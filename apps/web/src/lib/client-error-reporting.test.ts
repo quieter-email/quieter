@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vite-plus/test";
-import { isExpectedClientError, shouldDiscardClientError } from "./client-error-reporting";
+
+import {
+  isExpectedClientError,
+  shouldDiscardClientError,
+} from "./client-error-reporting";
 
 describe("client error reporting", () => {
   test("recognizes structured mailbox reauthorization errors", () => {
@@ -7,26 +11,32 @@ describe("client error reporting", () => {
       isExpectedClientError({
         code: "MAILBOX_SCOPE_REPAIR_REQUIRED",
         message: "A transport-specific message.",
-      }),
-    ).toBe(true);
+      })
+    ).toBeTruthy();
   });
 
   test("recognizes wrapped mailbox reauthorization errors", () => {
     expect(
       isExpectedClientError({
-        cause: new Error("Google access needs to be reconnected for this mailbox."),
-      }),
-    ).toBe(true);
+        cause: new Error(
+          "Google access needs to be reconnected for this mailbox."
+        ),
+      })
+    ).toBeTruthy();
   });
 
   test("keeps unrelated errors", () => {
-    expect(isExpectedClientError(new Error("The realtime connection failed."))).toBe(false);
+    expect(
+      isExpectedClientError(new Error("The realtime connection failed."))
+    ).toBeFalsy();
   });
 
   test("handles cyclic error causes", () => {
-    const error: { cause?: unknown; message: string } = { message: "Unexpected failure." };
+    const error: { cause?: unknown; message: string } = {
+      message: "Unexpected failure.",
+    };
     error.cause = error;
-    expect(isExpectedClientError(error)).toBe(false);
+    expect(isExpectedClientError(error)).toBeFalsy();
   });
 
   test("discards serialized mailbox reauthorization events", () => {
@@ -34,11 +44,16 @@ describe("client error reporting", () => {
       shouldDiscardClientError(
         {
           exception: {
-            values: [{ value: "Google access needs to be reconnected for this mailbox." }],
+            values: [
+              {
+                value:
+                  "Google access needs to be reconnected for this mailbox.",
+              },
+            ],
           },
         },
-        undefined,
-      ),
-    ).toBe(true);
+        null
+      )
+    ).toBeTruthy();
   });
 });

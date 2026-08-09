@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
+
 import {
   assertLocalDatabaseUrl,
   assertLocalDevelopmentDatabaseUrls,
@@ -9,62 +10,66 @@ import { parseReviewPullRequestNumber } from "./review-database";
 
 describe("destructive database target guard", () => {
   test("accepts the dedicated local migration test database", () => {
-    expect(() =>
+    expect(() => {
       assertLocalDatabaseUrl(
         "postgresql://postgres:postgres@localhost:5432/quieter_migration_test",
-        "quieter_migration_test",
-      ),
-    ).not.toThrow();
+        "quieter_migration_test"
+      );
+    }).not.toThrow();
   });
 
   test("accepts an IPv6 loopback database", () => {
-    expect(() =>
+    expect(() => {
       assertLocalDatabaseUrl(
         "postgresql://postgres:postgres@[::1]:5432/quieter_migration_test",
-        "quieter_migration_test",
-      ),
-    ).not.toThrow();
+        "quieter_migration_test"
+      );
+    }).not.toThrow();
   });
 
   test("rejects remote databases", () => {
-    expect(() =>
+    expect(() => {
       assertLocalDatabaseUrl(
         "postgresql://user:password@production.example.com/quieter_migration_test",
-        "quieter_migration_test",
-      ),
-    ).toThrow("loopback");
+        "quieter_migration_test"
+      );
+    }).toThrow("loopback");
   });
 
   test("rejects a non-test database on localhost", () => {
-    expect(() =>
+    expect(() => {
       assertLocalDatabaseUrl(
         "postgresql://postgres:postgres@localhost:5432/quieter",
-        "quieter_migration_test",
-      ),
-    ).toThrow("quieter_migration_test");
+        "quieter_migration_test"
+      );
+    }).toThrow("quieter_migration_test");
   });
 });
 
 describe("local development database boundary", () => {
   test("allows local application and migration databases", () => {
-    expect(() =>
+    expect(() => {
       assertLocalDevelopmentDatabaseUrls({
-        DATABASE_MIGRATION_URL: "postgresql://postgres:postgres@localhost:5432/quieter",
+        DATABASE_MIGRATION_URL:
+          "postgresql://postgres:postgres@localhost:5432/quieter",
         DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/quieter",
-      }),
-    ).not.toThrow();
+      });
+    }).not.toThrow();
   });
 
-  test.each(["DATABASE_URL", "DATABASE_MIGRATION_URL"] as const)("rejects a remote %s", (name) => {
-    expect(() =>
-      assertLocalDevelopmentDatabaseUrls({
-        [name]: "postgresql://user:password@production.example.com/quieter",
-      }),
-    ).toThrow(`${name} must target loopback PostgreSQL`);
-  });
+  test.each(["DATABASE_URL", "DATABASE_MIGRATION_URL"] as const)(
+    "rejects a remote %s",
+    (name) => {
+      expect(() => {
+        assertLocalDevelopmentDatabaseUrls({
+          [name]: "postgresql://user:password@production.example.com/quieter",
+        });
+      }).toThrow(`${name} must target loopback PostgreSQL`);
+    }
+  );
 
   test("allows an explicitly allowlisted local Neon branch", () => {
-    expect(() =>
+    expect(() => {
       assertLocalDevelopmentDatabaseUrls({
         DATABASE_MIGRATION_URL:
           "postgresql://user:password@ep-local-branch.eu-central-1.aws.neon.tech/neondb",
@@ -72,21 +77,21 @@ describe("local development database boundary", () => {
           "postgresql://user:password@ep-local-branch-pooler.eu-central-1.aws.neon.tech/neondb",
         QUIETER_DEPLOYMENT_ENV: "local",
         QUIETER_LOCAL_NEON_HOST: "ep-local-branch.eu-central-1.aws.neon.tech",
-      }),
-    ).not.toThrow();
+      });
+    }).not.toThrow();
   });
 
   test("requires a direct DATABASE_MIGRATION_URL for an allowlisted Neon branch", () => {
-    expect(() =>
+    expect(() => {
       assertLocalDevelopmentDatabaseUrls({
         DATABASE_URL:
           "postgresql://user:password@ep-local-branch-pooler.eu-central-1.aws.neon.tech/neondb",
         QUIETER_DEPLOYMENT_ENV: "local",
         QUIETER_LOCAL_NEON_HOST: "ep-local-branch.eu-central-1.aws.neon.tech",
-      }),
-    ).toThrow("DATABASE_MIGRATION_URL is required");
+      });
+    }).toThrow("DATABASE_MIGRATION_URL is required");
 
-    expect(() =>
+    expect(() => {
       assertLocalDevelopmentDatabaseUrls({
         DATABASE_MIGRATION_URL:
           "postgresql://user:password@ep-local-branch-pooler.eu-central-1.aws.neon.tech/neondb",
@@ -94,12 +99,12 @@ describe("local development database boundary", () => {
           "postgresql://user:password@ep-local-branch-pooler.eu-central-1.aws.neon.tech/neondb",
         QUIETER_DEPLOYMENT_ENV: "local",
         QUIETER_LOCAL_NEON_HOST: "ep-local-branch.eu-central-1.aws.neon.tech",
-      }),
-    ).toThrow("direct Neon endpoint");
+      });
+    }).toThrow("direct Neon endpoint");
   });
 
   test("rejects a Neon host that does not match the explicit allowlist", () => {
-    expect(() =>
+    expect(() => {
       assertLocalDevelopmentDatabaseUrls({
         DATABASE_MIGRATION_URL:
           "postgresql://user:password@ep-local-branch.eu-central-1.aws.neon.tech/neondb",
@@ -107,13 +112,14 @@ describe("local development database boundary", () => {
           "postgresql://user:password@ep-production-pooler.eu-central-1.aws.neon.tech/neondb",
         QUIETER_DEPLOYMENT_ENV: "local",
         QUIETER_LOCAL_NEON_HOST: "ep-local-branch.eu-central-1.aws.neon.tech",
-      }),
-    ).toThrow("explicitly allowlisted local Neon host");
+      });
+    }).toThrow("explicitly allowlisted local Neon host");
   });
 });
 
 describe("migration execution boundary", () => {
-  const remoteDatabaseUrl = "postgresql://user:password@production.example.com/quieter";
+  const remoteDatabaseUrl =
+    "postgresql://user:password@production.example.com/quieter";
   const approvedProductionEnvironment = {
     CI: "true",
     GITHUB_ACTIONS: "true",
@@ -124,27 +130,33 @@ describe("migration execution boundary", () => {
   };
 
   test("allows local migrations without CI", () => {
-    expect(() =>
-      assertMigrationExecutionAllowed("postgresql://postgres:postgres@localhost:5432/quieter", {}),
-    ).not.toThrow();
+    expect(() => {
+      assertMigrationExecutionAllowed(
+        "postgresql://postgres:postgres@localhost:5432/quieter",
+        {}
+      );
+    }).not.toThrow();
   });
 
   test("allows IPv6 loopback migrations without CI", () => {
-    expect(() =>
-      assertMigrationExecutionAllowed("postgresql://postgres:postgres@[::1]:5432/quieter", {}),
-    ).not.toThrow();
+    expect(() => {
+      assertMigrationExecutionAllowed(
+        "postgresql://postgres:postgres@[::1]:5432/quieter",
+        {}
+      );
+    }).not.toThrow();
   });
 
   test("allows migrations on an explicitly allowlisted local Neon branch", () => {
-    expect(() =>
+    expect(() => {
       assertMigrationExecutionAllowed(
         "postgresql://user:password@ep-local-branch.eu-central-1.aws.neon.tech/neondb",
         {
           QUIETER_DEPLOYMENT_ENV: "local",
           QUIETER_LOCAL_NEON_HOST: "ep-local-branch.eu-central-1.aws.neon.tech",
-        },
-      ),
-    ).not.toThrow();
+        }
+      );
+    }).not.toThrow();
   });
 
   const approvedReviewEnvironment = {
@@ -156,29 +168,47 @@ describe("migration execution boundary", () => {
   };
 
   test("allows remote migrations only in the approved production job", () => {
-    expect(() =>
-      assertMigrationExecutionAllowed(remoteDatabaseUrl, approvedProductionEnvironment),
-    ).not.toThrow();
+    expect(() => {
+      assertMigrationExecutionAllowed(
+        remoteDatabaseUrl,
+        approvedProductionEnvironment
+      );
+    }).not.toThrow();
   });
 
   test("allows remote migrations in the approved review deployment job", () => {
-    expect(() =>
-      assertMigrationExecutionAllowed(remoteDatabaseUrl, approvedReviewEnvironment),
-    ).not.toThrow();
+    expect(() => {
+      assertMigrationExecutionAllowed(
+        remoteDatabaseUrl,
+        approvedReviewEnvironment
+      );
+    }).not.toThrow();
   });
 
   test.each([
     ["developer machine", {}],
-    ["non-GitHub CI", { ...approvedProductionEnvironment, GITHUB_ACTIONS: undefined }],
-    ["unprotected ref", { ...approvedProductionEnvironment, GITHUB_REF_PROTECTED: "false" }],
-    ["non-main branch", { ...approvedProductionEnvironment, GITHUB_REF: "refs/heads/feature" }],
+    [
+      "non-GitHub CI",
+      { ...approvedProductionEnvironment, GITHUB_ACTIONS: undefined },
+    ],
+    [
+      "unprotected ref",
+      { ...approvedProductionEnvironment, GITHUB_REF_PROTECTED: "false" },
+    ],
+    [
+      "non-main branch",
+      { ...approvedProductionEnvironment, GITHUB_REF: "refs/heads/feature" },
+    ],
     [
       "different repository",
       { ...approvedProductionEnvironment, GITHUB_REPOSITORY: "fork/quieter" },
     ],
     [
       "missing production marker",
-      { ...approvedProductionEnvironment, QUIETER_ALLOW_REMOTE_MIGRATIONS: undefined },
+      {
+        ...approvedProductionEnvironment,
+        QUIETER_ALLOW_REMOTE_MIGRATIONS: undefined,
+      },
     ],
     [
       "review without deployment marker",
@@ -189,35 +219,38 @@ describe("migration execution boundary", () => {
       { ...approvedReviewEnvironment, GITHUB_REPOSITORY: "fork/quieter" },
     ],
   ])("rejects remote migrations from %s", (_, environment) => {
-    expect(() => assertMigrationExecutionAllowed(remoteDatabaseUrl, environment)).toThrow(
-      "approved GitHub Actions deployment jobs",
-    );
+    expect(() => {
+      assertMigrationExecutionAllowed(remoteDatabaseUrl, environment);
+    }).toThrow("approved GitHub Actions deployment jobs");
   });
 });
 
 describe("automated migration safety", () => {
   test("accepts additive migrations", () => {
-    expect(() =>
-      assertMigrationSqlIsDeploySafe('ALTER TABLE "user" ADD COLUMN "locale" text;', "add_locale"),
-    ).not.toThrow();
+    expect(() => {
+      assertMigrationSqlIsDeploySafe(
+        'ALTER TABLE "user" ADD COLUMN "locale" text;',
+        "add_locale"
+      );
+    }).not.toThrow();
   });
 
   test("requires concurrent indexes to use the non-transactional runner", () => {
-    expect(() =>
+    expect(() => {
       assertMigrationSqlIsDeploySafe(
         'CREATE INDEX CONCURRENTLY "mailbox_idx" ON "mailbox" ("id");',
-        "concurrent_index",
-      ),
-    ).toThrow("quieter:no-transaction");
+        "concurrent_index"
+      );
+    }).toThrow("quieter:no-transaction");
   });
 
   test("reserves non-transactional migrations for concurrent indexes", () => {
-    expect(() =>
+    expect(() => {
       assertMigrationSqlIsDeploySafe(
         '-- quieter:no-transaction\nALTER TABLE "mailbox" ADD COLUMN "revision" bigint;',
-        "unnecessary_non_transactional",
-      ),
-    ).toThrow("opts out of transactions");
+        "unnecessary_non_transactional"
+      );
+    }).toThrow("opts out of transactions");
   });
 
   test.each([
@@ -228,7 +261,9 @@ describe("automated migration safety", () => {
     'ALTER TABLE "user" DROP COLUMN "email";',
     'ALTER TABLE "user" ALTER COLUMN "id" TYPE uuid;',
   ])("rejects destructive SQL: %s", (sql) => {
-    expect(() => assertMigrationSqlIsDeploySafe(sql, "unsafe")).toThrow("destructive SQL");
+    expect(() => {
+      assertMigrationSqlIsDeploySafe(sql, "unsafe");
+    }).toThrow("destructive SQL");
   });
 });
 
@@ -238,6 +273,8 @@ describe("review pull request marker", () => {
   });
 
   test.each(["", "0", "-1", "1.5", "abc", undefined])("rejects %s", (value) => {
-    expect(() => parseReviewPullRequestNumber(value)).toThrow("REVIEW_PR_NUMBER");
+    expect(() => parseReviewPullRequestNumber(value)).toThrow(
+      "REVIEW_PR_NUMBER"
+    );
   });
 });

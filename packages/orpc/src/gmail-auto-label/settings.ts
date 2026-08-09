@@ -4,4 +4,4 @@ export const setGmailAutoLabeling = async (input: {
   enabled: boolean;
   mailboxId: string;
   userId: string;
-}) => setMailboxAutoLabeling(input);
+}) => await setMailboxAutoLabeling(input);

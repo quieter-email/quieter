@@ -2,13 +2,20 @@
   "name": "@quieter/cloudflare",
   "private": true,
   "type": "module",
+  "exports": {
+    "./compatibility-date": "./src/compatibility-date.ts"
+  },
   "scripts": {
     "cf-typecheck": "wrangler types worker-configuration.d.ts --config wrangler.types.jsonc --strict-vars false --check",
     "cf-typegen": "wrangler types worker-configuration.d.ts --config wrangler.types.jsonc --strict-vars false",
-    "test:workers": "vp test run --config vite.config.ts"
+    "check:compatibility-date": "bun scripts/sync-compatibility-date.ts --check",
+    "sync:compatibility-date": "bun scripts/sync-compatibility-date.ts",
+    "test:workers": "vp test run --config vite.config.ts",
+    "write:build-wrangler": "bun scripts/write-build-wrangler.ts"
   },
   "dependencies": {
     "@quieter/database": "workspace:*",
+    "@quieter/observability": "workspace:*",
     "@quieter/orpc": "workspace:*",
     "drizzle-orm": "catalog:",
     "jose": "5.10.0",

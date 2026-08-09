@@ -250,14 +250,10 @@ jobs:
 
       - name: Create credential-free Worker build configuration
         run: |
-          printf '%s\n' \
-            '{' \
-            '  "name": "quieter-review-artifact",' \
-            '  "main": "./apps/web/src/server.ts",' \
-            '  "compatibility_date": "2026-08-04",' \
-            '  "compatibility_flags": ["nodejs_compat"]' \
-            '}' \
-            > review-build-worker.wrangler.jsonc
+          bun packages/cloudflare/scripts/write-build-wrangler.ts \
+            --name quieter-review-artifact \
+            --main ./apps/web/src/server.ts \
+            --out review-build-worker.wrangler.jsonc
 
       - name: Build without credentials
         env:
@@ -286,7 +282,7 @@ jobs:
             --name quieter-review-artifact \
             --assets apps/web/dist/client \
             --autoconfig=false \
-            --compatibility-date 2026-08-04 \
+            --compatibility-date "$(bun -e 'import { COMPATIBILITY_DATE } from "./packages/cloudflare/src/compatibility-date.ts"; process.stdout.write(COMPATIBILITY_DATE)')" \
             --compatibility-flag nodejs_compat \
             --dry-run \
             --outdir .review-bundle

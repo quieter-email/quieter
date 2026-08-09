@@ -1,11 +1,13 @@
+import { createHash, randomBytes, randomUUID } from "node:crypto";
+
+import { ORPCError } from "@orpc/server";
+import { getSessionWithOrganization } from "@quieter/auth/session";
+import { db } from "@quieter/database/client";
 import type {
   MailboxConnectionStatus,
   MailboxGrantRole,
   PersistedMailboxProvider,
 } from "@quieter/database/schema";
-import { ORPCError } from "@orpc/server";
-import { getSessionWithOrganization } from "@quieter/auth/session";
-import { db } from "@quieter/database/client";
 import {
   gmailCredential,
   gmailOAuthState,
@@ -21,12 +23,15 @@ import {
   organizationDivisionMember,
   user,
 } from "@quieter/database/schema";
-import { getGmailMessageCount, getGmailProfile, isGmailServiceError } from "@quieter/gmail";
+import {
+  getGmailMessageCount,
+  getGmailProfile,
+  isGmailServiceError,
+} from "@quieter/gmail";
 import { getMailboxCapabilities } from "@quieter/mail/data-plane";
 import { and, asc, count, eq, inArray, lt } from "drizzle-orm";
-import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
-import type { MailboxGroup, MailboxGroupMetadata, MailboxListItem } from "./types";
+
 import {
   encryptSecret,
   getGmailOAuthConfig,
@@ -34,7 +39,23 @@ import {
   runAuthorizedGmailMailbox,
 } from "../gmail-mailbox-access";
 import { getOrganizationApiMailboxId } from "../organization-api-mail";
-import { DEFAULT_GMAIL_MAILBOX_NAME, getGmailMailboxDisplayName } from "./display-name";
+import { hasText } from "../text";
+import {
+  assertOwnedGmailMailbox,
+  getAuthorizedManagedMailbox,
+  getStrongestMailboxGrantRole,
+  MAILBOX_PROVIDER_GMAIL,
+  MAILBOX_PROVIDER_MANAGED,
+} from "./access";
+import {
+  DEFAULT_GMAIL_MAILBOX_NAME,
+  getGmailMailboxDisplayName,
+} from "./display-name";
+import type {
+  MailboxGroup,
+  MailboxGroupMetadata,
+  MailboxListItem,
+} from "./types";
 
 export {
   GMAIL_SCOPES,
@@ -46,13 +67,6 @@ export {
 
 export {
   getAuthorizedManagedMailbox,
-  MAILBOX_PROVIDER_GMAIL,
-  MAILBOX_PROVIDER_MANAGED,
-} from "./access";
-import {
-  assertOwnedGmailMailbox,
-  getAuthorizedManagedMailbox,
-  getStrongestMailboxGrantRole,
   MAILBOX_PROVIDER_GMAIL,
   MAILBOX_PROVIDER_MANAGED,
 } from "./access";
@@ -75,18 +89,26 @@ const googleTokenResponseSchema = z.object({
 
 const googleTokenInfoSchema = z.object({
   aud: z.string().min(1),
-  email: z.string().email(),
+  email: z.email(),
   email_verified: z.enum(["true", "false"]),
   exp: z.coerce.number().int().positive(),
   iss: z.enum(["accounts.google.com", "https://accounts.google.com"]),
   sub: z.string().min(1),
 });
 
-const normalizeEmailAddress = (emailAddress: string) => emailAddress.trim().toLowerCase();
+const normalizeEmailAddress = (emailAddress: string) =>
+  emailAddress.trim().toLowerCase();
 
 const normalizeReturnTo = (returnTo: string | undefined) => {
   const normalized = returnTo?.trim();
-  return normalized?.startsWith("/") && !normalized.startsWith("//") ? normalized : "/settings";
+  if (
+    hasText(normalized) &&
+    normalized.startsWith("/") &&
+    !normalized.startsWith("//")
+  ) {
+    return normalized;
+  }
+  return "/settings";
 };
 
 const createCodeVerifier = () => randomBytes(48).toString("base64url");
@@ -105,14 +127,19 @@ const listUserOrganizations = async (userId: string) =>
     .where(eq(member.userId, userId))
     .orderBy(asc(organization.name));
 
-const assertOrganizationMembership = async (userId: string, organizationId: string) => {
+const assertOrganizationMembership = async (
+  userId: string,
+  organizationId: string
+) => {
   const [membership] = await db
     .select({ id: member.id })
     .from(member)
-    .where(and(eq(member.userId, userId), eq(member.organizationId, organizationId)))
+    .where(
+      and(eq(member.userId, userId), eq(member.organizationId, organizationId))
+    )
     .limit(1);
 
-  if (!membership) {
+  if (membership === undefined) {
     throw new ORPCError("FORBIDDEN", {
       message: "You are not a member of that team.",
     });
@@ -123,11 +150,11 @@ const toMailboxListItem = (
   record: {
     directGrantRole?: MailboxGrantRole | null;
     displayName: string | null;
-    divisionGrantRoles?: Array<{
+    divisionGrantRoles?: {
       divisionId: string;
       divisionName: string;
       role: MailboxGrantRole;
-    }>;
+    }[];
     divisionId?: string | null;
     divisionName?: string | null;
     emailAddress: string;
@@ -145,11 +172,16 @@ const toMailboxListItem = (
     status: "connected" | "needs_reconnect";
     unreadNonSpamCount?: number | null;
   },
-  group: MailboxGroupMetadata,
+  group: MailboxGroupMetadata
 ): MailboxListItem => ({
-  capabilities: getMailboxCapabilities({ provider: record.provider, role: record.grantRole }),
+  autoLabelEnabled: record.autoLabelEnabled ?? false,
+  capabilities: getMailboxCapabilities({
+    provider: record.provider,
+    role: record.grantRole,
+  }),
   connectionStatus:
-    record.provider === MAILBOX_PROVIDER_GMAIL && !record.gmailCredentialMailboxId
+    record.provider === MAILBOX_PROVIDER_GMAIL &&
+    !hasText(record.gmailCredentialMailboxId)
       ? "needs_reconnect"
       : record.status,
   directGrantRole: record.directGrantRole ?? null,
@@ -162,29 +194,33 @@ const toMailboxListItem = (
   divisionName: record.divisionName ?? null,
   emailAddress: record.emailAddress,
   grantRole: record.grantRole,
-  autoLabelEnabled: record.autoLabelEnabled ?? false,
-  usefulDetailsEnabled: record.usefulDetailsEnabled ?? false,
   groupId: group.groupId,
   groupKind: group.groupKind,
   groupName: group.groupName,
   id: record.id,
   includeApiSentMessages: record.includeApiSentMessages ?? false,
-  signatureHtml: record.signatureHtml ?? null,
-  signatureText: record.signatureText ?? null,
   organizationId: record.organizationId,
   ownerUserId: record.ownerUserId,
   provider: record.provider,
+  signatureHtml: record.signatureHtml ?? null,
+  signatureText: record.signatureText ?? null,
   unreadNonSpamCount: record.unreadNonSpamCount ?? 0,
+  usefulDetailsEnabled: record.usefulDetailsEnabled ?? false,
 });
 
-const getGmailUnreadNonSpamCount = async (input: { mailboxId: string; userId: string }) =>
-  (await runAuthorizedGmailMailbox(input, async (accessToken) =>
-    getGmailMessageCount(accessToken, {
-      accurateUpTo: 99,
-      countBy: "threads",
-      mailbox: "unread",
-      query: "-in:spam -in:trash",
-    }),
+const getGmailUnreadNonSpamCount = async (input: {
+  mailboxId: string;
+  userId: string;
+}) =>
+  (await runAuthorizedGmailMailbox(
+    input,
+    async (accessToken) =>
+      await getGmailMessageCount(accessToken, {
+        accurateUpTo: 99,
+        countBy: "threads",
+        mailbox: "unread",
+        query: "-in:spam -in:trash",
+      })
   )) ?? 0;
 
 const listManagedUnreadNonSpamCounts = async (mailboxIds: string[]) => {
@@ -203,176 +239,209 @@ const listManagedUnreadNonSpamCounts = async (mailboxIds: string[]) => {
         inArray(managedMailMessage.mailboxId, mailboxIds),
         eq(managedMailMessage.direction, "inbound"),
         eq(managedMailMessage.isRead, false),
-        eq(managedMailMessage.mailboxState, "active"),
-      ),
+        eq(managedMailMessage.mailboxState, "active")
+      )
     )
     .groupBy(managedMailMessage.mailboxId);
 
-  return new Map(rows.map((record) => [record.mailboxId, Number(record.count)]));
+  return new Map(rows.map((record) => [record.mailboxId, record.count]));
 };
 
 export const listAccessibleMailboxState = async (input: { userId: string }) => {
   const organizations = await listUserOrganizations(input.userId);
 
-  const [gmailMailboxes, directManagedMailboxes, divisionManagedMailboxes, apiMessageCounts] =
-    await Promise.all([
-      db
-        .select({
-          divisionId: mailbox.divisionId,
-          divisionName: organizationDivision.name,
-          displayName: mailbox.displayName,
-          emailAddress: mailbox.emailAddress,
-          autoLabelEnabled: mailboxAutomationSettings.autoLabelEnabled,
-          gmailCredentialMailboxId: gmailCredential.mailboxId,
-          usefulDetailsEnabled: mailboxAutomationSettings.usefulDetailsEnabled,
-          id: mailbox.id,
-          includeApiSentMessages: mailbox.includeApiSentMessages,
-          signatureHtml: mailbox.signatureHtml,
-          signatureText: mailbox.signatureText,
-          organizationId: mailbox.organizationId,
-          ownerUserId: mailbox.ownerUserId,
-          provider: mailbox.provider,
-          status: mailbox.status,
-        })
-        .from(mailbox)
-        .leftJoin(gmailCredential, eq(gmailCredential.mailboxId, mailbox.id))
-        .leftJoin(mailboxAutomationSettings, eq(mailboxAutomationSettings.mailboxId, mailbox.id))
-        .leftJoin(organizationDivision, eq(organizationDivision.id, mailbox.divisionId))
-        .where(
-          and(eq(mailbox.ownerUserId, input.userId), eq(mailbox.provider, MAILBOX_PROVIDER_GMAIL)),
+  const [
+    gmailMailboxes,
+    directManagedMailboxes,
+    divisionManagedMailboxes,
+    apiMessageCounts,
+  ] = await Promise.all([
+    db
+      .select({
+        autoLabelEnabled: mailboxAutomationSettings.autoLabelEnabled,
+        displayName: mailbox.displayName,
+        divisionId: mailbox.divisionId,
+        divisionName: organizationDivision.name,
+        emailAddress: mailbox.emailAddress,
+        gmailCredentialMailboxId: gmailCredential.mailboxId,
+        id: mailbox.id,
+        includeApiSentMessages: mailbox.includeApiSentMessages,
+        organizationId: mailbox.organizationId,
+        ownerUserId: mailbox.ownerUserId,
+        provider: mailbox.provider,
+        signatureHtml: mailbox.signatureHtml,
+        signatureText: mailbox.signatureText,
+        status: mailbox.status,
+        usefulDetailsEnabled: mailboxAutomationSettings.usefulDetailsEnabled,
+      })
+      .from(mailbox)
+      .leftJoin(gmailCredential, eq(gmailCredential.mailboxId, mailbox.id))
+      .leftJoin(
+        mailboxAutomationSettings,
+        eq(mailboxAutomationSettings.mailboxId, mailbox.id)
+      )
+      .leftJoin(
+        organizationDivision,
+        eq(organizationDivision.id, mailbox.divisionId)
+      )
+      .where(
+        and(
+          eq(mailbox.ownerUserId, input.userId),
+          eq(mailbox.provider, MAILBOX_PROVIDER_GMAIL)
         )
-        .orderBy(asc(mailbox.emailAddress)),
-      db
-        .select({
-          directGrantRole: mailboxGrant.role,
-          divisionId: mailbox.divisionId,
-          divisionName: organizationDivision.name,
-          displayName: mailbox.displayName,
-          emailAddress: mailbox.emailAddress,
-          grantRole: mailboxGrant.role,
-          autoLabelEnabled: mailboxAutomationSettings.autoLabelEnabled,
-          usefulDetailsEnabled: mailboxAutomationSettings.usefulDetailsEnabled,
-          id: mailbox.id,
-          includeApiSentMessages: mailbox.includeApiSentMessages,
-          signatureHtml: mailbox.signatureHtml,
-          signatureText: mailbox.signatureText,
-          organizationId: mailbox.organizationId,
-          ownerUserId: mailbox.ownerUserId,
-          provider: mailbox.provider,
-          status: mailbox.status,
-        })
-        .from(mailboxGrant)
-        .innerJoin(mailbox, eq(mailbox.id, mailboxGrant.mailboxId))
-        .leftJoin(mailboxAutomationSettings, eq(mailboxAutomationSettings.mailboxId, mailbox.id))
-        .leftJoin(organizationDivision, eq(organizationDivision.id, mailbox.divisionId))
-        .innerJoin(
-          member,
-          and(eq(member.userId, input.userId), eq(member.organizationId, mailbox.organizationId)),
+      )
+      .orderBy(asc(mailbox.emailAddress)),
+    db
+      .select({
+        autoLabelEnabled: mailboxAutomationSettings.autoLabelEnabled,
+        directGrantRole: mailboxGrant.role,
+        displayName: mailbox.displayName,
+        divisionId: mailbox.divisionId,
+        divisionName: organizationDivision.name,
+        emailAddress: mailbox.emailAddress,
+        grantRole: mailboxGrant.role,
+        id: mailbox.id,
+        includeApiSentMessages: mailbox.includeApiSentMessages,
+        organizationId: mailbox.organizationId,
+        ownerUserId: mailbox.ownerUserId,
+        provider: mailbox.provider,
+        signatureHtml: mailbox.signatureHtml,
+        signatureText: mailbox.signatureText,
+        status: mailbox.status,
+        usefulDetailsEnabled: mailboxAutomationSettings.usefulDetailsEnabled,
+      })
+      .from(mailboxGrant)
+      .innerJoin(mailbox, eq(mailbox.id, mailboxGrant.mailboxId))
+      .leftJoin(
+        mailboxAutomationSettings,
+        eq(mailboxAutomationSettings.mailboxId, mailbox.id)
+      )
+      .leftJoin(
+        organizationDivision,
+        eq(organizationDivision.id, mailbox.divisionId)
+      )
+      .innerJoin(
+        member,
+        and(
+          eq(member.userId, input.userId),
+          eq(member.organizationId, mailbox.organizationId)
         )
-        .where(
-          and(
-            eq(mailboxGrant.userId, input.userId),
-            eq(mailbox.provider, MAILBOX_PROVIDER_MANAGED),
-          ),
+      )
+      .where(
+        and(
+          eq(mailboxGrant.userId, input.userId),
+          eq(mailbox.provider, MAILBOX_PROVIDER_MANAGED)
         )
-        .orderBy(asc(mailbox.emailAddress)),
-      db
-        .select({
-          accessDivisionId: organizationDivision.id,
-          accessDivisionName: organizationDivision.name,
-          directGrantRole: mailboxGrant.role,
-          divisionGrantRole: mailboxDivisionGrant.role,
-          divisionId: mailbox.divisionId,
-          divisionName: organizationDivision.name,
-          displayName: mailbox.displayName,
-          emailAddress: mailbox.emailAddress,
-          grantRole: mailboxDivisionGrant.role,
-          autoLabelEnabled: mailboxAutomationSettings.autoLabelEnabled,
-          usefulDetailsEnabled: mailboxAutomationSettings.usefulDetailsEnabled,
-          id: mailbox.id,
-          includeApiSentMessages: mailbox.includeApiSentMessages,
-          signatureHtml: mailbox.signatureHtml,
-          signatureText: mailbox.signatureText,
-          organizationId: mailbox.organizationId,
-          ownerUserId: mailbox.ownerUserId,
-          provider: mailbox.provider,
-          status: mailbox.status,
-        })
-        .from(mailboxDivisionGrant)
-        .innerJoin(mailbox, eq(mailbox.id, mailboxDivisionGrant.mailboxId))
-        .innerJoin(
-          organizationDivision,
-          eq(organizationDivision.id, mailboxDivisionGrant.divisionId),
+      )
+      .orderBy(asc(mailbox.emailAddress)),
+    db
+      .select({
+        accessDivisionId: organizationDivision.id,
+        accessDivisionName: organizationDivision.name,
+        autoLabelEnabled: mailboxAutomationSettings.autoLabelEnabled,
+        directGrantRole: mailboxGrant.role,
+        displayName: mailbox.displayName,
+        divisionGrantRole: mailboxDivisionGrant.role,
+        divisionId: mailbox.divisionId,
+        divisionName: organizationDivision.name,
+        emailAddress: mailbox.emailAddress,
+        grantRole: mailboxDivisionGrant.role,
+        id: mailbox.id,
+        includeApiSentMessages: mailbox.includeApiSentMessages,
+        organizationId: mailbox.organizationId,
+        ownerUserId: mailbox.ownerUserId,
+        provider: mailbox.provider,
+        signatureHtml: mailbox.signatureHtml,
+        signatureText: mailbox.signatureText,
+        status: mailbox.status,
+        usefulDetailsEnabled: mailboxAutomationSettings.usefulDetailsEnabled,
+      })
+      .from(mailboxDivisionGrant)
+      .innerJoin(mailbox, eq(mailbox.id, mailboxDivisionGrant.mailboxId))
+      .innerJoin(
+        organizationDivision,
+        eq(organizationDivision.id, mailboxDivisionGrant.divisionId)
+      )
+      .innerJoin(
+        organizationDivisionMember,
+        eq(organizationDivisionMember.divisionId, organizationDivision.id)
+      )
+      .innerJoin(
+        member,
+        and(
+          eq(member.id, organizationDivisionMember.memberId),
+          eq(member.userId, input.userId),
+          eq(member.organizationId, mailbox.organizationId)
         )
-        .innerJoin(
-          organizationDivisionMember,
-          eq(organizationDivisionMember.divisionId, organizationDivision.id),
+      )
+      .leftJoin(
+        mailboxGrant,
+        and(
+          eq(mailboxGrant.mailboxId, mailbox.id),
+          eq(mailboxGrant.userId, input.userId)
         )
-        .innerJoin(
-          member,
-          and(
-            eq(member.id, organizationDivisionMember.memberId),
-            eq(member.userId, input.userId),
-            eq(member.organizationId, mailbox.organizationId),
-          ),
+      )
+      .leftJoin(
+        mailboxAutomationSettings,
+        eq(mailboxAutomationSettings.mailboxId, mailbox.id)
+      )
+      .where(
+        and(
+          eq(mailbox.provider, MAILBOX_PROVIDER_MANAGED),
+          eq(organizationDivision.organizationId, mailbox.organizationId)
         )
-        .leftJoin(
-          mailboxGrant,
-          and(eq(mailboxGrant.mailboxId, mailbox.id), eq(mailboxGrant.userId, input.userId)),
-        )
-        .leftJoin(mailboxAutomationSettings, eq(mailboxAutomationSettings.mailboxId, mailbox.id))
-        .where(
-          and(
-            eq(mailbox.provider, MAILBOX_PROVIDER_MANAGED),
-            eq(organizationDivision.organizationId, mailbox.organizationId),
-          ),
-        )
-        .orderBy(asc(mailbox.emailAddress)),
-      db
-        .select({
-          count: count(),
-          organizationId: organizationApiMailMessage.organizationId,
-        })
-        .from(organizationApiMailMessage)
-        .where(
-          organizations.length > 0
-            ? inArray(
-                organizationApiMailMessage.organizationId,
-                organizations.map((organization) => organization.id),
-              )
-            : undefined,
-        )
-        .groupBy(organizationApiMailMessage.organizationId),
-    ]);
+      )
+      .orderBy(asc(mailbox.emailAddress)),
+    db
+      .select({
+        count: count(),
+        organizationId: organizationApiMailMessage.organizationId,
+      })
+      .from(organizationApiMailMessage)
+      .where(
+        organizations.length > 0
+          ? inArray(
+              organizationApiMailMessage.organizationId,
+              organizations.map((org) => org.id)
+            )
+          : undefined
+      )
+      .groupBy(organizationApiMailMessage.organizationId),
+  ]);
   const managedUnreadCountsByMailboxId = await listManagedUnreadNonSpamCounts([
     ...directManagedMailboxes.map((record) => record.id),
     ...divisionManagedMailboxes.map((record) => record.id),
   ]);
   const apiMessageCountsByOrganizationId = new Map(
-    apiMessageCounts.map((record) => [record.organizationId, Number(record.count)]),
+    apiMessageCounts.map((record) => [record.organizationId, record.count])
   );
   const divisions =
     organizations.length === 0
       ? []
       : await db
-          .select({ id: organizationDivision.id, name: organizationDivision.name })
+          .select({
+            id: organizationDivision.id,
+            name: organizationDivision.name,
+          })
           .from(organizationDivision)
           .where(
             inArray(
               organizationDivision.organizationId,
-              organizations.map((organization) => organization.id),
-            ),
+              organizations.map((org) => org.id)
+            )
           );
-  const divisionNamesById = new Map(divisions.map((division) => [division.id, division.name]));
+  const divisionNamesById = new Map(
+    divisions.map((division) => [division.id, division.name])
+  );
 
   type ManagedMailboxRecord = {
     directGrantRole: MailboxGrantRole | null;
     displayName: string | null;
-    divisionGrantRoles: Array<{
+    divisionGrantRoles: {
       divisionId: string;
       divisionName: string;
       role: MailboxGrantRole;
-    }>;
+    }[];
     divisionId: string | null;
     divisionName: string | null;
     emailAddress: string;
@@ -395,7 +464,9 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
   for (const record of divisionManagedMailboxes) {
     const normalizedRecord = {
       ...record,
-      divisionName: record.divisionId ? (divisionNamesById.get(record.divisionId) ?? null) : null,
+      divisionName: hasText(record.divisionId)
+        ? (divisionNamesById.get(record.divisionId) ?? null)
+        : null,
     };
     const divisionGrant = {
       divisionId: normalizedRecord.accessDivisionId,
@@ -406,23 +477,25 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
     if (existing) {
       existing.divisionGrantRoles.push(divisionGrant);
       existing.grantRole =
-        getStrongestMailboxGrantRole([existing.grantRole, normalizedRecord.divisionGrantRole]) ??
-        normalizedRecord.divisionGrantRole;
+        getStrongestMailboxGrantRole([
+          existing.grantRole,
+          normalizedRecord.divisionGrantRole,
+        ]) ?? normalizedRecord.divisionGrantRole;
       continue;
     }
     managedMailboxRecords.set(normalizedRecord.id, {
       ...normalizedRecord,
+      divisionGrantRoles: [divisionGrant],
       grantRole:
         getStrongestMailboxGrantRole([
           normalizedRecord.directGrantRole,
           normalizedRecord.divisionGrantRole,
         ]) ?? normalizedRecord.divisionGrantRole,
-      divisionGrantRoles: [divisionGrant],
     });
   }
 
-  const managedMailboxes = [...managedMailboxRecords.values()].sort((left, right) =>
-    left.emailAddress.localeCompare(right.emailAddress),
+  const managedMailboxes = [...managedMailboxRecords.values()].toSorted(
+    (left, right) => left.emailAddress.localeCompare(right.emailAddress)
   );
 
   const groups: MailboxGroup[] = organizations.flatMap((organizationRecord) => {
@@ -440,23 +513,26 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
             groupId: organizationRecord.id,
             groupKind: "organization",
             groupName: organizationRecord.name,
-          },
-        ),
+          }
+        )
       );
     const organizationManagedMailboxes = managedMailboxes.filter(
-      (record) => record.organizationId === organizationRecord.id,
+      (record) => record.organizationId === organizationRecord.id
     );
-    const divisionIds = Array.from(
-      new Set(
+    const divisionIds = [
+      ...new Set(
         organizationManagedMailboxes.flatMap((record) =>
-          record.divisionId && record.divisionName ? [record.divisionId] : [],
-        ),
+          hasText(record.divisionId) && hasText(record.divisionName)
+            ? [record.divisionId]
+            : []
+        )
       ),
-    );
+    ];
     const managedGroups = divisionIds.map((divisionId) => {
       const divisionName =
-        organizationManagedMailboxes.find((record) => record.divisionId === divisionId)
-          ?.divisionName ?? "Division";
+        organizationManagedMailboxes.find(
+          (record) => record.divisionId === divisionId
+        )?.divisionName ?? "Division";
       return {
         id: `division:${divisionId}`,
         kind: "division" as const,
@@ -466,14 +542,15 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
             toMailboxListItem(
               {
                 ...record,
-                unreadNonSpamCount: managedUnreadCountsByMailboxId.get(record.id) ?? 0,
+                unreadNonSpamCount:
+                  managedUnreadCountsByMailboxId.get(record.id) ?? 0,
               },
               {
                 groupId: `division:${divisionId}`,
                 groupKind: "division",
                 groupName: divisionName,
-              },
-            ),
+              }
+            )
           ),
         name: divisionName,
         organizationId: organizationRecord.id,
@@ -481,19 +558,20 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
       };
     });
     const unassignedMailboxes = organizationManagedMailboxes
-      .filter((record) => !record.divisionId)
+      .filter((record) => !hasText(record.divisionId))
       .map((record) =>
         toMailboxListItem(
           {
             ...record,
-            unreadNonSpamCount: managedUnreadCountsByMailboxId.get(record.id) ?? 0,
+            unreadNonSpamCount:
+              managedUnreadCountsByMailboxId.get(record.id) ?? 0,
           },
           {
             groupId: `team:${organizationRecord.id}:unassigned`,
             groupKind: "unassigned",
             groupName: "Unassigned",
-          },
-        ),
+          }
+        )
       );
     const apiMailboxes =
       (apiMessageCountsByOrganizationId.get(organizationRecord.id) ?? 0) > 0
@@ -514,7 +592,7 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
                 groupId: organizationRecord.id,
                 groupKind: "organization",
                 groupName: organizationRecord.name,
-              },
+              }
             ),
           ]
         : [];
@@ -551,7 +629,9 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
   return { groups };
 };
 
-export const listAccessibleGmailUnreadCounts = async (input: { userId: string }) => {
+export const listAccessibleGmailUnreadCounts = async (input: {
+  userId: string;
+}) => {
   const gmailMailboxes = await db
     .select({
       gmailCredentialMailboxId: gmailCredential.mailboxId,
@@ -561,21 +641,31 @@ export const listAccessibleGmailUnreadCounts = async (input: { userId: string })
     .from(mailbox)
     .leftJoin(gmailCredential, eq(gmailCredential.mailboxId, mailbox.id))
     .where(
-      and(eq(mailbox.ownerUserId, input.userId), eq(mailbox.provider, MAILBOX_PROVIDER_GMAIL)),
+      and(
+        eq(mailbox.ownerUserId, input.userId),
+        eq(mailbox.provider, MAILBOX_PROVIDER_GMAIL)
+      )
     );
 
   return await Promise.all(
     gmailMailboxes.map(async (record) => ({
       mailboxId: record.id,
       unreadNonSpamCount:
-        record.status === "connected" && record.gmailCredentialMailboxId
-          ? await getGmailUnreadNonSpamCount({ mailboxId: record.id, userId: input.userId })
+        record.status === "connected" &&
+        hasText(record.gmailCredentialMailboxId)
+          ? await getGmailUnreadNonSpamCount({
+              mailboxId: record.id,
+              userId: input.userId,
+            })
           : 0,
-    })),
+    }))
   );
 };
 
-export const assertAccessibleMailbox = async (input: { mailboxId: string; userId: string }) => {
+export const assertAccessibleMailbox = async (input: {
+  mailboxId: string;
+  userId: string;
+}) => {
   const [ownedGmailMailbox] = await db
     .select({
       contentRevision: mailbox.contentRevision,
@@ -588,15 +678,17 @@ export const assertAccessibleMailbox = async (input: { mailboxId: string; userId
       and(
         eq(mailbox.id, input.mailboxId),
         eq(mailbox.ownerUserId, input.userId),
-        eq(mailbox.provider, MAILBOX_PROVIDER_GMAIL),
-      ),
+        eq(mailbox.provider, MAILBOX_PROVIDER_GMAIL)
+      )
     )
     .limit(1);
 
-  if (ownedGmailMailbox) {
+  if (ownedGmailMailbox !== undefined) {
     return {
       ...ownedGmailMailbox,
-      capabilities: getMailboxCapabilities({ provider: ownedGmailMailbox.provider }),
+      capabilities: getMailboxCapabilities({
+        provider: ownedGmailMailbox.provider,
+      }),
     };
   }
 
@@ -607,8 +699,8 @@ export const assertAccessibleMailbox = async (input: { mailboxId: string; userId
         provider: grantedManagedMailbox.provider,
         role: grantedManagedMailbox.role,
       }),
-      id: grantedManagedMailbox.id,
       contentRevision: grantedManagedMailbox.contentRevision,
+      id: grantedManagedMailbox.id,
       organizationId: grantedManagedMailbox.organizationId,
       provider: grantedManagedMailbox.provider,
     };
@@ -626,11 +718,13 @@ export const startGmailOAuth = async (input: {
   returnTo?: string;
   userId: string;
 }) => {
-  await db.delete(gmailOAuthState).where(lt(gmailOAuthState.expiresAt, new Date()));
+  await db
+    .delete(gmailOAuthState)
+    .where(lt(gmailOAuthState.expiresAt, new Date()));
 
   let loginHint: string | null = null;
-  let organizationId = input.organizationId;
-  if (input.mailboxId) {
+  let { organizationId } = input;
+  if (hasText(input.mailboxId)) {
     const [existingMailbox] = await db
       .select({
         emailAddress: mailbox.emailAddress,
@@ -641,22 +735,23 @@ export const startGmailOAuth = async (input: {
         and(
           eq(mailbox.id, input.mailboxId),
           eq(mailbox.ownerUserId, input.userId),
-          eq(mailbox.provider, MAILBOX_PROVIDER_GMAIL),
-        ),
+          eq(mailbox.provider, MAILBOX_PROVIDER_GMAIL)
+        )
       )
       .limit(1);
 
-    if (!existingMailbox) {
+    if (existingMailbox === undefined) {
       throw new ORPCError("NOT_FOUND", { message: "Gmail mailbox not found." });
     }
     loginHint = existingMailbox.emailAddress;
     if (input.organizationId === undefined) {
-      organizationId = existingMailbox.organizationId;
+      ({ organizationId } = existingMailbox);
     }
   }
 
-  if (!organizationId) {
-    organizationId = (await listUserOrganizations(input.userId))[0]?.id;
+  if (!hasText(organizationId)) {
+    const organizations = await listUserOrganizations(input.userId);
+    organizationId = organizations[0]?.id;
   }
   if (!organizationId) {
     throw new ORPCError("BAD_REQUEST", {
@@ -683,7 +778,10 @@ export const startGmailOAuth = async (input: {
   const authorizationUrl = new URL(GOOGLE_AUTHORIZATION_URL);
   authorizationUrl.searchParams.set("access_type", "offline");
   authorizationUrl.searchParams.set("client_id", config.clientId);
-  authorizationUrl.searchParams.set("code_challenge", createCodeChallenge(codeVerifier));
+  authorizationUrl.searchParams.set(
+    "code_challenge",
+    createCodeChallenge(codeVerifier)
+  );
   authorizationUrl.searchParams.set("code_challenge_method", "S256");
   authorizationUrl.searchParams.set("include_granted_scopes", "true");
   authorizationUrl.searchParams.set("prompt", "consent select_account");
@@ -691,14 +789,17 @@ export const startGmailOAuth = async (input: {
   authorizationUrl.searchParams.set("response_type", "code");
   authorizationUrl.searchParams.set("scope", GMAIL_SCOPES.join(" "));
   authorizationUrl.searchParams.set("state", state);
-  if (loginHint) {
+  if (hasText(loginHint)) {
     authorizationUrl.searchParams.set("login_hint", loginHint);
   }
 
   return { authorizationUrl: authorizationUrl.toString() };
 };
 
-const exchangeGoogleAuthorizationCode = async (code: string, codeVerifier: string) => {
+const exchangeGoogleAuthorizationCode = async (
+  code: string,
+  codeVerifier: string
+) => {
   const config = getGmailOAuthConfig();
   const response = await fetch(GOOGLE_TOKEN_URL, {
     body: new URLSearchParams({
@@ -721,7 +822,9 @@ const exchangeGoogleAuthorizationCode = async (code: string, codeVerifier: strin
 
 const validateGoogleIdToken = async (idToken: string) => {
   const config = getGmailOAuthConfig();
-  const response = await fetch(`${GOOGLE_TOKEN_INFO_URL}?id_token=${encodeURIComponent(idToken)}`);
+  const response = await fetch(
+    `${GOOGLE_TOKEN_INFO_URL}?id_token=${encodeURIComponent(idToken)}`
+  );
   if (!response.ok) {
     throw new Error("Google returned an invalid identity token.");
   }
@@ -737,51 +840,13 @@ const validateGoogleIdToken = async (idToken: string) => {
   return tokenInfo;
 };
 
-export const completeGmailOAuth = async (input: {
-  code: string;
-  headers: Headers;
-  state: string;
-}) => {
-  const session = await getSessionWithOrganization(input.headers);
-  if (!session?.user || !session.session) {
-    throw new ORPCError("UNAUTHORIZED", { message: "Sign in before connecting Gmail." });
-  }
-
-  const [oauthState] = await db
-    .delete(gmailOAuthState)
-    .where(eq(gmailOAuthState.id, input.state))
-    .returning();
-
-  if (
-    !oauthState ||
-    oauthState.userId !== session.user.id ||
-    oauthState.expiresAt.getTime() <= Date.now()
-  ) {
-    throw new ORPCError("BAD_REQUEST", {
-      message: "This Gmail connection request is invalid or expired.",
-    });
-  }
-
-  if (oauthState.organizationId) {
-    await assertOrganizationMembership(session.user.id, oauthState.organizationId);
-  }
-
-  const tokenResponse = await exchangeGoogleAuthorizationCode(input.code, oauthState.codeVerifier);
-  const tokenInfo = await validateGoogleIdToken(tokenResponse.id_token);
-  const profile = await getGmailProfile(tokenResponse.access_token);
-  const emailAddress = normalizeEmailAddress(profile.emailAddress);
-
-  if (emailAddress !== normalizeEmailAddress(tokenInfo.email)) {
-    throw new Error("The Google identity and Gmail mailbox do not match.");
-  }
-
-  const grantedScopes = new Set(tokenResponse.scope.split(/\s+/).filter(Boolean));
-  if (!GMAIL_SCOPES.every((scope) => grantedScopes.has(scope))) {
-    throw new Error("Google did not grant all required Gmail permissions.");
-  }
-
-  const [targetMailbox, duplicateCredential, duplicateAddress] = await Promise.all([
-    oauthState.mailboxId
+const loadGmailOAuthMailboxConflicts = async (input: {
+  emailAddress: string;
+  mailboxId: string | null;
+  tokenSubject: string;
+}) =>
+  await Promise.all([
+    hasText(input.mailboxId)
       ? db
           .select({
             emailAddress: mailbox.emailAddress,
@@ -792,7 +857,7 @@ export const completeGmailOAuth = async (input: {
           })
           .from(mailbox)
           .innerJoin(gmailCredential, eq(gmailCredential.mailboxId, mailbox.id))
-          .where(eq(mailbox.id, oauthState.mailboxId))
+          .where(eq(mailbox.id, input.mailboxId))
           .limit(1)
           .then((rows) => rows[0] ?? null)
       : Promise.resolve(null),
@@ -804,7 +869,7 @@ export const completeGmailOAuth = async (input: {
       })
       .from(gmailCredential)
       .innerJoin(mailbox, eq(mailbox.id, gmailCredential.mailboxId))
-      .where(eq(gmailCredential.googleSubject, tokenInfo.sub))
+      .where(eq(gmailCredential.googleSubject, input.tokenSubject))
       .limit(1)
       .then((rows) => rows[0] ?? null),
     db
@@ -816,101 +881,277 @@ export const completeGmailOAuth = async (input: {
       })
       .from(mailbox)
       .leftJoin(gmailCredential, eq(gmailCredential.mailboxId, mailbox.id))
-      .where(eq(mailbox.emailAddress, emailAddress))
+      .where(eq(mailbox.emailAddress, input.emailAddress))
       .limit(1)
       .then((rows) => rows[0] ?? null),
   ]);
 
+const assertGmailOAuthMailboxAvailability = (input: {
+  duplicateAddress: {
+    googleSubject: string | null;
+    ownerUserId: string | null;
+  } | null;
+  duplicateCredential: { ownerUserId: string | null } | null;
+  emailAddress: string;
+  sessionUserId: string;
+  targetMailbox: {
+    emailAddress: string;
+    googleSubject: string;
+    ownerUserId: string | null;
+  } | null;
+  tokenSubject: string;
+}) => {
   if (
-    targetMailbox &&
-    (targetMailbox.ownerUserId !== session.user.id ||
-      targetMailbox.googleSubject !== tokenInfo.sub ||
-      normalizeEmailAddress(targetMailbox.emailAddress) !== emailAddress)
+    input.targetMailbox !== null &&
+    (input.targetMailbox.ownerUserId !== input.sessionUserId ||
+      input.targetMailbox.googleSubject !== input.tokenSubject ||
+      normalizeEmailAddress(input.targetMailbox.emailAddress) !==
+        input.emailAddress)
   ) {
     throw new ORPCError("BAD_REQUEST", {
-      message: "Reconnect by selecting the same Google account used by this mailbox.",
+      message:
+        "Reconnect by selecting the same Google account used by this mailbox.",
     });
   }
 
   if (
-    duplicateAddress?.ownerUserId === session.user.id &&
-    duplicateAddress.googleSubject &&
-    duplicateAddress.googleSubject !== tokenInfo.sub
+    input.duplicateAddress?.ownerUserId === input.sessionUserId &&
+    hasText(input.duplicateAddress.googleSubject) &&
+    input.duplicateAddress.googleSubject !== input.tokenSubject
   ) {
     throw new ORPCError("CONFLICT", {
-      message: "That address is already connected through a different Google identity.",
+      message:
+        "That address is already connected through a different Google identity.",
     });
   }
 
   if (
-    (duplicateCredential && duplicateCredential.ownerUserId !== session.user.id) ||
-    (duplicateAddress && duplicateAddress.ownerUserId !== session.user.id)
+    (input.duplicateCredential !== null &&
+      input.duplicateCredential.ownerUserId !== input.sessionUserId) ||
+    (input.duplicateAddress !== null &&
+      input.duplicateAddress.ownerUserId !== input.sessionUserId)
   ) {
     throw new ORPCError("CONFLICT", {
-      message: "That Gmail mailbox is already connected to another Quieter user.",
+      message:
+        "That Gmail mailbox is already connected to another Quieter user.",
     });
   }
+};
 
-  const existingMailboxId =
-    targetMailbox?.id ?? duplicateCredential?.mailboxId ?? duplicateAddress?.id ?? null;
-  const mailboxId = existingMailboxId ?? randomUUID();
-  const encryptedRefreshToken =
-    tokenResponse.refresh_token !== undefined
-      ? encryptSecret(tokenResponse.refresh_token)
-      : (targetMailbox?.refreshToken ??
-        duplicateCredential?.encryptedRefreshToken ??
-        duplicateAddress?.encryptedRefreshToken);
-  if (!encryptedRefreshToken) {
-    throw new Error("Google did not return an offline refresh token. Reconnect and grant access.");
-  }
-
+const persistGmailOAuthMailbox = async (input: {
+  encryptedRefreshToken: string;
+  emailAddress: string;
+  existingMailboxId: string | null;
+  mailboxId: string;
+  organizationId: string;
+  ownerUserId: string;
+  tokenInfo: { sub: string };
+  tokenResponse: z.infer<typeof googleTokenResponseSchema>;
+}) => {
   const now = new Date();
-  const mailboxWrite = existingMailboxId
+  const { existingMailboxId } = input;
+  const mailboxWrite = hasText(existingMailboxId)
     ? db
         .update(mailbox)
         .set({
-          emailAddress,
-          organizationId: oauthState.organizationId,
+          emailAddress: input.emailAddress,
+          organizationId: input.organizationId,
           status: "connected",
           updatedAt: now,
         })
-        .where(and(eq(mailbox.id, existingMailboxId), eq(mailbox.ownerUserId, session.user.id)))
+        .where(
+          and(
+            eq(mailbox.id, existingMailboxId),
+            eq(mailbox.ownerUserId, input.ownerUserId)
+          )
+        )
     : db.insert(mailbox).values({
         createdAt: now,
         displayName: DEFAULT_GMAIL_MAILBOX_NAME,
-        emailAddress,
-        id: mailboxId,
-        organizationId: oauthState.organizationId,
-        ownerUserId: session.user.id,
+        emailAddress: input.emailAddress,
+        id: input.mailboxId,
+        organizationId: input.organizationId,
+        ownerUserId: input.ownerUserId,
         provider: MAILBOX_PROVIDER_GMAIL,
         status: "connected",
         updatedAt: now,
       });
-  const encryptedAccessToken = encryptSecret(tokenResponse.access_token);
+  const encryptedAccessToken = encryptSecret(input.tokenResponse.access_token);
   await mailboxWrite;
   await db
     .insert(gmailCredential)
     .values({
-      accessTokenExpiresAt: new Date(now.getTime() + tokenResponse.expires_in * 1000),
+      accessTokenExpiresAt: new Date(
+        now.getTime() + input.tokenResponse.expires_in * 1000
+      ),
       createdAt: now,
       encryptedAccessToken,
-      encryptedRefreshToken,
-      googleSubject: tokenInfo.sub,
-      mailboxId,
-      scopes: tokenResponse.scope,
+      encryptedRefreshToken: input.encryptedRefreshToken,
+      googleSubject: input.tokenInfo.sub,
+      mailboxId: input.mailboxId,
+      scopes: input.tokenResponse.scope,
       updatedAt: now,
     })
     .onConflictDoUpdate({
       set: {
-        accessTokenExpiresAt: new Date(now.getTime() + tokenResponse.expires_in * 1000),
+        accessTokenExpiresAt: new Date(
+          now.getTime() + input.tokenResponse.expires_in * 1000
+        ),
         encryptedAccessToken,
-        encryptedRefreshToken,
-        googleSubject: tokenInfo.sub,
-        scopes: tokenResponse.scope,
+        encryptedRefreshToken: input.encryptedRefreshToken,
+        googleSubject: input.tokenInfo.sub,
+        scopes: input.tokenResponse.scope,
         updatedAt: now,
       },
       target: gmailCredential.mailboxId,
     });
+};
+
+const assertGoogleGmailScopes = (scope: string) => {
+  const grantedScopes = new Set(scope.split(/\s+/u).filter(hasText));
+  if (!GMAIL_SCOPES.every((grantedScope) => grantedScopes.has(grantedScope))) {
+    throw new Error("Google did not grant all required Gmail permissions.");
+  }
+};
+
+const exchangeAndValidateGmailOAuthGrant = async (input: {
+  code: string;
+  codeVerifier: string;
+}) => {
+  const tokenResponse = await exchangeGoogleAuthorizationCode(
+    input.code,
+    input.codeVerifier
+  );
+  const tokenInfo = await validateGoogleIdToken(tokenResponse.id_token);
+  const profile = await getGmailProfile(tokenResponse.access_token);
+  const emailAddress = normalizeEmailAddress(profile.emailAddress);
+
+  if (emailAddress !== normalizeEmailAddress(tokenInfo.email)) {
+    throw new Error("The Google identity and Gmail mailbox do not match.");
+  }
+
+  assertGoogleGmailScopes(tokenResponse.scope);
+
+  return { emailAddress, tokenInfo, tokenResponse };
+};
+
+const resolveGmailOAuthMailboxIdentity = (input: {
+  duplicateAddress: {
+    encryptedRefreshToken: string | null;
+    id: string;
+  } | null;
+  duplicateCredential: {
+    encryptedRefreshToken: string | null;
+    mailboxId: string;
+  } | null;
+  targetMailbox: {
+    id: string;
+    refreshToken: string | null;
+  } | null;
+  tokenRefreshToken: string | undefined;
+}) => {
+  const existingMailboxId =
+    input.targetMailbox?.id ??
+    input.duplicateCredential?.mailboxId ??
+    input.duplicateAddress?.id ??
+    null;
+  const mailboxId = existingMailboxId ?? randomUUID();
+  const encryptedRefreshToken =
+    input.tokenRefreshToken === undefined
+      ? (input.targetMailbox?.refreshToken ??
+        input.duplicateCredential?.encryptedRefreshToken ??
+        input.duplicateAddress?.encryptedRefreshToken)
+      : encryptSecret(input.tokenRefreshToken);
+  if (!hasText(encryptedRefreshToken)) {
+    throw new Error(
+      "Google did not return an offline refresh token. Reconnect and grant access."
+    );
+  }
+
+  return { encryptedRefreshToken, existingMailboxId, mailboxId };
+};
+
+export const completeGmailOAuth = async (input: {
+  code: string;
+  headers: Headers;
+  state: string;
+}) => {
+  const session = await getSessionWithOrganization(input.headers);
+  if (session?.user === undefined || session.session === undefined) {
+    throw new ORPCError("UNAUTHORIZED", {
+      message: "Sign in before connecting Gmail.",
+    });
+  }
+
+  const [oauthState] = await db
+    .delete(gmailOAuthState)
+    .where(eq(gmailOAuthState.id, input.state))
+    .returning();
+
+  if (
+    oauthState === undefined ||
+    oauthState.userId !== session.user.id ||
+    oauthState.expiresAt.getTime() <= Date.now()
+  ) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "This Gmail connection request is invalid or expired.",
+    });
+  }
+
+  if (hasText(oauthState.organizationId)) {
+    await assertOrganizationMembership(
+      session.user.id,
+      oauthState.organizationId
+    );
+  }
+
+  const { organizationId } = oauthState;
+  if (!hasText(organizationId)) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Create a team before connecting Gmail.",
+    });
+  }
+
+  const { emailAddress, tokenInfo, tokenResponse } =
+    await exchangeAndValidateGmailOAuthGrant({
+      code: input.code,
+      codeVerifier: oauthState.codeVerifier,
+    });
+
+  const [targetMailbox, duplicateCredential, duplicateAddress] =
+    await loadGmailOAuthMailboxConflicts({
+      emailAddress,
+      mailboxId: oauthState.mailboxId,
+      tokenSubject: tokenInfo.sub,
+    });
+
+  assertGmailOAuthMailboxAvailability({
+    duplicateAddress,
+    duplicateCredential,
+    emailAddress,
+    sessionUserId: session.user.id,
+    targetMailbox,
+    tokenSubject: tokenInfo.sub,
+  });
+
+  const { encryptedRefreshToken, existingMailboxId, mailboxId } =
+    resolveGmailOAuthMailboxIdentity({
+      duplicateAddress,
+      duplicateCredential,
+      targetMailbox,
+      tokenRefreshToken: tokenResponse.refresh_token,
+    });
+
+  await persistGmailOAuthMailbox({
+    emailAddress,
+    encryptedRefreshToken,
+    existingMailboxId,
+    mailboxId,
+    organizationId,
+    ownerUserId: session.user.id,
+    tokenInfo,
+    tokenResponse,
+  });
 
   return {
     mailboxId,
@@ -918,26 +1159,31 @@ export const completeGmailOAuth = async (input: {
   };
 };
 
-export const disconnectGmailMailbox = async (input: { mailboxId: string; userId: string }) => {
+export const disconnectGmailMailbox = async (input: {
+  mailboxId: string;
+  userId: string;
+}) => {
   const [deletedMailbox] = await db
     .delete(mailbox)
     .where(
       and(
         eq(mailbox.id, input.mailboxId),
         eq(mailbox.ownerUserId, input.userId),
-        eq(mailbox.provider, MAILBOX_PROVIDER_GMAIL),
-      ),
+        eq(mailbox.provider, MAILBOX_PROVIDER_GMAIL)
+      )
     )
     .returning({ id: mailbox.id });
 
-  if (!deletedMailbox) {
+  if (deletedMailbox === undefined) {
     throw new ORPCError("NOT_FOUND", { message: "Gmail mailbox not found." });
   }
 
   await db
     .update(user)
     .set({ defaultMailboxId: null, updatedAt: new Date() })
-    .where(and(eq(user.id, input.userId), eq(user.defaultMailboxId, input.mailboxId)));
+    .where(
+      and(eq(user.id, input.userId), eq(user.defaultMailboxId, input.mailboxId))
+    );
   return { disconnected: true, mailboxId: input.mailboxId };
 };
 
@@ -955,11 +1201,11 @@ export const moveGmailMailbox = async (input: {
       and(
         eq(mailbox.id, input.mailboxId),
         eq(mailbox.ownerUserId, input.userId),
-        eq(mailbox.provider, MAILBOX_PROVIDER_GMAIL),
-      ),
+        eq(mailbox.provider, MAILBOX_PROVIDER_GMAIL)
+      )
     )
     .returning({ id: mailbox.id, organizationId: mailbox.organizationId });
-  if (!updatedMailbox) {
+  if (updatedMailbox === undefined) {
     throw new ORPCError("NOT_FOUND", { message: "Gmail mailbox not found." });
   }
   return updatedMailbox;
@@ -970,12 +1216,15 @@ export const updateGmailMailboxDisplayName = async (input: {
   mailboxId: string;
   userId: string;
 }) => {
-  await assertOwnedGmailMailbox({ mailboxId: input.mailboxId, userId: input.userId });
+  await assertOwnedGmailMailbox({
+    mailboxId: input.mailboxId,
+    userId: input.userId,
+  });
 
   const [updatedMailbox] = await db
     .update(mailbox)
     .set({
-      displayName: input.displayName?.trim() || null,
+      displayName: hasText(input.displayName) ? input.displayName.trim() : null,
       updatedAt: new Date(),
     })
     .where(eq(mailbox.id, input.mailboxId))
@@ -983,7 +1232,7 @@ export const updateGmailMailboxDisplayName = async (input: {
       displayName: mailbox.displayName,
       mailboxId: mailbox.id,
     });
-  if (!updatedMailbox) {
+  if (updatedMailbox === undefined) {
     throw new ORPCError("NOT_FOUND", { message: "Gmail mailbox not found." });
   }
   return updatedMailbox;
@@ -1000,10 +1249,15 @@ export const updateMailboxSignature = async (input: {
     .from(mailbox)
     .where(eq(mailbox.id, input.mailboxId))
     .limit(1);
-  if (!selectedMailbox) throw new ORPCError("NOT_FOUND", { message: "Mailbox not found." });
+  if (selectedMailbox === undefined) {
+    throw new ORPCError("NOT_FOUND", { message: "Mailbox not found." });
+  }
 
   if (selectedMailbox.provider === MAILBOX_PROVIDER_GMAIL) {
-    await assertOwnedGmailMailbox({ mailboxId: input.mailboxId, userId: input.userId });
+    await assertOwnedGmailMailbox({
+      mailboxId: input.mailboxId,
+      userId: input.userId,
+    });
   } else {
     await getAuthorizedManagedMailbox({
       mailboxId: input.mailboxId,
@@ -1015,8 +1269,12 @@ export const updateMailboxSignature = async (input: {
   const [updated] = await db
     .update(mailbox)
     .set({
-      signatureHtml: input.signatureHtml?.trim() || null,
-      signatureText: input.signatureText?.trim() || null,
+      signatureHtml: hasText(input.signatureHtml)
+        ? input.signatureHtml.trim()
+        : null,
+      signatureText: hasText(input.signatureText)
+        ? input.signatureText.trim()
+        : null,
       updatedAt: new Date(),
     })
     .where(eq(mailbox.id, input.mailboxId))
@@ -1025,7 +1283,9 @@ export const updateMailboxSignature = async (input: {
       signatureHtml: mailbox.signatureHtml,
       signatureText: mailbox.signatureText,
     });
-  if (!updated) throw new ORPCError("NOT_FOUND", { message: "Mailbox not found." });
+  if (updated === undefined) {
+    throw new ORPCError("NOT_FOUND", { message: "Mailbox not found." });
+  }
   return updated;
 };
 

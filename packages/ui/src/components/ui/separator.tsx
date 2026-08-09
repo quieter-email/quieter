@@ -1,7 +1,8 @@
 "use client";
 
-import type { ComponentPropsWithoutRef } from "react";
 import { Separator as SeparatorPrimitive } from "@base-ui/react/separator";
+import type { ComponentPropsWithoutRef } from "react";
+
 import { cn } from "../../lib/cn";
 
 export const Separator = ({
@@ -11,9 +12,12 @@ export const Separator = ({
 }: ComponentPropsWithoutRef<typeof SeparatorPrimitive>) => (
   <SeparatorPrimitive
     className={cn(
-      { "h-px w-full": orientation === "horizontal", "h-full w-px": orientation !== "horizontal" },
+      {
+        "h-full w-px": orientation !== "horizontal",
+        "h-px w-full": orientation === "horizontal",
+      },
       "shrink-0 bg-border",
-      className,
+      className
     )}
     orientation={orientation}
     {...props}

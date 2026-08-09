@@ -3,21 +3,30 @@ import { mailDomain } from "@quieter/database/schema";
 import { extractMailAddress } from "@quieter/mail/compose/schema";
 import { and, eq } from "drizzle-orm";
 
+import { hasText } from "./text";
+
 export class OrganizationMailSendError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-  ) {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
     super(message);
     this.name = "OrganizationMailSendError";
+    this.status = status;
   }
 }
 
 const getSenderDomain = (sender: string) => {
-  const domain = extractMailAddress(sender).trim().toLowerCase().split("@").at(1);
+  const domain = extractMailAddress(sender)
+    .trim()
+    .toLowerCase()
+    .split("@")
+    .at(1);
 
-  if (!domain) {
-    throw new OrganizationMailSendError("Sender must be an email address.", 400);
+  if (!hasText(domain)) {
+    throw new OrganizationMailSendError(
+      "Sender must be an email address.",
+      400
+    );
   }
 
   return domain;
@@ -35,13 +44,16 @@ export const assertOrganizationOwnsVerifiedSenderDomain = async (input: {
       and(
         eq(mailDomain.organizationId, input.organizationId),
         eq(mailDomain.domain, domain),
-        eq(mailDomain.status, "verified"),
-      ),
+        eq(mailDomain.status, "verified")
+      )
     )
     .limit(1);
 
-  if (!ownedDomain) {
-    throw new OrganizationMailSendError("Sender domain is not verified for this team.", 403);
+  if (ownedDomain === undefined) {
+    throw new OrganizationMailSendError(
+      "Sender domain is not verified for this team.",
+      403
+    );
   }
 
   return domain;

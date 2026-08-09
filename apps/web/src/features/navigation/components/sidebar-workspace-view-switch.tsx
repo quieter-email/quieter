@@ -1,21 +1,23 @@
 "use client";
 
 import { Chat01Icon, InboxIcon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import type { IconSvgElement } from "@hugeicons/react";
 import { cn } from "@quieter/ui/cn";
 import { LayoutGroup } from "motion/react";
-import type { MailboxWorkspaceView } from "~/features/mailbox/domain/mailbox-workspace-view";
-import { SidebarNavItem } from "~/features/navigation/components/sidebar-nav-item";
-import { SidebarEntrance } from "~/features/navigation/components/sidebar-surfaces";
-import { useSidebarNavHover } from "~/features/navigation/hooks/use-sidebar-nav-hover";
 
-const WORKSPACE_VIEW_OPTIONS: ReadonlyArray<{
+import type { MailboxWorkspaceView } from "#/features/mailbox/domain/mailbox-workspace-view";
+import { SidebarNavItem } from "#/features/navigation/components/sidebar-nav-item";
+import { SidebarEntrance } from "#/features/navigation/components/sidebar-surfaces";
+import { useSidebarNavHover } from "#/features/navigation/hooks/use-sidebar-nav-hover";
+
+const WORKSPACE_VIEW_OPTIONS: readonly {
   id: MailboxWorkspaceView;
   label: string;
   icon: IconSvgElement;
-}> = [
-  { id: "inbox", label: "Mail", icon: InboxIcon },
-  { id: "chat", label: "Chat", icon: Chat01Icon },
+}[] = [
+  { icon: InboxIcon, id: "inbox", label: "Mail" },
+  { icon: Chat01Icon, id: "chat", label: "Chat" },
 ];
 
 type SidebarWorkspaceViewSwitchProps = {
@@ -42,7 +44,11 @@ export const SidebarWorkspaceViewSwitch = ({
   } = useSidebarNavHover<MailboxWorkspaceView>("workspace-view-hover");
 
   return (
-    <SidebarEntrance animateEntrance={animateEntrance} className="w-full min-w-0" index={1}>
+    <SidebarEntrance
+      animateEntrance={animateEntrance}
+      className="w-full min-w-0"
+      index={1}
+    >
       <LayoutGroup id="workspace-view">
         <nav
           ref={navRef}
@@ -67,10 +73,16 @@ export const SidebarWorkspaceViewSwitch = ({
                   hoverEnter={itemHovered && hoverEnter}
                   hoverExiting={isHoverExiting(id)}
                   hoverLayoutId={hoverLayoutId}
-                  onBlur={(event) => clearHoverIfLeavingNav(event.relatedTarget)}
-                  onClick={() => onSelectView(id)}
+                  onBlur={(event) => {
+                    clearHoverIfLeavingNav(event.relatedTarget);
+                  }}
+                  onClick={() => {
+                    onSelectView(id);
+                  }}
                   onFocus={() => {
-                    if (!isActive) setHover(id);
+                    if (!isActive) {
+                      setHover(id);
+                    }
                   }}
                   onHoverExitComplete={onHoverExitComplete}
                   onMouseEnter={() => {

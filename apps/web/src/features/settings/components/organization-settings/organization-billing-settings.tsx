@@ -6,20 +6,21 @@ import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+
 import {
   BillingCreditSummary,
   BillingProductCard,
-} from "~/features/settings/components/billing-product-card";
+} from "#/features/settings/components/billing-product-card";
 import {
   SettingsRowText,
   settingsSurfaceVariants,
-} from "~/features/settings/components/settings-layout";
+} from "#/features/settings/components/settings-layout";
 import {
   normalizeBillingProduct,
-  type UserBillingOverview,
   USER_BILLING_QUERY_KEY,
-} from "~/features/settings/domain/billing";
-import { orpc } from "~/lib/orpc";
+} from "#/features/settings/domain/billing";
+import type { UserBillingOverview } from "#/features/settings/domain/billing";
+import { orpc } from "#/lib/orpc";
 
 export const OrganizationBillingSettings = ({
   billing,
@@ -59,10 +60,14 @@ export const OrganizationBillingSettings = ({
         className={cn(
           settingsSurfaceVariants({ variant: "insetSection" }),
           "flex items-center gap-2",
-          settingsSurfaceVariants({ variant: "value" }),
+          settingsSurfaceVariants({ variant: "value" })
         )}
       >
-        <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+        <HugeiconsIcon
+          aria-hidden
+          className="size-4 animate-spin"
+          icon={Loading03Icon}
+        />
         Loading billing…
       </section>
     );
@@ -84,7 +89,7 @@ export const OrganizationBillingSettings = ({
         className={cn(
           settingsSurfaceVariants({ variant: "insetSection" }),
           "flex items-center gap-2",
-          settingsSurfaceVariants({ variant: "value" }),
+          settingsSurfaceVariants({ variant: "value" })
         )}
       >
         <HugeiconsIcon aria-hidden className="size-4" icon={Loading03Icon} />
@@ -96,7 +101,12 @@ export const OrganizationBillingSettings = ({
   const currentProduct = normalizeBillingProduct(billing.product);
 
   return (
-    <section className={cn(settingsSurfaceVariants({ variant: "divider" }), "px-4 py-6 md:px-6")}>
+    <section
+      className={cn(
+        settingsSurfaceVariants({ variant: "divider" }),
+        "px-4 py-6 md:px-6"
+      )}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <SettingsRowText title="Billing">
           <BillingCreditSummary
@@ -108,12 +118,18 @@ export const OrganizationBillingSettings = ({
         {currentProduct && billing.canManageBilling && (
           <Button
             disabled={portalMutation.isPending}
-            onClick={() => portalMutation.mutate({ organizationId })}
+            onClick={() => {
+              portalMutation.mutate({ organizationId });
+            }}
             size="sm"
             variant="outline"
           >
             {portalMutation.isPending && (
-              <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+              <HugeiconsIcon
+                aria-hidden
+                className="size-4 animate-spin"
+                icon={Loading03Icon}
+              />
             )}
             Manage billing
           </Button>
@@ -127,10 +143,13 @@ export const OrganizationBillingSettings = ({
             currentProduct={currentProduct}
             isAnyCheckoutPending={checkoutMutation.isPending}
             isStartingCheckout={
-              checkoutMutation.isPending && checkoutMutation.variables?.product === product
+              checkoutMutation.isPending &&
+              checkoutMutation.variables?.product === product
             }
             key={product}
-            onCheckout={() => checkoutMutation.mutate({ organizationId, product })}
+            onCheckout={() => {
+              checkoutMutation.mutate({ organizationId, product });
+            }}
             productId={product}
           />
         ))}

@@ -1,9 +1,17 @@
 const SAFE_RETURN_TO_ORIGIN = "https://quieter.local";
 
-export const getSafeAuthReturnTo = (value: string | null | undefined) => {
+export const getSafeAuthReturnTo = (
+  value: string | null | undefined
+): string | undefined => {
   const trimmed = value?.trim();
 
-  if (!trimmed || !trimmed.startsWith("/") || trimmed.startsWith("//") || trimmed.includes("\\")) {
+  if (
+    trimmed === undefined ||
+    trimmed === "" ||
+    !trimmed.startsWith("/") ||
+    trimmed.startsWith("//") ||
+    trimmed.includes("\\")
+  ) {
     return undefined;
   }
 

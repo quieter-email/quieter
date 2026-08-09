@@ -3,25 +3,39 @@
 import { CodeIcon, KeyboardIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
-import { useColorMode, type ConfigColorMode } from "@quieter/ui/color-mode";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@quieter/ui/select";
+import { useColorMode } from "@quieter/ui/color-mode";
+import type { ConfigColorMode } from "@quieter/ui/color-mode";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@quieter/ui/select";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
-import { ConsentPreferencesLink } from "~/components/consent-preferences-link";
-import { useKeyboardShortcuts } from "~/features/hotkeys/components/keyboard-shortcuts-context";
+
+import { ConsentPreferencesLink } from "#/components/consent-preferences-link";
+import { useKeyboardShortcuts } from "#/features/hotkeys/components/keyboard-shortcuts-context";
 import {
   isDemoModeAvailable,
   setDemoModeEnabled,
   useDemoModeEnabled,
-} from "~/features/settings/domain/demo-mode-setting";
+} from "#/features/settings/domain/demo-mode-setting";
 import {
   setExternalImagesEnabled,
   useExternalImagesEnabled,
-} from "~/features/settings/domain/external-images-setting";
+} from "#/features/settings/domain/external-images-setting";
 import {
   setManagedDemoModeEnabled,
   useManagedDemoModeEnabled,
-} from "~/features/settings/domain/managed-demo-mode-setting";
-import { SettingsCard, SettingsRow, SettingsRows, SettingsSection } from "./settings-layout";
+} from "#/features/settings/domain/managed-demo-mode-setting";
+
+import {
+  SettingsCard,
+  SettingsRow,
+  SettingsRows,
+  SettingsSection,
+} from "./settings-layout";
 
 const COLOR_MODE_OPTIONS: { label: string; value: ConfigColorMode }[] = [
   { label: "Light", value: "light" },
@@ -43,7 +57,11 @@ export const AppearanceSettingsPanel = () => {
                 value: option.value,
               }))}
               onValueChange={(value) => {
-                if (value === "light" || value === "dark" || value === "system") {
+                if (
+                  value === "light" ||
+                  value === "dark" ||
+                  value === "system"
+                ) {
                   setColorMode(value);
                 }
               }}
@@ -90,7 +108,8 @@ export const ReadingSettingsPanel = () => {
           }
           title="Allow external images"
         >
-          When disabled, remote images stay hidden until you allow them for the open message.
+          When disabled, remote images stay hidden until you allow them for the
+          open message.
         </SettingsRow>
       </SettingsRows>
     </SettingsSection>
@@ -105,8 +124,17 @@ export const ShortcutsSettingsPanel = () => {
       <SettingsRows>
         <SettingsRow
           action={
-            <Button onClick={openKeyboardShortcuts} size="sm" type="button" variant="outline">
-              <HugeiconsIcon aria-hidden className="size-4 shrink-0" icon={KeyboardIcon} />
+            <Button
+              onClick={openKeyboardShortcuts}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <HugeiconsIcon
+                aria-hidden
+                className="size-4 shrink-0"
+                icon={KeyboardIcon}
+              />
               View
             </Button>
           }
@@ -128,7 +156,8 @@ export const PrivacySettingsPanel = () => (
         }
         title="Cookie and analytics preferences"
       >
-        Choose which optional cookies and measurement tools Quieter may use in this browser.
+        Choose which optional cookies and measurement tools Quieter may use in
+        this browser.
       </SettingsRow>
     </SettingsRows>
   </SettingsSection>
@@ -158,7 +187,8 @@ export const DevelopmentSettingsPanel = () => {
           }
           title="Gmail demo mailbox"
         >
-          Replace real mailbox data with local Gmail demo messages while developing.
+          Replace real mailbox data with local Gmail demo messages while
+          developing.
         </SettingsRow>
         <SettingsRow
           action={
@@ -173,8 +203,8 @@ export const DevelopmentSettingsPanel = () => {
           }
           title="Managed demo mailbox"
         >
-          Replace real mailbox data with local managed-mail fixtures: labels, saved views, threads,
-          and inbox states. Nothing is sent for real.
+          Replace real mailbox data with local managed-mail fixtures: labels,
+          saved views, threads, and inbox states. Nothing is sent for real.
         </SettingsRow>
       </SettingsRows>
     </SettingsSection>

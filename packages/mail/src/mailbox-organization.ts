@@ -1,4 +1,5 @@
 import { z } from "zod";
+
 import { structuredMailSearchSchema } from "./search";
 
 export const mailboxLabelColorSchema = z.enum([
@@ -35,7 +36,9 @@ export const mailboxSavedViewDefinitionSchema = z.object({
   sort: z.enum(["newest", "oldest", "relevance"]).default("newest"),
 });
 
-export type MailboxSavedViewDefinition = z.infer<typeof mailboxSavedViewDefinitionSchema>;
+export type MailboxSavedViewDefinition = z.infer<
+  typeof mailboxSavedViewDefinitionSchema
+>;
 
 export const managedMailboxRuleActionSchema = z.discriminatedUnion("kind", [
   z.object({
@@ -52,9 +55,12 @@ export const managedMailboxRuleActionSchema = z.discriminatedUnion("kind", [
       kind: z.literal("set-labels"),
       removeIds: z.array(z.string().trim().min(1)).max(100),
     })
-    .refine((action) => action.addIds.length > 0 || action.removeIds.length > 0, {
-      message: "A label action must change at least one label.",
-    }),
+    .refine(
+      (action) => action.addIds.length > 0 || action.removeIds.length > 0,
+      {
+        message: "A label action must change at least one label.",
+      }
+    ),
   z.object({
     includeAttachments: z.boolean().default(false),
     kind: z.literal("forward"),
@@ -63,16 +69,24 @@ export const managedMailboxRuleActionSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("stop-processing") }),
 ]);
 
-export type ManagedMailboxRuleAction = z.infer<typeof managedMailboxRuleActionSchema>;
+export type ManagedMailboxRuleAction = z.infer<
+  typeof managedMailboxRuleActionSchema
+>;
 
 export const getManagedMailboxRuleActions = (input: {
   actions?: unknown;
   labelIds?: readonly string[];
-}) => {
-  const parsed = managedMailboxRuleActionSchema.array().safeParse(input.actions);
-  if (parsed.success) return parsed.data;
+}): ManagedMailboxRuleAction[] => {
+  const parsed = managedMailboxRuleActionSchema
+    .array()
+    .safeParse(input.actions);
+  if (parsed.success) {
+    return parsed.data;
+  }
 
-  const labelIds = Array.from(new Set(input.labelIds ?? [])).filter(Boolean);
+  const labelIds = input.labelIds
+    ? [...new Set(input.labelIds.filter((labelId) => labelId.length > 0))]
+    : [];
   return labelIds.length > 0
     ? ([
         {
@@ -95,7 +109,10 @@ export type ManagedMailboxRuleConditionGroup = z.infer<
 
 export const managedMailboxRuleDefinitionSchema = z.object({
   actions: z.array(managedMailboxRuleActionSchema).min(1).max(20).optional(),
-  conditionGroups: z.array(managedMailboxRuleConditionGroupSchema).max(20).optional(),
+  conditionGroups: z
+    .array(managedMailboxRuleConditionGroupSchema)
+    .max(20)
+    .optional(),
   enabled: z.boolean(),
   labelIds: z.array(z.string().trim().min(1)).max(100).default([]),
   matchMode: z.enum(["all", "any"]),
@@ -103,4 +120,6 @@ export const managedMailboxRuleDefinitionSchema = z.object({
   search: structuredMailSearchSchema,
 });
 
-export type ManagedMailboxRuleDefinition = z.infer<typeof managedMailboxRuleDefinitionSchema>;
+export type ManagedMailboxRuleDefinition = z.infer<
+  typeof managedMailboxRuleDefinitionSchema
+>;

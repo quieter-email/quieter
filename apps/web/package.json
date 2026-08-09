@@ -2,6 +2,14 @@
   "name": "@quieter/web",
   "private": true,
   "type": "module",
+  "imports": {
+    "#/*": [
+      "./src/*.ts",
+      "./src/*.tsx",
+      "./src/*/index.ts",
+      "./src/*/index.tsx"
+    ]
+  },
   "scripts": {
     "build": "bun --env-file=../../.env.local vp run @quieter/env#build && bun --env-file=../../.env.local vp build && bun scripts/check-worker-memory-boundaries.ts",
     "dev": "bun --env-file=../../.env.local vp dev --port 3000 --strictPort",
@@ -28,6 +36,7 @@
     "@quieter/env": "workspace:*",
     "@quieter/gmail": "workspace:*",
     "@quieter/mail": "workspace:*",
+    "@quieter/observability": "workspace:*",
     "@quieter/orpc": "workspace:*",
     "@quieter/ui": "workspace:*",
     "@sentry/tanstackstart-react": "^10.62.0",

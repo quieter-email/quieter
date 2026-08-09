@@ -3,12 +3,20 @@ import {
   getDraft,
   sendRawMessage,
   updateDraft,
-  type GmailMessage,
 } from "@quieter/gmail";
+import type { GmailMessage } from "@quieter/gmail";
 import { parseDraftMessage } from "@quieter/gmail/compose";
-import { arrayBufferToBase64Url, buildMimeMessage } from "@quieter/mail/compose/mime";
-import { composeDraftInputSchema, composeMessageInputSchema } from "@quieter/mail/compose/schema";
-import { z } from "zod";
+import {
+  arrayBufferToBase64Url,
+  buildMimeMessage,
+} from "@quieter/mail/compose/mime";
+import type {
+  composeDraftInputSchema,
+  composeMessageInputSchema,
+} from "@quieter/mail/compose/schema";
+import type { z } from "zod";
+
+import { hasText } from "./text";
 
 type ComposeDraftInput = z.infer<typeof composeDraftInputSchema>;
 type ComposeMessageInput = z.infer<typeof composeMessageInputSchema>;
@@ -16,38 +24,60 @@ type ComposeMessageInput = z.infer<typeof composeMessageInputSchema>;
 export const saveGmailDraft = async (
   accessToken: string,
   draft: ComposeDraftInput,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ) => {
   const raw = arrayBufferToBase64Url(
-    new TextEncoder().encode(await buildMimeMessage(draft, { includeQuieterDraftHeaders: true })),
+    new TextEncoder().encode(
+      await buildMimeMessage(draft, { includeQuieterDraftHeaders: true })
+    )
   );
-  const response = draft.draftId
-    ? await updateDraft(accessToken, draft.draftId, raw, draft.replyContext?.threadId, signal)
+  const response = hasText(draft.draftId)
+    ? await updateDraft(
+        accessToken,
+        draft.draftId,
+        raw,
+        draft.replyContext?.threadId,
+        signal
+      )
     : await createDraft(accessToken, raw, draft.replyContext?.threadId, signal);
   const savedDraft = await getDraft(accessToken, response.id, signal);
   const parsed = parseDraftMessage(savedDraft);
 
   return {
-    draftId: savedDraft.id,
+    bodyHtml: hasText(parsed.bodyHtml) ? parsed.bodyHtml : draft.bodyHtml,
+    bodyText: hasText(parsed.bodyText) ? parsed.bodyText : draft.bodyText,
     draftAnchor: parsed.draftAnchor ?? draft.draftAnchor ?? null,
-    messageId: savedDraft.message?.id ?? response.message?.id ?? parsed.messageId,
-    bodyHtml: parsed.bodyHtml || draft.bodyHtml,
-    bodyText: parsed.bodyText || draft.bodyText,
-    replyContext: parsed.replyContext ?? draft.replyContext ?? null,
-    subject: parsed.subject || draft.subject,
+    draftId: savedDraft.id,
+    messageId:
+      savedDraft.message?.id ?? response.message?.id ?? parsed.messageId,
     recipients: {
-      to: parsed.recipients.to || draft.recipients.to,
-      cc: parsed.recipients.cc || draft.recipients.cc,
-      bcc: parsed.recipients.bcc || draft.recipients.bcc,
+      bcc: hasText(parsed.recipients.bcc)
+        ? parsed.recipients.bcc
+        : draft.recipients.bcc,
+      cc: hasText(parsed.recipients.cc)
+        ? parsed.recipients.cc
+        : draft.recipients.cc,
+      to: hasText(parsed.recipients.to)
+        ? parsed.recipients.to
+        : draft.recipients.to,
     },
+    replyContext: parsed.replyContext ?? draft.replyContext ?? null,
+    subject: hasText(parsed.subject) ? parsed.subject : draft.subject,
   };
 };
 
 export const sendGmailMessage = async (
   accessToken: string,
   message: ComposeMessageInput,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<GmailMessage> => {
-  const raw = arrayBufferToBase64Url(new TextEncoder().encode(await buildMimeMessage(message)));
-  return await sendRawMessage(accessToken, raw, message.replyContext?.threadId, signal);
+  const raw = arrayBufferToBase64Url(
+    new TextEncoder().encode(await buildMimeMessage(message))
+  );
+  return await sendRawMessage(
+    accessToken,
+    raw,
+    message.replyContext?.threadId,
+    signal
+  );
 };

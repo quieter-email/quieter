@@ -1,5 +1,6 @@
 import { withRequestDatabaseClient } from "@quieter/database/client";
 import { serverEnv } from "@quieter/env/server";
+
 import { getAuthorizedChatRun, isActiveChatRunStatus } from "./chat-run-store";
 import {
   createChatRunHubSseResponse,
@@ -7,11 +8,12 @@ import {
   getChatRunHub,
   peekChatRunHub,
 } from "./chat/stream-hub";
+import { hasText } from "./text";
 
 const proxyChatRunStream = async (runId: string, request: Request) => {
   const startUrl = serverEnv.CHAT_GENERATION_START_URL;
   const token = serverEnv.CHAT_GENERATION_START_TOKEN;
-  if (!startUrl || !token) {
+  if (!hasText(startUrl) || !hasText(token)) {
     return createTerminalChatRunSseResponse({
       error: "Chat generation stream is not configured.",
       runId,
@@ -19,12 +21,15 @@ const proxyChatRunStream = async (runId: string, request: Request) => {
     });
   }
 
-  const streamUrl = new URL(`/runs/${encodeURIComponent(runId)}/stream`, startUrl);
+  const streamUrl = new URL(
+    `/runs/${encodeURIComponent(runId)}/stream`,
+    startUrl
+  );
   try {
     const response = await fetch(streamUrl, {
       headers: {
-        Authorization: `Bearer ${token}`,
         Accept: "text/event-stream",
+        Authorization: `Bearer ${token}`,
       },
       method: "GET",
       signal: request.signal,
@@ -60,25 +65,28 @@ export const createChatRunStreamResponse = async (input: {
   runId: string;
   userId: string;
 }) =>
-  withRequestDatabaseClient(async () => {
+  await withRequestDatabaseClient(async () => {
     const authorizedRun = await getAuthorizedChatRun(input.runId, input.userId);
 
-    if (!authorizedRun) {
+    if (authorizedRun === undefined) {
       return new Response("Unauthorized", { status: 401 });
     }
 
-    if (serverEnv.CHAT_GENERATION_START_URL) {
-      return proxyChatRunStream(input.runId, input.request);
+    if (hasText(serverEnv.CHAT_GENERATION_START_URL)) {
+      return await proxyChatRunStream(input.runId, input.request);
     }
 
     const existingHub = peekChatRunHub(input.runId);
-    if (existingHub) {
+    if (existingHub !== undefined) {
       return createChatRunHubSseResponse(existingHub, input.request.signal);
     }
 
     if (isActiveChatRunStatus(authorizedRun.status)) {
       // Race: stream attached before the producer created the hub.
-      return createChatRunHubSseResponse(getChatRunHub(input.runId), input.request.signal);
+      return createChatRunHubSseResponse(
+        getChatRunHub(input.runId),
+        input.request.signal
+      );
     }
 
     return createTerminalChatRunSseResponse({

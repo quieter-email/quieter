@@ -1,8 +1,9 @@
 "use client";
 
-import type { ReactNode } from "react";
 import { ReactLenis } from "lenis/react";
 import { useReducedMotion } from "motion/react";
+import type { ReactNode } from "react";
+
 import "lenis/dist/lenis.css";
 
 type HomeSmoothScrollProps = {
@@ -16,7 +17,9 @@ type HomeSmoothScrollProps = {
 export const HomeSmoothScroll = ({ children }: HomeSmoothScrollProps) => {
   const reduced = useReducedMotion();
 
-  if (reduced) return children;
+  if (reduced === true) {
+    return children;
+  }
 
   return (
     <ReactLenis

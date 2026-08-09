@@ -1,13 +1,11 @@
 import type { ChatModel } from "@quieter/ai/chat-models";
 import { db } from "@quieter/database/client";
-import {
-  chat,
-  chatMessage,
-  chatRun,
-  type ChatMessagePart,
-  type ChatMessageStatus,
-  type ChatRunContext,
-  type ChatRunStatus,
+import { chat, chatMessage, chatRun } from "@quieter/database/schema";
+import type {
+  ChatMessagePart,
+  ChatMessageStatus,
+  ChatRunContext,
+  ChatRunStatus,
 } from "@quieter/database/schema";
 import { and, desc, eq, gt, inArray } from "drizzle-orm";
 
@@ -17,14 +15,20 @@ export const ACTIVE_CHAT_RUN_STATUSES = [
   "waiting_on_tool",
 ] as const satisfies ChatRunStatus[];
 
+const ACTIVE_CHAT_RUN_STATUS_SET = new Set<ChatRunStatus>(
+  ACTIVE_CHAT_RUN_STATUSES
+);
+
 export const isActiveChatRunStatus = (
-  status: ChatRunStatus,
+  status: ChatRunStatus
 ): status is (typeof ACTIVE_CHAT_RUN_STATUSES)[number] =>
-  ACTIVE_CHAT_RUN_STATUSES.includes(status as (typeof ACTIVE_CHAT_RUN_STATUSES)[number]);
+  ACTIVE_CHAT_RUN_STATUS_SET.has(status);
 
 const ACTIVE_RUN_CONFLICT_INDEX = "chat_run_one_active_per_chat";
 const STALE_RUN_MS = 60_000;
-const EMPTY_ASSISTANT_PARTS: ChatMessagePart[] = [{ content: "", type: "text" }];
+const EMPTY_ASSISTANT_PARTS: ChatMessagePart[] = [
+  { content: "", type: "text" },
+];
 
 export class ActiveChatRunConflictError extends Error {
   constructor() {
@@ -35,22 +39,26 @@ export class ActiveChatRunConflictError extends Error {
 
 const getPostgresErrorField = (
   error: unknown,
-  field: "code" | "constraint",
+  field: "code" | "constraint"
 ): string | undefined => {
-  if (!error || typeof error !== "object") {
-    return;
+  if (error === null || typeof error !== "object") {
+    return undefined;
   }
 
-  const value = Reflect.get(error, field);
-  return typeof value === "string"
-    ? value
-    : getPostgresErrorField(Reflect.get(error, "cause"), field);
+  const value: unknown = Reflect.get(error, field);
+  if (typeof value === "string") {
+    return value;
+  }
+
+  return getPostgresErrorField(Reflect.get(error, "cause"), field);
 };
 
 const rethrowChatRunConflict = (error: unknown): never => {
   const isConflict =
     getPostgresErrorField(error, "code") === "23505" &&
-    [undefined, ACTIVE_RUN_CONFLICT_INDEX].includes(getPostgresErrorField(error, "constraint"));
+    [undefined, ACTIVE_RUN_CONFLICT_INDEX].includes(
+      getPostgresErrorField(error, "constraint")
+    );
 
   if (isConflict) {
     throw new ActiveChatRunConflictError();
@@ -62,7 +70,7 @@ const rethrowChatRunConflict = (error: unknown): never => {
 export const updateRunStatus = async (
   runId: string,
   status: ChatRunStatus,
-  extra?: { error?: string | null; lastHeartbeatAt?: Date },
+  extra?: { error?: string | null; lastHeartbeatAt?: Date }
 ) => {
   const now = new Date();
   const [updated] = await db
@@ -73,9 +81,14 @@ export const updateRunStatus = async (
       status,
       updatedAt: now,
     })
-    .where(and(eq(chatRun.id, runId), inArray(chatRun.status, [...ACTIVE_CHAT_RUN_STATUSES])))
+    .where(
+      and(
+        eq(chatRun.id, runId),
+        inArray(chatRun.status, [...ACTIVE_CHAT_RUN_STATUSES])
+      )
+    )
     .returning({ id: chatRun.id });
-  return !!updated;
+  return updated !== undefined;
 };
 
 export const touchChatRunHeartbeat = async (runId: string) => {
@@ -83,9 +96,14 @@ export const touchChatRunHeartbeat = async (runId: string) => {
   const [updated] = await db
     .update(chatRun)
     .set({ lastHeartbeatAt: now, updatedAt: now })
-    .where(and(eq(chatRun.id, runId), inArray(chatRun.status, [...ACTIVE_CHAT_RUN_STATUSES])))
+    .where(
+      and(
+        eq(chatRun.id, runId),
+        inArray(chatRun.status, [...ACTIVE_CHAT_RUN_STATUSES])
+      )
+    )
     .returning({ id: chatRun.id });
-  return !!updated;
+  return updated !== undefined;
 };
 
 export const persistChatRunDraft = async (input: {
@@ -94,8 +112,8 @@ export const persistChatRunDraft = async (input: {
   runId: string;
   runStatus?: Extract<ChatRunStatus, "running" | "waiting_on_tool">;
   status?: Extract<ChatMessageStatus, "draft" | "streaming">;
-}) => {
-  return await db.transaction(async (tx) => {
+}) =>
+  await db.transaction(async (tx) => {
     const now = new Date();
     const [activeRun] = await tx
       .update(chatRun)
@@ -105,11 +123,14 @@ export const persistChatRunDraft = async (input: {
         updatedAt: now,
       })
       .where(
-        and(eq(chatRun.id, input.runId), inArray(chatRun.status, [...ACTIVE_CHAT_RUN_STATUSES])),
+        and(
+          eq(chatRun.id, input.runId),
+          inArray(chatRun.status, [...ACTIVE_CHAT_RUN_STATUSES])
+        )
       )
       .returning({ id: chatRun.id });
 
-    if (!activeRun) {
+    if (activeRun === undefined) {
       return false;
     }
 
@@ -123,7 +144,6 @@ export const persistChatRunDraft = async (input: {
       .where(eq(chatMessage.id, input.assistantMessageId));
     return true;
   });
-};
 
 export const terminalizeChatRun = async (input: {
   error?: string | null;
@@ -142,11 +162,14 @@ export const terminalizeChatRun = async (input: {
         updatedAt: now,
       })
       .where(
-        and(eq(chatRun.id, input.runId), inArray(chatRun.status, [...ACTIVE_CHAT_RUN_STATUSES])),
+        and(
+          eq(chatRun.id, input.runId),
+          inArray(chatRun.status, [...ACTIVE_CHAT_RUN_STATUSES])
+        )
       )
       .returning({ assistantMessageId: chatRun.assistantMessageId });
 
-    if (!terminalRun) {
+    if (terminalRun === undefined) {
       return null;
     }
 
@@ -174,7 +197,10 @@ export const terminalizeChatRun = async (input: {
     };
   });
 
-export const cancelActiveChatRun = async (input: { chatId: string; userId: string }) =>
+export const cancelActiveChatRun = async (input: {
+  chatId: string;
+  userId: string;
+}) =>
   await db.transaction(async (tx) => {
     const now = new Date();
     const [cancelledRun] = await tx
@@ -190,15 +216,15 @@ export const cancelActiveChatRun = async (input: { chatId: string; userId: strin
         and(
           eq(chatRun.chatId, input.chatId),
           eq(chatRun.userId, input.userId),
-          inArray(chatRun.status, [...ACTIVE_CHAT_RUN_STATUSES]),
-        ),
+          inArray(chatRun.status, [...ACTIVE_CHAT_RUN_STATUSES])
+        )
       )
       .returning({
         assistantMessageId: chatRun.assistantMessageId,
         id: chatRun.id,
       });
 
-    if (!cancelledRun) {
+    if (cancelledRun === undefined) {
       return null;
     }
 
@@ -254,8 +280,8 @@ const hasVisibleAssistantContent = (parts: ChatMessagePart[]) =>
     );
   });
 
-const failStaleChatRun = (run: { id: string; status: ChatRunStatus }) =>
-  terminalizeChatRun({
+const failStaleChatRun = async (run: { id: string; status: ChatRunStatus }) =>
+  await terminalizeChatRun({
     error:
       run.status === "waiting_on_tool"
         ? "The mail lookup stopped responding. Retry the response to continue."
@@ -277,11 +303,16 @@ export const getActiveChatRunSummary = async (chatId: string) => {
       updatedAt: chatRun.updatedAt,
     })
     .from(chatRun)
-    .where(and(eq(chatRun.chatId, chatId), inArray(chatRun.status, [...ACTIVE_CHAT_RUN_STATUSES])))
+    .where(
+      and(
+        eq(chatRun.chatId, chatId),
+        inArray(chatRun.status, [...ACTIVE_CHAT_RUN_STATUSES])
+      )
+    )
     .orderBy(desc(chatRun.createdAt))
     .limit(1);
 
-  if (!activeRun) {
+  if (activeRun === undefined) {
     return null;
   }
 
@@ -290,7 +321,8 @@ export const getActiveChatRunSummary = async (chatId: string) => {
     .from(chatMessage)
     .where(eq(chatMessage.id, activeRun.assistantMessageId))
     .limit(1);
-  const lastActivity = activeRun.lastHeartbeatAt ?? activeRun.updatedAt ?? activeRun.createdAt;
+  const lastActivity =
+    activeRun.lastHeartbeatAt ?? activeRun.updatedAt ?? activeRun.createdAt;
   const isStale = Date.now() - lastActivity.getTime() > STALE_RUN_MS;
   const isEmptyAndStale =
     Date.now() - activeRun.createdAt.getTime() > STALE_RUN_MS &&
@@ -310,7 +342,8 @@ export const getActiveChatRunSummary = async (chatId: string) => {
   };
 };
 
-export const hasActiveChatRun = async (chatId: string) => !!(await getActiveChatRunSummary(chatId));
+export const hasActiveChatRun = async (chatId: string) =>
+  !!(await getActiveChatRunSummary(chatId));
 
 export const createChatRunRecords = async (input: {
   assistantMessageId: string;
@@ -365,7 +398,10 @@ export const createChatRunRecords = async (input: {
         updatedAt: now,
         userId: input.userId,
       });
-      await tx.update(chat).set({ updatedAt: now }).where(eq(chat.id, input.chatId));
+      await tx
+        .update(chat)
+        .set({ updatedAt: now })
+        .where(eq(chat.id, input.chatId));
     });
   } catch (error) {
     rethrowChatRunConflict(error);
@@ -396,8 +432,8 @@ export const startAssistantRun = async (input: {
         .where(
           and(
             eq(chatMessage.chatId, input.chatId),
-            gt(chatMessage.position, input.userMessagePosition),
-          ),
+            gt(chatMessage.position, input.userMessagePosition)
+          )
         );
       if (input.userMessage) {
         await tx
@@ -407,8 +443,8 @@ export const startAssistantRun = async (input: {
             and(
               eq(chatMessage.id, input.userMessage.id),
               eq(chatMessage.chatId, input.chatId),
-              eq(chatMessage.role, "user"),
-            ),
+              eq(chatMessage.role, "user")
+            )
           );
       }
       await tx.insert(chatMessage).values({
@@ -435,7 +471,10 @@ export const startAssistantRun = async (input: {
         updatedAt: now,
         userId: input.userId,
       });
-      await tx.update(chat).set({ updatedAt: now }).where(eq(chat.id, input.chatId));
+      await tx
+        .update(chat)
+        .set({ updatedAt: now })
+        .where(eq(chat.id, input.chatId));
     });
   } catch (error) {
     rethrowChatRunConflict(error);
@@ -475,8 +514,8 @@ export const continueAssistantRun = async (input: {
             eq(chatMessage.id, input.previousAssistant.id),
             eq(chatMessage.chatId, input.chatId),
             eq(chatMessage.userId, input.userId),
-            eq(chatMessage.role, "assistant"),
-          ),
+            eq(chatMessage.role, "assistant")
+          )
         );
       await tx.insert(chatMessage).values({
         chatId: input.chatId,
@@ -502,7 +541,10 @@ export const continueAssistantRun = async (input: {
         updatedAt: now,
         userId: input.userId,
       });
-      await tx.update(chat).set({ updatedAt: now }).where(eq(chat.id, input.chatId));
+      await tx
+        .update(chat)
+        .set({ updatedAt: now })
+        .where(eq(chat.id, input.chatId));
     });
   } catch (error) {
     rethrowChatRunConflict(error);

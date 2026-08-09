@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
+
 import { buildMimeMessage } from "../src/compose/mime";
 import { composeDraftInputSchema } from "../src/compose/schema";
 
@@ -19,7 +20,7 @@ const draft = {
   updatedAt: Date.now(),
 };
 
-describe("buildMimeMessage", () => {
+describe(buildMimeMessage, () => {
   test("adds managed sender headers and omits the Bcc header when requested", async () => {
     const sentAt = new Date("2026-06-07T10:00:00.000Z");
     const message = await buildMimeMessage(
@@ -44,7 +45,7 @@ describe("buildMimeMessage", () => {
         messageId: "<message@quieter.email>",
         omitBccHeader: true,
         sentAt,
-      },
+      }
     );
 
     expect(message).toContain("From: managed@quieter.email");
@@ -58,14 +59,14 @@ describe("buildMimeMessage", () => {
       composeDraftInputSchema.safeParse({
         ...draft,
         headers: [{ name: "sUbJeCt", value: "override" }],
-      }).success,
-    ).toBe(false);
+      }).success
+    ).toBeFalsy();
     expect(
       composeDraftInputSchema.safeParse({
         ...draft,
         headers: [{ name: "X-Long", value: "x".repeat(999) }],
-      }).success,
-    ).toBe(false);
+      }).success
+    ).toBeFalsy();
 
     const message = await buildMimeMessage({
       ...draft,
@@ -75,7 +76,9 @@ describe("buildMimeMessage", () => {
     expect(headerSection).toContain("X-Long: =?UTF-8?B?");
     expect(headerSection).toContain("\r\n ");
     const lines = headerSection.split("\r\n");
-    const customHeaderStart = lines.findIndex((line) => line.startsWith("X-Long:"));
+    const customHeaderStart = lines.findIndex((line) =>
+      line.startsWith("X-Long:")
+    );
     const customHeaderLines = lines
       .slice(customHeaderStart)
       .filter((line) => line.startsWith(" ") || line.startsWith("X-Long:"));
@@ -100,17 +103,22 @@ describe("buildMimeMessage", () => {
     expect(lines[longNameIndex + 1]).toBe(" value");
 
     const utf8Index = lines.findIndex((line) => line.startsWith("X-UTF8:"));
-    const encodedValue = lines
+    const encodedWords = lines
       .slice(utf8Index)
       .filter((line, index) => index === 0 || line.startsWith(" "))
       .join(" ")
-      .match(/=\?UTF-8\?B\?([^?]+)\?=/g);
-    expect(encodedValue).not.toBeNull();
-    const decodedValue = encodedValue!
+      .match(/[=]\?UTF-8\?B\?(?<encoded>[^?]+)\?=/gu);
+    expect(encodedWords).not.toBeNull();
+    const decodedValue = (encodedWords ?? [])
       .map((word) => {
-        const encoded = word.match(/=\?UTF-8\?B\?([^?]+)\?=/)?.[1] ?? "";
+        const encoded =
+          /[=]\?UTF-8\?B\?(?<encoded>[^?]+)\?=/u.exec(word)?.groups?.encoded ??
+          "";
         return new TextDecoder().decode(
-          Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0)),
+          Uint8Array.from(
+            atob(encoded),
+            (character) => character.codePointAt(0) ?? 0
+          )
         );
       })
       .join("");
@@ -133,10 +141,10 @@ describe("buildMimeMessage", () => {
     });
 
     expect(message).toContain(
-      'Content-Type: application/octet-stream; name="report___X-Injected: yes.txt"',
+      'Content-Type: application/octet-stream; name="report___X-Injected: yes.txt"'
     );
     expect(message).toContain(
-      'Content-Disposition: attachment; filename="report___X-Injected: yes.txt"',
+      'Content-Disposition: attachment; filename="report___X-Injected: yes.txt"'
     );
     expect(message).not.toContain("\r\nX-Injected: yes\r\n");
   });

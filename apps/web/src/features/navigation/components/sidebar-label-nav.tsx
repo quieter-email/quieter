@@ -1,7 +1,5 @@
 "use client";
 
-import type { MailboxLabel, MailboxLabelColor } from "@quieter/mail/mailbox-organization";
-import type { ReactNode } from "react";
 import {
   ArrowLeft02Icon,
   ArrowDown01Icon,
@@ -12,6 +10,10 @@ import {
   Tag01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import type {
+  MailboxLabel,
+  MailboxLabelColor,
+} from "@quieter/mail/mailbox-organization";
 import {
   AlertDialog,
   AlertDialogBody,
@@ -57,24 +59,29 @@ import { Textarea } from "@quieter/ui/textarea";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LayoutGroup } from "motion/react";
-import { useReducer, useState } from "react";
-import { MailboxColorPicker } from "~/features/message-labels/components/mailbox-color-picker";
-import { mailboxLabelDotClassNameByColor } from "~/features/message-labels/domain/mailbox-label-presentation";
-import { serializeStructuredSearchState } from "~/features/message-search/components/message-list-search/message-list-search-utils";
+import type { ReactNode } from "react";
+import { useEffect, useReducer, useState } from "react";
+
+import { MailboxColorPicker } from "#/features/message-labels/components/mailbox-color-picker";
+import { mailboxLabelDotClassNameByColor } from "#/features/message-labels/domain/mailbox-label-presentation";
+import { serializeStructuredSearchState } from "#/features/message-search/components/message-list-search/message-list-search-utils";
 import {
   getUserLabels,
   normalizeLabelSelectionKey,
   parseStructuredSearchQuery,
-} from "~/features/message-search/state/message-list-search-state";
-import { SidebarNavItem } from "~/features/navigation/components/sidebar-nav-item";
-import { SidebarEntrance } from "~/features/navigation/components/sidebar-surfaces";
-import { useSidebarNavHover } from "~/features/navigation/hooks/use-sidebar-nav-hover";
-import { getLabelsQueryKey, labelsQueryOptions } from "~/lib/gmail/labels-query";
+} from "#/features/message-search/state/message-list-search-state";
+import { SidebarNavItem } from "#/features/navigation/components/sidebar-nav-item";
+import { SidebarEntrance } from "#/features/navigation/components/sidebar-surfaces";
+import { useSidebarNavHover } from "#/features/navigation/hooks/use-sidebar-nav-hover";
+import {
+  getLabelsQueryKey,
+  labelsQueryOptions,
+} from "#/lib/gmail/labels-query";
 import {
   getManagedLabelCountsQueryKey,
   managedLabelCountsQueryOptions,
-} from "~/lib/managed-mailbox-organization-query";
-import { orpc } from "~/lib/orpc";
+} from "#/lib/managed-mailbox-organization-query";
+import { orpc } from "#/lib/orpc";
 
 type SidebarLabelNavProps = {
   animateEntrance: boolean;
@@ -85,7 +92,11 @@ type SidebarLabelNavProps = {
   searchQuery: string;
 };
 
-type EditingLabel = { color: MailboxLabelColor; label: MailboxLabel; name: string } | null;
+type EditingLabel = {
+  color: MailboxLabelColor;
+  label: MailboxLabel;
+  name: string;
+} | null;
 
 type HiddenLabelState = {
   mailboxId: string | null;
@@ -117,7 +128,7 @@ const ManagedLabelColorDot = ({
     className={cn(
       "inline-flex size-3 shrink-0 rounded-full",
       mailboxLabelDotClassNameByColor[color ?? "gray"],
-      className,
+      className
     )}
   />
 );
@@ -131,65 +142,159 @@ const SidebarLabelEntrance = ({
   children: ReactNode;
   index: number;
 }) => (
-  <SidebarEntrance animateEntrance={animateEntrance} className="w-full" index={index}>
+  <SidebarEntrance
+    animateEntrance={animateEntrance}
+    className="w-full"
+    index={index}
+  >
     {children}
   </SidebarEntrance>
 );
 
-const updateLabelFilter = (searchQuery: string, labelName: string, enabled: boolean) => {
+const updateLabelFilter = (
+  searchQuery: string,
+  labelName: string,
+  enabled: boolean
+) => {
   const state = parseStructuredSearchQuery(searchQuery);
   const labelKey = normalizeLabelSelectionKey(labelName);
   const filters = state.filters.filter(
-    (filter) => filter.type !== "label" || normalizeLabelSelectionKey(filter.value) !== labelKey,
+    (filter) =>
+      filter.type !== "label" ||
+      normalizeLabelSelectionKey(filter.value) !== labelKey
   );
 
   return serializeStructuredSearchState({
     ...state,
-    filters: enabled ? [...filters, { type: "label", value: labelName }] : filters,
+    filters: enabled
+      ? [...filters, { type: "label", value: labelName }]
+      : filters,
   });
 };
 
-const readHiddenLabelIds = (mailboxId: string | null) => {
-  if (!mailboxId || typeof window === "undefined") return new Set<string>();
+const isNonemptyMailboxId = (
+  mailboxId: string | null | undefined
+): mailboxId is string => (mailboxId?.trim() ?? "") !== "";
+
+const hasText = (value: string | null | undefined): value is string =>
+  value !== null && value !== undefined && value !== "";
+
+const parseHiddenLabelStorage = (
+  raw: string | null
+): Record<string, string[]> => {
+  if (raw === null) {
+    return {};
+  }
 
   try {
-    const parsed = JSON.parse(
-      window.localStorage.getItem(SIDEBAR_LABEL_VISIBILITY_STORAGE_KEY) ?? "{}",
-    ) as Record<string, string[]>;
-    return new Set(parsed[mailboxId] ?? []);
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null) {
+      return {};
+    }
+
+    const entries: Record<string, string[]> = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      if (
+        Array.isArray(value) &&
+        value.every((item) => typeof item === "string")
+      ) {
+        entries[key] = value;
+      }
+    }
+    return entries;
   } catch {
-    return new Set<string>();
+    return {};
   }
 };
 
-const writeHiddenLabelIds = (mailboxId: string, hiddenLabelIds: Set<string>) => {
-  let parsed: Record<string, string[]> = {};
-  try {
-    const raw = window.localStorage.getItem(SIDEBAR_LABEL_VISIBILITY_STORAGE_KEY);
-    parsed = raw ? (JSON.parse(raw) as Record<string, string[]>) : {};
-  } catch {}
+const readHiddenLabelIds = (mailboxId: string | null) => {
+  if (!isNonemptyMailboxId(mailboxId) || typeof window === "undefined") {
+    return new Set<string>();
+  }
 
-  parsed[mailboxId] = Array.from(hiddenLabelIds);
-  window.localStorage.setItem(SIDEBAR_LABEL_VISIBILITY_STORAGE_KEY, JSON.stringify(parsed));
+  const parsed = parseHiddenLabelStorage(
+    window.localStorage.getItem(SIDEBAR_LABEL_VISIBILITY_STORAGE_KEY)
+  );
+  const storedIds = parsed[mailboxId];
+  return storedIds === undefined ? new Set<string>() : new Set(storedIds);
 };
 
-const createHiddenLabelState = (mailboxId: string | null): HiddenLabelState => ({
+const writeHiddenLabelIds = (
+  mailboxId: string,
+  hiddenLabelIds: Set<string>
+) => {
+  let parsed: Record<string, string[]> = {};
+  try {
+    const raw = window.localStorage.getItem(
+      SIDEBAR_LABEL_VISIBILITY_STORAGE_KEY
+    );
+    parsed = raw === null ? {} : parseHiddenLabelStorage(raw);
+  } catch {
+    // Ignore corrupted sidebar label visibility storage.
+  }
+
+  parsed[mailboxId] = [...hiddenLabelIds];
+  window.localStorage.setItem(
+    SIDEBAR_LABEL_VISIBILITY_STORAGE_KEY,
+    JSON.stringify(parsed)
+  );
+};
+
+const createHiddenLabelState = (
+  mailboxId: string | null
+): HiddenLabelState => ({
   mailboxId,
   value: readHiddenLabelIds(mailboxId),
 });
 
 const reduceHiddenLabelState = (
   current: HiddenLabelState,
-  { mailboxId, updater }: HiddenLabelAction,
+  { mailboxId, updater }: HiddenLabelAction
 ): HiddenLabelState => {
   const currentValue =
-    current.mailboxId === mailboxId ? current.value : readHiddenLabelIds(mailboxId);
+    current.mailboxId === mailboxId
+      ? current.value
+      : readHiddenLabelIds(mailboxId);
   const next = updater(new Set(currentValue));
   writeHiddenLabelIds(mailboxId, next);
   return {
     mailboxId,
     value: next,
   };
+};
+
+const computeEffectiveHiddenLabelIds = (
+  mailboxProvider: SidebarLabelNavProps["mailboxProvider"],
+  userLabels: MailboxLabel[],
+  hiddenLabelIds: Set<string>
+) => {
+  const effectiveHiddenLabelIds = new Set<string>();
+  if (mailboxProvider === "managed") {
+    for (const label of userLabels) {
+      if (!label.visible) {
+        effectiveHiddenLabelIds.add(label.id);
+      }
+    }
+    return effectiveHiddenLabelIds;
+  }
+
+  for (const labelId of hiddenLabelIds) {
+    effectiveHiddenLabelIds.add(labelId);
+  }
+
+  let visibleLabelCount = 0;
+  for (const label of userLabels) {
+    if (hiddenLabelIds.has(label.id)) {
+      continue;
+    }
+    if (visibleLabelCount >= MAX_VISIBLE_SIDEBAR_LABELS) {
+      effectiveHiddenLabelIds.add(label.id);
+      continue;
+    }
+    visibleLabelCount += 1;
+  }
+
+  return effectiveHiddenLabelIds;
 };
 
 export const SidebarLabelNav = ({
@@ -205,7 +310,8 @@ export const SidebarLabelNav = ({
   const [newLabelColor, setNewLabelColor] = useState<MailboxLabelColor>("gray");
   const [newLabelName, setNewLabelName] = useState("");
   const [editingLabel, setEditingLabel] = useState<EditingLabel>(null);
-  const [editingLabelDetails, setEditingLabelDetails] = useState<EditingLabelDetails | null>(null);
+  const [editingLabelDetails, setEditingLabelDetails] =
+    useState<EditingLabelDetails | null>(null);
   const [deletingLabel, setDeletingLabel] = useState<MailboxLabel | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const {
@@ -222,64 +328,62 @@ export const SidebarLabelNav = ({
   const [hiddenLabelState, updateHiddenLabelState] = useReducer(
     reduceHiddenLabelState,
     mailboxId,
-    createHiddenLabelState,
+    createHiddenLabelState
   );
   const {
     data: labels,
     isError: areLabelsError,
     isPending: areLabelsPending,
-  } = useQuery(labelsQueryOptions(mailboxId ?? "", !!mailboxId));
-  const labelsUnavailable = areLabelsError && !labels;
+  } = useQuery(
+    labelsQueryOptions(mailboxId ?? "", isNonemptyMailboxId(mailboxId))
+  );
+  const labelsUnavailable = areLabelsError && labels === undefined;
 
   const { data: managedLabelCounts = [] } = useQuery(
-    managedLabelCountsQueryOptions(mailboxId ?? "", mailboxProvider === "managed" && !!mailboxId),
+    managedLabelCountsQueryOptions(
+      mailboxId ?? "",
+      mailboxProvider === "managed" && isNonemptyMailboxId(mailboxId)
+    )
   );
   const managedLabelCountById = new Map(
-    managedLabelCounts.map((record) => [record.labelId, Number(record.count)]),
+    managedLabelCounts.map((record) => [record.labelId, record.count])
   );
   const userLabels = getUserLabels(labels ?? []);
   const hiddenLabelIds =
     hiddenLabelState.mailboxId === mailboxId
       ? hiddenLabelState.value
       : readHiddenLabelIds(mailboxId);
-  const effectiveHiddenLabelIds = new Set<string>();
-  if (mailboxProvider === "managed") {
-    for (const label of userLabels) {
-      if (!label.visible) effectiveHiddenLabelIds.add(label.id);
-    }
-  } else {
-    for (const labelId of hiddenLabelIds) {
-      effectiveHiddenLabelIds.add(labelId);
-    }
-
-    let visibleLabelCount = 0;
-    for (const label of userLabels) {
-      if (hiddenLabelIds.has(label.id)) continue;
-      if (visibleLabelCount >= MAX_VISIBLE_SIDEBAR_LABELS) {
-        effectiveHiddenLabelIds.add(label.id);
-        continue;
-      }
-      visibleLabelCount += 1;
-    }
-  }
-  const visibleUserLabels = userLabels.filter((label) => !effectiveHiddenLabelIds.has(label.id));
+  const effectiveHiddenLabelIds = computeEffectiveHiddenLabelIds(
+    mailboxProvider,
+    userLabels,
+    hiddenLabelIds
+  );
+  const visibleUserLabels = userLabels.filter(
+    (label) => !effectiveHiddenLabelIds.has(label.id)
+  );
   const selectedLabelKeys = new Set(
     parseStructuredSearchQuery(searchQuery).filters.flatMap((filter) =>
-      filter.type === "label" ? [normalizeLabelSelectionKey(filter.value)] : [],
-    ),
+      filter.type === "label" ? [normalizeLabelSelectionKey(filter.value)] : []
+    )
   );
   const labelNoun = "label";
   const labelNounPlural = "labels";
   const labelTitle = "Labels";
   const labelTitleSingular = "Label";
 
-  const setMailboxHiddenLabelIds = (updater: (current: Set<string>) => Set<string>) => {
-    if (!mailboxId) return;
+  const setMailboxHiddenLabelIds = (
+    updater: (current: Set<string>) => Set<string>
+  ) => {
+    if (!isNonemptyMailboxId(mailboxId)) {
+      return;
+    }
     updateHiddenLabelState({ mailboxId, updater });
   };
 
   const invalidateLabels = async () => {
-    if (!mailboxId) return;
+    if (!isNonemptyMailboxId(mailboxId)) {
+      return;
+    }
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: getLabelsQueryKey(mailboxId) }),
       ...(mailboxProvider === "managed"
@@ -292,11 +396,21 @@ export const SidebarLabelNav = ({
     ]);
   };
 
-  const createLabelMutation = useMutation(orpc.mail.createLabel.mutationOptions());
-  const updateLabelMutation = useMutation(orpc.mail.updateLabel.mutationOptions());
-  const deleteLabelMutation = useMutation(orpc.mail.deleteLabel.mutationOptions());
-  const updateLabelDetailsMutation = useMutation(orpc.mail.updateLabelDetails.mutationOptions());
-  const reorderLabelsMutation = useMutation(orpc.mail.reorderManagedLabels.mutationOptions());
+  const createLabelMutation = useMutation(
+    orpc.mail.createLabel.mutationOptions()
+  );
+  const updateLabelMutation = useMutation(
+    orpc.mail.updateLabel.mutationOptions()
+  );
+  const deleteLabelMutation = useMutation(
+    orpc.mail.deleteLabel.mutationOptions()
+  );
+  const updateLabelDetailsMutation = useMutation(
+    orpc.mail.updateLabelDetails.mutationOptions()
+  );
+  const reorderLabelsMutation = useMutation(
+    orpc.mail.reorderManagedLabels.mutationOptions()
+  );
 
   const resetLabelForms = () => {
     setEditingLabel(null);
@@ -305,9 +419,13 @@ export const SidebarLabelNav = ({
   };
 
   const createLabel = async () => {
-    if (!mailboxId) return;
+    if (!isNonemptyMailboxId(mailboxId)) {
+      return;
+    }
     const name = newLabelName.trim();
-    if (!name) return;
+    if (name === "") {
+      return;
+    }
 
     try {
       const label = await createLabelMutation.mutateAsync({
@@ -325,37 +443,55 @@ export const SidebarLabelNav = ({
       setNewLabelName("");
       await invalidateLabels();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : `Could not create ${labelNoun}.`);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : `Could not create ${labelNoun}.`
+      );
     }
   };
 
   const saveLabelEdit = async () => {
-    if (!mailboxId || !editingLabel) return;
+    if (!isNonemptyMailboxId(mailboxId) || editingLabel === null) {
+      return;
+    }
     const name = editingLabel.name.trim();
-    if (!name) return;
+    if (name === "") {
+      return;
+    }
 
     try {
       const previousName = editingLabel.label.name;
       const label = await updateLabelMutation.mutateAsync({
+        color: editingLabel.color,
         labelId: editingLabel.label.id,
         mailboxId,
         name,
-        color: editingLabel.color,
       });
       setEditingLabel(null);
       await invalidateLabels();
       if (selectedLabelKeys.has(normalizeLabelSelectionKey(previousName))) {
         onSearch(
-          updateLabelFilter(updateLabelFilter(searchQuery, previousName, false), label.name, true),
+          updateLabelFilter(
+            updateLabelFilter(searchQuery, previousName, false),
+            label.name,
+            true
+          )
         );
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : `Could not update ${labelNoun}.`);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : `Could not update ${labelNoun}.`
+      );
     }
   };
 
   const deleteLabel = async (label: MailboxLabel) => {
-    if (!mailboxId) return;
+    if (!isNonemptyMailboxId(mailboxId)) {
+      return;
+    }
 
     try {
       await deleteLabelMutation.mutateAsync({ labelId: label.id, mailboxId });
@@ -370,17 +506,29 @@ export const SidebarLabelNav = ({
       onSearch(updateLabelFilter(searchQuery, label.name, false));
       setDeletingLabel(null);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : `Could not delete ${labelNoun}.`);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : `Could not delete ${labelNoun}.`
+      );
     }
   };
 
   const saveLabelDetails = async () => {
-    if (!mailboxId || !editingLabelDetails) return;
+    if (!isNonemptyMailboxId(mailboxId) || editingLabelDetails === null) {
+      return;
+    }
 
     try {
       await updateLabelDetailsMutation.mutateAsync({
-        description: editingLabelDetails.description.trim() || null,
-        inclusionCriteria: editingLabelDetails.inclusionCriteria.trim() || null,
+        description:
+          editingLabelDetails.description.trim() === ""
+            ? null
+            : editingLabelDetails.description.trim(),
+        inclusionCriteria:
+          editingLabelDetails.inclusionCriteria.trim() === ""
+            ? null
+            : editingLabelDetails.inclusionCriteria.trim(),
         labelId: editingLabelDetails.labelId,
         mailboxId,
       });
@@ -389,47 +537,190 @@ export const SidebarLabelNav = ({
       toast.success(`${labelTitleSingular} explanation saved.`);
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : `Could not save ${labelNoun} explanation.`,
+        error instanceof Error
+          ? error.message
+          : `Could not save ${labelNoun} explanation.`
       );
     }
   };
 
-  const toggleSidebarVisibility = (labelId: string) => {
-    if (!mailboxId) return;
+  const toggleSidebarVisibility = async (labelId: string) => {
+    if (!isNonemptyMailboxId(mailboxId)) {
+      return;
+    }
     if (mailboxProvider === "managed") {
       const label = userLabels.find((candidate) => candidate.id === labelId);
-      if (!label) return;
-      void updateLabelMutation
-        .mutateAsync({
+      if (!label) {
+        return;
+      }
+      try {
+        await updateLabelMutation.mutateAsync({
           labelId,
           mailboxId,
           name: label.name,
           visible: effectiveHiddenLabelIds.has(labelId),
-        })
-        .then(invalidateLabels)
-        .catch((error) => {
-          toast.error(error instanceof Error ? error.message : `Could not update ${labelNoun}.`);
         });
+        await invalidateLabels();
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : `Could not update ${labelNoun}.`
+        );
+      }
       return;
     }
 
     setMailboxHiddenLabelIds((current) => {
       const isShown = !effectiveHiddenLabelIds.has(labelId);
-      if (!isShown) {
+      if (isShown) {
+        current.add(labelId);
+      } else {
         if (visibleUserLabels.length >= MAX_VISIBLE_SIDEBAR_LABELS) {
           toast.error(`Hide one ${labelNoun} before showing another.`);
           return current;
         }
 
         current.delete(labelId);
-      } else {
-        current.add(labelId);
       }
       return current;
     });
   };
 
-  if (!mailboxId) return null;
+  const reorderLabelIds = async (labelIds: string[]) => {
+    if (!isNonemptyMailboxId(mailboxId)) {
+      return;
+    }
+
+    try {
+      await reorderLabelsMutation.mutateAsync({ labelIds, mailboxId });
+      await invalidateLabels();
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : `Could not reorder ${labelNoun}.`
+      );
+    }
+  };
+
+  useEffect(() => {
+    const node = labelNavRef.current;
+    if (node === null || !isNonemptyMailboxId(mailboxId)) {
+      return;
+    }
+
+    const handleMouseLeave = () => {
+      clearLabelHover();
+    };
+    node.addEventListener("mouseleave", handleMouseLeave);
+    return () => {
+      node.removeEventListener("mouseleave", handleMouseLeave);
+    };
+  }, [clearLabelHover, labelNavRef, mailboxId]);
+
+  if (!isNonemptyMailboxId(mailboxId)) {
+    return null;
+  }
+
+  const renderLabelNavContent = (): ReactNode => {
+    if (areLabelsPending) {
+      return (
+        <SidebarEntrance
+          animateEntrance={shouldAnimateEntrance}
+          className="px-2 py-1 text-xs text-muted-fg"
+          index={9}
+        >
+          Loading {labelNounPlural}…
+        </SidebarEntrance>
+      );
+    }
+    if (labelsUnavailable) {
+      return (
+        <SidebarEntrance
+          animateEntrance={shouldAnimateEntrance}
+          className="px-2 py-1 text-xs text-destructive"
+          index={9}
+        >
+          Could not load {labelNounPlural}.
+        </SidebarEntrance>
+      );
+    }
+    if (visibleUserLabels.length === 0) {
+      return (
+        <SidebarEntrance
+          animateEntrance={shouldAnimateEntrance}
+          className="px-2 py-1 text-xs text-muted-fg"
+          index={9}
+        >
+          No {labelNounPlural} shown.
+        </SidebarEntrance>
+      );
+    }
+    return visibleUserLabels.map((label, index) => {
+      const isActive = selectedLabelKeys.has(
+        normalizeLabelSelectionKey(label.name)
+      );
+      const labelHovered = isHovered(label.id);
+      const labelHoverExiting = isHoverExiting(label.id);
+
+      return (
+        <SidebarLabelEntrance
+          key={label.id}
+          animateEntrance={shouldAnimateEntrance}
+          index={index + 9}
+        >
+          <SidebarNavItem
+            active={isActive}
+            aria-pressed={isActive}
+            className={cn(
+              "squircle h-7 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-left text-xs font-light",
+              {
+                "text-fg": isActive || labelHovered,
+                "text-muted-fg": !isActive && !labelHovered,
+              }
+            )}
+            hover={labelHovered}
+            hoverEnter={labelHovered && hoverEnter}
+            hoverExiting={labelHoverExiting}
+            hoverLayoutId={hoverLayoutId}
+            onBlur={(event) => {
+              clearLabelHoverIfLeavingNav(event.relatedTarget);
+            }}
+            onClick={() => {
+              onSearch(updateLabelFilter(searchQuery, label.name, !isActive));
+            }}
+            onFocus={() => {
+              if (isActive) {
+                clearLabelHover();
+                return;
+              }
+              setLabelHover(label.id);
+            }}
+            onHoverExitComplete={onHoverExitComplete}
+            onMouseEnter={() => {
+              if (isActive) {
+                clearLabelHover();
+                return;
+              }
+              setLabelHover(label.id);
+            }}
+            size="sm"
+            type="button"
+            variant="ghost"
+          >
+            <ManagedLabelColorDot color={label.color} />
+            <span className="min-w-0 truncate">{label.name}</span>
+            {mailboxProvider === "managed" ? (
+              <span className="ml-auto text-[10px] text-muted-fg tabular-nums">
+                {managedLabelCountById.get(label.id) ?? 0}
+              </span>
+            ) : null}
+          </SidebarNavItem>
+        </SidebarLabelEntrance>
+      );
+    });
+  };
 
   return (
     <section className="mt-4">
@@ -452,7 +743,11 @@ export const SidebarLabelNav = ({
               type="button"
               variant="ghost"
             >
-              <HugeiconsIcon aria-hidden className="size-3.5" icon={Edit01Icon} />
+              <HugeiconsIcon
+                aria-hidden
+                className="size-3.5"
+                icon={Edit01Icon}
+              />
             </Button>
           </IconButtonTooltip>
         )}
@@ -463,98 +758,17 @@ export const SidebarLabelNav = ({
           ref={labelNavRef}
           aria-label={labelTitle}
           className="flex flex-col"
-          onMouseLeave={clearLabelHover}
         >
-          {areLabelsPending ? (
-            <SidebarEntrance
-              animateEntrance={shouldAnimateEntrance}
-              className="px-2 py-1 text-xs text-muted-fg"
-              index={9}
-            >
-              Loading {labelNounPlural}…
-            </SidebarEntrance>
-          ) : labelsUnavailable ? (
-            <SidebarEntrance
-              animateEntrance={shouldAnimateEntrance}
-              className="px-2 py-1 text-xs text-destructive"
-              index={9}
-            >
-              Could not load {labelNounPlural}.
-            </SidebarEntrance>
-          ) : visibleUserLabels.length === 0 ? (
-            <SidebarEntrance
-              animateEntrance={shouldAnimateEntrance}
-              className="px-2 py-1 text-xs text-muted-fg"
-              index={9}
-            >
-              No {labelNounPlural} shown.
-            </SidebarEntrance>
-          ) : (
-            visibleUserLabels.map((label, index) => {
-              const isActive = selectedLabelKeys.has(normalizeLabelSelectionKey(label.name));
-              const labelHovered = isHovered(label.id);
-              const labelHoverExiting = isHoverExiting(label.id);
-
-              return (
-                <SidebarLabelEntrance
-                  key={label.id}
-                  animateEntrance={shouldAnimateEntrance}
-                  index={index + 9}
-                >
-                  <SidebarNavItem
-                    active={isActive}
-                    aria-pressed={isActive}
-                    className={cn(
-                      "squircle h-7 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-left text-xs font-light",
-                      {
-                        "text-fg": isActive || labelHovered,
-                        "text-muted-fg": !isActive && !labelHovered,
-                      },
-                    )}
-                    hover={labelHovered}
-                    hoverEnter={labelHovered && hoverEnter}
-                    hoverExiting={labelHoverExiting}
-                    hoverLayoutId={hoverLayoutId}
-                    onBlur={(event) => clearLabelHoverIfLeavingNav(event.relatedTarget)}
-                    onClick={() => onSearch(updateLabelFilter(searchQuery, label.name, !isActive))}
-                    onFocus={() => {
-                      if (isActive) {
-                        clearLabelHover();
-                        return;
-                      }
-                      setLabelHover(label.id);
-                    }}
-                    onHoverExitComplete={onHoverExitComplete}
-                    onMouseEnter={() => {
-                      if (isActive) {
-                        clearLabelHover();
-                        return;
-                      }
-                      setLabelHover(label.id);
-                    }}
-                    size="sm"
-                    type="button"
-                    variant="ghost"
-                  >
-                    <ManagedLabelColorDot color={label.color} />
-                    <span className="min-w-0 truncate">{label.name}</span>
-                    {mailboxProvider === "managed" ? (
-                      <span className="ml-auto text-[10px] text-muted-fg tabular-nums">
-                        {managedLabelCountById.get(label.id) ?? 0}
-                      </span>
-                    ) : null}
-                  </SidebarNavItem>
-                </SidebarLabelEntrance>
-              );
-            })
-          )}
+          {renderLabelNavContent()}
         </nav>
       </LayoutGroup>
 
       <FullPageDialog
         onOpenChange={(open) => {
           setIsEditDialogOpen(open);
-          if (!open) resetLabelForms();
+          if (!open) {
+            resetLabelForms();
+          }
         }}
         open={isEditDialogOpen}
       >
@@ -570,10 +784,12 @@ export const SidebarLabelNav = ({
           <FullPageDialogBody>
             <div className="mx-auto w-full max-w-3xl px-5 py-8 sm:px-8 sm:py-10">
               <div className="mb-8">
-                <h2 className="text-xl font-semibold tracking-tight">{labelTitle}</h2>
+                <h2 className="text-xl font-semibold tracking-tight">
+                  {labelTitle}
+                </h2>
                 <FullPageDialogDescription className="mt-1">
-                  Create {labelNounPlural}, choose which ones appear in your sidebar, and explain
-                  what belongs in each one.
+                  Create {labelNounPlural}, choose which ones appear in your
+                  sidebar, and explain what belongs in each one.
                 </FullPageDialogDescription>
               </div>
               <form
@@ -584,10 +800,11 @@ export const SidebarLabelNav = ({
               >
                 <Input
                   aria-label={`New ${labelNoun} name`}
-                  autoFocus
                   className="min-w-48 flex-1 border-0 bg-bg/70 shadow-none"
                   disabled={createLabelMutation.isPending}
-                  onChange={(event) => setNewLabelName(event.currentTarget.value)}
+                  onChange={(event) => {
+                    setNewLabelName(event.currentTarget.value);
+                  }}
                   placeholder={`New ${labelNoun}`}
                   size="sm"
                   value={newLabelName}
@@ -599,7 +816,9 @@ export const SidebarLabelNav = ({
                   value={newLabelColor}
                 />
                 <Button
-                  disabled={createLabelMutation.isPending || !newLabelName.trim()}
+                  disabled={
+                    createLabelMutation.isPending || !newLabelName.trim()
+                  }
                   size="sm"
                   type="submit"
                 >
@@ -608,227 +827,315 @@ export const SidebarLabelNav = ({
               </form>
 
               <div>
-                {areLabelsPending ? (
-                  <p className="py-3 text-sm text-muted-fg">Loading {labelNounPlural}…</p>
-                ) : labelsUnavailable ? (
-                  <p className="py-3 text-sm text-destructive">Could not load {labelNounPlural}.</p>
-                ) : userLabels.length === 0 ? (
-                  <p className="py-3 text-sm text-muted-fg">No {labelNounPlural} yet.</p>
-                ) : (
-                  <div className="flex flex-col gap-1">
-                    {userLabels.map((label, index) => {
-                      const isShown = !effectiveHiddenLabelIds.has(label.id);
-                      const labelDetails =
-                        editingLabelDetails?.labelId === label.id ? editingLabelDetails : null;
-                      return (
-                        <div className="rounded-lg" key={label.id}>
-                          <div className="squircle flex min-h-12 items-center gap-3 px-2 hover:bg-bg/50">
-                            <ManagedLabelColorDot className="size-4" color={label.color} />
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm">{label.name}</p>
-                              {(label.description || label.inclusionCriteria) && (
-                                <p className="truncate text-xs text-muted-fg">
-                                  {label.description || label.inclusionCriteria}
-                                </p>
-                              )}
-                            </div>
-                            {mailboxProvider === "managed" ? (
-                              <div className="flex items-center">
-                                <IconButtonTooltip label={`Move ${label.name} up`}>
-                                  <Button
-                                    aria-label={`Move ${label.name} up`}
-                                    disabled={index === 0 || reorderLabelsMutation.isPending}
-                                    onClick={() => {
-                                      const labelIds = userLabels.map((candidate) => candidate.id);
-                                      [labelIds[index - 1], labelIds[index]] = [
-                                        labelIds[index],
-                                        labelIds[index - 1],
-                                      ];
-                                      void reorderLabelsMutation
-                                        .mutateAsync({ labelIds, mailboxId })
-                                        .then(invalidateLabels);
-                                    }}
-                                    size="icon-sm"
-                                    type="button"
-                                    variant="ghost"
-                                  >
-                                    <HugeiconsIcon aria-hidden icon={ArrowUp01Icon} />
-                                  </Button>
-                                </IconButtonTooltip>
-                                <IconButtonTooltip label={`Move ${label.name} down`}>
-                                  <Button
-                                    aria-label={`Move ${label.name} down`}
-                                    disabled={
-                                      index === userLabels.length - 1 ||
-                                      reorderLabelsMutation.isPending
-                                    }
-                                    onClick={() => {
-                                      const labelIds = userLabels.map((candidate) => candidate.id);
-                                      [labelIds[index], labelIds[index + 1]] = [
-                                        labelIds[index + 1],
-                                        labelIds[index],
-                                      ];
-                                      void reorderLabelsMutation
-                                        .mutateAsync({ labelIds, mailboxId })
-                                        .then(invalidateLabels);
-                                    }}
-                                    size="icon-sm"
-                                    type="button"
-                                    variant="ghost"
-                                  >
-                                    <HugeiconsIcon aria-hidden icon={ArrowDown01Icon} />
-                                  </Button>
-                                </IconButtonTooltip>
+                {(() => {
+                  if (areLabelsPending) {
+                    return (
+                      <p className="py-3 text-sm text-muted-fg">
+                        Loading {labelNounPlural}…
+                      </p>
+                    );
+                  }
+                  if (labelsUnavailable) {
+                    return (
+                      <p className="py-3 text-sm text-destructive">
+                        Could not load {labelNounPlural}.
+                      </p>
+                    );
+                  }
+                  if (userLabels.length === 0) {
+                    return (
+                      <p className="py-3 text-sm text-muted-fg">
+                        No {labelNounPlural} yet.
+                      </p>
+                    );
+                  }
+                  return (
+                    <div className="flex flex-col gap-1">
+                      {userLabels.map((label, index) => {
+                        const isShown = !effectiveHiddenLabelIds.has(label.id);
+                        const labelDescription =
+                          label.description ?? label.inclusionCriteria;
+                        const labelDetails =
+                          editingLabelDetails?.labelId === label.id
+                            ? editingLabelDetails
+                            : null;
+                        return (
+                          <div className="rounded-lg" key={label.id}>
+                            <div className="squircle flex min-h-12 items-center gap-3 px-2 hover:bg-bg/50">
+                              <ManagedLabelColorDot
+                                className="size-4"
+                                color={label.color}
+                              />
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm">{label.name}</p>
+                                {labelDescription !== undefined &&
+                                labelDescription !== "" ? (
+                                  <p className="truncate text-xs text-muted-fg">
+                                    {labelDescription}
+                                  </p>
+                                ) : null}
                               </div>
-                            ) : null}
-                            <IconButtonTooltip
-                              label={isShown ? "Hide in sidebar" : "Show in sidebar"}
-                            >
-                              <Button
-                                aria-label={isShown ? "Hide in sidebar" : "Show in sidebar"}
-                                aria-pressed={isShown}
-                                className={cn("-mr-3 size-7 text-muted-fg hover:text-fg", {
-                                  "text-fg": isShown,
-                                })}
-                                onClick={() => toggleSidebarVisibility(label.id)}
-                                size="icon-sm"
-                                type="button"
-                                variant="ghost"
-                              >
-                                {isShown ? (
-                                  <EyeIcon aria-hidden className="size-4" />
-                                ) : (
-                                  <EyeOffIcon aria-hidden className="size-4" />
-                                )}
-                              </Button>
-                            </IconButtonTooltip>
-                            <DropdownMenu>
-                              <IconButtonTooltip label={`${label.name} options`}>
-                                <DropdownMenuTrigger
-                                  aria-label={`${label.name} options`}
-                                  className="inline-flex size-7 items-center justify-center rounded-md text-muted-fg hover:bg-bg/50 hover:text-fg"
-                                >
-                                  <HugeiconsIcon
-                                    aria-hidden
-                                    className="size-3.5"
-                                    icon={MoreVerticalIcon}
-                                  />
-                                </DropdownMenuTrigger>
-                              </IconButtonTooltip>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                  onSelect={() =>
-                                    setEditingLabelDetails({
-                                      description: label.description ?? "",
-                                      inclusionCriteria: label.inclusionCriteria ?? "",
-                                      labelId: label.id,
-                                    })
-                                  }
-                                >
-                                  <HugeiconsIcon aria-hidden className="size-4" icon={Tag01Icon} />
-                                  Explain label
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onSelect={() =>
-                                    setEditingLabel({
-                                      color: label.color ?? "gray",
-                                      label,
-                                      name: label.name,
-                                    })
-                                  }
-                                >
-                                  <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
-                                  Edit
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  className="text-destructive"
-                                  onSelect={() => setDeletingLabel(label)}
-                                >
-                                  <HugeiconsIcon
-                                    aria-hidden
-                                    className="size-4"
-                                    icon={Delete01Icon}
-                                  />
-                                  Delete
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                          {labelDetails && (
-                            <form
-                              action={() => {
-                                void saveLabelDetails();
-                              }}
-                              className="space-y-5 bg-muted/30 px-9 py-5"
-                            >
-                              <Field>
-                                <FieldLabel>What this {labelNoun} is for</FieldLabel>
-                                <Textarea
-                                  aria-label={`What this ${labelNoun} is for`}
-                                  className="min-h-20"
-                                  disabled={updateLabelDetailsMutation.isPending}
-                                  maxLength={2000}
-                                  onChange={(event) => {
-                                    const description = event.currentTarget.value;
-                                    setEditingLabelDetails((current) =>
-                                      current ? { ...current, description } : current,
-                                    );
-                                  }}
-                                  placeholder={`A short explanation of the ${labelNoun}'s purpose.`}
-                                  value={labelDetails.description}
-                                />
-                                <FieldDescription>
-                                  Describe the topic or workflow this {labelNoun} represents.
-                                </FieldDescription>
-                              </Field>
-                              {mailboxProvider === "gmail" ? (
-                                <Field>
-                                  <FieldLabel>Emails to include</FieldLabel>
-                                  <Textarea
-                                    aria-label="Emails to include"
-                                    className="min-h-24"
-                                    disabled={updateLabelDetailsMutation.isPending}
-                                    maxLength={4000}
-                                    onChange={(event) => {
-                                      const inclusionCriteria = event.currentTarget.value;
-                                      setEditingLabelDetails((current) =>
-                                        current ? { ...current, inclusionCriteria } : current,
-                                      );
-                                    }}
-                                    placeholder="For example: invoices, receipts, and payment confirmations from vendors."
-                                    value={labelDetails.inclusionCriteria}
-                                  />
-                                  <FieldDescription>
-                                    Explain the senders, subjects, content, or situations that
-                                    belong here.
-                                  </FieldDescription>
-                                </Field>
+                              {mailboxProvider === "managed" ? (
+                                <div className="flex items-center">
+                                  <IconButtonTooltip
+                                    label={`Move ${label.name} up`}
+                                  >
+                                    <Button
+                                      aria-label={`Move ${label.name} up`}
+                                      disabled={
+                                        index === 0 ||
+                                        reorderLabelsMutation.isPending
+                                      }
+                                      onClick={() => {
+                                        const labelIds = userLabels.map(
+                                          (candidate) => candidate.id
+                                        );
+                                        [labelIds[index - 1], labelIds[index]] =
+                                          [
+                                            labelIds[index],
+                                            labelIds[index - 1],
+                                          ];
+                                        void reorderLabelIds(labelIds);
+                                      }}
+                                      size="icon-sm"
+                                      type="button"
+                                      variant="ghost"
+                                    >
+                                      <HugeiconsIcon
+                                        aria-hidden
+                                        icon={ArrowUp01Icon}
+                                      />
+                                    </Button>
+                                  </IconButtonTooltip>
+                                  <IconButtonTooltip
+                                    label={`Move ${label.name} down`}
+                                  >
+                                    <Button
+                                      aria-label={`Move ${label.name} down`}
+                                      disabled={
+                                        index === userLabels.length - 1 ||
+                                        reorderLabelsMutation.isPending
+                                      }
+                                      onClick={() => {
+                                        const labelIds = userLabels.map(
+                                          (candidate) => candidate.id
+                                        );
+                                        [labelIds[index], labelIds[index + 1]] =
+                                          [
+                                            labelIds[index + 1],
+                                            labelIds[index],
+                                          ];
+                                        void reorderLabelIds(labelIds);
+                                      }}
+                                      size="icon-sm"
+                                      type="button"
+                                      variant="ghost"
+                                    >
+                                      <HugeiconsIcon
+                                        aria-hidden
+                                        icon={ArrowDown01Icon}
+                                      />
+                                    </Button>
+                                  </IconButtonTooltip>
+                                </div>
                               ) : null}
-                              <div className="flex justify-end gap-2">
+                              <IconButtonTooltip
+                                label={
+                                  isShown
+                                    ? "Hide in sidebar"
+                                    : "Show in sidebar"
+                                }
+                              >
                                 <Button
-                                  disabled={updateLabelDetailsMutation.isPending}
-                                  onClick={() => setEditingLabelDetails(null)}
-                                  size="sm"
+                                  aria-label={
+                                    isShown
+                                      ? "Hide in sidebar"
+                                      : "Show in sidebar"
+                                  }
+                                  aria-pressed={isShown}
+                                  className={cn(
+                                    "-mr-3 size-7 text-muted-fg hover:text-fg",
+                                    {
+                                      "text-fg": isShown,
+                                    }
+                                  )}
+                                  onClick={() => {
+                                    void toggleSidebarVisibility(label.id);
+                                  }}
+                                  size="icon-sm"
                                   type="button"
                                   variant="ghost"
                                 >
-                                  Cancel
+                                  {isShown ? (
+                                    <EyeIcon aria-hidden className="size-4" />
+                                  ) : (
+                                    <EyeOffIcon
+                                      aria-hidden
+                                      className="size-4"
+                                    />
+                                  )}
                                 </Button>
-                                <Button
-                                  disabled={updateLabelDetailsMutation.isPending}
-                                  size="sm"
-                                  type="submit"
+                              </IconButtonTooltip>
+                              <DropdownMenu>
+                                <IconButtonTooltip
+                                  label={`${label.name} options`}
                                 >
-                                  Save explanation
-                                </Button>
-                              </div>
-                            </form>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                                  <DropdownMenuTrigger
+                                    aria-label={`${label.name} options`}
+                                    className="inline-flex size-7 items-center justify-center rounded-md text-muted-fg hover:bg-bg/50 hover:text-fg"
+                                  >
+                                    <HugeiconsIcon
+                                      aria-hidden
+                                      className="size-3.5"
+                                      icon={MoreVerticalIcon}
+                                    />
+                                  </DropdownMenuTrigger>
+                                </IconButtonTooltip>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onSelect={() => {
+                                      setEditingLabelDetails({
+                                        description: label.description ?? "",
+                                        inclusionCriteria:
+                                          label.inclusionCriteria ?? "",
+                                        labelId: label.id,
+                                      });
+                                    }}
+                                  >
+                                    <HugeiconsIcon
+                                      aria-hidden
+                                      className="size-4"
+                                      icon={Tag01Icon}
+                                    />
+                                    Explain label
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onSelect={() => {
+                                      setEditingLabel({
+                                        color: label.color ?? "gray",
+                                        label,
+                                        name: label.name,
+                                      });
+                                    }}
+                                  >
+                                    <HugeiconsIcon
+                                      aria-hidden
+                                      className="size-4"
+                                      icon={Edit01Icon}
+                                    />
+                                    Edit
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    className="text-destructive"
+                                    onSelect={() => {
+                                      setDeletingLabel(label);
+                                    }}
+                                  >
+                                    <HugeiconsIcon
+                                      aria-hidden
+                                      className="size-4"
+                                      icon={Delete01Icon}
+                                    />
+                                    Delete
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                            {labelDetails && (
+                              <form
+                                action={() => {
+                                  void saveLabelDetails();
+                                }}
+                                className="space-y-5 bg-muted/30 px-9 py-5"
+                              >
+                                <Field>
+                                  <FieldLabel>
+                                    What this {labelNoun} is for
+                                  </FieldLabel>
+                                  <Textarea
+                                    aria-label={`What this ${labelNoun} is for`}
+                                    className="min-h-20"
+                                    disabled={
+                                      updateLabelDetailsMutation.isPending
+                                    }
+                                    maxLength={2000}
+                                    onChange={(event) => {
+                                      const description =
+                                        event.currentTarget.value;
+                                      setEditingLabelDetails((current) =>
+                                        current
+                                          ? { ...current, description }
+                                          : current
+                                      );
+                                    }}
+                                    placeholder={`A short explanation of the ${labelNoun}'s purpose.`}
+                                    value={labelDetails.description}
+                                  />
+                                  <FieldDescription>
+                                    Describe the topic or workflow this{" "}
+                                    {labelNoun} represents.
+                                  </FieldDescription>
+                                </Field>
+                                {mailboxProvider === "gmail" ? (
+                                  <Field>
+                                    <FieldLabel>Emails to include</FieldLabel>
+                                    <Textarea
+                                      aria-label="Emails to include"
+                                      className="min-h-24"
+                                      disabled={
+                                        updateLabelDetailsMutation.isPending
+                                      }
+                                      maxLength={4000}
+                                      onChange={(event) => {
+                                        const inclusionCriteria =
+                                          event.currentTarget.value;
+                                        setEditingLabelDetails((current) =>
+                                          current
+                                            ? { ...current, inclusionCriteria }
+                                            : current
+                                        );
+                                      }}
+                                      placeholder="For example: invoices, receipts, and payment confirmations from vendors."
+                                      value={labelDetails.inclusionCriteria}
+                                    />
+                                    <FieldDescription>
+                                      Explain the senders, subjects, content, or
+                                      situations that belong here.
+                                    </FieldDescription>
+                                  </Field>
+                                ) : null}
+                                <div className="flex justify-end gap-2">
+                                  <Button
+                                    disabled={
+                                      updateLabelDetailsMutation.isPending
+                                    }
+                                    onClick={() => {
+                                      setEditingLabelDetails(null);
+                                    }}
+                                    size="sm"
+                                    type="button"
+                                    variant="ghost"
+                                  >
+                                    Cancel
+                                  </Button>
+                                  <Button
+                                    disabled={
+                                      updateLabelDetailsMutation.isPending
+                                    }
+                                    size="sm"
+                                    type="submit"
+                                  >
+                                    Save explanation
+                                  </Button>
+                                </div>
+                              </form>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </FullPageDialogBody>
@@ -836,7 +1143,9 @@ export const SidebarLabelNav = ({
       </FullPageDialog>
       <Dialog
         onOpenChange={(open) => {
-          if (!open) setEditingLabel(null);
+          if (!open) {
+            setEditingLabel(null);
+          }
         }}
         open={!!editingLabel}
       >
@@ -848,18 +1157,21 @@ export const SidebarLabelNav = ({
           >
             <DialogHeader>
               <DialogTitle>Edit {labelNoun}</DialogTitle>
-              <DialogDescription>Change its name and color together.</DialogDescription>
+              <DialogDescription>
+                Change its name and color together.
+              </DialogDescription>
             </DialogHeader>
             <DialogBody className="space-y-5 bg-secondary/25">
               <Field>
                 <FieldLabel>Name</FieldLabel>
                 <Input
-                  autoFocus
                   className="border-0 bg-bg/70 shadow-none"
                   disabled={updateLabelMutation.isPending}
                   onChange={(event) => {
                     const name = event.currentTarget.value;
-                    setEditingLabel((current) => (current ? { ...current, name } : current));
+                    setEditingLabel((current) =>
+                      current ? { ...current, name } : current
+                    );
                   }}
                   value={editingLabel?.name ?? ""}
                 />
@@ -868,9 +1180,11 @@ export const SidebarLabelNav = ({
                 <FieldLabel>Color</FieldLabel>
                 <MailboxColorPicker
                   label={`${labelTitleSingular} color`}
-                  onChange={(color) =>
-                    setEditingLabel((current) => (current ? { ...current, color } : current))
-                  }
+                  onChange={(color) => {
+                    setEditingLabel((current) =>
+                      current ? { ...current, color } : current
+                    );
+                  }}
                   value={editingLabel?.color ?? "gray"}
                 />
               </Field>
@@ -878,7 +1192,11 @@ export const SidebarLabelNav = ({
             <DialogFooter>
               <DialogCloseButton variant="ghost">Cancel</DialogCloseButton>
               <Button
-                disabled={updateLabelMutation.isPending || !editingLabel?.name.trim()}
+                disabled={
+                  updateLabelMutation.isPending ||
+                  editingLabel === null ||
+                  editingLabel.name.trim() === ""
+                }
                 size="sm"
                 type="submit"
               >
@@ -890,7 +1208,9 @@ export const SidebarLabelNav = ({
       </Dialog>
       <AlertDialog
         onOpenChange={(open) => {
-          if (!open) setDeletingLabel(null);
+          if (!open) {
+            setDeletingLabel(null);
+          }
         }}
         open={!!deletingLabel}
       >
@@ -898,13 +1218,18 @@ export const SidebarLabelNav = ({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete {labelNoun}</AlertDialogTitle>
             <AlertDialogDescription>
-              This removes the {labelNoun} from conversations, saved views, and automatic rules.
-              Rules or views left without usable settings will be disabled.
+              This removes the {labelNoun} from conversations, saved views, and
+              automatic rules. Rules or views left without usable settings will
+              be disabled.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogBody>
             <p className="text-sm text-fg">
-              Delete {deletingLabel?.name ? `"${deletingLabel.name}"` : `this ${labelNoun}`}?
+              Delete{" "}
+              {hasText(deletingLabel?.name)
+                ? `"${deletingLabel.name}"`
+                : `this ${labelNoun}`}
+              ?
             </p>
           </AlertDialogBody>
           <AlertDialogFooter>
@@ -912,7 +1237,9 @@ export const SidebarLabelNav = ({
             <Button
               disabled={deleteLabelMutation.isPending || !deletingLabel}
               onClick={() => {
-                if (deletingLabel) void deleteLabel(deletingLabel);
+                if (deletingLabel) {
+                  void deleteLabel(deletingLabel);
+                }
               }}
               variant="destructive"
             >

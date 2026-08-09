@@ -1,19 +1,21 @@
+import { createHash } from "node:crypto";
+
 import { SendMessageCommand, SQSClient } from "@aws-sdk/client-sqs";
 import { requireServerEnv, serverEnv } from "@quieter/env/server";
 import { acceptGmailPubSubNotification } from "@quieter/orpc/gmail-pubsub";
 import { createRemoteJWKSet, jwtVerify } from "jose";
-import { createHash } from "node:crypto";
 import { z } from "zod";
-import {
-  getBearerToken,
-  parseEventJson,
-  toJson,
-  type LambdaFunctionUrlEvent,
-  type LambdaFunctionUrlResponse,
+
+import { getBearerToken, parseEventJson, toJson } from "./function-url";
+import type {
+  LambdaFunctionUrlEvent,
+  LambdaFunctionUrlResponse,
 } from "./function-url";
 import { reportAwsError } from "./sentry";
 
-const GOOGLE_JWKS = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"));
+const GOOGLE_JWKS = createRemoteJWKSet(
+  new URL("https://www.googleapis.com/oauth2/v3/certs")
+);
 
 const pubSubEnvelopeSchema = z.object({
   message: z.object({
@@ -24,23 +26,30 @@ const pubSubEnvelopeSchema = z.object({
 });
 
 const gmailNotificationSchema = z.object({
-  emailAddress: z.string().email(),
+  emailAddress: z.email(),
   historyId: z
     .union([
-      z.string().regex(/^\d+$/),
-      z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).transform(String),
+      z.string().regex(/^\d+$/u),
+      z
+        .number()
+        .int()
+        .nonnegative()
+        .max(Number.MAX_SAFE_INTEGER)
+        .transform(String),
     ])
     .pipe(z.string().min(1)),
 });
 
 export const parseGmailPubSubNotification = (data: string) =>
-  gmailNotificationSchema.parse(JSON.parse(Buffer.from(data, "base64url").toString("utf8")));
+  gmailNotificationSchema.parse(
+    JSON.parse(Buffer.from(data, "base64url").toString("utf-8"))
+  );
 
 let sqsClient: SQSClient | null = null;
 
 const getSqsClient = () => {
   sqsClient ??= new SQSClient({
-    region: serverEnv.AWS_REGION || serverEnv.AWS_DEFAULT_REGION,
+    region: serverEnv.AWS_REGION ?? serverEnv.AWS_DEFAULT_REGION,
   });
   return sqsClient;
 };
@@ -48,7 +57,7 @@ const getSqsClient = () => {
 const verifyPushToken = async (token: string) => {
   const expectedAudience = requireServerEnv("GMAIL_PUBSUB_PUSH_AUDIENCE");
   const expectedServiceAccount = requireServerEnv(
-    "GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT",
+    "GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT"
   ).toLowerCase();
   const { payload } = await jwtVerify(token, GOOGLE_JWKS, {
     audience: expectedAudience,
@@ -65,14 +74,14 @@ const verifyPushToken = async (token: string) => {
 };
 
 export const handler = async (
-  event: LambdaFunctionUrlEvent,
+  event: LambdaFunctionUrlEvent
 ): Promise<LambdaFunctionUrlResponse> => {
   if (event.requestContext?.http?.method?.toUpperCase() !== "POST") {
     return toJson({ error: "Method not allowed" }, 405);
   }
 
   const token = getBearerToken(event.headers);
-  if (!token) {
+  if (token === null || token === undefined || token === "") {
     return toJson({ error: "Unauthorized" }, 401);
   }
   try {
@@ -86,22 +95,25 @@ export const handler = async (
     return toJson({ error: "Invalid notification" }, 400);
   }
   try {
-    if (envelope.data.subscription !== requireServerEnv("GMAIL_PUBSUB_SUBSCRIPTION")) {
+    if (
+      envelope.data.subscription !==
+      requireServerEnv("GMAIL_PUBSUB_SUBSCRIPTION")
+    ) {
       return toJson({ error: "Unexpected subscription" }, 403);
     }
 
-    const notification = parseGmailPubSubNotification(envelope.data.message.data);
+    const notification = parseGmailPubSubNotification(
+      envelope.data.message.data
+    );
     const emailAddress = notification.emailAddress.trim().toLowerCase();
     const accepted = await acceptGmailPubSubNotification({ emailAddress });
     if (accepted.accepted) {
       try {
-        const { notifyGmailLiveSyncConnections } = await import("./gmail-live-sync");
+        const { notifyGmailLiveSyncConnections } =
+          await import("./gmail-live-sync");
         await notifyGmailLiveSyncConnections(accepted.mailboxId);
       } catch (error) {
-        console.error(
-          `Could not fan out fast Gmail live-sync notification for mailbox ${accepted.mailboxId}.`,
-          error instanceof Error ? error.message : "Unknown error.",
-        );
+        await reportAwsError(error, "GmailPubSubIngressFanout");
       }
     }
 
@@ -116,7 +128,7 @@ export const handler = async (
         MessageDeduplicationId: envelope.data.message.messageId,
         MessageGroupId: createHash("sha256").update(emailAddress).digest("hex"),
         QueueUrl: requireServerEnv("GMAIL_PUBSUB_QUEUE_URL"),
-      }),
+      })
     );
 
     return {
@@ -128,10 +140,6 @@ export const handler = async (
     };
   } catch (error) {
     await reportAwsError(error, "GmailPubSubIngress");
-    console.error(
-      "Could not accept Gmail Pub/Sub notification.",
-      error instanceof Error ? error.message : "Unknown error.",
-    );
     return toJson({ error: "Could not accept notification" }, 500);
   }
 };

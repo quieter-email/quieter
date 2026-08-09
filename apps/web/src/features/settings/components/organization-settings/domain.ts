@@ -1,6 +1,7 @@
 import { queryOptions } from "@tanstack/react-query";
 import { z } from "zod";
-import { authClient } from "~/lib/auth";
+
+import { authClient } from "#/lib/auth";
 
 export type OrganizationSummary = NonNullable<
   ReturnType<typeof authClient.useListOrganizations>["data"]
@@ -8,7 +9,8 @@ export type OrganizationSummary = NonNullable<
 export type OrganizationPermissionCheck = Parameters<
   typeof authClient.organization.checkRolePermission
 >[0];
-export type OrganizationPermissions = OrganizationPermissionCheck["permissions"];
+export type OrganizationPermissions =
+  OrganizationPermissionCheck["permissions"];
 export type UserInvitation = {
   createdAt: Date | string;
   email: string;
@@ -58,8 +60,11 @@ const fullOrganizationSchema = z.object({
 export type OrganizationMember = z.infer<typeof organizationMemberSchema>;
 export type FullOrganization = z.infer<typeof fullOrganizationSchema>;
 
-export const formatCount = (count: number, singular: string, plural = `${singular}s`) =>
-  count === 1 ? `1 ${singular}` : `${count} ${plural}`;
+export const formatCount = (
+  count: number,
+  singular: string,
+  plural = `${singular}s`
+) => (count === 1 ? `1 ${singular}` : `${count} ${plural}`);
 
 const splitOrganizationRoles = (value: string) =>
   value.split(",").flatMap((part) => {
@@ -67,19 +72,28 @@ const splitOrganizationRoles = (value: string) =>
     return role ? [role] : [];
   });
 
+const isOrganizationRoleOption = (
+  value: string
+): value is OrganizationRoleOption =>
+  organizationRoleOptions.some((role) => role === value);
+
 export const formatRoleLabel = (value: string) =>
   splitOrganizationRoles(value)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(", ");
 
-export const hasOrganizationRole = (value: string, role: OrganizationRoleOption) =>
-  splitOrganizationRoles(value).includes(role);
+export const hasOrganizationRole = (
+  value: string,
+  role: OrganizationRoleOption
+) => splitOrganizationRoles(value).includes(role);
 
 const dateFormatter = new Intl.DateTimeFormat("en", { dateStyle: "medium" });
 
-export const normalizeOrganizationRole = (value: string): OrganizationRoleOption => {
-  const primaryRole = splitOrganizationRoles(value).find((part): part is OrganizationRoleOption =>
-    organizationRoleOptions.includes(part as OrganizationRoleOption),
+export const normalizeOrganizationRole = (
+  value: string
+): OrganizationRoleOption => {
+  const primaryRole = splitOrganizationRoles(value).find(
+    isOrganizationRoleOption
   );
 
   return primaryRole ?? "member";
@@ -89,8 +103,8 @@ export const slugifyOrganizationName = (value: string) =>
   value
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+    .replaceAll(/[^a-z0-9]+/gu, "-")
+    .replaceAll(/^-+|-+$/gu, "");
 
 export const formatDate = (value: Date | string) => {
   const date = value instanceof Date ? value : new Date(value);
@@ -103,10 +117,21 @@ export const formatDate = (value: Date | string) => {
 
 export const hasOrganizationPermission = (
   role: OrganizationPermissionCheck["role"] | null,
-  permissions: OrganizationPermissions,
-) => (role ? authClient.organization.checkRolePermission({ permissions, role }) : false);
+  permissions: OrganizationPermissions
+) =>
+  role
+    ? authClient.organization.checkRolePermission({ permissions, role })
+    : false;
 
-const invitationStatuses = new Set(["pending", "accepted", "rejected", "canceled"]);
+const invitationStatuses = new Set([
+  "pending",
+  "accepted",
+  "rejected",
+  "canceled",
+]);
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
 
 const isInvitationDate = (value: unknown): value is Date | string =>
   value instanceof Date
@@ -114,11 +139,11 @@ const isInvitationDate = (value: unknown): value is Date | string =>
     : typeof value === "string" && !Number.isNaN(new Date(value).getTime());
 
 const isUserInvitation = (value: unknown): value is UserInvitation => {
-  if (typeof value !== "object" || value === null) {
+  if (!isRecord(value)) {
     return false;
   }
 
-  const invitation = value as Record<string, unknown>;
+  const invitation = value;
   return (
     typeof invitation.id === "string" &&
     typeof invitation.email === "string" &&
@@ -138,7 +163,12 @@ const normalizeUserInvitations = (value: unknown): UserInvitation[] => {
     return value.filter(isUserInvitation);
   }
 
-  if (typeof value === "object" && value !== null && "data" in value && Array.isArray(value.data)) {
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "data" in value &&
+    Array.isArray(value.data)
+  ) {
     return value.data.filter(isUserInvitation);
   }
 
@@ -162,23 +192,27 @@ export const userInvitationsQueryOptions = (userId: string, enabled = true) =>
     staleTime: 30_000,
   });
 
-const loadFullOrganization = async (organizationId: string): Promise<FullOrganization | null> => {
+const loadFullOrganization = async (
+  organizationId: string
+): Promise<FullOrganization | null> => {
   const result = await authClient.organization.getFullOrganization({
     query: {
       membersLimit: 500,
       organizationId,
     },
   });
-  if (result.error) {
+  if (result.error !== null && result.error !== undefined) {
     throw new Error(result.error.message ?? "Could not load team.");
   }
 
-  return result.data ? fullOrganizationSchema.parse(result.data) : null;
+  return result.data !== null && result.data !== undefined
+    ? fullOrganizationSchema.parse(result.data)
+    : null;
 };
 
 export const fullOrganizationQueryOptions = (organizationId: string) =>
   queryOptions({
-    queryFn: () => loadFullOrganization(organizationId),
+    queryFn: async () => await loadFullOrganization(organizationId),
     queryKey: getFullOrganizationQueryKey(organizationId),
     staleTime: 30_000,
   });

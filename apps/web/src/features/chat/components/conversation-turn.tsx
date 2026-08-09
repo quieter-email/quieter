@@ -1,13 +1,19 @@
 "use client";
 
-import { Copy01Icon, Edit01Icon, Refresh01Icon } from "@hugeicons/core-free-icons";
+import {
+  Copy01Icon,
+  Edit01Icon,
+  Refresh01Icon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Textarea } from "@quieter/ui/textarea";
-import { type KeyboardEvent, useState } from "react";
-import type { ChatTurn, ResolveComposeTool } from "../types";
+import { useState } from "react";
+import type { KeyboardEvent } from "react";
+
 import { getCopyableMessageText } from "../domain/copy-message-text";
+import type { ChatTurn, ResolveComposeTool } from "../types";
 import { MessageActions } from "./message-actions";
 import { AssistantParts } from "./message-parts/assistant-parts";
 import { UserParts } from "./message-parts/user-parts";
@@ -40,7 +46,9 @@ export const ConversationTurn = ({
   const hasUserContent = Boolean(turn.user?.parts.length);
   const showActions = !actionsDisabled && (!isLastTurn || !isStreaming);
   const userCopyText = turn.user ? getCopyableMessageText(turn.user.parts) : "";
-  const assistantCopyText = turn.assistant ? getCopyableMessageText(turn.assistant.parts) : "";
+  const assistantCopyText = turn.assistant
+    ? getCopyableMessageText(turn.assistant.parts)
+    : "";
   const assistantMessageId = turn.assistant?.id;
   const startEditing = () => {
     if (!turn.user) {
@@ -89,15 +97,27 @@ export const ConversationTurn = ({
               <Textarea
                 aria-label="Edit message"
                 className="min-h-20 resize-none rounded-lg px-3.5 text-sm/relaxed"
-                onChange={(event) => setEditDraft(event.target.value)}
+                onChange={(event) => {
+                  setEditDraft(event.target.value);
+                }}
                 onKeyDown={handleEditKeyDown}
                 value={editDraft}
               />
               <div className="flex justify-end gap-2">
-                <Button onClick={cancelEditing} size="sm" type="button" variant="ghost">
+                <Button
+                  onClick={cancelEditing}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
                   Cancel
                 </Button>
-                <Button disabled={!editDraft.trim()} onClick={submitEdit} size="sm" type="button">
+                <Button
+                  disabled={!editDraft.trim()}
+                  onClick={submitEdit}
+                  size="sm"
+                  type="button"
+                >
                   Save & submit
                 </Button>
               </div>
@@ -113,7 +133,9 @@ export const ConversationTurn = ({
                     <IconButtonTooltip label="Copy">
                       <Button
                         aria-label="Copy"
-                        onClick={() => onCopy(userCopyText)}
+                        onClick={() => {
+                          onCopy(userCopyText);
+                        }}
                         size="icon-sm"
                         type="button"
                         variant="ghost"
@@ -156,7 +178,9 @@ export const ConversationTurn = ({
                 <IconButtonTooltip label="Copy">
                   <Button
                     aria-label="Copy"
-                    onClick={() => onCopy(assistantCopyText)}
+                    onClick={() => {
+                      onCopy(assistantCopyText);
+                    }}
                     size="icon-sm"
                     type="button"
                     variant="ghost"
@@ -169,7 +193,11 @@ export const ConversationTurn = ({
                 <Button
                   aria-label="Regenerate"
                   onClick={() => {
-                    if (assistantMessageId) {
+                    if (
+                      assistantMessageId !== null &&
+                      assistantMessageId !== undefined &&
+                      assistantMessageId !== ""
+                    ) {
                       onRegenerate(assistantMessageId);
                     }
                   }}

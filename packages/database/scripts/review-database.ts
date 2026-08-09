@@ -2,7 +2,7 @@ export const REVIEW_APP_ROLE = "quieter_review_app";
 
 export const parseReviewPullRequestNumber = (value: string | undefined) => {
   const trimmed = value?.trim();
-  if (!trimmed || !/^\d+$/.test(trimmed)) {
+  if (trimmed === undefined || trimmed === "" || !/^\d+$/u.test(trimmed)) {
     throw new Error("REVIEW_PR_NUMBER must be a positive integer");
   }
 

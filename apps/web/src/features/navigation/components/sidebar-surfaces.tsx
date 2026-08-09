@@ -3,11 +3,13 @@
 import { cn } from "@quieter/ui/cn";
 import { cva } from "class-variance-authority";
 import { AnimatePresence, m, useReducedMotion } from "motion/react";
-import { type ReactNode, useState } from "react";
-import { appMotionDuration } from "~/features/motion/app-motion";
+import { useRef, useState } from "react";
+import type { ReactNode } from "react";
+
+import { appMotionDuration } from "#/features/motion/app-motion";
 
 const sidebarSurfaceSpringTransition = {
-  layout: { type: "spring" as const, stiffness: 560, damping: 38, mass: 0.55 },
+  layout: { damping: 38, mass: 0.55, stiffness: 560, type: "spring" as const },
 };
 
 const sidebarSurfaceFadeTransition = {
@@ -26,7 +28,7 @@ export const sidebarSurfaceVariants = cva("squircle rounded-md", {
 });
 
 export const sidebarNavButtonVariants = cva(
-  "relative z-10 w-full bg-transparent hover:bg-transparent active:scale-100 active:bg-transparent aria-[current=page]:bg-transparent aria-[current=page]:hover:bg-transparent aria-[current=page]:active:bg-transparent motion-reduce:active:scale-100",
+  "relative z-10 w-full bg-transparent hover:bg-transparent active:scale-100 active:bg-transparent aria-[current=page]:bg-transparent aria-[current=page]:hover:bg-transparent aria-[current=page]:active:bg-transparent motion-reduce:active:scale-100"
 );
 
 type SidebarEntranceProps = {
@@ -43,28 +45,44 @@ export const SidebarEntrance = ({
   index = 0,
 }: SidebarEntranceProps) => {
   const reducedMotion = useReducedMotion();
-  const [shouldAnimate] = useState(animateEntrance);
+  const shouldAnimate = useRef(animateEntrance).current;
   const [isAnimating, setIsAnimating] = useState(animateEntrance);
+  let initial:
+    | false
+    | {
+        filter?: string;
+        opacity: number;
+        transform?: string;
+      } = false;
+  if (shouldAnimate) {
+    initial =
+      reducedMotion === true
+        ? { opacity: 0 }
+        : {
+            filter: "blur(8px)",
+            opacity: 0,
+            transform: "translate3d(-20px, 0, 0)",
+          };
+  }
 
   return (
     <m.div
-      animate={{ filter: "blur(0px)", opacity: 1, transform: "translate3d(0, 0, 0)" }}
-      className={cn({ "will-change-[transform,opacity,filter]": isAnimating }, className)}
-      initial={
-        shouldAnimate
-          ? reducedMotion
-            ? { opacity: 0 }
-            : {
-                filter: "blur(8px)",
-                opacity: 0,
-                transform: "translate3d(-20px, 0, 0)",
-              }
-          : false
-      }
-      onAnimationComplete={() => setIsAnimating(false)}
+      animate={{
+        filter: "blur(0px)",
+        opacity: 1,
+        transform: "translate3d(0, 0, 0)",
+      }}
+      className={cn(
+        { "will-change-[transform,opacity,filter]": isAnimating },
+        className
+      )}
+      initial={initial}
+      onAnimationComplete={() => {
+        setIsAnimating(false);
+      }}
       transition={{
-        delay: shouldAnimate && !reducedMotion ? index * 0.075 : 0,
-        duration: reducedMotion ? appMotionDuration.feedback : 0.5,
+        delay: shouldAnimate && reducedMotion !== true ? index * 0.075 : 0,
+        duration: reducedMotion === true ? appMotionDuration.feedback : 0.5,
         ease: "easeOut",
       }}
     >
@@ -77,8 +95,13 @@ type SidebarActiveSurfaceProps = {
   className?: string;
 };
 
-export const SidebarActiveSurface = ({ className }: SidebarActiveSurfaceProps) => (
-  <span aria-hidden className={cn(sidebarSurfaceVariants({ surface: "active" }), className)} />
+export const SidebarActiveSurface = ({
+  className,
+}: SidebarActiveSurfaceProps) => (
+  <span
+    aria-hidden
+    className={cn(sidebarSurfaceVariants({ surface: "active" }), className)}
+  />
 );
 
 type SidebarHoverSurfaceProps = {
@@ -99,39 +122,44 @@ export const SidebarHoverSurface = ({
   pressed,
 }: SidebarHoverSurfaceProps) => {
   const reducedMotion = useReducedMotion();
+  let hoverTransform = "scale(1)";
+  if (reducedMotion !== true && pressed) {
+    hoverTransform = "scale(0.98)";
+  }
+  const hoverScale = reducedMotion === true ? "scale(1)" : "scale(0.98)";
+  let hoverInitial: false | { opacity: number; transform: string } = false;
+  if (hoverEnter === true) {
+    hoverInitial = { opacity: 0, transform: hoverScale };
+  }
 
   return (
     <m.span
       className="pointer-events-none absolute inset-0 z-1"
       initial={false}
-      layout={!reducedMotion && !hoverExiting ? "position" : false}
-      layoutId={!reducedMotion && !hoverExiting ? hoverLayoutId : undefined}
+      layout={
+        reducedMotion !== true && hoverExiting !== true ? "position" : false
+      }
+      layoutId={
+        reducedMotion !== true && hoverExiting !== true
+          ? hoverLayoutId
+          : undefined
+      }
       transition={sidebarSurfaceSpringTransition}
     >
       <m.span
         aria-hidden
         animate={
-          hoverExiting
-            ? {
-                opacity: 0,
-                transform: reducedMotion ? "scale(1)" : "scale(0.98)",
-              }
-            : {
-                opacity: 1,
-                transform: reducedMotion ? "scale(1)" : pressed ? "scale(0.98)" : "scale(1)",
-              }
+          hoverExiting === true
+            ? { opacity: 0, transform: hoverScale }
+            : { opacity: 1, transform: hoverTransform }
         }
-        className={cn(sidebarSurfaceVariants({ surface: "hoverItem" }), className)}
-        initial={
-          hoverEnter
-            ? {
-                opacity: 0,
-                transform: reducedMotion ? "scale(1)" : "scale(0.98)",
-              }
-            : false
-        }
+        className={cn(
+          sidebarSurfaceVariants({ surface: "hoverItem" }),
+          className
+        )}
+        initial={hoverInitial}
         onAnimationComplete={() => {
-          if (hoverExiting) {
+          if (hoverExiting === true) {
             onHoverExitComplete?.();
           }
         }}
@@ -166,17 +194,17 @@ export const SidebarSimpleHoverSurface = ({
           className={cn(
             "pointer-events-none absolute inset-0 z-0",
             sidebarSurfaceVariants({ surface: "hover" }),
-            className,
+            className
           )}
           exit={{
             opacity: 0,
-            transform: reducedMotion ? "scale(1)" : "scale(0.98)",
+            transform: reducedMotion === true ? "scale(1)" : "scale(0.98)",
           }}
           initial={{
             opacity: 0,
-            transform: reducedMotion ? "scale(1)" : "scale(0.98)",
+            transform: reducedMotion === true ? "scale(1)" : "scale(0.98)",
           }}
-          layoutId={reducedMotion ? undefined : layoutId}
+          layoutId={reducedMotion === true ? undefined : layoutId}
           transition={{
             ...sidebarSurfaceSpringTransition,
             ...sidebarSurfaceFadeTransition,

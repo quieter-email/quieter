@@ -5,7 +5,13 @@ import type { ComponentPropsWithoutRef } from "react";
 type SvgIconProps = ComponentPropsWithoutRef<"svg">;
 
 const SvgIcon = ({ children, className, ...props }: SvgIconProps) => (
-  <svg aria-hidden className={className} fill="none" viewBox="0 0 16 16" {...props}>
+  <svg
+    aria-hidden
+    className={className}
+    fill="none"
+    viewBox="0 0 16 16"
+    {...props}
+  >
     {children}
   </svg>
 );

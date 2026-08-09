@@ -1,16 +1,21 @@
 "use client";
 
-import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useCallback, useLayoutEffect, useRef } from "react";
-import type { ThreadListEntry } from "~/lib/gmail/thread-list";
-import { getThreadQueryKey, getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
+
+import type { ThreadListEntry } from "#/lib/gmail/thread-list";
+import {
+  getThreadQueryKey,
+  getThreadWithDetailsOptions,
+} from "#/lib/gmail/thread-query";
+
 import type { MessageListProps } from "./message-list-types";
-import type { useMessageListSelection } from "./use-message-list-selection";
 import { MessageRow } from "./message-row";
+import type { useMessageListSelection } from "./use-message-list-selection";
 
 const MESSAGE_ROW_HEIGHT_PX = 68;
 const MESSAGE_ROW_GAP_PX = 0;
@@ -53,15 +58,15 @@ const loadMoreIfNeeded = ({
     return;
   }
 
-  const distanceToBottom = element.scrollHeight - (element.scrollTop + element.clientHeight);
+  const distanceToBottom =
+    element.scrollHeight - (element.scrollTop + element.clientHeight);
   if (distanceToBottom <= Math.max(element.clientHeight, 400)) {
     onLoadMore();
   }
 };
 
 const MessageListLoadingSkeleton = () => (
-  // react-doctor-disable-next-line react-doctor/prefer-tag-over-role
-  <div aria-live="polite" className="block space-y-0.5" role="status">
+  <div aria-live="polite" className="block space-y-0.5">
     <span className="sr-only">Loading messages…</span>
     {MESSAGE_LIST_SKELETON_ROW_IDS.map((rowId) => (
       <div
@@ -82,6 +87,69 @@ const MessageListLoadingSkeleton = () => (
   </div>
 );
 
+const useThreadIntentPrefetch = (
+  mailboxId: string,
+  queryClient: ReturnType<typeof useQueryClient>
+) => {
+  const intentTimerRef = useRef<number | null>(null);
+  const intentThreadIdRef = useRef<string | null>(null);
+  const handleThreadIntent = useCallback(
+    (threadId: string | null) => {
+      if (intentTimerRef.current !== null) {
+        window.clearTimeout(intentTimerRef.current);
+        intentTimerRef.current = null;
+      }
+      intentThreadIdRef.current = threadId;
+      if (threadId === null || threadId === "") {
+        return;
+      }
+      intentTimerRef.current = window.setTimeout(() => {
+        intentTimerRef.current = null;
+        if (intentThreadIdRef.current !== threadId) {
+          return;
+        }
+        const queryKey = getThreadQueryKey(mailboxId, threadId);
+        if (queryClient.isFetching({ exact: true, queryKey }) > 0) {
+          return;
+        }
+        void queryClient.prefetchQuery(
+          getThreadWithDetailsOptions(mailboxId, threadId)
+        );
+      }, 200);
+    },
+    [mailboxId, queryClient]
+  );
+
+  useLayoutEffect(
+    () => () => {
+      if (intentTimerRef.current !== null) {
+        window.clearTimeout(intentTimerRef.current);
+      }
+    },
+    []
+  );
+
+  return handleThreadIntent;
+};
+
+const getEmptyMessageLabel = (
+  activeMailbox: MessageListProps["activeMailbox"],
+  searchQuery: string
+) => {
+  if (activeMailbox === "drafts") {
+    return searchQuery ? "No drafts found." : "No drafts.";
+  }
+  if (searchQuery) {
+    return "No messages found.";
+  }
+  return "No messages.";
+};
+
+const isLoadingEmptyMessageList = (
+  threadedMessages: readonly ThreadListEntry[],
+  isPending: boolean
+) => threadedMessages.length === 0 && isPending;
+
 export const MessageListScrollPane = ({
   gmailLabels,
   list,
@@ -90,36 +158,17 @@ export const MessageListScrollPane = ({
   threadedMessages,
 }: MessageListScrollPaneProps) => {
   const queryClient = useQueryClient();
-  const intentTimerRef = useRef<number | undefined>(undefined);
-  const intentThreadIdRef = useRef<string | null>(null);
   const flattenedMessages = list.messages.flatMap((page) => page.messages);
   const activeThreadId =
-    flattenedMessages.find((message) => message.id === list.activeMessageId)?.threadId ?? null;
-  const isLoadingEmptyMessages = threadedMessages.length === 0 && list.isPending;
-  const handleThreadIntent = useCallback(
-    (threadId: string | null) => {
-      if (intentTimerRef.current !== undefined) {
-        window.clearTimeout(intentTimerRef.current);
-        intentTimerRef.current = undefined;
-      }
-      intentThreadIdRef.current = threadId;
-      if (!threadId) return;
-      intentTimerRef.current = window.setTimeout(() => {
-        intentTimerRef.current = undefined;
-        if (intentThreadIdRef.current !== threadId) return;
-        const queryKey = getThreadQueryKey(list.mailboxId, threadId);
-        if (queryClient.isFetching({ queryKey, exact: true }) > 0) return;
-        void queryClient.prefetchQuery(getThreadWithDetailsOptions(list.mailboxId, threadId));
-      }, 200);
-    },
-    [list.mailboxId, queryClient],
+    flattenedMessages.find((message) => message.id === list.activeMessageId)
+      ?.threadId ?? null;
+  const isLoadingEmptyMessages = isLoadingEmptyMessageList(
+    threadedMessages,
+    list.isPending
   );
-
-  useLayoutEffect(
-    () => () => {
-      if (intentTimerRef.current !== undefined) window.clearTimeout(intentTimerRef.current);
-    },
-    [],
+  const handleThreadIntent = useThreadIntentPrefetch(
+    list.mailboxId,
+    queryClient
   );
 
   // Track when we first see each thread ID to identify new messages
@@ -156,7 +205,7 @@ export const MessageListScrollPane = ({
   const virtualItems = messageVirtualizer.getVirtualItems();
   const hasMountedPrefetchRef = useRef(false);
 
-  useLayoutEffect(() => {
+  useLayoutEffect((): (() => void) | undefined => {
     if (
       hasMountedPrefetchRef.current ||
       !list.hasNextPage ||
@@ -164,7 +213,7 @@ export const MessageListScrollPane = ({
       list.isFetchingNextPage ||
       list.isPending
     ) {
-      return;
+      return undefined;
     }
 
     hasMountedPrefetchRef.current = true;
@@ -176,6 +225,7 @@ export const MessageListScrollPane = ({
       isPending: list.isPending,
       onLoadMore: list.onLoadMore,
     });
+    return undefined;
   }, [
     list.hasNextPage,
     list.isError,
@@ -186,38 +236,60 @@ export const MessageListScrollPane = ({
     threadedMessages.length,
   ]);
 
-  useLayoutEffect(() => {
+  useLayoutEffect((): (() => void) | undefined => {
     const threadId = selection.keyboardFocusedThreadId;
-    if (!threadId) return;
+    if (threadId === null || threadId === "") {
+      return undefined;
+    }
 
-    if (!selection.consumeFocusRingRequest()) return;
+    if (!selection.consumeFocusRingRequest()) {
+      return undefined;
+    }
 
-    const focusedIndex = threadedMessages.findIndex((thread) => thread.threadId === threadId);
-    if (focusedIndex === -1) return;
+    const focusedIndex = threadedMessages.findIndex(
+      (thread) => thread.threadId === threadId
+    );
+    if (focusedIndex === -1) {
+      return undefined;
+    }
 
     messageVirtualizer.scrollToIndex(focusedIndex, { align: "auto" });
 
     const frameId = requestAnimationFrame(() => {
-      const trigger = selection.scrollRef.current?.querySelector<HTMLButtonElement>(
-        `li[data-thread-id="${CSS.escape(threadId)}"] [data-message-row-trigger]`,
-      );
-      trigger?.focus({ preventScroll: true, focusVisible: true });
+      const trigger =
+        selection.scrollRef.current?.querySelector<HTMLButtonElement>(
+          `li[data-thread-id="${CSS.escape(threadId)}"] [data-message-row-trigger]`
+        );
+      trigger?.focus({ focusVisible: true, preventScroll: true });
     });
 
-    return () => cancelAnimationFrame(frameId);
+    return () => {
+      cancelAnimationFrame(frameId);
+    };
   }, [
     messageVirtualizer,
     selection.consumeFocusRingRequest,
     selection.keyboardFocusedThreadId,
     selection.scrollRef,
+    selection,
     threadedMessages,
   ]);
+
+  const handleThreadFocus = selection.focusThread;
+  const handleOpenDraft = list.onOpenDraft;
+
+  const emptyMessageLabel = getEmptyMessageLabel(
+    list.activeMailbox,
+    list.searchQuery
+  );
 
   return (
     <div
       className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-2 pt-1 pb-[max(1rem,env(safe-area-inset-bottom))] contain-strict @sm:px-4"
       onScroll={() => {
-        if (selection.isProgrammaticScrollToTopRef.current) return;
+        if (selection.isProgrammaticScrollToTopRef.current) {
+          return;
+        }
         loadMoreIfNeeded({
           element: selection.scrollRef.current,
           hasNextPage: list.hasNextPage,
@@ -233,7 +305,9 @@ export const MessageListScrollPane = ({
 
       {list.isError && (
         <p className="px-2 py-8 text-sm text-destructive">
-          {(list.error as { message?: string })?.message ?? "Could not load messages."}
+          {list.error instanceof Error
+            ? list.error.message
+            : "Could not load messages."}
         </p>
       )}
 
@@ -246,7 +320,9 @@ export const MessageListScrollPane = ({
         >
           {virtualItems.map((virtualItem) => {
             const thread = threadedMessages[virtualItem.index];
-            const compositeKey = thread?.threadId ? `${list.mailboxId}-${thread.threadId}` : "";
+            const compositeKey = thread?.threadId
+              ? `${list.mailboxId}-${thread.threadId}`
+              : "";
             const isNew = thread?.threadId
               ? (seenTimestamps.get(compositeKey) ?? 0) > now - 2000
               : false;
@@ -255,56 +331,51 @@ export const MessageListScrollPane = ({
                 ? newThreads.findIndex((t) => t.threadId === thread.threadId)
                 : 0;
 
-            return (
-              thread && (
-                <MessageRow
-                  activeMailbox={list.activeMailbox}
-                  className="absolute top-0 left-0 w-full"
-                  dataIndex={virtualItem.index}
-                  gmailLabels={gmailLabels}
-                  isNew={isNew}
-                  key={thread.threadId}
-                  mailboxActions={list.mailboxActions}
-                  mailboxId={list.mailboxId}
-                  mailboxProvider={list.mailboxProvider}
-                  offsetY={virtualItem.start}
-                  onThreadFocus={selection.focusThread}
-                  onThreadIntent={handleThreadIntent}
-                  onOpenDraft={list.onOpenDraft}
-                  onKeyboardOpen={onKeyboardOpenMessage}
-                  onThreadPress={selection.handleThreadPress}
-                  onThreadSelectionPress={selection.handleThreadSelectionPress}
-                  pendingActions={list.pendingActions}
-                  staggerIndex={staggerIndex}
-                  state={{
-                    active: activeThreadId === thread.threadId,
-                    selected: selection.selectedThreadIds.has(thread.threadId),
-                    selectionMode: selection.selectedThreadIds.size > 0,
-                  }}
-                  thread={thread}
-                />
-              )
+            return thread === undefined ? null : (
+              <MessageRow
+                activeMailbox={list.activeMailbox}
+                className="absolute top-0 left-0 w-full"
+                dataIndex={virtualItem.index}
+                gmailLabels={gmailLabels}
+                isNew={isNew}
+                key={thread.threadId}
+                mailboxActions={list.mailboxActions}
+                mailboxId={list.mailboxId}
+                mailboxProvider={list.mailboxProvider}
+                offsetY={virtualItem.start}
+                onThreadFocus={handleThreadFocus}
+                onThreadIntent={handleThreadIntent}
+                onOpenDraft={handleOpenDraft}
+                onKeyboardOpen={onKeyboardOpenMessage}
+                onThreadPress={selection.handleThreadPress}
+                onThreadSelectionPress={selection.handleThreadSelectionPress}
+                pendingActions={list.pendingActions}
+                staggerIndex={staggerIndex}
+                state={{
+                  active: activeThreadId === thread.threadId,
+                  selected: selection.selectedThreadIds.has(thread.threadId),
+                  selectionMode: selection.selectedThreadIds.size > 0,
+                }}
+                thread={thread}
+              />
             );
           })}
         </ul>
       )}
 
-      {!isLoadingEmptyMessages && !list.isError && threadedMessages.length === 0 && (
-        <p className="px-2 py-8 text-sm text-muted-fg">
-          {list.activeMailbox === "drafts"
-            ? list.searchQuery
-              ? "No drafts found."
-              : "No drafts."
-            : list.searchQuery
-              ? "No messages found."
-              : "No messages."}
-        </p>
-      )}
+      {!isLoadingEmptyMessages &&
+        !list.isError &&
+        threadedMessages.length === 0 && (
+          <p className="px-2 py-8 text-sm text-muted-fg">{emptyMessageLabel}</p>
+        )}
 
       {!list.isError && threadedMessages.length > 0 && (
         <p className="px-2 py-5 text-center text-xs text-muted-fg">
           {list.isFetchingNextPage || list.hasNextPage ? (
-            <HugeiconsIcon className="mx-auto animate-spin text-muted-fg" icon={Loading03Icon} />
+            <HugeiconsIcon
+              className="mx-auto animate-spin text-muted-fg"
+              icon={Loading03Icon}
+            />
           ) : (
             "You're all caught up."
           )}

@@ -10,19 +10,21 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { domAnimation, LazyMotion, m } from "motion/react";
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { z } from "zod";
-import { AuthVisual } from "~/components/auth-visual";
-import { GoogleLogo } from "~/components/google-logo";
-import { setDemoModeEnabled } from "~/features/settings/domain/demo-mode-setting";
-import { setManagedDemoModeEnabled } from "~/features/settings/domain/managed-demo-mode-setting";
-import { authClient } from "~/lib/auth";
+
+import { AuthVisual } from "#/components/auth-visual";
+import { GoogleLogo } from "#/components/google-logo";
+import { setDemoModeEnabled } from "#/features/settings/domain/demo-mode-setting";
+import { setManagedDemoModeEnabled } from "#/features/settings/domain/managed-demo-mode-setting";
+import { authClient } from "#/lib/auth";
 import {
   isPreviewPersonasAvailable,
   setPreviewPersona,
-  type PreviewPersona,
-} from "~/lib/preview-personas";
-import { queryPersister } from "~/lib/query-persister";
-import { setTermsAcceptanceCookie } from "~/lib/terms-acceptance";
+} from "#/lib/preview-personas";
+import type { PreviewPersona } from "#/lib/preview-personas";
+import { queryPersister } from "#/lib/query-persister";
+import { setTermsAcceptanceCookie } from "#/lib/terms-acceptance";
 
 const authRouteApi = getRouteApi("/auth");
 const AUTHENTICATION_ERROR_MESSAGE =
@@ -31,22 +33,31 @@ const AUTHENTICATION_ERROR_MESSAGE =
 type AuthErrorKey = "signup_disabled";
 
 const AUTH_ERROR_MESSAGES: Record<AuthErrorKey, string> = {
-  signup_disabled: "No account exists for that Google account. Sign up first to create one.",
+  signup_disabled:
+    "No account exists for that Google account. Sign up first to create one.",
 };
 
+const hasText = (value: string | null | undefined): value is string =>
+  value !== null && value !== undefined && value !== "";
+
 const normalizeAuthReturnTo = (returnTo?: string) => {
-  if (!returnTo) return "/";
+  if (!hasText(returnTo)) {
+    return "/";
+  }
 
   try {
     const url = new URL(returnTo, "https://quieter.local");
-    if (url.origin !== "https://quieter.local") return "/";
+    if (url.origin !== "https://quieter.local") {
+      return "/";
+    }
     return `${url.pathname}${url.search}${url.hash}`;
   } catch {
     return "/";
   }
 };
 
-const isAuthErrorKey = (key: string): key is AuthErrorKey => key in AUTH_ERROR_MESSAGES;
+const isAuthErrorKey = (key: string): key is AuthErrorKey =>
+  key in AUTH_ERROR_MESSAGES;
 
 type AuthNavigate = ReturnType<(typeof authRouteApi)["useNavigate"]>;
 
@@ -55,7 +66,7 @@ type AuthFormValues = {
   name?: string;
 };
 
-const previewPersonaOptions: Array<{ label: string; persona: PreviewPersona }> = [
+const previewPersonaOptions: { label: string; persona: PreviewPersona }[] = [
   { label: "User with Gmail", persona: "gmail" },
   { label: "User with managed mail", persona: "managed" },
   { label: "Onboarding user", persona: "empty" },
@@ -135,9 +146,9 @@ const AuthCredentials = ({
     errorCallbackParams.set("returnTo", callbackUrl);
   }
   const errorCallbackHref =
-    typeof globalThis.window !== "undefined"
-      ? `${globalThis.window.location.origin}/auth?${errorCallbackParams}`
-      : `/auth?${errorCallbackParams}`;
+    globalThis.window === undefined
+      ? `/auth?${errorCallbackParams}`
+      : `${globalThis.window.location.origin}/auth?${errorCallbackParams}`;
 
   const googleMutation = useMutation({
     mutationFn: async () => {
@@ -148,21 +159,16 @@ const AuthCredentials = ({
       markTermsAccepted();
 
       const response = await authClient.signIn.social({
-        provider: "google",
         callbackURL: callbackUrl,
         errorCallbackURL: errorCallbackHref,
-        requestSignUp: isSignup,
         fetchOptions: { timeout: 15_000 },
+        provider: "google",
+        requestSignUp: isSignup,
       });
       if (response.error) {
-        throw new Error(response.error.message ?? "Could not start Google sign-in.");
-      }
-
-      await clearCachedAccountData();
-
-      const redirectUrl = response.data?.url;
-      if (typeof redirectUrl === "string" && redirectUrl.length > 0) {
-        globalThis.window.location.assign(redirectUrl);
+        throw new Error(
+          response.error.message ?? "Could not start Google sign-in."
+        );
       }
 
       return response;
@@ -177,6 +183,15 @@ const AuthCredentials = ({
     onMutate: () => {
       setErrors((prev) => ({ ...prev, google: undefined }));
     },
+    onSuccess: async (response) => {
+      queryClient.clear();
+      await queryPersister.removeQueries();
+
+      const redirectUrl = response.data?.url;
+      if (typeof redirectUrl === "string" && redirectUrl.length > 0) {
+        globalThis.window.location.assign(redirectUrl);
+      }
+    },
   });
 
   const passkeyMutation = useMutation({
@@ -189,7 +204,9 @@ const AuthCredentials = ({
 
       const response = await authClient.signIn.passkey();
       if (response.error) {
-        throw new Error(response.error.message ?? "Could not sign in with a passkey.");
+        throw new Error(
+          response.error.message ?? "Could not sign in with a passkey."
+        );
       }
       return response;
     },
@@ -204,7 +221,8 @@ const AuthCredentials = ({
       setErrors((prev) => ({ ...prev, passkey: undefined }));
     },
     onSuccess: async () => {
-      await clearCachedAccountData();
+      queryClient.clear();
+      await queryPersister.removeQueries();
 
       if (callbackUrl === "/") {
         await navigate({
@@ -224,6 +242,16 @@ const AuthCredentials = ({
     } satisfies AuthFormValues,
     validationLogic: revalidateLogic(),
     validators: {
+      onDynamic:
+        mode === "signup"
+          ? z.object({
+              email: z.email("Enter a valid email."),
+              name: z.string().trim().min(1, "Name is required."),
+            })
+          : z.object({
+              email: z.email("Enter a valid email."),
+              name: z.string(),
+            }),
       onSubmitAsync: async ({ value }) => {
         if (!ensureTermsAccepted()) {
           return {
@@ -256,17 +284,9 @@ const AuthCredentials = ({
             form: AUTHENTICATION_ERROR_MESSAGE,
           };
         }
+
+        return {};
       },
-      onDynamic:
-        mode === "signup"
-          ? z.object({
-              email: z.email("Enter a valid email."),
-              name: z.string().trim().min(1, "Name is required."),
-            })
-          : z.object({
-              email: z.email("Enter a valid email."),
-              name: z.string(),
-            }),
     },
   });
 
@@ -280,45 +300,20 @@ const AuthCredentials = ({
       >
         {isSignup ? (
           <form.Field name="name">
-            {(field) => {
-              return (
-                <TextField>
-                  <TextFieldInput
-                    aria-label="Name"
-                    aria-invalid={field.state.meta.errors.length > 0}
-                    autoComplete="name"
-                    name={field.name}
-                    onBlur={() => field.handleBlur()}
-                    onChange={(event) => field.handleChange(event.target.value)}
-                    placeholder="Name"
-                    value={field.state.value}
-                  />
-                  {field.state.meta.errors.map((error) => (
-                    <p className="text-xs text-destructive" key={error?.message}>
-                      {error?.message ?? "An unknown error occurred."}
-                    </p>
-                  ))}
-                </TextField>
-              );
-            }}
-          </form.Field>
-        ) : null}
-
-        <form.Field name="email">
-          {(field) => {
-            return (
+            {(field) => (
               <TextField>
                 <TextFieldInput
-                  aria-label="Email address"
+                  aria-label="Name"
                   aria-invalid={field.state.meta.errors.length > 0}
-                  autoCapitalize="none"
-                  autoComplete="email"
-                  autoCorrect="off"
+                  autoComplete="name"
                   name={field.name}
-                  onBlur={() => field.handleBlur()}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                  placeholder="Email"
-                  type="email"
+                  onBlur={() => {
+                    field.handleBlur();
+                  }}
+                  onChange={(event) => {
+                    field.handleChange(event.target.value);
+                  }}
+                  placeholder="Name"
                   value={field.state.value}
                 />
                 {field.state.meta.errors.map((error) => (
@@ -327,8 +322,37 @@ const AuthCredentials = ({
                   </p>
                 ))}
               </TextField>
-            );
-          }}
+            )}
+          </form.Field>
+        ) : null}
+
+        <form.Field name="email">
+          {(field) => (
+            <TextField>
+              <TextFieldInput
+                aria-label="Email address"
+                aria-invalid={field.state.meta.errors.length > 0}
+                autoCapitalize="none"
+                autoComplete="email"
+                autoCorrect="off"
+                name={field.name}
+                onBlur={() => {
+                  field.handleBlur();
+                }}
+                onChange={(event) => {
+                  field.handleChange(event.target.value);
+                }}
+                placeholder="Email"
+                type="email"
+                value={field.state.value}
+              />
+              {field.state.meta.errors.map((error) => (
+                <p className="text-xs text-destructive" key={error?.message}>
+                  {error?.message ?? "An unknown error occurred."}
+                </p>
+              ))}
+            </TextField>
+          )}
         </form.Field>
 
         {isSignup ? (
@@ -337,7 +361,7 @@ const AuthCredentials = ({
               checked={termsAccepted}
               className="mt-0.5"
               onCheckedChange={(checked) => {
-                const accepted = checked === true;
+                const accepted = checked;
                 setTermsAccepted(accepted);
                 if (accepted) {
                   setErrors((prev) => ({ ...prev, terms: undefined }));
@@ -360,10 +384,10 @@ const AuthCredentials = ({
           </label>
         ) : null}
 
-        {errors.terms ? (
-          <p aria-live="assertive" className="text-sm text-destructive" role="status">
+        {hasText(errors.terms) ? (
+          <output aria-live="assertive" className="text-sm text-destructive">
             {errors.terms}
-          </p>
+          </output>
         ) : null}
 
         <form.Subscribe
@@ -374,36 +398,51 @@ const AuthCredentials = ({
             isSubmitting: state.isSubmitting,
           })}
         >
-          {({ canSubmit, email, isSubmitted, isSubmitting }) => (
-            <Button
-              className="group relative w-full justify-center gap-3"
-              disabled={!canSubmit || (isSignup && !termsAccepted)}
-              type="submit"
-            >
-              {authClient.isLastUsedLoginMethod("magic-link") && <AuthLastUsedHint />}
-              {isSubmitting ? (
-                "Sending…"
-              ) : isSubmitted ? (
+          {({ canSubmit, email, isSubmitted, isSubmitting }) => {
+            let submitContent: ReactNode = (
+              <>
+                <HugeiconsIcon className="size-4 shrink-0" icon={Mail01Icon} />
+                Continue with magic link
+              </>
+            );
+            if (isSubmitting) {
+              submitContent = "Sending…";
+            } else if (isSubmitted) {
+              submitContent = (
                 <>
-                  <HugeiconsIcon className="size-4 shrink-0" icon={Mail01Icon} />
+                  <HugeiconsIcon
+                    className="size-4 shrink-0"
+                    icon={Mail01Icon}
+                  />
                   Magic link sent to {email.trim().toLowerCase()}
                 </>
-              ) : (
-                <>
-                  <HugeiconsIcon className="size-4 shrink-0" icon={Mail01Icon} />
-                  Continue with magic link
-                </>
-              )}
-            </Button>
-          )}
+              );
+            }
+
+            return (
+              <Button
+                className="group relative w-full justify-center gap-3"
+                disabled={!canSubmit || (isSignup && !termsAccepted)}
+                type="submit"
+              >
+                {authClient.isLastUsedLoginMethod("magic-link") && (
+                  <AuthLastUsedHint />
+                )}
+                {submitContent}
+              </Button>
+            );
+          }}
         </form.Subscribe>
 
         <form.Subscribe selector={(state) => ({ errorMap: state.errorMap })}>
           {({ errorMap }) =>
             errorMap.onSubmit && (
-              <p aria-live="assertive" className="mt-4 text-sm text-destructive" role="status">
+              <output
+                aria-live="assertive"
+                className="mt-4 text-sm text-destructive"
+              >
                 {errorMap.onSubmit.form}
-              </p>
+              </output>
             )
           }
         </form.Subscribe>
@@ -441,15 +480,15 @@ const AuthCredentials = ({
         Continue with passkey
       </Button>
 
-      {errors.google ? (
-        <p aria-live="assertive" className="mt-4 text-sm text-destructive" role="status">
+      {hasText(errors.google) ? (
+        <output aria-live="assertive" className="mt-4 text-sm text-destructive">
           {errors.google}
-        </p>
+        </output>
       ) : null}
-      {errors.passkey ? (
-        <p aria-live="assertive" className="mt-4 text-sm text-destructive" role="status">
+      {hasText(errors.passkey) ? (
+        <output aria-live="assertive" className="mt-4 text-sm text-destructive">
           {errors.passkey}
-        </p>
+        </output>
       ) : null}
     </>
   );
@@ -457,7 +496,9 @@ const AuthCredentials = ({
 
 const PreviewPersonaPicker = ({ navigate }: { navigate: AuthNavigate }) => {
   const [error, setError] = useState<string | null>(null);
-  const [pendingPersona, setPendingPersona] = useState<PreviewPersona | null>(null);
+  const [pendingPersona, setPendingPersona] = useState<PreviewPersona | null>(
+    null
+  );
 
   if (!isPreviewPersonasAvailable()) {
     return null;
@@ -467,7 +508,9 @@ const PreviewPersonaPicker = ({ navigate }: { navigate: AuthNavigate }) => {
     setError(null);
     setPendingPersona(persona);
 
-    const complete = () => setPendingPersona(null);
+    const complete = () => {
+      setPendingPersona(null);
+    };
 
     try {
       const response = await fetch("/api/preview-persona", {
@@ -491,7 +534,9 @@ const PreviewPersonaPicker = ({ navigate }: { navigate: AuthNavigate }) => {
       complete();
     } catch (previewError) {
       setError(
-        previewError instanceof Error ? previewError.message : "Could not start preview persona.",
+        previewError instanceof Error
+          ? previewError.message
+          : "Could not start preview persona."
       );
       complete();
     }
@@ -513,10 +558,10 @@ const PreviewPersonaPicker = ({ navigate }: { navigate: AuthNavigate }) => {
           </Button>
         ))}
       </div>
-      {error ? (
-        <p aria-live="assertive" className="text-sm text-destructive" role="status">
+      {hasText(error) ? (
+        <output aria-live="assertive" className="text-sm text-destructive">
           {error}
-        </p>
+        </output>
       ) : null}
     </div>
   );
@@ -525,11 +570,12 @@ const PreviewPersonaPicker = ({ navigate }: { navigate: AuthNavigate }) => {
 export const AuthScreen = () => {
   const { error, mode, returnTo } = authRouteApi.useSearch();
   const navigate = authRouteApi.useNavigate();
-  const authError = error
-    ? isAuthErrorKey(error)
+  let authError: string | null = null;
+  if (hasText(error)) {
+    authError = isAuthErrorKey(error)
       ? AUTH_ERROR_MESSAGES[error]
-      : AUTHENTICATION_ERROR_MESSAGE
-    : null;
+      : AUTHENTICATION_ERROR_MESSAGE;
+  }
 
   return (
     <div className="grid h-dvh max-h-dvh w-full overflow-hidden bg-bg md:grid-cols-2">
@@ -551,16 +597,22 @@ export const AuthScreen = () => {
 
           <PreviewPersonaPicker navigate={navigate} />
 
-          {authError ? (
-            <p aria-live="assertive" className="mt-4 text-sm text-destructive" role="status">
+          {hasText(authError) ? (
+            <output
+              aria-live="assertive"
+              className="mt-4 text-sm text-destructive"
+            >
               {authError}
-            </p>
+            </output>
           ) : null}
 
           <p className="mt-6 text-sm text-muted-fg">
             <Link
               className="text-fg underline"
-              search={{ mode: mode === "signup" ? "login" : "signup", returnTo }}
+              search={{
+                mode: mode === "signup" ? "login" : "signup",
+                returnTo,
+              }}
               to="/auth"
             >
               {mode === "signup" ? "Log in" : "Sign up"}

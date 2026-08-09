@@ -1,36 +1,65 @@
 import { lazy } from "@orpc/server";
 
 export const appRouter = {
-  ai: lazy(() => import("./ai").then(({ aiRouter }) => ({ default: aiRouter }))),
-  auth: lazy(() => import("./auth").then(({ authRouter }) => ({ default: authRouter }))),
-  billing: lazy(() =>
-    import("./billing").then(({ billingRouter }) => ({ default: billingRouter })),
+  ai: lazy(
+    async () =>
+      await import("./ai").then(({ aiRouter }) => ({ default: aiRouter }))
   ),
-  chat: lazy(() => import("./chat").then(({ chatRouter }) => ({ default: chatRouter }))),
-  connectors: lazy(() =>
-    import("./connectors").then(({ connectorsRouter }) => ({ default: connectorsRouter })),
+  auth: lazy(
+    async () =>
+      await import("./auth").then(({ authRouter }) => ({ default: authRouter }))
   ),
-  mail: lazy(() => import("./mail").then(({ mailRouter }) => ({ default: mailRouter }))),
-  mailTemplates: lazy(() =>
-    import("./mail-templates").then(({ mailTemplatesRouter }) => ({
-      default: mailTemplatesRouter,
-    })),
+  billing: lazy(
+    async () =>
+      await import("./billing").then(({ billingRouter }) => ({
+        default: billingRouter,
+      }))
   ),
-  mailDomains: lazy(() =>
-    import("./mail-domains").then(({ mailDomainsRouter }) => ({ default: mailDomainsRouter })),
+  chat: lazy(
+    async () =>
+      await import("./chat").then(({ chatRouter }) => ({ default: chatRouter }))
   ),
-  mailboxActions: lazy(() =>
-    import("./mailbox-actions").then(({ mailboxActionsRouter }) => ({
-      default: mailboxActionsRouter,
-    })),
+  connectors: lazy(
+    async () =>
+      await import("./connectors").then(({ connectorsRouter }) => ({
+        default: connectorsRouter,
+      }))
   ),
-  organization: lazy(() =>
-    import("./organization").then(({ organizationRouter }) => ({ default: organizationRouter })),
+  mail: lazy(
+    async () =>
+      await import("./mail").then(({ mailRouter }) => ({ default: mailRouter }))
   ),
-  organizationMailUsage: lazy(() =>
-    import("./organization-mail-usage").then(({ organizationMailUsageRouter }) => ({
-      default: organizationMailUsageRouter,
-    })),
+  mailDomains: lazy(
+    async () =>
+      await import("./mail-domains").then(({ mailDomainsRouter }) => ({
+        default: mailDomainsRouter,
+      }))
+  ),
+  mailTemplates: lazy(
+    async () =>
+      await import("./mail-templates").then(({ mailTemplatesRouter }) => ({
+        default: mailTemplatesRouter,
+      }))
+  ),
+  mailboxActions: lazy(
+    async () =>
+      await import("./mailbox-actions").then(({ mailboxActionsRouter }) => ({
+        default: mailboxActionsRouter,
+      }))
+  ),
+  organization: lazy(
+    async () =>
+      await import("./organization").then(({ organizationRouter }) => ({
+        default: organizationRouter,
+      }))
+  ),
+  organizationMailUsage: lazy(
+    async () =>
+      await import("./organization-mail-usage").then(
+        ({ organizationMailUsageRouter }) => ({
+          default: organizationMailUsageRouter,
+        })
+      )
   ),
 };
 

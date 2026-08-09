@@ -10,14 +10,16 @@ export const getPosthogClient = (): PosthogClient | null => {
     return null;
   }
 
-  return (window.posthog as PosthogClient | undefined) ?? null;
+  return window.posthog ?? null;
 };
 
 export const getPosthogReady = () => ready;
 
 export const markPosthogReady = () => {
   ready = true;
-  for (const listener of listeners) listener();
+  for (const listener of listeners) {
+    listener();
+  }
 };
 
 export const subscribeToPosthogReady = (listener: () => void) => {

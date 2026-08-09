@@ -2,29 +2,33 @@
 
 import type { ChatMessagePart } from "@quieter/database/schema";
 import { useEffect, useRef } from "react";
+
 import {
   ChatRunStreamError,
   consumeChatRunStream,
-  type ChatRunStreamDone,
 } from "../lib/chat-run-stream";
+import type { ChatRunStreamDone as ChatRunStreamDoneType } from "../lib/chat-run-stream";
 
-export type { ChatRunStreamDone };
+export type { ChatRunStreamDone } from "../lib/chat-run-stream";
+type ChatRunStreamDone = ChatRunStreamDoneType;
 
-const waitForRetry = (attempt: number, signal: AbortSignal) =>
-  new Promise<void>((resolve) => {
+const waitForRetry = async (attempt: number, signal: AbortSignal) => {
+  await new Promise<void>((resolve) => {
     if (signal.aborted) {
       resolve();
       return;
     }
 
+    let timeout = 0;
     const finish = () => {
       window.clearTimeout(timeout);
       signal.removeEventListener("abort", finish);
       resolve();
     };
-    const timeout = window.setTimeout(finish, Math.min(1_000 * 2 ** attempt, 5_000));
+    timeout = window.setTimeout(finish, Math.min(1000 * 2 ** attempt, 5000));
     signal.addEventListener("abort", finish, { once: true });
   });
+};
 
 export const useChatRunStream = ({
   assistantMessageId,
@@ -40,7 +44,10 @@ export const useChatRunStream = ({
   /** Latest known assistant parts to paint before tailing live tokens. */
   initialParts?: ChatMessagePart[];
   onDone: (result: ChatRunStreamDone) => void;
-  onDraft: (input: { assistantMessageId: string; parts: ChatMessagePart[] }) => void;
+  onDraft: (input: {
+    assistantMessageId: string;
+    parts: ChatMessagePart[];
+  }) => void;
   onError: (message: string) => void;
   runId: string | null;
 }) => {
@@ -59,9 +66,17 @@ export const useChatRunStream = ({
     initialPartsRef.current = initialParts;
   }, [initialParts]);
 
-  useEffect(() => {
-    if (!enabled || !runId || !assistantMessageId) {
-      return;
+  useEffect((): (() => void) | undefined => {
+    if (
+      !enabled ||
+      runId === null ||
+      runId === undefined ||
+      runId === "" ||
+      assistantMessageId === null ||
+      assistantMessageId === undefined ||
+      assistantMessageId === ""
+    ) {
+      return undefined;
     }
 
     const activeAssistantMessageId = assistantMessageId;
@@ -72,10 +87,14 @@ export const useChatRunStream = ({
 
       while (!controller.signal.aborted) {
         try {
+          // Reconnect attempts must remain sequential so backoff is honored.
+          // oxlint-disable-next-line eslint/no-await-in-loop
           const result = await consumeChatRunStream({
             assistantMessageId: activeAssistantMessageId,
             initialParts: initialPartsRef.current,
-            onDraft: (draft) => onDraftRef.current(draft),
+            onDraft: (draft) => {
+              onDraftRef.current(draft);
+            },
             runId,
             signal: controller.signal,
           });
@@ -97,17 +116,23 @@ export const useChatRunStream = ({
               onErrorRef.current(
                 error instanceof Error && error.message
                   ? error.message
-                  : "Could not open chat stream.",
+                  : "Could not open chat stream."
               );
               return;
             }
 
-            await waitForRetry(attempt++, controller.signal);
+            const retryAttempt = attempt;
+            attempt += 1;
+            // Retries must wait for the previous backoff before reconnecting.
+            // oxlint-disable-next-line eslint/no-await-in-loop
+            await waitForRetry(retryAttempt, controller.signal);
             continue;
           }
 
           onErrorRef.current(
-            error instanceof Error && error.message ? error.message : "Could not open chat stream.",
+            error instanceof Error && error.message
+              ? error.message
+              : "Could not open chat stream."
           );
           return;
         }

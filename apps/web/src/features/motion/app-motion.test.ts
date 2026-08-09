@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+
 import {
   appMotionDuration,
   getAppFlyInMotion,
@@ -20,7 +21,7 @@ describe("app motion", () => {
       reducedMotion: true,
     });
 
-    expect(motion.initial).toEqual({ opacity: 0 });
+    expect(motion.initial).toStrictEqual({ opacity: 0 });
     expect(motion.transition).toMatchObject({
       delay: 0,
       duration: appMotionDuration.feedback,
@@ -30,7 +31,7 @@ describe("app motion", () => {
   it("keeps reduced motion presence changes opacity-only", () => {
     const motion = getAppPresenceMotion({ reducedMotion: true });
 
-    expect(motion.initial).toEqual({ opacity: 0 });
-    expect(motion.exit).toEqual({ opacity: 0 });
+    expect(motion.initial).toStrictEqual({ opacity: 0 });
+    expect(motion.exit).toStrictEqual({ opacity: 0 });
   });
 });

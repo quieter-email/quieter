@@ -2,10 +2,11 @@ import {
   hasManagedMailObjectReference,
   hasManagedRawMailObjectReference,
 } from "@quieter/orpc/managed-mail/ingestion";
-import {
-  deleteRawMailObject,
-  type RawMailObjectProvider,
-  type RawMailObjectReference,
+
+import { deleteRawMailObject } from "./raw-mail-object";
+import type {
+  RawMailObjectProvider,
+  RawMailObjectReference,
 } from "./raw-mail-object";
 
 export const deleteMailObjectUnlessTracked = async (input: {

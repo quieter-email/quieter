@@ -1,50 +1,71 @@
 "use client";
 
-import { Loading03Icon, Mail01Icon, Settings01Icon } from "@hugeicons/core-free-icons";
+import {
+  Loading03Icon,
+  Mail01Icon,
+  Settings01Icon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { domAnimation, LazyMotion, m } from "motion/react";
-import { lazy, Suspense, useState, type ComponentProps } from "react";
-import type { ComposeDraftState } from "~/features/compose/domain/draft";
-import type { MailboxWorkspaceView } from "~/features/mailbox/domain/mailbox-workspace-view";
-import type { MailboxSwitcherOrder } from "~/features/navigation/components/mailbox-switcher";
-import type { MailboxCategory } from "~/lib/gmail/gmail";
-import { WorkspaceDitherBackground } from "~/components/workspace-dither-background";
-import { WorkspaceSection, workspaceSectionVariants } from "~/components/workspace-section";
-import { MailSidebar } from "~/features/navigation/components/mail-sidebar";
+import { lazy, Suspense, useState } from "react";
+import type { ComponentProps, ReactNode } from "react";
+
+import { WorkspaceDitherBackground } from "#/components/workspace-dither-background";
+import {
+  WorkspaceSection,
+  workspaceSectionVariants,
+} from "#/components/workspace-section";
+import type { ComposeDraftState } from "#/features/compose/domain/draft";
+import type { MailboxWorkspaceView } from "#/features/mailbox/domain/mailbox-workspace-view";
+import { MailSidebar } from "#/features/navigation/components/mail-sidebar";
+import type { MailboxSwitcherOrder } from "#/features/navigation/components/mailbox-switcher";
+import type { MailboxCategory } from "#/lib/gmail/gmail";
+
 import { MailboxMessagesPanel } from "./mailbox-messages-panel";
 
-const ChatView = lazy(() =>
-  import("~/features/chat/components/chat-view").then(({ ChatView: Component }) => ({
-    default: Component,
-  })),
+const ChatView = lazy(
+  async () =>
+    await import("#/features/chat/components/chat-view").then(
+      ({ ChatView: Component }) => ({
+        default: Component,
+      })
+    )
 );
 
-const ComposeWorkspace = lazy(() =>
-  import("~/features/compose/components/compose-workspace").then(
-    ({ ComposeWorkspace: Component }) => ({
-      default: Component,
-    }),
-  ),
+const ComposeWorkspace = lazy(
+  async () =>
+    await import("#/features/compose/components/compose-workspace").then(
+      ({ ComposeWorkspace: Component }) => ({
+        default: Component,
+      })
+    )
 );
 
-const TemplateWorkspace = lazy(() =>
-  import("~/features/compose/components/template-workspace").then(
-    ({ TemplateWorkspace: Component }) => ({
-      default: Component,
-    }),
-  ),
+const TemplateWorkspace = lazy(
+  async () =>
+    await import("#/features/compose/components/template-workspace").then(
+      ({ TemplateWorkspace: Component }) => ({
+        default: Component,
+      })
+    )
 );
 
-const FirstRunManagedMailSetup = lazy(() =>
-  import("./first-run-managed-mail-setup").then(({ FirstRunManagedMailSetup: Component }) => ({
-    default: Component,
-  })),
+const FirstRunManagedMailSetup = lazy(
+  async () =>
+    await import("./first-run-managed-mail-setup").then(
+      ({ FirstRunManagedMailSetup: Component }) => ({
+        default: Component,
+      })
+    )
 );
 
 type MailboxSidebarGroups = ComponentProps<typeof MailSidebar>["groups"];
 type MailboxSidebarChats = ComponentProps<typeof MailSidebar>["chats"];
+
+const hasText = (value: string | null | undefined): value is string =>
+  value !== null && value !== undefined && value !== "";
 
 type MailboxWorkspaceLayoutState = {
   isMobileSidebarOpen: boolean;
@@ -100,9 +121,9 @@ type MailboxWorkspaceContentProps = {
 };
 
 const workspaceContentMotion = {
-  initial: { opacity: 0, scale: 0.96, filter: "blur(14px)" },
-  animate: { opacity: 1, scale: 1, filter: "blur(0px)" },
-  exit: { opacity: 0, scale: 0.96, filter: "blur(14px)" },
+  animate: { filter: "blur(0px)", opacity: 1, scale: 1 },
+  exit: { filter: "blur(14px)", opacity: 0, scale: 0.96 },
+  initial: { filter: "blur(14px)", opacity: 0, scale: 0.96 },
   style: { transformOrigin: "center center" },
   transition: { duration: 0.18, ease: "easeOut" },
 } as const;
@@ -123,9 +144,9 @@ const NoMailboxWorkspace = ({
   return (
     <LazyMotion features={domAnimation}>
       <m.section
-        initial={{ opacity: 0, scale: 0.96, filter: "blur(14px)" }}
-        animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
-        exit={{ opacity: 0, scale: 0.96, filter: "blur(14px)" }}
+        initial={{ filter: "blur(14px)", opacity: 0, scale: 0.96 }}
+        animate={{ filter: "blur(0px)", opacity: 1, scale: 1 }}
+        exit={{ filter: "blur(14px)", opacity: 0, scale: 0.96 }}
         transition={{ duration: 0.6, ease: "easeOut" }}
         className="absolute inset-0 flex items-center justify-center overflow-y-auto px-6 py-8"
       >
@@ -136,20 +157,26 @@ const NoMailboxWorkspace = ({
           to="/settings"
           variant="ghost"
         >
-          <HugeiconsIcon className="size-4 shrink-0" icon={Settings01Icon} strokeWidth={1.5} />
+          <HugeiconsIcon
+            className="size-4 shrink-0"
+            icon={Settings01Icon}
+            strokeWidth={1.5}
+          />
           Settings
         </LinkButton>
         {setupMode === "managed" ? (
           <m.div className="w-full" {...workspaceContentMotion}>
             <Suspense fallback={null}>
               <FirstRunManagedMailSetup
-                onBack={() => setSetupMode("choice")}
+                onBack={() => {
+                  setSetupMode("choice");
+                }}
                 organizations={mailboxGroups.map((group) => ({
                   id: group.id,
                   mailboxes: group.mailboxes.flatMap((mailbox) =>
                     mailbox.provider === "api"
                       ? []
-                      : [{ provider: mailbox.provider as "gmail" | "managed" }],
+                      : [{ provider: mailbox.provider }]
                   ),
                   name: group.name,
                 }))}
@@ -157,12 +184,21 @@ const NoMailboxWorkspace = ({
             </Suspense>
           </m.div>
         ) : (
-          <m.div className="w-full max-w-2xl text-center" {...workspaceContentMotion}>
-            <HugeiconsIcon aria-hidden className="mx-auto size-5 text-muted-fg" icon={Mail01Icon} />
-            <h1 className="mt-5 text-lg font-semibold tracking-tight text-fg">Connect a mailbox</h1>
+          <m.div
+            className="w-full max-w-2xl text-center"
+            {...workspaceContentMotion}
+          >
+            <HugeiconsIcon
+              aria-hidden
+              className="mx-auto size-5 text-muted-fg"
+              icon={Mail01Icon}
+            />
+            <h1 className="mt-5 text-lg font-semibold tracking-tight text-fg">
+              Connect a mailbox
+            </h1>
             <p className="mx-auto mt-2 max-w-md text-sm text-muted-fg">
-              Connect Gmail, or set up managed mail to send and receive from your own domain with
-              managed mailboxes and API keys.
+              Connect Gmail, or set up managed mail to send and receive from
+              your own domain with managed mailboxes and API keys.
             </p>
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
               <button
@@ -174,7 +210,9 @@ const NoMailboxWorkspace = ({
                 <span className="flex items-center gap-2 text-sm font-medium text-fg">
                   <HugeiconsIcon
                     aria-hidden
-                    className={cn("size-4", { "animate-spin": isConnectingGmail })}
+                    className={cn("size-4", {
+                      "animate-spin": isConnectingGmail,
+                    })}
                     icon={isConnectingGmail ? Loading03Icon : Mail01Icon}
                   />
                   {isConnectingGmail ? "Opening Google" : "Connect Gmail"}
@@ -185,11 +223,17 @@ const NoMailboxWorkspace = ({
               </button>
               <button
                 className="rounded-lg border border-border bg-bg/80 p-4 text-left shadow-sm transition-colors hover:bg-secondary/35"
-                onClick={() => setSetupMode("managed")}
+                onClick={() => {
+                  setSetupMode("managed");
+                }}
                 type="button"
               >
                 <span className="flex items-center gap-2 text-sm font-medium text-fg">
-                  <HugeiconsIcon aria-hidden className="size-4" icon={Mail01Icon} />
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-4"
+                    icon={Mail01Icon}
+                  />
                   Set up managed mail
                 </span>
                 <span className="mt-2 block text-sm text-muted-fg">
@@ -202,7 +246,9 @@ const NoMailboxWorkspace = ({
                 Open settings
               </LinkButton>
             </div>
-            {connectError && <p className="mt-3 text-sm text-destructive">{connectError}</p>}
+            {hasText(connectError) ? (
+              <p className="mt-3 text-sm text-destructive">{connectError}</p>
+            ) : null}
           </m.div>
         )}
       </m.section>
@@ -253,150 +299,175 @@ export const MailboxWorkspaceContent = ({
   selectedMailboxNeedsReconnect,
   selectedView,
   signature,
-}: MailboxWorkspaceContentProps) => (
-  <LazyMotion features={domAnimation}>
-    <main className="relative isolate flex h-dvh min-h-0 flex-col overflow-hidden bg-bg-elevated pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-fg lg:p-0">
-      <WorkspaceDitherBackground />
-      <div className="relative z-10 flex min-h-0 flex-1 overflow-hidden">
-        {selectedMailboxId && (
-          <MailSidebar
-            activeChatId={chatId}
-            chats={chats}
-            defaultMailboxId={defaultMailboxId}
-            groups={mailboxGroups}
-            onComposeNewMail={onComposeNewMail}
-            onMobileOpenChange={onMobileOpenChange}
-            onReorderMailboxSwitcher={onReorderMailboxSwitcher}
-            onReconnectMailbox={onReconnectMailbox}
-            onSearch={onSearch}
-            onCreateChat={onCreateChat}
-            onDeleteChat={onDeleteChat}
-            onRenameChat={onRenameChat}
-            onSelectChat={onSelectChat}
-            onSelectMailbox={onSelectMailbox}
-            onSelectMailboxId={onSelectMailboxId}
-            onSelectView={onSelectView}
-            onSetDefaultMailbox={onSetDefaultMailbox}
-            reconnectingMailboxId={reconnectingMailboxId}
-            searchQuery={searchQuery}
-            selectedMailbox={activeMailbox}
-            selectedMailboxId={selectedMailboxId}
-            selectedMailboxProvider={selectedMailboxProvider}
-            selectedView={selectedView}
-            isMobileOpen={layoutState.isMobileSidebarOpen}
+}: MailboxWorkspaceContentProps) => {
+  let mailboxContent: ReactNode;
+  if (!hasText(selectedMailboxId)) {
+    mailboxContent = (
+      <NoMailboxWorkspace
+        connectError={reconnectError}
+        isConnectingGmail={isConnectingGmail}
+        mailboxGroups={mailboxGroups}
+        onConnectGmail={onConnectGmail}
+      />
+    );
+  } else if (isComposeMailbox) {
+    mailboxContent = (
+      <Suspense fallback={null}>
+        <ComposeWorkspace
+          key={composeSessionKey}
+          demoMode={isDemoMode}
+          managedDemoMode={isManagedDemoMode}
+          mailboxId={selectedMailboxId}
+          onClose={onCloseCompose}
+          onManageTemplates={onManageTemplates}
+          onOpenSidebar={onOpenSidebar}
+          persistDrafts={persistComposeDrafts}
+          senderEmail={currentUserEmail}
+          signature={signature}
+        />
+      </Suspense>
+    );
+  } else if (activeMailbox === null) {
+    mailboxContent = (
+      <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(20rem,34%)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
+        <Suspense fallback={null}>
+          <TemplateWorkspace
+            mailboxId={selectedMailboxId}
+            onOpenSidebar={onOpenSidebar}
           />
-        )}
-
-        <div className="relative min-h-0 flex-1 overflow-hidden bg-transparent">
-          {!selectedMailboxId ? (
-            <NoMailboxWorkspace
-              connectError={reconnectError}
-              isConnectingGmail={isConnectingGmail}
-              mailboxGroups={mailboxGroups}
-              onConnectGmail={onConnectGmail}
-            />
-          ) : isComposeMailbox ? (
-            <Suspense fallback={null}>
-              <ComposeWorkspace
-                key={composeSessionKey}
-                demoMode={isDemoMode}
-                managedDemoMode={isManagedDemoMode}
-                mailboxId={selectedMailboxId}
-                onClose={onCloseCompose}
-                onManageTemplates={onManageTemplates}
-                onOpenSidebar={onOpenSidebar}
-                persistDrafts={persistComposeDrafts}
-                senderEmail={currentUserEmail}
-                signature={signature}
-              />
-            </Suspense>
-          ) : activeMailbox === null ? (
-            <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(20rem,34%)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
-              <Suspense fallback={null}>
-                <TemplateWorkspace mailboxId={selectedMailboxId} onOpenSidebar={onOpenSidebar} />
-              </Suspense>
-            </div>
-          ) : selectedMailboxNeedsReconnect ? (
-            <WorkspaceSection centered className="px-8">
-              <m.div className="max-w-md space-y-3 text-center" {...workspaceContentMotion}>
-                <h1 className="text-lg font-semibold tracking-tight text-fg">Reconnect Google</h1>
-                <p className="text-sm text-muted-fg">
-                  This account needs to reconnect through Google before Quieter can load mail.
-                </p>
-                <div className="pt-1">
-                  <Button
-                    disabled={reconnectingMailboxId === selectedMailboxId}
-                    onClick={() => {
-                      const selectedMailbox = mailboxGroups
-                        .flatMap((group) => group.mailboxes)
-                        .find((m) => m.id === selectedMailboxId);
-                      onReconnectMailbox({
-                        emailAddress: selectedMailbox?.emailAddress ?? "",
-                        id: selectedMailboxId ?? "",
-                      });
-                    }}
-                    type="button"
-                  >
-                    <HugeiconsIcon
-                      aria-hidden
-                      className={cn("size-4", {
-                        "animate-spin": reconnectingMailboxId === selectedMailboxId,
-                      })}
-                      icon={
-                        reconnectingMailboxId === selectedMailboxId ? Loading03Icon : Mail01Icon
-                      }
-                    />
-                    Reconnect
-                  </Button>
-                  {reconnectError && (
-                    <p className="mt-3 text-sm text-destructive">{reconnectError}</p>
-                  )}
-                </div>
-              </m.div>
-            </WorkspaceSection>
-          ) : selectedView === "chat" ? (
-            <m.div
-              key={`chat-${chatId ?? draftChatKey}`}
-              className={workspaceSectionVariants()}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.08, ease: "linear" }}
-            >
-              <Suspense fallback={null}>
-                <ChatView
-                  activeMailbox={activeMailbox}
-                  mailContext={chatContext}
-                  chatId={chatId}
-                  draftChatKey={draftChatKey}
-                  mailboxId={selectedMailboxId}
-                  mailboxOrganizationId={
-                    mailboxGroups.find((group) =>
-                      group.mailboxes.some((mailbox) => mailbox.id === selectedMailboxId),
-                    )?.id ?? ""
-                  }
-                  onChatIdChange={onChatIdChange}
-                  onOpenSidebar={onOpenSidebar}
-                />
-              </Suspense>
-            </m.div>
-          ) : (
-            <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(20rem,34%)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
-              <MailboxMessagesPanel
-                activeMailbox={activeMailbox}
-                currentUserEmail={currentUserEmail}
-                isDemoMode={isDemoMode}
-                isManagedDemoMode={isManagedDemoMode}
-                mailboxId={selectedMailboxId}
-                mailboxProvider={selectedMailboxProvider!}
-                onComposeDraftRequested={onComposeDraftRequested}
-                onOpenSidebar={onOpenSidebar}
-                onSearchQueryChange={onSearch}
-                searchQuery={searchQuery}
-              />
-            </div>
-          )}
-        </div>
+        </Suspense>
       </div>
-    </main>
-  </LazyMotion>
-);
+    );
+  } else if (selectedMailboxNeedsReconnect) {
+    const selectedMailbox = mailboxGroups
+      .flatMap((group) => group.mailboxes)
+      .find((mailbox) => mailbox.id === selectedMailboxId);
+    const isReconnecting = reconnectingMailboxId === selectedMailboxId;
+    mailboxContent = (
+      <WorkspaceSection centered className="px-8">
+        <m.div
+          className="max-w-md space-y-3 text-center"
+          {...workspaceContentMotion}
+        >
+          <h1 className="text-lg font-semibold tracking-tight text-fg">
+            Reconnect Google
+          </h1>
+          <p className="text-sm text-muted-fg">
+            This account needs to reconnect through Google before Quieter can
+            load mail.
+          </p>
+          <div className="pt-1">
+            <Button
+              disabled={isReconnecting}
+              onClick={() => {
+                onReconnectMailbox({
+                  emailAddress: selectedMailbox?.emailAddress ?? "",
+                  id: selectedMailboxId,
+                });
+              }}
+              type="button"
+            >
+              <HugeiconsIcon
+                aria-hidden
+                className={cn("size-4", {
+                  "animate-spin": isReconnecting,
+                })}
+                icon={isReconnecting ? Loading03Icon : Mail01Icon}
+              />
+              Reconnect
+            </Button>
+            {hasText(reconnectError) ? (
+              <p className="mt-3 text-sm text-destructive">{reconnectError}</p>
+            ) : null}
+          </div>
+        </m.div>
+      </WorkspaceSection>
+    );
+  } else if (selectedView === "chat") {
+    const mailboxOrganizationId =
+      mailboxGroups.find((group) =>
+        group.mailboxes.some((mailbox) => mailbox.id === selectedMailboxId)
+      )?.id ?? "";
+    mailboxContent = (
+      <m.div
+        key={`chat-${chatId ?? draftChatKey}`}
+        className={workspaceSectionVariants()}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.08, ease: "linear" }}
+      >
+        <Suspense fallback={null}>
+          <ChatView
+            activeMailbox={activeMailbox}
+            mailContext={chatContext}
+            chatId={chatId}
+            draftChatKey={draftChatKey}
+            mailboxId={selectedMailboxId}
+            mailboxOrganizationId={mailboxOrganizationId}
+            onChatIdChange={onChatIdChange}
+            onOpenSidebar={onOpenSidebar}
+          />
+        </Suspense>
+      </m.div>
+    );
+  } else {
+    mailboxContent = (
+      <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(20rem,34%)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
+        <MailboxMessagesPanel
+          activeMailbox={activeMailbox}
+          currentUserEmail={currentUserEmail}
+          isDemoMode={isDemoMode}
+          isManagedDemoMode={isManagedDemoMode}
+          mailboxId={selectedMailboxId}
+          mailboxProvider={selectedMailboxProvider ?? "gmail"}
+          onComposeDraftRequested={onComposeDraftRequested}
+          onOpenSidebar={onOpenSidebar}
+          onSearchQueryChange={onSearch}
+          searchQuery={searchQuery}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <LazyMotion features={domAnimation}>
+      <main className="relative isolate flex h-dvh min-h-0 flex-col overflow-hidden bg-bg-elevated pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-fg lg:p-0">
+        <WorkspaceDitherBackground />
+        <div className="relative z-10 flex min-h-0 flex-1 overflow-hidden">
+          {hasText(selectedMailboxId) ? (
+            <MailSidebar
+              activeChatId={chatId}
+              chats={chats}
+              defaultMailboxId={defaultMailboxId}
+              groups={mailboxGroups}
+              onComposeNewMail={onComposeNewMail}
+              onMobileOpenChange={onMobileOpenChange}
+              onReorderMailboxSwitcher={onReorderMailboxSwitcher}
+              onReconnectMailbox={onReconnectMailbox}
+              onSearch={onSearch}
+              onCreateChat={onCreateChat}
+              onDeleteChat={onDeleteChat}
+              onRenameChat={onRenameChat}
+              onSelectChat={onSelectChat}
+              onSelectMailbox={onSelectMailbox}
+              onSelectMailboxId={onSelectMailboxId}
+              onSelectView={onSelectView}
+              onSetDefaultMailbox={onSetDefaultMailbox}
+              reconnectingMailboxId={reconnectingMailboxId}
+              searchQuery={searchQuery}
+              selectedMailbox={activeMailbox}
+              selectedMailboxId={selectedMailboxId}
+              selectedMailboxProvider={selectedMailboxProvider}
+              selectedView={selectedView}
+              isMobileOpen={layoutState.isMobileSidebarOpen}
+            />
+          ) : null}
+
+          <div className="relative min-h-0 flex-1 overflow-hidden bg-transparent">
+            {mailboxContent}
+          </div>
+        </div>
+      </main>
+    </LazyMotion>
+  );
+};

@@ -1,7 +1,11 @@
-import { db, type DatabaseClient } from "@quieter/database/client";
+import { db } from "@quieter/database/client";
+import type { DatabaseClient } from "@quieter/database/client";
 import { chatRun, chatRunStreamChunk } from "@quieter/database/schema";
-import { EventType, type StreamChunk, type StreamDurability } from "@tanstack/ai";
+import { EventType } from "@tanstack/ai";
+import type { StreamChunk, StreamDurability } from "@tanstack/ai";
 import { and, asc, desc, eq, gt, isNull } from "drizzle-orm";
+
+import { delay, isAborted } from "./stream-delay";
 
 const FROM_START_OFFSET = "-1";
 const FROM_TAIL_OFFSET = "now";
@@ -15,9 +19,19 @@ type PostgresStreamDurabilityInit = {
   runId: string;
 };
 
-export const encodeChatRunStreamOffset = (runId: string, seq: number) => `${runId}:${seq}`;
+type StreamChunkRow = {
+  chunk: Record<string, unknown>;
+  offset: string;
+  seq: number;
+};
 
-export const decodeChatRunStreamSeq = (runId: string, offset: string): number | null => {
+export const encodeChatRunStreamOffset = (runId: string, seq: number) =>
+  `${runId}:${seq}`;
+
+export const decodeChatRunStreamSeq = (
+  runId: string,
+  offset: string
+): number | null => {
   if (offset === FROM_START_OFFSET) {
     return 0;
   }
@@ -34,9 +48,14 @@ export const decodeChatRunStreamSeq = (runId: string, offset: string): number | 
 /** Normalize a client resume cursor; unknown/unsafe values restart from the beginning. */
 export const sanitizeChatRunStreamOffset = (
   runId: string,
-  offset: string | null | undefined,
+  offset: string | null | undefined
 ): string => {
-  if (offset == null || offset === "" || offset === FROM_START_OFFSET) {
+  if (
+    offset === null ||
+    offset === undefined ||
+    offset === "" ||
+    offset === FROM_START_OFFSET
+  ) {
     return FROM_START_OFFSET;
   }
 
@@ -44,31 +63,42 @@ export const sanitizeChatRunStreamOffset = (
     return FROM_TAIL_OFFSET;
   }
 
-  return decodeChatRunStreamSeq(runId, offset) === null ? FROM_START_OFFSET : offset;
+  return decodeChatRunStreamSeq(runId, offset) === null
+    ? FROM_START_OFFSET
+    : offset;
 };
 
-const wait = (ms: number, signal?: AbortSignal) =>
-  new Promise<void>((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
-      return;
-    }
+const isStreamChunkRecord = (value: unknown): value is StreamChunk => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
 
-    const finish = () => {
-      clearTimeout(timeout);
-      signal?.removeEventListener("abort", onAbort);
-      resolve();
-    };
-    const onAbort = () => {
-      clearTimeout(timeout);
-      signal?.removeEventListener("abort", onAbort);
-      reject(signal?.reason ?? new DOMException("Aborted", "AbortError"));
-    };
-    const timeout = setTimeout(finish, ms);
-    signal?.addEventListener("abort", onAbort, { once: true });
-  });
+  const type: unknown = Reflect.get(value, "type");
+  return typeof type === "string";
+};
 
-export const closeChatRunStreamLog = async (runId: string, client: DatabaseClient = db) => {
+const toStoredStreamChunk = (chunk: StreamChunk): Record<string, unknown> => {
+  if (!isStreamChunkRecord(chunk)) {
+    throw new Error("Invalid stream chunk payload.");
+  }
+
+  return { ...chunk };
+};
+
+const parseStoredStreamChunk = (
+  value: Record<string, unknown>
+): StreamChunk => {
+  if (!isStreamChunkRecord(value)) {
+    throw new Error("Invalid stored stream chunk payload.");
+  }
+
+  return value;
+};
+
+export const closeChatRunStreamLog = async (
+  runId: string,
+  client: DatabaseClient = db
+) => {
   await client
     .update(chatRun)
     .set({ streamClosedAt: new Date(), updatedAt: new Date() })
@@ -81,19 +111,78 @@ const isStreamClosed = async (runId: string, client: DatabaseClient) => {
     .from(chatRun)
     .where(eq(chatRun.id, runId))
     .limit(1);
-  return Boolean(row?.streamClosedAt);
+  return row?.streamClosedAt !== null && row?.streamClosedAt !== undefined;
 };
 
-const readAfter = async (runId: string, afterSeq: number, client: DatabaseClient) =>
-  client
+const readAfter = async (
+  runId: string,
+  afterSeq: number,
+  client: DatabaseClient
+): Promise<StreamChunkRow[]> =>
+  await client
     .select({
       chunk: chatRunStreamChunk.chunk,
       offset: chatRunStreamChunk.offset,
       seq: chatRunStreamChunk.seq,
     })
     .from(chatRunStreamChunk)
-    .where(and(eq(chatRunStreamChunk.runId, runId), gt(chatRunStreamChunk.seq, afterSeq)))
+    .where(
+      and(
+        eq(chatRunStreamChunk.runId, runId),
+        gt(chatRunStreamChunk.seq, afterSeq)
+      )
+    )
     .orderBy(asc(chatRunStreamChunk.seq));
+
+const getChunkType = (chunk: Record<string, unknown>) => {
+  const type = Reflect.get(chunk, "type");
+  return typeof type === "string" ? type : undefined;
+};
+
+const resolveTailCursorSeq = async (
+  runId: string,
+  client: DatabaseClient
+): Promise<number> => {
+  const [tail] = await client
+    .select({
+      chunk: chatRunStreamChunk.chunk,
+      seq: chatRunStreamChunk.seq,
+    })
+    .from(chatRunStreamChunk)
+    .where(eq(chatRunStreamChunk.runId, runId))
+    .orderBy(desc(chatRunStreamChunk.seq))
+    .limit(1);
+  const tailSeq = tail?.seq ?? 0;
+
+  if (tail === undefined) {
+    return tailSeq;
+  }
+
+  if (!(await isStreamClosed(runId, client))) {
+    return tailSeq;
+  }
+
+  const tipType = getChunkType(tail.chunk);
+  if (tipType === EventType.RUN_FINISHED || tipType === EventType.RUN_ERROR) {
+    return tail.seq - 1;
+  }
+
+  return tailSeq;
+};
+
+const yieldEntries = function* yieldEntries(
+  entries: StreamChunkRow[],
+  state: { cursorSeq: number; sawChunk: boolean }
+) {
+  for (const entry of entries) {
+    state.cursorSeq = entry.seq;
+    state.sawChunk = true;
+    yield {
+      chunk: parseStoredStreamChunk(entry.chunk),
+      offset: entry.offset,
+    };
+  }
+};
 
 /**
  * Postgres-backed TanStack AI StreamDurability (legacy delivery log).
@@ -101,7 +190,7 @@ const readAfter = async (runId: string, afterSeq: number, client: DatabaseClient
  */
 export const createPostgresStreamDurability = (
   source: Request | PostgresStreamDurabilityInit,
-  options?: { client?: DatabaseClient; firstChunkDeadlineMs?: number },
+  options?: { client?: DatabaseClient; firstChunkDeadlineMs?: number }
 ): StreamDurability => {
   const init: PostgresStreamDurabilityInit =
     source instanceof Request
@@ -109,29 +198,31 @@ export const createPostgresStreamDurability = (
           client: options?.client,
           firstChunkDeadlineMs: options?.firstChunkDeadlineMs,
           offset:
-            source.headers.get("Last-Event-ID") ?? new URL(source.url).searchParams.get("offset"),
+            source.headers.get("Last-Event-ID") ??
+            new URL(source.url).searchParams.get("offset"),
           runId:
-            source.headers.get("X-Run-Id") ?? new URL(source.url).searchParams.get("runId") ?? "",
+            source.headers.get("X-Run-Id") ??
+            new URL(source.url).searchParams.get("runId") ??
+            "",
         }
       : source;
 
-  if (!init.runId) {
+  if (init.runId === "") {
     throw new Error(
-      "a runId is required: send it as an X-Run-Id header, a ?runId query param, or MemoryStreamInit.runId",
+      "a runId is required: send it as an X-Run-Id header, a ?runId query param, or MemoryStreamInit.runId"
     );
   }
 
-  const runId = init.runId;
-  // Capture the request-scoped client so long-lived SSE reads keep using it after ALS ends.
+  const { runId } = init;
   const client = init.client ?? options?.client ?? db;
   const resumeOffset = init.offset ?? null;
   const firstChunkDeadlineMs =
-    init.firstChunkDeadlineMs ?? options?.firstChunkDeadlineMs ?? DEFAULT_FIRST_CHUNK_DEADLINE_MS;
-  // Single-writer producer: resolve the tail once, then allocate seq in memory.
+    init.firstChunkDeadlineMs ??
+    options?.firstChunkDeadlineMs ??
+    DEFAULT_FIRST_CHUNK_DEADLINE_MS;
   let nextSeq: number | undefined;
 
   return {
-    resumeFrom: () => resumeOffset,
     append: async (chunks) => {
       if (chunks.length === 0) {
         return [];
@@ -157,7 +248,7 @@ export const createPostgresStreamDurability = (
           const offset = encodeChatRunStreamOffset(runId, seq);
           offsets.push(offset);
           return {
-            chunk: chunk as unknown as Record<string, unknown>,
+            chunk: toStoredStreamChunk(chunk),
             createdAt: now,
             offset,
             runId,
@@ -174,6 +265,65 @@ export const createPostgresStreamDurability = (
     close: async () => {
       await closeChatRunStreamLog(runId, client);
     },
+    async *read(offset, signal) {
+      let cursorSeq: number;
+      if (offset === FROM_TAIL_OFFSET) {
+        cursorSeq = await resolveTailCursorSeq(runId, client);
+      } else {
+        const seq = decodeChatRunStreamSeq(runId, offset);
+        if (seq === null) {
+          throw new Error(`Invalid stream offset ${JSON.stringify(offset)}`);
+        }
+        cursorSeq = seq;
+      }
+
+      const startedAt = Date.now();
+      const state = {
+        cursorSeq,
+        sawChunk: cursorSeq > 0 || offset === FROM_TAIL_OFFSET,
+      };
+
+      const poll = async function* poll(): AsyncGenerator<
+        { chunk: StreamChunk; offset: string },
+        void,
+        undefined
+      > {
+        if (isAborted(signal)) {
+          return;
+        }
+
+        const entries = await readAfter(runId, state.cursorSeq, client);
+        yield* yieldEntries(entries, state);
+
+        if (await isStreamClosed(runId, client)) {
+          const trailing = await readAfter(runId, state.cursorSeq, client);
+          if (trailing.length === 0) {
+            return;
+          }
+
+          yield* yieldEntries(trailing, state);
+          yield* poll();
+          return;
+        }
+
+        if (!state.sawChunk && Date.now() - startedAt > firstChunkDeadlineMs) {
+          throw new Error(
+            `Chat stream run ${runId} produced no data within ${firstChunkDeadlineMs}ms`
+          );
+        }
+
+        try {
+          await delay(READ_POLL_INTERVAL_MS, signal);
+        } catch {
+          return;
+        }
+
+        yield* poll();
+      };
+
+      yield* poll();
+    },
+    resumeFrom: () => resumeOffset,
     snapshot: async () => {
       const rows = await client
         .select({
@@ -185,88 +335,9 @@ export const createPostgresStreamDurability = (
         .orderBy(asc(chatRunStreamChunk.seq));
 
       return rows.map((row) => ({
-        chunk: row.chunk as unknown as StreamChunk,
+        chunk: parseStoredStreamChunk(row.chunk),
         offset: row.offset,
       }));
-    },
-    read: async function* (offset, signal) {
-      let cursorSeq: number;
-      if (offset === FROM_TAIL_OFFSET) {
-        const [tail] = await client
-          .select({
-            chunk: chatRunStreamChunk.chunk,
-            seq: chatRunStreamChunk.seq,
-          })
-          .from(chatRunStreamChunk)
-          .where(eq(chatRunStreamChunk.runId, runId))
-          .orderBy(desc(chatRunStreamChunk.seq))
-          .limit(1);
-        cursorSeq = tail?.seq ?? 0;
-
-        // Late joiners using `now` after close would otherwise skip the terminal
-        // event and hang/reconnect forever. Rewind to just before it.
-        if (tail && (await isStreamClosed(runId, client))) {
-          const tipType = (tail.chunk as { type?: string } | null)?.type;
-          if (tipType === EventType.RUN_FINISHED || tipType === EventType.RUN_ERROR) {
-            cursorSeq = tail.seq - 1;
-          }
-        }
-      } else {
-        const seq = decodeChatRunStreamSeq(runId, offset);
-        if (seq === null) {
-          throw new Error(`Invalid stream offset ${JSON.stringify(offset)}`);
-        }
-        cursorSeq = seq;
-      }
-
-      const startedAt = Date.now();
-      let sawChunk = cursorSeq > 0 || offset === FROM_TAIL_OFFSET;
-
-      for (;;) {
-        if (signal?.aborted) {
-          return;
-        }
-
-        const entries = await readAfter(runId, cursorSeq, client);
-        for (const entry of entries) {
-          cursorSeq = entry.seq;
-          sawChunk = true;
-          yield {
-            chunk: entry.chunk as unknown as StreamChunk,
-            offset: entry.offset,
-          };
-        }
-
-        if (await isStreamClosed(runId, client)) {
-          // Race: producer may append the terminal batch then close. Drain once more.
-          const trailing = await readAfter(runId, cursorSeq, client);
-          if (trailing.length === 0) {
-            return;
-          }
-
-          for (const entry of trailing) {
-            cursorSeq = entry.seq;
-            sawChunk = true;
-            yield {
-              chunk: entry.chunk as unknown as StreamChunk,
-              offset: entry.offset,
-            };
-          }
-          continue;
-        }
-
-        if (!sawChunk && Date.now() - startedAt > firstChunkDeadlineMs) {
-          throw new Error(
-            `Chat stream run ${runId} produced no data within ${firstChunkDeadlineMs}ms`,
-          );
-        }
-
-        try {
-          await wait(READ_POLL_INTERVAL_MS, signal);
-        } catch {
-          return;
-        }
-      }
     },
   };
 };

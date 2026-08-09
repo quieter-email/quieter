@@ -3,6 +3,7 @@ import {
   updateOrganizationMailUsageSettings,
 } from "@quieter/billing/organization-mail-usage";
 import { z } from "zod";
+
 import {
   assertUserCanManageOrganizationSettings,
   assertUserOrganizationMember,
@@ -12,10 +13,14 @@ import { protectedProcedure } from "./base";
 const microCentsPerCent = 1_000_000;
 
 const toCents = (microCents: number | null) =>
-  microCents == null ? null : Math.ceil(microCents / microCentsPerCent);
+  microCents === null || microCents === undefined
+    ? null
+    : Math.ceil(microCents / microCentsPerCent);
 
 const toMicroCents = (cents: number | null) =>
-  cents == null ? null : Math.round(cents * microCentsPerCent);
+  cents === null || cents === undefined
+    ? null
+    : Math.round(cents * microCentsPerCent);
 
 const serializeOverview = async (organizationId: string) => {
   const overview = await getOrganizationMailUsageOverview(organizationId);
@@ -29,10 +34,14 @@ const serializeOverview = async (organizationId: string) => {
       end: overview.period.end.toISOString(),
       start: overview.period.start.toISOString(),
     },
-    remainingIncludedManagedUsageCents: toCents(overview.remainingIncludedSesUsageMicroCents),
+    remainingIncludedManagedUsageCents: toCents(
+      overview.remainingIncludedSesUsageMicroCents
+    ),
     settings: {
       alertMilestonePercents: overview.settings.alertMilestonePercents,
-      monthlyOverageLimitCents: toCents(overview.settings.monthlyOverageLimitMicroCents),
+      monthlyOverageLimitCents: toCents(
+        overview.settings.monthlyOverageLimitMicroCents
+      ),
       overageEnabled: overview.settings.overageEnabled,
     },
     usage: {
@@ -52,7 +61,7 @@ export const organizationMailUsageRouter = {
     .input(
       z.object({
         organizationId: z.string().trim().min(1),
-      }),
+      })
     )
     .handler(async ({ context, input }) => {
       await assertUserOrganizationMember({
@@ -66,11 +75,14 @@ export const organizationMailUsageRouter = {
   updateSettings: protectedProcedure
     .input(
       z.object({
-        alertMilestonePercents: z.array(z.number().int().min(1).max(100)).min(1).max(10),
+        alertMilestonePercents: z
+          .array(z.number().int().min(1).max(100))
+          .min(1)
+          .max(10),
         monthlyOverageLimitCents: z.number().int().min(0).nullable(),
         organizationId: z.string().trim().min(1),
         overageEnabled: z.boolean(),
-      }),
+      })
     )
     .handler(async ({ context, input }) => {
       await assertUserCanManageOrganizationSettings({
@@ -80,7 +92,9 @@ export const organizationMailUsageRouter = {
 
       await updateOrganizationMailUsageSettings({
         alertMilestonePercents: input.alertMilestonePercents,
-        monthlyOverageLimitMicroCents: toMicroCents(input.monthlyOverageLimitCents),
+        monthlyOverageLimitMicroCents: toMicroCents(
+          input.monthlyOverageLimitCents
+        ),
         organizationId: input.organizationId,
         overageEnabled: input.overageEnabled,
       });

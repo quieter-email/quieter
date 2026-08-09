@@ -1,11 +1,13 @@
 import { CssSanitizer } from "@barkleapp/css-sanitizer";
-import Color, { type ColorInstance } from "color";
-import DOMPurify, { type Config } from "dompurify";
+import Color from "color";
+import type { ColorInstance } from "color";
+import DOMPurify from "dompurify";
+import type { Config } from "dompurify";
 
-const REPLACEMENT_CHARACTER_REGEX = /\uFFFD/g;
+const REPLACEMENT_CHARACTER_REGEX = /\uFFFD/gu;
 const TRACKING_PIXEL_SIZE = new Set(["0", "1"]);
-const TEXT_URL_REGEX = /\bhttps?:\/\/[^\s<>"']+/gi;
-const OKLCH_COLOR_REGEX = /^oklch\(\s*(?<value>.+?)\s*\)$/i;
+const TEXT_URL_REGEX = /\bhttps?:\/\/[^\s<>"']+/giu;
+const OKLCH_COLOR_REGEX = /^oklch\(\s*(?<value>.+?)\s*\)$/iu;
 const SAFE_STYLE_OPTIONS = {
   allowedProperties: [
     "color",
@@ -46,85 +48,92 @@ export type LinkifiedTextSegment =
       value: string;
     };
 
-// Runs after processed mail is mounted because readable color fixes need computed DOM styles.
-export const fixNonReadableColors = (
-  rootElement: ParentNode,
-  options?: { minContrast?: number; defaultBackground?: string },
-) => {
-  const { defaultBackground = "#ffffff", minContrast = 3.5 } = options || {};
-  const elements = Array.from<HTMLElement>(rootElement.querySelectorAll("*"));
-  if (rootElement instanceof HTMLElement) {
-    elements.unshift(rootElement);
-  }
+const clamp = (value: number, min: number, max: number): number =>
+  Math.min(max, Math.max(min, value));
 
-  for (const element of elements) {
-    const style = getComputedStyle(element);
-    if (style.display === "none" || style.visibility === "hidden") continue;
-
-    if (
-      style.color.startsWith("var(") ||
-      style.color === "transparent" ||
-      style.color === "inherit"
-    ) {
-      continue;
-    }
-
-    const textColor = parseCssColor(style.color);
-    if (!textColor) continue;
-
-    const effectiveBackground = getEffectiveBackgroundColor(element, defaultBackground);
-    const blendedText =
-      textColor.alpha() < 1 ? effectiveBackground.mix(textColor, textColor.alpha()) : textColor;
-    const contrast = blendedText.contrast(effectiveBackground);
-
-    if (contrast < minContrast) {
-      const blackContrast = Color("#000000").contrast(effectiveBackground);
-      const whiteContrast = Color("#ffffff").contrast(effectiveBackground);
-      element.style.color = blackContrast >= whiteContrast ? "#000000" : "#ffffff";
-    }
-  }
+const linearSrgbToRgb = (value: number): number => {
+  const channel =
+    value <= 0.0031308
+      ? 12.92 * value
+      : 1.055 * Math.abs(value) ** (1 / 2.4) * Math.sign(value) - 0.055;
+  return Math.round(clamp(channel, 0, 1) * 255);
 };
 
-const getEffectiveBackgroundColor = (element: HTMLElement, defaultBackground: string) => {
-  let current: HTMLElement | null = element;
-  while (current) {
-    const background = parseCssColor(getComputedStyle(current).backgroundColor);
-    if (background && background.alpha() >= 1) return background.rgb();
-    current = current.parentElement;
+const parseCssColorNumber = (value: string): number | undefined => {
+  if (value === "none") {
+    return undefined;
   }
-  return Color(defaultBackground);
+
+  if (value.endsWith("%")) {
+    const percentage = Number(value.slice(0, -1));
+    return Number.isFinite(percentage) ? percentage / 100 : undefined;
+  }
+
+  const number = Number(value);
+  return Number.isFinite(number) ? number : undefined;
 };
 
-const parseCssColor = (value: string): ColorInstance | undefined => {
-  const color = value.trim();
-  if (!color || color.startsWith("var(") || color === "inherit") return undefined;
-
-  try {
-    return Color(color);
-  } catch {
-    return parseOklchColor(color);
+const parseCssHue = (value: string): number | undefined => {
+  if (value === "none") {
+    return undefined;
   }
+
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    return undefined;
+  }
+
+  if (value.endsWith("rad")) {
+    return number;
+  }
+  if (value.endsWith("turn")) {
+    return number * 2 * Math.PI;
+  }
+  if (value.endsWith("grad")) {
+    return (number / 200) * Math.PI;
+  }
+
+  return (number * Math.PI) / 180;
 };
 
 const parseOklchColor = (value: string): ColorInstance | undefined => {
   const match = OKLCH_COLOR_REGEX.exec(value);
-  const rawValue = match?.groups?.value;
-  if (!rawValue) return undefined;
+  if (match?.groups?.value === undefined) {
+    return undefined;
+  }
+  const oklchValue = match.groups.value;
+  if (oklchValue === "") {
+    return undefined;
+  }
 
-  const [rawChannels, rawAlpha] = rawValue.split("/");
-  if (!rawChannels) return undefined;
+  const [rawChannels, rawAlpha] = oklchValue.split("/");
+  if ((rawChannels ?? "") === "") {
+    return undefined;
+  }
 
   const [rawLightness, rawChroma, rawHue] = rawChannels
     .trim()
-    .split(/[\s,]+/)
+    .split(/[\s,]+/u)
     .filter(Boolean);
-  if (!rawLightness || !rawChroma || !rawHue) return undefined;
+  if (
+    (rawLightness ?? "") === "" ||
+    (rawChroma ?? "") === "" ||
+    (rawHue ?? "") === ""
+  ) {
+    return undefined;
+  }
 
   const lightness = parseCssColorNumber(rawLightness);
   const chroma = parseCssColorNumber(rawChroma);
   const hue = parseCssHue(rawHue);
-  const alpha = rawAlpha ? parseCssColorNumber(rawAlpha.trim()) : 1;
-  if (lightness === undefined || chroma === undefined || hue === undefined || alpha === undefined) {
+  const alpha =
+    (rawAlpha ?? "") === "" ? 1 : parseCssColorNumber(rawAlpha.trim());
+  if (
+    lightness === undefined ||
+    chroma === undefined ||
+    hue === undefined ||
+    alpha === undefined
+  ) {
     return undefined;
   }
 
@@ -140,53 +149,100 @@ const parseOklchColor = (value: string): ColorInstance | undefined => {
   return Color.rgb(
     linearSrgbToRgb(4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3),
     linearSrgbToRgb(-1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3),
-    linearSrgbToRgb(-0.0041960863 * l3 - 0.7034186147 * m3 + 1.707614701 * s3),
+    linearSrgbToRgb(-0.0041960863 * l3 - 0.7034186147 * m3 + 1.707614701 * s3)
   ).alpha(clamp(alpha, 0, 1));
 };
 
-const parseCssColorNumber = (value: string): number | undefined => {
-  if (value === "none") return undefined;
-
-  if (value.endsWith("%")) {
-    const percentage = Number(value.slice(0, -1));
-    return Number.isFinite(percentage) ? percentage / 100 : undefined;
+const parseCssColor = (value: string): ColorInstance | undefined => {
+  const color = value.trim();
+  if ((color ?? "") === "" || color.startsWith("var(") || color === "inherit") {
+    return undefined;
   }
 
-  const number = Number(value);
-  return Number.isFinite(number) ? number : undefined;
+  try {
+    return Color(color);
+  } catch {
+    return parseOklchColor(color);
+  }
 };
 
-const parseCssHue = (value: string): number | undefined => {
-  if (value === "none") return undefined;
-
-  const number = Number.parseFloat(value);
-  if (!Number.isFinite(number)) return undefined;
-
-  if (value.endsWith("rad")) return number;
-  if (value.endsWith("turn")) return number * 2 * Math.PI;
-  if (value.endsWith("grad")) return (number / 200) * Math.PI;
-
-  return (number * Math.PI) / 180;
+const getEffectiveBackgroundColor = (
+  element: HTMLElement,
+  defaultBackground: string
+) => {
+  let current: HTMLElement | null = element;
+  while (current) {
+    const background = parseCssColor(getComputedStyle(current).backgroundColor);
+    if (background !== undefined && background.alpha() >= 1) {
+      return background.rgb();
+    }
+    current = current.parentElement;
+  }
+  return Color(defaultBackground);
 };
 
-const linearSrgbToRgb = (value: number): number => {
-  const channel =
-    value <= 0.0031308
-      ? 12.92 * value
-      : 1.055 * Math.abs(value) ** (1 / 2.4) * Math.sign(value) - 0.055;
-  return Math.round(clamp(channel, 0, 1) * 255);
+// Runs after processed mail is mounted because readable color fixes need computed DOM styles.
+export const fixNonReadableColors = (
+  rootElement: ParentNode,
+  options?: { minContrast?: number; defaultBackground?: string }
+) => {
+  const { defaultBackground = "#ffffff", minContrast = 3.5 } = options ?? {};
+  const elements = [...rootElement.querySelectorAll("*")];
+  if (rootElement instanceof HTMLElement) {
+    elements.unshift(rootElement);
+  }
+
+  for (const element of elements) {
+    if (!(element instanceof HTMLElement)) {
+      continue;
+    }
+
+    const style = getComputedStyle(element);
+    if (style.display === "none" || style.visibility === "hidden") {
+      continue;
+    }
+
+    if (
+      style.color.startsWith("var(") ||
+      style.color === "transparent" ||
+      style.color === "inherit"
+    ) {
+      continue;
+    }
+
+    const textColor = parseCssColor(style.color);
+    if (textColor === undefined) {
+      continue;
+    }
+
+    const effectiveBackground = getEffectiveBackgroundColor(
+      element,
+      defaultBackground
+    );
+    const blendedText =
+      textColor.alpha() < 1
+        ? effectiveBackground.mix(textColor, textColor.alpha())
+        : textColor;
+    const contrast = blendedText.contrast(effectiveBackground);
+
+    if (contrast < minContrast) {
+      const blackContrast = Color("#000000").contrast(effectiveBackground);
+      const whiteContrast = Color("#ffffff").contrast(effectiveBackground);
+      element.style.color =
+        blackContrast >= whiteContrast ? "#000000" : "#ffffff";
+    }
+  }
 };
 
-const clamp = (value: number, min: number, max: number): number =>
-  Math.min(max, Math.max(min, value));
-
-const mergeRelValues = (value: string | undefined): string => {
+const mergeRelValues = (value?: string): string => {
   const values = new Set(["noopener", "noreferrer"]);
-  for (const token of value?.split(/\s+/) ?? []) {
+  for (const token of value?.split(/\s+/u) ?? []) {
     const normalized = token.trim().toLowerCase();
-    if (normalized) values.add(normalized);
+    if (normalized) {
+      values.add(normalized);
+    }
   }
-  return Array.from(values).join(" ");
+  return [...values].join(" ");
 };
 
 const EMAIL_SANITIZE_CONFIG: Config = {
@@ -210,7 +266,9 @@ const EMAIL_SANITIZE_CONFIG: Config = {
 const createMailRenderStyles = (theme: MailRenderTheme): string => {
   const isDarkTheme = theme === "dark";
   const focusInner = isDarkTheme ? "#bfdbfe" : "#1d4ed8";
-  const focusOuter = isDarkTheme ? "rgba(96, 165, 250, 0.45)" : "rgba(37, 99, 235, 0.4)";
+  const focusOuter = isDarkTheme
+    ? "rgba(96, 165, 250, 0.45)"
+    : "rgba(37, 99, 235, 0.4)";
 
   return `
     <style type="text/css">
@@ -295,16 +353,16 @@ export const linkifyText = (text: string): LinkifiedTextSegment[] => {
 
   TEXT_URL_REGEX.lastIndex = 0;
   for (const match of text.matchAll(TEXT_URL_REGEX)) {
-    const matchedText = match[0];
+    const [matchedText] = match;
     const index = match.index ?? 0;
-    const url = matchedText.replace(/[.,;:!?]+$/, "");
+    const url = matchedText.replace(/[.,;:!?]+$/u, "");
     const trailing = matchedText.slice(url.length);
 
     if (index > cursor) {
       segments.push({ kind: "text", value: text.slice(cursor, index) });
     }
 
-    segments.push({ kind: "link", href: url, value: url });
+    segments.push({ href: url, kind: "link", value: url });
     if (trailing) {
       segments.push({ kind: "text", value: trailing });
     }
@@ -326,6 +384,43 @@ const OUTLOOK_CALENDAR_HOSTS = new Set([
 ]);
 const MAX_CALENDAR_LINKS = 3;
 
+const isGoogleCalendarUrl = (url: URL): boolean => {
+  const hostname = url.hostname.toLowerCase();
+  if (hostname !== "calendar.google.com" && hostname !== "www.google.com") {
+    return false;
+  }
+
+  const pathname = url.pathname.toLowerCase().replace(/\/+$/u, "");
+  const googleAction = url.searchParams.get("action")?.toLowerCase();
+  if (pathname === "/calendar/event") {
+    return url.searchParams.has("eid") || googleAction === "view";
+  }
+  if (pathname === "/calendar/render") {
+    return googleAction === "template";
+  }
+  return false;
+};
+
+const isOutlookCalendarUrl = (url: URL): boolean => {
+  const hostname = url.hostname.toLowerCase();
+  if (!OUTLOOK_CALENDAR_HOSTS.has(hostname)) {
+    return false;
+  }
+
+  const pathname = url.pathname.toLowerCase();
+  const outlookPath = url.searchParams.get("path")?.toLowerCase();
+  if (pathname.includes("/calendar/0/deeplink/compose")) {
+    return true;
+  }
+  if (pathname.includes("/calendar/item/")) {
+    return true;
+  }
+  if ((outlookPath ?? "").startsWith("/calendar/action/compose")) {
+    return true;
+  }
+  return url.searchParams.get("rru")?.toLowerCase() === "addevent";
+};
+
 export const getCalendarLink = (href: string): CalendarLink | null => {
   let url: URL;
   try {
@@ -334,31 +429,19 @@ export const getCalendarLink = (href: string): CalendarLink | null => {
     return null;
   }
 
-  if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return null;
+  }
 
-  const hostname = url.hostname.toLowerCase();
-  const pathname = url.pathname.toLowerCase().replace(/\/+$/, "");
-  const googleAction = url.searchParams.get("action")?.toLowerCase();
-
-  if (
-    (hostname === "calendar.google.com" || hostname === "www.google.com") &&
-    ((pathname === "/calendar/event" && (url.searchParams.has("eid") || googleAction === "view")) ||
-      (pathname === "/calendar/render" && googleAction === "template"))
-  ) {
+  if (isGoogleCalendarUrl(url)) {
     return { href: url.href, label: "Open in Google Calendar" };
   }
 
-  const outlookPath = url.searchParams.get("path")?.toLowerCase();
-  if (
-    OUTLOOK_CALENDAR_HOSTS.has(hostname) &&
-    (pathname.includes("/calendar/0/deeplink/compose") ||
-      pathname.includes("/calendar/item/") ||
-      outlookPath?.startsWith("/calendar/action/compose") ||
-      url.searchParams.get("rru")?.toLowerCase() === "addevent")
-  ) {
+  if (isOutlookCalendarUrl(url)) {
     return { href: url.href, label: "Open in Outlook Calendar" };
   }
 
+  const pathname = url.pathname.toLowerCase().replace(/\/+$/u, "");
   if (pathname.endsWith(".ics")) {
     return { href: url.href, label: "Open calendar invite" };
   }
@@ -372,11 +455,15 @@ export const getCalendarLinks = (hrefs: Iterable<string>): CalendarLink[] => {
 
   for (const href of hrefs) {
     const calendarLink = getCalendarLink(href);
-    if (!calendarLink || seen.has(calendarLink.href)) continue;
+    if (!calendarLink || seen.has(calendarLink.href)) {
+      continue;
+    }
 
     seen.add(calendarLink.href);
     links.push(calendarLink);
-    if (links.length === MAX_CALENDAR_LINKS) break;
+    if (links.length === MAX_CALENDAR_LINKS) {
+      break;
+    }
   }
 
   return links;
@@ -387,10 +474,17 @@ const linkifyBareUrls = (document: Document) => {
   const nodes: Text[] = [];
 
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    const textNode = node as Text;
+    if (!(node instanceof Text)) {
+      continue;
+    }
+    const textNode = node;
     TEXT_URL_REGEX.lastIndex = 0;
-    if (!TEXT_URL_REGEX.test(textNode.data)) continue;
-    if (textNode.parentElement?.closest("a, style, script, textarea, title")) continue;
+    if (!TEXT_URL_REGEX.test(textNode.data)) {
+      continue;
+    }
+    if (textNode.parentElement?.closest("a, style, script, textarea, title")) {
+      continue;
+    }
     nodes.push(textNode);
   }
 
@@ -407,7 +501,7 @@ const linkifyBareUrls = (document: Document) => {
       link.href = segment.href;
       link.textContent = segment.value;
       link.target = "_blank";
-      link.rel = mergeRelValues(undefined);
+      link.rel = mergeRelValues();
       fragment.append(link);
     }
 
@@ -415,78 +509,96 @@ const linkifyBareUrls = (document: Document) => {
   }
 };
 
+const isHiddenPreheaderStyle = (style: string): boolean =>
+  style.includes("display:none") ||
+  style.includes("display: none") ||
+  style.includes("font-size:0") ||
+  style.includes("font-size: 0") ||
+  style.includes("line-height:0") ||
+  style.includes("line-height: 0") ||
+  style.includes("max-height:0") ||
+  style.includes("max-height: 0") ||
+  style.includes("mso-hide:all") ||
+  style.includes("opacity:0") ||
+  style.includes("opacity: 0");
+
 const removePreheaderContent = (document: Document) => {
-  document
-    .querySelectorAll(".preheader, .preheaderText, [class*='preheader']")
-    .forEach((element) => {
-      const style = element.getAttribute("style") || "";
-      if (
-        style.includes("display:none") ||
-        style.includes("display: none") ||
-        style.includes("font-size:0") ||
-        style.includes("font-size: 0") ||
-        style.includes("line-height:0") ||
-        style.includes("line-height: 0") ||
-        style.includes("max-height:0") ||
-        style.includes("max-height: 0") ||
-        style.includes("mso-hide:all") ||
-        style.includes("opacity:0") ||
-        style.includes("opacity: 0")
-      ) {
-        element.remove();
-      }
-    });
+  for (const element of document.querySelectorAll(
+    ".preheader, .preheaderText, [class*='preheader']"
+  )) {
+    const style = element.getAttribute("style") ?? "";
+    if (isHiddenPreheaderStyle(style)) {
+      element.remove();
+    }
+  }
 };
 
 const collapseQuoted = (document: Document, selector: string) => {
-  document.querySelectorAll(selector).forEach((element) => {
-    if (element.closest("details.quoted-toggle")) return;
+  for (const element of document.querySelectorAll(selector)) {
+    if (element.closest("details.quoted-toggle")) {
+      continue;
+    }
 
     const details = document.createElement("details");
     details.className = "quoted-toggle";
     details.setAttribute("style", "margin-top:1em;");
     const summary = document.createElement("summary");
     summary.setAttribute("style", "cursor:pointer;");
-    summary.setAttribute("data-theme-color", "muted");
+    summary.dataset.themeColor = "muted";
     summary.textContent = "Show quoted text";
-    details.append(summary, ...Array.from(element.childNodes));
+    details.append(summary, ...element.childNodes);
     element.replaceWith(details);
-  });
+  }
 };
 
 const sanitizeStyleTags = (document: Document) => {
-  document.querySelectorAll("style").forEach((styleElement) => {
+  for (const styleElement of document.querySelectorAll("style")) {
     styleElement.textContent = cssSanitizer.sanitizeCss(
-      styleElement.textContent || "",
-      SAFE_STYLE_OPTIONS,
+      styleElement.textContent ?? "",
+      SAFE_STYLE_OPTIONS
     );
-  });
+  }
 };
 
 const removeTrackingPixels = (document: Document) => {
-  document.querySelectorAll("img").forEach((image) => {
+  for (const image of document.querySelectorAll("img")) {
     const width = image.getAttribute("width");
     const height = image.getAttribute("height");
-    if (width && height && TRACKING_PIXEL_SIZE.has(width) && TRACKING_PIXEL_SIZE.has(height)) {
+    if (
+      (width ?? "") !== "" &&
+      (height ?? "") !== "" &&
+      TRACKING_PIXEL_SIZE.has(width ?? "") &&
+      TRACKING_PIXEL_SIZE.has(height ?? "")
+    ) {
       image.remove();
     }
-  });
+  }
 };
 
-const getStyleDimension = (style: string, property: "height" | "width"): string | undefined => {
-  const match = new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*([^;]+)`, "i").exec(style);
+const getStyleDimension = (
+  style: string,
+  property: "height" | "width"
+): string | undefined => {
+  const match = new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*([^;]+)`, "iu").exec(
+    style
+  );
   return match?.[1]?.trim();
 };
 
 const normalizeCssSize = (value: string | undefined): string | undefined => {
-  const size = value?.trim();
-  if (!size) return undefined;
+  if (value === undefined) {
+    return undefined;
+  }
+  const size = value.trim();
+  if (size === "") {
+    return undefined;
+  }
 
-  if (/^\d+(?:\.\d+)?$/.test(size)) {
+  if (/^\d+(?:\.\d+)?$/u.test(size)) {
     return `${size}px`;
   }
 
-  if (/^\d+(?:\.\d+)?(?:px|em|rem|%|vw|vh|vmin|vmax)$/i.test(size)) {
+  if (/^\d+(?:\.\d+)?(?:px|em|rem|%|vw|vh|vmin|vmax)$/iu.test(size)) {
     return size;
   }
 
@@ -496,18 +608,27 @@ const normalizeCssSize = (value: string | undefined): string | undefined => {
 const createBlockedImagePlaceholder = (
   document: Document,
   image: HTMLImageElement,
-  src: string,
+  src: string
 ) => {
-  const style = image.getAttribute("style") || "";
-  const width = normalizeCssSize(image.getAttribute("width") || getStyleDimension(style, "width"));
+  const style = image.getAttribute("style") ?? "";
+  const width = normalizeCssSize(
+    image.getAttribute("width") ?? getStyleDimension(style, "width")
+  );
   const height = normalizeCssSize(
-    image.getAttribute("height") || getStyleDimension(style, "height"),
+    image.getAttribute("height") ?? getStyleDimension(style, "height")
   );
   const placeholder = document.createElement("span");
-  const placeholderStyles = width || height ? ["display:inline-block"] : ["display:none"];
+  const placeholderStyles =
+    (width ?? "") !== "" || (height ?? "") !== ""
+      ? ["display:inline-block"]
+      : ["display:none"];
 
-  if (width) placeholderStyles.push(`width:${width}`);
-  if (height) placeholderStyles.push(`height:${height}`);
+  if ((width ?? "") !== "") {
+    placeholderStyles.push(`width:${width}`);
+  }
+  if ((height ?? "") !== "") {
+    placeholderStyles.push(`height:${height}`);
+  }
 
   placeholder.setAttribute("aria-hidden", "true");
   placeholder.setAttribute("style", placeholderStyles.join(";"));
@@ -521,7 +642,9 @@ export const preprocessEmailHtml = (html: string): string => {
   sanitizeStyleTags(document);
   collapseQuoted(document, "blockquote");
   collapseQuoted(document, ".gmail_quote");
-  document.querySelectorAll("title").forEach((element) => element.remove());
+  for (const element of document.querySelectorAll("title")) {
+    element.remove();
+  }
   removeTrackingPixels(document);
   removePreheaderContent(document);
   linkifyBareUrls(document);
@@ -532,30 +655,40 @@ export const preprocessEmailHtml = (html: string): string => {
 export const applyEmailPreferences = (
   preprocessedHtml: string,
   shouldLoadImages: boolean,
-  theme: MailRenderTheme,
+  theme: MailRenderTheme
 ): ProcessedMailHtml => {
   let hasBlockedImages = false;
   const document = createDocument(preprocessedHtml);
   const calendarLinks = getCalendarLinks(
     Array.from(document.querySelectorAll("a"), (link) =>
-      link.closest("details.quoted-toggle") ? "" : (link.getAttribute("href") ?? ""),
-    ),
+      link.closest("details.quoted-toggle")
+        ? ""
+        : (link.getAttribute("href") ?? "")
+    )
   );
 
   if (!shouldLoadImages) {
-    document.querySelectorAll("img").forEach((image) => {
-      const src = image.getAttribute("src");
-      if (src && !src.startsWith("cid:")) {
+    for (const image of document.querySelectorAll("img")) {
+      const src = image.getAttribute("src") ?? "";
+      if (src !== "" && !src.startsWith("cid:")) {
         hasBlockedImages = true;
         image.replaceWith(createBlockedImagePlaceholder(document, image, src));
       }
-    });
+    }
   }
 
-  document.querySelectorAll("a").forEach((link) => {
-    link.setAttribute("target", link.getAttribute("target") || "_blank");
-    link.setAttribute("rel", mergeRelValues(link.getAttribute("rel") ?? undefined));
-  });
+  for (const link of document.querySelectorAll("a")) {
+    const target = link.getAttribute("target");
+    let linkTarget = "_blank";
+    if ((target ?? "") !== "") {
+      linkTarget = target ?? "_blank";
+    }
+    link.setAttribute("target", linkTarget);
+    link.setAttribute(
+      "rel",
+      mergeRelValues(link.getAttribute("rel") ?? undefined)
+    );
+  }
 
   return {
     calendarLinks,

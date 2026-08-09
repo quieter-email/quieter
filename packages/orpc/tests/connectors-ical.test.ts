@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
+
 import { parseIcsToGoogleCalendarEvent } from "../src/connectors/ical";
 
 describe("ICS connector parsing", () => {
@@ -17,10 +18,10 @@ describe("ICS connector parsing", () => {
         "RRULE:FREQ=WEEKLY;COUNT=3",
         "END:VEVENT",
         "END:VCALENDAR",
-      ].join("\r\n"),
+      ].join("\r\n")
     );
 
-    expect(event).toEqual({
+    expect(event).toStrictEqual({
       description: "Discuss roadmapand launch notes",
       end: { dateTime: "2026-07-01T10:00:00", timeZone: "Europe/Berlin" },
       iCalUID: "event-1@example.com",
@@ -40,11 +41,11 @@ describe("ICS connector parsing", () => {
         "DTSTART;VALUE=DATE:20260701",
         "END:VEVENT",
         "END:VCALENDAR",
-      ].join("\n"),
+      ].join("\n")
     );
 
-    expect(event.start).toEqual({ date: "2026-07-01" });
-    expect(event.end).toEqual({ date: "2026-07-02" });
+    expect(event.start).toStrictEqual({ date: "2026-07-01" });
+    expect(event.end).toStrictEqual({ date: "2026-07-02" });
     expect(event.summary).toBe("Launch day");
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { MailboxWorkspace } from "~/features/mailbox/components/mailbox-workspace";
+import { MailboxWorkspace } from "#/features/mailbox/components/mailbox-workspace";
 
 type InboxPageClientProps = {
   user: {
@@ -10,6 +10,6 @@ type InboxPageClientProps = {
   };
 };
 
-export const InboxPageClient = ({ user }: InboxPageClientProps) => {
-  return <MailboxWorkspace user={user} />;
-};
+export const InboxPageClient = ({ user }: InboxPageClientProps) => (
+  <MailboxWorkspace user={user} />
+);

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
+
 import { parseMailtoComposeDraft } from "./mailto";
 
 const getParsedFields = (value: string) => {
@@ -13,9 +14,11 @@ const getParsedFields = (value: string) => {
     : null;
 };
 
-describe("parseMailtoComposeDraft", () => {
+describe(parseMailtoComposeDraft, () => {
   test("parses multiple recipients from the path", () => {
-    expect(getParsedFields("mailto:alex@example.com,jamie@example.com")).toEqual({
+    expect(
+      getParsedFields("mailto:alex@example.com,jamie@example.com")
+    ).toStrictEqual({
       bodyText: "",
       recipients: {
         bcc: "",
@@ -27,7 +30,9 @@ describe("parseMailtoComposeDraft", () => {
   });
 
   test("parses to query recipients", () => {
-    expect(getParsedFields("mailto:?to=alex%40example.com&to=jamie%40example.com")).toEqual({
+    expect(
+      getParsedFields("mailto:?to=alex%40example.com&to=jamie%40example.com")
+    ).toStrictEqual({
       bodyText: "",
       recipients: {
         bcc: "",
@@ -41,9 +46,9 @@ describe("parseMailtoComposeDraft", () => {
   test("decodes subject, body, and newline body text", () => {
     expect(
       getParsedFields(
-        "mailto:alex%40example.com?subject=Hello%20there&body=Line%201%0D%0ALine%202",
-      ),
-    ).toEqual({
+        "mailto:alex%40example.com?subject=Hello%20there&body=Line%201%0D%0ALine%202"
+      )
+    ).toStrictEqual({
       bodyText: "Line 1\r\nLine 2",
       recipients: {
         bcc: "",
@@ -57,9 +62,9 @@ describe("parseMailtoComposeDraft", () => {
   test("parses cc and bcc recipients", () => {
     expect(
       getParsedFields(
-        "mailto:alex@example.com?cc=casey%40example.com,lee%40example.com&bcc=sam%40example.com",
-      ),
-    ).toEqual({
+        "mailto:alex@example.com?cc=casey%40example.com,lee%40example.com&bcc=sam%40example.com"
+      )
+    ).toStrictEqual({
       bodyText: "",
       recipients: {
         bcc: "sam@example.com",
@@ -76,7 +81,9 @@ describe("parseMailtoComposeDraft", () => {
   });
 
   test("ignores empty values", () => {
-    expect(getParsedFields("mailto:?to=&cc=&bcc=&subject=&body=")).toEqual({
+    expect(
+      getParsedFields("mailto:?to=&cc=&bcc=&subject=&body=")
+    ).toStrictEqual({
       bodyText: "",
       recipients: {
         bcc: "",

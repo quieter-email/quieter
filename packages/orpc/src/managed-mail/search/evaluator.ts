@@ -1,10 +1,19 @@
-import { managedMailAttachment, managedMailMessage } from "@quieter/database/schema";
-import {
-  normalizeStructuredMailSearch,
-  type MailSearchFilter,
-  type StructuredMailSearch,
+import type {
+  managedMailAttachment,
+  managedMailMessage,
+} from "@quieter/database/schema";
+import { normalizeStructuredMailSearch } from "@quieter/mail/search";
+import type {
+  MailSearchFilter,
+  StructuredMailSearch,
 } from "@quieter/mail/search";
-import { normalizeManagedSearchValue, parseAbsoluteDate, parseRelativeDate } from "./normalization";
+
+import { hasText } from "../../text";
+import {
+  normalizeManagedSearchValue,
+  parseAbsoluteDate,
+  parseRelativeDate,
+} from "./normalization";
 
 type ManagedMessageRecord = typeof managedMailMessage.$inferSelect;
 type ManagedAttachmentRecord = Pick<
@@ -13,7 +22,101 @@ type ManagedAttachmentRecord = Pick<
 >;
 
 const includesNormalized = (source: string | null | undefined, value: string) =>
-  normalizeManagedSearchValue(source).includes(normalizeManagedSearchValue(value));
+  normalizeManagedSearchValue(source).includes(
+    normalizeManagedSearchValue(value)
+  );
+
+const matchesHeaderFilter = (
+  message: ManagedMessageRecord,
+  filter: MailSearchFilter
+) => {
+  const value = filter.value.trim();
+  const separator = value.indexOf(":");
+  if (separator <= 0) {
+    return false;
+  }
+  const headerName = normalizeManagedSearchValue(value.slice(0, separator));
+  const headerValue = value.slice(separator + 1).trim();
+  if (!hasText(headerName) || !hasText(headerValue)) {
+    return false;
+  }
+  return message.headers.some(
+    (header) =>
+      normalizeManagedSearchValue(header.name) === headerName &&
+      normalizeManagedSearchValue(header.value).includes(
+        normalizeManagedSearchValue(headerValue)
+      )
+  );
+};
+
+const matchesIsFilter = (
+  message: ManagedMessageRecord,
+  filter: MailSearchFilter
+) => {
+  const value = filter.value.trim();
+  if (value === "read") {
+    return message.isRead;
+  }
+  if (value === "unread") {
+    return !message.isRead;
+  }
+  if (value === message.direction) {
+    return true;
+  }
+  if (value === "spam") {
+    return message.mailboxState === "spam";
+  }
+  if (value === "trash") {
+    return message.mailboxState === "trash";
+  }
+  if (value === "inbox") {
+    return message.direction === "inbound" && message.mailboxState === "active";
+  }
+  if (value === "sent") {
+    return (
+      message.direction === "outbound" && message.mailboxState === "active"
+    );
+  }
+  return false;
+};
+
+const matchesDateFilter = (
+  message: ManagedMessageRecord,
+  filter: MailSearchFilter,
+  now: Date
+) => {
+  const value = filter.value.trim();
+  if (filter.type === "after" || filter.type === "before") {
+    const date = parseAbsoluteDate(value);
+    if (date === null) {
+      return false;
+    }
+    if (filter.type === "before") {
+      return message.sentAt < date;
+    }
+    return message.sentAt >= date;
+  }
+
+  const date = parseRelativeDate(value, now);
+  if (date === null) {
+    return false;
+  }
+  if (filter.type === "older_than") {
+    return message.sentAt < date;
+  }
+  return message.sentAt >= date;
+};
+
+const matchesLabelFilter = (
+  filter: MailSearchFilter,
+  customLabelIds: readonly string[] | undefined,
+  customLabelNames: readonly string[] | undefined
+) =>
+  [...(customLabelIds ?? []), ...(customLabelNames ?? [])].some(
+    (label) =>
+      normalizeManagedSearchValue(label) ===
+      normalizeManagedSearchValue(filter.value.trim())
+  );
 
 const matchesFilter = (
   message: ManagedMessageRecord,
@@ -21,87 +124,77 @@ const matchesFilter = (
   filter: MailSearchFilter,
   customLabelIds: readonly string[] | undefined,
   customLabelNames: readonly string[] | undefined,
-  now: Date,
+  now: Date
 ) => {
   const value = filter.value.trim();
   let matches = false;
 
   switch (filter.type) {
-    case "from":
+    case "from": {
       matches = includesNormalized(message.from, value);
       break;
-    case "to":
+    }
+    case "to": {
       matches = includesNormalized(message.to, value);
       break;
-    case "cc":
+    }
+    case "cc": {
       matches = includesNormalized(message.cc, value);
       break;
-    case "bcc":
+    }
+    case "bcc": {
       matches = includesNormalized(message.bcc, value);
       break;
+    }
     case "header": {
-      const separator = value.indexOf(":");
-      if (separator <= 0) break;
-      const headerName = normalizeManagedSearchValue(value.slice(0, separator));
-      const headerValue = value.slice(separator + 1).trim();
-      if (!headerName || !headerValue) break;
-      matches = message.headers.some(
-        (header) =>
-          normalizeManagedSearchValue(header.name) === headerName &&
-          normalizeManagedSearchValue(header.value).includes(
-            normalizeManagedSearchValue(headerValue),
-          ),
-      );
+      matches = matchesHeaderFilter(message, filter);
       break;
     }
-    case "subject":
+    case "subject": {
       matches = includesNormalized(message.subject, value);
       break;
-    case "content":
+    }
+    case "content": {
       matches = includesNormalized(message.bodyText, value);
       break;
-    case "filename":
+    }
+    case "filename": {
       matches = attachments.some((attachment) =>
-        attachment.normalizedFileName.includes(normalizeManagedSearchValue(value)),
+        attachment.normalizedFileName.includes(
+          normalizeManagedSearchValue(value)
+        )
       );
       break;
-    case "has":
+    }
+    case "has": {
       matches = value === "attachment" && attachments.length > 0;
       break;
-    case "is":
-      matches =
-        (value === "read" && message.isRead) ||
-        (value === "unread" && !message.isRead) ||
-        value === message.direction ||
-        (value === "spam" && message.mailboxState === "spam") ||
-        (value === "trash" && message.mailboxState === "trash") ||
-        (value === "inbox" &&
-          message.direction === "inbound" &&
-          message.mailboxState === "active") ||
-        (value === "sent" && message.direction === "outbound" && message.mailboxState === "active");
-      break;
-    case "after":
-    case "before": {
-      const date = parseAbsoluteDate(value);
-      matches =
-        !!date && (filter.type === "before" ? message.sentAt < date : message.sentAt >= date);
+    }
+    case "is": {
+      matches = matchesIsFilter(message, filter);
       break;
     }
+    case "after":
+    case "before":
     case "newer_than":
     case "older_than": {
-      const date = parseRelativeDate(value, now);
-      matches =
-        !!date && (filter.type === "older_than" ? message.sentAt < date : message.sentAt >= date);
+      matches = matchesDateFilter(message, filter, now);
       break;
     }
-    case "label":
-      matches = [...(customLabelIds ?? []), ...(customLabelNames ?? [])].some(
-        (label) => normalizeManagedSearchValue(label) === normalizeManagedSearchValue(value),
-      );
+    case "label": {
+      matches = matchesLabelFilter(filter, customLabelIds, customLabelNames);
       break;
+    }
+    default: {
+      matches = false;
+      break;
+    }
   }
 
-  return filter.negated ? !matches : matches;
+  if (filter.negated === true) {
+    return !matches;
+  }
+  return matches;
 };
 
 export const matchesManagedMailRule = (input: {
@@ -122,11 +215,17 @@ export const matchesManagedMailRule = (input: {
       filter,
       input.customLabelIds,
       input.customLabelNames,
-      now,
-    ),
+      now
+    )
   );
 
-  if (search.text) results.push(includesNormalized(input.message.searchText, search.text));
-  if (results.length === 0) return false;
-  return input.matchMode === "all" ? results.every(Boolean) : results.some(Boolean);
+  if (hasText(search.text)) {
+    results.push(includesNormalized(input.message.searchText, search.text));
+  }
+  if (results.length === 0) {
+    return false;
+  }
+  return input.matchMode === "all"
+    ? results.every(Boolean)
+    : results.some(Boolean);
 };

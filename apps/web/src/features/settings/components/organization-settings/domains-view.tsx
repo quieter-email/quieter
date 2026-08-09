@@ -5,6 +5,8 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
 import { cn } from "@quieter/ui/cn";
 import { useQuery } from "@tanstack/react-query";
+import type { ReactNode } from "react";
+
 import {
   SettingsBackButton,
   SettingsLoadingState,
@@ -12,7 +14,8 @@ import {
   SettingsRows,
   settingsSurfaceVariants,
 } from "../settings-layout";
-import { formatCount, type FullOrganization } from "./domain";
+import { formatCount } from "./domain";
+import type { FullOrganization } from "./domain";
 import {
   formatMailDomainStatus,
   organizationMailDomainsQueryOptions,
@@ -50,12 +53,65 @@ export const DomainsView = ({
     (billingAccessUnknown && "Could not load billing access.") ||
     (!canUseOrganizationDomains &&
       `Registering domains requires ${BILLING_FEATURES.organizationDomains.requirementLabel} billing.`) ||
-    (!canManageDomains && "Only admins and owners can register team domains.") ||
+    (!canManageDomains &&
+      "Only admins and owners can register team domains.") ||
     null;
+  let domainsContent: ReactNode;
+  if (isDomainsPending) {
+    domainsContent = <SettingsLoadingState label="Loading domains" />;
+  } else if (isDomainsError) {
+    domainsContent = (
+      <p
+        className={cn(
+          "text-sm text-destructive",
+          settingsSurfaceVariants({ variant: "padding" })
+        )}
+      >
+        {domainsError?.message ?? "Could not load domains."}
+      </p>
+    );
+  } else if (domains.length > 0) {
+    domainsContent = (
+      <SettingsRows>
+        {domains.map((domain) => (
+          <SettingsNavigationRow
+            description={
+              domain.mode === "send_only"
+                ? "Outbound mail only"
+                : "Outbound and incoming mail"
+            }
+            key={domain.id}
+            meta={
+              resolveMailDomainVerified(domain)
+                ? "Verified"
+                : formatMailDomainStatus(domain.status)
+            }
+            onClick={() => {
+              onOpenDomain(domain.id);
+            }}
+            title={domain.domain}
+          />
+        ))}
+      </SettingsRows>
+    );
+  } else {
+    domainsContent = (
+      <p
+        className={cn(
+          "text-center text-sm text-muted-fg",
+          settingsSurfaceVariants({ variant: "padding" })
+        )}
+      >
+        No domains registered.
+      </p>
+    );
+  }
 
   return (
     <div className="@container space-y-6">
-      <SettingsBackButton onClick={onBack}>{organization.name}</SettingsBackButton>
+      <SettingsBackButton onClick={onBack}>
+        {organization.name}
+      </SettingsBackButton>
 
       <div className="flex flex-col gap-3 @md:flex-row @md:items-start @md:justify-between">
         <div>
@@ -67,57 +123,27 @@ export const DomainsView = ({
 
         {manageDomainsReason ? (
           <MutedActionButton
-            icon={<HugeiconsIcon aria-hidden className="size-4" icon={Globe02Icon} />}
+            icon={
+              <HugeiconsIcon
+                aria-hidden
+                className="size-4"
+                icon={Globe02Icon}
+              />
+            }
             label="Register"
             reason={manageDomainsReason}
           />
         ) : (
           <RegisterDomainDialog
-            onCreated={(domainId) => onOpenDomain(domainId)}
+            onCreated={(domainId) => {
+              onOpenDomain(domainId);
+            }}
             organizationId={organization.id}
           />
         )}
       </div>
 
-      {isDomainsPending ? (
-        <SettingsLoadingState label="Loading domains" />
-      ) : isDomainsError ? (
-        <p
-          className={cn(
-            "text-sm text-destructive",
-            settingsSurfaceVariants({ variant: "padding" }),
-          )}
-        >
-          {domainsError?.message ?? "Could not load domains."}
-        </p>
-      ) : domains.length > 0 ? (
-        <SettingsRows>
-          {domains.map((domain) => (
-            <SettingsNavigationRow
-              description={
-                domain.mode === "send_only" ? "Outbound mail only" : "Outbound and incoming mail"
-              }
-              key={domain.id}
-              meta={
-                resolveMailDomainVerified(domain)
-                  ? "Verified"
-                  : formatMailDomainStatus(domain.status)
-              }
-              onClick={() => onOpenDomain(domain.id)}
-              title={domain.domain}
-            />
-          ))}
-        </SettingsRows>
-      ) : (
-        <p
-          className={cn(
-            "text-center text-sm text-muted-fg",
-            settingsSurfaceVariants({ variant: "padding" }),
-          )}
-        >
-          No domains registered.
-        </p>
-      )}
+      {domainsContent}
     </div>
   );
 };

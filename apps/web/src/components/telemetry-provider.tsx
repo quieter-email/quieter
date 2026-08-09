@@ -2,15 +2,25 @@
 
 import { useConsentManager } from "@c15t/react";
 import { useLocation } from "@tanstack/react-router";
-import { type PropsWithChildren, useEffect, useRef, useSyncExternalStore } from "react";
-import { getPosthogClient, getPosthogReady, subscribeToPosthogReady } from "~/lib/posthog";
+import { useEffect, useRef, useSyncExternalStore } from "react";
+import type { PropsWithChildren } from "react";
+
+import {
+  getPosthogClient,
+  getPosthogReady,
+  subscribeToPosthogReady,
+} from "#/lib/posthog";
 
 const appEnvironment = import.meta.env.MODE;
 
 export const TelemetryProvider = ({ children }: PropsWithChildren) => {
   const { has, hasConsented } = useConsentManager();
   const measurementConsented = hasConsented() && has("measurement");
-  const posthogReady = useSyncExternalStore(subscribeToPosthogReady, getPosthogReady, () => false);
+  const posthogReady = useSyncExternalStore(
+    subscribeToPosthogReady,
+    getPosthogReady,
+    () => false
+  );
   const pathname = useLocation({
     select: (location) => location.pathname,
   });

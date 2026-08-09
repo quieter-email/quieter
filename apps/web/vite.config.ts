@@ -1,4 +1,5 @@
-import type { Plugin } from "vite-plus";
+import { fileURLToPath } from "node:url";
+
 import { cloudflare } from "@cloudflare/vite-plugin";
 import { assertLocalDevelopmentDatabaseUrls } from "@quieter/database/local-development";
 import reactScan from "@react-scan/vite-plugin-react-scan";
@@ -7,7 +8,8 @@ import { sentryTanstackStart } from "@sentry/tanstackstart-react/vite";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact, { reactCompilerPreset } from "@vitejs/plugin-react";
-import { defineConfig, Environment, lazyPlugins } from "vite-plus";
+import type { Plugin, Environment } from "vite-plus";
+import { defineConfig, lazyPlugins } from "vite-plus";
 
 const localWorkerSecretNames = [
   "APP_SITE_PASSWORD",
@@ -53,17 +55,22 @@ const localWorkerSecretNames = [
  */
 const preferNodeAwsSdkResolution = (): Plugin => {
   const withoutBrowser = (conditions: string[] | undefined) => {
-    if (!conditions) return;
+    if (!conditions) {
+      return;
+    }
     const next = conditions.filter((condition) => condition !== "browser");
-    if (!next.includes("node")) next.push("node");
+    if (!next.includes("node")) {
+      next.push("node");
+    }
     conditions.splice(0, conditions.length, ...next);
   };
 
   return {
-    name: "prefer-node-aws-sdk-resolution",
     configResolved(config) {
       for (const [name, environment] of Object.entries(config.environments)) {
-        if (name === "client") continue;
+        if (name === "client") {
+          continue;
+        }
         withoutBrowser(environment.resolve.conditions);
         environment.optimizeDeps.esbuildOptions ??= {};
         environment.optimizeDeps.esbuildOptions.platform = "node";
@@ -76,12 +83,15 @@ const preferNodeAwsSdkResolution = (): Plugin => {
         withoutBrowser(rolldownResolve?.conditionNames);
       }
     },
+    name: "prefer-node-aws-sdk-resolution",
   };
 };
 
 export default defineConfig(({ command }) => {
   const isDev = command === "serve";
-  if (isDev) assertLocalDevelopmentDatabaseUrls();
+  if (isDev) {
+    assertLocalDevelopmentDatabaseUrls();
+  }
 
   const isSentryEnabled = !isDev && !!process.env.SENTRY_AUTH_TOKEN;
   const sentryPlugins = isSentryEnabled
@@ -97,7 +107,8 @@ export default defineConfig(({ command }) => {
         telemetry: false,
       }).map((plugin) => ({
         ...plugin,
-        applyToEnvironment: (environment: Environment) => environment.name === "client",
+        applyToEnvironment: (environment: Environment) =>
+          environment.name === "client",
       }))
     : [];
 
@@ -106,17 +117,30 @@ export default defineConfig(({ command }) => {
       chunkSizeWarningLimit: 1200,
       sourcemap: isSentryEnabled,
     },
+    optimizeDeps: {
+      include: [
+        "@tiptap/core",
+        "@tiptap/react",
+        "@tiptap/starter-kit",
+        "motion",
+        "motion/react",
+      ],
+    },
     plugins: lazyPlugins(() => [
       cloudflare({
         config: isDev
           ? {
               secrets: {
-                required: localWorkerSecretNames.filter((name) => process.env[name]),
+                required: localWorkerSecretNames.filter(
+                  (name) => process.env[name]
+                ),
               },
             }
           : undefined,
+        configPath:
+          process.env.SST_WRANGLER_PATH ??
+          (isDev ? "local-worker.jsonc" : undefined),
         viteEnvironment: { name: "ssr" },
-        configPath: process.env.SST_WRANGLER_PATH ?? (isDev ? "local-worker.jsonc" : undefined),
       }),
       preferNodeAwsSdkResolution(),
       tanstackStart(),
@@ -128,10 +152,10 @@ export default defineConfig(({ command }) => {
       tailwindcss(),
       ...sentryPlugins,
     ]),
-    optimizeDeps: {
-      include: ["@tiptap/core", "@tiptap/react", "@tiptap/starter-kit", "motion", "motion/react"],
-    },
     resolve: {
+      alias: {
+        "#": fileURLToPath(new URL("./src", import.meta.url)),
+      },
       dedupe: [
         "@tanstack/react-router",
         "@tiptap/core",
@@ -145,7 +169,6 @@ export default defineConfig(({ command }) => {
         "react",
         "react-dom",
       ],
-      tsconfigPaths: true,
     },
     server: {
       port: 3000,

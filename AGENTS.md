@@ -7,7 +7,7 @@
 - API: oRPC + `@orpc/tanstack-query`
 - DB: Drizzle + Postgres (postgres-js against local Postgres or Neon; Cloudflare Workers use Hyperdrive). Every Worker request, including local Cloudflare Vite development, owns its Postgres client through `withRequestDatabaseClient`; never reuse an I/O-bound client across requests.
 - UI: Tailwind CSS 4, `@quieter/ui`, Base UI, Vaul, Hugeicons, Tiptap
-- Tooling: Vite+ (`vp`), including Vite, Oxfmt, Oxlint, type-aware checks, Vitest, tsdown, and Vite Task
+- Tooling: Vite+ (`vp`) for Vite, Oxfmt, Oxlint, type-aware checks, Vitest, tsdown, and Vite Task. Ultracite supplies Oxlint/Oxfmt presets plus agent rules, hooks, and the Ultracite skill.
 
 ## Boundaries
 
@@ -15,9 +15,7 @@
 - `apps/*` consume reusable UI through `@quieter/ui`.
 - Do not import Base UI or Vaul directly in app code unless extending `packages/ui` in the same change.
 - `packages/orpc` is the boundary between app and DB logic.
-- AWS handlers import only deployment-safe `@quieter/orpc` entrypoints. Keep authenticated
-  application services, routers, and framework adapters out of ingestion and worker dependency
-  graphs. `vp run @quieter/aws#check:boundaries` validates AWS imports and `vp run @quieter/aws#check:bundles` / `vp run @quieter/cloudflare#check:bundles` bundle SST handlers to catch unsupported transitive dependencies.
+- AWS handlers import only deployment-safe `@quieter/orpc` entrypoints. Keep authenticated application services, routers, and framework adapters out of ingestion and worker dependency graphs. `vp run @quieter/aws#check:boundaries` validates AWS imports and `vp run @quieter/aws#check:bundles` / `vp run @quieter/cloudflare#check:bundles` bundle SST handlers to catch unsupported transitive dependencies.
 - `packages/mail` owns pure mail parsing, compose schemas, MIME building, message content extraction, and sender avatar derivation.
 - `packages/mail/data-plane` owns provider-neutral mail categories, thread/page/detail contracts, semantic commands, mutation results, errors, sync tokens, and role-derived mailbox capabilities. Gmail, managed, API, and demo implementations must adapt to this contract rather than expose provider labels to the UI.
 - `packages/gmail` owns Gmail REST service logic and Gmail-specific draft parsing; encrypted credentials and token refresh are owned by `packages/orpc`.
@@ -54,22 +52,10 @@
 - Use route loaders / TanStack Start server functions for auth guards and request-scoped SSR data.
 - Validate search params with `validateSearch` + Zod (colocated on the route file; settings tab ids are shared via `apps/web/src/features/settings/domain/settings-tab.ts`).
 - Keep inbox `loaderDeps` limited to `mailboxId`.
-- Keep the Settings shell and overview bundle small. Lazy-load detail panels, and prefetch their
-  code chunks in the background after Settings is entered so the initial app bundle stays small
-  while subsequent Settings navigation is immediate.
-- Keep the route-level Settings pending UI standalone and dependency-light. It must not import the
-  shared Settings layout, data-aware overview, dither background, auth client, or query clients;
-  those dependencies belong behind the lazy Settings route boundary.
-- Use TanStack Query's built-in prefetch hooks and `QueryClient` intent prefetching for Settings
-  data. Do not add effects whose only job is warming queries. Entering Settings should prefetch the
-  complete accessible hierarchy: every main destination, every accessible team and common team
-  child, every accessible mailbox detail, and every mailbox action/detail. Keep exact
-  permission-aware intent prefetching on hover, focus, or touch/pointer intent as a final fallback.
-- Render static Settings structure and copy immediately. Confine loading feedback to the exact data
-  slot that is unavailable. Skeletons are allowed only when the final position and dimensions are
-  known; otherwise use the neutral Settings loading signal in reserved space. Do not reorder
-  sections to hide layout shifts, and never replace usable cached data with a blocking loader during
-  background refresh.
+- Keep the Settings shell and overview bundle small. Lazy-load detail panels, and prefetch their code chunks in the background after Settings is entered so the initial app bundle stays small while subsequent Settings navigation is immediate.
+- Keep the route-level Settings pending UI standalone and dependency-light. It must not import the shared Settings layout, data-aware overview, dither background, auth client, or query clients; those dependencies belong behind the lazy Settings route boundary.
+- Use TanStack Query's built-in prefetch hooks and `QueryClient` intent prefetching for Settings data. Do not add effects whose only job is warming queries. Entering Settings should prefetch the complete accessible hierarchy: every main destination, every accessible team and common team child, every accessible mailbox detail, and every mailbox action/detail. Keep exact permission-aware intent prefetching on hover, focus, or touch/pointer intent as a final fallback.
+- Render static Settings structure and copy immediately. Confine loading feedback to the exact data slot that is unavailable. Skeletons are allowed only when the final position and dimensions are known; otherwise use the neutral Settings loading signal in reserved space. Do not reorder sections to hide layout shifts, and never replace usable cached data with a blocking loader during background refresh.
 - Gmail REST calls run server-side through `packages/gmail`; tokens are decrypted and refreshed through `packages/orpc`.
 - Mail reads and writes use the provider-neutral `mail.listThreads`, `mail.getThread`, `mail.syncMailbox`, and `mail.applyChanges` RPCs. Known writes patch the scoped mail cache directly; do not add broad mail invalidations or provider-specific client mutation paths.
 - Archive is a first-class semantic category. Managed Archive uses `mailboxState = archived`; Gmail compiles Archive to the absence of Inbox, Sent, Draft, Spam, and Trash system membership. API mailboxes remain read-only Sent.
@@ -118,8 +104,7 @@
 - Pricing and checkout use the Polar SDK directly. Better Auth owns the verified Polar webhook endpoint.
 - Billing is organization-only. Every `billingSubscription` points directly at an organization while `userId` records the purchaser.
 - Paid products are `managed` and `pro`. The production Polar dashboard is the catalog source of truth unless it is clearly misconfigured. Managed is $15/month with $10 organization credits and managed mail. Pro is $25/month with $20 organization credits, managed mail, and AI for members. All billing and usage accounting is in US dollars. Gmail and BYOK remain available without checkout.
-- Organizations persist one stable billing owner. Administrative/test entitlements use audited
-  `billingEntitlementOverride` rows rather than source-controlled email bypasses.
+- Organizations persist one stable billing owner. Administrative/test entitlements use audited `billingEntitlementOverride` rows rather than source-controlled email bypasses.
 - Polar products are mirrored in code and reconciled by `vp run billing:sync-polar`; production dashboard values win over local variants unless the dashboard is clearly wrong. Checkout metadata includes the Quieter user id, product, and organization id. The Polar access token must include customer read/write access so checkout can create and resolve team customers. Better Auth receives Polar webhooks at `/api/auth/polar/webhooks` using `POLAR_WEBHOOK_SECRET`. Successful checkout redirects also carry the Polar checkout id so local sandbox development can synchronize without a publicly reachable webhook.
 - AI and managed-mail costs consume the same US-dollar organization balance through `billingCreditUsageEvent`. Credit usage events are sent to Polar so meter credits are consumed there too; local billing credit usage remains the application source of truth for gating and usage breakdowns. AI costs use the provider-reported US-dollar request cost plus a 15% cost-recovery fee so cache discounts and cache-write charges pass through accurately. Managed-mail usage costs twice the provider's US-dollar cost on both paid plans; customer-facing pricing shows the resulting rates rather than an infrastructure markup.
 
@@ -140,6 +125,7 @@
 ## Style Rules
 
 - Primary cleanup priority: before finishing any implementation, make the code the cleanest minimal shape and remove obsolete paths in the same change.
+- Do not use the middle-dot character (Unicode U+00B7) or its HTML/entity/escape spellings (`&middot;`, `&#183;`, `&#xB7;`, `\u00B7`, `\xB7`) in source, documentation, or user-facing copy. Use standard punctuation instead.
 - User-facing copy describes capabilities and outcomes, not implementation details. Never expose infrastructure or provider terms such as Pub/Sub, AWS, SES, S3, SQS, SST, API Gateway, or model identifiers in product UI or user-facing errors. Keep technical names only where the user must configure or interoperate with them, such as DNS records and API keys.
 - Never couple app code directly to the DB; go through `@quieter/orpc`.
 - Keep types strict. Avoid `any` and unnecessary casts.
@@ -166,4 +152,14 @@
 ## Workflow
 
 - Update `README.md` and `AGENTS.md` only for broader logic, architecture, tooling, or workflow changes that make their current guidance inaccurate.
-- Before finishing: `vp check --fix`, `vp run check:copy`, `vp test`, and `vp run -r build`.
+- Before finishing: `vp check --fix`, `vp test`, and `vp run -r build`.
+
+# Ultracite Code Standards
+
+Lint and format run through Vite+ using Ultracite Oxlint/Oxfmt presets in `vite.config.ts`.
+
+- **Format**: `vp fmt --write`
+- **Lint**: `vp lint` / `vp lint --fix`
+- **All checks**: `vp check` / `vp check --fix`
+
+Prefer Vite+ commands over a parallel Ultracite CLI. Editor format-on-save and `vp staged` on commit keep formatting aligned.

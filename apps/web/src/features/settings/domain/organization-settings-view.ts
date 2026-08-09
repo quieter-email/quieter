@@ -7,4 +7,5 @@ export const ORGANIZATION_SETTINGS_VIEWS = [
   "billing",
   "danger",
 ] as const;
-export type OrganizationSettingsView = (typeof ORGANIZATION_SETTINGS_VIEWS)[number];
+export type OrganizationSettingsView =
+  (typeof ORGANIZATION_SETTINGS_VIEWS)[number];

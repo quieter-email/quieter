@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
+
 import { createPolarCreditUsageEvent } from "../src/credits";
 
 describe("billing credits", () => {
@@ -17,11 +18,15 @@ describe("billing credits", () => {
       },
     });
 
-    expect(event.externalCustomerId).toBe("organization:team-1");
-    expect(event.externalId).toBe("credit-usage:event-1");
-    expect(event.metadata.credits).toBe(2.5);
-    expect(event.metadata.totalCostCents).toBe(2.5);
-    expect(event.metadata.billableCostCents).toBe(0);
-    expect("chatId" in event.metadata).toBe(false);
+    expect(event).toMatchObject({
+      externalCustomerId: "organization:team-1",
+      externalId: "credit-usage:event-1",
+      metadata: {
+        billableCostCents: 0,
+        credits: 2.5,
+        totalCostCents: 2.5,
+      },
+    });
+    expect("chatId" in event.metadata).toBeFalsy();
   });
 });

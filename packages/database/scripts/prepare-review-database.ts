@@ -1,12 +1,23 @@
 import postgres from "postgres";
-import { assertMigrationExecutionAllowed, getMigrationDatabaseUrl } from "./database-url";
-import { parseReviewPullRequestNumber, REVIEW_APP_ROLE } from "./review-database";
+
+import {
+  assertMigrationExecutionAllowed,
+  getMigrationDatabaseUrl,
+} from "./database-url";
+import {
+  parseReviewPullRequestNumber,
+  REVIEW_APP_ROLE,
+} from "./review-database";
 
 if (process.env.QUIETER_REVIEW_DEPLOYMENT !== "true") {
-  throw new Error("Review database preparation is restricted to Review deployment jobs");
+  throw new Error(
+    "Review database preparation is restricted to Review deployment jobs"
+  );
 }
 
-const pullRequestNumber = parseReviewPullRequestNumber(process.env.REVIEW_PR_NUMBER);
+const pullRequestNumber = parseReviewPullRequestNumber(
+  process.env.REVIEW_PR_NUMBER
+);
 const databaseUrl = getMigrationDatabaseUrl();
 assertMigrationExecutionAllowed(databaseUrl);
 
@@ -28,11 +39,11 @@ try {
   }
 
   if (activePullRequestNumber === pullRequestNumber) {
-    console.log(`Reusing Review database for pull request #${pullRequestNumber}`);
-    process.exit(0);
-  }
-
-  await sql.unsafe(`
+    process.stdout.write(
+      `Reusing Review database for pull request #${pullRequestNumber}\n`
+    );
+  } else {
+    await sql.unsafe(`
     DROP SCHEMA IF EXISTS drizzle CASCADE;
     DROP SCHEMA IF EXISTS public CASCADE;
     CREATE SCHEMA public;
@@ -43,13 +54,15 @@ try {
       GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${REVIEW_APP_ROLE};
     ALTER DEFAULT PRIVILEGES IN SCHEMA public
       GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO ${REVIEW_APP_ROLE};
-  `);
+    `);
 
-  console.log(
-    activePullRequestNumber == null
-      ? `Reset Review database for first deploy of pull request #${pullRequestNumber}`
-      : `Reset Review database for pull request #${pullRequestNumber} (was #${activePullRequestNumber})`,
-  );
+    process.stdout.write(
+      activePullRequestNumber === null
+        ? `Reset Review database for first deploy of pull request #${pullRequestNumber}`
+        : `Reset Review database for pull request #${pullRequestNumber} (was #${activePullRequestNumber})` +
+            "\n"
+    );
+  }
 } finally {
   await sql.end({ timeout: 5 });
 }

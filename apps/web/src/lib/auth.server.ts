@@ -9,8 +9,12 @@ type SessionUser = {
   name: string;
 };
 
-export const getSessionUserForRequest = async (request: Request): Promise<SessionUser | null> => {
-  const session = await getSessionWithOrganization(new Headers(request.headers));
+export const getSessionUserForRequest = async (
+  request: Request
+): Promise<SessionUser | null> => {
+  const session = await getSessionWithOrganization(
+    new Headers(request.headers)
+  );
 
   if (!session?.user) {
     return null;

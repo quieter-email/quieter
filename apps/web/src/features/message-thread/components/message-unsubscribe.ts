@@ -1,4 +1,4 @@
-import type { MessageListItem } from "~/lib/gmail/gmail";
+import type { MessageListItem } from "#/lib/gmail/gmail";
 
 export type MessageUnsubscribeTarget =
   | {
@@ -10,13 +10,21 @@ export type MessageUnsubscribeTarget =
     };
 
 export const getMessageUnsubscribeTarget = (
-  message: MessageListItem,
+  message: MessageListItem
 ): MessageUnsubscribeTarget | null => {
-  if (message.unsubscribeMailto) {
+  if (
+    message.unsubscribeMailto !== null &&
+    message.unsubscribeMailto !== undefined &&
+    message.unsubscribeMailto !== ""
+  ) {
     return { kind: "mailto" };
   }
 
-  if (message.unsubscribeUrl) {
+  if (
+    message.unsubscribeUrl !== null &&
+    message.unsubscribeUrl !== undefined &&
+    message.unsubscribeUrl !== ""
+  ) {
     return {
       kind: "url",
       url: message.unsubscribeUrl,

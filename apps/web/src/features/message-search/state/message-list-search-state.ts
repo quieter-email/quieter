@@ -11,7 +11,9 @@ export {
   type StructuredMailSearch as StructuredSearchState,
 } from "@quieter/mail/search";
 
-export const normalizeLabelSelectionKey = (value: string) => value.trim().toLocaleLowerCase();
+export const normalizeLabelSelectionKey = (value: string) =>
+  value.trim().toLocaleLowerCase();
 
-export const getUserLabels = <TLabel extends MailboxLabel>(labels: readonly TLabel[]) =>
-  labels.filter((label) => label.type === "user");
+export const getUserLabels = <TLabel extends MailboxLabel>(
+  labels: readonly TLabel[]
+) => labels.filter((label) => label.type === "user");

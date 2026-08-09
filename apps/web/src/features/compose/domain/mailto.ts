@@ -1,4 +1,5 @@
-import { createEmptyComposeDraft, type ComposeDraftState } from "./draft";
+import { createEmptyComposeDraft } from "./draft";
+import type { ComposeDraftState } from "./draft";
 
 const MAILTO_PROTOCOL = "mailto:";
 
@@ -16,9 +17,12 @@ const splitRecipients = (value: string) =>
     return trimmed ? [trimmed] : [];
   });
 
-const firstNonEmpty = (values: string[]) => values.find((value) => value.trim())?.trim() ?? "";
+const firstNonEmpty = (values: string[]) =>
+  values.find((value) => value.trim())?.trim() ?? "";
 
-export const parseMailtoComposeDraft = (value: string): ComposeDraftState | null => {
+export const parseMailtoComposeDraft = (
+  value: string
+): ComposeDraftState | null => {
   let url: URL;
 
   try {

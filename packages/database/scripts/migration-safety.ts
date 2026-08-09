@@ -1,45 +1,54 @@
 import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const packageDirectory = fileURLToPath(new URL("..", import.meta.url));
-const migrationsDirectory = join(packageDirectory, "drizzle");
+const migrationsDirectory = path.join(packageDirectory, "drizzle");
 const destructiveStatements = [
-  /\bDROP\s+(?:DATABASE|SCHEMA|TABLE)\b/i,
-  /\bTRUNCATE\b/i,
-  /\bDELETE\s+FROM\b/i,
-  /\bDROP\s+COLUMN\b/i,
-  /\bALTER\s+COLUMN\b[\s\S]*?\bTYPE\b/i,
+  /\bDROP\s+(?:DATABASE|SCHEMA|TABLE)\b/iu,
+  /\bTRUNCATE\b/iu,
+  /\bDELETE\s+FROM\b/iu,
+  /\bDROP\s+COLUMN\b/iu,
+  /\bALTER\s+COLUMN\b[\s\S]*?\bTYPE\b/iu,
 ];
 
-export const assertMigrationSqlIsDeploySafe = (sql: string, migrationName: string) => {
+export const assertMigrationSqlIsDeploySafe = (
+  sql: string,
+  migrationName: string
+) => {
   if (destructiveStatements.some((pattern) => pattern.test(sql))) {
     throw new Error(
-      `Migration ${migrationName} contains destructive SQL. Production deploys only allow expand-safe migrations; run contract migrations through a separately reviewed manual procedure.`,
+      `Migration ${migrationName} contains destructive SQL. Production deploys only allow expand-safe migrations; run contract migrations through a separately reviewed manual procedure.`
     );
   }
 
   const isNonTransactional = sql.includes("-- quieter:no-transaction");
-  const createsConcurrentIndex = /\bCREATE\s+(?:UNIQUE\s+)?INDEX\s+CONCURRENTLY\b/i.test(sql);
+  const createsConcurrentIndex =
+    /\bCREATE\s+(?:UNIQUE\s+)?INDEX\s+CONCURRENTLY\b/iu.test(sql);
   if (isNonTransactional && !createsConcurrentIndex) {
     throw new Error(
-      `Migration ${migrationName} opts out of transactions without creating a concurrent index. Reserve non-transactional migrations for reviewed PostgreSQL operations that cannot run in a transaction.`,
+      `Migration ${migrationName} opts out of transactions without creating a concurrent index. Reserve non-transactional migrations for reviewed PostgreSQL operations that cannot run in a transaction.`
     );
   }
   if (createsConcurrentIndex && !isNonTransactional) {
     throw new Error(
-      `Migration ${migrationName} creates a concurrent index without the -- quieter:no-transaction marker.`,
+      `Migration ${migrationName} creates a concurrent index without the -- quieter:no-transaction marker.`
     );
   }
 };
 
 export const assertMigrationFilesAreDeploySafe = () => {
-  for (const entry of readdirSync(migrationsDirectory, { withFileTypes: true })) {
+  for (const entry of readdirSync(migrationsDirectory, {
+    withFileTypes: true,
+  })) {
     if (!entry.isDirectory()) {
       continue;
     }
 
-    const sql = readFileSync(join(migrationsDirectory, entry.name, "migration.sql"), "utf8");
+    const sql = readFileSync(
+      path.join(migrationsDirectory, entry.name, "migration.sql"),
+      "utf-8"
+    );
     assertMigrationSqlIsDeploySafe(sql, entry.name);
   }
 };

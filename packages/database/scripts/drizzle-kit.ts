@@ -1,29 +1,33 @@
-import { serverEnv } from "@quieter/env/server";
-import { check, generate, push } from "drizzle-kit/cli";
-import { join } from "node:path";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-export { check, generate, push };
-export type { CheckOptions, GenerateOptions, PushOptions } from "drizzle-kit/cli";
+import { serverEnv } from "@quieter/env/server";
+
+export type {
+  CheckOptions,
+  GenerateOptions,
+  PushOptions,
+} from "drizzle-kit/cli";
+export { check, generate, push } from "drizzle-kit/cli";
 
 const packageDirectory = fileURLToPath(new URL("..", import.meta.url));
 
 export const kitOptions = {
   dialect: "postgresql" as const,
-  schema: "./src/schema.ts",
   out: "./drizzle",
+  schema: "./src/schema.ts",
 };
 
 export const kitPushOptions = () => {
   const databaseUrl = serverEnv.DATABASE_URL;
-  if (!databaseUrl) {
+  if (databaseUrl === undefined || databaseUrl === "") {
     throw new Error("DATABASE_URL is required");
   }
 
   return {
     ...kitOptions,
-    url: databaseUrl,
     force: process.argv.includes("--force"),
+    url: databaseUrl,
   };
 };
 
@@ -35,19 +39,25 @@ export const exitOnKitError = (response: {
     return;
   }
 
-  console.error(
-    response.error?.message ?? `drizzle-kit failed (${response.error?.code ?? "unknown"})`,
+  process.stderr.write(
+    response.error?.message ??
+      `drizzle-kit failed (${response.error?.code ?? "unknown"})\n`
   );
-  globalThis.process.exit(1);
+  throw new Error("drizzle-kit failed.");
 };
 
-export const runKitMigrate = async (configPath = join(packageDirectory, "drizzle.config.ts")) => {
-  const migrationProcess = Bun.spawn(["bunx", "drizzle-kit", "migrate", `--config=${configPath}`], {
-    cwd: packageDirectory,
-    env: globalThis.process.env,
-    stderr: "inherit",
-    stdout: "inherit",
-  });
+export const runKitMigrate = async (
+  configPath = path.join(packageDirectory, "drizzle.config.ts")
+) => {
+  const migrationProcess = Bun.spawn(
+    ["bunx", "drizzle-kit", "migrate", `--config=${configPath}`],
+    {
+      cwd: packageDirectory,
+      env: globalThis.process.env,
+      stderr: "inherit",
+      stdout: "inherit",
+    }
+  );
 
   const exitCode = await migrationProcess.exited;
   if (exitCode !== 0) {

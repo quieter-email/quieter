@@ -1,7 +1,12 @@
 import { queryOptions } from "@tanstack/react-query";
-import { rpc } from "~/lib/orpc";
 
-export const getChatsQueryKey = (mailboxId: string) => ["mailbox", mailboxId, "chats"] as const;
+import { rpc } from "#/lib/orpc";
+
+const hasText = (value: string | null | undefined): value is string =>
+  value !== null && value !== undefined && value !== "";
+
+export const getChatsQueryKey = (mailboxId: string) =>
+  ["mailbox", mailboxId, "chats"] as const;
 export const getChatQueryKey = (mailboxId: string, chatId: string | null) =>
   ["mailbox", mailboxId, "chat", chatId] as const;
 
@@ -9,29 +14,33 @@ const disabledChatsQueryKey = ["chats", "disabled"] as const;
 
 export const chatsQueryOptions = (mailboxId: string | null) =>
   queryOptions({
-    enabled: !!mailboxId,
-    queryKey: mailboxId ? getChatsQueryKey(mailboxId) : disabledChatsQueryKey,
-    queryFn: ({ signal }) => {
-      if (!mailboxId) {
+    enabled: hasText(mailboxId),
+    queryFn: async ({ signal }) => {
+      if (!hasText(mailboxId)) {
         throw new Error("Mailbox id is required.");
       }
 
-      return rpc.chat.list({ mailboxId }, { signal });
+      return await rpc.chat.list({ mailboxId }, { signal });
     },
+    queryKey: hasText(mailboxId)
+      ? getChatsQueryKey(mailboxId)
+      : disabledChatsQueryKey,
     // Sidebar generating dots only; live tokens come from the run SSE, not list polling.
     refetchInterval: (query) =>
-      query.state.data?.some((chat) => chat.isGenerating) ? 10_000 : false,
+      query.state.data?.some((chat) => chat.isGenerating) === true
+        ? 10_000
+        : false,
   });
 
 export const chatQueryOptions = (mailboxId: string, chatId: string | null) =>
   queryOptions({
-    enabled: !!chatId,
-    queryKey: getChatQueryKey(mailboxId, chatId),
-    queryFn: ({ signal }) => {
-      if (!chatId) {
+    enabled: hasText(chatId),
+    queryFn: async ({ signal }) => {
+      if (!hasText(chatId)) {
         throw new Error("Chat id is required.");
       }
 
-      return rpc.chat.get({ chatId, mailboxId }, { signal });
+      return await rpc.chat.get({ chatId, mailboxId }, { signal });
     },
+    queryKey: getChatQueryKey(mailboxId, chatId),
   });

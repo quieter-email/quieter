@@ -1,38 +1,51 @@
 import { queryOptions } from "@tanstack/react-query";
-import { rpc } from "~/lib/orpc";
-import { isManagedSandboxMailboxId, isSandboxMailboxId } from "~/lib/sandbox-mailbox";
+
+import { rpc } from "#/lib/orpc";
+import {
+  isManagedSandboxMailboxId,
+  isSandboxMailboxId,
+} from "#/lib/sandbox-mailbox";
+
 import { getManagedDemoThread } from "../managed-mail/demo-managed-mail";
 import { getDemoThread } from "./demo-mail";
-import { hasRenderableMessageBody, type ThreadMessagesResult } from "./gmail";
+import { hasRenderableMessageBody } from "./gmail";
+import type { ThreadMessagesResult } from "./gmail";
+import { getThreadQueryKey } from "./thread-query-keys";
 
-const THREAD_QUERY_VERSION = 3;
-
-export const getThreadQueryKey = (mailboxId: string, threadId: string) =>
-  ["message-thread", THREAD_QUERY_VERSION, mailboxId, threadId] as const;
-
-export const getMailboxThreadQueriesKey = (mailboxId: string) =>
-  ["message-thread", THREAD_QUERY_VERSION, mailboxId] as const;
+export { getThreadQueryKey } from "./thread-query-keys";
 
 const shouldRefreshThreadContent = (data: ThreadMessagesResult | undefined) =>
-  !data?.messages.length ||
-  data.messages.some((message) => !!message.snippet?.trim() && !hasRenderableMessageBody(message));
+  data === undefined ||
+  data.messages.length === 0 ||
+  data.messages.some(
+    (message) =>
+      message.snippet?.trim() !== undefined &&
+      message.snippet.trim() !== "" &&
+      !hasRenderableMessageBody(message)
+  );
 
-export const getThreadWithDetailsOptions = (mailboxId: string, threadId: string, enabled = true) =>
+export const getThreadWithDetailsOptions = (
+  mailboxId: string,
+  threadId: string,
+  enabled = true
+) =>
   queryOptions({
-    queryKey: getThreadQueryKey(mailboxId, threadId),
-    queryFn: ({ signal }) => {
+    enabled,
+    gcTime: 1000 * 60 * 30,
+    queryFn: async ({ signal }) => {
       if (isManagedSandboxMailboxId(mailboxId)) {
         return getManagedDemoThread(threadId);
       }
 
-      return isSandboxMailboxId(mailboxId)
-        ? getDemoThread(mailboxId, threadId)
-        : rpc.mail.getThread({ mailboxId, threadId }, { signal });
+      if (isSandboxMailboxId(mailboxId)) {
+        return getDemoThread(mailboxId, threadId);
+      }
+
+      return await rpc.mail.getThread({ mailboxId, threadId }, { signal });
     },
-    enabled,
-    staleTime: 1000 * 60 * 5,
-    gcTime: 1000 * 60 * 30,
+    queryKey: getThreadQueryKey(mailboxId, threadId),
     refetchOnMount: (query) => shouldRefreshThreadContent(query.state.data),
-    refetchOnWindowFocus: false,
     refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
+    staleTime: 1000 * 60 * 5,
   });

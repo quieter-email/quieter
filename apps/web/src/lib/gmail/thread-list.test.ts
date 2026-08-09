@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
+
 import type { MessageListItem } from "./gmail";
 import { buildThreadListEntries, getThreadLabelIds } from "./thread-list";
 
@@ -18,7 +19,11 @@ describe("thread label aggregation", () => {
       message("previous", ["INBOX", "previous-only"]),
     ]);
 
-    expect(entries[0]?.threadLabelIds).toEqual(["INBOX", "latest-only", "previous-only"]);
+    expect(entries[0]?.threadLabelIds).toStrictEqual([
+      "INBOX",
+      "latest-only",
+      "previous-only",
+    ]);
   });
 
   test("prefers the server-provided thread label snapshot for an anchor message", () => {
@@ -28,7 +33,7 @@ describe("thread label aggregation", () => {
           labelIds: ["latest-only"],
           threadLabelIds: ["latest-only", "previous-only"],
         },
-      ]),
-    ).toEqual(["latest-only", "previous-only"]);
+      ])
+    ).toStrictEqual(["latest-only", "previous-only"]);
   });
 });

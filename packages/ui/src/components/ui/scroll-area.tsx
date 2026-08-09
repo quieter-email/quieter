@@ -1,14 +1,18 @@
 "use client";
 
-import type { ComponentPropsWithRef, ComponentPropsWithoutRef } from "react";
 import { ScrollArea as ScrollAreaPrimitive } from "@base-ui/react/scroll-area";
+import type { ComponentPropsWithRef, ComponentPropsWithoutRef } from "react";
+
 import { cn } from "../../lib/cn";
 
 export const ScrollArea = ({
   className,
   ...props
 }: ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Root>) => (
-  <ScrollAreaPrimitive.Root className={cn("relative overflow-hidden", className)} {...props} />
+  <ScrollAreaPrimitive.Root
+    className={cn("relative overflow-hidden", className)}
+    {...props}
+  />
 );
 
 export const ScrollAreaViewport = ({
@@ -27,7 +31,10 @@ export const ScrollAreaContent = ({
   className,
   ...props
 }: ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Content>) => (
-  <ScrollAreaPrimitive.Content className={cn("min-w-full", className)} {...props} />
+  <ScrollAreaPrimitive.Content
+    className={cn("min-w-full", className)}
+    {...props}
+  />
 );
 
 export const ScrollAreaScrollbar = ({
@@ -37,7 +44,7 @@ export const ScrollAreaScrollbar = ({
   <ScrollAreaPrimitive.Scrollbar
     className={cn(
       "flex touch-none p-0.5 transition-colors select-none data-[orientation=horizontal]:h-2.5 data-[orientation=horizontal]:flex-col data-[orientation=vertical]:w-2.5",
-      className,
+      className
     )}
     {...props}
   />
@@ -48,7 +55,10 @@ export const ScrollAreaThumb = ({
   ...props
 }: ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Thumb>) => (
   <ScrollAreaPrimitive.Thumb
-    className={cn("relative flex-1 rounded-full bg-border/80 hover:bg-border", className)}
+    className={cn(
+      "relative flex-1 rounded-full bg-border/80 hover:bg-border",
+      className
+    )}
     {...props}
   />
 );

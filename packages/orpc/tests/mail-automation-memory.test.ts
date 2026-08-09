@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
+
 import {
   buildAutoLabelMemoryProfile,
   buildUsefulDetailMemoryProfile,
@@ -30,7 +31,7 @@ describe("mail automation memory profiles", () => {
       },
     ]);
 
-    expect(profile).toEqual({
+    expect(profile).toStrictEqual({
       kind: "auto_label",
       rules: [
         {
@@ -69,7 +70,7 @@ describe("mail automation memory profiles", () => {
       },
     ]);
 
-    expect(profile).toEqual({
+    expect(profile).toStrictEqual({
       kind: "auto_label",
       rules: [
         {
@@ -91,11 +92,11 @@ describe("mail automation memory profiles", () => {
         labelName: `Very specific label name ${index}`,
         removed: 0,
         source: `sender-${index}.example.com`,
-      })),
+      }))
     );
 
     expect(profile.rules).toHaveLength(80);
-    expect(profile.rules.every((rule) => rule.count === 5)).toBe(true);
+    expect(profile.rules.every((rule) => rule.count === 5)).toBeTruthy();
   });
 
   test("compresses useful-detail feedback into category policies", () => {
@@ -105,7 +106,7 @@ describe("mail automation memory profiles", () => {
       { kind: "bill", notUseful: 1, source: null, useful: 0 },
     ]);
 
-    expect(profile).toEqual({
+    expect(profile).toStrictEqual({
       kind: "useful_detail",
       rules: [
         { count: 2, kind: "task", policy: "suppress", source: "github.com" },
@@ -120,9 +121,16 @@ describe("mail automation memory profiles", () => {
       { kind: "delivery", notUseful: 1, source: "shop.example", useful: 0 },
     ]);
 
-    expect(profile).toEqual({
+    expect(profile).toStrictEqual({
       kind: "useful_detail",
-      rules: [{ count: 1, kind: "delivery", policy: "suppress", source: "shop.example" }],
+      rules: [
+        {
+          count: 1,
+          kind: "delivery",
+          policy: "suppress",
+          source: "shop.example",
+        },
+      ],
     });
   });
 
@@ -133,10 +141,10 @@ describe("mail automation memory profiles", () => {
         notUseful: 0,
         source: `sender-${index}.example.com`,
         useful: 5,
-      })),
+      }))
     );
 
     expect(profile.rules).toHaveLength(80);
-    expect(profile.rules.every((rule) => rule.count === 5)).toBe(true);
+    expect(profile.rules.every((rule) => rule.count === 5)).toBeTruthy();
   });
 });

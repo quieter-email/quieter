@@ -1,16 +1,23 @@
 "use client";
 
 import { useState } from "react";
-import type { GmailThreadToolResult } from "../../../types";
+
 import { formatMessageDate } from "../../../domain/chat-formatting";
 import { truncateToolDetail } from "../../../domain/tool-summaries";
+import type { GmailThreadToolResult } from "../../../types";
 import { ToolStep } from "./tool-step";
+
+const hasText = (value: string | null | undefined): value is string =>
+  value !== null && value !== undefined && value !== "";
 
 type ThreadToolProps = {
   nested?: boolean;
   data?: GmailThreadToolResult;
   error?: string | null;
-  onOpenMessage: (category: GmailThreadToolResult["category"], messageId: string) => void;
+  onOpenMessage: (
+    category: GmailThreadToolResult["category"],
+    messageId: string
+  ) => void;
   pending: boolean;
   threadId?: string;
 };
@@ -25,16 +32,19 @@ export const ThreadTool = ({
 }: ThreadToolProps) => {
   const [expanded, setExpanded] = useState(false);
   const success = data?.status === "success" ? data : null;
-  const messageCount = success ? success.messages.length + success.omittedMessageCount : 0;
-  const detailSource = success?.subject || threadId;
-  const detail = detailSource ? `"${truncateToolDetail(detailSource)}"` : undefined;
-  const meta = pending
-    ? undefined
-    : error
-      ? undefined
-      : success
-        ? `${messageCount} message${messageCount === 1 ? "" : "s"}`
-        : undefined;
+  const messageCount = success
+    ? success.messages.length + success.omittedMessageCount
+    : 0;
+  const detailSource = success?.subject?.trim() ?? threadId;
+  const detail = hasText(detailSource)
+    ? `"${truncateToolDetail(detailSource)}"`
+    : undefined;
+  let meta: string | undefined;
+  if (pending || hasText(error)) {
+    meta = undefined;
+  } else if (success !== null) {
+    meta = `${messageCount} message${messageCount === 1 ? "" : "s"}`;
+  }
 
   return (
     <ToolStep
@@ -45,7 +55,9 @@ export const ThreadTool = ({
       expanded={expanded}
       label={pending ? "Reading thread" : "Read thread"}
       meta={meta}
-      onToggle={() => setExpanded((current) => !current)}
+      onToggle={() => {
+        setExpanded((current) => !current);
+      }}
       pending={pending}
     >
       {success ? (
@@ -60,17 +72,25 @@ export const ThreadTool = ({
             <button
               className="block w-full rounded-sm text-left transition-colors hover:text-fg"
               key={message.id}
-              onClick={() => onOpenMessage(success.category, message.id)}
+              onClick={() => {
+                onOpenMessage(success.category, message.id);
+              }}
               type="button"
             >
               <div className="flex items-center justify-between gap-3 text-[11px] text-muted-fg">
-                <span className="truncate text-fg/80">{message.from || "Unknown"}</span>
-                {message.date ? (
-                  <span className="shrink-0 tabular-nums">{formatMessageDate(message.date)}</span>
+                <span className="truncate text-fg/80">
+                  {message.from?.trim() ?? "Unknown"}
+                </span>
+                {message.date !== null && message.date !== undefined ? (
+                  <span className="shrink-0 tabular-nums">
+                    {formatMessageDate(message.date)}
+                  </span>
                 ) : null}
               </div>
               <p className="mt-0.5 line-clamp-3 text-xs/relaxed whitespace-pre-wrap text-muted-fg">
-                {message.body || message.snippet || "(No content)"}
+                {message.body?.trim() ??
+                  message.snippet?.trim() ??
+                  "(No content)"}
                 {message.bodyTruncated ? "…" : ""}
               </p>
             </button>

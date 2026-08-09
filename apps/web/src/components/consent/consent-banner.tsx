@@ -19,8 +19,12 @@ export const ConsentBanner = () => {
     >
       <div className="mx-auto flex max-w-4xl flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
         <div className="min-w-0 space-y-1">
-          <p className="text-sm font-medium text-fg">{translations.cookieBanner.title}</p>
-          <p className="text-sm/6 text-muted-fg">{translations.cookieBanner.description}</p>
+          <p className="text-sm font-medium text-fg">
+            {translations.cookieBanner.title}
+          </p>
+          <p className="text-sm/6 text-muted-fg">
+            {translations.cookieBanner.description}
+          </p>
           <p className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-fg">
             <Link className="underline hover:text-fg" to="/privacy">
               Privacy Policy
@@ -42,7 +46,12 @@ export const ConsentBanner = () => {
           >
             {translations.common.rejectAll}
           </Button>
-          <Button onClick={openDialog} size="sm" type="button" variant="outline">
+          <Button
+            onClick={openDialog}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
             {translations.common.customize}
           </Button>
           <Button

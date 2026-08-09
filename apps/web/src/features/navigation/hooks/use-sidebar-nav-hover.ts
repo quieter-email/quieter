@@ -2,8 +2,11 @@
 
 import { useRef, useState } from "react";
 
-export const useSidebarNavHover = <T extends string, E extends HTMLElement = HTMLElement>(
-  layoutIdPrefix: string,
+export const useSidebarNavHover = <
+  T extends string,
+  E extends HTMLElement = HTMLElement,
+>(
+  layoutIdPrefix: string
 ) => {
   const navRef = useRef<E | null>(null);
   const [hoveredId, setHoveredId] = useState<T | null>(null);
@@ -29,7 +32,12 @@ export const useSidebarNavHover = <T extends string, E extends HTMLElement = HTM
   };
 
   const clearHoverIfLeavingNav = (nextTarget: EventTarget | null) => {
-    if (!nextTarget || !navRef.current?.contains(nextTarget as Node)) {
+    if (
+      nextTarget === null ||
+      navRef.current === null ||
+      !(nextTarget instanceof Node) ||
+      !navRef.current.contains(nextTarget)
+    ) {
       clearHover();
     }
   };
@@ -43,7 +51,9 @@ export const useSidebarNavHover = <T extends string, E extends HTMLElement = HTM
     isHoverExiting: (id: T) => exitingId === id,
     isHovered: (id: T) => hoveredId === id,
     navRef,
-    onHoverExitComplete: () => setExitingId(null),
+    onHoverExitComplete: () => {
+      setExitingId(null);
+    },
     setHover,
   };
 };

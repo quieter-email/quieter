@@ -12,7 +12,10 @@
     "GMAIL_PUBSUB_SUBSCRIPTION": "projects/example/subscriptions/gmail",
   },
   "secrets": {
-    "required": ["SST_RESOURCE_GmailLiveSyncTokenSecret", "SST_RESOURCE_GmailPubSubProcessToken"],
+    "required": [
+      "SST_RESOURCE_GmailLiveSyncTokenSecret",
+      "SST_RESOURCE_GmailPubSubProcessToken",
+    ],
   },
   "durable_objects": {
     "bindings": [

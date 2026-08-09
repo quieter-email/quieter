@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
+
 import { parseGmailPubSubNotification } from "../src/gmail-pubsub-ingress";
 
 const encodeNotification = (notification: unknown) =>
@@ -10,10 +11,10 @@ describe("Gmail push notification parsing", () => {
       parseGmailPubSubNotification(
         encodeNotification({
           emailAddress: "mailbox@example.com",
-          historyId: 1234567890,
-        }),
-      ),
-    ).toEqual({
+          historyId: 1_234_567_890,
+        })
+      )
+    ).toStrictEqual({
       emailAddress: "mailbox@example.com",
       historyId: "1234567890",
     });
@@ -25,9 +26,9 @@ describe("Gmail push notification parsing", () => {
         encodeNotification({
           emailAddress: "mailbox@example.com",
           historyId: "1234567890",
-        }),
-      ),
-    ).toEqual({
+        })
+      )
+    ).toStrictEqual({
       emailAddress: "mailbox@example.com",
       historyId: "1234567890",
     });

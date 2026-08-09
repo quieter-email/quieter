@@ -1,29 +1,32 @@
-import { z } from "zod";
-import {
-  composeDraftInputSchema,
-  QUIETER_DRAFT_HEADER_NAMES,
-  splitMailAddressList,
-} from "./schema";
+import type { z } from "zod";
+
+import type { composeDraftInputSchema } from "./schema";
+import { QUIETER_DRAFT_HEADER_NAMES, splitMailAddressList } from "./schema";
 
 type ComposeDraftInput = z.infer<typeof composeDraftInputSchema>;
 
 const bytesToBase64 = (bytes: Uint8Array) => {
   let binary = "";
   for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
+    binary += String.fromCodePoint(byte);
   }
 
   return btoa(binary);
 };
 
-export const arrayBufferToBase64Url = (bytes: Uint8Array) =>
-  bytesToBase64(bytes).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/g, "");
+export const arrayBufferToBase64Url = (bytes: Uint8Array): string =>
+  bytesToBase64(bytes)
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replaceAll(/=+$/gu, "");
 
 const createMimeBoundary = (prefix: string) =>
   `${prefix}_${crypto.randomUUID().replaceAll("-", "")}`;
 
 const encodeMimeHeaderValue = (value: string) => {
-  if (/^[\x20-\x7E]*$/.test(value)) return value;
+  if (/^[\u0020-\u007E]*$/u.test(value)) {
+    return value;
+  }
 
   const encoder = new TextEncoder();
   const encodedWords: string[] = [];
@@ -42,15 +45,22 @@ const encodeMimeHeaderValue = (value: string) => {
   return encodedWords.join(" ");
 };
 
-const escapeMimeParameter = (value: string) => value.replaceAll(/["\\\r\n]/g, "_");
+const escapeMimeParameter = (value: string) =>
+  value.replaceAll(/["\\\r\n]/gu, "_");
 
 const normalizeMimeType = (value: string) =>
-  /^[A-Za-z0-9!#$&^_.+-]+\/[A-Za-z0-9!#$&^_.+-]+$/.test(value) ? value : "application/octet-stream";
+  /^[A-Za-z0-9!#$&^_.+-]+\/[A-Za-z0-9!#$&^_.+-]+$/u.test(value)
+    ? value
+    : "application/octet-stream";
 
 const foldMimeHeader = (name: string, value: string) => {
   const fieldName = `${name}:`;
-  if (!value) return fieldName;
-  if (`${fieldName} ${value}`.length <= 78) return `${fieldName} ${value}`;
+  if (!value) {
+    return fieldName;
+  }
+  if (`${fieldName} ${value}`.length <= 78) {
+    return `${fieldName} ${value}`;
+  }
 
   const folded: string[] = [];
   let prefix = `${fieldName} `;
@@ -88,9 +98,10 @@ const encodeQuotedPrintable = (value: string) => {
   let output = "";
 
   for (const byte of bytes) {
-    const isPrintable = (byte >= 33 && byte <= 60) || (byte >= 62 && byte <= 126);
+    const isPrintable =
+      (byte >= 33 && byte <= 60) || (byte >= 62 && byte <= 126);
     if (isPrintable || byte === 9 || byte === 32) {
-      output += String.fromCharCode(byte);
+      output += String.fromCodePoint(byte);
     } else if (byte === 10) {
       output += "\r\n";
     } else {
@@ -103,21 +114,31 @@ const encodeQuotedPrintable = (value: string) => {
 
 const base64WithCrlf = (value: Uint8Array) => {
   const output = bytesToBase64(value);
-  return output.replace(/.{1,76}/g, "$&\r\n").trim();
+  return output.replaceAll(/.{1,76}/gu, "$&\r\n").trim();
 };
 
-const fileToBytes = async (file: File) => new Uint8Array(await file.arrayBuffer());
+const fileToBytes = async (file: File) =>
+  new Uint8Array(await file.arrayBuffer());
 
 const collectRecipients = (value: string) => splitMailAddressList(value);
 
 const collectReplyReferences = (draft: ComposeDraftInput) => {
-  const values = [...(draft.replyContext?.references ?? []), draft.replyContext?.messageHeaderId];
+  const values = [
+    ...(draft.replyContext?.references ?? []),
+    draft.replyContext?.messageHeaderId,
+  ];
   const seen = new Set<string>();
   const references: string[] = [];
 
   for (const value of values) {
     const normalized = value?.trim();
-    if (!normalized || seen.has(normalized)) continue;
+    if (
+      normalized === undefined ||
+      normalized.length === 0 ||
+      seen.has(normalized)
+    ) {
+      continue;
+    }
     seen.add(normalized);
     references.push(normalized);
   }
@@ -125,23 +146,161 @@ const collectReplyReferences = (draft: ComposeDraftInput) => {
   return references;
 };
 
-const addQuieterDraftHeaders = (headers: string[], draft: ComposeDraftInput) => {
+const addQuieterDraftHeaders = (
+  headers: string[],
+  draft: ComposeDraftInput
+) => {
   if (!draft.draftAnchor) {
     return;
   }
 
   headers.push(
     `${QUIETER_DRAFT_HEADER_NAMES.sourceMessageId}: ${draft.draftAnchor.sourceMessageId}`,
+    `${QUIETER_DRAFT_HEADER_NAMES.sourceThreadId}: ${draft.draftAnchor.sourceThreadId}`,
+    `${QUIETER_DRAFT_HEADER_NAMES.seededBy}: ${draft.draftAnchor.seededBy}`
   );
-  headers.push(`${QUIETER_DRAFT_HEADER_NAMES.sourceThreadId}: ${draft.draftAnchor.sourceThreadId}`);
-  headers.push(`${QUIETER_DRAFT_HEADER_NAMES.seededBy}: ${draft.draftAnchor.seededBy}`);
 
-  if (draft.draftAnchor.sourceMessageHeaderId?.trim()) {
+  const sourceMessageHeaderId = draft.draftAnchor.sourceMessageHeaderId?.trim();
+  if ((sourceMessageHeaderId ?? "") !== "") {
     headers.push(
-      `${QUIETER_DRAFT_HEADER_NAMES.sourceMessageHeaderId}: ${draft.draftAnchor.sourceMessageHeaderId.trim()}`,
+      `${QUIETER_DRAFT_HEADER_NAMES.sourceMessageHeaderId}: ${sourceMessageHeaderId}`
     );
   }
 };
+
+const appendRecipientHeaders = (
+  headers: string[],
+  draft: ComposeDraftInput,
+  options?: {
+    from?: string;
+    omitBccHeader?: boolean;
+  }
+) => {
+  const toRecipients = collectRecipients(draft.recipients.to);
+  const ccRecipients = collectRecipients(draft.recipients.cc);
+  const bccRecipients = collectRecipients(draft.recipients.bcc);
+
+  const from = options?.from?.trim();
+  if ((from ?? "") !== "") {
+    headers.push(`From: ${from}`);
+  }
+  if (toRecipients.length > 0) {
+    headers.push(`To: ${toRecipients.join(", ")}`);
+  }
+  if (ccRecipients.length > 0) {
+    headers.push(`Cc: ${ccRecipients.join(", ")}`);
+  }
+  if (bccRecipients.length > 0 && options?.omitBccHeader !== true) {
+    headers.push(`Bcc: ${bccRecipients.join(", ")}`);
+  }
+};
+
+const appendMetadataHeaders = (
+  headers: string[],
+  draft: ComposeDraftInput,
+  options?: {
+    messageId?: string;
+    sentAt?: Date;
+  }
+) => {
+  const replyReferences = collectReplyReferences(draft);
+
+  if (draft.subject.trim()) {
+    headers.push(`Subject: ${encodeMimeHeaderValue(draft.subject)}`);
+  }
+  const messageId = options?.messageId?.trim();
+  if ((messageId ?? "") !== "") {
+    headers.push(`Message-ID: ${messageId}`);
+  }
+  if (options?.sentAt !== undefined) {
+    headers.push(`Date: ${options.sentAt.toUTCString()}`);
+  }
+  const inReplyTo = draft.replyContext?.messageHeaderId;
+  if ((inReplyTo ?? "") !== "") {
+    headers.push(`In-Reply-To: ${inReplyTo}`);
+  }
+  if (replyReferences.length > 0) {
+    headers.push(`References: ${replyReferences.join(" ")}`);
+  }
+  for (const header of draft.headers ?? []) {
+    headers.push(
+      foldMimeHeader(
+        header.name.trim(),
+        encodeMimeHeaderValue(header.value.trim())
+      )
+    );
+  }
+};
+
+const buildInlineImagePart = async (
+  inlineImage: ComposeDraftInput["inlineImages"][number],
+  relatedBoundary: string
+): Promise<string | null> => {
+  if (inlineImage.file === undefined || inlineImage.file === null) {
+    return null;
+  }
+
+  const fileBytes = await fileToBytes(inlineImage.file);
+  return [
+    `--${relatedBoundary}`,
+    `Content-Type: ${normalizeMimeType(inlineImage.mimeType)}; name="${escapeMimeParameter(
+      inlineImage.name
+    )}"`,
+    `Content-Disposition: inline; filename="${escapeMimeParameter(inlineImage.name)}"`,
+    "Content-Transfer-Encoding: base64",
+    `Content-ID: <${inlineImage.contentId.replaceAll(/[<>\r\n]/gu, "")}>`,
+    "",
+    base64WithCrlf(fileBytes),
+  ].join("\r\n");
+};
+
+const buildAttachmentPart = async (
+  attachment: ComposeDraftInput["attachments"][number],
+  mixedBoundary: string
+): Promise<string | null> => {
+  if (attachment.file === undefined || attachment.file === null) {
+    return null;
+  }
+
+  const fileBytes = await fileToBytes(attachment.file);
+  return [
+    `--${mixedBoundary}`,
+    `Content-Type: ${normalizeMimeType(attachment.mimeType)}; name="${escapeMimeParameter(
+      attachment.name
+    )}"`,
+    `Content-Disposition: attachment; filename="${escapeMimeParameter(attachment.name)}"`,
+    "Content-Transfer-Encoding: base64",
+    "",
+    base64WithCrlf(fileBytes),
+  ].join("\r\n");
+};
+
+const buildHtmlAlternativePart = (
+  htmlBody: string,
+  inlineImageParts: string[],
+  alternativeBoundary: string,
+  relatedBoundary: string
+) =>
+  inlineImageParts.length > 0
+    ? [
+        `--${alternativeBoundary}`,
+        `Content-Type: multipart/related; boundary="${relatedBoundary}"`,
+        "",
+        `--${relatedBoundary}`,
+        'Content-Type: text/html; charset="UTF-8"',
+        "Content-Transfer-Encoding: quoted-printable",
+        "",
+        encodeQuotedPrintable(htmlBody),
+        ...inlineImageParts,
+        `--${relatedBoundary}--`,
+      ].join("\r\n")
+    : [
+        `--${alternativeBoundary}`,
+        'Content-Type: text/html; charset="UTF-8"',
+        "Content-Transfer-Encoding: quoted-printable",
+        "",
+        encodeQuotedPrintable(htmlBody),
+      ].join("\r\n");
 
 export const buildMimeMessage = async (
   draft: ComposeDraftInput,
@@ -151,33 +310,13 @@ export const buildMimeMessage = async (
     messageId?: string;
     omitBccHeader?: boolean;
     sentAt?: Date;
-  },
-) => {
+  }
+): Promise<string> => {
   const headers: string[] = [];
-  const toRecipients = collectRecipients(draft.recipients.to);
-  const ccRecipients = collectRecipients(draft.recipients.cc);
-  const bccRecipients = collectRecipients(draft.recipients.bcc);
-  const replyReferences = collectReplyReferences(draft);
 
-  if (options?.from?.trim()) headers.push(`From: ${options.from.trim()}`);
-  if (toRecipients.length > 0) headers.push(`To: ${toRecipients.join(", ")}`);
-  if (ccRecipients.length > 0) headers.push(`Cc: ${ccRecipients.join(", ")}`);
-  if (bccRecipients.length > 0 && !options?.omitBccHeader) {
-    headers.push(`Bcc: ${bccRecipients.join(", ")}`);
-  }
-  if (draft.subject.trim()) headers.push(`Subject: ${encodeMimeHeaderValue(draft.subject)}`);
-  if (options?.messageId?.trim()) headers.push(`Message-ID: ${options.messageId.trim()}`);
-  if (options?.sentAt) headers.push(`Date: ${options.sentAt.toUTCString()}`);
-  if (draft.replyContext?.messageHeaderId) {
-    headers.push(`In-Reply-To: ${draft.replyContext.messageHeaderId}`);
-  }
-  if (replyReferences.length > 0) {
-    headers.push(`References: ${replyReferences.join(" ")}`);
-  }
-  for (const header of draft.headers ?? []) {
-    headers.push(foldMimeHeader(header.name.trim(), encodeMimeHeaderValue(header.value.trim())));
-  }
-  if (options?.includeQuieterDraftHeaders) {
+  appendRecipientHeaders(headers, draft, options);
+  appendMetadataHeaders(headers, draft, options);
+  if (options?.includeQuieterDraftHeaders === true) {
     addQuieterDraftHeaders(headers, draft);
   }
   headers.push("MIME-Version: 1.0");
@@ -194,76 +333,38 @@ export const buildMimeMessage = async (
     encodeQuotedPrintable(draft.bodyText || ""),
   ].join("\r\n");
 
-  const inlineImageParts = (
-    await Promise.all(
-      draft.inlineImages.map(async (inlineImage) => {
-        if (!inlineImage.file) {
-          return null;
-        }
-
-        return [
-          `--${relatedBoundary}`,
-          `Content-Type: ${normalizeMimeType(inlineImage.mimeType)}; name="${escapeMimeParameter(
-            inlineImage.name,
-          )}"`,
-          `Content-Disposition: inline; filename="${escapeMimeParameter(inlineImage.name)}"`,
-          "Content-Transfer-Encoding: base64",
-          `Content-ID: <${inlineImage.contentId.replaceAll(/[<>\r\n]/g, "")}>`,
-          "",
-          base64WithCrlf(await fileToBytes(inlineImage.file)),
-        ].join("\r\n");
-      }),
+  const inlineImageResults = await Promise.all(
+    draft.inlineImages.map(
+      async (inlineImage) =>
+        await buildInlineImagePart(inlineImage, relatedBoundary)
     )
-  ).filter((part): part is string => !!part);
+  );
+  const inlineImageParts = inlineImageResults.filter(
+    (part): part is string => part !== null
+  );
 
   const htmlBody = draft.bodyHtml || "<p></p>";
-  const htmlPart =
-    inlineImageParts.length > 0
-      ? [
-          `--${alternativeBoundary}`,
-          `Content-Type: multipart/related; boundary="${relatedBoundary}"`,
-          "",
-          `--${relatedBoundary}`,
-          'Content-Type: text/html; charset="UTF-8"',
-          "Content-Transfer-Encoding: quoted-printable",
-          "",
-          encodeQuotedPrintable(htmlBody),
-          ...inlineImageParts,
-          `--${relatedBoundary}--`,
-        ].join("\r\n")
-      : [
-          `--${alternativeBoundary}`,
-          'Content-Type: text/html; charset="UTF-8"',
-          "Content-Transfer-Encoding: quoted-printable",
-          "",
-          encodeQuotedPrintable(htmlBody),
-        ].join("\r\n");
+  const htmlPart = buildHtmlAlternativePart(
+    htmlBody,
+    inlineImageParts,
+    alternativeBoundary,
+    relatedBoundary
+  );
 
   let body = [textPart, htmlPart, `--${alternativeBoundary}--`].join("\r\n");
   let contentType = `multipart/alternative; boundary="${alternativeBoundary}"`;
 
-  const attachments = (
-    await Promise.all(
-      draft.attachments
-        .filter((attachment) => !attachment.isInline)
-        .map(async (attachment) => {
-          if (!attachment.file) {
-            return null;
-          }
-
-          return [
-            `--${mixedBoundary}`,
-            `Content-Type: ${normalizeMimeType(attachment.mimeType)}; name="${escapeMimeParameter(
-              attachment.name,
-            )}"`,
-            `Content-Disposition: attachment; filename="${escapeMimeParameter(attachment.name)}"`,
-            "Content-Transfer-Encoding: base64",
-            "",
-            base64WithCrlf(await fileToBytes(attachment.file)),
-          ].join("\r\n");
-        }),
-    )
-  ).filter((part): part is string => !!part);
+  const attachmentResults = await Promise.all(
+    draft.attachments
+      .filter((attachment) => !attachment.isInline)
+      .map(
+        async (attachment) =>
+          await buildAttachmentPart(attachment, mixedBoundary)
+      )
+  );
+  const attachments = attachmentResults.filter(
+    (part): part is string => part !== null
+  );
 
   if (attachments.length > 0) {
     body = [
@@ -288,7 +389,7 @@ export const buildPlainTextMessage = ({
   body: string;
   subject: string;
   to: string;
-}) => {
+}): string => {
   const headers = [`To: ${to}`];
 
   if (subject.trim()) {

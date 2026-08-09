@@ -1,26 +1,36 @@
 import { jsx } from "react/jsx-runtime";
 import { describe, expect, test, vi } from "vite-plus/test";
+
 import { Quieter, QuieterApiError } from "../src";
 
-vi.mock("@react-email/render", () => ({
-  render: async () => "<strong>Rendered html</strong>",
+vi.mock(import("@react-email/render"), () => ({
+  render: async () => await Promise.resolve("<strong>Rendered html</strong>"),
 }));
 
 const getRequestBody = (body: BodyInit | null | undefined) =>
   typeof body === "string" ? body : "";
 
-const getRequestUrl = (input: RequestInfo | URL) =>
-  typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+const getRequestUrl = (input: RequestInfo | URL): string => {
+  if (typeof input === "string") {
+    return input;
+  }
+  if (input instanceof URL) {
+    return input.href;
+  }
+  return input.url;
+};
 
-describe("Quieter", () => {
+describe(Quieter, () => {
   test("sends provider-style payloads to /api/v1/send", async () => {
-    const calls: Array<{ init?: RequestInit; input: RequestInfo | URL }> = [];
+    const calls: { init?: RequestInit; input: RequestInfo | URL }[] = [];
     const client = new Quieter({
       apiKey: "quieter_test",
       baseUrl: "https://example.com",
       fetch: async (input, init) => {
         calls.push({ init, input });
-        return Response.json({ messageId: "message-1", sent: true }, { status: 201 });
+        return await Promise.resolve(
+          Response.json({ messageId: "message-1", sent: true }, { status: 201 })
+        );
       },
     });
 
@@ -32,9 +42,13 @@ describe("Quieter", () => {
       to: ["to@example.com"],
     });
 
-    expect(result).toEqual({ messageId: "message-1", sent: true });
-    expect(getRequestUrl(calls[0]!.input)).toBe("https://example.com/api/v1/send");
-    expect(new Headers(calls[0]?.init?.headers).get("authorization")).toBe("Bearer quieter_test");
+    expect(result).toStrictEqual({ messageId: "message-1", sent: true });
+    expect(getRequestUrl(calls[0].input)).toBe(
+      "https://example.com/api/v1/send"
+    );
+    expect(new Headers(calls[0]?.init?.headers).get("authorization")).toBe(
+      "Bearer quieter_test"
+    );
     expect(JSON.parse(getRequestBody(calls[0]?.init?.body))).toMatchObject({
       from: "Demo <demo@example.com>",
       html: "<strong>It works</strong>",
@@ -47,7 +61,9 @@ describe("Quieter", () => {
       apiKey: "quieter_test",
       fetch: async (_input, init) => {
         body = JSON.parse(getRequestBody(init?.body));
-        return Response.json({ messageId: "message-1", sent: true }, { status: 201 });
+        return await Promise.resolve(
+          Response.json({ messageId: "message-1", sent: true }, { status: 201 })
+        );
       },
     });
 
@@ -69,7 +85,10 @@ describe("Quieter", () => {
   test("throws QuieterApiError for API errors", async () => {
     const client = new Quieter({
       apiKey: "quieter_test",
-      fetch: async () => Response.json({ error: "Nope" }, { status: 403 }),
+      fetch: async () =>
+        await Promise.resolve(
+          Response.json({ error: "Nope" }, { status: 403 })
+        ),
     });
 
     await expect(
@@ -78,7 +97,7 @@ describe("Quieter", () => {
         subject: "Hello",
         text: "Hello",
         to: "to@example.com",
-      }),
+      })
     ).rejects.toBeInstanceOf(QuieterApiError);
   });
 });

@@ -15,7 +15,10 @@ const editableSelector = [
 const getElementTarget = (target: EventTarget | null) =>
   target instanceof Element ? target : null;
 
-export const isAppShortcutSequenceContinuation = (event: KeyboardEvent, now = Date.now()) => {
+export const isAppShortcutSequenceContinuation = (
+  event: KeyboardEvent,
+  now = Date.now()
+) => {
   for (const registration of getSequenceManager().registrations.state.values()) {
     const nextHotkey = registration.sequence[registration.matchedStepCount];
     if (
@@ -40,7 +43,7 @@ export const isEditableShortcutTarget = (target: EventTarget | null) => {
 
 export const hasOpenBlockingDialog = () =>
   !!document.querySelector(
-    "[role='dialog']:not([data-keyboard-shortcuts-dialog]), [data-popup-open]:not([data-keyboard-shortcuts-dialog])",
+    "[role='dialog']:not([data-keyboard-shortcuts-dialog]), [data-popup-open]:not([data-keyboard-shortcuts-dialog])"
   );
 
 export const shouldIgnoreAppShortcut = (event: KeyboardEvent) =>

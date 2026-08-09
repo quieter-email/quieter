@@ -6,9 +6,16 @@ import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { authClient } from "~/lib/auth";
-import { SettingsCard, SettingsSection, settingsSurfaceVariants } from "../settings-layout";
-import { type FullOrganization, formatRoleLabel, getFullOrganizationQueryKey } from "./domain";
+
+import { authClient } from "#/lib/auth";
+
+import {
+  SettingsCard,
+  SettingsSection,
+  settingsSurfaceVariants,
+} from "../settings-layout";
+import { formatRoleLabel, getFullOrganizationQueryKey } from "./domain";
+import type { FullOrganization } from "./domain";
 import { SettingsRow } from "./settings-row";
 
 export const PendingOrganizationInvitations = ({
@@ -22,12 +29,18 @@ export const PendingOrganizationInvitations = ({
 }) => {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
-  const [pendingInvitationId, setPendingInvitationId] = useState<string | null>(null);
+  const [pendingInvitationId, setPendingInvitationId] = useState<string | null>(
+    null
+  );
   const cancelInvitationMutation = useMutation({
     mutationFn: async (invitationId: string) => {
-      const response = await authClient.organization.cancelInvitation({ invitationId });
+      const response = await authClient.organization.cancelInvitation({
+        invitationId,
+      });
       if (response.error) {
-        throw new Error(response.error.message ?? "Could not cancel invitation.");
+        throw new Error(
+          response.error.message ?? "Could not cancel invitation."
+        );
       }
       return response;
     },
@@ -40,7 +53,7 @@ export const PendingOrganizationInvitations = ({
   });
   const pendingInvitations = invitations
     .filter((invitation) => invitation.status === "pending")
-    .sort((left, right) => left.email.localeCompare(right.email));
+    .toSorted((left, right) => left.email.localeCompare(right.email));
 
   if (pendingInvitations.length === 0) {
     return null;
@@ -54,7 +67,11 @@ export const PendingOrganizationInvitations = ({
       await cancelInvitationMutation.mutateAsync(invitationId);
       setPendingInvitationId(null);
     } catch (mutationError) {
-      setError((mutationError as { message?: string })?.message ?? "Could not cancel invitation.");
+      const message =
+        mutationError instanceof Error
+          ? mutationError.message
+          : "Could not cancel invitation.";
+      setError(message);
       setPendingInvitationId(null);
     }
   };
@@ -64,7 +81,8 @@ export const PendingOrganizationInvitations = ({
       <SettingsCard>
         {pendingInvitations.map((invitation) => {
           const isPending =
-            pendingInvitationId === invitation.id && cancelInvitationMutation.isPending;
+            pendingInvitationId === invitation.id &&
+            cancelInvitationMutation.isPending;
 
           return (
             <SettingsRow
@@ -72,7 +90,9 @@ export const PendingOrganizationInvitations = ({
                 canCancelInvitations ? (
                   <Button
                     disabled={isPending}
-                    onClick={() => void handleCancelInvitation(invitation.id)}
+                    onClick={() => {
+                      void handleCancelInvitation(invitation.id);
+                    }}
                     size="sm"
                     variant="outline"
                   >
@@ -83,7 +103,11 @@ export const PendingOrganizationInvitations = ({
                         icon={Loading03Icon}
                       />
                     ) : (
-                      <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
+                      <HugeiconsIcon
+                        aria-hidden
+                        className="size-4"
+                        icon={Delete02Icon}
+                      />
                     )}
                     Cancel
                   </Button>
@@ -95,11 +119,11 @@ export const PendingOrganizationInvitations = ({
             />
           );
         })}
-        {error && (
+        {(error ?? "") !== "" && (
           <p
             className={cn(
               "text-sm text-destructive",
-              settingsSurfaceVariants({ variant: "padding" }),
+              settingsSurfaceVariants({ variant: "padding" })
             )}
             role="alert"
           >

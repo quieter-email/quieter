@@ -1,20 +1,40 @@
-import { onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
-import { RequestHeadersPlugin, ResponseHeadersPlugin } from "@orpc/server/plugins";
+import {
+  RequestHeadersPlugin,
+  ResponseHeadersPlugin,
+} from "@orpc/server/plugins";
+import { reportError as reportRuntimeError } from "@quieter/observability";
+
+import type { OrpcContext } from "./context";
 import { appRouter } from "./routers/index";
 
-export const createOrpcHandler = (options?: { reportError?: (error: unknown) => void }) =>
+export { appRouter } from "./routers/index";
+
+const logOrpcError = (
+  error: unknown,
+  reportError?: (error: unknown) => void
+) => {
+  if (reportError === undefined) {
+    reportRuntimeError(error, { boundary: "orpc" });
+    return;
+  }
+
+  reportError(error);
+};
+
+export const createOrpcHandler = (options?: {
+  reportError?: (error: unknown) => void;
+}): RPCHandler<OrpcContext> =>
   new RPCHandler(appRouter, {
     interceptors: [
-      onError((error) => {
-        if (options?.reportError) {
-          options.reportError(error);
-        } else {
-          console.error(error instanceof Error ? (error.stack ?? error.message) : String(error));
+      async (interceptorOptions) => {
+        try {
+          return await interceptorOptions.next();
+        } catch (error) {
+          logOrpcError(error, options?.reportError);
+          throw error;
         }
-      }),
+      },
     ],
     plugins: [new RequestHeadersPlugin(), new ResponseHeadersPlugin()],
   });
-
-export { appRouter };

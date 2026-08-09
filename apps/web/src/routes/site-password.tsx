@@ -1,23 +1,29 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { zodValidator } from "@tanstack/zod-adapter";
 import { z } from "zod";
-import { LoadingPage } from "~/components/loading-page";
+
+import { LoadingPage } from "#/components/loading-page";
 
 export const Route = createFileRoute("/site-password")({
+  pendingComponent: LoadingPage,
   validateSearch: zodValidator(
     z.object({
       returnTo: z
         .string()
         .trim()
         .transform((value) =>
-          value && value.startsWith("/") && !value.startsWith("//") ? value : "/",
+          value && value.startsWith("/") && !value.startsWith("//")
+            ? value
+            : "/"
         )
         .catch("/")
         .default("/"),
       sitePasswordError: z
         .preprocess((value) => {
           if (typeof value === "string") {
-            return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
+            return ["1", "true", "yes", "on"].includes(
+              value.trim().toLowerCase()
+            );
           }
 
           if (typeof value === "boolean" || typeof value === "number") {
@@ -28,7 +34,6 @@ export const Route = createFileRoute("/site-password")({
         }, z.boolean())
         .catch(false)
         .default(false),
-    }),
+    })
   ),
-  pendingComponent: LoadingPage,
 });

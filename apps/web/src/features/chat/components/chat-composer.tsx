@@ -1,12 +1,18 @@
-import type { ChatModel } from "@quieter/ai/chat-models";
-import type { FormEvent, KeyboardEvent } from "react";
-import { AiMicIcon, Loading03Icon, SentIcon, StopIcon } from "@hugeicons/core-free-icons";
+import {
+  AiMicIcon,
+  Loading03Icon,
+  SentIcon,
+  StopIcon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import type { ChatModel } from "@quieter/ai/chat-models";
 import { Button } from "@quieter/ui/button";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { AnimatePresence, m, useReducedMotion } from "motion/react";
-import { AiModelSelect } from "~/features/ai/components/ai-model-select";
-import { getAppPresenceMotion } from "~/features/motion/app-motion";
+import type { KeyboardEvent, SubmitEvent } from "react";
+
+import { AiModelSelect } from "#/features/ai/components/ai-model-select";
+import { getAppPresenceMotion } from "#/features/motion/app-motion";
 
 type ChatComposerProps = {
   disabled?: boolean;
@@ -23,8 +29,49 @@ type ChatComposerProps = {
   onRecordingStart: () => void;
   onRecordingStop: () => void;
   onStop: () => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onSubmit: (event: SubmitEvent<HTMLFormElement>) => void;
 };
+
+const ChatComposerStatus = ({
+  recording,
+  shouldReduceMotion,
+  statusMotion,
+  transcribing,
+}: {
+  recording: boolean;
+  shouldReduceMotion: boolean | null;
+  statusMotion: ReturnType<typeof getAppPresenceMotion>;
+  transcribing: boolean;
+}) => (
+  <AnimatePresence initial={false}>
+    {recording || transcribing ? (
+      <m.output
+        {...statusMotion}
+        aria-live="polite"
+        className="flex h-6 items-center gap-2 px-4 text-xs text-muted-fg"
+        key={recording ? "recording" : "transcribing"}
+      >
+        {recording ? (
+          <span className="relative flex size-2" aria-hidden>
+            {shouldReduceMotion === true ? null : (
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-destructive opacity-40" />
+            )}
+            <span className="relative inline-flex size-2 rounded-full bg-destructive" />
+          </span>
+        ) : (
+          <HugeiconsIcon
+            aria-hidden
+            className={
+              shouldReduceMotion === true ? "size-3" : "size-3 animate-spin"
+            }
+            icon={Loading03Icon}
+          />
+        )}
+        {recording ? "Listening…" : "Transcribing what you said…"}
+      </m.output>
+    ) : null}
+  </AnimatePresence>
+);
 
 export const ChatComposer = ({
   disabled,
@@ -58,38 +105,20 @@ export const ChatComposer = ({
         aria-label="Message"
         className="max-h-40 min-h-18 w-full grow resize-none bg-transparent px-4 pt-4 pb-2 text-sm text-fg outline-none placeholder:text-muted-fg/50 disabled:cursor-not-allowed disabled:opacity-60"
         disabled={disabled}
-        onChange={(event) => onInputChange(event.target.value)}
+        onChange={(event) => {
+          onInputChange(event.target.value);
+        }}
         onKeyDown={onInputKeyDown}
         placeholder="Ask about your mail…"
         value={input}
       />
 
-      <AnimatePresence initial={false}>
-        {recording || transcribing ? (
-          <m.output
-            {...statusMotion}
-            aria-live="polite"
-            className="flex h-6 items-center gap-2 px-4 text-xs text-muted-fg"
-            key={recording ? "recording" : "transcribing"}
-          >
-            {recording ? (
-              <span className="relative flex size-2" aria-hidden>
-                {!shouldReduceMotion ? (
-                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-destructive opacity-40" />
-                ) : null}
-                <span className="relative inline-flex size-2 rounded-full bg-destructive" />
-              </span>
-            ) : (
-              <HugeiconsIcon
-                aria-hidden
-                className={shouldReduceMotion ? "size-3" : "size-3 animate-spin"}
-                icon={Loading03Icon}
-              />
-            )}
-            {recording ? "Listening…" : "Transcribing what you said…"}
-          </m.output>
-        ) : null}
-      </AnimatePresence>
+      <ChatComposerStatus
+        recording={recording}
+        shouldReduceMotion={shouldReduceMotion}
+        statusMotion={statusMotion}
+        transcribing={transcribing}
+      />
 
       <div className="flex items-center justify-between gap-1 px-2 pb-2">
         <AiModelSelect
@@ -114,11 +143,17 @@ export const ChatComposer = ({
               </Button>
             </IconButtonTooltip>
           ) : (
-            <IconButtonTooltip label={recordingSupported ? "Dictate" : "Recording unavailable"}>
+            <IconButtonTooltip
+              label={recordingSupported ? "Dictate" : "Recording unavailable"}
+            >
               <Button
-                aria-label={recordingSupported ? "Dictate" : "Recording unavailable"}
+                aria-label={
+                  recordingSupported ? "Dictate" : "Recording unavailable"
+                }
                 className="shrink-0"
-                disabled={disabled || transcribing || !recordingSupported}
+                disabled={
+                  disabled === true || transcribing || !recordingSupported
+                }
                 onClick={onRecordingStart}
                 size="icon"
                 type="button"
@@ -147,13 +182,23 @@ export const ChatComposer = ({
               <Button
                 aria-label="Send"
                 className="shrink-0 transition-opacity"
-                disabled={disabled || submitting || recording || transcribing || !input.trim()}
+                disabled={
+                  disabled === true ||
+                  submitting ||
+                  recording ||
+                  transcribing ||
+                  !input.trim()
+                }
                 size="icon"
                 type="submit"
                 variant="ghost"
               >
                 <HugeiconsIcon
-                  className={submitting && !shouldReduceMotion ? "animate-spin" : undefined}
+                  className={
+                    submitting && shouldReduceMotion !== true
+                      ? "animate-spin"
+                      : undefined
+                  }
                   icon={submitting ? Loading03Icon : SentIcon}
                 />
               </Button>

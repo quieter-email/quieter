@@ -1,4 +1,7 @@
-import type { MailboxGrantRole, PersistedMailboxProvider } from "@quieter/database/schema";
+import type {
+  MailboxGrantRole,
+  PersistedMailboxProvider,
+} from "@quieter/database/schema";
 import type { MailboxCapabilities } from "@quieter/mail/data-plane";
 
 export type MailboxGroupMetadata = {

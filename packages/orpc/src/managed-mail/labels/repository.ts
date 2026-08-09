@@ -1,12 +1,14 @@
+import { randomUUID } from "node:crypto";
+
 import { ORPCError } from "@orpc/server";
-import { db, type DatabaseClient } from "@quieter/database/client";
+import { db } from "@quieter/database/client";
+import type { DatabaseClient } from "@quieter/database/client";
 import {
   managedMailLabel,
   managedMailMessage,
   managedMailMessageLabel,
 } from "@quieter/database/schema";
 import { and, eq, inArray, ne } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
 
 type ManagedMailDatabase =
   | DatabaseClient
@@ -15,19 +17,26 @@ type ManagedMailDatabase =
 export const assertManagedLabelsBelongToMailbox = async (
   mailboxId: string,
   labelIds: readonly string[],
-  database: ManagedMailDatabase = db,
+  database: ManagedMailDatabase = db
 ) => {
-  const uniqueLabelIds = Array.from(new Set(labelIds));
-  if (uniqueLabelIds.length === 0) return [];
+  const uniqueLabelIds = [...new Set(labelIds)];
+  if (uniqueLabelIds.length === 0) {
+    return [];
+  }
 
   const labels = await database
     .select()
     .from(managedMailLabel)
     .where(
-      and(eq(managedMailLabel.mailboxId, mailboxId), inArray(managedMailLabel.id, uniqueLabelIds)),
+      and(
+        eq(managedMailLabel.mailboxId, mailboxId),
+        inArray(managedMailLabel.id, uniqueLabelIds)
+      )
     );
   if (labels.length !== uniqueLabelIds.length) {
-    throw new ORPCError("BAD_REQUEST", { message: "One or more labels are unavailable." });
+    throw new ORPCError("BAD_REQUEST", {
+      message: "One or more labels are unavailable.",
+    });
   }
   return labels;
 };
@@ -42,13 +51,17 @@ export const updateManagedMessageLabelAssignments = async (input: {
   userId?: string;
   database?: ManagedMailDatabase;
 }) => {
-  const addLabelIds = Array.from(new Set(input.addLabelIds ?? []));
-  const removeLabelIds = Array.from(new Set(input.removeLabelIds ?? []));
+  const addLabelIds =
+    input.addLabelIds === undefined ? [] : [...new Set(input.addLabelIds)];
+  const removeLabelIds =
+    input.removeLabelIds === undefined
+      ? []
+      : [...new Set(input.removeLabelIds)];
   const database = input.database ?? db;
   await assertManagedLabelsBelongToMailbox(
     input.mailboxId,
     [...addLabelIds, ...removeLabelIds],
-    database,
+    database
   );
 
   if (removeLabelIds.length > 0 && input.messageIds.length > 0) {
@@ -58,8 +71,8 @@ export const updateManagedMessageLabelAssignments = async (input: {
         and(
           eq(managedMailMessageLabel.mailboxId, input.mailboxId),
           inArray(managedMailMessageLabel.messageId, input.messageIds),
-          inArray(managedMailMessageLabel.labelId, removeLabelIds),
-        ),
+          inArray(managedMailMessageLabel.labelId, removeLabelIds)
+        )
       );
   }
 
@@ -77,11 +90,14 @@ export const updateManagedMessageLabelAssignments = async (input: {
             messageId,
             ruleId: input.ruleId ?? null,
             source: input.source,
-          })),
-        ),
+          }))
+        )
       )
       .onConflictDoNothing({
-        target: [managedMailMessageLabel.messageId, managedMailMessageLabel.labelId],
+        target: [
+          managedMailMessageLabel.messageId,
+          managedMailMessageLabel.labelId,
+        ],
       });
   }
 
@@ -116,15 +132,20 @@ export const inheritManagedThreadLabels = async (input: {
   const assignments = await db
     .selectDistinct({ labelId: managedMailMessageLabel.labelId })
     .from(managedMailMessageLabel)
-    .innerJoin(managedMailMessage, eq(managedMailMessage.id, managedMailMessageLabel.messageId))
+    .innerJoin(
+      managedMailMessage,
+      eq(managedMailMessage.id, managedMailMessageLabel.messageId)
+    )
     .where(
       and(
         eq(managedMailMessage.mailboxId, input.mailboxId),
         eq(managedMailMessage.threadId, input.threadId),
-        ne(managedMailMessage.id, input.messageId),
-      ),
+        ne(managedMailMessage.id, input.messageId)
+      )
     );
-  if (assignments.length === 0) return;
+  if (assignments.length === 0) {
+    return;
+  }
 
   await updateManagedMessageLabelAssignments({
     addLabelIds: assignments.map((assignment) => assignment.labelId),

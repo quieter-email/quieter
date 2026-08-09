@@ -1,8 +1,12 @@
 "use client";
 
 import { useState } from "react";
+
 import type { MailboxOverviewToolResult } from "../../../types";
 import { ToolStep } from "./tool-step";
+
+const hasText = (value: string | null | undefined): value is string =>
+  value !== null && value !== undefined && value !== "";
 
 type OverviewToolProps = {
   nested?: boolean;
@@ -14,16 +18,20 @@ type OverviewToolProps = {
 const formatCount = (value: number | undefined) =>
   typeof value === "number" ? value.toLocaleString() : "—";
 
-export const OverviewTool = ({ nested = false, data, error, pending }: OverviewToolProps) => {
+export const OverviewTool = ({
+  nested = false,
+  data,
+  error,
+  pending,
+}: OverviewToolProps) => {
   const [expanded, setExpanded] = useState(false);
   const success = data?.status === "success" ? data : null;
-  const meta = pending
-    ? undefined
-    : error
-      ? undefined
-      : success
-        ? `${formatCount(success.unreadMessages)} unread`
-        : undefined;
+  let meta: string | undefined;
+  if (pending || hasText(error)) {
+    meta = undefined;
+  } else if (success !== null) {
+    meta = `${formatCount(success.unreadMessages)} unread`;
+  }
 
   return (
     <ToolStep
@@ -34,30 +42,42 @@ export const OverviewTool = ({ nested = false, data, error, pending }: OverviewT
       expanded={expanded}
       label={pending ? "Checking mailbox" : "Checked mailbox"}
       meta={meta}
-      onToggle={() => setExpanded((current) => !current)}
+      onToggle={() => {
+        setExpanded((current) => !current);
+      }}
       pending={pending}
     >
       {success ? (
         <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-fg">
           <div className="flex justify-between gap-3">
             <dt>Messages</dt>
-            <dd className="text-fg/80 tabular-nums">{formatCount(success.totalMessages)}</dd>
+            <dd className="text-fg/80 tabular-nums">
+              {formatCount(success.totalMessages)}
+            </dd>
           </div>
           <div className="flex justify-between gap-3">
             <dt>Threads</dt>
-            <dd className="text-fg/80 tabular-nums">{formatCount(success.totalThreads)}</dd>
+            <dd className="text-fg/80 tabular-nums">
+              {formatCount(success.totalThreads)}
+            </dd>
           </div>
           <div className="flex justify-between gap-3">
             <dt>Unread</dt>
-            <dd className="text-fg/80 tabular-nums">{formatCount(success.unreadMessages)}</dd>
+            <dd className="text-fg/80 tabular-nums">
+              {formatCount(success.unreadMessages)}
+            </dd>
           </div>
           <div className="flex justify-between gap-3">
             <dt>Starred</dt>
-            <dd className="text-fg/80 tabular-nums">{formatCount(success.starredMessages)}</dd>
+            <dd className="text-fg/80 tabular-nums">
+              {formatCount(success.starredMessages)}
+            </dd>
           </div>
           <div className="flex justify-between gap-3">
             <dt>Attachments</dt>
-            <dd className="text-fg/80 tabular-nums">{formatCount(success.attachmentMessages)}</dd>
+            <dd className="text-fg/80 tabular-nums">
+              {formatCount(success.attachmentMessages)}
+            </dd>
           </div>
         </dl>
       ) : null}

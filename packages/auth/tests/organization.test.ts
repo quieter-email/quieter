@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
+
 import { createDefaultOrganizationName } from "../src/organization";
 
 describe("default organization names", () => {
@@ -8,8 +9,8 @@ describe("default organization names", () => {
         email: "lea@example.com",
         id: "user-123",
         name: "Léa van Doe",
-      }),
-    ).toMatch(/^lea-van-doe-[a-f0-9]{6}$/);
+      })
+    ).toMatch(/^lea-van-doe-[a-f0-9]{6}$/u);
   });
 
   test("uses a team fallback when the name has no slug characters", () => {
@@ -18,7 +19,7 @@ describe("default organization names", () => {
         email: "user@example.com",
         id: "user-456",
         name: "東京",
-      }),
-    ).toMatch(/^team-[a-f0-9]{6}$/);
+      })
+    ).toMatch(/^team-[a-f0-9]{6}$/u);
   });
 });

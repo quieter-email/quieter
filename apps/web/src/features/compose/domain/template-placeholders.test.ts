@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
+
 import {
   createTemplatePlaceholderToken,
   hydrateTemplatePlaceholders,
@@ -7,9 +8,11 @@ import {
 
 describe("template placeholders", () => {
   test("normalizes placeholder labels into Quieter-only tokens", () => {
-    expect(createTemplatePlaceholderToken("  First   name  ")).toBe("{{quieter:First name}}");
+    expect(createTemplatePlaceholderToken("  First   name  ")).toBe(
+      "{{quieter:First name}}"
+    );
     expect(createTemplatePlaceholderToken('Invoice <id> & "date"')).toBe(
-      "{{quieter:Invoice id date}}",
+      "{{quieter:Invoice id date}}"
     );
   });
 
@@ -18,12 +21,12 @@ describe("template placeholders", () => {
     const editorHtml = hydrateTemplatePlaceholders(providerHtml);
 
     expect(editorHtml).toBe(
-      '<p>Hello <span data-quieter-template-placeholder="First name">First name</span>,</p>',
+      '<p>Hello <span data-quieter-template-placeholder="First name">First name</span>,</p>'
     );
     expect(
       serializeTemplatePlaceholders(
-        '<p>Hello <span class="quieter-template-placeholder" contenteditable="false" data-quieter-template-placeholder="First name">First name</span>,</p>',
-      ),
+        '<p>Hello <span class="quieter-template-placeholder" contenteditable="false" data-quieter-template-placeholder="First name">First name</span>,</p>'
+      )
     ).toBe(providerHtml);
   });
 });

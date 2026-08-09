@@ -4,9 +4,10 @@ import { toast } from "@quieter/ui/toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { USER_BILLING_QUERY_KEY } from "~/features/settings/domain/billing";
-import { orpc } from "~/lib/orpc";
-import { settingsRouteApi } from "~/lib/route-apis";
+
+import { USER_BILLING_QUERY_KEY } from "#/features/settings/domain/billing";
+import { orpc } from "#/lib/orpc";
+import { settingsRouteApi } from "#/lib/route-apis";
 
 export const BillingCheckoutResult = () => {
   const navigate = useNavigate({ from: "/settings" });
@@ -24,14 +25,18 @@ export const BillingCheckoutResult = () => {
   });
 
   useEffect(() => {
-    if (!billing) return;
+    if (!billing) {
+      return;
+    }
 
     if (billing === "success") {
-      if (checkoutId) {
-        syncCheckout({ checkoutId });
-      } else {
+      if (checkoutId === undefined || checkoutId === "") {
         toast.success("Your purchase was completed.");
-        void queryClient.invalidateQueries({ queryKey: USER_BILLING_QUERY_KEY });
+        void queryClient.invalidateQueries({
+          queryKey: USER_BILLING_QUERY_KEY,
+        });
+      } else {
+        syncCheckout({ checkoutId });
       }
     } else {
       toast.message("Checkout canceled.");
@@ -39,7 +44,11 @@ export const BillingCheckoutResult = () => {
 
     void navigate({
       replace: true,
-      search: (previous) => ({ ...previous, billing: undefined, checkoutId: undefined }),
+      search: (previous) => ({
+        ...previous,
+        billing: undefined,
+        checkoutId: undefined,
+      }),
       to: ".",
     });
   }, [billing, checkoutId, navigate, queryClient, syncCheckout]);

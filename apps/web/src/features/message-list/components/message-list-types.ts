@@ -1,9 +1,14 @@
 import type { IconSvgElement } from "@hugeicons/react";
+
 import type {
   MailboxActions,
   MailboxPendingActions,
-} from "~/features/mailbox/components/mailbox-action-handlers";
-import type { ListMessagesPageResult, MailboxCategory, MessageListItem } from "~/lib/gmail/gmail";
+} from "#/features/mailbox/components/mailbox-action-handlers";
+import type {
+  ListMessagesPageResult,
+  MailboxCategory,
+  MessageListItem,
+} from "#/lib/gmail/gmail";
 
 export type ThreadPressGesture = {
   additive: boolean;

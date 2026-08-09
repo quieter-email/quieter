@@ -14,6 +14,11 @@
       "bun": "./src/github.ts",
       "default": "./dist/github.js"
     },
+    "./local-doctor": {
+      "types": "./src/local-doctor.ts",
+      "bun": "./src/local-doctor.ts",
+      "default": "./dist/local-doctor.js"
+    },
     "./public": {
       "types": "./src/public.ts",
       "bun": "./src/public.ts",
@@ -31,7 +36,8 @@
     }
   },
   "scripts": {
-    "build": "vp pack"
+    "build": "vp pack",
+    "doctor": "bun scripts/doctor.ts"
   },
   "dependencies": {
     "@t3-oss/env-core": "catalog:",

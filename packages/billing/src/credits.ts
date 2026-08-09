@@ -2,9 +2,11 @@ import { db } from "@quieter/database/client";
 import {
   billingCreditUsageEvent,
   billingSubscription,
-  type BillingUsageCategory,
 } from "@quieter/database/schema";
+import type { BillingUsageCategory } from "@quieter/database/schema";
+import { reportError } from "@quieter/observability";
 import { and, asc, eq, gt, gte, inArray, isNull, lt, sql } from "drizzle-orm";
+
 import type { BillingAccount } from "./entitlements";
 import { getPolarApiOrganizationId } from "./polar-config";
 
@@ -23,8 +25,12 @@ export const BILLING_USAGE_KINDS = [
 
 export type BillingUsageKind = (typeof BILLING_USAGE_KINDS)[number];
 
-const sanitizePolarEventMetadata = (metadata: Record<string, string | number | boolean>) =>
-  Object.fromEntries(Object.entries(metadata).filter(([, value]) => value !== ""));
+const sanitizePolarEventMetadata = (
+  metadata: Record<string, string | number | boolean>
+) =>
+  Object.fromEntries(
+    Object.entries(metadata).filter(([, value]) => value !== "")
+  );
 
 export const createPolarCreditUsageEvent = (input: {
   account: Pick<BillingAccount, "externalCustomerId">;
@@ -39,8 +45,8 @@ export const createPolarCreditUsageEvent = (input: {
   metadata: {
     billableCostCents: input.billableCostMicroCents / MICROCENTS_PER_CENT,
     category: input.category,
-    credits: input.costMicroCents / MICROCENTS_PER_CENT,
     creditUsageEventId: input.eventId,
+    credits: input.costMicroCents / MICROCENTS_PER_CENT,
     totalCostCents: input.costMicroCents / MICROCENTS_PER_CENT,
     ...sanitizePolarEventMetadata(input.metadata),
   },
@@ -50,12 +56,12 @@ export const createPolarCreditUsageEvent = (input: {
 
 const getBillingCreditUsageWithClient = async (
   client: Pick<typeof db, "select">,
-  account: BillingAccount,
+  account: BillingAccount
 ) => {
   const periodFilter = and(
     eq(billingCreditUsageEvent.organizationId, account.organizationId),
     gte(billingCreditUsageEvent.createdAt, account.currentPeriodStart),
-    lt(billingCreditUsageEvent.createdAt, account.currentPeriodEnd),
+    lt(billingCreditUsageEvent.createdAt, account.currentPeriodEnd)
   );
   const usageKind = sql<BillingUsageKind>`case
     when ${billingCreditUsageEvent.category} = 'mail'
@@ -91,12 +97,12 @@ const getBillingCreditUsageWithClient = async (
   ]);
 
   return {
-    billableCostMicroCents: Number(usage?.billableCostMicroCents ?? 0),
+    billableCostMicroCents: usage?.billableCostMicroCents ?? 0,
     breakdown: breakdown.map((item) => ({
-      costMicroCents: Number(item.costMicroCents),
+      costMicroCents: item.costMicroCents,
       kind: item.kind,
     })),
-    costMicroCents: Number(usage?.costMicroCents ?? 0),
+    costMicroCents: usage?.costMicroCents ?? 0,
     creditAmountMicroCents: account.creditAmountCents * MICROCENTS_PER_CENT,
   };
 };
@@ -113,7 +119,9 @@ export const recordBillingCreditUsage = async (input: {
 }) => {
   const lockKey = `organization:${input.account.organizationId}`;
   const result = await db.transaction(async (transaction) => {
-    await transaction.execute(sql`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`);
+    await transaction.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`
+    );
     const [existingEvent] = await transaction
       .select({
         billableCostMicroCents: billingCreditUsageEvent.billableCostMicroCents,
@@ -127,7 +135,7 @@ export const recordBillingCreditUsage = async (input: {
       .where(eq(billingCreditUsageEvent.dedupeKey, input.dedupeKey))
       .limit(1);
 
-    if (existingEvent) {
+    if (existingEvent !== undefined) {
       return {
         billableCostMicroCents: existingEvent.billableCostMicroCents,
         category: existingEvent.category,
@@ -138,11 +146,17 @@ export const recordBillingCreditUsage = async (input: {
       };
     }
 
-    const usage = await getBillingCreditUsageWithClient(transaction, input.account);
-    const billableBefore = Math.max(0, usage.costMicroCents - usage.creditAmountMicroCents);
+    const usage = await getBillingCreditUsageWithClient(
+      transaction,
+      input.account
+    );
+    const billableBefore = Math.max(
+      0,
+      usage.costMicroCents - usage.creditAmountMicroCents
+    );
     const billableAfter = Math.max(
       0,
-      usage.costMicroCents + input.costMicroCents - usage.creditAmountMicroCents,
+      usage.costMicroCents + input.costMicroCents - usage.creditAmountMicroCents
     );
     const billableCostMicroCents = billableAfter - billableBefore;
     const [event] = await transaction
@@ -164,8 +178,8 @@ export const recordBillingCreditUsage = async (input: {
       });
 
     return {
+      billableCostMicroCents: event === undefined ? 0 : billableCostMicroCents,
       category: input.category,
-      billableCostMicroCents: event ? billableCostMicroCents : 0,
       costMicroCents: input.costMicroCents,
       eventId: event?.id ?? null,
       metadata: input.metadata ?? {},
@@ -173,7 +187,11 @@ export const recordBillingCreditUsage = async (input: {
     };
   });
 
-  if (result.eventId && result.costMicroCents > 0 && !result.polarEventReportedAt) {
+  if (
+    (result.eventId ?? "") !== "" &&
+    result.costMicroCents > 0 &&
+    result.polarEventReportedAt === null
+  ) {
     const polarEventReportedAt = new Date();
 
     try {
@@ -189,7 +207,7 @@ export const recordBillingCreditUsage = async (input: {
         }),
       ]);
     } catch (error) {
-      console.error("Polar usage sync failed; the event remains queued for retry.", error);
+      reportError(error, { operation: "billing:polar-usage-sync" });
       return result;
     }
 
@@ -208,19 +226,27 @@ export const recordBillingCreditUsage = async (input: {
 };
 
 const currentActiveSubscriptionUnreportedUsageFilter = and(
-  eq(billingSubscription.organizationId, billingCreditUsageEvent.organizationId),
+  eq(
+    billingSubscription.organizationId,
+    billingCreditUsageEvent.organizationId
+  ),
   inArray(billingSubscription.plan, ["managed", "pro"]),
   inArray(billingSubscription.status, ["active", "trialing"]),
-  gte(billingCreditUsageEvent.createdAt, billingSubscription.currentPeriodStart),
-  lt(billingCreditUsageEvent.createdAt, billingSubscription.currentPeriodEnd),
+  gte(
+    billingCreditUsageEvent.createdAt,
+    billingSubscription.currentPeriodStart
+  ),
+  lt(billingCreditUsageEvent.createdAt, billingSubscription.currentPeriodEnd)
 );
 
 const unreportedPositiveCreditUsageFilter = and(
   isNull(billingCreditUsageEvent.polarEventReportedAt),
-  gt(billingCreditUsageEvent.costMicroCents, 0),
+  gt(billingCreditUsageEvent.costMicroCents, 0)
 );
 
-export const syncUnreportedBillingCreditUsage = async (input: { limit?: number } = {}) => {
+export const syncUnreportedBillingCreditUsage = async (
+  input: { limit?: number } = {}
+) => {
   const limit = input.limit ?? 100;
   const rows = await db
     .select({
@@ -232,7 +258,10 @@ export const syncUnreportedBillingCreditUsage = async (input: { limit?: number }
       organizationId: billingCreditUsageEvent.organizationId,
     })
     .from(billingCreditUsageEvent)
-    .innerJoin(billingSubscription, currentActiveSubscriptionUnreportedUsageFilter)
+    .innerJoin(
+      billingSubscription,
+      currentActiveSubscriptionUnreportedUsageFilter
+    )
     .where(unreportedPositiveCreditUsageFilter)
     .orderBy(asc(billingCreditUsageEvent.createdAt))
     .limit(limit);
@@ -258,8 +287,8 @@ export const syncUnreportedBillingCreditUsage = async (input: { limit?: number }
         costMicroCents: row.costMicroCents,
         eventId: row.eventId,
         metadata: row.metadata ?? {},
-      }),
-    ),
+      })
+    )
   );
 
   await db
@@ -269,10 +298,10 @@ export const syncUnreportedBillingCreditUsage = async (input: { limit?: number }
       and(
         inArray(
           billingCreditUsageEvent.id,
-          rows.map((row) => row.eventId),
+          rows.map((row) => row.eventId)
         ),
-        isNull(billingCreditUsageEvent.polarEventReportedAt),
-      ),
+        isNull(billingCreditUsageEvent.polarEventReportedAt)
+      )
     );
 
   return {

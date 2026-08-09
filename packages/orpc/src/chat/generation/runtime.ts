@@ -1,6 +1,9 @@
 const activeRunControllers = new Map<string, AbortController>();
 
-export const registerChatRunController = (runId: string, controller: AbortController) => {
+export const registerChatRunController = (
+  runId: string,
+  controller: AbortController
+) => {
   activeRunControllers.set(runId, controller);
 
   return () => {

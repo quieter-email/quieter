@@ -1,7 +1,8 @@
 "use client";
 
-import type { ComponentPropsWithoutRef } from "react";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
+import type { ComponentPropsWithoutRef } from "react";
+
 import { cn } from "../../lib/cn";
 
 export const FullPageDialog = DialogPrimitive.Root;
@@ -17,7 +18,7 @@ export const FullPageDialogContent = ({
     <DialogPrimitive.Popup
       className={cn(
         "fixed inset-2 z-50 flex flex-col overflow-hidden rounded-xl border bg-bg-surface text-fg shadow-2xl transition-[opacity,transform] duration-200 ease-out will-change-[opacity,transform] data-ending-style:scale-[0.99] data-ending-style:opacity-0 data-starting-style:scale-[0.99] data-starting-style:opacity-0 sm:inset-4 lg:inset-6",
-        className,
+        className
       )}
       {...props}
     >
@@ -31,12 +32,18 @@ export const FullPageDialogHeader = ({
   ...props
 }: ComponentPropsWithoutRef<"header">) => (
   <header
-    className={cn("flex h-12 shrink-0 items-center gap-3 border-b px-3 sm:h-14 sm:px-4", className)}
+    className={cn(
+      "flex h-12 shrink-0 items-center gap-3 border-b px-3 sm:h-14 sm:px-4",
+      className
+    )}
     {...props}
   />
 );
 
-export const FullPageDialogBody = ({ className, ...props }: ComponentPropsWithoutRef<"div">) => (
+export const FullPageDialogBody = ({
+  className,
+  ...props
+}: ComponentPropsWithoutRef<"div">) => (
   <div className={cn("min-h-0 flex-1 overflow-y-auto", className)} {...props} />
 );
 
@@ -54,7 +61,10 @@ export const FullPageDialogDescription = ({
   className,
   ...props
 }: ComponentPropsWithoutRef<typeof DialogPrimitive.Description>) => (
-  <DialogPrimitive.Description className={cn("text-sm text-muted-fg", className)} {...props} />
+  <DialogPrimitive.Description
+    className={cn("text-sm text-muted-fg", className)}
+    {...props}
+  />
 );
 
 export const FullPageDialogClose = ({
@@ -64,7 +74,7 @@ export const FullPageDialogClose = ({
   <DialogPrimitive.Close
     className={cn(
       "squircle inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-fg transition-colors hover:bg-muted hover:text-fg focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] [&_svg]:size-4",
-      className,
+      className
     )}
     {...props}
   />

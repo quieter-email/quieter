@@ -2,7 +2,8 @@
 
 import type { MailboxLabelColor } from "@quieter/mail/mailbox-organization";
 import { cn } from "@quieter/ui/cn";
-import { mailboxLabelDotClassNameByColor } from "~/features/message-labels/domain/mailbox-label-presentation";
+
+import { mailboxLabelDotClassNameByColor } from "#/features/message-labels/domain/mailbox-label-presentation";
 
 const mailboxColors: MailboxLabelColor[] = [
   "gray",
@@ -27,7 +28,10 @@ export const MailboxColorPicker = ({
   onChange: (color: MailboxLabelColor) => void;
   value: MailboxLabelColor;
 }) => (
-  <fieldset aria-label={label} className={cn("flex flex-wrap items-center gap-1.5", className)}>
+  <fieldset
+    aria-label={label}
+    className={cn("flex flex-wrap items-center gap-1.5", className)}
+  >
     {mailboxColors.map((color) => (
       <button
         aria-label={`${color} ${label.toLocaleLowerCase()}`}
@@ -37,10 +41,12 @@ export const MailboxColorPicker = ({
           mailboxLabelDotClassNameByColor[color],
           {
             "ring-2 ring-fg ring-offset-2 ring-offset-bg": value === color,
-          },
+          }
         )}
         key={color}
-        onClick={() => onChange(color)}
+        onClick={() => {
+          onChange(color);
+        }}
         type="button"
       />
     ))}

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
+
 import {
   collectVisibleMessageRefreshBatch,
   queueVisibleMessageRefreshIds,
@@ -10,7 +11,7 @@ describe("visible message refresh batching", () => {
     const hasQueuedMessage = queueVisibleMessageRefreshIds(
       queuedMessageIds,
       ["hot", "deep-a", "deep-b", "deep-c"],
-      new Set(["hot"]),
+      new Set(["hot"])
     );
 
     const batch = collectVisibleMessageRefreshBatch({
@@ -23,9 +24,9 @@ describe("visible message refresh batching", () => {
       skipMessageIds: new Set(["hot"]),
     });
 
-    expect(hasQueuedMessage).toBe(true);
-    expect(batch).toEqual(["deep-a", "deep-b"]);
-    expect([...queuedMessageIds]).toEqual(["deep-c"]);
+    expect(hasQueuedMessage).toBeTruthy();
+    expect(batch).toStrictEqual(["deep-a", "deep-b"]);
+    expect([...queuedMessageIds]).toStrictEqual(["deep-c"]);
   });
 
   test("does not refetch the same visible message inside the cooldown", () => {
@@ -43,8 +44,8 @@ describe("visible message refresh batching", () => {
         queuedMessageIds,
         recentAttemptByMessageId,
         skipMessageIds: new Set(),
-      }),
-    ).toEqual(["deep-a"]);
+      })
+    ).toStrictEqual(["deep-a"]);
 
     inFlightMessageIds.delete("deep-a");
     queueVisibleMessageRefreshIds(queuedMessageIds, ["deep-a"], new Set());
@@ -58,7 +59,7 @@ describe("visible message refresh batching", () => {
         queuedMessageIds,
         recentAttemptByMessageId,
         skipMessageIds: new Set(),
-      }),
-    ).toEqual([]);
+      })
+    ).toStrictEqual([]);
   });
 });

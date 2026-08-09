@@ -15,13 +15,15 @@ import {
 } from "@quieter/ui/dialog";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import type { ReactNode } from "react";
+
 import type {
   MessageLabelsDialogTarget,
   MessageLabelsDialogUpdate,
-} from "~/features/message-labels/domain/message-label-updates";
-import { getMessageLabelUpdates } from "~/features/message-labels/domain/message-label-updates";
-import { getUserLabels } from "~/features/message-search/state/message-list-search-state";
-import { labelsQueryOptions } from "~/lib/gmail/labels-query";
+} from "#/features/message-labels/domain/message-label-updates";
+import { getMessageLabelUpdates } from "#/features/message-labels/domain/message-label-updates";
+import { getUserLabels } from "#/features/message-search/state/message-list-search-state";
+import { labelsQueryOptions } from "#/lib/gmail/labels-query";
 
 export const MessageLabelsDialog = ({
   isPending,
@@ -59,7 +61,9 @@ export const MessageLabelsDialog = ({
   };
 
   const applyLabels = async () => {
-    if (isBusy) return;
+    if (isBusy) {
+      return;
+    }
 
     const updates = getMessageLabelUpdates(targets, draftLabels);
 
@@ -75,11 +79,76 @@ export const MessageLabelsDialog = ({
       setOpen(false);
     } catch (error) {
       setApplyError(
-        error instanceof Error && error.message ? error.message : "Could not update labels.",
+        error instanceof Error && error.message
+          ? error.message
+          : "Could not update labels."
       );
       setIsApplying(false);
     }
   };
+
+  let labelsContent: ReactNode;
+  if (areLabelsPending) {
+    labelsContent = (
+      <div className="flex items-center gap-2 text-sm text-muted-fg">
+        <HugeiconsIcon
+          aria-hidden
+          className="animate-spin"
+          icon={Loading03Icon}
+        />
+        <span>Loading labels…</span>
+      </div>
+    );
+  } else if (labelsUnavailable) {
+    labelsContent = (
+      <p className="text-sm text-destructive">
+        {labelsError?.message ?? "Could not load labels."}
+      </p>
+    );
+  } else if (userLabels.length > 0) {
+    labelsContent = (
+      <div className="space-y-2">
+        {userLabels.map((label) => {
+          const selectedCount = targets.reduce(
+            (count, target) =>
+              count + Number(target.labelIds.includes(label.id)),
+            0
+          );
+          const checked =
+            draftLabels[label.id] ?? selectedCount === targets.length;
+          const indeterminate =
+            draftLabels[label.id] === undefined &&
+            selectedCount > 0 &&
+            selectedCount < targets.length;
+
+          return (
+            <label
+              className="flex items-center gap-2 text-sm text-fg"
+              key={label.id}
+            >
+              <Checkbox
+                aria-label={label.name}
+                checked={checked}
+                disabled={isBusy}
+                indeterminate={indeterminate}
+                onCheckedChange={(nextChecked) => {
+                  setDraftLabels((current) => ({
+                    ...current,
+                    [label.id]: nextChecked,
+                  }));
+                }}
+              >
+                <CheckboxIndicator />
+              </Checkbox>
+              <span>{label.name}</span>
+            </label>
+          );
+        })}
+      </div>
+    );
+  } else {
+    labelsContent = <p className="text-sm text-muted-fg">No custom labels.</p>;
+  }
 
   return (
     <Dialog onOpenChange={setOpen} open={open}>
@@ -89,63 +158,24 @@ export const MessageLabelsDialog = ({
         </DialogHeader>
 
         <DialogBody className="max-h-[50vh] space-y-3 overflow-y-auto">
-          {areLabelsPending ? (
-            <div className="flex items-center gap-2 text-sm text-muted-fg">
-              <HugeiconsIcon aria-hidden className="animate-spin" icon={Loading03Icon} />
-              <span>Loading labels…</span>
-            </div>
-          ) : labelsUnavailable ? (
-            <p className="text-sm text-destructive">
-              {labelsError?.message ?? "Could not load labels."}
-            </p>
-          ) : userLabels.length > 0 ? (
-            <div className="space-y-2">
-              {userLabels.map((label) => {
-                const selectedCount = targets.reduce(
-                  (count, target) => count + Number(target.labelIds.includes(label.id)),
-                  0,
-                );
-                const checked = draftLabels[label.id] ?? selectedCount === targets.length;
-                const indeterminate =
-                  draftLabels[label.id] === undefined &&
-                  selectedCount > 0 &&
-                  selectedCount < targets.length;
-
-                return (
-                  <label className="flex items-center gap-2 text-sm text-fg" key={label.id}>
-                    <Checkbox
-                      aria-label={label.name}
-                      checked={checked}
-                      disabled={isBusy}
-                      indeterminate={indeterminate}
-                      onCheckedChange={(nextChecked) =>
-                        setDraftLabels((current) => ({
-                          ...current,
-                          [label.id]: nextChecked,
-                        }))
-                      }
-                    >
-                      <CheckboxIndicator />
-                    </Checkbox>
-                    <span>{label.name}</span>
-                  </label>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-fg">No custom labels.</p>
-          )}
+          {labelsContent}
 
           {isBusy && (
-            <p aria-live="polite" className="sr-only" role="status">
+            <output aria-live="polite" className="sr-only">
               Applying labels…
-            </p>
+            </output>
           )}
-          {applyError && (
-            <p aria-live="assertive" className="text-sm text-destructive" role="alert">
+          {applyError !== null &&
+          applyError !== undefined &&
+          applyError !== "" ? (
+            <p
+              aria-live="assertive"
+              className="text-sm text-destructive"
+              role="alert"
+            >
               {applyError}
             </p>
-          )}
+          ) : null}
         </DialogBody>
 
         <DialogFooter>

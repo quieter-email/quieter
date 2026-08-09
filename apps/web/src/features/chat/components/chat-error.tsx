@@ -1,4 +1,7 @@
-import { Alert02Icon, ArrowReloadHorizontalIcon } from "@hugeicons/core-free-icons";
+import {
+  Alert02Icon,
+  ArrowReloadHorizontalIcon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 
@@ -22,8 +25,18 @@ export const ChatError = ({
       <p className="mt-0.5 text-muted-fg">{message}</p>
     </div>
     {onRetry ? (
-      <Button disabled={disabled} onClick={onRetry} size="sm" type="button" variant="ghost">
-        <HugeiconsIcon aria-hidden className="size-3.5" icon={ArrowReloadHorizontalIcon} />
+      <Button
+        disabled={disabled}
+        onClick={onRetry}
+        size="sm"
+        type="button"
+        variant="ghost"
+      >
+        <HugeiconsIcon
+          aria-hidden
+          className="size-3.5"
+          icon={ArrowReloadHorizontalIcon}
+        />
         Retry
       </Button>
     ) : null}

@@ -1,14 +1,21 @@
 import { ORPCError } from "@orpc/server";
 import { Polar } from "@polar-sh/sdk";
 import { serverEnv } from "@quieter/env/server";
-import { getPolarApiOrganizationId, getPolarServer, resolvePolarServer } from "./polar-config";
+
+import { getPolarServer } from "./polar-config";
+
+export {
+  getPolarApiOrganizationId,
+  getPolarServer,
+  resolvePolarServer,
+} from "./polar-config";
 
 let polarClient: Polar | null = null;
 
 const getPolarAccessToken = () => {
   const accessToken = serverEnv.POLAR_ACCESS_TOKEN;
 
-  if (!accessToken) {
+  if (accessToken === undefined || accessToken === "") {
     throw new ORPCError("INTERNAL_SERVER_ERROR", {
       message: "Polar billing is not configured.",
     });
@@ -20,7 +27,9 @@ const getPolarAccessToken = () => {
 export const getPolarSandboxMode = () => getPolarServer() === "sandbox";
 
 export const getPolarClient = () => {
-  if (polarClient) return polarClient;
+  if (polarClient !== null) {
+    return polarClient;
+  }
 
   polarClient = new Polar({
     accessToken: getPolarAccessToken(),
@@ -31,17 +40,15 @@ export const getPolarClient = () => {
 };
 
 export const ingestPolarEvents = async (
-  events: Array<{
+  events: {
     externalCustomerId: string;
     externalId?: string;
     metadata?: Record<string, boolean | number | string>;
     name: string;
     organizationId?: string;
-  }>,
+  }[]
 ) => {
   await getPolarClient().events.ingest({
     events,
   });
 };
-
-export { getPolarApiOrganizationId, getPolarServer, resolvePolarServer };

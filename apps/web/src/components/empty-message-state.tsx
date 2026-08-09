@@ -1,5 +1,6 @@
 import { m } from "motion/react";
-import { VerticalSlot } from "~/components/vertical-slot";
+
+import { VerticalSlot } from "#/components/vertical-slot";
 
 const waveDots = Array.from({ length: 20 }, (_, index) => ({
   column: index % 10,
@@ -33,8 +34,16 @@ export const EmptyMessageState = ({
       </div>
       <VerticalSlot>
         <div>
-          {title ? <p className="text-sm font-semibold tracking-tight text-fg">{title}</p> : null}
-          {description ? <p className="mt-1.5 text-sm text-muted-fg">{description}</p> : null}
+          {title !== null && title !== undefined && title !== "" ? (
+            <p className="text-sm font-semibold tracking-tight text-fg">
+              {title}
+            </p>
+          ) : null}
+          {description !== null &&
+          description !== undefined &&
+          description !== "" ? (
+            <p className="mt-1.5 text-sm text-muted-fg">{description}</p>
+          ) : null}
         </div>
       </VerticalSlot>
     </div>

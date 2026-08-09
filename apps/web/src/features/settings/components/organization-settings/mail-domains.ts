@@ -1,10 +1,13 @@
 import type { RouterOutputs } from "@quieter/orpc";
 import { queryOptions } from "@tanstack/react-query";
-import { rpc } from "~/lib/orpc";
 
-export type OrganizationMailDomain = RouterOutputs["mailDomains"]["list"]["domains"][number];
+import { rpc } from "#/lib/orpc";
+
+export type OrganizationMailDomain =
+  RouterOutputs["mailDomains"]["list"]["domains"][number];
 export type OrganizationMailDomainStatus = OrganizationMailDomain["status"];
-export type OrganizationMailDomainDnsRecord = OrganizationMailDomain["requiredDnsRecords"][number];
+export type OrganizationMailDomainDnsRecord =
+  OrganizationMailDomain["requiredDnsRecords"][number];
 export type OrganizationMailDomainDetail = RouterOutputs["mailDomains"]["get"];
 
 export const getOrganizationMailDomainsQueryKey = (organizationId: string) =>
@@ -12,28 +15,39 @@ export const getOrganizationMailDomainsQueryKey = (organizationId: string) =>
 
 export const organizationMailDomainsQueryOptions = (organizationId: string) =>
   queryOptions({
-    queryFn: () => rpc.mailDomains.list({ organizationId }),
+    queryFn: async () => await rpc.mailDomains.list({ organizationId }),
     queryKey: getOrganizationMailDomainsQueryKey(organizationId),
     staleTime: 30_000,
   });
 
-export const getOrganizationMailDomainQueryKey = (organizationId: string, domainId: string) =>
-  ["mail-domains", organizationId, domainId] as const;
+export const getOrganizationMailDomainQueryKey = (
+  organizationId: string,
+  domainId: string
+) => ["mail-domains", organizationId, domainId] as const;
 
-export const getOrganizationDomainConnectQueryKey = (organizationId: string, domainId: string) =>
-  ["mail-domains", organizationId, domainId, "domain-connect"] as const;
+export const getOrganizationDomainConnectQueryKey = (
+  organizationId: string,
+  domainId: string
+) => ["mail-domains", organizationId, domainId, "domain-connect"] as const;
 
-export const organizationMailDomainQueryOptions = (organizationId: string, domainId: string) =>
+export const organizationMailDomainQueryOptions = (
+  organizationId: string,
+  domainId: string
+) =>
   queryOptions({
-    queryFn: () => rpc.mailDomains.get({ domainId, organizationId }),
+    queryFn: async () =>
+      await rpc.mailDomains.get({ domainId, organizationId }),
     queryKey: getOrganizationMailDomainQueryKey(organizationId, domainId),
     staleTime: 15_000,
   });
 
-export const organizationDomainConnectQueryOptions = (organizationId: string, domainId: string) =>
+export const organizationDomainConnectQueryOptions = (
+  organizationId: string,
+  domainId: string
+) =>
   queryOptions({
-    queryFn: () =>
-      rpc.mailDomains.getDomainConnectAvailability({
+    queryFn: async () =>
+      await rpc.mailDomains.getDomainConnectAvailability({
         domainId,
         organizationId,
       }),
@@ -41,9 +55,15 @@ export const organizationDomainConnectQueryOptions = (organizationId: string, do
     staleTime: 60_000,
   });
 
-export const formatMailDomainStatus = (status: OrganizationMailDomainStatus) => {
-  if (status === "verified") return "Verified";
-  if (status === "pending_dns") return "Needs DNS";
+export const formatMailDomainStatus = (
+  status: OrganizationMailDomainStatus
+) => {
+  if (status === "verified") {
+    return "Verified";
+  }
+  if (status === "pending_dns") {
+    return "Needs DNS";
+  }
   return "Check failed";
 };
 
@@ -58,17 +78,24 @@ export const resolveMailDomainVerified = (domain: {
   requiredDnsRecords: OrganizationMailDomain["requiredDnsRecords"];
   status: OrganizationMailDomainStatus;
 }) => {
-  if (domain.status === "verified") return true;
+  if (domain.status === "verified") {
+    return true;
+  }
 
   const requiredRecords = domain.requiredDnsRecords.filter(
-    (record) => record.required && !isOptionalDnsPurpose(record.purpose),
+    (record) => record.required && !isOptionalDnsPurpose(record.purpose)
   );
-  if (requiredRecords.length === 0) return false;
+  if (requiredRecords.length === 0) {
+    return false;
+  }
 
   const checks = domain.lastCheckResult?.checks ?? [];
   return requiredRecords.every((record) =>
     checks.some(
-      (check) => check.recordName === record.name && check.purpose === record.purpose && check.ok,
-    ),
+      (check) =>
+        check.recordName === record.name &&
+        check.purpose === record.purpose &&
+        check.ok
+    )
   );
 };

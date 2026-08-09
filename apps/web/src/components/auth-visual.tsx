@@ -8,7 +8,8 @@ const maxDevicePixelRatio = 1.5;
 const maxWaveCount = 24;
 const maxImpulseCount = maxWaveCount;
 const particleStaticStride = 5;
-const particleStaticStrideBytes = particleStaticStride * Float32Array.BYTES_PER_ELEMENT;
+const particleStaticStrideBytes =
+  particleStaticStride * Float32Array.BYTES_PER_ELEMENT;
 const targetParticleGridCells = 54_000;
 
 type Point = {
@@ -326,11 +327,14 @@ void main() {
 
 const fract = (value: number) => value - Math.floor(value);
 
-const hash = (x: number, y: number) => fract(Math.sin(x * 127.1 + y * 311.7) * 43758.5453123);
+const hash = (x: number, y: number) =>
+  fract(Math.sin(x * 127.1 + y * 311.7) * 43_758.5453123);
 
-const mix = (start: number, end: number, amount: number) => start * (1 - amount) + end * amount;
+const mix = (start: number, end: number, amount: number) =>
+  start * (1 - amount) + end * amount;
 
-const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(Math.max(value, min), max);
 
 const smoothstep = (edge0: number, edge1: number, value: number) => {
   const t = clamp((value - edge0) / (edge1 - edge0), 0, 1);
@@ -341,30 +345,55 @@ const smoothstep = (edge0: number, edge1: number, value: number) => {
 const oklchGrayToSrgb = (lightness: number) => {
   const linear = lightness ** 3;
 
-  return linear <= 0.0031308 ? linear * 12.92 : 1.055 * linear ** (1 / 2.4) - 0.055;
+  return linear <= 0.0031308
+    ? linear * 12.92
+    : 1.055 * linear ** (1 / 2.4) - 0.055;
 };
 
-const getCssColor = (element: HTMLElement, property: string, fallback: Rgb): Rgb => {
+const getCssColor = (
+  element: HTMLElement,
+  property: string,
+  fallback: Rgb
+): Rgb => {
   const value = getComputedStyle(element).getPropertyValue(property).trim();
-  const oklchMatch = /^oklch\(\s*([\d.]+)(%)?/.exec(value);
+  const oklchMatch = /^oklch\(\s*(?<lightness>[\d.]+)(?<percent>%)?/u.exec(
+    value
+  );
 
   if (oklchMatch) {
-    const lightness = Number(oklchMatch[1]) / (oklchMatch[2] ? 100 : 1);
+    const percent = oklchMatch.groups?.percent;
+    const lightness =
+      Number(oklchMatch.groups?.lightness) /
+      (percent === undefined || percent === "" ? 1 : 100);
     const channel = oklchGrayToSrgb(lightness);
 
     return [channel, channel, channel];
   }
 
-  const rgbMatch = /rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/.exec(value);
+  const rgbMatch =
+    /rgba?\(\s*(?<red>[\d.]+)[,\s]+(?<green>[\d.]+)[,\s]+(?<blue>[\d.]+)/u.exec(
+      value
+    );
 
   if (rgbMatch) {
-    return [Number(rgbMatch[1]) / 255, Number(rgbMatch[2]) / 255, Number(rgbMatch[3]) / 255];
+    return [
+      Number(rgbMatch.groups?.red) / 255,
+      Number(rgbMatch.groups?.green) / 255,
+      Number(rgbMatch.groups?.blue) / 255,
+    ];
   }
 
-  const srgbMatch = /^color\(\s*srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/.exec(value);
+  const srgbMatch =
+    /^color\(\s*srgb\s+(?<red>[\d.]+)\s+(?<green>[\d.]+)\s+(?<blue>[\d.]+)/u.exec(
+      value
+    );
 
   if (srgbMatch) {
-    return [Number(srgbMatch[1]), Number(srgbMatch[2]), Number(srgbMatch[3])];
+    return [
+      Number(srgbMatch.groups?.red),
+      Number(srgbMatch.groups?.green),
+      Number(srgbMatch.groups?.blue),
+    ];
   }
 
   return fallback;
@@ -374,7 +403,7 @@ const readColors = (canvas: HTMLCanvasElement): Colors => {
   const background = getCssColor(
     canvas,
     "background-color",
-    getCssColor(canvas, "--bg", [0.02, 0.02, 0.02]),
+    getCssColor(canvas, "--bg", [0.02, 0.02, 0.02])
   );
   const primary = getCssColor(canvas, "--primary", [0.25, 0.25, 0.25]);
 
@@ -384,14 +413,20 @@ const readColors = (canvas: HTMLCanvasElement): Colors => {
   };
 };
 
-const squircleRadius = (point: Point, scale: number, width: number, height: number) => {
+const squircleRadius = (
+  point: Point,
+  scale: number,
+  width: number,
+  height: number
+) => {
   const unit = Math.min(width, height) / 10;
   const offsetX = point.x - width * 0.5;
   const offsetY = point.y - height * 0.5;
   const localX = (offsetX * Math.SQRT1_2 + offsetY * Math.SQRT1_2) / scale;
   const localY = (-offsetX * Math.SQRT1_2 + offsetY * Math.SQRT1_2) / scale;
   const radius = 2 ** 0.25 * unit * 2;
-  const distanceValue = (Math.abs(localX) / radius) ** 3.25 + (Math.abs(localY) / radius) ** 3.25;
+  const distanceValue =
+    (Math.abs(localX) / radius) ** 3.25 + (Math.abs(localY) / radius) ** 3.25;
 
   return distanceValue ** (1 / 3.25);
 };
@@ -402,7 +437,7 @@ const appendNoiseDot = (
   cellY: number,
   gap: number,
   width: number,
-  height: number,
+  height: number
 ) => {
   const jitterX = hash(cellX + 53, cellY + 53) - 0.5;
   const jitterY = hash(cellX + 193, cellY + 193) - 0.5;
@@ -416,38 +451,56 @@ const appendNoiseDot = (
     outerRadius,
     squircleRadius(center, 0.9, width, height),
     squircleRadius(center, 0.8, width, height),
-    squircleRadius(center, 0.7, width, height),
+    squircleRadius(center, 0.7, width, height)
   );
   const insideOuter = 1 - smoothstep(0.94, 1.08, outerRadius);
   const edgeScatter = 1 - smoothstep(0, 0.7, Math.abs(nearestRadius - 1));
-  const innerScatter = (nearestRadius < 1 ? 1 : 0) * (1 - smoothstep(0, 0.85, 1 - nearestRadius));
-  const outerScatter = (nearestRadius >= 1 ? 1 : 0) * (1 - smoothstep(0, 0.95, nearestRadius - 1));
+  const innerScatter =
+    (nearestRadius < 1 ? 1 : 0) * (1 - smoothstep(0, 0.85, 1 - nearestRadius));
+  const outerScatter =
+    (nearestRadius >= 1 ? 1 : 0) * (1 - smoothstep(0, 0.95, nearestRadius - 1));
   const logoScatter = Math.max(edgeScatter, innerScatter, outerScatter);
   const density = clamp(0.44 + logoScatter * 0.38, 0, 0.97);
 
-  if (density < hash(cellX + 719, cellY + 719)) return;
+  if (density < hash(cellX + 719, cellY + 719)) {
+    return;
+  }
 
   const radiusSeed = hash(cellX + 389, cellY + 389);
 
   dots.push({
     ...center,
     opacity: mix(1, 0.2, insideOuter),
-    radius: mix(0.25 + radiusSeed * 0.65, 0.45 + radiusSeed * 1.35, logoScatter) * radiusScale,
+    radius:
+      mix(0.25 + radiusSeed * 0.65, 0.45 + radiusSeed * 1.35, logoScatter) *
+      radiusScale,
     vibrance: hash(cellX + 941, cellY + 941),
   });
 };
 
 const layerScale = (index: number) => {
-  if (index === 0) return 1;
-  if (index === 1) return 0.9;
-  if (index === 2) return 0.8;
+  if (index === 0) {
+    return 1;
+  }
+  if (index === 1) {
+    return 0.9;
+  }
+  if (index === 2) {
+    return 0.8;
+  }
   return 0.7;
 };
 
 const layerOpacity = (index: number) => {
-  if (index === 0) return 1;
-  if (index === 1) return 0.8;
-  if (index === 2) return 0.6;
+  if (index === 0) {
+    return 1;
+  }
+  if (index === 1) {
+    return 0.8;
+  }
+  if (index === 2) {
+    return 0.6;
+  }
   return 0.4;
 };
 
@@ -458,7 +511,7 @@ const appendRingDot = (
   layerIndex: number,
   gap: number,
   width: number,
-  height: number,
+  height: number
 ) => {
   const unit = Math.min(width, height) / 10;
   const radius = 2 ** 0.25 * unit * 2;
@@ -477,14 +530,18 @@ const appendRingDot = (
   const radiusValue = squircleRadius(center, scale, width, height);
   const distanceFromCenterLine = Math.abs(radiusValue - 1);
 
-  if (distanceFromCenterLine > halfRingWidth) return;
+  if (distanceFromCenterLine > halfRingWidth) {
+    return;
+  }
 
   const distanceFromRingEdge = halfRingWidth - distanceFromCenterLine;
   const edgeAmount = clamp(1 - distanceFromRingEdge / halfRingWidth, 0, 1);
   const edgeStrength = edgeAmount ** 0.35;
   const density = edgeAmount > 0.62 ? 1 : 0.12 + edgeStrength * 0.58;
 
-  if (density < hash(seedX + 29, seedY + 29)) return;
+  if (density < hash(seedX + 29, seedY + 29)) {
+    return;
+  }
 
   dots.push({
     ...center,
@@ -516,14 +573,22 @@ const buildDots = (width: number, height: number, gap: number) => {
   return dots;
 };
 
-const createShader = (gl: WebGL2RenderingContext, type: number, source: string) => {
+const createShader = (
+  gl: WebGL2RenderingContext,
+  type: number,
+  source: string
+) => {
   const shader = gl.createShader(type);
-  if (!shader) return null;
+  if (!shader) {
+    return null;
+  }
 
   gl.shaderSource(shader, source);
   gl.compileShader(shader);
 
-  if (gl.getShaderParameter(shader, gl.COMPILE_STATUS) === true) return shader;
+  if (gl.getShaderParameter(shader, gl.COMPILE_STATUS) === true) {
+    return shader;
+  }
 
   gl.deleteShader(shader);
   return null;
@@ -533,39 +598,58 @@ const createProgram = (
   gl: WebGL2RenderingContext,
   vertexSource: string,
   fragmentSource: string,
-  transformFeedbackVaryings?: string[],
+  transformFeedbackVaryings?: string[]
 ) => {
   const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexSource);
   const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
-  if (!vertexShader || !fragmentShader) return null;
+  if (!vertexShader || !fragmentShader) {
+    return null;
+  }
 
   const program = gl.createProgram();
-  if (!program) return null;
+  if (program === null) {
+    return null;
+  }
 
   gl.attachShader(program, vertexShader);
   gl.attachShader(program, fragmentShader);
 
   if (transformFeedbackVaryings) {
-    gl.transformFeedbackVaryings(program, transformFeedbackVaryings, gl.SEPARATE_ATTRIBS);
+    gl.transformFeedbackVaryings(
+      program,
+      transformFeedbackVaryings,
+      gl.SEPARATE_ATTRIBS
+    );
   }
 
   gl.linkProgram(program);
   gl.deleteShader(vertexShader);
   gl.deleteShader(fragmentShader);
 
-  if (gl.getProgramParameter(program, gl.LINK_STATUS) === true) return program;
+  if (gl.getProgramParameter(program, gl.LINK_STATUS) === true) {
+    return program;
+  }
 
   gl.deleteProgram(program);
   return null;
 };
 
-const createGpuBufferSet = (gl: WebGL2RenderingContext): GpuBufferSet | null => {
+const createGpuBufferSet = (
+  gl: WebGL2RenderingContext
+): GpuBufferSet | null => {
   const position = gl.createBuffer();
   const velocity = gl.createBuffer();
   const energy = gl.createBuffer();
   const active = gl.createBuffer();
 
-  if (!position || !velocity || !energy || !active) return null;
+  if (
+    position === null ||
+    velocity === null ||
+    energy === null ||
+    active === null
+  ) {
+    return null;
+  }
 
   return {
     active,
@@ -579,7 +663,9 @@ export const AuthVisual = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    if (!canvasRef.current) return;
+    if (!canvasRef.current) {
+      return;
+    }
 
     const canvas = canvasRef.current;
     const gl =
@@ -598,27 +684,39 @@ export const AuthVisual = () => {
         powerPreference: "high-performance",
         stencil: false,
       });
-    if (!gl) return;
+    if (!gl) {
+      return;
+    }
 
-    const renderProgram = createProgram(gl, renderVertexShaderSource, fragmentShaderSource);
+    const renderProgram = createProgram(
+      gl,
+      renderVertexShaderSource,
+      fragmentShaderSource
+    );
     const updateProgram = createProgram(
       gl,
       updateVertexShaderSource,
       passthroughFragmentShaderSource,
-      ["vNextPosition", "vNextVelocity", "vNextEnergy", "vNextActive"],
+      ["vNextPosition", "vNextVelocity", "vNextEnergy", "vNextActive"]
     );
-    if (!renderProgram || !updateProgram) return;
+    if (!renderProgram || !updateProgram) {
+      return;
+    }
     const activateProgram = gl.useProgram.bind(gl);
 
     const getAttribute = (program: WebGLProgram, name: string) => {
       const attribute = gl.getAttribLocation(program, name);
-      if (attribute < 0) throw new Error(`Missing WebGL attribute: ${name}`);
+      if (attribute < 0) {
+        throw new Error(`Missing WebGL attribute: ${name}`);
+      }
 
       return attribute;
     };
     const getUniform = (program: WebGLProgram, name: string) => {
       const uniform = gl.getUniformLocation(program, name);
-      if (!uniform) throw new Error(`Missing WebGL uniform: ${name}`);
+      if (!uniform) {
+        throw new Error(`Missing WebGL uniform: ${name}`);
+      }
 
       return uniform;
     };
@@ -645,7 +743,10 @@ export const AuthVisual = () => {
     };
     const updateUniforms = {
       cursor: getUniform(updateProgram, "uCursor"),
-      cursorActivationRadiusSquared: getUniform(updateProgram, "uCursorActivationRadiusSquared"),
+      cursorActivationRadiusSquared: getUniform(
+        updateProgram,
+        "uCursorActivationRadiusSquared"
+      ),
       cursorActive: getUniform(updateProgram, "uCursorActive"),
       cursorPush: getUniform(updateProgram, "uCursorPush"),
       cursorRadius: getUniform(updateProgram, "uCursorRadius"),
@@ -659,24 +760,33 @@ export const AuthVisual = () => {
       impulseCount: getUniform(updateProgram, "uImpulseCount"),
       impulseForce: getUniform(updateProgram, "uImpulseForce[0]"),
       impulseRadius: getUniform(updateProgram, "uImpulseRadius[0]"),
-      impulseRadiusSquared: getUniform(updateProgram, "uImpulseRadiusSquared[0]"),
+      impulseRadiusSquared: getUniform(
+        updateProgram,
+        "uImpulseRadiusSquared[0]"
+      ),
       spring: getUniform(updateProgram, "uSpring"),
       step: getUniform(updateProgram, "uStep"),
       waveActivationInnerRadiusSquared: getUniform(
         updateProgram,
-        "uWaveActivationInnerRadiusSquared[0]",
+        "uWaveActivationInnerRadiusSquared[0]"
       ),
       waveActivationOuterRadiusSquared: getUniform(
         updateProgram,
-        "uWaveActivationOuterRadiusSquared[0]",
+        "uWaveActivationOuterRadiusSquared[0]"
       ),
       waveCenter: getUniform(updateProgram, "uWaveCenter[0]"),
       waveCount: getUniform(updateProgram, "uWaveCount"),
       waveEnvelope: getUniform(updateProgram, "uWaveEnvelope[0]"),
       waveForce: getUniform(updateProgram, "uWaveForce[0]"),
       waveFrontRadius: getUniform(updateProgram, "uWaveFrontRadius[0]"),
-      waveInnerRadiusSquared: getUniform(updateProgram, "uWaveInnerRadiusSquared[0]"),
-      waveOuterRadiusSquared: getUniform(updateProgram, "uWaveOuterRadiusSquared[0]"),
+      waveInnerRadiusSquared: getUniform(
+        updateProgram,
+        "uWaveInnerRadiusSquared[0]"
+      ),
+      waveOuterRadiusSquared: getUniform(
+        updateProgram,
+        "uWaveOuterRadiusSquared[0]"
+      ),
       waveWidth: getUniform(updateProgram, "uWaveWidth[0]"),
     };
 
@@ -690,20 +800,27 @@ export const AuthVisual = () => {
     const secondUpdateVertexArray = gl.createVertexArray();
 
     if (
-      !staticBuffer ||
-      !firstStateBuffers ||
-      !secondStateBuffers ||
-      !transformFeedback ||
-      !firstRenderVertexArray ||
-      !secondRenderVertexArray ||
-      !firstUpdateVertexArray ||
-      !secondUpdateVertexArray
-    )
+      staticBuffer === null ||
+      firstStateBuffers === null ||
+      secondStateBuffers === null ||
+      transformFeedback === null ||
+      firstRenderVertexArray === null ||
+      secondRenderVertexArray === null ||
+      firstUpdateVertexArray === null ||
+      secondUpdateVertexArray === null
+    ) {
       return;
+    }
 
     const stateBuffers = [firstStateBuffers, secondStateBuffers] as const;
-    const renderVertexArrays = [firstRenderVertexArray, secondRenderVertexArray] as const;
-    const updateVertexArrays = [firstUpdateVertexArray, secondUpdateVertexArray] as const;
+    const renderVertexArrays = [
+      firstRenderVertexArray,
+      secondRenderVertexArray,
+    ] as const;
+    const updateVertexArrays = [
+      firstUpdateVertexArray,
+      secondUpdateVertexArray,
+    ] as const;
     let readBufferIndex: 0 | 1 = 0;
 
     const bindFloatAttribute = (
@@ -712,7 +829,7 @@ export const AuthVisual = () => {
       size: number,
       stride: number,
       offset: number,
-      divisor: number,
+      divisor: number
     ) => {
       gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
       gl.enableVertexAttribArray(attribute);
@@ -722,15 +839,29 @@ export const AuthVisual = () => {
 
     const configureVertexArrays = (index: 0 | 1) => {
       gl.bindVertexArray(renderVertexArrays[index]);
-      bindFloatAttribute(renderAttributes.position, stateBuffers[index].position, 2, 0, 0, 1);
-      bindFloatAttribute(renderAttributes.energy, stateBuffers[index].energy, 1, 0, 0, 1);
+      bindFloatAttribute(
+        renderAttributes.position,
+        stateBuffers[index].position,
+        2,
+        0,
+        0,
+        1
+      );
+      bindFloatAttribute(
+        renderAttributes.energy,
+        stateBuffers[index].energy,
+        1,
+        0,
+        0,
+        1
+      );
       bindFloatAttribute(
         renderAttributes.radius,
         staticBuffer,
         1,
         particleStaticStrideBytes,
         2 * Float32Array.BYTES_PER_ELEMENT,
-        1,
+        1
       );
       bindFloatAttribute(
         renderAttributes.opacity,
@@ -738,7 +869,7 @@ export const AuthVisual = () => {
         1,
         particleStaticStrideBytes,
         3 * Float32Array.BYTES_PER_ELEMENT,
-        1,
+        1
       );
       bindFloatAttribute(
         renderAttributes.vibrance,
@@ -746,23 +877,58 @@ export const AuthVisual = () => {
         1,
         particleStaticStrideBytes,
         4 * Float32Array.BYTES_PER_ELEMENT,
-        1,
+        1
       );
 
       gl.bindVertexArray(updateVertexArrays[index]);
-      bindFloatAttribute(updateAttributes.base, staticBuffer, 2, particleStaticStrideBytes, 0, 0);
+      bindFloatAttribute(
+        updateAttributes.base,
+        staticBuffer,
+        2,
+        particleStaticStrideBytes,
+        0,
+        0
+      );
       bindFloatAttribute(
         updateAttributes.vibrance,
         staticBuffer,
         1,
         particleStaticStrideBytes,
         4 * Float32Array.BYTES_PER_ELEMENT,
-        0,
+        0
       );
-      bindFloatAttribute(updateAttributes.position, stateBuffers[index].position, 2, 0, 0, 0);
-      bindFloatAttribute(updateAttributes.velocity, stateBuffers[index].velocity, 2, 0, 0, 0);
-      bindFloatAttribute(updateAttributes.energy, stateBuffers[index].energy, 1, 0, 0, 0);
-      bindFloatAttribute(updateAttributes.active, stateBuffers[index].active, 1, 0, 0, 0);
+      bindFloatAttribute(
+        updateAttributes.position,
+        stateBuffers[index].position,
+        2,
+        0,
+        0,
+        0
+      );
+      bindFloatAttribute(
+        updateAttributes.velocity,
+        stateBuffers[index].velocity,
+        2,
+        0,
+        0,
+        0
+      );
+      bindFloatAttribute(
+        updateAttributes.energy,
+        stateBuffers[index].energy,
+        1,
+        0,
+        0,
+        0
+      );
+      bindFloatAttribute(
+        updateAttributes.active,
+        stateBuffers[index].active,
+        1,
+        0,
+        0,
+        0
+      );
     };
 
     configureVertexArrays(0);
@@ -770,7 +936,12 @@ export const AuthVisual = () => {
 
     gl.bindVertexArray(null);
     gl.enable(gl.BLEND);
-    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.blendFuncSeparate(
+      gl.SRC_ALPHA,
+      gl.ONE_MINUS_SRC_ALPHA,
+      gl.ONE,
+      gl.ONE_MINUS_SRC_ALPHA
+    );
 
     let animationFrame = 0;
     let bufferWidth = 0;
@@ -804,11 +975,13 @@ export const AuthVisual = () => {
     const impulseRadii = new Float32Array(maxImpulseCount);
     const impulseRadiiSquared = new Float32Array(maxImpulseCount);
     const impulseForces = new Float32Array(maxImpulseCount);
-    const canAnimateParticles = !globalThis.window.matchMedia("(prefers-reduced-motion: reduce)")
-      .matches;
+    const canAnimateParticles = !globalThis.window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
     const canTrackCursor =
       canAnimateParticles &&
-      globalThis.window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+      globalThis.window.matchMedia("(hover: hover) and (pointer: fine)")
+        .matches;
     let colors = readColors(canvas);
 
     const refreshColors = () => {
@@ -818,9 +991,12 @@ export const AuthVisual = () => {
     const toCanvasPoint = (clientPoint: Point, requireInside: boolean) => {
       const xCss = clientPoint.x - canvasRect.left;
       const yCss = clientPoint.y - canvasRect.top;
-      const isInside = xCss >= 0 && xCss <= cssWidth && yCss >= 0 && yCss <= cssHeight;
+      const isInside =
+        xCss >= 0 && xCss <= cssWidth && yCss >= 0 && yCss <= cssHeight;
 
-      if (requireInside && !isInside) return null;
+      if (requireInside && !isInside) {
+        return null;
+      }
 
       return {
         x: (xCss * bufferWidth) / cssWidth,
@@ -832,7 +1008,7 @@ export const AuthVisual = () => {
       positions: Float32Array,
       velocities: Float32Array,
       energies: Float32Array,
-      activeFlags: Float32Array,
+      activeFlags: Float32Array
     ) => {
       for (const bufferSet of stateBuffers) {
         gl.bindBuffer(gl.ARRAY_BUFFER, bufferSet.position);
@@ -882,13 +1058,16 @@ export const AuthVisual = () => {
       const dpr = Math.min(
         globalThis.window.devicePixelRatio || 1,
         maxDevicePixelRatio,
-        Math.max(0.55, Math.sqrt(maxCanvasPixelCount / (nextCssWidth * nextCssHeight))),
+        Math.max(
+          0.55,
+          Math.sqrt(maxCanvasPixelCount / (nextCssWidth * nextCssHeight))
+        )
       );
       const pixelWidth = Math.max(1, Math.round(nextCssWidth * dpr));
       const pixelHeight = Math.max(1, Math.round(nextCssHeight * dpr));
       const nextParticleGap = Math.max(
         dotGap * dpr,
-        Math.sqrt((pixelWidth * pixelHeight) / targetParticleGridCells),
+        Math.sqrt((pixelWidth * pixelHeight) / targetParticleGridCells)
       );
 
       cssWidth = nextCssWidth;
@@ -898,8 +1077,9 @@ export const AuthVisual = () => {
         bufferWidth === pixelWidth &&
         bufferHeight === pixelHeight &&
         Math.abs(particleGap - nextParticleGap) < 0.01
-      )
+      ) {
         return;
+      }
 
       bufferWidth = pixelWidth;
       bufferHeight = pixelHeight;
@@ -922,7 +1102,8 @@ export const AuthVisual = () => {
 
     const syncCursor = (elapsedMs: number) => {
       const targetStrength = isPointerInside && cursorTarget ? 1 : 0;
-      const strengthFollow = 1 - Math.exp((-elapsedMs / 1000) * (targetStrength ? 12 : 5.5));
+      const strengthFollow =
+        1 - Math.exp((-elapsedMs / 1000) * (targetStrength ? 12 : 5.5));
 
       cursorStrength = mix(cursorStrength, targetStrength, strengthFollow);
 
@@ -931,7 +1112,10 @@ export const AuthVisual = () => {
 
         cursorVelocityX *= decay;
         cursorVelocityY *= decay;
-        return cursorStrength > 0.002 || Math.hypot(cursorVelocityX, cursorVelocityY) > 0.02;
+        return (
+          cursorStrength > 0.002 ||
+          Math.hypot(cursorVelocityX, cursorVelocityY) > 0.02
+        );
       }
 
       if (!cursorPosition) {
@@ -951,19 +1135,22 @@ export const AuthVisual = () => {
       cursorVelocityX = mix(
         cursorVelocityX,
         (nextX - previousX) / Math.max(elapsedMs, 1),
-        velocityFollow,
+        velocityFollow
       );
       cursorVelocityY = mix(
         cursorVelocityY,
         (nextY - previousY) / Math.max(elapsedMs, 1),
-        velocityFollow,
+        velocityFollow
       );
       cursorPosition = {
         x: nextX,
         y: nextY,
       };
 
-      return cursorStrength > 0.002 || Math.hypot(cursorVelocityX, cursorVelocityY) > 0.02;
+      return (
+        cursorStrength > 0.002 ||
+        Math.hypot(cursorVelocityX, cursorVelocityY) > 0.02
+      );
     };
 
     const syncWaveUniformData = (activeWaves: WaveFrame[]) => {
@@ -978,8 +1165,10 @@ export const AuthVisual = () => {
         waveWidths[index] = wave.width;
         waveInnerRadiiSquared[index] = wave.innerRadiusSquared;
         waveOuterRadiiSquared[index] = wave.outerRadiusSquared;
-        waveActivationInnerRadiiSquared[index] = wave.activationInnerRadiusSquared;
-        waveActivationOuterRadiiSquared[index] = wave.activationOuterRadiusSquared;
+        waveActivationInnerRadiiSquared[index] =
+          wave.activationInnerRadiusSquared;
+        waveActivationOuterRadiiSquared[index] =
+          wave.activationOuterRadiusSquared;
       }
     };
 
@@ -999,7 +1188,7 @@ export const AuthVisual = () => {
       elapsedMs: number,
       activeWaves: WaveFrame[],
       impulses: Impulse[],
-      cursorActive: boolean,
+      cursorActive: boolean
     ) => {
       const step = elapsedMs / 16.667;
       const minSide = Math.min(bufferWidth, bufferHeight);
@@ -1021,20 +1210,24 @@ export const AuthVisual = () => {
       gl.uniform1f(updateUniforms.damping, damping);
       gl.uniform1f(updateUniforms.diagonal, diagonal);
       gl.uniform1f(updateUniforms.cursorActive, cursorActive ? 1 : 0);
-      gl.uniform2f(updateUniforms.cursor, cursorPosition?.x ?? 0, cursorPosition?.y ?? 0);
+      gl.uniform2f(
+        updateUniforms.cursor,
+        cursorPosition?.x ?? 0,
+        cursorPosition?.y ?? 0
+      );
       gl.uniform2f(
         updateUniforms.cursorVelocity,
         cursorVelocityX * 16.667,
-        cursorVelocityY * 16.667,
+        cursorVelocityY * 16.667
       );
       gl.uniform1f(updateUniforms.cursorRadius, cursorRadius);
       gl.uniform1f(
         updateUniforms.cursorRadiusSquared,
-        cursorActivationRadius * cursorActivationRadius,
+        cursorActivationRadius * cursorActivationRadius
       );
       gl.uniform1f(
         updateUniforms.cursorActivationRadiusSquared,
-        cursorActivationRadius * cursorActivationRadius,
+        cursorActivationRadius * cursorActivationRadius
       );
       gl.uniform1f(updateUniforms.cursorPush, cursorPush);
       gl.uniform1f(updateUniforms.cursorSweep, cursorSweep);
@@ -1045,15 +1238,21 @@ export const AuthVisual = () => {
       gl.uniform1fv(updateUniforms.waveEnvelope, waveEnvelopes);
       gl.uniform1fv(updateUniforms.waveFrontRadius, waveFrontRadii);
       gl.uniform1fv(updateUniforms.waveWidth, waveWidths);
-      gl.uniform1fv(updateUniforms.waveInnerRadiusSquared, waveInnerRadiiSquared);
-      gl.uniform1fv(updateUniforms.waveOuterRadiusSquared, waveOuterRadiiSquared);
+      gl.uniform1fv(
+        updateUniforms.waveInnerRadiusSquared,
+        waveInnerRadiiSquared
+      );
+      gl.uniform1fv(
+        updateUniforms.waveOuterRadiusSquared,
+        waveOuterRadiiSquared
+      );
       gl.uniform1fv(
         updateUniforms.waveActivationInnerRadiusSquared,
-        waveActivationInnerRadiiSquared,
+        waveActivationInnerRadiiSquared
       );
       gl.uniform1fv(
         updateUniforms.waveActivationOuterRadiusSquared,
-        waveActivationOuterRadiiSquared,
+        waveActivationOuterRadiiSquared
       );
       gl.uniform1i(updateUniforms.impulseCount, impulses.length);
       gl.uniform2fv(updateUniforms.impulseCenter, impulseCenters);
@@ -1063,10 +1262,26 @@ export const AuthVisual = () => {
       gl.enable(gl.RASTERIZER_DISCARD);
       gl.bindBuffer(gl.ARRAY_BUFFER, null);
       gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, transformFeedback);
-      gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, stateBuffers[writeBufferIndex].position);
-      gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 1, stateBuffers[writeBufferIndex].velocity);
-      gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 2, stateBuffers[writeBufferIndex].energy);
-      gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 3, stateBuffers[writeBufferIndex].active);
+      gl.bindBufferBase(
+        gl.TRANSFORM_FEEDBACK_BUFFER,
+        0,
+        stateBuffers[writeBufferIndex].position
+      );
+      gl.bindBufferBase(
+        gl.TRANSFORM_FEEDBACK_BUFFER,
+        1,
+        stateBuffers[writeBufferIndex].velocity
+      );
+      gl.bindBufferBase(
+        gl.TRANSFORM_FEEDBACK_BUFFER,
+        2,
+        stateBuffers[writeBufferIndex].energy
+      );
+      gl.bindBufferBase(
+        gl.TRANSFORM_FEEDBACK_BUFFER,
+        3,
+        stateBuffers[writeBufferIndex].active
+      );
       gl.beginTransformFeedback(gl.POINTS);
       gl.drawArrays(gl.POINTS, 0, particleCount);
       gl.endTransformFeedback();
@@ -1081,9 +1296,13 @@ export const AuthVisual = () => {
     };
 
     const simulateParticles = (now: number) => {
-      if (!canAnimateParticles) return false;
+      if (!canAnimateParticles) {
+        return false;
+      }
 
-      const elapsedMs = lastRenderTime ? clamp(now - lastRenderTime, 8, 34) : 16.667;
+      const elapsedMs = lastRenderTime
+        ? clamp(now - lastRenderTime, 8, 34)
+        : 16.667;
       const cursorMoving = syncCursor(elapsedMs);
       const cursorActive = !!cursorPosition && cursorStrength > 0.002;
       const settlingDuration = 2200;
@@ -1098,7 +1317,10 @@ export const AuthVisual = () => {
         const outerRadius = frontRadius + wave.width * 3.8;
         const innerRadius = Math.max(0, frontRadius - wave.width * 6.6);
         const activationOuterRadius = frontRadius + wave.width * 2.7;
-        const activationInnerRadius = Math.max(0, wave.activatedRadius - wave.width * 5.6);
+        const activationInnerRadius = Math.max(
+          0,
+          wave.activatedRadius - wave.width * 5.6
+        );
 
         if (activationOuterRadius > wave.activatedRadius) {
           wave.activatedRadius = activationOuterRadius;
@@ -1106,8 +1328,10 @@ export const AuthVisual = () => {
 
         activeWaves.push({
           ...wave,
-          activationInnerRadiusSquared: activationInnerRadius * activationInnerRadius,
-          activationOuterRadiusSquared: activationOuterRadius * activationOuterRadius,
+          activationInnerRadiusSquared:
+            activationInnerRadius * activationInnerRadius,
+          activationOuterRadiusSquared:
+            activationOuterRadius * activationOuterRadius,
           envelope: (1 - age / wave.life) ** 1.12,
           frontRadius,
           innerRadiusSquared: innerRadius * innerRadius,
@@ -1119,7 +1343,12 @@ export const AuthVisual = () => {
         settleUntil = Math.max(settleUntil, now + settlingDuration);
       }
 
-      if (particlesSettled && !cursorActive && activeWaves.length === 0 && impulses.length === 0) {
+      if (
+        particlesSettled &&
+        !cursorActive &&
+        activeWaves.length === 0 &&
+        impulses.length === 0
+      ) {
         return false;
       }
 
@@ -1136,7 +1365,8 @@ export const AuthVisual = () => {
       runGpuSimulation(elapsedMs, activeWaves, impulses, cursorActive);
       pendingImpulses = [];
 
-      const shouldContinue = cursorMoving || waves.length > 0 || now < settleUntil;
+      const shouldContinue =
+        cursorMoving || waves.length > 0 || now < settleUntil;
 
       particlesSettled = !shouldContinue;
       return shouldContinue;
@@ -1146,7 +1376,7 @@ export const AuthVisual = () => {
       const now = globalThis.performance.now();
       const isActive = simulateParticles(now);
       const color = colors.primary;
-      const background = colors.background;
+      const { background } = colors;
 
       gl.clearColor(background[0], background[1], background[2], 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
@@ -1171,18 +1401,27 @@ export const AuthVisual = () => {
     };
 
     const queueRender = () => {
-      if (animationFrame) return;
+      if (animationFrame) {
+        return;
+      }
 
       animationFrame = globalThis.requestAnimationFrame(animate);
     };
 
     const handlePointerMove = (event: PointerEvent) => {
-      if (!canTrackCursor || (event.pointerType !== "mouse" && event.pointerType !== "pen")) return;
+      if (
+        !canTrackCursor ||
+        (event.pointerType !== "mouse" && event.pointerType !== "pen")
+      ) {
+        return;
+      }
 
       let shouldRender = false;
       const pointerEvents = event.getCoalescedEvents();
 
-      for (const pointerEvent of pointerEvents.length ? pointerEvents : [event]) {
+      for (const pointerEvent of pointerEvents.length
+        ? pointerEvents
+        : [event]) {
         const clientPoint = {
           x: pointerEvent.clientX,
           y: pointerEvent.clientY,
@@ -1196,31 +1435,41 @@ export const AuthVisual = () => {
         } else {
           cursorTarget = toCanvasPoint(clientPoint, false);
 
-          if (isPointerInside || cursorStrength > 0.01) shouldRender = true;
+          if (isPointerInside || cursorStrength > 0.01) {
+            shouldRender = true;
+          }
 
           isPointerInside = false;
         }
       }
 
-      if (shouldRender) queueRender();
+      if (shouldRender) {
+        queueRender();
+      }
     };
 
     const handlePointerRawUpdate = (event: Event) => {
-      if (event instanceof PointerEvent) handlePointerMove(event);
+      if (event instanceof PointerEvent) {
+        handlePointerMove(event);
+      }
     };
 
     const handlePointerDown = (event: PointerEvent) => {
-      if (!canAnimateParticles || !event.isPrimary) return;
+      if (!canAnimateParticles || !event.isPrimary) {
+        return;
+      }
 
       const canvasPoint = toCanvasPoint(
         {
           x: event.clientX,
           y: event.clientY,
         },
-        true,
+        true
       );
 
-      if (!canvasPoint) return;
+      if (!canvasPoint) {
+        return;
+      }
 
       const now = globalThis.performance.now();
       const unit = Math.min(bufferWidth, bufferHeight) / 10;
@@ -1231,9 +1480,14 @@ export const AuthVisual = () => {
       const waveForce = clamp(unit * 0.037, 2.6, 7);
       const impulseRadius = clamp(width * 1.28, 62, 190);
       const impulseForce = clamp(force * 1.24, 4.4, 13.5);
-      const previousWaves = waves.filter((wave) => now - wave.startedAt <= wave.life);
+      const previousWaves = waves.filter(
+        (wave) => now - wave.startedAt <= wave.life
+      );
 
-      if (canTrackCursor && (event.pointerType === "mouse" || event.pointerType === "pen")) {
+      if (
+        canTrackCursor &&
+        (event.pointerType === "mouse" || event.pointerType === "pen")
+      ) {
         cursorTarget = canvasPoint;
         isPointerInside = true;
       }
@@ -1291,18 +1545,28 @@ export const AuthVisual = () => {
     });
 
     if (canTrackCursor) {
-      globalThis.window.addEventListener("pointermove", handlePointerMove, { passive: true });
-      canvas.addEventListener("pointerrawupdate", handlePointerRawUpdate, { passive: true });
-      canvas.addEventListener("pointerleave", handlePointerLeave, { passive: true });
+      globalThis.window.addEventListener("pointermove", handlePointerMove, {
+        passive: true,
+      });
+      canvas.addEventListener("pointerrawupdate", handlePointerRawUpdate, {
+        passive: true,
+      });
+      canvas.addEventListener("pointerleave", handlePointerLeave, {
+        passive: true,
+      });
       globalThis.window.addEventListener("blur", handleWindowBlur);
     }
 
     if (canAnimateParticles) {
-      canvas.addEventListener("pointerdown", handlePointerDown, { passive: true });
+      canvas.addEventListener("pointerdown", handlePointerDown, {
+        passive: true,
+      });
     }
 
     return () => {
-      if (animationFrame) globalThis.cancelAnimationFrame(animationFrame);
+      if (animationFrame) {
+        globalThis.cancelAnimationFrame(animationFrame);
+      }
       resizeObserver.disconnect();
       mutationObserver.disconnect();
 
@@ -1341,6 +1605,11 @@ export const AuthVisual = () => {
   }, []);
 
   return (
-    <canvas aria-hidden="true" className="block size-full bg-bg" ref={canvasRef} tabIndex={-1} />
+    <canvas
+      aria-hidden="true"
+      className="block size-full bg-bg"
+      ref={canvasRef}
+      tabIndex={-1}
+    />
   );
 };

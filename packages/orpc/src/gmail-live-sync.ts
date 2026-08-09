@@ -4,22 +4,28 @@ import { db } from "@quieter/database/client";
 import { mailbox } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { and, eq } from "drizzle-orm";
+
 import { createGmailLiveSyncToken } from "./gmail-live-sync-token";
+import { hasText } from "./text";
 
 const getLiveSyncConfiguration = () => {
   const secret = serverEnv.GMAIL_LIVE_SYNC_TOKEN_SECRET;
   const url = serverEnv.GMAIL_LIVE_SYNC_URL;
+  const hasSecret = hasText(secret);
+  const hasUrl = hasText(url);
 
-  if (!secret && !url) {
+  if (!hasSecret && !hasUrl) {
     return null;
   }
-  if (!secret || !url) {
+  if (!hasSecret || !hasUrl) {
     throw new Error(
-      "GMAIL_LIVE_SYNC_TOKEN_SECRET and GMAIL_LIVE_SYNC_URL must be configured together.",
+      "GMAIL_LIVE_SYNC_TOKEN_SECRET and GMAIL_LIVE_SYNC_URL must be configured together."
     );
   }
   if (secret.length < 32) {
-    throw new Error("GMAIL_LIVE_SYNC_TOKEN_SECRET must contain at least 32 characters.");
+    throw new Error(
+      "GMAIL_LIVE_SYNC_TOKEN_SECRET must contain at least 32 characters."
+    );
   }
 
   const parsedUrl = new URL(url);
@@ -30,7 +36,10 @@ const getLiveSyncConfiguration = () => {
   return { secret, url: parsedUrl };
 };
 
-export const getGmailLiveSyncAccess = async (input: { mailboxId: string; userId: string }) => {
+export const getGmailLiveSyncAccess = async (input: {
+  mailboxId: string;
+  userId: string;
+}) => {
   const [selectedMailbox] = await db
     .select({
       emailAddress: mailbox.emailAddress,
@@ -43,11 +52,11 @@ export const getGmailLiveSyncAccess = async (input: { mailboxId: string; userId:
         eq(mailbox.id, input.mailboxId),
         eq(mailbox.ownerUserId, input.userId),
         eq(mailbox.provider, "gmail"),
-        eq(mailbox.status, "connected"),
-      ),
+        eq(mailbox.status, "connected")
+      )
     )
     .limit(1);
-  if (!selectedMailbox) {
+  if (selectedMailbox === undefined) {
     throw new ORPCError("NOT_FOUND", { message: "Gmail mailbox not found." });
   }
 
@@ -68,13 +77,13 @@ export const createGmailLiveSyncConnection = async (input: {
 }) => {
   const access = await getGmailLiveSyncAccess(input);
   const configuration = getLiveSyncConfiguration();
-  if (!access.hasAccess || !configuration) {
+  if (!access.hasAccess || configuration === null) {
     return { url: null };
   }
 
   const { token } = createGmailLiveSyncToken(
     { ...input, emailAddress: access.emailAddress },
-    configuration.secret,
+    configuration.secret
   );
   configuration.url.searchParams.set("token", token);
 

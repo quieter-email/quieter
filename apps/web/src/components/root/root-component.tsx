@@ -1,5 +1,7 @@
 import { Outlet } from "@tanstack/react-router";
-import { Providers } from "~/components/providers";
+
+import { Providers } from "#/components/providers";
+
 import { RootDocument } from "./root-document";
 
 export const RootComponent = () => (

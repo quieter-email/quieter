@@ -5,8 +5,12 @@ export const resolvePolarServer = (input: {
   nodeEnvironment: "development" | "production" | "test";
   polarSandbox?: boolean;
 }) => {
-  if (input.deploymentEnvironment === "production") return "production";
-  if (input.polarSandbox !== undefined) return input.polarSandbox ? "sandbox" : "production";
+  if (input.deploymentEnvironment === "production") {
+    return "production";
+  }
+  if (input.polarSandbox !== undefined) {
+    return input.polarSandbox ? "sandbox" : "production";
+  }
   return input.nodeEnvironment === "production" ? "production" : "sandbox";
 };
 
@@ -19,6 +23,6 @@ export const getPolarServer = () =>
 
 /** Polar API request scope; omit when the access token is already organization-scoped. */
 export const getPolarApiOrganizationId = (): string | undefined =>
-  serverEnv.POLAR_ACCESS_TOKEN?.startsWith("polar_oat_")
+  serverEnv.POLAR_ACCESS_TOKEN?.startsWith("polar_oat_") === true
     ? undefined
     : serverEnv.POLAR_ORGANIZATION_ID;

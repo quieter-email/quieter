@@ -1,11 +1,7 @@
-import {
-  EventType,
-  memoryStream,
-  replayRunStream,
-  type StreamChunk,
-  type StreamDurability,
-} from "@tanstack/ai";
-import { describe, expect, test } from "vite-plus/test";
+import { EventType, memoryStream, replayRunStream } from "@tanstack/ai";
+import type { StreamChunk } from "@tanstack/ai";
+import { describe, expect, test, vi } from "vite-plus/test";
+
 import {
   CHAT_AGENT_MAX_ITERATIONS,
   CHAT_AGENT_MAX_TOKENS,
@@ -20,26 +16,35 @@ const collect = async (stream: AsyncIterable<StreamChunk>) => {
   return chunks;
 };
 
+const startedChunk = (runId: string): StreamChunk => ({
+  runId,
+  threadId: "thread-1",
+  timestamp: Date.now(),
+  type: EventType.RUN_STARTED,
+});
+
+const finishedChunk = (runId: string): StreamChunk => ({
+  runId,
+  threadId: "thread-1",
+  timestamp: Date.now(),
+  type: EventType.RUN_FINISHED,
+});
+
 describe("chat generation budget", () => {
   test("keeps each run within the configured hard bounds", () => {
     expect(CHAT_AGENT_MAX_ITERATIONS).toBeLessThanOrEqual(12);
-    expect(CHAT_AGENT_MAX_TOKENS).toBeLessThanOrEqual(4_096);
+    expect(CHAT_AGENT_MAX_TOKENS).toBeLessThanOrEqual(4096);
   });
 });
 
-describe("streamChunksThroughDurability", () => {
+describe(streamChunksThroughDurability, () => {
   test("closes with a cancelled terminal when the producer aborts without one", async () => {
     const durability = memoryStream({ runId: "run-cancel-terminal" });
     const abortController = new AbortController();
 
     const producer = (async () => {
-      const stream = (async function* () {
-        yield {
-          type: EventType.RUN_STARTED,
-          timestamp: Date.now(),
-          runId: "run-cancel-terminal",
-          threadId: "thread-1",
-        } as StreamChunk;
+      const stream = (async function* stream() {
+        yield startedChunk("run-cancel-terminal");
         abortController.abort();
       })();
 
@@ -48,20 +53,24 @@ describe("streamChunksThroughDurability", () => {
           abortSignal: abortController.signal,
           durability,
           stream,
-        }),
+        })
       );
     })();
 
     await producer;
 
     const replayed = await collect(replayRunStream(durability));
-    expect(replayed.some((chunk) => chunk.type === EventType.RUN_STARTED)).toBe(true);
+    expect(
+      replayed.some((chunk) => chunk.type === EventType.RUN_STARTED)
+    ).toBeTruthy();
     expect(
       replayed.some(
         (chunk) =>
-          chunk.type === EventType.RUN_ERROR && "code" in chunk && chunk.code === "cancelled",
-      ),
-    ).toBe(true);
+          chunk.type === EventType.RUN_ERROR &&
+          "code" in chunk &&
+          chunk.code === "cancelled"
+      )
+    ).toBeTruthy();
   });
 
   test("does not invent a second terminal when the producer already finished", async () => {
@@ -70,58 +79,40 @@ describe("streamChunksThroughDurability", () => {
     await collect(
       streamChunksThroughDurability({
         durability,
-        stream: (async function* () {
-          yield {
-            type: EventType.RUN_STARTED,
-            timestamp: Date.now(),
-            runId: "run-finished-terminal",
-            threadId: "thread-1",
-          } as StreamChunk;
-          yield {
-            type: EventType.RUN_FINISHED,
-            timestamp: Date.now(),
-            runId: "run-finished-terminal",
-            threadId: "thread-1",
-          } as StreamChunk;
+        stream: (async function* stream() {
+          yield startedChunk("run-finished-terminal");
+          yield finishedChunk("run-finished-terminal");
         })(),
-      }),
+      })
     );
 
     const replayed = await collect(replayRunStream(durability));
-    expect(replayed.filter((chunk) => chunk.type === EventType.RUN_FINISHED)).toHaveLength(1);
-    expect(replayed.some((chunk) => chunk.type === EventType.RUN_ERROR)).toBe(false);
+    expect(
+      replayed.filter((chunk) => chunk.type === EventType.RUN_FINISHED)
+    ).toHaveLength(1);
+    expect(
+      replayed.some((chunk) => chunk.type === EventType.RUN_ERROR)
+    ).toBeFalsy();
   });
 
   test("does not close the log when durability.append rejects", async () => {
-    let closed = false;
-    const durability = {
-      resumeFrom: () => null,
-      append: async () => {
-        throw new Error("append failed");
-      },
-      close: async () => {
-        closed = true;
-      },
-      snapshot: async () => [],
-      read: async function* () {},
-    } satisfies StreamDurability;
+    const durability = memoryStream({ runId: "run-append-fail" });
+    vi.spyOn(durability, "append").mockRejectedValue(
+      new Error("append failed")
+    );
+    const close = vi.spyOn(durability, "close");
 
     await expect(
       collect(
         streamChunksThroughDurability({
           durability,
-          stream: (async function* () {
-            yield {
-              type: EventType.RUN_STARTED,
-              timestamp: Date.now(),
-              runId: "run-append-fail",
-              threadId: "thread-1",
-            } as StreamChunk;
+          stream: (async function* stream() {
+            yield startedChunk("run-append-fail");
           })(),
-        }),
-      ),
+        })
+      )
     ).rejects.toThrow("append failed");
 
-    expect(closed).toBe(false);
+    expect(close).not.toHaveBeenCalled();
   });
 });

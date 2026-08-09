@@ -3,9 +3,13 @@
 import { LinkButton } from "@quieter/ui/button";
 import { domAnimation, LazyMotion } from "motion/react";
 import { useEffect } from "react";
+
 import { HomeSections } from "./home-sections";
 import { HomeSmoothScroll } from "./home-smooth-scroll";
-import { HomeAtmosphericBackground, preloadHomeWebglBackgrounds } from "./lazy-webgl-backgrounds";
+import {
+  HomeAtmosphericBackground,
+  preloadHomeWebglBackgrounds,
+} from "./lazy-webgl-backgrounds";
 import { Entrance } from "./reveal";
 import { WaitlistForm } from "./waitlist-form";
 
@@ -31,7 +35,8 @@ const Hero = () => (
         className="mt-6 max-w-160 text-center text-[15px] leading-[1.7] text-balance text-muted-fg md:text-base"
         delay={0.18}
       >
-        Your Gmail, your team&rsquo;s mailboxes and the mail your product sends, in one place.
+        Your Gmail, your team&rsquo;s mailboxes and the mail your product sends,
+        in one place.
       </Entrance>
 
       <Entrance

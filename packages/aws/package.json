@@ -28,6 +28,7 @@
     "@quieter/billing": "workspace:*",
     "@quieter/database": "workspace:*",
     "@quieter/env": "workspace:*",
+    "@quieter/observability": "workspace:*",
     "@quieter/orpc": "workspace:*",
     "@sentry/node": "catalog:",
     "drizzle-orm": "catalog:",

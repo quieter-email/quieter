@@ -1,16 +1,17 @@
 import { readdir, readFile, stat } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import path from "node:path";
 
-const serverDirectory = resolve(import.meta.dirname, "../dist/server");
-const assetDirectory = join(serverDirectory, "assets");
+const serverDirectory = path.resolve(import.meta.dirname, "../dist/server");
+const assetDirectory = path.join(serverDirectory, "assets");
 const serverFiles = await readdir(serverDirectory);
+const assetFiles = await readdir(assetDirectory);
 const cloudflareBundle = serverFiles.includes("wrangler.json");
 const maximumChunkBytes = cloudflareBundle ? 1_800_000 : 800_000;
-const boundaries: Array<{
+const boundaries: {
   forbiddenMarkers?: string[];
   marker: string;
   maximumStaticGraphBytes: number;
-}> = [
+}[] = [
   {
     marker: "src/features/home/components/home-page.tsx",
     maximumStaticGraphBytes: cloudflareBundle ? 1_200_000 : 1_000_000,
@@ -39,65 +40,108 @@ const boundaries: Array<{
 ];
 
 const files = [
-  ...serverFiles.filter((file) => file.endsWith(".js")).map((file) => join(serverDirectory, file)),
-  ...(await readdir(assetDirectory))
+  ...serverFiles
     .filter((file) => file.endsWith(".js"))
-    .map((file) => join(assetDirectory, file)),
+    .map((file) => path.join(serverDirectory, file)),
+  ...assetFiles
+    .filter((file) => file.endsWith(".js"))
+    .map((file) => path.join(assetDirectory, file)),
 ];
 const sources = new Map<string, string>(
-  await Promise.all(files.map(async (file) => [file, await readFile(file, "utf8")] as const)),
+  await Promise.all(
+    files.map(async (file) => [file, await readFile(file, "utf-8")] as const)
+  )
 );
 
-for (const { forbiddenMarkers = [], marker, maximumStaticGraphBytes } of boundaries) {
+for (const {
+  forbiddenMarkers = [],
+  marker,
+  maximumStaticGraphBytes,
+} of boundaries) {
   const entry = [...sources].find(([, source]) => source.includes(marker))?.[0];
-  if (!entry) throw new Error(`Could not find the Worker memory boundary entry for ${marker}.`);
+  if (entry === undefined) {
+    throw new Error(
+      `Could not find the Worker memory boundary entry for ${marker}.`
+    );
+  }
 
   const reachable = new Set<string>();
   const visit = (file: string) => {
-    if (reachable.has(file)) return;
+    if (reachable.has(file)) {
+      return;
+    }
     reachable.add(file);
 
     const source = sources.get(file);
-    if (!source) return;
+    if (source === undefined) {
+      return;
+    }
 
-    for (const match of source.matchAll(/^import\s*(?:.+?\sfrom\s*)?["'](.+?)["'];/gm)) {
-      const specifier = match[1];
-      if (!specifier?.startsWith(".")) continue;
+    for (const match of source.matchAll(
+      /^import\s*(?:.+?\sfrom\s*)?["'](?<specifier>.+?)["'];/gmu
+    )) {
+      const specifier = match.groups?.specifier;
+      if (
+        specifier === undefined ||
+        specifier === "" ||
+        !specifier.startsWith(".")
+      ) {
+        continue;
+      }
 
-      const dependency = resolve(dirname(file), specifier);
-      if (sources.has(dependency)) visit(dependency);
+      const dependency = path.resolve(path.dirname(file), specifier);
+      if (sources.has(dependency)) {
+        visit(dependency);
+      }
     }
   };
   visit(entry);
 
   for (const forbiddenMarker of forbiddenMarkers) {
-    const dependency = [...reachable].find((file) => sources.get(file)?.includes(forbiddenMarker));
-    if (dependency) {
+    const dependency = [...reachable].find(
+      (file) => sources.get(file)?.includes(forbiddenMarker) === true
+    );
+    if (dependency !== undefined) {
       throw new Error(
-        `${marker} eagerly loads forbidden module ${forbiddenMarker} through ${dependency}.`,
+        `${marker} eagerly loads forbidden module ${forbiddenMarker} through ${dependency}.`
       );
     }
   }
 
   const sizes = await Promise.all(
-    [...reachable].map(async (file) => ({ bytes: (await stat(file)).size, file })),
+    [...reachable].map(async (file) => {
+      const fileStats = await stat(file);
+      return { bytes: fileStats.size, file };
+    })
   );
-  const largest = sizes.reduce((current, candidate) =>
-    candidate.bytes > current.bytes ? candidate : current,
-  );
-  const totalBytes = sizes.reduce((total, file) => total + file.bytes, 0);
+  const [firstSize] = sizes;
+  let largest = firstSize;
+  let totalBytes = 0;
+  for (const size of sizes) {
+    totalBytes += size.bytes;
+    if (largest === undefined || size.bytes > largest.bytes) {
+      largest = size;
+    }
+  }
 
-  if (largest.bytes > maximumChunkBytes || totalBytes > maximumStaticGraphBytes) {
+  if (largest === undefined) {
+    throw new Error("Could not measure the Worker bundle.");
+  }
+
+  if (
+    largest.bytes > maximumChunkBytes ||
+    totalBytes > maximumStaticGraphBytes
+  ) {
     throw new Error(
       `${marker} eagerly loads ${(totalBytes / 1_000_000).toFixed(2)} MB; largest chunk is ${(
         largest.bytes / 1_000_000
-      ).toFixed(2)} MB (${largest.file}).`,
+      ).toFixed(2)} MB (${largest.file}).`
     );
   }
 
-  console.log(
+  process.stdout.write(
     `${marker}: ${(totalBytes / 1_000_000).toFixed(2)} MB static graph, ${(
       largest.bytes / 1_000_000
-    ).toFixed(2)} MB largest chunk`,
+    ).toFixed(2)} MB largest chunk\n`
   );
 }

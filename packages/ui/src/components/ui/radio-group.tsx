@@ -1,8 +1,9 @@
 "use client";
 
-import type { ComponentPropsWithoutRef } from "react";
 import { Radio as RadioPrimitive } from "@base-ui/react/radio";
 import { RadioGroup as RadioGroupPrimitive } from "@base-ui/react/radio-group";
+import type { ComponentPropsWithoutRef } from "react";
+
 import { cn } from "../../lib/cn";
 import { DotIcon } from "./icons";
 
@@ -20,7 +21,7 @@ export const Radio = ({
   <RadioPrimitive.Root
     className={cn(
       "flex size-4 shrink-0 items-center justify-center rounded-full border border-border bg-bg-elevated text-primary shadow-xs transition-colors duration-150 ease-out focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none data-checked:border-primary data-checked:bg-bg-elevated data-disabled:cursor-not-allowed data-disabled:opacity-50",
-      className,
+      className
     )}
     {...props}
   />

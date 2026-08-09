@@ -1,8 +1,10 @@
-import { chat, type ChatMiddleware } from "@tanstack/ai";
+import { chat } from "@tanstack/ai";
+import type { ChatMiddleware } from "@tanstack/ai";
+
 import { CHAT_TITLE_MODEL } from "./chat-models";
 import { createOpenRouterAdapter } from "./openrouter";
 
-export { CHAT_TITLE_MODEL };
+export { CHAT_TITLE_MODEL } from "./chat-models";
 
 export const generateChatTitle = async ({
   middleware,
@@ -42,8 +44,8 @@ Return only the title with no quotes, markdown, explanation, or ending punctuati
   });
 
   return title
-    .replace(/\s+/g, " ")
+    .replaceAll(/\s+/gu, " ")
     .trim()
-    .replace(/^["'`#*\s]+|["'`#*.!?;:\s]+$/g, "")
+    .replaceAll(/^["'`#*\s]+|["'`#*.!?;:\s]+$/gu, "")
     .slice(0, 80);
 };

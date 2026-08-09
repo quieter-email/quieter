@@ -2,15 +2,16 @@
 
 import { Delete02Icon, Logout03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { authClient } from "~/lib/auth";
+
+import { authClient } from "#/lib/auth";
+
 import { SettingsBackButton, SettingsCard } from "../settings-layout";
+import { formatRoleLabel, hasOrganizationRole } from "./domain";
+import type { FullOrganization, OrganizationRoleOption } from "./domain";
 import {
-  type FullOrganization,
-  type OrganizationRoleOption,
-  formatRoleLabel,
-  hasOrganizationRole,
-} from "./domain";
-import { DeleteOrganizationDialog, LeaveOrganizationDialog } from "./organization-action-dialogs";
+  DeleteOrganizationDialog,
+  LeaveOrganizationDialog,
+} from "./organization-action-dialogs";
 import { MutedActionButton, SettingsRow } from "./settings-row";
 
 export const OrganizationDangerView = ({
@@ -28,27 +29,33 @@ export const OrganizationDangerView = ({
 }) => {
   const organizationCount = authClient.useListOrganizations().data?.length ?? 0;
   const ownerCount = fullOrganization.members.filter((member) =>
-    hasOrganizationRole(member.role, "owner"),
+    hasOrganizationRole(member.role, "owner")
   ).length;
   const leaveOrganizationReason =
-    (organizationCount <= 1 && "Create another team before leaving your only team.") ||
-    (activeRole != null &&
+    (organizationCount <= 1 &&
+      "Create another team before leaving your only team.") ||
+    (activeRole !== null &&
       hasOrganizationRole(activeRole, "owner") &&
       ownerCount <= 1 &&
       "Assign another owner before leaving.") ||
     null;
   const deleteOrganizationReason =
-    (organizationCount <= 1 && "Create another team before deleting your only team.") ||
+    (organizationCount <= 1 &&
+      "Create another team before deleting your only team.") ||
     (!canDeleteOrganization && "Only owners can delete teams.") ||
     null;
 
   return (
     <section className="space-y-6">
-      <SettingsBackButton onClick={onBack}>{fullOrganization.name}</SettingsBackButton>
+      <SettingsBackButton onClick={onBack}>
+        {fullOrganization.name}
+      </SettingsBackButton>
 
       <div>
         <h1 className="text-base font-semibold text-fg">Danger zone</h1>
-        <p className="mt-1 text-sm text-muted-fg">Leave this team or delete it permanently.</p>
+        <p className="mt-1 text-sm text-muted-fg">
+          Leave this team or delete it permanently.
+        </p>
       </div>
 
       <SettingsCard>
@@ -56,12 +63,21 @@ export const OrganizationDangerView = ({
           action={
             leaveOrganizationReason ? (
               <MutedActionButton
-                icon={<HugeiconsIcon aria-hidden className="size-4" icon={Logout03Icon} />}
+                icon={
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-4"
+                    icon={Logout03Icon}
+                  />
+                }
                 label="Leave"
                 reason={leaveOrganizationReason}
               />
             ) : (
-              <LeaveOrganizationDialog onLeft={onLeftOrDeleted} organization={fullOrganization} />
+              <LeaveOrganizationDialog
+                onLeft={onLeftOrDeleted}
+                organization={fullOrganization}
+              />
             )
           }
           label="Membership"
@@ -73,7 +89,13 @@ export const OrganizationDangerView = ({
             deleteOrganizationReason ? (
               <MutedActionButton
                 buttonClassName="pointer-events-none border-destructive/25 bg-destructive/10 text-destructive/80 opacity-100 hover:bg-destructive/10 hover:text-destructive/80"
-                icon={<HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />}
+                icon={
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-4"
+                    icon={Delete02Icon}
+                  />
+                }
                 label="Delete"
                 reason={deleteOrganizationReason}
               />

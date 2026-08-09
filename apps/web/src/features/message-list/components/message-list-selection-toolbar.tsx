@@ -1,6 +1,10 @@
 "use client";
 
-import { Cancel01Icon, Loading03Icon, MoreVerticalIcon } from "@hugeicons/core-free-icons";
+import {
+  Cancel01Icon,
+  Loading03Icon,
+  MoreVerticalIcon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
@@ -12,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@quieter/ui/dropdown-menu";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+
 import type { MessageListBulkAction } from "./message-list-types";
 
 const MessageListBulkActions = ({
@@ -97,7 +102,9 @@ export const MessageListSelectionToolbar = ({
           </Checkbox>
         </IconButtonTooltip>
 
-        <p className="truncate text-sm font-medium text-fg">{selectedCount} selected</p>
+        <p className="truncate text-sm font-medium text-fg">
+          {selectedCount} selected
+        </p>
       </div>
 
       <div className="flex items-center gap-1">
@@ -120,9 +127,9 @@ export const MessageListSelectionToolbar = ({
         </IconButtonTooltip>
       </div>
       {pending && (
-        <p aria-live="polite" className="sr-only" role="status">
+        <output aria-live="polite" className="sr-only">
           Updating selected {itemLabelPlural}…
-        </p>
+        </output>
       )}
     </div>
   </div>

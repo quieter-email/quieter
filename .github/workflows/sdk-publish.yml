@@ -71,9 +71,6 @@ jobs:
       - name: Check
         run: vp check
 
-      - name: Check copy policy
-        run: vp run check:copy
-
       - name: Test
         run: vp test
 

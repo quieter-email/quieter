@@ -1,9 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import type { GmailMessagesToolResult } from "../../../types";
+
 import { truncateToolDetail } from "../../../domain/tool-summaries";
+import type { GmailMessagesToolResult } from "../../../types";
 import { ToolStep } from "./tool-step";
+
+const hasText = (value: string | null | undefined): value is string =>
+  value !== null && value !== undefined && value !== "";
 
 type MessagesToolProps = {
   data?: GmailMessagesToolResult;
@@ -14,7 +18,7 @@ type MessagesToolProps = {
       GmailMessagesToolResult,
       { status: "success" }
     >["messages"][number]["category"],
-    messageId: string,
+    messageId: string
   ) => void;
   pending: boolean;
   requestedCount?: number;
@@ -31,18 +35,27 @@ export const MessagesTool = ({
   const [expanded, setExpanded] = useState(false);
   const success = data?.status === "success" ? data : null;
   const count = success?.messages.length ?? requestedCount;
-  const detail = count === undefined ? undefined : `${count} message${count === 1 ? "" : "s"}`;
+  const detail =
+    count === undefined
+      ? undefined
+      : `${count} message${count === 1 ? "" : "s"}`;
 
   return (
     <ToolStep
       detail={detail}
       error={error}
-      expandable={!!success?.messages.length}
+      expandable={success !== null && success.messages.length > 0}
       expanded={expanded}
       label={pending ? "Reading messages" : "Read messages"}
-      meta={success?.failed.length ? `${success.failed.length} unavailable` : undefined}
+      meta={
+        success !== null && success.failed.length > 0
+          ? `${success.failed.length} unavailable`
+          : undefined
+      }
       nested={nested}
-      onToggle={() => setExpanded((current) => !current)}
+      onToggle={() => {
+        setExpanded((current) => !current);
+      }}
       pending={pending}
     >
       {success ? (
@@ -51,13 +64,19 @@ export const MessagesTool = ({
             <button
               className="block w-full rounded-sm text-left text-xs text-muted-fg transition-colors hover:text-fg"
               key={message.id}
-              onClick={() => onOpenMessage(message.category, message.id)}
+              onClick={() => {
+                onOpenMessage(message.category, message.id);
+              }}
               type="button"
             >
               <span className="block truncate text-fg/80">
-                {message.subject ? truncateToolDetail(message.subject, 70) : "(No subject)"}
+                {hasText(message.subject)
+                  ? truncateToolDetail(message.subject, 70)
+                  : "(No subject)"}
               </span>
-              {message.from ? <span className="block truncate">{message.from}</span> : null}
+              {hasText(message.from) ? (
+                <span className="block truncate">{message.from}</span>
+              ) : null}
             </button>
           ))}
         </div>

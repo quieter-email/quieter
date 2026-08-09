@@ -1,13 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+import { reportServerError } from "#/lib/server-error-reporting";
+
 const redirectWithStatus = (
   requestUrl: string,
   returnTo: string,
   status: "connected" | "error",
-  mailboxId?: string,
+  mailboxId?: string
 ) => {
   const redirectUrl = new URL(returnTo, requestUrl);
-  if (status === "connected" && mailboxId && redirectUrl.pathname === "/") {
+  if (
+    status === "connected" &&
+    mailboxId !== undefined &&
+    mailboxId !== "" &&
+    redirectUrl.pathname === "/"
+  ) {
     redirectUrl.searchParams.set("gmailLink", "complete");
     redirectUrl.searchParams.set("mailboxId", mailboxId);
   } else {
@@ -24,8 +31,18 @@ export const Route = createFileRoute("/api/gmail/callback")({
         const code = url.searchParams.get("code");
         const state = url.searchParams.get("state");
 
-        if (!code || !state || url.searchParams.has("error")) {
-          return redirectWithStatus(request.url, "/settings?tab=mailboxes", "error");
+        if (
+          code === null ||
+          code === "" ||
+          state === null ||
+          state === "" ||
+          url.searchParams.has("error")
+        ) {
+          return redirectWithStatus(
+            request.url,
+            "/settings?tab=mailboxes",
+            "error"
+          );
         }
 
         try {
@@ -35,10 +52,19 @@ export const Route = createFileRoute("/api/gmail/callback")({
             headers: request.headers,
             state,
           });
-          return redirectWithStatus(request.url, result.returnTo, "connected", result.mailboxId);
+          return redirectWithStatus(
+            request.url,
+            result.returnTo,
+            "connected",
+            result.mailboxId
+          );
         } catch (error) {
-          console.error(error);
-          return redirectWithStatus(request.url, "/settings?tab=mailboxes", "error");
+          reportServerError(error, "gmail-oauth-callback");
+          return redirectWithStatus(
+            request.url,
+            "/settings?tab=mailboxes",
+            "error"
+          );
         }
       },
     },

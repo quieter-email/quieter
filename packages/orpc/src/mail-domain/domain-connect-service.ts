@@ -1,21 +1,24 @@
+import { randomUUID } from "node:crypto";
+
 import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
-import {
-  mailDomain,
-  mailDomainConnectAttempt,
-  type MailDomainMode,
-} from "@quieter/database/schema";
+import { mailDomain, mailDomainConnectAttempt } from "@quieter/database/schema";
+import type { MailDomainMode } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { and, eq, gt, isNull } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
+
+import { hasText } from "../text";
 import {
   buildDomainConnectApplyUrl,
   discoverDomainConnect,
   DOMAIN_CONNECT_STATE_TTL_MS,
   getDomainConnectService,
-  type DomainConnectDiscovery,
 } from "./domain-connect";
-import { assertUserCanManageMailDomains, assertUserOrganizationMember } from "./service";
+import type { DomainConnectDiscovery } from "./domain-connect";
+import {
+  assertUserCanManageMailDomains,
+  assertUserOrganizationMember,
+} from "./service";
 import { verifyMailDomainSetup } from "./verification";
 
 const DOMAIN_CONNECT_DISCOVERY_CACHE_TTL_MS = 60_000;
@@ -35,7 +38,7 @@ const getCachedDomainConnectDiscovery = async (input: {
 }) => {
   const cacheKey = `${input.domain}\0${input.mode}\0${input.configured ? "1" : "0"}`;
   const cached = discoveryCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) {
+  if (cached !== undefined && cached.expiresAt > Date.now()) {
     return cached.result;
   }
 
@@ -49,8 +52,10 @@ const getCachedDomainConnectDiscovery = async (input: {
 
 const getDomainConnectPrivateKey = () => {
   const encoded = serverEnv.DOMAIN_CONNECT_PRIVATE_KEY_B64;
-  if (!encoded) return null;
-  const privateKey = Buffer.from(encoded, "base64").toString("utf8");
+  if (!hasText(encoded)) {
+    return null;
+  }
+  const privateKey = Buffer.from(encoded, "base64").toString("utf-8");
   return privateKey.includes("BEGIN PRIVATE KEY") ? privateKey : null;
 };
 
@@ -64,7 +69,10 @@ const getDomainConnectReturnTo = (organizationId: string, domainId: string) => {
   return `/settings?${search}`;
 };
 
-const getDomainForConnect = async (input: { domainId: string; organizationId: string }) => {
+const getDomainForConnect = async (input: {
+  domainId: string;
+  organizationId: string;
+}) => {
   const [domain] = await db
     .select({
       domain: mailDomain.domain,
@@ -74,10 +82,13 @@ const getDomainForConnect = async (input: { domainId: string; organizationId: st
     })
     .from(mailDomain)
     .where(
-      and(eq(mailDomain.id, input.domainId), eq(mailDomain.organizationId, input.organizationId)),
+      and(
+        eq(mailDomain.id, input.domainId),
+        eq(mailDomain.organizationId, input.organizationId)
+      )
     )
     .limit(1);
-  if (!domain) {
+  if (domain === undefined) {
     throw new ORPCError("NOT_FOUND", {
       message: "Mail domain was not found in the active team.",
     });
@@ -92,8 +103,10 @@ export const getDomainConnectAvailability = async (input: {
 }) => {
   await assertUserOrganizationMember(input);
   const domain = await getDomainForConnect(input);
-  return getCachedDomainConnectDiscovery({
-    configured: !!getDomainConnectPrivateKey() && !!serverEnv.BETTER_AUTH_URL,
+  return await getCachedDomainConnectDiscovery({
+    configured:
+      hasText(getDomainConnectPrivateKey()) &&
+      hasText(serverEnv.BETTER_AUTH_URL),
     domain: domain.domain,
     mode: domain.mode,
   });
@@ -107,8 +120,8 @@ export const startDomainConnect = async (input: {
   await assertUserCanManageMailDomains(input);
   const domain = await getDomainForConnect(input);
   const privateKey = getDomainConnectPrivateKey();
-  const baseUrl = serverEnv.BETTER_AUTH_URL?.replace(/\/+$/, "");
-  if (!privateKey || !baseUrl) {
+  const baseUrl = serverEnv.BETTER_AUTH_URL?.replace(/\/+$/u, "");
+  if (!hasText(privateKey) || !hasText(baseUrl)) {
     throw new ORPCError("BAD_REQUEST", {
       message: "One-click DNS setup is not configured in this environment.",
     });
@@ -121,7 +134,8 @@ export const startDomainConnect = async (input: {
   });
   if (!discovery.available) {
     throw new ORPCError("BAD_REQUEST", {
-      message: "This DNS provider does not support Quieter one-click setup yet.",
+      message:
+        "This DNS provider does not support Quieter one-click setup yet.",
     });
   }
 
@@ -167,7 +181,7 @@ export const completeDomainConnect = async (input: {
 }) => {
   const { auth } = await import("@quieter/auth");
   const session = await auth.api.getSession({ headers: input.headers });
-  if (!session?.user || !session.session) {
+  if (session?.user === undefined || session.session === undefined) {
     throw new ORPCError("UNAUTHORIZED", {
       message: "Sign in before completing domain setup.",
     });
@@ -179,9 +193,14 @@ export const completeDomainConnect = async (input: {
     .where(eq(mailDomainConnectAttempt.id, input.state))
     .limit(1);
   const now = new Date();
-  if (!attempt || attempt.userId !== session.user.id || attempt.consumedAt) {
+  if (
+    attempt === undefined ||
+    attempt.userId !== session.user.id ||
+    attempt.consumedAt !== null
+  ) {
     throw new ORPCError("BAD_REQUEST", {
-      message: "This one-click DNS request is invalid or has already been used.",
+      message:
+        "This one-click DNS request is invalid or has already been used.",
     });
   }
   if (attempt.expiresAt.getTime() <= now.getTime()) {
@@ -191,8 +210,8 @@ export const completeDomainConnect = async (input: {
       .where(
         and(
           eq(mailDomainConnectAttempt.id, attempt.id),
-          isNull(mailDomainConnectAttempt.consumedAt),
-        ),
+          isNull(mailDomainConnectAttempt.consumedAt)
+        )
       );
     throw new ORPCError("BAD_REQUEST", {
       message: "This one-click DNS request has expired.",
@@ -209,16 +228,22 @@ export const completeDomainConnect = async (input: {
   });
   if (domain.mode !== attempt.mode) {
     throw new ORPCError("BAD_REQUEST", {
-      message: "The domain mode changed during setup. Start one-click setup again.",
+      message:
+        "The domain mode changed during setup. Start one-click setup again.",
     });
   }
 
-  const callbackStatus =
-    input.error == null
-      ? "returned"
-      : input.error === "access_denied" || input.error.startsWith("user_cancel")
-        ? "canceled"
-        : "failed";
+  let callbackStatus: "returned" | "canceled" | "failed";
+  if (input.error === null) {
+    callbackStatus = "returned";
+  } else if (
+    input.error === "access_denied" ||
+    input.error.startsWith("user_cancel")
+  ) {
+    callbackStatus = "canceled";
+  } else {
+    callbackStatus = "failed";
+  }
   const [consumedAttempt] = await db
     .update(mailDomainConnectAttempt)
     .set({
@@ -232,18 +257,22 @@ export const completeDomainConnect = async (input: {
         eq(mailDomainConnectAttempt.id, attempt.id),
         eq(mailDomainConnectAttempt.userId, session.user.id),
         isNull(mailDomainConnectAttempt.consumedAt),
-        gt(mailDomainConnectAttempt.expiresAt, now),
-      ),
+        gt(mailDomainConnectAttempt.expiresAt, now)
+      )
     )
     .returning({ id: mailDomainConnectAttempt.id });
-  if (!consumedAttempt) {
+  if (consumedAttempt === undefined) {
     throw new ORPCError("BAD_REQUEST", {
-      message: "This one-click DNS request is invalid or has already been used.",
+      message:
+        "This one-click DNS request is invalid or has already been used.",
     });
   }
 
-  const returnTo = getDomainConnectReturnTo(attempt.organizationId, attempt.domainId);
-  if (input.error) {
+  const returnTo = getDomainConnectReturnTo(
+    attempt.organizationId,
+    attempt.domainId
+  );
+  if (hasText(input.error)) {
     return { result: callbackStatus, returnTo };
   }
 
@@ -252,7 +281,10 @@ export const completeDomainConnect = async (input: {
     organizationId: attempt.organizationId,
   });
   return {
-    result: verification.status === "verified" ? ("verified" as const) : ("needs_dns" as const),
+    result:
+      verification.status === "verified"
+        ? ("verified" as const)
+        : ("needs_dns" as const),
     returnTo,
   };
 };

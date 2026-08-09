@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { db } from "@quieter/database/client";
 import {
   invitation,
@@ -10,7 +12,6 @@ import {
 import { serverEnv } from "@quieter/env/server";
 import { APIError } from "better-auth/api";
 import { and, eq, notInArray, or, sql } from "drizzle-orm";
-import { createHash } from "node:crypto";
 
 type AuthUser = typeof user.$inferSelect;
 
@@ -20,7 +21,10 @@ type EnsureUserOrganizationStateResult = {
   organizationIds: string[];
 };
 
-const getUserOrganizationIds = async (client: Pick<typeof db, "select">, userId: string) => {
+const getUserOrganizationIds = async (
+  client: Pick<typeof db, "select">,
+  userId: string
+) => {
   const organizationRows = await client
     .select({ organizationId: member.organizationId })
     .from(member)
@@ -31,45 +35,59 @@ const getUserOrganizationIds = async (client: Pick<typeof db, "select">, userId:
 };
 
 export const createDefaultOrganizationName = (currentUser: UserIdentity) => {
-  const normalizedName =
-    currentUser.name
-      .normalize("NFKD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 40) || "team";
-  const shortId = createHash("sha256").update(currentUser.id).digest("hex").slice(0, 6);
+  const slug = currentUser.name
+    .normalize("NFKD")
+    .replaceAll(/[\u0300-\u036F]/gu, "")
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/gu, "-")
+    .replaceAll(/^-+|-+$/gu, "")
+    .slice(0, 40);
+  const normalizedName = slug.length > 0 ? slug : "team";
+  const shortId = createHash("sha256")
+    .update(currentUser.id)
+    .digest("hex")
+    .slice(0, 6);
 
   return `${normalizedName}-${shortId}`;
 };
 
 export const ensureUserOrganizationState = async (
-  currentUser: UserIdentity,
+  currentUser: UserIdentity
 ): Promise<EnsureUserOrganizationStateResult> => {
-  const existingOrganizationIds = await getUserOrganizationIds(db, currentUser.id);
+  const existingOrganizationIds = await getUserOrganizationIds(
+    db,
+    currentUser.id
+  );
 
   if (existingOrganizationIds.length > 0) {
     await db
       .update(mailbox)
-      .set({ organizationId: existingOrganizationIds[0], updatedAt: new Date() })
+      .set({
+        organizationId: existingOrganizationIds[0],
+        updatedAt: new Date(),
+      })
       .where(
         and(
           eq(mailbox.ownerUserId, currentUser.id),
           eq(mailbox.provider, "gmail"),
-          sql`${mailbox.organizationId} is null`,
-        ),
+          sql`${mailbox.organizationId} is null`
+        )
       );
 
     return { organizationIds: existingOrganizationIds };
   }
 
   return await db.transaction(async (transaction) => {
-    let organizationIds = await getUserOrganizationIds(transaction, currentUser.id);
+    let organizationIds = await getUserOrganizationIds(
+      transaction,
+      currentUser.id
+    );
     if (organizationIds.length === 0) {
       const now = new Date();
       const name = createDefaultOrganizationName(currentUser);
-      const stableId = createHash("sha256").update(currentUser.id).digest("hex");
+      const stableId = createHash("sha256")
+        .update(currentUser.id)
+        .digest("hex");
       const organizationId = `default-organization-${stableId}`;
 
       await transaction
@@ -89,7 +107,7 @@ export const ensureUserOrganizationState = async (
         .where(eq(organization.slug, name))
         .limit(1);
 
-      if (!defaultOrganization) {
+      if (defaultOrganization === null || defaultOrganization === undefined) {
         throw new Error("Default team provisioning failed.");
       }
 
@@ -113,8 +131,8 @@ export const ensureUserOrganizationState = async (
         and(
           eq(mailbox.ownerUserId, currentUser.id),
           eq(mailbox.provider, "gmail"),
-          sql`${mailbox.organizationId} is null`,
-        ),
+          sql`${mailbox.organizationId} is null`
+        )
       );
 
     return { organizationIds };
@@ -142,50 +160,69 @@ export const cleanupOrganizationsForDeletedUser = async (userId: string) => {
 
 type RawMailObjectProvider = "r2" | "s3";
 
+const hasText = (value: string | null | undefined): value is string =>
+  value !== null && value !== undefined && value !== "";
+
+const createManagedMailObjectClient = async (input: {
+  provider: RawMailObjectProvider;
+}) => {
+  const region = serverEnv.AWS_REGION ?? serverEnv.AWS_DEFAULT_REGION;
+  if (input.provider === "s3" && !hasText(region)) {
+    throw new Error("Managed mail cleanup is temporarily unavailable.");
+  }
+
+  const { DeleteObjectCommand, S3Client } = await import("@aws-sdk/client-s3");
+  let endpoint = serverEnv.R2_ENDPOINT;
+  if (!hasText(endpoint) && hasText(serverEnv.R2_ACCOUNT_ID)) {
+    endpoint = `https://${serverEnv.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
+  }
+  const accessKeyId = serverEnv.R2_ACCESS_KEY_ID;
+  const secretAccessKey = serverEnv.R2_SECRET_ACCESS_KEY;
+
+  if (input.provider === "r2") {
+    if (
+      !(hasText(endpoint) && hasText(accessKeyId) && hasText(secretAccessKey))
+    ) {
+      throw new Error("Managed mail cleanup is temporarily unavailable.");
+    }
+    return {
+      DeleteObjectCommand,
+      client: new S3Client({
+        credentials: {
+          accessKeyId,
+          secretAccessKey,
+        },
+        endpoint,
+        region: "auto",
+      }),
+    };
+  }
+
+  return {
+    DeleteObjectCommand,
+    client: new S3Client({ region: region ?? "us-east-1" }),
+  };
+};
+
 const deleteUntrackedManagedMailObject = async (input: {
   bucket: string;
   key: string;
   provider: RawMailObjectProvider;
 }) => {
-  const region = serverEnv.AWS_REGION || serverEnv.AWS_DEFAULT_REGION;
-  if (input.provider === "s3" && !region) {
-    throw new Error("Managed mail cleanup is temporarily unavailable.");
-  }
-
-  const { DeleteObjectCommand, S3Client } = await import("@aws-sdk/client-s3");
-  const endpoint =
-    serverEnv.R2_ENDPOINT ||
-    (serverEnv.R2_ACCOUNT_ID
-      ? `https://${serverEnv.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`
-      : null);
-  if (
-    input.provider === "r2" &&
-    (!endpoint || !serverEnv.R2_ACCESS_KEY_ID || !serverEnv.R2_SECRET_ACCESS_KEY)
-  ) {
-    throw new Error("Managed mail cleanup is temporarily unavailable.");
-  }
-  const r2Endpoint = endpoint ?? "";
-  const client =
-    input.provider === "r2"
-      ? new S3Client({
-          credentials: {
-            accessKeyId: serverEnv.R2_ACCESS_KEY_ID!,
-            secretAccessKey: serverEnv.R2_SECRET_ACCESS_KEY!,
-          },
-          endpoint: r2Endpoint,
-          region: "auto",
-        })
-      : new S3Client({ region });
+  const { DeleteObjectCommand, client } =
+    await createManagedMailObjectClient(input);
 
   await client.send(
     new DeleteObjectCommand({
       Bucket: input.bucket,
       Key: input.key,
-    }),
+    })
   );
 };
 
-export const cleanupMailboxesForDeletedOrganization = async (organizationId: string) => {
+export const cleanupMailboxesForDeletedOrganization = async (
+  organizationId: string
+) => {
   const managedMessages = await db
     .select({
       id: managedMailMessage.id,
@@ -197,7 +234,12 @@ export const cleanupMailboxesForDeletedOrganization = async (organizationId: str
     })
     .from(managedMailMessage)
     .innerJoin(mailbox, eq(mailbox.id, managedMailMessage.mailboxId))
-    .where(and(eq(mailbox.organizationId, organizationId), eq(mailbox.provider, "managed")));
+    .where(
+      and(
+        eq(mailbox.organizationId, organizationId),
+        eq(mailbox.provider, "managed")
+      )
+    );
   const managedMessageIds = managedMessages.map((message) => message.id);
   const objects = new Map<
     string,
@@ -205,16 +247,32 @@ export const cleanupMailboxesForDeletedOrganization = async (organizationId: str
   >();
 
   for (const message of managedMessages) {
-    if (message.rawObjectProvider && message.rawObjectBucket && message.rawObjectKey) {
+    if (
+      message.rawObjectProvider !== null &&
+      message.rawObjectProvider !== undefined &&
+      message.rawObjectBucket !== null &&
+      message.rawObjectBucket !== undefined &&
+      message.rawObjectBucket !== "" &&
+      message.rawObjectKey !== null &&
+      message.rawObjectKey !== undefined &&
+      message.rawObjectKey !== ""
+    ) {
       objects.set(
         `${message.rawObjectProvider}\0${message.rawObjectBucket}\0${message.rawObjectKey}`,
         {
           bucket: message.rawObjectBucket,
           key: message.rawObjectKey,
           provider: message.rawObjectProvider,
-        },
+        }
       );
-    } else if (message.s3Bucket && message.s3Key) {
+    } else if (
+      message.s3Bucket !== null &&
+      message.s3Bucket !== undefined &&
+      message.s3Bucket !== "" &&
+      message.s3Key !== null &&
+      message.s3Key !== undefined &&
+      message.s3Key !== ""
+    ) {
       objects.set(`s3\0${message.s3Bucket}\0${message.s3Key}`, {
         bucket: message.s3Bucket,
         key: message.s3Key,
@@ -225,76 +283,99 @@ export const cleanupMailboxesForDeletedOrganization = async (organizationId: str
 
   await db
     .delete(mailbox)
-    .where(and(eq(mailbox.organizationId, organizationId), eq(mailbox.provider, "managed")));
+    .where(
+      and(
+        eq(mailbox.organizationId, organizationId),
+        eq(mailbox.provider, "managed")
+      )
+    );
   const gmailMailboxes = await db
     .select({
       id: mailbox.id,
       ownerUserId: mailbox.ownerUserId,
     })
     .from(mailbox)
-    .where(and(eq(mailbox.organizationId, organizationId), eq(mailbox.provider, "gmail")));
-
-  for (const gmailMailbox of gmailMailboxes) {
-    if (!gmailMailbox.ownerUserId) continue;
-    const [targetMembership] = await db
-      .select({ organizationId: member.organizationId })
-      .from(member)
-      .where(
-        and(
-          eq(member.userId, gmailMailbox.ownerUserId),
-          sql`${member.organizationId} <> ${organizationId}`,
-        ),
+    .where(
+      and(
+        eq(mailbox.organizationId, organizationId),
+        eq(mailbox.provider, "gmail")
       )
-      .limit(1);
+    );
 
-    if (!targetMembership) {
-      throw new Error("Every mailbox owner must retain another team.");
-    }
+  await Promise.all(
+    gmailMailboxes.map(async (gmailMailbox) => {
+      if (
+        gmailMailbox.ownerUserId === null ||
+        gmailMailbox.ownerUserId === undefined ||
+        gmailMailbox.ownerUserId === ""
+      ) {
+        return;
+      }
+      const [targetMembership] = await db
+        .select({ organizationId: member.organizationId })
+        .from(member)
+        .where(
+          and(
+            eq(member.userId, gmailMailbox.ownerUserId),
+            sql`${member.organizationId} <> ${organizationId}`
+          )
+        )
+        .limit(1);
 
-    await db
-      .update(mailbox)
-      .set({ organizationId: targetMembership.organizationId, updatedAt: new Date() })
-      .where(eq(mailbox.id, gmailMailbox.id));
-  }
+      if (targetMembership === null || targetMembership === undefined) {
+        throw new Error("Every mailbox owner must retain another team.");
+      }
 
-  for (const object of objects.values()) {
-    const [otherReference] = await db
-      .select({ id: managedMailMessage.id })
-      .from(managedMailMessage)
-      .where(
-        object.provider === "s3"
-          ? and(
-              notInArray(managedMailMessage.id, managedMessageIds),
-              or(
-                and(
-                  eq(managedMailMessage.rawObjectProvider, object.provider),
-                  eq(managedMailMessage.rawObjectBucket, object.bucket),
-                  eq(managedMailMessage.rawObjectKey, object.key),
-                ),
-                and(
-                  eq(managedMailMessage.s3Bucket, object.bucket),
-                  eq(managedMailMessage.s3Key, object.key),
-                ),
-              ),
-            )
-          : and(
-              eq(managedMailMessage.rawObjectProvider, object.provider),
-              eq(managedMailMessage.rawObjectBucket, object.bucket),
-              eq(managedMailMessage.rawObjectKey, object.key),
-              notInArray(managedMailMessage.id, managedMessageIds),
-            ),
-      )
-      .limit(1);
+      await db
+        .update(mailbox)
+        .set({
+          organizationId: targetMembership.organizationId,
+          updatedAt: new Date(),
+        })
+        .where(eq(mailbox.id, gmailMailbox.id));
+    })
+  );
 
-    if (!otherReference) {
-      await deleteUntrackedManagedMailObject(object);
-    }
-  }
+  await Promise.all(
+    [...objects.values()].map(async (object) => {
+      const [otherReference] = await db
+        .select({ id: managedMailMessage.id })
+        .from(managedMailMessage)
+        .where(
+          object.provider === "s3"
+            ? and(
+                notInArray(managedMailMessage.id, managedMessageIds),
+                or(
+                  and(
+                    eq(managedMailMessage.rawObjectProvider, object.provider),
+                    eq(managedMailMessage.rawObjectBucket, object.bucket),
+                    eq(managedMailMessage.rawObjectKey, object.key)
+                  ),
+                  and(
+                    eq(managedMailMessage.s3Bucket, object.bucket),
+                    eq(managedMailMessage.s3Key, object.key)
+                  )
+                )
+              )
+            : and(
+                eq(managedMailMessage.rawObjectProvider, object.provider),
+                eq(managedMailMessage.rawObjectBucket, object.bucket),
+                eq(managedMailMessage.rawObjectKey, object.key),
+                notInArray(managedMailMessage.id, managedMessageIds)
+              )
+        )
+        .limit(1);
+
+      if (otherReference === null || otherReference === undefined) {
+        await deleteUntrackedManagedMailObject(object);
+      }
+    })
+  );
 };
 
 export const assertCanLeaveOrganization = async (
   currentUser: UserIdentity,
-  organizationId: string,
+  organizationId: string
 ) => {
   const organizationState = await ensureUserOrganizationState(currentUser);
 
@@ -313,7 +394,7 @@ export const assertCanLeaveOrganization = async (
 
 export const assertCanDeleteOrganization = async (
   currentUser: UserIdentity,
-  organizationId: string,
+  organizationId: string
 ) => {
   await assertCanLeaveOrganization(currentUser, organizationId);
 
@@ -322,12 +403,18 @@ export const assertCanDeleteOrganization = async (
     .from(member)
     .where(eq(member.organizationId, organizationId));
 
-  for (const organizationMember of organizationMembers) {
-    const organizationIds = await getUserOrganizationIds(db, organizationMember.userId);
-    if (organizationIds.length <= 1) {
-      throw new APIError("BAD_REQUEST", {
-        message: "Every member must belong to another team before this team can be deleted.",
-      });
-    }
-  }
+  await Promise.all(
+    organizationMembers.map(async (organizationMember) => {
+      const organizationIds = await getUserOrganizationIds(
+        db,
+        organizationMember.userId
+      );
+      if (organizationIds.length <= 1) {
+        throw new APIError("BAD_REQUEST", {
+          message:
+            "Every member must belong to another team before this team can be deleted.",
+        });
+      }
+    })
+  );
 };

@@ -2,7 +2,8 @@
 
 import { ArrowUp01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button, type ButtonProps } from "@quieter/ui/button";
+import { Button } from "@quieter/ui/button";
+import type { ButtonProps } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
 import { useState } from "react";
@@ -10,17 +11,26 @@ import { useState } from "react";
 type ArrowIconMotionKind = "idle" | "success" | "failure";
 
 const arrowPrimaryVariants = {
+  failure: {
+    transform: [
+      "translateY(0%) scaleX(1) scaleY(1)",
+      "translateY(-40%) scaleX(0.97) scaleY(0.97)",
+      "translateY(-18%) scaleX(1) scaleY(1)",
+      "translateY(0%) scaleX(1) scaleY(1)",
+    ],
+    transition: {
+      duration: 1,
+      ease: [0.22, 1, 0.36, 1] as const,
+      times: [0, 0.38, 0.68, 1],
+    },
+  },
+  failureFrom: {
+    transform: "translateY(0%) scaleX(1) scaleY(1)",
+  },
   idle: {
     opacity: 1,
     transform: "translateY(0%) scaleX(1) scaleY(1)",
     transition: { duration: 0 },
-  },
-  successFrom: {
-    opacity: 1,
-    transform: "translateY(0%) scaleX(1) scaleY(1)",
-  },
-  failureFrom: {
-    transform: "translateY(0%) scaleX(1) scaleY(1)",
   },
   success: {
     opacity: [1, 1, 0.88],
@@ -35,18 +45,9 @@ const arrowPrimaryVariants = {
       times: [0, 0.42, 1],
     },
   },
-  failure: {
-    transform: [
-      "translateY(0%) scaleX(1) scaleY(1)",
-      "translateY(-40%) scaleX(0.97) scaleY(0.97)",
-      "translateY(-18%) scaleX(1) scaleY(1)",
-      "translateY(0%) scaleX(1) scaleY(1)",
-    ],
-    transition: {
-      duration: 1,
-      ease: [0.22, 1, 0.36, 1] as const,
-      times: [0, 0.38, 0.68, 1],
-    },
+  successFrom: {
+    opacity: 1,
+    transform: "translateY(0%) scaleX(1) scaleY(1)",
   },
 };
 
@@ -58,40 +59,71 @@ const arrowSecondaryVariants = {
   to: {
     opacity: 1,
     transform: "translateY(0%) scaleX(1) scaleY(1)",
-    transition: { bounce: 0.14, delay: 0.22, duration: 1.42, type: "spring" as const },
+    transition: {
+      bounce: 0.14,
+      delay: 0.22,
+      duration: 1.42,
+      type: "spring" as const,
+    },
   },
 };
 
-const arrowPrimaryInitial: Record<ArrowIconMotionKind, keyof typeof arrowPrimaryVariants> = {
+const arrowPrimaryInitial: Record<
+  ArrowIconMotionKind,
+  keyof typeof arrowPrimaryVariants
+> = {
+  failure: "failureFrom",
   idle: "idle",
   success: "successFrom",
-  failure: "failureFrom",
 };
 
-export const ArrowInteractionButton = ({ className, onClick, ...props }: ButtonProps) => {
+export const ArrowInteractionButton = ({
+  className,
+  onClick,
+  ...props
+}: ButtonProps) => {
   const shouldReduceMotion = useReducedMotion() ?? false;
-  const [animation, setAnimation] = useState<{ kind: ArrowIconMotionKind; nonce: number }>({
+  const [animation, setAnimation] = useState<{
+    kind: ArrowIconMotionKind;
+    nonce: number;
+  }>({
     kind: "idle",
     nonce: 0,
   });
+  type ArrowButtonClickEvent = Parameters<
+    NonNullable<ButtonProps["onClick"]>
+  >[0];
+  const handleClick = (event: ArrowButtonClickEvent) => {
+    try {
+      onClick?.(event);
+    } catch {
+      if (shouldReduceMotion) {
+        return;
+      }
+
+      setAnimation((previous) => ({
+        kind: "failure",
+        nonce: previous.nonce + 1,
+      }));
+      return;
+    }
+
+    if (shouldReduceMotion) {
+      return;
+    }
+
+    setAnimation((previous) => ({
+      kind: "success",
+      nonce: previous.nonce + 1,
+    }));
+  };
 
   return (
     <Button
       {...props}
       className={cn("relative", className)}
       onClick={(event) => {
-        void Promise.resolve(onClick?.(event))
-          .then((success) => {
-            if (shouldReduceMotion) return;
-            setAnimation((previous) => ({
-              kind: success ? "success" : "failure",
-              nonce: previous.nonce + 1,
-            }));
-          })
-          .catch(() => {
-            if (shouldReduceMotion) return;
-            setAnimation((previous) => ({ kind: "failure", nonce: previous.nonce + 1 }));
-          });
+        handleClick(event);
       }}
     >
       <span aria-hidden="true" className="pointer-events-none opacity-0">

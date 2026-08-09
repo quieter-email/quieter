@@ -1,35 +1,32 @@
 import { composeDraftFormValuesSchema } from "@quieter/mail/compose/schema";
-import { z } from "zod";
+import type { z } from "zod";
+
 import {
   haveComposeDraftPersistedFieldsChanged,
   hasComposeDraftContent,
   getRenderableComposeBodyHtml,
   removeComposeRuntimeFile,
   syncInlineImagesWithHtml,
-  type ComposeDraftState,
 } from "./draft";
+import type { ComposeDraftState } from "./draft";
 
 export type ComposeFormValues = z.infer<typeof composeDraftFormValuesSchema>;
 
 export const emptyComposeFormValues: ComposeFormValues = {
-  to: "",
-  cc: "",
   bcc: "",
-  subject: "",
   bodyHtml: "",
   bodyText: "",
+  cc: "",
+  subject: "",
+  to: "",
 };
 
 type ComposeFormWriter = {
   reset: (values: ComposeFormValues) => void;
-  setFieldValue: {
-    (field: "to", value: string): void;
-    (field: "cc", value: string): void;
-    (field: "bcc", value: string): void;
-    (field: "subject", value: string): void;
-    (field: "bodyHtml", value: string): void;
-    (field: "bodyText", value: string): void;
-  };
+  setFieldValue: (
+    field: "bcc" | "bodyHtml" | "bodyText" | "cc" | "subject" | "to",
+    value: string
+  ) => void;
   validateAllFields: (cause: "change") => unknown;
 };
 
@@ -48,16 +45,21 @@ type ComposeDraftFormMeta = Pick<
   | "updatedAt"
 >;
 
-export const draftToComposeFormValues = (draft: ComposeDraftState): ComposeFormValues => ({
-  to: draft.recipients.to,
-  cc: draft.recipients.cc,
+export const draftToComposeFormValues = (
+  draft: ComposeDraftState
+): ComposeFormValues => ({
   bcc: draft.recipients.bcc,
-  subject: draft.subject,
   bodyHtml: getRenderableComposeBodyHtml(draft.bodyHtml, draft.bodyText),
   bodyText: draft.bodyText,
+  cc: draft.recipients.cc,
+  subject: draft.subject,
+  to: draft.recipients.to,
 });
 
-export const writeComposeFormValues = (form: ComposeFormWriter, values: ComposeFormValues) => {
+export const writeComposeFormValues = (
+  form: ComposeFormWriter,
+  values: ComposeFormValues
+) => {
   form.reset(values);
   form.setFieldValue("to", values.to);
   form.setFieldValue("cc", values.cc);
@@ -71,18 +73,22 @@ export const writeComposeFormValues = (form: ComposeFormWriter, values: ComposeF
 
 export const composeFormValuesToDraft = (
   values: ComposeFormValues,
-  meta: ComposeDraftFormMeta,
+  meta: ComposeDraftFormMeta
 ): ComposeDraftState => {
   const base = {
     ...meta,
-    recipients: { to: values.to, cc: values.cc, bcc: values.bcc },
-    subject: values.subject,
     bodyHtml: values.bodyHtml,
     bodyText: values.bodyText,
+    recipients: { bcc: values.bcc, cc: values.cc, to: values.to },
+    subject: values.subject,
   };
-  const previousInlineImageIds = new Set(meta.inlineImages.map((image) => image.id));
+  const previousInlineImageIds = new Set(
+    meta.inlineImages.map((image) => image.id)
+  );
   const syncedDraft = syncInlineImagesWithHtml(base, values.bodyHtml);
-  const nextInlineImageIds = new Set(syncedDraft.inlineImages.map((image) => image.id));
+  const nextInlineImageIds = new Set(
+    syncedDraft.inlineImages.map((image) => image.id)
+  );
 
   for (const id of previousInlineImageIds) {
     if (!nextInlineImageIds.has(id)) {

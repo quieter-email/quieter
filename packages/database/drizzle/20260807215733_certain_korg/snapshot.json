@@ -2,9 +2,7 @@
   "version": "8",
   "dialect": "postgres",
   "id": "07576f97-8c0b-4f34-bba5-ef0b7813bc8a",
-  "prevIds": [
-    "cb080d7c-6972-464d-8e49-b61d3d10a9ba"
-  ],
+  "prevIds": ["cb080d7c-6972-464d-8e49-b61d3d10a9ba"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -12762,14 +12760,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "userId"
-      ],
+      "columns": ["userId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "account_userId_user_id_fkey",
@@ -12779,14 +12773,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "userId"
-      ],
+      "columns": ["userId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "aiMemory_userId_user_id_fkey",
@@ -12796,14 +12786,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "schemaTo": "public",
       "tableTo": "mailbox",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "aiMemory_mailboxId_mailbox_id_fkey",
@@ -12813,14 +12799,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "userId"
-      ],
+      "columns": ["userId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "aiMemoryChangeSet_userId_user_id_fkey",
@@ -12830,14 +12812,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "schemaTo": "public",
       "tableTo": "mailbox",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "aiMemoryChangeSet_mailboxId_mailbox_id_fkey",
@@ -12847,14 +12825,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "sourceEventId"
-      ],
+      "columns": ["sourceEventId"],
       "schemaTo": "public",
       "tableTo": "userAiContextEvent",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "aiMemoryChangeSet_sourceEventId_userAiContextEvent_id_fkey",
@@ -12864,14 +12838,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "undoOfId"
-      ],
+      "columns": ["undoOfId"],
       "schemaTo": "public",
       "tableTo": "aiMemoryChangeSet",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "aiMemoryChangeSet_undoOfId_aiMemoryChangeSet_id_fkey",
@@ -12881,14 +12851,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "userId"
-      ],
+      "columns": ["userId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "aiMemoryScopeConfig_userId_user_id_fkey",
@@ -12898,14 +12864,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "schemaTo": "public",
       "tableTo": "mailbox",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "aiMemoryScopeConfig_mailboxId_mailbox_id_fkey",
@@ -12915,14 +12877,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "userId"
-      ],
+      "columns": ["userId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "billingCreditUsageEvent_userId_user_id_fkey",
@@ -12932,14 +12890,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organizationId"
-      ],
+      "columns": ["organizationId"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "billingCreditUsageEvent_organizationId_organization_id_fkey",
@@ -12949,14 +12903,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "userId"
-      ],
+      "columns": ["userId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "billingEntitlementOverride_userId_user_id_fkey",
@@ -12966,14 +12916,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "createdByUserId"
-      ],
+      "columns": ["createdByUserId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "billingEntitlementOverride_createdByUserId_user_id_fkey",
@@ -12983,14 +12929,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "userId"
-      ],
+      "columns": ["userId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "billingSubscription_userId_user_id_fkey",
@@ -13000,14 +12942,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organizationId"
-      ],
+      "columns": ["organizationId"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "billingSubscription_organizationId_organization_id_fkey",
@@ -13017,14 +12955,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "schemaTo": "public",
       "tableTo": "mailbox",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "chat_mailboxId_mailbox_id_fkey",
@@ -13034,14 +12968,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "userId"
-      ],
+      "columns": ["userId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "chat_userId_user_id_fkey",
@@ -13051,16 +12981,10 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "chatId",
-        "userId"
-      ],
+      "columns": ["chatId", "userId"],
       "schemaTo": "public",
       "tableTo": "chat",
-      "columnsTo": [
-        "id",
-        "userId"
-      ],
+      "columnsTo": ["id", "userId"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "chat_message_chat_id_user_id_fkey",
@@ -13070,16 +12994,10 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "assistantMessageId",
-        "chatId"
-      ],
+      "columns": ["assistantMessageId", "chatId"],
       "schemaTo": "public",
       "tableTo": "chatMessage",
-      "columnsTo": [
-        "id",
-        "chatId"
-      ],
+      "columnsTo": ["id", "chatId"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "chat_run_assistant_message_id_chat_id_fkey",
@@ -13089,18 +13007,10 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "chatId",
-        "mailboxId",
-        "userId"
-      ],
+      "columns": ["chatId", "mailboxId", "userId"],
       "schemaTo": "public",
       "tableTo": "chat",
-      "columnsTo": [
-        "id",
-        "mailboxId",
-        "userId"
-      ],
+      "columnsTo": ["id", "mailboxId", "userId"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "chat_run_chat_id_mailbox_id_user_id_fkey",
@@ -13110,14 +13020,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "runId"
-      ],
+      "columns": ["runId"],
       "schemaTo": "public",
       "tableTo": "chatRun",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "chatRunStreamChunk_runId_chatRun_id_fkey",
@@ -13127,14 +13033,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "userId"
-      ],
+      "columns": ["userId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "connectorCredential_userId_user_id_fkey",
@@ -13144,14 +13046,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "userId"
-      ],
+      "columns": ["userId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "connectorOAuthState_userId_user_id_fkey",
@@ -13161,14 +13059,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "schemaTo": "public",
       "tableTo": "mailbox",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "gmailAutoLabelEvent_mailboxId_mailbox_id_fkey",
@@ -13178,14 +13072,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "schemaTo": "public",
       "tableTo": "mailbox",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "gmailAutoLabelSettings_mailboxId_mailbox_id_fkey",
@@ -13195,14 +13085,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "schemaTo": "public",
       "tableTo": "mailbox",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "gmailCredential_mailboxId_mailbox_id_fkey",
@@ -13212,14 +13098,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "schemaTo": "public",
       "tableTo": "mailbox",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "gmailLabel_mailboxId_mailbox_id_fkey",
@@ -13229,14 +13111,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "userId"
-      ],
+      "columns": ["userId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "gmailOAuthState_userId_user_id_fkey",
@@ -13246,14 +13124,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "schemaTo": "public",
       "tableTo": "mailbox",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "gmailOAuthState_mailboxId_mailbox_id_fkey",
@@ -13263,14 +13137,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organizationId"
-      ],
+      "columns": ["organizationId"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "gmailOAuthState_organizationId_organization_id_fkey",
@@ -13280,14 +13150,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "schemaTo": "public",
       "tableTo": "mailbox",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "gmailUsefulDetail_mailboxId_mailbox_id_fkey",
@@ -13297,14 +13163,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "schemaTo": "public",
       "tableTo": "mailbox",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "gmailUsefulDetailEvent_mailboxId_mailbox_id_fkey",
@@ -13314,14 +13176,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "schemaTo": "public",
       "tableTo": "mailbox",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "gmailUsefulDetailFeedback_mailboxId_mailbox_id_fkey",
@@ -13331,14 +13189,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "schemaTo": "public",
       "tableTo": "mailbox",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "gmailUsefulDetailSettings_mailboxId_mailbox_id_fkey",
@@ -13348,14 +13202,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "schemaTo": "public",
       "tableTo": "mailbox",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "gmailWatchState_mailboxId_mailbox_id_fkey",
@@ -13365,14 +13215,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organizationId"
-      ],
+      "columns": ["organizationId"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "invitation_organizationId_organization_id_fkey",
@@ -13382,14 +13228,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "inviterId"
-      ],
+      "columns": ["inviterId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "invitation_inviterId_user_id_fkey",
@@ -13399,14 +13241,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "schemaTo": "public",
       "tableTo": "mailbox",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "mailAutoLabelFeedback_mailboxId_mailbox_id_fkey",
@@ -13416,14 +13254,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "createdByUserId"
-      ],
+      "columns": ["createdByUserId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "mailAutoLabelFeedback_createdByUserId_user_id_fkey",
@@ -13433,14 +13267,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "schemaTo": "public",
       "tableTo": "mailbox",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "mailAutomationMemoryProfile_mailboxId_mailbox_id_fkey",
@@ -13450,14 +13280,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organizationId"
-      ],
+      "columns": ["organizationId"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "mailDomain_organizationId_organization_id_fkey",
@@ -13467,14 +13293,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "modeUpdatedByUserId"
-      ],
+      "columns": ["modeUpdatedByUserId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "mailDomain_modeUpdatedByUserId_user_id_fkey",
@@ -13484,14 +13306,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "domainId"
-      ],
+      "columns": ["domainId"],
       "schemaTo": "public",
       "tableTo": "mailDomain",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "mailDomainConnectAttempt_domainId_mailDomain_id_fkey",
@@ -13501,14 +13319,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organizationId"
-      ],
+      "columns": ["organizationId"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "mailDomainConnectAttempt_organizationId_organization_id_fkey",
@@ -13518,14 +13332,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "userId"
-      ],
+      "columns": ["userId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "mailDomainConnectAttempt_userId_user_id_fkey",
@@ -13535,14 +13345,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "userId"
-      ],
+      "columns": ["userId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "mailTemplate_userId_user_id_fkey",
@@ -13552,14 +13358,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organizationId"
-      ],
+      "columns": ["organizationId"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "mailTemplate_organizationId_organization_id_fkey",
@@ -13569,14 +13371,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "ownerUserId"
-      ],
+      "columns": ["ownerUserId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "mailbox_ownerUserId_user_id_fkey",
@@ -13586,14 +13384,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organizationId"
-      ],
+      "columns": ["organizationId"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "mailbox_organizationId_organization_id_fkey",
@@ -13603,14 +13397,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "divisionId"
-      ],
+      "columns": ["divisionId"],
       "schemaTo": "public",
       "tableTo": "organizationDivision",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "mailbox_divisionId_organizationDivision_id_fkey",
@@ -13620,14 +13410,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "schemaTo": "public",
       "tableTo": "mailbox",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "mailboxAction_mailboxId_mailbox_id_fkey",
@@ -13637,14 +13423,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organizationId"
-      ],
+      "columns": ["organizationId"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "mailboxAction_organizationId_organization_id_fkey",
@@ -13654,14 +13436,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "createdByUserId"
-      ],
+      "columns": ["createdByUserId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "mailboxAction_createdByUserId_user_id_fkey",
@@ -13671,14 +13449,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "runId"
-      ],
+      "columns": ["runId"],
       "schemaTo": "public",
       "tableTo": "mailboxActionRun",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "mailboxActionExternalEffect_runId_mailboxActionRun_id_fkey",
@@ -13688,14 +13462,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "stepRunId"
-      ],
+      "columns": ["stepRunId"],
       "schemaTo": "public",
       "tableTo": "mailboxActionStepRun",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "mailboxActionExternalEffect_z30vRB4MGaFd_fkey",
@@ -13705,14 +13475,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "actionId"
-      ],
+      "columns": ["actionId"],
       "schemaTo": "public",
       "tableTo": "mailboxAction",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "mailboxActionExternalEffect_actionId_mailboxAction_id_fkey",
@@ -13722,14 +13488,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "revisionId"
-      ],
+      "columns": ["revisionId"],
       "schemaTo": "public",
       "tableTo": "mailboxActionRevision",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "mailboxActionExternalEffect_envh3iCq9DLB_fkey",
@@ -13739,14 +13501,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "connectorCredentialId"
-      ],
+      "columns": ["connectorCredentialId"],
       "schemaTo": "public",
       "tableTo": "connectorCredential",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "mailboxActionExternalEffect_c1WaeE5H7a7J_fkey",
@@ -13756,14 +13514,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "actionId"
-      ],
+      "columns": ["actionId"],
       "schemaTo": "public",
       "tableTo": "mailboxAction",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "mailboxActionRevision_actionId_mailboxAction_id_fkey",
@@ -13773,14 +13527,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "createdByUserId"
-      ],
+      "columns": ["createdByUserId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "mailboxActionRevision_createdByUserId_user_id_fkey",
@@ -13790,14 +13540,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "actionId"
-      ],
+      "columns": ["actionId"],
       "schemaTo": "public",
       "tableTo": "mailboxAction",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "mailboxActionRun_actionId_mailboxAction_id_fkey",
@@ -13807,14 +13553,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "revisionId"
-      ],
+      "columns": ["revisionId"],
       "schemaTo": "public",
       "tableTo": "mailboxActionRevision",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "mailboxActionRun_revisionId_mailboxActionRevision_id_fkey",
@@ -13824,14 +13566,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "schemaTo": "public",
       "tableTo": "mailbox",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "mailboxActionRun_mailboxId_mailbox_id_fkey",
@@ -13841,14 +13579,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organizationId"
-      ],
+      "columns": ["organizationId"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "mailboxActionRun_organizationId_organization_id_fkey",
@@ -13858,14 +13592,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "runId"
-      ],
+      "columns": ["runId"],
       "schemaTo": "public",
       "tableTo": "mailboxActionRun",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "mailboxActionRunFrame_runId_mailboxActionRun_id_fkey",
@@ -13875,14 +13605,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "runId"
-      ],
+      "columns": ["runId"],
       "schemaTo": "public",
       "tableTo": "mailboxActionRun",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "mailboxActionStepRun_runId_mailboxActionRun_id_fkey",
@@ -13892,14 +13618,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "frameId"
-      ],
+      "columns": ["frameId"],
       "schemaTo": "public",
       "tableTo": "mailboxActionRunFrame",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "mailboxActionStepRun_frameId_mailboxActionRunFrame_id_fkey",
@@ -13909,14 +13631,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "schemaTo": "public",
       "tableTo": "mailbox",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "mailboxAutomationSettings_mailboxId_mailbox_id_fkey",
@@ -13926,14 +13644,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "schemaTo": "public",
       "tableTo": "mailbox",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "mailboxDivisionGrant_mailboxId_mailbox_id_fkey",
@@ -13943,14 +13657,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "divisionId"
-      ],
+      "columns": ["divisionId"],
       "schemaTo": "public",
       "tableTo": "organizationDivision",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "mailboxDivisionGrant_divisionId_organizationDivision_id_fkey",
@@ -13960,14 +13670,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "schemaTo": "public",
       "tableTo": "mailbox",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "mailboxGrant_mailboxId_mailbox_id_fkey",
@@ -13977,14 +13683,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "userId"
-      ],
+      "columns": ["userId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "mailboxGrant_userId_user_id_fkey",
@@ -13994,14 +13696,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "schemaTo": "public",
       "tableTo": "mailbox",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "managedMailAttachment_mailboxId_mailbox_id_fkey",
@@ -14011,14 +13709,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "messageId"
-      ],
+      "columns": ["messageId"],
       "schemaTo": "public",
       "tableTo": "managedMailMessage",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "managedMailAttachment_messageId_managedMailMessage_id_fkey",
@@ -14028,14 +13722,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "schemaTo": "public",
       "tableTo": "mailbox",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "managedMailLabel_mailboxId_mailbox_id_fkey",
@@ -14045,14 +13735,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "createdByUserId"
-      ],
+      "columns": ["createdByUserId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "managedMailLabel_createdByUserId_user_id_fkey",
@@ -14062,14 +13748,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "updatedByUserId"
-      ],
+      "columns": ["updatedByUserId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "managedMailLabel_updatedByUserId_user_id_fkey",
@@ -14079,14 +13761,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "schemaTo": "public",
       "tableTo": "mailbox",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "managedMailMessage_mailboxId_mailbox_id_fkey",
@@ -14096,14 +13774,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "schemaTo": "public",
       "tableTo": "mailbox",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "managedMailMessageLabel_mailboxId_mailbox_id_fkey",
@@ -14113,14 +13787,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "messageId"
-      ],
+      "columns": ["messageId"],
       "schemaTo": "public",
       "tableTo": "managedMailMessage",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "managedMailMessageLabel_messageId_managedMailMessage_id_fkey",
@@ -14130,14 +13800,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "labelId"
-      ],
+      "columns": ["labelId"],
       "schemaTo": "public",
       "tableTo": "managedMailLabel",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "managedMailMessageLabel_labelId_managedMailLabel_id_fkey",
@@ -14147,14 +13813,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "ruleId"
-      ],
+      "columns": ["ruleId"],
       "schemaTo": "public",
       "tableTo": "managedMailRule",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "managedMailMessageLabel_ruleId_managedMailRule_id_fkey",
@@ -14164,14 +13826,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "assignedByUserId"
-      ],
+      "columns": ["assignedByUserId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "managedMailMessageLabel_assignedByUserId_user_id_fkey",
@@ -14181,14 +13839,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "schemaTo": "public",
       "tableTo": "mailbox",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "managedMailRule_mailboxId_mailbox_id_fkey",
@@ -14198,14 +13852,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "createdByUserId"
-      ],
+      "columns": ["createdByUserId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "managedMailRule_createdByUserId_user_id_fkey",
@@ -14215,14 +13865,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "updatedByUserId"
-      ],
+      "columns": ["updatedByUserId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "managedMailRule_updatedByUserId_user_id_fkey",
@@ -14232,14 +13878,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "schemaTo": "public",
       "tableTo": "mailbox",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "managedMailRuleApplication_mailboxId_mailbox_id_fkey",
@@ -14249,14 +13891,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "ruleId"
-      ],
+      "columns": ["ruleId"],
       "schemaTo": "public",
       "tableTo": "managedMailRule",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "managedMailRuleApplication_ruleId_managedMailRule_id_fkey",
@@ -14266,14 +13904,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "messageId"
-      ],
+      "columns": ["messageId"],
       "schemaTo": "public",
       "tableTo": "managedMailMessage",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "managedMailRuleApplication_messageId_managedMailMessage_id_fkey",
@@ -14283,14 +13917,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "schemaTo": "public",
       "tableTo": "mailbox",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "managedMailRuleBackfill_mailboxId_mailbox_id_fkey",
@@ -14300,14 +13930,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "ruleId"
-      ],
+      "columns": ["ruleId"],
       "schemaTo": "public",
       "tableTo": "managedMailRule",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "managedMailRuleBackfill_ruleId_managedMailRule_id_fkey",
@@ -14317,14 +13943,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "schemaTo": "public",
       "tableTo": "mailbox",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "managedMailSavedView_mailboxId_mailbox_id_fkey",
@@ -14334,14 +13956,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "ownerUserId"
-      ],
+      "columns": ["ownerUserId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "managedMailSavedView_ownerUserId_user_id_fkey",
@@ -14351,14 +13969,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organizationId"
-      ],
+      "columns": ["organizationId"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "member_organizationId_organization_id_fkey",
@@ -14368,14 +13982,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "userId"
-      ],
+      "columns": ["userId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "member_userId_user_id_fkey",
@@ -14385,14 +13995,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "billingOwnerUserId"
-      ],
+      "columns": ["billingOwnerUserId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "organization_billingOwnerUserId_user_id_fkey",
@@ -14402,14 +14008,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organizationId"
-      ],
+      "columns": ["organizationId"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "organizationApiMailAttachment_1RhXbTveCg1M_fkey",
@@ -14419,14 +14021,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "messageId"
-      ],
+      "columns": ["messageId"],
       "schemaTo": "public",
       "tableTo": "organizationApiMailMessage",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "organizationApiMailAttachment_pdgJFqrAK1JS_fkey",
@@ -14436,14 +14034,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organizationId"
-      ],
+      "columns": ["organizationId"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "organizationApiMailMessage_organizationId_organization_id_fkey",
@@ -14453,14 +14047,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organizationId"
-      ],
+      "columns": ["organizationId"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "organizationDivision_organizationId_organization_id_fkey",
@@ -14470,14 +14060,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "divisionId"
-      ],
+      "columns": ["divisionId"],
       "schemaTo": "public",
       "tableTo": "organizationDivision",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "organizationDivisionMember_l2IQrxE96fOG_fkey",
@@ -14487,14 +14073,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "memberId"
-      ],
+      "columns": ["memberId"],
       "schemaTo": "public",
       "tableTo": "member",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "organizationDivisionMember_memberId_member_id_fkey",
@@ -14504,14 +14086,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organizationId"
-      ],
+      "columns": ["organizationId"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "organizationMailSendIdempotency_BnWifFjgj6Vc_fkey",
@@ -14521,14 +14099,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organizationId"
-      ],
+      "columns": ["organizationId"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "organizationMailUsageAlertEvent_ROF4Zd0q45Cy_fkey",
@@ -14538,14 +14112,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organizationId"
-      ],
+      "columns": ["organizationId"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "organizationMailUsageEvent_organizationId_organization_id_fkey",
@@ -14555,14 +14125,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organizationId"
-      ],
+      "columns": ["organizationId"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "organizationMailUsageSettings_HFx0SA0zm7qR_fkey",
@@ -14572,14 +14138,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "userId"
-      ],
+      "columns": ["userId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "passkey_userId_user_id_fkey",
@@ -14589,14 +14151,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "activeOrganizationId"
-      ],
+      "columns": ["activeOrganizationId"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "session_activeOrganizationId_organization_id_fkey",
@@ -14606,14 +14164,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "userId"
-      ],
+      "columns": ["userId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "session_userId_user_id_fkey",
@@ -14623,14 +14177,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "userId"
-      ],
+      "columns": ["userId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "userAiContext_userId_user_id_fkey",
@@ -14640,14 +14190,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "userId"
-      ],
+      "columns": ["userId"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "userAiContextEvent_userId_user_id_fkey",
@@ -14657,14 +14203,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "schemaTo": "public",
       "tableTo": "mailbox",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "userAiContextEvent_mailboxId_mailbox_id_fkey",
@@ -14674,14 +14216,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organizationId"
-      ],
+      "columns": ["organizationId"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "userAiContextEvent_organizationId_organization_id_fkey",
@@ -14690,10 +14228,7 @@
       "table": "userAiContextEvent"
     },
     {
-      "columns": [
-        "runId",
-        "seq"
-      ],
+      "columns": ["runId", "seq"],
       "nameExplicit": false,
       "name": "chatRunStreamChunk_pkey",
       "entityType": "pks",
@@ -14701,9 +14236,7 @@
       "table": "chatRunStreamChunk"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "account_pkey",
       "schema": "public",
@@ -14711,9 +14244,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "aiMemory_pkey",
       "schema": "public",
@@ -14721,9 +14252,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "aiMemoryChangeSet_pkey",
       "schema": "public",
@@ -14731,9 +14260,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "aiMemoryScopeConfig_pkey",
       "schema": "public",
@@ -14741,9 +14268,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "apikey_pkey",
       "schema": "public",
@@ -14751,9 +14276,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "billingCreditUsageEvent_pkey",
       "schema": "public",
@@ -14761,9 +14284,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "billingEntitlementOverride_pkey",
       "schema": "public",
@@ -14771,9 +14292,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "billingSubscription_pkey",
       "schema": "public",
@@ -14781,9 +14300,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "chat_pkey",
       "schema": "public",
@@ -14791,9 +14308,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "chatMessage_pkey",
       "schema": "public",
@@ -14801,9 +14316,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "chatRun_pkey",
       "schema": "public",
@@ -14811,9 +14324,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "connectorCredential_pkey",
       "schema": "public",
@@ -14821,9 +14332,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "connectorOAuthState_pkey",
       "schema": "public",
@@ -14831,9 +14340,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "gmailAutoLabelEvent_pkey",
       "schema": "public",
@@ -14841,9 +14348,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "nameExplicit": false,
       "name": "gmailAutoLabelSettings_pkey",
       "schema": "public",
@@ -14851,9 +14356,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "nameExplicit": false,
       "name": "gmailCredential_pkey",
       "schema": "public",
@@ -14861,9 +14364,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "gmailOAuthState_pkey",
       "schema": "public",
@@ -14871,9 +14372,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "gmailUsefulDetail_pkey",
       "schema": "public",
@@ -14881,9 +14380,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "gmailUsefulDetailEvent_pkey",
       "schema": "public",
@@ -14891,9 +14388,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "gmailUsefulDetailFeedback_pkey",
       "schema": "public",
@@ -14901,9 +14396,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "nameExplicit": false,
       "name": "gmailUsefulDetailSettings_pkey",
       "schema": "public",
@@ -14911,9 +14404,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "nameExplicit": false,
       "name": "gmailWatchState_pkey",
       "schema": "public",
@@ -14921,9 +14412,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "invitation_pkey",
       "schema": "public",
@@ -14931,9 +14420,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "mailAutoLabelFeedback_pkey",
       "schema": "public",
@@ -14941,9 +14428,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "mailAutomationMemoryProfile_pkey",
       "schema": "public",
@@ -14951,9 +14436,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "mailDomain_pkey",
       "schema": "public",
@@ -14961,9 +14444,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "mailDomainConnectAttempt_pkey",
       "schema": "public",
@@ -14971,9 +14452,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "mailTemplate_pkey",
       "schema": "public",
@@ -14981,9 +14460,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "mailbox_pkey",
       "schema": "public",
@@ -14991,9 +14468,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "mailboxAction_pkey",
       "schema": "public",
@@ -15001,9 +14476,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "mailboxActionExternalEffect_pkey",
       "schema": "public",
@@ -15011,9 +14484,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "mailboxActionRevision_pkey",
       "schema": "public",
@@ -15021,9 +14492,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "mailboxActionRun_pkey",
       "schema": "public",
@@ -15031,9 +14500,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "mailboxActionRunFrame_pkey",
       "schema": "public",
@@ -15041,9 +14508,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "mailboxActionStepRun_pkey",
       "schema": "public",
@@ -15051,9 +14516,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "mailboxId"
-      ],
+      "columns": ["mailboxId"],
       "nameExplicit": false,
       "name": "mailboxAutomationSettings_pkey",
       "schema": "public",
@@ -15061,9 +14524,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "mailboxDivisionGrant_pkey",
       "schema": "public",
@@ -15071,9 +14532,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "mailboxGrant_pkey",
       "schema": "public",
@@ -15081,9 +14540,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "managedMailAttachment_pkey",
       "schema": "public",
@@ -15091,9 +14548,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "managedMailLabel_pkey",
       "schema": "public",
@@ -15101,9 +14556,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "managedMailMessage_pkey",
       "schema": "public",
@@ -15111,9 +14564,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "managedMailMessageLabel_pkey",
       "schema": "public",
@@ -15121,9 +14572,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "managedMailRule_pkey",
       "schema": "public",
@@ -15131,9 +14580,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "managedMailRuleApplication_pkey",
       "schema": "public",
@@ -15141,9 +14588,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "managedMailRuleBackfill_pkey",
       "schema": "public",
@@ -15151,9 +14596,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "managedMailSavedView_pkey",
       "schema": "public",
@@ -15161,9 +14604,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "member_pkey",
       "schema": "public",
@@ -15171,9 +14612,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "organization_pkey",
       "schema": "public",
@@ -15181,9 +14620,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "organizationApiMailAttachment_pkey",
       "schema": "public",
@@ -15191,9 +14628,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "organizationApiMailMessage_pkey",
       "schema": "public",
@@ -15201,9 +14636,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "organizationDivision_pkey",
       "schema": "public",
@@ -15211,9 +14644,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "organizationDivisionMember_pkey",
       "schema": "public",
@@ -15221,9 +14652,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "organizationMailSendIdempotency_pkey",
       "schema": "public",
@@ -15231,9 +14660,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "organizationMailUsageAlertEvent_pkey",
       "schema": "public",
@@ -15241,9 +14668,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "organizationMailUsageEvent_pkey",
       "schema": "public",
@@ -15251,9 +14676,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "organizationId"
-      ],
+      "columns": ["organizationId"],
       "nameExplicit": false,
       "name": "organizationMailUsageSettings_pkey",
       "schema": "public",
@@ -15261,9 +14684,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "passkey_pkey",
       "schema": "public",
@@ -15271,9 +14692,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "key"
-      ],
+      "columns": ["key"],
       "nameExplicit": false,
       "name": "rateLimitBucket_pkey",
       "schema": "public",
@@ -15281,9 +14700,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "session_pkey",
       "schema": "public",
@@ -15291,9 +14708,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "user_pkey",
       "schema": "public",
@@ -15301,9 +14716,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "userAiContext_pkey",
       "schema": "public",
@@ -15311,9 +14724,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "userAiContextEvent_pkey",
       "schema": "public",
@@ -15321,9 +14732,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "verification_pkey",
       "schema": "public",
@@ -15331,9 +14740,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "email"
-      ],
+      "columns": ["email"],
       "nameExplicit": false,
       "name": "waitlistSignup_pkey",
       "schema": "public",
@@ -15342,10 +14749,7 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "providerId",
-        "accountId"
-      ],
+      "columns": ["providerId", "accountId"],
       "nullsNotDistinct": false,
       "name": "account_providerId_accountId_unique",
       "entityType": "uniques",
@@ -15354,10 +14758,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "scopeKey",
-        "key"
-      ],
+      "columns": ["scopeKey", "key"],
       "nullsNotDistinct": false,
       "name": "ai_memory_scope_key_memory_key_unique",
       "entityType": "uniques",
@@ -15366,9 +14767,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "sourceEventId"
-      ],
+      "columns": ["sourceEventId"],
       "nullsNotDistinct": false,
       "name": "ai_memory_change_set_source_event_unique",
       "entityType": "uniques",
@@ -15377,9 +14776,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "scopeKey"
-      ],
+      "columns": ["scopeKey"],
       "nullsNotDistinct": false,
       "name": "ai_memory_scope_config_scope_key_unique",
       "entityType": "uniques",
@@ -15388,9 +14785,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "dedupeKey"
-      ],
+      "columns": ["dedupeKey"],
       "nullsNotDistinct": false,
       "name": "billing_credit_usage_event_dedupe_key_unique",
       "entityType": "uniques",
@@ -15399,10 +14794,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "provider",
-        "providerSubscriptionId"
-      ],
+      "columns": ["provider", "providerSubscriptionId"],
       "nullsNotDistinct": false,
       "name": "billing_subscription_provider_subscription_unique",
       "entityType": "uniques",
@@ -15411,10 +14803,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "id",
-        "userId"
-      ],
+      "columns": ["id", "userId"],
       "nullsNotDistinct": false,
       "name": "chat_id_user_id_unique",
       "entityType": "uniques",
@@ -15423,11 +14812,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "id",
-        "mailboxId",
-        "userId"
-      ],
+      "columns": ["id", "mailboxId", "userId"],
       "nullsNotDistinct": false,
       "name": "chat_id_mailbox_id_user_id_unique",
       "entityType": "uniques",
@@ -15436,10 +14821,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "id",
-        "chatId"
-      ],
+      "columns": ["id", "chatId"],
       "nullsNotDistinct": false,
       "name": "chat_message_id_chat_id_unique",
       "entityType": "uniques",
@@ -15448,10 +14830,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "chatId",
-        "position"
-      ],
+      "columns": ["chatId", "position"],
       "nullsNotDistinct": false,
       "name": "chat_message_chat_id_position_unique",
       "entityType": "uniques",
@@ -15460,10 +14839,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "runId",
-        "offset"
-      ],
+      "columns": ["runId", "offset"],
       "nullsNotDistinct": false,
       "name": "chat_run_stream_chunk_run_id_offset_unique",
       "entityType": "uniques",
@@ -15472,11 +14848,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "userId",
-        "provider",
-        "providerAccountId"
-      ],
+      "columns": ["userId", "provider", "providerAccountId"],
       "nullsNotDistinct": false,
       "name": "connector_credential_user_provider_account_unique",
       "entityType": "uniques",
@@ -15485,10 +14857,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "mailboxId",
-        "gmailMessageId"
-      ],
+      "columns": ["mailboxId", "gmailMessageId"],
       "nullsNotDistinct": false,
       "name": "gmail_auto_label_event_mailbox_message_unique",
       "entityType": "uniques",
@@ -15497,9 +14866,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "googleSubject"
-      ],
+      "columns": ["googleSubject"],
       "nullsNotDistinct": false,
       "name": "gmail_credential_google_subject_unique",
       "entityType": "uniques",
@@ -15508,10 +14875,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "mailboxId",
-        "labelId"
-      ],
+      "columns": ["mailboxId", "labelId"],
       "nullsNotDistinct": false,
       "name": "gmail_label_mailbox_id_label_id_unique",
       "entityType": "uniques",
@@ -15520,11 +14884,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "mailboxId",
-        "kind",
-        "dedupeKey"
-      ],
+      "columns": ["mailboxId", "kind", "dedupeKey"],
       "nullsNotDistinct": false,
       "name": "gmail_useful_detail_mailbox_kind_dedupe_unique",
       "entityType": "uniques",
@@ -15533,10 +14893,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "mailboxId",
-        "gmailMessageId"
-      ],
+      "columns": ["mailboxId", "gmailMessageId"],
       "nullsNotDistinct": false,
       "name": "gmail_useful_detail_event_mailbox_message_unique",
       "entityType": "uniques",
@@ -15545,10 +14902,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "mailboxId",
-        "detailId"
-      ],
+      "columns": ["mailboxId", "detailId"],
       "nullsNotDistinct": false,
       "name": "gmail_useful_detail_feedback_mailbox_detail_unique",
       "entityType": "uniques",
@@ -15557,11 +14911,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "mailboxId",
-        "providerMessageId",
-        "labelId"
-      ],
+      "columns": ["mailboxId", "providerMessageId", "labelId"],
       "nullsNotDistinct": false,
       "name": "mail_auto_label_feedback_message_label_unique",
       "entityType": "uniques",
@@ -15570,10 +14920,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "mailboxId",
-        "agent"
-      ],
+      "columns": ["mailboxId", "agent"],
       "nullsNotDistinct": false,
       "name": "mail_automation_memory_profile_mailbox_agent_unique",
       "entityType": "uniques",
@@ -15582,9 +14929,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "domain"
-      ],
+      "columns": ["domain"],
       "nullsNotDistinct": false,
       "name": "mail_domain_domain_unique",
       "entityType": "uniques",
@@ -15593,9 +14938,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "emailAddress"
-      ],
+      "columns": ["emailAddress"],
       "nullsNotDistinct": false,
       "name": "mailbox_email_address_unique",
       "entityType": "uniques",
@@ -15604,9 +14947,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "idempotencyKey"
-      ],
+      "columns": ["idempotencyKey"],
       "nullsNotDistinct": false,
       "name": "mailbox_action_external_effect_idempotency_unique",
       "entityType": "uniques",
@@ -15615,10 +14956,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "actionId",
-        "revisionNumber"
-      ],
+      "columns": ["actionId", "revisionNumber"],
       "nullsNotDistinct": false,
       "name": "mailbox_action_revision_action_number_unique",
       "entityType": "uniques",
@@ -15627,9 +14965,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "dedupeKey"
-      ],
+      "columns": ["dedupeKey"],
       "nullsNotDistinct": false,
       "name": "mailbox_action_run_dedupe_key_unique",
       "entityType": "uniques",
@@ -15638,10 +14974,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "mailboxId",
-        "divisionId"
-      ],
+      "columns": ["mailboxId", "divisionId"],
       "nullsNotDistinct": false,
       "name": "mailbox_division_grant_mailbox_division_unique",
       "entityType": "uniques",
@@ -15650,10 +14983,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "mailboxId",
-        "userId"
-      ],
+      "columns": ["mailboxId", "userId"],
       "nullsNotDistinct": false,
       "name": "mailbox_grant_mailbox_id_user_id_unique",
       "entityType": "uniques",
@@ -15662,10 +14992,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "mailboxId",
-        "normalizedName"
-      ],
+      "columns": ["mailboxId", "normalizedName"],
       "nullsNotDistinct": false,
       "name": "managed_mail_label_mailbox_normalized_name_unique",
       "entityType": "uniques",
@@ -15674,10 +15001,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "mailboxId",
-        "providerMessageId"
-      ],
+      "columns": ["mailboxId", "providerMessageId"],
       "nullsNotDistinct": false,
       "name": "managed_mail_message_mailbox_provider_message_unique",
       "entityType": "uniques",
@@ -15686,10 +15010,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "messageId",
-        "labelId"
-      ],
+      "columns": ["messageId", "labelId"],
       "nullsNotDistinct": false,
       "name": "managed_mail_message_label_message_label_unique",
       "entityType": "uniques",
@@ -15698,10 +15019,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "mailboxId",
-        "normalizedName"
-      ],
+      "columns": ["mailboxId", "normalizedName"],
       "nullsNotDistinct": false,
       "name": "managed_mail_rule_mailbox_normalized_name_unique",
       "entityType": "uniques",
@@ -15710,10 +15028,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "ruleId",
-        "messageId"
-      ],
+      "columns": ["ruleId", "messageId"],
       "nullsNotDistinct": false,
       "name": "managed_mail_rule_application_rule_message_unique",
       "entityType": "uniques",
@@ -15722,10 +15037,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "organizationId",
-        "userId"
-      ],
+      "columns": ["organizationId", "userId"],
       "nullsNotDistinct": false,
       "name": "member_organization_id_user_id_unique",
       "entityType": "uniques",
@@ -15734,9 +15046,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "slug"
-      ],
+      "columns": ["slug"],
       "nullsNotDistinct": false,
       "name": "organization_slug_unique",
       "entityType": "uniques",
@@ -15745,10 +15055,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "organizationId",
-        "providerMessageId"
-      ],
+      "columns": ["organizationId", "providerMessageId"],
       "nullsNotDistinct": false,
       "name": "organization_api_mail_message_org_provider_unique",
       "entityType": "uniques",
@@ -15757,10 +15064,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "organizationId",
-        "normalizedName"
-      ],
+      "columns": ["organizationId", "normalizedName"],
       "nullsNotDistinct": false,
       "name": "organization_division_organization_name_unique",
       "entityType": "uniques",
@@ -15769,10 +15073,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "divisionId",
-        "memberId"
-      ],
+      "columns": ["divisionId", "memberId"],
       "nullsNotDistinct": false,
       "name": "organization_division_member_division_member_unique",
       "entityType": "uniques",
@@ -15781,10 +15082,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "organizationId",
-        "idempotencyKey"
-      ],
+      "columns": ["organizationId", "idempotencyKey"],
       "nullsNotDistinct": false,
       "name": "organization_mail_send_idempotency_organization_key_unique",
       "entityType": "uniques",
@@ -15807,9 +15105,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "dedupeKey"
-      ],
+      "columns": ["dedupeKey"],
       "nullsNotDistinct": false,
       "name": "organization_mail_usage_event_dedupe_key_unique",
       "entityType": "uniques",
@@ -15818,9 +15114,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "credentialID"
-      ],
+      "columns": ["credentialID"],
       "nullsNotDistinct": false,
       "name": "passkey_credential_id_unique",
       "entityType": "uniques",
@@ -15829,9 +15123,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "userId"
-      ],
+      "columns": ["userId"],
       "nullsNotDistinct": false,
       "name": "user_ai_context_user_id_unique",
       "entityType": "uniques",
@@ -15840,9 +15132,7 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "token"
-      ],
+      "columns": ["token"],
       "nullsNotDistinct": false,
       "name": "session_token_key",
       "schema": "public",
@@ -15851,9 +15141,7 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "email"
-      ],
+      "columns": ["email"],
       "nullsNotDistinct": false,
       "name": "user_email_key",
       "schema": "public",

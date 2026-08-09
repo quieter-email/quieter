@@ -1,14 +1,17 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+
 import { z } from "zod";
+
+import { hasText } from "./text";
 
 const TOKEN_LIFETIME_SECONDS = 90;
 
 const tokenPayloadSchema = z.object({
-  emailAddress: z.string().email(),
+  emailAddress: z.email(),
   expiresAt: z.number().int().positive(),
   issuedAt: z.number().int().positive(),
   mailboxId: z.string().min(1),
-  nonce: z.string().uuid(),
+  nonce: z.uuid(),
   userId: z.string().min(1),
   version: z.literal(1),
 });
@@ -25,7 +28,7 @@ export const createGmailLiveSyncToken = (
     userId: string;
   },
   secret: string,
-  now = new Date(),
+  now = new Date()
 ) => {
   const issuedAt = Math.floor(now.getTime() / 1000);
   const payload: GmailLiveSyncTokenPayload = {
@@ -37,7 +40,9 @@ export const createGmailLiveSyncToken = (
     userId: input.userId,
     version: 1,
   };
-  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString(
+    "base64url"
+  );
 
   return {
     expiresAt: new Date(payload.expiresAt * 1000),
@@ -48,14 +53,20 @@ export const createGmailLiveSyncToken = (
 export const verifyGmailLiveSyncToken = (
   token: string,
   secret: string,
-  now = new Date(),
+  now = new Date()
 ): GmailLiveSyncTokenPayload => {
   const [encodedPayload, encodedSignature, extraPart] = token.split(".");
-  if (!encodedPayload || !encodedSignature || extraPart) {
+  if (
+    !hasText(encodedPayload) ||
+    !hasText(encodedSignature) ||
+    extraPart !== undefined
+  ) {
     throw new Error("Gmail live-sync token is malformed.");
   }
 
-  const expectedSignature = Buffer.from(signTokenPayload(encodedPayload, secret));
+  const expectedSignature = Buffer.from(
+    signTokenPayload(encodedPayload, secret)
+  );
   const providedSignature = Buffer.from(encodedSignature);
   if (
     expectedSignature.length !== providedSignature.length ||
@@ -65,7 +76,7 @@ export const verifyGmailLiveSyncToken = (
   }
 
   const payload = tokenPayloadSchema.parse(
-    JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8")),
+    JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf-8"))
   );
   const nowSeconds = Math.floor(now.getTime() / 1000);
   if (payload.expiresAt <= nowSeconds || payload.issuedAt > nowSeconds + 30) {

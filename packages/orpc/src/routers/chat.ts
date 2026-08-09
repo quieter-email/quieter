@@ -1,10 +1,9 @@
-import type { ChatMiddleware } from "@tanstack/ai";
 import { ORPCError } from "@orpc/server";
 import {
   composeEmailInputSchema,
   composeEmailResultSchema,
-  type ComposeEmailResult,
 } from "@quieter/ai/chat-agent";
+import type { ComposeEmailResult } from "@quieter/ai/chat-agent";
 import { chatModelSchema, CHAT_TITLE_MODEL } from "@quieter/ai/chat-models";
 import {
   OPENROUTER_TRANSCRIPTION_MODEL,
@@ -15,15 +14,19 @@ import { getBillingCreditUsage } from "@quieter/billing/credits";
 import { hasUserBillingFeature } from "@quieter/billing/entitlements";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
 import { db } from "@quieter/database/client";
-import { chat, chatMessage, chatRun, type ChatMessagePart } from "@quieter/database/schema";
+import { chat, chatMessage, chatRun } from "@quieter/database/schema";
+import type { ChatMessagePart } from "@quieter/database/schema";
 import {
   composeDraftFormValuesSchema,
   composeDraftInputSchema,
   composeMessageInputSchema,
   composeSendFormValuesSchema,
 } from "@quieter/mail/compose/schema";
+import { reportError } from "@quieter/observability";
+import type { ChatMiddleware } from "@tanstack/ai";
 import { and, desc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import { z } from "zod";
+
 import {
   learnAiMemoryFromSentMessage,
   loadAiAgentContext,
@@ -37,13 +40,18 @@ import {
   getActiveChatRunSummary,
   hasActiveChatRun,
   startAssistantRun,
+  ACTIVE_CHAT_RUN_STATUSES,
 } from "../chat-run-store";
-import { ACTIVE_CHAT_RUN_STATUSES } from "../chat-run-store";
 import { terminalizeFailedChatRun } from "../chat/generation/failure";
 import { cancelChatRun, startChatRun } from "../chat/generation/lifecycle";
 import { saveGmailDraft, sendGmailMessage } from "../gmail-compose";
 import { assertAccessibleMailbox } from "../mailbox/service";
-import { callGmail, mailboxCategorySchema, mailboxIdSchema, protectedProcedure } from "./base";
+import {
+  callGmail,
+  mailboxCategorySchema,
+  mailboxIdSchema,
+  protectedProcedure,
+} from "./base";
 
 const chatIdSchema = z.string().trim().min(1);
 const chatTitleSchema = z.string().trim().min(1).max(120);
@@ -97,14 +105,35 @@ const resolveComposeToolInputSchema = z.discriminatedUnion("action", [
   }),
 ]);
 
-const findAuthorizedChat = async (chatId: string, mailboxId: string, userId: string) => {
+const approvalIdForPart = (approval: unknown, toolCallId: string) => {
+  if (typeof approval === "object" && approval !== null) {
+    const approvalId: unknown = Reflect.get(approval, "id");
+    if (typeof approvalId === "string") {
+      return approvalId;
+    }
+  }
+
+  return `approval_${toolCallId}`;
+};
+
+const findAuthorizedChat = async (
+  chatId: string,
+  mailboxId: string,
+  userId: string
+) => {
   const [authorizedChat] = await db
     .select()
     .from(chat)
-    .where(and(eq(chat.id, chatId), eq(chat.mailboxId, mailboxId), eq(chat.userId, userId)))
+    .where(
+      and(
+        eq(chat.id, chatId),
+        eq(chat.mailboxId, mailboxId),
+        eq(chat.userId, userId)
+      )
+    )
     .limit(1);
 
-  if (!authorizedChat) {
+  if (authorizedChat === undefined) {
     throw new ORPCError("NOT_FOUND", {
       message: "Chat not found.",
     });
@@ -113,7 +142,11 @@ const findAuthorizedChat = async (chatId: string, mailboxId: string, userId: str
   return authorizedChat;
 };
 
-const getAuthorizedChat = async (chatId: string, mailboxId: string, userId: string) => {
+const getAuthorizedChat = async (
+  chatId: string,
+  mailboxId: string,
+  userId: string
+) => {
   const [, authorizedChat] = await Promise.all([
     assertAccessibleMailbox({ mailboxId, userId }),
     findAuthorizedChat(chatId, mailboxId, userId),
@@ -143,6 +176,30 @@ const listChatMessages = async (chatId: string) => {
     role: message.role,
     status: message.status,
   }));
+};
+
+const assertCanUseAiCredits = async (
+  entitlement: Awaited<ReturnType<typeof hasUserBillingFeature>>
+) => {
+  if (!entitlement.hasAccess) {
+    throw new ORPCError("FORBIDDEN", {
+      message: `AI chat requires ${BILLING_FEATURES.aiChat.requirementLabel}.`,
+    });
+  }
+
+  if (entitlement.hasUnlimitedAccess) {
+    return;
+  }
+  if (!entitlement.account) {
+    return;
+  }
+
+  const usage = await getBillingCreditUsage(entitlement.account);
+  if (usage.costMicroCents >= usage.creditAmountMicroCents) {
+    throw new ORPCError("FORBIDDEN", {
+      message: "AI chat requires available usage balance.",
+    });
+  }
 };
 
 const assertCanRunChatGeneration = async (input: {
@@ -178,25 +235,30 @@ const assertCanRunChatGeneration = async (input: {
     });
   }
 
-  if (!input.allowPendingCompose) {
+  if (input.allowPendingCompose !== true) {
     const assistantMessages = await db
       .select({ parts: chatMessage.parts })
       .from(chatMessage)
-      .where(and(eq(chatMessage.chatId, authorizedChat.id), eq(chatMessage.role, "assistant")));
+      .where(
+        and(
+          eq(chatMessage.chatId, authorizedChat.id),
+          eq(chatMessage.role, "assistant")
+        )
+      );
     const hasPendingCompose = assistantMessages.some(({ parts }) => {
       const completedToolCalls = new Set(
         parts.flatMap((part) =>
           part.type === "tool-result" && typeof part.toolCallId === "string"
             ? [part.toolCallId]
-            : [],
-        ),
+            : []
+        )
       );
       return parts.some(
         (part) =>
           part.type === "tool-call" &&
           part.name === "compose_email" &&
           typeof part.id === "string" &&
-          !completedToolCalls.has(part.id),
+          !completedToolCalls.has(part.id)
       );
     });
 
@@ -220,38 +282,23 @@ const rethrowChatRunConflict = (error: unknown): never => {
   throw error;
 };
 
-const startAssistantRunOrThrow = (input: Parameters<typeof startAssistantRun>[0]) =>
-  startAssistantRun(input).catch(rethrowChatRunConflict);
+const startAssistantRunOrThrow = async (
+  input: Parameters<typeof startAssistantRun>[0]
+) => await startAssistantRun(input).catch(rethrowChatRunConflict);
 
-const continueAssistantRunOrThrow = (input: Parameters<typeof continueAssistantRun>[0]) =>
-  continueAssistantRun(input).catch(rethrowChatRunConflict);
+const continueAssistantRunOrThrow = async (
+  input: Parameters<typeof continueAssistantRun>[0]
+) => await continueAssistantRun(input).catch(rethrowChatRunConflict);
 
 const startCreatedChatRun = async (runId: string) => {
   try {
     await startChatRun(runId);
   } catch (error) {
-    console.error(`Could not start chat run ${runId}.`, error);
-    await terminalizeFailedChatRun(runId, "The response could not start. Retry it to continue.");
-  }
-};
-
-const assertCanUseAiCredits = async (
-  entitlement: Awaited<ReturnType<typeof hasUserBillingFeature>>,
-) => {
-  if (!entitlement.hasAccess) {
-    throw new ORPCError("FORBIDDEN", {
-      message: `AI chat requires ${BILLING_FEATURES.aiChat.requirementLabel}.`,
-    });
-  }
-
-  if (entitlement.hasUnlimitedAccess) return;
-  if (!entitlement.account) return;
-
-  const usage = await getBillingCreditUsage(entitlement.account);
-  if (usage.costMicroCents >= usage.creditAmountMicroCents) {
-    throw new ORPCError("FORBIDDEN", {
-      message: "AI chat requires available usage balance.",
-    });
+    reportError(error, { operation: "chat: start-run" });
+    await terminalizeFailedChatRun(
+      runId,
+      "The response could not start. Retry it to continue."
+    );
   }
 };
 
@@ -282,33 +329,35 @@ const buildRunResponse = async ({
 };
 
 export const chatRouter = {
-  list: protectedProcedure
-    .route({ method: "GET" })
-    .input(z.object({ mailboxId: mailboxIdSchema }))
+  cancelGeneration: protectedProcedure
+    .input(z.object({ chatId: chatIdSchema, mailboxId: mailboxIdSchema }))
     .handler(async ({ context, input }) => {
-      await assertAccessibleMailbox({ mailboxId: input.mailboxId, userId: context.userId });
+      const authorizedChat = await getAuthorizedChat(
+        input.chatId,
+        input.mailboxId,
+        context.userId
+      );
+      const cancelledRun = await cancelActiveChatRun({
+        chatId: authorizedChat.id,
+        userId: context.userId,
+      });
 
-      return await db
-        .select({
-          createdAt: chat.createdAt,
-          id: chat.id,
-          isGenerating: sql<boolean>`${chatRun.id} is not null`,
-          title: chat.title,
-          updatedAt: chat.updatedAt,
-        })
-        .from(chat)
-        .leftJoin(
-          chatRun,
-          and(eq(chatRun.chatId, chat.id), inArray(chatRun.status, [...ACTIVE_CHAT_RUN_STATUSES])),
-        )
-        .where(and(eq(chat.mailboxId, input.mailboxId), eq(chat.userId, context.userId)))
-        .orderBy(desc(chat.updatedAt));
+      if (!cancelledRun) {
+        return { cancelled: false as const };
+      }
+
+      cancelChatRun(cancelledRun.runId);
+
+      return { cancelled: true as const, ...cancelledRun };
     }),
 
   create: protectedProcedure
     .input(z.object({ mailboxId: mailboxIdSchema }))
     .handler(async ({ context, input }) => {
-      await assertAccessibleMailbox({ mailboxId: input.mailboxId, userId: context.userId });
+      await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
 
       const now = new Date();
       const [createdChat] = await db
@@ -328,141 +377,89 @@ export const chatRouter = {
           updatedAt: chat.updatedAt,
         });
 
-      return createdChat!;
+      return createdChat;
     }),
 
-  rename: protectedProcedure
+  delete: protectedProcedure
+    .input(z.object({ chatId: chatIdSchema, mailboxId: mailboxIdSchema }))
+    .handler(async ({ context, input }) => {
+      const authorizedChat = await getAuthorizedChat(
+        input.chatId,
+        input.mailboxId,
+        context.userId
+      );
+
+      await db.delete(chat).where(eq(chat.id, authorizedChat.id));
+
+      return { deleted: true, id: authorizedChat.id };
+    }),
+
+  editUserMessage: protectedProcedure
     .input(
       z.object({
+        category: mailboxCategorySchema,
         chatId: chatIdSchema,
+        context: chatRunContextSchema.optional(),
         mailboxId: mailboxIdSchema,
-        title: chatTitleSchema,
-      }),
+        message: chatPromptSchema,
+        model: chatModelSchema,
+        userMessageId: z.string().trim().min(1),
+      })
     )
     .handler(async ({ context, input }) => {
-      const authorizedChat = await getAuthorizedChat(input.chatId, input.mailboxId, context.userId);
-      const [updatedChat] = await db
-        .update(chat)
-        .set({
-          title: input.title,
-          updatedAt: new Date(),
-        })
-        .where(eq(chat.id, authorizedChat.id))
-        .returning({
-          createdAt: chat.createdAt,
-          id: chat.id,
-          title: chat.title,
-          updatedAt: chat.updatedAt,
-        });
-
-      return updatedChat!;
-    }),
-
-  transcribeAudio: protectedProcedure
-    .input(chatAudioTranscriptionSchema)
-    .handler(async ({ context, input }) => {
-      const accessibleMailbox = await assertAccessibleMailbox({
+      const authorizedChat = await assertCanRunChatGeneration({
+        chatId: input.chatId,
         mailboxId: input.mailboxId,
         userId: context.userId,
       });
-      const entitlement = await hasUserBillingFeature({
-        feature: "aiChat",
-        organizationId: accessibleMailbox.organizationId ?? undefined,
+
+      const [userMessage] = await db
+        .select({
+          id: chatMessage.id,
+          position: chatMessage.position,
+        })
+        .from(chatMessage)
+        .where(
+          and(
+            eq(chatMessage.id, input.userMessageId),
+            eq(chatMessage.chatId, authorizedChat.id),
+            eq(chatMessage.role, "user")
+          )
+        )
+        .limit(1);
+
+      if (userMessage === undefined) {
+        throw new ORPCError("NOT_FOUND", {
+          message: "User message not found.",
+        });
+      }
+
+      const userParts: ChatMessagePart[] = [
+        { content: input.message, type: "text" },
+      ];
+
+      const { assistantMessageId, runId } = await startAssistantRunOrThrow({
+        chatId: authorizedChat.id,
+        context: input.context,
+        mailboxCategory: input.category,
+        mailboxId: input.mailboxId,
+        model: input.model,
         userId: context.userId,
+        userMessage: {
+          id: userMessage.id,
+          parts: userParts,
+        },
+        userMessagePosition: userMessage.position,
       });
 
-      await assertCanUseAiCredits(entitlement);
+      await startCreatedChatRun(runId);
 
-      if (input.chatId) {
-        await findAuthorizedChat(input.chatId, input.mailboxId, context.userId);
-      }
-
-      const { generateOpenRouterTranscription } =
-        await import("@quieter/ai/openrouter-transcription");
-      const result = await generateOpenRouterTranscription({
-        audioBase64: input.audioBase64,
-        format: input.format,
-      }).catch((error) => {
-        console.error("Could not transcribe chat audio.", error);
-        const message =
-          error instanceof Error &&
-          (error.message.startsWith("Transcription ") ||
-            error.message.startsWith("We could not transcribe "))
-            ? error.message
-            : "We could not transcribe that recording. Try recording it again.";
-
-        throw new ORPCError("INTERNAL_SERVER_ERROR", {
-          message,
-        });
+      return await buildRunResponse({
+        assistantMessageId,
+        chatId: authorizedChat.id,
+        runId,
+        userMessageId: userMessage.id,
       });
-      const text = result.text.trim();
-
-      if (!text) {
-        throw new ORPCError("BAD_REQUEST", {
-          message: "No speech was detected.",
-        });
-      }
-
-      const responseText =
-        input.mode === "email"
-          ? await (async () => {
-              const { formatTranscribedEmail, TRANSCRIBED_EMAIL_FORMAT_MODEL } =
-                await import("@quieter/ai/format-transcribed-email");
-              const memoryContext = await loadAiAgentContext({
-                agent: "compose",
-                mailboxId: input.mailboxId,
-                query: text,
-                userId: context.userId,
-              });
-              return await formatTranscribedEmail({
-                memoryContext: serializeAiAgentContext(memoryContext),
-                middleware: [
-                  {
-                    name: "polar-ai-transcribed-email-format-usage",
-                    onUsage: (usageContext, usage) => {
-                      usageContext.defer(
-                        reportAiUsage({
-                          chatId: input.chatId ?? null,
-                          costUsd: usage.cost,
-                          completionTokens: usage.completionTokens,
-                          externalId: `chat-transcription-format:${result.id}`,
-                          mailboxId: input.mailboxId,
-                          model: TRANSCRIBED_EMAIL_FORMAT_MODEL,
-                          promptTokens: usage.promptTokens,
-                          promptTokensDetails: usage.promptTokensDetails,
-                          usageKind: "aiChat",
-                          userId: context.userId,
-                        }).catch((error) => {
-                          console.error(
-                            "Could not report transcribed email formatting AI usage to Polar.",
-                            error instanceof Error ? error.message : "Unknown error.",
-                          );
-                        }),
-                      );
-                    },
-                  },
-                ],
-                transcript: text,
-              }).catch(() => text);
-            })()
-          : text;
-
-      const cost = result.usage?.cost;
-      if (typeof cost === "number" && Number.isFinite(cost) && cost > 0) {
-        await reportAiUsage({
-          chatId: input.chatId ?? null,
-          costUsd: cost,
-          completionTokens: result.usage?.completionTokens ?? 0,
-          externalId: `chat-transcription:${result.id}`,
-          mailboxId: input.mailboxId,
-          model: OPENROUTER_TRANSCRIPTION_MODEL,
-          promptTokens: result.usage?.promptTokens ?? 0,
-          usageKind: "aiChat",
-          userId: context.userId,
-        });
-      }
-
-      return { text: responseText };
     }),
 
   generateTitle: protectedProcedure
@@ -471,7 +468,7 @@ export const chatRouter = {
         chatId: chatIdSchema,
         mailboxId: mailboxIdSchema,
         message: chatPromptSchema,
-      }),
+      })
     )
     .handler(async ({ context, input }) => {
       const [authorizedChat, accessibleMailbox] = await Promise.all([
@@ -489,7 +486,7 @@ export const chatRouter = {
 
       await assertCanUseAiCredits(entitlement);
 
-      if (authorizedChat.title) {
+      if (authorizedChat.title !== null && authorizedChat.title.length > 0) {
         return authorizedChat;
       }
 
@@ -497,27 +494,29 @@ export const chatRouter = {
         name: "polar-ai-title-usage",
         onUsage: (usageContext, usage) => {
           usageContext.defer(
-            reportAiUsage({
-              chatId: authorizedChat.id,
-              costUsd: usage.cost,
-              completionTokens: usage.completionTokens,
-              externalId: `chat-title:${authorizedChat.id}`,
-              mailboxId: input.mailboxId,
-              model: CHAT_TITLE_MODEL,
-              promptTokens: usage.promptTokens,
-              promptTokensDetails: usage.promptTokensDetails,
-              usageKind: "aiChat",
-              userId: context.userId,
-            }).catch((error) => {
-              console.error(
-                "Could not report chat title AI usage to Polar.",
-                error instanceof Error ? error.message : "Unknown error.",
-              );
-            }),
+            (async () => {
+              try {
+                await reportAiUsage({
+                  chatId: authorizedChat.id,
+                  completionTokens: usage.completionTokens,
+                  costUsd: usage.cost,
+                  externalId: `chat-title:${authorizedChat.id}`,
+                  mailboxId: input.mailboxId,
+                  model: CHAT_TITLE_MODEL,
+                  promptTokens: usage.promptTokens,
+                  promptTokensDetails: usage.promptTokensDetails,
+                  usageKind: "aiChat",
+                  userId: context.userId,
+                });
+              } catch (error: unknown) {
+                reportError(error, { operation: "chat:report-title-usage" });
+              }
+            })()
           );
         },
       };
-      const { generateChatTitle } = await import("@quieter/ai/generate-chat-title");
+      const { generateChatTitle } =
+        await import("@quieter/ai/generate-chat-title");
       const title = await generateChatTitle({
         middleware: [usageMiddleware],
         prompt: input.message,
@@ -537,25 +536,24 @@ export const chatRouter = {
         .returning();
 
       return (
-        updatedChat ?? (await findAuthorizedChat(input.chatId, input.mailboxId, context.userId))
+        updatedChat ??
+        (await findAuthorizedChat(
+          input.chatId,
+          input.mailboxId,
+          context.userId
+        ))
       );
-    }),
-
-  delete: protectedProcedure
-    .input(z.object({ chatId: chatIdSchema, mailboxId: mailboxIdSchema }))
-    .handler(async ({ context, input }) => {
-      const authorizedChat = await getAuthorizedChat(input.chatId, input.mailboxId, context.userId);
-
-      await db.delete(chat).where(eq(chat.id, authorizedChat.id));
-
-      return { deleted: true, id: authorizedChat.id };
     }),
 
   get: protectedProcedure
     .route({ method: "GET" })
     .input(z.object({ chatId: chatIdSchema, mailboxId: mailboxIdSchema }))
     .handler(async ({ context, input }) => {
-      const authorizedChat = await getAuthorizedChat(input.chatId, input.mailboxId, context.userId);
+      const authorizedChat = await getAuthorizedChat(
+        input.chatId,
+        input.mailboxId,
+        context.userId
+      );
       const messages = await db
         .select({
           createdAt: chatMessage.createdAt,
@@ -596,130 +594,38 @@ export const chatRouter = {
       };
     }),
 
-  sendMessage: protectedProcedure
-    .input(
-      z.object({
-        category: mailboxCategorySchema,
-        chatId: chatIdSchema,
-        context: chatRunContextSchema.optional(),
-        mailboxId: mailboxIdSchema,
-        message: chatPromptSchema,
-        model: chatModelSchema,
-      }),
-    )
+  list: protectedProcedure
+    .route({ method: "GET" })
+    .input(z.object({ mailboxId: mailboxIdSchema }))
     .handler(async ({ context, input }) => {
-      const authorizedChat = await assertCanRunChatGeneration({
-        chatId: input.chatId,
+      await assertAccessibleMailbox({
         mailboxId: input.mailboxId,
         userId: context.userId,
       });
 
-      const [lastMessage] = await db
-        .select({ position: chatMessage.position })
-        .from(chatMessage)
-        .where(eq(chatMessage.chatId, authorizedChat.id))
-        .orderBy(desc(chatMessage.position))
-        .limit(1);
-      const nextPosition = (lastMessage?.position ?? -1) + 1;
-      const runId = crypto.randomUUID();
-      const userMessageId = crypto.randomUUID();
-      const assistantMessageId = crypto.randomUUID();
-      const userParts: ChatMessagePart[] = [{ content: input.message, type: "text" }];
-
-      try {
-        await createChatRunRecords({
-          assistantMessageId,
-          chatId: authorizedChat.id,
-          context: input.context,
-          mailboxCategory: input.category,
-          mailboxId: input.mailboxId,
-          model: input.model,
-          runId,
-          userId: context.userId,
-          userMessage: {
-            id: userMessageId,
-            parts: userParts,
-            position: nextPosition,
-          },
-        });
-      } catch (error) {
-        rethrowChatRunConflict(error);
-      }
-
-      await startCreatedChatRun(runId);
-
-      return buildRunResponse({
-        assistantMessageId,
-        chatId: authorizedChat.id,
-        runId,
-        userMessageId,
-      });
-    }),
-
-  editUserMessage: protectedProcedure
-    .input(
-      z.object({
-        category: mailboxCategorySchema,
-        chatId: chatIdSchema,
-        context: chatRunContextSchema.optional(),
-        mailboxId: mailboxIdSchema,
-        message: chatPromptSchema,
-        model: chatModelSchema,
-        userMessageId: z.string().trim().min(1),
-      }),
-    )
-    .handler(async ({ context, input }) => {
-      const authorizedChat = await assertCanRunChatGeneration({
-        chatId: input.chatId,
-        mailboxId: input.mailboxId,
-        userId: context.userId,
-      });
-
-      const [userMessage] = await db
+      return await db
         .select({
-          id: chatMessage.id,
-          position: chatMessage.position,
+          createdAt: chat.createdAt,
+          id: chat.id,
+          isGenerating: sql<boolean>`${chatRun.id} is not null`,
+          title: chat.title,
+          updatedAt: chat.updatedAt,
         })
-        .from(chatMessage)
+        .from(chat)
+        .leftJoin(
+          chatRun,
+          and(
+            eq(chatRun.chatId, chat.id),
+            inArray(chatRun.status, [...ACTIVE_CHAT_RUN_STATUSES])
+          )
+        )
         .where(
           and(
-            eq(chatMessage.id, input.userMessageId),
-            eq(chatMessage.chatId, authorizedChat.id),
-            eq(chatMessage.role, "user"),
-          ),
+            eq(chat.mailboxId, input.mailboxId),
+            eq(chat.userId, context.userId)
+          )
         )
-        .limit(1);
-
-      if (!userMessage) {
-        throw new ORPCError("NOT_FOUND", {
-          message: "User message not found.",
-        });
-      }
-
-      const userParts: ChatMessagePart[] = [{ content: input.message, type: "text" }];
-
-      const { assistantMessageId, runId } = await startAssistantRunOrThrow({
-        chatId: authorizedChat.id,
-        context: input.context,
-        mailboxCategory: input.category,
-        mailboxId: input.mailboxId,
-        model: input.model,
-        userId: context.userId,
-        userMessage: {
-          id: userMessage.id,
-          parts: userParts,
-        },
-        userMessagePosition: userMessage.position,
-      });
-
-      await startCreatedChatRun(runId);
-
-      return buildRunResponse({
-        assistantMessageId,
-        chatId: authorizedChat.id,
-        runId,
-        userMessageId: userMessage.id,
-      });
+        .orderBy(desc(chat.updatedAt));
     }),
 
   regenerateResponse: protectedProcedure
@@ -731,7 +637,7 @@ export const chatRouter = {
         context: chatRunContextSchema.optional(),
         mailboxId: mailboxIdSchema,
         model: chatModelSchema,
-      }),
+      })
     )
     .handler(async ({ context, input }) => {
       const authorizedChat = await assertCanRunChatGeneration({
@@ -751,12 +657,12 @@ export const chatRouter = {
           and(
             eq(chatMessage.id, input.assistantMessageId),
             eq(chatMessage.chatId, authorizedChat.id),
-            eq(chatMessage.role, "assistant"),
-          ),
+            eq(chatMessage.role, "assistant")
+          )
         )
         .limit(1);
 
-      if (!assistantMessage) {
+      if (assistantMessage === undefined) {
         throw new ORPCError("NOT_FOUND", {
           message: "Assistant message not found.",
         });
@@ -775,12 +681,12 @@ export const chatRouter = {
           and(
             eq(chatMessage.chatId, authorizedChat.id),
             eq(chatMessage.position, assistantMessage.position - 1),
-            eq(chatMessage.role, "user"),
-          ),
+            eq(chatMessage.role, "user")
+          )
         )
         .limit(1);
 
-      if (!userMessage) {
+      if (userMessage === undefined) {
         throw new ORPCError("BAD_REQUEST", {
           message: "Could not find the user message for this response.",
         });
@@ -798,12 +704,43 @@ export const chatRouter = {
 
       await startCreatedChatRun(runId);
 
-      return buildRunResponse({
+      return await buildRunResponse({
         assistantMessageId,
         chatId: authorizedChat.id,
         runId,
         userMessageId: userMessage.id,
       });
+    }),
+
+  rename: protectedProcedure
+    .input(
+      z.object({
+        chatId: chatIdSchema,
+        mailboxId: mailboxIdSchema,
+        title: chatTitleSchema,
+      })
+    )
+    .handler(async ({ context, input }) => {
+      const authorizedChat = await getAuthorizedChat(
+        input.chatId,
+        input.mailboxId,
+        context.userId
+      );
+      const [updatedChat] = await db
+        .update(chat)
+        .set({
+          title: input.title,
+          updatedAt: new Date(),
+        })
+        .where(eq(chat.id, authorizedChat.id))
+        .returning({
+          createdAt: chat.createdAt,
+          id: chat.id,
+          title: chat.title,
+          updatedAt: chat.updatedAt,
+        });
+
+      return updatedChat;
     }),
 
   resolveComposeTool: protectedProcedure
@@ -828,12 +765,12 @@ export const chatRouter = {
             eq(chatMessage.id, input.assistantMessageId),
             eq(chatMessage.chatId, authorizedChat.id),
             eq(chatMessage.userId, context.userId),
-            eq(chatMessage.role, "assistant"),
-          ),
+            eq(chatMessage.role, "assistant")
+          )
         )
         .limit(1);
 
-      if (!assistantMessage) {
+      if (assistantMessage === undefined) {
         throw new ORPCError("NOT_FOUND", {
           message: "The compose request was not found.",
         });
@@ -843,12 +780,15 @@ export const chatRouter = {
         (part) =>
           part.type === "tool-call" &&
           part.id === input.toolCallId &&
-          part.name === "compose_email",
+          part.name === "compose_email"
       );
       const toolCall = assistantMessage.parts[toolCallIndex];
       let proposedMessage: unknown = toolCall?.input;
 
-      if (proposedMessage === undefined && typeof toolCall?.arguments === "string") {
+      if (
+        proposedMessage === undefined &&
+        typeof toolCall?.arguments === "string"
+      ) {
         try {
           proposedMessage = JSON.parse(toolCall.arguments);
         } catch {
@@ -856,7 +796,10 @@ export const chatRouter = {
         }
       }
 
-      if (!toolCall || !composeEmailInputSchema.safeParse(proposedMessage).success) {
+      if (
+        toolCall === undefined ||
+        !composeEmailInputSchema.safeParse(proposedMessage).success
+      ) {
         throw new ORPCError("BAD_REQUEST", {
           message: "The compose request is invalid.",
         });
@@ -864,7 +807,8 @@ export const chatRouter = {
 
       if (
         assistantMessage.parts.some(
-          (part) => part.type === "tool-result" && part.toolCallId === input.toolCallId,
+          (part) =>
+            part.type === "tool-result" && part.toolCallId === input.toolCallId
         )
       ) {
         throw new ORPCError("CONFLICT", {
@@ -879,15 +823,16 @@ export const chatRouter = {
           and(
             eq(chatMessage.chatId, authorizedChat.id),
             eq(chatMessage.role, "user"),
-            lt(chatMessage.position, assistantMessage.position),
-          ),
+            lt(chatMessage.position, assistantMessage.position)
+          )
         )
         .orderBy(desc(chatMessage.position))
         .limit(1);
 
-      if (!userMessage) {
+      if (userMessage === undefined) {
         throw new ORPCError("BAD_REQUEST", {
-          message: "Could not find the message that started this compose request.",
+          message:
+            "Could not find the message that started this compose request.",
         });
       }
 
@@ -898,17 +843,12 @@ export const chatRouter = {
               ...part,
               approval: {
                 approved,
-                id:
-                  typeof part.approval === "object" &&
-                  part.approval &&
-                  typeof Reflect.get(part.approval, "id") === "string"
-                    ? Reflect.get(part.approval, "id")
-                    : `approval_${input.toolCallId}`,
+                id: approvalIdForPart(part.approval, input.toolCallId),
                 needsApproval: true,
               },
               state: "approval-responded",
             }
-          : part,
+          : part
       );
       const [claimedMessage] = await db
         .update(chatMessage)
@@ -916,12 +856,12 @@ export const chatRouter = {
         .where(
           and(
             eq(chatMessage.id, assistantMessage.id),
-            eq(chatMessage.parts, assistantMessage.parts),
-          ),
+            eq(chatMessage.parts, assistantMessage.parts)
+          )
         )
         .returning({ id: chatMessage.id });
 
-      if (!claimedMessage) {
+      if (claimedMessage === undefined) {
         throw new ORPCError("CONFLICT", {
           message: "This email action is already being handled.",
         });
@@ -958,53 +898,72 @@ export const chatRouter = {
         });
 
         try {
-          result = await callGmail(context, input.mailboxId, async (accessToken) => {
-            if (input.action === "save_draft") {
-              const saved = await saveGmailDraft(accessToken, draft, context.signal);
+          result = await callGmail(
+            context,
+            input.mailboxId,
+            async (accessToken) => {
+              if (input.action === "save_draft") {
+                const saved = await saveGmailDraft(
+                  accessToken,
+                  draft,
+                  context.signal
+                );
+                return {
+                  draftId: saved.draftId,
+                  messageId: saved.messageId ?? undefined,
+                  status: "draft_saved" as const,
+                  subject: saved.subject,
+                  to: saved.recipients.to,
+                };
+              }
+
+              const sent = await sendGmailMessage(
+                accessToken,
+                composeMessageInputSchema.parse(draft),
+                context.signal
+              );
+              await learnAiMemoryFromSentMessage({
+                bodyText: input.message.bodyText,
+                isReply: false,
+                mailboxId: input.mailboxId,
+                recipients: [
+                  input.message.to,
+                  input.message.cc,
+                  input.message.bcc,
+                ].join(","),
+                userId: context.userId,
+              }).catch((error: unknown) => {
+                reportError(error, {
+                  operation: "chat:learn-from-sent-message",
+                });
+              });
               return {
-                draftId: saved.draftId,
-                messageId: saved.messageId ?? undefined,
-                status: "draft_saved" as const,
-                subject: saved.subject,
-                to: saved.recipients.to,
+                messageId: sent.id,
+                status: "sent" as const,
+                subject: input.message.subject,
+                threadId: sent.threadId,
+                to: input.message.to,
               };
             }
-
-            const sent = await sendGmailMessage(
-              accessToken,
-              composeMessageInputSchema.parse(draft),
-              context.signal,
-            );
-            await learnAiMemoryFromSentMessage({
-              bodyText: input.message.bodyText,
-              isReply: false,
-              mailboxId: input.mailboxId,
-              recipients: [input.message.to, input.message.cc, input.message.bcc].join(","),
-              userId: context.userId,
-            }).catch((error) => console.error("Could not record sent-message learning.", error));
-            return {
-              messageId: sent.id,
-              status: "sent" as const,
-              subject: input.message.subject,
-              threadId: sent.threadId,
-              to: input.message.to,
-            };
-          });
+          );
           result = composeEmailResultSchema.parse(result);
         } catch (error) {
           await db
             .update(chatMessage)
             .set({ parts: assistantMessage.parts })
             .where(
-              and(eq(chatMessage.id, assistantMessage.id), eq(chatMessage.parts, claimedParts)),
+              and(
+                eq(chatMessage.id, assistantMessage.id),
+                eq(chatMessage.parts, claimedParts)
+              )
             )
-            .catch(() => undefined);
+            .catch(() => null);
           throw error;
         }
       }
 
       const resolvedParts = claimedParts.map((part, index) =>
-        index === toolCallIndex ? { ...part, output: result } : part,
+        index === toolCallIndex ? { ...part, output: result } : part
       );
       resolvedParts.push({
         content: JSON.stringify(result),
@@ -1029,7 +988,7 @@ export const chatRouter = {
 
       await startCreatedChatRun(runId);
 
-      return buildRunResponse({
+      return await buildRunResponse({
         assistantMessageId,
         chatId: authorizedChat.id,
         runId,
@@ -1037,21 +996,185 @@ export const chatRouter = {
       });
     }),
 
-  cancelGeneration: protectedProcedure
-    .input(z.object({ chatId: chatIdSchema, mailboxId: mailboxIdSchema }))
+  sendMessage: protectedProcedure
+    .input(
+      z.object({
+        category: mailboxCategorySchema,
+        chatId: chatIdSchema,
+        context: chatRunContextSchema.optional(),
+        mailboxId: mailboxIdSchema,
+        message: chatPromptSchema,
+        model: chatModelSchema,
+      })
+    )
     .handler(async ({ context, input }) => {
-      const authorizedChat = await getAuthorizedChat(input.chatId, input.mailboxId, context.userId);
-      const cancelledRun = await cancelActiveChatRun({
-        chatId: authorizedChat.id,
+      const authorizedChat = await assertCanRunChatGeneration({
+        chatId: input.chatId,
+        mailboxId: input.mailboxId,
         userId: context.userId,
       });
 
-      if (!cancelledRun) {
-        return { cancelled: false as const };
+      const [lastMessage] = await db
+        .select({ position: chatMessage.position })
+        .from(chatMessage)
+        .where(eq(chatMessage.chatId, authorizedChat.id))
+        .orderBy(desc(chatMessage.position))
+        .limit(1);
+      const nextPosition = (lastMessage?.position ?? -1) + 1;
+      const runId = crypto.randomUUID();
+      const userMessageId = crypto.randomUUID();
+      const assistantMessageId = crypto.randomUUID();
+      const userParts: ChatMessagePart[] = [
+        { content: input.message, type: "text" },
+      ];
+
+      try {
+        await createChatRunRecords({
+          assistantMessageId,
+          chatId: authorizedChat.id,
+          context: input.context,
+          mailboxCategory: input.category,
+          mailboxId: input.mailboxId,
+          model: input.model,
+          runId,
+          userId: context.userId,
+          userMessage: {
+            id: userMessageId,
+            parts: userParts,
+            position: nextPosition,
+          },
+        });
+      } catch (error) {
+        rethrowChatRunConflict(error);
       }
 
-      cancelChatRun(cancelledRun.runId);
+      await startCreatedChatRun(runId);
 
-      return { cancelled: true as const, ...cancelledRun };
+      return await buildRunResponse({
+        assistantMessageId,
+        chatId: authorizedChat.id,
+        runId,
+        userMessageId,
+      });
+    }),
+
+  transcribeAudio: protectedProcedure
+    .input(chatAudioTranscriptionSchema)
+    .handler(async ({ context, input }) => {
+      const accessibleMailbox = await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      const entitlement = await hasUserBillingFeature({
+        feature: "aiChat",
+        organizationId: accessibleMailbox.organizationId ?? undefined,
+        userId: context.userId,
+      });
+
+      await assertCanUseAiCredits(entitlement);
+
+      if (input.chatId !== undefined && input.chatId.length > 0) {
+        await findAuthorizedChat(input.chatId, input.mailboxId, context.userId);
+      }
+
+      const { generateOpenRouterTranscription } =
+        await import("@quieter/ai/openrouter-transcription");
+      let result: Awaited<ReturnType<typeof generateOpenRouterTranscription>>;
+      try {
+        result = await generateOpenRouterTranscription({
+          audioBase64: input.audioBase64,
+          format: input.format,
+        });
+      } catch (error: unknown) {
+        reportError(error, { operation: "chat:transcribe-audio" });
+        const message =
+          error instanceof Error &&
+          (error.message.startsWith("Transcription ") ||
+            error.message.startsWith("We could not transcribe "))
+            ? error.message
+            : "We could not transcribe that recording. Try recording it again.";
+
+        throw new ORPCError("INTERNAL_SERVER_ERROR", {
+          message,
+        });
+      }
+      const text = result.text.trim();
+
+      if (!text) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: "No speech was detected.",
+        });
+      }
+
+      const responseText =
+        input.mode === "email"
+          ? await (async () => {
+              const { formatTranscribedEmail, TRANSCRIBED_EMAIL_FORMAT_MODEL } =
+                await import("@quieter/ai/format-transcribed-email");
+              const memoryContext = await loadAiAgentContext({
+                agent: "compose",
+                mailboxId: input.mailboxId,
+                query: text,
+                userId: context.userId,
+              });
+              let formattedText = text;
+              try {
+                formattedText = await formatTranscribedEmail({
+                  memoryContext: serializeAiAgentContext(memoryContext),
+                  middleware: [
+                    {
+                      name: "polar-ai-transcribed-email-format-usage",
+                      onUsage: (usageContext, usage) => {
+                        usageContext.defer(
+                          (async () => {
+                            try {
+                              await reportAiUsage({
+                                chatId: input.chatId ?? null,
+                                completionTokens: usage.completionTokens,
+                                costUsd: usage.cost,
+                                externalId: `chat-transcription-format:${result.id}`,
+                                mailboxId: input.mailboxId,
+                                model: TRANSCRIBED_EMAIL_FORMAT_MODEL,
+                                promptTokens: usage.promptTokens,
+                                promptTokensDetails: usage.promptTokensDetails,
+                                usageKind: "aiChat",
+                                userId: context.userId,
+                              });
+                            } catch (error: unknown) {
+                              reportError(error, {
+                                operation: "chat:report-transcription-usage",
+                              });
+                            }
+                          })()
+                        );
+                      },
+                    },
+                  ],
+                  transcript: text,
+                });
+              } catch {
+                formattedText = text;
+              }
+
+              return formattedText;
+            })()
+          : text;
+
+      const cost = result.usage?.cost;
+      if (typeof cost === "number" && Number.isFinite(cost) && cost > 0) {
+        await reportAiUsage({
+          chatId: input.chatId ?? null,
+          completionTokens: result.usage?.completionTokens ?? 0,
+          costUsd: cost,
+          externalId: `chat-transcription:${result.id}`,
+          mailboxId: input.mailboxId,
+          model: OPENROUTER_TRANSCRIPTION_MODEL,
+          promptTokens: result.usage?.promptTokens ?? 0,
+          usageKind: "aiChat",
+          userId: context.userId,
+        });
+      }
+
+      return { text: responseText };
     }),
 };

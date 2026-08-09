@@ -1,4 +1,4 @@
-export const AI_COST_RECOVERY_BASIS_POINTS = 1_500;
+export const AI_COST_RECOVERY_BASIS_POINTS = 1500;
 
 export const applyAiCostRecoveryFee = (costMicroCents: number) =>
   Math.ceil(costMicroCents * (1 + AI_COST_RECOVERY_BASIS_POINTS / 10_000));

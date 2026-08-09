@@ -1,25 +1,26 @@
-import type { ComponentPropsWithoutRef } from "react";
 import { cn } from "@quieter/ui/cn";
-import { cva, type VariantProps } from "class-variance-authority";
+import { cva } from "class-variance-authority";
+import type { VariantProps } from "class-variance-authority";
+import type { ComponentPropsWithoutRef } from "react";
 
 export const workspaceSectionVariants = cva(
   "overflow-hidden rounded-lg border border-border bg-bg/60",
   {
-    variants: {
-      layout: {
-        fill: "absolute inset-1.5 flex min-h-0 min-w-0 flex-col",
-        cell: "m-1.5 min-h-0 min-w-0 flex-1 flex-col lg:m-2 lg:ml-0 lg:flex",
-      },
-      centered: {
-        true: "items-center justify-center",
-        false: null,
-      },
-    },
     defaultVariants: {
-      layout: "fill",
       centered: false,
+      layout: "fill",
     },
-  },
+    variants: {
+      centered: {
+        false: null,
+        true: "items-center justify-center",
+      },
+      layout: {
+        cell: "m-1.5 min-h-0 min-w-0 flex-1 flex-col lg:m-2 lg:ml-0 lg:flex",
+        fill: "absolute inset-1.5 flex min-h-0 min-w-0 flex-col",
+      },
+    },
+  }
 );
 
 export type WorkspaceSectionProps = ComponentPropsWithoutRef<"section"> &
@@ -35,5 +36,8 @@ export const WorkspaceSection = ({
   layout = "fill",
   ...props
 }: WorkspaceSectionProps) => (
-  <section {...props} className={cn(workspaceSectionVariants({ centered, layout }), className)} />
+  <section
+    {...props}
+    className={cn(workspaceSectionVariants({ centered, layout }), className)}
+  />
 );

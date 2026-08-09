@@ -1,8 +1,12 @@
 "use client";
 
 import { useState } from "react";
+
 import type { GmailLabelListToolResult } from "../../../types";
 import { ToolStep } from "./tool-step";
+
+const hasText = (value: string | null | undefined): value is string =>
+  value !== null && value !== undefined && value !== "";
 
 type LabelsToolProps = {
   nested?: boolean;
@@ -11,17 +15,22 @@ type LabelsToolProps = {
   pending: boolean;
 };
 
-export const LabelsTool = ({ nested = false, data, error, pending }: LabelsToolProps) => {
+export const LabelsTool = ({
+  nested = false,
+  data,
+  error,
+  pending,
+}: LabelsToolProps) => {
   const [expanded, setExpanded] = useState(false);
   const success = data?.status === "success" ? data : null;
-  const userLabels = success?.labels.filter((label) => label.type === "user") ?? [];
-  const meta = pending
-    ? undefined
-    : error
-      ? undefined
-      : success
-        ? `${success.labels.length} label${success.labels.length === 1 ? "" : "s"}`
-        : undefined;
+  const userLabels =
+    success?.labels.filter((label) => label.type === "user") ?? [];
+  let meta: string | undefined;
+  if (pending || hasText(error)) {
+    meta = undefined;
+  } else if (success !== null) {
+    meta = `${success.labels.length} label${success.labels.length === 1 ? "" : "s"}`;
+  }
 
   return (
     <ToolStep
@@ -31,7 +40,9 @@ export const LabelsTool = ({ nested = false, data, error, pending }: LabelsToolP
       expanded={expanded}
       label={pending ? "Listing labels" : "Listed labels"}
       meta={meta}
-      onToggle={() => setExpanded((current) => !current)}
+      onToggle={() => {
+        setExpanded((current) => !current);
+      }}
       pending={pending}
     >
       {success ? (

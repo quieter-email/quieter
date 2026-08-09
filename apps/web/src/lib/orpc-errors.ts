@@ -6,10 +6,15 @@ type OrpcErrorLike = {
   status?: unknown;
 };
 
+export const getErrorMessage = (error: unknown, fallback: string) =>
+  error instanceof Error && error.message.trim() !== ""
+    ? error.message
+    : fallback;
+
 export const isMailboxScopeRepairRequiredError = (
-  error: unknown,
+  error: unknown
 ): error is Error & { data: MailboxScopeRepairRequiredErrorData } => {
-  if (!error || typeof error !== "object") {
+  if (error === null || error === undefined || typeof error !== "object") {
     return false;
   }
 
@@ -18,22 +23,33 @@ export const isMailboxScopeRepairRequiredError = (
     return false;
   }
 
-  const data = candidate.data;
+  const { data } = candidate;
   return (
-    !!data &&
+    data !== null &&
+    data !== undefined &&
     typeof data === "object" &&
-    typeof (data as Partial<MailboxScopeRepairRequiredErrorData>).mailboxId === "string" &&
-    typeof (data as Partial<MailboxScopeRepairRequiredErrorData>).emailAddress === "string"
+    typeof (data as Partial<MailboxScopeRepairRequiredErrorData>).mailboxId ===
+      "string" &&
+    typeof (data as Partial<MailboxScopeRepairRequiredErrorData>)
+      .emailAddress === "string"
   );
 };
 
 export const shouldRetryOrpcError = (failureCount: number, error: unknown) => {
-  if (isMailboxScopeRepairRequiredError(error)) return false;
-  if (!error || typeof error !== "object") return failureCount < 1;
+  if (isMailboxScopeRepairRequiredError(error)) {
+    return false;
+  }
+  if (error === null || error === undefined || typeof error !== "object") {
+    return failureCount < 1;
+  }
 
   const candidate = error as OrpcErrorLike;
-  if (candidate.code === "NOT_FOUND") return false;
-  if (typeof candidate.status === "number" && candidate.status < 500) return false;
+  if (candidate.code === "NOT_FOUND") {
+    return false;
+  }
+  if (typeof candidate.status === "number" && candidate.status < 500) {
+    return false;
+  }
 
   return failureCount < 1;
 };

@@ -9,9 +9,13 @@ import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { z } from "zod";
-import { authClient } from "~/lib/auth";
+
+import { authClient } from "#/lib/auth";
+import { getErrorMessage } from "#/lib/orpc-errors";
+
 import { settingsSurfaceVariants } from "../settings-layout";
-import { type FullOrganization, getFullOrganizationQueryKey } from "./domain";
+import { getFullOrganizationQueryKey } from "./domain";
+import type { FullOrganization } from "./domain";
 
 export const InviteMemberForm = ({
   className,
@@ -56,14 +60,14 @@ export const InviteMemberForm = ({
         form.reset();
       } catch (mutationError) {
         setSubmitError(
-          (mutationError as { message?: string })?.message ?? "Could not invite member.",
+          getErrorMessage(mutationError, "Could not invite member.")
         );
       }
     },
     validationLogic: revalidateLogic(),
     validators: {
       onDynamic: z.object({
-        email: z.string().trim().email("Enter a valid email."),
+        email: z.email("Enter a valid email.").trim(),
       }),
     },
   });
@@ -79,7 +83,12 @@ export const InviteMemberForm = ({
         await form.handleSubmit();
       }}
     >
-      <div className={cn(settingsSurfaceVariants({ variant: "insetFieldRow" }), "gap-3")}>
+      <div
+        className={cn(
+          settingsSurfaceVariants({ variant: "insetFieldRow" }),
+          "gap-3"
+        )}
+      >
         <form.Field name="email">
           {(field) => {
             const hasErrors = field.state.meta.errors.length > 0;
@@ -92,7 +101,9 @@ export const InviteMemberForm = ({
                   chrome="ghost"
                   className="h-9 px-0"
                   name={field.name}
-                  onBlur={() => field.handleBlur()}
+                  onBlur={() => {
+                    field.handleBlur();
+                  }}
                   onChange={(event) => {
                     setSubmitError(null);
                     field.handleChange(event.target.value);
@@ -103,7 +114,10 @@ export const InviteMemberForm = ({
                 {hasErrors && (
                   <div id={emailErrorId} role="alert">
                     {field.state.meta.errors.map((error) => (
-                      <p className="text-sm text-destructive" key={error?.message}>
+                      <p
+                        className="text-sm text-destructive"
+                        key={error?.message}
+                      >
                         {error?.message}
                       </p>
                     ))}
@@ -120,19 +134,29 @@ export const InviteMemberForm = ({
           type="submit"
         >
           {inviteMemberMutation.isPending ? (
-            <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+            <HugeiconsIcon
+              aria-hidden
+              className="size-4 animate-spin"
+              icon={Loading03Icon}
+            />
           ) : (
-            <HugeiconsIcon aria-hidden className="size-4" icon={UserAdd01Icon} />
+            <HugeiconsIcon
+              aria-hidden
+              className="size-4"
+              icon={UserAdd01Icon}
+            />
           )}
           Invite
         </Button>
       </div>
 
-      {submitError && (
+      {submitError !== null &&
+      submitError !== undefined &&
+      submitError !== "" ? (
         <p className="px-4 pb-3 text-sm text-destructive @md:px-6" role="alert">
           {submitError}
         </p>
-      )}
+      ) : null}
     </form>
   );
 };

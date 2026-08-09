@@ -1,7 +1,7 @@
 "use client";
 
-import type { ReactNode } from "react";
 import { cn } from "@quieter/ui/cn";
+import type { ReactNode } from "react";
 
 export const MessageActions = ({
   align,
@@ -16,7 +16,7 @@ export const MessageActions = ({
     className={cn(
       "flex items-center gap-0.5 opacity-0 transition-opacity group-focus-within/message:opacity-100 group-hover/message:opacity-100",
       { "justify-end": align === "end", "justify-start": align === "start" },
-      className,
+      className
     )}
   >
     {children}

@@ -2,11 +2,24 @@
 
 import { cn } from "@quieter/ui/cn";
 import { Link, useLocation } from "@tanstack/react-router";
-import { ConsentPreferencesLink } from "~/components/consent-preferences-link";
 
-const publicFooterRoutes = new Set(["/home", "/privacy", "/cookies", "/terms", "/imprint"]);
+import { ConsentPreferencesLink } from "#/components/consent-preferences-link";
 
-const FooterLinks = ({ className, tabIndex }: { className?: string; tabIndex?: number }) => (
+const publicFooterRoutes = new Set([
+  "/home",
+  "/privacy",
+  "/cookies",
+  "/terms",
+  "/imprint",
+]);
+
+const FooterLinks = ({
+  className,
+  tabIndex,
+}: {
+  className?: string;
+  tabIndex?: number;
+}) => (
   <div className={cn("flex flex-wrap items-center gap-x-4 gap-y-2", className)}>
     <Link className="hover:text-fg" tabIndex={tabIndex} to="/privacy">
       Privacy
@@ -41,7 +54,9 @@ export const SiteFooter = () => {
     select: (location) => location.pathname,
   });
 
-  if (!publicFooterRoutes.has(pathname)) return null;
+  if (!publicFooterRoutes.has(pathname)) {
+    return null;
+  }
 
   if (pathname === "/home") {
     return (

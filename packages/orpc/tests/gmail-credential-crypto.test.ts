@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
+
 import {
   decryptGmailCredentialSecret,
   encryptGmailCredentialSecret,
@@ -13,7 +14,7 @@ describe("Gmail credential encryption", () => {
   test("writes and reads current-key credentials", () => {
     const encrypted = encryptGmailCredentialSecret("access-token", keys);
 
-    expect(encrypted.startsWith("v2.")).toBe(true);
+    expect(encrypted.startsWith("v2.")).toBeTruthy();
     expect(decryptGmailCredentialSecret(encrypted, keys)).toBe("access-token");
   });
 
@@ -22,15 +23,15 @@ describe("Gmail credential encryption", () => {
       legacyKey: keys.legacyKey,
     });
 
-    expect(encrypted.startsWith("v1.")).toBe(true);
+    expect(encrypted.startsWith("v1.")).toBeTruthy();
     expect(decryptGmailCredentialSecret(encrypted, keys)).toBe("refresh-token");
   });
 
   test("does not read current credentials without the current key", () => {
     const encrypted = encryptGmailCredentialSecret("access-token", keys);
 
-    expect(() => decryptGmailCredentialSecret(encrypted, { legacyKey: keys.legacyKey })).toThrow(
-      "Current Gmail credential encryption key is missing.",
-    );
+    expect(() => {
+      decryptGmailCredentialSecret(encrypted, { legacyKey: keys.legacyKey });
+    }).toThrow("Current Gmail credential encryption key is missing.");
   });
 });

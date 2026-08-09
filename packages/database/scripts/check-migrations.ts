@@ -4,5 +4,5 @@ const response = await check(kitOptions);
 exitOnKitError(response);
 
 if (response.status === "ok") {
-  console.log(`Migrations folder is valid (${response.dialect})`);
+  process.stdout.write(`Migrations folder is valid (${response.dialect})\n`);
 }

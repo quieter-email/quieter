@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vite-plus/test";
-import type { MessageListItem } from "~/lib/gmail/gmail";
+
+import type { MessageListItem } from "#/lib/gmail/gmail";
+
 import {
   buildComposeDraftFromMessageAction,
   buildComposeDraftFromSavedDraftMessage,
@@ -9,8 +11,8 @@ import {
   draftToComposeFormValues,
   shouldPersistComposeDraft,
   writeComposeFormValues,
-  type ComposeFormValues,
 } from "./compose-form";
+import type { ComposeFormValues } from "./compose-form";
 import {
   appendComposeSignature,
   createEmptyComposeDraft,
@@ -18,20 +20,20 @@ import {
 } from "./draft";
 
 const sourceMessage = {
-  id: "msg-1",
-  threadId: "thread-1",
-  from: "Alex Sender <alex@example.com>",
-  to: "Me <me@example.com>",
-  cc: "Casey <casey@example.com>",
-  subject: "Project update",
-  messageHeaderId: "<msg-1@example.com>",
-  references: "<root@example.com>",
-  date: "2026-04-20T10:00:00.000Z",
   bodyHtml: "<p>Hello from Alex.</p>",
   bodyText: "Hello from Alex.",
+  cc: "Casey <casey@example.com>",
+  date: "2026-04-20T10:00:00.000Z",
+  from: "Alex Sender <alex@example.com>",
+  id: "msg-1",
+  messageHeaderId: "<msg-1@example.com>",
+  references: "<root@example.com>",
+  subject: "Project update",
+  threadId: "thread-1",
+  to: "Me <me@example.com>",
 } satisfies MessageListItem;
 
-describe("buildComposeDraftFromMessageAction", () => {
+describe(buildComposeDraftFromMessageAction, () => {
   test("builds a reply draft that can populate the compose form", () => {
     const draft = buildComposeDraftFromMessageAction({
       action: "reply",
@@ -39,33 +41,33 @@ describe("buildComposeDraftFromMessageAction", () => {
       message: sourceMessage,
     });
 
-    expect(draft.recipients).toEqual({
-      to: "Alex Sender <alex@example.com>",
-      cc: "",
-      bcc: "",
-    });
-    expect(draft.subject).toBe("Re: Project update");
-    expect(draft.bodyHtml).toContain("<blockquote><p>Hello from Alex.</p></blockquote>");
-    expect(draft.replyContext).toEqual({
-      threadId: "thread-1",
-      messageHeaderId: "<msg-1@example.com>",
-      references: ["<root@example.com>", "<msg-1@example.com>"],
-    });
-    expect(draftToComposeFormValues(draft)).toMatchObject({
-      to: "Alex Sender <alex@example.com>",
+    expect(draft).toMatchObject({
+      recipients: {
+        bcc: "",
+        cc: "",
+        to: "Alex Sender <alex@example.com>",
+      },
+      replyContext: {
+        messageHeaderId: "<msg-1@example.com>",
+        references: ["<root@example.com>", "<msg-1@example.com>"],
+        threadId: "thread-1",
+      },
       subject: "Re: Project update",
-      bodyHtml: expect.stringContaining("Hello from Alex."),
-      bodyText: expect.stringContaining("Hello from Alex."),
     });
+    expect(draft.bodyHtml).toContain(
+      "<blockquote><p>Hello from Alex.</p></blockquote>"
+    );
+    const formValues = draftToComposeFormValues(draft);
+    expect(formValues).toMatchObject({
+      subject: "Re: Project update",
+      to: "Alex Sender <alex@example.com>",
+    });
+    expect(formValues.bodyHtml).toContain("Hello from Alex.");
+    expect(formValues.bodyText).toContain("Hello from Alex.");
   });
 
   test("uses saved draft content when continuing a linked reply draft", () => {
     const savedDraftMessage = {
-      id: "draft-message-1",
-      threadId: "thread-1",
-      draftId: "draft-1",
-      to: "Alex Sender <alex@example.com>",
-      subject: "Re: Project update",
       bodyHtml: "<p>Already started.</p>",
       bodyText: "Already started.",
       draftAnchor: {
@@ -73,6 +75,11 @@ describe("buildComposeDraftFromMessageAction", () => {
         sourceMessageId: "msg-1",
         sourceThreadId: "thread-1",
       },
+      draftId: "draft-1",
+      id: "draft-message-1",
+      subject: "Re: Project update",
+      threadId: "thread-1",
+      to: "Alex Sender <alex@example.com>",
     } satisfies MessageListItem;
 
     const draft = buildComposeDraftFromMessageAction({
@@ -86,24 +93,26 @@ describe("buildComposeDraftFromMessageAction", () => {
     expect(draft.messageId).toBe("draft-message-1");
     expect(draft.bodyHtml).toBe("<p>Already started.</p>");
     expect(draftToComposeFormValues(draft)).toMatchObject({
-      to: "Alex Sender <alex@example.com>",
-      subject: "Re: Project update",
       bodyHtml: "<p>Already started.</p>",
+      subject: "Re: Project update",
+      to: "Alex Sender <alex@example.com>",
     });
-    expect(buildComposeDraftFromSavedDraftMessage(savedDraftMessage).saveStatus).toBe("saved");
+    expect(
+      buildComposeDraftFromSavedDraftMessage(savedDraftMessage).saveStatus
+    ).toBe("saved");
   });
 
   test("rebuilds reply content when a linked draft has no body", () => {
     const emptyLinkedDraft = {
-      id: "draft-message-empty",
-      threadId: "thread-1",
-      draftId: "draft-empty",
-      subject: "Re: Project update",
       draftAnchor: {
         seededBy: "reply",
         sourceMessageId: "msg-1",
         sourceThreadId: "thread-1",
       },
+      draftId: "draft-empty",
+      id: "draft-message-empty",
+      subject: "Re: Project update",
+      threadId: "thread-1",
     } satisfies MessageListItem;
 
     const draft = buildComposeDraftFromMessageAction({
@@ -114,12 +123,14 @@ describe("buildComposeDraftFromMessageAction", () => {
     });
 
     expect(draft.draftId).toBeUndefined();
-    expect(draft.bodyHtml).toContain("<blockquote><p>Hello from Alex.</p></blockquote>");
+    expect(draft.bodyHtml).toContain(
+      "<blockquote><p>Hello from Alex.</p></blockquote>"
+    );
     expect(draft.recipients.to).toBe("Alex Sender <alex@example.com>");
   });
 });
 
-describe("appendComposeSignature", () => {
+describe(appendComposeSignature, () => {
   test("adds one mailbox signature to a new draft", () => {
     const draft = appendComposeSignature(createEmptyComposeDraft(), {
       html: "<p>Alex</p>",
@@ -135,13 +146,14 @@ describe("appendComposeSignature", () => {
     const draft = appendComposeSignature(
       {
         ...createEmptyComposeDraft(),
-        bodyHtml: '<p>Hello</p><div data-quieter-signature="true"><p>Alex</p></div>',
+        bodyHtml:
+          '<p>Hello</p><div data-quieter-signature="true"><p>Alex</p></div>',
         bodyText: "Hello\n\nAlex",
       },
-      { html: "<p>Alex</p>", text: "Alex" },
+      { html: "<p>Alex</p>", text: "Alex" }
     );
 
-    expect(draft.bodyHtml.match(/data-quieter-signature/g)).toHaveLength(1);
+    expect(draft.bodyHtml.match(/data-quieter-signature/gu)).toHaveLength(1);
     expect(draft.bodyText).toBe("Hello\n\nAlex");
   });
 
@@ -155,17 +167,17 @@ describe("appendComposeSignature", () => {
   });
 });
 
-describe("writeComposeFormValues", () => {
+describe(writeComposeFormValues, () => {
   test("writes every mounted compose field after reset", () => {
     const values: ComposeFormValues = {
-      to: "alex@example.com",
-      cc: "casey@example.com",
       bcc: "",
-      subject: "Re: Project update",
       bodyHtml: "<p>Reply body</p>",
       bodyText: "Reply body",
+      cc: "casey@example.com",
+      subject: "Re: Project update",
+      to: "alex@example.com",
     };
-    const fieldWrites: Array<[keyof ComposeFormValues, string]> = [];
+    const fieldWrites: [keyof ComposeFormValues, string][] = [];
     const resetWrites: ComposeFormValues[] = [];
     const validateWrites: string[] = [];
     const form = {
@@ -182,8 +194,8 @@ describe("writeComposeFormValues", () => {
 
     writeComposeFormValues(form, values);
 
-    expect(resetWrites).toEqual([values]);
-    expect(fieldWrites).toEqual([
+    expect(resetWrites).toStrictEqual([values]);
+    expect(fieldWrites).toStrictEqual([
       ["to", "alex@example.com"],
       ["cc", "casey@example.com"],
       ["bcc", ""],
@@ -191,11 +203,11 @@ describe("writeComposeFormValues", () => {
       ["bodyHtml", "<p>Reply body</p>"],
       ["bodyText", "Reply body"],
     ]);
-    expect(validateWrites).toEqual(["change"]);
+    expect(validateWrites).toStrictEqual(["change"]);
   });
 });
 
-describe("shouldPersistComposeDraft", () => {
+describe(shouldPersistComposeDraft, () => {
   test("does not save an unchanged generated reply draft", () => {
     const currentDraft = buildComposeDraftFromMessageAction({
       action: "reply",
@@ -208,8 +220,8 @@ describe("shouldPersistComposeDraft", () => {
         currentDraft,
         nextDraft: currentDraft,
         values: draftToComposeFormValues(currentDraft),
-      }),
-    ).toBe(false);
+      })
+    ).toBeFalsy();
   });
 
   test("saves a new message after the user adds content", () => {
@@ -221,16 +233,16 @@ describe("shouldPersistComposeDraft", () => {
       to: "alex@example.com",
     };
     const nextDraft = composeFormValuesToDraft(values, {
-      localId: currentDraft.localId,
-      draftId: currentDraft.draftId,
-      messageId: currentDraft.messageId,
-      draftAnchor: currentDraft.draftAnchor,
-      replyContext: currentDraft.replyContext,
       attachments: currentDraft.attachments,
-      inlineImages: currentDraft.inlineImages,
-      saveStatus: currentDraft.saveStatus,
+      draftAnchor: currentDraft.draftAnchor,
+      draftId: currentDraft.draftId,
       errorMessage: currentDraft.errorMessage,
+      inlineImages: currentDraft.inlineImages,
       lastSavedAt: currentDraft.lastSavedAt,
+      localId: currentDraft.localId,
+      messageId: currentDraft.messageId,
+      replyContext: currentDraft.replyContext,
+      saveStatus: currentDraft.saveStatus,
       updatedAt: Date.now(),
     });
 
@@ -239,8 +251,8 @@ describe("shouldPersistComposeDraft", () => {
         currentDraft,
         nextDraft,
         values,
-      }),
-    ).toBe(true);
+      })
+    ).toBeTruthy();
   });
 });
 
@@ -253,10 +265,10 @@ describe("draft body rendering", () => {
     };
 
     expect(getRenderableComposeBodyHtml(draft.bodyHtml, draft.bodyText)).toBe(
-      "<p>Loaded draft body<br>Second line</p>",
+      "<p>Loaded draft body<br>Second line</p>"
     );
     expect(draftToComposeFormValues(draft).bodyHtml).toBe(
-      "<p>Loaded draft body<br>Second line</p>",
+      "<p>Loaded draft body<br>Second line</p>"
     );
   });
 });

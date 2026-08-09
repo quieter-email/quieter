@@ -1,5 +1,7 @@
-import { EventType, type StreamChunk } from "@tanstack/ai";
+import { EventType } from "@tanstack/ai";
+import type { StreamChunk } from "@tanstack/ai";
 import { describe, expect, test } from "vite-plus/test";
+
 import { isActiveChatRunStatus } from "../src/chat-run-store";
 import {
   createHubStreamDurability,
@@ -11,9 +13,9 @@ import {
 
 describe("chat run stream hub", () => {
   test("identifies active statuses", () => {
-    expect(isActiveChatRunStatus("queued")).toBe(true);
-    expect(isActiveChatRunStatus("waiting_on_tool")).toBe(true);
-    expect(isActiveChatRunStatus("complete")).toBe(false);
+    expect(isActiveChatRunStatus("queued")).toBeTruthy();
+    expect(isActiveChatRunStatus("waiting_on_tool")).toBeTruthy();
+    expect(isActiveChatRunStatus("complete")).toBeFalsy();
   });
 
   test("encodes opaque offsets per chunk", () => {
@@ -27,56 +29,59 @@ describe("chat run stream hub", () => {
 
     await durability.append([
       {
-        type: EventType.TEXT_MESSAGE_CONTENT,
-        timestamp: Date.now(),
-        messageId: "m1",
         delta: "Hello",
+        messageId: "m1",
+        timestamp: Date.now(),
+        type: EventType.TEXT_MESSAGE_CONTENT,
       } satisfies StreamChunk,
     ]);
 
     const received: string[] = [];
-    let resolveAttached: (() => void) | undefined;
-    const attached = new Promise<void>((resolve) => {
-      resolveAttached = resolve;
-    });
+    const hubIterator = hub.subscribe()[Symbol.asyncIterator]();
 
-    const reader = (async () => {
-      let sawBuffered = false;
-      for await (const entry of hub.subscribe()) {
-        if (entry.chunk.type === EventType.TEXT_MESSAGE_CONTENT) {
-          received.push(String((entry.chunk as { delta?: string }).delta ?? ""));
-          if (!sawBuffered) {
-            sawBuffered = true;
-            resolveAttached?.();
-          }
-        }
-        if (entry.chunk.type === EventType.RUN_FINISHED) {
-          break;
-        }
-      }
-    })();
-
-    await attached;
+    const firstEntry = await hubIterator.next();
+    if (firstEntry.value?.chunk.type === EventType.TEXT_MESSAGE_CONTENT) {
+      received.push(firstEntry.value.chunk.delta ?? "");
+    }
 
     await durability.append([
       {
-        type: EventType.TEXT_MESSAGE_CONTENT,
-        timestamp: Date.now(),
-        messageId: "m1",
         delta: " world",
+        messageId: "m1",
+        timestamp: Date.now(),
+        type: EventType.TEXT_MESSAGE_CONTENT,
       } satisfies StreamChunk,
       {
-        type: EventType.RUN_FINISHED,
-        timestamp: Date.now(),
         runId,
         threadId: runId,
+        timestamp: Date.now(),
+        type: EventType.RUN_FINISHED,
       } satisfies StreamChunk,
     ]);
     await durability.close();
-    await reader;
+
+    const secondEntry = await hubIterator.next();
+    if (
+      secondEntry.done !== true &&
+      secondEntry.value.chunk.type === EventType.TEXT_MESSAGE_CONTENT
+    ) {
+      received.push(secondEntry.value.chunk.delta ?? "");
+    }
+
+    const thirdEntry = await hubIterator.next();
+    const endEntry = await hubIterator.next();
+    expect({
+      endDone: endEntry.done,
+      terminalDone: thirdEntry.done,
+      terminalType: thirdEntry.value?.chunk.type,
+    }).toStrictEqual({
+      endDone: true,
+      terminalDone: false,
+      terminalType: EventType.RUN_FINISHED,
+    });
 
     expect(received.join("")).toBe("Hello world");
-    expect(peekChatRunHub(runId)?.isClosed()).toBe(true);
+    expect(peekChatRunHub(runId)?.isClosed()).toBeTruthy();
     releaseChatRunHub(runId);
     expect(peekChatRunHub(runId)).toBeUndefined();
   });

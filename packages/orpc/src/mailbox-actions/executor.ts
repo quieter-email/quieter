@@ -1,4 +1,5 @@
-import type { ChatMiddleware } from "@tanstack/ai";
+import { randomUUID } from "node:crypto";
+
 import { ORPCError } from "@orpc/server";
 import {
   evaluateMailboxActionCondition,
@@ -7,8 +8,10 @@ import {
   planLinearMcpResearchCalls,
   planLinearIssue,
   routeMailboxAction,
-  type ActionEmailInput,
-  type ActionExecutionContext,
+} from "@quieter/ai/mailbox-actions";
+import type {
+  ActionEmailInput,
+  ActionExecutionContext,
 } from "@quieter/ai/mailbox-actions";
 import { reportAiUsage } from "@quieter/billing";
 import { db } from "@quieter/database/client";
@@ -23,23 +26,27 @@ import {
   managedMailMessage,
 } from "@quieter/database/schema";
 import { getMessageWithDetails } from "@quieter/gmail";
+import { reportError } from "@quieter/observability";
+import type { ChatMiddleware } from "@tanstack/ai";
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
-import { buildMailMemoryQuery, loadAiAgentContext, serializeAiAgentContext } from "../ai-memory";
+
+import {
+  buildMailMemoryQuery,
+  loadAiAgentContext,
+  serializeAiAgentContext,
+} from "../ai-memory";
 import {
   createLinearIssueForCredential,
   listLinearIssueMetadataForCredential,
   listLinearMcpToolsForCredential,
   runLinearMcpToolCallsForCredential,
-  type LinearIssueCreateDraft,
 } from "../connectors/runtime";
+import type { LinearIssueCreateDraft } from "../connectors/runtime";
 import { runAuthorizedGmailMailbox } from "../gmail-mailbox-access";
 import { MAILBOX_PROVIDER_GMAIL } from "../mailbox/access";
-import {
-  type MailboxActionGraph,
-  type MailboxActionNode,
-  validateMailboxActionGraph,
-} from "./graph";
+import { hasText } from "../text";
+import { validateMailboxActionGraph } from "./graph";
+import type { MailboxActionGraph, MailboxActionNode } from "./graph";
 
 type RuntimeFrame = {
   branchPath: string[];
@@ -66,13 +73,19 @@ const RUN_LEASE_MS = 10 * 60 * 1000;
 const getNodeById = (graph: MailboxActionGraph) =>
   new Map(graph.nodes.map((node) => [node.id, node]));
 
-const getOutgoingEdges = (graph: MailboxActionGraph, nodeId: string, port: string) =>
-  graph.edges.filter((edge) => edge.source === nodeId && edge.sourcePort === port);
+const getOutgoingEdges = (
+  graph: MailboxActionGraph,
+  nodeId: string,
+  port: string
+) =>
+  graph.edges.filter(
+    (edge) => edge.source === nodeId && edge.sourcePort === port
+  );
 
 const compactEmailInput = (email: ActionEmailInput) => ({
   ...email,
-  bodyHtml: email.bodyHtml?.slice(0, 8_000) ?? null,
-  bodyText: email.bodyText?.slice(0, 8_000) ?? null,
+  bodyHtml: email.bodyHtml?.slice(0, 8000) ?? null,
+  bodyText: email.bodyText?.slice(0, 8000) ?? null,
 });
 
 const loadActionEmailInput = async (input: {
@@ -85,17 +98,18 @@ const loadActionEmailInput = async (input: {
     .where(eq(mailbox.id, input.mailboxId))
     .limit(1);
 
-  if (!mailboxRecord) {
+  if (mailboxRecord === undefined) {
     throw new ORPCError("NOT_FOUND", { message: "Mailbox not found." });
   }
 
   if (mailboxRecord.provider === MAILBOX_PROVIDER_GMAIL) {
-    if (!mailboxRecord.ownerUserId) {
+    if (!hasText(mailboxRecord.ownerUserId)) {
       throw new ORPCError("NOT_FOUND", { message: "Mailbox not found." });
     }
     const message = await runAuthorizedGmailMailbox(
       { mailboxId: input.mailboxId, userId: mailboxRecord.ownerUserId },
-      async (accessToken) => await getMessageWithDetails(accessToken, input.sourceMessageId),
+      async (accessToken) =>
+        await getMessageWithDetails(accessToken, input.sourceMessageId)
     );
     return compactEmailInput({
       attachments: message.attachments?.map((attachment) => ({
@@ -131,12 +145,12 @@ const loadActionEmailInput = async (input: {
     .where(
       and(
         eq(managedMailMessage.mailboxId, input.mailboxId),
-        eq(managedMailMessage.providerMessageId, input.sourceMessageId),
-      ),
+        eq(managedMailMessage.providerMessageId, input.sourceMessageId)
+      )
     )
     .limit(1);
 
-  if (!message) {
+  if (message === undefined) {
     throw new ORPCError("NOT_FOUND", { message: "Message not found." });
   }
 
@@ -154,57 +168,83 @@ const loadActionEmailInput = async (input: {
   });
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
 const readPathValue = (source: unknown, path: string) => {
   const segments = path.split(".").filter(Boolean);
   let current: unknown = source;
   for (const segment of segments) {
-    if (typeof current !== "object" || current === null || Array.isArray(current)) return "";
-    current = (current as Record<string, unknown>)[segment];
+    if (!isRecord(current)) {
+      return "";
+    }
+    current = current[segment];
   }
-  return typeof current === "string" || typeof current === "number" || typeof current === "boolean"
+  return typeof current === "string" ||
+    typeof current === "number" ||
+    typeof current === "boolean"
     ? String(current)
     : "";
 };
 
 const renderTemplate = (
   value: string | undefined,
-  input: { context: ActionExecutionContext; email: ActionEmailInput },
+  input: { context: ActionExecutionContext; email: ActionEmailInput }
 ) =>
-  (value ?? "").replaceAll(/\{\{\s*([^}]+?)\s*\}\}/g, (_match, rawPath: string) => {
-    const path = rawPath.trim();
-    if (path.startsWith("email.")) return readPathValue(input.email, path.slice("email.".length));
-    if (path.startsWith("variables.")) {
-      return readPathValue(input.context.variables, path.slice("variables.".length));
+  (value ?? "").replaceAll(
+    /\{\{\s*(?<rawPath>[^}]+?)\s*\}\}/gu,
+    (match: string) => {
+      const path = match.slice(2, -2).trim();
+      if (path.startsWith("email.")) {
+        return readPathValue(input.email, path.slice("email.".length));
+      }
+      if (path.startsWith("variables.")) {
+        return readPathValue(
+          input.context.variables,
+          path.slice("variables.".length)
+        );
+      }
+      if (path.startsWith("outputs.")) {
+        return readPathValue(
+          input.context.previousOutputs,
+          path.slice("outputs.".length)
+        );
+      }
+      return "";
     }
-    if (path.startsWith("outputs.")) {
-      return readPathValue(input.context.previousOutputs, path.slice("outputs.".length));
-    }
-    return "";
-  });
+  );
 
 const validateLinearPlan = (
   issue: LinearIssueCreateDraft,
-  metadata: Awaited<ReturnType<typeof listLinearIssueMetadataForCredential>>,
+  metadata: Awaited<ReturnType<typeof listLinearIssueMetadataForCredential>>
 ) => {
   const teamIds = new Set(metadata.teams.map((team) => team.id));
   const labelIds = new Set(
-    metadata.labels.filter((label) => !label.isGroup).map((label) => label.id),
+    metadata.labels.filter((label) => !label.isGroup).map((label) => label.id)
   );
   const projectIds = new Set(metadata.projects.map((project) => project.id));
   const stateIds = new Set(metadata.states.map((state) => state.id));
   const assignableUserIds = new Set(
-    metadata.users.filter((user) => user.active && user.isAssignable).map((user) => user.id),
+    metadata.users
+      .filter((user) => user.active && user.isAssignable)
+      .map((user) => user.id)
   );
-  if (!teamIds.has(issue.teamId)) throw new Error("Linear team is not available.");
-  if (issue.projectId && !projectIds.has(issue.projectId))
+  if (!teamIds.has(issue.teamId)) {
+    throw new Error("Linear team is not available.");
+  }
+  if (hasText(issue.projectId) && !projectIds.has(issue.projectId)) {
     throw new Error("Linear project is not available.");
-  if (issue.stateId && !stateIds.has(issue.stateId))
+  }
+  if (hasText(issue.stateId) && !stateIds.has(issue.stateId)) {
     throw new Error("Linear state is not available.");
-  if (issue.assigneeId && !assignableUserIds.has(issue.assigneeId)) {
+  }
+  if (hasText(issue.assigneeId) && !assignableUserIds.has(issue.assigneeId)) {
     throw new Error("Linear assignee is not available.");
   }
   for (const labelId of issue.labelIds ?? []) {
-    if (!labelIds.has(labelId)) throw new Error("Linear label is not available.");
+    if (!labelIds.has(labelId)) {
+      throw new Error("Linear label is not available.");
+    }
   }
 };
 
@@ -226,7 +266,7 @@ const createLinearExternalEffect = async (input: {
     .from(mailboxActionExternalEffect)
     .where(eq(mailboxActionExternalEffect.idempotencyKey, idempotencyKey))
     .limit(1);
-  if (existing) {
+  if (existing !== undefined) {
     return { id: existing.externalId, url: existing.externalUrl ?? undefined };
   }
 
@@ -269,8 +309,9 @@ const executeNode = async (input: {
   };
 
   switch (input.node.type) {
-    case "email_received":
+    case "email_received": {
       return { output: { messageId: input.email.id }, outputPorts: ["out"] };
+    }
     case "ai_condition": {
       const result = await evaluateMailboxActionCondition({
         context,
@@ -289,7 +330,12 @@ const executeNode = async (input: {
       };
     }
     case "ai_router": {
-      const ports = [...new Set([...input.node.config.ports, input.node.config.fallbackPort])];
+      const ports = [
+        ...new Set([
+          ...input.node.config.ports,
+          input.node.config.fallbackPort,
+        ]),
+      ];
       const result = await routeMailboxAction({
         context,
         email: input.email,
@@ -305,33 +351,42 @@ const executeNode = async (input: {
       });
       return { output: result, outputPorts: [result.outputPort] };
     }
-    case "set_variable":
+    case "set_variable": {
       return {
         output: { [input.node.config.name]: input.node.config.value },
         outputPorts: ["out"],
         variables: { [input.node.config.name]: input.node.config.value },
       };
-    case "merge":
+    }
+    case "merge": {
       return { output: { mode: input.node.config.mode }, outputPorts: ["out"] };
-    case "stop":
+    }
+    case "stop": {
       return { output: { stopped: true }, outputPorts: [] };
+    }
     case "linear_create_issue": {
       if (
-        !input.node.config.credentialId ||
-        !input.node.config.teamId ||
-        !input.node.config.title
+        !hasText(input.node.config.credentialId) ||
+        !hasText(input.node.config.teamId) ||
+        !hasText(input.node.config.title)
       ) {
         throw new Error("Linear issue node is missing required configuration.");
       }
       const issue: LinearIssueCreateDraft = {
         assigneeId: input.node.config.assigneeId,
-        description: renderTemplate(input.node.config.description, { context, email: input.email }),
+        description: renderTemplate(input.node.config.description, {
+          context,
+          email: input.email,
+        }),
         labelIds: input.node.config.labelIds,
         priority: input.node.config.priority,
         projectId: input.node.config.projectId,
         stateId: input.node.config.stateId,
         teamId: input.node.config.teamId,
-        title: renderTemplate(input.node.config.title, { context, email: input.email }),
+        title: renderTemplate(input.node.config.title, {
+          context,
+          email: input.email,
+        }),
       };
       const createdIssue = await createLinearExternalEffect({
         actionId: input.actionId,
@@ -345,7 +400,10 @@ const executeNode = async (input: {
       return { output: { issue: createdIssue }, outputPorts: ["success"] };
     }
     case "linear_agent_issue": {
-      if (!input.node.config.credentialId || !input.node.config.teamId) {
+      if (
+        !hasText(input.node.config.credentialId) ||
+        !hasText(input.node.config.teamId)
+      ) {
         throw new Error("Linear agent node is missing required configuration.");
       }
       const metadata = await listLinearIssueMetadataForCredential({
@@ -419,6 +477,9 @@ const executeNode = async (input: {
         outputPorts: ["success"],
       };
     }
+    default: {
+      throw new Error("Unsupported node type.");
+    }
   }
 };
 
@@ -440,10 +501,13 @@ const claimRun = async (runId: string) => {
           eq(mailboxActionRun.status, "queued"),
           and(
             eq(mailboxActionRun.status, "running"),
-            or(isNull(mailboxActionRun.leasedUntil), lt(mailboxActionRun.leasedUntil, now)),
-          ),
-        ),
-      ),
+            or(
+              isNull(mailboxActionRun.leasedUntil),
+              lt(mailboxActionRun.leasedUntil, now)
+            )
+          )
+        )
+      )
     )
     .returning({
       actionId: mailboxActionRun.actionId,
@@ -459,7 +523,9 @@ const claimRun = async (runId: string) => {
 
 export const executeMailboxActionRun = async (runId: string) => {
   const run = await claimRun(runId);
-  if (!run) return { status: "not_claimed" as const };
+  if (run === null) {
+    return { status: "not_claimed" as const };
+  }
 
   try {
     const [revision] = await db
@@ -467,13 +533,15 @@ export const executeMailboxActionRun = async (runId: string) => {
       .from(mailboxActionRevision)
       .where(eq(mailboxActionRevision.id, run.revisionId))
       .limit(1);
-    if (!revision) throw new Error("Action revision was not found.");
+    if (revision === undefined) {
+      throw new Error("Action revision was not found.");
+    }
 
     const validation = validateMailboxActionGraph(revision.graph);
-    if (!validation.graph) {
+    if (validation.graph === undefined || validation.graph === null) {
       throw new Error("Action revision graph is invalid.");
     }
-    const graph = validation.graph;
+    const { graph } = validation;
     const [actionOwner] = await db
       .select({
         userId: mailboxAction.createdByUserId,
@@ -484,11 +552,13 @@ export const executeMailboxActionRun = async (runId: string) => {
     const usageIndexesByStepRunId = new Map<string, number>();
     const createUsageMiddleware: MailboxActionUsageMiddlewareFactory = ({
       model,
-      nodeId,
+      nodeId: _nodeId,
       stepRunId,
     }) => {
       const billingUserId = actionOwner?.userId;
-      if (!billingUserId) return [];
+      if (!hasText(billingUserId)) {
+        return [];
+      }
       return [
         {
           name: "mailbox-action-ai-usage",
@@ -497,23 +567,25 @@ export const executeMailboxActionRun = async (runId: string) => {
             usageIndexesByStepRunId.set(stepRunId, usageIndex + 1);
             const externalId = `mailbox-action:${run.id}:${stepRunId}:${usageIndex}`;
             usageContext.defer(
-              reportAiUsage({
-                costUsd: usage.cost,
-                completionTokens: usage.completionTokens,
-                externalId,
-                mailboxId: run.mailboxId,
-                model,
-                promptTokens: usage.promptTokens,
-                promptTokensDetails: usage.promptTokensDetails,
-                usageKind: "aiChat",
-                userId: billingUserId,
-              }).catch((error) => {
-                console.error("Could not report mailbox action AI usage.", {
-                  error: error instanceof Error ? error.message : "Unknown error.",
-                  nodeId,
-                  runId: run.id,
-                });
-              }),
+              (async () => {
+                try {
+                  await reportAiUsage({
+                    completionTokens: usage.completionTokens,
+                    costUsd: usage.cost,
+                    externalId,
+                    mailboxId: run.mailboxId,
+                    model,
+                    promptTokens: usage.promptTokens,
+                    promptTokensDetails: usage.promptTokensDetails,
+                    usageKind: "aiChat",
+                    userId: billingUserId,
+                  });
+                } catch (error: unknown) {
+                  reportError(error, {
+                    operation: "mailbox-actions:report-ai-usage",
+                  });
+                }
+              })()
             );
           },
         },
@@ -523,16 +595,19 @@ export const executeMailboxActionRun = async (runId: string) => {
       mailboxId: run.mailboxId,
       sourceMessageId: run.sourceMessageId,
     });
-    const memoryContext = await loadAiAgentContext({
+    const agentContext = await loadAiAgentContext({
       agent: "automation",
       includeUserScope: false,
       mailboxId: run.mailboxId,
       query: buildMailMemoryQuery(email),
       userId: actionOwner?.userId ?? "",
-    }).then(serializeAiAgentContext);
+    });
+    const memoryContext = serializeAiAgentContext(agentContext);
     const nodesById = getNodeById(graph);
     const triggerNode = nodesById.get(run.triggerNodeId);
-    if (!triggerNode) throw new Error("Trigger node was not found.");
+    if (triggerNode === undefined) {
+      throw new Error("Trigger node was not found.");
+    }
 
     const now = new Date();
     const initialFrameId = randomUUID();
@@ -545,7 +620,7 @@ export const executeMailboxActionRun = async (runId: string) => {
       updatedAt: now,
       variables: {},
     });
-    const queue: Array<{ frame: RuntimeFrame; node: MailboxActionNode }> = [
+    const queue: { frame: RuntimeFrame; node: MailboxActionNode }[] = [
       {
         frame: {
           branchPath: [triggerNode.id],
@@ -558,9 +633,13 @@ export const executeMailboxActionRun = async (runId: string) => {
     ];
 
     let executedCount = 0;
-    while (queue.length > 0) {
+
+    const processQueueItem = async (): Promise<void> => {
       const item = queue.shift();
-      if (!item) break;
+      if (item === undefined) {
+        return;
+      }
+
       executedCount += 1;
       if (executedCount > MAX_NODE_EXECUTIONS) {
         throw new Error("Workflow exceeded the node execution limit.");
@@ -600,7 +679,10 @@ export const executeMailboxActionRun = async (runId: string) => {
         usageMiddleware: createUsageMiddleware,
       });
       const mergedVariables = { ...item.frame.variables, ...result.variables };
-      const previousOutputs = { ...item.frame.previousOutputs, [item.node.id]: result.output };
+      const previousOutputs = {
+        ...item.frame.previousOutputs,
+        [item.node.id]: result.output,
+      };
       const stepCompletedAt = new Date();
       await db
         .update(mailboxActionStepRun)
@@ -619,7 +701,9 @@ export const executeMailboxActionRun = async (runId: string) => {
       for (const outputPort of result.outputPorts) {
         for (const edge of getOutgoingEdges(graph, item.node.id, outputPort)) {
           const targetNode = nodesById.get(edge.target);
-          if (!targetNode) continue;
+          if (targetNode === undefined) {
+            continue;
+          }
           const childFrameId = randomUUID();
           const childPath = [
             ...item.frame.branchPath,
@@ -647,7 +731,11 @@ export const executeMailboxActionRun = async (runId: string) => {
           });
         }
       }
-    }
+
+      await processQueueItem();
+    };
+
+    await processQueueItem();
 
     const completedAt = new Date();
     await db
@@ -666,7 +754,8 @@ export const executeMailboxActionRun = async (runId: string) => {
       .update(mailboxActionRun)
       .set({
         completedAt: failedAt,
-        lastError: error instanceof Error ? error.message : "Mailbox action failed.",
+        lastError:
+          error instanceof Error ? error.message : "Mailbox action failed.",
         leasedUntil: null,
         status: "failed",
         updatedAt: failedAt,

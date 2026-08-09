@@ -1,6 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { getMailboxesQueryKey } from "~/lib/mailboxes-query";
-import { rpc } from "~/lib/orpc";
+
+import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
+import { rpc } from "#/lib/orpc";
 
 export const openGoogleAccountLink = async (input: {
   mailboxId?: string;

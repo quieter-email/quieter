@@ -1,4 +1,5 @@
-import type { MailboxCategory } from "~/lib/gmail/gmail";
+import type { MailboxCategory } from "#/lib/gmail/gmail";
+
 import type { ComposeDraftState } from "../domain/draft";
 
 export type PendingComposeSession = {

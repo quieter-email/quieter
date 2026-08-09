@@ -1,4 +1,7 @@
-import type { HotkeySequence, RegisterableHotkey } from "@tanstack/react-hotkeys";
+import type {
+  HotkeySequence,
+  RegisterableHotkey,
+} from "@tanstack/react-hotkeys";
 
 export type KeyboardShortcutCategory =
   | "Global"

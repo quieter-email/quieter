@@ -1,26 +1,31 @@
 import { cpSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
+
 import { exitOnKitError, generate } from "./drizzle-kit";
 
 const packageDirectory = fileURLToPath(new URL("..", import.meta.url));
-const migrationsDirectory = join(packageDirectory, "drizzle");
-const temporaryDirectory = mkdtempSync(join(tmpdir(), "quieter-drizzle-check-"));
-const temporaryMigrationsDirectory = join(temporaryDirectory, "drizzle");
+const migrationsDirectory = path.join(packageDirectory, "drizzle");
+const temporaryDirectory = mkdtempSync(
+  path.join(tmpdir(), "quieter-drizzle-check-")
+);
+const temporaryMigrationsDirectory = path.join(temporaryDirectory, "drizzle");
 
 try {
-  cpSync(migrationsDirectory, temporaryMigrationsDirectory, { recursive: true });
+  cpSync(migrationsDirectory, temporaryMigrationsDirectory, {
+    recursive: true,
+  });
   const migrationNames = new Set(
     readdirSync(temporaryMigrationsDirectory, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
-      .map((entry) => entry.name),
+      .map((entry) => entry.name)
   );
 
   const response = await generate({
     dialect: "postgresql",
-    schema: "./src/schema.ts",
     out: temporaryMigrationsDirectory,
+    schema: "./src/schema.ts",
   });
   exitOnKitError(response);
 
@@ -32,7 +37,7 @@ try {
 
   if (generatedMigrations.length > 0) {
     throw new Error(
-      `Schema changes are missing a committed migration: ${generatedMigrations.join(", ")}`,
+      `Schema changes are missing a committed migration: ${generatedMigrations.join(", ")}`
     );
   }
 } finally {

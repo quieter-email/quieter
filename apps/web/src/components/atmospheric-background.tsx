@@ -259,7 +259,9 @@ const hash13 = (x: number, y: number, z: number) => {
   let px = fract(f32(x * 0.1031));
   let py = fract(f32(y * 0.1031));
   let pz = fract(f32(z * 0.1031));
-  const dot = f32(px * f32(pz + 31.32) + py * f32(py + 31.32) + pz * f32(px + 31.32));
+  const dot = f32(
+    px * f32(pz + 31.32) + py * f32(py + 31.32) + pz * f32(px + 31.32)
+  );
   // GLSL: p += dot(p, p.zyx + 31.32) → each component += same scalar dot
   px = f32(px + dot);
   py = f32(py + dot);
@@ -321,11 +323,9 @@ type FrameGlobals = {
 const computeFrameGlobals = (
   timeSeconds: number,
   animate: boolean,
-  seed: readonly [number, number, number],
+  seed: readonly [number, number, number]
 ): FrameGlobals => {
-  const sx = seed[0];
-  const sy = seed[1];
-  const sz = seed[2];
+  const [sx, sy, sz] = seed;
   const t = f32(f32(timeSeconds * (animate ? 1 : 0) * 0.095) + f32(sx * 40));
 
   const mood = valueNoise3(f32(t * 0.22), sy, f32(t * 0.16));
@@ -338,35 +338,108 @@ const computeFrameGlobals = (
   const thick = f32(mix(0.16, 0.26, thickNoise) * mix(1, 0.9, hardness));
 
   return {
-    mood,
     detail,
-    hardness,
-    thick,
     drift,
     drift2,
+    grainTick: animate
+      ? Math.floor(f32(timeSeconds * 3 + sx * 100))
+      : f32(sx * 100),
+    hardness,
+    mood,
     phaseA: f32(f32(sx * 6.28318) + f32(t * 1.42)),
     phaseB: f32(f32(sy * 6.28318) + f32(t * 0.58) + 2.4),
     phaseC: f32(f32(sz * 6.28318) - f32(t * 1.95) - 1.1),
     ridgeAmpB: mix(0.2, 0.7, detail),
     ridgeAmpC: mix(0.05, 0.55, detail),
-    grainTick: animate ? Math.floor(f32(timeSeconds * 3 + sx * 100)) : f32(sx * 100),
+    thick,
   };
 };
 
-const compileShader = (gl: WebGLRenderingContext, type: number, source: string) => {
+const compileShader = (
+  gl: WebGLRenderingContext,
+  type: number,
+  source: string
+) => {
   const shader = gl.createShader(type);
-  if (!shader) return null;
+  if (!shader) {
+    return null;
+  }
 
   gl.shaderSource(shader, source);
   gl.compileShader(shader);
 
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+  if (gl.getShaderParameter(shader, gl.COMPILE_STATUS) !== true) {
     gl.deleteShader(shader);
     return null;
   }
 
   return shader;
 };
+
+const ATMOSPHERIC_UNIFORM_NAMES = [
+  "animate",
+  "cosA",
+  "cosB",
+  "cosC",
+  "drift",
+  "fadeBottom",
+  "fadeColorBottom",
+  "fadeColorTop",
+  "fadeTop",
+  "grain",
+  "grainTick",
+  "hardness",
+  "intensity",
+  "layout",
+  "mood",
+  "phase",
+  "resolution",
+  "ridgeAmp",
+  "seed",
+  "thick",
+  "time",
+] as const;
+type AtmosphericUniformName = (typeof ATMOSPHERIC_UNIFORM_NAMES)[number];
+type AtmosphericGlLocations = {
+  position: number;
+} & Record<AtmosphericUniformName, WebGLUniformLocation | null>;
+type ReadyAtmosphericGlLocations = {
+  position: number;
+} & Record<AtmosphericUniformName, WebGLUniformLocation>;
+
+const getAtmosphericGlLocations = (
+  gl: WebGLRenderingContext,
+  program: WebGLProgram
+): AtmosphericGlLocations => ({
+  animate: gl.getUniformLocation(program, "uAnimate"),
+  cosA: gl.getUniformLocation(program, "uCosA"),
+  cosB: gl.getUniformLocation(program, "uCosB"),
+  cosC: gl.getUniformLocation(program, "uCosC"),
+  drift: gl.getUniformLocation(program, "uDrift"),
+  fadeBottom: gl.getUniformLocation(program, "uFadeBottom"),
+  fadeColorBottom: gl.getUniformLocation(program, "uFadeColorBottom"),
+  fadeColorTop: gl.getUniformLocation(program, "uFadeColorTop"),
+  fadeTop: gl.getUniformLocation(program, "uFadeTop"),
+  grain: gl.getUniformLocation(program, "uGrain"),
+  grainTick: gl.getUniformLocation(program, "uGrainTick"),
+  hardness: gl.getUniformLocation(program, "uHardness"),
+  intensity: gl.getUniformLocation(program, "uIntensity"),
+  layout: gl.getUniformLocation(program, "uLayout"),
+  mood: gl.getUniformLocation(program, "uMood"),
+  phase: gl.getUniformLocation(program, "uPhase"),
+  position: gl.getAttribLocation(program, "aPosition"),
+  resolution: gl.getUniformLocation(program, "uResolution"),
+  ridgeAmp: gl.getUniformLocation(program, "uRidgeAmp"),
+  seed: gl.getUniformLocation(program, "uSeed"),
+  thick: gl.getUniformLocation(program, "uThick"),
+  time: gl.getUniformLocation(program, "uTime"),
+});
+
+const hasAtmosphericGlLocations = (
+  locations: AtmosphericGlLocations
+): locations is ReadyAtmosphericGlLocations =>
+  locations.position !== -1 &&
+  ATMOSPHERIC_UNIFORM_NAMES.every((name) => locations[name] !== null);
 
 type UniformSet = {
   resolution: WebGLUniformLocation;
@@ -392,14 +465,20 @@ export const AtmosphericBackground = ({
   const [ready, setReady] = useState(false);
   const underlay = fadeBottom === "elevated" ? "bg-bg-elevated" : "bg-black";
   const sessionRef = useRef({
-    seed: [Math.random(), Math.random(), Math.random()] as [number, number, number],
+    seed: [Math.random(), Math.random(), Math.random()] as [
+      number,
+      number,
+      number,
+    ],
     startedAt: performance.now(),
     timeOffset: Math.random() * 120,
   });
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) {
+      return;
+    }
 
     let cancelled = false;
     let revealed = false;
@@ -426,14 +505,18 @@ export const AtmosphericBackground = ({
     const cosC: [number, number] = [f32(Math.cos(angC)), f32(Math.sin(angC))];
 
     const reveal = () => {
-      if (cancelled || revealed) return;
+      if (cancelled || revealed) {
+        return;
+      }
       revealed = true;
       if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
         setReady(true);
         return;
       }
       requestAnimationFrame(() => {
-        if (!cancelled) setReady(true);
+        if (!cancelled) {
+          setReady(true);
+        }
       });
     };
 
@@ -443,7 +526,9 @@ export const AtmosphericBackground = ({
     };
 
     const draw = (timeSeconds: number) => {
-      if (!gl || !uniforms) return;
+      if (!gl || !uniforms) {
+        return;
+      }
       const g = computeFrameGlobals(timeSeconds, shouldAnimate, session.seed);
       gl.uniform1f(uniforms.time, timeSeconds);
       gl.uniform1f(uniforms.mood, g.mood);
@@ -457,9 +542,14 @@ export const AtmosphericBackground = ({
     };
 
     const resize = () => {
-      if (!gl || !uniforms || cancelled) return;
+      if (!gl || !uniforms || cancelled) {
+        return;
+      }
       const rect = canvas.getBoundingClientRect();
-      const pixelRatio = Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO);
+      const pixelRatio = Math.min(
+        window.devicePixelRatio || 1,
+        MAX_PIXEL_RATIO
+      );
       const nextWidth = Math.max(1, Math.ceil(rect.width * pixelRatio));
       const nextHeight = Math.max(1, Math.ceil(rect.height * pixelRatio));
 
@@ -475,19 +565,23 @@ export const AtmosphericBackground = ({
       draw(
         shouldAnimate
           ? (performance.now() - session.startedAt) * 0.001 + session.timeOffset
-          : session.timeOffset,
+          : session.timeOffset
       );
       reveal();
     };
 
     const render = (now: number) => {
       draw((now - session.startedAt) * 0.001 + session.timeOffset);
-      if (!revealed) reveal();
+      if (!revealed) {
+        reveal();
+      }
       raf = requestAnimationFrame(render);
     };
 
     const startLoop = () => {
-      if (!shouldAnimate || raf !== 0 || !visible || cancelled) return;
+      if (!shouldAnimate || raf !== 0 || !visible || cancelled) {
+        return;
+      }
       raf = requestAnimationFrame(render);
     };
 
@@ -504,8 +598,12 @@ export const AtmosphericBackground = ({
       resizeObserver?.disconnect();
       resizeObserver = null;
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      if (gl && positionBuffer) gl.deleteBuffer(positionBuffer);
-      if (gl && program) gl.deleteProgram(program);
+      if (gl && positionBuffer) {
+        gl.deleteBuffer(positionBuffer);
+      }
+      if (gl && program) {
+        gl.deleteProgram(program);
+      }
       positionBuffer = null;
       program = null;
       uniforms = null;
@@ -515,7 +613,9 @@ export const AtmosphericBackground = ({
     };
 
     const initGl = () => {
-      if (cancelled || gl) return;
+      if (cancelled || gl) {
+        return;
+      }
 
       const context = canvas.getContext("webgl", {
         alpha: false,
@@ -527,18 +627,28 @@ export const AtmosphericBackground = ({
         preserveDrawingBuffer: false,
         stencil: false,
       });
-      if (!context) return;
+      if (!context) {
+        return;
+      }
       gl = context;
 
-      const vertexShader = compileShader(gl, gl.VERTEX_SHADER, VERTEX_SHADER_SOURCE);
-      const fragmentShader = compileShader(gl, gl.FRAGMENT_SHADER, FRAGMENT_SHADER_SOURCE);
-      if (!vertexShader || !fragmentShader) {
+      const vertexShader = compileShader(
+        gl,
+        gl.VERTEX_SHADER,
+        VERTEX_SHADER_SOURCE
+      );
+      const fragmentShader = compileShader(
+        gl,
+        gl.FRAGMENT_SHADER,
+        FRAGMENT_SHADER_SOURCE
+      );
+      if (vertexShader === null || fragmentShader === null) {
         gl = null;
         return;
       }
 
       const nextProgram = gl.createProgram();
-      if (!nextProgram) {
+      if (nextProgram === null) {
         gl.deleteShader(vertexShader);
         gl.deleteShader(fragmentShader);
         gl = null;
@@ -551,14 +661,14 @@ export const AtmosphericBackground = ({
       gl.deleteShader(vertexShader);
       gl.deleteShader(fragmentShader);
 
-      if (!gl.getProgramParameter(nextProgram, gl.LINK_STATUS)) {
+      if (gl.getProgramParameter(nextProgram, gl.LINK_STATUS) !== true) {
         gl.deleteProgram(nextProgram);
         gl = null;
         return;
       }
 
       const nextBuffer = gl.createBuffer();
-      if (!nextBuffer) {
+      if (nextBuffer === null) {
         gl.deleteProgram(nextProgram);
         gl = null;
         return;
@@ -568,69 +678,53 @@ export const AtmosphericBackground = ({
       positionBuffer = nextBuffer;
       gl.useProgram(program);
       gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+      gl.bufferData(
+        gl.ARRAY_BUFFER,
+        new Float32Array([-1, -1, 3, -1, -1, 3]),
+        gl.STATIC_DRAW
+      );
 
-      const positionLocation = gl.getAttribLocation(program, "aPosition");
-      const resolutionLocation = gl.getUniformLocation(program, "uResolution");
-      const timeLocation = gl.getUniformLocation(program, "uTime");
-      const intensityLocation = gl.getUniformLocation(program, "uIntensity");
-      const grainLocation = gl.getUniformLocation(program, "uGrain");
-      const animateLocation = gl.getUniformLocation(program, "uAnimate");
-      const seedLocation = gl.getUniformLocation(program, "uSeed");
-      const fadeTopLocation = gl.getUniformLocation(program, "uFadeTop");
-      const fadeBottomLocation = gl.getUniformLocation(program, "uFadeBottom");
-      const fadeColorTopLocation = gl.getUniformLocation(program, "uFadeColorTop");
-      const fadeColorBottomLocation = gl.getUniformLocation(program, "uFadeColorBottom");
-      const moodLocation = gl.getUniformLocation(program, "uMood");
-      const hardnessLocation = gl.getUniformLocation(program, "uHardness");
-      const thickLocation = gl.getUniformLocation(program, "uThick");
-      const driftLocation = gl.getUniformLocation(program, "uDrift");
-      const phaseLocation = gl.getUniformLocation(program, "uPhase");
-      const layoutLocation = gl.getUniformLocation(program, "uLayout");
-      const ridgeAmpLocation = gl.getUniformLocation(program, "uRidgeAmp");
-      const cosALocation = gl.getUniformLocation(program, "uCosA");
-      const cosBLocation = gl.getUniformLocation(program, "uCosB");
-      const cosCLocation = gl.getUniformLocation(program, "uCosC");
-      const grainTickLocation = gl.getUniformLocation(program, "uGrainTick");
-
-      if (
-        positionLocation === -1 ||
-        !resolutionLocation ||
-        !timeLocation ||
-        !intensityLocation ||
-        !grainLocation ||
-        !animateLocation ||
-        !seedLocation ||
-        !fadeTopLocation ||
-        !fadeBottomLocation ||
-        !fadeColorTopLocation ||
-        !fadeColorBottomLocation ||
-        !moodLocation ||
-        !hardnessLocation ||
-        !thickLocation ||
-        !driftLocation ||
-        !phaseLocation ||
-        !layoutLocation ||
-        !ridgeAmpLocation ||
-        !cosALocation ||
-        !cosBLocation ||
-        !cosCLocation ||
-        !grainTickLocation
-      ) {
+      const locations = getAtmosphericGlLocations(gl, program);
+      if (!hasAtmosphericGlLocations(locations)) {
         teardownGl();
         return;
       }
 
-      uniforms = {
-        resolution: resolutionLocation,
-        time: timeLocation,
-        mood: moodLocation,
-        hardness: hardnessLocation,
-        thick: thickLocation,
+      const {
+        animate: animateLocation,
+        cosA: cosALocation,
+        cosB: cosBLocation,
+        cosC: cosCLocation,
         drift: driftLocation,
-        phase: phaseLocation,
-        ridgeAmp: ridgeAmpLocation,
+        fadeBottom: fadeBottomLocation,
+        fadeColorBottom: fadeColorBottomLocation,
+        fadeColorTop: fadeColorTopLocation,
+        fadeTop: fadeTopLocation,
+        grain: grainLocation,
         grainTick: grainTickLocation,
+        hardness: hardnessLocation,
+        intensity: intensityLocation,
+        layout: layoutLocation,
+        mood: moodLocation,
+        phase: phaseLocation,
+        position: positionLocation,
+        resolution: resolutionLocation,
+        ridgeAmp: ridgeAmpLocation,
+        seed: seedLocation,
+        thick: thickLocation,
+        time: timeLocation,
+      } = locations;
+
+      uniforms = {
+        drift: driftLocation,
+        grainTick: grainTickLocation,
+        hardness: hardnessLocation,
+        mood: moodLocation,
+        phase: phaseLocation,
+        resolution: resolutionLocation,
+        ridgeAmp: ridgeAmpLocation,
+        thick: thickLocation,
+        time: timeLocation,
       };
 
       gl.enableVertexAttribArray(positionLocation);
@@ -651,7 +745,9 @@ export const AtmosphericBackground = ({
       gl.uniform2f(cosBLocation, cosB[0], cosB[1]);
       gl.uniform2f(cosCLocation, cosC[0], cosC[1]);
 
-      const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const prefersReducedMotion = window.matchMedia(
+        "(prefers-reduced-motion: reduce)"
+      ).matches;
       shouldAnimate = animate && !prefersReducedMotion;
       gl.uniform1f(animateLocation, shouldAnimate ? 1 : 0);
 
@@ -672,7 +768,7 @@ export const AtmosphericBackground = ({
         }
         stopLoop();
       },
-      { rootMargin: VISIBLE_ROOT_MARGIN },
+      { rootMargin: VISIBLE_ROOT_MARGIN }
     );
     intersection.observe(canvas);
 
@@ -686,12 +782,22 @@ export const AtmosphericBackground = ({
   return (
     <div
       aria-hidden
-      className={cn("pointer-events-none absolute inset-0 overflow-hidden", underlay, className)}
+      className={cn(
+        "pointer-events-none absolute inset-0 overflow-hidden",
+        underlay,
+        className
+      )}
     >
       <canvas
-        className={cn("absolute inset-0 size-full ease-out", ready ? "opacity-100" : "opacity-0")}
+        className={cn(
+          "absolute inset-0 size-full ease-out",
+          ready ? "opacity-100" : "opacity-0"
+        )}
         ref={canvasRef}
-        style={{ transitionDuration: `${REVEAL_MS}ms`, transitionProperty: "opacity" }}
+        style={{
+          transitionDuration: `${REVEAL_MS}ms`,
+          transitionProperty: "opacity",
+        }}
       />
     </div>
   );

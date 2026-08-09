@@ -3,6 +3,7 @@ import { account, mailbox, member, user } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { makeSignature } from "better-auth/crypto";
 import { eq } from "drizzle-orm";
+
 import { auth } from "./index";
 import { ensureUserOrganizationState } from "./organization";
 
@@ -67,39 +68,69 @@ const previewPersonaUsers: Record<PreviewPersona, PersonaAccount> = {
 };
 
 export const isPreviewPersona = (value: unknown): value is PreviewPersona =>
-  typeof value === "string" && previewPersonas.includes(value as PreviewPersona);
+  typeof value === "string" &&
+  (previewPersonas as readonly string[]).includes(value);
 
 export const isPreviewPersonasEnabled = () =>
-  serverEnv.NODE_ENV === "development" || serverEnv.QUIETER_PREVIEW_PERSONAS_ENABLED === true;
+  serverEnv.NODE_ENV === "development" ||
+  serverEnv.QUIETER_PREVIEW_PERSONAS_ENABLED === true;
 
-export const createPreviewPersonaSessionHeaders = async (persona: PreviewPersona) => {
-  if (!isPreviewPersonasEnabled()) {
-    throw new Error("Preview personas are disabled.");
+const formatSameSite = (sameSite: string) => {
+  const normalized = sameSite.toLowerCase();
+  if (normalized === "strict") {
+    return "Strict";
   }
-
-  const currentUser = await ensurePreviewPersonaAccount(persona);
-  const authContext = await auth.$context;
-  const session = await authContext.internalAdapter.createSession(currentUser.id);
-  const signedToken = `${session.token}.${await makeSignature(session.token, authContext.secret)}`;
-  const headers = new Headers({ "cache-control": "no-store" });
-
-  headers.append(
-    "set-cookie",
-    serializeCookie(
-      authContext.authCookies.sessionToken.name,
-      signedToken,
-      authContext.authCookies.sessionToken.attributes,
-    ),
-  );
-  headers.append("set-cookie", serializePreviewPersonaCookie(null));
-
-  return headers;
+  if (normalized === "none") {
+    return "None";
+  }
+  return "Lax";
 };
 
-export const createPreviewPersonaClearHeaders = () => {
-  const headers = new Headers({ "cache-control": "no-store" });
-  headers.append("set-cookie", serializePreviewPersonaCookie(null));
-  return headers;
+const serializeCookie = (
+  name: string,
+  value: string,
+  attributes: {
+    domain?: string;
+    httpOnly?: boolean;
+    maxAge?: number;
+    path?: string;
+    secure?: boolean;
+    sameSite?: string;
+  }
+) =>
+  [
+    `${name}=${value}`,
+    attributes.maxAge === undefined ? null : `Max-Age=${attributes.maxAge}`,
+    attributes.domain !== null &&
+    attributes.domain !== undefined &&
+    attributes.domain !== ""
+      ? `Domain=${attributes.domain}`
+      : null,
+    `Path=${attributes.path ?? "/"}`,
+    attributes.httpOnly === true ? "HttpOnly" : null,
+    attributes.secure === true ? "Secure" : null,
+    `SameSite=${formatSameSite(attributes.sameSite ?? "lax")}`,
+  ]
+    .filter(Boolean)
+    .join("; ");
+
+const serializePreviewPersonaCookie = (persona: PreviewPersona | null) =>
+  [
+    `${previewPersonaCookieName}=${persona ? encodeURIComponent(persona) : ""}`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax",
+    `Max-Age=${persona ? previewPersonaCookieMaxAgeSeconds : 0}`,
+  ].join("; ");
+
+const getUserOrganizationId = async (userId: string) => {
+  const [membership] = await db
+    .select({ organizationId: member.organizationId })
+    .from(member)
+    .where(eq(member.userId, userId))
+    .limit(1);
+
+  return membership?.organizationId ?? null;
 };
 
 const ensurePreviewPersonaAccount = async (persona: PreviewPersona) => {
@@ -150,14 +181,19 @@ const ensurePreviewPersonaAccount = async (persona: PreviewPersona) => {
 
   const organizationState = await ensureUserOrganizationState(personaAccount);
   const organizationId =
-    organizationState.organizationIds[0] ?? (await getUserOrganizationId(personaAccount.id));
+    organizationState.organizationIds[0] ??
+    (await getUserOrganizationId(personaAccount.id));
 
-  if (!organizationId) {
+  if (
+    organizationId === null ||
+    organizationId === undefined ||
+    organizationId === ""
+  ) {
     throw new Error("Could not create preview team.");
   }
 
   const defaultMailboxId = personaAccount.mailbox?.id ?? null;
-  if (personaAccount.mailbox) {
+  if (personaAccount.mailbox !== null && personaAccount.mailbox !== undefined) {
     await db
       .insert(mailbox)
       .values({
@@ -166,7 +202,10 @@ const ensurePreviewPersonaAccount = async (persona: PreviewPersona) => {
         emailAddress: personaAccount.mailbox.emailAddress,
         id: personaAccount.mailbox.id,
         organizationId,
-        ownerUserId: personaAccount.mailbox.provider === "gmail" ? personaAccount.id : null,
+        ownerUserId:
+          personaAccount.mailbox.provider === "gmail"
+            ? personaAccount.id
+            : null,
         provider: personaAccount.mailbox.provider,
         status: "connected",
         updatedAt: now,
@@ -176,7 +215,10 @@ const ensurePreviewPersonaAccount = async (persona: PreviewPersona) => {
           displayName: personaAccount.mailbox.displayName,
           emailAddress: personaAccount.mailbox.emailAddress,
           organizationId,
-          ownerUserId: personaAccount.mailbox.provider === "gmail" ? personaAccount.id : null,
+          ownerUserId:
+            personaAccount.mailbox.provider === "gmail"
+              ? personaAccount.id
+              : null,
           provider: personaAccount.mailbox.provider,
           status: "connected",
           updatedAt: now,
@@ -193,52 +235,36 @@ const ensurePreviewPersonaAccount = async (persona: PreviewPersona) => {
   return personaAccount;
 };
 
-const getUserOrganizationId = async (userId: string) => {
-  const [membership] = await db
-    .select({ organizationId: member.organizationId })
-    .from(member)
-    .where(eq(member.userId, userId))
-    .limit(1);
+export const createPreviewPersonaSessionHeaders = async (
+  persona: PreviewPersona
+) => {
+  if (!isPreviewPersonasEnabled()) {
+    throw new Error("Preview personas are disabled.");
+  }
 
-  return membership?.organizationId ?? null;
+  const currentUser = await ensurePreviewPersonaAccount(persona);
+  const authContext = await auth.$context;
+  const session = await authContext.internalAdapter.createSession(
+    currentUser.id
+  );
+  const signedToken = `${session.token}.${await makeSignature(session.token, authContext.secret)}`;
+  const headers = new Headers({ "cache-control": "no-store" });
+
+  headers.append(
+    "set-cookie",
+    serializeCookie(
+      authContext.authCookies.sessionToken.name,
+      signedToken,
+      authContext.authCookies.sessionToken.attributes
+    )
+  );
+  headers.append("set-cookie", serializePreviewPersonaCookie(null));
+
+  return headers;
 };
 
-const serializeCookie = (
-  name: string,
-  value: string,
-  attributes: {
-    domain?: string;
-    httpOnly?: boolean;
-    maxAge?: number;
-    path?: string;
-    secure?: boolean;
-    sameSite?: string;
-  },
-) =>
-  [
-    `${name}=${value}`,
-    attributes.maxAge == null ? null : `Max-Age=${attributes.maxAge}`,
-    attributes.domain ? `Domain=${attributes.domain}` : null,
-    `Path=${attributes.path ?? "/"}`,
-    attributes.httpOnly ? "HttpOnly" : null,
-    attributes.secure ? "Secure" : null,
-    `SameSite=${formatSameSite(attributes.sameSite ?? "lax")}`,
-  ]
-    .filter(Boolean)
-    .join("; ");
-
-const serializePreviewPersonaCookie = (persona: PreviewPersona | null) =>
-  [
-    `${previewPersonaCookieName}=${persona ? encodeURIComponent(persona) : ""}`,
-    "Path=/",
-    "HttpOnly",
-    "SameSite=Lax",
-    `Max-Age=${persona ? previewPersonaCookieMaxAgeSeconds : 0}`,
-  ].join("; ");
-
-const formatSameSite = (sameSite: string) => {
-  const normalized = sameSite.toLowerCase();
-  if (normalized === "strict") return "Strict";
-  if (normalized === "none") return "None";
-  return "Lax";
+export const createPreviewPersonaClearHeaders = () => {
+  const headers = new Headers({ "cache-control": "no-store" });
+  headers.append("set-cookie", serializePreviewPersonaCookie(null));
+  return headers;
 };

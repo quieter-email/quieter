@@ -11,7 +11,7 @@ export type MessageLabelsDialogUpdate = {
 
 export const getMessageLabelUpdates = (
   targets: readonly MessageLabelsDialogTarget[],
-  draftLabels: Readonly<Record<string, boolean>>,
+  draftLabels: Readonly<Record<string, boolean>>
 ): MessageLabelsDialogUpdate[] =>
   targets.flatMap((target) => {
     const currentLabelIds = new Set(target.labelIds);
@@ -19,8 +19,12 @@ export const getMessageLabelUpdates = (
     const removeLabelIds: string[] = [];
 
     for (const [labelId, checked] of Object.entries(draftLabels)) {
-      if (checked && !currentLabelIds.has(labelId)) addLabelIds.push(labelId);
-      if (!checked && currentLabelIds.has(labelId)) removeLabelIds.push(labelId);
+      if (checked && !currentLabelIds.has(labelId)) {
+        addLabelIds.push(labelId);
+      }
+      if (!checked && currentLabelIds.has(labelId)) {
+        removeLabelIds.push(labelId);
+      }
     }
 
     return addLabelIds.length > 0 || removeLabelIds.length > 0

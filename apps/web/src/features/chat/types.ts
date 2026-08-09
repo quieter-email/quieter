@@ -1,6 +1,8 @@
 import type { UIMessage } from "@tanstack/ai";
-import type { ComposeFormValues } from "~/features/compose/domain/compose-form";
-import type { MailboxCategory } from "~/lib/gmail/gmail";
+
+import type { ComposeFormValues } from "#/features/compose/domain/compose-form";
+import type { MailboxCategory } from "#/lib/gmail/gmail";
+
 export type {
   ComposeEmailInput,
   ComposeEmailResult,
@@ -47,7 +49,9 @@ export type ResolveComposeToolInput =
       toolCallId: string;
     };
 
-export type ResolveComposeTool = (input: ResolveComposeToolInput) => Promise<void>;
+export type ResolveComposeTool = (
+  input: ResolveComposeToolInput
+) => Promise<void>;
 
 export type ChatTurn = {
   assistant: UIMessage | null;

@@ -1,6 +1,7 @@
 "use client";
 
-import { chatModelGroups, chatModels, type ChatModel } from "@quieter/ai/chat-models";
+import { chatModelGroups, chatModels } from "@quieter/ai/chat-models";
+import type { ChatModel } from "@quieter/ai/chat-models";
 import {
   Select,
   SelectContent,
@@ -8,9 +9,9 @@ import {
   SelectItem,
   SelectSeparator,
   SelectTrigger,
-  type SelectTriggerProps,
   SelectValue,
 } from "@quieter/ui/select";
+import type { SelectTriggerProps } from "@quieter/ui/select";
 import { Fragment } from "react";
 
 type AiModelSelectProps = {
@@ -35,9 +36,14 @@ export const AiModelSelect = ({
   variant,
 }: AiModelSelectProps) => (
   <Select
-    items={chatModels.map(({ label, value: model }) => ({ label, value: model }))}
+    items={chatModels.map(({ label, value: model }) => ({
+      label,
+      value: model,
+    }))}
     onValueChange={(model) => {
-      if (model) onValueChange(model);
+      if (model) {
+        onValueChange(model);
+      }
     }}
     value={value}
   >
@@ -53,7 +59,9 @@ export const AiModelSelect = ({
     <SelectContent align={align} size="compact">
       {chatModelGroups.map((group, index) => (
         <Fragment key={group}>
-          {index > 0 && <SelectSeparator className="mx-2 my-0.5 h-px bg-border/70" />}
+          {index > 0 && (
+            <SelectSeparator className="mx-2 my-0.5 h-px bg-border/70" />
+          )}
           <SelectGroup>
             {chatModels
               .filter((model) => model.group === group)

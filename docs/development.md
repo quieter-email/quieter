@@ -8,9 +8,7 @@
 - Non-production AWS credentials only when running the SST mail and background-processing stack
 - OAuth and provider credentials for integrations you want to test
 
-Local PostgreSQL remains supported. A dedicated Neon development branch is also supported when its
-exact direct endpoint hostname is pinned with `QUIETER_LOCAL_NEON_HOST`; arbitrary hosted or
-production database URLs remain rejected.
+Local PostgreSQL remains supported. A dedicated Neon development branch is also supported when its exact direct endpoint hostname is pinned with `QUIETER_LOCAL_NEON_HOST`; arbitrary hosted or production database URLs remain rejected.
 
 ## Install
 
@@ -27,9 +25,7 @@ On PowerShell:
 Copy-Item .env.example .env.local
 ```
 
-Do not copy production database credentials or persistent queue endpoints into `.env.local`.
-Run `vp run env:doctor` after editing `.env.local`; it rejects unknown remote databases,
-production-shaped background infrastructure, and non-sandbox Polar credentials.
+Do not copy production database credentials or persistent queue endpoints into `.env.local`. Run `vp run env:doctor` after editing `.env.local`; it rejects unknown remote databases, production-shaped background infrastructure, and non-sandbox Polar credentials.
 
 ## Local Database
 
@@ -45,11 +41,9 @@ The default example URL is:
 postgresql://postgres:postgres@localhost:5432/quieter
 ```
 
-Adjust the username, password, or port for your local PostgreSQL installation. Keep the hostname
-loopback-only.
+Adjust the username, password, or port for your local PostgreSQL installation. Keep the hostname loopback-only.
 
-For a disposable Neon branch, use its pooled connection string for `DATABASE_URL`, its direct
-connection string for `DATABASE_MIGRATION_URL`, and pin the direct hostname:
+For a disposable Neon branch, use its pooled connection string for `DATABASE_URL`, its direct connection string for `DATABASE_MIGRATION_URL`, and pin the direct hostname:
 
 ```text
 DATABASE_URL=postgresql://user:password@ep-your-development-branch-pooler.region.aws.neon.tech/neondb
@@ -58,9 +52,7 @@ QUIETER_DEPLOYMENT_ENV=local
 QUIETER_LOCAL_NEON_HOST=ep-your-development-branch.region.aws.neon.tech
 ```
 
-The local guards normalize pooled and direct Neon hostnames but accept only that exact endpoint.
-`DATABASE_MIGRATION_URL` is required for Neon and must use the direct endpoint. Never point the
-allowlist at a production branch.
+The local guards normalize pooled and direct Neon hostnames but accept only that exact endpoint. `DATABASE_MIGRATION_URL` is required for Neon and must use the direct endpoint. Never point the allowlist at a production branch.
 
 Apply the committed application migrations:
 
@@ -68,8 +60,7 @@ Apply the committed application migrations:
 vp run db:migrate
 ```
 
-`db:push` is reserved for disposable local databases. Normal schema changes require a committed
-Drizzle migration.
+`db:push` is reserved for disposable local databases. Normal schema changes require a committed Drizzle migration.
 
 ## Environment
 
@@ -84,8 +75,7 @@ Start with `.env.example`. Environment variables are validated by `@quieter/env`
 Local development requires only the values needed by the paths you exercise. Important groups:
 
 - `DATABASE_URL`: loopback PostgreSQL or the explicitly allowlisted Neon development branch (pooled)
-- `DATABASE_MIGRATION_URL`: required for Neon as the direct endpoint; optional on loopback, where
-  migration commands fall back to `DATABASE_URL`
+- `DATABASE_MIGRATION_URL`: required for Neon as the direct endpoint; optional on loopback, where migration commands fall back to `DATABASE_URL`
 - Better Auth: application URL and secret
 - Auth email mode: `QUIETER_AUTH_MAIL_MODE=console` prints local auth links without managed mail
 - Google identity OAuth: sign-in only
@@ -104,25 +94,15 @@ Run the normal local web session:
 bun run dev
 ```
 
-This directly starts the Cloudflare/Vite production-shaped Worker runtime on
-`http://localhost:3000` as the only foreground process. Vite validates that the database is
-loopback-only or the explicitly allowlisted Neon branch before serving. Chat generation, AI
-automation, and mailbox actions use their in-process fallbacks, so stopping this command stops all
-local background work without a custom orchestrator. Apply migrations explicitly with
-`vp run db:migrate` after pulling or generating schema changes.
+This directly starts the Cloudflare/Vite production-shaped Worker runtime on `http://localhost:3000` as the only foreground process. Vite validates that the database is loopback-only or the explicitly allowlisted Neon branch before serving. Chat generation, AI automation, and mailbox actions use their in-process fallbacks, so stopping this command stops all local background work without a custom orchestrator. Apply migrations explicitly with `vp run db:migrate` after pulling or generating schema changes.
 
-Run the optional remote mail and background-processing infrastructure only for explicit provider
-integration tests:
+Run the optional remote mail and background-processing infrastructure only for explicit provider integration tests:
 
 ```bash
 bun run dev:mail
 ```
 
-`bun run dev` is the single safe local runtime. Use `bun run dev:cloud` when you explicitly need the
-web app and SST together. The package commands invoke SST directly with the `mail-dev` stage and
-load `.env.local` plus optional `.env.sst.local`. Keep AWS credentials out of `.env.local`; put
-non-production SST credentials in `.env.sst.local`. Remote queues and schedules can outlive the
-terminal, so remove the stage after infrastructure testing rather than relying on Ctrl+C.
+`bun run dev` is the single safe local runtime. Use `bun run dev:cloud` when you explicitly need the web app and SST together. The package commands invoke SST directly with the `mail-dev` stage and load `.env.local` plus optional `.env.sst.local`. Keep AWS credentials out of `.env.local`; put non-production SST credentials in `.env.sst.local`. Remote queues and schedules can outlive the terminal, so remove the stage after infrastructure testing rather than relying on Ctrl+C.
 
 ## Where Changes Belong
 
@@ -140,8 +120,7 @@ terminal, so remove the stage after infrastructure testing rather than relying o
 | AWS handlers and workflows                        | `packages/aws`      |
 | Environment schemas                               | `packages/env`      |
 
-Application code must not access the database directly. Add or reuse an oRPC procedure instead.
-Application UI must consume reusable components through `@quieter/ui`.
+Application code must not access the database directly. Add or reuse an oRPC procedure instead. Application UI must consume reusable components through `@quieter/ui`.
 
 ## Database Changes
 
@@ -159,9 +138,7 @@ Application UI must consume reusable components through `@quieter/ui`.
    vp run db:check
    ```
 
-CI runs destructive migration integration tests only against a dedicated temporary PostgreSQL
-database. Automated production migrations reject destructive SQL. Use expand/contract changes for
-renames, required columns, type rewrites, and destructive changes.
+CI runs destructive migration integration tests only against a dedicated temporary PostgreSQL database. Automated production migrations reject destructive SQL. Use expand/contract changes for renames, required columns, type rewrites, and destructive changes.
 
 Read [Database safety](database-safety.md) before changing migration tooling.
 
@@ -171,7 +148,6 @@ Run the full verification suite:
 
 ```bash
 vp check --fix
-vp run check:copy
 vp test
 vp run -r build
 ```
@@ -185,8 +161,7 @@ vp lint packages/database
 vp run db:check
 ```
 
-The pre-commit hook runs formatting and linting on staged files. Pull requests to `main` must pass
-the quality and migration checks.
+The pre-commit hook runs formatting and linting on staged files. Pull requests to `main` must pass the quality and migration checks.
 
 ## Generated Files
 

@@ -1,6 +1,7 @@
+import { createHash, randomUUID } from "node:crypto";
+
 import type { SESv2Client } from "@aws-sdk/client-sesv2";
 import { ORPCError } from "@orpc/server";
-import { ORGANIZATION_API_KEY_CONFIG_ID } from "@quieter/auth/organization-api-key";
 import {
   assertCanConsumeOrganizationMailUsage,
   estimateOutboundOrganizationMailUsage,
@@ -13,31 +14,37 @@ import { serverEnv } from "@quieter/env/server";
 import {
   buildSendMimeMessage,
   getSendEnvelopeAddress,
-  sendMessageInputSchema,
-  type SendMessageInput,
-  type SendMessageResult,
 } from "@quieter/mail/send";
+import type { SendMessageInput, SendMessageResult } from "@quieter/mail/send";
+import { reportError } from "@quieter/observability";
 import { and, eq, lt } from "drizzle-orm";
-import { createHash, randomUUID } from "node:crypto";
+
 import { recordOutboundManagedMessageForSender } from "./managed-mail/messages/service";
 import { recordOrganizationApiMailMessage } from "./organization-api-mail";
 import {
   assertOrganizationOwnsVerifiedSenderDomain,
   OrganizationMailSendError,
 } from "./organization-mail-policy";
+import { hasText } from "./text";
 
-export { ORGANIZATION_API_KEY_CONFIG_ID };
-export { assertOrganizationOwnsVerifiedSenderDomain, OrganizationMailSendError };
-export { sendMessageInputSchema };
-export type { SendMessageInput, SendMessageResult };
+export { ORGANIZATION_API_KEY_CONFIG_ID } from "@quieter/auth/organization-api-key";
+export {
+  assertOrganizationOwnsVerifiedSenderDomain,
+  OrganizationMailSendError,
+} from "./organization-mail-policy";
+export { sendMessageInputSchema } from "@quieter/mail/send";
+export type { SendMessageInput, SendMessageResult } from "@quieter/mail/send";
 
 const IDEMPOTENCY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 const getAwsRegion = () => {
-  const region = serverEnv.AWS_REGION || serverEnv.AWS_DEFAULT_REGION;
+  const region = serverEnv.AWS_REGION ?? serverEnv.AWS_DEFAULT_REGION;
 
-  if (!region) {
-    throw new OrganizationMailSendError("Mail sending is temporarily unavailable.", 500);
+  if (!hasText(region)) {
+    throw new OrganizationMailSendError(
+      "Mail sending is temporarily unavailable.",
+      500
+    );
   }
 
   return region;
@@ -62,8 +69,11 @@ const stableJsonStringify = (value: unknown): string => {
 
   return `{${Object.entries(value)
     .filter(([, entryValue]) => entryValue !== undefined)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, entryValue]) => `${JSON.stringify(key)}:${stableJsonStringify(entryValue)}`)
+    .toSorted(([left], [right]) => left.localeCompare(right))
+    .map(
+      ([key, entryValue]) =>
+        `${JSON.stringify(key)}:${stableJsonStringify(entryValue)}`
+    )
     .join(",")}}`;
 };
 
@@ -78,9 +88,9 @@ const deleteExpiredIdempotencyRecords = async (organizationId: string) => {
         eq(organizationMailSendIdempotency.organizationId, organizationId),
         lt(
           organizationMailSendIdempotency.createdAt,
-          new Date(Date.now() - IDEMPOTENCY_RETENTION_MS),
-        ),
-      ),
+          new Date(Date.now() - IDEMPOTENCY_RETENTION_MS)
+        )
+      )
     );
 };
 
@@ -98,22 +108,31 @@ const getIdempotentResult = async (input: {
     .from(organizationMailSendIdempotency)
     .where(
       and(
-        eq(organizationMailSendIdempotency.organizationId, input.organizationId),
-        eq(organizationMailSendIdempotency.idempotencyKey, input.idempotencyKey),
-      ),
+        eq(
+          organizationMailSendIdempotency.organizationId,
+          input.organizationId
+        ),
+        eq(organizationMailSendIdempotency.idempotencyKey, input.idempotencyKey)
+      )
     )
     .limit(1);
 
-  if (!existing) return null;
+  if (existing === undefined) {
+    return null;
+  }
 
   if (existing.requestHash !== input.requestHash) {
     throw new OrganizationMailSendError(
       "Idempotency key was already used with a different message.",
-      409,
+      409
     );
   }
 
-  if (existing.status === "completed" && existing.response) {
+  if (
+    existing.status === "completed" &&
+    existing.response !== undefined &&
+    existing.response !== null
+  ) {
     return {
       ...existing.response,
       idempotent: true,
@@ -122,7 +141,7 @@ const getIdempotentResult = async (input: {
 
   throw new OrganizationMailSendError(
     "Idempotency key is already in use by an in-progress send.",
-    409,
+    409
   );
 };
 
@@ -152,7 +171,9 @@ const claimIdempotentSend = async (input: {
     })
     .returning({ id: organizationMailSendIdempotency.id });
 
-  if (claimed.length > 0) return null;
+  if (claimed.length > 0) {
+    return null;
+  }
 
   return await getIdempotentResult(input);
 };
@@ -175,32 +196,62 @@ const persistIdempotentResult = async (input: {
     })
     .where(
       and(
-        eq(organizationMailSendIdempotency.organizationId, input.organizationId),
-        eq(organizationMailSendIdempotency.idempotencyKey, input.idempotencyKey),
+        eq(
+          organizationMailSendIdempotency.organizationId,
+          input.organizationId
+        ),
+        eq(
+          organizationMailSendIdempotency.idempotencyKey,
+          input.idempotencyKey
+        ),
         eq(organizationMailSendIdempotency.requestHash, input.requestHash),
-        eq(organizationMailSendIdempotency.status, "pending"),
-      ),
+        eq(organizationMailSendIdempotency.status, "pending")
+      )
     );
+};
+
+const recordApiMailMessage = async (
+  input: Parameters<typeof recordOrganizationApiMailMessage>[0]
+) => {
+  try {
+    await recordOrganizationApiMailMessage(input);
+  } catch (error: unknown) {
+    reportError(error, { operation: "organization-mail:persist-send" });
+  }
+};
+
+const recordMailUsage = async (
+  input: Parameters<typeof recordOrganizationMailUsage>[0]
+) => {
+  try {
+    await recordOrganizationMailUsage(input);
+  } catch (error: unknown) {
+    reportError(error, { operation: "organization-mail:record-usage" });
+  }
 };
 
 export const sendOrganizationMailMessage = async (input: {
   message: SendMessageInput;
   organizationId: string;
 }): Promise<SendMessageResult> => {
-  const idempotencyKey = input.message.idempotencyKey;
-  const requestHash = idempotencyKey ? createRequestHash(input.message) : null;
+  const { idempotencyKey } = input.message;
+  const requestHash = hasText(idempotencyKey)
+    ? createRequestHash(input.message)
+    : null;
 
   return await withOrganizationMailUsageLock(input.organizationId, async () => {
     await deleteExpiredIdempotencyRecords(input.organizationId);
 
-    if (idempotencyKey && requestHash) {
+    if (hasText(idempotencyKey) && requestHash !== null) {
       const idempotentResult = await getIdempotentResult({
         idempotencyKey,
         organizationId: input.organizationId,
         requestHash,
       });
 
-      if (idempotentResult) return idempotentResult;
+      if (idempotentResult !== null) {
+        return idempotentResult;
+      }
     }
 
     const sentAt = new Date();
@@ -233,14 +284,16 @@ export const sendOrganizationMailMessage = async (input: {
       sender: input.message.from,
     });
 
-    if (idempotencyKey && requestHash) {
+    if (hasText(idempotencyKey) && requestHash !== null) {
       const idempotentResult = await claimIdempotentSend({
         idempotencyKey,
         organizationId: input.organizationId,
         requestHash,
       });
 
-      if (idempotentResult) return idempotentResult;
+      if (idempotentResult !== null) {
+        return idempotentResult;
+      }
     }
 
     const { SendEmailCommand } = await import("@aws-sdk/client-sesv2");
@@ -263,16 +316,16 @@ export const sendOrganizationMailMessage = async (input: {
         })),
         FromEmailAddress: builtMessage.fromAddress,
         ReplyToAddresses: builtMessage.replyTo,
-      }),
+      })
     );
     const result = {
       messageId: response.MessageId ?? null,
       sent: true,
     } satisfies SendMessageResult;
 
-    if (response.MessageId) {
+    if (hasText(response.MessageId)) {
       await Promise.all([
-        recordOrganizationApiMailMessage({
+        recordApiMailMessage({
           attachments: builtMessage.attachments,
           bcc: builtMessage.bcc,
           bodyHtml: input.message.html,
@@ -289,12 +342,6 @@ export const sendOrganizationMailMessage = async (input: {
           sentAt,
           subject: input.message.subject,
           to: builtMessage.to,
-        }).catch((error) => {
-          console.error("Failed to persist API mail record after send.", {
-            error,
-            organizationId: input.organizationId,
-            providerMessageId: response.MessageId,
-          });
         }),
         recordOutboundManagedMessageForSender({
           attachments: builtMessage.attachments,
@@ -315,25 +362,19 @@ export const sendOrganizationMailMessage = async (input: {
           subject: input.message.subject,
           to: builtMessage.to,
         }),
-        recordOrganizationMailUsage({
+        recordMailUsage({
           ...usageEstimate,
           metadata: {
             sender: builtMessage.fromAddress,
-            ...(idempotencyKey ? { idempotencyKey } : {}),
+            ...(hasText(idempotencyKey) ? { idempotencyKey } : {}),
           },
           organizationId: input.organizationId,
           providerMessageId: response.MessageId,
-        }).catch((error) => {
-          console.error("Failed to record team mail usage after send.", {
-            error,
-            organizationId: input.organizationId,
-            providerMessageId: response.MessageId,
-          });
         }),
       ]);
     }
 
-    if (idempotencyKey && requestHash) {
+    if (hasText(idempotencyKey) && requestHash !== null) {
       await persistIdempotentResult({
         idempotencyKey,
         organizationId: input.organizationId,

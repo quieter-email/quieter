@@ -27,19 +27,20 @@ type IcsProperty = {
   value: string;
 };
 
-const datePattern = /^(\d{4})(\d{2})(\d{2})$/;
-const dateTimePattern = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})?(Z)?$/;
+const datePattern = /^(?<year>\d{4})(?<month>\d{2})(?<day>\d{2})$/u;
+const dateTimePattern =
+  /^(?<year>\d{4})(?<month>\d{2})(?<day>\d{2})T(?<hour>\d{2})(?<minute>\d{2})(?<second>\d{2})?(?<utc>Z)?$/u;
 const recurrenceProperties = new Set(["EXDATE", "EXRULE", "RDATE", "RRULE"]);
 
 const unfoldLines = (input: string) =>
   input
-    .replaceAll(/\r?\n[ \t]/g, "")
-    .split(/\r\n|\n|\r/)
+    .replaceAll(/\r?\n[ \t]/gu, "")
+    .split(/\r\n|\n|\r/u)
     .filter(Boolean);
 
 const unescapeText = (value: string) =>
   value
-    .replaceAll(/\\[nN]/g, "\n")
+    .replaceAll(/\\[nN]/gu, "\n")
     .replaceAll("\\,", ",")
     .replaceAll("\\;", ";")
     .replaceAll("\\\\", "\\");
@@ -51,9 +52,11 @@ const parseParams = (parts: string[]) => {
     const [rawKey, ...rawValueParts] = part.split("=");
     const key = rawKey?.trim().toUpperCase();
     const value = rawValueParts.join("=").trim();
-    if (!key || !value) continue;
+    if (key === undefined || key === "" || value === "") {
+      continue;
+    }
 
-    params[key] = value.replace(/^"|"$/g, "");
+    params[key] = value.replaceAll(/^"|"$/gu, "");
   }
 
   return params;
@@ -61,11 +64,15 @@ const parseParams = (parts: string[]) => {
 
 const parseLine = (line: string): IcsProperty | null => {
   const separatorIndex = line.indexOf(":");
-  if (separatorIndex <= 0) return null;
+  if (separatorIndex <= 0) {
+    return null;
+  }
 
   const nameParts = line.slice(0, separatorIndex).split(";");
   const name = nameParts[0]?.trim().toUpperCase();
-  if (!name) return null;
+  if (name === undefined || name === "") {
+    return null;
+  }
 
   return {
     name,
@@ -102,7 +109,8 @@ const extractFirstVEvent = (lines: string[]) => {
 const firstProperty = (properties: IcsProperty[], name: string) =>
   properties.find((property) => property.name === name);
 
-const toIsoDate = (match: RegExpMatchArray) => `${match[1]}-${match[2]}-${match[3]}`;
+const toIsoDate = (match: RegExpMatchArray) =>
+  `${match.groups?.year}-${match.groups?.month}-${match.groups?.day}`;
 
 const addDays = (date: string, days: number) => {
   const [year, month, day] = date.split("-").map(Number);
@@ -114,35 +122,45 @@ const addDays = (date: string, days: number) => {
 const formatLocalDateTime = (date: Date) =>
   date
     .toISOString()
-    .replace(/\.\d{3}Z$/, "")
+    .replace(/\.\d{3}Z$/u, "")
     .replace("Z", "");
 
-const addHours = (date: GoogleCalendarEventDate, hours: number): GoogleCalendarEventDate => {
-  if (date.date) {
+const addHours = (
+  date: GoogleCalendarEventDate,
+  hours: number
+): GoogleCalendarEventDate => {
+  if (date.date !== undefined) {
     return { date: addDays(date.date, 1) };
   }
 
-  const dateTime = date.dateTime;
-  if (!dateTime) {
+  const { dateTime } = date;
+  if (dateTime === undefined || dateTime === "") {
     throw new Error("Calendar invitation includes an invalid event time.");
   }
 
   const value = new Date(dateTime.endsWith("Z") ? dateTime : `${dateTime}Z`);
   value.setUTCHours(value.getUTCHours() + hours);
-  return dateTime.endsWith("Z")
-    ? { dateTime: value.toISOString().replace(/\.\d{3}Z$/, "Z") }
-    : { dateTime: formatLocalDateTime(value), timeZone: date.timeZone };
+  if (dateTime.endsWith("Z")) {
+    return { dateTime: value.toISOString().replace(/\.\d{3}Z$/u, "Z") };
+  }
+
+  return { dateTime: formatLocalDateTime(value), timeZone: date.timeZone };
 };
 
 const parseIcsDuration = (value: string) => {
-  const match = value
-    .trim()
-    .match(/^P(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/i);
-  if (!match) {
+  const match =
+    /^P(?:(?<weeks>\d+)W)?(?:(?<days>\d+)D)?(?:T(?:(?<hours>\d+)H)?(?:(?<minutes>\d+)M)?(?:(?<seconds>\d+)S)?)?$/iu.exec(
+      value.trim()
+    );
+  if (match === null) {
     throw new Error("Calendar invitation includes an invalid event duration.");
   }
 
-  const [, weeks = "0", days = "0", hours = "0", minutes = "0", seconds = "0"] = match;
+  const weeks = match.groups?.weeks ?? "0";
+  const days = match.groups?.days ?? "0";
+  const hours = match.groups?.hours ?? "0";
+  const minutes = match.groups?.minutes ?? "0";
+  const seconds = match.groups?.seconds ?? "0";
   return {
     days: Number(weeks) * 7 + Number(days),
     hours: Number(hours),
@@ -151,18 +169,23 @@ const parseIcsDuration = (value: string) => {
   };
 };
 
-const addDuration = (date: GoogleCalendarEventDate, duration: string): GoogleCalendarEventDate => {
+const addDuration = (
+  date: GoogleCalendarEventDate,
+  duration: string
+): GoogleCalendarEventDate => {
   const parsed = parseIcsDuration(duration);
-  if (date.date) {
+  if (date.date !== undefined) {
     if (parsed.hours > 0 || parsed.minutes > 0 || parsed.seconds > 0) {
-      throw new Error("Calendar invitation includes an invalid all-day duration.");
+      throw new Error(
+        "Calendar invitation includes an invalid all-day duration."
+      );
     }
 
-    return { date: addDays(date.date, parsed.days || 1) };
+    return { date: addDays(date.date, parsed.days > 0 ? parsed.days : 1) };
   }
 
-  const dateTime = date.dateTime;
-  if (!dateTime) {
+  const { dateTime } = date;
+  if (dateTime === undefined || dateTime === "") {
     throw new Error("Calendar invitation includes an invalid event time.");
   }
 
@@ -172,40 +195,70 @@ const addDuration = (date: GoogleCalendarEventDate, duration: string): GoogleCal
       parsed.days * 24 * 60 * 60 +
       parsed.hours * 60 * 60 +
       parsed.minutes * 60 +
-      parsed.seconds,
+      parsed.seconds
   );
-  return dateTime.endsWith("Z")
-    ? { dateTime: value.toISOString().replace(/\.\d{3}Z$/, "Z") }
-    : { dateTime: formatLocalDateTime(value), timeZone: date.timeZone };
+  if (dateTime.endsWith("Z")) {
+    return { dateTime: value.toISOString().replace(/\.\d{3}Z$/u, "Z") };
+  }
+
+  return { dateTime: formatLocalDateTime(value), timeZone: date.timeZone };
 };
 
 const parseIcsDate = (property: IcsProperty): GoogleCalendarEventDate => {
   const trimmedValue = property.value.trim();
-  const dateMatch = trimmedValue.match(datePattern);
-  if (property.params.VALUE?.toUpperCase() === "DATE" || dateMatch) {
-    if (!dateMatch) {
+  const dateMatch = datePattern.exec(trimmedValue);
+  if (property.params.VALUE?.toUpperCase() === "DATE" || dateMatch !== null) {
+    if (dateMatch === null) {
       throw new Error("Calendar invitation includes an invalid all-day date.");
     }
 
     return { date: toIsoDate(dateMatch) };
   }
 
-  const dateTimeMatch = trimmedValue.match(dateTimePattern);
-  if (!dateTimeMatch) {
+  const dateTimeMatch = dateTimePattern.exec(trimmedValue);
+  if (dateTimeMatch === null) {
     throw new Error("Calendar invitation includes an invalid event time.");
   }
 
-  const [, year, month, day, hour, minute, second = "00", utc] = dateTimeMatch;
+  const year = dateTimeMatch.groups?.year;
+  const month = dateTimeMatch.groups?.month;
+  const day = dateTimeMatch.groups?.day;
+  const hour = dateTimeMatch.groups?.hour;
+  const minute = dateTimeMatch.groups?.minute;
+  const second = dateTimeMatch.groups?.second ?? "00";
+  const utc = dateTimeMatch.groups?.utc;
   const dateTime = `${year}-${month}-${day}T${hour}:${minute}:${second}`;
-  if (utc) {
+  if (utc !== undefined) {
     return { dateTime: `${dateTime}Z` };
   }
 
   const timeZone = property.params.TZID?.trim();
-  return timeZone ? { dateTime, timeZone } : { dateTime, timeZone: "UTC" };
+  if (timeZone !== undefined && timeZone !== "") {
+    return { dateTime, timeZone };
+  }
+
+  return { dateTime, timeZone: "UTC" };
 };
 
-export const parseIcsToGoogleCalendarEvent = (input: string): GoogleCalendarEventDraft => {
+const resolveEventEnd = (
+  start: GoogleCalendarEventDate,
+  endProperty: IcsProperty | undefined,
+  durationProperty: IcsProperty | undefined
+): GoogleCalendarEventDate => {
+  if (endProperty !== undefined) {
+    return parseIcsDate(endProperty);
+  }
+
+  if (durationProperty !== undefined) {
+    return addDuration(start, durationProperty.value);
+  }
+
+  return addHours(start, 1);
+};
+
+export const parseIcsToGoogleCalendarEvent = (
+  input: string
+): GoogleCalendarEventDraft => {
   const eventLines = extractFirstVEvent(unfoldLines(input));
   if (eventLines.length === 0) {
     throw new Error("Calendar invitation does not include an event.");
@@ -213,37 +266,39 @@ export const parseIcsToGoogleCalendarEvent = (input: string): GoogleCalendarEven
 
   const properties = eventLines.flatMap((line) => {
     const property = parseLine(line);
-    return property ? [property] : [];
+    return property === null ? [] : [property];
   });
   const startProperty = firstProperty(properties, "DTSTART");
-  if (!startProperty) {
+  if (startProperty === undefined) {
     throw new Error("Calendar invitation does not include a start time.");
   }
 
   const start = parseIcsDate(startProperty);
   const endProperty = firstProperty(properties, "DTEND");
   const durationProperty = firstProperty(properties, "DURATION");
-  const end = endProperty
-    ? parseIcsDate(endProperty)
-    : durationProperty
-      ? addDuration(start, durationProperty.value)
-      : addHours(start, 1);
-  const summary = unescapeText(firstProperty(properties, "SUMMARY")?.value ?? "").trim();
-  const description = unescapeText(firstProperty(properties, "DESCRIPTION")?.value ?? "").trim();
-  const location = unescapeText(firstProperty(properties, "LOCATION")?.value ?? "").trim();
+  const end = resolveEventEnd(start, endProperty, durationProperty);
+  const summary = unescapeText(
+    firstProperty(properties, "SUMMARY")?.value ?? ""
+  ).trim();
+  const description = unescapeText(
+    firstProperty(properties, "DESCRIPTION")?.value ?? ""
+  ).trim();
+  const location = unescapeText(
+    firstProperty(properties, "LOCATION")?.value ?? ""
+  ).trim();
   const iCalUID = firstProperty(properties, "UID")?.value.trim();
   const recurrence = properties
     .filter((property) => recurrenceProperties.has(property.name))
     .map((property) => property.raw.trim())
-    .filter(Boolean);
+    .filter((value) => value !== "");
 
   return {
-    ...(description ? { description } : {}),
+    ...(description === "" ? {} : { description }),
     end,
-    ...(iCalUID ? { iCalUID } : {}),
-    ...(location ? { location } : {}),
-    ...(recurrence.length > 0 ? { recurrence } : {}),
+    ...(iCalUID === undefined || iCalUID === "" ? {} : { iCalUID }),
+    ...(location === "" ? {} : { location }),
+    ...(recurrence.length === 0 ? {} : { recurrence }),
     start,
-    summary: summary || "Calendar event",
+    summary: summary === "" ? "Calendar event" : summary,
   };
 };

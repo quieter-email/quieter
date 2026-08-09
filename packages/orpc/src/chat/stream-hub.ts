@@ -1,4 +1,8 @@
-import { EventType, type StreamChunk, type StreamDurability } from "@tanstack/ai";
+import { EventType } from "@tanstack/ai";
+import type { StreamChunk, StreamDurability } from "@tanstack/ai";
+
+import { hasText } from "../text";
+import { createQueueWaiter, isAborted } from "./stream-delay";
 
 export type ChatRunHubOffset = string;
 
@@ -17,9 +21,9 @@ export type ChatRunHub = {
   append: (chunks: StreamChunk[]) => ChatRunHubOffset[];
   close: () => void;
   isClosed: () => boolean;
-  snapshot: () => Array<{ chunk: StreamChunk; offset: string }>;
+  snapshot: () => { chunk: StreamChunk; offset: string }[];
   subscribe: (
-    signal?: AbortSignal,
+    signal?: AbortSignal
   ) => AsyncGenerator<{ chunk: StreamChunk; offset: string }, void, undefined>;
 };
 
@@ -27,7 +31,7 @@ const hubs = new Map<string, ChatRunHub>();
 const evictionTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 /** Bound memory for long tool+LLM runs. */
-const MAX_HUB_BUFFER_CHUNKS = 4_000;
+const MAX_HUB_BUFFER_CHUNKS = 4000;
 /** Keep sealed hubs briefly so late dump-then-close attaches still work. */
 const SEALED_HUB_RETENTION_MS = 60_000;
 const SSE_HEARTBEAT_MS = 15_000;
@@ -35,13 +39,14 @@ const SSE_HEARTBEAT_MS = 15_000;
 const isTerminalChunk = (chunk: StreamChunk) =>
   chunk.type === EventType.RUN_FINISHED || chunk.type === EventType.RUN_ERROR;
 
-export const encodeChatRunHubOffset = (runId: string, seq: number) => `${runId}:${seq}`;
+export const encodeChatRunHubOffset = (runId: string, seq: number) =>
+  `${runId}:${seq}`;
 
 export const peekChatRunHub = (runId: string) => hubs.get(runId);
 
 const clearEvictionTimer = (runId: string) => {
   const timer = evictionTimers.get(runId);
-  if (!timer) {
+  if (timer === undefined) {
     return;
   }
   clearTimeout(timer);
@@ -57,10 +62,10 @@ export const sealChatRunHub = (runId: string) => {
     setTimeout(() => {
       evictionTimers.delete(runId);
       const hub = hubs.get(runId);
-      if (hub?.isClosed()) {
+      if (hub !== undefined && hub.isClosed()) {
         hubs.delete(runId);
       }
-    }, SEALED_HUB_RETENTION_MS),
+    }, SEALED_HUB_RETENTION_MS)
   );
 };
 
@@ -68,26 +73,59 @@ export const sealChatRunHub = (runId: string) => {
 export const releaseChatRunHub = (runId: string) => {
   clearEvictionTimer(runId);
   const hub = hubs.get(runId);
-  if (!hub) {
+  if (hub === undefined) {
     return;
   }
   hub.close();
   hubs.delete(runId);
 };
 
+const buildTerminalChatRunChunk = (input: {
+  error: string | null;
+  runId: string;
+  status: string;
+}): StreamChunk => {
+  if (input.status === "cancelled") {
+    return {
+      code: "cancelled",
+      message: "Generation cancelled.",
+      timestamp: Date.now(),
+      type: EventType.RUN_ERROR,
+    } satisfies StreamChunk;
+  }
+
+  if (input.status === "failed") {
+    const message = hasText(input.error)
+      ? input.error
+      : "The response could not finish.";
+    return {
+      code: "failed",
+      message,
+      timestamp: Date.now(),
+      type: EventType.RUN_ERROR,
+    } satisfies StreamChunk;
+  }
+
+  return {
+    runId: input.runId,
+    threadId: input.runId,
+    timestamp: Date.now(),
+    type: EventType.RUN_FINISHED,
+  } satisfies StreamChunk;
+};
+
 export const getChatRunHub = (runId: string): ChatRunHub => {
   const existing = hubs.get(runId);
-  if (existing) {
+  if (existing !== undefined) {
     return existing;
   }
 
-  const buffer: Array<{ chunk: StreamChunk; offset: string }> = [];
+  const buffer: { chunk: StreamChunk; offset: string }[] = [];
   const subscribers = new Set<HubSubscriber>();
   let nextSeq = 0;
   let closed = false;
 
   const hub: ChatRunHub = {
-    runId,
     append: (chunks) => {
       if (chunks.length === 0) {
         return [];
@@ -120,79 +158,87 @@ export const getChatRunHub = (runId: string): ChatRunHub => {
       subscribers.clear();
     },
     isClosed: () => closed,
+    runId,
     snapshot: () => buffer.map((entry) => ({ ...entry })),
-    subscribe: async function* (signal) {
-      const queue: Array<{ chunk: StreamChunk; offset: string }> = [];
-      let resolveWait: (() => void) | undefined;
-      let rejectWait: ((error: unknown) => void) | undefined;
+    async *subscribe(signal) {
+      const queue: { chunk: StreamChunk; offset: string }[] = [];
+      const waiter = createQueueWaiter();
       let done = closed;
 
-      const wake = () => {
-        resolveWait?.();
-        resolveWait = undefined;
-        rejectWait = undefined;
-      };
-
       const subscriber: HubSubscriber = {
-        push: (entry) => {
-          queue.push(entry);
-          wake();
-        },
         close: (error) => {
           done = true;
-          if (error !== undefined) {
-            rejectWait?.(error);
+          if (error === undefined) {
+            waiter.wake();
           } else {
-            wake();
+            waiter.reject(error);
           }
+        },
+        push: (entry) => {
+          queue.push(entry);
+          waiter.wake();
         },
       };
 
       const onAbort = () => {
         subscribers.delete(subscriber);
-        rejectWait?.(signal?.reason ?? new DOMException("Aborted", "AbortError"));
+        waiter.reject(
+          signal?.reason ?? new DOMException("Aborted", "AbortError")
+        );
       };
 
-      if (signal?.aborted) {
-        throw signal.reason ?? new DOMException("Aborted", "AbortError");
+      if (isAborted(signal)) {
+        throw signal?.reason ?? new DOMException("Aborted", "AbortError");
       }
       signal?.addEventListener("abort", onAbort, { once: true });
       subscribers.add(subscriber);
 
+      const drainLive = async function* drainLive(): AsyncGenerator<
+        { chunk: StreamChunk; offset: string },
+        void,
+        undefined
+      > {
+        if (isAborted(signal) || (done && queue.length === 0)) {
+          return;
+        }
+
+        if (queue.length === 0) {
+          await waiter.wait();
+          yield* drainLive();
+          return;
+        }
+
+        const entry = queue.shift();
+        if (entry === undefined) {
+          yield* drainLive();
+          return;
+        }
+
+        yield entry;
+        if (!isTerminalChunk(entry.chunk)) {
+          yield* drainLive();
+        }
+      };
+
       try {
-        // Snapshot so live appends during yields only land in `queue`, not a second replay.
         const replay = buffer.slice();
         const replayedOffsets = new Set(replay.map((entry) => entry.offset));
         for (const entry of replay) {
           yield entry;
         }
 
-        while (queue.length > 0 && replayedOffsets.has(queue[0]?.offset ?? "")) {
+        while (
+          queue.length > 0 &&
+          replayedOffsets.has(queue[0]?.offset ?? "")
+        ) {
           queue.shift();
         }
 
-        if (closed || replay.some((entry) => isTerminalChunk(entry.chunk))) {
+        if (replay.some((entry) => isTerminalChunk(entry.chunk))) {
           return;
         }
 
-        while (!done && !signal?.aborted) {
-          if (queue.length === 0) {
-            await new Promise<void>((resolve, reject) => {
-              resolveWait = resolve;
-              rejectWait = reject;
-            });
-            continue;
-          }
-
-          const entry = queue.shift();
-          if (!entry) {
-            continue;
-          }
-          yield entry;
-          if (isTerminalChunk(entry.chunk)) {
-            return;
-          }
-        }
+        yield* drainLive();
       } finally {
         signal?.removeEventListener("abort", onAbort);
         subscribers.delete(subscriber);
@@ -205,19 +251,26 @@ export const getChatRunHub = (runId: string): ChatRunHub => {
 };
 
 /** Producer-side StreamDurability backed by the in-memory hub (no Postgres). */
-export const createHubStreamDurability = (runId: string): StreamDurability<ChatRunHubOffset> => {
+export const createHubStreamDurability = (runId: string): StreamDurability => {
   const hub = getChatRunHub(runId);
 
   return {
-    resumeFrom: () => null,
-    append: async (chunks) => hub.append(chunks),
+    append: async (chunks) => {
+      const offsets = hub.append(chunks);
+      await Promise.resolve();
+      return offsets;
+    },
     close: async () => {
       hub.close();
+      await Promise.resolve();
     },
-    snapshot: async () => hub.snapshot(),
-    read: async function* (offset, signal) {
-      void offset;
+    async *read(_offset, signal) {
       yield* hub.subscribe(signal);
+    },
+    resumeFrom: () => null,
+    snapshot: async () => {
+      await Promise.resolve();
+      return hub.snapshot();
     },
   };
 };
@@ -237,36 +290,7 @@ export const createTerminalChatRunSseResponse = (input: {
   runId: string;
   status: string;
 }) => {
-  const chunk: StreamChunk =
-    input.status === "cancelled"
-      ? ({
-          type: EventType.RUN_ERROR,
-          timestamp: Date.now(),
-          message: "Generation cancelled.",
-          code: "cancelled",
-          error: {
-            code: "cancelled",
-            message: "Generation cancelled.",
-          },
-        } satisfies StreamChunk)
-      : input.status === "failed"
-        ? ({
-            type: EventType.RUN_ERROR,
-            timestamp: Date.now(),
-            message: input.error || "The response could not finish.",
-            code: "failed",
-            error: {
-              code: "failed",
-              message: input.error || "The response could not finish.",
-            },
-          } satisfies StreamChunk)
-        : ({
-            type: EventType.RUN_FINISHED,
-            timestamp: Date.now(),
-            runId: input.runId,
-            threadId: input.runId,
-          } satisfies StreamChunk);
-
+  const chunk = buildTerminalChatRunChunk(input);
   const body = encodeChatRunSseChunk(chunk, `${input.runId}:terminal`);
   return new Response(body, {
     headers: sseHeaders,
@@ -274,8 +298,14 @@ export const createTerminalChatRunSseResponse = (input: {
 };
 
 /** Dump-then-live SSE Response from an in-memory hub. */
-export const createChatRunHubSseResponse = (hub: ChatRunHub, signal?: AbortSignal) => {
+export const createChatRunHubSseResponse = (
+  hub: ChatRunHub,
+  signal?: AbortSignal
+) => {
   const stream = new ReadableStream<Uint8Array>({
+    cancel() {
+      // Subscriber cleanup happens in hub.subscribe finally via abort signal.
+    },
     async start(controller) {
       const heartbeat = setInterval(() => {
         try {
@@ -294,7 +324,7 @@ export const createChatRunHubSseResponse = (hub: ChatRunHub, signal?: AbortSigna
         }
         controller.close();
       } catch (error) {
-        if (signal?.aborted) {
+        if (isAborted(signal)) {
           controller.close();
           return;
         }
@@ -302,9 +332,6 @@ export const createChatRunHubSseResponse = (hub: ChatRunHub, signal?: AbortSigna
       } finally {
         clearInterval(heartbeat);
       }
-    },
-    cancel() {
-      // Subscriber cleanup happens in hub.subscribe finally via abort signal.
     },
   });
 

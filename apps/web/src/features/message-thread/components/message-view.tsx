@@ -29,40 +29,40 @@ import { toast } from "@quieter/ui/toast";
 import { TooltipGroup } from "@quieter/ui/tooltip";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import type {
-  MailboxActions,
-  MailboxPendingActions,
-} from "~/features/mailbox/components/mailbox-action-handlers";
-import { SenderAvatar } from "~/components/sender-avatar";
+import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
+
+import { SenderAvatar } from "#/components/sender-avatar";
 import {
-  type ComposeDraftState,
   buildComposeDraftFromMessageAction,
   buildComposeDraftFromSavedDraftMessage,
   findLinkedDraftForMessage,
   hasDistinctReplyAllRecipients,
-} from "~/features/compose";
-import {
-  GmailUsefulDetailCard,
-  type GmailUsefulDetail,
-} from "~/features/gmail-useful-details/components/gmail-useful-detail-card";
-import { shouldIgnoreAppShortcut } from "~/features/hotkeys/domain/hotkey-guards";
-import { MessageLabels } from "~/features/message-labels/components/message-labels";
+} from "#/features/compose/domain/compose-actions";
+import type { ComposeDraftState } from "#/features/compose/domain/draft";
+import { GmailUsefulDetailCard } from "#/features/gmail-useful-details/components/gmail-useful-detail-card";
+import type { GmailUsefulDetail } from "#/features/gmail-useful-details/components/gmail-useful-detail-card";
+import { shouldIgnoreAppShortcut } from "#/features/hotkeys/domain/hotkey-guards";
+import type {
+  MailboxActions,
+  MailboxPendingActions,
+} from "#/features/mailbox/components/mailbox-action-handlers";
+import { MessageLabels } from "#/features/message-labels/components/message-labels";
 import {
   hasRenderableMessageBody,
   isMessageUnread,
-  type MailboxCategory,
   MAILBOX_LABELS,
-  type MessageListItem,
-} from "~/lib/gmail/gmail";
-import { labelsQueryOptions } from "~/lib/gmail/labels-query";
-import { getMessageInspectorOptions } from "~/lib/gmail/message-inspector-query";
-import { formatMessageDate, parseSender } from "~/lib/gmail/message-utils";
-import { getThreadLabelIds } from "~/lib/gmail/thread-list";
-import { getThreadWithDetailsOptions } from "~/lib/gmail/thread-query";
-import { gmailThreadUsefulDetailsQueryOptions } from "~/lib/gmail/useful-details-query";
-import { getMailboxesQueryKey } from "~/lib/mailboxes-query";
-import { orpc } from "~/lib/orpc";
+} from "#/lib/gmail/gmail";
+import type { MailboxCategory, MessageListItem } from "#/lib/gmail/gmail";
+import { labelsQueryOptions } from "#/lib/gmail/labels-query";
+import { getMessageInspectorOptions } from "#/lib/gmail/message-inspector-query";
+import { formatMessageDate, parseSender } from "#/lib/gmail/message-utils";
+import { getThreadLabelIds } from "#/lib/gmail/thread-list";
+import { getThreadWithDetailsOptions } from "#/lib/gmail/thread-query";
+import { gmailThreadUsefulDetailsQueryOptions } from "#/lib/gmail/useful-details-query";
+import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
+import { orpc } from "#/lib/orpc";
+
 import { createMailboxThreadMessageActionHandlers } from "./message-action-handlers";
 import { MessageActionsDropdown } from "./message-actions";
 import { MessageAttachments } from "./message-attachments";
@@ -70,12 +70,12 @@ import { MessageBody } from "./message-body";
 import {
   getMessageUnsubscribeTarget,
   openUnsubscribeUrl,
-  type MessageUnsubscribeTarget,
 } from "./message-unsubscribe";
+import type { MessageUnsubscribeTarget } from "./message-unsubscribe";
 
 type MessageViewProps = {
   activeMailbox: MailboxCategory;
-  autoFocus?: boolean;
+  focusOnOpen?: boolean;
   currentUserEmail?: string | null;
   mailboxId: string;
   mailboxProvider: "api" | "gmail" | "managed";
@@ -104,21 +104,49 @@ type MessageUnsubscribeAction = {
 };
 
 const formatEnvelopeValue = (value?: string) => {
-  const trimmed = value?.trim();
-  return trimmed || null;
+  const trimmed = value?.trim() ?? "";
+  return trimmed === "" ? null : trimmed;
 };
 
 const isDraftMessage = (message: MessageListItem) =>
-  !!(message.draftId || message.labelIds?.includes(MAILBOX_LABELS.drafts));
+  (message.draftId?.trim() ?? "") !== "" ||
+  message.labelIds?.includes(MAILBOX_LABELS.drafts) === true;
 
 const getMessagesMissingLoadedBody = (messages: readonly MessageListItem[]) =>
   messages.filter(
-    (threadMessage) => !!threadMessage.snippet?.trim() && !hasRenderableMessageBody(threadMessage),
+    (threadMessage) =>
+      (threadMessage.snippet?.trim() ?? "") !== "" &&
+      !hasRenderableMessageBody(threadMessage)
   );
+
+const resolveThreadSubject = (
+  visibleMessages: MessageListItem[],
+  threadDataSubject: string | undefined,
+  messageSubject: string | undefined
+): string => {
+  for (const threadMessage of visibleMessages) {
+    const trimmedSubject = threadMessage.subject?.trim() ?? "";
+    if (trimmedSubject !== "") {
+      return trimmedSubject;
+    }
+  }
+
+  const trimmedThreadSubject = threadDataSubject?.trim() ?? "";
+  if (trimmedThreadSubject !== "") {
+    return trimmedThreadSubject;
+  }
+
+  const trimmedMessageSubject = messageSubject?.trim() ?? "";
+  if (trimmedMessageSubject !== "") {
+    return trimmedMessageSubject;
+  }
+
+  return "(No subject)";
+};
 
 const getMessageUnsubscribeAction = (
   message: MessageListItem,
-  onUnsubscribe?: (messageId: string) => void | Promise<void>,
+  onUnsubscribe?: (messageId: string) => void | Promise<void>
 ): MessageUnsubscribeAction | undefined => {
   const target = getMessageUnsubscribeTarget(message);
   if (!target) {
@@ -140,20 +168,24 @@ const getMessageUnsubscribeAction = (
 
   return {
     kind: "url",
-    onClick: () => openUnsubscribeUrl(target.url),
+    onClick: () => {
+      openUnsubscribeUrl(target.url);
+    },
   };
 };
 
 const runHotkeyThreadAction = async (
   action: () => void | Promise<void>,
-  successMessage: string,
+  successMessage: string
 ) => {
   try {
     await action();
     toast.success(successMessage);
   } catch (error) {
     toast.error(
-      error instanceof Error && error.message ? error.message : "Could not update message.",
+      error instanceof Error && error.message
+        ? error.message
+        : "Could not update message."
     );
   }
 };
@@ -169,14 +201,18 @@ const MessageHeaderContent = ({
   trailing,
 }: MessageHeaderContentProps) => {
   const sender = parseSender(message.from);
-  const senderName = sender.name || sender.display || "Unknown sender";
-  const senderEmail = sender.email || "";
+  const senderDisplayName = sender.name?.trim() ?? "";
+  const senderName =
+    senderDisplayName === ""
+      ? (sender.display ?? "Unknown sender")
+      : (sender.name ?? senderDisplayName);
+  const senderEmail = sender.email?.trim() ?? "";
   const senderInitial = (senderName.trim().charAt(0) || "?").toUpperCase();
-  const date = formatMessageDate(message, "full") || "--";
-  const preview = message.snippet?.trim() || "";
-  const participantRows = [{ label: "To", value: formatEnvelopeValue(message.to) }].filter(
-    (row) => !!row.value,
-  );
+  const date = formatMessageDate(message, "full") ?? "--";
+  const preview = message.snippet?.trim() ?? "";
+  const participantRows = [
+    { label: "To", value: formatEnvelopeValue(message.to) },
+  ].filter((row) => (row.value ?? "") !== "");
   const content = (
     <div className="w-full min-w-0 flex-1 select-text">
       <div className="flex w-full min-w-0 flex-wrap items-baseline justify-start gap-x-2 gap-y-1">
@@ -187,13 +223,13 @@ const MessageHeaderContent = ({
         <span
           className={cn(
             "max-w-full min-w-0 shrink cursor-text truncate text-sm font-medium text-fg @sm:text-[15px]",
-            senderNameClassName,
+            senderNameClassName
           )}
         >
           {senderName}
         </span>
 
-        {senderEmail && (
+        {senderEmail !== "" && (
           <span className="max-w-full min-w-0 shrink cursor-text truncate text-xs text-muted-fg @sm:text-sm">
             {senderEmail}
           </span>
@@ -204,16 +240,23 @@ const MessageHeaderContent = ({
         </span>
       </div>
 
-      {previewMode === "collapsed" && !isExpanded ? (
+      {previewMode === "collapsed" && isExpanded === false ? (
         <p className="mt-1 min-h-5 cursor-text truncate text-sm text-fg">
-          {preview || <span aria-hidden>&nbsp;</span>}
+          {preview === "" ? <span aria-hidden>&nbsp;</span> : preview}
         </p>
       ) : (
         <div className="mt-1 min-h-5 space-y-1">
           {participantRows.map((row) => (
-            <div className="flex min-w-0 items-start gap-2 text-xs @sm:text-sm" key={row.label}>
-              <span className="shrink-0 cursor-text text-muted-fg">{row.label}</span>
-              <span className="min-w-0 cursor-text wrap-break-word text-fg">{row.value}</span>
+            <div
+              className="flex min-w-0 items-start gap-2 text-xs @sm:text-sm"
+              key={row.label}
+            >
+              <span className="shrink-0 cursor-text text-muted-fg">
+                {row.label}
+              </span>
+              <span className="min-w-0 cursor-text wrap-break-word text-fg">
+                {row.value}
+              </span>
             </div>
           ))}
         </div>
@@ -241,9 +284,21 @@ const MessageHeaderContent = ({
               className="w-full min-w-0 rounded-sm text-left transition-colors select-text @sm:flex-1"
               onClick={(event) => {
                 const selection = window.getSelection();
-                if (selection && !selection.isCollapsed && selection.toString().trim()) {
-                  for (let index = 0; index < selection.rangeCount; index++) {
-                    if (selection.getRangeAt(index).intersectsNode(event.currentTarget)) {
+                if (
+                  selection &&
+                  !selection.isCollapsed &&
+                  (selection.toString().trim() ?? "") !== ""
+                ) {
+                  for (
+                    let index = 0;
+                    index < selection.rangeCount;
+                    index += 1
+                  ) {
+                    if (
+                      selection
+                        .getRangeAt(index)
+                        .intersectsNode(event.currentTarget)
+                    ) {
                       return;
                     }
                   }
@@ -291,97 +346,107 @@ const MessageHeaderActions = ({
   onReplyAll: () => void;
   onUnsubscribe?: MessageUnsubscribeAction;
   showReplyAll?: boolean;
-}) => (
-  <div
-    className={cn(
-      "flex flex-wrap items-center justify-start gap-1 @md:justify-end @md:gap-0.5",
-      className,
-    )}
-  >
-    {onContinueDraft && (
-      <IconButtonTooltip label="Continue with draft">
+}) => {
+  const handleUnsubscribe = () => {
+    onUnsubscribe?.onClick();
+  };
+
+  return (
+    <div
+      className={cn(
+        "flex flex-wrap items-center justify-start gap-1 @md:justify-end @md:gap-0.5",
+        className
+      )}
+    >
+      {onContinueDraft !== undefined && (
+        <IconButtonTooltip label="Continue with draft">
+          <Button
+            aria-label="Continue with draft"
+            className="h-10 gap-1.5 px-2.5 text-muted-fg hover:text-fg @md:size-8 @md:px-0"
+            onClick={onContinueDraft}
+            type="button"
+            variant="ghost"
+          >
+            <HugeiconsIcon aria-hidden icon={Edit01Icon} />
+            <span className="@md:hidden">Draft</span>
+          </Button>
+        </IconButtonTooltip>
+      )}
+      <IconButtonTooltip label="Reply">
         <Button
-          aria-label="Continue with draft"
+          aria-label="Reply"
           className="h-10 gap-1.5 px-2.5 text-muted-fg hover:text-fg @md:size-8 @md:px-0"
-          onClick={onContinueDraft}
+          onClick={onReply}
           type="button"
           variant="ghost"
         >
-          <HugeiconsIcon aria-hidden icon={Edit01Icon} />
-          <span className="@md:hidden">Draft</span>
+          <HugeiconsIcon aria-hidden icon={MailReply02Icon} />
+          <span className="@md:hidden">Reply</span>
         </Button>
       </IconButtonTooltip>
-    )}
-    <IconButtonTooltip label="Reply">
-      <Button
-        aria-label="Reply"
-        className="h-10 gap-1.5 px-2.5 text-muted-fg hover:text-fg @md:size-8 @md:px-0"
-        onClick={onReply}
-        type="button"
-        variant="ghost"
-      >
-        <HugeiconsIcon aria-hidden icon={MailReply02Icon} />
-        <span className="@md:hidden">Reply</span>
-      </Button>
-    </IconButtonTooltip>
-    {showReplyAll && (
-      <IconButtonTooltip label="Reply all">
+      {showReplyAll && (
+        <IconButtonTooltip label="Reply all">
+          <Button
+            aria-label="Reply all"
+            className="h-10 gap-1.5 px-2.5 text-muted-fg hover:text-fg @md:size-8 @md:px-0"
+            onClick={onReplyAll}
+            type="button"
+            variant="ghost"
+          >
+            <HugeiconsIcon aria-hidden icon={MailReplyAll02Icon} />
+            <span className="@md:hidden">Reply all</span>
+          </Button>
+        </IconButtonTooltip>
+      )}
+      <IconButtonTooltip label="Forward">
         <Button
-          aria-label="Reply all"
+          aria-label="Forward"
           className="h-10 gap-1.5 px-2.5 text-muted-fg hover:text-fg @md:size-8 @md:px-0"
-          onClick={onReplyAll}
+          onClick={onForward}
           type="button"
           variant="ghost"
         >
-          <HugeiconsIcon aria-hidden icon={MailReplyAll02Icon} />
-          <span className="@md:hidden">Reply all</span>
+          <HugeiconsIcon aria-hidden icon={ArrowRightDoubleIcon} />
+          <span className="@md:hidden">Forward</span>
         </Button>
       </IconButtonTooltip>
-    )}
-    <IconButtonTooltip label="Forward">
-      <Button
-        aria-label="Forward"
-        className="h-10 gap-1.5 px-2.5 text-muted-fg hover:text-fg @md:size-8 @md:px-0"
-        onClick={onForward}
-        type="button"
-        variant="ghost"
-      >
-        <HugeiconsIcon aria-hidden icon={ArrowRightDoubleIcon} />
-        <span className="@md:hidden">Forward</span>
-      </Button>
-    </IconButtonTooltip>
-    {onUnsubscribe && (
-      <IconButtonTooltip label="Unsubscribe">
+      {onUnsubscribe !== undefined && (
+        <IconButtonTooltip label="Unsubscribe">
+          <Button
+            aria-label="Unsubscribe"
+            className="h-10 gap-1.5 px-2.5 text-muted-fg hover:text-fg @md:size-8 @md:px-0"
+            disabled={isPending === true && onUnsubscribe.kind === "mailto"}
+            onClick={handleUnsubscribe}
+            type="button"
+            variant="ghost"
+          >
+            <HugeiconsIcon
+              aria-hidden
+              icon={
+                onUnsubscribe.kind === "mailto"
+                  ? MailRemove01Icon
+                  : ArrowUpRight01Icon
+              }
+            />
+            <span className="@md:hidden">Unsubscribe</span>
+          </Button>
+        </IconButtonTooltip>
+      )}
+      <IconButtonTooltip label="Details">
         <Button
-          aria-label="Unsubscribe"
+          aria-label="Details"
           className="h-10 gap-1.5 px-2.5 text-muted-fg hover:text-fg @md:size-8 @md:px-0"
-          disabled={isPending && onUnsubscribe.kind === "mailto"}
-          onClick={onUnsubscribe.onClick}
+          onClick={onDetails}
           type="button"
           variant="ghost"
         >
-          <HugeiconsIcon
-            aria-hidden
-            icon={onUnsubscribe.kind === "mailto" ? MailRemove01Icon : ArrowUpRight01Icon}
-          />
-          <span className="@md:hidden">Unsubscribe</span>
+          <HugeiconsIcon aria-hidden icon={ZoomInAreaIcon} />
+          <span className="@md:hidden">Details</span>
         </Button>
       </IconButtonTooltip>
-    )}
-    <IconButtonTooltip label="Details">
-      <Button
-        aria-label="Details"
-        className="h-10 gap-1.5 px-2.5 text-muted-fg hover:text-fg @md:size-8 @md:px-0"
-        onClick={onDetails}
-        type="button"
-        variant="ghost"
-      >
-        <HugeiconsIcon aria-hidden icon={ZoomInAreaIcon} />
-        <span className="@md:hidden">Details</span>
-      </Button>
-    </IconButtonTooltip>
-  </div>
-);
+    </div>
+  );
+};
 
 const MessageInspectorPanel = ({
   mailboxId,
@@ -400,92 +465,108 @@ const MessageInspectorPanel = ({
     isError: isInspectorError,
     isPending: isInspectorPending,
   } = useQuery(getMessageInspectorOptions(mailboxId, message.id, open));
-  const payloadText = inspector?.payload ? JSON.stringify(inspector.payload, null, 2) : "";
+  const payloadText =
+    inspector?.payload === undefined
+      ? ""
+      : JSON.stringify(inspector.payload, null, 2);
+  let inspectorBody: ReactNode = null;
+
+  if (isInspectorPending) {
+    inspectorBody = (
+      <div className="flex items-center gap-2 text-sm text-muted-fg">
+        <HugeiconsIcon
+          aria-hidden
+          className="animate-spin"
+          icon={Loading03Icon}
+        />
+        <span>Loading message details…</span>
+      </div>
+    );
+  } else if (isInspectorError) {
+    inspectorBody = (
+      <p className="text-sm text-destructive">
+        {inspectorError.message ?? "Could not load message details."}
+      </p>
+    );
+  } else if (inspector !== undefined) {
+    inspectorBody = (
+      <>
+        <section className="space-y-2">
+          <h3 className="text-sm font-semibold text-fg">Summary</h3>
+          {[
+            { label: "Reference", value: inspector.messageHeaderId },
+            { label: "Subject", value: inspector.subject },
+            { label: "Date", value: inspector.date },
+            { label: "Snippet", value: inspector.snippet },
+          ].flatMap((row) =>
+            (row.value?.trim() ?? "") === ""
+              ? []
+              : [
+                  <p className="text-sm text-fg" key={row.label}>
+                    <span className="font-semibold text-fg">{row.label}: </span>
+                    <span className="wrap-break-word">{row.value}</span>
+                  </p>,
+                ]
+          )}
+        </section>
+
+        <section className="space-y-2">
+          <h3 className="text-sm font-semibold text-fg">Delivery details</h3>
+          {inspector.headers.map((header) => (
+            <p
+              className="text-sm text-fg"
+              key={`${inspector.messageHeaderId}-${header.name}-${header.value}`}
+            >
+              <span className="font-semibold text-fg">{header.name}: </span>
+              <span className="wrap-break-word">{header.value}</span>
+            </p>
+          ))}
+        </section>
+
+        {(inspector.rawText?.trim() ?? "") !== "" && (
+          <section className="space-y-2">
+            <h3 className="text-sm font-semibold text-fg">Original message</h3>
+            <pre className="overflow-x-auto text-sm whitespace-pre-wrap text-fg">
+              {inspector.rawText}
+            </pre>
+          </section>
+        )}
+
+        {(inspector.raw?.trim() ?? "") !== "" && (
+          <section className="space-y-2">
+            <h3 className="text-sm font-semibold text-fg">Gmail record</h3>
+            <pre className="overflow-x-auto text-sm break-all whitespace-pre-wrap text-fg">
+              {inspector.raw}
+            </pre>
+          </section>
+        )}
+
+        {payloadText !== "" && (
+          <section className="space-y-2">
+            <h3 className="text-sm font-semibold text-fg">Message structure</h3>
+            <pre className="overflow-x-auto text-sm whitespace-pre-wrap text-fg">
+              {payloadText}
+            </pre>
+          </section>
+        )}
+      </>
+    );
+  }
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent className="w-[min(92vw,56rem)]">
         <DialogHeader>
-          <DialogTitle className="text-base font-bold">Full details</DialogTitle>
+          <DialogTitle className="text-base font-bold">
+            Full details
+          </DialogTitle>
           <DialogDescription className="text-fg">
             Complete information available for this message.
           </DialogDescription>
         </DialogHeader>
 
         <DialogBody className="max-h-[70vh] space-y-5 overflow-y-auto">
-          {isInspectorPending ? (
-            <div className="flex items-center gap-2 text-sm text-muted-fg">
-              <HugeiconsIcon aria-hidden className="animate-spin" icon={Loading03Icon} />
-              <span>Loading message details…</span>
-            </div>
-          ) : isInspectorError ? (
-            <p className="text-sm text-destructive">
-              {inspectorError.message || "Could not load message details."}
-            </p>
-          ) : (
-            inspector && (
-              <>
-                <section className="space-y-2">
-                  <h3 className="text-sm font-semibold text-fg">Summary</h3>
-                  {[
-                    { label: "Reference", value: inspector.messageHeaderId },
-                    { label: "Subject", value: inspector.subject },
-                    { label: "Date", value: inspector.date },
-                    { label: "Snippet", value: inspector.snippet },
-                  ].flatMap((row) =>
-                    row.value?.trim()
-                      ? [
-                          <p className="text-sm text-fg" key={row.label}>
-                            <span className="font-semibold text-fg">{row.label}: </span>
-                            <span className="wrap-break-word">{row.value}</span>
-                          </p>,
-                        ]
-                      : [],
-                  )}
-                </section>
-
-                <section className="space-y-2">
-                  <h3 className="text-sm font-semibold text-fg">Delivery details</h3>
-                  {inspector.headers.map((header) => (
-                    <p
-                      className="text-sm text-fg"
-                      key={`${inspector.messageHeaderId}-${header.name}-${header.value}`}
-                    >
-                      <span className="font-semibold text-fg">{header.name}: </span>
-                      <span className="wrap-break-word">{header.value}</span>
-                    </p>
-                  ))}
-                </section>
-
-                {inspector.rawText && (
-                  <section className="space-y-2">
-                    <h3 className="text-sm font-semibold text-fg">Original message</h3>
-                    <pre className="overflow-x-auto text-sm whitespace-pre-wrap text-fg">
-                      {inspector.rawText}
-                    </pre>
-                  </section>
-                )}
-
-                {inspector.raw && (
-                  <section className="space-y-2">
-                    <h3 className="text-sm font-semibold text-fg">Gmail record</h3>
-                    <pre className="overflow-x-auto text-sm break-all whitespace-pre-wrap text-fg">
-                      {inspector.raw}
-                    </pre>
-                  </section>
-                )}
-
-                {payloadText && (
-                  <section className="space-y-2">
-                    <h3 className="text-sm font-semibold text-fg">Message structure</h3>
-                    <pre className="overflow-x-auto text-sm whitespace-pre-wrap text-fg">
-                      {payloadText}
-                    </pre>
-                  </section>
-                )}
-              </>
-            )
-          )}
+          {inspectorBody}
         </DialogBody>
 
         <DialogFooter>
@@ -518,12 +599,16 @@ const ThreadMessageBody = ({
         className={cn(
           "px-4 pb-4 transition-[opacity,transform] duration-(--app-motion-duration-enter) ease-(--app-motion-ease-out) motion-reduce:transition-none @sm:px-5 @sm:pb-5",
           {
-            "translate-y-0 opacity-100": expanded,
             "-translate-y-1 opacity-0": !expanded,
-          },
+            "translate-y-0 opacity-100": expanded,
+          }
         )}
       >
-        <MessageBody html={message.bodyHtml} isLoading={isLoading} text={message.bodyText} />
+        <MessageBody
+          html={message.bodyHtml}
+          isLoading={isLoading}
+          text={message.bodyText}
+        />
       </div>
     </div>
   </div>
@@ -556,7 +641,7 @@ const MessageExpandButton = ({
           "transition-transform duration-(--app-motion-duration-layout) ease-(--app-motion-ease-in-out) motion-reduce:transition-none",
           {
             "rotate-180": expanded,
-          },
+          }
         )}
         icon={ArrowDown01Icon}
       />
@@ -602,7 +687,7 @@ const ThreadMessageCard = ({
         currentUserEmail,
         existingDraftMessage: linkedDraftMessage,
         message,
-      }),
+      })
     );
   };
 
@@ -611,7 +696,9 @@ const ThreadMessageCard = ({
       return;
     }
 
-    onComposeDraftRequested(buildComposeDraftFromSavedDraftMessage(linkedDraftMessage));
+    onComposeDraftRequested(
+      buildComposeDraftFromSavedDraftMessage(linkedDraftMessage)
+    );
   };
 
   return (
@@ -629,12 +716,24 @@ const ThreadMessageCard = ({
               onDetails={() => {
                 setDetailsDialogOpen(true);
               }}
-              onForward={() => openComposeAction("forward")}
+              onForward={() => {
+                openComposeAction("forward");
+              }}
               isPending={isActionPending}
-              onReply={() => openComposeAction("reply")}
-              onReplyAll={() => openComposeAction("reply-all")}
-              onUnsubscribe={getMessageUnsubscribeAction(message, onUnsubscribe)}
-              showReplyAll={hasDistinctReplyAllRecipients(message, currentUserEmail)}
+              onReply={() => {
+                openComposeAction("reply");
+              }}
+              onReplyAll={() => {
+                openComposeAction("reply-all");
+              }}
+              onUnsubscribe={getMessageUnsubscribeAction(
+                message,
+                onUnsubscribe
+              )}
+              showReplyAll={hasDistinctReplyAllRecipients(
+                message,
+                currentUserEmail
+              )}
             />
           ) : null
         }
@@ -654,13 +753,21 @@ const ThreadMessageCard = ({
       {usefulDetails.length > 0 && (
         <div className="space-y-1.5 px-4 pb-3 @sm:px-5">
           {usefulDetails.map((detail) => (
-            <GmailUsefulDetailCard detail={detail} key={detail.id} mailboxId={mailboxId} />
+            <GmailUsefulDetailCard
+              detail={detail}
+              key={detail.id}
+              mailboxId={mailboxId}
+            />
           ))}
         </div>
       )}
 
       <div id={`message-body-${message.id}`}>
-        <ThreadMessageBody expanded={expanded} isLoading={isLoading} message={message} />
+        <ThreadMessageBody
+          expanded={expanded}
+          isLoading={isLoading}
+          message={message}
+        />
       </div>
 
       <MessageInspectorPanel
@@ -707,7 +814,7 @@ const SingleMessageCard = ({
         currentUserEmail,
         existingDraftMessage: linkedDraftMessage,
         message,
-      }),
+      })
     );
   };
 
@@ -716,7 +823,9 @@ const SingleMessageCard = ({
       return;
     }
 
-    onComposeDraftRequested(buildComposeDraftFromSavedDraftMessage(linkedDraftMessage));
+    onComposeDraftRequested(
+      buildComposeDraftFromSavedDraftMessage(linkedDraftMessage)
+    );
   };
 
   return (
@@ -729,12 +838,21 @@ const SingleMessageCard = ({
             onDetails={() => {
               setDetailsDialogOpen(true);
             }}
-            onForward={() => openComposeAction("forward")}
+            onForward={() => {
+              openComposeAction("forward");
+            }}
             isPending={isActionPending}
-            onReply={() => openComposeAction("reply")}
-            onReplyAll={() => openComposeAction("reply-all")}
+            onReply={() => {
+              openComposeAction("reply");
+            }}
+            onReplyAll={() => {
+              openComposeAction("reply-all");
+            }}
             onUnsubscribe={getMessageUnsubscribeAction(message, onUnsubscribe)}
-            showReplyAll={hasDistinctReplyAllRecipients(message, currentUserEmail)}
+            showReplyAll={hasDistinctReplyAllRecipients(
+              message,
+              currentUserEmail
+            )}
           />
         }
         message={message}
@@ -744,13 +862,21 @@ const SingleMessageCard = ({
       {usefulDetails.length > 0 && (
         <div className="space-y-1.5 px-4 pb-3 @sm:px-5">
           {usefulDetails.map((detail) => (
-            <GmailUsefulDetailCard detail={detail} key={detail.id} mailboxId={mailboxId} />
+            <GmailUsefulDetailCard
+              detail={detail}
+              key={detail.id}
+              mailboxId={mailboxId}
+            />
           ))}
         </div>
       )}
 
       <div className="px-4 pb-4 @sm:px-5 @sm:pb-5">
-        <MessageBody html={message.bodyHtml} isLoading={isLoading} text={message.bodyText} />
+        <MessageBody
+          html={message.bodyHtml}
+          isLoading={isLoading}
+          text={message.bodyText}
+        />
       </div>
 
       <MessageInspectorPanel
@@ -785,14 +911,17 @@ const ThreadMessageList = ({
   usefulDetails: GmailUsefulDetail[];
 }) => {
   const [expandedMessageIds, setExpandedMessageIds] = useState<string[]>(
-    messages.length ? [messages[0].id] : [],
+    messages.length ? [messages[0].id] : []
   );
 
   return (
     <div>
       {messages.map((threadMessage) => {
         const isExpanded = expandedMessageIds.includes(threadMessage.id);
-        const linkedDraftMessage = findLinkedDraftForMessage(allThreadMessages, threadMessage);
+        const linkedDraftMessage = findLinkedDraftForMessage(
+          allThreadMessages,
+          threadMessage
+        );
 
         return (
           <ThreadMessageCard
@@ -810,11 +939,11 @@ const ThreadMessageList = ({
               setExpandedMessageIds((current) =>
                 isExpanded
                   ? current.filter((id) => id !== threadMessage.id)
-                  : [...current, threadMessage.id],
+                  : [...current, threadMessage.id]
               );
             }}
             usefulDetails={usefulDetails.filter(
-              (detail) => detail.gmailMessageId === threadMessage.id,
+              (detail) => detail.gmailMessageId === threadMessage.id
             )}
           />
         );
@@ -823,25 +952,70 @@ const ThreadMessageList = ({
   );
 };
 
-export const MessageView = ({
-  activeMailbox,
-  autoFocus = false,
+type ApiSourceActionProps = {
+  apiSource: MessageListItem["apiSource"];
+  isPending: boolean;
+  onCreateMailbox: () => void;
+};
+
+const ApiSourceAction = ({
+  apiSource,
+  isPending,
+  onCreateMailbox,
+}: ApiSourceActionProps) => {
+  if (apiSource === null || apiSource === undefined) {
+    return null;
+  }
+  if (apiSource.canCreateMailbox) {
+    return (
+      <Button
+        disabled={isPending}
+        onClick={onCreateMailbox}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        {isPending && (
+          <HugeiconsIcon
+            aria-hidden
+            className="size-3.5 animate-spin"
+            icon={Loading03Icon}
+          />
+        )}
+        Create mailbox
+      </Button>
+    );
+  }
+  if (
+    apiSource.senderMailboxId !== null &&
+    apiSource.senderMailboxId !== undefined &&
+    apiSource.senderMailboxId !== ""
+  ) {
+    return (
+      <span className="squircle rounded-md bg-muted px-2 py-1 text-xs text-muted-fg">
+        {apiSource.includedInMailbox
+          ? "Included in mailbox"
+          : "Mailbox copy disabled"}
+      </span>
+    );
+  }
+  return null;
+};
+
+const useMessageViewData = ({
   mailboxId,
   mailboxProvider,
-  currentUserEmail,
-  mailboxActions,
   message,
-  onComposeDraftRequested,
-  onBackToList,
-  onAutoFocusComplete,
   pendingActions,
-}: MessageViewProps) => {
-  const viewRef = useRef<HTMLElement>(null);
-  const onAutoFocusCompleteRef = useRef(onAutoFocusComplete);
-  onAutoFocusCompleteRef.current = onAutoFocusComplete;
+}: {
+  mailboxId: string;
+  mailboxProvider: MessageViewProps["mailboxProvider"];
+  message: MessageListItem;
+  pendingActions: MailboxPendingActions;
+}) => {
   const queryClient = useQueryClient();
   const { data: gmailLabels = [] } = useQuery(
-    labelsQueryOptions(mailboxId, mailboxProvider !== "api"),
+    labelsQueryOptions(mailboxId, mailboxProvider !== "api")
   );
   const {
     data: threadData,
@@ -851,25 +1025,36 @@ export const MessageView = ({
     // react-doctor-disable-next-line react-doctor/no-event-handler
     ...getThreadWithDetailsOptions(mailboxId, message.threadId),
     placeholderData: {
-      threadId: message.threadId,
+      messages: [message],
       snippet: message.snippet,
       subject: message.subject,
-      messages: [message],
+      threadId: message.threadId,
     },
     refetchInterval: (query) => {
       const thread = query.state.data;
-      return thread &&
+      const missingBodyCount =
+        thread === undefined
+          ? 0
+          : getMessagesMissingLoadedBody(thread.messages).length;
+      return thread !== undefined &&
         query.state.dataUpdateCount < 2 &&
-        getMessagesMissingLoadedBody(thread.messages).length > 0
+        missingBodyCount > 0
         ? 250
         : false;
     },
   });
   const { data: usefulDetails = [] } = useQuery(
-    gmailThreadUsefulDetailsQueryOptions(mailboxId, message.threadId, mailboxProvider === "gmail"),
+    gmailThreadUsefulDetailsQueryOptions(
+      mailboxId,
+      message.threadId,
+      mailboxProvider === "gmail"
+    )
   );
   const createApiMailboxMutation = useMutation({
     ...orpc.mail.createManagedMailboxForApiMessage.mutationOptions(),
+    onError: (error) => {
+      toast.error(error.message ?? "Could not create mailbox.");
+    },
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: getMailboxesQueryKey() }),
@@ -877,47 +1062,105 @@ export const MessageView = ({
       ]);
       toast.success("Mailbox created.");
     },
-    onError: (error) => {
-      toast.error(error.message || "Could not create mailbox.");
-    },
   });
-  const threadMessages = threadData?.messages?.length
-    ? [...threadData.messages].reverse()
-    : [message];
+  const threadMessages =
+    threadData?.messages !== undefined && threadData.messages.length > 0
+      ? threadData.messages.toReversed()
+      : [message];
   const threadLabelIds = getThreadLabelIds(threadMessages);
-  const messages = threadMessages.filter((threadMessage) => !isDraftMessage(threadMessage));
+  const messages = threadMessages.filter(
+    (threadMessage) => !isDraftMessage(threadMessage)
+  );
   const visibleMessages = messages.length > 0 ? messages : [message];
-  const messagesMissingLoadedBody = getMessagesMissingLoadedBody(visibleMessages);
+  const messagesMissingLoadedBody =
+    getMessagesMissingLoadedBody(visibleMessages);
   const hasMissingLoadedBody = messagesMissingLoadedBody.length > 0;
-  const isBodyRefreshPending = isThreadPending || isThreadFetching || hasMissingLoadedBody;
-  const subject =
-    visibleMessages.reduce<string | undefined>((resolvedSubject, threadMessage) => {
-      if (!threadMessage.subject?.trim()) {
-        return resolvedSubject;
-      }
-
-      return threadMessage.subject;
-    }, undefined) ||
-    threadData?.subject ||
-    message.subject ||
-    "(No subject)";
-  const threadIsUnread = visibleMessages.some((entry) => isMessageUnread(entry));
+  const isBodyRefreshPending =
+    isThreadPending || isThreadFetching || hasMissingLoadedBody;
+  const subject = resolveThreadSubject(
+    visibleMessages,
+    threadData?.subject,
+    message.subject
+  );
+  const threadIsUnread = visibleMessages.some((entry) =>
+    isMessageUnread(entry)
+  );
   const isSingleMessageThread = visibleMessages.length === 1;
   const canComposeFromMailbox = mailboxProvider !== "api";
-  const apiSource = message.apiSource;
+  const { apiSource } = message;
   const threadAttachments = visibleMessages.flatMap((threadMessage) =>
     (threadMessage.attachments ?? []).map((attachment) => ({
       ...attachment,
       messageId: threadMessage.id,
-    })),
+    }))
   );
   const isActionPending =
     pendingActions.isMessageActionPending(message.id) ||
     pendingActions.isThreadActionPending(message.threadId);
   const hotkeyMessage = visibleMessages[0] ?? message;
-  const hotkeyLinkedDraftMessage = findLinkedDraftForMessage(threadMessages, hotkeyMessage);
+  const hotkeyLinkedDraftMessage =
+    findLinkedDraftForMessage(threadMessages, hotkeyMessage) ?? undefined;
+
+  const apiSourceAction = (
+    <ApiSourceAction
+      apiSource={apiSource}
+      isPending={createApiMailboxMutation.isPending}
+      onCreateMailbox={() => {
+        createApiMailboxMutation.mutate({
+          mailboxId,
+          messageId: message.id,
+        });
+      }}
+    />
+  );
+
+  return {
+    apiSource,
+    apiSourceAction,
+    canComposeFromMailbox,
+    gmailLabels,
+    hotkeyLinkedDraftMessage,
+    hotkeyMessage,
+    isActionPending,
+    isBodyRefreshPending,
+    isSingleMessageThread,
+    subject,
+    threadAttachments,
+    threadIsUnread,
+    threadLabelIds,
+    threadMessages,
+    usefulDetails,
+    visibleMessages,
+  };
+};
+
+const useMessageViewHotkeys = ({
+  activeMailbox,
+  canComposeFromMailbox,
+  currentUserEmail,
+  hotkeyLinkedDraftMessage,
+  hotkeyMessage,
+  isActionPending,
+  mailboxActions,
+  mailboxProvider,
+  onBackToList,
+  onComposeDraftRequested,
+}: {
+  activeMailbox: MailboxCategory;
+  canComposeFromMailbox: boolean;
+  currentUserEmail?: string | null;
+  hotkeyLinkedDraftMessage: MessageListItem | undefined;
+  hotkeyMessage: MessageListItem;
+  isActionPending: boolean;
+  mailboxActions: MailboxActions;
+  mailboxProvider: MessageViewProps["mailboxProvider"];
+  onBackToList?: () => void;
+  onComposeDraftRequested?: (draft: ComposeDraftState) => void;
+}) => {
   const requestComposeAction = (action: "reply" | "reply-all" | "forward") => {
-    if (!canComposeFromMailbox || !onComposeDraftRequested) return;
+    if (!canComposeFromMailbox || onComposeDraftRequested === undefined) {
+      return;
+    }
 
     onComposeDraftRequested(
       buildComposeDraftFromMessageAction({
@@ -925,54 +1168,68 @@ export const MessageView = ({
         currentUserEmail,
         existingDraftMessage: hotkeyLinkedDraftMessage,
         message: hotkeyMessage,
-      }),
+      })
     );
   };
   useHotkeys(
     [
       {
-        hotkey: "R",
         callback: (event) => {
-          if (shouldIgnoreAppShortcut(event)) return;
+          if (shouldIgnoreAppShortcut(event)) {
+            return;
+          }
           requestComposeAction("reply");
         },
+        hotkey: "R",
         options: {
-          enabled: canComposeFromMailbox && !!onComposeDraftRequested && activeMailbox !== "drafts",
+          enabled:
+            canComposeFromMailbox &&
+            onComposeDraftRequested !== undefined &&
+            activeMailbox !== "drafts",
         },
       },
       {
-        hotkey: "A",
         callback: (event) => {
-          if (shouldIgnoreAppShortcut(event)) return;
+          if (shouldIgnoreAppShortcut(event)) {
+            return;
+          }
           requestComposeAction("reply-all");
         },
+        hotkey: "A",
         options: {
           enabled:
-            !!onComposeDraftRequested &&
+            onComposeDraftRequested !== undefined &&
             canComposeFromMailbox &&
             activeMailbox !== "drafts" &&
             hasDistinctReplyAllRecipients(hotkeyMessage, currentUserEmail),
         },
       },
       {
-        hotkey: "F",
         callback: (event) => {
-          if (shouldIgnoreAppShortcut(event)) return;
+          if (shouldIgnoreAppShortcut(event)) {
+            return;
+          }
           requestComposeAction("forward");
         },
+        hotkey: "F",
         options: {
-          enabled: canComposeFromMailbox && !!onComposeDraftRequested && activeMailbox !== "drafts",
+          enabled:
+            canComposeFromMailbox &&
+            onComposeDraftRequested !== undefined &&
+            activeMailbox !== "drafts",
         },
       },
       {
-        hotkey: "E",
         callback: (event) => {
-          if (shouldIgnoreAppShortcut(event)) return;
+          if (shouldIgnoreAppShortcut(event)) {
+            return;
+          }
           void runHotkeyThreadAction(async () => {
             await mailboxActions.archiveThread(hotkeyMessage.threadId);
             onBackToList?.();
           }, "Conversation archived.");
         },
+        hotkey: "E",
         options: {
           enabled:
             !isActionPending &&
@@ -981,27 +1238,32 @@ export const MessageView = ({
         },
       },
       {
-        hotkey: "Shift+3",
         callback: (event) => {
-          if (shouldIgnoreAppShortcut(event)) return;
-          void runHotkeyThreadAction(
-            () => mailboxActions.moveThreadToTrash(hotkeyMessage.threadId),
-            "Conversation moved to Trash.",
-          );
+          if (shouldIgnoreAppShortcut(event)) {
+            return;
+          }
+          void runHotkeyThreadAction(async () => {
+            await mailboxActions.moveThreadToTrash(hotkeyMessage.threadId);
+          }, "Conversation moved to Trash.");
         },
+        hotkey: "Shift+3",
         options: {
-          enabled: !isActionPending && activeMailbox !== "drafts" && activeMailbox !== "trash",
+          enabled:
+            !isActionPending &&
+            activeMailbox !== "drafts" &&
+            activeMailbox !== "trash",
         },
       },
       {
-        hotkey: "Shift+1",
         callback: (event) => {
-          if (shouldIgnoreAppShortcut(event)) return;
-          void runHotkeyThreadAction(
-            () => mailboxActions.markThreadAsSpam(hotkeyMessage.threadId),
-            "Conversation marked as Spam.",
-          );
+          if (shouldIgnoreAppShortcut(event)) {
+            return;
+          }
+          void runHotkeyThreadAction(async () => {
+            await mailboxActions.markThreadAsSpam(hotkeyMessage.threadId);
+          }, "Conversation marked as Spam.");
         },
+        hotkey: "Shift+1",
         options: {
           enabled:
             !isActionPending &&
@@ -1011,57 +1273,117 @@ export const MessageView = ({
         },
       },
       {
+        callback: (event) => {
+          if (shouldIgnoreAppShortcut(event)) {
+            return;
+          }
+          void runHotkeyThreadAction(async () => {
+            await mailboxActions.markThreadAsRead(hotkeyMessage.threadId);
+          }, "Conversation marked as Read.");
+        },
         hotkey: "Shift+I",
-        callback: (event) => {
-          if (shouldIgnoreAppShortcut(event)) return;
-          void runHotkeyThreadAction(
-            () => mailboxActions.markThreadAsRead(hotkeyMessage.threadId),
-            "Conversation marked as Read.",
-          );
-        },
         options: {
-          enabled: !isActionPending && mailboxProvider !== "api" && activeMailbox !== "drafts",
+          enabled:
+            !isActionPending &&
+            mailboxProvider !== "api" &&
+            activeMailbox !== "drafts",
         },
       },
       {
+        callback: (event) => {
+          if (shouldIgnoreAppShortcut(event)) {
+            return;
+          }
+          void runHotkeyThreadAction(async () => {
+            await mailboxActions.markThreadAsUnread(hotkeyMessage.threadId);
+          }, "Conversation marked as Unread.");
+        },
         hotkey: "Shift+U",
-        callback: (event) => {
-          if (shouldIgnoreAppShortcut(event)) return;
-          void runHotkeyThreadAction(
-            () => mailboxActions.markThreadAsUnread(hotkeyMessage.threadId),
-            "Conversation marked as Unread.",
-          );
-        },
         options: {
-          enabled: !isActionPending && mailboxProvider !== "api" && activeMailbox !== "drafts",
+          enabled:
+            !isActionPending &&
+            mailboxProvider !== "api" &&
+            activeMailbox !== "drafts",
         },
       },
       {
-        hotkey: "U",
         callback: (event) => {
-          if (shouldIgnoreAppShortcut(event)) return;
+          if (shouldIgnoreAppShortcut(event)) {
+            return;
+          }
           onBackToList?.();
         },
+        hotkey: "U",
         options: { enabled: !!onBackToList },
       },
     ],
-    { ignoreInputs: true },
+    { ignoreInputs: true }
   );
+};
+
+const useMessageViewFocus = ({
+  focusOnOpen,
+  onAutoFocusComplete,
+}: Pick<MessageViewProps, "focusOnOpen" | "onAutoFocusComplete">) => {
+  const viewRef = useRef<HTMLElement>(null);
+  const onAutoFocusCompleteRef = useRef(onAutoFocusComplete);
 
   useEffect(() => {
-    if (!autoFocus) return;
+    onAutoFocusCompleteRef.current = onAutoFocusComplete;
+  }, [onAutoFocusComplete]);
+
+  useEffect(() => {
+    if (focusOnOpen !== true) {
+      return;
+    }
 
     const frameId = requestAnimationFrame(() => {
       const view = viewRef.current;
       const focusTarget = view?.querySelector<HTMLElement>(
-        "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled])",
+        "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled])"
       );
-      (focusTarget ?? view)?.focus({ preventScroll: true, focusVisible: true });
+      (focusTarget ?? view)?.focus({ focusVisible: true, preventScroll: true });
       onAutoFocusCompleteRef.current?.();
     });
 
-    return () => cancelAnimationFrame(frameId);
-  }, [autoFocus]);
+    return () => {
+      cancelAnimationFrame(frameId);
+    };
+  }, [focusOnOpen]);
+
+  return viewRef;
+};
+
+type MessageViewContentProps = MessageViewProps &
+  ReturnType<typeof useMessageViewData> & {
+    viewRef: ReturnType<typeof useMessageViewFocus>;
+  };
+
+const MessageViewContent = (props: MessageViewContentProps) => {
+  const {
+    activeMailbox,
+    apiSource,
+    apiSourceAction,
+    canComposeFromMailbox,
+    currentUserEmail,
+    gmailLabels,
+    isActionPending,
+    isBodyRefreshPending,
+    isSingleMessageThread,
+    mailboxActions,
+    mailboxId,
+    mailboxProvider,
+    message,
+    onComposeDraftRequested,
+    subject,
+    threadAttachments,
+    threadIsUnread,
+    threadLabelIds,
+    threadMessages,
+    usefulDetails,
+    viewRef,
+    visibleMessages,
+  } = props;
 
   return (
     <article ref={viewRef} tabIndex={-1} className="@container w-full">
@@ -1091,44 +1413,25 @@ export const MessageView = ({
           )}
         </div>
 
-        <MessageLabels className="mt-3" labelIds={threadLabelIds} labels={gmailLabels} />
+        <MessageLabels
+          className="mt-3"
+          labelIds={threadLabelIds}
+          labels={gmailLabels}
+        />
 
-        {apiSource && (
+        {apiSource !== null && apiSource !== undefined && (
           <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-            <span className="text-muted-fg">Sent through API from {apiSource.senderAddress}.</span>
-            {apiSource.canCreateMailbox ? (
-              <Button
-                disabled={createApiMailboxMutation.isPending}
-                onClick={() =>
-                  createApiMailboxMutation.mutate({
-                    mailboxId,
-                    messageId: message.id,
-                  })
-                }
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                {createApiMailboxMutation.isPending && (
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-3.5 animate-spin"
-                    icon={Loading03Icon}
-                  />
-                )}
-                Create mailbox
-              </Button>
-            ) : apiSource.senderMailboxId ? (
-              <span className="squircle rounded-md bg-muted px-2 py-1 text-xs text-muted-fg">
-                {apiSource.includedInMailbox ? "Included in mailbox" : "Mailbox copy disabled"}
-              </span>
-            ) : null}
+            <span className="text-muted-fg">
+              Sent through API from {apiSource.senderAddress}.
+            </span>
+            {apiSourceAction}
           </div>
         )}
 
         {!isSingleMessageThread && (
           <p className="mt-2 text-sm text-muted-fg">
-            {visibleMessages.length} {visibleMessages.length === 1 ? "message" : "messages"}
+            {visibleMessages.length}{" "}
+            {visibleMessages.length === 1 ? "message" : "messages"}
           </p>
         )}
 
@@ -1139,7 +1442,33 @@ export const MessageView = ({
         />
       </header>
 
-      {!isSingleMessageThread ? (
+      {isSingleMessageThread ? (
+        visibleMessages.map((threadMessage) => (
+          <SingleMessageCard
+            currentUserEmail={currentUserEmail}
+            isLoading={isBodyRefreshPending}
+            isActionPending={isActionPending}
+            key={threadMessage.id}
+            linkedDraftMessage={findLinkedDraftForMessage(
+              threadMessages,
+              threadMessage
+            )}
+            mailboxId={mailboxId}
+            message={threadMessage}
+            onComposeDraftRequested={
+              canComposeFromMailbox ? onComposeDraftRequested : undefined
+            }
+            onUnsubscribe={
+              mailboxProvider === "gmail"
+                ? mailboxActions.unsubscribeFromMessage
+                : undefined
+            }
+            usefulDetails={usefulDetails.filter(
+              (detail) => detail.gmailMessageId === threadMessage.id
+            )}
+          />
+        ))
+      ) : (
         <ThreadMessageList
           allThreadMessages={threadMessages}
           currentUserEmail={currentUserEmail}
@@ -1148,32 +1477,45 @@ export const MessageView = ({
           key={message.threadId}
           mailboxId={mailboxId}
           messages={visibleMessages}
-          onComposeDraftRequested={canComposeFromMailbox ? onComposeDraftRequested : undefined}
+          onComposeDraftRequested={
+            canComposeFromMailbox ? onComposeDraftRequested : undefined
+          }
           onUnsubscribe={
-            mailboxProvider === "gmail" ? mailboxActions.unsubscribeFromMessage : undefined
+            mailboxProvider === "gmail"
+              ? mailboxActions.unsubscribeFromMessage
+              : undefined
           }
           usefulDetails={usefulDetails}
         />
-      ) : (
-        visibleMessages.map((threadMessage) => (
-          <SingleMessageCard
-            currentUserEmail={currentUserEmail}
-            isLoading={isBodyRefreshPending}
-            isActionPending={isActionPending}
-            key={threadMessage.id}
-            linkedDraftMessage={findLinkedDraftForMessage(threadMessages, threadMessage)}
-            mailboxId={mailboxId}
-            message={threadMessage}
-            onComposeDraftRequested={canComposeFromMailbox ? onComposeDraftRequested : undefined}
-            onUnsubscribe={
-              mailboxProvider === "gmail" ? mailboxActions.unsubscribeFromMessage : undefined
-            }
-            usefulDetails={usefulDetails.filter(
-              (detail) => detail.gmailMessageId === threadMessage.id,
-            )}
-          />
-        ))
       )}
     </article>
   );
+};
+
+export const MessageView = (props: MessageViewProps) => {
+  const data = useMessageViewData({
+    mailboxId: props.mailboxId,
+    mailboxProvider: props.mailboxProvider,
+    message: props.message,
+    pendingActions: props.pendingActions,
+  });
+  const viewRef = useMessageViewFocus({
+    focusOnOpen: props.focusOnOpen,
+    onAutoFocusComplete: props.onAutoFocusComplete,
+  });
+
+  useMessageViewHotkeys({
+    activeMailbox: props.activeMailbox,
+    canComposeFromMailbox: data.canComposeFromMailbox,
+    currentUserEmail: props.currentUserEmail,
+    hotkeyLinkedDraftMessage: data.hotkeyLinkedDraftMessage,
+    hotkeyMessage: data.hotkeyMessage,
+    isActionPending: data.isActionPending,
+    mailboxActions: props.mailboxActions,
+    mailboxProvider: props.mailboxProvider,
+    onBackToList: props.onBackToList,
+    onComposeDraftRequested: props.onComposeDraftRequested,
+  });
+
+  return <MessageViewContent {...props} {...data} viewRef={viewRef} />;
 };

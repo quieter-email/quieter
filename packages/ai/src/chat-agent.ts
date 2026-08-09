@@ -1,8 +1,13 @@
-import { MAILBOX_LABELS, type MailboxCategory } from "@quieter/gmail";
-import { toolDefinition, type AnyTool } from "@tanstack/ai";
+import { MAILBOX_LABELS } from "@quieter/gmail";
+import type { MailboxCategory } from "@quieter/gmail";
+import { reportError } from "@quieter/observability";
+import { toolDefinition } from "@tanstack/ai";
+import type { AnyTool } from "@tanstack/ai";
 import { z } from "zod";
 
-const mailboxCategories = Object.keys(MAILBOX_LABELS) as MailboxCategory[];
+const mailboxCategories = Object.keys(MAILBOX_LABELS).filter(
+  (key): key is MailboxCategory => key in MAILBOX_LABELS
+);
 
 export const gmailToolsPrompt = `You are Quieter's email assistant — an autonomous agent embedded in the user's mailbox. Your job is to understand what they want, investigate their mail when needed, and deliver useful outcomes without making them micromanage every step.
 
@@ -144,7 +149,7 @@ export const gmailSearchResultSchema = z.discriminatedUnion("status", [
         snippet: z.string().optional(),
         subject: z.string().optional(),
         threadId: z.string(),
-      }),
+      })
     ),
     nextPageToken: z.string().optional(),
     query: z.string(),
@@ -160,21 +165,23 @@ export const gmailSearchResultSchema = z.discriminatedUnion("status", [
 export type GmailSearchResult = z.infer<typeof gmailSearchResultSchema>;
 
 export const gmailSearchToolDef = toolDefinition({
-  name: "search_gmail",
   description:
     "Search the selected Gmail mailbox with Gmail search syntax and return matching message summaries.",
   inputSchema: z.object({
-    query: z.string().trim().min(1).max(500).meta({
-      description: "Gmail search query. Can be free text or use Gmail operators.",
-    }),
     maxResults: z.number().int().min(1).max(50).default(10).meta({
-      description: "Maximum summaries to return. Match the user's requested count, up to 50.",
+      description:
+        "Maximum summaries to return. Match the user's requested count, up to 50.",
     }),
-    pageToken: z.string().trim().max(2_000).optional().meta({
+    pageToken: z.string().trim().max(2000).optional().meta({
       description:
         "Continuation token returned by a previous search_gmail call. Omit it for the first page.",
     }),
+    query: z.string().trim().min(1).max(500).meta({
+      description:
+        "Gmail search query. Can be free text or use Gmail operators.",
+    }),
   }),
+  name: "search_gmail",
   outputSchema: gmailSearchResultSchema,
 });
 
@@ -193,7 +200,7 @@ export const gmailThreadResultSchema = z.discriminatedUnion("status", [
         isUnread: z.boolean().optional(),
         snippet: z.string().optional(),
         to: z.string().optional(),
-      }),
+      })
     ),
     omittedMessageCount: z.number().int().nonnegative(),
     snippet: z.string().optional(),
@@ -210,7 +217,6 @@ export const gmailThreadResultSchema = z.discriminatedUnion("status", [
 export type GmailThreadResult = z.infer<typeof gmailThreadResultSchema>;
 
 export const gmailThreadToolDef = toolDefinition({
-  name: "read_gmail_thread",
   description:
     "Read the selected Gmail conversation, including bounded message bodies and attachment counts.",
   inputSchema: z.object({
@@ -218,6 +224,7 @@ export const gmailThreadToolDef = toolDefinition({
       description: "Gmail thread id, usually from a search_gmail result.",
     }),
   }),
+  name: "read_gmail_thread",
   outputSchema: gmailThreadResultSchema,
 });
 
@@ -242,20 +249,20 @@ export const mailboxOverviewResultSchema = z.discriminatedUnion("status", [
 export type MailboxOverviewResult = z.infer<typeof mailboxOverviewResultSchema>;
 
 export const composeEmailInputSchema = z.object({
-  to: z.string().default("").meta({
-    description: "To recipients as a comma-separated email address list.",
+  bcc: z.string().default("").meta({
+    description: "Bcc recipients as a comma-separated email address list.",
+  }),
+  bodyText: z.string().default("").meta({
+    description: "Complete proposed plain-text email body.",
   }),
   cc: z.string().default("").meta({
     description: "Cc recipients as a comma-separated email address list.",
   }),
-  bcc: z.string().default("").meta({
-    description: "Bcc recipients as a comma-separated email address list.",
-  }),
   subject: z.string().default("").meta({
     description: "Proposed email subject.",
   }),
-  bodyText: z.string().default("").meta({
-    description: "Complete proposed plain-text email body.",
+  to: z.string().default("").meta({
+    description: "To recipients as a comma-separated email address list.",
   }),
 });
 
@@ -285,19 +292,19 @@ export type ComposeEmailInput = z.infer<typeof composeEmailInputSchema>;
 export type ComposeEmailResult = z.infer<typeof composeEmailResultSchema>;
 
 export const composeEmailToolDef = toolDefinition({
-  name: "compose_email",
   description:
     "Open an editable inline email composer with a proposed message. The user must explicitly send, save the draft, or decline before the assistant continues.",
   inputSchema: composeEmailInputSchema,
-  outputSchema: composeEmailResultSchema,
+  name: "compose_email",
   needsApproval: true,
+  outputSchema: composeEmailResultSchema,
 });
 
 export const mailboxOverviewToolDef = toolDefinition({
-  name: "get_mailbox_overview",
   description:
     "Get totals and estimated unread, starred, and attachment message counts for the selected mailbox.",
   inputSchema: z.object({}),
+  name: "get_mailbox_overview",
   outputSchema: mailboxOverviewResultSchema,
 });
 
@@ -310,7 +317,7 @@ export const gmailMessageResultSchema = z.discriminatedUnion("status", [
         fileName: z.string(),
         mimeType: z.string(),
         size: z.number().int().nonnegative(),
-      }),
+      })
     ),
     body: z.string(),
     bodyTruncated: z.boolean(),
@@ -336,13 +343,14 @@ export const gmailMessageResultSchema = z.discriminatedUnion("status", [
 export type GmailMessageResult = z.infer<typeof gmailMessageResultSchema>;
 
 export const gmailMessageToolDef = toolDefinition({
-  name: "read_gmail_message",
-  description: "Read one Gmail message with its full body and attachment metadata.",
+  description:
+    "Read one Gmail message with its full body and attachment metadata.",
   inputSchema: z.object({
     messageId: z.string().trim().min(1).max(256).meta({
       description: "Gmail message id, usually from a search_gmail result.",
     }),
   }),
+  name: "read_gmail_message",
   outputSchema: gmailMessageResultSchema,
 });
 
@@ -352,7 +360,7 @@ export const gmailMessagesResultSchema = z.discriminatedUnion("status", [
       z.object({
         error: z.string(),
         messageId: z.string(),
-      }),
+      })
     ),
     fetchedAt: z.string(),
     messages: z.array(gmailMessageResultSchema.options[0]),
@@ -364,13 +372,14 @@ export const gmailMessagesResultSchema = z.discriminatedUnion("status", [
 export type GmailMessagesResult = z.infer<typeof gmailMessagesResultSchema>;
 
 export const gmailMessagesToolDef = toolDefinition({
-  name: "read_gmail_messages",
   description: "Read up to 20 Gmail messages in one live mailbox request.",
   inputSchema: z.object({
     messageIds: z.array(z.string().trim().min(1).max(256)).min(1).max(20).meta({
-      description: "Gmail message ids, usually selected from search_gmail results.",
+      description:
+        "Gmail message ids, usually selected from search_gmail results.",
     }),
   }),
+  name: "read_gmail_messages",
   outputSchema: gmailMessagesResultSchema,
 });
 
@@ -395,13 +404,13 @@ export const gmailAttachmentResultSchema = z.discriminatedUnion("status", [
 export type GmailAttachmentResult = z.infer<typeof gmailAttachmentResultSchema>;
 
 export const gmailAttachmentToolDef = toolDefinition({
-  name: "read_gmail_attachment",
   description:
     "Read bounded text from a supported Gmail attachment using its message and attachment ids.",
   inputSchema: z.object({
     attachmentId: z.string().trim().min(1).max(512),
     messageId: z.string().trim().min(1).max(256),
   }),
+  name: "read_gmail_attachment",
   outputSchema: gmailAttachmentResultSchema,
 });
 
@@ -416,7 +425,7 @@ export const gmailLabelListResultSchema = z.discriminatedUnion("status", [
         inclusionCriteria: z.string().nullable().optional(),
         name: z.string(),
         type: z.enum(["system", "user"]),
-      }),
+      })
     ),
     status: z.literal("success"),
   }),
@@ -428,9 +437,9 @@ export const gmailLabelListResultSchema = z.discriminatedUnion("status", [
 export type GmailLabelListResult = z.infer<typeof gmailLabelListResultSchema>;
 
 export const gmailLabelListToolDef = toolDefinition({
-  name: "list_gmail_labels",
   description: "List Gmail labels available in the selected mailbox.",
   inputSchema: z.object({}),
+  name: "list_gmail_labels",
   outputSchema: gmailLabelListResultSchema,
 });
 
@@ -463,7 +472,6 @@ export const modifyMailResultSchema = z.discriminatedUnion("status", [
 export type ModifyMailResult = z.infer<typeof modifyMailResultSchema>;
 
 export const modifyMailToolDef = toolDefinition({
-  name: "modify_mail",
   description:
     "Apply a mailbox action to a Gmail message or thread: mark_read, mark_unread, star, unstar, archive, trash, or untrash.",
   inputSchema: z.object({
@@ -477,6 +485,7 @@ export const modifyMailToolDef = toolDefinition({
       description: "Whether id refers to a message or a thread.",
     }),
   }),
+  name: "modify_mail",
   outputSchema: modifyMailResultSchema,
 });
 
@@ -484,7 +493,7 @@ const googleCalendarEventDateSchema = z
   .object({
     date: z
       .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .regex(/^\d{4}-\d{2}-\d{2}$/u)
       .optional()
       .meta({
         description: "All-day event date in YYYY-MM-DD format.",
@@ -493,7 +502,8 @@ const googleCalendarEventDateSchema = z
       description: "Timed event start or end as an ISO-like date-time.",
     }),
     timeZone: z.string().trim().min(1).optional().meta({
-      description: "IANA timezone name for dateTime values, such as Europe/Berlin.",
+      description:
+        "IANA timezone name for dateTime values, such as Europe/Berlin.",
     }),
   })
   .refine((value) => Boolean(value.date) !== Boolean(value.dateTime), {
@@ -502,20 +512,20 @@ const googleCalendarEventDateSchema = z
 
 export const googleCalendarCreateEventInputSchema = z
   .object({
-    summary: z.string().trim().min(1).max(200).meta({
-      description: "Event title.",
-    }),
-    description: z.string().trim().max(5_000).optional().meta({
+    description: z.string().trim().max(5000).optional().meta({
       description: "Optional event notes.",
     }),
-    location: z.string().trim().max(1_000).optional().meta({
+    end: googleCalendarEventDateSchema.meta({
+      description: "Event end date or date-time.",
+    }),
+    location: z.string().trim().max(1000).optional().meta({
       description: "Optional event location.",
     }),
     start: googleCalendarEventDateSchema.meta({
       description: "Event start date or date-time.",
     }),
-    end: googleCalendarEventDateSchema.meta({
-      description: "Event end date or date-time.",
+    summary: z.string().trim().min(1).max(200).meta({
+      description: "Event title.",
     }),
   })
   .refine((value) => Boolean(value.start.date) === Boolean(value.end.date), {
@@ -523,25 +533,32 @@ export const googleCalendarCreateEventInputSchema = z
     path: ["end"],
   });
 
-export const googleCalendarCreateEventResultSchema = z.discriminatedUnion("status", [
-  z.object({
-    htmlLink: z.string().optional(),
-    id: z.string(),
-    status: z.literal("success"),
-    summary: z.string(),
-  }),
-  toolErrorSchema.extend({
-    summary: z.string(),
-  }),
-]);
+export const googleCalendarCreateEventResultSchema = z.discriminatedUnion(
+  "status",
+  [
+    z.object({
+      htmlLink: z.string().optional(),
+      id: z.string(),
+      status: z.literal("success"),
+      summary: z.string(),
+    }),
+    toolErrorSchema.extend({
+      summary: z.string(),
+    }),
+  ]
+);
 
-export type GoogleCalendarCreateEventInput = z.infer<typeof googleCalendarCreateEventInputSchema>;
-export type GoogleCalendarCreateEventResult = z.infer<typeof googleCalendarCreateEventResultSchema>;
+export type GoogleCalendarCreateEventInput = z.infer<
+  typeof googleCalendarCreateEventInputSchema
+>;
+export type GoogleCalendarCreateEventResult = z.infer<
+  typeof googleCalendarCreateEventResultSchema
+>;
 
 export const googleCalendarCreateEventToolDef = toolDefinition({
-  name: "create_google_calendar_event",
   description: "Create an event on the user's connected Google Calendar.",
   inputSchema: googleCalendarCreateEventInputSchema,
+  name: "create_google_calendar_event",
   outputSchema: googleCalendarCreateEventResultSchema,
 });
 
@@ -556,14 +573,14 @@ export const linearIssueMetadataResultSchema = z.discriminatedUnion("status", [
         name: z.string(),
         parentId: z.string().nullable().optional(),
         teamId: z.string().nullable().optional(),
-      }),
+      })
     ),
     projects: z.array(
       z.object({
         description: z.string().nullable().optional(),
         id: z.string(),
         name: z.string(),
-      }),
+      })
     ),
     states: z.array(
       z.object({
@@ -572,7 +589,7 @@ export const linearIssueMetadataResultSchema = z.discriminatedUnion("status", [
         name: z.string(),
         teamId: z.string().nullable().optional(),
         type: z.string(),
-      }),
+      })
     ),
     status: z.literal("success"),
     teams: z.array(
@@ -582,7 +599,7 @@ export const linearIssueMetadataResultSchema = z.discriminatedUnion("status", [
         id: z.string(),
         key: z.string(),
         name: z.string(),
-      }),
+      })
     ),
     users: z.array(
       z.object({
@@ -592,13 +609,15 @@ export const linearIssueMetadataResultSchema = z.discriminatedUnion("status", [
         id: z.string(),
         isAssignable: z.boolean(),
         name: z.string(),
-      }),
+      })
     ),
   }),
   toolErrorSchema,
 ]);
 
-export type LinearIssueMetadataResult = z.infer<typeof linearIssueMetadataResultSchema>;
+export type LinearIssueMetadataResult = z.infer<
+  typeof linearIssueMetadataResultSchema
+>;
 
 const linearIssuePrioritySchema = z.union([
   z.literal(0),
@@ -619,13 +638,15 @@ export const linearIssueCreateInputSchema = z.object({
     description: "Linear label ids from list_linear_issue_metadata.",
   }),
   priority: linearIssuePrioritySchema.optional().meta({
-    description: "Linear priority: 0 = No priority, 1 = Urgent, 2 = High, 3 = Medium, 4 = Low.",
+    description:
+      "Linear priority: 0 = No priority, 1 = Urgent, 2 = High, 3 = Medium, 4 = Low.",
   }),
   projectId: z.string().trim().min(1).optional().meta({
     description: "Optional Linear project id from list_linear_issue_metadata.",
   }),
   stateId: z.string().trim().min(1).optional().meta({
-    description: "Optional Linear workflow state id from list_linear_issue_metadata.",
+    description:
+      "Optional Linear workflow state id from list_linear_issue_metadata.",
   }),
   teamId: z.string().trim().min(1).meta({
     description: "Linear team id from list_linear_issue_metadata.",
@@ -648,21 +669,25 @@ export const linearIssueCreateResultSchema = z.discriminatedUnion("status", [
   }),
 ]);
 
-export type LinearIssueCreateInput = z.infer<typeof linearIssueCreateInputSchema>;
-export type LinearIssueCreateResult = z.infer<typeof linearIssueCreateResultSchema>;
+export type LinearIssueCreateInput = z.infer<
+  typeof linearIssueCreateInputSchema
+>;
+export type LinearIssueCreateResult = z.infer<
+  typeof linearIssueCreateResultSchema
+>;
 
 export const linearIssueMetadataToolDef = toolDefinition({
-  name: "list_linear_issue_metadata",
   description:
     "List Linear teams, labels, workflow states, projects, and users for issue creation.",
   inputSchema: z.object({}),
+  name: "list_linear_issue_metadata",
   outputSchema: linearIssueMetadataResultSchema,
 });
 
 export const linearIssueCreateToolDef = toolDefinition({
-  name: "create_linear_issue",
   description: "Create one issue in the user's connected Linear workspace.",
   inputSchema: linearIssueCreateInputSchema,
+  name: "create_linear_issue",
   outputSchema: linearIssueCreateResultSchema,
 });
 
@@ -679,8 +704,12 @@ export type GmailToolsContext = {
     attachmentId: string;
     messageId: string;
   }) => Promise<GmailAttachmentResult>;
-  readGmailMessage: (input: { messageId: string }) => Promise<GmailMessageResult>;
-  readGmailMessages: (input: { messageIds: string[] }) => Promise<GmailMessagesResult>;
+  readGmailMessage: (input: {
+    messageId: string;
+  }) => Promise<GmailMessageResult>;
+  readGmailMessages: (input: {
+    messageIds: string[];
+  }) => Promise<GmailMessagesResult>;
   readGmailThread: (input: { threadId: string }) => Promise<GmailThreadResult>;
   searchGmail: (input: {
     maxResults: number;
@@ -691,12 +720,14 @@ export type GmailToolsContext = {
 
 export type GoogleCalendarToolsContext = {
   createGoogleCalendarEvent: (
-    input: GoogleCalendarCreateEventInput,
+    input: GoogleCalendarCreateEventInput
   ) => Promise<GoogleCalendarCreateEventResult>;
 };
 
 export type LinearToolsContext = {
-  createLinearIssue: (input: LinearIssueCreateInput) => Promise<LinearIssueCreateResult>;
+  createLinearIssue: (
+    input: LinearIssueCreateInput
+  ) => Promise<LinearIssueCreateResult>;
   listLinearIssueMetadata: () => Promise<LinearIssueMetadataResult>;
 };
 
@@ -709,21 +740,22 @@ export const aiMemoryResultSchema = z.object({
 });
 
 export const aiMemoryToolDef = toolDefinition({
-  name: "remember_preference",
   description:
     "Record an explicit durable preference in personal memory or the current mailbox memory.",
   inputSchema: z.object({
-    preference: z.string().trim().min(1).max(1_000).meta({
+    preference: z.string().trim().min(1).max(1000).meta({
       description: "The reusable user preference or rule to remember.",
     }),
     reason: z.string().trim().max(500).optional().meta({
-      description: "Short reason this is durable context rather than a one-off fact.",
+      description:
+        "Short reason this is durable context rather than a one-off fact.",
     }),
     scope: z.enum(["mailbox", "user"]).meta({
       description:
         "Use user for personal preferences that should follow the person across mailboxes. Use mailbox for behavior specific to the current mailbox or its collaborators.",
     }),
   }),
+  name: "remember_preference",
   outputSchema: aiMemoryResultSchema,
 });
 
@@ -735,36 +767,52 @@ export type AiMemoryToolsContext = {
   }) => Promise<AiMemoryResult>;
 };
 
-const getMailboxToolErrorMessage = (operation: string, error: unknown, fallback: string) => {
-  console.error(`Mailbox tool ${operation} failed.`, error);
+const getMailboxToolErrorMessage = (
+  operation: string,
+  error: unknown,
+  fallback: string
+) => {
+  reportError(error, { operation: `mailbox-tool:${operation}` });
 
-  if (!(error instanceof Error)) return fallback;
+  if (!(error instanceof Error)) {
+    return fallback;
+  }
 
-  if (/timed?\s*out|timeout/i.test(error.message)) {
+  if (/timed?\s*out|timeout/iu.test(error.message)) {
     return "The mailbox took too long to respond. Retry with a narrower request.";
   }
 
-  if (/rate.?limit|too many requests|\b429\b/i.test(error.message)) {
+  if (/rate.?limit|too many requests|\b429\b/iu.test(error.message)) {
     return "The mailbox is receiving too many requests. Wait a moment, then retry.";
   }
 
-  if (/unauth|autherror|credential|access token|\b401\b/i.test(error.message)) {
+  if (
+    /unauth|autherror|credential|access token|\b401\b/iu.test(error.message)
+  ) {
     return "This mailbox needs to be reconnected before it can be used in chat.";
   }
 
-  if (error.message.startsWith("The attachment ") || error.message.startsWith("This attachment ")) {
+  if (
+    error.message.startsWith("The attachment ") ||
+    error.message.startsWith("This attachment ")
+  ) {
     return error.message;
   }
 
   return fallback;
 };
 
-export const createGmailSearchServerTool = (context: GmailToolsContext): AnyTool =>
+export const createGmailSearchServerTool = (
+  context: GmailToolsContext
+): AnyTool =>
   gmailSearchToolDef.server(async ({ query, maxResults, pageToken }) => {
     try {
       return await context.searchGmail({
         maxResults: maxResults ?? 10,
-        pageToken: pageToken || undefined,
+        pageToken:
+          pageToken !== null && pageToken !== undefined && pageToken !== ""
+            ? pageToken
+            : undefined,
         query,
       });
     } catch (error) {
@@ -773,7 +821,7 @@ export const createGmailSearchServerTool = (context: GmailToolsContext): AnyTool
         error: getMailboxToolErrorMessage(
           "search",
           error,
-          "The mailbox search could not be completed. Try a narrower query.",
+          "The mailbox search could not be completed. Try a narrower query."
         ),
         query,
         status: "error",
@@ -781,7 +829,9 @@ export const createGmailSearchServerTool = (context: GmailToolsContext): AnyTool
     }
   });
 
-export const createGmailMessagesServerTool = (context: GmailToolsContext): AnyTool =>
+export const createGmailMessagesServerTool = (
+  context: GmailToolsContext
+): AnyTool =>
   gmailMessagesToolDef.server(async ({ messageIds }) => {
     try {
       return await context.readGmailMessages({ messageIds });
@@ -790,14 +840,16 @@ export const createGmailMessagesServerTool = (context: GmailToolsContext): AnyTo
         error: getMailboxToolErrorMessage(
           "batch read",
           error,
-          "Those messages could not be loaded. Refresh the mailbox and retry.",
+          "Those messages could not be loaded. Refresh the mailbox and retry."
         ),
         status: "error",
       };
     }
   });
 
-export const createGmailAttachmentServerTool = (context: GmailToolsContext): AnyTool =>
+export const createGmailAttachmentServerTool = (
+  context: GmailToolsContext
+): AnyTool =>
   gmailAttachmentToolDef.server(async ({ attachmentId, messageId }) => {
     try {
       return await context.readGmailAttachment({ attachmentId, messageId });
@@ -807,7 +859,7 @@ export const createGmailAttachmentServerTool = (context: GmailToolsContext): Any
         error: getMailboxToolErrorMessage(
           "attachment read",
           error,
-          "That attachment could not be read. Open the message and retry.",
+          "That attachment could not be read. Open the message and retry."
         ),
         messageId,
         status: "error",
@@ -815,7 +867,9 @@ export const createGmailAttachmentServerTool = (context: GmailToolsContext): Any
     }
   });
 
-export const createGmailThreadServerTool = (context: GmailToolsContext): AnyTool =>
+export const createGmailThreadServerTool = (
+  context: GmailToolsContext
+): AnyTool =>
   gmailThreadToolDef.server(async ({ threadId }) => {
     try {
       return await context.readGmailThread({ threadId });
@@ -825,7 +879,7 @@ export const createGmailThreadServerTool = (context: GmailToolsContext): AnyTool
         error: getMailboxToolErrorMessage(
           "thread read",
           error,
-          "That conversation could not be loaded. Refresh the mailbox and retry.",
+          "That conversation could not be loaded. Refresh the mailbox and retry."
         ),
         status: "error",
         threadId,
@@ -833,7 +887,9 @@ export const createGmailThreadServerTool = (context: GmailToolsContext): AnyTool
     }
   });
 
-export const createMailboxOverviewServerTool = (context: GmailToolsContext): AnyTool =>
+export const createMailboxOverviewServerTool = (
+  context: GmailToolsContext
+): AnyTool =>
   mailboxOverviewToolDef.server(async () => {
     try {
       return await context.getMailboxOverview();
@@ -843,14 +899,16 @@ export const createMailboxOverviewServerTool = (context: GmailToolsContext): Any
         error: getMailboxToolErrorMessage(
           "overview",
           error,
-          "The mailbox summary could not be refreshed. Try again.",
+          "The mailbox summary could not be refreshed. Try again."
         ),
         status: "error",
       };
     }
   });
 
-export const createGmailMessageServerTool = (context: GmailToolsContext): AnyTool =>
+export const createGmailMessageServerTool = (
+  context: GmailToolsContext
+): AnyTool =>
   gmailMessageToolDef.server(async ({ messageId }) => {
     try {
       return await context.readGmailMessage({ messageId });
@@ -860,7 +918,7 @@ export const createGmailMessageServerTool = (context: GmailToolsContext): AnyToo
         error: getMailboxToolErrorMessage(
           "message read",
           error,
-          "That message could not be loaded. Refresh the mailbox and retry.",
+          "That message could not be loaded. Refresh the mailbox and retry."
         ),
         messageId,
         status: "error",
@@ -868,7 +926,9 @@ export const createGmailMessageServerTool = (context: GmailToolsContext): AnyToo
     }
   });
 
-export const createGmailLabelListServerTool = (context: GmailToolsContext): AnyTool =>
+export const createGmailLabelListServerTool = (
+  context: GmailToolsContext
+): AnyTool =>
   gmailLabelListToolDef.server(async () => {
     try {
       return await context.listGmailLabels();
@@ -878,14 +938,16 @@ export const createGmailLabelListServerTool = (context: GmailToolsContext): AnyT
         error: getMailboxToolErrorMessage(
           "label list",
           error,
-          "Mailbox labels could not be refreshed. Try again.",
+          "Mailbox labels could not be refreshed. Try again."
         ),
         status: "error",
       };
     }
   });
 
-export const createModifyMailServerTool = (context: GmailToolsContext): AnyTool =>
+export const createModifyMailServerTool = (
+  context: GmailToolsContext
+): AnyTool =>
   modifyMailToolDef.server(async ({ action, id, target }) => {
     try {
       return await context.modifyMail({ action, id, target });
@@ -896,7 +958,7 @@ export const createModifyMailServerTool = (context: GmailToolsContext): AnyTool 
         error: getMailboxToolErrorMessage(
           "mail action",
           error,
-          "The mail action could not be completed. Refresh the mailbox and try again.",
+          "The mail action could not be completed. Refresh the mailbox and try again."
         ),
         id,
         status: "error",
@@ -905,51 +967,68 @@ export const createModifyMailServerTool = (context: GmailToolsContext): AnyTool 
     }
   });
 
-export const createGoogleCalendarEventServerTool = (context: GoogleCalendarToolsContext): AnyTool =>
+export const createGoogleCalendarEventServerTool = (
+  context: GoogleCalendarToolsContext
+): AnyTool =>
   googleCalendarCreateEventToolDef.server(async (input) => {
     try {
       return await context.createGoogleCalendarEvent(input);
     } catch (error) {
       return {
-        error: error instanceof Error ? error.message : "Could not create the calendar event.",
+        error:
+          error instanceof Error
+            ? error.message
+            : "Could not create the calendar event.",
         status: "error",
         summary: input.summary,
       };
     }
   });
 
-export const createLinearIssueMetadataServerTool = (context: LinearToolsContext): AnyTool =>
+export const createLinearIssueMetadataServerTool = (
+  context: LinearToolsContext
+): AnyTool =>
   linearIssueMetadataToolDef.server(async () => {
     try {
       return await context.listLinearIssueMetadata();
     } catch (error) {
       return {
-        error: error instanceof Error ? error.message : "Could not list Linear metadata.",
+        error:
+          error instanceof Error
+            ? error.message
+            : "Could not list Linear metadata.",
         status: "error",
       };
     }
   });
 
-export const createLinearIssueServerTool = (context: LinearToolsContext): AnyTool =>
+export const createLinearIssueServerTool = (
+  context: LinearToolsContext
+): AnyTool =>
   linearIssueCreateToolDef.server(async (input) => {
     try {
       return await context.createLinearIssue(input);
     } catch (error) {
       return {
-        error: error instanceof Error ? error.message : "Could not create the Linear issue.",
+        error:
+          error instanceof Error
+            ? error.message
+            : "Could not create the Linear issue.",
         status: "error",
         title: input.title,
       };
     }
   });
 
-export const createAiMemoryServerTool = (context: AiMemoryToolsContext): AnyTool =>
+export const createAiMemoryServerTool = (
+  context: AiMemoryToolsContext
+): AnyTool =>
   aiMemoryToolDef.server(async (input) => {
     try {
       return await context.rememberPreference(input);
     } catch (error) {
-      console.error("Could not record dynamic AI memory.", {
-        error: error instanceof Error ? error.message : "Unknown error.",
+      reportError(error, {
+        operation: "ai-memory:remember-preference",
         preferenceLength: input.preference.length,
       });
       return { status: "skipped" };

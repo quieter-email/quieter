@@ -2,19 +2,14 @@
 
 Production database access uses two separate Postgres roles:
 
-- The application role can read and write application tables but cannot create, alter, or drop
-  schemas or tables.
-- The migration role owns the schema and exists only as the `DATABASE_MIGRATION_URL` secret in the
-  protected GitHub `production` environment.
+- The application role can read and write application tables but cannot create, alter, or drop schemas or tables.
+- The migration role owns the schema and exists only as the `DATABASE_MIGRATION_URL` secret in the protected GitHub `production` environment.
 
-Developers receive neither production credential. Local development uses loopback Postgres or an
-exactly allowlisted disposable Neon branch, and CI migration tests use the workflow's temporary
-Postgres service container.
+Developers receive neither production credential. Local development uses loopback Postgres or an exactly allowlisted disposable Neon branch, and CI migration tests use the workflow's temporary Postgres service container.
 
 ## Production Role Setup
 
-Connect as the existing production owner and create the application role through SQL. Do not create
-the role through the Neon Console, API, or CLI, which can assign broader Neon-managed privileges.
+Connect as the existing production owner and create the application role through SQL. Do not create the role through the Neon Console, API, or CLI, which can assign broader Neon-managed privileges.
 
 ```sql
 CREATE ROLE quieter_app
@@ -39,11 +34,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE <migration-role> IN SCHEMA public
   GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO quieter_app;
 ```
 
-Use the `quieter_app` connection string for the deployed Worker `DATABASE_URL` and application
-runtime secrets.
-Keep the schema-owner connection string only in GitHub's protected production
-`DATABASE_MIGRATION_URL` secret. After switching, rotate the previous owner password and remove every
-remote database URL from developer machines.
+Use the `quieter_app` connection string for the deployed Worker `DATABASE_URL` and application runtime secrets. Keep the schema-owner connection string only in GitHub's protected production `DATABASE_MIGRATION_URL` secret. After switching, rotate the previous owner password and remove every remote database URL from developer machines.
 
 Verify the application role:
 
@@ -60,6 +51,4 @@ The second query must return `false`.
 - Enable the longest affordable restore window and periodically test restoration.
 - Restrict protected-branch network access when the Neon plan supports it.
 - Keep GitHub `main` protected and production deployments manually approved.
-- Never bypass the repository migration guards. A remote URL in `.env.local` must belong to a
-  disposable Neon development branch whose exact direct hostname is pinned by
-  `QUIETER_LOCAL_NEON_HOST`.
+- Never bypass the repository migration guards. A remote URL in `.env.local` must belong to a disposable Neon development branch whose exact direct hostname is pinned by `QUIETER_LOCAL_NEON_HOST`.

@@ -1,9 +1,9 @@
-import { aiMemory } from "@quieter/database/schema";
+import type { aiMemory } from "@quieter/database/schema";
 import { describe, expect, test } from "vite-plus/test";
+
 import { rankAiMemoryCandidates } from "../src/ai-memory";
 
 type Memory = typeof aiMemory.$inferSelect;
-
 const memory = (overrides: Partial<Memory> = {}): Memory => ({
   archivedAt: null,
   confidence: 0.8,
@@ -12,8 +12,8 @@ const memory = (overrides: Partial<Memory> = {}): Memory => ({
   expiresAt: null,
   id: "memory-1",
   importance: 3,
-  kind: "learned",
   key: "reply-style",
+  kind: "learned",
   lastConfirmedAt: new Date("2026-07-01T00:00:00Z"),
   lastUsedAt: null,
   mailboxId: null,
@@ -58,7 +58,7 @@ describe("AI memory retrieval ranking", () => {
       query: "Draft a concise reply",
     });
 
-    expect(ranked.map(({ memory: candidate }) => candidate.id)).toEqual(["memory-1"]);
+    expect(ranked.map((entry) => entry.memory.id)).toStrictEqual(["memory-1"]);
   });
 
   test("uses sender-domain evidence and favors a matching mailbox rule", () => {
@@ -69,7 +69,10 @@ describe("AI memory retrieval ranking", () => {
           content: "Prefer applying Receipts to newsletter mail",
           id: "personal",
           key: "personal-receipts",
-          metadata: { agents: ["auto_label"], topics: ["newsletter", "receipts"] },
+          metadata: {
+            agents: ["auto_label"],
+            topics: ["newsletter", "receipts"],
+          },
         }),
         memory({
           content: "Avoid applying Receipts to newsletters from store.example",
@@ -90,7 +93,10 @@ describe("AI memory retrieval ranking", () => {
       query: "Newsletter from deals@store.example",
     });
 
-    expect(ranked.map(({ memory: candidate }) => candidate.id)).toEqual(["mailbox", "personal"]);
+    expect(ranked.map((entry) => entry.memory.id)).toStrictEqual([
+      "mailbox",
+      "personal",
+    ]);
   });
 
   test("keeps explicit importance-five cross-agent constraints available without lexical overlap", () => {

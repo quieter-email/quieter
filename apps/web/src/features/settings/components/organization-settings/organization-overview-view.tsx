@@ -12,15 +12,23 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+
+import { runDetached } from "#/features/settings/components/mailboxes-settings-shared";
 import {
   formatBillingProduct,
   normalizeBillingProduct,
-  type UserBillingOverview,
-} from "~/features/settings/domain/billing";
-import { SettingsBackButton, SettingsNavigationRow, SettingsRows } from "../settings-layout";
+} from "#/features/settings/domain/billing";
+import type { UserBillingOverview } from "#/features/settings/domain/billing";
+
+import {
+  SettingsBackButton,
+  SettingsNavigationRow,
+  SettingsRows,
+} from "../settings-layout";
 import { prefetchOrganizationDivisions } from "../settings-prefetch";
 import { organizationApiKeysQueryOptions } from "./api-keys";
-import { type FullOrganization, type OrganizationSummary, formatCount } from "./domain";
+import { formatCount } from "./domain";
+import type { FullOrganization, OrganizationSummary } from "./domain";
 import { organizationMailDomainsQueryOptions } from "./mail-domains";
 import { OrganizationFormDialog } from "./organization-form-dialog";
 import { organizationMailUsageQueryOptions } from "./organization-mail-usage-query";
@@ -32,6 +40,125 @@ const moneyFormatter = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 2,
   style: "currency",
 });
+
+const getBillingAccessSummary = (
+  billingPending: boolean,
+  billingAccessUnknown: boolean,
+  unavailableMessage: string
+) => {
+  if (billingPending) {
+    return "Loading billing access…";
+  }
+  if (billingAccessUnknown) {
+    return "Could not load billing access.";
+  }
+  return unavailableMessage;
+};
+
+const getDomainsSummary = ({
+  billingAccessUnknown,
+  billingPending,
+  canUseOrganizationDomains,
+  domainCount,
+  isDomainsError,
+  isDomainsPending,
+}: {
+  billingAccessUnknown: boolean;
+  billingPending: boolean;
+  canUseOrganizationDomains: boolean;
+  domainCount: number;
+  isDomainsError: boolean;
+  isDomainsPending: boolean;
+}) => {
+  if (billingPending || billingAccessUnknown) {
+    return getBillingAccessSummary(billingPending, billingAccessUnknown, "");
+  }
+  if (!canUseOrganizationDomains) {
+    return `Requires ${BILLING_FEATURES.organizationDomains.requirementLabel}`;
+  }
+  if (isDomainsPending) {
+    return "Loading domains…";
+  }
+  if (isDomainsError) {
+    return "Could not load domains.";
+  }
+  return formatCount(domainCount, "Domain", "Domains");
+};
+
+const getApiKeysSummary = ({
+  apiKeyCount,
+  billingAccessUnknown,
+  billingPending,
+  canUseOrganizationApiKeys,
+  isApiKeysError,
+  isApiKeysPending,
+}: {
+  apiKeyCount: number;
+  billingAccessUnknown: boolean;
+  billingPending: boolean;
+  canUseOrganizationApiKeys: boolean;
+  isApiKeysError: boolean;
+  isApiKeysPending: boolean;
+}) => {
+  if (billingPending || billingAccessUnknown) {
+    return getBillingAccessSummary(billingPending, billingAccessUnknown, "");
+  }
+  if (!canUseOrganizationApiKeys) {
+    return `Requires ${BILLING_FEATURES.organizationApiKeys.requirementLabel}`;
+  }
+  if (isApiKeysPending) {
+    return "Loading API keys…";
+  }
+  if (isApiKeysError) {
+    return "Could not load API keys.";
+  }
+  return formatCount(apiKeyCount, "API Key", "API Keys");
+};
+
+const getBillingSummary = ({
+  billing,
+  billingAccessUnknown,
+  billingPending,
+}: {
+  billing: UserBillingOverview["teams"][number] | null;
+  billingAccessUnknown: boolean;
+  billingPending: boolean;
+}) => {
+  if (billingPending) {
+    return "Loading billing…";
+  }
+  if (billingAccessUnknown) {
+    return "Could not load billing.";
+  }
+  if (billing === null) {
+    return "Billing details unavailable.";
+  }
+
+  const billingProduct = normalizeBillingProduct(billing.product);
+  const parts = [formatBillingProduct(billingProduct)];
+  if (
+    billing.creditAmountCents !== null &&
+    billing.creditAmountCents !== undefined
+  ) {
+    parts.push(
+      `${moneyFormatter.format(
+        (billing.usage?.remainingCreditCents ?? billing.creditAmountCents) / 100
+      )} usage balance remaining`
+    );
+  }
+  return parts.join(", ");
+};
+
+const getPeopleSummary = (
+  memberCount: number,
+  pendingInvitationsCount: number
+) => {
+  const parts = [formatCount(memberCount, "Member", "Members")];
+  if (pendingInvitationsCount > 0) {
+    parts.push(formatCount(pendingInvitationsCount, "pending invitation"));
+  }
+  return parts.join(", ");
+};
 
 export const OrganizationOverviewView = ({
   billing,
@@ -75,7 +202,7 @@ export const OrganizationOverviewView = ({
     isPending: isApiKeysPending,
   } = useQuery({
     ...organizationApiKeysQueryOptions(organization.id),
-    enabled: canUseOrganizationApiKeys && !!organization.id,
+    enabled: canUseOrganizationApiKeys && organization.id.length > 0,
   });
   const {
     data: domains,
@@ -83,54 +210,36 @@ export const OrganizationOverviewView = ({
     isPending: isDomainsPending,
   } = useQuery({
     ...organizationMailDomainsQueryOptions(organization.id),
-    enabled: canUseOrganizationDomains && !!organization.id,
+    enabled: canUseOrganizationDomains && organization.id.length > 0,
   });
-  const updateOrganizationReason =
-    (!canUpdateOrganization && "Only admins and owners can edit team details.") || null;
-  const peopleSummary = [
-    formatCount(fullOrganization.members.length, "Member", "Members"),
-    pendingInvitationsCount > 0 && formatCount(pendingInvitationsCount, "pending invitation"),
-  ]
-    .filter(Boolean)
-    .join(", ");
-  const domainsSummary = billingPending
-    ? "Loading billing access…"
-    : billingAccessUnknown
-      ? "Could not load billing access."
-      : !canUseOrganizationDomains
-        ? `Requires ${BILLING_FEATURES.organizationDomains.requirementLabel}`
-        : isDomainsPending
-          ? "Loading domains…"
-          : isDomainsError
-            ? "Could not load domains."
-            : formatCount(domains.domains.length, "Domain", "Domains");
-  const apiKeysSummary = billingPending
-    ? "Loading billing access…"
-    : billingAccessUnknown
-      ? "Could not load billing access."
-      : !canUseOrganizationApiKeys
-        ? `Requires ${BILLING_FEATURES.organizationApiKeys.requirementLabel}`
-        : isApiKeysPending
-          ? "Loading API keys…"
-          : isApiKeysError
-            ? "Could not load API keys."
-            : formatCount(apiKeys.apiKeys.length, "API Key", "API Keys");
-  const billingProduct = normalizeBillingProduct(billing?.product);
-  const billingSummary = billingPending
-    ? "Loading billing…"
-    : billingAccessUnknown
-      ? "Could not load billing."
-      : !billing
-        ? "Billing details unavailable."
-        : [
-            formatBillingProduct(billingProduct),
-            billing.creditAmountCents != null &&
-              `${moneyFormatter.format(
-                (billing.usage?.remainingCreditCents ?? billing.creditAmountCents) / 100,
-              )} usage balance remaining`,
-          ]
-            .filter(Boolean)
-            .join(", ");
+  const updateOrganizationReason = canUpdateOrganization
+    ? null
+    : "Only admins and owners can edit team details.";
+  const peopleSummary = getPeopleSummary(
+    fullOrganization.members.length,
+    pendingInvitationsCount
+  );
+  const domainsSummary = getDomainsSummary({
+    billingAccessUnknown,
+    billingPending,
+    canUseOrganizationDomains,
+    domainCount: domains?.domains.length ?? 0,
+    isDomainsError,
+    isDomainsPending,
+  });
+  const apiKeysSummary = getApiKeysSummary({
+    apiKeyCount: apiKeys?.apiKeys.length ?? 0,
+    billingAccessUnknown,
+    billingPending,
+    canUseOrganizationApiKeys,
+    isApiKeysError,
+    isApiKeysPending,
+  });
+  const billingSummary = getBillingSummary({
+    billing,
+    billingAccessUnknown,
+    billingPending,
+  });
 
   return (
     <section className="space-y-6">
@@ -142,14 +251,16 @@ export const OrganizationOverviewView = ({
           <p className="mt-1 text-sm text-muted-fg">{organization.slug}</p>
         </div>
 
-        {updateOrganizationReason ? (
+        {updateOrganizationReason === null ? (
+          <OrganizationFormDialog organization={organization} />
+        ) : (
           <MutedActionButton
-            icon={<HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />}
+            icon={
+              <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
+            }
             label="Edit"
             reason={updateOrganizationReason}
           />
-        ) : (
-          <OrganizationFormDialog organization={organization} />
         )}
       </div>
 
@@ -164,7 +275,11 @@ export const OrganizationOverviewView = ({
           description="Mailbox access groups"
           icon={<HugeiconsIcon aria-hidden icon={LeftToRightListBulletIcon} />}
           onClick={onOpenDivisions}
-          onIntent={() => void prefetchOrganizationDivisions(queryClient, organization.id)}
+          onIntent={() => {
+            runDetached(async () => {
+              await prefetchOrganizationDivisions(queryClient, organization.id);
+            });
+          }}
           title="Divisions"
         />
         <SettingsNavigationRow
@@ -172,9 +287,14 @@ export const OrganizationOverviewView = ({
           icon={<HugeiconsIcon aria-hidden icon={Globe02Icon} />}
           onClick={onOpenDomains}
           onIntent={() => {
-            if (canUseOrganizationDomains) {
-              void queryClient.prefetchQuery(organizationMailDomainsQueryOptions(organization.id));
+            if (!canUseOrganizationDomains) {
+              return;
             }
+            runDetached(async () => {
+              await queryClient.prefetchQuery(
+                organizationMailDomainsQueryOptions(organization.id)
+              );
+            });
           }}
           title="Domains"
         />
@@ -183,9 +303,14 @@ export const OrganizationOverviewView = ({
           icon={<HugeiconsIcon aria-hidden icon={Key02Icon} />}
           onClick={onOpenApiKeys}
           onIntent={() => {
-            if (canUseOrganizationApiKeys) {
-              void queryClient.prefetchQuery(organizationApiKeysQueryOptions(organization.id));
+            if (!canUseOrganizationApiKeys) {
+              return;
             }
+            runDetached(async () => {
+              await queryClient.prefetchQuery(
+                organizationApiKeysQueryOptions(organization.id)
+              );
+            });
           }}
           title="API keys"
         />
@@ -194,9 +319,14 @@ export const OrganizationOverviewView = ({
           icon={<HugeiconsIcon aria-hidden icon={Wallet02Icon} />}
           onClick={onOpenBilling}
           onIntent={() => {
-            if (canUpdateOrganization && canUseOrganizationDomains) {
-              void queryClient.prefetchQuery(organizationMailUsageQueryOptions(organization.id));
+            if (!canUpdateOrganization || !canUseOrganizationDomains) {
+              return;
             }
+            runDetached(async () => {
+              await queryClient.prefetchQuery(
+                organizationMailUsageQueryOptions(organization.id)
+              );
+            });
           }}
           title="Billing"
         />

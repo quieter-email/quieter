@@ -2,7 +2,11 @@
 
 import { BILLING_PRODUCTS } from "@quieter/billing/plans";
 import { cn } from "@quieter/ui/cn";
-import { HomeAtmosphericBackground, HomeWorkspaceDitherBackground } from "./lazy-webgl-backgrounds";
+
+import {
+  HomeAtmosphericBackground,
+  HomeWorkspaceDitherBackground,
+} from "./lazy-webgl-backgrounds";
 import { Reveal } from "./reveal";
 import { WaitlistForm } from "./waitlist-form";
 
@@ -57,8 +61,10 @@ const ImagePlate = ({ src }: { src: string }) => (
       loading="lazy"
       src={src}
       style={{
-        maskImage: "radial-gradient(ellipse at center, black 58%, transparent 100%)",
-        WebkitMaskImage: "radial-gradient(ellipse at center, black 58%, transparent 100%)",
+        WebkitMaskImage:
+          "radial-gradient(ellipse at center, black 58%, transparent 100%)",
+        maskImage:
+          "radial-gradient(ellipse at center, black 58%, transparent 100%)",
       }}
       width="1619"
     />
@@ -75,10 +81,15 @@ const FeatureSection = ({ body, id, image, imageFirst, title }: Feature) => (
         <h2 className="font-serif text-2xl/snug font-normal tracking-[-0.012em] text-fg md:text-[1.625rem]">
           {title}
         </h2>
-        <p className="max-w-[320px] text-[15px] leading-[1.73] text-muted-fg">{body}</p>
+        <p className="max-w-[320px] text-[15px] leading-[1.73] text-muted-fg">
+          {body}
+        </p>
       </Reveal>
 
-      <Reveal className={cn(imageFirst && "md:order-1")} delay={imageFirst ? 0 : 0.08}>
+      <Reveal
+        className={cn(imageFirst && "md:order-1")}
+        delay={imageFirst ? 0 : 0.08}
+      >
         <ImagePlate src={image} />
       </Reveal>
     </div>
@@ -102,14 +113,18 @@ const Pricing = () => (
             delay={index * 0.07}
             key={product.name}
           >
-            <dt className="w-37.5 shrink-0 text-base text-fg">{product.name}</dt>
+            <dt className="w-37.5 shrink-0 text-base text-fg">
+              {product.name}
+            </dt>
             <dd className="min-w-60 flex-1 text-[15px] leading-[1.73] text-muted-fg">
               {product.description}
             </dd>
             <dd className="ml-auto text-base text-fg tabular-nums">
               ${product.monthlyPriceCents / 100}
             </dd>
-            <dd className="w-16 text-right text-[15px] text-muted-fg/70">/ month</dd>
+            <dd className="w-16 text-right text-[15px] text-muted-fg/70">
+              / month
+            </dd>
           </Reveal>
         ))}
       </dl>

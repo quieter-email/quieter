@@ -1,12 +1,23 @@
 import postgres from "postgres";
-import { assertMigrationExecutionAllowed, getMigrationDatabaseUrl } from "./database-url";
-import { parseReviewPullRequestNumber, REVIEW_APP_ROLE } from "./review-database";
+
+import {
+  assertMigrationExecutionAllowed,
+  getMigrationDatabaseUrl,
+} from "./database-url";
+import {
+  parseReviewPullRequestNumber,
+  REVIEW_APP_ROLE,
+} from "./review-database";
 
 if (process.env.QUIETER_REVIEW_DEPLOYMENT !== "true") {
-  throw new Error("Review database grants are restricted to Review deployment jobs");
+  throw new Error(
+    "Review database grants are restricted to Review deployment jobs"
+  );
 }
 
-const pullRequestNumber = parseReviewPullRequestNumber(process.env.REVIEW_PR_NUMBER);
+const pullRequestNumber = parseReviewPullRequestNumber(
+  process.env.REVIEW_PR_NUMBER
+);
 const databaseUrl = getMigrationDatabaseUrl();
 assertMigrationExecutionAllowed(databaseUrl);
 
@@ -35,7 +46,10 @@ try {
       updated_at = excluded.updated_at
   `;
 
-  console.log(`Granted Review privileges and marked pull request #${pullRequestNumber}`);
+  process.stdout.write(
+    `Granted Review privileges and marked pull request #${pullRequestNumber}` +
+      "\n"
+  );
 } finally {
   await sql.end({ timeout: 5 });
 }

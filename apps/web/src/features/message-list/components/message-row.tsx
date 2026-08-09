@@ -1,20 +1,30 @@
 "use client";
 
-import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
-import type { FocusEvent, KeyboardEvent, MouseEvent } from "react";
-import { FileAttachmentIcon, MessageMultiple01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
+import {
+  FileAttachmentIcon,
+  MessageMultiple01Icon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import type { IconSvgElement } from "@hugeicons/react";
 import { splitMailAddressList } from "@quieter/mail/compose/schema";
+import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { cn } from "@quieter/ui/cn";
 import { m, useReducedMotion } from "motion/react";
+import type { FocusEvent, KeyboardEvent, MouseEvent } from "react";
 import { useState } from "react";
-import type { ThreadListEntry } from "~/lib/gmail/thread-list";
-import { SenderAvatar } from "~/components/sender-avatar";
-import { MessageLabels } from "~/features/message-labels/components/message-labels";
-import { createMailboxThreadMessageActionHandlers } from "~/features/message-thread/components/message-action-handlers";
-import { MessageActionsContextMenu } from "~/features/message-thread/components/message-actions";
-import { appEaseOut, appMotionDuration, getAppStaggerDelay } from "~/features/motion/app-motion";
-import { formatMessageListDate, parseSender } from "~/lib/gmail/message-utils";
+
+import { SenderAvatar } from "#/components/sender-avatar";
+import { MessageLabels } from "#/features/message-labels/components/message-labels";
+import { createMailboxThreadMessageActionHandlers } from "#/features/message-thread/components/message-action-handlers";
+import { MessageActionsContextMenu } from "#/features/message-thread/components/message-actions";
+import {
+  appEaseOut,
+  appMotionDuration,
+  getAppStaggerDelay,
+} from "#/features/motion/app-motion";
+import { formatMessageListDate, parseSender } from "#/lib/gmail/message-utils";
+import type { ThreadListEntry } from "#/lib/gmail/thread-list";
+
 import type { MessageListProps } from "./message-list-types";
 import type { useMessageListSelection } from "./use-message-list-selection";
 
@@ -29,12 +39,67 @@ type MessageRowGestureEvent = {
   shiftKey: boolean;
 };
 
-const getSelectionGesture = (event: MessageRowGestureEvent): MessageRowSelectionGesture => ({
+const getSelectionGesture = (
+  event: MessageRowGestureEvent
+): MessageRowSelectionGesture => ({
   additive: event.metaKey || event.ctrlKey,
   range: event.shiftKey,
 });
 
-const rowPressTransition = { damping: 28, mass: 0.7, stiffness: 700, type: "spring" } as const;
+const getMessageRowSubject = (message: ThreadListEntry["anchorMessage"]) => {
+  const subjectValue = message.subject?.trim() ?? "";
+  return subjectValue.length > 0 ? subjectValue : "(No subject)";
+};
+
+const getMessageRowSender = (
+  message: ThreadListEntry["anchorMessage"],
+  isDraftMailbox: boolean
+) => {
+  const draftRecipient =
+    splitMailAddressList(message.to)[0] ?? message.to ?? "";
+  const sender = parseSender(isDraftMailbox ? draftRecipient : message.from);
+  const senderLabel = isDraftMailbox
+    ? sender.name || sender.email || sender.display || "No recipients"
+    : sender.name || sender.email || sender.display;
+
+  return {
+    senderEmail: sender.name ? sender.email : "",
+    senderInitial: (senderLabel.trim().charAt(0) || "?").toUpperCase(),
+    senderLabel,
+  };
+};
+
+const getMessageRowSurfaceOpacity = (
+  isActive: boolean,
+  isHovered: boolean,
+  isSelected: boolean
+) => {
+  if (isActive) {
+    return 1;
+  }
+  if (isSelected) {
+    return isHovered ? 0.9 : 0.75;
+  }
+  return isHovered ? 0.5 : 0;
+};
+
+const getMessageRowOpenAriaLabel = (
+  isActive: boolean,
+  isDraftMailbox: boolean,
+  subject: string
+) => {
+  if (isDraftMailbox) {
+    return `Open draft: ${subject}`;
+  }
+  return `${isActive ? "Close" : "Open"} conversation: ${subject}`;
+};
+
+const rowPressTransition = {
+  damping: 28,
+  mass: 0.7,
+  stiffness: 700,
+  type: "spring",
+} as const;
 
 type MessageRowProps = {
   activeMailbox: MessageListProps["activeMailbox"];
@@ -47,8 +112,12 @@ type MessageRowProps = {
   onKeyboardOpen?: () => void;
   onThreadFocus: (threadId: string | null) => void;
   onThreadIntent: (threadId: string | null) => void;
-  onThreadPress: ReturnType<typeof useMessageListSelection>["handleThreadPress"];
-  onThreadSelectionPress: ReturnType<typeof useMessageListSelection>["handleThreadSelectionPress"];
+  onThreadPress: ReturnType<
+    typeof useMessageListSelection
+  >["handleThreadPress"];
+  onThreadSelectionPress: ReturnType<
+    typeof useMessageListSelection
+  >["handleThreadSelectionPress"];
   pendingActions: MessageListProps["pendingActions"];
   className?: string;
   rowRef?: (element: HTMLLIElement | null) => void;
@@ -88,66 +157,31 @@ const MessageRowMetaBadge = ({
   </span>
 );
 
-const MessageRowContent = ({
-  activeMailbox,
-  gmailLabels,
-  mailboxActions,
-  mailboxId,
-  mailboxProvider,
-  onOpenDraft,
-  onKeyboardOpen,
-  onThreadFocus,
-  onThreadIntent,
-  onThreadPress,
+const MessageRowSelectionButton = ({
+  isActionPending,
+  isSelected,
   onThreadSelectionPress,
-  pendingActions,
-  state,
+  reducedMotion,
+  selectionAriaLabel,
+  senderInitial,
+  setIsSelectHovered,
+  showCheckbox,
   thread,
-}: MessageRowContentProps) => {
-  const reducedMotion = useReducedMotion();
-  const [isHovered, setIsHovered] = useState(false);
-  const [isPressed, setIsPressed] = useState(false);
-  const [isSelectHovered, setIsSelectHovered] = useState(false);
-  const isActive = !!state?.active;
-  const isSelected = !!state?.selected;
-  const showSelectionControl = !!state?.selectionMode;
-  const showCheckbox = showSelectionControl || isSelectHovered;
-  const anchorMessage = thread.anchorMessage;
-  const subject = anchorMessage.subject || "(No subject)";
-  const isDraftMailbox = activeMailbox === "drafts";
-  const draftRecipient = splitMailAddressList(anchorMessage.to)[0] ?? anchorMessage.to ?? "";
-  const sender = parseSender(isDraftMailbox ? draftRecipient : anchorMessage.from);
-  const senderLabel = isDraftMailbox
-    ? sender.name || sender.email || sender.display || "No recipients"
-    : sender.name || sender.email || sender.display;
-  const senderEmail = sender.name ? sender.email : "";
-  const senderInitial = (senderLabel.trim().charAt(0) || "?").toUpperCase();
-  const date = formatMessageListDate(anchorMessage);
-  const unread = !isDraftMailbox && thread.unreadCount > 0;
-  const threaded = thread.messageCount > 1;
-  const attachmentCount = thread.attachmentCount;
-  const isActionPending =
-    pendingActions.isMessageActionPending(anchorMessage.id) ||
-    pendingActions.isThreadActionPending(thread.threadId);
-  const metaTextClassName = cn("text-xs tabular-nums", {
-    "font-semibold text-fg/90": unread,
-    "text-muted-fg": !unread,
-    "text-fg/75": isActive && !unread,
-  });
-  const surfaceOpacity = Math.max(
-    isActive ? 1 : 0,
-    isSelected ? (isHovered ? 0.9 : 0.75) : 0,
-    isHovered ? 0.5 : 0,
-  );
-  const selectionAriaLabel = isDraftMailbox ? "Select draft" : "Select conversation";
-  const openAriaLabel = isDraftMailbox
-    ? `Open draft: ${subject}`
-    : `${isActive ? "Close" : "Open"} conversation: ${subject}`;
+}: {
+  isActionPending: boolean;
+  isSelected: boolean;
+  onThreadSelectionPress: MessageRowProps["onThreadSelectionPress"];
+  reducedMotion: boolean | null;
+  selectionAriaLabel: string;
+  senderInitial: string;
+  setIsSelectHovered: (hovered: boolean) => void;
+  showCheckbox: boolean;
+  thread: ThreadListEntry;
+}) => {
   const handleSelectionPress = (event: MouseEvent<HTMLElement>) => {
     if (event.button !== 0) {
       return;
     }
-
     event.preventDefault();
     event.stopPropagation();
     onThreadSelectionPress(thread, getSelectionGesture(event));
@@ -156,18 +190,225 @@ const MessageRowContent = ({
     if (event.key !== " " && event.key !== "Enter") {
       return;
     }
-
     event.preventDefault();
     event.stopPropagation();
     onThreadSelectionPress(thread, getSelectionGesture(event));
   };
+
+  return (
+    <div className="relative z-10 ml-2 flex h-full shrink-0 items-center justify-center @sm:ml-3">
+      <button
+        aria-label={selectionAriaLabel}
+        aria-pressed={isSelected}
+        className="relative size-9.5 rounded-lg border border-transparent focus-visible:z-20 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none disabled:pointer-events-none"
+        disabled={isActionPending}
+        onKeyDown={handleSelectionKeyDown}
+        onMouseDown={handleSelectionPress}
+        onMouseEnter={() => {
+          setIsSelectHovered(true);
+        }}
+        onMouseLeave={() => {
+          setIsSelectHovered(false);
+        }}
+        tabIndex={-1}
+        type="button"
+      >
+        <m.span
+          animate={{
+            opacity: showCheckbox ? 0 : 1,
+            scale: reducedMotion !== false || !showCheckbox ? 1 : 0.92,
+          }}
+          className="block"
+          initial={false}
+          transition={{
+            duration: appMotionDuration.feedback,
+            ease: appEaseOut,
+          }}
+        >
+          <SenderAvatar
+            avatarUrlDark={thread.anchorMessage.senderAvatarUrls?.dark}
+            avatarUrlLight={thread.anchorMessage.senderAvatarUrls?.light}
+            className="size-9.5 rounded-lg"
+            fallbackLabel={senderInitial}
+          />
+        </m.span>
+
+        <m.span
+          animate={{
+            opacity: showCheckbox ? 1 : 0,
+            scale: reducedMotion !== false || showCheckbox ? 1 : 0.8,
+          }}
+          aria-hidden="true"
+          className="absolute inset-0 flex items-center justify-center"
+          initial={false}
+          transition={{
+            duration: appMotionDuration.feedback,
+            ease: appEaseOut,
+          }}
+        >
+          <span
+            className={cn(
+              "flex size-4.5 items-center justify-center rounded-[5px] border bg-bg text-transparent shadow-xs transition-[background-color,border-color,color] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out)",
+              {
+                "border-border": !isSelected,
+                "border-primary bg-primary text-primary-fg": isSelected,
+              }
+            )}
+          >
+            <svg
+              className="size-3.5"
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              viewBox="0 0 14 14"
+            >
+              <path d="M3 7.5 5.75 10 11 4.75" />
+            </svg>
+          </span>
+        </m.span>
+      </button>
+    </div>
+  );
+};
+
+const MessageRowDetails = ({
+  date,
+  gmailLabels,
+  isDraftMailbox,
+  metaTextClassName,
+  senderEmail,
+  senderLabel,
+  subject,
+  thread,
+  threaded,
+  unread,
+}: {
+  date: string;
+  gmailLabels: MailboxLabel[];
+  isDraftMailbox: boolean;
+  metaTextClassName: string;
+  senderEmail: string;
+  senderLabel: string;
+  subject: string;
+  thread: ThreadListEntry;
+  threaded: boolean;
+  unread: boolean;
+}) => (
+  <div className="relative z-10 flex min-w-0 flex-1 items-center gap-2 px-2 @sm:gap-3 @sm:px-3">
+    <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 overflow-hidden">
+      <div className="flex w-full min-w-0 items-center justify-between gap-2">
+        <p className="min-w-0 truncate text-left text-[13px]/4.5 text-fg">
+          {isDraftMailbox && (
+            <span className="font-medium text-muted-fg">To </span>
+          )}
+          <span
+            className={cn({
+              "font-medium": !unread,
+              "font-semibold": unread,
+            })}
+          >
+            {senderLabel}
+          </span>
+          {senderEmail && (
+            <span className="ml-2 hidden text-[11px] text-muted-fg @sm:inline">
+              {senderEmail}
+            </span>
+          )}
+        </p>
+
+        <div className="flex shrink-0 items-center gap-2">
+          {thread.attachmentCount > 0 && (
+            <MessageRowMetaBadge
+              icon={FileAttachmentIcon}
+              label={String(thread.attachmentCount)}
+              title={
+                thread.attachmentCount === 1
+                  ? "This thread has 1 attachment."
+                  : `This thread has ${thread.attachmentCount} attachments.`
+              }
+            />
+          )}
+          {threaded && (
+            <MessageRowMetaBadge
+              icon={MessageMultiple01Icon}
+              label={String(thread.messageCount)}
+              title={
+                thread.messageCount === 1
+                  ? "This thread has 1 message."
+                  : `This thread has ${thread.messageCount} messages.`
+              }
+            />
+          )}
+          <span className={metaTextClassName} suppressHydrationWarning>
+            {date || "--"}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex w-full min-w-0 items-center gap-1.5">
+        <p
+          className={cn("min-w-0 flex-1 truncate text-left text-[13px]/4.5", {
+            "font-medium text-fg": unread,
+            "text-muted-fg": !unread,
+          })}
+        >
+          {isDraftMailbox ? (
+            <>
+              <span className="mr-2 font-medium text-destructive">Draft</span>
+              {subject}
+            </>
+          ) : (
+            subject
+          )}
+        </p>
+        <div className="hidden shrink-0 @sm:block">
+          <MessageLabels
+            compact
+            labelIds={thread.threadLabelIds}
+            labels={gmailLabels}
+            limit={2}
+          />
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+const useMessageRowHandlers = ({
+  isActionPending,
+  isActive,
+  mailboxActions,
+  mailboxProvider,
+  onKeyboardOpen,
+  onThreadFocus,
+  onThreadIntent,
+  onThreadPress,
+  onThreadSelectionPress,
+  showSelectionControl,
+  thread,
+  unread,
+}: {
+  isActionPending: boolean;
+  isActive: boolean;
+  mailboxActions: MessageListProps["mailboxActions"];
+  mailboxProvider: MessageListProps["mailboxProvider"];
+  onKeyboardOpen?: () => void;
+  onThreadFocus: (threadId: string | null) => void;
+  onThreadIntent: (threadId: string | null) => void;
+  onThreadPress: MessageRowProps["onThreadPress"];
+  onThreadSelectionPress: MessageRowProps["onThreadSelectionPress"];
+  showSelectionControl: boolean;
+  thread: ThreadListEntry;
+  unread: boolean;
+}) => {
   const handleRowMouseDown = (event: MouseEvent<HTMLButtonElement>) => {
     if (event.button !== 0) {
       return;
     }
 
     event.preventDefault();
-
     const gesture = getSelectionGesture(event);
 
     if (gesture.additive || gesture.range) {
@@ -185,26 +426,33 @@ const MessageRowContent = ({
       onKeyboardOpen?.();
     }
 
-    if (!showSelectionControl && unread && mailboxProvider !== "api" && !isActionPending) {
-      void mailboxActions.markThreadAsRead(thread.threadId).catch(() => {});
+    if (
+      !showSelectionControl &&
+      unread &&
+      mailboxProvider !== "api" &&
+      !isActionPending
+    ) {
+      void mailboxActions.markThreadAsRead(thread.threadId);
     }
 
     onThreadPress(thread, gesture);
   };
   const handleRowKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
-    if (event.key !== " " || (!event.metaKey && !event.ctrlKey && !event.shiftKey)) {
+    if (
+      event.key !== " " ||
+      (!event.metaKey && !event.ctrlKey && !event.shiftKey)
+    ) {
       return;
     }
 
     event.preventDefault();
     onThreadSelectionPress(thread, getSelectionGesture(event));
   };
-
   const handleRowFocusCapture = (event: FocusEvent<HTMLDivElement>) => {
     if (!(event.target instanceof HTMLButtonElement)) {
       return;
     }
-    if (!event.target.hasAttribute("data-message-row-trigger")) {
+    if (!Object.hasOwn(event.target.dataset, "messageRowTrigger")) {
       return;
     }
 
@@ -221,9 +469,116 @@ const MessageRowContent = ({
     onThreadIntent(null);
   };
 
+  return {
+    handleRowBlurCapture,
+    handleRowClick,
+    handleRowFocusCapture,
+    handleRowKeyDown,
+    handleRowMouseDown,
+  };
+};
+
+type MessageRowSurfaceProps = {
+  activeMailbox: MessageListProps["activeMailbox"];
+  anchorMessage: ThreadListEntry["anchorMessage"];
+  date: string;
+  gmailLabels: MailboxLabel[];
+  isActionPending: boolean;
+  isActive: boolean;
+  isDraftMailbox: boolean;
+  isPressed: boolean;
+  isSelected: boolean;
+  mailboxActions: MessageListProps["mailboxActions"];
+  mailboxId: string;
+  mailboxProvider: MessageListProps["mailboxProvider"];
+  metaTextClassName: string;
+  onKeyboardOpen?: () => void;
+  onOpenDraft: MessageListProps["onOpenDraft"];
+  onThreadFocus: (threadId: string | null) => void;
+  onThreadIntent: (threadId: string | null) => void;
+  onThreadPress: MessageRowProps["onThreadPress"];
+  onThreadSelectionPress: MessageRowProps["onThreadSelectionPress"];
+  openAriaLabel: string;
+  reducedMotion: boolean | null;
+  selectionAriaLabel: string;
+  senderInitial: string;
+  senderEmail: string;
+  senderLabel: string;
+  surfaceOpacity: number;
+  setIsHovered: (hovered: boolean) => void;
+  setIsPressed: (pressed: boolean) => void;
+  setIsSelectHovered: (hovered: boolean) => void;
+  showCheckbox: boolean;
+  showSelectionControl: boolean;
+  subject: string;
+  thread: ThreadListEntry;
+  threaded: boolean;
+  unread: boolean;
+};
+
+const MessageRowSurface = ({
+  activeMailbox,
+  anchorMessage,
+  date,
+  gmailLabels,
+  isActionPending,
+  isActive,
+  isDraftMailbox,
+  isPressed,
+  isSelected,
+  mailboxActions,
+  mailboxId,
+  mailboxProvider,
+  metaTextClassName,
+  onKeyboardOpen,
+  onOpenDraft,
+  onThreadFocus,
+  onThreadIntent,
+  onThreadPress,
+  onThreadSelectionPress,
+  openAriaLabel,
+  reducedMotion,
+  selectionAriaLabel,
+  senderInitial,
+  senderEmail,
+  senderLabel,
+  surfaceOpacity,
+  setIsHovered,
+  setIsPressed,
+  setIsSelectHovered,
+  showCheckbox,
+  showSelectionControl,
+  subject,
+  thread,
+  threaded,
+  unread,
+}: MessageRowSurfaceProps) => {
+  const {
+    handleRowBlurCapture,
+    handleRowClick,
+    handleRowFocusCapture,
+    handleRowKeyDown,
+    handleRowMouseDown,
+  } = useMessageRowHandlers({
+    isActionPending,
+    isActive,
+    mailboxActions,
+    mailboxProvider,
+    onKeyboardOpen,
+    onThreadFocus,
+    onThreadIntent,
+    onThreadPress,
+    onThreadSelectionPress,
+    showSelectionControl,
+    thread,
+    unread,
+  });
+
   return (
     <m.div
-      animate={{ scale: reducedMotion || !isPressed ? 1 : 0.97 }}
+      animate={{
+        scale: reducedMotion !== false || !isPressed ? 1 : 0.97,
+      }}
       className="relative flex h-17 items-stretch rounded-lg"
       initial={false}
       onBlurCapture={handleRowBlurCapture}
@@ -245,7 +600,7 @@ const MessageRowContent = ({
         const active = document.activeElement;
         if (
           active instanceof HTMLButtonElement &&
-          active.hasAttribute("data-message-row-trigger")
+          Object.hasOwn(active.dataset, "messageRowTrigger")
         ) {
           active.blur();
         }
@@ -266,70 +621,17 @@ const MessageRowContent = ({
           className="pointer-events-none absolute top-1/2 left-0 z-20 h-8 w-0.75 -translate-y-1/2 rounded-r-full bg-primary"
         />
       )}
-      <div className="relative z-10 ml-2 flex h-full shrink-0 items-center justify-center @sm:ml-3">
-        <button
-          aria-label={selectionAriaLabel}
-          aria-pressed={isSelected}
-          className="relative size-9.5 rounded-lg border border-transparent focus-visible:z-20 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none disabled:pointer-events-none"
-          disabled={isActionPending}
-          onKeyDown={handleSelectionKeyDown}
-          onMouseDown={handleSelectionPress}
-          onMouseEnter={() => setIsSelectHovered(true)}
-          onMouseLeave={() => setIsSelectHovered(false)}
-          tabIndex={-1}
-          type="button"
-        >
-          <m.span
-            animate={{
-              opacity: showCheckbox ? 0 : 1,
-              scale: reducedMotion || !showCheckbox ? 1 : 0.92,
-            }}
-            className="block"
-            initial={false}
-            transition={{ duration: appMotionDuration.feedback, ease: appEaseOut }}
-          >
-            <SenderAvatar
-              avatarUrlDark={anchorMessage.senderAvatarUrls?.dark}
-              avatarUrlLight={anchorMessage.senderAvatarUrls?.light}
-              className="size-9.5 rounded-lg"
-              fallbackLabel={senderInitial}
-            />
-          </m.span>
-
-          <m.span
-            animate={{
-              opacity: showCheckbox ? 1 : 0,
-              scale: reducedMotion || showCheckbox ? 1 : 0.8,
-            }}
-            aria-hidden="true"
-            className="absolute inset-0 flex items-center justify-center"
-            initial={false}
-            transition={{ duration: appMotionDuration.feedback, ease: appEaseOut }}
-          >
-            <span
-              className={cn(
-                "flex size-4.5 items-center justify-center rounded-[5px] border bg-bg text-transparent shadow-xs transition-[background-color,border-color,color] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out)",
-                {
-                  "border-primary bg-primary text-primary-fg": isSelected,
-                  "border-border": !isSelected,
-                },
-              )}
-            >
-              <svg
-                className="size-3.5"
-                fill="none"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                viewBox="0 0 14 14"
-              >
-                <path d="M3 7.5 5.75 10 11 4.75" />
-              </svg>
-            </span>
-          </m.span>
-        </button>
-      </div>
+      <MessageRowSelectionButton
+        isActionPending={isActionPending}
+        isSelected={isSelected}
+        onThreadSelectionPress={onThreadSelectionPress}
+        reducedMotion={reducedMotion}
+        selectionAriaLabel={selectionAriaLabel}
+        senderInitial={senderInitial}
+        setIsSelectHovered={setIsSelectHovered}
+        showCheckbox={showCheckbox}
+        thread={thread}
+      />
 
       <MessageActionsContextMenu
         actions={createMailboxThreadMessageActionHandlers({
@@ -356,86 +658,131 @@ const MessageRowContent = ({
           onClick={handleRowClick}
           onKeyDown={handleRowKeyDown}
           onMouseDown={handleRowMouseDown}
-          onPointerCancel={() => setIsPressed(false)}
-          onPointerDown={() => setIsPressed(true)}
-          onPointerLeave={() => setIsPressed(false)}
-          onPointerUp={() => setIsPressed(false)}
+          onPointerCancel={() => {
+            setIsPressed(false);
+          }}
+          onPointerDown={() => {
+            setIsPressed(true);
+          }}
+          onPointerLeave={() => {
+            setIsPressed(false);
+          }}
+          onPointerUp={() => {
+            setIsPressed(false);
+          }}
           type="button"
         >
-          <div className="relative z-10 flex min-w-0 flex-1 items-center gap-2 px-2 @sm:gap-3 @sm:px-3">
-            <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 overflow-hidden">
-              <div className="flex w-full min-w-0 items-center justify-between gap-2">
-                <p className="min-w-0 truncate text-left text-[13px]/4.5 text-fg">
-                  {isDraftMailbox && <span className="font-medium text-muted-fg">To </span>}
-                  <span className={cn({ "font-semibold": unread, "font-medium": !unread })}>
-                    {senderLabel}
-                  </span>
-                  {senderEmail && (
-                    <span className="ml-2 hidden text-[11px] text-muted-fg @sm:inline">
-                      {senderEmail}
-                    </span>
-                  )}
-                </p>
-
-                <div className="flex shrink-0 items-center gap-2">
-                  {attachmentCount > 0 && (
-                    <MessageRowMetaBadge
-                      icon={FileAttachmentIcon}
-                      label={String(attachmentCount)}
-                      title={
-                        attachmentCount === 1
-                          ? "This thread has 1 attachment."
-                          : `This thread has ${attachmentCount} attachments.`
-                      }
-                    />
-                  )}
-                  {threaded && (
-                    <MessageRowMetaBadge
-                      icon={MessageMultiple01Icon}
-                      label={String(thread.messageCount)}
-                      title={
-                        thread.messageCount === 1
-                          ? "This thread has 1 message."
-                          : `This thread has ${thread.messageCount} messages.`
-                      }
-                    />
-                  )}
-                  <span className={metaTextClassName} suppressHydrationWarning>
-                    {date || "--"}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex w-full min-w-0 items-center gap-1.5">
-                <p
-                  className={cn("min-w-0 flex-1 truncate text-left text-[13px]/4.5", {
-                    "font-medium text-fg": unread,
-                    "text-muted-fg": !unread,
-                  })}
-                >
-                  {isDraftMailbox ? (
-                    <>
-                      <span className="mr-2 font-medium text-destructive">Draft</span>
-                      {subject}
-                    </>
-                  ) : (
-                    subject
-                  )}
-                </p>
-                <div className="hidden shrink-0 @sm:block">
-                  <MessageLabels
-                    compact
-                    labelIds={thread.threadLabelIds}
-                    labels={gmailLabels}
-                    limit={2}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
+          <MessageRowDetails
+            date={date}
+            gmailLabels={gmailLabels}
+            isDraftMailbox={isDraftMailbox}
+            metaTextClassName={metaTextClassName}
+            senderEmail={senderEmail}
+            senderLabel={senderLabel}
+            subject={subject}
+            thread={thread}
+            threaded={threaded}
+            unread={unread}
+          />
         </button>
       </MessageActionsContextMenu>
     </m.div>
+  );
+};
+
+const MessageRowContent = ({
+  activeMailbox,
+  gmailLabels,
+  mailboxActions,
+  mailboxId,
+  mailboxProvider,
+  onOpenDraft,
+  onKeyboardOpen,
+  onThreadFocus,
+  onThreadIntent,
+  onThreadPress,
+  onThreadSelectionPress,
+  pendingActions,
+  state,
+  thread,
+}: MessageRowContentProps) => {
+  const reducedMotion = useReducedMotion();
+  const [isHovered, setIsHovered] = useState(false);
+  const [isPressed, setIsPressed] = useState(false);
+  const [isSelectHovered, setIsSelectHovered] = useState(false);
+  const isActive = state?.active === true;
+  const isSelected = state?.selected === true;
+  const showSelectionControl = state?.selectionMode === true;
+  const showCheckbox = showSelectionControl || isSelectHovered;
+  const { anchorMessage } = thread;
+  const isDraftMailbox = activeMailbox === "drafts";
+  const subject = getMessageRowSubject(anchorMessage);
+  const { senderEmail, senderInitial, senderLabel } = getMessageRowSender(
+    anchorMessage,
+    isDraftMailbox
+  );
+  const date = formatMessageListDate(anchorMessage);
+  const unread = !isDraftMailbox && thread.unreadCount > 0;
+  const threaded = thread.messageCount > 1;
+  const isActionPending =
+    pendingActions.isMessageActionPending(anchorMessage.id) ||
+    pendingActions.isThreadActionPending(thread.threadId);
+  const metaTextClassName = cn("text-xs tabular-nums", {
+    "font-semibold text-fg/90": unread,
+    "text-fg/75": isActive && !unread,
+    "text-muted-fg": !unread,
+  });
+  const surfaceOpacity = getMessageRowSurfaceOpacity(
+    isActive,
+    isHovered,
+    isSelected
+  );
+  const selectionAriaLabel = isDraftMailbox
+    ? "Select draft"
+    : "Select conversation";
+  const openAriaLabel = getMessageRowOpenAriaLabel(
+    isActive,
+    isDraftMailbox,
+    subject
+  );
+  return (
+    <MessageRowSurface
+      activeMailbox={activeMailbox}
+      anchorMessage={anchorMessage}
+      date={date}
+      gmailLabels={gmailLabels}
+      isActionPending={isActionPending}
+      isActive={isActive}
+      isDraftMailbox={isDraftMailbox}
+      isPressed={isPressed}
+      isSelected={isSelected}
+      mailboxActions={mailboxActions}
+      mailboxId={mailboxId}
+      mailboxProvider={mailboxProvider}
+      metaTextClassName={metaTextClassName}
+      onKeyboardOpen={onKeyboardOpen}
+      onOpenDraft={onOpenDraft}
+      onThreadFocus={onThreadFocus}
+      onThreadIntent={onThreadIntent}
+      onThreadPress={onThreadPress}
+      onThreadSelectionPress={onThreadSelectionPress}
+      openAriaLabel={openAriaLabel}
+      reducedMotion={reducedMotion}
+      selectionAriaLabel={selectionAriaLabel}
+      senderEmail={senderEmail}
+      senderInitial={senderInitial}
+      senderLabel={senderLabel}
+      surfaceOpacity={surfaceOpacity}
+      setIsHovered={setIsHovered}
+      setIsPressed={setIsPressed}
+      setIsSelectHovered={setIsSelectHovered}
+      showCheckbox={showCheckbox}
+      showSelectionControl={showSelectionControl}
+      subject={subject}
+      thread={thread}
+      threaded={threaded}
+      unread={unread}
+    />
   );
 };
 
@@ -492,17 +839,23 @@ export const MessageRow = ({
         transform: `translateY(${offsetY}px)`,
       }}
     >
-      {isNew ? (
+      {isNew === true ? (
         <m.div
           animate={{ opacity: 1, transform: "translate3d(0, 0, 0)" }}
           initial={
-            shouldReduceMotion
+            shouldReduceMotion === true
               ? { opacity: 0 }
               : { opacity: 0, transform: "translate3d(0, -8px, 0)" }
           }
           transition={{
-            delay: shouldReduceMotion ? 0 : getAppStaggerDelay(staggerIndex),
-            duration: shouldReduceMotion ? appMotionDuration.feedback : appMotionDuration.enter,
+            delay:
+              shouldReduceMotion === true
+                ? 0
+                : getAppStaggerDelay(staggerIndex),
+            duration:
+              shouldReduceMotion === true
+                ? appMotionDuration.feedback
+                : appMotionDuration.enter,
             ease: appEaseOut,
           }}
         >

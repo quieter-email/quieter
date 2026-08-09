@@ -1,4 +1,5 @@
-import { createElement as h, type CSSProperties } from "react";
+import { createElement as h } from "react";
+import type { CSSProperties } from "react";
 
 type AuthActionEmailProps = {
   body: string;
@@ -105,8 +106,14 @@ const createAuthActionEmail = (props: AuthActionEmailProps) =>
       "head",
       null,
       h("title", null, props.title),
-      h("meta", { content: "text/html; charset=UTF-8", httpEquiv: "Content-Type" }),
-      h("meta", { content: "width=device-width, initial-scale=1.0", name: "viewport" }),
+      h("meta", {
+        content: "text/html; charset=UTF-8",
+        httpEquiv: "Content-Type",
+      }),
+      h("meta", {
+        content: "width=device-width, initial-scale=1.0",
+        name: "viewport",
+      })
     ),
     h(
       "body",
@@ -118,7 +125,7 @@ const createAuthActionEmail = (props: AuthActionEmailProps) =>
         {
           style: styles.preview,
         },
-        props.preview,
+        props.preview
       ),
       h(
         "table",
@@ -139,8 +146,8 @@ const createAuthActionEmail = (props: AuthActionEmailProps) =>
               {
                 style: styles.brand,
               },
-              "Quieter",
-            ),
+              "Quieter"
+            )
           ),
           h(
             "tr",
@@ -155,14 +162,14 @@ const createAuthActionEmail = (props: AuthActionEmailProps) =>
                 {
                   style: styles.heading,
                 },
-                props.title,
+                props.title
               ),
               h(
                 "p",
                 {
                   style: styles.text,
                 },
-                props.body,
+                props.body
               ),
               h(
                 "a",
@@ -170,23 +177,23 @@ const createAuthActionEmail = (props: AuthActionEmailProps) =>
                   href: props.url,
                   style: styles.button,
                 },
-                props.cta,
+                props.cta
               ),
               h(
                 "p",
                 {
                   style: styles.linkHelp,
                 },
-                "If the button does not open, paste this URL into your browser:",
+                "If the button does not open, paste this URL into your browser:"
               ),
               h(
                 "p",
                 {
                   style: styles.linkText,
                 },
-                props.url,
-              ),
-            ),
+                props.url
+              )
+            )
           ),
           h(
             "tr",
@@ -196,12 +203,12 @@ const createAuthActionEmail = (props: AuthActionEmailProps) =>
               {
                 style: styles.footer,
               },
-              "This email was sent because someone requested access to Quieter.",
-            ),
-          ),
-        ),
-      ),
-    ),
+              "This email was sent because someone requested access to Quieter."
+            )
+          )
+        )
+      )
+    )
   );
 
 export const VerificationEmail = (props: { url: string }) =>

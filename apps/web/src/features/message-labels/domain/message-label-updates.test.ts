@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
+
 import { getMessageLabelUpdates } from "./message-label-updates";
 
-describe("getMessageLabelUpdates", () => {
+describe(getMessageLabelUpdates, () => {
   it("adds and removes labels only where each selected conversation needs a change", () => {
     expect(
       getMessageLabelUpdates(
@@ -9,9 +10,9 @@ describe("getMessageLabelUpdates", () => {
           { id: "thread-1", labelIds: ["shared", "first-only"] },
           { id: "thread-2", labelIds: ["shared", "second-only"] },
         ],
-        { "first-only": true, "second-only": false, shared: false },
-      ),
-    ).toEqual([
+        { "first-only": true, "second-only": false, shared: false }
+      )
+    ).toStrictEqual([
       {
         addLabelIds: [],
         id: "thread-1",
@@ -32,9 +33,13 @@ describe("getMessageLabelUpdates", () => {
           { id: "thread-1", labelIds: ["existing"] },
           { id: "thread-2", labelIds: [] },
         ],
-        { existing: true },
-      ),
-    ).toEqual([{ addLabelIds: ["existing"], id: "thread-2", removeLabelIds: [] }]);
-    expect(getMessageLabelUpdates([{ id: "thread-1", labelIds: ["existing"] }], {})).toEqual([]);
+        { existing: true }
+      )
+    ).toStrictEqual([
+      { addLabelIds: ["existing"], id: "thread-2", removeLabelIds: [] },
+    ]);
+    expect(
+      getMessageLabelUpdates([{ id: "thread-1", labelIds: ["existing"] }], {})
+    ).toStrictEqual([]);
   });
 });

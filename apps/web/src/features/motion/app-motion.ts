@@ -13,7 +13,10 @@ export const appMotionStagger = {
 } as const;
 
 export const getAppStaggerDelay = (index: number) =>
-  Math.min(Math.max(index, 0) * appMotionStagger.step, appMotionStagger.maxDelay);
+  Math.min(
+    Math.max(index, 0) * appMotionStagger.step,
+    appMotionStagger.maxDelay
+  );
 
 type AppFlyInOptions = {
   animate: boolean;
@@ -31,7 +34,26 @@ export const getAppFlyInMotion = ({
   reducedMotion,
 }: AppFlyInOptions) => {
   const initialTransform =
-    axis === "x" ? `translate3d(${-distance}px, 0, 0)` : `translate3d(0, ${distance}px, 0)`;
+    axis === "x"
+      ? `translate3d(${-distance}px, 0, 0)`
+      : `translate3d(0, ${distance}px, 0)`;
+  let initial:
+    | false
+    | {
+        filter?: string;
+        opacity: number;
+        transform?: string;
+      } = false;
+  if (animate) {
+    initial =
+      reducedMotion === true
+        ? { opacity: 0 }
+        : {
+            filter: "blur(6px)",
+            opacity: 0,
+            transform: initialTransform,
+          };
+  }
 
   return {
     animate: {
@@ -39,21 +61,16 @@ export const getAppFlyInMotion = ({
       opacity: 1,
       transform: "translate3d(0, 0, 0)",
     },
-    initial: animate
-      ? reducedMotion
-        ? { opacity: 0 }
-        : {
-            filter: "blur(6px)",
-            opacity: 0,
-            transform: initialTransform,
-          }
-      : false,
+    initial,
     transition: {
-      delay: animate && !reducedMotion ? getAppStaggerDelay(index) : 0,
-      duration: reducedMotion ? appMotionDuration.feedback : appMotionDuration.enter,
+      delay: animate && reducedMotion !== true ? getAppStaggerDelay(index) : 0,
+      duration:
+        reducedMotion === true
+          ? appMotionDuration.feedback
+          : appMotionDuration.enter,
       ease: appEaseOut,
     },
-  } as const;
+  };
 };
 
 export const getAppPresenceMotion = ({
@@ -62,26 +79,30 @@ export const getAppPresenceMotion = ({
 }: {
   distance?: number;
   reducedMotion: boolean | null;
-}) =>
-  ({
-    animate: {
-      opacity: 1,
-      transform: "translate3d(0, 0, 0)",
-    },
-    exit: reducedMotion
+}) => ({
+  animate: {
+    opacity: 1,
+    transform: "translate3d(0, 0, 0)",
+  },
+  exit:
+    reducedMotion === true
       ? { opacity: 0 }
       : {
           opacity: 0,
           transform: `translate3d(0, ${-distance / 2}px, 0)`,
         },
-    initial: reducedMotion
+  initial:
+    reducedMotion === true
       ? { opacity: 0 }
       : {
           opacity: 0,
           transform: `translate3d(0, ${distance}px, 0)`,
         },
-    transition: {
-      duration: reducedMotion ? appMotionDuration.feedback : appMotionDuration.enter,
-      ease: appEaseOut,
-    },
-  }) as const;
+  transition: {
+    duration:
+      reducedMotion === true
+        ? appMotionDuration.feedback
+        : appMotionDuration.enter,
+    ease: appEaseOut,
+  },
+});

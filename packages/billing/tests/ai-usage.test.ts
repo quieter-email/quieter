@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
+
 import {
   AI_COST_RECOVERY_BASIS_POINTS,
   applyAiCostRecoveryFee,
@@ -8,7 +9,7 @@ import { BILLING_USAGE_KINDS } from "../src/credits";
 
 describe("AI usage pricing", () => {
   test("adds a 15% cost-recovery fee to provider cost", () => {
-    expect(AI_COST_RECOVERY_BASIS_POINTS).toBe(1_500);
+    expect(AI_COST_RECOVERY_BASIS_POINTS).toBe(1500);
     expect(applyAiCostRecoveryFee(100)).toBe(115);
     expect(applyAiCostRecoveryFee(101)).toBe(117);
   });
@@ -24,7 +25,9 @@ describe("AI usage pricing", () => {
   test.each([Number.NaN, Number.POSITIVE_INFINITY, 0, -1])(
     "rejects invalid provider costs %#",
     (costUsd) => {
-      expect(() => getAiUsageCostMicroCents(costUsd)).toThrow();
-    },
+      expect(() => getAiUsageCostMicroCents(costUsd)).toThrow(
+        "AI provider cost must be a finite positive number."
+      );
+    }
   );
 });

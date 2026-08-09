@@ -1,10 +1,12 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { persistQueryByKey } from "~/lib/query-persister";
-import {
-  isMessageInMailbox,
-  type MailboxCategory,
-  type MessageListItem,
-  type ThreadMessagesResult,
+
+import { persistQueryByKey } from "#/lib/query-persister";
+
+import { isMessageInMailbox } from "../gmail";
+import type {
+  MailboxCategory,
+  MessageListItem,
+  ThreadMessagesResult,
 } from "../gmail";
 import { getThreadLabelIds } from "../thread-list";
 import { getThreadQueryKey } from "../thread-query";
@@ -20,9 +22,8 @@ import {
   updateMessagesInQueryData,
   updateMessagesInThreadData,
   upsertMessageInThreadData,
-  type MessagesQueryData,
-  type ThreadMetadataMutationResult,
 } from "./data";
+import type { MessagesQueryData, ThreadMetadataMutationResult } from "./data";
 import { getMessagesQueryKey, normalizeSearchQuery } from "./keys";
 
 export type MessagesQuerySnapshot = {
@@ -62,9 +63,9 @@ const isMailboxCategory = (value: unknown): value is MailboxCategory =>
 
 export const getCachedMessagesQueries = (
   queryClient: QueryClient,
-  mailboxId: string,
-): CachedMessagesQuery[] => {
-  return queryClient
+  mailboxId: string
+): CachedMessagesQuery[] =>
+  queryClient
     .getQueriesData<MessagesQueryData>({ queryKey: ["messages", mailboxId] })
     .flatMap(([queryKey, data]) => {
       const [scope, queryMailboxId, mailbox, rawSearchQuery] = queryKey;
@@ -82,36 +83,34 @@ export const getCachedMessagesQueries = (
 
       return [
         {
-          queryKey: getMessagesQueryKey(mailboxId, mailbox, rawSearchQuery),
-          mailbox,
-          searchQuery: normalizeSearchQuery(rawSearchQuery),
           data,
+          mailbox,
+          queryKey: getMessagesQueryKey(mailboxId, mailbox, rawSearchQuery),
+          searchQuery: normalizeSearchQuery(rawSearchQuery),
         },
       ];
     });
-};
 
 export const snapshotMessagesQueries = (
   queryClient: QueryClient,
-  mailboxId: string,
-): MessagesQuerySnapshot[] => {
-  return getCachedMessagesQueries(queryClient, mailboxId).map((cachedQuery) => ({
-    queryKey: cachedQuery.queryKey,
+  mailboxId: string
+): MessagesQuerySnapshot[] =>
+  getCachedMessagesQueries(queryClient, mailboxId).map((cachedQuery) => ({
     data: cachedQuery.data,
+    queryKey: cachedQuery.queryKey,
   }));
-};
 
 export const snapshotThreadQuery = (
   queryClient: QueryClient,
-  threadQueryKey: ReturnType<typeof getThreadQueryKey>,
+  threadQueryKey: ReturnType<typeof getThreadQueryKey>
 ): ThreadQuerySnapshot => ({
-  queryKey: threadQueryKey,
   data: queryClient.getQueryData<ThreadMessagesResult>(threadQueryKey),
+  queryKey: threadQueryKey,
 });
 
 export const restoreMessagesQueries = (
   queryClient: QueryClient,
-  snapshots: readonly MessagesQuerySnapshot[],
+  snapshots: readonly MessagesQuerySnapshot[]
 ) => {
   for (const snapshot of snapshots) {
     queryClient.setQueryData(snapshot.queryKey, snapshot.data);
@@ -120,30 +119,38 @@ export const restoreMessagesQueries = (
 
 export const persistQueryKeys = async (
   queryClient: QueryClient,
-  queryKeys: ReadonlyArray<readonly unknown[]>,
+  queryKeys: readonly (readonly unknown[])[]
 ) => {
   const seenQueryKeys = new Set<string>();
-  const uniqueQueryKeys: Array<readonly unknown[]> = [];
+  const uniqueQueryKeys: (readonly unknown[])[] = [];
 
   for (const queryKey of queryKeys) {
     const queryKeyId = JSON.stringify(queryKey);
-    if (seenQueryKeys.has(queryKeyId)) continue;
+    if (seenQueryKeys.has(queryKeyId)) {
+      continue;
+    }
 
     seenQueryKeys.add(queryKeyId);
     uniqueQueryKeys.push(queryKey);
   }
 
-  await Promise.all(uniqueQueryKeys.map((queryKey) => persistQueryByKey(queryKey, queryClient)));
+  await Promise.all(
+    uniqueQueryKeys.map(async (queryKey) => {
+      await persistQueryByKey(queryKey, queryClient);
+    })
+  );
 };
 
 export const findMessageInCachedMailboxQueries = (
   queryClient: QueryClient,
   mailboxId: string,
-  messageId: string,
+  messageId: string
 ) => {
   for (const cachedQuery of getCachedMessagesQueries(queryClient, mailboxId)) {
     const message = findMessageInQueryData(cachedQuery.data, messageId);
-    if (message) return message;
+    if (message) {
+      return message;
+    }
   }
 
   return undefined;
@@ -152,41 +159,53 @@ export const findMessageInCachedMailboxQueries = (
 export const findMessagesInCachedMailboxQueries = (
   queryClient: QueryClient,
   mailboxId: string,
-  predicate: (message: MessageListItem) => boolean,
+  predicate: (message: MessageListItem) => boolean
 ) => {
   const messagesById = new Map<string, MessageListItem>();
 
   for (const cachedQuery of getCachedMessagesQueries(queryClient, mailboxId)) {
     for (const page of cachedQuery.data?.pages ?? []) {
       for (const message of page.messages) {
-        if (predicate(message)) messagesById.set(message.id, message);
+        if (predicate(message)) {
+          messagesById.set(message.id, message);
+        }
       }
     }
   }
 
-  return Array.from(messagesById.values());
+  return [...messagesById.values()];
 };
 
 const reconcileMessageInCachedMailboxQuery = (
   cachedQuery: CachedMessagesQuery,
-  nextMessage: MessageListItem,
+  nextMessage: MessageListItem
 ): MessagesQueryData | undefined => {
-  const currentMessage = findMessageInQueryData(cachedQuery.data, nextMessage.id);
+  const currentMessage = findMessageInQueryData(
+    cachedQuery.data,
+    nextMessage.id
+  );
 
   if (currentMessage) {
     if (!isMessageInMailbox(nextMessage, cachedQuery.mailbox)) {
       return removeMessagesFromQueryData(
         cachedQuery.data,
-        (message) => message.id === nextMessage.id,
+        (message) => message.id === nextMessage.id
       );
     }
 
-    return updateMessageInQueryData(cachedQuery.data, nextMessage.id, (message) =>
-      mergeMessagePreservingLoadedDetails(message, nextMessage),
+    return updateMessageInQueryData(
+      cachedQuery.data,
+      nextMessage.id,
+      (message) => mergeMessagePreservingLoadedDetails(message, nextMessage)
     );
   }
 
-  if (cachedQuery.searchQuery || !isMessageInMailbox(nextMessage, cachedQuery.mailbox)) {
+  if (
+    (cachedQuery.searchQuery !== null &&
+      cachedQuery.searchQuery !== undefined &&
+      cachedQuery.searchQuery !== "") ||
+    !isMessageInMailbox(nextMessage, cachedQuery.mailbox)
+  ) {
     return cachedQuery.data;
   }
 
@@ -196,13 +215,18 @@ const reconcileMessageInCachedMailboxQuery = (
 export const applyMessageToCachedMailboxQueries = (
   queryClient: QueryClient,
   mailboxId: string,
-  nextMessage: MessageListItem,
+  nextMessage: MessageListItem
 ) => {
-  const touchedQueryKeys: Array<ReturnType<typeof getMessagesQueryKey>> = [];
+  const touchedQueryKeys: ReturnType<typeof getMessagesQueryKey>[] = [];
 
   for (const cachedQuery of getCachedMessagesQueries(queryClient, mailboxId)) {
-    const nextData = reconcileMessageInCachedMailboxQuery(cachedQuery, nextMessage);
-    if (nextData === cachedQuery.data) continue;
+    const nextData = reconcileMessageInCachedMailboxQuery(
+      cachedQuery,
+      nextMessage
+    );
+    if (nextData === cachedQuery.data) {
+      continue;
+    }
 
     queryClient.setQueryData(cachedQuery.queryKey, nextData);
     touchedQueryKeys.push(cachedQuery.queryKey);
@@ -215,13 +239,19 @@ export const updateMessagesInCachedMailboxQueries = (
   queryClient: QueryClient,
   mailboxId: string,
   predicate: (message: MessageListItem) => boolean,
-  updater: (message: MessageListItem) => MessageListItem,
+  updater: (message: MessageListItem) => MessageListItem
 ) => {
-  const touchedQueryKeys: Array<ReturnType<typeof getMessagesQueryKey>> = [];
+  const touchedQueryKeys: ReturnType<typeof getMessagesQueryKey>[] = [];
 
   for (const cachedQuery of getCachedMessagesQueries(queryClient, mailboxId)) {
-    const nextData = updateMessagesInQueryData(cachedQuery.data, predicate, updater);
-    if (nextData === cachedQuery.data) continue;
+    const nextData = updateMessagesInQueryData(
+      cachedQuery.data,
+      predicate,
+      updater
+    );
+    if (nextData === cachedQuery.data) {
+      continue;
+    }
 
     queryClient.setQueryData(cachedQuery.queryKey, nextData);
     touchedQueryKeys.push(cachedQuery.queryKey);
@@ -233,13 +263,15 @@ export const updateMessagesInCachedMailboxQueries = (
 export const removeMessagesFromCachedMailboxQueries = (
   queryClient: QueryClient,
   mailboxId: string,
-  predicate: (message: MessageListItem) => boolean,
+  predicate: (message: MessageListItem) => boolean
 ) => {
-  const touchedQueryKeys: Array<ReturnType<typeof getMessagesQueryKey>> = [];
+  const touchedQueryKeys: ReturnType<typeof getMessagesQueryKey>[] = [];
 
   for (const cachedQuery of getCachedMessagesQueries(queryClient, mailboxId)) {
     const nextData = removeMessagesFromQueryData(cachedQuery.data, predicate);
-    if (nextData === cachedQuery.data) continue;
+    if (nextData === cachedQuery.data) {
+      continue;
+    }
 
     queryClient.setQueryData(cachedQuery.queryKey, nextData);
     touchedQueryKeys.push(cachedQuery.queryKey);
@@ -251,28 +283,42 @@ export const removeMessagesFromCachedMailboxQueries = (
 export const applyVisibleMailboxMessagesRefreshToCache = async (
   queryClient: QueryClient,
   args: VisibleMessagesRefreshArgs,
-  result: VisibleMessagesRefreshResult,
+  result: VisibleMessagesRefreshResult
 ) => {
-  const touchedQueryKeys: Array<readonly unknown[]> = [];
+  const touchedQueryKeys: (readonly unknown[])[] = [];
 
   for (const updatedMessage of result.updatedMessages) {
     touchedQueryKeys.push(
-      ...applyMessageToCachedMailboxQueries(queryClient, args.mailboxId, updatedMessage),
+      ...applyMessageToCachedMailboxQueries(
+        queryClient,
+        args.mailboxId,
+        updatedMessage
+      )
     );
 
-    const threadQueryKey = getThreadQueryKey(args.mailboxId, updatedMessage.threadId);
-    queryClient.setQueryData(threadQueryKey, (currentData: ThreadMessagesResult | undefined) =>
-      upsertMessageInThreadData(currentData, updatedMessage),
+    const threadQueryKey = getThreadQueryKey(
+      args.mailboxId,
+      updatedMessage.threadId
+    );
+    queryClient.setQueryData(
+      threadQueryKey,
+      (currentData: ThreadMessagesResult | undefined) =>
+        upsertMessageInThreadData(currentData, updatedMessage)
     );
     touchedQueryKeys.push(threadQueryKey);
   }
 
   if (result.removedMessageIds.length > 0) {
     const removedMessageIds = new Set(result.removedMessageIds);
-    const messagesQueryKey = getMessagesQueryKey(args.mailboxId, args.mailbox, args.searchQuery);
-    const previousData = queryClient.getQueryData<MessagesQueryData>(messagesQueryKey);
+    const messagesQueryKey = getMessagesQueryKey(
+      args.mailboxId,
+      args.mailbox,
+      args.searchQuery
+    );
+    const previousData =
+      queryClient.getQueryData<MessagesQueryData>(messagesQueryKey);
     const nextData = removeMessagesFromQueryData(previousData, (message) =>
-      removedMessageIds.has(message.id),
+      removedMessageIds.has(message.id)
     );
 
     if (nextData !== previousData) {
@@ -287,49 +333,53 @@ export const applyVisibleMailboxMessagesRefreshToCache = async (
 export const applyResolvedThreadMetadataToCaches = async (
   queryClient: QueryClient,
   mailboxId: string,
-  updatedThread: ThreadMetadataMutationResult,
+  updatedThread: ThreadMetadataMutationResult
 ) => {
   const threadQueryKey = getThreadQueryKey(mailboxId, updatedThread.threadId);
   const updatesById = toMessageMetadataById(updatedThread.messages);
   const threadLabelIds = getThreadLabelIds(updatedThread.messages);
-  const touchedQueryKeys: Array<readonly unknown[]> = [];
+  const touchedQueryKeys: (readonly unknown[])[] = [];
 
   for (const updatedMessage of updatedThread.messages) {
     const previousMessage = findMessageInCachedMailboxQueries(
       queryClient,
       mailboxId,
-      updatedMessage.id,
+      updatedMessage.id
     );
-    if (!previousMessage) continue;
+    if (!previousMessage) {
+      continue;
+    }
 
     touchedQueryKeys.push(
       ...applyMessageToCachedMailboxQueries(
         queryClient,
         mailboxId,
         applyMessageMetadata(previousMessage, {
-          labelIds: updatedMessage.labelIds,
           isUnread: updatedMessage.isUnread,
+          labelIds: updatedMessage.labelIds,
           threadLabelIds,
-        }),
-      ),
+        })
+      )
     );
   }
 
-  queryClient.setQueryData(threadQueryKey, (currentData: ThreadMessagesResult | undefined) =>
-    updateMessagesInThreadData(
-      currentData,
-      (message) => updatesById.has(message.id),
-      (message) => {
-        const nextMessage = updatesById.get(message.id);
-        return nextMessage
-          ? applyMessageMetadata(message, {
-              labelIds: nextMessage.labelIds,
-              isUnread: nextMessage.isUnread,
-              threadLabelIds,
-            })
-          : message;
-      },
-    ),
+  queryClient.setQueryData(
+    threadQueryKey,
+    (currentData: ThreadMessagesResult | undefined) =>
+      updateMessagesInThreadData(
+        currentData,
+        (message) => updatesById.has(message.id),
+        (message) => {
+          const nextMessage = updatesById.get(message.id);
+          return nextMessage
+            ? applyMessageMetadata(message, {
+                isUnread: nextMessage.isUnread,
+                labelIds: nextMessage.labelIds,
+                threadLabelIds,
+              })
+            : message;
+        }
+      )
   );
 
   await persistQueryKeys(queryClient, [...touchedQueryKeys, threadQueryKey]);

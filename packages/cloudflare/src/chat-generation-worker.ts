@@ -13,6 +13,8 @@ import { DurableObject } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
+import { timingSafeEqual } from "./crypto-utils";
+
 type ChatGenerationEnv = {
   ChatRunSession: DurableObjectNamespace;
   SST_RESOURCE_ChatGenerationStartToken: string;
@@ -32,25 +34,27 @@ const signaturesMatch = async (actual: string, expected: string) => {
     crypto.subtle.digest("SHA-256", textEncoder.encode(actual)),
     crypto.subtle.digest("SHA-256", textEncoder.encode(expected)),
   ]);
-  return crypto.subtle.timingSafeEqual(actualDigest, expectedDigest);
+  return timingSafeEqual(actualDigest, expectedDigest);
 };
 
 const getBearerToken = (request: Request) => {
   const authorization = request.headers.get("authorization")?.trim();
-  if (!authorization?.toLowerCase().startsWith("bearer ")) {
+  if (
+    authorization === undefined ||
+    authorization === "" ||
+    !authorization.toLowerCase().startsWith("bearer ")
+  ) {
     return null;
   }
-  return authorization.slice("Bearer ".length).trim() || null;
+  const token = authorization.slice("Bearer ".length).trim();
+  return token === "" ? null : token;
 };
 
 const assertStartToken = async (request: Request, env: ChatGenerationEnv) => {
   const token = getBearerToken(request);
   const expected = readLinkedSecret(env.SST_RESOURCE_ChatGenerationStartToken);
-  if (!token || !(await signaturesMatch(token, expected))) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      headers: { "content-type": "application/json" },
-      status: 401,
-    });
+  if (token === null || !(await signaturesMatch(token, expected))) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
   return null;
 };
@@ -68,53 +72,54 @@ export class ChatRunSession extends DurableObject<ChatGenerationEnv> {
   #generation: Promise<void> | null = null;
 
   #ensureProducer(runId: string, force: boolean) {
-    if (this.#generation) {
+    if (this.#generation !== null) {
       return;
     }
     // Ensure observers can attach before the first token lands.
     getChatRunHub(runId);
-    this.#generation = withRequestDatabaseClient(async () => {
-      await ensureChatRunGeneration(runId, { force });
-    }).finally(() => {
-      this.#generation = null;
-    });
-    this.ctx.waitUntil(this.#generation);
+    const generation = (async () => {
+      try {
+        await withRequestDatabaseClient(async () => {
+          await ensureChatRunGeneration(runId, { force });
+        });
+      } finally {
+        this.#generation = null;
+      }
+    })();
+    this.#generation = generation;
+    this.ctx.waitUntil(generation);
   }
 
   async fetch(request: Request) {
     const url = new URL(request.url);
     const runId = url.searchParams.get("runId")?.trim();
-    if (!runId) {
-      return new Response(JSON.stringify({ error: "runId required" }), {
-        headers: { "content-type": "application/json" },
-        status: 400,
-      });
+    if (runId === undefined || runId === "") {
+      return Response.json({ error: "runId required" }, { status: 400 });
     }
 
     if (request.method === "POST" && url.pathname === "/start") {
       this.#ensureProducer(runId, false);
-      return new Response(JSON.stringify({ runId, started: true }), {
-        headers: { "content-type": "application/json" },
-      });
+      return Response.json({ runId, started: true });
     }
 
     if (request.method === "POST" && url.pathname === "/cancel") {
       abortChatRun(runId);
-      return new Response(JSON.stringify({ cancelled: true, runId }), {
-        headers: { "content-type": "application/json" },
-      });
+      return Response.json({ cancelled: true, runId });
     }
 
     if (request.method === "GET" && url.pathname === "/stream") {
       const existing = peekChatRunHub(runId);
-      if (existing) {
+      if (existing !== undefined && existing !== null) {
         return createChatRunHubSseResponse(existing, request.signal);
       }
-      if (this.#generation) {
-        return createChatRunHubSseResponse(getChatRunHub(runId), request.signal);
+      if (this.#generation !== null) {
+        return createChatRunHubSseResponse(
+          getChatRunHub(runId),
+          request.signal
+        );
       }
 
-      return withRequestDatabaseClient(async () => {
+      return await withRequestDatabaseClient(async () => {
         const [run] = await db
           .select({
             error: chatRun.error,
@@ -124,17 +129,17 @@ export class ChatRunSession extends DurableObject<ChatGenerationEnv> {
           .where(eq(chatRun.id, runId))
           .limit(1);
 
-        if (!run) {
-          return new Response(JSON.stringify({ error: "Not found" }), {
-            headers: { "content-type": "application/json" },
-            status: 404,
-          });
+        if (run === undefined) {
+          return Response.json({ error: "Not found" }, { status: 404 });
         }
 
         if (isActiveChatRunStatus(run.status)) {
           // DO restarted (or stream beat start): reclaim and resume the producer.
           this.#ensureProducer(runId, true);
-          return createChatRunHubSseResponse(getChatRunHub(runId), request.signal);
+          return createChatRunHubSseResponse(
+            getChatRunHub(runId),
+            request.signal
+          );
         }
 
         return createTerminalChatRunSseResponse({
@@ -153,56 +158,79 @@ const forwardToSession = async (
   env: ChatGenerationEnv,
   runId: string,
   path: "/start" | "/cancel" | "/stream",
-  request: Request,
+  request: Request
 ) => {
   const target = new URL(path, "https://chat-run.session");
   target.searchParams.set("runId", runId);
-  return sessionStub(env, runId).fetch(
-    new Request(target, {
+  return await sessionStub(env, runId).fetch(
+    new Request(target.toString(), {
       headers: request.headers,
       method: request.method,
       signal: request.signal,
-    }),
+    })
   );
 };
 
 export default {
   async fetch(request: Request, env: ChatGenerationEnv) {
     const unauthorized = await assertStartToken(request, env);
-    if (unauthorized) {
+    if (unauthorized !== null) {
       return unauthorized;
     }
 
     const url = new URL(request.url);
 
-    if (request.method === "POST" && (url.pathname === "/" || url.pathname === "/start")) {
+    if (
+      request.method === "POST" &&
+      (url.pathname === "/" || url.pathname === "/start")
+    ) {
       let payload: unknown;
       try {
         payload = await request.json();
       } catch {
-        return new Response(JSON.stringify({ error: "Invalid chat generation request." }), {
-          headers: { "content-type": "application/json" },
-          status: 400,
-        });
+        return Response.json(
+          { error: "Invalid chat generation request." },
+          { status: 400 }
+        );
       }
       const parsed = startPayloadSchema.safeParse(payload);
       if (!parsed.success) {
-        return new Response(JSON.stringify({ error: "Invalid chat generation request." }), {
-          headers: { "content-type": "application/json" },
-          status: 400,
-        });
+        return Response.json(
+          { error: "Invalid chat generation request." },
+          { status: 400 }
+        );
       }
-      return forwardToSession(env, parsed.data.runId, "/start", request);
+      return await forwardToSession(env, parsed.data.runId, "/start", request);
     }
 
-    const streamMatch = url.pathname.match(/^\/runs\/([^/]+)\/stream$/);
-    if (request.method === "GET" && streamMatch?.[1]) {
-      return forwardToSession(env, decodeURIComponent(streamMatch[1]), "/stream", request);
+    const streamMatch = /^\/runs\/(?<runId>[^/]+)\/stream$/u.exec(url.pathname);
+    const streamRunId = streamMatch?.groups?.runId;
+    if (
+      request.method === "GET" &&
+      streamRunId !== undefined &&
+      streamRunId !== ""
+    ) {
+      return await forwardToSession(
+        env,
+        decodeURIComponent(streamRunId),
+        "/stream",
+        request
+      );
     }
 
-    const cancelMatch = url.pathname.match(/^\/runs\/([^/]+)\/cancel$/);
-    if (request.method === "POST" && cancelMatch?.[1]) {
-      return forwardToSession(env, decodeURIComponent(cancelMatch[1]), "/cancel", request);
+    const cancelMatch = /^\/runs\/(?<runId>[^/]+)\/cancel$/u.exec(url.pathname);
+    const cancelRunId = cancelMatch?.groups?.runId;
+    if (
+      request.method === "POST" &&
+      cancelRunId !== undefined &&
+      cancelRunId !== ""
+    ) {
+      return await forwardToSession(
+        env,
+        decodeURIComponent(cancelRunId),
+        "/cancel",
+        request
+      );
     }
 
     return new Response(null, { status: 404 });

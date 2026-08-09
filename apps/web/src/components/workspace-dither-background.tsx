@@ -121,20 +121,104 @@ type WorkspaceDitherBackgroundProps = {
   strength?: number;
 };
 
-const compileShader = (gl: WebGLRenderingContext, type: number, source: string) => {
+const compileShader = (
+  gl: WebGLRenderingContext,
+  type: number,
+  source: string
+) => {
   const shader = gl.createShader(type);
-  if (!shader) return null;
+  if (!shader) {
+    return null;
+  }
 
   gl.shaderSource(shader, source);
   gl.compileShader(shader);
 
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+  if (gl.getShaderParameter(shader, gl.COMPILE_STATUS) !== true) {
     gl.deleteShader(shader);
     return null;
   }
 
   return shader;
 };
+
+type WorkspaceGlLocations = {
+  alphaScale: WebGLUniformLocation | null;
+  animate: WebGLUniformLocation | null;
+  color: WebGLUniformLocation | null;
+  cssSize: WebGLUniformLocation | null;
+  dpr: WebGLUniformLocation | null;
+  falloff: WebGLUniformLocation | null;
+  fieldDrift: WebGLUniformLocation | null;
+  focusA: WebGLUniformLocation | null;
+  focusB: WebGLUniformLocation | null;
+  pattern: WebGLUniformLocation | null;
+  position: number;
+  resolution: WebGLUniformLocation | null;
+  step: WebGLUniformLocation | null;
+  strengthWave: WebGLUniformLocation | null;
+  time: WebGLUniformLocation | null;
+};
+
+type ReadyWorkspaceGlLocations = {
+  alphaScale: WebGLUniformLocation;
+  animate: WebGLUniformLocation;
+  color: WebGLUniformLocation;
+  cssSize: WebGLUniformLocation;
+  dpr: WebGLUniformLocation;
+  falloff: WebGLUniformLocation;
+  fieldDrift: WebGLUniformLocation;
+  focusA: WebGLUniformLocation;
+  focusB: WebGLUniformLocation;
+  pattern: WebGLUniformLocation;
+  position: number;
+  resolution: WebGLUniformLocation;
+  step: WebGLUniformLocation;
+  strengthWave: WebGLUniformLocation;
+  time: WebGLUniformLocation;
+};
+
+const getWorkspaceGlLocations = (
+  gl: WebGLRenderingContext,
+  program: WebGLProgram
+): WorkspaceGlLocations => ({
+  alphaScale: gl.getUniformLocation(program, "uAlphaScale"),
+  animate: gl.getUniformLocation(program, "uAnimate"),
+  color: gl.getUniformLocation(program, "uColor"),
+  cssSize: gl.getUniformLocation(program, "uCssSize"),
+  dpr: gl.getUniformLocation(program, "uDpr"),
+  falloff: gl.getUniformLocation(program, "uFalloff"),
+  fieldDrift: gl.getUniformLocation(program, "uFieldDrift"),
+  focusA: gl.getUniformLocation(program, "uFocusA"),
+  focusB: gl.getUniformLocation(program, "uFocusB"),
+  pattern: gl.getUniformLocation(program, "uPattern"),
+  position: gl.getAttribLocation(program, "aPosition"),
+  resolution: gl.getUniformLocation(program, "uResolution"),
+  step: gl.getUniformLocation(program, "uStep"),
+  strengthWave: gl.getUniformLocation(program, "uStrengthWave"),
+  time: gl.getUniformLocation(program, "uTime"),
+});
+
+const hasWorkspaceGlLocations = (
+  locations: WorkspaceGlLocations
+): locations is ReadyWorkspaceGlLocations =>
+  locations.position !== -1 &&
+  [
+    locations.alphaScale,
+    locations.animate,
+    locations.color,
+    locations.cssSize,
+    locations.dpr,
+    locations.falloff,
+    locations.fieldDrift,
+    locations.focusA,
+    locations.focusB,
+    locations.pattern,
+    locations.resolution,
+    locations.step,
+    locations.strengthWave,
+    locations.time,
+  ].every((location) => location !== null);
 
 export const WorkspaceDitherBackground = ({
   animate = false,
@@ -154,7 +238,9 @@ export const WorkspaceDitherBackground = ({
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) {
+      return;
+    }
 
     let cancelled = false;
     let revealed = false;
@@ -183,14 +269,18 @@ export const WorkspaceDitherBackground = ({
     const { startedAt } = sessionRef.current;
 
     const reveal = () => {
-      if (cancelled || revealed) return;
+      if (cancelled || revealed) {
+        return;
+      }
       revealed = true;
       if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
         setReady(true);
         return;
       }
       requestAnimationFrame(() => {
-        if (!cancelled) setReady(true);
+        if (!cancelled) {
+          setReady(true);
+        }
       });
     };
 
@@ -219,8 +309,10 @@ export const WorkspaceDitherBackground = ({
       const focusAy = 0.5 + Math.sin(t * 1.2) * 0.26;
       const focusBx = 0.5 + Math.cos(t * 1.45 + Math.PI) * 0.32;
       const focusBy = 0.5 + Math.sin(t * 1.2 + Math.PI) * 0.26;
-      const driftX = Math.sin(t * 0.55) * 0.035 + Math.sin(t * 0.23 + 1.7) * 0.018;
-      const driftY = Math.cos(t * 0.42) * 0.03 + Math.cos(t * 0.31 + 0.8) * 0.015;
+      const driftX =
+        Math.sin(t * 0.55) * 0.035 + Math.sin(t * 0.23 + 1.7) * 0.018;
+      const driftY =
+        Math.cos(t * 0.42) * 0.03 + Math.cos(t * 0.31 + 0.8) * 0.015;
 
       gl.uniform1f(timeLocation, timeSeconds);
       gl.uniform1f(strengthWaveLocation, strengthWave);
@@ -230,22 +322,40 @@ export const WorkspaceDitherBackground = ({
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
-      if (!revealed) reveal();
+      if (!revealed) {
+        reveal();
+      }
     };
 
     const resize = () => {
       resizeFrame = null;
-      if (!gl || !resolutionLocation || !cssSizeLocation || !dprLocation || cancelled) return;
+      if (
+        !gl ||
+        !resolutionLocation ||
+        !cssSizeLocation ||
+        !dprLocation ||
+        cancelled
+      ) {
+        return;
+      }
       const { height, width } = canvas.getBoundingClientRect();
-      if (!height || !width) return;
+      if (!height || !width) {
+        return;
+      }
 
-      const pixelRatio = Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO);
+      const pixelRatio = Math.min(
+        window.devicePixelRatio || 1,
+        MAX_PIXEL_RATIO
+      );
       const deviceWidth = Math.ceil(width * pixelRatio);
       const deviceHeight = Math.ceil(height * pixelRatio);
       cssWidth = width;
       cssHeight = height;
 
-      if (deviceWidth !== lastDeviceWidth || deviceHeight !== lastDeviceHeight) {
+      if (
+        deviceWidth !== lastDeviceWidth ||
+        deviceHeight !== lastDeviceHeight
+      ) {
         lastDeviceWidth = deviceWidth;
         lastDeviceHeight = deviceHeight;
         if (canvas.width !== deviceWidth || canvas.height !== deviceHeight) {
@@ -271,12 +381,16 @@ export const WorkspaceDitherBackground = ({
     };
 
     const startLoop = () => {
-      if (!shouldAnimate || raf !== 0 || !visible || cancelled) return;
+      if (!shouldAnimate || raf !== 0 || !visible || cancelled) {
+        return;
+      }
       raf = requestAnimationFrame(render);
     };
 
     const handleVisibilityChange = () => {
-      if (!shouldAnimate) return;
+      if (!shouldAnimate) {
+        return;
+      }
       if (document.hidden || !visible) {
         stopLoop();
         return;
@@ -293,10 +407,18 @@ export const WorkspaceDitherBackground = ({
         resizeFrame = null;
       }
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      if (gl && program) gl.deleteProgram(program);
-      if (gl && vertexShader) gl.deleteShader(vertexShader);
-      if (gl && fragmentShader) gl.deleteShader(fragmentShader);
-      if (gl && positionBuffer) gl.deleteBuffer(positionBuffer);
+      if (gl && program) {
+        gl.deleteProgram(program);
+      }
+      if (gl && vertexShader) {
+        gl.deleteShader(vertexShader);
+      }
+      if (gl && fragmentShader) {
+        gl.deleteShader(fragmentShader);
+      }
+      if (gl && positionBuffer) {
+        gl.deleteBuffer(positionBuffer);
+      }
       program = null;
       vertexShader = null;
       fragmentShader = null;
@@ -309,7 +431,9 @@ export const WorkspaceDitherBackground = ({
     };
 
     const initGl = () => {
-      if (cancelled || gl) return;
+      if (cancelled || gl) {
+        return;
+      }
 
       const context = canvas.getContext("webgl", {
         alpha: true,
@@ -321,18 +445,24 @@ export const WorkspaceDitherBackground = ({
         preserveDrawingBuffer: false,
         stencil: false,
       });
-      if (!context) return;
+      if (!context) {
+        return;
+      }
       gl = context;
 
       vertexShader = compileShader(gl, gl.VERTEX_SHADER, VERTEX_SHADER_SOURCE);
-      fragmentShader = compileShader(gl, gl.FRAGMENT_SHADER, FRAGMENT_SHADER_SOURCE);
-      if (!vertexShader || !fragmentShader) {
+      fragmentShader = compileShader(
+        gl,
+        gl.FRAGMENT_SHADER,
+        FRAGMENT_SHADER_SOURCE
+      );
+      if (vertexShader === null || fragmentShader === null) {
         teardownGl();
         return;
       }
 
       program = gl.createProgram();
-      if (!program) {
+      if (program === null) {
         teardownGl();
         return;
       }
@@ -341,7 +471,7 @@ export const WorkspaceDitherBackground = ({
       gl.attachShader(program, fragmentShader);
       gl.linkProgram(program);
 
-      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      if (gl.getProgramParameter(program, gl.LINK_STATUS) !== true) {
         teardownGl();
         return;
       }
@@ -349,49 +479,48 @@ export const WorkspaceDitherBackground = ({
       gl.useProgram(program);
 
       positionBuffer = gl.createBuffer();
-      if (!positionBuffer) {
+      if (positionBuffer === null) {
         teardownGl();
         return;
       }
       gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+      gl.bufferData(
+        gl.ARRAY_BUFFER,
+        new Float32Array([-1, -1, 3, -1, -1, 3]),
+        gl.STATIC_DRAW
+      );
 
-      const positionLocation = gl.getAttribLocation(program, "aPosition");
-      resolutionLocation = gl.getUniformLocation(program, "uResolution");
-      cssSizeLocation = gl.getUniformLocation(program, "uCssSize");
-      const stepLocation = gl.getUniformLocation(program, "uStep");
-      dprLocation = gl.getUniformLocation(program, "uDpr");
-      const colorLocation = gl.getUniformLocation(program, "uColor");
-      const alphaScaleLocation = gl.getUniformLocation(program, "uAlphaScale");
-      const falloffLocation = gl.getUniformLocation(program, "uFalloff");
-      const patternLocation = gl.getUniformLocation(program, "uPattern");
-      timeLocation = gl.getUniformLocation(program, "uTime");
-      const animateLocation = gl.getUniformLocation(program, "uAnimate");
-      strengthWaveLocation = gl.getUniformLocation(program, "uStrengthWave");
-      focusALocation = gl.getUniformLocation(program, "uFocusA");
-      focusBLocation = gl.getUniformLocation(program, "uFocusB");
-      fieldDriftLocation = gl.getUniformLocation(program, "uFieldDrift");
-
-      if (
-        positionLocation === -1 ||
-        !resolutionLocation ||
-        !cssSizeLocation ||
-        !stepLocation ||
-        !dprLocation ||
-        !colorLocation ||
-        !alphaScaleLocation ||
-        !falloffLocation ||
-        !patternLocation ||
-        !timeLocation ||
-        !animateLocation ||
-        !strengthWaveLocation ||
-        !focusALocation ||
-        !focusBLocation ||
-        !fieldDriftLocation
-      ) {
+      const locations = getWorkspaceGlLocations(gl, program);
+      if (!hasWorkspaceGlLocations(locations)) {
         teardownGl();
         return;
       }
+
+      const {
+        alphaScale: alphaScaleLocation,
+        animate: animateLocation,
+        color: colorLocation,
+        cssSize: nextCssSizeLocation,
+        dpr: nextDprLocation,
+        falloff: falloffLocation,
+        fieldDrift: nextFieldDriftLocation,
+        focusA: nextFocusALocation,
+        focusB: nextFocusBLocation,
+        pattern: patternLocation,
+        position: positionLocation,
+        resolution: nextResolutionLocation,
+        step: stepLocation,
+        strengthWave: nextStrengthWaveLocation,
+        time: nextTimeLocation,
+      } = locations;
+      cssSizeLocation = nextCssSizeLocation;
+      dprLocation = nextDprLocation;
+      resolutionLocation = nextResolutionLocation;
+      timeLocation = nextTimeLocation;
+      strengthWaveLocation = nextStrengthWaveLocation;
+      focusALocation = nextFocusALocation;
+      focusBLocation = nextFocusBLocation;
+      fieldDriftLocation = nextFieldDriftLocation;
 
       gl.enableVertexAttribArray(positionLocation);
       gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
@@ -409,11 +538,13 @@ export const WorkspaceDitherBackground = ({
 
       const [red, green, blue] = dotRgb
         .split(",")
-        .map((channel) => Number.parseFloat(channel.trim()) / 255);
+        .map((channel) => Number(channel.trim()) / 255);
       gl.uniform3f(colorLocation, red || 0, green || 0, blue || 0);
       gl.uniform1f(alphaScaleLocation, activeStrength);
 
-      const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const prefersReducedMotion = window.matchMedia(
+        "(prefers-reduced-motion: reduce)"
+      ).matches;
       shouldAnimate = animate && !prefersReducedMotion;
       gl.uniform1f(animateLocation, shouldAnimate ? 1 : 0);
 
@@ -434,7 +565,7 @@ export const WorkspaceDitherBackground = ({
         }
         stopLoop();
       },
-      { rootMargin: VISIBLE_ROOT_MARGIN },
+      { rootMargin: VISIBLE_ROOT_MARGIN }
     );
     intersection.observe(canvas);
 
@@ -450,10 +581,13 @@ export const WorkspaceDitherBackground = ({
       className={cn(
         "pointer-events-none absolute inset-0 z-0 size-full overflow-hidden opacity-25 ease-out dark:opacity-100",
         className,
-        !ready && "opacity-0",
+        !ready && "opacity-0"
       )}
       ref={canvasRef}
-      style={{ transitionDuration: `${REVEAL_MS}ms`, transitionProperty: "opacity" }}
+      style={{
+        transitionDuration: `${REVEAL_MS}ms`,
+        transitionProperty: "opacity",
+      }}
     />
   );
 };

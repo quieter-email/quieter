@@ -1,5 +1,11 @@
-import { Add01Icon, Cancel01Icon, Loading03Icon, Tick01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
+import {
+  Add01Icon,
+  Cancel01Icon,
+  Loading03Icon,
+  Tick01Icon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import type { IconSvgElement } from "@hugeicons/react";
 import { AnimatePresence, m } from "motion/react";
 
 export type WaitlistIconState = "error" | "idle" | "loading" | "success";

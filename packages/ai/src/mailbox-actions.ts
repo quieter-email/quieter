@@ -1,5 +1,7 @@
-import { chat, type ChatMiddleware } from "@tanstack/ai";
+import { chat } from "@tanstack/ai";
+import type { ChatMiddleware } from "@tanstack/ai";
 import { z } from "zod";
+
 import { defaultChatModel } from "./chat-models";
 import { createOpenRouterAdapter } from "./openrouter";
 
@@ -7,7 +9,7 @@ export const MAILBOX_ACTION_CONDITION_MODEL = defaultChatModel;
 export const MAILBOX_ACTION_LINEAR_AGENT_MODEL = defaultChatModel;
 
 export type ActionEmailInput = {
-  attachments?: Array<{ fileName: string; mimeType: string }>;
+  attachments?: { fileName: string; mimeType: string }[];
   bodyHtml?: string | null;
   bodyText?: string | null;
   date?: string | null;
@@ -27,23 +29,33 @@ export type ActionExecutionContext = {
 };
 
 export type LinearIssuePlanningContext = {
-  labels: Array<{
+  labels: {
     description?: string | null;
     id: string;
     isGroup: boolean;
     name: string;
     teamId?: string | null;
-  }>;
-  projects: Array<{ description?: string | null; id: string; name: string }>;
-  states: Array<{ id: string; name: string; teamId?: string | null; type: string }>;
-  teams: Array<{ description?: string | null; id: string; key: string; name: string }>;
-  users: Array<{
+  }[];
+  projects: { description?: string | null; id: string; name: string }[];
+  states: {
+    id: string;
+    name: string;
+    teamId?: string | null;
+    type: string;
+  }[];
+  teams: {
+    description?: string | null;
+    id: string;
+    key: string;
+    name: string;
+  }[];
+  users: {
     active: boolean;
     displayName: string;
     id: string;
     isAssignable: boolean;
     name: string;
-  }>;
+  }[];
 };
 
 export type LinearMcpResearchTool = {
@@ -71,21 +83,27 @@ const conditionResultSchema = z.object({
   confidence: z.number().min(0).max(1),
   evidence: z.array(z.string()).max(5),
   matches: z.boolean(),
-  rationale: z.string().max(1_000),
+  rationale: z.string().max(1000),
 });
 
 const routerResultSchema = z.object({
   confidence: z.number().min(0).max(1),
   evidence: z.array(z.string()).max(5),
   outputPort: z.string().min(1),
-  rationale: z.string().max(1_000),
+  rationale: z.string().max(1000),
 });
 
 const linearIssuePlanSchema = z.object({
   assigneeId: z.string().min(1).optional(),
   description: z.string().min(1).max(12_000),
   labelIds: z.array(z.string().min(1)).max(12).default([]),
-  priority: z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
+  priority: z.union([
+    z.literal(0),
+    z.literal(1),
+    z.literal(2),
+    z.literal(3),
+    z.literal(4),
+  ]),
   projectId: z.string().min(1).optional(),
   stateId: z.string().min(1).optional(),
   teamId: z.string().min(1),
@@ -99,10 +117,15 @@ const linearMcpResearchPlanSchema = z.object({
         arguments: z.record(z.string(), z.unknown()).optional(),
         reason: z.string().min(1).max(500),
         toolName: z.string().min(1),
-      }),
+      })
     )
     .max(4),
 });
+
+const actionPromptPayloadSchema = z.record(z.string(), z.unknown());
+
+const parseActionPromptInput = (serialized: string) =>
+  actionPromptPayloadSchema.parse(JSON.parse(serialized));
 
 const serializeActionPromptInput = (input: {
   context: ActionExecutionContext;
@@ -114,7 +137,7 @@ const serializeActionPromptInput = (input: {
     branchPath: input.context.branchPath,
     email: {
       attachments: input.email.attachments,
-      body: (input.email.bodyText ?? input.email.bodyHtml ?? "").slice(0, 8_000),
+      body: (input.email.bodyText ?? input.email.bodyHtml ?? "").slice(0, 8000),
       date: input.email.date,
       from: input.email.from,
       provider: input.email.provider,
@@ -123,16 +146,16 @@ const serializeActionPromptInput = (input: {
       threadId: input.email.threadId,
       to: input.email.to,
     },
-    instructions: input.instructions?.slice(0, 4_000),
-    memoryContext: input.memoryContext?.slice(0, 6_000),
+    instructions: input.instructions?.slice(0, 4000),
+    memoryContext: input.memoryContext?.slice(0, 6000),
     previousOutputs: input.context.previousOutputs,
     variables: input.context.variables,
   });
 
 const serializeLinearMcpTools = (tools: LinearMcpResearchTool[]) =>
   tools.slice(0, 25).map((tool) => ({
-    description: tool.description?.slice(0, 1_000),
-    inputSchema: JSON.stringify(tool.inputSchema ?? {}).slice(0, 2_000),
+    description: tool.description?.slice(0, 1000),
+    inputSchema: JSON.stringify(tool.inputSchema ?? {}).slice(0, 2000),
     name: tool.name,
   }));
 
@@ -188,13 +211,13 @@ export const routeMailboxAction = async (input: {
         content: JSON.stringify({
           fallbackPort: input.fallbackPort,
           ports: input.ports,
-          workflowInput: JSON.parse(
+          workflowInput: parseActionPromptInput(
             serializeActionPromptInput({
               context: input.context,
               email: input.email,
               instructions: input.routingInstructions,
               memoryContext: input.memoryContext,
-            }),
+            })
           ),
         }),
         role: "user",
@@ -234,20 +257,20 @@ export const planLinearMcpResearchCalls = async (input: {
         content: JSON.stringify({
           preferredTeamId: input.teamId,
           tools: serializeLinearMcpTools(input.tools),
-          workflowInput: JSON.parse(
+          workflowInput: parseActionPromptInput(
             serializeActionPromptInput({
               context: input.context,
               email: input.email,
               instructions: input.instructions,
               memoryContext: input.memoryContext,
-            }),
+            })
           ),
         }),
         role: "user",
       },
     ],
     middleware: input.middleware,
-    modelOptions: { maxCompletionTokens: 1_500 },
+    modelOptions: { maxCompletionTokens: 1500 },
     outputSchema: linearMcpResearchPlanSchema,
     systemPrompts: [
       `Choose a small read-only Linear MCP research plan for creating a good issue from this email.
@@ -274,23 +297,23 @@ export const planLinearIssue = async (input: {
     messages: [
       {
         content: JSON.stringify({
+          linear: input.linear,
+          linearMcpResearch: input.linearMcpResearch,
           preferredTeamId: input.teamId,
-          workflowInput: JSON.parse(
+          workflowInput: parseActionPromptInput(
             serializeActionPromptInput({
               context: input.context,
               email: input.email,
               instructions: input.instructions,
               memoryContext: input.memoryContext,
-            }),
+            })
           ),
-          linear: input.linear,
-          linearMcpResearch: input.linearMcpResearch,
         }),
         role: "user",
       },
     ],
     middleware: input.middleware,
-    modelOptions: { maxCompletionTokens: 3_000 },
+    modelOptions: { maxCompletionTokens: 3000 },
     outputSchema: linearIssuePlanSchema,
     systemPrompts: [
       `Create a Linear issue plan from the email and workflow context.

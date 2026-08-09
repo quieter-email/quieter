@@ -47,6 +47,7 @@
     "@quieter/env": "workspace:*",
     "@quieter/gmail": "workspace:*",
     "@quieter/mail": "workspace:*",
+    "@quieter/observability": "workspace:*",
     "@tanstack/ai": "catalog:"
   },
   "devDependencies": {

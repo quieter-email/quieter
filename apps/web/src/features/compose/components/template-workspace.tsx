@@ -30,15 +30,24 @@ import { ToolbarButton, ToolbarSeparator } from "@quieter/ui/toolbar";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
-import { WorkspaceSection, workspaceSectionVariants } from "~/components/workspace-section";
-import { orpc } from "~/lib/orpc";
+import type { ReactNode } from "react";
+
+import {
+  WorkspaceSection,
+  workspaceSectionVariants,
+} from "#/components/workspace-section";
+import { orpc } from "#/lib/orpc";
+
 import { normalizeComposeBodyHtml } from "../domain/draft";
 import {
   ComposeEditor,
   ComposeEditorBody,
-  type ComposeEditorHandle,
   ComposeEditorToolbar,
 } from "./compose-editor";
+import type { ComposeEditorHandle } from "./compose-editor";
+
+const hasText = (value: string | null | undefined): value is string =>
+  value !== null && value !== undefined && value !== "";
 
 type MailTemplateItem = {
   bodyHtml: string;
@@ -68,17 +77,45 @@ export const TemplateWorkspace = ({
   onOpenSidebar: () => void;
 }) => {
   const queryClient = useQueryClient();
-  const queryOptions = orpc.mailTemplates.list.queryOptions({ input: { mailboxId } });
+  const queryOptions = orpc.mailTemplates.list.queryOptions({
+    input: { mailboxId },
+  });
   const templatesQuery = useQuery(queryOptions);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [deleteTemplate, setDeleteTemplate] = useState<MailTemplateItem | null>(null);
+  const [deleteTemplate, setDeleteTemplate] = useState<MailTemplateItem | null>(
+    null
+  );
   const [search, setSearch] = useState("");
   const [mobileEditorOpen, setMobileEditorOpen] = useState(false);
   const templateEditorRef = useRef<ComposeEditorHandle | null>(null);
+  const refreshTemplates = async () => {
+    await queryClient.invalidateQueries({ queryKey: queryOptions.queryKey });
+  };
+  const createMutation = useMutation({
+    ...orpc.mailTemplates.create.mutationOptions(),
+    onError: (error) => {
+      toast.error(error.message || "Could not save the template.");
+    },
+    onSuccess: async (template) => {
+      await refreshTemplates();
+      setEditingId(template.id);
+      toast.success("Template saved.");
+    },
+  });
+  const updateMutation = useMutation({
+    ...orpc.mailTemplates.update.mutationOptions(),
+    onError: (error) => {
+      toast.error(error.message || "Could not update the template.");
+    },
+    onSuccess: async () => {
+      await refreshTemplates();
+      toast.success("Template updated.");
+    },
+  });
   const templateForm = useForm({
     defaultValues: emptyTemplateFormValues,
     onSubmit: async ({ value }) => {
-      if (!value.name.trim()) {
+      if (value.name.trim() === "") {
         toast.error("Give this template a name.");
         return;
       }
@@ -87,16 +124,18 @@ export const TemplateWorkspace = ({
         return;
       }
 
-      if (editingId) {
-        await updateMutation.mutateAsync({ ...value, id: editingId, mailboxId, subject: "" });
+      if (hasText(editingId)) {
+        await updateMutation.mutateAsync({
+          ...value,
+          id: editingId,
+          mailboxId,
+          subject: "",
+        });
       } else {
         await createMutation.mutateAsync({ ...value, mailboxId, subject: "" });
       }
     },
   });
-  const refreshTemplates = async () => {
-    await queryClient.invalidateQueries({ queryKey: queryOptions.queryKey });
-  };
   const selectTemplate = (template: MailTemplateItem) => {
     setEditingId(template.id);
     setMobileEditorOpen(true);
@@ -111,25 +150,11 @@ export const TemplateWorkspace = ({
     setMobileEditorOpen(true);
     templateForm.reset(emptyTemplateFormValues);
   };
-  const createMutation = useMutation({
-    ...orpc.mailTemplates.create.mutationOptions(),
-    onSuccess: async (template) => {
-      await refreshTemplates();
-      setEditingId(template.id);
-      toast.success("Template saved.");
-    },
-    onError: (error) => toast.error(error.message || "Could not save the template."),
-  });
-  const updateMutation = useMutation({
-    ...orpc.mailTemplates.update.mutationOptions(),
-    onSuccess: async () => {
-      await refreshTemplates();
-      toast.success("Template updated.");
-    },
-    onError: (error) => toast.error(error.message || "Could not update the template."),
-  });
   const deleteMutation = useMutation({
     ...orpc.mailTemplates.delete.mutationOptions(),
+    onError: (error) => {
+      toast.error(error.message || "Could not delete the template.");
+    },
     onSuccess: async () => {
       await refreshTemplates();
       setDeleteTemplate(null);
@@ -138,16 +163,46 @@ export const TemplateWorkspace = ({
       templateForm.reset(emptyTemplateFormValues);
       toast.success("Template deleted.");
     },
-    onError: (error) => toast.error(error.message || "Could not delete the template."),
   });
   const templates = templatesQuery.data?.templates ?? [];
   const normalizedSearch = search.trim().toLowerCase();
   const filteredTemplates = normalizedSearch
-    ? templates.filter((template) => template.name.toLowerCase().includes(normalizedSearch))
+    ? templates.filter((template) =>
+        template.name.toLowerCase().includes(normalizedSearch)
+      )
     : templates;
-  const currentTemplate = templates.find((template) => template.id === editingId) ?? null;
+  const currentTemplate =
+    templates.find((template) => template.id === editingId) ?? null;
   const canEditCurrentTemplate = !currentTemplate || currentTemplate.canEdit;
   const isSaving = createMutation.isPending || updateMutation.isPending;
+  let templateQueryState: ReactNode = null;
+  if (templatesQuery.isPending) {
+    templateQueryState = (
+      <div className="flex items-center justify-center gap-2 px-3 py-10 text-xs text-muted-fg">
+        <HugeiconsIcon className="size-3.5 animate-spin" icon={Loading03Icon} />
+        Loading templates
+      </div>
+    );
+  } else if (templatesQuery.isError) {
+    templateQueryState = (
+      <p className="px-3 py-10 text-center text-xs/5 text-destructive">
+        Could not load templates.
+      </p>
+    );
+  } else if (filteredTemplates.length === 0) {
+    const emptyTitle =
+      templates.length === 0 ? "No templates yet" : "No matches";
+    const emptyDescription =
+      templates.length === 0
+        ? "Create a reusable message for replies or new email."
+        : "Try a different search.";
+    templateQueryState = (
+      <div className="px-6 py-12 text-center">
+        <p className="text-sm font-medium text-fg">{emptyTitle}</p>
+        <p className="mt-1 text-xs/5 text-muted-fg">{emptyDescription}</p>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -180,15 +235,24 @@ export const TemplateWorkspace = ({
               New
             </Button>
           </div>
-          <label className="relative mt-4 block">
+          <label
+            className="relative mt-4 block"
+            htmlFor="template-workspace-search"
+          >
+            <span className="sr-only" id="template-workspace-search-label">
+              Search templates
+            </span>
             <HugeiconsIcon
               className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-fg"
               icon={Search01Icon}
             />
             <Input
-              aria-label="Search templates"
+              aria-labelledby="template-workspace-search-label"
               className="pl-9"
-              onChange={(event) => setSearch(event.currentTarget.value)}
+              id="template-workspace-search"
+              onChange={(event) => {
+                setSearch(event.currentTarget.value);
+              }}
               placeholder="Search templates"
               value={search}
             />
@@ -203,11 +267,14 @@ export const TemplateWorkspace = ({
                 "group flex w-full items-start gap-3 rounded-lg p-3 text-left transition-colors",
                 {
                   "bg-muted text-fg": editingId === template.id,
-                  "text-muted-fg hover:bg-muted/55 hover:text-fg": editingId !== template.id,
-                },
+                  "text-muted-fg hover:bg-muted/55 hover:text-fg":
+                    editingId !== template.id,
+                }
               )}
               key={template.id}
-              onClick={() => selectTemplate(template)}
+              onClick={() => {
+                selectTemplate(template);
+              }}
               type="button"
             >
               <span
@@ -216,38 +283,20 @@ export const TemplateWorkspace = ({
                   {
                     "bg-primary": editingId === template.id,
                     "group-hover:bg-muted-fg/60": editingId !== template.id,
-                  },
+                  }
                 )}
               />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium">{template.name}</span>
+                <span className="block truncate text-sm font-medium">
+                  {template.name}
+                </span>
                 <span className="mt-1 flex items-center gap-2 text-[11px] text-muted-fg">
                   <span>{template.scope === "team" ? "Team" : "Personal"}</span>
                 </span>
               </span>
             </button>
           ))}
-          {templatesQuery.isPending ? (
-            <div className="flex items-center justify-center gap-2 px-3 py-10 text-xs text-muted-fg">
-              <HugeiconsIcon className="size-3.5 animate-spin" icon={Loading03Icon} />
-              Loading templates
-            </div>
-          ) : templatesQuery.isError ? (
-            <p className="px-3 py-10 text-center text-xs/5 text-destructive">
-              Could not load templates.
-            </p>
-          ) : filteredTemplates.length === 0 ? (
-            <div className="px-6 py-12 text-center">
-              <p className="text-sm font-medium text-fg">
-                {templates.length === 0 ? "No templates yet" : "No matches"}
-              </p>
-              <p className="mt-1 text-xs/5 text-muted-fg">
-                {templates.length === 0
-                  ? "Create a reusable message for replies or new email."
-                  : "Try a different search."}
-              </p>
-            </div>
-          ) : null}
+          {templateQueryState}
         </div>
       </WorkspaceSection>
 
@@ -266,7 +315,9 @@ export const TemplateWorkspace = ({
             <IconButtonTooltip label="Back to templates">
               <Button
                 aria-label="Back to templates"
-                onClick={() => setMobileEditorOpen(false)}
+                onClick={() => {
+                  setMobileEditorOpen(false);
+                }}
                 size="icon-sm"
                 type="button"
                 variant="ghost"
@@ -275,7 +326,7 @@ export const TemplateWorkspace = ({
               </Button>
             </IconButtonTooltip>
             <p className="text-sm font-medium tracking-tight text-fg">
-              {editingId ? "Edit template" : "New template"}
+              {hasText(editingId) ? "Edit template" : "New template"}
             </p>
           </div>
 
@@ -287,11 +338,14 @@ export const TemplateWorkspace = ({
                     Name
                   </FieldLabel>
                   <FieldControl
-                    autoFocus={!editingId}
                     className="min-w-0 flex-1"
                     disabled={!canEditCurrentTemplate}
-                    onBlur={() => field.handleBlur()}
-                    onChange={(event) => field.handleChange(event.currentTarget.value)}
+                    onBlur={() => {
+                      field.handleBlur();
+                    }}
+                    onChange={(event) => {
+                      field.handleChange(event.currentTarget.value);
+                    }}
                     placeholder="Template name"
                     value={field.state.value}
                   />
@@ -303,14 +357,22 @@ export const TemplateWorkspace = ({
           <templateForm.Field name="bodyHtml">
             {(field) => (
               <Field className="flex min-h-0 flex-1 flex-col gap-2">
-                <FieldLabel className="font-normal text-muted-fg">Message</FieldLabel>
+                <FieldLabel className="font-normal text-muted-fg">
+                  Message
+                </FieldLabel>
                 <ComposeEditor
                   disabled={!canEditCurrentTemplate}
                   html={field.state.value}
                   key={editingId ?? "new"}
-                  onBlur={() => field.handleBlur()}
-                  onChange={({ html }) => field.handleChange(html)}
-                  onInlineImageFiles={() => {}}
+                  onBlur={() => {
+                    field.handleBlur();
+                  }}
+                  onChange={({ html }) => {
+                    field.handleChange(html);
+                  }}
+                  onInlineImageFiles={(files) => {
+                    void files;
+                  }}
                   ref={templateEditorRef}
                 >
                   <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -324,7 +386,9 @@ export const TemplateWorkspace = ({
                               className="size-8 px-0"
                               disabled={!canEditCurrentTemplate}
                               onClick={() =>
-                                templateEditorRef.current?.insertPlaceholder("Placeholder")
+                                templateEditorRef.current?.insertPlaceholder(
+                                  "Placeholder"
+                                )
                               }
                               type="button"
                             >
@@ -335,28 +399,37 @@ export const TemplateWorkspace = ({
                             {(scopeField) => (
                               <>
                                 <ToolbarButton
-                                  aria-pressed={scopeField.state.value === "personal"}
+                                  aria-pressed={
+                                    scopeField.state.value === "personal"
+                                  }
                                   className={cn({
                                     "bg-bg-surface text-fg shadow-sm":
                                       scopeField.state.value === "personal",
                                   })}
                                   disabled={!canEditCurrentTemplate}
-                                  onClick={() => scopeField.handleChange("personal")}
+                                  onClick={() => {
+                                    scopeField.handleChange("personal");
+                                  }}
                                   type="button"
                                 >
                                   Personal
                                 </ToolbarButton>
                                 <ToolbarButton
-                                  aria-pressed={scopeField.state.value === "team"}
+                                  aria-pressed={
+                                    scopeField.state.value === "team"
+                                  }
                                   className={cn({
                                     "bg-bg-surface text-fg shadow-sm":
                                       scopeField.state.value === "team",
                                   })}
                                   disabled={
                                     !canEditCurrentTemplate ||
-                                    !templatesQuery.data?.canManageTeamTemplates
+                                    templatesQuery.data
+                                      ?.canManageTeamTemplates !== true
                                   }
-                                  onClick={() => scopeField.handleChange("team")}
+                                  onClick={() => {
+                                    scopeField.handleChange("team");
+                                  }}
                                   type="button"
                                 >
                                   Team
@@ -364,10 +437,13 @@ export const TemplateWorkspace = ({
                               </>
                             )}
                           </templateForm.Field>
-                          {editingId && currentTemplate?.canEdit ? (
+                          {hasText(editingId) &&
+                          currentTemplate?.canEdit === true ? (
                             <ToolbarButton
                               aria-label="Delete template"
-                              onClick={() => setDeleteTemplate(currentTemplate)}
+                              onClick={() => {
+                                setDeleteTemplate(currentTemplate);
+                              }}
                               type="button"
                             >
                               <HugeiconsIcon icon={Delete02Icon} />
@@ -378,7 +454,10 @@ export const TemplateWorkspace = ({
                           {canEditCurrentTemplate ? (
                             <ToolbarButton disabled={isSaving} type="submit">
                               {isSaving ? (
-                                <HugeiconsIcon className="animate-spin" icon={Loading03Icon} />
+                                <HugeiconsIcon
+                                  className="animate-spin"
+                                  icon={Loading03Icon}
+                                />
                               ) : (
                                 <HugeiconsIcon icon={NoteEditIcon} />
                               )}
@@ -402,13 +481,17 @@ export const TemplateWorkspace = ({
 
       <AlertDialog
         onOpenChange={(nextOpen) => {
-          if (!nextOpen) setDeleteTemplate(null);
+          if (!nextOpen) {
+            setDeleteTemplate(null);
+          }
         }}
         open={!!deleteTemplate}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete “{deleteTemplate?.name}”?</AlertDialogTitle>
+            <AlertDialogTitle>
+              Delete “{deleteTemplate?.name}”?
+            </AlertDialogTitle>
             <AlertDialogDescription>
               {deleteTemplate?.scope === "team"
                 ? "This removes the shared template for everyone on this team."

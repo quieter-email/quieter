@@ -1,11 +1,11 @@
 import type { DatabaseClient } from "@quieter/database/client";
 import { tables } from "@quieter/database/schema";
-import { getTableColumns, sql } from "drizzle-orm";
+import { getColumns, sql } from "drizzle-orm";
 
 export const assertReviewDatabaseSchema = async (client: DatabaseClient) => {
   const tableChecks = Object.entries(tables).map(([name, table]) => {
-    const columns = Object.values(getTableColumns(table)).map((column) =>
-      sql.identifier(column.name),
+    const columns = Object.values(getColumns(table)).map(
+      (column: { name: string }) => sql.identifier(column.name)
     );
 
     return sql`${sql.identifier(name)} AS (SELECT ${sql.join(columns, sql`, `)} FROM ${table} LIMIT 0)`;

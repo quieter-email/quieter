@@ -1,12 +1,20 @@
-import type { Subscription } from "@polar-sh/sdk/models/components/subscription.js";
 import { ORPCError } from "@orpc/server";
+import type { Subscription } from "@polar-sh/sdk/models/components/subscription.js";
 import { ResourceNotFound } from "@polar-sh/sdk/models/errors/resourcenotfound.js";
 import { db } from "@quieter/database/client";
-import { billingSubscription, mailbox, member, organization } from "@quieter/database/schema";
+import {
+  billingSubscription,
+  mailbox,
+  member,
+  organization,
+} from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
+import { reportError } from "@quieter/observability";
 import { and, desc, eq, inArray } from "drizzle-orm";
+
 import { getAiUsageCostMicroCents } from "./ai-pricing";
-import { getBillingCreditUsage, recordBillingCreditUsage, type BillingUsageKind } from "./credits";
+import { getBillingCreditUsage, recordBillingCreditUsage } from "./credits";
+import type { BillingUsageKind } from "./credits";
 import {
   getOrganizationBillingEntitlement,
   hasUserBillingFeature,
@@ -14,7 +22,7 @@ import {
   isLocalDevelopmentBillingEntitlementEnabled,
   subscriptionBelongsToOrganization,
 } from "./entitlements";
-import { BILLING_PRODUCT_IDS, type BillingProductId } from "./plans";
+import type { BillingProductId } from "./plans";
 import { getPolarApiOrganizationId, getPolarClient } from "./polar";
 import {
   BILLING_METADATA_ORGANIZATION_ID,
@@ -29,25 +37,23 @@ export {
   getAiUsageCostMicroCents,
 } from "./ai-pricing";
 
-export { syncBillingSubscription };
+export { syncBillingSubscription } from "./subscription-sync";
 
 export const createBillingCheckoutMetadata = (input: {
   organizationId: string;
   product: BillingProductId;
   userId: string;
-}) => {
-  return {
-    customerMetadata: {
-      [BILLING_METADATA_ORGANIZATION_ID]: input.organizationId,
-      [BILLING_METADATA_USER_ID]: input.userId,
-    },
-    metadata: {
-      [BILLING_METADATA_ORGANIZATION_ID]: input.organizationId,
-      [BILLING_METADATA_PRODUCT]: input.product,
-      [BILLING_METADATA_USER_ID]: input.userId,
-    },
-  };
-};
+}) => ({
+  customerMetadata: {
+    [BILLING_METADATA_ORGANIZATION_ID]: input.organizationId,
+    [BILLING_METADATA_USER_ID]: input.userId,
+  },
+  metadata: {
+    [BILLING_METADATA_ORGANIZATION_ID]: input.organizationId,
+    [BILLING_METADATA_PRODUCT]: input.product,
+    [BILLING_METADATA_USER_ID]: input.userId,
+  },
+});
 
 export const createBillingPortalSession = (input: {
   organizationId: string;
@@ -65,7 +71,7 @@ const getBillingProductId = (productId: BillingProductId): string => {
     pro: serverEnv.POLAR_PRODUCT_PRO_ID,
   }[productId];
 
-  if (!polarProductId) {
+  if (typeof polarProductId !== "string" || polarProductId === "") {
     throw new ORPCError("INTERNAL_SERVER_ERROR", {
       message: `Polar product is not configured for ${productId}.`,
     });
@@ -74,27 +80,30 @@ const getBillingProductId = (productId: BillingProductId): string => {
   return polarProductId;
 };
 
-export const syncPolarCatalog = () => {
-  const products = {} as Record<BillingProductId, string>;
-
-  for (const product of BILLING_PRODUCT_IDS) {
-    products[product] = getBillingProductId(product);
-  }
-
-  return products;
-};
+export const syncPolarCatalog = (): Record<BillingProductId, string> => ({
+  managed: getBillingProductId("managed"),
+  pro: getBillingProductId("pro"),
+});
 
 const getBaseUrl = (headers: Headers) => {
-  const configured = serverEnv.BETTER_AUTH_URL;
-  if (configured) return configured.replace(/\/$/, "");
+  const configured = serverEnv.BETTER_AUTH_URL ?? "";
+  if (configured !== "") {
+    return configured.replace(/\/$/u, "");
+  }
 
-  const origin = headers.get("origin")?.trim();
-  if (origin) return origin.replace(/\/$/, "");
+  const origin = headers.get("origin")?.trim() ?? "";
+  if (origin !== "") {
+    return origin.replace(/\/$/u, "");
+  }
 
-  const host = headers.get("x-forwarded-host") ?? headers.get("host");
+  const host = headers.get("x-forwarded-host") ?? headers.get("host") ?? "";
   const proto = headers.get("x-forwarded-proto") ?? "http";
 
-  return host ? `${proto}://${host}` : "http://localhost:3000";
+  if (host === "") {
+    return "http://localhost:3000";
+  }
+
+  return `${proto}://${host}`;
 };
 
 const getSettingsUrl = (
@@ -102,14 +111,16 @@ const getSettingsUrl = (
   input: {
     billing?: "canceled" | "success";
     organizationId: string;
-  },
+  }
 ) => {
   const url = new URL("/settings", getBaseUrl(headers));
   url.searchParams.set("tab", "organization");
   url.searchParams.set("organizationId", input.organizationId);
   url.searchParams.set("organizationView", "overview");
 
-  if (input.billing) url.searchParams.set("billing", input.billing);
+  if (input.billing) {
+    url.searchParams.set("billing", input.billing);
+  }
   return url.toString();
 };
 
@@ -140,7 +151,7 @@ export const createBillingCheckout = async (input: {
     .where(eq(organization.id, input.organizationId))
     .limit(1);
 
-  if (!organizationRecord) {
+  if (organizationRecord === undefined) {
     throw new ORPCError("NOT_FOUND", {
       message: "Team not found.",
     });
@@ -160,8 +171,8 @@ export const createBillingCheckout = async (input: {
   const rows = await db
     .select({
       currentPeriodEnd: billingSubscription.currentPeriodEnd,
-      plan: billingSubscription.plan,
       metadata: billingSubscription.metadata,
+      plan: billingSubscription.plan,
       providerSubscriptionId: billingSubscription.providerSubscriptionId,
       status: billingSubscription.status,
       updatedAt: billingSubscription.updatedAt,
@@ -170,14 +181,14 @@ export const createBillingCheckout = async (input: {
     .where(
       and(
         eq(billingSubscription.organizationId, input.organizationId),
-        inArray(billingSubscription.plan, ["managed", "pro"]),
-      ),
+        inArray(billingSubscription.plan, ["managed", "pro"])
+      )
     )
     .orderBy(desc(billingSubscription.updatedAt));
   const activeSubscription = rows.find(
     (row) =>
       isActiveBillingSubscription(row) &&
-      subscriptionBelongsToOrganization(row.metadata, input.organizationId),
+      subscriptionBelongsToOrganization(row.metadata, input.organizationId)
   );
 
   if (activeSubscription) {
@@ -205,24 +216,28 @@ export const createBillingCheckout = async (input: {
   let teamCustomerId: string | undefined;
 
   try {
-    teamCustomerId = (await polar.customers.getExternal({ externalId: externalCustomerId })).id;
+    const externalCustomer = await polar.customers.getExternal({
+      externalId: externalCustomerId,
+    });
+    teamCustomerId = externalCustomer.id;
   } catch (error) {
-    if (!(error instanceof ResourceNotFound)) throw error;
+    if (!(error instanceof ResourceNotFound)) {
+      throw error;
+    }
 
-    teamCustomerId = (
-      await polar.customers.create({
-        externalId: externalCustomerId,
-        metadata: checkoutMetadata.customerMetadata,
-        name: customerName,
-        organizationId: getPolarApiOrganizationId(),
-        owner: {
-          email: input.customerEmail,
-          externalId: input.userId,
-          name: input.customerName,
-        },
-        type: "team",
-      })
-    ).id;
+    const createdCustomer = await polar.customers.create({
+      externalId: externalCustomerId,
+      metadata: checkoutMetadata.customerMetadata,
+      name: customerName,
+      organizationId: getPolarApiOrganizationId(),
+      owner: {
+        email: input.customerEmail,
+        externalId: input.userId,
+        name: input.customerName,
+      },
+      type: "team",
+    });
+    teamCustomerId = createdCustomer.id;
   }
 
   const checkout = await polar.checkouts.create({
@@ -255,16 +270,18 @@ export const createBillingPortal = async (input: {
       organizationId: input.organizationId,
       returnUrl,
       userId: input.userId,
-    }),
+    })
   );
 
   return { portalUrl: session.customerPortalUrl };
 };
 
 const serializeEntitlement = async (
-  entitlement: Awaited<ReturnType<typeof getOrganizationBillingEntitlement>>,
+  entitlement: Awaited<ReturnType<typeof getOrganizationBillingEntitlement>>
 ) => {
-  const usage = entitlement.account ? await getBillingCreditUsage(entitlement.account) : null;
+  const usage = entitlement.account
+    ? await getBillingCreditUsage(entitlement.account)
+    : null;
 
   return {
     creditAmountCents: entitlement.account?.creditAmountCents ?? null,
@@ -282,7 +299,8 @@ const serializeEntitlement = async (
           })),
           costCents: usage.costMicroCents / 1_000_000,
           remainingCreditCents:
-            Math.max(0, usage.creditAmountMicroCents - usage.costMicroCents) / 1_000_000,
+            Math.max(0, usage.creditAmountMicroCents - usage.costMicroCents) /
+            1_000_000,
         }
       : null,
   };
@@ -311,15 +329,18 @@ export const getBillingOverview = async (input: { userId: string }) => {
         await getOrganizationBillingEntitlement({
           feature: "organizationMail",
           organizationId: membership.organizationId,
-        }),
+        })
       )),
-    })),
+    }))
   );
 
   return { teams };
 };
 
-export const syncBillingCheckout = async (input: { checkoutId: string; userId: string }) => {
+export const syncBillingCheckout = async (input: {
+  checkoutId: string;
+  userId: string;
+}) => {
   if (isLocalDevelopmentBillingEntitlementEnabled()) {
     return { synced: false };
   }
@@ -335,11 +356,20 @@ export const syncBillingCheckout = async (input: { checkoutId: string; userId: s
   }
 
   let subscription: Subscription | undefined;
-  if (checkout.subscriptionId) {
+  if ((checkout.subscriptionId ?? "") !== "") {
+    const { subscriptionId } = checkout;
+    if (typeof subscriptionId !== "string") {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "This checkout cannot be applied to your billing account.",
+      });
+    }
     subscription = await polar.subscriptions.get({
-      id: checkout.subscriptionId,
+      id: subscriptionId,
     });
-  } else if (checkout.customerId && checkout.productId) {
+  } else if (
+    (checkout.customerId ?? "") !== "" &&
+    (checkout.productId ?? "") !== ""
+  ) {
     const subscriptions = await polar.subscriptions.list({
       active: true,
       customerId: checkout.customerId,
@@ -348,23 +378,66 @@ export const syncBillingCheckout = async (input: { checkoutId: string; userId: s
       sorting: ["-started_at"],
     });
     subscription = subscriptions.result.items.find(
-      (candidate) => candidate.metadata[BILLING_METADATA_USER_ID] === input.userId,
+      (candidate) =>
+        candidate.metadata[BILLING_METADATA_USER_ID] === input.userId
     );
   }
 
-  if (!subscription) {
-    console.error("Could not resolve the subscription created by a completed checkout.", {
-      checkoutId: checkout.id,
-      customerId: checkout.customerId,
-      productId: checkout.productId,
-      userId: input.userId,
-    });
+  if (subscription === undefined) {
+    reportError(
+      new Error(
+        "Could not resolve the subscription created by a completed checkout."
+      ),
+      { operation: "billing:resolve-checkout-subscription" }
+    );
     throw new ORPCError("BAD_REQUEST", {
       message: "We could not activate your plan. Please contact support.",
     });
   }
 
   return await syncBillingSubscription(subscription);
+};
+
+const recordAiCreditUsage = async (input: {
+  chatId?: string | null;
+  costMicroCents: number;
+  externalId: string;
+  mailboxId?: string;
+  metadata: Record<string, number | string>;
+  userId: string;
+}) => {
+  const mailboxId = input.mailboxId ?? "";
+  if (mailboxId === "") {
+    return;
+  }
+  const [mailboxRow] = await db
+    .select({ organizationId: mailbox.organizationId })
+    .from(mailbox)
+    .where(eq(mailbox.id, mailboxId))
+    .limit(1);
+  if (mailboxRow === undefined) {
+    return;
+  }
+
+  const entitlement = await hasUserBillingFeature({
+    feature: "aiChat",
+    organizationId: mailboxRow.organizationId,
+    userId: input.userId,
+  });
+  if (entitlement.account === null) {
+    return;
+  }
+
+  await recordBillingCreditUsage({
+    account: entitlement.account,
+    category: "ai",
+    costMicroCents: input.costMicroCents,
+    dedupeKey: `ai:${input.externalId}`,
+    metadata: {
+      chatId: input.chatId ?? "",
+      ...input.metadata,
+    },
+  });
 };
 
 export const reportAiUsage = async (input: {
@@ -379,17 +452,24 @@ export const reportAiUsage = async (input: {
     cachedTokens?: number;
     cacheWriteTokens?: number;
   };
-  usageKind: Extract<BillingUsageKind, "aiChat" | "aiMemory" | "autoLabel" | "usefulDetails">;
+  usageKind: Extract<
+    BillingUsageKind,
+    "aiChat" | "aiMemory" | "autoLabel" | "usefulDetails"
+  >;
   userId: string;
 }) => {
   if (input.costUsd === undefined) {
     throw new Error("The AI provider did not report a generation cost.");
   }
 
-  if (input.costUsd <= 0) return;
+  if (input.costUsd <= 0) {
+    return;
+  }
 
   const costMicroCents = getAiUsageCostMicroCents(input.costUsd);
-  if (costMicroCents <= 0) return;
+  if (costMicroCents <= 0) {
+    return;
+  }
 
   await recordAiCreditUsage({
     chatId: input.chatId,
@@ -397,49 +477,14 @@ export const reportAiUsage = async (input: {
     externalId: input.externalId,
     mailboxId: input.mailboxId,
     metadata: {
-      completionTokens: input.completionTokens,
-      cachedTokens: input.promptTokensDetails?.cachedTokens ?? 0,
       cacheWriteTokens: input.promptTokensDetails?.cacheWriteTokens ?? 0,
+      cachedTokens: input.promptTokensDetails?.cachedTokens ?? 0,
+      completionTokens: input.completionTokens,
       costUsd: input.costUsd,
       model: input.model,
       promptTokens: input.promptTokens,
       usageKind: input.usageKind,
     },
     userId: input.userId,
-  });
-};
-
-const recordAiCreditUsage = async (input: {
-  chatId?: string | null;
-  costMicroCents: number;
-  externalId: string;
-  mailboxId?: string;
-  metadata: Record<string, number | string>;
-  userId: string;
-}) => {
-  if (!input.mailboxId) return;
-  const [mailboxRow] = await db
-    .select({ organizationId: mailbox.organizationId })
-    .from(mailbox)
-    .where(eq(mailbox.id, input.mailboxId))
-    .limit(1);
-  if (!mailboxRow) return;
-
-  const entitlement = await hasUserBillingFeature({
-    feature: "aiChat",
-    organizationId: mailboxRow.organizationId,
-    userId: input.userId,
-  });
-  if (!entitlement.account) return;
-
-  await recordBillingCreditUsage({
-    account: entitlement.account,
-    category: "ai",
-    costMicroCents: input.costMicroCents,
-    dedupeKey: `ai:${input.externalId}`,
-    metadata: {
-      chatId: input.chatId ?? "",
-      ...input.metadata,
-    },
   });
 };

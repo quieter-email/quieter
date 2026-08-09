@@ -3,11 +3,13 @@
   "compilerOptions": {
     "jsx": "react-jsx",
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
-    "types": ["bun", "vite/client"],
-    "paths": {
-      "~/*": ["./src/*"]
-    }
+    "types": ["bun", "vite/client", "node"]
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "scripts/**/*.ts",
+    "instrument.server.ts"
+  ],
   "exclude": ["node_modules"]
 }

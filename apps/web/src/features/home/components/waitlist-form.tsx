@@ -4,12 +4,30 @@ import { Field, FieldLabel } from "@quieter/ui/field";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
 import { toast } from "@quieter/ui/toast";
-import { useState, type SubmitEvent } from "react";
-import { type WaitlistIconState, WaitlistSubmitIcon } from "./waitlist-submit-icon";
+import { useState } from "react";
+import type { SubmitEvent } from "react";
+
+import { WaitlistSubmitIcon } from "./waitlist-submit-icon";
+import type { WaitlistIconState } from "./waitlist-submit-icon";
 
 type WaitlistResponse = {
   email: string;
   status: "created" | "existing";
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const parseWaitlistResponse = (value: unknown): WaitlistResponse => {
+  if (
+    !isRecord(value) ||
+    typeof value.email !== "string" ||
+    (value.status !== "created" && value.status !== "existing")
+  ) {
+    throw new Error("Invalid waitlist response.");
+  }
+
+  return { email: value.email, status: value.status };
 };
 
 const addToWaitlist = async (formData: FormData): Promise<WaitlistResponse> => {
@@ -25,12 +43,19 @@ const addToWaitlist = async (formData: FormData): Promise<WaitlistResponse> => {
     throw new Error("Could not add waitlist signup.");
   }
 
-  return await response.json();
+  return parseWaitlistResponse(await response.json());
 };
 
-export const WaitlistForm = ({ className, id }: { className?: string; id?: string }) => {
+export const WaitlistForm = ({
+  className,
+  id,
+}: {
+  className?: string;
+  id?: string;
+}) => {
   const [iconState, setIconState] = useState<WaitlistIconState>("idle");
-  const fieldId = id ? `${id}-email` : "waitlist-email";
+  const fieldId =
+    id !== undefined && id !== "" ? `${id}-email` : "waitlist-email";
 
   const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -49,17 +74,20 @@ export const WaitlistForm = ({ className, id }: { className?: string; id?: strin
           : `Added ${response.email} to the waitlist.`,
     });
 
-    void request
-      .then(() => {
+    const updateIconState = async () => {
+      try {
+        await request;
         form.reset();
         setIconState("success");
-      })
-      .catch(() => {
+      } catch {
         setIconState("error");
-      })
-      .finally(() => {
-        window.setTimeout(() => setIconState("idle"), 1600);
-      });
+      } finally {
+        window.setTimeout(() => {
+          setIconState("idle");
+        }, 1600);
+      }
+    };
+    void updateIconState();
   };
 
   return (

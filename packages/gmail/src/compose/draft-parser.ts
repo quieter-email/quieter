@@ -4,57 +4,60 @@ import {
   extractMessageAttachments,
   extractMessageContent,
 } from "@quieter/mail/message-content";
+
 import type { GmailDraft } from "../service";
 
 export const parseDraftMessage = (draft: GmailDraft) => {
-  const message = draft.message;
+  const { message } = draft;
   if (!message) {
     return {
-      subject: "",
+      attachments: [],
       bodyHtml: "",
       bodyText: "",
-      recipients: {
-        to: "",
-        cc: "",
-        bcc: "",
-      },
       draftAnchor: null,
-      messageId: null,
-      replyContext: null,
-      attachments: [],
       inReplyTo: null,
       inlineImages: [],
+      messageId: null,
+      recipients: {
+        bcc: "",
+        cc: "",
+        to: "",
+      },
+      replyContext: null,
+      subject: "",
     };
   }
 
   const content = extractMessageContent(message.payload);
   const headers = message.payload?.headers ?? [];
   const readHeader = (name: string) =>
-    headers.find((header) => header.name.toLowerCase() === name.toLowerCase())?.value ?? "";
+    headers.find((header) => header.name.toLowerCase() === name.toLowerCase())
+      ?.value ?? "";
   const draftAnchor = parseDraftAnchorFromHeaderReader(readHeader) ?? null;
   const inReplyTo = readHeader("In-Reply-To").trim();
-  const references = Array.from(new Set(readHeader("References").match(/<[^>]+>/g) ?? []));
+  const referenceMatches = readHeader("References").match(/<[^>]+>/gu);
+  const references = referenceMatches ? [...new Set(referenceMatches)] : [];
 
   return {
-    subject: readHeader("Subject"),
+    attachments: extractMessageAttachments(message.payload),
     bodyHtml: content.html ?? "",
     bodyText: content.text ?? "",
-    recipients: {
-      to: readHeader("To"),
-      cc: readHeader("Cc"),
-      bcc: readHeader("Bcc"),
-    },
     draftAnchor,
-    messageId: message.id,
-    replyContext: message.threadId
-      ? {
-          threadId: message.threadId,
-          messageHeaderId: inReplyTo || undefined,
-          references,
-        }
-      : null,
-    attachments: extractMessageAttachments(message.payload),
     inReplyTo: inReplyTo || null,
     inlineImages: extractInlineMessageAttachments(message.payload),
+    messageId: message.id,
+    recipients: {
+      bcc: readHeader("Bcc"),
+      cc: readHeader("Cc"),
+      to: readHeader("To"),
+    },
+    replyContext: message.threadId
+      ? {
+          messageHeaderId: inReplyTo || undefined,
+          references,
+          threadId: message.threadId,
+        }
+      : null,
+    subject: readHeader("Subject"),
   };
 };

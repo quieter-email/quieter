@@ -1,12 +1,13 @@
 import type { MessagePart } from "@tanstack/ai";
+
 import { UserTextPart } from "./user-text-part";
 
 export const UserParts = ({ parts }: { parts: MessagePart[] }) => (
   <>
-    {parts.map((part, index) =>
+    {parts.map((part) =>
       part.type === "text" ? (
-        <UserTextPart key={`text:${index}:${part.content}`} text={part.content} />
-      ) : null,
+        <UserTextPart key={`text:${part.content}`} text={part.content} />
+      ) : null
     )}
   </>
 );

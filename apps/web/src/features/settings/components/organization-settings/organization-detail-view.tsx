@@ -1,17 +1,26 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import type { OrganizationSettingsView } from "~/features/settings/domain/organization-settings-view";
-import { getTeamBilling, userBillingQueryOptions } from "~/features/settings/domain/billing";
-import { SettingsBackButton, SettingsErrorState, SettingsLoadingState } from "../settings-layout";
+
+import {
+  getTeamBilling,
+  userBillingQueryOptions,
+} from "#/features/settings/domain/billing";
+import type { OrganizationSettingsView } from "#/features/settings/domain/organization-settings-view";
+
+import {
+  SettingsBackButton,
+  SettingsErrorState,
+  SettingsLoadingState,
+} from "../settings-layout";
 import { ApiKeysView } from "./api-keys-view";
 import { DivisionsView } from "./divisions-view";
 import {
-  type OrganizationSummary,
   fullOrganizationQueryOptions,
   hasOrganizationPermission,
   normalizeOrganizationRole,
 } from "./domain";
+import type { OrganizationSummary } from "./domain";
 import { DomainDetailView } from "./domain-detail-view";
 import { DomainsView } from "./domains-view";
 import { MembersView } from "./members-view";
@@ -61,10 +70,15 @@ export const OrganizationDetailView = ({
     isPending: isBillingPending,
     isSuccess: isBillingSuccess,
   } = useQuery(userBillingQueryOptions());
-  const activeMember = fullOrganization?.members.find((member) => member.userId === userId) ?? null;
-  const activeRole = activeMember && normalizeOrganizationRole(activeMember.role);
+  const activeMember =
+    fullOrganization?.members.find((member) => member.userId === userId) ??
+    null;
+  const activeRole =
+    activeMember && normalizeOrganizationRole(activeMember.role);
   const pendingInvitations =
-    fullOrganization?.invitations.filter((invitation) => invitation.status === "pending") ?? [];
+    fullOrganization?.invitations.filter(
+      (invitation) => invitation.status === "pending"
+    ) ?? [];
   const canCancelInvitations = hasOrganizationPermission(activeRole, {
     invitation: ["cancel"],
   });
@@ -84,7 +98,8 @@ export const OrganizationDetailView = ({
     organization: ["update"],
   });
   const teamBilling = getTeamBilling(billing, organization.id);
-  const canUseTeamFeatures = isBillingSuccess && teamBilling?.hasAccess === true;
+  const canUseTeamFeatures =
+    isBillingSuccess && teamBilling?.hasAccess === true;
 
   if (isFullOrganizationPending) {
     return (
@@ -101,7 +116,9 @@ export const OrganizationDetailView = ({
         <SettingsBackButton onClick={onBackToList}>Teams</SettingsBackButton>
         <SettingsErrorState
           message={fullOrganizationError.message ?? "Could not load team."}
-          onRetry={() => void refetchFullOrganization()}
+          onRetry={() => {
+            void refetchFullOrganization();
+          }}
         />
       </>
     );

@@ -1,12 +1,17 @@
 "use client";
 
-import { CheckmarkCircle02Icon, Loading03Icon } from "@hugeicons/core-free-icons";
+import {
+  CheckmarkCircle02Icon,
+  Loading03Icon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { BILLING_PRODUCTS, type BillingProductId } from "@quieter/billing/plans";
+import { BILLING_PRODUCTS } from "@quieter/billing/plans";
+import type { BillingProductId } from "@quieter/billing/plans";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
-import { settingsSurfaceVariants } from "~/features/settings/components/settings-layout";
-import { formatBillingProduct } from "~/features/settings/domain/billing";
+
+import { settingsSurfaceVariants } from "#/features/settings/components/settings-layout";
+import { formatBillingProduct } from "#/features/settings/domain/billing";
 
 const moneyFormatter = new Intl.NumberFormat("en-US", {
   currency: "USD",
@@ -36,8 +41,8 @@ export const BillingProductCard = ({
   return (
     <article
       className={cn("squircle rounded-xl border bg-bg p-5", {
-        "border-primary/50 bg-primary/4": isCurrent,
         "border-border": !isCurrent,
+        "border-primary/50 bg-primary/4": isCurrent,
       })}
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -50,7 +55,9 @@ export const BillingProductCard = ({
               </span>
             )}
           </div>
-          <p className="mt-1.5 text-sm/6 text-muted-fg">{product.description}</p>
+          <p className="mt-1.5 text-sm/6 text-muted-fg">
+            {product.description}
+          </p>
         </div>
         <div className="flex shrink-0 flex-col gap-3 sm:items-end">
           <p className="text-2xl font-semibold tracking-tight text-fg">
@@ -65,9 +72,21 @@ export const BillingProductCard = ({
             variant={product.highlight ? "default" : "outline"}
           >
             {isStartingCheckout && (
-              <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+              <HugeiconsIcon
+                aria-hidden
+                className="size-4 animate-spin"
+                icon={Loading03Icon}
+              />
             )}
-            {isCurrent ? "Current billing" : canChoose ? "Choose" : "Owner or admin required"}
+            {(() => {
+              if (isCurrent) {
+                return "Current billing";
+              }
+              if (canChoose) {
+                return "Choose";
+              }
+              return "Owner or admin required";
+            })()}
           </Button>
         </div>
       </div>
@@ -94,20 +113,31 @@ export const BillingCreditSummary = ({
 }: {
   creditAmountCents: number | null;
   product: BillingProductId | null;
-  usage: { billableCostCents: number; costCents: number; remainingCreditCents: number } | null;
+  usage: {
+    billableCostCents: number;
+    costCents: number;
+    remainingCreditCents: number;
+  } | null;
 }) => (
   <div
-    className={cn("flex flex-wrap gap-x-5 gap-y-1", settingsSurfaceVariants({ variant: "value" }))}
+    className={cn(
+      "flex flex-wrap gap-x-5 gap-y-1",
+      settingsSurfaceVariants({ variant: "value" })
+    )}
   >
     <span>{formatBillingProduct(product)}</span>
-    {creditAmountCents != null && (
+    {creditAmountCents !== null && creditAmountCents !== undefined && (
       <span>
-        {moneyFormatter.format((usage?.remainingCreditCents ?? creditAmountCents) / 100)} usage
-        balance remaining
+        {moneyFormatter.format(
+          (usage?.remainingCreditCents ?? creditAmountCents) / 100
+        )}{" "}
+        usage balance remaining
       </span>
     )}
-    {!!usage?.billableCostCents && (
-      <span>{moneyFormatter.format(usage.billableCostCents / 100)} overage</span>
+    {(usage?.billableCostCents ?? 0) > 0 && (
+      <span>
+        {moneyFormatter.format((usage?.billableCostCents ?? 0) / 100)} overage
+      </span>
     )}
   </div>
 );

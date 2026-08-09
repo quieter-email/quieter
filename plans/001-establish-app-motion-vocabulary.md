@@ -72,7 +72,7 @@ object that unrelated features must import unchanged. Each feature composes the 
 
 ## Verification
 
-- **Mechanical**: `vp check --fix`, `vp run check:copy`, `vp test`, `vp run -r build`.
+- **Mechanical**: `vp check --fix`, `vp test`, `vp run -r build`.
 - **Feel check**:
   - Inspect a semantic entrance at 10% speed: it begins within one frame, travels no more than 8px,
     and finishes within the semantic entrance duration plus capped stagger.

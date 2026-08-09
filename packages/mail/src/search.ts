@@ -51,7 +51,9 @@ const GMAIL_FILTER_TYPES = new Set<MailSearchFilterType>([
   "to",
 ]);
 
-const MANAGED_FILTER_TYPES = new Set<MailSearchFilterType>(mailSearchFilterTypeSchema.options);
+const MANAGED_FILTER_TYPES = new Set<MailSearchFilterType>(
+  mailSearchFilterTypeSchema.options
+);
 
 const REPEATABLE_FILTER_TYPES = new Set<MailSearchFilterType>([
   "bcc",
@@ -64,13 +66,15 @@ const REPEATABLE_FILTER_TYPES = new Set<MailSearchFilterType>([
   "to",
 ]);
 
-export const getSupportedMailSearchFilterTypes = (provider: MailboxProvider) =>
+export const getSupportedMailSearchFilterTypes = (
+  provider: MailboxProvider
+): Set<MailSearchFilterType> =>
   provider === "managed" ? MANAGED_FILTER_TYPES : GMAIL_FILTER_TYPES;
 
 export const isMailSearchFilterSupported = (
   provider: MailboxProvider,
-  filter: Pick<MailSearchFilter, "type" | "value">,
-) => {
+  filter: Pick<MailSearchFilter, "type" | "value">
+): boolean => {
   if (!getSupportedMailSearchFilterTypes(provider).has(filter.type)) {
     return false;
   }
@@ -82,10 +86,12 @@ export const isMailSearchFilterSupported = (
   );
 };
 
-export const isRepeatableMailSearchFilter = (type: MailSearchFilterType) =>
-  REPEATABLE_FILTER_TYPES.has(type);
+export const isRepeatableMailSearchFilter = (
+  type: MailSearchFilterType
+): boolean => REPEATABLE_FILTER_TYPES.has(type);
 
-export const normalizeSearchText = (value: string) => value.replace(/\s+/g, " ").trim();
+export const normalizeSearchText = (value: string): string =>
+  value.replaceAll(/\s+/gu, " ").trim();
 
 const parseQuotedValue = (value: string) => {
   if (!value.startsWith('"') || !value.endsWith('"')) {
@@ -108,7 +114,7 @@ const parseQuotedValue = (value: string) => {
 const readStructuredToken = (query: string, start: number) => {
   let cursor = query[start] === "-" ? start + 1 : start;
   const typeStart = cursor;
-  while (cursor < query.length && /[a-z_]/i.test(query[cursor] ?? "")) {
+  while (cursor < query.length && /[a-z_]/iu.test(query[cursor] ?? "")) {
     cursor += 1;
   }
 
@@ -137,13 +143,15 @@ const readStructuredToken = (query: string, start: number) => {
     return null;
   }
 
-  while (cursor < query.length && !/\s/.test(query[cursor] ?? "")) {
+  while (cursor < query.length && !/\s/u.test(query[cursor] ?? "")) {
     cursor += 1;
   }
   return query.slice(start, cursor);
 };
 
-export const parseStructuredSearchFilterToken = (token: string): MailSearchFilter | null => {
+export const parseStructuredSearchFilterToken = (
+  token: string
+): MailSearchFilter | null => {
   const negated = token.startsWith("-");
   const normalizedToken = negated ? token.slice(1) : token;
   const separatorIndex = normalizedToken.indexOf(":");
@@ -152,18 +160,21 @@ export const parseStructuredSearchFilterToken = (token: string): MailSearchFilte
   }
 
   const parsedType = mailSearchFilterTypeSchema.safeParse(
-    normalizedToken.slice(0, separatorIndex).toLocaleLowerCase(),
+    normalizedToken.slice(0, separatorIndex).toLocaleLowerCase()
   );
   if (!parsedType.success) {
     return null;
   }
 
   const type = parsedType.data;
-  const withNegation = (filter: Omit<MailSearchFilter, "negated">): MailSearchFilter =>
-    negated ? { ...filter, negated: true } : filter;
+  const withNegation = (
+    filter: Omit<MailSearchFilter, "negated">
+  ): MailSearchFilter => (negated ? { ...filter, negated: true } : filter);
   const rawValue = normalizedToken.slice(separatorIndex + 1);
   if (rawValue.length === 0) {
-    return ["has", "is", "label"].includes(type) ? null : withNegation({ type, value: "" });
+    return ["has", "is", "label"].includes(type)
+      ? null
+      : withNegation({ type, value: "" });
   }
 
   const value = parseQuotedValue(rawValue).trim();
@@ -201,15 +212,20 @@ export const serializeStructuredSearchFilterToken = ({
   negated,
   type,
   value,
-}: MailSearchFilter) => {
+}: MailSearchFilter): string => {
   const normalizedValue = value.trim();
-  const prefix = negated ? "-" : "";
-  if (!normalizedValue) {
+  const prefix = negated === true ? "-" : "";
+  if (normalizedValue.length === 0) {
     return type === "label" ? "" : `${prefix}${type}:`;
   }
 
-  const escapedValue = normalizedValue.replace(/(["\\])/g, "\\$1");
-  const serializedValue = /[\s"\\]/.test(normalizedValue) ? `"${escapedValue}"` : normalizedValue;
+  const escapedValue = normalizedValue.replaceAll(
+    /(?<char>["\\])/gu,
+    "\\$<char>"
+  );
+  const serializedValue = /[\s"\\]/u.test(normalizedValue)
+    ? `"${escapedValue}"`
+    : normalizedValue;
   return `${prefix}${type}:${serializedValue}`;
 };
 
@@ -217,21 +233,24 @@ type StructuredSearchQuerySegment =
   | { type: "text"; value: string }
   | { filter: MailSearchFilter; type: "filter" };
 
-const tokenizeStructuredSearchQuery = (query: string): StructuredSearchQuerySegment[] => {
+const tokenizeStructuredSearchQuery = (
+  query: string
+): StructuredSearchQuerySegment[] => {
   const segments: StructuredSearchQuerySegment[] = [];
   let cursor = 0;
   let textStart = 0;
 
   while (cursor < query.length) {
-    const isTokenStart = cursor === 0 || /\s/.test(query[cursor - 1] ?? "");
+    const isTokenStart = cursor === 0 || /\s/u.test(query[cursor - 1] ?? "");
     if (!isTokenStart) {
       cursor += 1;
       continue;
     }
 
     const token = readStructuredToken(query, cursor);
-    const filter = token && parseStructuredSearchFilterToken(token);
-    if (!filter || !token) {
+    const filter =
+      token === null ? null : parseStructuredSearchFilterToken(token);
+    if (filter === null || token === null) {
       cursor += 1;
       continue;
     }
@@ -251,21 +270,29 @@ const tokenizeStructuredSearchQuery = (query: string): StructuredSearchQuerySegm
   return segments.length > 0 ? segments : [{ type: "text", value: query }];
 };
 
-const areEquivalentFilters = (left: MailSearchFilter, right: MailSearchFilter) =>
+const areEquivalentFilters = (
+  left: MailSearchFilter,
+  right: MailSearchFilter
+) =>
   left.type === right.type &&
   left.negated === right.negated &&
   normalizeSearchText(left.value).toLocaleLowerCase() ===
     normalizeSearchText(right.value).toLocaleLowerCase();
 
 export const normalizeStructuredMailSearch = (
-  search: StructuredMailSearch,
+  search: StructuredMailSearch
 ): StructuredMailSearch => {
   const filters: MailSearchFilter[] = [];
   for (const filter of search.filters) {
-    const normalizedFilter = { ...filter, value: normalizeSearchText(filter.value) };
+    const normalizedFilter = {
+      ...filter,
+      value: normalizeSearchText(filter.value),
+    };
     if (
-      normalizedFilter.value &&
-      !filters.some((current) => areEquivalentFilters(current, normalizedFilter))
+      normalizedFilter.value.length > 0 &&
+      !filters.some((current) =>
+        areEquivalentFilters(current, normalizedFilter)
+      )
     ) {
       filters.push(normalizedFilter);
     }
@@ -274,7 +301,9 @@ export const normalizeStructuredMailSearch = (
   return { filters, text: normalizeSearchText(search.text) };
 };
 
-export const parseStructuredSearchQuery = (query: string): StructuredMailSearch => {
+export const parseStructuredSearchQuery = (
+  query: string
+): StructuredMailSearch => {
   const filters: MailSearchFilter[] = [];
   const textParts: string[] = [];
 
@@ -292,16 +321,23 @@ export const parseStructuredSearchQuery = (query: string): StructuredMailSearch 
       continue;
     }
 
-    const existingIndex = filters.findIndex((filter) => filter.type === segment.filter.type);
+    const existingIndex = filters.findIndex(
+      (filter) => filter.type === segment.filter.type
+    );
     filters[existingIndex] = segment.filter;
   }
 
   return normalizeStructuredMailSearch({ filters, text: textParts.join("") });
 };
 
-export const serializeStructuredSearchState = (search: StructuredMailSearch) => {
+export const serializeStructuredSearchState = (
+  search: StructuredMailSearch
+): string => {
   const normalized = normalizeStructuredMailSearch(search);
-  return [...normalized.filters.map(serializeStructuredSearchFilterToken), normalized.text]
+  return [
+    ...normalized.filters.map(serializeStructuredSearchFilterToken),
+    normalized.text,
+  ]
     .filter(Boolean)
     .join(" ")
     .trim();
@@ -309,5 +345,7 @@ export const serializeStructuredSearchState = (search: StructuredMailSearch) => 
 
 export const areStructuredMailSearchesEqual = (
   left: StructuredMailSearch,
-  right: StructuredMailSearch,
-) => serializeStructuredSearchState(left) === serializeStructuredSearchState(right);
+  right: StructuredMailSearch
+): boolean =>
+  serializeStructuredSearchState(left) ===
+  serializeStructuredSearchState(right);

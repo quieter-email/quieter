@@ -1,8 +1,9 @@
 "use client";
 
-import type { ComponentPropsWithoutRef } from "react";
 import { NumberField as NumberFieldPrimitive } from "@base-ui/react/number-field";
 import { cva } from "class-variance-authority";
+import type { ComponentPropsWithoutRef } from "react";
+
 import { cn } from "../../lib/cn";
 import { MinusIcon, PlusIcon } from "./icons";
 
@@ -10,7 +11,10 @@ export const NumberField = ({
   className,
   ...props
 }: ComponentPropsWithoutRef<typeof NumberFieldPrimitive.Root>) => (
-  <NumberFieldPrimitive.Root className={cn("grid w-full gap-1.5", className)} {...props} />
+  <NumberFieldPrimitive.Root
+    className={cn("grid w-full gap-1.5", className)}
+    {...props}
+  />
 );
 
 export const NumberFieldGroup = ({
@@ -20,7 +24,7 @@ export const NumberFieldGroup = ({
   <NumberFieldPrimitive.Group
     className={cn(
       "flex items-center rounded-md border border-border bg-bg-elevated shadow-sm",
-      className,
+      className
     )}
     {...props}
   />
@@ -33,7 +37,7 @@ export const NumberFieldInput = ({
   <NumberFieldPrimitive.Input
     className={cn(
       "h-9 w-full border-0 bg-transparent px-3 text-center text-sm text-fg shadow-none transition-colors duration-150 ease-out placeholder:text-muted-fg read-only:bg-transparent focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:focus-visible:ring-destructive/45",
-      className,
+      className
     )}
     {...props}
   />
@@ -44,11 +48,11 @@ const numberFieldButtonVariants = cva(
   {
     variants: {
       side: {
-        increment: "rounded-r-md border-l",
         decrement: "rounded-l-md border-r",
+        increment: "rounded-r-md border-l",
       },
     },
-  },
+  }
 );
 
 export const NumberFieldIncrement = ({

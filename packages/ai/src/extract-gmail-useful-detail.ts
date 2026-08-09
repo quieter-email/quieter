@@ -1,7 +1,11 @@
-import { chat, type ChatMiddleware } from "@tanstack/ai";
+import { chat } from "@tanstack/ai";
+import type { ChatMiddleware } from "@tanstack/ai";
 import { z } from "zod";
-import { defaultUsefulDetailModel, type ChatModel } from "./chat-models";
-import { AI_MEMORY_CONTEXT_MAX_LENGTH, type AutomationMailMessage } from "./classify-gmail-message";
+
+import { defaultUsefulDetailModel } from "./chat-models";
+import type { ChatModel } from "./chat-models";
+import { AI_MEMORY_CONTEXT_MAX_LENGTH } from "./classify-gmail-message";
+import type { AutomationMailMessage } from "./classify-gmail-message";
 import { createOpenRouterAdapter } from "./openrouter";
 
 const deliveryStatusSchema = z.enum([
@@ -49,7 +53,9 @@ const gmailUsefulDetailSchema = z.object({
   trackingNumber: z.string().nullable(),
 });
 
-export type GmailUsefulDetailCandidate = z.infer<typeof gmailUsefulDetailSchema>;
+export type GmailUsefulDetailCandidate = z.infer<
+  typeof gmailUsefulDetailSchema
+>;
 export type GmailUsefulDetailPreferenceProfile = {
   avoidKinds: Exclude<GmailUsefulDetailCandidate["kind"], "none">[];
   memoryContext?: string | null;
@@ -82,7 +88,10 @@ export const extractMailUsefulDetail = async ({
   const mailboxPreferences = preferences
     ? {
         ...preferences,
-        memoryContext: preferences.memoryContext?.slice(0, AI_MEMORY_CONTEXT_MAX_LENGTH),
+        memoryContext: preferences.memoryContext?.slice(
+          0,
+          AI_MEMORY_CONTEXT_MAX_LENGTH
+        ),
       }
     : undefined;
   const result = await chat({
@@ -96,17 +105,17 @@ export const extractMailUsefulDetail = async ({
               fileName,
               mimeType,
             })),
-            body: (message.bodyText ?? message.bodyHtml ?? "").slice(0, 8_000),
+            body: (message.bodyText ?? message.bodyHtml ?? "").slice(0, 8000),
             from: message.from,
             receivedAt: getReceivedAt(message),
             snippet: message.snippet,
             subject: message.subject,
             to: message.to,
           },
-          ...(mailboxPreferences &&
+          ...(mailboxPreferences !== undefined &&
           (mailboxPreferences.avoidKinds.length > 0 ||
             mailboxPreferences.preferKinds.length > 0 ||
-            mailboxPreferences.memoryContext)
+            (mailboxPreferences.memoryContext ?? "") !== "")
             ? { mailboxPreferences }
             : {}),
         }),

@@ -9,13 +9,9 @@ import {
   Loading03Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  useLayoutEffect,
-  useRef,
-  useState,
-  type ComponentPropsWithoutRef,
-  type ReactNode,
-} from "react";
+import { useLayoutEffect, useRef, useState } from "react";
+import type { ComponentPropsWithoutRef, ReactNode } from "react";
+
 import { cn } from "../../lib/cn";
 import { DEFAULT_TOAST_TIMEOUT, toastManager } from "./toast";
 
@@ -23,7 +19,11 @@ const ToastIcon = ({ type }: { type: string | undefined }) => {
   if (type === "success") {
     return (
       <span className="flex size-4 shrink-0 items-center justify-center text-success">
-        <HugeiconsIcon aria-hidden className="size-4" icon={CheckmarkCircle02Icon} />
+        <HugeiconsIcon
+          aria-hidden
+          className="size-4"
+          icon={CheckmarkCircle02Icon}
+        />
       </span>
     );
   }
@@ -47,7 +47,11 @@ const ToastIcon = ({ type }: { type: string | undefined }) => {
   if (type === "info") {
     return (
       <span className="flex size-4 shrink-0 items-center justify-center text-primary">
-        <HugeiconsIcon aria-hidden className="size-4" icon={InformationCircleIcon} />
+        <HugeiconsIcon
+          aria-hidden
+          className="size-4"
+          icon={InformationCircleIcon}
+        />
       </span>
     );
   }
@@ -55,18 +59,16 @@ const ToastIcon = ({ type }: { type: string | undefined }) => {
   if (type === "loading") {
     return (
       <span className="flex size-4 shrink-0 items-center justify-center text-muted-fg">
-        <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+        <HugeiconsIcon
+          aria-hidden
+          className="size-4 animate-spin"
+          icon={Loading03Icon}
+        />
       </span>
     );
   }
 
   return null;
-};
-
-const ToastList = () => {
-  const { toasts } = Toast.useToastManager();
-
-  return toasts.map((item) => <ToastItem key={item.id} toast={item} />);
 };
 
 const ToastItem = ({ toast: item }: { toast: Toast.Root.ToastObject }) => {
@@ -77,7 +79,10 @@ const ToastItem = ({ toast: item }: { toast: Toast.Root.ToastObject }) => {
   useLayoutEffect(() => {
     const updateKey = item.updateKey ?? 0;
 
-    if (updateKey > previousUpdateKeyRef.current && item.type === previousTypeRef.current) {
+    if (
+      updateKey > previousUpdateKeyRef.current &&
+      item.type === previousTypeRef.current
+    ) {
       setShakeGeneration((generation) => generation + 1);
     }
 
@@ -92,15 +97,23 @@ const ToastItem = ({ toast: item }: { toast: Toast.Root.ToastObject }) => {
         {
           "toast-shake-even": shakeGeneration > 0 && shakeGeneration % 2 === 0,
           "toast-shake-odd": shakeGeneration > 0 && shakeGeneration % 2 === 1,
-        },
+        }
       )}
       toast={item}
     >
       <Toast.Content className="flex items-start gap-3 overflow-hidden p-4 transition-opacity duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] data-behind:opacity-0 data-expanded:opacity-100">
         <ToastIcon type={item.type} />
         <div className="grid min-w-0 flex-1 gap-1 pr-6">
-          {item.title ? <Toast.Title className="text-sm font-semibold text-current" /> : null}
-          {item.description ? <Toast.Description className="text-sm text-current/75" /> : null}
+          {item.title !== null &&
+          item.title !== undefined &&
+          item.title !== "" ? (
+            <Toast.Title className="text-sm font-semibold text-current" />
+          ) : null}
+          {item.description !== null &&
+          item.description !== undefined &&
+          item.description !== "" ? (
+            <Toast.Description className="text-sm text-current/75" />
+          ) : null}
         </div>
         <Toast.Close
           aria-label="Dismiss"
@@ -113,18 +126,28 @@ const ToastItem = ({ toast: item }: { toast: Toast.Root.ToastObject }) => {
   );
 };
 
+const ToastList = () => {
+  const { toasts } = Toast.useToastManager();
+
+  return toasts.map((item) => <ToastItem key={item.id} toast={item} />);
+};
+
 export const Toaster = ({
   children,
   className,
   ...props
 }: ComponentPropsWithoutRef<"div"> & { children?: ReactNode }) => (
-  <Toast.Provider limit={3} timeout={DEFAULT_TOAST_TIMEOUT} toastManager={toastManager}>
+  <Toast.Provider
+    limit={3}
+    timeout={DEFAULT_TOAST_TIMEOUT}
+    toastManager={toastManager}
+  >
     {children}
     <Toast.Portal>
       <Toast.Viewport
         className={cn(
           "fixed top-auto right-4 bottom-4 left-auto z-50 mx-auto w-[min(22.5rem,calc(100vw-2rem))]",
-          className,
+          className
         )}
         {...props}
       >

@@ -13,7 +13,7 @@ export const createChatTurnEntranceState = (): ChatTurnEntranceState => ({
 export const trackChatTurnEntrances = (
   state: ChatTurnEntranceState,
   turnIds: string[],
-  hydrated: boolean,
+  hydrated: boolean
 ) => {
   const enteringTurnIds = new Set<string>();
 

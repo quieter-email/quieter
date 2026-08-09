@@ -1,31 +1,40 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { isPreviewPersonasAvailable } from "~/lib/preview-personas";
+
+import { isPreviewPersonasAvailable } from "#/lib/preview-personas";
 
 const MANAGED_DEMO_MODE_STORAGE_KEY = "quieter:managed-demo-mode-enabled";
-const MANAGED_DEMO_MODE_CHANGE_EVENT = "quieter:managed-demo-mode-enabled-change";
+const MANAGED_DEMO_MODE_CHANGE_EVENT =
+  "quieter:managed-demo-mode-enabled-change";
 const GMAIL_DEMO_MODE_STORAGE_KEY = "quieter:demo-mode-enabled";
 const GMAIL_DEMO_MODE_CHANGE_EVENT = "quieter:demo-mode-enabled-change";
 
 export const isManagedDemoModeAvailable = () => isPreviewPersonasAvailable();
 
 const readManagedDemoModeEnabled = () => {
-  if (!isManagedDemoModeAvailable() || typeof window === "undefined") return false;
+  if (!isManagedDemoModeAvailable() || typeof window === "undefined") {
+    return false;
+  }
   return window.localStorage.getItem(MANAGED_DEMO_MODE_STORAGE_KEY) === "true";
 };
 
-const subscribeToManagedDemoMode = (callback: () => void) => {
+const subscribeToManagedDemoMode = (onStoreChange: () => void) => {
   const handleStorage = (event: StorageEvent) => {
-    if (event.key === MANAGED_DEMO_MODE_STORAGE_KEY) callback();
+    if (event.key === MANAGED_DEMO_MODE_STORAGE_KEY) {
+      onStoreChange();
+    }
+  };
+  const handleChange = () => {
+    onStoreChange();
   };
 
   window.addEventListener("storage", handleStorage);
-  window.addEventListener(MANAGED_DEMO_MODE_CHANGE_EVENT, callback);
+  window.addEventListener(MANAGED_DEMO_MODE_CHANGE_EVENT, handleChange);
 
   return () => {
     window.removeEventListener("storage", handleStorage);
-    window.removeEventListener(MANAGED_DEMO_MODE_CHANGE_EVENT, callback);
+    window.removeEventListener(MANAGED_DEMO_MODE_CHANGE_EVENT, handleChange);
   };
 };
 
@@ -35,7 +44,9 @@ const disableGmailDemoMode = () => {
 };
 
 export const setManagedDemoModeEnabled = (enabled: boolean) => {
-  if (!isManagedDemoModeAvailable()) return;
+  if (!isManagedDemoModeAvailable()) {
+    return;
+  }
 
   if (enabled) {
     disableGmailDemoMode();
@@ -46,4 +57,8 @@ export const setManagedDemoModeEnabled = (enabled: boolean) => {
 };
 
 export const useManagedDemoModeEnabled = () =>
-  useSyncExternalStore(subscribeToManagedDemoMode, readManagedDemoModeEnabled, () => false);
+  useSyncExternalStore(
+    subscribeToManagedDemoMode,
+    readManagedDemoModeEnabled,
+    () => false
+  );

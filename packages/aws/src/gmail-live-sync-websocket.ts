@@ -1,9 +1,14 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DeleteCommand, DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
+import {
+  DeleteCommand,
+  DynamoDBDocumentClient,
+  PutCommand,
+} from "@aws-sdk/lib-dynamodb";
 import { serverEnv } from "@quieter/env/server";
 import { getGmailLiveSyncAccess } from "@quieter/orpc/gmail-live-sync";
 import { verifyGmailLiveSyncToken } from "@quieter/orpc/gmail-live-sync-token";
 import { Resource } from "sst";
+
 import { reportAwsError, withSentry } from "./sentry";
 
 const CONNECTION_TTL_SECONDS = 60 * 60 * 3;
@@ -18,8 +23,8 @@ type WebSocketEvent = {
 
 const dynamo = DynamoDBDocumentClient.from(
   new DynamoDBClient({
-    region: serverEnv.AWS_REGION || serverEnv.AWS_DEFAULT_REGION,
-  }),
+    region: serverEnv.AWS_REGION ?? serverEnv.AWS_DEFAULT_REGION,
+  })
 );
 
 const response = (statusCode: number) => ({
@@ -29,13 +34,16 @@ const response = (statusCode: number) => ({
 
 const handleConnect = async (event: WebSocketEvent, connectionId: string) => {
   const token = event.queryStringParameters?.token;
-  if (!token) {
+  if (token === null || token === undefined || token === "") {
     return response(401);
   }
 
   let payload: ReturnType<typeof verifyGmailLiveSyncToken>;
   try {
-    payload = verifyGmailLiveSyncToken(token, Resource.GmailLiveSyncTokenSecret.value);
+    payload = verifyGmailLiveSyncToken(
+      token,
+      Resource.GmailLiveSyncTokenSecret.value
+    );
   } catch {
     return response(403);
   }
@@ -60,37 +68,43 @@ const handleConnect = async (event: WebSocketEvent, connectionId: string) => {
           userId: payload.userId,
         },
         TableName: Resource.GmailLiveSyncConnections.name,
-      }),
+      })
     );
     return response(200);
   } catch (error) {
     await reportAwsError(error, "GmailLiveSyncWebSocket");
-    console.error(
-      "Could not establish Gmail live-sync connection.",
-      error instanceof Error ? error.message : "Unknown error.",
-    );
     return response(500);
   }
 };
 
-export const handler = withSentry("GmailLiveSyncWebSocket", async (event: WebSocketEvent) => {
-  const connectionId = event.requestContext?.connectionId;
-  const routeKey = event.requestContext?.routeKey;
-  if (!connectionId || !routeKey) {
-    return response(400);
-  }
+export const handler = withSentry(
+  "GmailLiveSyncWebSocket",
+  async (event: WebSocketEvent) => {
+    const connectionId = event.requestContext?.connectionId;
+    const routeKey = event.requestContext?.routeKey;
+    if (
+      connectionId === null ||
+      connectionId === undefined ||
+      connectionId === "" ||
+      routeKey === null ||
+      routeKey === undefined ||
+      routeKey === ""
+    ) {
+      return response(400);
+    }
 
-  if (routeKey === "$connect") {
-    return await handleConnect(event, connectionId);
-  }
-  if (routeKey === "$disconnect") {
-    await dynamo.send(
-      new DeleteCommand({
-        Key: { connectionId },
-        TableName: Resource.GmailLiveSyncConnections.name,
-      }),
-    );
-  }
+    if (routeKey === "$connect") {
+      return await handleConnect(event, connectionId);
+    }
+    if (routeKey === "$disconnect") {
+      await dynamo.send(
+        new DeleteCommand({
+          Key: { connectionId },
+          TableName: Resource.GmailLiveSyncConnections.name,
+        })
+      );
+    }
 
-  return response(200);
-});
+    return response(200);
+  }
+);
