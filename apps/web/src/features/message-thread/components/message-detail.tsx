@@ -1,14 +1,13 @@
 "use client";
 
-import { ArrowLeft01Icon, Loading03Icon } from "@hugeicons/core-free-icons";
+import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button } from "@quieter/ui/button";
-import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { m, useReducedMotion } from "motion/react";
 import { Suspense } from "react";
 import type { ReactNode } from "react";
 
 import { EmptyMessageState } from "#/components/empty-message-state";
+import { MobileHeader } from "#/components/mobile-header";
 import type { ComposeDraftState } from "#/features/compose/domain/draft";
 import type {
   MailboxActions,
@@ -128,19 +127,7 @@ export const MessageDetail = ({
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       {onBackToList && (
-        <div className="flex min-h-12 shrink-0 items-center border-b px-2 lg:hidden">
-          <IconButtonTooltip label="Back to list">
-            <Button
-              aria-label="Back to list"
-              onClick={onBackToList}
-              size="icon-lg"
-              type="button"
-              variant="ghost"
-            >
-              <HugeiconsIcon aria-hidden icon={ArrowLeft01Icon} />
-            </Button>
-          </IconButtonTooltip>
-        </div>
+        <MobileHeader leading="back" onLeadingClick={onBackToList} />
       )}
 
       <div

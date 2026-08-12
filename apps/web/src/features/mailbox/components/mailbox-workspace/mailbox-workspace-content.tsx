@@ -3,17 +3,16 @@
 import {
   Loading03Icon,
   Mail01Icon,
-  SidebarLeftIcon,
   Settings01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
-import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { domAnimation, LazyMotion, m } from "motion/react";
 import { lazy, Suspense, useState } from "react";
 import type { ComponentProps, ReactNode } from "react";
 
+import { MobileHeader } from "#/components/mobile-header";
 import { WorkspaceDitherBackground } from "#/components/workspace-dither-background";
 import {
   WorkspaceSection,
@@ -134,27 +133,17 @@ const ComposeWorkspaceLoading = ({
   onOpenSidebar,
 }: Pick<MailboxWorkspaceContentProps, "onOpenSidebar">) => (
   <WorkspaceSection aria-busy="true" data-compose-workspace>
-    <div className="flex h-full min-h-0 flex-col gap-4 p-6 sm:gap-5 sm:p-8">
-      <div className="-mx-6 -mt-6 flex shrink-0 items-center gap-2 border-b border-border px-6 py-3 sm:-mx-8 sm:-mt-8 sm:px-8 lg:hidden">
-        <IconButtonTooltip label="Open sidebar">
-          <Button
-            aria-label="Open sidebar"
-            onClick={onOpenSidebar}
-            size="icon-sm"
-            type="button"
-            variant="ghost"
-          >
-            <HugeiconsIcon icon={SidebarLeftIcon} />
-          </Button>
-        </IconButtonTooltip>
-        <p className="text-sm font-medium tracking-tight text-fg">
-          New message
-        </p>
-      </div>
+    <div className="flex h-full min-h-0 flex-col">
+      <MobileHeader
+        className="px-4 sm:px-6"
+        leading="sidebar"
+        onLeadingClick={onOpenSidebar}
+        title="New message"
+      />
       <output
         aria-label="Loading composer"
         aria-live="polite"
-        className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 text-sm text-muted-fg"
+        className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col items-center justify-center gap-3 p-6 text-sm text-muted-fg sm:p-8"
       >
         <HugeiconsIcon
           aria-hidden

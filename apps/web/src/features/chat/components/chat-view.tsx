@@ -21,6 +21,7 @@ import {
 import { useRef, useState } from "react";
 import type { ComponentProps, KeyboardEvent, SubmitEvent } from "react";
 
+import { MobileHeader } from "#/components/mobile-header";
 import {
   setDefaultChatModel,
   useDefaultChatModel,
@@ -155,8 +156,14 @@ const ChatComposerPanel = ({
   </>
 );
 
+const chatExamplePrompts = [
+  "Summarize what's unread",
+  "Draft a reply to the latest message",
+];
+
 const ChatViewLayout = ({
   chatId,
+  chatTitle,
   composer,
   draftChatKey,
   hasMessages,
@@ -165,6 +172,7 @@ const ChatViewLayout = ({
   transcript,
 }: {
   chatId: string | null;
+  chatTitle: string | null | undefined;
   composer: ChatComposerProps & {
     canUseAiChat: boolean;
     isBillingPending: boolean;
@@ -179,11 +187,18 @@ const ChatViewLayout = ({
 }) => (
   <LazyMotion features={domMax}>
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <header className="flex min-h-14 items-center px-3 lg:hidden">
-        <Button onClick={onOpenSidebar} size="sm" type="button" variant="ghost">
-          Sidebar
-        </Button>
-      </header>
+      <MobileHeader
+        leading="sidebar"
+        onLeadingClick={onOpenSidebar}
+        title={hasMessages && hasText(chatTitle) ? chatTitle : undefined}
+      />
+      {hasMessages && hasText(chatTitle) ? (
+        <header className="hidden shrink-0 items-center border-b border-border px-4 py-3 lg:flex">
+          <h1 className="truncate text-sm font-medium tracking-tight text-fg">
+            {chatTitle}
+          </h1>
+        </header>
+      ) : null}
       <LayoutGroup id={chatId ?? draftChatKey}>
         <div className="flex min-h-0 flex-1 flex-col">
           {hasMessages ? (
@@ -207,7 +222,10 @@ const ChatViewLayout = ({
               </div>
             </>
           ) : (
-            <div className="flex min-h-0 flex-1 items-center justify-center px-4">
+            <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-5 px-4">
+              <p className="text-title-sm tracking-tight text-fg">
+                Ask about your mail
+              </p>
               <m.div
                 className="w-full max-w-xl"
                 layoutDependency={hasMessages}
@@ -220,6 +238,21 @@ const ChatViewLayout = ({
               >
                 <ChatComposerPanel {...composer} />
               </m.div>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                {chatExamplePrompts.map((prompt) => (
+                  <Button
+                    key={prompt}
+                    onClick={() => {
+                      composer.onInputChange(prompt);
+                    }}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    {prompt}
+                  </Button>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -1129,6 +1162,7 @@ export const ChatView = ({
   return (
     <ChatViewLayout
       chatId={chatId ?? null}
+      chatTitle={chatData?.title}
       composer={{
         canUseAiChat,
         disabled: composerDisabled,
