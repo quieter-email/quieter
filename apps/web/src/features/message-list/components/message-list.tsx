@@ -16,7 +16,10 @@ import { useQuery } from "@tanstack/react-query";
 import { m, useReducedMotion } from "motion/react";
 import { useLayoutEffect, useRef, useState } from "react";
 
-import { shouldIgnoreAppShortcut } from "#/features/hotkeys/domain/hotkey-guards";
+import {
+  omitDisabledHotkeys,
+  shouldIgnoreAppShortcut,
+} from "#/features/hotkeys/domain/hotkey-guards";
 import { MessageLabelsDialog } from "#/features/message-labels/components/message-labels-dialog";
 import { MessageListSearch } from "#/features/message-search/components/message-list-search";
 import { appEaseOut, appMotionDuration } from "#/features/motion/app-motion";
@@ -526,21 +529,23 @@ const useMessageListInteractions = ({
     threadedMessages.length > 0 && (props.activeMessageId?.trim() ?? "") === "";
 
   useHotkeys(
-    buildMessageListHotkeys({
-      actionHotkeysEnabled,
-      activeMailbox: props.activeMailbox,
-      activeMessageId: props.activeMessageId,
-      listNavigationHotkeysEnabled,
-      mailboxActions: props.mailboxActions,
-      mailboxProvider: props.mailboxProvider,
-      onDeactivateActiveMessage: props.onDeactivateActiveMessage,
-      openBulkLabels,
-      openFocusedThread,
-      runActionThreads,
-      selection,
-      threadedMessages,
-      userLabels,
-    }),
+    omitDisabledHotkeys(
+      buildMessageListHotkeys({
+        actionHotkeysEnabled,
+        activeMailbox: props.activeMailbox,
+        activeMessageId: props.activeMessageId,
+        listNavigationHotkeysEnabled,
+        mailboxActions: props.mailboxActions,
+        mailboxProvider: props.mailboxProvider,
+        onDeactivateActiveMessage: props.onDeactivateActiveMessage,
+        openBulkLabels,
+        openFocusedThread,
+        runActionThreads,
+        selection,
+        threadedMessages,
+        userLabels,
+      })
+    ),
     {
       ignoreInputs: true,
     }

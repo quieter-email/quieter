@@ -3,6 +3,18 @@ import {
   getSequenceManager,
   matchesKeyboardEvent,
 } from "@tanstack/hotkeys";
+import type { UseHotkeyDefinition } from "@tanstack/react-hotkeys";
+
+/**
+ * Drops disabled definitions so an inactive context registers nothing.
+ *
+ * `useHotkeys` keeps `enabled: false` rows registered and only suppresses their
+ * callbacks, so two mounted contexts declaring the same key always collide in
+ * `HotkeyManager` and warn. Filtering first keeps registration itself scoped to
+ * whichever context is currently active.
+ */
+export const omitDisabledHotkeys = (definitions: UseHotkeyDefinition[]) =>
+  definitions.filter((definition) => definition.options?.enabled !== false);
 
 const editableSelector = [
   "input:not([type='button']):not([type='checkbox']):not([type='radio']):not([type='reset']):not([type='submit'])",

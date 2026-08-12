@@ -42,7 +42,10 @@ import {
 import type { ComposeDraftState } from "#/features/compose/domain/draft";
 import { GmailUsefulDetailCard } from "#/features/gmail-useful-details/components/gmail-useful-detail-card";
 import type { GmailUsefulDetail } from "#/features/gmail-useful-details/components/gmail-useful-detail-card";
-import { shouldIgnoreAppShortcut } from "#/features/hotkeys/domain/hotkey-guards";
+import {
+  omitDisabledHotkeys,
+  shouldIgnoreAppShortcut,
+} from "#/features/hotkeys/domain/hotkey-guards";
 import type {
   MailboxActions,
   MailboxPendingActions,
@@ -1172,7 +1175,7 @@ const useMessageViewHotkeys = ({
     );
   };
   useHotkeys(
-    [
+    omitDisabledHotkeys([
       {
         callback: (event) => {
           if (shouldIgnoreAppShortcut(event)) {
@@ -1306,17 +1309,7 @@ const useMessageViewHotkeys = ({
             activeMailbox !== "drafts",
         },
       },
-      {
-        callback: (event) => {
-          if (shouldIgnoreAppShortcut(event)) {
-            return;
-          }
-          onBackToList?.();
-        },
-        hotkey: "U",
-        options: { enabled: !!onBackToList },
-      },
-    ],
+    ]),
     { ignoreInputs: true }
   );
 };
