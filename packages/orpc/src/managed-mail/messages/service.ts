@@ -224,7 +224,9 @@ const toMessageListItem = async (
   messageHeaderId: record.messageHeaderId ?? undefined,
   references: record.references ?? undefined,
   replyTo: record.replyTo ?? undefined,
-  senderAvatarUrls: await getSenderAvatarUrls(record.from),
+  senderAvatarUrls: await getSenderAvatarUrls(record.from, {
+    headers: record.direction === "inbound" ? record.headers : [],
+  }),
   snippet: record.snippet ?? undefined,
   subject: record.subject ?? undefined,
   threadAttachmentCount: options.attachmentCount,

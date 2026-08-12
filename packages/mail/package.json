@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@quieter/env": "workspace:*",
+    "fast-xml-parser": "catalog:",
     "postal-mime": "^2.7.6",
     "zod": "catalog:"
   },

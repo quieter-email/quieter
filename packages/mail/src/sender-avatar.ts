@@ -1,5 +1,7 @@
 import { publicEnv } from "@quieter/env/public";
 
+import { createBimiResolver } from "./bimi";
+
 const EMAIL_ADDRESS_PATTERN =
   /(?<email>[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+)/iu;
 const PERSONAL_EMAIL_DOMAINS = new Set([
@@ -37,6 +39,13 @@ export type SenderAvatarUrls = {
   light: string;
   dark: string;
 };
+
+export type SenderAvatarHeader = {
+  name: string;
+  value: string;
+};
+
+const bimiResolver = createBimiResolver();
 
 export const extractSenderEmail = (
   value: string | undefined
@@ -110,7 +119,7 @@ const getLogoDevAvatarUrl = (
 
 export const getSenderAvatarUrls = async (
   sender: string | undefined,
-  opts?: { size?: number }
+  opts?: { headers?: readonly SenderAvatarHeader[]; size?: number }
 ): Promise<SenderAvatarUrls | undefined> => {
   const email = extractSenderEmail(sender);
   if (email === undefined) {
@@ -123,6 +132,14 @@ export const getSenderAvatarUrls = async (
   }
 
   const size = getClampedAvatarSize(opts?.size);
+
+  const bimiUrl = await bimiResolver.resolve({
+    domain,
+    headers: opts?.headers ?? [],
+  });
+  if (bimiUrl !== undefined) {
+    return { dark: bimiUrl, light: bimiUrl };
+  }
 
   if (isPersonalMailboxDomain(domain)) {
     const gravatarUrl = await getGravatarAvatarUrl(email, size);

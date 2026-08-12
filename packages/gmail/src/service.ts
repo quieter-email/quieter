@@ -1100,7 +1100,9 @@ const toMessageListItem = async (
     messageHeaderId: getHeader(message, "Message-ID"),
     references: getHeader(message, "References"),
     replyTo: getHeader(message, "Reply-To"),
-    senderAvatarUrls: await getSenderAvatarUrls(from),
+    senderAvatarUrls: await getSenderAvatarUrls(from, {
+      headers: message.payload?.headers ?? [],
+    }),
     snippet: decodeMimeHeaderValue(message.snippet),
     subject: getHeader(message, "Subject"),
     threadAttachmentCount: options.threadSummary?.attachmentCount,
