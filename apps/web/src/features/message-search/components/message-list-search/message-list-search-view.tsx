@@ -152,7 +152,7 @@ export const MessageListSearchView = ({
                     "lg:hidden"
                   )}
                   onClick={onOpenSidebar}
-                  size="icon-lg"
+                  size="icon"
                   variant="ghost"
                 >
                   <HugeiconsIcon icon={SidebarLeftIcon} />
@@ -168,7 +168,7 @@ export const MessageListSearchView = ({
                 className={searchControlVariants({ control: "toolbar" })}
                 disabled={isRefreshing}
                 onClick={() => void onRefresh()}
-                size="icon-lg"
+                size="icon"
                 variant="ghost"
               >
                 <SpinWhileActive active={isRefreshing}>
@@ -584,7 +584,7 @@ export const MessageListSearchView = ({
                 onClick={() => {
                   void onScrollToTop();
                 }}
-                size="icon-lg"
+                size="icon"
                 type="button"
                 variant="ghost"
               />
