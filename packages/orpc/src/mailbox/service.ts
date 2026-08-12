@@ -713,6 +713,7 @@ export const assertAccessibleMailbox = async (input: {
 };
 
 export const startGmailOAuth = async (input: {
+  loginHint?: string;
   mailboxId?: string;
   organizationId?: string | null;
   returnTo?: string;
@@ -722,7 +723,12 @@ export const startGmailOAuth = async (input: {
     .delete(gmailOAuthState)
     .where(lt(gmailOAuthState.expiresAt, new Date()));
 
-  let loginHint: string | null = null;
+  // Onboarding passes the address from the identity sign-in so the first
+  // connection skips Google's account picker. Reconnects override it below
+  // with the mailbox's own address.
+  let loginHint: string | null = hasText(input.loginHint)
+    ? input.loginHint
+    : null;
   let { organizationId } = input;
   if (hasText(input.mailboxId)) {
     const [existingMailbox] = await db

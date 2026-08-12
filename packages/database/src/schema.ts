@@ -256,6 +256,7 @@ export const user = pgTable("user", {
     "mailboxSwitcherOrder"
   ).$type<MailboxSwitcherOrder>(),
   name: text("name").notNull(),
+  onboardingCompletedAt: timestamp("onboardingCompletedAt"),
   termsAcceptedAt: timestamp("termsAcceptedAt"),
   updatedAt: timestamp("updatedAt").notNull(),
 });

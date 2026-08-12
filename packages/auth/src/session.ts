@@ -19,6 +19,11 @@ const sessionAuth = betterAuth({
   }),
   user: {
     additionalFields: {
+      onboardingCompletedAt: {
+        input: false,
+        required: false,
+        type: "date",
+      },
       termsAcceptedAt: {
         input: false,
         required: false,

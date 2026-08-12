@@ -92,6 +92,13 @@ export const Route = createFileRoute("/")({
       });
     }
 
+    if (user.needsOnboarding) {
+      return redirect({
+        search: { returnTo: location.href },
+        to: "/onboarding",
+      });
+    }
+
     return {
       user,
     };

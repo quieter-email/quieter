@@ -22,6 +22,13 @@ export const Route = createFileRoute("/settings")({
       });
     }
 
+    if (user.needsOnboarding) {
+      throw redirect({
+        search: { returnTo: "/settings" },
+        to: "/onboarding",
+      });
+    }
+
     return {
       user,
     };

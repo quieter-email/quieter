@@ -136,6 +136,9 @@ const getUserOrganizationId = async (userId: string) => {
 const ensurePreviewPersonaAccount = async (persona: PreviewPersona) => {
   const personaAccount = previewPersonaUsers[persona];
   const now = new Date();
+  // The "empty" persona is the onboarding fixture, so it deliberately stays
+  // un-onboarded; the others jump straight into the product.
+  const onboardingCompletedAt = persona === "empty" ? null : now;
 
   await db
     .insert(user)
@@ -146,6 +149,7 @@ const ensurePreviewPersonaAccount = async (persona: PreviewPersona) => {
       id: personaAccount.id,
       image: personaAccount.image,
       name: personaAccount.name,
+      onboardingCompletedAt,
       termsAcceptedAt: now,
       updatedAt: now,
     })
@@ -155,6 +159,7 @@ const ensurePreviewPersonaAccount = async (persona: PreviewPersona) => {
         emailVerified: personaAccount.emailVerified,
         image: personaAccount.image,
         name: personaAccount.name,
+        onboardingCompletedAt,
         termsAcceptedAt: now,
         updatedAt: now,
       },

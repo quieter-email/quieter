@@ -47,6 +47,12 @@ export const appRouter = {
         default: mailboxActionsRouter,
       }))
   ),
+  onboarding: lazy(
+    async () =>
+      await import("./onboarding").then(({ onboardingRouter }) => ({
+        default: onboardingRouter,
+      }))
+  ),
   organization: lazy(
     async () =>
       await import("./organization").then(({ organizationRouter }) => ({

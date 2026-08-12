@@ -7,6 +7,7 @@ type SessionUser = {
   id: string;
   image: string | null;
   name: string;
+  needsOnboarding: boolean;
 };
 
 export const getSessionUserForRequest = async (
@@ -26,5 +27,12 @@ export const getSessionUserForRequest = async (
     id: session.user.id,
     image: session.user.image ?? null,
     name: session.user.name,
+    // Terms are accepted during onboarding, so an account can exist before
+    // consent. Every authenticated route redirects until this clears.
+    needsOnboarding:
+      session.user.termsAcceptedAt === null ||
+      session.user.termsAcceptedAt === undefined ||
+      session.user.onboardingCompletedAt === null ||
+      session.user.onboardingCompletedAt === undefined,
   };
 };

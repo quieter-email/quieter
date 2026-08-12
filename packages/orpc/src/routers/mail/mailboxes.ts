@@ -292,6 +292,7 @@ export const mailboxProcedures = {
   startGmailConnection: protectedProcedure
     .input(
       z.object({
+        loginHint: z.email().optional(),
         mailboxId: mailboxIdSchema.optional(),
         organizationId: z.string().trim().min(1).optional(),
         returnTo: z.string().trim().optional(),
