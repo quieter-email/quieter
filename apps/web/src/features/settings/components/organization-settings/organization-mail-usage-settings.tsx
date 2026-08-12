@@ -15,6 +15,7 @@ import {
   NumberFieldIncrement,
   NumberFieldInput,
 } from "@quieter/ui/number-field";
+import { Pill } from "@quieter/ui/pill";
 import {
   Progress,
   ProgressIndicator,
@@ -124,34 +125,36 @@ const Price = ({
   </div>
 );
 
+// Categorical, so it uses the q-* palette. Those tokens carry their own
+// light/dark values, so no `dark:` variant is needed here.
 const usageBreakdownConfig = [
   {
-    className: "bg-sky-500 dark:bg-sky-400",
+    className: "bg-q-blue",
     kind: "aiChat",
     label: "AI chat",
   },
   {
-    className: "bg-teal-500 dark:bg-teal-400",
+    className: "bg-q-cyan",
     kind: "aiMemory",
     label: "AI memory",
   },
   {
-    className: "bg-amber-500 dark:bg-amber-400",
+    className: "bg-q-yellow",
     kind: "usefulDetails",
     label: "Useful details",
   },
   {
-    className: "bg-violet-500 dark:bg-violet-400",
+    className: "bg-q-purple",
     kind: "autoLabel",
     label: "Auto-label",
   },
   {
-    className: "bg-emerald-500 dark:bg-emerald-400",
+    className: "bg-q-green",
     kind: "inboundMail",
     label: "Inbound mail",
   },
   {
-    className: "bg-orange-500 dark:bg-orange-400",
+    className: "bg-q-orange",
     kind: "outboundMail",
     label: "Outbound mail",
   },
@@ -382,12 +385,12 @@ const ManagedUsageSettingsControls = ({
       </SettingsRowText>
       <Switch
         checked={overageEnabled}
-        className="h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary"
+        className="shrink-0"
         disabled={!canManageOrganizationMailUsage}
         id="managed-overage-toggle"
         onCheckedChange={setOverageEnabled}
       >
-        <SwitchThumb className="size-4 bg-bg-surface data-checked:translate-x-4 data-checked:bg-primary-fg" />
+        <SwitchThumb />
       </Switch>
     </SettingsInsetRow>
 
@@ -619,9 +622,7 @@ const ManagedUsageSettingsForm = ({
           <SettingsRowText title="Usage balance">
             {formatMoney(managedUsageCostCents)} tracked this period
           </SettingsRowText>
-          <span className="squircle rounded-md border border-success/30 bg-success/10 px-2.5 py-1 text-xs font-medium text-success">
-            Unlimited
-          </span>
+          <Pill tone="green">Unlimited</Pill>
         </SettingsInsetRow>
       </section>
     );

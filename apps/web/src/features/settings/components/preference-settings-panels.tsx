@@ -99,11 +99,12 @@ export const ReadingSettingsPanel = () => {
             <Switch
               aria-label="Allow external images"
               checked={externalImagesEnabled}
-              className="h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary"
+              className="shrink-0"
+              size="sm"
               id="external-images-toggle"
               onCheckedChange={setExternalImagesEnabled}
             >
-              <SwitchThumb className="size-4 bg-bg-surface data-checked:translate-x-4 data-checked:bg-primary-fg" />
+              <SwitchThumb />
             </Switch>
           }
           title="Allow external images"
@@ -178,11 +179,12 @@ export const DevelopmentSettingsPanel = () => {
           action={
             <Switch
               checked={demoModeEnabled}
-              className="h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary"
+              className="shrink-0"
+              size="sm"
               id="demo-mode-toggle"
               onCheckedChange={setDemoModeEnabled}
             >
-              <SwitchThumb className="size-4 bg-bg-surface data-checked:translate-x-4 data-checked:bg-primary-fg" />
+              <SwitchThumb />
             </Switch>
           }
           title="Gmail demo mailbox"
@@ -194,11 +196,12 @@ export const DevelopmentSettingsPanel = () => {
           action={
             <Switch
               checked={managedDemoModeEnabled}
-              className="h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary"
+              className="shrink-0"
+              size="sm"
               id="managed-demo-mode-toggle"
               onCheckedChange={setManagedDemoModeEnabled}
             >
-              <SwitchThumb className="size-4 bg-bg-surface data-checked:translate-x-4 data-checked:bg-primary-fg" />
+              <SwitchThumb />
             </Switch>
           }
           title="Managed demo mailbox"

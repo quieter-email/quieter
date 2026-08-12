@@ -719,6 +719,7 @@ const useManagedMailboxRuleActions = ({
     runRowAction,
     updateRuleMutation,
   } = state;
+  const queryClient = useQueryClient();
 
   const runRuleRowAction = async <T,>(
     kind: PendingRowKind,
@@ -735,6 +736,42 @@ const useManagedMailboxRuleActions = ({
     } catch (error) {
       toast.error(error instanceof Error ? error.message : fallback);
     }
+  };
+
+  /**
+   * Enabling a rule is reversible, so the switch moves at once instead of
+   * showing a spinner, and the previous rule list is restored if the write
+   * fails.
+   */
+  const runOptimisticRuleUpdate = async (
+    ruleId: string,
+    enabled: boolean,
+    operation: () => Promise<unknown>
+  ) => {
+    const rulesKey = getManagedRulesQueryKey(mailboxId);
+    await queryClient.cancelQueries({ queryKey: rulesKey });
+    const previous =
+      queryClient.getQueryData<RouterOutputs["mail"]["listManagedRules"]>(
+        rulesKey
+      );
+    queryClient.setQueryData<RouterOutputs["mail"]["listManagedRules"]>(
+      rulesKey,
+      (current) =>
+        current?.map((entry) =>
+          entry.id === ruleId ? { ...entry, enabled } : entry
+        )
+    );
+
+    try {
+      await operation();
+    } catch (error) {
+      queryClient.setQueryData(rulesKey, previous);
+      toast.error(
+        error instanceof Error ? error.message : "Could not update rule."
+      );
+      return;
+    }
+    await invalidateRules();
   };
 
   const runRuleReorder = async <T,>(
@@ -855,6 +892,7 @@ const useManagedMailboxRuleActions = ({
     cancelBackfill,
     createRuleDefinition,
     previewRule,
+    runOptimisticRuleUpdate,
     runRuleReorder,
     runRuleRowAction,
     saveRule,
@@ -1563,6 +1601,7 @@ const ManagedRuleRow = (props: ManagedRuleRowProps) => {
     ruleConditionGroupsRef,
     ruleEnabledRef,
     ruleActionsRef,
+    runOptimisticRuleUpdate,
     runRuleReorder,
     runRuleRowAction,
     setActiveBackfillId,
@@ -1606,9 +1645,8 @@ const ManagedRuleRow = (props: ManagedRuleRowProps) => {
       <Switch
         aria-label={`${rule.enabled ? "Disable" : "Enable"} ${rule.name}`}
         checked={rule.enabled}
-        className="h-5 w-9 shrink-0 p-0.5"
-        disabled={isRowActionPending("rule", rule.id, "update")}
-        pending={isRowActionPending("rule", rule.id, "update")}
+        className="shrink-0"
+        size="sm"
         onCheckedChange={(enabled) => {
           const conditionGroups = getRuleConditionGroups(rule.conditionGroups);
           if (
@@ -1617,10 +1655,9 @@ const ManagedRuleRow = (props: ManagedRuleRowProps) => {
             toast.error("This rule has invalid condition groups.");
             return;
           }
-          void runRuleRowAction(
-            "rule",
+          void runOptimisticRuleUpdate(
             rule.id,
-            "update",
+            enabled,
             async () =>
               await updateRuleMutation.mutateAsync({
                 definition: {
@@ -1637,12 +1674,11 @@ const ManagedRuleRow = (props: ManagedRuleRowProps) => {
                 },
                 mailboxId,
                 ruleId: rule.id,
-              }),
-            "Could not update rule."
+              })
           );
         }}
       >
-        <SwitchThumb className="size-4 data-checked:translate-x-4" />
+        <SwitchThumb />
       </Switch>
       <IconButtonTooltip label={`Edit ${rule.name}`}>
         <Button

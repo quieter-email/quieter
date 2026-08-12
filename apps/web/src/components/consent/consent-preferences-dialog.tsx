@@ -73,13 +73,14 @@ export const ConsentPreferencesDialog = () => {
                 <Switch
                   aria-label={copy?.title ?? category}
                   checked={selectedConsents[category]}
-                  className="h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary"
+                  className="shrink-0"
+                  size="sm"
                   disabled={isDisabled}
                   onCheckedChange={(checked) => {
                     setSelectedConsent(category, checked);
                   }}
                 >
-                  <SwitchThumb className="size-4 bg-bg-surface data-checked:translate-x-4 data-checked:bg-primary-fg" />
+                  <SwitchThumb />
                 </Switch>
               </div>
             );

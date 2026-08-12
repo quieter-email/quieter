@@ -19,7 +19,6 @@ import {
   mailboxGrantRoleOptions,
   mailboxGrantSelectItems,
   parseMailboxGrantRole,
-  switchVariants,
 } from "#/features/settings/components/mailboxes-settings-shared";
 import {
   SettingsCard,
@@ -57,8 +56,6 @@ const ManagedMailboxIntelligenceRow = ({
   disabled,
   emailAddress,
   hasAutomationAccess,
-  isAutoLabelPending,
-  isUsefulDetailsPending,
   onAutoLabelChange,
   onUsefulDetailsChange,
   usefulDetailsEnabled,
@@ -69,8 +66,6 @@ const ManagedMailboxIntelligenceRow = ({
   disabled: boolean;
   emailAddress: string;
   hasAutomationAccess: boolean;
-  isAutoLabelPending: boolean;
-  isUsefulDetailsPending: boolean;
   onAutoLabelChange: (enabled: boolean) => void;
   onUsefulDetailsChange: (enabled: boolean) => void;
   usefulDetailsEnabled: boolean;
@@ -99,13 +94,13 @@ const ManagedMailboxIntelligenceRow = ({
           <Switch
             aria-label={`Find time-sensitive updates in new mail for ${emailAddress}`}
             checked={usefulDetailsEnabled}
-            className={switchVariants()}
-            disabled={disabled || isUsefulDetailsPending}
+            className="shrink-0"
+            size="sm"
+            disabled={disabled}
             id={usefulDetailsSwitchId}
-            pending={isUsefulDetailsPending}
             onCheckedChange={onUsefulDetailsChange}
           >
-            <SwitchThumb className="size-4 data-checked:translate-x-4" />
+            <SwitchThumb />
           </Switch>
         </label>
         <label
@@ -125,13 +120,13 @@ const ManagedMailboxIntelligenceRow = ({
           <Switch
             aria-label={`Automatically label new mail for ${emailAddress}`}
             checked={autoLabelEnabled}
-            className={switchVariants()}
-            disabled={disabled || isAutoLabelPending}
+            className="shrink-0"
+            size="sm"
+            disabled={disabled}
             id={autoLabelSwitchId}
-            pending={isAutoLabelPending}
             onCheckedChange={onAutoLabelChange}
           >
-            <SwitchThumb className="size-4 data-checked:translate-x-4" />
+            <SwitchThumb />
           </Switch>
         </label>
       </SettingsInsetRows>
@@ -146,9 +141,7 @@ export const ManagedMailboxDetailSettings = ({
   emailAddress,
   hasAutomationAccess,
   includeApiMessagesSwitchId,
-  isAutoLabelPending,
   isUpdatePending,
-  isUsefulDetailsPending,
   mailboxId,
   onAutoLabelChange,
   onDivisionGrantChange,
@@ -162,9 +155,7 @@ export const ManagedMailboxDetailSettings = ({
   emailAddress: string;
   hasAutomationAccess: boolean;
   includeApiMessagesSwitchId: string;
-  isAutoLabelPending: boolean;
   isUpdatePending: boolean;
-  isUsefulDetailsPending: boolean;
   mailboxId: string;
   onAutoLabelChange: (enabled: boolean) => void;
   onDivisionGrantChange: (
@@ -271,15 +262,14 @@ export const ManagedMailboxDetailSettings = ({
               <Switch
                 aria-label={`Show API messages sent from ${emailAddress}`}
                 checked={details.mailbox.includeApiSentMessages}
-                className={switchVariants()}
-                disabled={isUpdatePending}
+                className="shrink-0"
+                size="sm"
                 id={includeApiMessagesSwitchId}
-                pending={isUpdatePending}
                 onCheckedChange={(includeApiSentMessages) => {
                   onUpdateMailbox({ includeApiSentMessages });
                 }}
               >
-                <SwitchThumb className="size-4 data-checked:translate-x-4" />
+                <SwitchThumb />
               </Switch>
             </label>
           </SettingsInsetRows>
@@ -292,8 +282,6 @@ export const ManagedMailboxDetailSettings = ({
         disabled={!hasAutomationAccess}
         emailAddress={emailAddress}
         hasAutomationAccess={hasAutomationAccess}
-        isAutoLabelPending={isAutoLabelPending}
-        isUsefulDetailsPending={isUsefulDetailsPending}
         onAutoLabelChange={onAutoLabelChange}
         onUsefulDetailsChange={onUsefulDetailsChange}
         usefulDetailsEnabled={details.mailbox.usefulDetailsEnabled}

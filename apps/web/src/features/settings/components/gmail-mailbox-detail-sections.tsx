@@ -6,7 +6,6 @@ import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
 
-import { switchVariants } from "#/features/settings/components/mailboxes-settings-shared";
 import {
   SettingsCard,
   SettingsInsetRows,
@@ -22,8 +21,6 @@ export const GmailMailboxDetailSections = ({
   disconnectPending,
   emailAddress,
   hasAutomationAccess,
-  isAutoLabelPending,
-  isUsefulDetailsPending,
   onAutoLabelChange,
   onDisconnect,
   onUsefulDetailsChange,
@@ -36,8 +33,6 @@ export const GmailMailboxDetailSections = ({
   disconnectPending: boolean;
   emailAddress: string;
   hasAutomationAccess: boolean;
-  isAutoLabelPending: boolean;
-  isUsefulDetailsPending: boolean;
   onAutoLabelChange: (enabled: boolean) => void;
   onDisconnect: () => void;
   onUsefulDetailsChange: (enabled: boolean) => void;
@@ -68,17 +63,15 @@ export const GmailMailboxDetailSections = ({
             <Switch
               aria-label={`Find time-sensitive updates in new mail for ${emailAddress}`}
               checked={usefulDetailsEnabled}
-              className={switchVariants()}
+              className="shrink-0"
+              size="sm"
               disabled={
-                !hasAutomationAccess ||
-                isUsefulDetailsPending ||
-                connectionStatus !== "connected"
+                !hasAutomationAccess || connectionStatus !== "connected"
               }
               id={usefulDetailsSwitchId}
-              pending={isUsefulDetailsPending}
               onCheckedChange={onUsefulDetailsChange}
             >
-              <SwitchThumb className="size-4 data-checked:translate-x-4" />
+              <SwitchThumb />
             </Switch>
           </label>
           <label
@@ -98,17 +91,15 @@ export const GmailMailboxDetailSections = ({
             <Switch
               aria-label={`Automatically label new mail for ${emailAddress}`}
               checked={autoLabelEnabled}
-              className={switchVariants()}
+              className="shrink-0"
+              size="sm"
               disabled={
-                !hasAutomationAccess ||
-                isAutoLabelPending ||
-                connectionStatus !== "connected"
+                !hasAutomationAccess || connectionStatus !== "connected"
               }
               id={autoLabelSwitchId}
-              pending={isAutoLabelPending}
               onCheckedChange={onAutoLabelChange}
             >
-              <SwitchThumb className="size-4 data-checked:translate-x-4" />
+              <SwitchThumb />
             </Switch>
           </label>
         </SettingsInsetRows>

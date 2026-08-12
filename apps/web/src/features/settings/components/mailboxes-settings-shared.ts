@@ -1,5 +1,4 @@
 import { toast } from "@quieter/ui/toast";
-import { cva } from "class-variance-authority";
 
 import type { MailboxGrantRole } from "#/features/mailbox/components/mailbox-access-pill";
 
@@ -36,10 +35,6 @@ export const mailboxGrantSelectItems = [
   { label: "No access", value: "none" },
   ...mailboxGrantRoleOptions,
 ];
-
-export const switchVariants = cva(
-  "h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary"
-);
 
 export const getProviderLabel = (provider: string) => {
   if (provider === "gmail") {

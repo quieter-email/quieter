@@ -16,6 +16,7 @@ import { SettingsDataPrefetch } from "./settings-data-prefetch";
 import { SettingsBackButton, SettingsLoadingState } from "./settings-layout";
 import { SettingsOverviewPanel } from "./settings-overview-panel";
 import { prefetchSettingsTab } from "./settings-prefetch";
+import { SettingsSearch } from "./settings-search";
 
 const AccountSettingsPanel = lazy(
   async () =>
@@ -254,6 +255,13 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
         }}
         organizationId={organizationId}
         tab={tab}
+      />
+      <SettingsSearch
+        onPrefetchTab={(nextTab) => {
+          void prefetchSettingsTab(queryClient, nextTab);
+          void preloadSettingsPanel(nextTab);
+        }}
+        onSelectTab={setTab}
       />
       <div className="relative z-10 min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-205 px-5 py-8 md:px-8 md:py-14">

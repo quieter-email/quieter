@@ -89,15 +89,11 @@ export const ManagedMailboxManagerSettingsSection = ({
       emailAddress={emailAddress}
       hasAutomationAccess={hasAutomationAccess}
       includeApiMessagesSwitchId={includeApiMessagesSwitchId}
-      isAutoLabelPending={setGmailAutoLabelingMutation.isPending}
       isUpdatePending={updateManagedMailboxMutation.isPending}
-      isUsefulDetailsPending={setGmailUsefulDetailsMutation.isPending}
       mailboxId={mailboxId}
       onAutoLabelChange={(enabled) => {
-        setGmailAutoLabelingMutation.mutate(
-          { enabled, mailboxId },
-          { onError: showMutationError("Could not update auto-labeling.") }
-        );
+        // Optimistic; the mutation owns rollback and the failure toast.
+        setGmailAutoLabelingMutation.mutate({ enabled, mailboxId });
       }}
       onDivisionGrantChange={(divisionId, role) => {
         if (role === null) {
@@ -126,16 +122,10 @@ export const ManagedMailboxManagerSettingsSection = ({
         );
       }}
       onUpdateMailbox={(input) => {
-        updateManagedMailboxMutation.mutate(
-          { ...input, mailboxId },
-          { onError: showMutationError("Could not update mailbox.") }
-        );
+        updateManagedMailboxMutation.mutate({ ...input, mailboxId });
       }}
       onUsefulDetailsChange={(enabled) => {
-        setGmailUsefulDetailsMutation.mutate(
-          { enabled, mailboxId },
-          { onError: showMutationError("Could not update useful details.") }
-        );
+        setGmailUsefulDetailsMutation.mutate({ enabled, mailboxId });
       }}
     />
   );

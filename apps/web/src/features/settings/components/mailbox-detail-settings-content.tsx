@@ -155,13 +155,12 @@ export const MailboxDetailSettingsContent = ({
           disconnectPending={disconnectMailboxMutation.isPending}
           emailAddress={mailbox.emailAddress}
           hasAutomationAccess={hasAutomationAccess}
-          isAutoLabelPending={setGmailAutoLabelingMutation.isPending}
-          isUsefulDetailsPending={setGmailUsefulDetailsMutation.isPending}
           onAutoLabelChange={(enabled) => {
-            setGmailAutoLabelingMutation.mutate(
-              { enabled, mailboxId: mailbox.id },
-              { onError: showMutationError("Could not update auto-labeling.") }
-            );
+            // Optimistic; the mutation owns rollback and the failure toast.
+            setGmailAutoLabelingMutation.mutate({
+              enabled,
+              mailboxId: mailbox.id,
+            });
           }}
           onDisconnect={() => {
             disconnectMailboxMutation.mutate(
@@ -170,10 +169,10 @@ export const MailboxDetailSettingsContent = ({
             );
           }}
           onUsefulDetailsChange={(enabled) => {
-            setGmailUsefulDetailsMutation.mutate(
-              { enabled, mailboxId: mailbox.id },
-              { onError: showMutationError("Could not update useful details.") }
-            );
+            setGmailUsefulDetailsMutation.mutate({
+              enabled,
+              mailboxId: mailbox.id,
+            });
           }}
           usefulDetailsEnabled={mailbox.usefulDetailsEnabled}
           usefulDetailsSwitchId={usefulDetailsSwitchId}

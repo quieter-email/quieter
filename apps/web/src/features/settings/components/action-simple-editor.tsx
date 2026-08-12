@@ -23,6 +23,7 @@ import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
+import { Pill } from "@quieter/ui/pill";
 import {
   Select,
   SelectContent,
@@ -67,6 +68,7 @@ export type MailboxOption = {
 
 type MailboxActionListItem =
   RouterOutputs["mailboxActions"]["list"]["actions"][number];
+type MailboxActionQueryData = RouterOutputs["mailboxActions"]["get"];
 type MailboxActionDetail = RouterOutputs["mailboxActions"]["get"]["action"];
 type MailboxActionRevision =
   RouterOutputs["mailboxActions"]["get"]["revisions"][number];
@@ -381,9 +383,9 @@ const ActionRuleFields = ({
         />
         <p className={settingsSurfaceVariants({ variant: "value" })}>
           Example: When it&apos;s a bug or feature request, use{" "}
-          <span className="rounded-full border border-[#5e6ad2]/40 bg-[#5e6ad2]/15 px-1.5 py-0.5 text-[#b8bef8]">
+          <Pill className="align-middle" tone="purple">
             @Linear
-          </span>{" "}
+          </Pill>{" "}
           to search for duplicate issues, then create one if needed.
         </p>
       </div>
@@ -593,12 +595,40 @@ const useActionEditorMutations = ({
       toast.success("Action published.");
     },
   });
-  const setEnabledMutation = useMutation({
-    ...orpc.mailboxActions.setEnabled.mutationOptions(),
-    onError: (error) => {
+  // Enabling an action is reversible, so the switch moves at once and rolls
+  // back if the write fails.
+  const optimisticSetEnabled = {
+    onError: (
+      error: unknown,
+      input: { actionId: string; enabled: boolean },
+      context: { previous: MailboxActionQueryData | undefined } | undefined
+    ) => {
+      queryClient.setQueryData(
+        mailboxActionQueryKey(input.actionId),
+        context?.previous
+      );
       toast.error(getActionErrorMessage(error, "Could not update action."));
     },
-    onSuccess: invalidateActionQueries,
+    onMutate: async (input: { actionId: string; enabled: boolean }) => {
+      const actionKey = mailboxActionQueryKey(input.actionId);
+      await queryClient.cancelQueries({ queryKey: actionKey });
+      const previous =
+        queryClient.getQueryData<MailboxActionQueryData>(actionKey);
+      queryClient.setQueryData<MailboxActionQueryData>(actionKey, (current) =>
+        current === undefined
+          ? current
+          : {
+              ...current,
+              action: { ...current.action, enabled: input.enabled },
+            }
+      );
+      return { previous };
+    },
+  };
+  const setEnabledMutation = useMutation({
+    ...orpc.mailboxActions.setEnabled.mutationOptions(),
+    ...optimisticSetEnabled,
+    onSettled: invalidateActionQueries,
   });
   const deleteActionMutation = useMutation({
     ...orpc.mailboxActions.delete.mutationOptions(),
@@ -753,7 +783,6 @@ const useActionEditorController = ({
     isDeleting: mutations.deleteActionMutation.isPending,
     isPublishing: mutations.publishMutation.isPending,
     isSaving: mutations.saveDraftMutation.isPending,
-    isSettingEnabled: mutations.setEnabledMutation.isPending,
     publishAction,
     publishDisabled,
     saveDraft,
@@ -771,7 +800,6 @@ const ActionEditorStatus = ({
   hasPublished,
   isPublishing,
   isSaving,
-  isSettingEnabled,
   onPublish,
   onSave,
   onSetEnabled,
@@ -782,7 +810,6 @@ const ActionEditorStatus = ({
   hasPublished: boolean;
   isPublishing: boolean;
   isSaving: boolean;
-  isSettingEnabled: boolean;
   onPublish: () => void;
   onSave: () => void;
   onSetEnabled: (enabled: boolean) => void;
@@ -827,7 +854,7 @@ const ActionEditorStatus = ({
           <Switch
             aria-label="Enable action"
             checked={action.enabled}
-            disabled={!hasPublished || isSettingEnabled}
+            disabled={!hasPublished}
             onCheckedChange={onSetEnabled}
           >
             <SwitchThumb />
@@ -847,7 +874,6 @@ const ActionEditorRuleSection = ({
   hasPublished,
   isPublishing,
   isSaving,
-  isSettingEnabled,
   onPublish,
   onSave,
   onSetEnabled,
@@ -860,7 +886,6 @@ const ActionEditorRuleSection = ({
   hasPublished: boolean;
   isPublishing: boolean;
   isSaving: boolean;
-  isSettingEnabled: boolean;
   onPublish: () => void;
   onSave: () => void;
   onSetEnabled: (enabled: boolean) => void;
@@ -889,7 +914,6 @@ const ActionEditorRuleSection = ({
       hasPublished={hasPublished}
       isPublishing={isPublishing}
       isSaving={isSaving}
-      isSettingEnabled={isSettingEnabled}
       onPublish={onPublish}
       onSave={onSave}
       onSetEnabled={onSetEnabled}
@@ -1182,7 +1206,6 @@ export const ActionSimpleEditor = ({
     isDeleting,
     isPublishing,
     isSaving,
-    isSettingEnabled,
     linearAccounts,
     linearConfigured,
     linearMetadataLoading,
@@ -1246,7 +1269,6 @@ export const ActionSimpleEditor = ({
         hasPublished={hasPublished}
         isPublishing={isPublishing}
         isSaving={isSaving}
-        isSettingEnabled={isSettingEnabled}
         onPublish={publishAction}
         onSave={saveDraft}
         onSetEnabled={setActionEnabled}
