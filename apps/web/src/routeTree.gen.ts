@@ -12,8 +12,10 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as CookiesRouteImport } from './routes/cookies'
+import { Route as DesignSystemRouteImport } from './routes/design-system'
 import { Route as HomeRouteImport } from './routes/home'
 import { Route as ImprintRouteImport } from './routes/imprint'
+import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SitePasswordRouteImport } from './routes/site-password'
@@ -48,6 +50,11 @@ const CookiesRoute = CookiesRouteImport.update({
   path: '/cookies',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DesignSystemRoute = DesignSystemRouteImport.update({
+  id: '/design-system',
+  path: '/design-system',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const HomeRoute = HomeRouteImport.update({
   id: '/home',
   path: '/home',
@@ -56,6 +63,11 @@ const HomeRoute = HomeRouteImport.update({
 const ImprintRoute = ImprintRouteImport.update({
   id: '/imprint',
   path: '/imprint',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OnboardingRoute = OnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRoute = PrivacyRouteImport.update({
@@ -156,8 +168,10 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/cookies': typeof CookiesRoute
+  '/design-system': typeof DesignSystemRoute
   '/home': typeof HomeRoute
   '/imprint': typeof ImprintRoute
+  '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
   '/settings': typeof SettingsRoute
   '/site-password': typeof SitePasswordRoute
@@ -181,8 +195,10 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/cookies': typeof CookiesRoute
+  '/design-system': typeof DesignSystemRoute
   '/home': typeof HomeRoute
   '/imprint': typeof ImprintRoute
+  '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
   '/settings': typeof SettingsRoute
   '/site-password': typeof SitePasswordRoute
@@ -207,8 +223,10 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/cookies': typeof CookiesRoute
+  '/design-system': typeof DesignSystemRoute
   '/home': typeof HomeRoute
   '/imprint': typeof ImprintRoute
+  '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
   '/settings': typeof SettingsRoute
   '/site-password': typeof SitePasswordRoute
@@ -234,8 +252,10 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/cookies'
+    | '/design-system'
     | '/home'
     | '/imprint'
+    | '/onboarding'
     | '/privacy'
     | '/settings'
     | '/site-password'
@@ -259,8 +279,10 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/cookies'
+    | '/design-system'
     | '/home'
     | '/imprint'
+    | '/onboarding'
     | '/privacy'
     | '/settings'
     | '/site-password'
@@ -284,8 +306,10 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/cookies'
+    | '/design-system'
     | '/home'
     | '/imprint'
+    | '/onboarding'
     | '/privacy'
     | '/settings'
     | '/site-password'
@@ -310,8 +334,10 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthRoute: typeof AuthRoute
   CookiesRoute: typeof CookiesRoute
+  DesignSystemRoute: typeof DesignSystemRoute
   HomeRoute: typeof HomeRoute
   ImprintRoute: typeof ImprintRoute
+  OnboardingRoute: typeof OnboardingRoute
   PrivacyRoute: typeof PrivacyRoute
   SettingsRoute: typeof SettingsRoute
   SitePasswordRoute: typeof SitePasswordRoute
@@ -355,6 +381,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CookiesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/design-system': {
+      id: '/design-system'
+      path: '/design-system'
+      fullPath: '/design-system'
+      preLoaderRoute: typeof DesignSystemRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/home': {
       id: '/home'
       path: '/home'
@@ -367,6 +400,13 @@ declare module '@tanstack/react-router' {
       path: '/imprint'
       fullPath: '/imprint'
       preLoaderRoute: typeof ImprintRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/onboarding': {
+      id: '/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof OnboardingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy': {
@@ -502,8 +542,10 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRoute,
   CookiesRoute: CookiesRoute,
+  DesignSystemRoute: DesignSystemRoute,
   HomeRoute: HomeRoute,
   ImprintRoute: ImprintRoute,
+  OnboardingRoute: OnboardingRoute,
   PrivacyRoute: PrivacyRoute,
   SettingsRoute: SettingsRoute,
   SitePasswordRoute: SitePasswordRoute,
