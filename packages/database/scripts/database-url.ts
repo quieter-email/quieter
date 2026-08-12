@@ -1,60 +1,31 @@
 import { serverEnv } from "@quieter/env/server";
 
+import {
+  getHostname,
+  isExplicitLocalPlanetScaleUrl,
+  isPresent,
+  LOOPBACK_HOSTS,
+} from "./local-development";
+
+export {
+  assertLocalDatabaseUrl,
+  assertLocalDevelopmentDatabaseUrls,
+} from "./local-development";
+
 const LOCK_TIMEOUT = "5s";
 const STATEMENT_TIMEOUT = "5min";
-const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
 const PRODUCTION_REPOSITORY = "quieter-email/quieter";
 const productionMigrationTarget = {
   protectedRef: true,
   ref: "refs/heads/main",
 } as const;
 
-const getHostname = (url: URL) =>
-  url.hostname.replace(/^\[(?<host>.*)\]$/u, "$<host>");
-const normalizeNeonHostname = (hostname: string) =>
-  hostname.replace("-pooler.", ".");
-
-const isPresent = (value: string | undefined): value is string =>
-  value !== undefined && value !== "";
-
-const isExplicitLocalNeonConfigured = (
-  environment: Record<string, string | undefined>
-) => {
-  const configuredHost =
-    environment.QUIETER_LOCAL_NEON_HOST?.trim().toLowerCase();
-  return (
-    isPresent(configuredHost) &&
-    configuredHost.endsWith(".neon.tech") &&
-    environment.QUIETER_DEPLOYMENT_ENV === "local"
-  );
-};
-
-const isExplicitLocalNeonUrl = (
-  url: URL,
-  environment: Record<string, string | undefined>
-) => {
-  const configuredHost =
-    environment.QUIETER_LOCAL_NEON_HOST?.trim().toLowerCase();
-  if (
-    !isPresent(configuredHost) ||
-    environment.QUIETER_DEPLOYMENT_ENV !== "local"
-  ) {
-    return false;
-  }
-
-  const hostname = normalizeNeonHostname(getHostname(url).toLowerCase());
-  return (
-    ["postgres:", "postgresql:"].includes(url.protocol) &&
-    configuredHost.endsWith(".neon.tech") &&
-    hostname === normalizeNeonHostname(configuredHost)
-  );
-};
-
 const assertDirectMigrationDatabaseUrl = (value: string) => {
-  const hostname = getHostname(new URL(value));
-  if (hostname.includes("-pooler")) {
+  const url = new URL(value);
+  const hostname = getHostname(url);
+  if (hostname.includes("-pooler") || url.port === "6432") {
     throw new Error(
-      "DATABASE_MIGRATION_URL must use the direct Neon endpoint, not the pooled endpoint."
+      "DATABASE_MIGRATION_URL must use a direct Postgres endpoint on port 5432, not a pooled endpoint."
     );
   }
 };
@@ -92,66 +63,11 @@ export const getMigrationDatabaseUrl = () => {
   const hostname = getHostname(new URL(databaseUrl));
   if (!LOOPBACK_HOSTS.has(hostname)) {
     throw new Error(
-      "DATABASE_MIGRATION_URL is required when DATABASE_URL is not loopback PostgreSQL. Use the direct Neon endpoint for migrations."
+      "DATABASE_MIGRATION_URL is required when DATABASE_URL is not loopback PostgreSQL. Use a direct Postgres endpoint on port 5432 for migrations."
     );
   }
 
   return withMigrationTimeouts(databaseUrl);
-};
-
-export const assertLocalDatabaseUrl = (
-  value: string,
-  expectedDatabase?: string
-) => {
-  const url = new URL(value);
-  const database = url.pathname.slice(1);
-
-  if (
-    !["postgres:", "postgresql:"].includes(url.protocol) ||
-    !LOOPBACK_HOSTS.has(getHostname(url))
-  ) {
-    throw new Error(
-      "Destructive database commands are restricted to loopback PostgreSQL servers"
-    );
-  }
-
-  if (isPresent(expectedDatabase) && database !== expectedDatabase) {
-    throw new Error(
-      `Destructive database commands require the ${expectedDatabase} database`
-    );
-  }
-};
-
-export const assertLocalDevelopmentDatabaseUrls = (
-  environment: Record<string, string | undefined> = process.env
-) => {
-  if (isExplicitLocalNeonConfigured(environment)) {
-    const migrationUrl = environment.DATABASE_MIGRATION_URL?.trim();
-    if (!isPresent(migrationUrl)) {
-      throw new Error(
-        "DATABASE_MIGRATION_URL is required for the allowlisted local Neon branch and must use the direct endpoint."
-      );
-    }
-    assertDirectMigrationDatabaseUrl(migrationUrl);
-  }
-
-  for (const name of ["DATABASE_URL", "DATABASE_MIGRATION_URL"] as const) {
-    const value = environment[name]?.trim();
-    if (!isPresent(value)) {
-      continue;
-    }
-
-    try {
-      const url = new URL(value);
-      if (!isExplicitLocalNeonUrl(url, environment)) {
-        assertLocalDatabaseUrl(value);
-      }
-    } catch {
-      throw new Error(
-        `${name} must target loopback PostgreSQL or the explicitly allowlisted local Neon host.`
-      );
-    }
-  }
 };
 
 export const assertMigrationExecutionAllowed = (
@@ -164,7 +80,7 @@ export const assertMigrationExecutionAllowed = (
     return;
   }
 
-  if (isExplicitLocalNeonUrl(url, environment)) {
+  if (isExplicitLocalPlanetScaleUrl(url, environment) && url.port === "5432") {
     return;
   }
 

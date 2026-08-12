@@ -71,6 +71,9 @@ export const normalizeSubscriptionStatus = (
     case "unpaid": {
       return "past_due";
     }
+    case "paused": {
+      return "past_due";
+    }
     default: {
       return "past_due";
     }

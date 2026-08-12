@@ -223,7 +223,7 @@ const hasWorkspaceGlLocations = (
 export const WorkspaceDitherBackground = ({
   animate = false,
   className,
-  dotRgb = "0, 0, 0",
+  dotRgb,
   falloff = 1.28,
   pattern = "default",
   step = DITHER_STEP,
@@ -231,7 +231,9 @@ export const WorkspaceDitherBackground = ({
 }: WorkspaceDitherBackgroundProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [ready, setReady] = useState(false);
-  const themeStrength = useColorModeValue(2, 5);
+  const themeDotRgb = useColorModeValue("0, 0, 0", "255, 255, 255");
+  const themeStrength = useColorModeValue(2, 0.55);
+  const activeDotRgb = dotRgb ?? themeDotRgb;
   const activeStrength = strength ?? themeStrength;
   const gridStep = Math.max(1, step);
   const sessionRef = useRef({ startedAt: performance.now() });
@@ -322,7 +324,7 @@ export const WorkspaceDitherBackground = ({
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
-      if (!revealed) {
+      if (animate && !revealed) {
         reveal();
       }
     };
@@ -536,7 +538,7 @@ export const WorkspaceDitherBackground = ({
       }[pattern];
       gl.uniform1f(patternLocation, patternIndex);
 
-      const [red, green, blue] = dotRgb
+      const [red, green, blue] = activeDotRgb
         .split(",")
         .map((channel) => Number(channel.trim()) / 255);
       gl.uniform3f(colorLocation, red || 0, green || 0, blue || 0);
@@ -554,6 +556,16 @@ export const WorkspaceDitherBackground = ({
       resize();
       startLoop();
     };
+
+    if (!animate) {
+      visible = true;
+      initGl();
+
+      return () => {
+        cancelled = true;
+        teardownGl();
+      };
+    }
 
     const intersection = new IntersectionObserver(
       ([entry]) => {
@@ -574,20 +586,24 @@ export const WorkspaceDitherBackground = ({
       intersection.disconnect();
       teardownGl();
     };
-  }, [activeStrength, animate, dotRgb, falloff, gridStep, pattern]);
+  }, [activeDotRgb, activeStrength, animate, falloff, gridStep, pattern]);
 
   return (
     <canvas
       className={cn(
         "pointer-events-none absolute inset-0 z-0 size-full overflow-hidden opacity-25 ease-out dark:opacity-100",
         className,
-        !ready && "opacity-0"
+        animate && !ready && "opacity-0"
       )}
       ref={canvasRef}
-      style={{
-        transitionDuration: `${REVEAL_MS}ms`,
-        transitionProperty: "opacity",
-      }}
+      style={
+        animate
+          ? {
+              transitionDuration: `${REVEAL_MS}ms`,
+              transitionProperty: "opacity",
+            }
+          : undefined
+      }
     />
   );
 };

@@ -38,7 +38,9 @@ const sitePasswordPagePath = "/site-password";
 const homePagePath = "/home";
 const publicPathPrefixes = ["/_build/", "/assets/"];
 const isSentryEnabled =
-  serverEnv.NODE_ENV !== "development" && serverEnv.SENTRY_DSN !== undefined;
+  import.meta.env.SSR &&
+  serverEnv.NODE_ENV !== "development" &&
+  serverEnv.SENTRY_DSN !== undefined;
 const fallbackRateLimitBuckets = new Map<
   string,
   { count: number; expiresAt: number }

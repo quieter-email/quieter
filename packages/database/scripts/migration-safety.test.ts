@@ -68,52 +68,65 @@ describe("local development database boundary", () => {
     }
   );
 
-  test("allows an explicitly allowlisted local Neon branch", () => {
+  test("allows the explicitly allowlisted local PlanetScale database", () => {
     expect(() => {
       assertLocalDevelopmentDatabaseUrls({
         DATABASE_MIGRATION_URL:
-          "postgresql://user:password@ep-local-branch.eu-central-1.aws.neon.tech/neondb",
+          "postgresql://migrator:password@eu-central-1.pg.psdb.cloud:5432/quieter_dev?sslmode=verify-full",
         DATABASE_URL:
-          "postgresql://user:password@ep-local-branch-pooler.eu-central-1.aws.neon.tech/neondb",
+          "postgresql://app:password@eu-central-1.pg.psdb.cloud:6432/quieter_dev?sslmode=verify-full",
         QUIETER_DEPLOYMENT_ENV: "local",
-        QUIETER_LOCAL_NEON_HOST: "ep-local-branch.eu-central-1.aws.neon.tech",
+        QUIETER_LOCAL_PLANETSCALE_HOST: "eu-central-1.pg.psdb.cloud",
       });
     }).not.toThrow();
   });
 
-  test("requires a direct DATABASE_MIGRATION_URL for an allowlisted Neon branch", () => {
+  test("requires direct migrations for the allowlisted PlanetScale database", () => {
     expect(() => {
       assertLocalDevelopmentDatabaseUrls({
         DATABASE_URL:
-          "postgresql://user:password@ep-local-branch-pooler.eu-central-1.aws.neon.tech/neondb",
+          "postgresql://app:password@eu-central-1.pg.psdb.cloud:6432/quieter_dev?sslmode=verify-full",
         QUIETER_DEPLOYMENT_ENV: "local",
-        QUIETER_LOCAL_NEON_HOST: "ep-local-branch.eu-central-1.aws.neon.tech",
+        QUIETER_LOCAL_PLANETSCALE_HOST: "eu-central-1.pg.psdb.cloud",
       });
     }).toThrow("DATABASE_MIGRATION_URL is required");
 
     expect(() => {
       assertLocalDevelopmentDatabaseUrls({
         DATABASE_MIGRATION_URL:
-          "postgresql://user:password@ep-local-branch-pooler.eu-central-1.aws.neon.tech/neondb",
+          "postgresql://migrator:password@eu-central-1.pg.psdb.cloud:6432/quieter_dev?sslmode=verify-full",
         DATABASE_URL:
-          "postgresql://user:password@ep-local-branch-pooler.eu-central-1.aws.neon.tech/neondb",
+          "postgresql://app:password@eu-central-1.pg.psdb.cloud:6432/quieter_dev?sslmode=verify-full",
         QUIETER_DEPLOYMENT_ENV: "local",
-        QUIETER_LOCAL_NEON_HOST: "ep-local-branch.eu-central-1.aws.neon.tech",
+        QUIETER_LOCAL_PLANETSCALE_HOST: "eu-central-1.pg.psdb.cloud",
       });
-    }).toThrow("direct Neon endpoint");
+    }).toThrow("port 5432");
   });
 
-  test("rejects a Neon host that does not match the explicit allowlist", () => {
+  test("rejects a PlanetScale host outside the explicit allowlist", () => {
     expect(() => {
       assertLocalDevelopmentDatabaseUrls({
         DATABASE_MIGRATION_URL:
-          "postgresql://user:password@ep-local-branch.eu-central-1.aws.neon.tech/neondb",
+          "postgresql://migrator:password@eu-central-1.pg.psdb.cloud:5432/quieter_dev?sslmode=verify-full",
         DATABASE_URL:
-          "postgresql://user:password@ep-production-pooler.eu-central-1.aws.neon.tech/neondb",
+          "postgresql://app:password@other.pg.psdb.cloud:6432/quieter_dev?sslmode=verify-full",
         QUIETER_DEPLOYMENT_ENV: "local",
-        QUIETER_LOCAL_NEON_HOST: "ep-local-branch.eu-central-1.aws.neon.tech",
+        QUIETER_LOCAL_PLANETSCALE_HOST: "eu-central-1.pg.psdb.cloud",
       });
-    }).toThrow("explicitly allowlisted local Neon host");
+    }).toThrow("explicitly allowlisted PlanetScale quieter_dev database");
+  });
+
+  test("rejects the production logical database in local development", () => {
+    expect(() => {
+      assertLocalDevelopmentDatabaseUrls({
+        DATABASE_MIGRATION_URL:
+          "postgresql://migrator:password@eu-central-1.pg.psdb.cloud:5432/quieter_dev?sslmode=verify-full",
+        DATABASE_URL:
+          "postgresql://app:password@eu-central-1.pg.psdb.cloud:6432/quieter?sslmode=verify-full",
+        QUIETER_DEPLOYMENT_ENV: "local",
+        QUIETER_LOCAL_PLANETSCALE_HOST: "eu-central-1.pg.psdb.cloud",
+      });
+    }).toThrow("explicitly allowlisted PlanetScale quieter_dev database");
   });
 });
 
@@ -147,13 +160,13 @@ describe("migration execution boundary", () => {
     }).not.toThrow();
   });
 
-  test("allows migrations on an explicitly allowlisted local Neon branch", () => {
+  test("allows migrations on the allowlisted PlanetScale development database", () => {
     expect(() => {
       assertMigrationExecutionAllowed(
-        "postgresql://user:password@ep-local-branch.eu-central-1.aws.neon.tech/neondb",
+        "postgresql://migrator:password@eu-central-1.pg.psdb.cloud:5432/quieter_dev?sslmode=verify-full",
         {
           QUIETER_DEPLOYMENT_ENV: "local",
-          QUIETER_LOCAL_NEON_HOST: "ep-local-branch.eu-central-1.aws.neon.tech",
+          QUIETER_LOCAL_PLANETSCALE_HOST: "eu-central-1.pg.psdb.cloud",
         }
       );
     }).not.toThrow();

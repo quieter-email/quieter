@@ -29,9 +29,9 @@
     "prepublishOnly": "vp pack"
   },
   "dependencies": {
-    "@react-email/render": "^2.0.9",
-    "@types/react": "^19.2.17",
-    "react": "^19.2.7"
+    "@react-email/render": "^2.1.0",
+    "@types/react": "^19.2.18",
+    "react": "^19.2.8"
   },
   "devDependencies": {
     "@quieter/config": "workspace:*",

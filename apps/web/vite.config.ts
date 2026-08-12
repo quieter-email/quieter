@@ -2,7 +2,6 @@ import { fileURLToPath } from "node:url";
 
 import { cloudflare } from "@cloudflare/vite-plugin";
 import { assertLocalDevelopmentDatabaseUrls } from "@quieter/database/local-development";
-import reactScan from "@react-scan/vite-plugin-react-scan";
 import babel from "@rolldown/plugin-babel";
 import { sentryTanstackStart } from "@sentry/tanstackstart-react/vite";
 import tailwindcss from "@tailwindcss/vite";
@@ -11,40 +10,7 @@ import viteReact, { reactCompilerPreset } from "@vitejs/plugin-react";
 import type { Plugin, Environment } from "vite-plus";
 import { defineConfig, lazyPlugins } from "vite-plus";
 
-const localWorkerSecretNames = [
-  "APP_SITE_PASSWORD",
-  "AWS_DEFAULT_REGION",
-  "AWS_EC2_METADATA_DISABLED",
-  "AWS_REGION",
-  "BETTER_AUTH_APP_NAME",
-  "BETTER_AUTH_SECRET",
-  "BETTER_AUTH_URL",
-  "CONNECTOR_TOKEN_ENCRYPTION_KEY",
-  "DATABASE_URL",
-  "GMAIL_TOKEN_ENCRYPTION_KEY",
-  "GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT",
-  "GOOGLE_AUTH_CLIENT_ID",
-  "GOOGLE_AUTH_CLIENT_SECRET",
-  "GOOGLE_CALENDAR_CLIENT_ID",
-  "GOOGLE_CALENDAR_CLIENT_SECRET",
-  "GOOGLE_GMAIL_CLIENT_ID",
-  "GOOGLE_GMAIL_CLIENT_SECRET",
-  "LINEAR_CLIENT_ID",
-  "LINEAR_CLIENT_SECRET",
-  "NODE_ENV",
-  "OPENROUTER_API_KEY",
-  "POLAR_ACCESS_TOKEN",
-  "POLAR_ORGANIZATION_ID",
-  "POLAR_PRODUCT_MANAGED_ID",
-  "POLAR_PRODUCT_PRO_ID",
-  "POLAR_SANDBOX",
-  "POLAR_WEBHOOK_SECRET",
-  "QUIETER_AUTH_MAIL_MODE",
-  "QUIETER_AUTH_MAIL_SENDER",
-  "QUIETER_DEPLOYMENT_ENV",
-  "QUIETER_GMAIL_AI_AUTOMATION_ENABLED",
-  "QUIETER_LOCAL_BILLING_BYPASS",
-] as const;
+const workspaceRoot = fileURLToPath(new URL("../..", import.meta.url));
 
 /**
  * Cloudflare's Worker env defaults include the "browser" resolve condition. Vite merges
@@ -87,12 +53,15 @@ const preferNodeAwsSdkResolution = (): Plugin => {
   };
 };
 
+const validateLocalDevelopment = (): Plugin => ({
+  config() {
+    assertLocalDevelopmentDatabaseUrls();
+  },
+  name: "validate-local-development",
+});
+
 export default defineConfig(({ command }) => {
   const isDev = command === "serve";
-  if (isDev) {
-    assertLocalDevelopmentDatabaseUrls();
-  }
-
   const isSentryEnabled = !isDev && !!process.env.SENTRY_AUTH_TOKEN;
   const sentryPlugins = isSentryEnabled
     ? sentryTanstackStart({
@@ -117,6 +86,7 @@ export default defineConfig(({ command }) => {
       chunkSizeWarningLimit: 1200,
       sourcemap: isSentryEnabled,
     },
+    envDir: workspaceRoot,
     optimizeDeps: {
       include: [
         "@tiptap/core",
@@ -128,24 +98,19 @@ export default defineConfig(({ command }) => {
     },
     plugins: lazyPlugins(() => [
       cloudflare({
-        config: isDev
-          ? {
-              secrets: {
-                required: localWorkerSecretNames.filter(
-                  (name) => process.env[name]
-                ),
-              },
-            }
-          : undefined,
         configPath:
           process.env.SST_WRANGLER_PATH ??
-          (isDev ? "local-worker.jsonc" : undefined),
+          (isDev
+            ? fileURLToPath(
+                new URL("../../local-worker.jsonc", import.meta.url)
+              )
+            : undefined),
         viteEnvironment: { name: "ssr" },
       }),
+      ...(isDev ? [validateLocalDevelopment()] : []),
       preferNodeAwsSdkResolution(),
       tanstackStart(),
       viteReact(),
-      ...(isDev ? [reactScan()] : []),
       babel({
         presets: [reactCompilerPreset()],
       }),
@@ -169,9 +134,6 @@ export default defineConfig(({ command }) => {
         "react",
         "react-dom",
       ],
-    },
-    server: {
-      port: 3000,
     },
   };
 });

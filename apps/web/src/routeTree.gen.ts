@@ -9,53 +9,43 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as TermsRouteImport } from './routes/terms'
-import { Route as SitePasswordRouteImport } from './routes/site-password'
-import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as PrivacyRouteImport } from './routes/privacy'
-import { Route as ImprintRouteImport } from './routes/imprint'
-import { Route as HomeRouteImport } from './routes/home'
-import { Route as CookiesRouteImport } from './routes/cookies'
-import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as ApiWaitlistRouteImport } from './routes/api/waitlist'
-import { Route as ApiSitePasswordRouteImport } from './routes/api/site-password'
-import { Route as ApiReviewHealthRouteImport } from './routes/api/review-health'
-import { Route as ApiPreviewPersonaRouteImport } from './routes/api/preview-persona'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as CookiesRouteImport } from './routes/cookies'
+import { Route as HomeRouteImport } from './routes/home'
+import { Route as ImprintRouteImport } from './routes/imprint'
+import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as SitePasswordRouteImport } from './routes/site-password'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as ApiOpenapiRouteImport } from './routes/api/openapi'
-import { Route as ApiV1SendRouteImport } from './routes/api/v1/send'
-import { Route as ApiOrpcSplatRouteImport } from './routes/api/orpc.$'
-import { Route as ApiGmailCallbackRouteImport } from './routes/api/gmail.callback'
-import { Route as ApiDomainConnectCallbackRouteImport } from './routes/api/domain-connect.callback'
-import { Route as ApiConnectorsCallbackRouteImport } from './routes/api/connectors.callback'
+import { Route as ApiPreviewPersonaRouteImport } from './routes/api/preview-persona'
+import { Route as ApiReviewHealthRouteImport } from './routes/api/review-health'
+import { Route as ApiSitePasswordRouteImport } from './routes/api/site-password'
+import { Route as ApiWaitlistRouteImport } from './routes/api/waitlist'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth.$'
-import { Route as ApiInternalGmailCredentialsRotateRouteImport } from './routes/api.internal.gmail-credentials.rotate'
+import { Route as ApiConnectorsCallbackRouteImport } from './routes/api/connectors.callback'
+import { Route as ApiDomainConnectCallbackRouteImport } from './routes/api/domain-connect.callback'
+import { Route as ApiGmailCallbackRouteImport } from './routes/api/gmail.callback'
+import { Route as ApiOrpcSplatRouteImport } from './routes/api/orpc.$'
+import { Route as ApiV1SendRouteImport } from './routes/api/v1/send'
 import { Route as ApiDomainConnectTemplatesServiceIdRouteImport } from './routes/api/domain-connect.templates.$serviceId'
+import { Route as ApiInternalGmailCredentialsRotateRouteImport } from './routes/api.internal.gmail-credentials.rotate'
 import { Route as ApiChatRunsRunIdStreamRouteImport } from './routes/api/chat.runs.$runId.stream'
 
-const TermsRoute = TermsRouteImport.update({
-  id: '/terms',
-  path: '/terms',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
-} as any)
-const SitePasswordRoute = SitePasswordRouteImport.update({
-  id: '/site-password',
-  path: '/site-password',
+} as any).lazy(() => import('./routes/index.lazy').then((d) => d.Route))
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
   getParentRoute: () => rootRouteImport,
-} as any).lazy(() => import('./routes/site-password.lazy').then((d) => d.Route))
-const SettingsRoute = SettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => rootRouteImport,
-} as any).lazy(() => import('./routes/settings.lazy').then((d) => d.Route))
-const PrivacyRoute = PrivacyRouteImport.update({
-  id: '/privacy',
-  path: '/privacy',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ImprintRoute = ImprintRouteImport.update({
-  id: '/imprint',
-  path: '/imprint',
+} as any).lazy(() => import('./routes/auth.lazy').then((d) => d.Route))
+const CookiesRoute = CookiesRouteImport.update({
+  id: '/cookies',
+  path: '/cookies',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HomeRoute = HomeRouteImport.update({
@@ -63,39 +53,29 @@ const HomeRoute = HomeRouteImport.update({
   path: '/home',
   getParentRoute: () => rootRouteImport,
 } as any)
-const CookiesRoute = CookiesRouteImport.update({
-  id: '/cookies',
-  path: '/cookies',
+const ImprintRoute = ImprintRouteImport.update({
+  id: '/imprint',
+  path: '/imprint',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthRoute = AuthRouteImport.update({
-  id: '/auth',
-  path: '/auth',
-  getParentRoute: () => rootRouteImport,
-} as any).lazy(() => import('./routes/auth.lazy').then((d) => d.Route))
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any).lazy(() => import('./routes/index.lazy').then((d) => d.Route))
-const ApiWaitlistRoute = ApiWaitlistRouteImport.update({
-  id: '/api/waitlist',
-  path: '/api/waitlist',
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiSitePasswordRoute = ApiSitePasswordRouteImport.update({
-  id: '/api/site-password',
-  path: '/api/site-password',
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => rootRouteImport,
-} as any)
-const ApiReviewHealthRoute = ApiReviewHealthRouteImport.update({
-  id: '/api/review-health',
-  path: '/api/review-health',
+} as any).lazy(() => import('./routes/settings.lazy').then((d) => d.Route))
+const SitePasswordRoute = SitePasswordRouteImport.update({
+  id: '/site-password',
+  path: '/site-password',
   getParentRoute: () => rootRouteImport,
-} as any)
-const ApiPreviewPersonaRoute = ApiPreviewPersonaRouteImport.update({
-  id: '/api/preview-persona',
-  path: '/api/preview-persona',
+} as any).lazy(() => import('./routes/site-password.lazy').then((d) => d.Route))
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiOpenapiRoute = ApiOpenapiRouteImport.update({
@@ -103,19 +83,34 @@ const ApiOpenapiRoute = ApiOpenapiRouteImport.update({
   path: '/api/openapi',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiV1SendRoute = ApiV1SendRouteImport.update({
-  id: '/api/v1/send',
-  path: '/api/v1/send',
+const ApiPreviewPersonaRoute = ApiPreviewPersonaRouteImport.update({
+  id: '/api/preview-persona',
+  path: '/api/preview-persona',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiOrpcSplatRoute = ApiOrpcSplatRouteImport.update({
-  id: '/api/orpc/$',
-  path: '/api/orpc/$',
+const ApiReviewHealthRoute = ApiReviewHealthRouteImport.update({
+  id: '/api/review-health',
+  path: '/api/review-health',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiGmailCallbackRoute = ApiGmailCallbackRouteImport.update({
-  id: '/api/gmail/callback',
-  path: '/api/gmail/callback',
+const ApiSitePasswordRoute = ApiSitePasswordRouteImport.update({
+  id: '/api/site-password',
+  path: '/api/site-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiWaitlistRoute = ApiWaitlistRouteImport.update({
+  id: '/api/waitlist',
+  path: '/api/waitlist',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
+  id: '/api/auth/$',
+  path: '/api/auth/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiConnectorsCallbackRoute = ApiConnectorsCallbackRouteImport.update({
+  id: '/api/connectors/callback',
+  path: '/api/connectors/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiDomainConnectCallbackRoute =
@@ -124,26 +119,31 @@ const ApiDomainConnectCallbackRoute =
     path: '/api/domain-connect/callback',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiConnectorsCallbackRoute = ApiConnectorsCallbackRouteImport.update({
-  id: '/api/connectors/callback',
-  path: '/api/connectors/callback',
+const ApiGmailCallbackRoute = ApiGmailCallbackRouteImport.update({
+  id: '/api/gmail/callback',
+  path: '/api/gmail/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
-  id: '/api/auth/$',
-  path: '/api/auth/$',
+const ApiOrpcSplatRoute = ApiOrpcSplatRouteImport.update({
+  id: '/api/orpc/$',
+  path: '/api/orpc/$',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiInternalGmailCredentialsRotateRoute =
-  ApiInternalGmailCredentialsRotateRouteImport.update({
-    id: '/api/internal/gmail-credentials/rotate',
-    path: '/api/internal/gmail-credentials/rotate',
-    getParentRoute: () => rootRouteImport,
-  } as any)
+const ApiV1SendRoute = ApiV1SendRouteImport.update({
+  id: '/api/v1/send',
+  path: '/api/v1/send',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiDomainConnectTemplatesServiceIdRoute =
   ApiDomainConnectTemplatesServiceIdRouteImport.update({
     id: '/api/domain-connect/templates/$serviceId',
     path: '/api/domain-connect/templates/$serviceId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiInternalGmailCredentialsRotateRoute =
+  ApiInternalGmailCredentialsRotateRouteImport.update({
+    id: '/api/internal/gmail-credentials/rotate',
+    path: '/api/internal/gmail-credentials/rotate',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiChatRunsRunIdStreamRoute = ApiChatRunsRunIdStreamRouteImport.update({
@@ -334,53 +334,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/terms': {
-      id: '/terms'
-      path: '/terms'
-      fullPath: '/terms'
-      preLoaderRoute: typeof TermsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/site-password': {
-      id: '/site-password'
-      path: '/site-password'
-      fullPath: '/site-password'
-      preLoaderRoute: typeof SitePasswordRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/settings': {
-      id: '/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof SettingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/privacy': {
-      id: '/privacy'
-      path: '/privacy'
-      fullPath: '/privacy'
-      preLoaderRoute: typeof PrivacyRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/imprint': {
-      id: '/imprint'
-      path: '/imprint'
-      fullPath: '/imprint'
-      preLoaderRoute: typeof ImprintRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/home': {
-      id: '/home'
-      path: '/home'
-      fullPath: '/home'
-      preLoaderRoute: typeof HomeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/cookies': {
-      id: '/cookies'
-      path: '/cookies'
-      fullPath: '/cookies'
-      preLoaderRoute: typeof CookiesRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth': {
@@ -390,39 +348,53 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/cookies': {
+      id: '/cookies'
+      path: '/cookies'
+      fullPath: '/cookies'
+      preLoaderRoute: typeof CookiesRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/waitlist': {
-      id: '/api/waitlist'
-      path: '/api/waitlist'
-      fullPath: '/api/waitlist'
-      preLoaderRoute: typeof ApiWaitlistRouteImport
+    '/home': {
+      id: '/home'
+      path: '/home'
+      fullPath: '/home'
+      preLoaderRoute: typeof HomeRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/site-password': {
-      id: '/api/site-password'
-      path: '/api/site-password'
-      fullPath: '/api/site-password'
-      preLoaderRoute: typeof ApiSitePasswordRouteImport
+    '/imprint': {
+      id: '/imprint'
+      path: '/imprint'
+      fullPath: '/imprint'
+      preLoaderRoute: typeof ImprintRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/review-health': {
-      id: '/api/review-health'
-      path: '/api/review-health'
-      fullPath: '/api/review-health'
-      preLoaderRoute: typeof ApiReviewHealthRouteImport
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/preview-persona': {
-      id: '/api/preview-persona'
-      path: '/api/preview-persona'
-      fullPath: '/api/preview-persona'
-      preLoaderRoute: typeof ApiPreviewPersonaRouteImport
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/site-password': {
+      id: '/site-password'
+      path: '/site-password'
+      fullPath: '/site-password'
+      preLoaderRoute: typeof SitePasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/openapi': {
@@ -432,39 +404,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiOpenapiRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/v1/send': {
-      id: '/api/v1/send'
-      path: '/api/v1/send'
-      fullPath: '/api/v1/send'
-      preLoaderRoute: typeof ApiV1SendRouteImport
+    '/api/preview-persona': {
+      id: '/api/preview-persona'
+      path: '/api/preview-persona'
+      fullPath: '/api/preview-persona'
+      preLoaderRoute: typeof ApiPreviewPersonaRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/orpc/$': {
-      id: '/api/orpc/$'
-      path: '/api/orpc/$'
-      fullPath: '/api/orpc/$'
-      preLoaderRoute: typeof ApiOrpcSplatRouteImport
+    '/api/review-health': {
+      id: '/api/review-health'
+      path: '/api/review-health'
+      fullPath: '/api/review-health'
+      preLoaderRoute: typeof ApiReviewHealthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/gmail/callback': {
-      id: '/api/gmail/callback'
-      path: '/api/gmail/callback'
-      fullPath: '/api/gmail/callback'
-      preLoaderRoute: typeof ApiGmailCallbackRouteImport
+    '/api/site-password': {
+      id: '/api/site-password'
+      path: '/api/site-password'
+      fullPath: '/api/site-password'
+      preLoaderRoute: typeof ApiSitePasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/domain-connect/callback': {
-      id: '/api/domain-connect/callback'
-      path: '/api/domain-connect/callback'
-      fullPath: '/api/domain-connect/callback'
-      preLoaderRoute: typeof ApiDomainConnectCallbackRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/connectors/callback': {
-      id: '/api/connectors/callback'
-      path: '/api/connectors/callback'
-      fullPath: '/api/connectors/callback'
-      preLoaderRoute: typeof ApiConnectorsCallbackRouteImport
+    '/api/waitlist': {
+      id: '/api/waitlist'
+      path: '/api/waitlist'
+      fullPath: '/api/waitlist'
+      preLoaderRoute: typeof ApiWaitlistRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/auth/$': {
@@ -474,11 +439,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/internal/gmail-credentials/rotate': {
-      id: '/api/internal/gmail-credentials/rotate'
-      path: '/api/internal/gmail-credentials/rotate'
-      fullPath: '/api/internal/gmail-credentials/rotate'
-      preLoaderRoute: typeof ApiInternalGmailCredentialsRotateRouteImport
+    '/api/connectors/callback': {
+      id: '/api/connectors/callback'
+      path: '/api/connectors/callback'
+      fullPath: '/api/connectors/callback'
+      preLoaderRoute: typeof ApiConnectorsCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/domain-connect/callback': {
+      id: '/api/domain-connect/callback'
+      path: '/api/domain-connect/callback'
+      fullPath: '/api/domain-connect/callback'
+      preLoaderRoute: typeof ApiDomainConnectCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/gmail/callback': {
+      id: '/api/gmail/callback'
+      path: '/api/gmail/callback'
+      fullPath: '/api/gmail/callback'
+      preLoaderRoute: typeof ApiGmailCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/orpc/$': {
+      id: '/api/orpc/$'
+      path: '/api/orpc/$'
+      fullPath: '/api/orpc/$'
+      preLoaderRoute: typeof ApiOrpcSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/send': {
+      id: '/api/v1/send'
+      path: '/api/v1/send'
+      fullPath: '/api/v1/send'
+      preLoaderRoute: typeof ApiV1SendRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/domain-connect/templates/$serviceId': {
@@ -486,6 +479,13 @@ declare module '@tanstack/react-router' {
       path: '/api/domain-connect/templates/$serviceId'
       fullPath: '/api/domain-connect/templates/$serviceId'
       preLoaderRoute: typeof ApiDomainConnectTemplatesServiceIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/internal/gmail-credentials/rotate': {
+      id: '/api/internal/gmail-credentials/rotate'
+      path: '/api/internal/gmail-credentials/rotate'
+      fullPath: '/api/internal/gmail-credentials/rotate'
+      preLoaderRoute: typeof ApiInternalGmailCredentialsRotateRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/chat/runs/$runId/stream': {

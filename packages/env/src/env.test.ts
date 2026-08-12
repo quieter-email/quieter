@@ -279,6 +279,28 @@ describe("local environment doctor", () => {
     expect(errors).toStrictEqual([]);
   });
 
+  test("accepts the allowlisted PlanetScale development database", async () => {
+    const { diagnoseLocalEnv } = await import("./local-doctor");
+    const errors = diagnoseLocalEnv(
+      new Map([
+        ["BETTER_AUTH_URL", "http://localhost:3000"],
+        [
+          "DATABASE_MIGRATION_URL",
+          "postgresql://migrator:password@eu-central-1.pg.psdb.cloud:5432/quieter_dev?sslmode=verify-full",
+        ],
+        [
+          "DATABASE_URL",
+          "postgresql://app:password@eu-central-1.pg.psdb.cloud:6432/quieter_dev?sslmode=verify-full",
+        ],
+        ["QUIETER_AUTH_MAIL_MODE", "console"],
+        ["QUIETER_DEPLOYMENT_ENV", "local"],
+        ["QUIETER_LOCAL_PLANETSCALE_HOST", "eu-central-1.pg.psdb.cloud"],
+      ])
+    );
+
+    expect(errors).toStrictEqual([]);
+  });
+
   test("rejects cloud secrets and non-local deployment", async () => {
     const { diagnoseLocalEnv } = await import("./local-doctor");
     const errors = diagnoseLocalEnv(

@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "@orpc/server": "catalog:",
-    "@polar-sh/sdk": "^0.48.1",
+    "@polar-sh/sdk": "^0.49.0",
     "@quieter/ai": "workspace:*",
     "@quieter/database": "workspace:*",
     "@quieter/env": "workspace:*",

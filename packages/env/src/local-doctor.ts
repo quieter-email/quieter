@@ -71,19 +71,28 @@ export const parseEnvFile = (path: string) => {
 const getHostname = (value: string) =>
   new URL(value).hostname.replace(/^\[(?<host>.*)\]$/u, "$<host>");
 
-const normalizeNeonHostname = (hostname: string) =>
-  hostname.toLowerCase().replace("-pooler.", ".");
-
 const hasText = (value: string | undefined): value is string =>
   value !== undefined && value !== "";
 
-const isAllowlistedNeonHost = (
-  hostname: string,
-  configuredNeonHost: string | undefined
-) =>
-  hasText(configuredNeonHost) &&
-  configuredNeonHost.endsWith(".neon.tech") &&
-  normalizeNeonHostname(hostname) === normalizeNeonHostname(configuredNeonHost);
+const isPlanetScaleHostname = (hostname: string) =>
+  hostname.endsWith(".pg.psdb.cloud") ||
+  hostname.endsWith(".horizon.psdb.cloud");
+
+const isAllowlistedPlanetScaleUrl = (
+  key: "DATABASE_MIGRATION_URL" | "DATABASE_URL",
+  value: string,
+  configuredPlanetScaleHost: string | undefined
+) => {
+  const url = new URL(value);
+  return (
+    hasText(configuredPlanetScaleHost) &&
+    isPlanetScaleHostname(configuredPlanetScaleHost) &&
+    getHostname(value).toLowerCase() === configuredPlanetScaleHost &&
+    url.pathname.slice(1) === "quieter_dev" &&
+    url.searchParams.get("sslmode") === "verify-full" &&
+    url.port === (key === "DATABASE_URL" ? "6432" : "5432")
+  );
+};
 
 const collectForbiddenKeyErrors = (env: Map<string, string>) =>
   forbiddenLocalKeys.flatMap((key) =>
@@ -96,7 +105,7 @@ const collectForbiddenKeyErrors = (env: Map<string, string>) =>
 
 const validateDatabaseUrls = (
   env: Map<string, string>,
-  configuredNeonHost: string | undefined
+  configuredPlanetScaleHost: string | undefined
 ) => {
   const errors: string[] = [];
 
@@ -110,12 +119,12 @@ const validateDatabaseUrls = (
       const hostname = getHostname(value);
       if (
         loopbackHosts.has(hostname) ||
-        isAllowlistedNeonHost(hostname, configuredNeonHost)
+        isAllowlistedPlanetScaleUrl(key, value, configuredPlanetScaleHost)
       ) {
         continue;
       }
       errors.push(
-        `${key} must target loopback PostgreSQL or QUIETER_LOCAL_NEON_HOST in .env.local.`
+        `${key} must target loopback PostgreSQL or the allowlisted PlanetScale quieter_dev database in .env.local.`
       );
     } catch {
       errors.push(`${key} is not a valid URL.`);
@@ -123,23 +132,13 @@ const validateDatabaseUrls = (
   }
 
   if (
-    hasText(configuredNeonHost) &&
-    configuredNeonHost.endsWith(".neon.tech")
+    hasText(configuredPlanetScaleHost) &&
+    isPlanetScaleHostname(configuredPlanetScaleHost)
   ) {
     const migrationUrl = env.get("DATABASE_MIGRATION_URL");
-    if (hasText(migrationUrl)) {
-      try {
-        if (getHostname(migrationUrl).includes("-pooler")) {
-          errors.push(
-            "DATABASE_MIGRATION_URL must use the direct Neon endpoint, not the pooled endpoint."
-          );
-        }
-      } catch {
-        // Invalid URL already reported above.
-      }
-    } else {
+    if (!hasText(migrationUrl)) {
       errors.push(
-        "DATABASE_MIGRATION_URL is required for the allowlisted local Neon branch and must use the direct endpoint."
+        "DATABASE_MIGRATION_URL is required for the allowlisted local PlanetScale database and must use direct port 5432."
       );
     }
   }
@@ -185,14 +184,14 @@ const validateAuthAndDeployment = (env: Map<string, string>) => {
 };
 
 export const diagnoseLocalEnv = (env: Map<string, string>) => {
-  const configuredNeonHost = env
-    .get("QUIETER_LOCAL_NEON_HOST")
+  const configuredPlanetScaleHost = env
+    .get("QUIETER_LOCAL_PLANETSCALE_HOST")
     ?.trim()
     .toLowerCase();
 
   return [
     ...collectForbiddenKeyErrors(env),
-    ...validateDatabaseUrls(env, configuredNeonHost),
+    ...validateDatabaseUrls(env, configuredPlanetScaleHost),
     ...validateAuthAndDeployment(env),
   ];
 };

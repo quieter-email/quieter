@@ -57,7 +57,7 @@ Repository checks cannot validate account-level state. After changing Worker inf
 
 ## Database safety
 
-`DATABASE_URL` is the least-privilege runtime role. `DATABASE_MIGRATION_URL` is available only to the protected production migration step. Local development must use loopback Postgres or an explicitly allowlisted disposable Neon branch. For Neon, keep `DATABASE_URL` pooled and set `DATABASE_MIGRATION_URL` to the matching direct endpoint pinned by `QUIETER_LOCAL_NEON_HOST`. Do not store production migration credentials in `.env.local`.
+`DATABASE_URL` is the least-privilege runtime role. `DATABASE_MIGRATION_URL` is available only to the protected production migration step. Local development must use loopback Postgres or the explicitly allowlisted PlanetScale `quieter_dev` database. Keep `DATABASE_URL` on port 6432, set `DATABASE_MIGRATION_URL` to direct port 5432, and pin their exact host with `QUIETER_LOCAL_PLANETSCALE_HOST`. Do not store production migration credentials in `.env.local`.
 
 Production migration history is never adopted or rewritten automatically. Automated production migrations reject destructive SQL; contract migrations require a separately reviewed manual procedure.
 

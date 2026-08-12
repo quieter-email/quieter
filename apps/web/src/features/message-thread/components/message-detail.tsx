@@ -144,7 +144,7 @@ export const MessageDetail = ({
       )}
 
       <div
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+        className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto"
         data-message-detail-scroll-container
       >
         <m.div
@@ -153,7 +153,7 @@ export const MessageDetail = ({
             opacity: 1,
             transform: "translate3d(0, 0, 0)",
           }}
-          className="flex min-h-full flex-1 flex-col"
+          className="flex min-h-full min-w-0 flex-1 flex-col"
           initial={
             reducedMotion === true
               ? { opacity: 0 }

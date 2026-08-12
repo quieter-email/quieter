@@ -6,7 +6,7 @@ import { COMPATIBILITY_DATE } from "../src/compatibility-date";
 const root = path.join(import.meta.dirname, "../../..");
 const check = process.argv.includes("--check");
 const targets = [
-  "apps/web/local-worker.jsonc",
+  "local-worker.jsonc",
   "packages/cloudflare/wrangler.types.jsonc",
   ".github/review-worker.wrangler.jsonc",
 ] as const;

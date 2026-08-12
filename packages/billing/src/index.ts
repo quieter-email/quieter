@@ -371,11 +371,11 @@ export const syncBillingCheckout = async (input: {
     (checkout.productId ?? "") !== ""
   ) {
     const subscriptions = await polar.subscriptions.list({
-      active: true,
       customerId: checkout.customerId,
       limit: 10,
       productId: checkout.productId,
       sorting: ["-started_at"],
+      status: ["active", "trialing"],
     });
     subscription = subscriptions.result.items.find(
       (candidate) =>

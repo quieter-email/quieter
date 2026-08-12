@@ -4,14 +4,14 @@
   "type": "module",
   "exports": {
     "./client": "./src/client.ts",
-    "./local-development": "./scripts/database-url.ts",
+    "./local-development": "./scripts/local-development.ts",
     "./schema": "./src/schema.ts"
   },
   "dependencies": {
     "@quieter/env": "workspace:*",
     "drizzle-orm": "catalog:",
     "postgres": "^3.4.9",
-    "sst": "^4.17.0"
+    "sst": "^4.17.1"
   },
   "devDependencies": {
     "@quieter/config": "workspace:*",

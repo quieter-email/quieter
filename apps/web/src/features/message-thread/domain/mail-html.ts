@@ -274,6 +274,9 @@ const createMailRenderStyles = (theme: MailRenderTheme): string => {
     <style type="text/css">
       :host {
         display: block;
+        width: 100%;
+        max-width: 100%;
+        overflow: hidden;
         line-height: 1.5;
         background-color: ${isDarkTheme ? "#1A1A1A" : "#ffffff"};
         color: ${isDarkTheme ? "#ffffff" : "#000000"};
@@ -285,7 +288,17 @@ const createMailRenderStyles = (theme: MailRenderTheme): string => {
 
       body {
         margin: 0;
+        max-width: 100%;
         padding: 0;
+        overflow-wrap: anywhere;
+      }
+
+      img, video, iframe, object, svg {
+        max-width: 100% !important;
+      }
+
+      img, video {
+        height: auto !important;
       }
 
       a {
@@ -306,6 +319,7 @@ const createMailRenderStyles = (theme: MailRenderTheme): string => {
 
       table {
         border-collapse: collapse;
+        max-width: 100% !important;
       }
 
       ::selection {

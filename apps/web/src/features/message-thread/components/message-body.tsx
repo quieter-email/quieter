@@ -242,7 +242,7 @@ const HtmlMessageBodyContent = ({
         </section>
       )}
       <div
-        className="mail-content no-scrollbar w-full flex-1 overflow-scroll bg-transparent text-fg"
+        className="mail-content w-full max-w-full min-w-0 flex-1 overflow-x-hidden bg-transparent text-fg"
         ref={hostRef}
       />
     </>
