@@ -28,6 +28,10 @@ jobs:
       - name: Setup Vite+
         uses: voidzero-dev/setup-vp@v1
         with:
+          # Pinned to the `vite-plus` catalog entry in package.json. Without it the
+          # action installs the latest vp, whose formatter drifts from the local one
+          # and fails commits that were previously green.
+          version: "0.2.4"
           cache: true
           node-version: "24.18.0"
 
@@ -90,6 +94,10 @@ jobs:
       - name: Setup Vite+
         uses: voidzero-dev/setup-vp@v1
         with:
+          # Pinned to the `vite-plus` catalog entry in package.json. Without it the
+          # action installs the latest vp, whose formatter drifts from the local one
+          # and fails commits that were previously green.
+          version: "0.2.4"
           cache: true
           node-version: "24.18.0"
 
@@ -137,6 +145,10 @@ jobs:
       - name: Setup Vite+
         uses: voidzero-dev/setup-vp@v1
         with:
+          # Pinned to the `vite-plus` catalog entry in package.json. Without it the
+          # action installs the latest vp, whose formatter drifts from the local one
+          # and fails commits that were previously green.
+          version: "0.2.4"
           cache: true
           node-version: "24.18.0"
 
