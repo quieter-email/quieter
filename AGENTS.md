@@ -40,7 +40,9 @@
 - Mailbox list selection supports Shift range, Ctrl/Cmd toggle, `Mod+A`, and `Escape`.
 - Cookie consent uses [c15t](https://c15t.com/) offline mode with browser-only preference storage and a conservative opt-in banner. PostHog loads only after `measurement` consent (`@c15t/scripts`, `loadMode: 'after-consent'`). Client Sentry stays on in production; disclose in the Privacy Policy.
 - Capture unexpected application and infrastructure failures in Sentry with actionable context, while filtering expected user-action and authorization states. Keep PostHog limited to consent-gated, aggregate product analytics: never send message content, search text, mailbox or user identifiers, email addresses, full URLs containing private parameters, or enable autocapture/session replay/person profiles.
-- Signup requires explicit Terms + Privacy acceptance (`user.termsAcceptedAt` via `quieter_terms_accepted_at` cookie). Do not bundle analytics consent into signup or login.
+- Authentication is a single unified flow at `/auth`; there is no separate signup screen or `mode` parameter. Any method may create the account, so the response never reveals whether an address is registered. Authentication collects no profile details and no consent.
+- Consent and first-run setup happen at `/onboarding`. Explicit Terms + Privacy acceptance is recorded there as `user.termsAcceptedAt`, alongside display name, optional team name, and an optional first mailbox; completion sets `user.onboardingCompletedAt`. Every authenticated route redirects to `/onboarding` until both are set, so an account exists but is unusable before acceptance. Do not bundle analytics consent into onboarding; that stays with the cookie banner.
+- Google sign-in remains identity-only and its token can never read mail. Onboarding offers a one-click Gmail connection by passing the verified sign-in address to the separate Gmail PKCE flow as `login_hint`; Google's own consent screen is still required, and Gmail stays connectable later from Settings.
 - Legal pages: `/privacy`, `/cookies`, `/terms`. Footer and Settings expose “Manage privacy preferences” (`ConsentDialog`).
 
 ## Data + Routing
