@@ -113,7 +113,7 @@ const SearchDropdownRow = ({
       icon={icon}
     />
     <span className="min-w-0 flex-1 truncate">{label}</span>
-    {hasText(hint) && <span className="text-[11px] text-muted-fg">{hint}</span>}
+    {hasText(hint) && <span className="text-micro text-muted-fg">{hint}</span>}
   </button>
 );
 

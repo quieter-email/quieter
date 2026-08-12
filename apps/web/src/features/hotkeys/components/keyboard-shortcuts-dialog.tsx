@@ -116,7 +116,7 @@ const getShortcutDisplay = (shortcut: KeyboardShortcut): string[][] => {
 };
 
 const KeyBadge = ({ value }: { value: string }) => (
-  <kbd className="squircle inline-flex h-6 min-w-6 items-center justify-center rounded-md border border-border bg-bg-surface px-1.5 font-mono text-[11px] font-medium text-fg shadow-xs">
+  <kbd className="squircle inline-flex h-6 min-w-6 items-center justify-center rounded-md border border-border bg-bg-surface px-1.5 font-mono text-micro font-medium text-fg shadow-xs">
     {value}
   </kbd>
 );
@@ -137,13 +137,13 @@ const ShortcutKeys = ({ shortcut }: { shortcut: KeyboardShortcut }) => (
               key={`${shortcut.id}-${bindingKey}-${key}`}
             >
               {keyIndex > 0 && (
-                <span className="text-[11px] text-muted-fg">then</span>
+                <span className="text-micro text-muted-fg">then</span>
               )}
               <KeyBadge value={key} />
             </span>
           ))}
           {bindingIndex < bindings.length - 1 && (
-            <span className="text-[11px] text-muted-fg">or</span>
+            <span className="text-micro text-muted-fg">or</span>
           )}
         </div>
       );
@@ -160,7 +160,7 @@ const ShortcutRow = ({ item }: { item: ShortcutViewItem }) => {
     <div className="grid min-h-10 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-border px-3 py-2 last:border-b-0">
       <div className="min-w-0">
         <p
-          className={cn("truncate text-[0.8rem] font-normal text-fg", {
+          className={cn("truncate text-body-sm font-normal text-fg", {
             "text-muted-fg": shortcut.status === "coming-soon",
           })}
         >

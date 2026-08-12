@@ -15,7 +15,7 @@ const pillVariants = cva(
     },
     variants: {
       size: {
-        sm: "h-5 px-2 text-[11px]",
+        sm: "h-5 px-2 text-micro",
         xs: "h-4 px-1.5 text-[10px]",
       },
       tone: {

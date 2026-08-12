@@ -29,7 +29,7 @@ export const settingsSurfaceVariants = cva("", {
       padding: "px-4 py-3 @md:px-6",
       rowShell:
         "squircle relative flex w-full items-center gap-4 px-4 py-3 after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border/60 after:content-[''] last:after:hidden @md:px-6 @md:after:inset-x-6",
-      title: "text-[0.8rem] font-normal text-fg",
+      title: "text-body-sm font-normal text-fg",
       value: "text-xs/4 text-muted-fg",
     },
   },
@@ -312,7 +312,7 @@ export const SettingsNavigationRow = ({
       </div>
     ) : null}
     <span className="min-w-0 flex-1">
-      <span className="block truncate text-[0.8rem] font-normal text-fg">
+      <span className="block truncate text-body-sm font-normal text-fg">
         {title}
       </span>
       <span

@@ -50,7 +50,7 @@ export const BillingProductCard = ({
           <div className="flex items-center gap-2">
             <h3 className="text-base font-semibold text-fg">{product.name}</h3>
             {isCurrent && (
-              <span className="squircle rounded-full border border-primary/40 px-2 py-0.5 text-[11px] font-medium text-primary">
+              <span className="squircle rounded-full border border-primary/40 px-2 py-0.5 text-micro font-medium text-primary">
                 Current
               </span>
             )}

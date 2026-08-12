@@ -52,7 +52,7 @@ const MessageToolContent = ({
     }}
     type="button"
   >
-    <p className="text-[11px] text-muted-fg">
+    <p className="text-micro text-muted-fg">
       {hasText(success.to) ? (
         <span className="mr-3">To {success.to}</span>
       ) : null}
@@ -64,7 +64,7 @@ const MessageToolContent = ({
       ) : null}
     </p>
     {success.attachments.length ? (
-      <p className="mt-1 truncate text-[11px] text-muted-fg/80">
+      <p className="mt-1 truncate text-micro text-muted-fg/80">
         {success.attachments
           .map((attachment) => attachment.fileName)
           .join(", ")}

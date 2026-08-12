@@ -290,7 +290,7 @@ export const TemplateWorkspace = ({
                 <span className="block truncate text-sm font-medium">
                   {template.name}
                 </span>
-                <span className="mt-1 flex items-center gap-2 text-[11px] text-muted-fg">
+                <span className="mt-1 flex items-center gap-2 text-micro text-muted-fg">
                   <span>{template.scope === "team" ? "Team" : "Personal"}</span>
                 </span>
               </span>

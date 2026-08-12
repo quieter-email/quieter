@@ -28,7 +28,7 @@ const selectTriggerVariants = cva(
         sm: "h-8 px-3 text-[13px] [&_svg]:size-3.5",
       },
       variant: {
-        default: "w-full border border-border bg-bg-elevated text-fg shadow-sm",
+        default: "w-full border border-border bg-input text-fg shadow-sm",
         ghost:
           "w-auto bg-transparent text-muted-fg hover:bg-muted hover:text-fg active:bg-muted/80 active:text-fg",
       },
@@ -222,7 +222,7 @@ export const SelectGroupLabel = ({
     <SelectPrimitive.GroupLabel
       className={cn(
         "px-2.5 py-1 text-xs text-muted-fg",
-        size === "compact" && "px-2 py-0.5 text-[11px]",
+        size === "compact" && "px-2 py-0.5 text-micro",
         className
       )}
       {...props}

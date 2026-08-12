@@ -312,7 +312,7 @@ const MessageRowDetails = ({
             {senderLabel}
           </span>
           {senderEmail && (
-            <span className="ml-2 hidden text-[11px] text-muted-fg @sm:inline">
+            <span className="ml-2 hidden text-micro text-muted-fg @sm:inline">
               {senderEmail}
             </span>
           )}

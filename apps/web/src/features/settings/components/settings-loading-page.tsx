@@ -86,7 +86,7 @@ const SettingsPendingOverview = () => {
                       />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-[0.8rem] font-normal text-fg">
+                      <p className="truncate text-body-sm font-normal text-fg">
                         {title}
                       </p>
                       <p className="mt-0.5 truncate text-xs/4 text-muted-fg">

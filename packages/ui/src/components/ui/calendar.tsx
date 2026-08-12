@@ -108,7 +108,7 @@ export const Calendar = ({
         ),
         week: cn("grid grid-cols-7 gap-0.5", defaultClassNames.week),
         weekday: cn(
-          "flex h-8 items-center justify-center text-[11px] font-medium text-muted-fg",
+          "flex h-8 items-center justify-center text-micro font-medium text-muted-fg",
           defaultClassNames.weekday
         ),
         weekdays: cn("grid grid-cols-7 gap-0.5", defaultClassNames.weekdays),

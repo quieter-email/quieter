@@ -63,7 +63,7 @@ export const ThreadTool = ({
       {success ? (
         <div className="space-y-2">
           {success.omittedMessageCount > 0 ? (
-            <p className="text-[11px] text-muted-fg/75">
+            <p className="text-micro text-muted-fg/75">
               {success.omittedMessageCount} earlier message
               {success.omittedMessageCount === 1 ? "" : "s"} hidden
             </p>
@@ -77,7 +77,7 @@ export const ThreadTool = ({
               }}
               type="button"
             >
-              <div className="flex items-center justify-between gap-3 text-[11px] text-muted-fg">
+              <div className="flex items-center justify-between gap-3 text-micro text-muted-fg">
                 <span className="truncate text-fg/80">
                   {message.from?.trim() ?? "Unknown"}
                 </span>

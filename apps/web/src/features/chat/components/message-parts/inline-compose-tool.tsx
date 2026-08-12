@@ -54,7 +54,7 @@ const ComposeField = ({
   value: string;
 }) => (
   <label className="flex min-w-0 items-center gap-3 border-b border-border py-1.5 last:border-b-0">
-    <span className="w-12 shrink-0 text-[11px] text-muted-fg">{label}</span>
+    <span className="w-12 shrink-0 text-micro text-muted-fg">{label}</span>
     {readOnly ? (
       <span className="h-8 w-full min-w-0 truncate bg-transparent px-0 text-sm text-fg">
         {value || "—"}
@@ -231,7 +231,7 @@ export const InlineComposeTool = ({
             <span className="text-fg/75">{` "${initial.subject}"`}</span>
           ) : null}
         </p>
-        <div className="flex shrink-0 items-center gap-2 text-[11px]">
+        <div className="flex shrink-0 items-center gap-2 text-micro">
           <button
             className={cn("text-muted-fg transition-colors hover:text-fg", {
               "text-fg": showCc,
