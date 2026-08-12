@@ -146,24 +146,20 @@ export const auth = betterAuth({
         after: async (createdUser) => {
           await ensureUserOrganizationState(createdUser);
         },
-        before: async (createdUser, context) => {
-          const termsAcceptedAt = readTermsAcceptedAtFromRequest(
-            context?.request
-          );
-          if (termsAcceptedAt === null || termsAcceptedAt === undefined) {
-            throw new APIError("BAD_REQUEST", {
-              message:
-                "Accept the Terms of Service and Privacy Policy to create an account.",
-            });
-          }
-
-          return await Promise.resolve({
+        /**
+         * Acceptance is recorded during onboarding, not at account creation,
+         * so the account may exist before it. The onboarding gate keeps the
+         * product unusable until `termsAcceptedAt` is set, and a stale
+         * acceptance cookie from a previous flow still counts.
+         */
+        before: async (createdUser, context) =>
+          await Promise.resolve({
             data: {
               ...createdUser,
-              termsAcceptedAt: new Date(),
+              termsAcceptedAt:
+                readTermsAcceptedAtFromRequest(context?.request) ?? null,
             },
-          });
-        },
+          }),
       },
       delete: {
         before: async (deletedUser) => {
@@ -281,6 +277,11 @@ export const auth = betterAuth({
   trustedOrigins,
   user: {
     additionalFields: {
+      onboardingCompletedAt: {
+        input: false,
+        required: false,
+        type: "date",
+      },
       termsAcceptedAt: {
         input: false,
         required: false,

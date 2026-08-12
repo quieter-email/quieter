@@ -3,11 +3,11 @@
 import { Key02Icon, Mail01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
-import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
+import { FieldLabel } from "@quieter/ui/field";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { getRouteApi, Link } from "@tanstack/react-router";
+import { getRouteApi } from "@tanstack/react-router";
 import { domAnimation, LazyMotion, m } from "motion/react";
 import { useState } from "react";
 import type { ReactNode } from "react";
@@ -24,18 +24,10 @@ import {
 } from "#/lib/preview-personas";
 import type { PreviewPersona } from "#/lib/preview-personas";
 import { queryPersister } from "#/lib/query-persister";
-import { setTermsAcceptanceCookie } from "#/lib/terms-acceptance";
 
 const authRouteApi = getRouteApi("/auth");
 const AUTHENTICATION_ERROR_MESSAGE =
   "Unable to authenticate. Please check your credentials or try again.";
-
-type AuthErrorKey = "signup_disabled";
-
-const AUTH_ERROR_MESSAGES: Record<AuthErrorKey, string> = {
-  signup_disabled:
-    "No account exists for that Google account. Sign up first to create one.",
-};
 
 const hasText = (value: string | null | undefined): value is string =>
   value !== null && value !== undefined && value !== "";
@@ -56,14 +48,10 @@ const normalizeAuthReturnTo = (returnTo?: string) => {
   }
 };
 
-const isAuthErrorKey = (key: string): key is AuthErrorKey =>
-  key in AUTH_ERROR_MESSAGES;
-
 type AuthNavigate = ReturnType<(typeof authRouteApi)["useNavigate"]>;
 
 type AuthFormValues = {
   email: string;
-  name?: string;
 };
 
 const previewPersonaOptions: { label: string; persona: PreviewPersona }[] = [
@@ -96,11 +84,9 @@ const AuthLastUsedHint = () => (
 );
 
 const AuthCredentials = ({
-  mode,
   navigate,
   returnTo,
 }: {
-  mode: "login" | "signup";
   navigate: AuthNavigate;
   returnTo?: string;
 }) => {
@@ -110,38 +96,19 @@ const AuthCredentials = ({
     passkey?: string;
     terms?: string;
   }>({});
-  const [termsAccepted, setTermsAccepted] = useState(false);
 
-  const isSignup = mode === "signup";
   const callbackUrl = normalizeAuthReturnTo(returnTo);
   const clearCachedAccountData = async () => {
     queryClient.clear();
     await queryPersister.removeQueries();
   };
 
-  const ensureTermsAccepted = () => {
-    if (!isSignup || termsAccepted) {
-      return true;
-    }
-
-    setErrors((prev) => ({
-      ...prev,
-      terms: "Accept the Terms of Service and Privacy Policy to continue.",
-    }));
-    return false;
-  };
-
-  const markTermsAccepted = () => {
-    if (!isSignup) {
-      return;
-    }
-
-    setTermsAcceptanceCookie();
-  };
-
-  const errorCallbackParams = new URLSearchParams({
-    mode: isSignup ? "signup" : "login",
-  });
+  /**
+   * One flow, so any attempt may be the one that creates the account. The
+   * server blocks user creation without the acceptance cookie, so the box is
+   * required up front rather than behind a separate Sign up screen.
+   */
+  const errorCallbackParams = new URLSearchParams();
   if (callbackUrl !== "/") {
     errorCallbackParams.set("returnTo", callbackUrl);
   }
@@ -152,18 +119,14 @@ const AuthCredentials = ({
 
   const googleMutation = useMutation({
     mutationFn: async () => {
-      if (!ensureTermsAccepted()) {
-        throw new Error("Terms acceptance is required.");
-      }
-
-      markTermsAccepted();
-
       const response = await authClient.signIn.social({
         callbackURL: callbackUrl,
         errorCallbackURL: errorCallbackHref,
         fetchOptions: { timeout: 15_000 },
         provider: "google",
-        requestSignUp: isSignup,
+        // Unified flow: an unknown Google account creates one here rather than
+        // dead-ending on `signup_disabled`.
+        requestSignUp: true,
       });
       if (response.error) {
         throw new Error(
@@ -196,12 +159,6 @@ const AuthCredentials = ({
 
   const passkeyMutation = useMutation({
     mutationFn: async () => {
-      if (!ensureTermsAccepted()) {
-        throw new Error("Terms acceptance is required.");
-      }
-
-      markTermsAccepted();
-
       const response = await authClient.signIn.passkey();
       if (response.error) {
         throw new Error(
@@ -238,29 +195,13 @@ const AuthCredentials = ({
   const form = useForm({
     defaultValues: {
       email: "",
-      name: "",
     } satisfies AuthFormValues,
     validationLogic: revalidateLogic(),
     validators: {
-      onDynamic:
-        mode === "signup"
-          ? z.object({
-              email: z.email("Enter a valid email."),
-              name: z.string().trim().min(1, "Name is required."),
-            })
-          : z.object({
-              email: z.email("Enter a valid email."),
-              name: z.string(),
-            }),
+      onDynamic: z.object({
+        email: z.email("Enter a valid email."),
+      }),
       onSubmitAsync: async ({ value }) => {
-        if (!ensureTermsAccepted()) {
-          return {
-            form: "Accept the Terms of Service and Privacy Policy to continue.",
-          };
-        }
-
-        markTermsAccepted();
-
         const normalizedEmail = value.email.trim().toLowerCase();
 
         try {
@@ -268,7 +209,9 @@ const AuthCredentials = ({
             callbackURL: callbackUrl,
             email: normalizedEmail,
             errorCallbackURL: errorCallbackHref,
-            name: isSignup ? value.name.trim() : undefined,
+            // Always allowed: the response is identical whether or not an
+            // account exists, so the form never reveals which addresses are
+            // registered. A display name is set later in Settings.
             newUserCallbackURL: callbackUrl,
           });
 
@@ -298,43 +241,16 @@ const AuthCredentials = ({
         }}
         className="mt-8 space-y-3"
       >
-        {isSignup ? (
-          <form.Field name="name">
-            {(field) => (
-              <TextField>
-                <TextFieldInput
-                  aria-label="Name"
-                  aria-invalid={field.state.meta.errors.length > 0}
-                  autoComplete="name"
-                  name={field.name}
-                  onBlur={() => {
-                    field.handleBlur();
-                  }}
-                  onChange={(event) => {
-                    field.handleChange(event.target.value);
-                  }}
-                  placeholder="Name"
-                  value={field.state.value}
-                />
-                {field.state.meta.errors.map((error) => (
-                  <p className="text-xs text-destructive" key={error?.message}>
-                    {error?.message ?? "An unknown error occurred."}
-                  </p>
-                ))}
-              </TextField>
-            )}
-          </form.Field>
-        ) : null}
-
         <form.Field name="email">
           {(field) => (
             <TextField>
+              <FieldLabel htmlFor="auth-email">Email address</FieldLabel>
               <TextFieldInput
-                aria-label="Email address"
                 aria-invalid={field.state.meta.errors.length > 0}
                 autoCapitalize="none"
                 autoComplete="email"
                 autoCorrect="off"
+                id="auth-email"
                 name={field.name}
                 onBlur={() => {
                   field.handleBlur();
@@ -342,7 +258,6 @@ const AuthCredentials = ({
                 onChange={(event) => {
                   field.handleChange(event.target.value);
                 }}
-                placeholder="Email"
                 type="email"
                 value={field.state.value}
               />
@@ -354,41 +269,6 @@ const AuthCredentials = ({
             </TextField>
           )}
         </form.Field>
-
-        {isSignup ? (
-          <label className="flex items-start gap-3 text-sm text-muted-fg">
-            <Checkbox
-              checked={termsAccepted}
-              className="mt-0.5"
-              onCheckedChange={(checked) => {
-                const accepted = checked;
-                setTermsAccepted(accepted);
-                if (accepted) {
-                  setErrors((prev) => ({ ...prev, terms: undefined }));
-                }
-              }}
-            >
-              <CheckboxIndicator />
-            </Checkbox>
-            <span>
-              I agree to the{" "}
-              <Link className="text-fg underline" target="_blank" to="/terms">
-                Terms of Service
-              </Link>{" "}
-              and{" "}
-              <Link className="text-fg underline" target="_blank" to="/privacy">
-                Privacy Policy
-              </Link>
-              .
-            </span>
-          </label>
-        ) : null}
-
-        {hasText(errors.terms) ? (
-          <output aria-live="assertive" className="text-sm text-destructive">
-            {errors.terms}
-          </output>
-        ) : null}
 
         <form.Subscribe
           selector={(state) => ({
@@ -422,7 +302,7 @@ const AuthCredentials = ({
             return (
               <Button
                 className="group relative w-full justify-center gap-3"
-                disabled={!canSubmit || (isSignup && !termsAccepted)}
+                disabled={!canSubmit}
                 type="submit"
               >
                 {authClient.isLastUsedLoginMethod("magic-link") && (
@@ -452,7 +332,7 @@ const AuthCredentials = ({
 
       <Button
         className="group relative mt-3 w-full cursor-pointer justify-center gap-3"
-        disabled={googleMutation.isPending || (isSignup && !termsAccepted)}
+        disabled={googleMutation.isPending}
         onClick={() => void googleMutation.mutateAsync()}
         type="button"
         variant="outline"
@@ -470,7 +350,7 @@ const AuthCredentials = ({
 
       <Button
         className="group relative mt-3 w-full justify-center gap-3"
-        disabled={passkeyMutation.isPending || (isSignup && !termsAccepted)}
+        disabled={passkeyMutation.isPending}
         onClick={() => void passkeyMutation.mutateAsync()}
         type="button"
         variant="outline"
@@ -544,7 +424,9 @@ const PreviewPersonaPicker = ({ navigate }: { navigate: AuthNavigate }) => {
 
   return (
     <div className="mt-6 space-y-3">
-      <div className="grid gap-2 sm:grid-cols-3">
+      {/* Buttons are `whitespace-nowrap shrink-0`, so equal grid columns force
+          the longer labels to overflow. Let them size to content and wrap. */}
+      <div className="flex flex-wrap gap-2">
         {previewPersonaOptions.map((option) => (
           <Button
             className="justify-center text-center"
@@ -554,7 +436,7 @@ const PreviewPersonaPicker = ({ navigate }: { navigate: AuthNavigate }) => {
             type="button"
             variant="outline"
           >
-            {pendingPersona === option.persona ? "Opening..." : option.label}
+            {pendingPersona === option.persona ? "Opening…" : option.label}
           </Button>
         ))}
       </div>
@@ -568,29 +450,25 @@ const PreviewPersonaPicker = ({ navigate }: { navigate: AuthNavigate }) => {
 };
 
 export const AuthScreen = () => {
-  const { error, mode, returnTo } = authRouteApi.useSearch();
+  const { error, returnTo } = authRouteApi.useSearch();
   const navigate = authRouteApi.useNavigate();
-  let authError: string | null = null;
-  if (hasText(error)) {
-    authError = isAuthErrorKey(error)
-      ? AUTH_ERROR_MESSAGES[error]
-      : AUTHENTICATION_ERROR_MESSAGE;
-  }
+  const authError = hasText(error) ? AUTHENTICATION_ERROR_MESSAGE : null;
 
   return (
     <div className="grid h-dvh max-h-dvh w-full overflow-hidden bg-bg md:grid-cols-2">
-      <div className="size-full min-h-0 border-r bg-bg-surface max-md:hidden">
-        <AuthVisual />
-      </div>
+      {/* Form first, in DOM and on screen: it is the task, the atmosphere is
+          not. The visual sits second and is ordered right on wide viewports. */}
       <div className="flex size-full min-h-0 items-center justify-center px-6">
         <div className="w-full max-w-md">
           <h1 className="text-3xl font-medium tracking-tight text-fg">
-            {mode === "signup" ? "Sign up" : "Log in"}
+            Continue to Quieter
           </h1>
+          <p className="mt-2 text-sm text-muted-fg">
+            Sign in, or create an account with the same address.
+          </p>
 
           <AuthCredentials
-            key={`${mode}:${returnTo ?? ""}`}
-            mode={mode}
+            key={returnTo ?? ""}
             navigate={navigate}
             returnTo={returnTo}
           />
@@ -605,20 +483,10 @@ export const AuthScreen = () => {
               {authError}
             </output>
           ) : null}
-
-          <p className="mt-6 text-sm text-muted-fg">
-            <Link
-              className="text-fg underline"
-              search={{
-                mode: mode === "signup" ? "login" : "signup",
-                returnTo,
-              }}
-              to="/auth"
-            >
-              {mode === "signup" ? "Log in" : "Sign up"}
-            </Link>
-          </p>
         </div>
+      </div>
+      <div className="size-full min-h-0 border-l bg-bg-surface max-md:hidden">
+        <AuthVisual />
       </div>
     </div>
   );

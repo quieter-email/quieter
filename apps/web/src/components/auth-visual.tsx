@@ -668,22 +668,17 @@ export const AuthVisual = () => {
     }
 
     const canvas = canvasRef.current;
-    const gl =
-      canvas.getContext("webgl2", {
-        alpha: true,
-        antialias: false,
-        depth: false,
-        desynchronized: true,
-        powerPreference: "high-performance",
-        stencil: false,
-      }) ??
-      canvas.getContext("webgl2", {
-        alpha: true,
-        antialias: false,
-        depth: false,
-        powerPreference: "high-performance",
-        stencil: false,
-      });
+    // No `desynchronized` here, unlike the always-animating backgrounds. This
+    // canvas stops rendering once the particles settle, and a low-latency swap
+    // chain has no guaranteed buffer to re-present while idle, so the canvas
+    // flickers whenever something else triggers a recomposite.
+    const gl = canvas.getContext("webgl2", {
+      alpha: true,
+      antialias: false,
+      depth: false,
+      powerPreference: "high-performance",
+      stencil: false,
+    });
     if (!gl) {
       return;
     }
