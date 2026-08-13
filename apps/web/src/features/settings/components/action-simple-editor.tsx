@@ -23,7 +23,6 @@ import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
-import { Pill } from "@quieter/ui/pill";
 import {
   Select,
   SelectContent,
@@ -77,7 +76,7 @@ type MailboxActionRevision =
 type ConnectorsData = RouterOutputs["connectors"]["list"];
 
 const DEFAULT_ACTION_INSTRUCTIONS =
-  "When it's a bug or feature request, use @Linear to search for duplicate issues. If none are found, create a clear new issue with the right team, title, description, labels, priority, and useful context from the email.";
+  "When it's a bug or feature request, mention the app that should handle it, search there for anything matching, and otherwise create a clear new entry with a title, description, and useful context from the email.";
 
 const TRIGGER_OPTIONS = [
   { label: "On Email Received", value: "email_received" },
@@ -388,11 +387,8 @@ const ActionRuleFields = ({
           />
         </div>
         <p className={settingsSurfaceVariants({ variant: "value" })}>
-          Type @ to mention a connected app, such as{" "}
-          <Pill className="align-middle" tone="purple">
-            @Linear
-          </Pill>
-          , and the agent uses it for that step.
+          Type @ to mention a connected app, and the agent uses it for that
+          step.
         </p>
       </div>
     </SimpleField>

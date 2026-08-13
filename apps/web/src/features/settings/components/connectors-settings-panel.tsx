@@ -3,11 +3,13 @@
 import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { runDetached } from "#/features/settings/components/mailboxes-settings-shared";
+import { getConnectorIcon } from "#/lib/connector-icons";
 import {
   CONNECTORS_QUERY_KEY,
   connectorsQueryOptions,
@@ -26,28 +28,20 @@ import {
 
 const getSettingsReturnTo = () => "/settings?tab=connectors";
 
-const connectorIcons = {
-  google_calendar: (
+const ConnectorIcon = ({ provider }: { provider: ConnectorProvider }) => {
+  const icon = getConnectorIcon(provider);
+
+  return (
     <img
       alt=""
       aria-hidden
-      className="size-4"
+      className={cn("size-4", icon.className)}
       height={16}
-      src="/google-calendar.svg"
+      src={icon.src}
       width={16}
     />
-  ),
-  linear: (
-    <img
-      alt=""
-      aria-hidden
-      className="size-4 invert dark:invert-0"
-      height={16}
-      src="/linear.svg"
-      width={16}
-    />
-  ),
-} as const;
+  );
+};
 
 type ConnectorSummary = NonNullable<
   Awaited<
@@ -196,7 +190,7 @@ export const ConnectorsSettingsPanel = () => {
                   </Button>
                 )
               }
-              icon={connectorIcons[connector.provider]}
+              icon={<ConnectorIcon provider={connector.provider} />}
               key={connector.provider}
               title={connector.displayName}
             >

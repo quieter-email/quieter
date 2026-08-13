@@ -20,21 +20,18 @@ import type { ReactNode } from "react";
 import { EmptyMessageState } from "#/components/empty-message-state";
 import { MobileHeader } from "#/components/mobile-header";
 
+// Sample data only. Real mentions come from the user's connected apps.
 const showcaseTokens: TokenFieldToken[] = [
   {
-    description: "Issue tracker",
-    iconClassName: "size-3.5 invert dark:invert-0",
-    iconSrc: "/linear.svg",
-    id: "linear",
-    label: "Linear",
-    text: "@Linear",
+    description: "Sample app",
+    id: "sample-tracker",
+    label: "Tracker",
+    text: "@Tracker",
     tone: "purple",
   },
   {
-    description: "Calendar",
-    iconClassName: "size-3.5",
-    iconSrc: "/google-calendar.svg",
-    id: "calendar",
+    description: "Sample app",
+    id: "sample-calendar",
     label: "Calendar",
     text: "@Calendar",
     tone: "blue",
@@ -103,7 +100,7 @@ const Row = ({ children, label }: { children: ReactNode; label: string }) => (
 export const DesignSystemShowcase = () => {
   const [checked, setChecked] = useState(true);
   const [tokenFieldValue, setTokenFieldValue] = useState(
-    "When it's a bug, use @Linear to file it."
+    "When it's a bug, use @Tracker to file it."
   );
   const [boxChecked, setBoxChecked] = useState(true);
 
