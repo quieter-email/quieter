@@ -285,6 +285,15 @@ export default defineConfig({
         },
       },
       {
+        // The token field is an ARIA combobox over a contenteditable region
+        // with an aria-activedescendant listbox. Neither select nor datalist
+        // can express inline tokens, so the roles must stay explicit.
+        files: ["packages/ui/src/components/ui/token-field.tsx"],
+        rules: {
+          "jsx-a11y/prefer-tag-over-role": "off",
+        },
+      },
+      {
         // The shared Input is associated through htmlFor/aria-labelledby, but
         // this rule cannot resolve that relationship through the wrapper.
         files: [

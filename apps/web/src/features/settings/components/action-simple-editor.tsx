@@ -32,12 +32,14 @@ import {
   SelectValue,
 } from "@quieter/ui/select";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
-import { Textarea } from "@quieter/ui/textarea";
 import { toast } from "@quieter/ui/toast";
+import { TokenField } from "@quieter/ui/token-field";
+import type { TokenFieldToken } from "@quieter/ui/token-field";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
+import { getConnectorTokens } from "#/features/ai/domain/connector-tokens";
 import {
   CONNECTORS_QUERY_KEY,
   openConnectorLink,
@@ -220,6 +222,7 @@ type LinearTeam =
   RouterOutputs["mailboxActions"]["linearMetadata"]["teams"][number];
 
 const ActionRuleFields = ({
+  connectorTokens,
   credentialId,
   instructions,
   linearAccounts,
@@ -235,6 +238,7 @@ const ActionRuleFields = ({
   teams,
   name,
 }: {
+  connectorTokens: TokenFieldToken[];
   credentialId: string;
   instructions: string;
   linearAccounts: LinearAccount[];
@@ -282,7 +286,7 @@ const ActionRuleFields = ({
     </SimpleField>
 
     <SimpleField
-      description="The connector the instruction can use. Type @Linear in the instruction when you want the agent to use Linear."
+      description="The connector the instruction can use. Mention it in the instruction to tell the agent when to reach for it."
       label="Connector"
     >
       <div className="space-y-3">
@@ -372,21 +376,23 @@ const ActionRuleFields = ({
       label="Instruction"
     >
       <div className="space-y-2">
-        <Textarea
-          aria-label="Action instruction"
-          className="min-h-36"
-          onChange={(event) => {
-            setInstructions(event.target.value);
-          }}
-          placeholder={DEFAULT_ACTION_INSTRUCTIONS}
-          value={instructions}
-        />
+        <div className="squircle rounded-md border border-border bg-input px-3 py-2 shadow-sm transition-colors duration-150 ease-out focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/45">
+          <TokenField
+            aria-label="Action instruction"
+            className="max-h-72 min-h-32 overflow-y-auto text-sm"
+            onChange={setInstructions}
+            placeholder={DEFAULT_ACTION_INSTRUCTIONS}
+            suggestionsLabel="Connectors"
+            tokens={connectorTokens}
+            value={instructions}
+          />
+        </div>
         <p className={settingsSurfaceVariants({ variant: "value" })}>
-          Example: When it&apos;s a bug or feature request, use{" "}
+          Type @ to mention a connected app, such as{" "}
           <Pill className="align-middle" tone="purple">
             @Linear
-          </Pill>{" "}
-          to search for duplicate issues, then create one if needed.
+          </Pill>
+          , and the agent uses it for that step.
         </p>
       </div>
     </SimpleField>
@@ -1235,6 +1241,10 @@ export const ActionSimpleEditor = ({
     setSelectedActionId,
     setSelectedMailboxId,
   });
+  const connectorTokens = useMemo(
+    () => getConnectorTokens(connectorsData),
+    [connectorsData]
+  );
 
   const ruleSection =
     action === undefined ? (
@@ -1248,6 +1258,7 @@ export const ActionSimpleEditor = ({
         action={action}
         fields={
           <ActionRuleFields
+            connectorTokens={connectorTokens}
             credentialId={credentialId}
             instructions={instructions}
             linearAccounts={linearAccounts}

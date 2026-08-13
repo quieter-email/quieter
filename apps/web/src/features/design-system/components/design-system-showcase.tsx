@@ -12,11 +12,34 @@ import { Pill } from "@quieter/ui/pill";
 import type { PillTone } from "@quieter/ui/pill";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { Textarea } from "@quieter/ui/textarea";
+import { TokenField } from "@quieter/ui/token-field";
+import type { TokenFieldToken } from "@quieter/ui/token-field";
 import { useState } from "react";
 import type { ReactNode } from "react";
 
 import { EmptyMessageState } from "#/components/empty-message-state";
 import { MobileHeader } from "#/components/mobile-header";
+
+const showcaseTokens: TokenFieldToken[] = [
+  {
+    description: "Issue tracker",
+    iconClassName: "size-3.5 invert dark:invert-0",
+    iconSrc: "/linear.svg",
+    id: "linear",
+    label: "Linear",
+    text: "@Linear",
+    tone: "purple",
+  },
+  {
+    description: "Calendar",
+    iconClassName: "size-3.5",
+    iconSrc: "/google-calendar.svg",
+    id: "calendar",
+    label: "Calendar",
+    text: "@Calendar",
+    tone: "blue",
+  },
+];
 
 // Literal classes: Tailwind cannot extract an interpolated `bg-${name}`.
 const surfaceTokens = [
@@ -79,6 +102,9 @@ const Row = ({ children, label }: { children: ReactNode; label: string }) => (
 
 export const DesignSystemShowcase = () => {
   const [checked, setChecked] = useState(true);
+  const [tokenFieldValue, setTokenFieldValue] = useState(
+    "When it's a bug, use @Linear to file it."
+  );
   const [boxChecked, setBoxChecked] = useState(true);
 
   return (
@@ -197,6 +223,18 @@ export const DesignSystemShowcase = () => {
           </Row>
           <Row label="Textarea">
             <Textarea className="w-64" placeholder="Placeholder" />
+          </Row>
+          <Row label="Token field">
+            <div className="squircle w-80 rounded-md border border-border bg-input px-3 py-2 shadow-sm focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/45">
+              <TokenField
+                aria-label="Token field"
+                className="max-h-32 min-h-16 overflow-y-auto text-sm"
+                onChange={setTokenFieldValue}
+                placeholder="Type @ to mention an app…"
+                tokens={showcaseTokens}
+                value={tokenFieldValue}
+              />
+            </div>
           </Row>
           <Row label="Field with label">
             <Field className="w-64">

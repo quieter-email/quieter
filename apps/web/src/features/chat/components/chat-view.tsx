@@ -18,10 +18,11 @@ import {
   m,
   useReducedMotion,
 } from "motion/react";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { ComponentProps, KeyboardEvent, SubmitEvent } from "react";
 
 import { MobileHeader } from "#/components/mobile-header";
+import { getConnectorTokens } from "#/features/ai/domain/connector-tokens";
 import {
   setDefaultChatModel,
   useDefaultChatModel,
@@ -42,6 +43,7 @@ import {
   getChatQueryKey,
   getChatsQueryKey,
 } from "#/lib/chat-query";
+import { connectorsQueryOptions } from "#/lib/connectors-query";
 import { orpc } from "#/lib/orpc";
 import { persistQueryByKey } from "#/lib/query-persister";
 
@@ -730,7 +732,7 @@ const useChatViewActions = ({
     void submitPrompt();
   };
 
-  const handleInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleInputKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "Enter" || event.shiftKey) {
       return;
     }
@@ -1022,6 +1024,11 @@ export const ChatView = ({
     userBillingQueryOptions()
   );
   const [input, setInput] = useState("");
+  const { data: connectorsData } = useQuery(connectorsQueryOptions());
+  const connectorTokens = useMemo(
+    () => getConnectorTokens(connectorsData),
+    [connectorsData]
+  );
   const defaultModel = useDefaultChatModel();
   const [streamRunId, setStreamRunId] = useState<string | null>(null);
   const [streamingAssistant, setStreamingAssistant] = useState<{
@@ -1163,6 +1170,7 @@ export const ChatView = ({
       chatTitle={chatData?.title}
       composer={{
         canUseAiChat,
+        connectorTokens,
         disabled: composerDisabled,
         input,
         isBillingPending,

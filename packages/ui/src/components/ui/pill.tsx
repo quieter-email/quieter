@@ -6,7 +6,7 @@ import type { ComponentPropsWithoutRef } from "react";
 
 import { cn } from "../../lib/cn";
 
-const pillVariants = cva(
+export const pillVariants = cva(
   "squircle inline-flex shrink-0 items-center justify-center rounded-full font-medium leading-none whitespace-nowrap",
   {
     defaultVariants: {

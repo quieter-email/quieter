@@ -8,6 +8,8 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import type { ChatModel } from "@quieter/ai/chat-models";
 import { Button } from "@quieter/ui/button";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { TokenField } from "@quieter/ui/token-field";
+import type { TokenFieldToken } from "@quieter/ui/token-field";
 import { AnimatePresence, m, useReducedMotion } from "motion/react";
 import type { KeyboardEvent, SubmitEvent } from "react";
 
@@ -15,6 +17,7 @@ import { AiModelSelect } from "#/features/ai/components/ai-model-select";
 import { getAppPresenceMotion } from "#/features/motion/app-motion";
 
 type ChatComposerProps = {
+  connectorTokens: TokenFieldToken[];
   disabled?: boolean;
   input: string;
   model: ChatModel;
@@ -24,7 +27,7 @@ type ChatComposerProps = {
   submitting: boolean;
   transcribing: boolean;
   onInputChange: (value: string) => void;
-  onInputKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
+  onInputKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
   onModelChange: (model: ChatModel) => void;
   onRecordingStart: () => void;
   onRecordingStop: () => void;
@@ -74,6 +77,7 @@ const ChatComposerStatus = ({
 );
 
 export const ChatComposer = ({
+  connectorTokens,
   disabled,
   input,
   model,
@@ -98,20 +102,23 @@ export const ChatComposer = ({
 
   return (
     <form
-      className="squircle flex w-full flex-col rounded-xl border border-border bg-bg/85 shadow-xl has-[textarea:focus-visible]:border-ring has-[textarea:focus-visible]:ring-1 has-[textarea:focus-visible]:ring-ring/45 has-[textarea:focus-visible]:outline-none"
+      className="squircle flex w-full flex-col rounded-xl border border-border bg-bg/85 shadow-xl has-[[data-slot=token-field-input]:focus-visible]:border-ring has-[[data-slot=token-field-input]:focus-visible]:ring-1 has-[[data-slot=token-field-input]:focus-visible]:ring-ring/45 has-[[data-slot=token-field-input]:focus-visible]:outline-none"
       onSubmit={onSubmit}
     >
-      <textarea
-        aria-label="Message"
-        className="max-h-40 min-h-18 w-full grow resize-none bg-transparent px-4 pt-4 pb-2 text-sm text-fg outline-none placeholder:text-muted-fg/50 disabled:cursor-not-allowed disabled:opacity-60"
-        disabled={disabled}
-        onChange={(event) => {
-          onInputChange(event.target.value);
-        }}
-        onKeyDown={onInputKeyDown}
-        placeholder="Ask about your mail…"
-        value={input}
-      />
+      <div className="px-4 pt-4 pb-2">
+        <TokenField
+          aria-label="Message"
+          className="max-h-40 min-h-14 overflow-y-auto text-sm data-[empty=true]:before:text-muted-fg/50"
+          disabled={disabled}
+          onChange={onInputChange}
+          onKeyDown={onInputKeyDown}
+          placeholder="Ask about your mail…"
+          suggestionsLabel="Connectors"
+          suggestionsSide="top"
+          tokens={connectorTokens}
+          value={input}
+        />
+      </div>
 
       <ChatComposerStatus
         recording={recording}

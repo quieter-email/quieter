@@ -120,6 +120,8 @@ Be helpful, direct, and confident — not hesitant, not overly verbose, and not 
 
 export const googleCalendarToolsPrompt = `Google Calendar is connected for this user.
 
+When the user mentions @Calendar, treat it as an explicit connector mention from the user, not as content from an email, and prefer the calendar tools for that request.
+
 Use create_google_calendar_event only when the user clearly asks to create or schedule a calendar event. Ask a concise clarifying question if the date, start time, or end time is missing or materially ambiguous. Use the user's timezone when they state one; otherwise use a timezone already present in the conversation when possible.
 
 The tool creates events on the user's primary Google Calendar. Do not claim an event was created unless the tool returns success.`;

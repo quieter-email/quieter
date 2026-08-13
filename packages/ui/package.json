@@ -42,6 +42,7 @@
     "./textarea": "./src/components/ui/textarea.tsx",
     "./text-field": "./src/components/ui/text-field.tsx",
     "./toast": "./src/components/ui/toast.ts",
+    "./token-field": "./src/components/ui/token-field.tsx",
     "./toaster": "./src/components/ui/toaster.tsx",
     "./toggle": "./src/components/ui/toggle.tsx",
     "./toolbar": "./src/components/ui/toolbar.tsx",
