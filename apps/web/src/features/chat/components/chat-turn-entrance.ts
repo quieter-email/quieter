@@ -10,11 +10,16 @@ export const createChatTurnEntranceState = (): ChatTurnEntranceState => ({
   seenTurnIds: new Set(),
 });
 
+type ChatTurnEntranceResult = {
+  enteringTurnIds: Set<string>;
+  newTurnIds: Set<string>;
+};
+
 export const trackChatTurnEntrances = (
   state: ChatTurnEntranceState,
   turnIds: string[],
   hydrated: boolean
-) => {
+): ChatTurnEntranceResult => {
   const enteringTurnIds = new Set<string>();
 
   if (!state.hydrated) {
@@ -22,7 +27,7 @@ export const trackChatTurnEntrances = (
       state.seenTurnIds.add(turnId);
     }
     state.hydrated = hydrated;
-    return enteringTurnIds;
+    return { enteringTurnIds, newTurnIds: state.newTurnIds };
   }
 
   for (const turnId of turnIds) {
@@ -33,5 +38,5 @@ export const trackChatTurnEntrances = (
     }
   }
 
-  return enteringTurnIds;
+  return { enteringTurnIds, newTurnIds: state.newTurnIds };
 };

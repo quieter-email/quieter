@@ -45,6 +45,7 @@ export const SidebarEntrance = ({
   index = 0,
 }: SidebarEntranceProps) => {
   const reducedMotion = useReducedMotion();
+  // react-doctor-disable-next-line react-hooks-js/refs -- Entrance animation is intentionally captured only on mount.
   const shouldAnimate = useRef(animateEntrance).current;
   const [isAnimating, setIsAnimating] = useState(animateEntrance);
   let initial:

@@ -67,10 +67,13 @@ export const ChatTranscript = ({
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const isNearBottomRef = useRef(true);
+  // react-doctor-disable-next-line react-doctor/rerender-lazy-ref-init -- Entrance tracking must remain one stable mutable session across renders.
   const turnEntranceStateRef = useRef(createChatTurnEntranceState());
   const [showScrollButton, setShowScrollButton] = useState(false);
   const retryAssistantId = turns.at(-1)?.assistant?.id;
-  const enteringTurnIds = trackChatTurnEntrances(
+  // react-doctor-disable-next-line react-hooks-js/refs -- The entrance tracker is intentionally mutable render-time bookkeeping.
+  // react-doctor-disable-next-line react-hooks-js/refs -- The tracker is intentionally a stable mutable render-time session.
+  const { enteringTurnIds, newTurnIds } = trackChatTurnEntrances(
     turnEntranceStateRef.current,
     turns.map((turn) => turn.id),
     hydrated
@@ -138,6 +141,7 @@ export const ChatTranscript = ({
                 const turnMotion = getAppPresenceMotion({
                   reducedMotion: shouldReduceMotion,
                 });
+                const animateEntrance = newTurnIds.has(turn.id);
 
                 return (
                   <m.div
@@ -147,9 +151,7 @@ export const ChatTranscript = ({
                   >
                     <ConversationTurn
                       actionsDisabled={actionsDisabled}
-                      animateEntrance={turnEntranceStateRef.current.newTurnIds.has(
-                        turn.id
-                      )}
+                      animateEntrance={animateEntrance}
                       isLastTurn={index === turns.length - 1}
                       isStreaming={isStreaming && index === turns.length - 1}
                       onCopy={onCopy}

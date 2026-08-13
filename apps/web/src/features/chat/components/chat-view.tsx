@@ -514,9 +514,7 @@ const useChatViewStream = ({
     result: ChatRunStreamDone,
     resolvedChatId?: string | null
   ) => {
-    let targetChatId = resolvedChatId;
-    targetChatId ??= streamChatIdRef.current;
-    targetChatId ??= chatId;
+    const targetChatId = resolvedChatId ?? streamChatIdRef.current ?? chatId;
 
     if (!hasText(targetChatId) || !hasText(result.assistantMessageId)) {
       return;

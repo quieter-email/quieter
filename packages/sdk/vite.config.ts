@@ -3,7 +3,7 @@ import { defineConfig } from "vite-plus";
 export default defineConfig({
   pack: {
     deps: {
-      skipNodeModulesBundle: true,
+      neverBundle: true,
     },
     dts: true,
     entry: ["src/index.ts"],

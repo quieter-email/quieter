@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@quieter/ui/cn";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 
 /**
  * Atmospheric background — soft light fields + curved highlight ridges with
@@ -453,6 +453,18 @@ type UniformSet = {
   grainTick: WebGLUniformLocation;
 };
 
+type AtmosphericSession = {
+  seed: [number, number, number];
+  startedAt: number;
+  timeOffset: number;
+};
+
+const createAtmosphericSession = (): AtmosphericSession => ({
+  seed: [Math.random(), Math.random(), Math.random()],
+  startedAt: performance.now(),
+  timeOffset: Math.random() * 120,
+});
+
 export const AtmosphericBackground = ({
   animate = true,
   className,
@@ -464,15 +476,11 @@ export const AtmosphericBackground = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [ready, setReady] = useState(false);
   const underlay = fadeBottom === "elevated" ? "bg-bg-elevated" : "bg-black";
-  const sessionRef = useRef({
-    seed: [Math.random(), Math.random(), Math.random()] as [
-      number,
-      number,
-      number,
-    ],
-    startedAt: performance.now(),
-    timeOffset: Math.random() * 120,
-  });
+  const [session] = useReducer(
+    (current: AtmosphericSession) => current,
+    undefined,
+    createAtmosphericSession
+  );
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -492,7 +500,6 @@ export const AtmosphericBackground = ({
     let height = 0;
     let uniforms: UniformSet | null = null;
     let shouldAnimate = false;
-    const session = sessionRef.current;
     const [sx, sy, sz] = session.seed;
 
     const layoutX = f32(f32(sx - 0.5) * 0.55);
@@ -676,6 +683,7 @@ export const AtmosphericBackground = ({
 
       program = nextProgram;
       positionBuffer = nextBuffer;
+      // react-doctor-disable-next-line react-hooks-js/hooks -- WebGL's useProgram method is not a React hook.
       gl.useProgram(program);
       gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
       gl.bufferData(
@@ -777,7 +785,7 @@ export const AtmosphericBackground = ({
       intersection.disconnect();
       teardownGl();
     };
-  }, [animate, fadeBottom, fadeTop, grain, intensity]);
+  }, [animate, fadeBottom, fadeTop, grain, intensity, session]);
 
   return (
     <div

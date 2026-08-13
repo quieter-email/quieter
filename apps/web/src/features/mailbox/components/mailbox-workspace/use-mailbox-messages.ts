@@ -317,8 +317,10 @@ export const useMailboxMessages = ({
       normalizedQuery
     )
       .then(() => null)
-      .catch((error: unknown) => error);
-    setIsManualRefreshing(false);
+      .catch((error: unknown) => error)
+      .finally(() => {
+        setIsManualRefreshing(false);
+      });
 
     if (refreshError !== null && refreshError !== undefined) {
       markMailboxNeedsReconnectInCache(queryClient, refreshError);

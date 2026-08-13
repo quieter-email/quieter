@@ -133,6 +133,7 @@ export const useComposeDialogController = ({
   const activeDraftRef = useRef(state.draft);
   const onCloseRef = useRef(onClose);
   const openIdRef = useRef(0);
+  // react-doctor-disable-next-line react-doctor/rerender-lazy-ref-init -- The queue promise is a stable mutable workflow primitive.
   const saveQueueRef = useRef(Promise.resolve());
   const savedDraftByLocalIdRef = useRef(new Map<string, ComposeDraftState>());
 
@@ -425,14 +426,14 @@ export const useComposeDialogController = ({
     }
 
     const finishClose = async () => {
-      try {
-        await saveDraft(draft, { refreshAfterSave: true });
-      } catch {
-        ignoreBackgroundFailure();
-      } finally {
-        savedDraftByLocalIdRef.current.delete(draft.localId);
-        clearComposeDraftRuntimeFiles(draft);
-      }
+      await saveDraft(draft, { refreshAfterSave: true })
+        .catch(() => {
+          ignoreBackgroundFailure();
+        })
+        .finally(() => {
+          savedDraftByLocalIdRef.current.delete(draft.localId);
+          clearComposeDraftRuntimeFiles(draft);
+        });
     };
     scheduleFireAndForget(finishClose);
   };
@@ -501,14 +502,14 @@ export const useComposeDialogController = ({
     };
 
     const finishDiscard = async () => {
-      try {
-        await deleteDraft();
-      } catch {
-        ignoreBackgroundFailure();
-      } finally {
-        savedDraftByLocalIdRef.current.delete(draft.localId);
-        clearComposeDraftRuntimeFiles(draft);
-      }
+      await deleteDraft()
+        .catch(() => {
+          ignoreBackgroundFailure();
+        })
+        .finally(() => {
+          savedDraftByLocalIdRef.current.delete(draft.localId);
+          clearComposeDraftRuntimeFiles(draft);
+        });
     };
     scheduleFireAndForget(finishDiscard);
   };

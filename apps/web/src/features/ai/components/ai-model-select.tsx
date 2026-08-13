@@ -25,6 +25,8 @@ type AiModelSelectProps = {
   variant?: SelectTriggerProps["variant"];
 };
 
+type ChatModelOption = (typeof chatModels)[number];
+
 export const AiModelSelect = ({
   align,
   ariaLabel,
@@ -34,45 +36,55 @@ export const AiModelSelect = ({
   size,
   value,
   variant,
-}: AiModelSelectProps) => (
-  <Select
-    items={chatModels.map(({ label, value: model }) => ({
-      label,
-      value: model,
-    }))}
-    onValueChange={(model) => {
-      if (model) {
-        onValueChange(model);
-      }
-    }}
-    value={value}
-  >
-    <SelectTrigger
-      aria-label={ariaLabel}
-      className={className}
-      disabled={disabled}
-      size={size}
-      variant={variant}
+}: AiModelSelectProps) => {
+  const modelsByGroup = new Map<string, ChatModelOption[]>();
+  for (const model of chatModels) {
+    const groupModels = modelsByGroup.get(model.group);
+    if (groupModels) {
+      groupModels.push(model);
+    } else {
+      modelsByGroup.set(model.group, [model]);
+    }
+  }
+
+  return (
+    <Select
+      items={chatModels.map(({ label, value: model }) => ({
+        label,
+        value: model,
+      }))}
+      onValueChange={(model) => {
+        if (model) {
+          onValueChange(model);
+        }
+      }}
+      value={value}
     >
-      <SelectValue />
-    </SelectTrigger>
-    <SelectContent align={align} size="compact">
-      {chatModelGroups.map((group, index) => (
-        <Fragment key={group}>
-          {index > 0 && (
-            <SelectSeparator className="mx-2 my-0.5 h-px bg-border/70" />
-          )}
-          <SelectGroup>
-            {chatModels
-              .filter((model) => model.group === group)
-              .map((model) => (
+      <SelectTrigger
+        aria-label={ariaLabel}
+        className={className}
+        disabled={disabled}
+        size={size}
+        variant={variant}
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent align={align} size="compact">
+        {chatModelGroups.map((group, index) => (
+          <Fragment key={group}>
+            {index > 0 && (
+              <SelectSeparator className="mx-2 my-0.5 h-px bg-border/70" />
+            )}
+            <SelectGroup>
+              {modelsByGroup.get(group)?.map((model) => (
                 <SelectItem key={model.value} value={model.value}>
                   {model.label}
                 </SelectItem>
               ))}
-          </SelectGroup>
-        </Fragment>
-      ))}
-    </SelectContent>
-  </Select>
-);
+            </SelectGroup>
+          </Fragment>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+};

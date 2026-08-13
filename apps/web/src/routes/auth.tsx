@@ -6,6 +6,7 @@ import { LoadingPage } from "#/components/loading-page";
 import { getSessionUser } from "#/lib/auth.functions";
 import { getSafeAuthReturnTo } from "#/lib/return-to";
 
+// react-doctor-disable-next-line react-doctor/tanstack-start-route-property-order -- The repository's TanStack Router lint rule owns this generated route property order.
 export const Route = createFileRoute("/auth")({
   loader: async ({ location }) => {
     const user = await getSessionUser();

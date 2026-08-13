@@ -43,10 +43,8 @@ let landingDemoState: DemoMailState | null = null;
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
-const now = Date.now();
-
 const daysAgo = (days: number) =>
-  new Date(now - days * 24 * 60 * 60 * 1000).toISOString();
+  new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
 const attachment = (
   fileName: string,
@@ -759,13 +757,12 @@ export const listDemoMessages = ({
 }): ListMessagesPageResult => {
   const start = (pageToken ?? "") === "" ? 0 : Number(pageToken) || 0;
   const allMessages = getSortedMessages(mailboxId);
-  const threadLabelIdsById = new Map<string, string[]>();
+  const threadLabelIdsById = new Map<string, Set<string>>();
   for (const message of allMessages) {
-    const labelIds = threadLabelIdsById.get(message.threadId) ?? [];
+    const labelIds =
+      threadLabelIdsById.get(message.threadId) ?? new Set<string>();
     for (const labelId of message.labelIds ?? []) {
-      if (!labelIds.includes(labelId)) {
-        labelIds.push(labelId);
-      }
+      labelIds.add(labelId);
     }
     threadLabelIdsById.set(message.threadId, labelIds);
   }
@@ -774,10 +771,13 @@ export const listDemoMessages = ({
       isMessageInMailbox(message, category) &&
       messageMatchesQuery(message, query)
   );
-  const page = messages.slice(start, start + maxResults).map((message) => ({
-    ...message,
-    threadLabelIds: threadLabelIdsById.get(message.threadId),
-  }));
+  const page = messages.slice(start, start + maxResults).map((message) => {
+    const threadLabelIds = threadLabelIdsById.get(message.threadId);
+    return {
+      ...message,
+      threadLabelIds: threadLabelIds ? [...threadLabelIds] : undefined,
+    };
+  });
   const nextOffset = start + maxResults;
 
   return {

@@ -916,11 +916,12 @@ const ThreadMessageList = ({
   const [expandedMessageIds, setExpandedMessageIds] = useState<string[]>(
     messages.length ? [messages[0].id] : []
   );
+  const expandedMessageIdSet = new Set(expandedMessageIds);
 
   return (
     <div>
       {messages.map((threadMessage) => {
-        const isExpanded = expandedMessageIds.includes(threadMessage.id);
+        const isExpanded = expandedMessageIdSet.has(threadMessage.id);
         const linkedDraftMessage = findLinkedDraftForMessage(
           allThreadMessages,
           threadMessage

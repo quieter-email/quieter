@@ -250,13 +250,11 @@ const MailboxRowEntrance = ({
   index,
 }: MailboxRowEntranceProps) => {
   const reducedMotion = useReducedMotion();
+  // react-doctor-disable-next-line react-hooks-js/refs -- Entrance animation is intentionally captured only on mount.
   const animate = useRef(animateEntrance).current;
 
   return (
-    <m.div
-      className="will-change-[transform,opacity,filter]"
-      {...getAppFlyInMotion({ animate, index, reducedMotion })}
-    >
+    <m.div {...getAppFlyInMotion({ animate, index, reducedMotion })}>
       {children}
     </m.div>
   );
@@ -746,13 +744,14 @@ export const MailboxSwitcherDropdown = ({
   };
   const isFiltering = normalizedSearchQuery.length > 0;
   const canReorderGroups = !isFiltering && groups.length > 1;
-  const mailboxEntranceIds = new Set(
-    isOpen
-      ? mailboxes
-          .filter((mailbox) => !seenMailboxEntranceIds.has(mailbox.id))
-          .map((mailbox) => mailbox.id)
-      : []
-  );
+  const mailboxEntranceIds = new Set<string>();
+  if (isOpen) {
+    for (const mailbox of mailboxes) {
+      if (!seenMailboxEntranceIds.has(mailbox.id)) {
+        mailboxEntranceIds.add(mailbox.id);
+      }
+    }
+  }
   const mailboxEntranceIndexById = new Map(
     mailboxes.map((mailbox, index) => [mailbox.id, index])
   );

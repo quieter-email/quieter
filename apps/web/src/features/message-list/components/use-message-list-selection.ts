@@ -165,12 +165,13 @@ export const useMessageListSelection = ({
     scrollElement.scrollTo({ behavior: "smooth", top: 0 });
 
     const finishScroll = async () => {
-      try {
-        await waitForSmoothScrollTop(scrollElement);
-        await waitForNextPaint();
-      } finally {
-        isProgrammaticScrollToTopRef.current = false;
+      const [scrollResult] = await Promise.allSettled([
+        waitForSmoothScrollTop(scrollElement),
+      ]);
+      if (scrollResult.status === "fulfilled") {
+        await Promise.allSettled([waitForNextPaint()]);
       }
+      isProgrammaticScrollToTopRef.current = false;
     };
     scheduleFireAndForget(finishScroll);
 

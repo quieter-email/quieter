@@ -112,16 +112,17 @@ const AuthCredentials = ({
   if (callbackUrl !== "/") {
     errorCallbackParams.set("returnTo", callbackUrl);
   }
-  const errorCallbackHref =
+  const errorCallbackPath = `/auth?${errorCallbackParams}`;
+  const getErrorCallbackHref = () =>
     globalThis.window === undefined
-      ? `/auth?${errorCallbackParams}`
-      : `${globalThis.window.location.origin}/auth?${errorCallbackParams}`;
+      ? errorCallbackPath
+      : `${globalThis.window.location.origin}${errorCallbackPath}`;
 
   const googleMutation = useMutation({
     mutationFn: async () => {
       const response = await authClient.signIn.social({
         callbackURL: callbackUrl,
-        errorCallbackURL: errorCallbackHref,
+        errorCallbackURL: getErrorCallbackHref(),
         fetchOptions: { timeout: 15_000 },
         provider: "google",
         // Unified flow: an unknown Google account creates one here rather than
@@ -208,7 +209,7 @@ const AuthCredentials = ({
           const response = await authClient.signIn.magicLink({
             callbackURL: callbackUrl,
             email: normalizedEmail,
-            errorCallbackURL: errorCallbackHref,
+            errorCallbackURL: getErrorCallbackHref(),
             // Always allowed: the response is identical whether or not an
             // account exists, so the form never reveals which addresses are
             // registered. A display name is set later in Settings.
@@ -333,7 +334,9 @@ const AuthCredentials = ({
       <Button
         className="group relative mt-3 w-full cursor-pointer justify-center gap-3"
         disabled={googleMutation.isPending}
-        onClick={() => void googleMutation.mutateAsync()}
+        onClick={() => {
+          googleMutation.mutate();
+        }}
         type="button"
         variant="outline"
       >
@@ -351,7 +354,9 @@ const AuthCredentials = ({
       <Button
         className="group relative mt-3 w-full justify-center gap-3"
         disabled={passkeyMutation.isPending}
-        onClick={() => void passkeyMutation.mutateAsync()}
+        onClick={() => {
+          passkeyMutation.mutate();
+        }}
         type="button"
         variant="outline"
       >

@@ -142,11 +142,18 @@ export const ComposeWorkspace = ({
   const sessionRef = useRef<ReturnType<
     typeof takePendingComposeSession
   > | null>(null);
+  // react-doctor-disable-next-line react-hooks-js/todo -- This one-shot session handoff intentionally uses a lazy ref assignment.
+  // react-doctor-disable-next-line react-doctor/no-ref-current-in-render -- The handoff must be consumed once without a second render.
   sessionRef.current ??= takePendingComposeSession() ?? null;
+  // react-doctor-disable-next-line react-hooks-js/refs -- The pending session is a one-shot render handoff, not reactive state.
   const session = sessionRef.current;
+  // react-doctor-disable-next-line react-hooks-js/refs -- This initial draft is intentionally read once from the one-shot handoff.
+  const initialDraft = session?.draft ?? null;
+  // react-doctor-disable-next-line react-hooks-js/refs -- The controller receives the one-shot initial draft exactly once.
   const compose = useComposeDialogController({
     demoMode,
-    initialDraft: session?.draft ?? null,
+    // react-doctor-disable-next-line react-hooks-js/refs -- This value comes from the one-shot compose handoff by design.
+    initialDraft,
     mailboxId,
     managedDemoMode,
     onClose,

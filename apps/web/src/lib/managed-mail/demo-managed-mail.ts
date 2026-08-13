@@ -74,9 +74,8 @@ type ManagedDemoSavedView = {
   sort: "newest" | "oldest" | "relevance";
 };
 
-const now = Date.now();
 const daysAgo = (days: number) =>
-  new Date(now - days * 24 * 60 * 60 * 1000).toISOString();
+  new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
 const createInitialLabels = (): ManagedDemoLabel[] => [
   {
@@ -612,13 +611,12 @@ export const listManagedDemoMessages = ({
 }): ListMessagesPageResult => {
   const start = (pageToken ?? "") === "" ? 0 : Number(pageToken) || 0;
   const allMessages = getSortedMessages();
-  const threadLabelIdsById = new Map<string, string[]>();
+  const threadLabelIdsById = new Map<string, Set<string>>();
   for (const message of allMessages) {
-    const threadLabelIds = threadLabelIdsById.get(message.threadId) ?? [];
+    const threadLabelIds =
+      threadLabelIdsById.get(message.threadId) ?? new Set<string>();
     for (const labelId of message.labelIds ?? []) {
-      if (!threadLabelIds.includes(labelId)) {
-        threadLabelIds.push(labelId);
-      }
+      threadLabelIds.add(labelId);
     }
     threadLabelIdsById.set(message.threadId, threadLabelIds);
   }
@@ -627,10 +625,13 @@ export const listManagedDemoMessages = ({
       isMessageInMailbox(message, category) &&
       messageMatchesQuery(message, query)
   );
-  const page = messages.slice(start, start + maxResults).map((message) => ({
-    ...message,
-    threadLabelIds: threadLabelIdsById.get(message.threadId),
-  }));
+  const page = messages.slice(start, start + maxResults).map((message) => {
+    const threadLabelIds = threadLabelIdsById.get(message.threadId);
+    return {
+      ...message,
+      threadLabelIds: threadLabelIds ? [...threadLabelIds] : undefined,
+    };
+  });
   const nextOffset = start + maxResults;
 
   return {

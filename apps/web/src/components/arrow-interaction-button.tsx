@@ -137,7 +137,7 @@ export const ArrowInteractionButton = ({
           <m.span
             key={`primary-${animation.kind}-${animation.nonce}`}
             animate={animation.kind}
-            className="pointer-events-none absolute inset-0 inline-grid place-items-center will-change-transform"
+            className="pointer-events-none absolute inset-0 inline-grid place-items-center"
             initial={arrowPrimaryInitial[animation.kind]}
             variants={arrowPrimaryVariants}
           >
@@ -147,7 +147,7 @@ export const ArrowInteractionButton = ({
             <m.span
               key={`secondary-${animation.nonce}`}
               animate="to"
-              className="pointer-events-none absolute inset-0 inline-grid place-items-center will-change-transform"
+              className="pointer-events-none absolute inset-0 inline-grid place-items-center"
               initial="from"
               variants={arrowSecondaryVariants}
             >

@@ -353,9 +353,7 @@ const useManagedMailboxOrganizerState = ({
   ) => {
     const key = getPendingRowActionKey(kind, id, action);
     setPendingRowActions((current) => ({ ...current, [key]: true }));
-    try {
-      return await operation();
-    } finally {
+    return await operation().finally(() => {
       setPendingRowActions((current) => {
         if (!current[key]) {
           return current;
@@ -364,7 +362,7 @@ const useManagedMailboxOrganizerState = ({
         Reflect.deleteProperty(next, key);
         return next;
       });
-    }
+    });
   };
 
   const runReorder = async <T,>(
@@ -373,9 +371,7 @@ const useManagedMailboxOrganizerState = ({
     operation: () => Promise<T>
   ) => {
     setPendingReorders((current) => ({ ...current, [scope]: rowId }));
-    try {
-      return await operation();
-    } finally {
+    return await operation().finally(() => {
       setPendingReorders((current) => {
         if (current[scope] !== rowId) {
           return current;
@@ -384,7 +380,7 @@ const useManagedMailboxOrganizerState = ({
         Reflect.deleteProperty(next, scope);
         return next;
       });
-    }
+    });
   };
 
   const editingRuleUpdatePending =

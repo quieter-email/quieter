@@ -222,23 +222,26 @@ export const MessageAttachments = ({
     setActiveDownloadAttachmentKey(attachmentKey);
     setErrorMessage(null);
 
-    try {
-      await downloadAttachmentFromServer(
+    const [downloadResult] = await Promise.allSettled([
+      downloadAttachmentFromServer(
         mailboxId,
         attachment.messageId,
         attachment.attachmentId,
         attachment.fileName,
         attachment.mimeType
-      );
-    } catch (error) {
+      ),
+    ]);
+    if (downloadResult.status === "rejected") {
       setErrorMessage(
-        getErrorMessage(error, `Could not download ${attachment.fileName}.`)
-      );
-    } finally {
-      setActiveDownloadAttachmentKey((current) =>
-        current === attachmentKey ? null : current
+        getErrorMessage(
+          downloadResult.reason,
+          `Could not download ${attachment.fileName}.`
+        )
       );
     }
+    setActiveDownloadAttachmentKey((current) =>
+      current === attachmentKey ? null : current
+    );
   };
 
   const handleCalendarAction = async (attachment: ThreadAttachment) => {
@@ -246,7 +249,7 @@ export const MessageAttachments = ({
     setActiveCalendarAttachmentKey(attachmentKey);
     setErrorMessage(null);
 
-    try {
+    const performAction = async () => {
       if (!isGoogleCalendarConnected) {
         await openConnectorLink({
           provider: "google_calendar",
@@ -261,18 +264,19 @@ export const MessageAttachments = ({
         messageId: attachment.messageId,
       });
       toast.success(`Added ${result.summary} to Google Calendar.`);
-    } catch (error) {
+    };
+    const [calendarResult] = await Promise.allSettled([performAction()]);
+    if (calendarResult.status === "rejected") {
       setErrorMessage(
         getErrorMessage(
-          error,
+          calendarResult.reason,
           `Could not add ${attachment.fileName} to Google Calendar.`
         )
       );
-    } finally {
-      setActiveCalendarAttachmentKey((current) =>
-        current === attachmentKey ? null : current
-      );
     }
+    setActiveCalendarAttachmentKey((current) =>
+      current === attachmentKey ? null : current
+    );
   };
 
   return (

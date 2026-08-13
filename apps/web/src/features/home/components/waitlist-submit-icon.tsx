@@ -21,7 +21,7 @@ export const WaitlistSubmitIcon = ({ state }: { state: WaitlistIconState }) => (
   <AnimatePresence initial={false} mode="popLayout">
     <m.span
       animate={{ opacity: 1, scale: 1 }}
-      className="grid place-items-center will-change-[transform,opacity]"
+      className="grid place-items-center"
       exit={{ opacity: 0, scale: 0.9 }}
       initial={{ opacity: 0.5, scale: 0.9 }}
       key={state}

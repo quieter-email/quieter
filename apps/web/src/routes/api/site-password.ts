@@ -42,12 +42,15 @@ const getSafeReturnTo = (
   value: FormDataEntryValue | null,
   request: Request
 ) => {
-  const returnTo =
-    typeof value === "string"
-      ? value
-      : new URL(request.headers.get("referer") ?? request.url).searchParams.get(
-          "returnTo"
-        );
+  let returnTo: string | null;
+  if (typeof value === "string") {
+    returnTo = value;
+  } else {
+    const referer = request.headers.get("referer") ?? request.url;
+    returnTo = URL.canParse(referer)
+      ? new URL(referer).searchParams.get("returnTo")
+      : null;
+  }
 
   if (
     returnTo === null ||

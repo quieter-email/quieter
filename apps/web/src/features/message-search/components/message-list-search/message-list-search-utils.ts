@@ -8,6 +8,7 @@ import type { DropdownDirection } from "./message-list-search-types";
 export { serializeStructuredSearchState } from "@quieter/mail/search";
 
 const initialCalendarFallbackMonth = new Date(0);
+// react-doctor-disable-next-line react-doctor/no-impure-call-at-module-scope -- This is the browser snapshot for useSyncExternalStore; the server snapshot above is intentionally static.
 const clientCalendarFallbackMonth = new Date();
 
 export const subscribeToCalendarFallbackMonth = () => () => {

@@ -9,9 +9,11 @@ describe("chat turn entrances", () => {
   it("seeds hydrated turns without animating them", () => {
     const state = createChatTurnEntranceState();
 
-    expect(trackChatTurnEntrances(state, [], false)).toStrictEqual(new Set());
     expect(
-      trackChatTurnEntrances(state, ["existing-user"], true)
+      trackChatTurnEntrances(state, [], false).enteringTurnIds
+    ).toStrictEqual(new Set());
+    expect(
+      trackChatTurnEntrances(state, ["existing-user"], true).enteringTurnIds
     ).toStrictEqual(new Set());
     expect(state.newTurnIds).toStrictEqual(new Set());
   });
@@ -22,9 +24,11 @@ describe("chat turn entrances", () => {
 
     expect(
       trackChatTurnEntrances(state, ["existing-user", "new-user"], true)
+        .enteringTurnIds
     ).toStrictEqual(new Set(["new-user"]));
     expect(
       trackChatTurnEntrances(state, ["existing-user", "new-user"], true)
+        .enteringTurnIds
     ).toStrictEqual(new Set());
     expect(state.newTurnIds).toStrictEqual(new Set(["new-user"]));
   });

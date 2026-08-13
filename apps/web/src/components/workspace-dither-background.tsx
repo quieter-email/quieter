@@ -236,8 +236,10 @@ export const WorkspaceDitherBackground = ({
   const activeDotRgb = dotRgb ?? themeDotRgb;
   const activeStrength = strength ?? themeStrength;
   const gridStep = Math.max(1, step);
+  // react-doctor-disable-next-line react-hooks-js/purity -- The timestamp is captured once to keep animation time continuous across effect restarts.
   const sessionRef = useRef({ startedAt: performance.now() });
 
+  // react-doctor-disable-next-line react-doctor/effect-needs-cleanup -- ResizeObserver and every animation handle are disconnected or cancelled below.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) {
@@ -248,6 +250,7 @@ export const WorkspaceDitherBackground = ({
     let revealed = false;
     let visible = false;
     let raf = 0;
+    let revealFrame: number | null = null;
     let resizeFrame: number | null = null;
     let resizeObserver: ResizeObserver | null = null;
     let gl: WebGLRenderingContext | null = null;
@@ -269,7 +272,6 @@ export const WorkspaceDitherBackground = ({
     let cssWidth = 0;
     let cssHeight = 0;
     const { startedAt } = sessionRef.current;
-
     const reveal = () => {
       if (cancelled || revealed) {
         return;
@@ -279,7 +281,8 @@ export const WorkspaceDitherBackground = ({
         setReady(true);
         return;
       }
-      requestAnimationFrame(() => {
+      revealFrame = requestAnimationFrame(() => {
+        revealFrame = null;
         if (!cancelled) {
           setReady(true);
         }
@@ -374,6 +377,7 @@ export const WorkspaceDitherBackground = ({
     };
 
     const scheduleResize = () => {
+      // react-doctor-disable-next-line react-hooks-js/todo -- Vite+ lint requires ??= here to avoid scheduling duplicate resize frames.
       resizeFrame ??= requestAnimationFrame(resize);
     };
 
@@ -407,6 +411,10 @@ export const WorkspaceDitherBackground = ({
       if (resizeFrame !== null) {
         cancelAnimationFrame(resizeFrame);
         resizeFrame = null;
+      }
+      if (revealFrame !== null) {
+        cancelAnimationFrame(revealFrame);
+        revealFrame = null;
       }
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       if (gl && program) {
@@ -478,6 +486,7 @@ export const WorkspaceDitherBackground = ({
         return;
       }
 
+      // react-doctor-disable-next-line react-hooks-js/hooks -- WebGL's useProgram method is not a React hook.
       gl.useProgram(program);
 
       positionBuffer = gl.createBuffer();
@@ -557,33 +566,40 @@ export const WorkspaceDitherBackground = ({
       startLoop();
     };
 
-    if (!animate) {
-      visible = true;
-      initGl();
+    if (animate) {
+      const intersection = new IntersectionObserver(
+        ([entry]) => {
+          visible = entry?.isIntersecting ?? false;
+          if (visible) {
+            initGl();
+            startLoop();
+            return;
+          }
+          stopLoop();
+        },
+        { rootMargin: VISIBLE_ROOT_MARGIN }
+      );
+      intersection.observe(canvas);
 
       return () => {
         cancelled = true;
+        intersection.disconnect();
+        if (raf !== 0) {
+          cancelAnimationFrame(raf);
+          raf = 0;
+        }
         teardownGl();
       };
     }
-
-    const intersection = new IntersectionObserver(
-      ([entry]) => {
-        visible = entry?.isIntersecting ?? false;
-        if (visible) {
-          initGl();
-          startLoop();
-          return;
-        }
-        stopLoop();
-      },
-      { rootMargin: VISIBLE_ROOT_MARGIN }
-    );
-    intersection.observe(canvas);
+    visible = true;
+    initGl();
 
     return () => {
       cancelled = true;
-      intersection.disconnect();
+      if (raf !== 0) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+      }
       teardownGl();
     };
   }, [activeDotRgb, activeStrength, animate, falloff, gridStep, pattern]);

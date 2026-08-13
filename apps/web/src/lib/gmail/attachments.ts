@@ -39,16 +39,16 @@ export const downloadAttachmentFromServer = async (
   const objectUrl = URL.createObjectURL(file);
   const anchor = document.createElement("a");
 
-  anchor.href = objectUrl;
-  anchor.download = file.name;
-  anchor.rel = "noopener";
-  document.body.append(anchor);
-  anchor.click();
-  anchor.remove();
-
-  window.setTimeout(() => {
+  try {
+    anchor.href = objectUrl;
+    anchor.download = file.name;
+    anchor.rel = "noopener";
+    document.body.append(anchor);
+    anchor.click();
+  } finally {
+    anchor.remove();
     URL.revokeObjectURL(objectUrl);
-  }, 0);
+  }
 
   return file;
 };

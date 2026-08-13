@@ -75,17 +75,19 @@ export const WaitlistForm = ({
     });
 
     const updateIconState = async () => {
-      try {
-        await request;
-        form.reset();
-        setIconState("success");
-      } catch {
-        setIconState("error");
-      } finally {
-        window.setTimeout(() => {
-          setIconState("idle");
-        }, 1600);
-      }
+      await request
+        .then(() => {
+          form.reset();
+          setIconState("success");
+        })
+        .catch(() => {
+          setIconState("error");
+        })
+        .finally(() => {
+          window.setTimeout(() => {
+            setIconState("idle");
+          }, 1600);
+        });
     };
     void updateIconState();
   };
