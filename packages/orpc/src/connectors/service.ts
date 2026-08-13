@@ -180,6 +180,9 @@ const connectorDefinitions = {
   }
 >;
 
+export const getConnectorDisplayName = (provider: ConnectorProvider) =>
+  connectorDefinitions[provider].displayName;
+
 const normalizeReturnTo = (returnTo: string | undefined) => {
   const normalized = returnTo?.trim();
   if (

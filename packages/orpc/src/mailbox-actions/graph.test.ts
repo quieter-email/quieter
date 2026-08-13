@@ -63,23 +63,23 @@ const graph = (
 });
 
 describe(validateMailboxActionGraph, () => {
-  test("accepts a direct trigger to deterministic Linear issue action", () => {
+  test("accepts a direct trigger to a configured connector step", () => {
     const result = validateMailboxActionGraph(
       graph(
         [
           trigger(),
           {
             config: {
-              credentialId: "linear-credential",
-              teamId: "team-id",
-              title: "{{email.subject}}",
+              credentialId: "connector-credential",
+              instructions: "File anything that describes work to track.",
+              provider: "linear",
             },
-            id: "linear",
+            id: "connector",
             position,
-            type: "linear_create_issue",
+            type: "connector_agent",
           },
         ],
-        [edge("trigger-linear", "trigger", "out", "linear")]
+        [edge("trigger-connector", "trigger", "out", "connector")]
       )
     );
 
@@ -202,11 +202,10 @@ describe(validateMailboxActionGraph, () => {
 
     expect(result.graph).not.toBeNull();
     expect(result.valid).toBeFalsy();
+    expect(result.errors).toContain("Step connector needs a connected app.");
     expect(result.errors).toContain(
-      "Linear node linear needs a connected Linear account."
+      "Step connector needs a connected account."
     );
-    expect(result.errors).toContain(
-      "Linear node linear needs a target Linear team."
-    );
+    expect(result.errors).toContain("Step connector needs an instruction.");
   });
 });

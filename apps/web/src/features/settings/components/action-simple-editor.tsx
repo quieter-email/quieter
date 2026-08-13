@@ -34,7 +34,7 @@ import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { toast } from "@quieter/ui/toast";
 import { TokenField } from "@quieter/ui/token-field";
 import type { TokenFieldToken } from "@quieter/ui/token-field";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 
@@ -44,7 +44,6 @@ import {
   openConnectorLink,
 } from "#/lib/connectors-query";
 import {
-  linearMetadataQueryOptions,
   mailboxActionQueryKey,
   mailboxActionsListQueryKey,
 } from "#/lib/mailbox-actions-query";
@@ -83,74 +82,73 @@ const TRIGGER_OPTIONS = [
 ] as const;
 const TRIGGER_VALUE = TRIGGER_OPTIONS[0].value;
 
-const isLinearAgentNode = (
+type ConnectorProvider =
+  NonNullable<ConnectorsData>["connectors"][number]["provider"];
+
+const isConnectorAgentNode = (
   node: unknown
-): node is { config?: Record<string, unknown>; type: "linear_agent_issue" } => {
+): node is { config?: Record<string, unknown>; type: "connector_agent" } => {
   if (node === null || node === undefined || typeof node !== "object") {
     return false;
   }
-  return "type" in node && node.type === "linear_agent_issue";
+  return "type" in node && node.type === "connector_agent";
 };
 
-const getLinearAccountLabel = (
-  account: NonNullable<ConnectorsData>["connectors"][number]["accounts"][number]
+const getConnectorAccountLabel = (
+  account: NonNullable<ConnectorsData>["connectors"][number]["accounts"][number],
+  fallback: string
 ) =>
   account.providerWorkspaceName ??
   account.accountEmail ??
   account.displayName ??
-  "Linear";
+  fallback;
 
-const getSimpleActionConfig = (graph: unknown) => {
+const getSimpleActionConfig = (
+  graph: unknown
+): { credentialId: string; instructions: string; provider: string } => {
+  const empty = { credentialId: "", instructions: "", provider: "" } as const;
+
   if (graph === null || graph === undefined || typeof graph !== "object") {
-    return {
-      credentialId: "",
-      instructions: DEFAULT_ACTION_INSTRUCTIONS,
-      teamId: "",
-    };
+    return empty;
   }
 
   const { nodes } = graph as { nodes?: unknown };
-  const linearNode = Array.isArray(nodes)
-    ? nodes.find(isLinearAgentNode)
+  const connectorNode = Array.isArray(nodes)
+    ? nodes.find(isConnectorAgentNode)
     : undefined;
   const config =
-    linearNode !== undefined &&
-    "config" in linearNode &&
-    linearNode.config !== null &&
-    linearNode.config !== undefined &&
-    typeof linearNode.config === "object"
-      ? linearNode.config
+    connectorNode !== undefined &&
+    "config" in connectorNode &&
+    connectorNode.config !== null &&
+    connectorNode.config !== undefined &&
+    typeof connectorNode.config === "object"
+      ? connectorNode.config
       : {};
-
-  const instructionsValue =
-    typeof config.instructions === "string" ? config.instructions.trim() : "";
 
   return {
     credentialId:
       typeof config.credentialId === "string" ? config.credentialId : "",
     instructions:
-      instructionsValue === ""
-        ? DEFAULT_ACTION_INSTRUCTIONS
-        : instructionsValue,
-    teamId: typeof config.teamId === "string" ? config.teamId : "",
+      typeof config.instructions === "string" ? config.instructions : "",
+    provider: typeof config.provider === "string" ? config.provider : "",
   };
 };
 
 const createSimpleActionGraph = ({
   credentialId,
   instructions,
-  teamId,
+  provider,
 }: {
   credentialId: string;
   instructions: string;
-  teamId: string;
+  provider: ConnectorProvider | undefined;
 }): MailboxActionGraph => ({
   edges: [
     {
-      id: "edge-trigger-linear",
+      id: "edge-trigger-connector",
       source: "trigger",
       sourcePort: "out",
-      target: "linear",
+      target: "connector",
       targetPort: "in",
     },
   ],
@@ -165,11 +163,11 @@ const createSimpleActionGraph = ({
       config: {
         credentialId: credentialId === "" ? undefined : credentialId,
         instructions,
-        teamId: teamId === "" ? undefined : teamId,
+        provider,
       },
-      id: "linear",
+      id: "connector",
       position: { x: 320, y: 0 },
-      type: "linear_agent_issue",
+      type: "connector_agent",
     },
   ],
   version: MAILBOX_ACTION_GRAPH_VERSION,
@@ -212,188 +210,209 @@ const getSavedActionsDescription = (
   return "No actions yet.";
 };
 
-const getLinearCredentialId = (credentialId: string) =>
-  credentialId === "" ? undefined : credentialId;
-
-type LinearAccount =
+type ConnectorAccount =
   NonNullable<ConnectorsData>["connectors"][number]["accounts"][number];
-type LinearTeam =
-  RouterOutputs["mailboxActions"]["linearMetadata"]["teams"][number];
+type ConnectorSummary = NonNullable<ConnectorsData>["connectors"][number];
+
+const ConnectorAccountField = ({
+  accounts,
+  connector,
+  credentialId,
+  onConnect,
+  setCredentialId,
+  startingConnection,
+}: {
+  accounts: ConnectorAccount[];
+  connector: ConnectorSummary;
+  credentialId: string;
+  onConnect: (provider: ConnectorProvider) => void;
+  setCredentialId: (value: string) => void;
+  startingConnection: boolean;
+}) => {
+  if (accounts.length === 0) {
+    return (
+      <Button
+        disabled={startingConnection || !connector.isConfigured}
+        onClick={() => {
+          onConnect(connector.provider);
+        }}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        {startingConnection ? (
+          <HugeiconsIcon
+            aria-hidden
+            className="size-4 animate-spin"
+            icon={Loading03Icon}
+          />
+        ) : null}
+        Connect {connector.displayName}
+      </Button>
+    );
+  }
+
+  return (
+    <Select
+      items={accounts.map((account) => ({
+        label: getConnectorAccountLabel(account, connector.displayName),
+        value: account.id,
+      }))}
+      onValueChange={(value) => {
+        if (value === null || value === undefined || value === "") {
+          return;
+        }
+        setCredentialId(value);
+      }}
+      value={credentialId}
+    >
+      <SelectTrigger aria-label={`${connector.displayName} account`}>
+        <SelectValue placeholder={`Select ${connector.displayName} account`} />
+      </SelectTrigger>
+      <SelectContent>
+        {accounts.map((account) => (
+          <SelectItem key={account.id} value={account.id}>
+            {getConnectorAccountLabel(account, connector.displayName)}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+};
 
 const ActionRuleFields = ({
   connectorTokens,
+  connectors,
   credentialId,
   instructions,
-  linearAccounts,
-  linearConfigured,
-  linearMetadataLoading,
-  onConnectLinear,
+  name,
+  onConnect,
+  provider,
   setCredentialId,
   setInstructions,
   setName,
-  setTeamId,
-  startingLinear,
-  teamId,
-  teams,
-  name,
+  setProvider,
+  startingConnection,
 }: {
   connectorTokens: TokenFieldToken[];
+  connectors: ConnectorSummary[];
   credentialId: string;
   instructions: string;
-  linearAccounts: LinearAccount[];
-  linearConfigured: boolean | undefined;
-  linearMetadataLoading: boolean;
   name: string;
-  onConnectLinear: () => void;
+  onConnect: (provider: ConnectorProvider) => void;
+  provider: string;
   setCredentialId: (value: string) => void;
   setInstructions: (value: string) => void;
   setName: (value: string) => void;
-  setTeamId: (value: string) => void;
-  startingLinear: boolean;
-  teamId: string;
-  teams: LinearTeam[];
-}) => (
-  <div className="divide-y divide-border/70">
-    <SimpleField label="Name">
-      <Input
-        onChange={(event) => {
-          setName(event.target.value);
-        }}
-        placeholder="Action name"
-        value={name}
-      />
-    </SimpleField>
+  setProvider: (value: string) => void;
+  startingConnection: boolean;
+}) => {
+  const selected = connectors.find((item) => item.provider === provider);
+  const accounts: ConnectorAccount[] =
+    selected?.accounts.filter((account) => account.status === "connected") ??
+    [];
 
-    <SimpleField
-      description="The first event that starts this action."
-      label="Trigger"
-    >
-      <Select
-        items={TRIGGER_OPTIONS.map((option) => ({
-          label: option.label,
-          value: option.value,
-        }))}
-        value={TRIGGER_VALUE}
+  return (
+    <div className="divide-y divide-border/70">
+      <SimpleField label="Name">
+        <Input
+          onChange={(event) => {
+            setName(event.target.value);
+          }}
+          placeholder="Action name"
+          value={name}
+        />
+      </SimpleField>
+
+      <SimpleField
+        description="The first event that starts this action."
+        label="Trigger"
       >
-        <SelectTrigger aria-label="Trigger">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="email_received">On Email Received</SelectItem>
-        </SelectContent>
-      </Select>
-    </SimpleField>
+        <Select
+          items={TRIGGER_OPTIONS.map((option) => ({
+            label: option.label,
+            value: option.value,
+          }))}
+          value={TRIGGER_VALUE}
+        >
+          <SelectTrigger aria-label="Trigger">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="email_received">On Email Received</SelectItem>
+          </SelectContent>
+        </Select>
+      </SimpleField>
 
-    <SimpleField
-      description="The connector the instruction can use. Mention it in the instruction to tell the agent when to reach for it."
-      label="Connector"
-    >
-      <div className="space-y-3">
-        {linearAccounts.length > 0 ? (
+      <SimpleField
+        description="The app this action works in. It figures out where to put things from your instruction and what the connection can reach."
+        label="App"
+      >
+        <div className="space-y-3">
           <Select
-            items={linearAccounts.map((account) => ({
-              label: getLinearAccountLabel(account),
-              value: account.id,
+            items={connectors.map((connector) => ({
+              label: connector.displayName,
+              value: connector.provider,
             }))}
             onValueChange={(value) => {
               if (value === null || value === undefined || value === "") {
                 return;
               }
-              setCredentialId(value);
-              setTeamId("");
+              setProvider(value);
+              setCredentialId("");
             }}
-            value={credentialId}
+            value={provider}
           >
-            <SelectTrigger aria-label="Linear account">
-              <SelectValue placeholder="Select Linear workspace" />
+            <SelectTrigger aria-label="App">
+              <SelectValue placeholder="Select an app" />
             </SelectTrigger>
             <SelectContent>
-              {linearAccounts.map((account) => (
-                <SelectItem key={account.id} value={account.id}>
-                  {getLinearAccountLabel(account)}
+              {connectors.map((connector) => (
+                <SelectItem key={connector.provider} value={connector.provider}>
+                  {connector.displayName}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-        ) : (
-          <Button
-            disabled={startingLinear || linearConfigured === false}
-            onClick={onConnectLinear}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            {startingLinear ? (
-              <HugeiconsIcon
-                aria-hidden
-                className="size-4 animate-spin"
-                icon={Loading03Icon}
-              />
-            ) : (
-              <img
-                alt=""
-                aria-hidden
-                className="size-4 invert dark:invert-0"
-                height={16}
-                src="/linear.svg"
-                width={16}
-              />
-            )}
-            Connect Linear
-          </Button>
-        )}
-        <Select
-          disabled={credentialId === "" || linearMetadataLoading}
-          items={teams.map((team) => ({
-            label: `${team.name} (${team.key})`,
-            value: team.id,
-          }))}
-          onValueChange={(value) => {
-            if (value === null || value === undefined || value === "") {
-              return;
-            }
-            setTeamId(value);
-          }}
-          value={teamId}
-        >
-          <SelectTrigger aria-label="Linear team">
-            <SelectValue placeholder="Select Linear team" />
-          </SelectTrigger>
-          <SelectContent>
-            {teams.map((team) => (
-              <SelectItem key={team.id} value={team.id}>
-                {team.name} ({team.key})
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-    </SimpleField>
 
-    <SimpleField
-      description="Write the whole behavior in one prompt. The email content is provided automatically when the action runs."
-      label="Instruction"
-    >
-      <div className="space-y-2">
-        <div className="squircle rounded-md border border-border bg-input px-3 py-2 shadow-sm transition-colors duration-150 ease-out focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/45">
-          <TokenField
-            aria-label="Action instruction"
-            className="max-h-72 min-h-32 overflow-y-auto text-sm"
-            onChange={setInstructions}
-            placeholder={DEFAULT_ACTION_INSTRUCTIONS}
-            suggestionsLabel="Connectors"
-            tokens={connectorTokens}
-            value={instructions}
-          />
+          {selected === undefined ? null : (
+            <ConnectorAccountField
+              accounts={accounts}
+              connector={selected}
+              credentialId={credentialId}
+              onConnect={onConnect}
+              setCredentialId={setCredentialId}
+              startingConnection={startingConnection}
+            />
+          )}
         </div>
-        <p className={settingsSurfaceVariants({ variant: "value" })}>
-          Type @ to mention a connected app, and the agent uses it for that
-          step.
-        </p>
-      </div>
-    </SimpleField>
-  </div>
-);
+      </SimpleField>
+
+      <SimpleField
+        description="Write the whole behavior in one prompt. The email content is provided automatically when the action runs."
+        label="Instruction"
+      >
+        <div className="space-y-2">
+          <div className="squircle rounded-md border border-border bg-input px-3 py-2 shadow-sm transition-colors duration-150 ease-out focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/45">
+            <TokenField
+              aria-label="Action instruction"
+              className="max-h-72 min-h-32 overflow-y-auto text-sm"
+              onChange={setInstructions}
+              placeholder={DEFAULT_ACTION_INSTRUCTIONS}
+              suggestionsLabel="Connectors"
+              tokens={connectorTokens}
+              value={instructions}
+            />
+          </div>
+          <p className={settingsSurfaceVariants({ variant: "value" })}>
+            Type @ to mention a connected app, and the agent uses it for that
+            step.
+          </p>
+        </div>
+      </SimpleField>
+    </div>
+  );
+};
 
 const hasEditorValue = (value: string | null | undefined): value is string =>
   value !== undefined && value !== "";
@@ -406,38 +425,36 @@ const getActionFormDirty = ({
   credentialId,
   initialCredentialId,
   initialInstructions,
-  initialTeamId,
+  initialProvider,
   instructions,
   name,
-  teamId,
+  provider,
 }: {
   action: MailboxActionDetail | undefined;
   credentialId: string;
   initialCredentialId: string;
   initialInstructions: string;
-  initialTeamId: string;
+  initialProvider: string;
   instructions: string;
   name: string;
-  teamId: string;
+  provider: string;
 }) =>
   [
     name !== (action?.name ?? "New action"),
     credentialId !== initialCredentialId,
-    teamId !== initialTeamId,
+    provider !== initialProvider,
     instructions !== initialInstructions,
   ].some(Boolean);
 
 const getActionHasRequiredFields = ({
   credentialId,
   instructions,
-  teamId,
+  provider,
 }: {
   credentialId: string;
   instructions: string;
-  teamId: string;
-}) =>
-  [credentialId, teamId].every((value) => value !== "") &&
-  instructions.trim() !== "";
+  provider: string;
+}) => credentialId !== "" && provider !== "" && instructions.trim() !== "";
 
 const getActionPublishDisabled = ({
   action,
@@ -492,10 +509,10 @@ const useActionEditorForm = (
   draftRevision: MailboxActionRevision | undefined
 ) => {
   const initialConfig = getSimpleActionConfig(draftRevision?.graph);
-  const [startingLinear, setStartingLinear] = useState(false);
+  const [startingConnection, setStartingConnection] = useState(false);
   const [name, setName] = useState(action?.name ?? "New action");
   const [credentialId, setCredentialId] = useState(initialConfig.credentialId);
-  const [teamId, setTeamId] = useState(initialConfig.teamId);
+  const [provider, setProvider] = useState(initialConfig.provider);
   const [instructions, setInstructions] = useState(initialConfig.instructions);
 
   return {
@@ -507,42 +524,19 @@ const useActionEditorForm = (
       credentialId,
       initialCredentialId: initialConfig.credentialId,
       initialInstructions: initialConfig.instructions,
-      initialTeamId: initialConfig.teamId,
+      initialProvider: initialConfig.provider,
       instructions,
       name,
-      teamId,
+      provider,
     }),
     name,
+    provider,
     setCredentialId,
     setInstructions,
     setName,
-    setStartingLinear,
-    setTeamId,
-    startingLinear,
-    teamId,
-  };
-};
-
-const useActionEditorLinearData = (
-  connectorsData: ConnectorsData | undefined,
-  credentialId: string
-) => {
-  const linearConnector = connectorsData?.connectors.find(
-    (connector) => connector.provider === "linear"
-  );
-  const linearAccounts =
-    linearConnector?.accounts.filter(
-      (account) => account.status === "connected"
-    ) ?? [];
-  const { data: linearMetadata, isLoading: linearMetadataLoading } = useQuery(
-    linearMetadataQueryOptions(getLinearCredentialId(credentialId))
-  );
-
-  return {
-    linearAccounts,
-    linearConfigured: linearConnector?.isConfigured,
-    linearMetadataLoading,
-    teams: linearMetadata?.teams ?? [],
+    setProvider,
+    setStartingConnection,
+    startingConnection,
   };
 };
 
@@ -675,7 +669,7 @@ const useActionEditorController = ({
 }) => {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const form = useActionEditorForm(action, draftRevision);
-  const linear = useActionEditorLinearData(connectorsData, form.credentialId);
+  const connectors = connectorsData?.connectors ?? [];
   const mutations = useActionEditorMutations({
     activeActionId,
     activeMailboxId,
@@ -702,24 +696,26 @@ const useActionEditorController = ({
       graph: createSimpleActionGraph({
         credentialId: form.credentialId,
         instructions: form.instructions,
-        teamId: form.teamId,
+        // Resolving through the connector list keeps a stale stored provider
+        // from being saved back as if it were still valid.
+        provider: connectors.find(
+          (connector) => connector.provider === form.provider
+        )?.provider,
       }),
       name: form.name,
     });
   };
 
-  const startLinearConnection = async () => {
-    form.setStartingLinear(true);
+  const startConnection = async (provider: ConnectorProvider) => {
+    form.setStartingConnection(true);
     try {
       await openConnectorLink({
-        provider: "linear",
+        provider,
         returnTo: "/settings?tab=actions",
       });
     } catch (error) {
-      form.setStartingLinear(false);
-      toast.error(
-        getActionErrorMessage(error, "Could not start Linear setup.")
-      );
+      form.setStartingConnection(false);
+      toast.error(getActionErrorMessage(error, "Could not start setup."));
     }
   };
 
@@ -727,7 +723,7 @@ const useActionEditorController = ({
   const hasRequiredFields = getActionHasRequiredFields({
     credentialId: form.credentialId,
     instructions: form.instructions,
-    teamId: form.teamId,
+    provider: form.provider,
   });
   const publishDisabled = getActionPublishDisabled({
     action,
@@ -770,7 +766,7 @@ const useActionEditorController = ({
 
   return {
     ...form,
-    ...linear,
+    connectors,
     ...mutations,
     createAction,
     createDisabled:
@@ -791,7 +787,7 @@ const useActionEditorController = ({
     selectMailbox,
     setActionEnabled,
     setDeleteOpen,
-    startLinearConnection,
+    startConnection,
     statusDescription,
     validationErrors,
   };
@@ -1208,9 +1204,7 @@ export const ActionSimpleEditor = ({
     isDeleting,
     isPublishing,
     isSaving,
-    linearAccounts,
-    linearConfigured,
-    linearMetadataLoading,
+    connectors,
     name,
     publishAction,
     publishDisabled,
@@ -1221,12 +1215,11 @@ export const ActionSimpleEditor = ({
     setDeleteOpen,
     setInstructions,
     setName,
-    setTeamId,
-    startLinearConnection,
-    startingLinear,
+    setProvider,
+    startConnection,
+    startingConnection,
     statusDescription,
-    teamId,
-    teams,
+    provider,
     validationErrors,
   } = useActionEditorController({
     action,
@@ -1255,22 +1248,19 @@ export const ActionSimpleEditor = ({
         fields={
           <ActionRuleFields
             connectorTokens={connectorTokens}
+            connectors={connectors}
             credentialId={credentialId}
             instructions={instructions}
-            linearAccounts={linearAccounts}
-            linearConfigured={linearConfigured}
-            linearMetadataLoading={linearMetadataLoading}
             name={name}
-            onConnectLinear={() => {
-              void startLinearConnection();
+            onConnect={(nextProvider) => {
+              void startConnection(nextProvider);
             }}
+            provider={provider}
             setCredentialId={setCredentialId}
             setInstructions={setInstructions}
             setName={setName}
-            setTeamId={setTeamId}
-            startingLinear={startingLinear}
-            teamId={teamId}
-            teams={teams}
+            setProvider={setProvider}
+            startingConnection={startingConnection}
           />
         }
         hasPublished={hasPublished}

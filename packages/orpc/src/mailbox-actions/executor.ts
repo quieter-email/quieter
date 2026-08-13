@@ -4,9 +4,9 @@ import { ORPCError } from "@orpc/server";
 import {
   evaluateMailboxActionCondition,
   MAILBOX_ACTION_CONDITION_MODEL,
-  MAILBOX_ACTION_LINEAR_AGENT_MODEL,
-  planLinearMcpResearchCalls,
-  planLinearIssue,
+  MAILBOX_ACTION_CONNECTOR_AGENT_MODEL,
+  planConnectorAgentReadCalls,
+  planConnectorAgentWriteCalls,
   routeMailboxAction,
 } from "@quieter/ai/mailbox-actions";
 import type {
@@ -15,6 +15,7 @@ import type {
 } from "@quieter/ai/mailbox-actions";
 import { reportAiUsage } from "@quieter/billing";
 import { db } from "@quieter/database/client";
+import type { ConnectorProvider } from "@quieter/database/schema";
 import {
   mailbox,
   mailboxAction,
@@ -36,12 +37,12 @@ import {
   serializeAiAgentContext,
 } from "../ai-memory";
 import {
-  createLinearIssueForCredential,
-  listLinearIssueMetadataForCredential,
-  listLinearMcpToolsForCredential,
-  runLinearMcpToolCallsForCredential,
-} from "../connectors/runtime";
-import type { LinearIssueCreateDraft } from "../connectors/runtime";
+  listConnectorAgentTools,
+  runConnectorAgentReadCalls,
+  runConnectorAgentWriteCall,
+} from "../connectors/agent-tools";
+import type { ConnectorAgentToolCall } from "../connectors/agent-tools";
+import { getConnectorDisplayName } from "../connectors/service";
 import { runAuthorizedGmailMailbox } from "../gmail-mailbox-access";
 import { MAILBOX_PROVIDER_GMAIL } from "../mailbox/access";
 import { hasText } from "../text";
@@ -168,96 +169,22 @@ const loadActionEmailInput = async (input: {
   });
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-const readPathValue = (source: unknown, path: string) => {
-  const segments = path.split(".").filter(Boolean);
-  let current: unknown = source;
-  for (const segment of segments) {
-    if (!isRecord(current)) {
-      return "";
-    }
-    current = current[segment];
-  }
-  return typeof current === "string" ||
-    typeof current === "number" ||
-    typeof current === "boolean"
-    ? String(current)
-    : "";
-};
-
-const renderTemplate = (
-  value: string | undefined,
-  input: { context: ActionExecutionContext; email: ActionEmailInput }
-) =>
-  (value ?? "").replaceAll(
-    /\{\{\s*(?<rawPath>[^}]+?)\s*\}\}/gu,
-    (match: string) => {
-      const path = match.slice(2, -2).trim();
-      if (path.startsWith("email.")) {
-        return readPathValue(input.email, path.slice("email.".length));
-      }
-      if (path.startsWith("variables.")) {
-        return readPathValue(
-          input.context.variables,
-          path.slice("variables.".length)
-        );
-      }
-      if (path.startsWith("outputs.")) {
-        return readPathValue(
-          input.context.previousOutputs,
-          path.slice("outputs.".length)
-        );
-      }
-      return "";
-    }
-  );
-
-const validateLinearPlan = (
-  issue: LinearIssueCreateDraft,
-  metadata: Awaited<ReturnType<typeof listLinearIssueMetadataForCredential>>
-) => {
-  const teamIds = new Set(metadata.teams.map((team) => team.id));
-  const labelIds = new Set(
-    metadata.labels.filter((label) => !label.isGroup).map((label) => label.id)
-  );
-  const projectIds = new Set(metadata.projects.map((project) => project.id));
-  const stateIds = new Set(metadata.states.map((state) => state.id));
-  const assignableUserIds = new Set(
-    metadata.users
-      .filter((user) => user.active && user.isAssignable)
-      .map((user) => user.id)
-  );
-  if (!teamIds.has(issue.teamId)) {
-    throw new Error("Linear team is not available.");
-  }
-  if (hasText(issue.projectId) && !projectIds.has(issue.projectId)) {
-    throw new Error("Linear project is not available.");
-  }
-  if (hasText(issue.stateId) && !stateIds.has(issue.stateId)) {
-    throw new Error("Linear state is not available.");
-  }
-  if (hasText(issue.assigneeId) && !assignableUserIds.has(issue.assigneeId)) {
-    throw new Error("Linear assignee is not available.");
-  }
-  for (const labelId of issue.labelIds ?? []) {
-    if (!labelIds.has(labelId)) {
-      throw new Error("Linear label is not available.");
-    }
-  }
-};
-
-const createLinearExternalEffect = async (input: {
+/**
+ * Runs one mutating connector call at most once per run. A step can now make
+ * several calls, so the key carries the call's position within the step.
+ */
+const runConnectorWriteCall = async (input: {
   actionId: string;
-  connectorCredentialId: string;
-  issue: LinearIssueCreateDraft;
+  call: ConnectorAgentToolCall;
+  callIndex: number;
+  credentialId: string;
   nodeId: string;
+  provider: ConnectorProvider;
   revisionId: string;
   runId: string;
   stepRunId: string;
 }) => {
-  const idempotencyKey = `${input.runId}:${input.nodeId}`;
+  const idempotencyKey = `${input.runId}:${input.nodeId}:${input.callIndex}`;
   const [existing] = await db
     .select({
       externalId: mailboxActionExternalEffect.externalId,
@@ -266,29 +193,41 @@ const createLinearExternalEffect = async (input: {
     .from(mailboxActionExternalEffect)
     .where(eq(mailboxActionExternalEffect.idempotencyKey, idempotencyKey))
     .limit(1);
+
   if (existing !== undefined) {
-    return { id: existing.externalId, url: existing.externalUrl ?? undefined };
+    return {
+      externalId: existing.externalId,
+      externalUrl: existing.externalUrl ?? undefined,
+      replayed: true,
+      status: "success" as const,
+      toolName: input.call.toolName,
+    };
   }
 
-  const issue = await createLinearIssueForCredential({
-    credentialId: input.connectorCredentialId,
-    issue: input.issue,
+  const result = await runConnectorAgentWriteCall({
+    call: input.call,
+    credentialId: input.credentialId,
+    provider: input.provider,
   });
-  await db.insert(mailboxActionExternalEffect).values({
-    actionId: input.actionId,
-    connectorCredentialId: input.connectorCredentialId,
-    createdAt: new Date(),
-    externalId: issue.id,
-    externalUrl: issue.url,
-    id: randomUUID(),
-    idempotencyKey,
-    metadata: { identifier: issue.identifier, title: issue.title },
-    provider: "linear",
-    revisionId: input.revisionId,
-    runId: input.runId,
-    stepRunId: input.stepRunId,
-  });
-  return issue;
+
+  if (result.status === "success" && hasText(result.externalId)) {
+    await db.insert(mailboxActionExternalEffect).values({
+      actionId: input.actionId,
+      connectorCredentialId: input.credentialId,
+      createdAt: new Date(),
+      externalId: result.externalId,
+      externalUrl: result.externalUrl,
+      id: randomUUID(),
+      idempotencyKey,
+      metadata: { toolName: result.toolName },
+      provider: input.provider,
+      revisionId: input.revisionId,
+      runId: input.runId,
+      stepRunId: input.stepRunId,
+    });
+  }
+
+  return { ...result, replayed: false };
 };
 
 const executeNode = async (input: {
@@ -364,116 +303,95 @@ const executeNode = async (input: {
     case "stop": {
       return { output: { stopped: true }, outputPorts: [] };
     }
-    case "linear_create_issue": {
-      if (
-        !hasText(input.node.config.credentialId) ||
-        !hasText(input.node.config.teamId) ||
-        !hasText(input.node.config.title)
-      ) {
-        throw new Error("Linear issue node is missing required configuration.");
+    case "connector_agent": {
+      const { credentialId, instructions, provider } = input.node.config;
+
+      if (!hasText(credentialId) || provider === undefined) {
+        throw new Error("Connector step is missing its app or account.");
       }
-      const issue: LinearIssueCreateDraft = {
-        assigneeId: input.node.config.assigneeId,
-        description: renderTemplate(input.node.config.description, {
-          context,
-          email: input.email,
-        }),
-        labelIds: input.node.config.labelIds,
-        priority: input.node.config.priority,
-        projectId: input.node.config.projectId,
-        stateId: input.node.config.stateId,
-        teamId: input.node.config.teamId,
-        title: renderTemplate(input.node.config.title, {
-          context,
-          email: input.email,
-        }),
-      };
-      const createdIssue = await createLinearExternalEffect({
-        actionId: input.actionId,
-        connectorCredentialId: input.node.config.credentialId,
-        issue,
-        nodeId: input.node.id,
-        revisionId: input.revisionId,
-        runId: input.runId,
-        stepRunId: input.stepRunId,
-      });
-      return { output: { issue: createdIssue }, outputPorts: ["success"] };
-    }
-    case "linear_agent_issue": {
-      if (
-        !hasText(input.node.config.credentialId) ||
-        !hasText(input.node.config.teamId)
-      ) {
-        throw new Error("Linear agent node is missing required configuration.");
-      }
-      const metadata = await listLinearIssueMetadataForCredential({
-        credentialId: input.node.config.credentialId,
-      });
-      const mcpTools = await listLinearMcpToolsForCredential({
-        credentialId: input.node.config.credentialId,
-      });
-      const mcpResearchPlan =
-        mcpTools.length > 0
-          ? await planLinearMcpResearchCalls({
+
+      const connectorName = getConnectorDisplayName(provider);
+      const tools = await listConnectorAgentTools({ credentialId, provider });
+      const readableTools = new Set(
+        tools.filter((tool) => !tool.mutates).map((tool) => tool.name)
+      );
+      const writableTools = new Set(
+        tools.filter((tool) => tool.mutates).map((tool) => tool.name)
+      );
+
+      const readPlan =
+        readableTools.size > 0
+          ? await planConnectorAgentReadCalls({
+              connectorName,
               context,
               email: input.email,
-              instructions: input.node.config.instructions,
+              instructions,
               memoryContext: input.memoryContext,
               middleware: input.usageMiddleware({
-                model: MAILBOX_ACTION_LINEAR_AGENT_MODEL,
+                model: MAILBOX_ACTION_CONNECTOR_AGENT_MODEL,
                 nodeId: input.node.id,
                 stepRunId: input.stepRunId,
               }),
-              teamId: input.node.config.teamId,
-              tools: mcpTools,
+              tools,
             })
           : { calls: [] };
-      const mcpResearch =
-        mcpResearchPlan.calls.length > 0
-          ? await runLinearMcpToolCallsForCredential({
-              calls: mcpResearchPlan.calls.map((call) => ({
-                arguments: call.arguments,
-                toolName: call.toolName,
-              })),
-              credentialId: input.node.config.credentialId,
-            })
-          : [];
-      const plan = await planLinearIssue({
+      const research = await runConnectorAgentReadCalls({
+        calls: readPlan.calls
+          .filter((call) => readableTools.has(call.toolName))
+          .map((call) => ({
+            arguments: call.arguments,
+            toolName: call.toolName,
+          })),
+        credentialId,
+        provider,
+      });
+
+      const writePlan = await planConnectorAgentWriteCalls({
+        connectorName,
         context,
         email: input.email,
-        instructions: input.node.config.instructions,
-        linear: metadata,
-        linearMcpResearch: mcpResearch,
+        instructions,
         memoryContext: input.memoryContext,
         middleware: input.usageMiddleware({
-          model: MAILBOX_ACTION_LINEAR_AGENT_MODEL,
+          model: MAILBOX_ACTION_CONNECTOR_AGENT_MODEL,
           nodeId: input.node.id,
           stepRunId: input.stepRunId,
         }),
-        teamId: input.node.config.teamId,
+        research,
+        tools,
       });
-      const issue: LinearIssueCreateDraft = {
-        assigneeId: plan.assigneeId,
-        description: plan.description,
-        labelIds: plan.labelIds,
-        priority: plan.priority,
-        projectId: plan.projectId,
-        stateId: plan.stateId,
-        teamId: plan.teamId,
-        title: plan.title,
-      };
-      validateLinearPlan(issue, metadata);
-      const createdIssue = await createLinearExternalEffect({
-        actionId: input.actionId,
-        connectorCredentialId: input.node.config.credentialId,
-        issue,
-        nodeId: input.node.id,
-        revisionId: input.revisionId,
-        runId: input.runId,
-        stepRunId: input.stepRunId,
-      });
+
+      // A planned call naming a tool the connector never offered is a model
+      // mistake, not an instruction; dropping it keeps the step from acting
+      // outside what this connection can do.
+      const plannedCalls = writePlan.calls.filter((call) =>
+        writableTools.has(call.toolName)
+      );
+      const effects: Awaited<ReturnType<typeof runConnectorWriteCall>>[] = [];
+
+      for (const [callIndex, call] of plannedCalls.entries()) {
+        effects.push(
+          await runConnectorWriteCall({
+            actionId: input.actionId,
+            call: { arguments: call.arguments, toolName: call.toolName },
+            callIndex,
+            credentialId,
+            nodeId: input.node.id,
+            provider,
+            revisionId: input.revisionId,
+            runId: input.runId,
+            stepRunId: input.stepRunId,
+          })
+        );
+      }
+
       return {
-        output: { issue: createdIssue, mcpResearch, mcpResearchPlan, plan },
+        output: {
+          connector: connectorName,
+          effects,
+          research,
+          skippedReason: writePlan.skippedReason,
+        },
         outputPorts: ["success"],
       };
     }

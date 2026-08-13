@@ -118,28 +118,28 @@ const getConfigurableActionForUser = async (input: {
   return action;
 };
 
-const linearNodes = (graph: MailboxActionGraph) =>
+const connectorAgentNodes = (graph: MailboxActionGraph) =>
   graph.nodes.filter(
-    (
-      node
-    ): node is Extract<
-      MailboxActionNode,
-      { type: "linear_agent_issue" | "linear_create_issue" }
-    > =>
-      node.type === "linear_agent_issue" || node.type === "linear_create_issue"
+    (node): node is Extract<MailboxActionNode, { type: "connector_agent" }> =>
+      node.type === "connector_agent"
   );
 
-const validateLinearCredentialOwnershipIssues = async (input: {
+/**
+ * A step may only use a connector account that this user has actually
+ * connected, and the account must belong to the app the step names.
+ */
+const validateConnectorCredentialOwnershipIssues = async (input: {
   graph: MailboxActionGraph;
   userId: string;
 }): Promise<MailboxActionValidationIssue[]> => {
-  const nodes = linearNodes(input.graph).filter((node) =>
-    hasText(node.config.credentialId)
+  const nodes = connectorAgentNodes(input.graph).filter(
+    (node) =>
+      hasText(node.config.credentialId) && node.config.provider !== undefined
   );
   const results = await Promise.all(
     nodes.map(async (node) => {
-      const { credentialId } = node.config;
-      if (!hasText(credentialId)) {
+      const { credentialId, provider } = node.config;
+      if (!hasText(credentialId) || provider === undefined) {
         return null;
       }
       const [credential] = await db
@@ -148,7 +148,7 @@ const validateLinearCredentialOwnershipIssues = async (input: {
         .where(
           and(
             eq(connectorCredential.id, credentialId),
-            eq(connectorCredential.provider, "linear"),
+            eq(connectorCredential.provider, provider),
             eq(connectorCredential.status, "connected"),
             eq(connectorCredential.userId, input.userId)
           )
@@ -156,7 +156,7 @@ const validateLinearCredentialOwnershipIssues = async (input: {
         .limit(1);
       if (credential === undefined) {
         return {
-          message: `Linear node ${node.id} uses a Linear account that is not connected.`,
+          message: `Step ${node.id} uses an account that is not connected.`,
           nodeId: node.id,
         } satisfies MailboxActionValidationIssue;
       }
@@ -351,7 +351,7 @@ export const publishMailboxAction = async (input: {
 
   const validation = validateMailboxActionGraph(draft.graph);
   const credentialIssues = validation.graph
-    ? await validateLinearCredentialOwnershipIssues({
+    ? await validateConnectorCredentialOwnershipIssues({
         graph: validation.graph,
         userId: input.userId,
       })

@@ -1164,6 +1164,26 @@ export const createLinearIssueForCredential = async (input: {
     }
   );
 
+const createGoogleCalendarEvent = async (input: {
+  accessToken: string;
+  event: GoogleCalendarEventInput;
+  signal?: AbortSignal;
+}) => {
+  const eventDraft = normalizeGoogleCalendarEvent(input.event);
+  const event = await postGoogleCalendarEvent({
+    accessToken: input.accessToken,
+    event: eventDraft,
+    signal: input.signal,
+  });
+
+  return {
+    htmlLink: event.htmlLink,
+    id: event.id,
+    status: "success" as const,
+    summary: event.summary ?? eventDraft.summary,
+  };
+};
+
 export const createGoogleCalendarEventForUser = async (input: {
   event: GoogleCalendarEventInput;
   signal?: AbortSignal;
@@ -1175,19 +1195,31 @@ export const createGoogleCalendarEventForUser = async (input: {
       signal: input.signal,
       userId: input.userId,
     },
-    async (accessToken, signal) => {
-      const eventDraft = normalizeGoogleCalendarEvent(input.event);
-      const event = await postGoogleCalendarEvent({
+    async (accessToken, signal) =>
+      await createGoogleCalendarEvent({
         accessToken,
-        event: eventDraft,
+        event: input.event,
         signal,
-      });
+      })
+  );
 
-      return {
-        htmlLink: event.htmlLink,
-        id: event.id,
-        status: "success" as const,
-        summary: event.summary ?? eventDraft.summary,
-      };
-    }
+export const createGoogleCalendarEventForCredential = async (input: {
+  credentialId: string;
+  event: GoogleCalendarEventInput;
+  signal?: AbortSignal;
+  userId?: string;
+}) =>
+  await runAuthorizedConnectorCredential(
+    {
+      credentialId: input.credentialId,
+      provider: GOOGLE_CALENDAR_CONNECTOR_PROVIDER,
+      signal: input.signal,
+      userId: input.userId,
+    },
+    async (accessToken, _credential, signal) =>
+      await createGoogleCalendarEvent({
+        accessToken,
+        event: input.event,
+        signal,
+      })
   );

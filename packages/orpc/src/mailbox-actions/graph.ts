@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { connectorProviderSchema } from "../connectors/service";
 import { hasText } from "../text";
 
 export const MAILBOX_ACTION_GRAPH_VERSION = 1 as const;
@@ -26,29 +27,15 @@ const mergeConfigSchema = z.object({
   mode: z.enum(["wait_all", "pass_through"]).default("wait_all"),
 });
 const stopConfigSchema = z.object({}).default({});
-const linearBaseConfigSchema = z.object({
-  assigneeId: z.string().trim().min(1).optional(),
+/**
+ * A connector step names the app and the account, and carries the instruction
+ * in prose. Anything a specific connector needs beyond that, such as which team
+ * to file under, is discovered from its own tools while the action runs.
+ */
+const connectorAgentConfigSchema = z.object({
   credentialId: z.string().trim().min(1).optional(),
-  labelIds: z.array(z.string().trim().min(1)).max(12).optional(),
-  priority: z
-    .union([
-      z.literal(0),
-      z.literal(1),
-      z.literal(2),
-      z.literal(3),
-      z.literal(4),
-    ])
-    .optional(),
-  projectId: z.string().trim().min(1).optional(),
-  stateId: z.string().trim().min(1).optional(),
-  teamId: z.string().trim().min(1).optional(),
-});
-const linearCreateIssueConfigSchema = linearBaseConfigSchema.extend({
-  description: z.string().trim().max(12_000).optional(),
-  title: z.string().trim().min(1).max(255).optional(),
-});
-const linearAgentIssueConfigSchema = linearBaseConfigSchema.extend({
   instructions: z.string().trim().max(4000).optional(),
+  provider: connectorProviderSchema.optional(),
 });
 
 export const mailboxActionNodeSchema = z.discriminatedUnion("type", [
@@ -89,16 +76,10 @@ export const mailboxActionNodeSchema = z.discriminatedUnion("type", [
     type: z.literal("stop"),
   }),
   z.object({
-    config: linearCreateIssueConfigSchema,
+    config: connectorAgentConfigSchema,
     id: z.string().trim().min(1),
     position: positionSchema,
-    type: z.literal("linear_create_issue"),
-  }),
-  z.object({
-    config: linearAgentIssueConfigSchema,
-    id: z.string().trim().min(1),
-    position: positionSchema,
-    type: z.literal("linear_agent_issue"),
+    type: z.literal("connector_agent"),
   }),
 ]);
 
@@ -141,8 +122,7 @@ export const getMailboxActionOutputPorts = (
     case "ai_router": {
       return [...new Set([...node.config.ports, node.config.fallbackPort])];
     }
-    case "linear_agent_issue":
-    case "linear_create_issue": {
+    case "connector_agent": {
       return ["success"];
     }
     case "stop": {
@@ -297,27 +277,24 @@ export const validateMailboxActionGraph = (graphInput: unknown) => {
     }
   }
   for (const node of graph.nodes) {
-    if (
-      node.type !== "linear_agent_issue" &&
-      node.type !== "linear_create_issue"
-    ) {
+    if (node.type !== "connector_agent") {
       continue;
+    }
+    if (node.config.provider === undefined) {
+      addIssue({
+        message: `Step ${node.id} needs a connected app.`,
+        nodeId: node.id,
+      });
     }
     if (!hasText(node.config.credentialId)) {
       addIssue({
-        message: `Linear node ${node.id} needs a connected Linear account.`,
+        message: `Step ${node.id} needs a connected account.`,
         nodeId: node.id,
       });
     }
-    if (!hasText(node.config.teamId)) {
+    if (!hasText(node.config.instructions)) {
       addIssue({
-        message: `Linear node ${node.id} needs a target Linear team.`,
-        nodeId: node.id,
-      });
-    }
-    if (node.type === "linear_create_issue" && !hasText(node.config.title)) {
-      addIssue({
-        message: `Linear issue node ${node.id} needs a title.`,
+        message: `Step ${node.id} needs an instruction.`,
         nodeId: node.id,
       });
     }
@@ -334,10 +311,10 @@ export const validateMailboxActionGraph = (graphInput: unknown) => {
 export const createDefaultMailboxActionGraph = (): MailboxActionGraph => ({
   edges: [
     {
-      id: "edge-trigger-linear",
+      id: "edge-trigger-connector",
       source: "trigger",
       sourcePort: "out",
-      target: "linear",
+      target: "connector",
       targetPort: "in",
     },
   ],
@@ -349,13 +326,10 @@ export const createDefaultMailboxActionGraph = (): MailboxActionGraph => ({
       type: "email_received",
     },
     {
-      config: {
-        instructions:
-          "Create a useful Linear issue when this email describes work to track.",
-      },
-      id: "linear",
+      config: {},
+      id: "connector",
       position: { x: 360, y: 120 },
-      type: "linear_agent_issue",
+      type: "connector_agent",
     },
   ],
   version: MAILBOX_ACTION_GRAPH_VERSION,

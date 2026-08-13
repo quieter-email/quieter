@@ -11,9 +11,6 @@ export const mailboxActionsListQueryKey = (mailboxId: string | undefined) =>
 export const mailboxActionQueryKey = (actionId: string | undefined) =>
   ["mailbox-action", actionId ?? ""] as const;
 
-export const linearMetadataQueryKey = (credentialId: string | undefined) =>
-  ["mailbox-actions", "linear-metadata", credentialId ?? ""] as const;
-
 export const mailboxActionsListQueryOptions = (mailboxId: string | undefined) =>
   queryOptions({
     enabled: hasText(mailboxId),
@@ -38,20 +35,4 @@ export const mailboxActionQueryOptions = (actionId: string | undefined) =>
     },
     queryKey: mailboxActionQueryKey(actionId),
     staleTime: 5000,
-  });
-
-export const linearMetadataQueryOptions = (credentialId: string | undefined) =>
-  queryOptions({
-    enabled: hasText(credentialId),
-    queryFn: async ({ signal }) => {
-      if (!hasText(credentialId)) {
-        throw new Error("Linear credential id is required.");
-      }
-      return await rpc.mailboxActions.linearMetadata(
-        { credentialId },
-        { signal }
-      );
-    },
-    queryKey: linearMetadataQueryKey(credentialId),
-    staleTime: 60_000,
   });

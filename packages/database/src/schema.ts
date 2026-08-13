@@ -50,7 +50,8 @@ export type MailboxActionStepStatus =
   | "running"
   | "skipped"
   | "succeeded";
-export type MailboxActionExternalProvider = "linear";
+/** Any connector can record an external effect from a mailbox action. */
+export type MailboxActionExternalProvider = ConnectorProvider;
 export type GmailDeliveryStatus =
   | "delayed"
   | "delivered"
@@ -1378,7 +1379,7 @@ export const mailboxActionExternalEffect = pgTable(
   (table) => [
     check(
       "mailbox_action_external_effect_provider_check",
-      sql`${table.provider} in ('linear')`
+      sql`${table.provider} in ('google_calendar', 'linear')`
     ),
     index("mailbox_action_external_effect_action_created_idx").on(
       table.actionId,

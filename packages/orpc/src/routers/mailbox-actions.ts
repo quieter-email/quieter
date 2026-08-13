@@ -1,6 +1,5 @@
 import { z } from "zod";
 
-import { listLinearIssueMetadata } from "../connectors/service";
 import {
   createMailboxAction,
   deleteMailboxAction,
@@ -13,7 +12,6 @@ import {
 import { mailboxIdSchema, protectedProcedure } from "./base";
 
 const actionIdSchema = z.string().trim().min(1);
-const credentialIdSchema = z.string().trim().min(1);
 
 export const mailboxActionsRouter = {
   create: protectedProcedure
@@ -40,17 +38,6 @@ export const mailboxActionsRouter = {
     .handler(
       async ({ context, input }) =>
         await getMailboxAction({ ...input, userId: context.userId })
-    ),
-
-  linearMetadata: protectedProcedure
-    .input(z.object({ credentialId: credentialIdSchema }))
-    .handler(
-      async ({ context, input }) =>
-        await listLinearIssueMetadata({
-          ...input,
-          signal: context.signal,
-          userId: context.userId,
-        })
     ),
 
   list: protectedProcedure
