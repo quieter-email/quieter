@@ -1,4 +1,7 @@
+import { production } from "./stage";
 import type { SecretResource } from "./types";
+
+const productionHyperdriveId = "6521686112444b3ca0eaa88e4d1f8b5f";
 
 const parsePostgresOrigin = (connectionString: string) => {
   const url = new URL(connectionString);
@@ -22,6 +25,12 @@ const parsePostgresOrigin = (connectionString: string) => {
 };
 
 export const createAppDatabase = (databaseSecret: SecretResource) => {
+  if (production) {
+    return sst.cloudflare.Hyperdrive.get("AppDatabaseV2", {
+      hyperdriveId: productionHyperdriveId,
+    });
+  }
+
   const origin = databaseSecret.value.apply(parsePostgresOrigin);
 
   return new sst.cloudflare.Hyperdrive("AppDatabaseV2", {
