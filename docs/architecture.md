@@ -147,4 +147,20 @@ PayKit and Polar handle product synchronization, checkout, subscription events, 
 
 SST provisions the mail bucket, receipt topic and role, queues, workflows, function URLs, Gmail notification ingress, live-sync WebSocket, and maintenance schedules.
 
-Cloudflare Workers hosts the web application. SST builds and publishes production, binds deployment outputs directly, and provisions the fixed review infrastructure. Review promotions upload a credential-free pull-request artifact with trusted default-branch Wrangler configuration; the pull-request build never receives deployment credentials.
+Cloudflare Workers hosts the web application. SST builds and publishes production and binds deployment outputs directly.
+
+### SST configuration layout
+
+The root [`sst.config.ts`](../sst.config.ts) owns only app-wide SST settings and delegates resource composition to [`infra/`](../infra):
+
+- `stage.ts` centralizes stage flags, domains, and deployment environment names.
+- `runtime.ts` normalizes `@quieter/env` values and shared Worker/function environment groups.
+- `secrets.ts` declares stage-aware `sst.Secret` resources and Cloudflare secret bindings.
+- `database.ts` owns the Cloudflare Hyperdrive binding.
+- `web.ts` owns the TanStack Start Worker and its common bindings.
+- `chat.ts` and `actions.ts` own chat generation and mailbox-action resources.
+- `mail.ts` owns SES receipt storage, processing, ingress, and send permissions.
+- `gmail.ts` owns Gmail live-sync and Pub/Sub resources across AWS and Cloudflare.
+- `app.ts` is the small stage-aware composition entry point; `types.ts` contains shared infra boundary types.
+
+SST is the runtime source of truth for application credentials and tokens; their canonical names live in `packages/env/src/sst-secrets.ts`. Cloudflare receives them as secret-text bindings, while AWS functions receive values derived from SST secret outputs. Deployment environment variables are reserved for non-secret configuration such as feature switches, resource identifiers, domains, and provider deployment credentials.

@@ -23,21 +23,9 @@ export default defineConfig({
         command: "bun scripts/generate-migration.ts",
         dependsOn: dependencyBuild,
       },
-      "db:grant-review": {
-        cache: false,
-        command:
-          "bun --env-file=../../.env.local scripts/grant-review-database.ts",
-        dependsOn: dependencyBuild,
-      },
       "db:migrate": {
         cache: false,
         command: migrationRunCommand,
-        dependsOn: dependencyBuild,
-      },
-      "db:prepare-review": {
-        cache: false,
-        command:
-          "bun --env-file=../../.env.local scripts/prepare-review-database.ts",
         dependsOn: dependencyBuild,
       },
       "db:push": {

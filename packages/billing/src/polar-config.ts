@@ -1,7 +1,7 @@
 import { serverEnv } from "@quieter/env/server";
 
 export const resolvePolarServer = (input: {
-  deploymentEnvironment?: "local" | "preview" | "production";
+  deploymentEnvironment?: "local" | "production";
   nodeEnvironment: "development" | "production" | "test";
   polarSandbox?: boolean;
 }) => {

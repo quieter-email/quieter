@@ -8,7 +8,6 @@ const check = process.argv.includes("--check");
 const targets = [
   "local-worker.jsonc",
   "packages/cloudflare/wrangler.types.jsonc",
-  ".github/review-worker.wrangler.jsonc",
 ] as const;
 
 const datePattern =

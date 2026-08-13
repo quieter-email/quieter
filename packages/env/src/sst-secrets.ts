@@ -1,4 +1,4 @@
-export const githubSstSecrets = {
+export const sstSecretNames = {
   APP_SITE_PASSWORD: "AppSitePassword",
   BETTER_AUTH_SECRET: "BetterAuthSecret",
   CHAT_GENERATION_START_TOKEN: "ChatGenerationStartToken",
@@ -27,14 +27,4 @@ export const githubSstSecrets = {
   SENTRY_DSN: "SentryDsn",
 } as const;
 
-/**
- * Optional deploy secrets. Synced when present, never required for production.
- * Move Domain Connect into `githubSstSecrets` once provider registration and the
- * signing key are ready.
- */
-export const githubSstOptionalSecrets = {
-  DOMAIN_CONNECT_PRIVATE_KEY_B64: "DomainConnectPrivateKeyB64",
-} as const;
-
-export type GithubSstSecretName = keyof typeof githubSstSecrets;
-export type GithubSstOptionalSecretName = keyof typeof githubSstOptionalSecrets;
+export type SstSecretName = keyof typeof sstSecretNames;

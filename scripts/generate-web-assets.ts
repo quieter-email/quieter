@@ -13,8 +13,6 @@ const brand = {
   devLight: "#ffe7b8",
   light: "#f2f2f2",
   page: "#f7f4ee",
-  reviewDark: "#164e8b",
-  reviewLight: "#dcebff",
   themeDark: "#141414",
   themeLight: "#f7f4ee",
 };
@@ -666,18 +664,6 @@ const main = async () => {
               light: recolorLogo(lightLogo, brand.devDark, brand.devLight),
             }),
           },
-          {
-            file: "review",
-            staticLogo: recolorLogo(logo, brand.reviewDark, brand.reviewLight),
-            svg: buildSchemeIconSvg({
-              dark: recolorLogo(logo, brand.reviewDark, brand.reviewLight),
-              light: recolorLogo(
-                lightLogo,
-                brand.reviewDark,
-                brand.reviewLight
-              ),
-            }),
-          },
         ];
 
   await Promise.all(
@@ -764,10 +750,8 @@ const main = async () => {
       : []),
     "  apps/web/public/favicon.ico",
     "  apps/web/public/favicon-dev.ico",
-    "  apps/web/public/favicon-review.ico",
     "  apps/web/public/icon.svg",
     "  apps/web/public/icon-dev.svg",
-    "  apps/web/public/icon-review.svg",
     "  apps/web/public/apple-touch-icon.png",
     "  apps/web/public/icon-192.png",
     "  apps/web/public/icon-512.png",

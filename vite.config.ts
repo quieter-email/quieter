@@ -118,7 +118,7 @@ export default defineConfig({
         files: [
           "apps/web/src/features/message-thread/domain/mail-html.test.ts",
           "apps/web/src/lib/site-password.server.ts",
-          "packages/env/src/github.ts",
+          "packages/env/src/sst-secrets.ts",
           "packages/mail/tests/message-content.test.ts",
         ],
         rules: {

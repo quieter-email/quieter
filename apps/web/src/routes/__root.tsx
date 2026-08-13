@@ -5,7 +5,6 @@ import { createRootRoute } from "@tanstack/react-router";
 import { RootComponent } from "#/components/root/root-component";
 import { RootErrorComponent } from "#/components/root/root-error-component";
 import { RootNotFoundComponent } from "#/components/root/root-not-found-component";
-import { clientEnv } from "#/env";
 
 import appCss from "../styles.css?url";
 
@@ -14,8 +13,6 @@ const appCssHref: string = typeof appCss === "string" ? appCss : "";
 let faviconVariant = "";
 if (import.meta.env.DEV) {
   faviconVariant = "-dev";
-} else if (clientEnv.VITE_QUIETER_DEPLOYMENT_ENV === "preview") {
-  faviconVariant = "-review";
 }
 
 export const Route = createRootRoute({

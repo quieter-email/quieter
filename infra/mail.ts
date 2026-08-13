@@ -1,0 +1,162 @@
+import type { DeploymentContext } from "./runtime";
+import { requireSecretResource } from "./secrets";
+import type { SecretResources } from "./types";
+
+const mailObjectKeyPrefix = "mail/inbound/";
+export const mailReceiptRuleSetName = "quieter-mail";
+
+export const createMailResources = async (
+  context: DeploymentContext,
+  secretResources: SecretResources
+) => {
+  const callerIdentity = await aws.getCallerIdentity({});
+  const region = await aws.getRegion({});
+  const mailReceiptRuleSourceArn = `arn:aws:ses:${region.region}:${callerIdentity.accountId}:receipt-rule-set/${mailReceiptRuleSetName}:receipt-rule/*`;
+  const mailBucket = new sst.aws.Bucket("MailBucket", {
+    policy: [
+      {
+        actions: ["s3:PutObject"],
+        conditions: [
+          {
+            test: "StringEquals",
+            values: [callerIdentity.accountId],
+            variable: "aws:SourceAccount",
+          },
+          {
+            test: "ArnLike",
+            values: [mailReceiptRuleSourceArn],
+            variable: "aws:SourceArn",
+          },
+        ],
+        paths: [`${mailObjectKeyPrefix}*`],
+        principals: [
+          {
+            identifiers: ["ses.amazonaws.com"],
+            type: "service",
+          },
+        ],
+      },
+    ],
+  });
+  // Keep the existing Pulumi resource type to avoid changing the deployed resource identity.
+  // oxlint-disable-next-line eslint/no-deprecated
+  const mailBucketLifecycle = new aws.s3.BucketLifecycleConfigurationV2(
+    "MailBucketLifecycle",
+    {
+      bucket: mailBucket.name,
+      rules: [
+        {
+          expiration: {
+            days: 1,
+          },
+          filter: {
+            prefix: mailObjectKeyPrefix,
+          },
+          id: "expire-ses-landing-objects",
+          status: "Enabled",
+        },
+      ],
+    }
+  );
+
+  const mailReceiptTopic = new sst.aws.SnsTopic("MailReceiptTopic");
+  const mailReceiptRole = new aws.iam.Role("MailReceiptRole", {
+    assumeRolePolicy: $jsonStringify({
+      Statement: [
+        {
+          Action: "sts:AssumeRole",
+          Condition: {
+            ArnLike: {
+              "aws:SourceArn": mailReceiptRuleSourceArn,
+            },
+            StringEquals: {
+              "aws:SourceAccount": callerIdentity.accountId,
+            },
+          },
+          Effect: "Allow",
+          Principal: {
+            Service: "ses.amazonaws.com",
+          },
+        },
+      ],
+      Version: "2012-10-17",
+    }),
+  });
+  const mailReceiptRolePolicy = new aws.iam.RolePolicy(
+    "MailReceiptRolePolicy",
+    {
+      policy: $jsonStringify({
+        Statement: [
+          {
+            Action: ["s3:PutObject"],
+            Effect: "Allow",
+            Resource: [
+              mailBucket.arn.apply((arn) => `${arn}/${mailObjectKeyPrefix}*`),
+            ],
+          },
+          {
+            Action: ["sns:Publish"],
+            Effect: "Allow",
+            Resource: [mailReceiptTopic.arn],
+          },
+        ],
+        Version: "2012-10-17",
+      }),
+      role: mailReceiptRole.id,
+    }
+  );
+
+  void mailBucketLifecycle;
+  void mailReceiptRolePolicy;
+
+  mailReceiptTopic.subscribe("MailReceiptProcessor", {
+    environment: {
+      DATABASE_URL: context.databaseUrl,
+      POLAR_ACCESS_TOKEN: context.polarAccessToken,
+      POLAR_ORGANIZATION_ID: context.polarOrganizationId,
+      POLAR_SANDBOX: context.polarSandbox,
+      QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
+      ...context.r2Environment,
+      ...context.sentryEnvironment,
+    },
+    handler: "packages/aws/src/receipt.handler",
+    link: [mailBucket],
+    timeout: "30 seconds",
+  });
+
+  const mailIngressToken = requireSecretResource(
+    secretResources,
+    "MAIL_INGEST_TOKEN"
+  );
+  const mailIngress = new sst.aws.Function("MailIngress", {
+    environment: {
+      DATABASE_URL: context.databaseUrl,
+      QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
+      ...context.r2Environment,
+      ...context.sentryEnvironment,
+    },
+    handler: "packages/aws/src/inbound.handler",
+    link: [mailBucket, mailIngressToken],
+    timeout: "30 seconds",
+    url: true,
+  });
+  const webAwsPermissions = new sst.Linkable("WebAwsPermissions", {
+    include: [
+      {
+        actions: ["ses:SendEmail", "ses:SendRawEmail"],
+        resources: ["*"],
+        type: "aws.permission",
+      },
+    ],
+    properties: {},
+  });
+
+  return {
+    mailBucket,
+    mailIngress,
+    mailIngressToken,
+    mailReceiptRole,
+    mailReceiptTopic,
+    webAwsPermissions,
+  };
+};

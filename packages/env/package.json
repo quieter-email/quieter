@@ -10,12 +10,6 @@
       "bun": "./src/client.ts",
       "default": "./dist/client.js"
     },
-    "./github": {
-      "types": "./src/github.ts",
-      "development": "./src/github.ts",
-      "bun": "./src/github.ts",
-      "default": "./dist/github.js"
-    },
     "./local-doctor": {
       "types": "./src/local-doctor.ts",
       "development": "./src/local-doctor.ts",
@@ -39,6 +33,12 @@
       "development": "./src/sst.ts",
       "bun": "./src/sst.ts",
       "default": "./dist/sst.js"
+    },
+    "./sst-secrets": {
+      "types": "./src/sst-secrets.ts",
+      "development": "./src/sst-secrets.ts",
+      "bun": "./src/sst-secrets.ts",
+      "default": "./dist/sst-secrets.js"
     }
   },
   "scripts": {

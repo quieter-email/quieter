@@ -28,7 +28,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE <migration-role> IN SCHEMA public
   GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO <application-role>;
 ```
 
-Use the application role on PlanetScale port 6432 for the deployed Worker `DATABASE_URL` and application runtime secrets. Keep the migration role's direct port 5432 connection string only in GitHub's protected production `DATABASE_MIGRATION_URL` secret. After switching, remove every production database URL from developer machines.
+Store the deployed runtime's PlanetScale application-role URL on port 6432 in the SST `DatabaseUrl` secret. Keep the migration role's direct port 5432 connection string only in GitHub's protected production `DATABASE_MIGRATION_URL` secret. After switching, remove every production database URL from developer machines.
 
 Verify the application role:
 

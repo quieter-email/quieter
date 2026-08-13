@@ -8,11 +8,11 @@ export default defineConfig({
     dts: false,
     entry: [
       "src/client.ts",
-      "src/github.ts",
       "src/local-doctor.ts",
       "src/public.ts",
       "src/server.ts",
       "src/sst.ts",
+      "src/sst-secrets.ts",
     ],
     fixedExtension: false,
     format: "esm",

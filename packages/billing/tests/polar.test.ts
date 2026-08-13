@@ -20,7 +20,7 @@ describe("Polar server selection", () => {
   test("allows explicit sandbox mode outside production", () => {
     expect(
       resolvePolarServer({
-        deploymentEnvironment: "preview",
+        deploymentEnvironment: "local",
         nodeEnvironment: "production",
         polarSandbox: true,
       })

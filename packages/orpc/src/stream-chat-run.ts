@@ -56,7 +56,7 @@ const proxyChatRunStream = async (runId: string, request: Request) => {
 
 /**
  * Observation-only SSE for an in-flight or finished chat run.
- * Local/review: dump-then-live from the in-process hub.
+ * Local execution: dump-then-live from the in-process hub.
  * Deployed: proxy to the ChatRunSession Durable Object after auth.
  * Does not start generation — mutations own that.
  */

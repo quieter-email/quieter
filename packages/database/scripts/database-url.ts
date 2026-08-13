@@ -96,12 +96,7 @@ export const assertMigrationExecutionAllowed = (
     (!productionMigrationTarget.protectedRef ||
       environment.GITHUB_REF_PROTECTED === "true");
 
-  const isApprovedReviewMigrationJob =
-    isGitHubActionsJob &&
-    environment.QUIETER_ALLOW_REMOTE_MIGRATIONS === "review" &&
-    environment.QUIETER_REVIEW_DEPLOYMENT === "true";
-
-  if (!isApprovedProductionMigrationJob && !isApprovedReviewMigrationJob) {
+  if (!isApprovedProductionMigrationJob) {
     throw new Error(
       "Remote database migrations are restricted to approved GitHub Actions deployment jobs"
     );

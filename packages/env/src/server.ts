@@ -135,9 +135,7 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       POLAR_WEBHOOK_SECRET: optionalString,
       QUIETER_AUTH_MAIL_MODE: z.enum(["api", "console"]).default("api"),
       QUIETER_AUTH_MAIL_SENDER: z.email().default("auth@quieter.email"),
-      QUIETER_DEPLOYMENT_ENV: z
-        .enum(["local", "preview", "production"])
-        .default("local"),
+      QUIETER_DEPLOYMENT_ENV: z.enum(["local", "production"]).default("local"),
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED: optionalBooleanString,
       QUIETER_LOCAL_BILLING_BYPASS: optionalBooleanString,
       QUIETER_MAIL_API_KEY: optionalString,

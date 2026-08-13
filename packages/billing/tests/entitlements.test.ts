@@ -393,13 +393,13 @@ describe("local development billing entitlement", () => {
       isLocalDevelopmentBillingEntitlementEnabled({
         BETTER_AUTH_URL: "http://localhost:3000",
         NODE_ENV: "development",
-        QUIETER_DEPLOYMENT_ENV: "preview",
+        QUIETER_DEPLOYMENT_ENV: "production",
         QUIETER_LOCAL_BILLING_BYPASS: true,
       })
     ).toBeFalsy();
     expect(
       isLocalDevelopmentBillingEntitlementEnabled({
-        BETTER_AUTH_URL: "https://review.quieter.email",
+        BETTER_AUTH_URL: "https://quieter.email",
         NODE_ENV: "production",
         QUIETER_DEPLOYMENT_ENV: "local",
         QUIETER_LOCAL_BILLING_BYPASS: true,

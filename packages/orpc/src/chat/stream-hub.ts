@@ -14,7 +14,7 @@ type HubSubscriber = {
 /**
  * In-memory live fanout for one chat run.
  * Producer appends StreamChunks; observers get dump-then-live over SSE.
- * Used in-process (local/review) and inside the ChatRunSession Durable Object.
+ * Used in-process locally and inside the ChatRunSession Durable Object.
  */
 export type ChatRunHub = {
   readonly runId: string;
