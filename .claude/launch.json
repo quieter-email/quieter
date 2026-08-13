@@ -1,0 +1,18 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "runtimeExecutable": "node_modules/.bin/vp",
+      "runtimeArgs": [
+        "dev",
+        "apps/web",
+        "--port",
+        "3000",
+        "--configLoader",
+        "native"
+      ],
+      "port": 3000
+    }
+  ]
+}
