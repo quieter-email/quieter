@@ -2,12 +2,12 @@ import { randomUUID } from "node:crypto";
 
 import { ORPCError } from "@orpc/server";
 import {
+  CONNECTOR_AGENT_MAX_WRITE_CALLS,
   evaluateMailboxActionCondition,
   MAILBOX_ACTION_CONDITION_MODEL,
   MAILBOX_ACTION_CONNECTOR_AGENT_MODEL,
-  planConnectorAgentReadCalls,
-  planConnectorAgentWriteCalls,
   routeMailboxAction,
+  runConnectorAgentStep,
 } from "@quieter/ai/mailbox-actions";
 import type {
   ActionEmailInput,
@@ -28,8 +28,10 @@ import {
 } from "@quieter/database/schema";
 import { getMessageWithDetails } from "@quieter/gmail";
 import { reportError } from "@quieter/observability";
-import type { ChatMiddleware } from "@tanstack/ai";
+import { toolDefinition } from "@tanstack/ai";
+import type { AnyTool, ChatMiddleware } from "@tanstack/ai";
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
+import { z } from "zod";
 
 import {
   buildMailMemoryQuery,
@@ -41,7 +43,10 @@ import {
   runConnectorAgentReadCalls,
   runConnectorAgentWriteCall,
 } from "../connectors/agent-tools";
-import type { ConnectorAgentToolCall } from "../connectors/agent-tools";
+import type {
+  ConnectorAgentTool,
+  ConnectorAgentToolCall,
+} from "../connectors/agent-tools";
 import { getConnectorDisplayName } from "../connectors/service";
 import { runAuthorizedGmailMailbox } from "../gmail-mailbox-access";
 import { MAILBOX_PROVIDER_GMAIL } from "../mailbox/access";
@@ -70,6 +75,8 @@ type MailboxActionUsageMiddlewareFactory = (input: {
 
 const MAX_NODE_EXECUTIONS = 500;
 const RUN_LEASE_MS = 10 * 60 * 1000;
+/** A step should finish while the mail still feels freshly handled. */
+const CONNECTOR_STEP_BUDGET_MS = 45 * 1000;
 
 const getNodeById = (graph: MailboxActionGraph) =>
   new Map(graph.nodes.map((node) => [node.id, node]));
@@ -230,6 +237,65 @@ const runConnectorWriteCall = async (input: {
   return { ...result, replayed: false };
 };
 
+const toolArgumentsSchema = z.record(z.string(), z.unknown());
+
+type ConnectorStepIdentity = {
+  actionId: string;
+  credentialId: string;
+  nodeId: string;
+  provider: ConnectorProvider;
+  revisionId: string;
+  runId: string;
+  stepRunId: string;
+};
+
+/**
+ * Turns the connector's advertised tools into ones the agent loop can actually
+ * call. Reads pass straight through; writes are counted, capped, and recorded
+ * so a replayed run cannot repeat them.
+ */
+const createConnectorStepTools = (
+  identity: ConnectorStepIdentity,
+  tools: ConnectorAgentTool[],
+  effects: Awaited<ReturnType<typeof runConnectorWriteCall>>[]
+): AnyTool[] =>
+  tools.map((tool) =>
+    toolDefinition({
+      description: tool.description ?? tool.name,
+      inputSchema: tool.inputSchema,
+      name: tool.name,
+    }).server(async (args) => {
+      const call: ConnectorAgentToolCall = {
+        arguments: toolArgumentsSchema.parse(args ?? {}),
+        toolName: tool.name,
+      };
+
+      if (!tool.mutates) {
+        const [result] = await runConnectorAgentReadCalls({
+          calls: [call],
+          credentialId: identity.credentialId,
+          provider: identity.provider,
+        });
+        return result ?? { error: "Tool returned nothing.", status: "error" };
+      }
+
+      if (effects.length >= CONNECTOR_AGENT_MAX_WRITE_CALLS) {
+        return {
+          error: `This step has already made ${CONNECTOR_AGENT_MAX_WRITE_CALLS} changes, which is the limit. Finish without further changes.`,
+          status: "error",
+        };
+      }
+
+      const result = await runConnectorWriteCall({
+        ...identity,
+        call,
+        callIndex: effects.length,
+      });
+      effects.push(result);
+      return result;
+    })
+  );
+
 const executeNode = async (input: {
   actionId: string;
   email: ActionEmailInput;
@@ -312,88 +378,71 @@ const executeNode = async (input: {
 
       const connectorName = getConnectorDisplayName(provider);
       const tools = await listConnectorAgentTools({ credentialId, provider });
-      const readableTools = new Set(
-        tools.filter((tool) => !tool.mutates).map((tool) => tool.name)
-      );
-      const writableTools = new Set(
-        tools.filter((tool) => tool.mutates).map((tool) => tool.name)
-      );
-
-      const readPlan =
-        readableTools.size > 0
-          ? await planConnectorAgentReadCalls({
-              connectorName,
-              context,
-              email: input.email,
-              instructions,
-              memoryContext: input.memoryContext,
-              middleware: input.usageMiddleware({
-                model: MAILBOX_ACTION_CONNECTOR_AGENT_MODEL,
-                nodeId: input.node.id,
-                stepRunId: input.stepRunId,
-              }),
-              tools,
-            })
-          : { calls: [] };
-      const research = await runConnectorAgentReadCalls({
-        calls: readPlan.calls
-          .filter((call) => readableTools.has(call.toolName))
-          .map((call) => ({
-            arguments: call.arguments,
-            toolName: call.toolName,
-          })),
-        credentialId,
-        provider,
-      });
-
-      const writePlan = await planConnectorAgentWriteCalls({
-        connectorName,
-        context,
-        email: input.email,
-        instructions,
-        memoryContext: input.memoryContext,
-        middleware: input.usageMiddleware({
-          model: MAILBOX_ACTION_CONNECTOR_AGENT_MODEL,
-          nodeId: input.node.id,
-          stepRunId: input.stepRunId,
-        }),
-        research,
-        tools,
-      });
-
-      // A planned call naming a tool the connector never offered is a model
-      // mistake, not an instruction; dropping it keeps the step from acting
-      // outside what this connection can do.
-      const plannedCalls = writePlan.calls.filter((call) =>
-        writableTools.has(call.toolName)
-      );
       const effects: Awaited<ReturnType<typeof runConnectorWriteCall>>[] = [];
-
-      for (const [callIndex, call] of plannedCalls.entries()) {
-        effects.push(
-          await runConnectorWriteCall({
-            actionId: input.actionId,
-            call: { arguments: call.arguments, toolName: call.toolName },
-            callIndex,
-            credentialId,
-            nodeId: input.node.id,
-            provider,
-            revisionId: input.revisionId,
-            runId: input.runId,
-            stepRunId: input.stepRunId,
-          })
-        );
-      }
-
-      return {
-        output: {
-          connector: connectorName,
-          effects,
-          research,
-          skippedReason: writePlan.skippedReason,
-        },
-        outputPorts: ["success"],
+      const identity = {
+        actionId: input.actionId,
+        credentialId,
+        nodeId: input.node.id,
+        provider,
+        revisionId: input.revisionId,
+        runId: input.runId,
+        stepRunId: input.stepRunId,
       };
+
+      // The loop is bounded by model turns as well, but a slow connector could
+      // still stretch a step past the point where the run is worth finishing.
+      const abortController = new AbortController();
+      const deadline = setTimeout(() => {
+        abortController.abort();
+      }, CONNECTOR_STEP_BUDGET_MS);
+
+      try {
+        const result = await runConnectorAgentStep({
+          abortController,
+          connectorName,
+          context,
+          email: input.email,
+          instructions,
+          memoryContext: input.memoryContext,
+          middleware: input.usageMiddleware({
+            model: MAILBOX_ACTION_CONNECTOR_AGENT_MODEL,
+            nodeId: input.node.id,
+            stepRunId: input.stepRunId,
+          }),
+          tools: createConnectorStepTools(identity, tools, effects),
+        });
+
+        return {
+          output: {
+            connector: connectorName,
+            effects,
+            outcome: result.outcome,
+            summary: result.summary,
+          },
+          outputPorts: ["success"],
+        };
+      } catch (error) {
+        // Changes already made are real, so report them rather than losing them
+        // to a timeout or a model error partway through the loop.
+        if (effects.length === 0) {
+          throw error;
+        }
+
+        return {
+          output: {
+            connector: connectorName,
+            effects,
+            outcome: "acted",
+            summary:
+              error instanceof Error
+                ? `Stopped early: ${error.message}`
+                : "Stopped early.",
+          },
+          outputPorts: ["success"],
+        };
+      } finally {
+        clearTimeout(deadline);
+      }
     }
     default: {
       throw new Error("Unsupported node type.");

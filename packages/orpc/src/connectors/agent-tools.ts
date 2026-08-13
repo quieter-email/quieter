@@ -3,6 +3,7 @@ import {
   linearIssueCreateInputSchema,
 } from "@quieter/ai/chat-agent";
 import type { ConnectorProvider } from "@quieter/database/schema";
+import type { JSONSchema } from "@tanstack/ai";
 import { z } from "zod";
 
 import {
@@ -19,10 +20,20 @@ import {
  */
 export type ConnectorAgentTool = {
   description?: string;
-  inputSchema?: unknown;
+  inputSchema: JSONSchema;
   mutates: boolean;
   name: string;
 };
+
+/**
+ * An MCP server describes its tools with schemas we never author, so they
+ * arrive untyped. They are passed to the model as-is; anything that is not an
+ * object becomes a permissive schema and the provider validates the call.
+ */
+const asJsonSchema = (value: unknown): JSONSchema =>
+  typeof value === "object" && value !== null
+    ? value
+    : { additionalProperties: true, type: "object" };
 
 export type ConnectorAgentToolCall = {
   arguments?: Record<string, unknown>;
@@ -66,7 +77,7 @@ export const LINEAR_CREATE_ISSUE_TOOL = "create_linear_issue";
 export const GOOGLE_CALENDAR_CREATE_EVENT_TOOL = "create_google_calendar_event";
 
 const toJsonSchema = (schema: z.ZodType) =>
-  z.toJSONSchema(schema, { io: "input", target: "draft-7" });
+  asJsonSchema(z.toJSONSchema(schema, { io: "input", target: "draft-7" }));
 
 const failedCall = (
   call: ConnectorAgentToolCall,
@@ -108,7 +119,7 @@ const linearAdapter: ConnectorAgentAdapter = {
     return [
       ...readTools.map((tool) => ({
         description: tool.description,
-        inputSchema: tool.inputSchema,
+        inputSchema: asJsonSchema(tool.inputSchema),
         mutates: false,
         name: tool.name,
       })),
