@@ -121,8 +121,13 @@ export const withRequestDatabaseClient = async <Result>(
   );
 };
 
+const databaseProxyOverrides = new Map<PropertyKey, unknown>();
+
 const databaseProxyHandler: ProxyHandler<DatabaseClient> = {
   get(_target, property): unknown {
+    if (databaseProxyOverrides.has(property)) {
+      return databaseProxyOverrides.get(property);
+    }
     const client = getDatabaseClient();
     const value: unknown = Reflect.get(client, property);
     if (typeof value === "function") {
@@ -131,6 +136,12 @@ const databaseProxyHandler: ProxyHandler<DatabaseClient> = {
     }
     return value;
   },
+  set(_target, property, value): boolean {
+    databaseProxyOverrides.set(property, value);
+    return true;
+  },
 };
 
-export const db = new Proxy(getDatabaseClient(), databaseProxyHandler);
+// The handler ignores the target; this inert object prevents import-time client creation.
+// oxlint-disable-next-line typescript/no-unsafe-type-assertion
+export const db = new Proxy({} as DatabaseClient, databaseProxyHandler);

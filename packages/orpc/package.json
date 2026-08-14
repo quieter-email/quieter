@@ -21,6 +21,7 @@
     "./chat-generation": "./src/chat/generation/runner.ts",
     "./chat-generation-lifecycle": "./src/chat/generation/lifecycle.ts",
     "./chat-generation-runtime": "./src/chat/generation/runtime.ts",
+    "./chat-contracts": "./src/chat/contracts.ts",
     "./chat-run-store": "./src/chat-run-store.ts",
     "./chat-stream-hub": "./src/chat/stream-hub.ts",
     "./connectors": "./src/connectors/service.ts",

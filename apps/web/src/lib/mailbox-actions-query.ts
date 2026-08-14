@@ -8,8 +8,10 @@ const hasText = (value: string | null | undefined): value is string =>
 export const mailboxActionsListQueryKey = (mailboxId: string | undefined) =>
   ["mailbox-actions", mailboxId ?? ""] as const;
 
-export const mailboxActionQueryKey = (actionId: string | undefined) =>
-  ["mailbox-action", actionId ?? ""] as const;
+export const mailboxActionQueryKey = (
+  mailboxId: string | undefined,
+  actionId: string | undefined
+) => ["mailbox-action", mailboxId ?? "", actionId ?? ""] as const;
 
 export const mailboxActionsListQueryOptions = (mailboxId: string | undefined) =>
   queryOptions({
@@ -24,15 +26,18 @@ export const mailboxActionsListQueryOptions = (mailboxId: string | undefined) =>
     staleTime: 15_000,
   });
 
-export const mailboxActionQueryOptions = (actionId: string | undefined) =>
+export const mailboxActionQueryOptions = (
+  mailboxId: string | undefined,
+  actionId: string | undefined
+) =>
   queryOptions({
-    enabled: hasText(actionId),
+    enabled: hasText(mailboxId) && hasText(actionId),
     queryFn: async ({ signal }) => {
       if (!hasText(actionId)) {
         throw new Error("Action id is required.");
       }
       return await rpc.mailboxActions.get({ actionId }, { signal });
     },
-    queryKey: mailboxActionQueryKey(actionId),
+    queryKey: mailboxActionQueryKey(mailboxId, actionId),
     staleTime: 5000,
   });

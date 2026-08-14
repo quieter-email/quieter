@@ -1,4 +1,7 @@
-import type { ChatMessagePart, ChatRunStatus } from "@quieter/database/schema";
+import type {
+  ChatMessagePart,
+  ChatRunStatus,
+} from "@quieter/orpc/chat-contracts";
 import { EventType, StreamProcessor } from "@tanstack/ai";
 import type { StreamChunk, UIMessage } from "@tanstack/ai";
 
@@ -143,44 +146,47 @@ const readSseChunk = async (
  * Minimal SSE reader for the observation endpoint (supports id: + data:).
  * @yields {SseEvent} Parsed SSE events from the stream body.
  */
-const readSseEvents = async function* readSseEvents(
+export const readSseEvents = async function* readSseEvents(
   body: ReadableStream<Uint8Array>,
   signal?: AbortSignal
 ): AsyncGenerator<SseEvent> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
 
-  const readSseEventsLoop = async function* readSseEventsLoop(
-    buffer: string,
-    pendingId?: string
-  ): AsyncGenerator<SseEvent> {
-    const { done, value } = await readSseChunk(reader, signal);
-    if (done) {
-      return;
-    }
-
-    let nextBuffer = buffer + decoder.decode(value, { stream: true });
-    const lines = nextBuffer.split("\n");
-    nextBuffer = lines.pop() ?? "";
-
-    let nextPendingId = pendingId;
-    for (const rawLine of lines) {
-      const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
-      const result = processSseLine(line, nextPendingId);
-      nextPendingId = result.pendingId;
-      if (result.done === true) {
-        return;
-      }
-      if (result.event !== undefined) {
-        yield result.event;
-      }
-    }
-
-    yield* readSseEventsLoop(nextBuffer, nextPendingId);
-  };
-
   try {
-    yield* readSseEventsLoop("");
+    let buffer = "";
+    let pendingId: string | undefined;
+    let streamDone = false;
+
+    while (!streamDone) {
+      // Stream reads are ordered; starting the next read early can reorder chunks.
+      // oxlint-disable-next-line eslint/no-await-in-loop
+      const { done, value } = await readSseChunk(reader, signal);
+      if (done) {
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const rawLine of lines) {
+        const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
+        const {
+          done: eventDone,
+          event,
+          pendingId: nextPendingId,
+        } = processSseLine(line, pendingId);
+        pendingId = nextPendingId;
+        if (eventDone === true) {
+          streamDone = true;
+          break;
+        }
+        if (event !== undefined) {
+          yield event;
+        }
+      }
+    }
   } finally {
     reader.releaseLock();
   }

@@ -2,8 +2,8 @@
 
 import type { ChatModel } from "@quieter/ai/chat-models";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
-import type { ChatMessagePart } from "@quieter/database/schema";
 import type { RouterInputs, RouterOutputs } from "@quieter/orpc";
+import type { ChatMessagePart } from "@quieter/orpc/chat-contracts";
 import { Button } from "@quieter/ui/button";
 import { toast } from "@quieter/ui/toast";
 import type { UIMessage } from "@tanstack/ai";

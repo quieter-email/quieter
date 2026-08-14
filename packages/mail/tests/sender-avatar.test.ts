@@ -81,6 +81,7 @@ describe(createBimiResolver, () => {
   test("requires aligned DMARC authentication evidence and an enforced policy", async () => {
     const calls: string[] = [];
     const resolver = createBimiResolver({
+      assetHostnames: ["assets.authenticated.example"],
       fetch: async (input) => {
         const url = new URL(getRequestUrl(input));
         calls.push(url.href);
@@ -88,7 +89,9 @@ describe(createBimiResolver, () => {
           const name = url.searchParams.get("name");
           if (name === "default._bimi.authenticated.example") {
             return await Promise.resolve(
-              txtAnswer("v=BIMI1; l=https://assets.example/logo.svg")
+              txtAnswer(
+                "v=BIMI1; l=https://assets.authenticated.example/logo.svg"
+              )
             );
           }
           if (name === "_dmarc.authenticated.example") {
@@ -97,7 +100,7 @@ describe(createBimiResolver, () => {
             );
           }
         }
-        if (url.href === "https://assets.example/logo.svg") {
+        if (url.href === "https://assets.authenticated.example/logo.svg") {
           return await Promise.resolve(
             new Response(VALID_SVG("Authenticated"), {
               headers: {
@@ -133,7 +136,7 @@ describe(createBimiResolver, () => {
         if (url.searchParams.get("type") === "TXT") {
           if (url.searchParams.get("name") === "default._bimi.none.example") {
             return await Promise.resolve(
-              txtAnswer("v=BIMI1; l=https://assets.example/logo.svg")
+              txtAnswer("v=BIMI1; l=https://assets.none.example/logo.svg")
             );
           }
           if (url.searchParams.get("name") === "_dmarc.none.example") {
@@ -152,18 +155,50 @@ describe(createBimiResolver, () => {
     ).resolves.toBeUndefined();
   });
 
+  test("does not fetch a BIMI asset from an untrusted hostname", async () => {
+    const assetRequests: string[] = [];
+    const resolver = createBimiResolver({
+      assetHostnames: ["assets.brand.example"],
+      fetch: async (input) => {
+        const url = new URL(getRequestUrl(input));
+        if (url.searchParams.get("type") === "TXT") {
+          const name = url.searchParams.get("name");
+          if (name === "default._bimi.brand.example") {
+            return await Promise.resolve(
+              txtAnswer("v=BIMI1; l=https://private.example.net/logo.svg")
+            );
+          }
+          if (name === "_dmarc.brand.example") {
+            return await Promise.resolve(txtAnswer("v=DMARC1; p=reject"));
+          }
+        }
+        assetRequests.push(url.href);
+        return await Promise.resolve(new Response(null, { status: 404 }));
+      },
+    });
+
+    await expect(
+      resolver.resolve({
+        domain: "brand.example",
+        headers: authHeaders("brand.example"),
+      })
+    ).resolves.toBeUndefined();
+    expect(assetRequests).toStrictEqual([]);
+  });
+
   test("uses the organizational-domain record and refreshes expired DNS and asset caches", async () => {
     let now = 0;
     let label = "First";
     let assetRequests = 0;
     const resolver = createBimiResolver({
+      assetHostnames: ["assets.example.org"],
       fetch: async (input) => {
         const url = new URL(getRequestUrl(input));
         if (url.searchParams.get("type") === "TXT") {
           const name = url.searchParams.get("name");
           if (name === "default._bimi.example.org") {
             return await Promise.resolve(
-              txtAnswer("v=BIMI1; l=https://assets.example/logo.svg")
+              txtAnswer("v=BIMI1; l=https://assets.example.org/logo.svg")
             );
           }
           if (name === "_dmarc.example.org") {
@@ -172,7 +207,7 @@ describe(createBimiResolver, () => {
             );
           }
         }
-        if (url.href === "https://assets.example/logo.svg") {
+        if (url.href === "https://assets.example.org/logo.svg") {
           assetRequests += 1;
           return await Promise.resolve(
             new Response(VALID_SVG(label), {
@@ -209,8 +244,9 @@ describe(createBimiResolver, () => {
 });
 
 describe(getSenderAvatarUrls, () => {
-  test("gives a qualifying BIMI mark precedence over the fallback", async () => {
+  test("does not fetch an untrusted BIMI asset", async () => {
     const originalFetch = globalThis.fetch;
+    const assetRequests: string[] = [];
     globalThis.fetch = async (input) => {
       const url = new URL(getRequestUrl(input));
       if (url.searchParams.get("type") === "TXT") {
@@ -218,14 +254,17 @@ describe(getSenderAvatarUrls, () => {
           url.searchParams.get("name") === "default._bimi.integration.example"
         ) {
           return await Promise.resolve(
-            txtAnswer("v=BIMI1; l=https://assets.example/integration.svg")
+            txtAnswer(
+              "v=BIMI1; l=https://assets.integration.example/integration.svg"
+            )
           );
         }
         if (url.searchParams.get("name") === "_dmarc.integration.example") {
           return await Promise.resolve(txtAnswer("v=DMARC1; p=reject"));
         }
       }
-      if (url.href === "https://assets.example/integration.svg") {
+      if (url.href === "https://assets.integration.example/integration.svg") {
+        assetRequests.push(url.href);
         return await Promise.resolve(
           new Response(VALID_SVG("Integration"), {
             headers: { "content-type": "image/svg+xml" },
@@ -242,8 +281,8 @@ describe(getSenderAvatarUrls, () => {
           headers: authHeaders("integration.example"),
         }
       );
-      expect(result?.dark).toMatch(/^data:image\/svg\+xml,/u);
-      expect(result?.light).toMatch(/^data:image\/svg\+xml,/u);
+      expect(result).toBeUndefined();
+      expect(assetRequests).toStrictEqual([]);
     } finally {
       globalThis.fetch = originalFetch;
     }

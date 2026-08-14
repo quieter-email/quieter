@@ -9,8 +9,8 @@ import { managedMailMessage } from "@quieter/database/schema";
 import { requireServerEnv, serverEnv } from "@quieter/env/server";
 import { and, asc, eq, gt, isNotNull, isNull } from "drizzle-orm";
 
-const batchSize = Number(process.env.BACKFILL_BATCH_SIZE ?? 100);
-const concurrency = Number(process.env.BACKFILL_CONCURRENCY ?? 5);
+const batchSize = Number(serverEnv.BACKFILL_BATCH_SIZE ?? 100);
+const concurrency = Number(serverEnv.BACKFILL_CONCURRENCY ?? 5);
 const sourceBucket = requireServerEnv("MAIL_BUCKET");
 const targetBucket = requireServerEnv("R2_BUCKET");
 const endpoint =

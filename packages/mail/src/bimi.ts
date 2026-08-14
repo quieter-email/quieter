@@ -295,6 +295,9 @@ const parseHttpsUrl = (value: string): string | undefined => {
   }
 };
 
+const isSameOrSubdomain = (hostname: string, domain: string): boolean =>
+  hostname === domain || hostname.endsWith(`.${domain}`);
+
 type BimiRecord = {
   logoUrl: string;
 };
@@ -852,6 +855,7 @@ export type BimiResolver = {
 };
 
 export type BimiResolverOptions = {
+  assetHostnames?: readonly string[];
   dnsEndpoint?: string;
   fetch?: typeof fetch;
   now?: () => number;
@@ -865,6 +869,9 @@ export const createBimiResolver = (
     (async (input, init) => await globalThis.fetch(input, init));
   const now = options.now ?? Date.now;
   const dnsEndpoint = options.dnsEndpoint ?? DNS_OVER_HTTPS_ENDPOINT;
+  const assetHostnames = new Set(
+    (options.assetHostnames ?? []).map((hostname) => hostname.toLowerCase())
+  );
   const dnsCache = new Map<string, CacheEntry<DnsLookup>>();
   const dnsInflight = new Map<string, Promise<DnsLookup>>();
   const assetCache = new Map<string, CacheEntry<string | undefined>>();
@@ -949,7 +956,16 @@ export const createBimiResolver = (
     if (bimiRecords.length !== 1) {
       return undefined;
     }
-    return parseBimiRecord(bimiRecords[0] ?? "");
+    const record = parseBimiRecord(bimiRecords[0] ?? "");
+    if (record === undefined) {
+      return undefined;
+    }
+    const assetHostname = new URL(record.logoUrl).hostname.toLowerCase();
+    return [...assetHostnames].some((hostname) =>
+      isSameOrSubdomain(assetHostname, hostname)
+    )
+      ? record
+      : undefined;
   };
 
   const fetchAsset = async (url: string): Promise<string | undefined> => {

@@ -1,6 +1,8 @@
+import { serverEnv } from "@quieter/env/server";
+
 import { syncUnreportedBillingCreditUsage } from "../src/credits";
 
-const limit = Number(process.env.POLAR_CREDIT_USAGE_SYNC_LIMIT ?? 100);
+const limit = Number(serverEnv.POLAR_CREDIT_USAGE_SYNC_LIMIT ?? 100);
 
 if (!Number.isInteger(limit) || limit <= 0) {
   throw new Error("POLAR_CREDIT_USAGE_SYNC_LIMIT must be a positive integer.");

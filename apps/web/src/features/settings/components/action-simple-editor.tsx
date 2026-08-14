@@ -556,7 +556,7 @@ const useActionEditorMutations = ({
         queryKey: mailboxActionsListQueryKey(activeMailboxId),
       }),
       queryClient.invalidateQueries({
-        queryKey: mailboxActionQueryKey(activeActionId),
+        queryKey: mailboxActionQueryKey(activeMailboxId, activeActionId),
       }),
       queryClient.invalidateQueries({ queryKey: CONNECTORS_QUERY_KEY }),
     ]);
@@ -600,13 +600,13 @@ const useActionEditorMutations = ({
       context: { previous: MailboxActionQueryData | undefined } | undefined
     ) => {
       queryClient.setQueryData(
-        mailboxActionQueryKey(input.actionId),
+        mailboxActionQueryKey(activeMailboxId, input.actionId),
         context?.previous
       );
       toast.error(getActionErrorMessage(error, "Could not update action."));
     },
     onMutate: async (input: { actionId: string; enabled: boolean }) => {
-      const actionKey = mailboxActionQueryKey(input.actionId);
+      const actionKey = mailboxActionQueryKey(activeMailboxId, input.actionId);
       await queryClient.cancelQueries({ queryKey: actionKey });
       const previous =
         queryClient.getQueryData<MailboxActionQueryData>(actionKey);

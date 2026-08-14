@@ -172,7 +172,7 @@ export const ActionsSettingsPanel = () => {
     ? selectedActionId
     : actions[0]?.id;
   const { data: actionData } = useQuery(
-    mailboxActionQueryOptions(activeActionId)
+    mailboxActionQueryOptions(activeMailboxId, activeActionId)
   );
   const action = actionData?.action;
   const draftRevision =

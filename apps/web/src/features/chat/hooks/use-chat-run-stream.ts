@@ -1,6 +1,6 @@
 "use client";
 
-import type { ChatMessagePart } from "@quieter/database/schema";
+import type { ChatMessagePart } from "@quieter/orpc/chat-contracts";
 import { useEffect, useRef } from "react";
 
 import {
