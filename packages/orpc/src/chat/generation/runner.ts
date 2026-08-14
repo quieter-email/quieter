@@ -1,4 +1,3 @@
-import { isAiMemoryToolRequest } from "@quieter/ai/ai-memory";
 import {
   composeEmailToolDef,
   createAiMemoryServerTool,
@@ -796,12 +795,9 @@ export const runChatGeneration = async (
         ];
         const memoryContext: AiMemoryToolsContext = {
           useMemory: async ({ request, scope }) => {
-            if (
-              !isAiMemoryToolRequest({
-                toolRequest: request,
-                userRequest: latestUserRequest,
-              })
-            ) {
+            // Only the acting user can establish durable intent. Without a
+            // user turn there is nothing this tool is allowed to act on.
+            if (latestUserRequest.trim() === "") {
               return { status: "skipped" };
             }
             const selectedMailbox = await assertAccessibleMailbox({
@@ -825,6 +821,7 @@ export const runChatGeneration = async (
                   request,
                   scope: requestedScope,
                   userId: run.userId,
+                  userMessage: latestUserRequest,
                 });
                 return {
                   answer: result.answer,

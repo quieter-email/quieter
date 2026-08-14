@@ -8,15 +8,19 @@ Memory moves through these stages:
 
 1. High-signal activity is captured as a compact `userAiContextEvent`. Sent-message observations contain behavioral features, not raw bodies.
 2. The memory writer consolidates observations into atomic, conflict-aware `aiMemory` records. Records carry evidence source, confidence, importance, reinforcement, applicability, provenance, expiry, and version.
-3. Every record mutation creates or replaces an `aiMemoryIndexJob` in the same database transaction. This transactional outbox prevents indexing failures from losing authoritative state.
-4. The Cloudflare memory worker batches pending jobs, generates multilingual embeddings with Workers AI, and upserts or deletes vectors in Vectorize. A scheduled repair pass retries failures with bounded exponential backoff.
-5. Retrieval queries the mailbox and personal vector namespaces, loads authoritative records from PlanetScale, and combines semantic similarity with lexical overlap, sender-domain evidence, agent applicability, source strength, confidence, importance, recency, reinforcement, and prior usefulness.
+3. Writing a record clears its `embedding`. A null embedding on an active record is the re-embedding queue, so a failed write, a newly written record, and a backfill all recover through one path.
+4. Embeddings are generated from the record's summary, content, and retrieval tags, then stored on the record itself. Retrieval and re-embedding both run opportunistically off the request path.
+5. Retrieval runs one query against the memory table, combining cosine similarity with lexical overlap, sender-domain evidence, agent applicability, source strength, confidence, importance, recency, reinforcement, and prior usefulness.
 6. Context packing applies authority precedence and diversity-aware selection under strict record and character budgets. Only the small task-relevant result reaches the agent.
 7. Expired records and old, unreinforced, low-confidence inferences retire automatically. Explicit knowledge and user-authored instructions do not silently decay away.
 
-PlanetScale remains the source of truth. Vectorize contains embeddings and minimal non-sensitive indexing metadata; it never becomes an authority for content or access control. If embedding or vector search is unavailable, retrieval safely falls back to the database-backed lexical ranker.
+Embeddings live in the same PlanetScale table as the records they describe, in a `vector(1024)` column indexed with HNSW over cosine distance. There is no second datastore to keep consistent: archiving or deleting a record removes it from semantic recall in the same statement, because every read filters on active status. Retrieval degrades to the lexical ranker whenever embeddings are unavailable or not yet generated.
 
-Embeddings use Cloudflare-hosted Qwen3 Embedding 0.6B at 1,024 dimensions with cosine distance. It is the least expensive listed Workers AI multilingual tier, supports more than 100 languages, and keeps personal-memory inference on the same platform as the vector index. Retrieval queries include an English task instruction, as recommended by the model author for multilingual search quality.
+The `vector` extension must be enabled on a database before the memory-embedding migration runs. Neither the runtime nor the migration role can create extensions on PlanetScale, so this is a one-time operator action per database.
+
+Embeddings use Cloudflare-hosted Qwen3 Embedding 0.6B at 1,024 dimensions. It is the least expensive listed Workers AI multilingual tier and supports more than 100 languages. It is called over the Workers AI REST API, so no Quieter-owned service sits in front of it. Retrieval queries include an English task instruction, as recommended by the model author for multilingual search quality.
+
+Semantic recall costs one embedding request per retrieval, so agents that run once per user request use it and per-message auto-labeling does not. Auto-labeling matches on sender domains, subjects, and label names, which the lexical and sender-domain signals already cover, and enabling it there would add one external request per synced message.
 
 ## Ownership and authority
 
@@ -52,8 +56,10 @@ Interactive agents can receive personal and mailbox context. Background agents w
 
 The chat `memory` tool is the only inspection and editing interface. It can summarize personal and current-mailbox context or apply an explicit correction, remembrance, or forgetting request. The model chooses the internal scope from the user's intent without asking the user to manage the storage model.
 
+Memory writes carry provenance. The tool passes the acting user's verbatim message alongside the agent's restatement of it, and the writer treats only the user's own words as evidence of intent. A restatement that claims durable intent the user did not express produces no operation, and content an agent read from mail, attachments, or connectors can never create or change a record. This is a structural boundary rather than a keyword filter, so ordinary phrasing such as "from now on, sign off with Cheers" is captured while an instruction embedded in a message is not.
+
 ## Reliability and deletion
 
-Model failures produce no partial memory mutation. Concurrent writes use record versions. Index jobs are idempotent per memory record, recover abandoned processing leases, and cannot overwrite a newer queued mutation when an older job completes.
+Model failures produce no partial memory mutation. Concurrent writes use record versions. An embedding is written only while the record's `updatedAt` is unchanged, so an embedding computed from superseded content is discarded rather than attached to newer text.
 
-Resetting personal context enqueues vector deletion before removing authoritative records, history, and personal learning observations in one transaction. Mailbox deletion additionally removes feedback and legacy automation profiles. Completed vector deletes are eventually consistent, while deleted database records become unavailable to retrieval immediately.
+Resetting personal context removes records, history, and personal learning observations in one transaction. Mailbox deletion additionally removes feedback and legacy automation profiles. Because embeddings are columns on the records themselves, deletion is immediate and complete with no second system to reconcile.

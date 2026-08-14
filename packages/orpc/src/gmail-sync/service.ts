@@ -431,6 +431,7 @@ const processAutoLabelMessage = async ({
             agent: "auto_label",
             candidates: autoLabelContext.memoryCandidates,
             query: buildMailMemoryQuery(message),
+            semantic: false,
           })
         ),
         message,

@@ -45,6 +45,8 @@ Repository checks cannot validate account-level state. After changing Worker inf
 
 Production migration history is never adopted or rewritten automatically. Automated production migrations reject destructive SQL; contract migrations require a separately reviewed manual procedure.
 
+The `vector` extension must be enabled on a database before the memory-embedding migration runs against it. Neither the runtime role nor the migration role can create extensions, so enable it once per database through the PlanetScale control plane. Until it is enabled, the migration fails rather than silently shipping without semantic recall.
+
 ## Failure behavior
 
 - Verification or migration failure prevents deployment.

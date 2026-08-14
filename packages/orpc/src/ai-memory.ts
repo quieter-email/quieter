@@ -52,10 +52,10 @@ import {
 } from "drizzle-orm";
 
 import {
-  enqueueAiMemoryIndexJobs,
-  searchAiMemoryIndex,
-  triggerAiMemoryIndexing,
-} from "./ai-memory-index";
+  embedAiMemories,
+  embedPendingAiMemories,
+  searchAiMemoryBySimilarity,
+} from "./ai-memory-embedding";
 import { hasText } from "./text";
 
 const MEMORY_CANDIDATE_LIMIT = 200;
@@ -431,58 +431,69 @@ export const rankAiMemoryCandidates = ({
     );
 };
 
+const memoryAuthority = (memory: MemoryRow) => {
+  if (memory.kind === "instruction") {
+    return memory.scope === "mailbox" ? 4 : 3;
+  }
+  return memory.scope === "mailbox" ? 2 : 1;
+};
+
+const jaccardSimilarity = (left: Set<string>, right: Set<string>) => {
+  const union = new Set([...left, ...right]).size;
+  if (union === 0) {
+    return 0;
+  }
+  return [...left].filter((token) => right.has(token)).length / union;
+};
+
+/**
+ * Packs the highest-authority, most relevant, least redundant memories into
+ * the context budget. Authority dominates the ordering; relevance and
+ * novelty break ties within an authority tier.
+ */
 const formatMemoryContext = (
   ranked: ReturnType<typeof rankAiMemoryCandidates>
 ) => {
+  const remaining = ranked.map((candidate) => ({
+    ...candidate,
+    tokens: normalizeSearchTokens(
+      `${candidate.memory.summary} ${candidate.memory.content}`
+    ),
+  }));
+  const selectedTokens: Set<string>[] = [];
   const selected: MemoryRow[] = [];
-  const remaining = [...ranked];
   let usedCharacters = 0;
 
   while (selected.length < MEMORY_CONTEXT_LIMIT && remaining.length > 0) {
-    const selectedTokens = selected.map((memory) =>
-      normalizeSearchTokens(`${memory.summary} ${memory.content}`)
-    );
-    const rankedByMarginalValue = remaining
-      .map((candidate) => {
-        const candidateTokens = normalizeSearchTokens(
-          `${candidate.memory.summary} ${candidate.memory.content}`
+    let bestIndex = 0;
+    let bestScore = Number.NEGATIVE_INFINITY;
+    for (const [index, candidate] of remaining.entries()) {
+      let redundancy = 0;
+      for (const tokens of selectedTokens) {
+        redundancy = Math.max(
+          redundancy,
+          jaccardSimilarity(candidate.tokens, tokens)
         );
-        let maximumSimilarity = 0;
-        for (const tokens of selectedTokens) {
-          const intersection = [...candidateTokens].filter((token) =>
-            tokens.has(token)
-          ).length;
-          const union = new Set([...candidateTokens, ...tokens]).size;
-          maximumSimilarity = Math.max(
-            maximumSimilarity,
-            union === 0 ? 0 : intersection / union
-          );
-        }
-        let authority = candidate.memory.scope === "mailbox" ? 2 : 1;
-        if (candidate.memory.kind === "instruction") {
-          authority = candidate.memory.scope === "mailbox" ? 4 : 3;
-        }
-        return {
-          ...candidate,
-          marginalScore:
-            authority * 10 + candidate.score - maximumSimilarity * 0.3,
-        };
-      })
-      .toSorted((left, right) => right.marginalScore - left.marginalScore);
-    const [next] = rankedByMarginalValue;
+      }
+      const marginalScore =
+        memoryAuthority(candidate.memory) * 10 +
+        candidate.score -
+        redundancy * 0.3;
+      if (marginalScore > bestScore) {
+        bestIndex = index;
+        bestScore = marginalScore;
+      }
+    }
+    const [next] = remaining.splice(bestIndex, 1);
     if (next === undefined) {
       break;
     }
-    const remainingIndex = remaining.findIndex(
-      (candidate) => candidate.memory.id === next.memory.id
-    );
-    remaining.splice(remainingIndex, 1);
-    const { memory } = next;
-    const nextLength = memory.content.length + 4;
+    const nextLength = next.memory.content.length + 4;
     if (usedCharacters + nextLength > MEMORY_CONTEXT_CHARACTER_BUDGET) {
       continue;
     }
-    selected.push(memory);
+    selected.push(next.memory);
+    selectedTokens.push(next.tokens);
     usedCharacters += nextLength;
   }
 
@@ -515,46 +526,54 @@ export const loadAiConfiguration = async ({ userId }: { userId: string }) => {
 
 export type AiAgentMemoryCandidates = MemoryRow[];
 
-const retireAiMemoryCandidates = async (candidates: MemoryRow[]) => {
-  const stale = candidates.filter(
-    (memory) => getAiMemoryRetirementReason(memory) !== null
-  );
+/**
+ * Archives records that have expired or decayed below usefulness. Archiving
+ * removes them from retrieval on its own, because every read filters on
+ * `status = 'active'`.
+ */
+const retireAiMemories = async (stale: MemoryRow[]) => {
   if (stale.length === 0) {
     return;
   }
-  const archivedIds = await db.transaction(async (tx) => {
-    const archived: string[] = [];
-    const now = new Date();
-    for (const memory of stale) {
-      const [updated] = await tx
-        .update(aiMemory)
-        .set({
-          archivedAt: now,
-          status: "archived",
-          updatedAt: now,
-          version: sql`${aiMemory.version} + 1`,
-        })
-        .where(
-          and(
-            eq(aiMemory.id, memory.id),
-            eq(aiMemory.status, "active"),
-            eq(aiMemory.version, memory.version)
+  const now = new Date();
+  await Promise.all(
+    stale.map(
+      async (memory) =>
+        await db
+          .update(aiMemory)
+          .set({
+            archivedAt: now,
+            status: "archived",
+            updatedAt: now,
+            version: sql`${aiMemory.version} + 1`,
+          })
+          .where(
+            and(
+              eq(aiMemory.id, memory.id),
+              eq(aiMemory.status, "active"),
+              eq(aiMemory.version, memory.version)
+            )
           )
-        )
-        .returning({ id: aiMemory.id });
-      if (updated !== undefined) {
-        archived.push(updated.id);
-      }
-    }
-    await enqueueAiMemoryIndexJobs({
-      database: tx,
-      memoryIds: archived,
-      operation: "delete",
-    });
-    return archived;
-  });
-  if (archivedIds.length > 0) {
-    void triggerAiMemoryIndexing();
+    )
+  );
+};
+
+/**
+ * Background upkeep for the scopes a request just touched: retire decayed
+ * records and embed anything still missing a vector.
+ */
+const maintainAiMemoryScopes = async ({
+  scopeKeys,
+  stale,
+}: {
+  scopeKeys: string[];
+  stale: MemoryRow[];
+}) => {
+  try {
+    await retireAiMemories(stale);
+    await embedPendingAiMemories(scopeKeys);
+  } catch (error: unknown) {
+    reportError(error, { operation: "ai-memory:maintain-scopes" });
   }
 };
 
@@ -575,6 +594,10 @@ const buildMemoryValues = ({
 }) => ({
   confidence: operation.confidence,
   content: operation.content ?? operation.summary,
+  // Content changed, so any stored embedding no longer describes this record.
+  // A null embedding is the re-embedding queue.
+  embeddedAt: null,
+  embedding: null,
   expiresAt: hasText(operation.expiresAt)
     ? new Date(operation.expiresAt)
     : null,
@@ -747,24 +770,14 @@ const applyAiMemoryPlan = async ({
       throw new Error("Could not record the AI memory change.");
     }
 
-    await enqueueAiMemoryIndexJobs({
-      database: tx,
-      memoryIds: changes.flatMap((change) =>
-        change.after?.status === "active" ? [change.memoryId] : []
-      ),
-      operation: "upsert",
-    });
-    await enqueueAiMemoryIndexJobs({
-      database: tx,
-      memoryIds: changes.flatMap((change) =>
-        change.after?.status === "active" ? [] : [change.memoryId]
-      ),
-      operation: "delete",
-    });
-    return insertedChangeSet;
+    return { changeSet: insertedChangeSet, changes };
   });
-  void triggerAiMemoryIndexing();
-  return appliedChangeSet;
+  void embedAiMemories(
+    appliedChangeSet.changes.flatMap((change) =>
+      change.after?.status === "active" ? [change.memoryId] : []
+    )
+  );
+  return appliedChangeSet.changeSet;
 };
 
 const createUsageMiddleware = () => {
@@ -837,6 +850,7 @@ export const requestAiMemoryUpdate = async ({
   request,
   scope: requestedScope,
   userId,
+  userMessage,
 }: {
   allowMutations?: boolean;
   changeSetSource?: "chat" | "settings";
@@ -844,6 +858,8 @@ export const requestAiMemoryUpdate = async ({
   request: string;
   scope: "mailbox" | "user";
   userId: string;
+  /** The acting user's verbatim message, when the caller has one. */
+  userMessage?: string | null;
 }) => {
   const normalizedRequest = request
     .trim()
@@ -868,6 +884,7 @@ export const requestAiMemoryUpdate = async ({
       middleware: [usage.middleware],
       request: normalizedRequest,
       source: "explicit",
+      userMessage,
     });
     const appliedPlan = allowMutations
       ? plan
@@ -1197,18 +1214,18 @@ export const loadAiAgentMemoryCandidates = async ({
             .limit(MEMORY_CANDIDATE_LIMIT)
       )
     );
-    const candidates = candidatesByScope.flat();
-    const activeCandidates = candidates.filter(
-      (memory) => getAiMemoryRetirementReason(memory) === null
-    );
-    if (activeCandidates.length !== candidates.length) {
-      try {
-        await retireAiMemoryCandidates(candidates);
-      } catch (error: unknown) {
-        reportError(error, { operation: "ai-memory:retire-stale" });
+    const stale: MemoryRow[] = [];
+    const usable: MemoryRow[] = [];
+    for (const memory of candidatesByScope.flat()) {
+      if (getAiMemoryRetirementReason(memory) === null) {
+        usable.push(memory);
+      } else {
+        stale.push(memory);
       }
     }
-    return activeCandidates;
+    // Retiring and embedding are housekeeping, so they never block the caller.
+    void maintainAiMemoryScopes({ scopeKeys, stale });
+    return usable;
   } catch (error) {
     reportError(error, { operation: "ai-memory:load-candidates" });
     return [];
@@ -1219,50 +1236,37 @@ export const rankAiAgentMemoryCandidates = async ({
   agent,
   candidates,
   query,
+  semantic = true,
 }: {
   agent: string;
   candidates: AiAgentMemoryCandidates;
   query: string;
+  /**
+   * Semantic recall costs one embedding request per call. Agents that run
+   * once per user request keep it on; per-message agents whose queries are
+   * inherently lexical (sender, subject, label names) turn it off.
+   */
+  semantic?: boolean;
 }): Promise<AiAgentMemoryContext> => {
   try {
-    const semanticScores = await searchAiMemoryIndex({
-      query: `${agent.replaceAll("_", " ")} ${query}`,
-      scopeKeys: [...new Set(candidates.map((memory) => memory.scopeKey))],
-    });
+    const scopeKeys = [...new Set(candidates.map((memory) => memory.scopeKey))];
+    const { rows: semanticRows, similarity } = semantic
+      ? await searchAiMemoryBySimilarity({
+          query: `${agent.replaceAll("_", " ")} ${query}`,
+          scopeKeys,
+        })
+      : { rows: [], similarity: new Map<string, number>() };
     const loadedIds = new Set(candidates.map((memory) => memory.id));
-    const missingSemanticIds = [...semanticScores.keys()].filter(
-      (id) => !loadedIds.has(id)
+    const extraCandidates = semanticRows.filter(
+      (memory) =>
+        !loadedIds.has(memory.id) &&
+        getAiMemoryRetirementReason(memory) === null
     );
-    const semanticCandidates =
-      missingSemanticIds.length === 0
-        ? []
-        : await db
-            .select()
-            .from(aiMemory)
-            .where(
-              and(
-                inArray(aiMemory.id, missingSemanticIds),
-                inArray(aiMemory.scopeKey, [
-                  ...new Set(candidates.map((memory) => memory.scopeKey)),
-                ]),
-                eq(aiMemory.status, "active")
-              )
-            );
-    const activeSemanticCandidates = semanticCandidates.filter(
-      (memory) => getAiMemoryRetirementReason(memory) === null
-    );
-    if (activeSemanticCandidates.length !== semanticCandidates.length) {
-      try {
-        await retireAiMemoryCandidates(semanticCandidates);
-      } catch (error: unknown) {
-        reportError(error, { operation: "ai-memory:retire-semantic-stale" });
-      }
-    }
     const ranked = rankAiMemoryCandidates({
       agent,
-      candidates: [...candidates, ...activeSemanticCandidates],
+      candidates: [...candidates, ...extraCandidates],
       query,
-      semanticScores,
+      semanticScores: similarity,
     });
     const selected = formatMemoryContext([
       ...ranked.filter(
@@ -1614,6 +1618,8 @@ export const replaceMailboxFeedbackMemories = async ({
       const values = {
         confidence: memory.confidence,
         content: memory.content.slice(0, 2000),
+        embeddedAt: null,
+        embedding: null,
         importance: memory.importance,
         key,
         kind: "learned" as const,
@@ -1732,23 +1738,13 @@ export const replaceMailboxFeedbackMemories = async ({
       updatedAt: now,
       userId,
     });
-    await enqueueAiMemoryIndexJobs({
-      database: tx,
-      memoryIds: applied.flatMap((change) =>
-        change.after?.status === "active" ? [change.memoryId] : []
-      ),
-      operation: "upsert",
-    });
-    await enqueueAiMemoryIndexJobs({
-      database: tx,
-      memoryIds: applied.flatMap((change) =>
-        change.after?.status === "active" ? [] : [change.memoryId]
-      ),
-      operation: "delete",
-    });
     return applied;
   });
-  void triggerAiMemoryIndexing();
+  void embedAiMemories(
+    changes.flatMap((change) =>
+      change.after?.status === "active" ? [change.memoryId] : []
+    )
+  );
   return { changed: changes.length };
 };
 
@@ -2119,6 +2115,8 @@ export const undoAiMemoryChange = async ({
                 archivedAt: previous.status === "archived" ? now : null,
                 confidence: previous.confidence,
                 content: previous.content,
+                embeddedAt: null,
+                embedding: null,
                 expiresAt: hasText(previous.expiresAt)
                   ? new Date(previous.expiresAt)
                   : null,
@@ -2179,37 +2177,18 @@ export const undoAiMemoryChange = async ({
         userId,
       })
       .returning();
-    await enqueueAiMemoryIndexJobs({
-      database: tx,
-      memoryIds: inverse.flatMap((change) =>
-        change.after?.status === "active" ? [change.memoryId] : []
-      ),
-      operation: "upsert",
-    });
-    await enqueueAiMemoryIndexJobs({
-      database: tx,
-      memoryIds: inverse.flatMap((change) =>
-        change.after?.status === "active" ? [] : [change.memoryId]
-      ),
-      operation: "delete",
-    });
-    return insertedUndo;
+    return { changeSet: insertedUndo, changes: inverse };
   });
-  void triggerAiMemoryIndexing();
-  return undoChangeSet;
+  void embedAiMemories(
+    undoChangeSet.changes.flatMap((change) =>
+      change.after?.status === "active" ? [change.memoryId] : []
+    )
+  );
+  return undoChangeSet.changeSet;
 };
 
-export const purgePersonalAiMemory = async (userId: string) => {
-  const result = await db.transaction(async (tx) => {
-    const memories = await tx
-      .select({ id: aiMemory.id })
-      .from(aiMemory)
-      .where(eq(aiMemory.scopeKey, `user:${userId}`));
-    await enqueueAiMemoryIndexJobs({
-      database: tx,
-      memoryIds: memories.map((memory) => memory.id),
-      operation: "delete",
-    });
+export const purgePersonalAiMemory = async (userId: string) =>
+  await db.transaction(async (tx) => {
     await tx.delete(aiMemory).where(eq(aiMemory.scopeKey, `user:${userId}`));
     await tx
       .delete(aiMemoryChangeSet)
@@ -2233,21 +2212,9 @@ export const purgePersonalAiMemory = async (userId: string) => {
       );
     return { deleted: true };
   });
-  void triggerAiMemoryIndexing();
-  return result;
-};
 
-export const purgeMailboxAiMemory = async (mailboxId: string) => {
-  const result = await db.transaction(async (tx) => {
-    const memories = await tx
-      .select({ id: aiMemory.id })
-      .from(aiMemory)
-      .where(eq(aiMemory.scopeKey, `mailbox:${mailboxId}`));
-    await enqueueAiMemoryIndexJobs({
-      database: tx,
-      memoryIds: memories.map((memory) => memory.id),
-      operation: "delete",
-    });
+export const purgeMailboxAiMemory = async (mailboxId: string) =>
+  await db.transaction(async (tx) => {
     await tx
       .delete(aiMemory)
       .where(eq(aiMemory.scopeKey, `mailbox:${mailboxId}`));
@@ -2268,9 +2235,6 @@ export const purgeMailboxAiMemory = async (mailboxId: string) => {
       .where(eq(mailAutomationMemoryProfile.mailboxId, mailboxId));
     return { deleted: true };
   });
-  void triggerAiMemoryIndexing();
-  return result;
-};
 
 export const exportPersonalAiMemory = async (userId: string) => {
   const [memories, learning] = await Promise.all([

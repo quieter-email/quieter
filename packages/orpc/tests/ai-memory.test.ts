@@ -6,6 +6,7 @@ import {
   getAiMemoryRetirementReason,
   rankAiMemoryCandidates,
 } from "../src/ai-memory";
+import { buildAiMemoryDocument } from "../src/ai-memory-embedding";
 
 type Memory = typeof aiMemory.$inferSelect;
 const memory = (overrides: Partial<Memory> = {}): Memory => ({
@@ -13,6 +14,8 @@ const memory = (overrides: Partial<Memory> = {}): Memory => ({
   confidence: 0.8,
   content: "Prefer concise replies",
   createdAt: new Date("2026-07-01T00:00:00Z"),
+  embeddedAt: null,
+  embedding: null,
   expiresAt: null,
   id: "memory-1",
   importance: 3,
@@ -152,5 +155,31 @@ describe("AI memory retrieval ranking", () => {
     );
     expect(getAiMemoryRetirementReason(stale, now)).toBe("stale_low_signal");
     expect(getAiMemoryRetirementReason(reinforced, now)).toBeNull();
+  });
+});
+
+describe("AI memory embedding documents", () => {
+  test("embeds the readable memory together with its retrieval tags", () => {
+    expect(
+      buildAiMemoryDocument(
+        memory({
+          content: "Prefer concise replies",
+          metadata: {
+            agents: ["all"],
+            sourceDomains: ["acme.com"],
+            topics: ["replies"],
+          },
+          summary: "Concise replies",
+        })
+      )
+    ).toBe("Concise replies\nPrefer concise replies\nreplies\nacme.com");
+  });
+
+  test("omits absent retrieval tags instead of emitting blank lines", () => {
+    expect(
+      buildAiMemoryDocument(
+        memory({ content: "Prefer concise replies", metadata: {} })
+      )
+    ).toBe("Concise replies\nPrefer concise replies");
   });
 });

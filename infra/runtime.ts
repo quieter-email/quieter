@@ -58,10 +58,6 @@ export const createDeploymentContext = (secretResources: SecretResources) => {
   );
 
   return {
-    aiMemoryServiceToken: requireSecretResource(
-      secretResources,
-      "AI_MEMORY_SERVICE_TOKEN"
-    ).value,
     connectorTokenEncryptionKey: requireSecretResource(
       secretResources,
       "CONNECTOR_TOKEN_ENCRYPTION_KEY"

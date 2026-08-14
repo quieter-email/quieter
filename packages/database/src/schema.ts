@@ -14,6 +14,7 @@ import {
   timestamp,
   unique,
   uniqueIndex,
+  vector,
 } from "drizzle-orm/pg-core";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { defineRelations } from "drizzle-orm/relations";
@@ -236,6 +237,7 @@ export type AiMemoryIndexJobStatus =
   | "failed"
   | "pending"
   | "processing";
+export const AI_MEMORY_EMBEDDING_DIMENSIONS = 1024;
 export type AiMemoryMetadata = {
   agents?: string[];
   sourceDomains?: string[];
@@ -648,6 +650,10 @@ export const aiMemory = pgTable(
     confidence: doublePrecision("confidence").notNull().default(0.75),
     content: text("content").notNull(),
     createdAt: timestamp("createdAt").notNull(),
+    embeddedAt: timestamp("embeddedAt"),
+    embedding: vector("embedding", {
+      dimensions: AI_MEMORY_EMBEDDING_DIMENSIONS,
+    }),
     expiresAt: timestamp("expiresAt"),
     id: text("id").primaryKey(),
     importance: integer("importance").notNull().default(3),
@@ -727,6 +733,12 @@ export const aiMemory = pgTable(
       table.updatedAt
     ),
     index("ai_memory_expiration_idx").on(table.status, table.expiresAt),
+    index("ai_memory_embedding_pending_idx")
+      .on(table.scopeKey, table.updatedAt)
+      .where(sql`${table.status} = 'active' and ${table.embedding} is null`),
+    index("ai_memory_embedding_idx")
+      .using("hnsw", table.embedding.op("vector_cosine_ops"))
+      .where(sql`${table.status} = 'active'`),
     unique("ai_memory_scope_key_memory_key_unique").on(
       table.scopeKey,
       table.key
@@ -734,6 +746,12 @@ export const aiMemory = pgTable(
   ]
 );
 
+/**
+ * Retired. Memory embeddings live on `aiMemory.embedding`, so no external
+ * index needs an outbox. The table is kept only so the expand deploy stays
+ * safe; a contract migration drops it once every environment is past this
+ * release.
+ */
 export const aiMemoryIndexJob = pgTable(
   "aiMemoryIndexJob",
   {
