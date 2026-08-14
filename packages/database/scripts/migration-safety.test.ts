@@ -180,6 +180,18 @@ describe("migration execution boundary", () => {
     }).not.toThrow();
   });
 
+  test.each(["postgres", "quieter_dev", ""])(
+    "rejects the %s database in the approved production job",
+    (database) => {
+      expect(() => {
+        assertMigrationExecutionAllowed(
+          `postgresql://user:password@production.example.com/${database}`,
+          approvedProductionEnvironment
+        );
+      }).toThrow("Production migrations must target the quieter database");
+    }
+  );
+
   test.each([
     ["developer machine", {}],
     [
