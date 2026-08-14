@@ -43,6 +43,9 @@ jobs:
       - name: Install dependencies
         run: vp install --frozen-lockfile
 
+      - name: Build environment package
+        run: vp run @quieter/env#build
+
       - name: Generate SST platform types
         run: vp exec sst install --stage ci
 
