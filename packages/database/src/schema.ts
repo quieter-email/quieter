@@ -119,6 +119,15 @@ export type OrganizationMailUsageAlertTarget =
   | "included_usage"
   | "overage_limit";
 export type OrganizationMailUsageDirection = "inbound" | "outbound";
+export type OrganizationMailDeliveryEventType =
+  | "bounced"
+  | "complained"
+  | "delayed"
+  | "delivered"
+  | "rejected"
+  | "sent";
+export type OrganizationMailDeliveryStatus = OrganizationMailDeliveryEventType;
+export type OrganizationMailSuppressionReason = "bounce" | "complaint";
 
 export type MailDomainDnsRecord = {
   name: string;
@@ -1762,6 +1771,109 @@ export const organizationApiMailAttachment = pgTable(
   ]
 );
 
+export const organizationMailDeliveryEvent = pgTable(
+  "organizationMailDeliveryEvent",
+  {
+    createdAt: timestamp("createdAt").notNull(),
+    dedupeKey: text("dedupeKey").notNull(),
+    diagnosticCode: text("diagnosticCode"),
+    eventType: text("eventType")
+      .$type<OrganizationMailDeliveryEventType>()
+      .notNull(),
+    id: text("id").primaryKey(),
+    occurredAt: timestamp("occurredAt").notNull(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull(),
+    providerMessageId: text("providerMessageId").notNull(),
+    providerStatus: text("providerStatus"),
+    reason: text("reason"),
+    recipient: text("recipient").notNull(),
+  },
+  (table) => [
+    check(
+      "organization_mail_delivery_event_type_check",
+      sql`${table.eventType} in ('bounced', 'complained', 'delayed', 'delivered', 'rejected', 'sent')`
+    ),
+    index("organization_mail_delivery_event_message_idx").on(
+      table.organizationId,
+      table.providerMessageId,
+      table.occurredAt
+    ),
+    index("organization_mail_delivery_event_recipient_idx").on(
+      table.organizationId,
+      table.recipient,
+      table.occurredAt
+    ),
+    unique("organization_mail_delivery_event_dedupe_key_unique").on(
+      table.dedupeKey
+    ),
+  ]
+);
+
+export const organizationMailDeliveryRecipient = pgTable(
+  "organizationMailDeliveryRecipient",
+  {
+    createdAt: timestamp("createdAt").notNull(),
+    lastEventAt: timestamp("lastEventAt").notNull(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    providerMessageId: text("providerMessageId").notNull(),
+    recipient: text("recipient").notNull(),
+    status: text("status").$type<OrganizationMailDeliveryStatus>().notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    check(
+      "organization_mail_delivery_recipient_status_check",
+      sql`${table.status} in ('bounced', 'complained', 'delayed', 'delivered', 'rejected', 'sent')`
+    ),
+    index("organization_mail_delivery_recipient_message_idx").on(
+      table.organizationId,
+      table.providerMessageId
+    ),
+    index("organization_mail_delivery_recipient_status_idx").on(
+      table.organizationId,
+      table.status,
+      table.updatedAt
+    ),
+    primaryKey({
+      columns: [table.organizationId, table.providerMessageId, table.recipient],
+      name: "organization_mail_delivery_recipient_pk",
+    }),
+  ]
+);
+
+export const organizationMailRecipientSuppression = pgTable(
+  "organizationMailRecipientSuppression",
+  {
+    createdAt: timestamp("createdAt").notNull(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    reason: text("reason").$type<OrganizationMailSuppressionReason>().notNull(),
+    recipient: text("recipient").notNull(),
+    revokedAt: timestamp("revokedAt"),
+    sourceProviderMessageId: text("sourceProviderMessageId").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    check(
+      "organization_mail_recipient_suppression_reason_check",
+      sql`${table.reason} in ('bounce', 'complaint')`
+    ),
+    index("organization_mail_recipient_suppression_active_idx")
+      .on(table.organizationId, table.recipient)
+      .where(sql`${table.revokedAt} is null`),
+    primaryKey({
+      columns: [table.organizationId, table.recipient],
+      name: "organization_mail_recipient_suppression_pk",
+    }),
+  ]
+);
+
 export const managedMailLabel = pgTable(
   "managedMailLabel",
   {
@@ -2561,6 +2673,9 @@ export const tables = {
   organizationApiMailMessage,
   organizationDivision,
   organizationDivisionMember,
+  organizationMailDeliveryEvent,
+  organizationMailDeliveryRecipient,
+  organizationMailRecipientSuppression,
   organizationMailSendIdempotency,
   organizationMailUsageAlertEvent,
   organizationMailUsageEvent,
@@ -3303,6 +3418,20 @@ export const authRelations = defineRelations(tables, (r) => ({
       from: r.organization.id,
       to: r.organizationApiMailMessage.organizationId,
     }),
+    organizationMailDeliveryEvents: r.many.organizationMailDeliveryEvent({
+      from: r.organization.id,
+      to: r.organizationMailDeliveryEvent.organizationId,
+    }),
+    organizationMailDeliveryRecipients:
+      r.many.organizationMailDeliveryRecipient({
+        from: r.organization.id,
+        to: r.organizationMailDeliveryRecipient.organizationId,
+      }),
+    organizationMailRecipientSuppressions:
+      r.many.organizationMailRecipientSuppression({
+        from: r.organization.id,
+        to: r.organizationMailRecipientSuppression.organizationId,
+      }),
     organizationMailSendIdempotency: r.many.organizationMailSendIdempotency({
       from: r.organization.id,
       to: r.organizationMailSendIdempotency.organizationId,
@@ -3377,6 +3506,27 @@ export const authRelations = defineRelations(tables, (r) => ({
       from: r.organizationDivisionMember.memberId,
       optional: false,
       to: r.member.id,
+    }),
+  },
+  organizationMailDeliveryEvent: {
+    organization: r.one.organization({
+      from: r.organizationMailDeliveryEvent.organizationId,
+      optional: false,
+      to: r.organization.id,
+    }),
+  },
+  organizationMailDeliveryRecipient: {
+    organization: r.one.organization({
+      from: r.organizationMailDeliveryRecipient.organizationId,
+      optional: false,
+      to: r.organization.id,
+    }),
+  },
+  organizationMailRecipientSuppression: {
+    organization: r.one.organization({
+      from: r.organizationMailRecipientSuppression.organizationId,
+      optional: false,
+      to: r.organization.id,
     }),
   },
   organizationMailSendIdempotency: {

@@ -21,6 +21,7 @@ import { and, eq, lt } from "drizzle-orm";
 
 import { recordOutboundManagedMessageForSender } from "./managed-mail/messages/service";
 import { recordOrganizationApiMailMessage } from "./organization-api-mail";
+import { assertOrganizationMailRecipientsNotSuppressed } from "./organization-mail-delivery";
 import {
   assertOrganizationOwnsVerifiedSenderDomain,
   OrganizationMailSendError,
@@ -283,6 +284,10 @@ export const sendOrganizationMailMessage = async (input: {
       organizationId: input.organizationId,
       sender: input.message.from,
     });
+    await assertOrganizationMailRecipientsNotSuppressed({
+      organizationId: input.organizationId,
+      recipients: [...builtMessage.to, ...builtMessage.cc, ...builtMessage.bcc],
+    });
 
     if (hasText(idempotencyKey) && requestHash !== null) {
       const idempotentResult = await claimIdempotentSend({
@@ -300,6 +305,7 @@ export const sendOrganizationMailMessage = async (input: {
     const client = await getSesv2Client();
     const response = await client.send(
       new SendEmailCommand({
+        ConfigurationSetName: serverEnv.SES_CONFIGURATION_SET_NAME,
         Content: {
           Raw: {
             Data: new TextEncoder().encode(builtMessage.raw),

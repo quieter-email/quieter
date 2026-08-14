@@ -13,6 +13,61 @@ const openApiDocument = {
         required: ["error"],
         type: "object",
       },
+      MessageDeliveryResponse: {
+        additionalProperties: false,
+        properties: {
+          events: {
+            items: {
+              additionalProperties: false,
+              properties: {
+                diagnosticCode: { type: ["string", "null"] },
+                eventType: {
+                  enum: [
+                    "bounced",
+                    "complained",
+                    "delayed",
+                    "delivered",
+                    "rejected",
+                    "sent",
+                  ],
+                },
+                occurredAt: { format: "date-time", type: "string" },
+                providerStatus: { type: ["string", "null"] },
+                reason: { type: ["string", "null"] },
+                recipient: { format: "email", type: "string" },
+              },
+              required: ["eventType", "occurredAt", "recipient"],
+              type: "object",
+            },
+            type: "array",
+          },
+          messageId: { type: "string" },
+          recipients: {
+            items: {
+              additionalProperties: false,
+              properties: {
+                lastEventAt: { format: "date-time", type: "string" },
+                recipient: { format: "email", type: "string" },
+                status: {
+                  enum: [
+                    "bounced",
+                    "complained",
+                    "delayed",
+                    "delivered",
+                    "rejected",
+                    "sent",
+                  ],
+                },
+              },
+              required: ["lastEventAt", "recipient", "status"],
+              type: "object",
+            },
+            type: "array",
+          },
+        },
+        required: ["events", "messageId", "recipients"],
+        type: "object",
+      },
       SendMessageRequest: {
         additionalProperties: false,
         properties: {
@@ -144,6 +199,32 @@ const openApiDocument = {
         required: ["messageId", "sent"],
         type: "object",
       },
+      SuppressionListResponse: {
+        additionalProperties: false,
+        properties: {
+          data: {
+            items: {
+              additionalProperties: false,
+              properties: {
+                createdAt: { format: "date-time", type: "string" },
+                reason: { enum: ["bounce", "complaint"] },
+                recipient: { format: "email", type: "string" },
+                sourceProviderMessageId: { type: "string" },
+              },
+              required: [
+                "createdAt",
+                "reason",
+                "recipient",
+                "sourceProviderMessageId",
+              ],
+              type: "object",
+            },
+            type: "array",
+          },
+        },
+        required: ["data"],
+        type: "object",
+      },
     },
     securitySchemes: {
       organizationApiKey: {
@@ -159,6 +240,51 @@ const openApiDocument = {
   },
   openapi: "3.1.0",
   paths: {
+    "/api/v1/messages/{messageId}": {
+      get: {
+        description:
+          "Returns recipient-level delivery state and event history for a sent message.",
+        operationId: "getMessageDelivery",
+        parameters: [
+          {
+            in: "path",
+            name: "messageId",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          "200": {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/MessageDeliveryResponse",
+                },
+              },
+            },
+            description: "Current recipient delivery state and event history.",
+          },
+          "401": {
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+            description: "Missing or invalid team API key.",
+          },
+          "404": {
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+            description: "Message not found for this team.",
+          },
+        },
+        security: [{ organizationApiKey: [] }],
+        summary: "Get message delivery status",
+      },
+    },
     "/api/v1/send": {
       post: {
         description:
@@ -231,6 +357,14 @@ const openApiDocument = {
             },
             description: "Message payload is too large.",
           },
+          "422": {
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+            description: "One or more recipients are suppressed.",
+          },
           "500": {
             content: {
               "application/json": {
@@ -242,6 +376,43 @@ const openApiDocument = {
         },
         security: [{ organizationApiKey: [] }],
         summary: "Send a mail message",
+      },
+    },
+    "/api/v1/suppressions": {
+      get: {
+        description:
+          "Lists recipients suppressed after permanent bounces or complaints.",
+        operationId: "listRecipientSuppressions",
+        parameters: [
+          {
+            in: "query",
+            name: "limit",
+            required: false,
+            schema: { maximum: 500, minimum: 1, type: "integer" },
+          },
+        ],
+        responses: {
+          "200": {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/SuppressionListResponse",
+                },
+              },
+            },
+            description: "Active team recipient suppressions.",
+          },
+          "401": {
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+            description: "Missing or invalid team API key.",
+          },
+        },
+        security: [{ organizationApiKey: [] }],
+        summary: "List recipient suppressions",
       },
     },
   },

@@ -4,6 +4,7 @@
 - [Architecture](architecture.md)
 - [Responsive mail baseline](responsive-mail.md)
 - [Database safety](database-safety.md)
+- [Outbound mail feedback](outbound-mail-feedback.md)
 - [Deployment and operations](deployment.md)
 
 Public repository policies live at the root:

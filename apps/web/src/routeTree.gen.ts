@@ -30,8 +30,10 @@ import { Route as ApiDomainConnectCallbackRouteImport } from './routes/api/domai
 import { Route as ApiGmailCallbackRouteImport } from './routes/api/gmail.callback'
 import { Route as ApiOrpcSplatRouteImport } from './routes/api/orpc.$'
 import { Route as ApiV1SendRouteImport } from './routes/api/v1/send'
+import { Route as ApiV1SuppressionsRouteImport } from './routes/api/v1/suppressions'
 import { Route as ApiDomainConnectTemplatesServiceIdRouteImport } from './routes/api/domain-connect.templates.$serviceId'
 import { Route as ApiInternalGmailCredentialsRotateRouteImport } from './routes/api.internal.gmail-credentials.rotate'
+import { Route as ApiV1MessagesMessageIdRouteImport } from './routes/api/v1/messages.$messageId'
 import { Route as ApiChatRunsRunIdStreamRouteImport } from './routes/api/chat.runs.$runId.stream'
 
 const IndexRoute = IndexRouteImport.update({
@@ -140,6 +142,11 @@ const ApiV1SendRoute = ApiV1SendRouteImport.update({
   path: '/api/v1/send',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1SuppressionsRoute = ApiV1SuppressionsRouteImport.update({
+  id: '/api/v1/suppressions',
+  path: '/api/v1/suppressions',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiDomainConnectTemplatesServiceIdRoute =
   ApiDomainConnectTemplatesServiceIdRouteImport.update({
     id: '/api/domain-connect/templates/$serviceId',
@@ -152,6 +159,11 @@ const ApiInternalGmailCredentialsRotateRoute =
     path: '/api/internal/gmail-credentials/rotate',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiV1MessagesMessageIdRoute = ApiV1MessagesMessageIdRouteImport.update({
+  id: '/api/v1/messages/$messageId',
+  path: '/api/v1/messages/$messageId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiChatRunsRunIdStreamRoute = ApiChatRunsRunIdStreamRouteImport.update({
   id: '/api/chat/runs/$runId/stream',
   path: '/api/chat/runs/$runId/stream',
@@ -180,8 +192,10 @@ export interface FileRoutesByFullPath {
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
   '/api/v1/send': typeof ApiV1SendRoute
+  '/api/v1/suppressions': typeof ApiV1SuppressionsRoute
   '/api/domain-connect/templates/$serviceId': typeof ApiDomainConnectTemplatesServiceIdRoute
   '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
+  '/api/v1/messages/$messageId': typeof ApiV1MessagesMessageIdRoute
   '/api/chat/runs/$runId/stream': typeof ApiChatRunsRunIdStreamRoute
 }
 export interface FileRoutesByTo {
@@ -206,8 +220,10 @@ export interface FileRoutesByTo {
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
   '/api/v1/send': typeof ApiV1SendRoute
+  '/api/v1/suppressions': typeof ApiV1SuppressionsRoute
   '/api/domain-connect/templates/$serviceId': typeof ApiDomainConnectTemplatesServiceIdRoute
   '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
+  '/api/v1/messages/$messageId': typeof ApiV1MessagesMessageIdRoute
   '/api/chat/runs/$runId/stream': typeof ApiChatRunsRunIdStreamRoute
 }
 export interface FileRoutesById {
@@ -233,8 +249,10 @@ export interface FileRoutesById {
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
   '/api/v1/send': typeof ApiV1SendRoute
+  '/api/v1/suppressions': typeof ApiV1SuppressionsRoute
   '/api/domain-connect/templates/$serviceId': typeof ApiDomainConnectTemplatesServiceIdRoute
   '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
+  '/api/v1/messages/$messageId': typeof ApiV1MessagesMessageIdRoute
   '/api/chat/runs/$runId/stream': typeof ApiChatRunsRunIdStreamRoute
 }
 export interface FileRouteTypes {
@@ -261,8 +279,10 @@ export interface FileRouteTypes {
     | '/api/gmail/callback'
     | '/api/orpc/$'
     | '/api/v1/send'
+    | '/api/v1/suppressions'
     | '/api/domain-connect/templates/$serviceId'
     | '/api/internal/gmail-credentials/rotate'
+    | '/api/v1/messages/$messageId'
     | '/api/chat/runs/$runId/stream'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -287,8 +307,10 @@ export interface FileRouteTypes {
     | '/api/gmail/callback'
     | '/api/orpc/$'
     | '/api/v1/send'
+    | '/api/v1/suppressions'
     | '/api/domain-connect/templates/$serviceId'
     | '/api/internal/gmail-credentials/rotate'
+    | '/api/v1/messages/$messageId'
     | '/api/chat/runs/$runId/stream'
   id:
     | '__root__'
@@ -313,8 +335,10 @@ export interface FileRouteTypes {
     | '/api/gmail/callback'
     | '/api/orpc/$'
     | '/api/v1/send'
+    | '/api/v1/suppressions'
     | '/api/domain-connect/templates/$serviceId'
     | '/api/internal/gmail-credentials/rotate'
+    | '/api/v1/messages/$messageId'
     | '/api/chat/runs/$runId/stream'
   fileRoutesById: FileRoutesById
 }
@@ -340,8 +364,10 @@ export interface RootRouteChildren {
   ApiGmailCallbackRoute: typeof ApiGmailCallbackRoute
   ApiOrpcSplatRoute: typeof ApiOrpcSplatRoute
   ApiV1SendRoute: typeof ApiV1SendRoute
+  ApiV1SuppressionsRoute: typeof ApiV1SuppressionsRoute
   ApiDomainConnectTemplatesServiceIdRoute: typeof ApiDomainConnectTemplatesServiceIdRoute
   ApiInternalGmailCredentialsRotateRoute: typeof ApiInternalGmailCredentialsRotateRoute
+  ApiV1MessagesMessageIdRoute: typeof ApiV1MessagesMessageIdRoute
   ApiChatRunsRunIdStreamRoute: typeof ApiChatRunsRunIdStreamRoute
 }
 
@@ -494,6 +520,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1SendRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/suppressions': {
+      id: '/api/v1/suppressions'
+      path: '/api/v1/suppressions'
+      fullPath: '/api/v1/suppressions'
+      preLoaderRoute: typeof ApiV1SuppressionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/domain-connect/templates/$serviceId': {
       id: '/api/domain-connect/templates/$serviceId'
       path: '/api/domain-connect/templates/$serviceId'
@@ -506,6 +539,13 @@ declare module '@tanstack/react-router' {
       path: '/api/internal/gmail-credentials/rotate'
       fullPath: '/api/internal/gmail-credentials/rotate'
       preLoaderRoute: typeof ApiInternalGmailCredentialsRotateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/messages/$messageId': {
+      id: '/api/v1/messages/$messageId'
+      path: '/api/v1/messages/$messageId'
+      fullPath: '/api/v1/messages/$messageId'
+      preLoaderRoute: typeof ApiV1MessagesMessageIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/chat/runs/$runId/stream': {
@@ -540,10 +580,12 @@ const rootRouteChildren: RootRouteChildren = {
   ApiGmailCallbackRoute: ApiGmailCallbackRoute,
   ApiOrpcSplatRoute: ApiOrpcSplatRoute,
   ApiV1SendRoute: ApiV1SendRoute,
+  ApiV1SuppressionsRoute: ApiV1SuppressionsRoute,
   ApiDomainConnectTemplatesServiceIdRoute:
     ApiDomainConnectTemplatesServiceIdRoute,
   ApiInternalGmailCredentialsRotateRoute:
     ApiInternalGmailCredentialsRotateRoute,
+  ApiV1MessagesMessageIdRoute: ApiV1MessagesMessageIdRoute,
   ApiChatRunsRunIdStreamRoute: ApiChatRunsRunIdStreamRoute,
 }
 export const routeTree = rootRouteImport

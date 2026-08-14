@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { assertUserCanManageOrganizationSettings } from "../mail-domain/service";
+import { listOrganizationMailRecipientSuppressions } from "../organization-mail-delivery";
 import {
   createOrganizationDivision,
   deleteOrganizationDivision,
@@ -35,6 +37,21 @@ export const organizationRouter = {
       async ({ context, input }) =>
         await listOrganizationDivisions({ ...input, userId: context.userId })
     ),
+  listMailRecipientSuppressions: protectedProcedure
+    .route({ method: "GET" })
+    .input(
+      z.object({
+        limit: z.number().int().min(1).max(500).optional(),
+        organizationId: z.string().trim().min(1),
+      })
+    )
+    .handler(async ({ context, input }) => {
+      await assertUserCanManageOrganizationSettings({
+        organizationId: input.organizationId,
+        userId: context.userId,
+      });
+      return await listOrganizationMailRecipientSuppressions(input);
+    }),
   setDivisionMembers: protectedProcedure
     .input(
       z.object({

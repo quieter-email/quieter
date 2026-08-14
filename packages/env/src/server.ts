@@ -85,6 +85,8 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       SENTRY_ENVIRONMENT: runtimeEnv.SENTRY_ENVIRONMENT,
       SENTRY_ORG: runtimeEnv.SENTRY_ORG,
       SENTRY_PROJECT: runtimeEnv.SENTRY_PROJECT,
+      SES_CONFIGURATION_SET_NAME: runtimeEnv.SES_CONFIGURATION_SET_NAME,
+      SES_FEEDBACK_TOPIC_ARN: runtimeEnv.SES_FEEDBACK_TOPIC_ARN,
       VITE_LOGO_DEV_PUBLISHABLE_KEY: runtimeEnv.VITE_LOGO_DEV_PUBLISHABLE_KEY,
     },
     server: {
@@ -151,6 +153,8 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       SENTRY_ENVIRONMENT: optionalString,
       SENTRY_ORG: optionalString,
       SENTRY_PROJECT: optionalString,
+      SES_CONFIGURATION_SET_NAME: optionalString,
+      SES_FEEDBACK_TOPIC_ARN: optionalString,
       VITE_LOGO_DEV_PUBLISHABLE_KEY: optionalString,
     },
   });

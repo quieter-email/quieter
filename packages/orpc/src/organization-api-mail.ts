@@ -29,6 +29,7 @@ import {
   createManagedMessageSearchText,
   normalizeManagedSearchValue,
 } from "./managed-mail/search/normalization";
+import { getOrganizationMailDelivery } from "./organization-mail-delivery";
 import { hasText } from "./text";
 
 const API_MAILBOX_ID_PREFIX = "api:";
@@ -565,6 +566,26 @@ export const getOrganizationApiMailInspector = async (input: {
     subject: record.subject ?? undefined,
     to: record.to ?? undefined,
   };
+};
+
+export const getOrganizationApiMailDelivery = async (input: {
+  mailboxId: string;
+  messageId: string;
+  userId: string;
+}) => {
+  const organizationId = parseOrganizationApiMailboxId(input.mailboxId);
+  if (organizationId === null) {
+    throw new ORPCError("NOT_FOUND", { message: "API mailbox not found." });
+  }
+  const record = await findApiMessage({
+    messageId: input.messageId,
+    organizationId,
+    userId: input.userId,
+  });
+  return await getOrganizationMailDelivery({
+    organizationId,
+    providerMessageId: record.providerMessageId,
+  });
 };
 
 export const backfillApiMessagesForManagedMailbox = async (input: {

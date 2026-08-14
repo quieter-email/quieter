@@ -9,6 +9,7 @@ const allowedOrpcImports = new Set([
   "@quieter/orpc/gmail-pubsub",
   "@quieter/orpc/mailbox-actions",
   "@quieter/orpc/managed-mail/ingestion",
+  "@quieter/orpc/organization-mail-delivery",
 ]);
 
 const listTypeScriptFiles = async (directory: string): Promise<string[]> => {

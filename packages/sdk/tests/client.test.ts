@@ -100,4 +100,65 @@ describe(Quieter, () => {
       })
     ).rejects.toBeInstanceOf(QuieterApiError);
   });
+
+  test("loads recipient-level delivery state", async () => {
+    let requestedUrl = "";
+    const client = new Quieter({
+      apiKey: "quieter_test",
+      baseUrl: "https://example.com",
+      fetch: async (input) => {
+        requestedUrl = getRequestUrl(input);
+        return await Promise.resolve(
+          Response.json({
+            events: [],
+            messageId: "message/1",
+            recipients: [
+              {
+                lastEventAt: "2026-08-14T10:00:00.000Z",
+                recipient: "to@example.com",
+                status: "delivered",
+              },
+            ],
+          })
+        );
+      },
+    });
+
+    const delivery = await client.getMessage("message/1");
+
+    expect(requestedUrl).toBe(
+      "https://example.com/api/v1/messages/message%2F1"
+    );
+    expect(delivery.recipients[0]?.status).toBe("delivered");
+  });
+
+  test("lists recipient suppressions", async () => {
+    let requestedUrl = "";
+    const client = new Quieter({
+      apiKey: "quieter_test",
+      baseUrl: "https://example.com",
+      fetch: async (input) => {
+        requestedUrl = getRequestUrl(input);
+        return await Promise.resolve(
+          Response.json({
+            data: [
+              {
+                createdAt: "2026-08-14T10:00:00.000Z",
+                reason: "complaint",
+                recipient: "to@example.com",
+                sourceProviderMessageId: "message-1",
+              },
+            ],
+          })
+        );
+      },
+    });
+
+    const suppressions = await client.listSuppressions({ limit: 25 });
+
+    expect(requestedUrl).toBe(
+      "https://example.com/api/v1/suppressions?limit=25"
+    );
+    expect(suppressions[0]?.reason).toBe("complaint");
+  });
 });

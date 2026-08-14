@@ -63,6 +63,8 @@ export const createInfrastructure = async (input: {
       R2_ACCOUNT_ID: context.env.R2_ACCOUNT_ID ?? "",
       R2_BUCKET: context.env.R2_BUCKET ?? "",
       R2_ENDPOINT: context.env.R2_ENDPOINT ?? "",
+      SES_CONFIGURATION_SET_NAME:
+        mail.mailOutboundConfigurationSet.configurationSetName,
     },
     [mail.mailBucket, mail.webAwsPermissions]
   );
@@ -86,6 +88,12 @@ export const createInfrastructure = async (input: {
     mailBucket: mail.mailBucket.name,
     mailIngestTokenSecretName: mail.mailIngressToken.name,
     mailIngressUrl: mail.mailIngress.url,
+    mailOutboundConfigurationSetName:
+      mail.mailOutboundConfigurationSet.configurationSetName,
+    mailOutboundFeedbackDeadLetterQueueUrl:
+      mail.mailOutboundFeedbackDeadLetterQueue.url,
+    mailOutboundFeedbackQueueUrl: mail.mailOutboundFeedbackQueue.url,
+    mailOutboundFeedbackTopicArn: mail.mailOutboundFeedbackTopic.arn,
     mailReceiptRoleArn: mail.mailReceiptRole.arn,
     mailReceiptRuleSetName,
     mailReceiptTopicArn: mail.mailReceiptTopic.arn,

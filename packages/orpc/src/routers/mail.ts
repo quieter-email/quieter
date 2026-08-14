@@ -62,6 +62,7 @@ import {
 } from "../managed-mail/labels/service";
 import {
   deleteManagedDraft,
+  getManagedMessageDelivery,
   getManagedMessageInspector,
   getManagedThread,
   listManagedMessages,
@@ -75,6 +76,7 @@ import {
 } from "../managed-mail/messages/service";
 import {
   getOrganizationApiMailInspector,
+  getOrganizationApiMailDelivery,
   getOrganizationApiMailThread,
   isOrganizationApiMailboxId,
   listOrganizationApiMailMessages,
@@ -554,6 +556,34 @@ export const mailRouter = {
           }
         )
     ),
+  getMessageDelivery: protectedProcedure
+    .route({ method: "GET" })
+    .input(
+      z.object({
+        mailboxId: mailboxIdSchema,
+        messageId: z.string().trim().min(1),
+      })
+    )
+    .handler(async ({ context, input }) => {
+      if (isOrganizationApiMailboxId(input.mailboxId)) {
+        return await getOrganizationApiMailDelivery({
+          ...input,
+          userId: context.userId,
+        });
+      }
+
+      const selectedMailbox = await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      if (selectedMailbox.provider !== "managed") {
+        return null;
+      }
+      return await getManagedMessageDelivery({
+        ...input,
+        userId: context.userId,
+      });
+    }),
   getMessageInspector: protectedProcedure
     .route({ method: "GET" })
     .input(

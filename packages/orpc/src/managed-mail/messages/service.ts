@@ -60,6 +60,10 @@ import type { z } from "zod";
 
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
 import {
+  assertOrganizationMailRecipientsNotSuppressed,
+  getOrganizationMailDelivery,
+} from "../../organization-mail-delivery";
+import {
   assertOrganizationOwnsVerifiedSenderDomain,
   OrganizationMailSendError,
 } from "../../organization-mail-policy";
@@ -1498,6 +1502,41 @@ export const recordOutboundManagedMessageForSender = async (input: {
   });
 };
 
+export const getManagedMessageDelivery = async (input: {
+  mailboxId: string;
+  messageId: string;
+  userId: string;
+}) => {
+  const selectedMailbox = await getAuthorizedManagedMailbox({
+    mailboxId: input.mailboxId,
+    requiredRoles: ["reader", "responder", "manager"],
+    userId: input.userId,
+  });
+  if (!selectedMailbox.organizationId) {
+    throw new ORPCError("INTERNAL_SERVER_ERROR", {
+      message: "Managed mailbox team is missing.",
+    });
+  }
+  const [message] = await db
+    .select({ providerMessageId: managedMailMessage.providerMessageId })
+    .from(managedMailMessage)
+    .where(
+      and(
+        eq(managedMailMessage.id, input.messageId),
+        eq(managedMailMessage.mailboxId, input.mailboxId),
+        eq(managedMailMessage.direction, "outbound")
+      )
+    )
+    .limit(1);
+  if (message === undefined) {
+    throw new ORPCError("NOT_FOUND", { message: "Sent message not found." });
+  }
+  return await getOrganizationMailDelivery({
+    organizationId: selectedMailbox.organizationId,
+    providerMessageId: message.providerMessageId,
+  });
+};
+
 export const sendManagedMailboxMessage = async (input: {
   mailboxId: string;
   message: ComposeMessageInput;
@@ -1547,6 +1586,10 @@ export const sendManagedMailboxMessage = async (input: {
       organizationId,
       sender: selectedMailbox.emailAddress,
     });
+    await assertOrganizationMailRecipientsNotSuppressed({
+      organizationId,
+      recipients: [...to, ...cc, ...bcc],
+    });
   } catch (error) {
     if (error instanceof OrganizationMailSendError) {
       throw new ORPCError(
@@ -1578,6 +1621,7 @@ export const sendManagedMailboxMessage = async (input: {
   const client = await getSesv2Client();
   const response = await client.send(
     new SendEmailCommand({
+      ConfigurationSetName: serverEnv.SES_CONFIGURATION_SET_NAME,
       Content: {
         Raw: {
           Data: new TextEncoder().encode(rawMessage),

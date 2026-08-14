@@ -109,6 +109,159 @@ export const createMailResources = async (
   void mailBucketLifecycle;
   void mailReceiptRolePolicy;
 
+  const mailOutboundConfigurationSet = new aws.sesv2.ConfigurationSet(
+    "MailOutboundConfigurationSet",
+    {
+      configurationSetName: `quieter-${$app.stage}-outbound`,
+      reputationOptions: {
+        reputationMetricsEnabled: true,
+      },
+      sendingOptions: {
+        sendingEnabled: true,
+      },
+      suppressionOptions: {
+        suppressedReasons: ["BOUNCE", "COMPLAINT"],
+      },
+    }
+  );
+  const mailOutboundFeedbackTopic = new sst.aws.SnsTopic(
+    "MailOutboundFeedbackTopic"
+  );
+  const mailOutboundFeedbackTopicPolicy = new aws.sns.TopicPolicy(
+    "MailOutboundFeedbackTopicPolicy",
+    {
+      arn: mailOutboundFeedbackTopic.arn,
+      policy: $jsonStringify({
+        Statement: [
+          {
+            Action: "sns:Publish",
+            Condition: {
+              StringEquals: {
+                "aws:SourceAccount": callerIdentity.accountId,
+              },
+            },
+            Effect: "Allow",
+            Principal: {
+              Service: "ses.amazonaws.com",
+            },
+            Resource: mailOutboundFeedbackTopic.arn,
+            Sid: "AllowSesFeedbackPublishing",
+          },
+        ],
+        Version: "2012-10-17",
+      }),
+    }
+  );
+  const mailOutboundFeedbackDeadLetterQueue = new sst.aws.Queue(
+    "MailOutboundFeedbackDeadLetterQueue",
+    {
+      transform: {
+        queue: {
+          messageRetentionSeconds: 60 * 60 * 24 * 14,
+        },
+      },
+    }
+  );
+  const mailOutboundFeedbackQueue = new sst.aws.Queue(
+    "MailOutboundFeedbackQueue",
+    {
+      dlq: {
+        queue: mailOutboundFeedbackDeadLetterQueue.arn,
+        retry: 5,
+      },
+      transform: {
+        queue: {
+          messageRetentionSeconds: 60 * 60 * 24 * 14,
+        },
+      },
+      visibilityTimeout: "2 minutes",
+    }
+  );
+  const mailOutboundFeedbackQueueAgeAlarm = new aws.cloudwatch.MetricAlarm(
+    "MailOutboundFeedbackQueueAgeAlarm",
+    {
+      alarmDescription:
+        "Outbound mail feedback has not been processed for five minutes.",
+      comparisonOperator: "GreaterThanThreshold",
+      dimensions: {
+        QueueName: mailOutboundFeedbackQueue.nodes.queue.name,
+      },
+      evaluationPeriods: 1,
+      metricName: "ApproximateAgeOfOldestMessage",
+      namespace: "AWS/SQS",
+      period: 300,
+      statistic: "Maximum",
+      threshold: 300,
+      treatMissingData: "notBreaching",
+    }
+  );
+  const mailOutboundFeedbackDeadLetterAlarm = new aws.cloudwatch.MetricAlarm(
+    "MailOutboundFeedbackDeadLetterAlarm",
+    {
+      alarmDescription:
+        "Outbound mail feedback could not be processed after retries.",
+      comparisonOperator: "GreaterThanThreshold",
+      dimensions: {
+        QueueName: mailOutboundFeedbackDeadLetterQueue.nodes.queue.name,
+      },
+      evaluationPeriods: 1,
+      metricName: "ApproximateNumberOfMessagesVisible",
+      namespace: "AWS/SQS",
+      period: 300,
+      statistic: "Maximum",
+      threshold: 0,
+      treatMissingData: "notBreaching",
+    }
+  );
+  mailOutboundFeedbackTopic.subscribeQueue(
+    "MailOutboundFeedbackQueueSubscriber",
+    mailOutboundFeedbackQueue.arn
+  );
+  const mailOutboundFeedbackEventDestination =
+    new aws.sesv2.ConfigurationSetEventDestination(
+      "MailOutboundFeedbackEventDestination",
+      {
+        configurationSetName: mailOutboundConfigurationSet.configurationSetName,
+        eventDestination: {
+          enabled: true,
+          matchingEventTypes: [
+            "BOUNCE",
+            "COMPLAINT",
+            "DELIVERY",
+            "DELIVERY_DELAY",
+            "REJECT",
+            "SEND",
+          ],
+          snsDestination: {
+            topicArn: mailOutboundFeedbackTopic.arn,
+          },
+        },
+        eventDestinationName: "outbound-feedback",
+      },
+      { dependsOn: [mailOutboundFeedbackTopicPolicy] }
+    );
+  mailOutboundFeedbackQueue.subscribe(
+    {
+      environment: {
+        DATABASE_URL: context.databaseUrl,
+        SES_FEEDBACK_TOPIC_ARN: mailOutboundFeedbackTopic.arn,
+        ...context.sentryEnvironment,
+      },
+      handler: "packages/aws/src/outbound-feedback.handler",
+      timeout: "60 seconds",
+    },
+    {
+      batch: {
+        partialResponses: true,
+        size: 10,
+      },
+    }
+  );
+
+  void mailOutboundFeedbackEventDestination;
+  void mailOutboundFeedbackDeadLetterAlarm;
+  void mailOutboundFeedbackQueueAgeAlarm;
+
   mailReceiptTopic.subscribe("MailReceiptProcessor", {
     environment: {
       DATABASE_URL: context.databaseUrl,
@@ -155,6 +308,10 @@ export const createMailResources = async (
     mailBucket,
     mailIngress,
     mailIngressToken,
+    mailOutboundConfigurationSet,
+    mailOutboundFeedbackDeadLetterQueue,
+    mailOutboundFeedbackQueue,
+    mailOutboundFeedbackTopic,
     mailReceiptRole,
     mailReceiptTopic,
     webAwsPermissions,

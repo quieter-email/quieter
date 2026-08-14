@@ -12,6 +12,7 @@ const entrypoints = [
   "gmail-pubsub-process.ts",
   "inbound.ts",
   "mailbox-action-consumer.ts",
+  "outbound-feedback.ts",
   "receipt.ts",
 ].map((fileName) => path.join(packageRoot, "src", fileName));
 
@@ -35,7 +36,9 @@ await rm(outputDirectory, { force: true, recursive: true });
 try {
   const result = await Bun.build({
     entrypoints,
-    external: ["sst"],
+    // Better Auth includes an optional TanStack Start integration that is not
+    // reachable from Lambda handlers and requires Vite-only virtual modules.
+    external: ["@tanstack/react-start/server", "sst"],
     minify: false,
     outdir: outputDirectory,
     sourcemap: "none",

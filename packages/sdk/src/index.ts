@@ -66,6 +66,48 @@ export type QuieterSendResult = {
   sent: true;
 };
 
+export type QuieterDeliveryStatus =
+  | "bounced"
+  | "complained"
+  | "delayed"
+  | "delivered"
+  | "rejected"
+  | "sent";
+
+export type QuieterDeliveryEvent = {
+  diagnosticCode: string | null;
+  eventType: QuieterDeliveryStatus;
+  occurredAt: string;
+  providerStatus: string | null;
+  reason: string | null;
+  recipient: string;
+};
+
+export type QuieterMessageDelivery = {
+  events: QuieterDeliveryEvent[];
+  messageId: string;
+  recipients: {
+    lastEventAt: string;
+    recipient: string;
+    status: QuieterDeliveryStatus;
+  }[];
+};
+
+export type QuieterRecipientSuppression = {
+  createdAt: string;
+  reason: "bounce" | "complaint";
+  recipient: string;
+  sourceProviderMessageId: string;
+};
+
+export type QuieterRequestOptions = {
+  signal?: AbortSignal;
+};
+
+export type QuieterListSuppressionsOptions = QuieterRequestOptions & {
+  limit?: number;
+};
+
 export type QuieterFetch = (
   input: RequestInfo | URL,
   init?: RequestInit
@@ -94,7 +136,27 @@ const isSendResult = (value: unknown): value is QuieterSendResult =>
   "sent" in value &&
   value.sent === true;
 
+const isMessageDelivery = (value: unknown): value is QuieterMessageDelivery =>
+  typeof value === "object" &&
+  value !== null &&
+  "messageId" in value &&
+  typeof value.messageId === "string" &&
+  "recipients" in value &&
+  Array.isArray(value.recipients) &&
+  "events" in value &&
+  Array.isArray(value.events);
+
+const isSuppressionList = (
+  value: unknown
+): value is { data: QuieterRecipientSuppression[] } =>
+  typeof value === "object" &&
+  value !== null &&
+  "data" in value &&
+  Array.isArray(value.data);
+
 const SEND_PATH = "/api/v1/send";
+const MESSAGE_PATH = "/api/v1/messages/";
+const SUPPRESSIONS_PATH = "/api/v1/suppressions";
 const DEFAULT_BASE_URL = "https://quieter.email";
 
 const bytesToBase64 = (bytes: Uint8Array) => {
@@ -174,6 +236,68 @@ export class Quieter {
     }
 
     this.fetch = fetchImpl;
+  }
+
+  private async getJson(path: string, signal?: AbortSignal) {
+    const response = await this.fetch(new URL(path, this.baseUrl), {
+      headers: {
+        accept: "application/json",
+        authorization: `Bearer ${this.apiKey}`,
+      },
+      method: "GET",
+      signal,
+    });
+    const json: unknown = await response.json().catch(() => null);
+    if (!response.ok) {
+      const error = isApiErrorBody(json) ? json : null;
+      throw new QuieterApiError({
+        issues: error?.issues,
+        message: error?.error ?? `Quieter API returned ${response.status}.`,
+        response: json,
+        status: response.status,
+      });
+    }
+    return { json, status: response.status };
+  }
+
+  async getMessage(
+    messageId: string,
+    options: QuieterRequestOptions = {}
+  ): Promise<QuieterMessageDelivery> {
+    const normalizedMessageId = messageId.trim();
+    if (normalizedMessageId === "") {
+      throw new Error("Quieter requires a messageId.");
+    }
+    const { json, status } = await this.getJson(
+      `${MESSAGE_PATH}${encodeURIComponent(normalizedMessageId)}`,
+      options.signal
+    );
+    if (!isMessageDelivery(json)) {
+      throw new QuieterApiError({
+        message: "Quieter API returned an unexpected response.",
+        response: json,
+        status,
+      });
+    }
+    return json;
+  }
+
+  async listSuppressions(
+    options: QuieterListSuppressionsOptions = {}
+  ): Promise<QuieterRecipientSuppression[]> {
+    const path = new URL(SUPPRESSIONS_PATH, this.baseUrl);
+    if (options.limit !== undefined) {
+      path.searchParams.set("limit", String(options.limit));
+    }
+    const { json, status } = await this.getJson(path.href, options.signal);
+    if (!isSuppressionList(json)) {
+      throw new QuieterApiError({
+        message: "Quieter API returned an unexpected response.",
+        response: json,
+        status,
+      });
+    }
+    return json.data;
   }
 
   async send(

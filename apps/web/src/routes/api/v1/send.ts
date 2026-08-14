@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
+import { getOrganizationApiKeyOrganizationId } from "#/lib/organization-api-auth.server";
 import { reportServerError } from "#/lib/server-error-reporting";
 
 const MAX_SEND_PAYLOAD_BYTES = 25 * 1024 * 1024;
@@ -9,31 +10,14 @@ export const Route = createFileRoute("/api/v1/send")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const apiKey = getBearerToken(request.headers);
-
-        if (apiKey === null || apiKey === "") {
+        const organizationId =
+          await getOrganizationApiKeyOrganizationId(request);
+        if (organizationId === null) {
           return Response.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const [{ organizationApiKeyApi }, organizationMail] = await Promise.all(
-          [import("@quieter/auth"), import("@quieter/orpc/organization-mail")]
-        );
-        const verifiedApiKey = await organizationApiKeyApi.verifyApiKey({
-          body: {
-            configId: organizationMail.ORGANIZATION_API_KEY_CONFIG_ID,
-            key: apiKey,
-          },
-        });
-
-        if (
-          !verifiedApiKey.valid ||
-          verifiedApiKey.key === null ||
-          verifiedApiKey.key === undefined ||
-          verifiedApiKey.key.configId !==
-            organizationMail.ORGANIZATION_API_KEY_CONFIG_ID
-        ) {
-          return Response.json({ error: "Unauthorized" }, { status: 401 });
-        }
+        const organizationMail =
+          await import("@quieter/orpc/organization-mail");
 
         const body = await readBoundedRequestBody(request);
         if (body === null) {
@@ -70,7 +54,7 @@ export const Route = createFileRoute("/api/v1/send")({
         try {
           const result = await organizationMail.sendOrganizationMailMessage({
             message: parsedMessage.data,
-            organizationId: verifiedApiKey.key.referenceId,
+            organizationId,
           });
 
           return Response.json(result, {
@@ -94,22 +78,6 @@ export const Route = createFileRoute("/api/v1/send")({
     },
   },
 });
-
-const getBearerToken = (headers: Headers) => {
-  const authorization = headers.get("authorization")?.trim();
-
-  if (
-    authorization === null ||
-    authorization === undefined ||
-    authorization === "" ||
-    !authorization.startsWith("Bearer ")
-  ) {
-    return null;
-  }
-
-  const token = authorization.slice("Bearer ".length).trim();
-  return token === "" ? null : token;
-};
 
 const readBoundedRequestBody = async (request: Request) => {
   const contentLength = request.headers.get("content-length");
