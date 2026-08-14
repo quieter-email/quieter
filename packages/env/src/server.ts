@@ -17,6 +17,8 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
     emptyStringAsUndefined: true,
     onValidationError: throwEnvironmentValidationError,
     runtimeEnvStrict: {
+      AI_MEMORY_SERVICE_TOKEN: runtimeEnv.AI_MEMORY_SERVICE_TOKEN,
+      AI_MEMORY_SERVICE_URL: runtimeEnv.AI_MEMORY_SERVICE_URL,
       APP_SITE_PASSWORD: runtimeEnv.APP_SITE_PASSWORD,
       AWS_DEFAULT_REGION: runtimeEnv.AWS_DEFAULT_REGION,
       AWS_REGION: runtimeEnv.AWS_REGION,
@@ -90,6 +92,8 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       VITE_LOGO_DEV_PUBLISHABLE_KEY: runtimeEnv.VITE_LOGO_DEV_PUBLISHABLE_KEY,
     },
     server: {
+      AI_MEMORY_SERVICE_TOKEN: optionalString,
+      AI_MEMORY_SERVICE_URL: optionalHttpUrl,
       APP_SITE_PASSWORD: optionalString,
       AWS_DEFAULT_REGION: optionalString,
       AWS_REGION: optionalString,

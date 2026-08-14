@@ -1,4 +1,4 @@
-import { isExplicitAiMemoryRequest } from "@quieter/ai/ai-memory";
+import { isAiMemoryToolRequest } from "@quieter/ai/ai-memory";
 import {
   composeEmailToolDef,
   createAiMemoryServerTool,
@@ -44,11 +44,7 @@ import type {
 import { EventType } from "@tanstack/ai";
 import { and, eq, inArray, isNull, lt, or } from "drizzle-orm";
 
-import {
-  loadAiAgentContext,
-  recordAiMemoryEvent,
-  refreshAiMemoryFromEvent,
-} from "../../ai-memory";
+import { loadAiAgentContext, requestAiMemoryUpdate } from "../../ai-memory";
 import {
   isActiveChatRunStatus,
   isCancelRequested,
@@ -799,52 +795,56 @@ export const runChatGeneration = async (
           createModifyMailServerTool(context),
         ];
         const memoryContext: AiMemoryToolsContext = {
-          rememberPreference: async ({ preference, reason, scope }) => {
+          useMemory: async ({ request, scope }) => {
             if (
-              !isExplicitAiMemoryRequest({
-                preference,
+              !isAiMemoryToolRequest({
+                toolRequest: request,
                 userRequest: latestUserRequest,
               })
             ) {
               return { status: "skipped" };
             }
-            if (scope === "mailbox") {
-              const selectedMailbox = await assertAccessibleMailbox({
-                mailboxId: run.mailboxId,
-                userId: run.userId,
-              });
-              if (!selectedMailbox.capabilities.canManageKnowledge) {
-                return { status: "skipped" };
-              }
-            }
-
-            const event = await recordAiMemoryEvent({
-              kind: "explicit_preference",
+            const selectedMailbox = await assertAccessibleMailbox({
               mailboxId: run.mailboxId,
-              metadata: {
-                memoryScope: scope,
-                preference,
-                reason: reason ?? null,
-                source: "chat",
-              },
               userId: run.userId,
             });
-
-            if (!event) {
-              return { status: "skipped" };
-            }
-
-            if (!abortController.signal.aborted) {
-              void refreshAiMemoryFromEvent({ eventId: event.id }).catch(
-                (error: unknown) => {
-                  reportError(error, {
-                    operation: "chat-generation:update-memory",
-                  });
-                }
-              );
-            }
-
-            return { status: "recorded" };
+            const requestedScopes =
+              scope === "both"
+                ? (["user", "mailbox"] as const)
+                : ([scope === "personal" ? "user" : "mailbox"] as const);
+            const answers = await Promise.all(
+              requestedScopes.map(async (requestedScope) => {
+                const canMutate =
+                  scope !== "both" &&
+                  (requestedScope === "user" ||
+                    selectedMailbox.capabilities.canManageKnowledge);
+                const result = await requestAiMemoryUpdate({
+                  allowMutations: canMutate,
+                  changeSetSource: "chat",
+                  mailboxId: run.mailboxId,
+                  request,
+                  scope: requestedScope,
+                  userId: run.userId,
+                });
+                return {
+                  answer: result.answer,
+                  changed: result.status === "applied",
+                  scope: requestedScope,
+                };
+              })
+            );
+            return {
+              answer: answers
+                .map(({ answer, scope: answerScope }) =>
+                  answers.length === 1
+                    ? answer
+                    : `${answerScope === "user" ? "Personal" : "This mailbox"}: ${answer}`
+                )
+                .join("\n\n"),
+              status: answers.some(({ changed }) => changed)
+                ? "updated"
+                : "answered",
+            };
           },
         };
         tools.push(createAiMemoryServerTool(memoryContext));

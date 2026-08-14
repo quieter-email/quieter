@@ -1,6 +1,9 @@
 import type { DeploymentContext } from "./runtime";
 
-export const createMailboxActionResources = (context: DeploymentContext) => {
+export const createMailboxActionResources = (
+  context: DeploymentContext,
+  memoryServiceUrl: $util.Input<string>
+) => {
   const mailboxActionDeadLetterQueue = new sst.aws.Queue(
     "MailboxActionDeadLetterQueue",
     {
@@ -27,6 +30,8 @@ export const createMailboxActionResources = (context: DeploymentContext) => {
   mailboxActionQueue.subscribe(
     {
       environment: {
+        AI_MEMORY_SERVICE_TOKEN: context.aiMemoryServiceToken,
+        AI_MEMORY_SERVICE_URL: memoryServiceUrl,
         CONNECTOR_TOKEN_ENCRYPTION_KEY: context.connectorTokenEncryptionKey,
         DATABASE_URL: context.databaseUrl,
         GMAIL_TOKEN_ENCRYPTION_KEY: context.gmailTokenEncryptionKey,

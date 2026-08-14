@@ -11,7 +11,8 @@ export const createChatResources = (
   context: DeploymentContext,
   secretResources: SecretResources,
   secretBindings: SstLinkable[],
-  appDatabase: ReturnType<typeof createAppDatabase>
+  appDatabase: ReturnType<typeof createAppDatabase>,
+  memoryServiceUrl: $util.Input<string>
 ) => {
   const chatGenerationStartToken = requireSecretResource(
     secretResources,
@@ -28,6 +29,7 @@ export const createChatResources = (
         flags: ["nodejs_compat"],
       },
       environment: {
+        AI_MEMORY_SERVICE_URL: memoryServiceUrl,
         POLAR_ORGANIZATION_ID: context.polarOrganizationId,
         POLAR_SANDBOX: context.polarSandbox,
         QUIETER_DEPLOYMENT_ENV: deploymentEnvironment,

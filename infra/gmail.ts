@@ -7,7 +7,8 @@ import type { SecretResources } from "./types";
 
 export const createGmailResources = (
   context: DeploymentContext,
-  secretResources: SecretResources
+  secretResources: SecretResources,
+  memoryServiceUrl: $util.Input<string>
 ) => {
   const gmailLiveSyncTokenSecret = requireSecretResource(
     secretResources,
@@ -85,6 +86,8 @@ export const createGmailResources = (
     gmailPubSubQueue.subscribe(
       {
         environment: {
+          AI_MEMORY_SERVICE_TOKEN: context.aiMemoryServiceToken,
+          AI_MEMORY_SERVICE_URL: memoryServiceUrl,
           DATABASE_URL: context.databaseUrl,
           GMAIL_PUBSUB_TOPIC: context.gmailPubSubEnvironment.GMAIL_PUBSUB_TOPIC,
           GMAIL_TOKEN_ENCRYPTION_KEY: context.gmailTokenEncryptionKey,
@@ -154,6 +157,8 @@ export const createGmailResources = (
 
     const gmailPubSubProcess = new sst.aws.Function("GmailPubSubProcess", {
       environment: {
+        AI_MEMORY_SERVICE_TOKEN: context.aiMemoryServiceToken,
+        AI_MEMORY_SERVICE_URL: memoryServiceUrl,
         DATABASE_URL: context.databaseUrl,
         GMAIL_PUBSUB_PROCESS_TOKEN: gmailPubSubProcessToken.value,
         GMAIL_TOKEN_ENCRYPTION_KEY: context.gmailTokenEncryptionKey,

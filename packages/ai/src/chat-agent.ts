@@ -96,12 +96,12 @@ When drafting:
 - include a clear subject; use "Re:" / "Fwd:" when appropriate
 - leave to/cc/bcc empty only when truly unknown; otherwise make a reasonable guess and note it briefly
 
-### remember_preference
-Record an explicit durable user preference that should improve future Quieter AI behavior. Use only
-when the user clearly states a reusable preference, rule, correction, or stable context. Do not use
-it for one-off facts, secrets, verification codes, message summaries, inferred private facts, or
-temporary tasks. Choose personal memory for preferences that follow the user across mailboxes, and
-current mailbox memory for shared rules or context specific to that mailbox.
+### memory
+Use memory only when the user explicitly asks what Quieter knows, asks it to remember or forget
+something, or corrects durable context. The tool can inspect personal and current-mailbox memory or
+update one of them. Choose the scope silently from the user's intent; do not make the user manage
+memory scopes. Private personal context is allowed and useful. Never retain credentials, recovery
+material, verification codes, full payment or bank identifiers, raw messages, or temporary tasks.
 
 ## Gmail search syntax
 
@@ -736,38 +736,35 @@ export type LinearToolsContext = {
 };
 
 export type AiMemoryResult = {
-  status: "recorded" | "skipped";
+  answer?: string;
+  status: "answered" | "skipped" | "updated";
 };
 
 export const aiMemoryResultSchema = z.object({
-  status: z.enum(["recorded", "skipped"]),
+  answer: z.string().optional(),
+  status: z.enum(["answered", "skipped", "updated"]),
 });
 
 export const aiMemoryToolDef = toolDefinition({
   description:
-    "Record an explicit durable preference in personal memory or the current mailbox memory.",
+    "Inspect, remember, correct, or forget durable context when the user explicitly asks.",
   inputSchema: z.object({
-    preference: z.string().trim().min(1).max(1000).meta({
-      description: "The reusable user preference or rule to remember.",
+    request: z.string().trim().min(1).max(2000).meta({
+      description: "A concise restatement of the user's memory request.",
     }),
-    reason: z.string().trim().max(500).optional().meta({
+    scope: z.enum(["both", "mailbox", "personal"]).meta({
       description:
-        "Short reason this is durable context rather than a one-off fact.",
-    }),
-    scope: z.enum(["mailbox", "user"]).meta({
-      description:
-        "Use user for personal preferences that should follow the person across mailboxes. Use mailbox for behavior specific to the current mailbox or its collaborators.",
+        "Use both only to inspect memory. Use personal for context that follows the person, or mailbox for shared mailbox-specific context.",
     }),
   }),
-  name: "remember_preference",
+  name: "memory",
   outputSchema: aiMemoryResultSchema,
 });
 
 export type AiMemoryToolsContext = {
-  rememberPreference: (input: {
-    preference: string;
-    reason?: string;
-    scope: "mailbox" | "user";
+  useMemory: (input: {
+    request: string;
+    scope: "both" | "mailbox" | "personal";
   }) => Promise<AiMemoryResult>;
 };
 
@@ -1029,11 +1026,11 @@ export const createAiMemoryServerTool = (
 ): AnyTool =>
   aiMemoryToolDef.server(async (input) => {
     try {
-      return await context.rememberPreference(input);
+      return await context.useMemory(input);
     } catch (error) {
       reportError(error, {
         operation: "ai-memory:remember-preference",
-        preferenceLength: input.preference.length,
+        requestLength: input.request.length,
       });
       return { status: "skipped" };
     }

@@ -3,6 +3,8 @@ import { existsSync, readFileSync } from "node:fs";
 const loopbackHosts = new Set(["127.0.0.1", "::1", "localhost"]);
 
 export const forbiddenLocalKeys = [
+  "AI_MEMORY_SERVICE_TOKEN",
+  "AI_MEMORY_SERVICE_URL",
   "AWS_ACCESS_KEY_ID",
   "AWS_SECRET_ACCESS_KEY",
   "AWS_SESSION_TOKEN",

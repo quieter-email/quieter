@@ -230,6 +230,12 @@ export type AiMemoryChangeSetSource =
   | "settings"
   | "system";
 export type AiMemoryChangeSetStatus = "applied" | "failed" | "no_change";
+export type AiMemoryIndexJobOperation = "delete" | "upsert";
+export type AiMemoryIndexJobStatus =
+  | "completed"
+  | "failed"
+  | "pending"
+  | "processing";
 export type AiMemoryMetadata = {
   agents?: string[];
   sourceDomains?: string[];
@@ -725,6 +731,42 @@ export const aiMemory = pgTable(
       table.scopeKey,
       table.key
     ),
+  ]
+);
+
+export const aiMemoryIndexJob = pgTable(
+  "aiMemoryIndexJob",
+  {
+    attemptCount: integer("attemptCount").notNull().default(0),
+    availableAt: timestamp("availableAt").notNull(),
+    completedAt: timestamp("completedAt"),
+    createdAt: timestamp("createdAt").notNull(),
+    id: text("id").primaryKey(),
+    lastError: text("lastError"),
+    memoryId: text("memoryId").notNull(),
+    operation: text("operation").$type<AiMemoryIndexJobOperation>().notNull(),
+    processingAt: timestamp("processingAt"),
+    status: text("status").$type<AiMemoryIndexJobStatus>().notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    check(
+      "ai_memory_index_job_operation_check",
+      sql`${table.operation} in ('delete', 'upsert')`
+    ),
+    check(
+      "ai_memory_index_job_status_check",
+      sql`${table.status} in ('completed', 'failed', 'pending', 'processing')`
+    ),
+    check(
+      "ai_memory_index_job_attempt_count_check",
+      sql`${table.attemptCount} >= 0`
+    ),
+    index("ai_memory_index_job_status_available_idx").on(
+      table.status,
+      table.availableAt
+    ),
+    unique("ai_memory_index_job_memory_unique").on(table.memoryId),
   ]
 );
 
@@ -2623,6 +2665,7 @@ export const tables = {
   account,
   aiMemory,
   aiMemoryChangeSet,
+  aiMemoryIndexJob,
   aiMemoryScopeConfig,
   apikey,
   billingCreditUsageEvent,

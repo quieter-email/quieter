@@ -342,7 +342,7 @@ const processManagedAutoLabelMessage = async (input: {
       const labelIds = await classifyMailMessage({
         labels: input.autoLabelContext.labels,
         memoryContext: serializeAiAgentContext(
-          rankAiAgentMemoryCandidates({
+          await rankAiAgentMemoryCandidates({
             agent: "auto_label",
             candidates: input.autoLabelContext.memoryCandidates,
             query: buildMailMemoryQuery(message),

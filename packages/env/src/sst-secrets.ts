@@ -1,4 +1,5 @@
 export const sstSecretNames = {
+  AI_MEMORY_SERVICE_TOKEN: "AiMemoryServiceToken",
   APP_SITE_PASSWORD: "AppSitePassword",
   BETTER_AUTH_SECRET: "BetterAuthSecret",
   CHAT_GENERATION_START_TOKEN: "ChatGenerationStartToken",

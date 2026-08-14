@@ -3,6 +3,7 @@ import { createChatResources } from "./chat";
 import { createAppDatabase } from "./database";
 import { createGmailResources } from "./gmail";
 import { createMailResources, mailReceiptRuleSetName } from "./mail";
+import { createAiMemoryResources } from "./memory";
 import { createDeploymentContext, requireWorkerUrl } from "./runtime";
 import { requireSecretResource, selectSecretBindings } from "./secrets";
 import type { SecretBindings, SecretResources } from "./types";
@@ -19,11 +20,21 @@ export const createInfrastructure = async (input: {
   const webSecretBindings = Object.values(secretBindings);
 
   const context = createDeploymentContext(secretResources);
+  const memory = createAiMemoryResources(
+    secretResources,
+    selectSecretBindings(secretBindings, ["SENTRY_DSN"]),
+    appDatabase
+  );
+  const memoryServiceUrl = requireWorkerUrl(
+    memory.worker.url,
+    "AiMemoryWorker"
+  );
   const chat = createChatResources(
     context,
     secretResources,
     selectSecretBindings(secretBindings, [
       "CONNECTOR_TOKEN_ENCRYPTION_KEY",
+      "AI_MEMORY_SERVICE_TOKEN",
       "GMAIL_TOKEN_ENCRYPTION_KEY",
       "GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT",
       "GOOGLE_CALENDAR_CLIENT_ID",
@@ -36,15 +47,21 @@ export const createInfrastructure = async (input: {
       "POLAR_ACCESS_TOKEN",
       "SENTRY_DSN",
     ]),
-    appDatabase
+    appDatabase,
+    memoryServiceUrl
   );
-  const actions = createMailboxActionResources(context);
-  const gmail = createGmailResources(context, secretResources);
+  const actions = createMailboxActionResources(context, memoryServiceUrl);
+  const gmail = createGmailResources(
+    context,
+    secretResources,
+    memoryServiceUrl
+  );
   const mail = await createMailResources(context, secretResources);
   const web = createWeb(
     appDatabase,
     webSecretBindings,
     {
+      AI_MEMORY_SERVICE_URL: memoryServiceUrl,
       CHAT_GENERATION_START_URL: requireWorkerUrl(
         chat.chatGenerationWorker.url,
         "ChatGenerationWorker"
@@ -70,6 +87,9 @@ export const createInfrastructure = async (input: {
   );
 
   return {
+    aiMemoryServiceTokenSecretName: memory.serviceToken.name,
+    aiMemoryServiceUrl: memory.worker.url,
+    aiMemoryVectorIndexName: memory.memoryVectorIndexName,
     chatGenerationStartTokenSecretName: requireSecretResource(
       secretResources,
       "CHAT_GENERATION_START_TOKEN"

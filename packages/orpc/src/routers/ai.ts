@@ -19,7 +19,6 @@ import {
   forgetAiMemory,
   getPersonalAiMemoryScopeConfig,
   listMailboxAiMemory,
-  listMailboxAiMemorySettings,
   listPersonalAiMemory,
   purgeMailboxAiMemory,
   purgePersonalAiMemory,
@@ -27,10 +26,7 @@ import {
   undoAiMemoryChange,
   updateAiMemoryScopeConfig,
 } from "../ai-memory";
-import {
-  assertAccessibleMailbox,
-  listAccessibleMailboxState,
-} from "../mailbox/service";
+import { assertAccessibleMailbox } from "../mailbox/service";
 import { protectedProcedure } from "./base";
 
 const memoryTargetSchema = z
@@ -70,75 +66,20 @@ const serializeModels = (
   };
 };
 
-const listAccessibleMemoryMailboxes = async (userId: string) => {
-  const { groups } = await listAccessibleMailboxState({ userId });
-  const mailboxes = new Map(
-    groups
-      .flatMap((group) => group.mailboxes)
-      .filter((selectedMailbox) => selectedMailbox.provider !== "api")
-      .map((selectedMailbox) => [selectedMailbox.id, selectedMailbox])
-  );
-  return [...mailboxes.values()];
-};
-
-const loadMemorySettings = async (userId: string) => {
-  const mailboxes = await listAccessibleMemoryMailboxes(userId);
-  const [personal, personalLearning, mailboxSettings] = await Promise.all([
-    listPersonalAiMemory(userId),
-    getPersonalAiMemoryScopeConfig(userId),
-    listMailboxAiMemorySettings(
-      mailboxes.map((selectedMailbox) => selectedMailbox.id)
-    ),
-  ]);
-
-  return {
-    scopes: [
-      {
-        canManage: true,
-        description:
-          "Follows you across mailboxes and stays private to your account.",
-        key: "user",
-        kind: "user" as const,
-        learning: personalLearning,
-        mailboxId: null,
-        memory: personal,
-        name: "Personal",
-      },
-      ...mailboxes.map((selectedMailbox) => {
-        const settings = mailboxSettings.get(selectedMailbox.id);
-        if (!settings) {
-          throw new Error("Could not load mailbox AI knowledge settings.");
-        }
-        return {
-          canManage: selectedMailbox.capabilities.canManageKnowledge,
-          description:
-            "Stays with this mailbox and is shared with everyone who can access the mailbox.",
-          key: `mailbox:${selectedMailbox.id}`,
-          kind: "mailbox" as const,
-          learning: settings.learning,
-          mailboxId: selectedMailbox.id,
-          memory: settings.memory,
-          name:
-            (selectedMailbox.displayName ?? "").length > 0
-              ? (selectedMailbox.displayName ?? selectedMailbox.emailAddress)
-              : selectedMailbox.emailAddress,
-        };
-      }),
-    ],
-  };
-};
-
 const loadSettings = async (userId: string) => {
-  const [[record], memory] = await Promise.all([
+  const [[record], memoryConfig] = await Promise.all([
     db
       .select()
       .from(userAiContext)
       .where(eq(userAiContext.userId, userId))
       .limit(1),
-    loadMemorySettings(userId),
+    getPersonalAiMemoryScopeConfig(userId),
   ]);
   return {
-    memory,
+    memory: {
+      enabled: memoryConfig.activeLearningEnabled,
+      revision: memoryConfig.revision,
+    },
     models: serializeModels(record),
   };
 };
@@ -265,6 +206,11 @@ export const aiRouter = {
       }
     }),
 
+  resetPersonalization: protectedProcedure.handler(async ({ context }) => {
+    await purgePersonalAiMemory(context.userId);
+    return { deleted: true };
+  }),
+
   settings: protectedProcedure
     .route({ method: "GET" })
     .handler(async ({ context }) => await loadSettings(context.userId)),
@@ -344,5 +290,27 @@ export const aiRouter = {
         })
         .returning();
       return serializeModels(record);
+    }),
+
+  updatePersonalization: protectedProcedure
+    .input(
+      z.object({
+        enabled: z.boolean(),
+        revision: z.number().int().nonnegative(),
+      })
+    )
+    .handler(async ({ context, input }) => {
+      const current = await getPersonalAiMemoryScopeConfig(context.userId);
+      const updated = await updateAiMemoryScopeConfig({
+        activeLearningEnabled: input.enabled,
+        learningPrompt: current.learningPrompt,
+        revision: input.revision,
+        scope: "user",
+        userId: context.userId,
+      });
+      return {
+        enabled: updated.activeLearningEnabled,
+        revision: updated.revision,
+      };
     }),
 };
