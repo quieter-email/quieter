@@ -74,6 +74,16 @@ const composeLabelClassName = "w-14 shrink-0 text-sm font-normal text-muted-fg";
 const hasText = (value: string | null | undefined): value is string =>
   value !== null && value !== undefined && value !== "";
 
+/**
+ * The recipient input lives inside a shared field primitive that does not take
+ * a ref, so it is found by its marker attribute.
+ */
+const focusComposeRecipientField = () => {
+  document
+    .querySelector<HTMLElement>("[data-compose-recipient-field]")
+    ?.focus({ preventScroll: false });
+};
+
 const composeRecipientMotion = {
   animate: { filter: "blur(0px)", gridTemplateRows: "1fr", opacity: 1 },
   exit: { filter: "blur(2px)", gridTemplateRows: "0fr", opacity: 0 },
@@ -157,6 +167,7 @@ export const ComposeWorkspace = ({
     mailboxId,
     managedDemoMode,
     onClose,
+    onRecipientProblem: focusComposeRecipientField,
     persistDrafts,
     signature,
   });
@@ -341,6 +352,7 @@ export const ComposeWorkspace = ({
                           <FieldControl
                             aria-invalid={!!error}
                             className="min-w-0 flex-1"
+                            data-compose-recipient-field
                             disabled={!canEditBody}
                             onBlur={() => {
                               field.handleBlur();

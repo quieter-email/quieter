@@ -50,6 +50,9 @@ import type {
   MailboxActions,
   MailboxPendingActions,
 } from "#/features/mailbox/components/mailbox-action-handlers";
+import { MessageDeliverySection } from "#/features/message-delivery/components/message-delivery-section";
+import { MessageDeliveryStatus } from "#/features/message-delivery/components/message-delivery-status";
+import { supportsMessageDelivery } from "#/features/message-delivery/domain/message-delivery-support";
 import { MessageLabels } from "#/features/message-labels/components/message-labels";
 import {
   hasRenderableMessageBody,
@@ -93,6 +96,7 @@ type MessageViewProps = {
 type MessageHeaderContentProps = {
   message: MessageListItem;
   className?: string;
+  deliveryStatus?: ReactNode;
   headerActions?: ReactNode;
   isExpanded?: boolean;
   onToggleExpanded?: () => void;
@@ -195,6 +199,7 @@ const runHotkeyThreadAction = async (
 
 const MessageHeaderContent = ({
   className,
+  deliveryStatus,
   headerActions,
   isExpanded,
   message,
@@ -241,6 +246,8 @@ const MessageHeaderContent = ({
         <span className="shrink-0 basis-full cursor-text text-xs whitespace-nowrap text-muted-fg @sm:basis-auto @sm:text-sm">
           {date}
         </span>
+
+        {deliveryStatus}
       </div>
 
       {previewMode === "collapsed" && isExpanded === false ? (
@@ -452,11 +459,13 @@ const MessageHeaderActions = ({
 };
 
 const MessageInspectorPanel = ({
+  deliveryEnabled,
   mailboxId,
   message,
   open,
   onOpenChange,
 }: {
+  deliveryEnabled: boolean;
   mailboxId: string;
   message: MessageListItem;
   open: boolean;
@@ -514,7 +523,7 @@ const MessageInspectorPanel = ({
         </section>
 
         <section className="space-y-2">
-          <h3 className="text-sm font-semibold text-fg">Delivery details</h3>
+          <h3 className="text-sm font-semibold text-fg">Message headers</h3>
           {inspector.headers.map((header) => (
             <p
               className="text-sm text-fg"
@@ -569,6 +578,11 @@ const MessageInspectorPanel = ({
         </DialogHeader>
 
         <DialogBody className="max-h-[70vh] space-y-5 overflow-y-auto">
+          <MessageDeliverySection
+            enabled={deliveryEnabled && open}
+            mailboxId={mailboxId}
+            messageId={message.id}
+          />
           {inspectorBody}
         </DialogBody>
 
@@ -658,6 +672,7 @@ const ThreadMessageCard = ({
   isLoading,
   linkedDraftMessage,
   mailboxId,
+  mailboxProvider,
   message,
   onComposeDraftRequested,
   onUnsubscribe,
@@ -671,6 +686,7 @@ const ThreadMessageCard = ({
   isActionPending?: boolean;
   linkedDraftMessage: MessageListItem | null;
   mailboxId: string;
+  mailboxProvider: MessageViewProps["mailboxProvider"];
   message: MessageListItem;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
   onUnsubscribe?: (messageId: string) => void | Promise<void>;
@@ -678,6 +694,11 @@ const ThreadMessageCard = ({
   usefulDetails: GmailUsefulDetail[];
 }) => {
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const showsDelivery = supportsMessageDelivery({
+    mailboxId,
+    mailboxProvider,
+    message,
+  });
 
   const openComposeAction = (action: "reply" | "reply-all" | "forward") => {
     if (!onComposeDraftRequested) {
@@ -712,6 +733,14 @@ const ThreadMessageCard = ({
     >
       <MessageHeaderContent
         className="p-4 @sm:px-5 @sm:py-4"
+        deliveryStatus={
+          showsDelivery ? (
+            <MessageDeliveryStatus
+              mailboxId={mailboxId}
+              messageId={message.id}
+            />
+          ) : null
+        }
         headerActions={
           expanded ? (
             <MessageHeaderActions
@@ -774,6 +803,7 @@ const ThreadMessageCard = ({
       </div>
 
       <MessageInspectorPanel
+        deliveryEnabled={showsDelivery}
         mailboxId={mailboxId}
         message={message}
         onOpenChange={setDetailsDialogOpen}
@@ -788,6 +818,7 @@ const SingleMessageCard = ({
   isLoading,
   linkedDraftMessage,
   mailboxId,
+  mailboxProvider,
   message,
   onComposeDraftRequested,
   onUnsubscribe,
@@ -799,12 +830,18 @@ const SingleMessageCard = ({
   isActionPending?: boolean;
   linkedDraftMessage: MessageListItem | null;
   mailboxId: string;
+  mailboxProvider: MessageViewProps["mailboxProvider"];
   message: MessageListItem;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
   onUnsubscribe?: (messageId: string) => void | Promise<void>;
   usefulDetails: GmailUsefulDetail[];
 }) => {
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const showsDelivery = supportsMessageDelivery({
+    mailboxId,
+    mailboxProvider,
+    message,
+  });
 
   const openComposeAction = (action: "reply" | "reply-all" | "forward") => {
     if (!onComposeDraftRequested) {
@@ -835,6 +872,14 @@ const SingleMessageCard = ({
     <section>
       <MessageHeaderContent
         className="p-4 @sm:p-5"
+        deliveryStatus={
+          showsDelivery ? (
+            <MessageDeliveryStatus
+              mailboxId={mailboxId}
+              messageId={message.id}
+            />
+          ) : null
+        }
         headerActions={
           <MessageHeaderActions
             onContinueDraft={linkedDraftMessage ? openLinkedDraft : undefined}
@@ -883,6 +928,7 @@ const SingleMessageCard = ({
       </div>
 
       <MessageInspectorPanel
+        deliveryEnabled={showsDelivery}
         mailboxId={mailboxId}
         message={message}
         onOpenChange={setDetailsDialogOpen}
@@ -897,6 +943,7 @@ const ThreadMessageList = ({
   currentUserEmail,
   isLoading,
   mailboxId,
+  mailboxProvider,
   messages,
   onComposeDraftRequested,
   onUnsubscribe,
@@ -908,6 +955,7 @@ const ThreadMessageList = ({
   isLoading?: boolean;
   isActionPending?: boolean;
   mailboxId: string;
+  mailboxProvider: MessageViewProps["mailboxProvider"];
   messages: MessageListItem[];
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
   onUnsubscribe?: (messageId: string) => void | Promise<void>;
@@ -936,6 +984,7 @@ const ThreadMessageList = ({
             key={threadMessage.id}
             linkedDraftMessage={linkedDraftMessage}
             mailboxId={mailboxId}
+            mailboxProvider={mailboxProvider}
             message={threadMessage}
             onComposeDraftRequested={onComposeDraftRequested}
             onUnsubscribe={onUnsubscribe}
@@ -1448,6 +1497,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
               threadMessage
             )}
             mailboxId={mailboxId}
+            mailboxProvider={mailboxProvider}
             message={threadMessage}
             onComposeDraftRequested={
               canComposeFromMailbox ? onComposeDraftRequested : undefined
@@ -1470,6 +1520,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
           isActionPending={isActionPending}
           key={message.threadId}
           mailboxId={mailboxId}
+          mailboxProvider={mailboxProvider}
           messages={visibleMessages}
           onComposeDraftRequested={
             canComposeFromMailbox ? onComposeDraftRequested : undefined

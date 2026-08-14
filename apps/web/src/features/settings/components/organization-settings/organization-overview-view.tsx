@@ -6,6 +6,7 @@ import {
   Globe02Icon,
   Key02Icon,
   LeftToRightListBulletIcon,
+  MailRemove01Icon,
   UserGroupIcon,
   Wallet02Icon,
 } from "@hugeicons/core-free-icons";
@@ -30,6 +31,7 @@ import { organizationApiKeysQueryOptions } from "./api-keys";
 import { formatCount } from "./domain";
 import type { FullOrganization, OrganizationSummary } from "./domain";
 import { organizationMailDomainsQueryOptions } from "./mail-domains";
+import { organizationMailSuppressionsQueryOptions } from "./mail-suppressions";
 import { OrganizationFormDialog } from "./organization-form-dialog";
 import { organizationMailUsageQueryOptions } from "./organization-mail-usage-query";
 import { MutedActionButton } from "./settings-row";
@@ -115,6 +117,31 @@ const getApiKeysSummary = ({
   return formatCount(apiKeyCount, "API Key", "API Keys");
 };
 
+const getSuppressionsSummary = ({
+  isSuppressionsError,
+  isSuppressionsPending,
+  suppressionCount,
+}: {
+  isSuppressionsError: boolean;
+  isSuppressionsPending: boolean;
+  suppressionCount: number;
+}) => {
+  if (isSuppressionsPending) {
+    return "Loading blocked recipients…";
+  }
+  if (isSuppressionsError) {
+    return "Could not load blocked recipients.";
+  }
+  if (suppressionCount === 0) {
+    return "No blocked recipients";
+  }
+  return formatCount(
+    suppressionCount,
+    "Blocked recipient",
+    "Blocked recipients"
+  );
+};
+
 const getBillingSummary = ({
   billing,
   billingAccessUnknown,
@@ -174,6 +201,7 @@ export const OrganizationOverviewView = ({
   onOpenDivisions,
   onOpenDomains,
   onOpenMembers,
+  onOpenSuppressions,
   organization,
   pendingInvitationsCount,
   fullOrganization,
@@ -191,6 +219,7 @@ export const OrganizationOverviewView = ({
   onOpenDivisions: () => void;
   onOpenDomains: () => void;
   onOpenMembers: () => void;
+  onOpenSuppressions: () => void;
   organization: OrganizationSummary;
   pendingInvitationsCount: number;
   fullOrganization: FullOrganization;
@@ -211,6 +240,14 @@ export const OrganizationOverviewView = ({
   } = useQuery({
     ...organizationMailDomainsQueryOptions(organization.id),
     enabled: canUseOrganizationDomains && organization.id.length > 0,
+  });
+  const {
+    data: suppressions,
+    isError: isSuppressionsError,
+    isPending: isSuppressionsPending,
+  } = useQuery({
+    ...organizationMailSuppressionsQueryOptions(organization.id),
+    enabled: canUpdateOrganization && organization.id.length > 0,
   });
   const updateOrganizationReason = canUpdateOrganization
     ? null
@@ -234,6 +271,11 @@ export const OrganizationOverviewView = ({
     canUseOrganizationApiKeys,
     isApiKeysError,
     isApiKeysPending,
+  });
+  const suppressionsSummary = getSuppressionsSummary({
+    isSuppressionsError,
+    isSuppressionsPending,
+    suppressionCount: suppressions?.length ?? 0,
   });
   const billingSummary = getBillingSummary({
     billing,
@@ -314,6 +356,14 @@ export const OrganizationOverviewView = ({
           }}
           title="API keys"
         />
+        {canUpdateOrganization ? (
+          <SettingsNavigationRow
+            description={suppressionsSummary}
+            icon={<HugeiconsIcon aria-hidden icon={MailRemove01Icon} />}
+            onClick={onOpenSuppressions}
+            title="Blocked recipients"
+          />
+        ) : null}
         <SettingsNavigationRow
           description={billingSummary}
           icon={<HugeiconsIcon aria-hidden icon={Wallet02Icon} />}

@@ -23,6 +23,7 @@ import {
 import type { OrganizationSummary } from "./domain";
 import { DomainDetailView } from "./domain-detail-view";
 import { DomainsView } from "./domains-view";
+import { MailSuppressionsView } from "./mail-suppressions-view";
 import { MembersView } from "./members-view";
 import { OrganizationBillingView } from "./organization-billing-view";
 import { OrganizationDangerView } from "./organization-danger-view";
@@ -39,6 +40,7 @@ export const OrganizationDetailView = ({
   onOpenDomains,
   onOpenDomain,
   onOpenMembers,
+  onOpenSuppressions,
   organization,
   userId,
   view,
@@ -53,6 +55,7 @@ export const OrganizationDetailView = ({
   onOpenDomains: () => void;
   onOpenDomain: (domainId: string) => void;
   onOpenMembers: () => void;
+  onOpenSuppressions: () => void;
   organization: OrganizationSummary;
   userId: string;
   view: OrganizationSettingsView;
@@ -200,6 +203,16 @@ export const OrganizationDetailView = ({
     );
   }
 
+  if (view === "suppressions") {
+    return (
+      <MailSuppressionsView
+        canViewSuppressions={canUpdateOrganization}
+        onBack={onBackToOrganization}
+        organization={fullOrganization}
+      />
+    );
+  }
+
   if (view === "billing") {
     return (
       <OrganizationBillingView
@@ -243,6 +256,7 @@ export const OrganizationDetailView = ({
       onOpenDivisions={onOpenDivisions}
       onOpenDomains={onOpenDomains}
       onOpenMembers={onOpenMembers}
+      onOpenSuppressions={onOpenSuppressions}
       organization={organization}
       pendingInvitationsCount={pendingInvitations.length}
     />

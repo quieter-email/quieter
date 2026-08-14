@@ -105,6 +105,26 @@ type ManagedMessagePresentationRecord = Pick<
 
 const MANAGED_MESSAGE_PAGE_SIZE = 15;
 
+/**
+ * Send policy failures are the sender's problem, not ours, so they keep their
+ * own status instead of collapsing into a server error.
+ */
+const getOrganizationMailSendErrorCode = (status: number) => {
+  if (status === 400) {
+    return "BAD_REQUEST";
+  }
+  if (status === 403) {
+    return "FORBIDDEN";
+  }
+  if (status === 409) {
+    return "CONFLICT";
+  }
+  if (status === 422) {
+    return "UNPROCESSABLE_CONTENT";
+  }
+  return "INTERNAL_SERVER_ERROR";
+};
+
 const normalizeEmailAddress = (value: string) => value.trim().toLowerCase();
 
 const getManagedPrimarySystemLabelId = (message: {
@@ -1592,13 +1612,10 @@ export const sendManagedMailboxMessage = async (input: {
     });
   } catch (error) {
     if (error instanceof OrganizationMailSendError) {
-      throw new ORPCError(
-        error.status === 403 ? "FORBIDDEN" : "INTERNAL_SERVER_ERROR",
-        {
-          message: error.message,
-          status: error.status,
-        }
-      );
+      throw new ORPCError(getOrganizationMailSendErrorCode(error.status), {
+        message: error.message,
+        status: error.status,
+      });
     }
     throw error;
   }

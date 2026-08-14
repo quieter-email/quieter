@@ -35,6 +35,19 @@ export const isMailboxScopeRepairRequiredError = (
   );
 };
 
+/**
+ * A blocked recipient is a recipient problem, not a temporary outage, so the
+ * composer keeps the draft and points at the recipient fields instead.
+ */
+export const isSuppressedRecipientError = (error: unknown) => {
+  if (error === null || error === undefined || typeof error !== "object") {
+    return false;
+  }
+
+  const candidate = error as OrpcErrorLike;
+  return candidate.code === "UNPROCESSABLE_CONTENT" || candidate.status === 422;
+};
+
 export const shouldRetryOrpcError = (failureCount: number, error: unknown) => {
   if (isMailboxScopeRepairRequiredError(error)) {
     return false;

@@ -24,6 +24,7 @@ import {
   saveManagedDemoDraft,
   sendManagedDemoDraft,
 } from "#/lib/managed-mail/demo-managed-mail";
+import { isSuppressedRecipientError } from "#/lib/orpc-errors";
 
 import {
   composeFormValuesToDraft,
@@ -50,6 +51,9 @@ type ComposeDraftUpdate =
   | ((current: ComposeDraftState) => ComposeDraftState);
 
 const ignoreBackgroundFailure = (): void => undefined;
+
+const SUPPRESSED_RECIPIENT_MESSAGE =
+  "This message includes a recipient that can no longer receive mail from this team.";
 
 const getErrorMessage = (error: unknown, fallback: string): string => {
   if (error instanceof Error && (error.message ?? "") !== "") {
@@ -100,6 +104,7 @@ export const useComposeDialogController = ({
   managedDemoMode = false,
   mailboxId,
   onClose,
+  onRecipientProblem,
   persistDrafts = true,
   signature,
 }: {
@@ -108,6 +113,7 @@ export const useComposeDialogController = ({
   managedDemoMode?: boolean;
   mailboxId: string | null;
   onClose?: () => void;
+  onRecipientProblem?: () => void;
   persistDrafts?: boolean;
   signature?: { html: string | null; text: string | null };
 }) => {
@@ -190,6 +196,20 @@ export const useComposeDialogController = ({
     await queryClient.refetchQueries({ queryKey, type: "active" });
   };
 
+  const handleSendFailure = (error: unknown) => {
+    const isRecipientProblem = isSuppressedRecipientError(error);
+    setDraft({
+      ...activeDraftRef.current,
+      errorMessage: isRecipientProblem
+        ? SUPPRESSED_RECIPIENT_MESSAGE
+        : getErrorMessage(error, "Could not send message."),
+      saveStatus: "error",
+    });
+    if (isRecipientProblem) {
+      onRecipientProblem?.();
+    }
+  };
+
   const submitComposeForm = async (values: ComposeFormValues) => {
     if ((mailboxId ?? "") === "") {
       return;
@@ -207,11 +227,7 @@ export const useComposeDialogController = ({
         await sendComposeMessage(mailboxId ?? "", message);
       }
     } catch (error) {
-      setDraft({
-        ...activeDraftRef.current,
-        errorMessage: getErrorMessage(error, "Could not send message."),
-        saveStatus: "error",
-      });
+      handleSendFailure(error);
       return;
     }
 
