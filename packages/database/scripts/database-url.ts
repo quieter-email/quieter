@@ -15,6 +15,7 @@ export {
 const LOCK_TIMEOUT = "5s";
 const STATEMENT_TIMEOUT = "5min";
 const PRODUCTION_REPOSITORY = "quieter-email/quieter";
+const PRODUCTION_DATABASE = "quieter";
 const productionMigrationTarget = {
   protectedRef: true,
   ref: "refs/heads/main",
@@ -95,6 +96,15 @@ export const assertMigrationExecutionAllowed = (
     environment.GITHUB_REF === productionMigrationTarget.ref &&
     (!productionMigrationTarget.protectedRef ||
       environment.GITHUB_REF_PROTECTED === "true");
+
+  if (isApprovedProductionMigrationJob) {
+    const database = decodeURIComponent(url.pathname.replace(/^\//u, ""));
+    if (database !== PRODUCTION_DATABASE) {
+      throw new Error(
+        `Production migrations must target the ${PRODUCTION_DATABASE} database, received ${database || "an empty database name"}`
+      );
+    }
+  }
 
   if (!isApprovedProductionMigrationJob) {
     throw new Error(

@@ -60,8 +60,25 @@ jobs:
       - name: Install dependencies
         run: vp install --frozen-lockfile
 
-      - name: Build deployment configuration
-        run: vp run @quieter/env#build
+      - name: Build deployment artifacts
+        run: vp run -r build
+
+      - name: Configure production runtime secrets
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_AI_API_TOKEN: ${{ secrets.CLOUDFLARE_AI_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          bun -e '
+            const databaseName = decodeURIComponent(new URL(process.env.DATABASE_URL).pathname.replace(/^\//u, ""));
+            if (databaseName !== "quieter") {
+              throw new Error(`Production DATABASE_URL must target the quieter database, received ${databaseName || "an empty database name"}.`);
+            }
+          '
+          vp exec sst secret set CloudflareAccountId "$CLOUDFLARE_ACCOUNT_ID" --stage "$SST_STAGE"
+          vp exec sst secret set CloudflareAiApiToken "$CLOUDFLARE_AI_API_TOKEN" --stage "$SST_STAGE"
+          vp exec sst secret set DatabaseUrl "$DATABASE_URL" --stage "$SST_STAGE"
 
       - name: Apply production database migrations
         if: ${{ env.SST_STAGE == 'production' }}
