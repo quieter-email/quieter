@@ -1,12 +1,12 @@
+import { randomUUID } from "node:crypto";
+
 import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import { managedMailSavedView } from "@quieter/database/schema";
-import {
-  mailboxSavedViewDefinitionSchema,
-  type MailboxSavedViewDefinition,
-} from "@quieter/mail/mailbox-organization";
+import { mailboxSavedViewDefinitionSchema } from "@quieter/mail/mailbox-organization";
+import type { MailboxSavedViewDefinition } from "@quieter/mail/mailbox-organization";
 import { and, asc, eq, inArray, isNull, or } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
+
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
 import { normalizeManagedOrganizationName } from "../organization/normalize-name";
 
@@ -20,14 +20,21 @@ const assertViewAccess = async (input: {
     userId: input.userId,
   });
   if (input.ownerUserId === null && mailbox.role !== "manager") {
-    throw new ORPCError("FORBIDDEN", { message: "Mailbox manager access is required." });
+    throw new ORPCError("FORBIDDEN", {
+      message: "Mailbox manager access is required.",
+    });
   }
   if (input.ownerUserId !== null && input.ownerUserId !== input.userId) {
-    throw new ORPCError("FORBIDDEN", { message: "This personal view belongs to another user." });
+    throw new ORPCError("FORBIDDEN", {
+      message: "This personal view belongs to another user.",
+    });
   }
 };
 
-export const listManagedSavedViews = async (input: { mailboxId: string; userId: string }) => {
+export const listManagedSavedViews = async (input: {
+  mailboxId: string;
+  userId: string;
+}) => {
   await getAuthorizedManagedMailbox(input);
   return await db
     .select()
@@ -37,11 +44,14 @@ export const listManagedSavedViews = async (input: { mailboxId: string; userId: 
         eq(managedMailSavedView.mailboxId, input.mailboxId),
         or(
           isNull(managedMailSavedView.ownerUserId),
-          eq(managedMailSavedView.ownerUserId, input.userId),
-        ),
-      ),
+          eq(managedMailSavedView.ownerUserId, input.userId)
+        )
+      )
     )
-    .orderBy(asc(managedMailSavedView.ownerUserId), asc(managedMailSavedView.position));
+    .orderBy(
+      asc(managedMailSavedView.ownerUserId),
+      asc(managedMailSavedView.position)
+    );
 };
 
 export const createManagedSavedView = async (input: {
@@ -89,11 +99,13 @@ export const updateManagedSavedView = async (input: {
     .where(
       and(
         eq(managedMailSavedView.id, input.viewId),
-        eq(managedMailSavedView.mailboxId, input.mailboxId),
-      ),
+        eq(managedMailSavedView.mailboxId, input.mailboxId)
+      )
     )
     .limit(1);
-  if (!view) throw new ORPCError("NOT_FOUND", { message: "Saved view not found." });
+  if (view === undefined) {
+    throw new ORPCError("NOT_FOUND", { message: "Saved view not found." });
+  }
   await assertViewAccess({
     mailboxId: input.mailboxId,
     ownerUserId: view.ownerUserId,
@@ -127,17 +139,21 @@ export const deleteManagedSavedView = async (input: {
     .where(
       and(
         eq(managedMailSavedView.id, input.viewId),
-        eq(managedMailSavedView.mailboxId, input.mailboxId),
-      ),
+        eq(managedMailSavedView.mailboxId, input.mailboxId)
+      )
     )
     .limit(1);
-  if (!view) throw new ORPCError("NOT_FOUND", { message: "Saved view not found." });
+  if (view === undefined) {
+    throw new ORPCError("NOT_FOUND", { message: "Saved view not found." });
+  }
   await assertViewAccess({
     mailboxId: input.mailboxId,
     ownerUserId: view.ownerUserId,
     userId: input.userId,
   });
-  await db.delete(managedMailSavedView).where(eq(managedMailSavedView.id, view.id));
+  await db
+    .delete(managedMailSavedView)
+    .where(eq(managedMailSavedView.id, view.id));
   return { id: view.id };
 };
 
@@ -154,27 +170,31 @@ export const reorderManagedSavedViews = async (input: {
           .where(
             and(
               eq(managedMailSavedView.mailboxId, input.mailboxId),
-              inArray(managedMailSavedView.id, input.viewIds),
-            ),
+              inArray(managedMailSavedView.id, input.viewIds)
+            )
           )
       : [];
   if (views.length !== new Set(input.viewIds).size) {
-    throw new ORPCError("BAD_REQUEST", { message: "One or more saved views are unavailable." });
-  }
-  for (const view of views) {
-    await assertViewAccess({
-      mailboxId: input.mailboxId,
-      ownerUserId: view.ownerUserId,
-      userId: input.userId,
+    throw new ORPCError("BAD_REQUEST", {
+      message: "One or more saved views are unavailable.",
     });
   }
+  await Promise.all(
+    views.map(async (view) => {
+      await assertViewAccess({
+        mailboxId: input.mailboxId,
+        ownerUserId: view.ownerUserId,
+        userId: input.userId,
+      });
+    })
+  );
   await Promise.all(
     input.viewIds.map((viewId, position) =>
       db
         .update(managedMailSavedView)
         .set({ position, updatedAt: new Date() })
-        .where(eq(managedMailSavedView.id, viewId)),
-    ),
+        .where(eq(managedMailSavedView.id, viewId))
+    )
   );
   return { viewIds: input.viewIds };
 };

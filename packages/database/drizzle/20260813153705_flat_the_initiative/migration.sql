@@ -1,0 +1,1 @@
+ALTER TABLE "mailboxActionExternalEffect" DROP CONSTRAINT "mailbox_action_external_effect_provider_check", ADD CONSTRAINT "mailbox_action_external_effect_provider_check" CHECK ("provider" in ('google_calendar', 'linear'));

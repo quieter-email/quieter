@@ -4,7 +4,10 @@ import { eq } from "drizzle-orm";
 
 export const AUTO_LABEL_BUDGET_RETRY_MS = 1000 * 60 * 60 * 6;
 
-export const deferAutoLabelAutomation = async (eventId: string, message: string) => {
+export const deferAutoLabelAutomation = async (
+  eventId: string,
+  message: string
+) => {
   const now = new Date();
   await db
     .update(gmailAutoLabelEvent)

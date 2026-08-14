@@ -1,11 +1,13 @@
 "use client";
 
-import type { ReactNode } from "react";
 import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { cn } from "@quieter/ui/cn";
 import { AnimatePresence, m, useReducedMotion } from "motion/react";
-import { getAppPresenceMotion } from "~/features/motion/app-motion";
+import type { ReactNode } from "react";
+
+import { getAppPresenceMotion } from "#/features/motion/app-motion";
+
 import { LoadingDots } from "../../thinking-indicator";
 
 type ToolStepProps = {
@@ -20,6 +22,46 @@ type ToolStepProps = {
   onToggle?: () => void;
   pending?: boolean;
 };
+
+const getLeadingIndicator = ({
+  canExpand,
+  expanded,
+  nested,
+  pending,
+  shouldReduceMotion,
+}: {
+  canExpand: boolean;
+  expanded: boolean;
+  nested: boolean;
+  pending: boolean;
+  shouldReduceMotion: boolean | null;
+}): ReactNode => {
+  if (pending) {
+    return <LoadingDots />;
+  }
+  if (nested && canExpand) {
+    return (
+      <HugeiconsIcon
+        aria-hidden
+        className={cn("size-3.5 shrink-0 text-muted-fg/45", {
+          "rotate-90": expanded,
+          "transition-none": shouldReduceMotion,
+          "transition-transform duration-(--app-motion-duration-enter) ease-(--app-motion-ease-out)":
+            shouldReduceMotion !== true,
+        })}
+        icon={ArrowRight01Icon}
+      />
+    );
+  }
+  return nested ? <span aria-hidden className="size-3.5 shrink-0" /> : null;
+};
+
+const hasRenderableChildren = (children: ReactNode) =>
+  children !== null &&
+  children !== undefined &&
+  children !== false &&
+  children !== true &&
+  children !== "";
 
 export const ToolStep = ({
   children,
@@ -36,41 +78,34 @@ export const ToolStep = ({
   const shouldReduceMotion = useReducedMotion();
   const hasError = Boolean(error);
   const canExpand = expandable && !pending && !hasError;
+  const leadingIndicator = getLeadingIndicator({
+    canExpand,
+    expanded,
+    nested,
+    pending,
+    shouldReduceMotion,
+  });
 
   return (
-    <div className={cn({ "py-1": nested, "py-0.5": !nested })}>
+    <div className={cn({ "py-0.5": !nested, "py-1": nested })}>
       <button
         aria-expanded={canExpand ? expanded : undefined}
-        className={cn("group flex w-full max-w-full items-center gap-2 text-left", {
-          "cursor-default": !canExpand,
-          "cursor-pointer": canExpand,
-        })}
+        className={cn(
+          "group flex w-full max-w-full items-center gap-2 text-left",
+          {
+            "cursor-default": !canExpand,
+            "cursor-pointer": canExpand,
+          }
+        )}
         disabled={!canExpand}
         onClick={canExpand ? onToggle : undefined}
         type="button"
       >
-        {pending ? (
-          <LoadingDots />
-        ) : nested ? (
-          canExpand ? (
-            <HugeiconsIcon
-              aria-hidden
-              className={cn("size-3.5 shrink-0 text-muted-fg/45", {
-                "rotate-90": expanded,
-                "transition-none": shouldReduceMotion,
-                "transition-transform duration-(--app-motion-duration-enter) ease-(--app-motion-ease-out)":
-                  !shouldReduceMotion,
-              })}
-              icon={ArrowRight01Icon}
-            />
-          ) : (
-            <span aria-hidden className="size-3.5 shrink-0" />
-          )
-        ) : null}
+        {leadingIndicator}
         <span
           className={cn("flex min-w-0 flex-1 items-baseline gap-x-2 truncate", {
-            "text-sm/relaxed": nested,
             "text-sm/5": !nested,
+            "text-sm/relaxed": nested,
           })}
         >
           <span
@@ -81,10 +116,16 @@ export const ToolStep = ({
           >
             {label}
           </span>
-          {detail ? <span className="text-fg/75">{detail}</span> : null}
-          {meta ? <span className="text-muted-fg/65">{meta}</span> : null}
+          {detail !== undefined && detail !== "" ? (
+            <span className="text-fg/75">{detail}</span>
+          ) : null}
+          {meta !== undefined && meta !== "" ? (
+            <span className="text-muted-fg/65">{meta}</span>
+          ) : null}
           {hasError ? (
-            <span className="border-l border-destructive/30 pl-2 text-destructive/90">{error}</span>
+            <span className="border-l border-destructive/30 pl-2 text-destructive/90">
+              {error}
+            </span>
           ) : null}
         </span>
         {!nested && canExpand ? (
@@ -97,8 +138,8 @@ export const ToolStep = ({
                 "rotate-90 opacity-100": expanded,
                 "transition-none": shouldReduceMotion,
                 "transition-transform duration-(--app-motion-duration-enter) ease-(--app-motion-ease-out)":
-                  !shouldReduceMotion,
-              },
+                  shouldReduceMotion !== true,
+              }
             )}
             icon={ArrowRight01Icon}
           />
@@ -106,8 +147,10 @@ export const ToolStep = ({
       </button>
 
       <AnimatePresence initial={false}>
-        {expanded && children ? (
-          <m.div {...getAppPresenceMotion({ reducedMotion: shouldReduceMotion })}>
+        {expanded && hasRenderableChildren(children) ? (
+          <m.div
+            {...getAppPresenceMotion({ reducedMotion: shouldReduceMotion })}
+          >
             <div
               className={cn("mt-1.5 border-l border-border", {
                 "ml-1.5 pl-3": nested,

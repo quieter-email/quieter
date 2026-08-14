@@ -1,5 +1,7 @@
-import { chat, type ChatMiddleware } from "@tanstack/ai";
+import { chat } from "@tanstack/ai";
+import type { ChatMiddleware } from "@tanstack/ai";
 import { z } from "zod";
+
 import { defaultChatModel } from "./chat-models";
 import { createOpenRouterAdapter } from "./openrouter";
 

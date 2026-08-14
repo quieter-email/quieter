@@ -1,7 +1,8 @@
-import type { MailboxSwitcherOrder } from "@quieter/database/schema";
 import { db } from "@quieter/database/client";
+import type { MailboxSwitcherOrder } from "@quieter/database/schema";
 import { user } from "@quieter/database/schema";
 import { eq } from "drizzle-orm";
+
 import type { MailboxGroup } from "./types";
 
 export const getUserMailboxPreferences = async (userId: string) => {
@@ -20,8 +21,8 @@ export const getUserMailboxPreferences = async (userId: string) => {
 };
 
 export const resolveDefaultMailboxId = (
-  mailboxes: Array<{ id: string }>,
-  defaultMailboxId: string | null,
+  mailboxes: { id: string }[],
+  defaultMailboxId: string | null
 ) =>
   mailboxes.some((mailboxRecord) => mailboxRecord.id === defaultMailboxId)
     ? defaultMailboxId
@@ -29,7 +30,7 @@ export const resolveDefaultMailboxId = (
 
 export const canonicalizeMailboxSwitcherOrder = (
   groups: MailboxGroup[],
-  order: MailboxSwitcherOrder | null,
+  order: MailboxSwitcherOrder | null
 ): MailboxSwitcherOrder => {
   const groupIds = groups.map((group) => group.id);
   const groupIdSet = new Set(groupIds);
@@ -38,7 +39,9 @@ export const canonicalizeMailboxSwitcherOrder = (
     ...(order?.groupIds.filter((groupId) => groupIdSet.has(groupId)) ?? []),
     ...groupIds,
   ].filter((groupId) => {
-    if (seenGroupIds.has(groupId) || !groupIdSet.has(groupId)) return false;
+    if (seenGroupIds.has(groupId) || !groupIdSet.has(groupId)) {
+      return false;
+    }
     seenGroupIds.add(groupId);
     return true;
   });
@@ -52,7 +55,9 @@ export const canonicalizeMailboxSwitcherOrder = (
       ...(order?.mailboxIdsByGroupId[group.id] ?? []),
       ...mailboxIds,
     ].filter((mailboxId) => {
-      if (seenMailboxIds.has(mailboxId) || !mailboxIdSet.has(mailboxId)) return false;
+      if (seenMailboxIds.has(mailboxId) || !mailboxIdSet.has(mailboxId)) {
+        return false;
+      }
       seenMailboxIds.add(mailboxId);
       return true;
     });
@@ -63,23 +68,31 @@ export const canonicalizeMailboxSwitcherOrder = (
 
 export const applyMailboxSwitcherOrder = (
   groups: MailboxGroup[],
-  order: MailboxSwitcherOrder | null,
+  order: MailboxSwitcherOrder | null
 ): MailboxGroup[] => {
-  if (!order) return groups;
+  if (!order) {
+    return groups;
+  }
 
   const canonicalOrder = canonicalizeMailboxSwitcherOrder(groups, order);
   const groupsById = new Map(groups.map((group) => [group.id, group]));
   return canonicalOrder.groupIds.flatMap((groupId) => {
     const group = groupsById.get(groupId);
-    if (!group) return [];
-    const mailboxesById = new Map(group.mailboxes.map((record) => [record.id, record]));
+    if (!group) {
+      return [];
+    }
+    const mailboxesById = new Map(
+      group.mailboxes.map((record) => [record.id, record])
+    );
     return [
       {
         ...group,
-        mailboxes: canonicalOrder.mailboxIdsByGroupId[group.id].flatMap((mailboxId) => {
-          const record = mailboxesById.get(mailboxId);
-          return record ? [record] : [];
-        }),
+        mailboxes: canonicalOrder.mailboxIdsByGroupId[group.id].flatMap(
+          (mailboxId) => {
+            const record = mailboxesById.get(mailboxId);
+            return record ? [record] : [];
+          }
+        ),
       },
     ];
   });

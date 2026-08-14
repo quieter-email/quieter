@@ -2,9 +2,6 @@
   "extends": "@quieter/config/tsconfig/base.json",
   "compilerOptions": {
     "lib": ["ESNext", "DOM"],
-    "paths": {
-      "quieter": ["../sdk/src/index.ts"]
-    },
     "types": ["bun", "node"]
   },
   "include": ["src/**/*.ts", "tests/**/*.ts"]

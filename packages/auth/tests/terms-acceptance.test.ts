@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
+
 import {
   readTermsAcceptedAtFromCookieHeader,
   termsAcceptanceCookieName,
@@ -9,19 +10,29 @@ describe("terms acceptance cookie", () => {
     const acceptedAt = new Date(Date.now() - 60_000);
     const cookie = `${termsAcceptanceCookieName}=${encodeURIComponent(acceptedAt.toISOString())}`;
 
-    expect(readTermsAcceptedAtFromCookieHeader(cookie)).toEqual(acceptedAt);
+    expect(readTermsAcceptedAtFromCookieHeader(cookie)).toStrictEqual(
+      acceptedAt
+    );
   });
 
   test("rejects stale, future, and invalid timestamps", () => {
     const stale = new Date(Date.now() - 11 * 60_000).toISOString();
     const future = new Date(Date.now() + 60_000).toISOString();
 
-    expect(readTermsAcceptedAtFromCookieHeader(`${termsAcceptanceCookieName}=${stale}`)).toBeNull();
     expect(
-      readTermsAcceptedAtFromCookieHeader(`${termsAcceptanceCookieName}=${future}`),
+      readTermsAcceptedAtFromCookieHeader(
+        `${termsAcceptanceCookieName}=${stale}`
+      )
     ).toBeNull();
     expect(
-      readTermsAcceptedAtFromCookieHeader(`${termsAcceptanceCookieName}=not-a-date`),
+      readTermsAcceptedAtFromCookieHeader(
+        `${termsAcceptanceCookieName}=${future}`
+      )
+    ).toBeNull();
+    expect(
+      readTermsAcceptedAtFromCookieHeader(
+        `${termsAcceptanceCookieName}=not-a-date`
+      )
     ).toBeNull();
   });
 });

@@ -1,6 +1,10 @@
 "use client";
 
-import { Add01Icon, Globe02Icon, Loading03Icon } from "@hugeicons/core-free-icons";
+import {
+  Add01Icon,
+  Globe02Icon,
+  Loading03Icon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
@@ -17,10 +21,14 @@ import {
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { type ReactNode, useState } from "react";
+import { useState } from "react";
+import type { ReactNode } from "react";
 import { z } from "zod";
-import { orpc } from "~/lib/orpc";
-import { getOrganizationMailDomainsQueryKey, type OrganizationMailDomain } from "./mail-domains";
+
+import { orpc } from "#/lib/orpc";
+
+import { getOrganizationMailDomainsQueryKey } from "./mail-domains";
+import type { OrganizationMailDomain } from "./mail-domains";
 
 type MailDomainMode = OrganizationMailDomain["mode"];
 
@@ -37,11 +45,11 @@ const modeOptions = [
     label: "Send and receive",
     value: "send_and_receive",
   },
-] as const satisfies Array<{
+] as const satisfies {
   description: string;
   label: string;
   value: MailDomainMode;
-}>;
+}[];
 
 export const RegisterDomainDialog = ({
   children,
@@ -79,7 +87,9 @@ export const RegisterDomainDialog = ({
         form.reset();
         onCreated?.(result.domainId);
       } catch (error) {
-        setSubmitError(error instanceof Error ? error.message : "Could not register domain.");
+        setSubmitError(
+          error instanceof Error ? error.message : "Could not register domain."
+        );
       }
     },
     validationLogic: revalidateLogic(),
@@ -93,7 +103,12 @@ export const RegisterDomainDialog = ({
 
   return (
     <>
-      <Button onClick={() => setOpen(true)} size="sm">
+      <Button
+        onClick={() => {
+          setOpen(true);
+        }}
+        size="sm"
+      >
         {children ?? (
           <>
             <HugeiconsIcon aria-hidden className="size-4" icon={Add01Icon} />
@@ -116,7 +131,8 @@ export const RegisterDomainDialog = ({
           <DialogHeader>
             <DialogTitle>Register domain</DialogTitle>
             <DialogDescription>
-              Choose what this domain can do. You can expand its capabilities later.
+              Choose what this domain can do. You can expand its capabilities
+              later.
             </DialogDescription>
           </DialogHeader>
 
@@ -135,7 +151,9 @@ export const RegisterDomainDialog = ({
                       aria-label="Domain"
                       autoComplete="off"
                       name={field.name}
-                      onBlur={() => field.handleBlur()}
+                      onBlur={() => {
+                        field.handleBlur();
+                      }}
                       onChange={(event) => {
                         setSubmitError(null);
                         field.handleChange(event.target.value);
@@ -144,7 +162,10 @@ export const RegisterDomainDialog = ({
                       value={field.state.value}
                     />
                     {field.state.meta.errors.map((error) => (
-                      <p className="text-sm text-destructive" key={error?.message}>
+                      <p
+                        className="text-sm text-destructive"
+                        key={error?.message}
+                      >
                         {error?.message}
                       </p>
                     ))}
@@ -155,25 +176,31 @@ export const RegisterDomainDialog = ({
               <form.Field name="mode">
                 {(field) => (
                   <fieldset className="space-y-2">
-                    <legend className="mb-2 text-sm font-medium text-fg">Mail mode</legend>
+                    <legend className="mb-2 text-sm font-medium text-fg">
+                      Mail mode
+                    </legend>
                     {modeOptions.map((option) => {
                       const selected = field.state.value === option.value;
                       return (
-                        <label
+                        <div
                           className={cn(
                             "squircle flex cursor-pointer gap-3 rounded-lg border p-4 transition-colors",
                             selected
                               ? "border-fg/30 bg-muted/40"
                               : "border-border hover:bg-muted/20",
-                            "",
+                            ""
                           )}
                           key={option.value}
                         >
                           <input
+                            aria-label={option.label}
                             checked={selected}
                             className="mt-1 size-4 accent-fg"
+                            id={`domain-mode-${option.value}`}
                             name={field.name}
-                            onChange={() => field.handleChange(option.value)}
+                            onChange={() => {
+                              field.handleChange(option.value);
+                            }}
                             type="radio"
                             value={option.value}
                           />
@@ -185,20 +212,28 @@ export const RegisterDomainDialog = ({
                               {option.description}
                             </span>
                           </span>
-                        </label>
+                        </div>
                       );
                     })}
                   </fieldset>
                 )}
               </form.Field>
 
-              {submitError && <p className="text-sm text-destructive">{submitError}</p>}
+              {submitError !== null &&
+              submitError !== undefined &&
+              submitError !== "" ? (
+                <p className="text-sm text-destructive">{submitError}</p>
+              ) : null}
 
               <DialogFooter className="px-0 pb-0">
                 <DialogCloseButton disabled={createSetupMutation.isPending}>
                   Cancel
                 </DialogCloseButton>
-                <Button disabled={createSetupMutation.isPending} size="sm" type="submit">
+                <Button
+                  disabled={createSetupMutation.isPending}
+                  size="sm"
+                  type="submit"
+                >
                   {createSetupMutation.isPending ? (
                     <HugeiconsIcon
                       aria-hidden
@@ -206,7 +241,11 @@ export const RegisterDomainDialog = ({
                       icon={Loading03Icon}
                     />
                   ) : (
-                    <HugeiconsIcon aria-hidden className="size-4" icon={Globe02Icon} />
+                    <HugeiconsIcon
+                      aria-hidden
+                      className="size-4"
+                      icon={Globe02Icon}
+                    />
                   )}
                   Register domain
                 </Button>

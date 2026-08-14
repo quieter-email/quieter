@@ -1,16 +1,21 @@
 "use client";
 
-import type { MouseEventHandler, ReactNode } from "react";
-import { Button, type ButtonProps } from "@quieter/ui/button";
+import { Button } from "@quieter/ui/button";
+import type { ButtonProps } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import type { MouseEventHandler, ReactNode } from "react";
 import { useState } from "react";
+
 import {
   SidebarActiveSurface,
   SidebarHoverSurface,
-} from "~/features/navigation/components/sidebar-surfaces";
-import { sidebarNavButtonClassName } from "~/features/navigation/domain/sidebar-surfaces";
+  sidebarNavButtonVariants,
+} from "#/features/navigation/components/sidebar-surfaces";
 
-type SidebarNavItemProps = Omit<ButtonProps, "onMouseEnter" | "onMouseLeave"> & {
+type SidebarNavItemProps = Omit<
+  ButtonProps,
+  "onMouseEnter" | "onMouseLeave"
+> & {
   active?: boolean;
   activeSurfaceClassName?: string;
   children: ReactNode;
@@ -51,17 +56,28 @@ export const SidebarNavItem = ({
       className="group squircle relative flex w-full items-center rounded-md py-px"
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      onPointerCancel={() => setPressed(false)}
+      onPointerCancel={() => {
+        setPressed(false);
+      }}
       onPointerDown={(event) => {
         if (event.button === 0) {
           setPressed(true);
         }
       }}
-      onPointerLeave={() => setPressed(false)}
-      onPointerUp={() => setPressed(false)}
+      onPointerLeave={() => {
+        setPressed(false);
+      }}
+      onPointerUp={() => {
+        setPressed(false);
+      }}
     >
-      {active ? <SidebarActiveSurface className={activeSurfaceClassName} /> : null}
-      {!active && (hover || hoverExiting) && hoverLayoutId ? (
+      {active === true ? (
+        <SidebarActiveSurface className={activeSurfaceClassName} />
+      ) : null}
+      {active !== true &&
+      (hover === true || hoverExiting === true) &&
+      hoverLayoutId !== undefined &&
+      hoverLayoutId !== "" ? (
         <SidebarHoverSurface
           className={hoverSurfaceClassName}
           hoverEnter={hoverEnter}
@@ -72,7 +88,7 @@ export const SidebarNavItem = ({
         />
       ) : null}
       <Button
-        className={cn(sidebarNavButtonClassName, className)}
+        className={cn(sidebarNavButtonVariants(), className)}
         onBlur={onBlur}
         onFocus={onFocus}
         variant={variant}

@@ -1,8 +1,9 @@
 "use client";
 
-import type { QueryClient } from "@tanstack/react-query";
 import * as Sentry from "@sentry/tanstackstart-react";
+import type { QueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
+
 import { isExpectedClientError } from "../client-error-reporting";
 import { getGmailUnreadCountsQueryKey } from "../mailboxes-query";
 import { rpc } from "../orpc";
@@ -34,9 +35,9 @@ export const useMailboxLiveSync = (input: {
   const { enabled, mailboxId, queryClient } = input;
 
   // react-doctor-disable-next-line react-doctor/effect-needs-cleanup -- Cleanup closes the socket and clears both timers below.
-  useEffect(() => {
+  useEffect((): (() => void) | undefined => {
     if (!enabled) {
-      return;
+      return undefined;
     }
 
     let connectionAttempts = 0;
@@ -61,14 +62,14 @@ export const useMailboxLiveSync = (input: {
             query.queryKey[1] === mailboxId &&
             query.queryKey.at(-1) === "live-sync",
         },
-        { cancelRefetch: false },
+        { cancelRefetch: false }
       );
       void queryClient.invalidateQueries(
         {
           exact: true,
           queryKey: getGmailUnreadCountsQueryKey(),
         },
-        { cancelRefetch: false },
+        { cancelRefetch: false }
       );
     };
     const requestUsefulDetails = () => {
@@ -77,7 +78,7 @@ export const useMailboxLiveSync = (input: {
           exact: true,
           queryKey: getGmailUsefulDetailsQueryKey(mailboxId),
         },
-        { cancelRefetch: false },
+        { cancelRefetch: false }
       );
     };
     const scheduleReconnect = () => {
@@ -95,9 +96,13 @@ export const useMailboxLiveSync = (input: {
     const reportConnectionFailure = (
       error: unknown,
       phase: "connection" | "socket-close" | "socket-error",
-      details?: { closeCode?: number; endpoint?: string },
+      details?: { closeCode?: number; endpoint?: string }
     ) => {
-      if (disposed || reportedConnectionFailure || isExpectedClientError(error)) {
+      if (
+        disposed ||
+        reportedConnectionFailure ||
+        isExpectedClientError(error)
+      ) {
         return;
       }
 
@@ -122,8 +127,15 @@ export const useMailboxLiveSync = (input: {
       connectionAttempts += 1;
 
       try {
-        const connection = await rpc.mail.createLiveSyncConnection({ mailboxId });
-        if (disposed || !connection.url) {
+        const connection = await rpc.mail.createLiveSyncConnection({
+          mailboxId,
+        });
+        if (
+          disposed ||
+          connection.url === null ||
+          connection.url === undefined ||
+          connection.url === ""
+        ) {
           return;
         }
 
@@ -153,7 +165,10 @@ export const useMailboxLiveSync = (input: {
           }
 
           try {
-            const eventType = parseMailboxEvent(JSON.parse(String(event.data)), mailboxId);
+            const eventType = parseMailboxEvent(
+              JSON.parse(String(event.data)),
+              mailboxId
+            );
             if (eventType === "mailbox-dirty") {
               requestSync();
             } else if (eventType === "mailbox-details-dirty") {
@@ -173,7 +188,7 @@ export const useMailboxLiveSync = (input: {
             reportConnectionFailure(
               new Error("Gmail live sync connection closed unexpectedly."),
               "socket-close",
-              { closeCode: event.code, endpoint },
+              { closeCode: event.code, endpoint }
             );
           }
           scheduleReconnect();
@@ -183,9 +198,13 @@ export const useMailboxLiveSync = (input: {
             return;
           }
 
-          reportConnectionFailure(new Error("Gmail live sync connection failed."), "socket-error", {
-            endpoint,
-          });
+          reportConnectionFailure(
+            new Error("Gmail live sync connection failed."),
+            "socket-error",
+            {
+              endpoint,
+            }
+          );
         });
       } catch (error) {
         reportConnectionFailure(error, "connection");

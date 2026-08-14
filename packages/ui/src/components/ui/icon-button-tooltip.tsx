@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+
 import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
 
 type IconButtonTooltipProps = {
@@ -9,12 +10,19 @@ type IconButtonTooltipProps = {
   sideOffset?: number;
 };
 
-export const IconButtonTooltip = ({ children, label, sideOffset = 6 }: IconButtonTooltipProps) => (
+export const IconButtonTooltip = ({
+  children,
+  label,
+  sideOffset = 6,
+}: IconButtonTooltipProps) => (
   <Tooltip>
     <TooltipTrigger className="inline-flex" render={<span />}>
       {children}
     </TooltipTrigger>
-    <TooltipContent className="min-w-0 px-2 py-1 text-center" sideOffset={sideOffset}>
+    <TooltipContent
+      className="min-w-0 px-2 py-1 text-center"
+      sideOffset={sideOffset}
+    >
       {label}
     </TooltipContent>
   </Tooltip>

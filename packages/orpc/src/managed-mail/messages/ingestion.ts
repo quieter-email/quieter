@@ -1,3 +1,5 @@
+import { createHash, randomUUID } from "node:crypto";
+
 import { db } from "@quieter/database/client";
 import {
   mailbox,
@@ -5,10 +7,13 @@ import {
   managedMailAttachment,
   managedMailMessage,
 } from "@quieter/database/schema";
-import { parseRawMailMessage, type ParsedRawMailMessage } from "@quieter/mail/raw-message";
+import { parseRawMailMessage } from "@quieter/mail/raw-message";
+import type { ParsedRawMailMessage } from "@quieter/mail/raw-message";
+import { reportError } from "@quieter/observability";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
-import { createHash, randomUUID } from "node:crypto";
+
 import { enqueueMailboxActionsForMessage } from "../../mailbox-actions/enqueue";
+import { hasText } from "../../text";
 import { processManagedMailAutomation } from "../automation";
 import { inheritManagedThreadLabels } from "../labels/repository";
 import { applyManagedRulesToMessage } from "../rules/evaluator";
@@ -21,25 +26,29 @@ type RawMailObjectProvider = "r2" | "s3";
 
 const normalizeEmailAddress = (value: string) => value.trim().toLowerCase();
 
-const getReplyReferenceIds = (message: ParsedRawMailMessage) =>
-  Array.from(
-    new Set(
-      [message.inReplyTo, ...(message.references?.match(/<[^>]+>/g) ?? [])]
-        .map((value) => value?.trim())
-        .filter((value): value is string => !!value),
-    ),
-  );
+const getReplyReferenceIds = (message: ParsedRawMailMessage) => [
+  ...new Set(
+    [message.inReplyTo, ...(message.references?.match(/<[^>]+>/gu) ?? [])]
+      .map((value) => value?.trim())
+      .filter((value): value is string => hasText(value))
+  ),
+];
 
 const deriveThreadId = (mailboxId: string, canonicalRef: string) =>
-  createHash("sha256").update(`${mailboxId}\0${canonicalRef}`).digest("hex").slice(0, 32);
+  createHash("sha256")
+    .update(`${mailboxId}\0${canonicalRef}`)
+    .digest("hex")
+    .slice(0, 32);
 
 const resolveManagedThreadId = async (
   mailboxId: string,
   message: ParsedRawMailMessage,
-  fallbackThreadId: string,
+  fallbackThreadId: string
 ) => {
   const referenceIds = getReplyReferenceIds(message);
-  if (referenceIds.length === 0) return fallbackThreadId;
+  if (referenceIds.length === 0) {
+    return fallbackThreadId;
+  }
 
   const [referencedMessage] = await db
     .select({ threadId: managedMailMessage.threadId })
@@ -47,13 +56,193 @@ const resolveManagedThreadId = async (
     .where(
       and(
         eq(managedMailMessage.mailboxId, mailboxId),
-        inArray(managedMailMessage.messageHeaderId, referenceIds),
-      ),
+        inArray(managedMailMessage.messageHeaderId, referenceIds)
+      )
     )
     .orderBy(desc(managedMailMessage.sentAt))
     .limit(1);
 
-  return referencedMessage?.threadId ?? deriveThreadId(mailboxId, referenceIds[0]);
+  return (
+    referencedMessage?.threadId ?? deriveThreadId(mailboxId, referenceIds[0])
+  );
+};
+
+const runPostIngestionOrganization = async (input: {
+  mailboxId: string;
+  messageId: string;
+  providerMessageId: string;
+  threadId: string;
+}) => {
+  try {
+    await inheritManagedThreadLabels({
+      mailboxId: input.mailboxId,
+      messageId: input.messageId,
+      threadId: input.threadId,
+    });
+    await applyManagedRulesToMessage({
+      mailboxId: input.mailboxId,
+      messageId: input.messageId,
+    });
+    await processManagedMailAutomation({
+      mailboxId: input.mailboxId,
+      messageId: input.messageId,
+    });
+    await enqueueMailboxActionsForMessage({
+      mailboxId: input.mailboxId,
+      sourceMessageId: input.providerMessageId,
+      sourceThreadId: input.threadId,
+    });
+  } catch (error) {
+    reportError(error, { operation: "managed-mail:organize-after-ingestion" });
+  }
+};
+
+const ingestManagedMessageForMailbox = async (input: {
+  parsed: ParsedRawMailMessage;
+  providerMessageId: string;
+  rawObjectBucket: string;
+  rawObjectKey: string;
+  rawObjectProvider: RawMailObjectProvider;
+  rawSizeBytes: number;
+  receivedAt: Date;
+  recipients: string[];
+  s3Bucket?: string;
+  s3Key?: string;
+  targetMailboxId: string;
+}) => {
+  const id = randomUUID();
+  const sentAt = input.parsed.date ?? input.receivedAt;
+  const canonicalRef = input.parsed.messageHeaderId ?? id;
+  const threadId = await resolveManagedThreadId(
+    input.targetMailboxId,
+    input.parsed,
+    deriveThreadId(input.targetMailboxId, canonicalRef)
+  );
+  const inserted = await db.transaction(async (tx) => {
+    const [message] = await tx
+      .insert(managedMailMessage)
+      .values({
+        bcc: input.parsed.bcc ?? null,
+        bccNormalized: normalizeManagedSearchValue(input.parsed.bcc),
+        bodyHtml: input.parsed.bodyHtml ?? null,
+        bodyText: input.parsed.bodyText ?? null,
+        cc: input.parsed.cc ?? null,
+        ccNormalized: normalizeManagedSearchValue(input.parsed.cc),
+        createdAt: new Date(),
+        direction: "inbound",
+        from: input.parsed.from,
+        fromNormalized: normalizeManagedSearchValue(input.parsed.from),
+        headers: input.parsed.headers,
+        id,
+        inReplyTo: input.parsed.inReplyTo ?? null,
+        isRead: false,
+        mailboxId: input.targetMailboxId,
+        messageHeaderId: input.parsed.messageHeaderId ?? null,
+        providerMessageId: input.providerMessageId,
+        rawObjectBucket: input.rawObjectBucket,
+        rawObjectKey: input.rawObjectKey,
+        rawObjectProvider: input.rawObjectProvider,
+        rawSizeBytes: input.rawSizeBytes,
+        references: input.parsed.references ?? null,
+        replyTo: input.parsed.replyTo ?? null,
+        s3Bucket:
+          input.rawObjectProvider === "s3"
+            ? input.rawObjectBucket
+            : (input.s3Bucket ?? null),
+        s3Key:
+          input.rawObjectProvider === "s3"
+            ? input.rawObjectKey
+            : (input.s3Key ?? null),
+        searchText: createManagedMessageSearchText(input.parsed),
+        sentAt,
+        snippet: input.parsed.snippet ?? null,
+        subject: input.parsed.subject ?? null,
+        threadId,
+        to: input.parsed.to ?? input.recipients.join(", "),
+        toNormalized: normalizeManagedSearchValue(
+          input.parsed.to ?? input.recipients.join(", ")
+        ),
+        updatedAt: new Date(),
+      })
+      .onConflictDoNothing({
+        target: [
+          managedMailMessage.mailboxId,
+          managedMailMessage.providerMessageId,
+        ],
+      })
+      .returning({
+        id: managedMailMessage.id,
+        mailboxId: managedMailMessage.mailboxId,
+        threadId: managedMailMessage.threadId,
+      });
+
+    if (message !== undefined && input.parsed.attachments.length > 0) {
+      await tx.insert(managedMailAttachment).values(
+        input.parsed.attachments.map((attachment) => ({
+          contentId: attachment.contentId ?? null,
+          createdAt: new Date(),
+          fileName: attachment.fileName,
+          id: randomUUID(),
+          inline: attachment.inline,
+          mailboxId: message.mailboxId,
+          messageId: message.id,
+          mimeType: attachment.mimeType,
+          normalizedFileName: normalizeManagedSearchValue(attachment.fileName),
+          size: attachment.size,
+        }))
+      );
+    }
+
+    if (message !== undefined) {
+      await tx
+        .update(mailbox)
+        .set({
+          contentRevision: sql`${mailbox.contentRevision} + 1`,
+          updatedAt: new Date(),
+        })
+        .where(eq(mailbox.id, input.targetMailboxId));
+    }
+
+    return message;
+  });
+
+  if (inserted !== undefined) {
+    await runPostIngestionOrganization({
+      mailboxId: inserted.mailboxId,
+      messageId: inserted.id,
+      providerMessageId: input.providerMessageId,
+      threadId: inserted.threadId,
+    });
+    return inserted.mailboxId;
+  }
+
+  const [existing] = await db
+    .select({
+      id: managedMailMessage.id,
+      threadId: managedMailMessage.threadId,
+    })
+    .from(managedMailMessage)
+    .where(
+      and(
+        eq(managedMailMessage.mailboxId, input.targetMailboxId),
+        eq(managedMailMessage.providerMessageId, input.providerMessageId)
+      )
+    )
+    .limit(1);
+  if (existing !== undefined) {
+    await Promise.all([
+      inheritManagedThreadLabels({
+        mailboxId: input.targetMailboxId,
+        messageId: existing.id,
+        threadId: existing.threadId,
+      }),
+      applyManagedRulesToMessage({
+        mailboxId: input.targetMailboxId,
+        messageId: existing.id,
+      }),
+    ]);
+  }
+  return null;
 };
 
 export const recordInboundManagedMessage = async (input: {
@@ -68,10 +257,16 @@ export const recordInboundManagedMessage = async (input: {
   s3Bucket?: string;
   s3Key?: string;
 }) => {
-  const recipients = Array.from(
-    new Set(input.recipients.map(normalizeEmailAddress).filter(Boolean)),
-  );
-  if (recipients.length === 0) return [];
+  const recipients = [
+    ...new Set(
+      input.recipients
+        .map(normalizeEmailAddress)
+        .filter((value) => hasText(value))
+    ),
+  ];
+  if (recipients.length === 0) {
+    return [];
+  }
 
   const targetMailboxes = await db
     .select({ id: mailbox.id })
@@ -82,173 +277,70 @@ export const recordInboundManagedMessage = async (input: {
         eq(mailDomain.organizationId, mailbox.organizationId),
         eq(mailDomain.mode, "send_and_receive"),
         eq(mailDomain.status, "verified"),
-        sql`lower(split_part(${mailbox.emailAddress}, '@', 2)) = ${mailDomain.domain}`,
-      ),
+        sql`lower(split_part(${mailbox.emailAddress}, '@', 2)) = ${mailDomain.domain}`
+      )
     )
-    .where(and(eq(mailbox.provider, "managed"), inArray(mailbox.emailAddress, recipients)));
-  if (targetMailboxes.length === 0) return [];
+    .where(
+      and(
+        eq(mailbox.provider, "managed"),
+        inArray(mailbox.emailAddress, recipients)
+      )
+    );
+  if (targetMailboxes.length === 0) {
+    return [];
+  }
 
   const parsed = await parseRawMailMessage(input.rawMessage);
   const rawObjectProvider = input.rawObjectProvider ?? "s3";
   const rawObjectBucket = input.rawObjectBucket ?? input.s3Bucket;
   const rawObjectKey = input.rawObjectKey ?? input.s3Key;
-  if (!rawObjectBucket || !rawObjectKey) {
-    throw new Error("Inbound managed mail requires a canonical raw object reference.");
-  }
-  const insertedMailboxIds: string[] = [];
-
-  for (const targetMailbox of targetMailboxes) {
-    const id = randomUUID();
-    const sentAt = parsed.date ?? input.receivedAt;
-    const canonicalRef = parsed.messageHeaderId ?? id;
-    const threadId = await resolveManagedThreadId(
-      targetMailbox.id,
-      parsed,
-      deriveThreadId(targetMailbox.id, canonicalRef),
+  if (!hasText(rawObjectBucket) || !hasText(rawObjectKey)) {
+    throw new Error(
+      "Inbound managed mail requires a canonical raw object reference."
     );
-    const inserted = await db.transaction(async (tx) => {
-      const [message] = await tx
-        .insert(managedMailMessage)
-        .values({
-          bcc: parsed.bcc ?? null,
-          bccNormalized: normalizeManagedSearchValue(parsed.bcc),
-          bodyHtml: parsed.bodyHtml ?? null,
-          bodyText: parsed.bodyText ?? null,
-          cc: parsed.cc ?? null,
-          ccNormalized: normalizeManagedSearchValue(parsed.cc),
-          createdAt: new Date(),
-          direction: "inbound",
-          from: parsed.from,
-          fromNormalized: normalizeManagedSearchValue(parsed.from),
-          headers: parsed.headers,
-          id,
-          inReplyTo: parsed.inReplyTo ?? null,
-          isRead: false,
-          mailboxId: targetMailbox.id,
-          messageHeaderId: parsed.messageHeaderId ?? null,
+  }
+
+  const ingestResults = await Promise.all(
+    targetMailboxes.map(
+      async (targetMailbox) =>
+        await ingestManagedMessageForMailbox({
+          parsed,
           providerMessageId: input.providerMessageId,
           rawObjectBucket,
           rawObjectKey,
           rawObjectProvider,
           rawSizeBytes: input.rawSizeBytes,
-          references: parsed.references ?? null,
-          replyTo: parsed.replyTo ?? null,
-          s3Bucket: rawObjectProvider === "s3" ? rawObjectBucket : (input.s3Bucket ?? null),
-          s3Key: rawObjectProvider === "s3" ? rawObjectKey : (input.s3Key ?? null),
-          searchText: createManagedMessageSearchText(parsed),
-          sentAt,
-          snippet: parsed.snippet ?? null,
-          subject: parsed.subject ?? null,
-          threadId,
-          to: parsed.to ?? recipients.join(", "),
-          toNormalized: normalizeManagedSearchValue(parsed.to ?? recipients.join(", ")),
-          updatedAt: new Date(),
+          receivedAt: input.receivedAt,
+          recipients,
+          s3Bucket: input.s3Bucket,
+          s3Key: input.s3Key,
+          targetMailboxId: targetMailbox.id,
         })
-        .onConflictDoNothing({
-          target: [managedMailMessage.mailboxId, managedMailMessage.providerMessageId],
-        })
-        .returning({
-          id: managedMailMessage.id,
-          mailboxId: managedMailMessage.mailboxId,
-          threadId: managedMailMessage.threadId,
-        });
-
-      if (message && parsed.attachments.length > 0) {
-        await tx.insert(managedMailAttachment).values(
-          parsed.attachments.map((attachment) => ({
-            contentId: attachment.contentId ?? null,
-            createdAt: new Date(),
-            fileName: attachment.fileName,
-            id: randomUUID(),
-            inline: attachment.inline,
-            mailboxId: message.mailboxId,
-            messageId: message.id,
-            mimeType: attachment.mimeType,
-            normalizedFileName: normalizeManagedSearchValue(attachment.fileName),
-            size: attachment.size,
-          })),
-        );
-      }
-
-      if (message) {
-        await tx
-          .update(mailbox)
-          .set({ contentRevision: sql`${mailbox.contentRevision} + 1`, updatedAt: new Date() })
-          .where(eq(mailbox.id, targetMailbox.id));
-      }
-
-      return message;
-    });
-
-    if (inserted) {
-      try {
-        await inheritManagedThreadLabels({
-          mailboxId: inserted.mailboxId,
-          messageId: inserted.id,
-          threadId: inserted.threadId,
-        });
-        await applyManagedRulesToMessage({
-          mailboxId: inserted.mailboxId,
-          messageId: inserted.id,
-        });
-        await processManagedMailAutomation({
-          mailboxId: inserted.mailboxId,
-          messageId: inserted.id,
-        });
-        await enqueueMailboxActionsForMessage({
-          mailboxId: inserted.mailboxId,
-          sourceMessageId: input.providerMessageId,
-          sourceThreadId: inserted.threadId,
-        });
-      } catch (error) {
-        console.error("Managed message organization failed after ingestion.", {
-          error,
-          mailboxId: inserted.mailboxId,
-          messageId: inserted.id,
-        });
-      }
-      insertedMailboxIds.push(inserted.mailboxId);
-    } else {
-      const [existing] = await db
-        .select({ id: managedMailMessage.id, threadId: managedMailMessage.threadId })
-        .from(managedMailMessage)
-        .where(
-          and(
-            eq(managedMailMessage.mailboxId, targetMailbox.id),
-            eq(managedMailMessage.providerMessageId, input.providerMessageId),
-          ),
-        )
-        .limit(1);
-      if (existing) {
-        await inheritManagedThreadLabels({
-          mailboxId: targetMailbox.id,
-          messageId: existing.id,
-          threadId: existing.threadId,
-        });
-        await applyManagedRulesToMessage({
-          mailboxId: targetMailbox.id,
-          messageId: existing.id,
-        });
-      }
-    }
-  }
+    )
+  );
+  const insertedMailboxIds = ingestResults.filter(
+    (mailboxId): mailboxId is string => mailboxId !== null
+  );
 
   return insertedMailboxIds;
 };
 
-export const hasManagedMailObjectReference = async (input: { s3Bucket: string; s3Key: string }) => {
+export const hasManagedMailObjectReference = async (input: {
+  s3Bucket: string;
+  s3Key: string;
+}) => {
   const [reference] = await db
     .select({ id: managedMailMessage.id })
     .from(managedMailMessage)
     .where(
       and(
         eq(managedMailMessage.s3Bucket, input.s3Bucket),
-        eq(managedMailMessage.s3Key, input.s3Key),
-      ),
+        eq(managedMailMessage.s3Key, input.s3Key)
+      )
     )
     .limit(1);
 
-  return !!reference;
+  return reference !== undefined;
 };
 
 export const hasManagedRawMailObjectReference = async (input: {
@@ -263,10 +355,10 @@ export const hasManagedRawMailObjectReference = async (input: {
       and(
         eq(managedMailMessage.rawObjectProvider, input.provider),
         eq(managedMailMessage.rawObjectBucket, input.bucket),
-        eq(managedMailMessage.rawObjectKey, input.key),
-      ),
+        eq(managedMailMessage.rawObjectKey, input.key)
+      )
     )
     .limit(1);
 
-  return !!reference;
+  return reference !== undefined;
 };

@@ -1,4 +1,5 @@
-import { mergeAttributes, Node, type Editor } from "@tiptap/core";
+import { mergeAttributes, Node } from "@tiptap/core";
+import type { Editor } from "@tiptap/core";
 
 export type TemplatePlaceholderRange = {
   from: number;
@@ -6,14 +7,15 @@ export type TemplatePlaceholderRange = {
   to: number;
 };
 
-export const TEMPLATE_PLACEHOLDER_PATTERN = /\{\{quieter:([^{}\n]{1,80})\}\}/g;
+export const TEMPLATE_PLACEHOLDER_PATTERN =
+  /\{\{quieter:(?<label>[^{}\n]{1,80})\}\}/gu;
 const TEMPLATE_PLACEHOLDER_HTML_PATTERN =
-  /<span\b[^>]*data-quieter-template-placeholder="([^"]*)"[^>]*>[^<]*<\/span>/gi;
+  /<span\b[^>]*data-quieter-template-placeholder="(?<label>[^"]*)"[^>]*>[^<]*<\/span>/giu;
 
 export const createTemplatePlaceholderToken = (label: string) => {
   const normalized = label
-    .replaceAll(/[{}<>&"\n\r]/g, "")
-    .replaceAll(/\s+/g, " ")
+    .replaceAll(/[{}<>&"\n\r]/gu, "")
+    .replaceAll(/\s+/gu, " ")
     .trim()
     .slice(0, 80);
 
@@ -21,13 +23,16 @@ export const createTemplatePlaceholderToken = (label: string) => {
 };
 
 export const findTemplatePlaceholders = (
-  document: Editor["state"]["doc"],
+  document: Editor["state"]["doc"]
 ): TemplatePlaceholderRange[] => {
   const placeholders: TemplatePlaceholderRange[] = [];
 
   document.descendants((node, position) => {
-    const label = node.type.name === "templatePlaceholder" ? node.attrs.label : null;
-    if (typeof label !== "string" || !label.trim()) return;
+    const label: unknown =
+      node.type.name === "templatePlaceholder" ? node.attrs.label : null;
+    if (typeof label !== "string" || !label.trim()) {
+      return;
+    }
 
     placeholders.push({
       from: position,
@@ -40,56 +45,74 @@ export const findTemplatePlaceholders = (
 };
 
 export const getSelectedTemplatePlaceholder = (
-  editor: Pick<Editor, "state">,
+  editor: Pick<Editor, "state">
 ): TemplatePlaceholderRange | null => {
   const { selection } = editor.state;
   return (
     findTemplatePlaceholders(editor.state.doc).find(
       (placeholder) =>
-        (selection.from === placeholder.from && selection.to === placeholder.to) ||
-        (selection.empty && selection.from >= placeholder.from && selection.from <= placeholder.to),
+        (selection.from === placeholder.from &&
+          selection.to === placeholder.to) ||
+        (selection.empty &&
+          selection.from >= placeholder.from &&
+          selection.from <= placeholder.to)
     ) ?? null
   );
 };
 
-const selectTemplatePlaceholder = (editor: Editor, direction: "backward" | "forward"): boolean => {
+const selectTemplatePlaceholder = (
+  editor: Editor,
+  direction: "backward" | "forward"
+): boolean => {
   const placeholders = findTemplatePlaceholders(editor.state.doc);
-  if (placeholders.length === 0) return false;
+  if (placeholders.length === 0) {
+    return false;
+  }
 
   const current = getSelectedTemplatePlaceholder(editor);
   const cursor = editor.state.selection.from;
   const target =
     direction === "forward"
-      ? (placeholders.find((placeholder) => placeholder.from > (current?.from ?? cursor)) ??
-        placeholders[0])
-      : (placeholders.findLast((placeholder) => placeholder.from < (current?.from ?? cursor)) ??
-        placeholders.at(-1));
-  if (!target) return false;
+      ? (placeholders.find(
+          (placeholder) => placeholder.from > (current?.from ?? cursor)
+        ) ?? placeholders[0])
+      : (placeholders.findLast(
+          (placeholder) => placeholder.from < (current?.from ?? cursor)
+        ) ?? placeholders.at(-1));
+  if (!target) {
+    return false;
+  }
 
-  return editor.chain().focus().setNodeSelection(target.from).scrollIntoView().run();
+  return editor
+    .chain()
+    .focus()
+    .setNodeSelection(target.from)
+    .scrollIntoView()
+    .run();
 };
 
 export const hydrateTemplatePlaceholders = (html: string) =>
   html.replaceAll(TEMPLATE_PLACEHOLDER_PATTERN, (_match, rawLabel: string) => {
     const token = createTemplatePlaceholderToken(rawLabel);
-    if (!token) return "";
+    if (!token) {
+      return "";
+    }
     const label = token.slice("{{quieter:".length, -2);
     return `<span data-quieter-template-placeholder="${label}">${label}</span>`;
   });
 
 export const serializeTemplatePlaceholders = (html: string) =>
   html.replaceAll(TEMPLATE_PLACEHOLDER_HTML_PATTERN, (_match, label: string) =>
-    createTemplatePlaceholderToken(label),
+    createTemplatePlaceholderToken(label)
   );
 
 export const TemplatePlaceholder = Node.create({
-  name: "templatePlaceholder",
-
   addAttributes() {
     return {
       label: {
         default: "",
-        parseHTML: (element) => element.getAttribute("data-quieter-template-placeholder") ?? "",
+        parseHTML: (element) =>
+          element.dataset.quieterTemplatePlaceholder ?? "",
       },
     };
   },
@@ -102,9 +125,12 @@ export const TemplatePlaceholder = Node.create({
   },
 
   atom: true,
+
   group: "inline",
+
   inline: true,
-  selectable: true,
+
+  name: "templatePlaceholder",
 
   parseHTML() {
     return [{ tag: "span[data-quieter-template-placeholder]" }];
@@ -126,7 +152,9 @@ export const TemplatePlaceholder = Node.create({
 
   renderText({ node }) {
     return createTemplatePlaceholderToken(
-      typeof node.attrs.label === "string" ? node.attrs.label : "",
+      typeof node.attrs.label === "string" ? node.attrs.label : ""
     );
   },
+
+  selectable: true,
 });

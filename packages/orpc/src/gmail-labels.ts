@@ -1,10 +1,8 @@
-import type { GmailLabelListItem } from "@quieter/gmail";
 import { db } from "@quieter/database/client";
 import { gmailLabel } from "@quieter/database/schema";
-import {
-  mailboxLabelColorSchema,
-  type MailboxLabelColor,
-} from "@quieter/mail/mailbox-organization";
+import type { GmailLabelListItem } from "@quieter/gmail";
+import { mailboxLabelColorSchema } from "@quieter/mail/mailbox-organization";
+import type { MailboxLabelColor } from "@quieter/mail/mailbox-organization";
 import { and, eq, notInArray, sql } from "drizzle-orm";
 
 export type GmailLabelWithDetails = GmailLabelListItem & {
@@ -15,7 +13,7 @@ export type GmailLabelWithDetails = GmailLabelListItem & {
 
 export const syncGmailLabels = async (
   mailboxId: string,
-  labels: GmailLabelListItem[],
+  labels: GmailLabelListItem[]
 ): Promise<GmailLabelWithDetails[]> => {
   const userLabels = labels.filter((label) => label.type === "user");
   const now = new Date();
@@ -25,20 +23,20 @@ export const syncGmailLabels = async (
       .insert(gmailLabel)
       .values(
         userLabels.map((label) => ({
-          createdAt: now,
           color: "gray",
+          createdAt: now,
           labelId: label.id,
           mailboxId,
           name: label.name,
           updatedAt: now,
-        })),
+        }))
       )
       .onConflictDoUpdate({
-        target: [gmailLabel.mailboxId, gmailLabel.labelId],
         set: {
           name: sql.raw('excluded."name"'),
           updatedAt: now,
         },
+        target: [gmailLabel.mailboxId, gmailLabel.labelId],
       });
 
     await db.delete(gmailLabel).where(
@@ -46,9 +44,9 @@ export const syncGmailLabels = async (
         eq(gmailLabel.mailboxId, mailboxId),
         notInArray(
           gmailLabel.labelId,
-          userLabels.map((label) => label.id),
-        ),
-      ),
+          userLabels.map((label) => label.id)
+        )
+      )
     );
   } else {
     await db.delete(gmailLabel).where(eq(gmailLabel.mailboxId, mailboxId));
@@ -63,13 +61,18 @@ export const syncGmailLabels = async (
     })
     .from(gmailLabel)
     .where(eq(gmailLabel.mailboxId, mailboxId));
-  const detailsByLabelId = new Map(details.map((detail) => [detail.labelId, detail]));
+  const detailsByLabelId = new Map(
+    details.map((detail) => [detail.labelId, detail])
+  );
 
   return labels.map((label) => ({
     ...label,
-    color: mailboxLabelColorSchema.parse(detailsByLabelId.get(label.id)?.color ?? "gray"),
+    color: mailboxLabelColorSchema.parse(
+      detailsByLabelId.get(label.id)?.color ?? "gray"
+    ),
     description: detailsByLabelId.get(label.id)?.description ?? null,
-    inclusionCriteria: detailsByLabelId.get(label.id)?.inclusionCriteria ?? null,
+    inclusionCriteria:
+      detailsByLabelId.get(label.id)?.inclusionCriteria ?? null,
   }));
 };
 
@@ -86,7 +89,12 @@ export const saveGmailLabelDetails = async (input: {
       inclusionCriteria: input.inclusionCriteria,
       updatedAt: new Date(),
     })
-    .where(and(eq(gmailLabel.mailboxId, input.mailboxId), eq(gmailLabel.labelId, input.labelId)))
+    .where(
+      and(
+        eq(gmailLabel.mailboxId, input.mailboxId),
+        eq(gmailLabel.labelId, input.labelId)
+      )
+    )
     .returning({
       description: gmailLabel.description,
       inclusionCriteria: gmailLabel.inclusionCriteria,
@@ -99,26 +107,26 @@ export const saveGmailLabelDetails = async (input: {
 export const upsertSyncedGmailLabel = async (
   mailboxId: string,
   label: GmailLabelListItem,
-  color?: MailboxLabelColor,
+  color?: MailboxLabelColor
 ): Promise<GmailLabelWithDetails> => {
   const now = new Date();
   const [record] = await db
     .insert(gmailLabel)
     .values({
-      createdAt: now,
       color: color ?? "gray",
+      createdAt: now,
       labelId: label.id,
       mailboxId,
       name: label.name,
       updatedAt: now,
     })
     .onConflictDoUpdate({
-      target: [gmailLabel.mailboxId, gmailLabel.labelId],
       set: {
         ...(color ? { color } : {}),
         name: label.name,
         updatedAt: now,
       },
+      target: [gmailLabel.mailboxId, gmailLabel.labelId],
     })
     .returning({
       color: gmailLabel.color,
@@ -134,8 +142,13 @@ export const upsertSyncedGmailLabel = async (
   };
 };
 
-export const deleteSyncedGmailLabel = async (mailboxId: string, labelId: string) => {
+export const deleteSyncedGmailLabel = async (
+  mailboxId: string,
+  labelId: string
+) => {
   await db
     .delete(gmailLabel)
-    .where(and(eq(gmailLabel.mailboxId, mailboxId), eq(gmailLabel.labelId, labelId)));
+    .where(
+      and(eq(gmailLabel.mailboxId, mailboxId), eq(gmailLabel.labelId, labelId))
+    );
 };

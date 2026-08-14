@@ -1,6 +1,10 @@
 "use client";
 
-import { Cancel01Icon, Loading03Icon, MoreVerticalIcon } from "@hugeicons/core-free-icons";
+import {
+  Cancel01Icon,
+  Loading03Icon,
+  MoreVerticalIcon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
@@ -12,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@quieter/ui/dropdown-menu";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+
 import type { MessageListBulkAction } from "./message-list-types";
 
 const MessageListBulkActions = ({
@@ -28,7 +33,7 @@ const MessageListBulkActions = ({
       <DropdownMenuTrigger
         aria-label="Open bulk actions"
         aria-busy={pending || undefined}
-        className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-bg text-fg shadow-sm hover:bg-muted/60 active:bg-muted/80 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0"
+        className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl border border-transparent bg-secondary/55 text-muted-fg shadow-none hover:bg-muted hover:text-fg active:bg-muted/80 active:text-fg disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0"
         disabled={disabled || actions.length === 0}
         type="button"
       >
@@ -79,9 +84,9 @@ export const MessageListSelectionToolbar = ({
   selectedCount: number;
   pending: boolean;
 }) => (
-  <div className="bg-transparent p-4 pb-3">
-    <div className="flex min-w-0 items-center justify-between gap-3">
-      <div className="flex min-w-0 items-center gap-2.5">
+  <div className="bg-transparent p-2 @sm:px-4 @sm:pt-4 @sm:pb-3">
+    <div className="flex min-w-0 items-stretch justify-between gap-2 lg:-ml-2">
+      <div className="flex min-w-0 items-center gap-2">
         <IconButtonTooltip label="Select all">
           <Checkbox
             aria-label={`Select all ${itemLabelPlural}`}
@@ -97,10 +102,12 @@ export const MessageListSelectionToolbar = ({
           </Checkbox>
         </IconButtonTooltip>
 
-        <p className="truncate text-sm font-medium text-fg">{selectedCount} selected</p>
+        <p className="truncate text-sm font-medium text-fg">
+          {selectedCount} selected
+        </p>
       </div>
 
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-2">
         <MessageListBulkActions
           actions={actions}
           disabled={disabled || selectedCount === 0}
@@ -109,20 +116,21 @@ export const MessageListSelectionToolbar = ({
         <IconButtonTooltip label="Clear selection">
           <Button
             aria-label="Clear selection"
+            className="rounded-xl bg-secondary/55 text-muted-fg shadow-none hover:bg-muted hover:text-fg [&_svg]:size-3.5"
             disabled={disabled}
             onClick={onClearSelection}
-            size="icon-lg"
+            size="icon"
             type="button"
-            variant="outline"
+            variant="ghost"
           >
             <HugeiconsIcon aria-hidden icon={Cancel01Icon} />
           </Button>
         </IconButtonTooltip>
       </div>
       {pending && (
-        <p aria-live="polite" className="sr-only" role="status">
+        <output aria-live="polite" className="sr-only">
           Updating selected {itemLabelPlural}…
-        </p>
+        </output>
       )}
     </div>
   </div>

@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
+import type { ReactNode } from "react";
 
 export const LegalDocumentPage = ({
   children,
@@ -23,7 +23,9 @@ export const LegalDocumentPage = ({
         <p className="text-xs text-muted-fg">Last updated June 29, 2026.</p>
       </header>
 
-      <article className="typeset typeset-docs mt-10 max-w-[37em]">{children}</article>
+      <article className="typeset typeset-docs mt-10 max-w-[37em]">
+        {children}
+      </article>
     </div>
   </div>
 );

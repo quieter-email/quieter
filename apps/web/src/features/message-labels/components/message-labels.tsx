@@ -3,7 +3,8 @@
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { cn } from "@quieter/ui/cn";
 import { Pill } from "@quieter/ui/pill";
-import { mailboxLabelPillToneByColor } from "~/features/message-labels/domain/mailbox-label-presentation";
+
+import { mailboxLabelPillToneByColor } from "#/features/message-labels/domain/mailbox-label-presentation";
 
 type MessageLabelsProps = {
   className?: string;
@@ -20,15 +21,22 @@ export const MessageLabels = ({
   labels,
   limit,
 }: MessageLabelsProps) => {
-  if (!labelIds?.length) return null;
+  if ((labelIds?.length ?? 0) === 0) {
+    return null;
+  }
 
   const messageLabelIds = new Set(labelIds);
   const messageLabels = labels.filter(
-    (label) => label.type === "user" && messageLabelIds.has(label.id),
+    (label) => label.type === "user" && messageLabelIds.has(label.id)
   );
-  if (messageLabels.length === 0) return null;
+  if (messageLabels.length === 0) {
+    return null;
+  }
 
-  const visibleLabels = limit ? messageLabels.slice(0, limit) : messageLabels;
+  const visibleLabels =
+    limit !== null && limit !== undefined && limit > 0
+      ? messageLabels.slice(0, limit)
+      : messageLabels;
   const hiddenLabels = messageLabels.slice(visibleLabels.length);
 
   return (

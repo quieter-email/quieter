@@ -1,23 +1,13 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { zodValidator } from "@tanstack/zod-adapter";
 import { z } from "zod";
-import { LoadingPage } from "~/components/loading-page";
-import { getSessionUser } from "~/lib/auth.functions";
-import { getSafeAuthReturnTo } from "~/lib/return-to";
 
+import { LoadingPage } from "#/components/loading-page";
+import { getSessionUser } from "#/lib/auth.functions";
+import { getSafeAuthReturnTo } from "#/lib/return-to";
+
+// react-doctor-disable-next-line react-doctor/tanstack-start-route-property-order -- The repository's TanStack Router lint rule owns this generated route property order.
 export const Route = createFileRoute("/auth")({
-  validateSearch: zodValidator(
-    z.object({
-      error: z.string().optional(),
-      mode: z.enum(["login", "signup"]).catch("login").default("login"),
-      returnTo: z
-        .string()
-        .optional()
-        .catch(undefined)
-        .transform((returnTo) => getSafeAuthReturnTo(returnTo)),
-    }),
-  ),
-  ssr: "data-only",
   loader: async ({ location }) => {
     const user = await getSessionUser();
 
@@ -30,4 +20,14 @@ export const Route = createFileRoute("/auth")({
     }
   },
   pendingComponent: LoadingPage,
+  ssr: "data-only",
+  validateSearch: zodValidator(
+    z.object({
+      error: z.string().optional(),
+      returnTo: z
+        .string()
+        .optional()
+        .transform((returnTo) => getSafeAuthReturnTo(returnTo)),
+    })
+  ),
 });

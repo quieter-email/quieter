@@ -38,11 +38,15 @@ jobs:
       - name: Setup Vite+
         uses: voidzero-dev/setup-vp@v1
         with:
+          # Pinned to the `vite-plus` catalog entry in package.json. Without it the
+          # action installs the latest vp, whose formatter drifts from the local one
+          # and fails commits that were previously green.
+          version: "0.2.9"
           cache: true
           node-version: "24.18.0"
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}

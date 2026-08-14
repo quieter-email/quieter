@@ -52,9 +52,10 @@ export const BILLING_FEATURES = {
 
 export const BILLING_PRODUCTS = {
   managed: {
-    creditAmountCents: 1_000,
+    creditAmountCents: 1000,
     currency: "usd",
-    description: "Managed mail for your team with a shared monthly usage balance.",
+    description:
+      "Managed mail for your team with a shared monthly usage balance.",
     features: [
       "$10 monthly usage balance",
       "Managed sending and receiving",
@@ -63,14 +64,15 @@ export const BILLING_PRODUCTS = {
       "Managed mail from $0.20 per 1,000 messages",
     ],
     highlight: false,
-    monthlyPriceCents: 1_500,
+    monthlyPriceCents: 1500,
     name: "Managed",
     polarMetadataKey: "managed",
   },
   pro: {
-    creditAmountCents: 2_000,
+    creditAmountCents: 2000,
     currency: "usd",
-    description: "Managed mail and AI for every team member with a larger shared balance.",
+    description:
+      "Managed mail and AI for every team member with a larger shared balance.",
     features: [
       "$20 monthly usage balance",
       "Everything in Managed",
@@ -78,7 +80,7 @@ export const BILLING_PRODUCTS = {
       "AI usage at model cost plus 15%",
     ],
     highlight: true,
-    monthlyPriceCents: 2_500,
+    monthlyPriceCents: 2500,
     name: "Pro",
     polarMetadataKey: "pro",
   },
@@ -100,4 +102,5 @@ export const productHasAi = (product: BillingProductId) => product === "pro";
 
 export const productHasManagedMail = (_product: BillingProductId) => true;
 
-export const getBillingFeatureRequirement = (feature: BillingFeature) => BILLING_FEATURES[feature];
+export const getBillingFeatureRequirement = (feature: BillingFeature) =>
+  BILLING_FEATURES[feature];

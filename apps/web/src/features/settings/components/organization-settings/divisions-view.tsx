@@ -36,8 +36,11 @@ import { toast } from "@quieter/ui/toast";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { z } from "zod";
-import { orpc } from "~/lib/orpc";
+
+import { orpc } from "#/lib/orpc";
+
 import {
   SettingsBackButton,
   SettingsCard,
@@ -46,14 +49,14 @@ import {
   SettingsNavigationRow,
   SettingsRows,
   SettingsSection,
-  settingsInsetRowClass,
-  settingsRowPaddingClass,
+  settingsSurfaceVariants,
 } from "../settings-layout";
 import {
   getOrganizationDivisionsQueryKey,
   organizationDivisionsQueryOptions,
 } from "./divisions-query";
-import { formatCount, type FullOrganization, type OrganizationMember } from "./domain";
+import { formatCount } from "./domain";
+import type { FullOrganization, OrganizationMember } from "./domain";
 import { SettingsRow } from "./settings-row";
 
 const getMutationErrorMessage = (error: unknown, fallback: string) =>
@@ -63,7 +66,7 @@ type OrganizationDivision = {
   description: string | null;
   id: string;
   mailboxCount: number;
-  members: Array<{ memberId: string }>;
+  members: { memberId: string }[];
   name: string;
 };
 
@@ -100,7 +103,9 @@ const CreateDivisionDialog = ({
         form.reset();
         onCreated(result.divisionId);
       } catch (error) {
-        setSubmitError(getMutationErrorMessage(error, "Could not create division."));
+        setSubmitError(
+          getMutationErrorMessage(error, "Could not create division.")
+        );
       }
     },
     validationLogic: revalidateLogic(),
@@ -114,7 +119,12 @@ const CreateDivisionDialog = ({
 
   return (
     <>
-      <Button onClick={() => setOpen(true)} size="sm">
+      <Button
+        onClick={() => {
+          setOpen(true);
+        }}
+        size="sm"
+      >
         <HugeiconsIcon aria-hidden className="size-4" icon={Add01Icon} />
         Add
       </Button>
@@ -150,7 +160,9 @@ const CreateDivisionDialog = ({
                       aria-invalid={field.state.meta.errors.length > 0}
                       aria-label="Division name"
                       name={field.name}
-                      onBlur={() => field.handleBlur()}
+                      onBlur={() => {
+                        field.handleBlur();
+                      }}
                       onChange={(event) => {
                         setSubmitError(null);
                         field.handleChange(event.target.value);
@@ -159,7 +171,10 @@ const CreateDivisionDialog = ({
                       value={field.state.value}
                     />
                     {field.state.meta.errors.map((error) => (
-                      <p className="text-sm text-destructive" key={error?.message}>
+                      <p
+                        className="text-sm text-destructive"
+                        key={error?.message}
+                      >
                         {error?.message}
                       </p>
                     ))}
@@ -173,7 +188,9 @@ const CreateDivisionDialog = ({
                     <TextFieldInput
                       aria-label="Division description"
                       name={field.name}
-                      onBlur={() => field.handleBlur()}
+                      onBlur={() => {
+                        field.handleBlur();
+                      }}
                       onChange={(event) => {
                         setSubmitError(null);
                         field.handleChange(event.target.value);
@@ -185,16 +202,34 @@ const CreateDivisionDialog = ({
                 )}
               </form.Field>
 
-              {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
+              {submitError !== null &&
+              submitError !== undefined &&
+              submitError !== "" ? (
+                <p className="text-sm text-destructive">{submitError}</p>
+              ) : null}
             </DialogBody>
 
             <DialogFooter>
-              <DialogCloseButton disabled={createMutation.isPending}>Cancel</DialogCloseButton>
-              <Button disabled={createMutation.isPending} size="sm" type="submit">
+              <DialogCloseButton disabled={createMutation.isPending}>
+                Cancel
+              </DialogCloseButton>
+              <Button
+                disabled={createMutation.isPending}
+                size="sm"
+                type="submit"
+              >
                 {createMutation.isPending ? (
-                  <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-4 animate-spin"
+                    icon={Loading03Icon}
+                  />
                 ) : (
-                  <HugeiconsIcon aria-hidden className="size-4" icon={Add01Icon} />
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-4"
+                    icon={Add01Icon}
+                  />
                 )}
                 Add
               </Button>
@@ -217,7 +252,8 @@ const EditDivisionFieldDialog = ({
 }) => {
   const queryClient = useQueryClient();
   const label = field === "name" ? "Name" : "Description";
-  const currentValue = field === "name" ? division.name : (division.description ?? "");
+  const currentValue =
+    field === "name" ? division.name : (division.description ?? "");
   const [open, setOpen] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const updateMutation = useMutation({
@@ -231,20 +267,25 @@ const EditDivisionFieldDialog = ({
         await updateMutation.mutateAsync(
           field === "name"
             ? { divisionId: division.id, name: next.value }
-            : { description: next.value, divisionId: division.id },
+            : { description: next.value, divisionId: division.id }
         );
         await queryClient.invalidateQueries({
           queryKey: getOrganizationDivisionsQueryKey(organizationId),
         });
         setOpen(false);
       } catch (error) {
-        setSubmitError(getMutationErrorMessage(error, "Could not update division."));
+        setSubmitError(
+          getMutationErrorMessage(error, "Could not update division.")
+        );
       }
     },
     validationLogic: revalidateLogic(),
     validators: {
       onDynamic: z.object({
-        value: field === "name" ? z.string().trim().min(1, "Name is required.") : z.string(),
+        value:
+          field === "name"
+            ? z.string().trim().min(1, "Name is required.")
+            : z.string(),
       }),
     },
   });
@@ -292,16 +333,25 @@ const EditDivisionFieldDialog = ({
                       aria-invalid={formField.state.meta.errors.length > 0}
                       aria-label={label}
                       name={formField.name}
-                      onBlur={() => formField.handleBlur()}
+                      onBlur={() => {
+                        formField.handleBlur();
+                      }}
                       onChange={(event) => {
                         setSubmitError(null);
                         formField.handleChange(event.target.value);
                       }}
-                      placeholder={field === "description" ? "Optional description" : undefined}
+                      placeholder={
+                        field === "description"
+                          ? "Optional description"
+                          : undefined
+                      }
                       value={formField.state.value}
                     />
                     {formField.state.meta.errors.map((error) => (
-                      <p className="text-sm text-destructive" key={error?.message}>
+                      <p
+                        className="text-sm text-destructive"
+                        key={error?.message}
+                      >
                         {error?.message}
                       </p>
                     ))}
@@ -309,14 +359,28 @@ const EditDivisionFieldDialog = ({
                 )}
               </form.Field>
 
-              {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
+              {submitError !== null &&
+              submitError !== undefined &&
+              submitError !== "" ? (
+                <p className="text-sm text-destructive">{submitError}</p>
+              ) : null}
             </DialogBody>
 
             <DialogFooter>
-              <DialogCloseButton disabled={updateMutation.isPending}>Cancel</DialogCloseButton>
-              <Button disabled={updateMutation.isPending} size="sm" type="submit">
+              <DialogCloseButton disabled={updateMutation.isPending}>
+                Cancel
+              </DialogCloseButton>
+              <Button
+                disabled={updateMutation.isPending}
+                size="sm"
+                type="submit"
+              >
                 {updateMutation.isPending ? (
-                  <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-4 animate-spin"
+                    icon={Loading03Icon}
+                  />
                 ) : null}
                 Save
               </Button>
@@ -341,6 +405,9 @@ const DeleteDivisionDialog = ({
   const [open, setOpen] = useState(false);
   const deleteMutation = useMutation({
     ...orpc.organization.deleteDivision.mutationOptions(),
+    onError: (error) => {
+      toast.error(getMutationErrorMessage(error, "Could not delete division."));
+    },
     onSuccess: async () => {
       setOpen(false);
       await queryClient.invalidateQueries({
@@ -349,14 +416,17 @@ const DeleteDivisionDialog = ({
       toast.success("Division removed.");
       onDeleted();
     },
-    onError: (error) => {
-      toast.error(getMutationErrorMessage(error, "Could not delete division."));
-    },
   });
 
   return (
     <AlertDialog onOpenChange={setOpen} open={open}>
-      <Button onClick={() => setOpen(true)} size="sm" variant="outline">
+      <Button
+        onClick={() => {
+          setOpen(true);
+        }}
+        size="sm"
+        variant="outline"
+      >
         <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
         Delete
       </Button>
@@ -365,8 +435,8 @@ const DeleteDivisionDialog = ({
         <AlertDialogHeader>
           <AlertDialogTitle>Delete division</AlertDialogTitle>
           <AlertDialogDescription>
-            Removes {division.name} and its member assignments. Mailbox access granted through this
-            division will no longer apply.
+            Removes {division.name} and its member assignments. Mailbox access
+            granted through this division will no longer apply.
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -380,14 +450,24 @@ const DeleteDivisionDialog = ({
           </AlertDialogCloseButton>
           <Button
             disabled={deleteMutation.isPending}
-            onClick={() => deleteMutation.mutate({ divisionId: division.id })}
+            onClick={() => {
+              deleteMutation.mutate({ divisionId: division.id });
+            }}
             size="sm"
             variant="destructive"
           >
             {deleteMutation.isPending ? (
-              <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+              <HugeiconsIcon
+                aria-hidden
+                className="size-4 animate-spin"
+                icon={Loading03Icon}
+              />
             ) : (
-              <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
+              <HugeiconsIcon
+                aria-hidden
+                className="size-4"
+                icon={Delete02Icon}
+              />
             )}
             Delete
           </Button>
@@ -419,7 +499,10 @@ const DivisionDetailView = ({
       });
     },
   });
-  const selectedMemberIds = new Set(division.members.map((member) => member.memberId));
+  const selectedMemberIds = new Set(
+    division.members.map((member) => member.memberId)
+  );
+  const description = division.description?.trim();
 
   return (
     <div className="space-y-6">
@@ -459,7 +542,11 @@ const DivisionDetailView = ({
               ) : null
             }
             label="Description"
-            value={division.description?.trim() || "None"}
+            value={
+              description === undefined || description === ""
+                ? "None"
+                : description
+            }
           />
         </SettingsCard>
       </SettingsSection>
@@ -475,15 +562,22 @@ const DivisionDetailView = ({
                 const checked = selectedMemberIds.has(memberRecord.id);
                 return (
                   <label
-                    className={cn(settingsInsetRowClass, "cursor-pointer gap-3")}
+                    className={cn(
+                      settingsSurfaceVariants({ variant: "insetRow" }),
+                      "cursor-pointer gap-3"
+                    )}
+                    htmlFor={`division-member-${memberRecord.id}`}
                     key={memberRecord.id}
                   >
                     <Checkbox
                       checked={checked}
-                      disabled={!canManageDivisions || setMembersMutation.isPending}
+                      disabled={
+                        !canManageDivisions || setMembersMutation.isPending
+                      }
+                      id={`division-member-${memberRecord.id}`}
                       onCheckedChange={(nextChecked) => {
                         const nextMemberIds = new Set(selectedMemberIds);
-                        if (nextChecked === true) {
+                        if (nextChecked) {
                           nextMemberIds.add(memberRecord.id);
                         } else {
                           nextMemberIds.delete(memberRecord.id);
@@ -494,11 +588,15 @@ const DivisionDetailView = ({
                             memberIds: [...nextMemberIds],
                           },
                           {
-                            onError: (error) =>
+                            onError: (error) => {
                               toast.error(
-                                getMutationErrorMessage(error, "Could not update members."),
-                              ),
-                          },
+                                getMutationErrorMessage(
+                                  error,
+                                  "Could not update members."
+                                )
+                              );
+                            },
+                          }
                         );
                       }}
                     >
@@ -517,7 +615,12 @@ const DivisionDetailView = ({
               })}
             </SettingsInsetRows>
           ) : (
-            <p className={cn("text-sm text-muted-fg", settingsRowPaddingClass)}>
+            <p
+              className={cn(
+                "text-sm text-muted-fg",
+                settingsSurfaceVariants({ variant: "padding" })
+              )}
+            >
               No team members yet.
             </p>
           )}
@@ -556,7 +659,9 @@ export const DivisionsView = ({
   onBack: () => void;
   organization: FullOrganization;
 }) => {
-  const [selectedDivisionId, setSelectedDivisionId] = useState<string | null>(null);
+  const [selectedDivisionId, setSelectedDivisionId] = useState<string | null>(
+    null
+  );
   const {
     data: divisionsData,
     error: divisionsError,
@@ -564,7 +669,8 @@ export const DivisionsView = ({
     isPending: isDivisionsPending,
   } = useQuery(organizationDivisionsQueryOptions(organization.id));
   const divisions = divisionsData?.divisions ?? [];
-  const selectedDivision = divisions.find((division) => division.id === selectedDivisionId) ?? null;
+  const selectedDivision =
+    divisions.find((division) => division.id === selectedDivisionId) ?? null;
 
   if (selectedDivision) {
     return (
@@ -573,53 +679,82 @@ export const DivisionsView = ({
         division={selectedDivision}
         key={selectedDivision.id}
         members={members}
-        onBack={() => setSelectedDivisionId(null)}
+        onBack={() => {
+          setSelectedDivisionId(null);
+        }}
         organization={organization}
       />
     );
   }
 
+  let divisionsContent: ReactNode;
+  if (isDivisionsPending) {
+    divisionsContent = <SettingsLoadingState label="Loading divisions" />;
+  } else if (isDivisionsError) {
+    divisionsContent = (
+      <p
+        className={cn(
+          "text-sm text-destructive",
+          settingsSurfaceVariants({ variant: "padding" })
+        )}
+      >
+        {divisionsError?.message ?? "Could not load divisions."}
+      </p>
+    );
+  } else if (divisions.length > 0) {
+    divisionsContent = (
+      <SettingsRows>
+        {divisions.map((division) => (
+          <SettingsNavigationRow
+            description={`${formatCount(division.members.length, "Member")}, ${formatCount(division.mailboxCount, "Mailbox", "Mailboxes")}`}
+            icon={<HugeiconsIcon aria-hidden icon={UserGroupIcon} />}
+            key={division.id}
+            onClick={() => {
+              setSelectedDivisionId(division.id);
+            }}
+            title={division.name}
+          />
+        ))}
+      </SettingsRows>
+    );
+  } else {
+    divisionsContent = (
+      <p
+        className={cn(
+          "text-center text-sm text-muted-fg",
+          settingsSurfaceVariants({ variant: "padding" })
+        )}
+      >
+        No divisions yet.
+      </p>
+    );
+  }
+
   return (
     <div className="@container space-y-6">
-      <SettingsBackButton onClick={onBack}>{organization.name}</SettingsBackButton>
+      <SettingsBackButton onClick={onBack}>
+        {organization.name}
+      </SettingsBackButton>
 
       <div className="flex flex-col gap-3 @md:flex-row @md:items-start @md:justify-between">
         <div>
           <h1 className="text-base font-semibold text-fg">Divisions</h1>
-          <p className="mt-1 text-sm text-muted-fg">{formatCount(divisions.length, "Division")}</p>
+          <p className="mt-1 text-sm text-muted-fg">
+            {formatCount(divisions.length, "Division")}
+          </p>
         </div>
 
         {canManageDivisions ? (
           <CreateDivisionDialog
-            onCreated={(divisionId) => setSelectedDivisionId(divisionId)}
+            onCreated={(divisionId) => {
+              setSelectedDivisionId(divisionId);
+            }}
             organizationId={organization.id}
           />
         ) : null}
       </div>
 
-      {isDivisionsPending ? (
-        <SettingsLoadingState label="Loading divisions" />
-      ) : isDivisionsError ? (
-        <p className={cn("text-sm text-destructive", settingsRowPaddingClass)}>
-          {divisionsError?.message ?? "Could not load divisions."}
-        </p>
-      ) : divisions.length > 0 ? (
-        <SettingsRows>
-          {divisions.map((division) => (
-            <SettingsNavigationRow
-              description={`${formatCount(division.members.length, "Member")}, ${formatCount(division.mailboxCount, "Mailbox", "Mailboxes")}`}
-              icon={<HugeiconsIcon aria-hidden icon={UserGroupIcon} />}
-              key={division.id}
-              onClick={() => setSelectedDivisionId(division.id)}
-              title={division.name}
-            />
-          ))}
-        </SettingsRows>
-      ) : (
-        <p className={cn("text-center text-sm text-muted-fg", settingsRowPaddingClass)}>
-          No divisions yet.
-        </p>
-      )}
+      {divisionsContent}
     </div>
   );
 };

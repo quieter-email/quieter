@@ -1,8 +1,14 @@
-import type { MailDomainDnsRecord, MailDomainMode } from "@quieter/database/schema";
-import { ORPCError } from "@orpc/server";
 import { createSign } from "node:crypto";
 import { resolveTxt } from "node:dns/promises";
+
+import { ORPCError } from "@orpc/server";
+import type {
+  MailDomainDnsRecord,
+  MailDomainMode,
+} from "@quieter/database/schema";
 import { z } from "zod";
+
+import { hasText } from "../text";
 
 export const DOMAIN_CONNECT_PROVIDER_ID = "quieter.email";
 export const DOMAIN_CONNECT_PUBLIC_KEY_NAME = "_dck1";
@@ -19,11 +25,15 @@ const domainConnectServices = {
     name: "Send mail with Quieter",
     version: 1,
   },
-} as const satisfies Record<MailDomainMode, { id: string; name: string; version: number }>;
-
-export const domainConnectModes = Object.keys(domainConnectServices) as Array<
-  keyof typeof domainConnectServices
+} as const satisfies Record<
+  MailDomainMode,
+  { id: string; name: string; version: number }
 >;
+
+export const domainConnectModes: (keyof typeof domainConnectServices)[] = [
+  "send_and_receive",
+  "send_only",
+];
 
 const trustedProviderEndpoints = [
   {
@@ -58,14 +68,20 @@ type DomainConnectProvider = {
   templateVersion: number | null;
 };
 
-type DomainConnectFetch = (input: Request | string | URL, init?: RequestInit) => Promise<Response>;
+type DomainConnectFetch = (
+  input: Request | string | URL,
+  init?: RequestInit
+) => Promise<Response>;
 
 export type DomainConnectDiscovery =
   | {
       available: false;
       controlPanelUrl: string | null;
       providerName: string | null;
-      reason: "not_configured" | "provider_not_supported" | "template_not_supported";
+      reason:
+        | "not_configured"
+        | "provider_not_supported"
+        | "template_not_supported";
     }
   | {
       available: true;
@@ -186,41 +202,93 @@ export const createDomainConnectTemplate = (mode: MailDomainMode) => {
   };
 };
 
-export const getDomainConnectService = (mode: MailDomainMode) => domainConnectServices[mode];
+export const getDomainConnectService = (mode: MailDomainMode) =>
+  domainConnectServices[mode];
 
 const normalizeEndpoint = (value: string) => {
   const url = new URL(value.includes("://") ? value : `https://${value}`);
-  if (url.protocol !== "https:" || url.username || url.password || url.port || url.search) {
+  if (
+    url.protocol !== "https:" ||
+    url.username ||
+    url.password ||
+    url.port ||
+    url.search
+  ) {
     return null;
   }
-  return url.toString().replace(/\/+$/, "");
+  return url.toString().replace(/\/+$/u, "");
 };
 
 const getTrustedProvider = (discoveryEndpoint: string) =>
   trustedProviderEndpoints.find((provider) =>
-    provider.discovery.some((endpoint) => endpoint === discoveryEndpoint),
+    provider.discovery.some((endpoint) => endpoint === discoveryEndpoint)
   );
 
 const isTrustedEndpoint = (value: string, allowed: readonly string[]) => {
   const endpoint = normalizeEndpoint(value);
-  return endpoint != null && allowed.some((candidate) => candidate === endpoint);
+  return (
+    endpoint !== null && allowed.some((candidate) => candidate === endpoint)
+  );
 };
 
 const readDiscoveryEndpoint = async (
   domain: string,
-  lookupTxt: (name: string) => Promise<string[][]>,
+  lookupTxt: (name: string) => Promise<string[][]>
 ) => {
   try {
     const answers = await lookupTxt(`_domainconnect.${domain}`);
     for (const answer of answers) {
       const endpoint = normalizeEndpoint(answer.join("").trim());
-      if (endpoint && getTrustedProvider(endpoint)) return endpoint;
+      if (hasText(endpoint) && getTrustedProvider(endpoint) !== undefined) {
+        return endpoint;
+      }
     }
   } catch {
     return null;
   }
   return null;
 };
+
+const providerNotSupportedDiscovery = (): DomainConnectDiscovery => ({
+  available: false,
+  controlPanelUrl: null,
+  providerName: null,
+  reason: "provider_not_supported",
+});
+
+const parseTemplateVersion = (responseBody: string) => {
+  if (!hasText(responseBody.trim())) {
+    return null;
+  }
+  try {
+    const parsed = z
+      .object({ version: z.number().int().positive() })
+      .safeParse(JSON.parse(responseBody));
+    return parsed.success ? parsed.data.version : null;
+  } catch {
+    return null;
+  }
+};
+
+const isSuccessfulResponse = (
+  response: Response | null
+): response is Response => response !== null && response.ok;
+
+const isTrustedProviderSettings = (
+  settings: z.infer<typeof providerSettingsSchema>,
+  trustedProvider: (typeof trustedProviderEndpoints)[number]
+) =>
+  trustedProvider.providerIds.some(
+    (providerId) => providerId === settings.providerId
+  ) &&
+  isTrustedEndpoint(settings.urlAPI, trustedProvider.urlApi) &&
+  hasText(settings.urlSyncUX) &&
+  isTrustedEndpoint(settings.urlSyncUX, trustedProvider.urlSyncUx);
+
+const isCompatibleTemplateVersion = (
+  templateVersion: number | null,
+  expectedVersion: number
+) => templateVersion === null || templateVersion === expectedVersion;
 
 export const discoverDomainConnect = async (input: {
   configured: boolean;
@@ -240,82 +308,64 @@ export const discoverDomainConnect = async (input: {
 
   const discoveryEndpoint = await readDiscoveryEndpoint(
     input.domain,
-    input.lookupTxt ?? resolveTxt,
+    input.lookupTxt ?? resolveTxt
   );
-  if (!discoveryEndpoint) {
-    return {
-      available: false,
-      controlPanelUrl: null,
-      providerName: null,
-      reason: "provider_not_supported",
-    };
+  if (!hasText(discoveryEndpoint)) {
+    return providerNotSupportedDiscovery();
   }
 
   const trustedProvider = getTrustedProvider(discoveryEndpoint);
-  if (!trustedProvider) {
-    return {
-      available: false,
-      controlPanelUrl: null,
-      providerName: null,
-      reason: "provider_not_supported",
-    };
+  if (trustedProvider === undefined) {
+    return providerNotSupportedDiscovery();
   }
 
   const fetcher = input.fetcher ?? fetch;
   const settingsResponse = await fetcher(
     `${discoveryEndpoint}/v2/${encodeURIComponent(input.domain)}/settings`,
-    { headers: { accept: "application/json" }, signal: AbortSignal.timeout(5_000) },
+    {
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(5000),
+    }
   ).catch(() => null);
-  if (!settingsResponse?.ok) {
-    return {
-      available: false,
-      controlPanelUrl: null,
-      providerName: null,
-      reason: "provider_not_supported",
-    };
+  if (!isSuccessfulResponse(settingsResponse)) {
+    return providerNotSupportedDiscovery();
   }
 
   const parsedSettings = providerSettingsSchema.safeParse(
-    await settingsResponse.json().catch(() => null),
+    await settingsResponse.json().catch(() => null)
   );
-  if (
-    !parsedSettings.success ||
-    !trustedProvider.providerIds.some(
-      (providerId) => providerId === parsedSettings.data.providerId,
-    ) ||
-    !isTrustedEndpoint(parsedSettings.data.urlAPI, trustedProvider.urlApi) ||
-    !parsedSettings.data.urlSyncUX ||
-    !isTrustedEndpoint(parsedSettings.data.urlSyncUX, trustedProvider.urlSyncUx)
-  ) {
-    return {
-      available: false,
-      controlPanelUrl: null,
-      providerName: null,
-      reason: "provider_not_supported",
-    };
+  if (!parsedSettings.success) {
+    return providerNotSupportedDiscovery();
+  }
+  const settings = parsedSettings.data;
+  if (!isTrustedProviderSettings(settings, trustedProvider)) {
+    return providerNotSupportedDiscovery();
   }
 
   const service = domainConnectServices[input.mode];
-  const apiUrl = normalizeEndpoint(parsedSettings.data.urlAPI);
-  const syncUrl = normalizeEndpoint(parsedSettings.data.urlSyncUX);
-  if (!apiUrl || !syncUrl) {
-    return {
-      available: false,
-      controlPanelUrl: null,
-      providerName: null,
-      reason: "provider_not_supported",
-    };
+  const apiUrl = normalizeEndpoint(settings.urlAPI);
+  const syncUrl = hasText(settings.urlSyncUX)
+    ? normalizeEndpoint(settings.urlSyncUX)
+    : null;
+  if (!hasText(apiUrl) || !hasText(syncUrl)) {
+    return providerNotSupportedDiscovery();
   }
 
   const supportResponse = await fetcher(
     `${apiUrl}/v2/domainTemplates/providers/${DOMAIN_CONNECT_PROVIDER_ID}/services/${service.id}`,
-    { headers: { accept: "application/json" }, signal: AbortSignal.timeout(5_000) },
+    {
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(5000),
+    }
   ).catch(() => null);
-  const providerName = parsedSettings.data.providerDisplayName ?? parsedSettings.data.providerName;
-  const controlPanelUrl = parsedSettings.data.urlControlPanel
-    ? parsedSettings.data.urlControlPanel.replaceAll("%domain%", encodeURIComponent(input.domain))
+  const providerName = settings.providerDisplayName ?? settings.providerName;
+  const controlPanelUrl = hasText(settings.urlControlPanel)
+    ? settings.urlControlPanel.replaceAll(
+        "%domain%",
+        encodeURIComponent(input.domain)
+      )
     : null;
-  if (!supportResponse?.ok) {
+  if (!isSuccessfulResponse(supportResponse)) {
     return {
       available: false,
       controlPanelUrl,
@@ -324,19 +374,8 @@ export const discoverDomainConnect = async (input: {
     };
   }
 
-  const responseBody = await supportResponse.text();
-  const templateVersion = (() => {
-    if (!responseBody.trim()) return null;
-    try {
-      const parsed = z
-        .object({ version: z.number().int().positive() })
-        .safeParse(JSON.parse(responseBody));
-      return parsed.success ? parsed.data.version : null;
-    } catch {
-      return null;
-    }
-  })();
-  if (templateVersion != null && templateVersion !== service.version) {
+  const templateVersion = parseTemplateVersion(await supportResponse.text());
+  if (!isCompatibleTemplateVersion(templateVersion, service.version)) {
     return {
       available: false,
       controlPanelUrl,
@@ -351,7 +390,7 @@ export const discoverDomainConnect = async (input: {
       apiUrl,
       controlPanelUrl,
       displayName: providerName,
-      id: parsedSettings.data.providerId,
+      id: settings.providerId,
       syncUrl,
       templateVersion,
     },
@@ -360,12 +399,16 @@ export const discoverDomainConnect = async (input: {
   };
 };
 
-export const getDomainConnectVariables = (domain: string, records: MailDomainDnsRecord[]) => {
+export const getDomainConnectVariables = (
+  domain: string,
+  records: MailDomainDnsRecord[]
+) => {
   const getRecord = (purpose: MailDomainDnsRecord["purpose"]) => {
     const record = records.find((candidate) => candidate.purpose === purpose);
-    if (!record) {
+    if (record === undefined) {
       throw new ORPCError("BAD_REQUEST", {
-        message: "The domain DNS setup is incomplete. Refresh the setup before continuing.",
+        message:
+          "The domain DNS setup is incomplete. Refresh the setup before continuing.",
       });
     }
     return record;
@@ -373,39 +416,49 @@ export const getDomainConnectVariables = (domain: string, records: MailDomainDns
   const dkim = records.filter((record) => record.purpose === "dkim");
   if (dkim.length !== 3) {
     throw new ORPCError("BAD_REQUEST", {
-      message: "The domain signing records are incomplete. Refresh the setup before continuing.",
+      message:
+        "The domain signing records are incomplete. Refresh the setup before continuing.",
     });
   }
 
   const getDkimParts = (record: MailDomainDnsRecord) => {
     const suffix = `._domainkey.${domain}`;
-    const selector = record.name.endsWith(suffix) ? record.name.slice(0, -suffix.length) : null;
-    const token = record.value.match(/^([^.]+)\.dkim\.amazonses\.com\.?$/)?.[1];
-    if (!selector || selector.includes(".") || !token) {
+    const selector = record.name.endsWith(suffix)
+      ? record.name.slice(0, -suffix.length)
+      : null;
+    const token = /^(?<token>[^.]+)\.dkim\.amazonses\.com\.?$/u.exec(
+      record.value
+    )?.groups?.token;
+    if (!hasText(selector) || selector.includes(".") || !hasText(token)) {
       throw new ORPCError("BAD_REQUEST", {
-        message: "The domain signing records are invalid. Refresh the setup before continuing.",
+        message:
+          "The domain signing records are invalid. Refresh the setup before continuing.",
       });
     }
     return { selector, token };
   };
-  const ownership = getRecord("ownership").value.match(/^quieter-domain-verification=(.+)$/)?.[1];
-  const region = getRecord("mail_from_mx").value.match(
-    /^feedback-smtp\.([a-z0-9-]+)\.amazonses\.com\.?$/,
-  )?.[1];
-  if (!ownership || !region) {
+  const ownership = /^quieter-domain-verification=(?<token>.+)$/u.exec(
+    getRecord("ownership").value
+  )?.groups?.token;
+  const region =
+    /^feedback-smtp\.(?<region>[a-z0-9-]+)\.amazonses\.com\.?$/u.exec(
+      getRecord("mail_from_mx").value
+    )?.groups?.region;
+  if (!hasText(ownership) || !hasText(region)) {
     throw new ORPCError("BAD_REQUEST", {
-      message: "The domain DNS setup is invalid. Refresh the setup before continuing.",
+      message:
+        "The domain DNS setup is invalid. Refresh the setup before continuing.",
     });
   }
   const dkimParts = dkim.map(getDkimParts);
   const variables = new URLSearchParams({
     AWS_REGION: region,
-    DKIM1_SELECTOR: dkimParts[0]!.selector,
-    DKIM1_TOKEN: dkimParts[0]!.token,
-    DKIM2_SELECTOR: dkimParts[1]!.selector,
-    DKIM2_TOKEN: dkimParts[1]!.token,
-    DKIM3_SELECTOR: dkimParts[2]!.selector,
-    DKIM3_TOKEN: dkimParts[2]!.token,
+    DKIM1_SELECTOR: dkimParts[0].selector,
+    DKIM1_TOKEN: dkimParts[0].token,
+    DKIM2_SELECTOR: dkimParts[1].selector,
+    DKIM2_TOKEN: dkimParts[1].token,
+    DKIM3_SELECTOR: dkimParts[2].selector,
+    DKIM3_TOKEN: dkimParts[2].token,
     OWNERSHIP_TOKEN: ownership,
   });
   variables.sort();
@@ -423,12 +476,15 @@ export const buildDomainConnectApplyUrl = (input: {
 }) => {
   const service = domainConnectServices[input.mode];
   const applyUrl = new URL(
-    `${input.provider.syncUrl}/v2/domainTemplates/providers/${DOMAIN_CONNECT_PROVIDER_ID}/services/${service.id}/apply`,
+    `${input.provider.syncUrl}/v2/domainTemplates/providers/${DOMAIN_CONNECT_PROVIDER_ID}/services/${service.id}/apply`
   );
   applyUrl.searchParams.set("domain", input.domain);
   applyUrl.searchParams.set("redirect_uri", input.callbackUrl);
   applyUrl.searchParams.set("state", input.state);
-  for (const [name, value] of getDomainConnectVariables(input.domain, input.records)) {
+  for (const [name, value] of getDomainConnectVariables(
+    input.domain,
+    input.records
+  )) {
     applyUrl.searchParams.set(name, value);
   }
 

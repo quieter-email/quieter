@@ -1,9 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+import { reportServerError } from "#/lib/server-error-reporting";
+
 const redirectWithStatus = (
   requestUrl: string,
   returnTo: string,
-  status: "connected" | "error",
+  status: "connected" | "error"
 ) => {
   const redirectUrl = new URL(returnTo, requestUrl);
   redirectUrl.searchParams.set("connector", status);
@@ -18,12 +20,23 @@ export const Route = createFileRoute("/api/connectors/callback")({
         const code = url.searchParams.get("code");
         const state = url.searchParams.get("state");
 
-        if (!code || !state || url.searchParams.has("error")) {
-          return redirectWithStatus(request.url, "/settings?tab=connectors", "error");
+        if (
+          code === null ||
+          code === "" ||
+          state === null ||
+          state === "" ||
+          url.searchParams.has("error")
+        ) {
+          return redirectWithStatus(
+            request.url,
+            "/settings?tab=connectors",
+            "error"
+          );
         }
 
         try {
-          const { completeConnectorOAuth } = await import("@quieter/orpc/connectors");
+          const { completeConnectorOAuth } =
+            await import("@quieter/orpc/connectors");
           const result = await completeConnectorOAuth({
             code,
             headers: request.headers,
@@ -31,8 +44,12 @@ export const Route = createFileRoute("/api/connectors/callback")({
           });
           return redirectWithStatus(request.url, result.returnTo, "connected");
         } catch (error) {
-          console.error(error);
-          return redirectWithStatus(request.url, "/settings?tab=connectors", "error");
+          reportServerError(error, "connector-oauth-callback");
+          return redirectWithStatus(
+            request.url,
+            "/settings?tab=connectors",
+            "error"
+          );
         }
       },
     },

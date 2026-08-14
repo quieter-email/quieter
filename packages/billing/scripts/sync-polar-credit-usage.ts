@@ -1,6 +1,8 @@
+import { serverEnv } from "@quieter/env/server";
+
 import { syncUnreportedBillingCreditUsage } from "../src/credits";
 
-const limit = Number(process.env.POLAR_CREDIT_USAGE_SYNC_LIMIT ?? 100);
+const limit = Number(serverEnv.POLAR_CREDIT_USAGE_SYNC_LIMIT ?? 100);
 
 if (!Number.isInteger(limit) || limit <= 0) {
   throw new Error("POLAR_CREDIT_USAGE_SYNC_LIMIT must be a positive integer.");
@@ -9,12 +11,20 @@ if (!Number.isInteger(limit) || limit <= 0) {
 let totalSynced = 0;
 let remaining = true;
 
-while (remaining) {
-  const result = await syncUnreportedBillingCreditUsage({ limit });
-  totalSynced += result.synced;
-  remaining = result.remaining;
+const syncAllCreditUsage = async (): Promise<void> => {
+  const { synced, remaining: hasMore } = await syncUnreportedBillingCreditUsage(
+    { limit }
+  );
+  totalSynced += synced;
+  remaining = hasMore;
 
-  if (result.synced === 0) break;
-}
+  if (synced === 0 || !remaining) {
+    return;
+  }
 
-console.log(`Synced ${totalSynced} credit usage events to Polar.`);
+  await syncAllCreditUsage();
+};
+
+await syncAllCreditUsage();
+
+process.stdout.write(`Synced ${totalSynced} credit usage events to Polar.\n`);

@@ -1,12 +1,15 @@
-import { managedMailMessage } from "@quieter/database/schema";
+import type { managedMailMessage } from "@quieter/database/schema";
 import { describe, expect, test } from "vite-plus/test";
+
 import { matchesManagedMailRule } from "../src/managed-mail/search/evaluator";
 
 type ManagedMessageRecord = typeof managedMailMessage.$inferSelect;
 
 const NOW = new Date("2026-06-29T12:00:00.000Z");
 
-const message = (input: Partial<ManagedMessageRecord> = {}): ManagedMessageRecord => ({
+const message = (
+  input: Partial<ManagedMessageRecord> = {}
+): ManagedMessageRecord => ({
   bcc: null,
   bccNormalized: "",
   bodyHtml: null,
@@ -55,15 +58,23 @@ const matchesState = (record: ManagedMessageRecord, value: string) =>
 
 describe("managed mail search evaluator", () => {
   test("matches active inbox and sent states by direction", () => {
-    expect(matchesState(message(), "inbox")).toBe(true);
-    expect(matchesState(message(), "sent")).toBe(false);
-    expect(matchesState(message({ direction: "outbound" }), "sent")).toBe(true);
+    expect(matchesState(message(), "inbox")).toBeTruthy();
+    expect(matchesState(message(), "sent")).toBeFalsy();
+    expect(
+      matchesState(message({ direction: "outbound" }), "sent")
+    ).toBeTruthy();
   });
 
   test("matches spam and trash mailbox states", () => {
-    expect(matchesState(message({ mailboxState: "spam" }), "spam")).toBe(true);
-    expect(matchesState(message({ mailboxState: "trash" }), "trash")).toBe(true);
-    expect(matchesState(message({ mailboxState: "trash" }), "inbox")).toBe(false);
+    expect(
+      matchesState(message({ mailboxState: "spam" }), "spam")
+    ).toBeTruthy();
+    expect(
+      matchesState(message({ mailboxState: "trash" }), "trash")
+    ).toBeTruthy();
+    expect(
+      matchesState(message({ mailboxState: "trash" }), "inbox")
+    ).toBeFalsy();
   });
 
   test("matches rule labels and headers", () => {
@@ -80,49 +91,61 @@ describe("managed mail search evaluator", () => {
           ],
           text: "",
         },
-      }),
-    ).toBe(true);
+      })
+    ).toBeTruthy();
     expect(
       matchesManagedMailRule({
         attachments: [],
         matchMode: "all",
         message: message({ headers: [{ name: "X-Account", value: "VIP" }] }),
         search: { filters: [{ type: "header", value: "X-Account" }], text: "" },
-      }),
-    ).toBe(false);
+      })
+    ).toBeFalsy();
     expect(
       matchesManagedMailRule({
         attachments: [],
         matchMode: "all",
         message: message({ headers: [{ name: "X-Account", value: "VIP" }] }),
         search: { filters: [{ type: "header", value: ":VIP" }], text: "" },
-      }),
-    ).toBe(false);
+      })
+    ).toBeFalsy();
     expect(
       matchesManagedMailRule({
         attachments: [],
         matchMode: "all",
         message: message({ headers: [{ name: "X-Account", value: "VIP" }] }),
-        search: { filters: [{ type: "header", value: "X-Account:" }], text: "" },
-      }),
-    ).toBe(false);
+        search: {
+          filters: [{ type: "header", value: "X-Account:" }],
+          text: "",
+        },
+      })
+    ).toBeFalsy();
     expect(
       matchesManagedMailRule({
         attachments: [],
         matchMode: "all",
         message: message({ headers: [{ name: "X-Account", value: "VIP" }] }),
-        search: { filters: [{ type: "header", value: "X-Account:other" }], text: "" },
-      }),
-    ).toBe(false);
+        search: {
+          filters: [{ type: "header", value: "X-Account:other" }],
+          text: "",
+        },
+      })
+    ).toBeFalsy();
+  });
+
+  test("matches custom label names in rules", () => {
     expect(
       matchesManagedMailRule({
         attachments: [],
         customLabelNames: ["VIP/Important"],
         matchMode: "all",
         message: message(),
-        search: { filters: [{ type: "label", value: "vip/important" }], text: "" },
-      }),
-    ).toBe(true);
+        search: {
+          filters: [{ type: "label", value: "vip/important" }],
+          text: "",
+        },
+      })
+    ).toBeTruthy();
   });
 
   test("matches absolute and relative date conditions", () => {
@@ -133,8 +156,8 @@ describe("managed mail search evaluator", () => {
         message: message(),
         now: NOW,
         search: { filters: [{ type: "after", value: "2026-06-28" }], text: "" },
-      }),
-    ).toBe(true);
+      })
+    ).toBeTruthy();
     expect(
       matchesManagedMailRule({
         attachments: [],
@@ -142,7 +165,7 @@ describe("managed mail search evaluator", () => {
         message: message(),
         now: NOW,
         search: { filters: [{ type: "older_than", value: "1d" }], text: "" },
-      }),
-    ).toBe(false);
+      })
+    ).toBeFalsy();
   });
 });

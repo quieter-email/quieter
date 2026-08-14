@@ -1,7 +1,8 @@
 import { describe, expect, test } from "vite-plus/test";
+
 import { parseToolResult } from "./chat-tools";
 
-describe("parseToolResult", () => {
+describe(parseToolResult, () => {
   test("parses structured Gmail search results", () => {
     const result = parseToolResult(
       "search_gmail",
@@ -11,10 +12,10 @@ describe("parseToolResult", () => {
         messages: [],
         query: "is:unread",
         status: "success",
-      }),
+      })
     );
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       data: {
         category: "inbox",
         fetchedAt: "2026-07-13T12:00:00.000Z",
@@ -34,10 +35,10 @@ describe("parseToolResult", () => {
         error: "Thread not found.",
         status: "error",
         threadId: "thread-1",
-      }),
+      })
     );
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       data: {
         category: "inbox",
         error: "Thread not found.",
@@ -55,10 +56,10 @@ describe("parseToolResult", () => {
         status: "declined",
         subject: "Status update",
         to: "person@example.com",
-      }),
+      })
     );
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       data: {
         status: "declined",
         subject: "Status update",
@@ -77,10 +78,10 @@ describe("parseToolResult", () => {
         subject: "Status update",
         threadId: "thread-1",
         to: "person@example.com",
-      }),
+      })
     );
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       data: {
         messageId: "message-1",
         status: "sent",
@@ -101,10 +102,10 @@ describe("parseToolResult", () => {
         id: "thread-1",
         status: "success",
         target: "thread",
-      }),
+      })
     );
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       data: {
         action: "mark_read",
         category: "inbox",
@@ -131,8 +132,8 @@ describe("parseToolResult", () => {
           status: "success",
           subject: "Hello",
           threadId: "thread-1",
-        }),
-      ),
+        })
+      )
     ).toMatchObject({ kind: "gmail-message" });
 
     expect(
@@ -143,8 +144,8 @@ describe("parseToolResult", () => {
           fetchedAt: "2026-07-13T12:00:00.000Z",
           labels: [{ id: "INBOX", name: "INBOX", type: "system" }],
           status: "success",
-        }),
-      ),
+        })
+      )
     ).toMatchObject({ kind: "gmail-labels" });
   });
 
@@ -169,8 +170,8 @@ describe("parseToolResult", () => {
             },
           ],
           status: "success",
-        }),
-      ),
+        })
+      )
     ).toMatchObject({ kind: "gmail-messages" });
   });
 
@@ -186,12 +187,12 @@ describe("parseToolResult", () => {
         mimeType: "text/csv",
         size: 22,
         status: "success",
-      }),
+      })
     ).toMatchObject({ kind: "gmail-attachment" });
   });
 
   test("falls back to an unknown result for malformed output", () => {
-    expect(parseToolResult("get_mailbox_overview", "not-json")).toEqual({
+    expect(parseToolResult("get_mailbox_overview", "not-json")).toStrictEqual({
       kind: "unknown",
       value: null,
     });

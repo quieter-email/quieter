@@ -1,7 +1,7 @@
 "use client";
 
-import type { ComponentPropsWithoutRef, ElementType, ReactNode } from "react";
 import { m, useReducedMotion } from "motion/react";
+import type { ComponentPropsWithoutRef, ElementType, ReactNode } from "react";
 
 const EASE = [0.23, 1, 0.32, 1] as const;
 
@@ -12,9 +12,10 @@ const EASE = [0.23, 1, 0.32, 1] as const;
  * opacity remains, so the page still resolves without anything travelling.
  */
 export const useEntrance = (reduced: boolean | null) => ({
-  hidden: reduced
-    ? { opacity: 0 }
-    : { filter: "blur(8px)", opacity: 0, transform: "translateY(16px)" },
+  hidden:
+    reduced === true
+      ? { opacity: 0 }
+      : { filter: "blur(8px)", opacity: 0, transform: "translateY(16px)" },
   visible: {
     filter: "blur(0px)",
     opacity: 1,
@@ -38,13 +39,17 @@ export const Reveal = <T extends ElementType = "div">({
 }: RevealProps<T>) => {
   const reduced = useReducedMotion();
   const variants = useEntrance(reduced);
-  const Component = m[(as ?? "div") as "div"];
+  const Component = m.create(as ?? "div");
 
   return (
     <Component
       {...props}
       initial="hidden"
-      transition={{ delay, duration: reduced ? 0.3 : 0.7, ease: EASE }}
+      transition={{
+        delay,
+        duration: reduced === true ? 0.3 : 0.7,
+        ease: EASE,
+      }}
       variants={variants}
       viewport={{ margin: "-80px", once: true }}
       whileInView="visible"
@@ -63,14 +68,18 @@ export const Entrance = <T extends ElementType = "div">({
 }: RevealProps<T>) => {
   const reduced = useReducedMotion();
   const variants = useEntrance(reduced);
-  const Component = m[(as ?? "div") as "div"];
+  const Component = m.create(as ?? "div");
 
   return (
     <Component
       {...props}
       animate="visible"
       initial="hidden"
-      transition={{ delay, duration: reduced ? 0.3 : 0.8, ease: EASE }}
+      transition={{
+        delay,
+        duration: reduced === true ? 0.3 : 0.8,
+        ease: EASE,
+      }}
       variants={variants}
     >
       {children}

@@ -15,12 +15,13 @@
     "./server": "./src/server.ts",
     "./server-client": "./src/server-client.ts",
     "./organization-mail": "./src/organization-mail.ts",
+    "./organization-mail-delivery": "./src/organization-mail-delivery.ts",
     "./organization-mail-policy": "./src/organization-mail-policy.ts",
-    "./review-health": "./src/review-health.ts",
     "./router": "./src/routers/index.ts",
     "./chat-generation": "./src/chat/generation/runner.ts",
     "./chat-generation-lifecycle": "./src/chat/generation/lifecycle.ts",
     "./chat-generation-runtime": "./src/chat/generation/runtime.ts",
+    "./chat-contracts": "./src/chat/contracts.ts",
     "./chat-run-store": "./src/chat-run-store.ts",
     "./chat-stream-hub": "./src/chat/stream-hub.ts",
     "./connectors": "./src/connectors/service.ts",
@@ -47,6 +48,7 @@
     "@quieter/env": "workspace:*",
     "@quieter/gmail": "workspace:*",
     "@quieter/mail": "workspace:*",
+    "@quieter/observability": "workspace:*",
     "@tanstack/ai": "catalog:"
   },
   "devDependencies": {
@@ -57,6 +59,7 @@
     "@types/node": "catalog:",
     "drizzle-orm": "catalog:",
     "typescript": "catalog:",
+    "vite": "catalog:",
     "vite-plus": "catalog:",
     "zod": "catalog:"
   },

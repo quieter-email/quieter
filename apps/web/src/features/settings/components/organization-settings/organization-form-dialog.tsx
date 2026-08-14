@@ -1,6 +1,10 @@
 "use client";
 
-import { Edit01Icon, Loading03Icon, UserGroupIcon } from "@hugeicons/core-free-icons";
+import {
+  Edit01Icon,
+  Loading03Icon,
+  UserGroupIcon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import {
@@ -17,12 +21,11 @@ import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { z } from "zod";
-import { authClient } from "~/lib/auth";
-import {
-  type OrganizationSummary,
-  getFullOrganizationQueryKey,
-  slugifyOrganizationName,
-} from "./domain";
+
+import { authClient } from "#/lib/auth";
+
+import { getFullOrganizationQueryKey, slugifyOrganizationName } from "./domain";
+import type { OrganizationSummary } from "./domain";
 
 export const OrganizationFormDialog = ({
   organization,
@@ -52,7 +55,7 @@ export const OrganizationFormDialog = ({
       if (response.error) {
         throw new Error(
           response.error.message ??
-            (organization ? "Could not update team." : "Could not create team."),
+            (organization ? "Could not update team." : "Could not create team.")
         );
       }
       return response;
@@ -84,12 +87,17 @@ export const OrganizationFormDialog = ({
           slug: nextSlug,
         });
         setOpen(false);
-        resetDialog();
+        setSubmitError(null);
+        form.reset(defaultValues);
       } catch (mutationError) {
-        setSubmitError(
-          (mutationError as { message?: string })?.message ??
-            (organization ? "Could not update team." : "Could not create team."),
-        );
+        let message = organization
+          ? "Could not update team."
+          : "Could not create team.";
+        if (mutationError instanceof Error) {
+          const { message: errorMessage } = mutationError;
+          message = errorMessage;
+        }
+        setSubmitError(message);
       }
     },
     validationLogic: revalidateLogic(),
@@ -99,7 +107,10 @@ export const OrganizationFormDialog = ({
         slug: z
           .string()
           .trim()
-          .regex(/^$|^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers, and hyphens."),
+          .regex(
+            /^$|^[a-z0-9]+(?:-[a-z0-9]+)*$/u,
+            "Use lowercase letters, numbers, and hyphens."
+          ),
       }),
     },
   });
@@ -131,7 +142,9 @@ export const OrganizationFormDialog = ({
       <Dialog
         onOpenChange={(nextOpen) => {
           setOpen(nextOpen);
-          if (!nextOpen) resetDialog();
+          if (!nextOpen) {
+            resetDialog();
+          }
         }}
         open={open}
       >
@@ -152,7 +165,9 @@ export const OrganizationFormDialog = ({
                     <TextFieldInput
                       aria-invalid={field.state.meta.errors.length > 0}
                       name={field.name}
-                      onBlur={() => field.handleBlur()}
+                      onBlur={() => {
+                        field.handleBlur();
+                      }}
                       onChange={(event) => {
                         setSubmitError(null);
                         field.handleChange(event.target.value);
@@ -161,7 +176,10 @@ export const OrganizationFormDialog = ({
                       value={field.state.value}
                     />
                     {field.state.meta.errors.map((error) => (
-                      <p className="text-sm text-destructive" key={error?.message}>
+                      <p
+                        className="text-sm text-destructive"
+                        key={error?.message}
+                      >
                         {error?.message}
                       </p>
                     ))}
@@ -175,7 +193,9 @@ export const OrganizationFormDialog = ({
                     <TextFieldInput
                       aria-invalid={field.state.meta.errors.length > 0}
                       name={field.name}
-                      onBlur={() => field.handleBlur()}
+                      onBlur={() => {
+                        field.handleBlur();
+                      }}
                       onChange={(event) => {
                         setSubmitError(null);
                         field.handleChange(event.target.value);
@@ -184,7 +204,10 @@ export const OrganizationFormDialog = ({
                       value={field.state.value}
                     />
                     {field.state.meta.errors.map((error) => (
-                      <p className="text-sm text-destructive" key={error?.message}>
+                      <p
+                        className="text-sm text-destructive"
+                        key={error?.message}
+                      >
                         {error?.message}
                       </p>
                     ))}
@@ -192,18 +215,32 @@ export const OrganizationFormDialog = ({
                 )}
               </form.Field>
 
-              {submitError && <p className="text-sm text-destructive">{submitError}</p>}
+              {(submitError ?? "") === "" ? null : (
+                <p className="text-sm text-destructive">{submitError}</p>
+              )}
             </DialogBody>
 
             <DialogFooter>
               <DialogCloseButton disabled={organizationMutation.isPending}>
                 Cancel
               </DialogCloseButton>
-              <Button disabled={organizationMutation.isPending} size="sm" type="submit">
+              <Button
+                disabled={organizationMutation.isPending}
+                size="sm"
+                type="submit"
+              >
                 {organizationMutation.isPending ? (
-                  <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-4 animate-spin"
+                    icon={Loading03Icon}
+                  />
                 ) : (
-                  <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-4"
+                    icon={Edit01Icon}
+                  />
                 )}
                 {submitLabel}
               </Button>

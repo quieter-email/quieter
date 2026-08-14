@@ -1,22 +1,32 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+
 import { serverEnv } from "@quieter/env/server";
 import { drizzle as drizzlePostgres } from "drizzle-orm/postgres-js";
-import { AsyncLocalStorage } from "node:async_hooks";
 import postgres from "postgres";
 import { Resource } from "sst";
+
 import { authRelations } from "./schema";
 
 export type DatabaseClient = ReturnType<typeof drizzlePostgres>;
 
-const getLinkedHyperdriveConnectionString = () => {
-  try {
-    const appDatabase = Reflect.get(Resource, "AppDatabaseV2") as
-      | { connectionString?: string }
-      | undefined;
-    const connectionString = appDatabase?.connectionString;
+const isPresentString = (value: string | undefined): value is string =>
+  value !== undefined && value !== "";
 
-    return typeof connectionString === "string" && connectionString.length > 0
-      ? connectionString
-      : undefined;
+const getLinkedHyperdriveConnectionString = (): string | undefined => {
+  try {
+    const appDatabase: unknown = Reflect.get(Resource, "AppDatabaseV2");
+    if (typeof appDatabase !== "object" || appDatabase === null) {
+      return undefined;
+    }
+
+    const connectionString: unknown = Reflect.get(
+      appDatabase,
+      "connectionString"
+    );
+    if (typeof connectionString !== "string" || connectionString === "") {
+      return undefined;
+    }
+    return connectionString;
   } catch {
     return undefined;
   }
@@ -25,12 +35,12 @@ const getLinkedHyperdriveConnectionString = () => {
 const getDatabaseUrl = () => {
   const linkedConnectionString = getLinkedHyperdriveConnectionString();
 
-  if (linkedConnectionString) {
+  if (isPresentString(linkedConnectionString)) {
     return linkedConnectionString;
   }
 
   const databaseUrl = serverEnv.DATABASE_URL;
-  if (!databaseUrl) {
+  if (!isPresentString(databaseUrl)) {
     throw new Error("DATABASE_URL environment variable is missing");
   }
   return databaseUrl;
@@ -40,7 +50,9 @@ export const assertDatabaseConfigured = () => {
   getDatabaseUrl();
 };
 
-const createDatabaseClient = (databaseUrl = getDatabaseUrl()): DatabaseClient => {
+const createDatabaseClient = (
+  databaseUrl = getDatabaseUrl()
+): DatabaseClient => {
   const hyperdrive = databaseUrl === getLinkedHyperdriveConnectionString();
   const sql = postgres(databaseUrl, {
     connect_timeout: 10,
@@ -66,7 +78,7 @@ const getDatabaseClient = () => {
 
   const linkedConnectionString = getLinkedHyperdriveConnectionString();
 
-  if (linkedConnectionString) {
+  if (isPresentString(linkedConnectionString)) {
     return createDatabaseClient(linkedConnectionString);
   }
 
@@ -74,23 +86,62 @@ const getDatabaseClient = () => {
   return directDatabaseClient;
 };
 
-export function withRequestDatabaseClient<Result>(
-  callback: (client: DatabaseClient) => Result,
-): Result;
-export function withRequestDatabaseClient<Result>(callback: () => Result): Result;
-export function withRequestDatabaseClient<Result>(
-  callback: ((client: DatabaseClient) => Result) | (() => Result),
-) {
-  const runCallback: (client: DatabaseClient) => Result = callback;
+type RequestDatabaseRun<Result> =
+  | ((client: DatabaseClient) => Result | Promise<Result>)
+  | (() => Result | Promise<Result>);
+
+const isClientRun = <Result>(
+  run: RequestDatabaseRun<Result>
+): run is (client: DatabaseClient) => Result | Promise<Result> =>
+  run.length > 0;
+
+const executeRequestDatabaseRun = async <Result>(
+  run: RequestDatabaseRun<Result>,
+  client: DatabaseClient
+): Promise<Result> => {
+  if (isClientRun(run)) {
+    return await run(client);
+  }
+  const runWithoutClient = run as () => Result | Promise<Result>;
+  return await runWithoutClient();
+};
+
+export const withRequestDatabaseClient = async <Result>(
+  run: RequestDatabaseRun<Result>
+): Promise<Result> => {
   const requestClient = requestDatabaseClient.getStore();
   if (requestClient) {
-    return runCallback(requestClient);
+    return await executeRequestDatabaseRun(run, requestClient);
   }
 
   const client = createDatabaseClient();
-  return requestDatabaseClient.run(client, () => runCallback(client));
-}
+  return await requestDatabaseClient.run(
+    client,
+    async () => await executeRequestDatabaseRun(run, client)
+  );
+};
 
-export const db = new Proxy({} as DatabaseClient, {
-  get: (_target, property) => Reflect.get(getDatabaseClient(), property),
-});
+const databaseProxyOverrides = new Map<PropertyKey, unknown>();
+
+const databaseProxyHandler: ProxyHandler<DatabaseClient> = {
+  get(_target, property): unknown {
+    if (databaseProxyOverrides.has(property)) {
+      return databaseProxyOverrides.get(property);
+    }
+    const client = getDatabaseClient();
+    const value: unknown = Reflect.get(client, property);
+    if (typeof value === "function") {
+      return (...args: unknown[]) =>
+        Reflect.apply(value, client, args) as unknown;
+    }
+    return value;
+  },
+  set(_target, property, value): boolean {
+    databaseProxyOverrides.set(property, value);
+    return true;
+  },
+};
+
+// The handler ignores the target; this inert object prevents import-time client creation.
+// oxlint-disable-next-line typescript/no-unsafe-type-assertion
+export const db = new Proxy({} as DatabaseClient, databaseProxyHandler);

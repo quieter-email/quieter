@@ -1,42 +1,53 @@
 import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod";
+
 import {
   nodeEnvironment,
   optionalBooleanString,
   optionalHttpUrl,
   optionalString,
   optionalUrl,
-  type RuntimeEnvironment,
+  throwEnvironmentValidationError,
   webSocketUrl,
 } from "./schema";
+import type { RuntimeEnvironment } from "./schema";
 
 export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
   createEnv({
     emptyStringAsUndefined: true,
+    onValidationError: throwEnvironmentValidationError,
     runtimeEnvStrict: {
       APP_SITE_PASSWORD: runtimeEnv.APP_SITE_PASSWORD,
       AWS_DEFAULT_REGION: runtimeEnv.AWS_DEFAULT_REGION,
       AWS_REGION: runtimeEnv.AWS_REGION,
+      BACKFILL_BATCH_SIZE: runtimeEnv.BACKFILL_BATCH_SIZE,
+      BACKFILL_CONCURRENCY: runtimeEnv.BACKFILL_CONCURRENCY,
       BETTER_AUTH_APP_NAME: runtimeEnv.BETTER_AUTH_APP_NAME,
       BETTER_AUTH_SECRET: runtimeEnv.BETTER_AUTH_SECRET,
       BETTER_AUTH_TRUSTED_ORIGINS: runtimeEnv.BETTER_AUTH_TRUSTED_ORIGINS,
       BETTER_AUTH_URL: runtimeEnv.BETTER_AUTH_URL,
       CHAT_GENERATION_START_TOKEN: runtimeEnv.CHAT_GENERATION_START_TOKEN,
       CHAT_GENERATION_START_URL: runtimeEnv.CHAT_GENERATION_START_URL,
+      CLOUDFLARE_ACCOUNT_ID: runtimeEnv.CLOUDFLARE_ACCOUNT_ID,
+      CLOUDFLARE_AI_API_TOKEN: runtimeEnv.CLOUDFLARE_AI_API_TOKEN,
       CONNECTOR_TOKEN_ENCRYPTION_KEY: runtimeEnv.CONNECTOR_TOKEN_ENCRYPTION_KEY,
       DATABASE_MIGRATION_URL: runtimeEnv.DATABASE_MIGRATION_URL,
       DATABASE_URL: runtimeEnv.DATABASE_URL,
       DOMAIN_CONNECT_PRIVATE_KEY_B64: runtimeEnv.DOMAIN_CONNECT_PRIVATE_KEY_B64,
-      GMAIL_CREDENTIAL_ROTATION_TOKEN: runtimeEnv.GMAIL_CREDENTIAL_ROTATION_TOKEN,
+      GMAIL_CREDENTIAL_ROTATION_TOKEN:
+        runtimeEnv.GMAIL_CREDENTIAL_ROTATION_TOKEN,
       GMAIL_LIVE_SYNC_TOKEN_SECRET: runtimeEnv.GMAIL_LIVE_SYNC_TOKEN_SECRET,
       GMAIL_LIVE_SYNC_URL: runtimeEnv.GMAIL_LIVE_SYNC_URL,
+      GMAIL_PUBSUB_PROCESS_TOKEN: runtimeEnv.GMAIL_PUBSUB_PROCESS_TOKEN,
       GMAIL_PUBSUB_PUSH_AUDIENCE: runtimeEnv.GMAIL_PUBSUB_PUSH_AUDIENCE,
-      GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT: runtimeEnv.GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT,
+      GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT:
+        runtimeEnv.GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT,
       GMAIL_PUBSUB_QUEUE_URL: runtimeEnv.GMAIL_PUBSUB_QUEUE_URL,
       GMAIL_PUBSUB_SUBSCRIPTION: runtimeEnv.GMAIL_PUBSUB_SUBSCRIPTION,
       GMAIL_PUBSUB_TOPIC: runtimeEnv.GMAIL_PUBSUB_TOPIC,
       GMAIL_TOKEN_ENCRYPTION_KEY: runtimeEnv.GMAIL_TOKEN_ENCRYPTION_KEY,
-      GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT: runtimeEnv.GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT,
+      GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT:
+        runtimeEnv.GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT,
       GOOGLE_AUTH_CLIENT_ID: runtimeEnv.GOOGLE_AUTH_CLIENT_ID,
       GOOGLE_AUTH_CLIENT_SECRET: runtimeEnv.GOOGLE_AUTH_CLIENT_SECRET,
       GOOGLE_CALENDAR_CLIENT_ID: runtimeEnv.GOOGLE_CALENDAR_CLIENT_ID,
@@ -45,27 +56,30 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       GOOGLE_GMAIL_CLIENT_SECRET: runtimeEnv.GOOGLE_GMAIL_CLIENT_SECRET,
       LINEAR_CLIENT_ID: runtimeEnv.LINEAR_CLIENT_ID,
       LINEAR_CLIENT_SECRET: runtimeEnv.LINEAR_CLIENT_SECRET,
-      MAIL_BUCKET: runtimeEnv.MAIL_BUCKET,
       MAILBOX_ACTION_QUEUE_URL: runtimeEnv.MAILBOX_ACTION_QUEUE_URL,
+      MAIL_BUCKET: runtimeEnv.MAIL_BUCKET,
       MAIL_RECEIPT_ROLE_ARN: runtimeEnv.MAIL_RECEIPT_ROLE_ARN,
       MAIL_RECEIPT_RULE_SET_NAME: runtimeEnv.MAIL_RECEIPT_RULE_SET_NAME,
       MAIL_RECEIPT_TOPIC_ARN: runtimeEnv.MAIL_RECEIPT_TOPIC_ARN,
       NODE_ENV: runtimeEnv.NODE_ENV,
       OPENROUTER_API_KEY: runtimeEnv.OPENROUTER_API_KEY,
       POLAR_ACCESS_TOKEN: runtimeEnv.POLAR_ACCESS_TOKEN,
+      POLAR_CREDIT_USAGE_SYNC_LIMIT: runtimeEnv.POLAR_CREDIT_USAGE_SYNC_LIMIT,
       POLAR_ORGANIZATION_ID: runtimeEnv.POLAR_ORGANIZATION_ID,
       POLAR_PRODUCT_MANAGED_ID: runtimeEnv.POLAR_PRODUCT_MANAGED_ID,
       POLAR_PRODUCT_PRO_ID: runtimeEnv.POLAR_PRODUCT_PRO_ID,
       POLAR_SANDBOX: runtimeEnv.POLAR_SANDBOX,
       POLAR_WEBHOOK_SECRET: runtimeEnv.POLAR_WEBHOOK_SECRET,
-      QUIETER_AUTH_MAIL_SENDER: runtimeEnv.QUIETER_AUTH_MAIL_SENDER,
       QUIETER_AUTH_MAIL_MODE: runtimeEnv.QUIETER_AUTH_MAIL_MODE,
+      QUIETER_AUTH_MAIL_SENDER: runtimeEnv.QUIETER_AUTH_MAIL_SENDER,
+      QUIETER_DEPLOYMENT_ENV: runtimeEnv.QUIETER_DEPLOYMENT_ENV,
+      QUIETER_GMAIL_AI_AUTOMATION_ENABLED:
+        runtimeEnv.QUIETER_GMAIL_AI_AUTOMATION_ENABLED,
+      QUIETER_LOCAL_BILLING_BYPASS: runtimeEnv.QUIETER_LOCAL_BILLING_BYPASS,
       QUIETER_MAIL_API_KEY: runtimeEnv.QUIETER_MAIL_API_KEY,
       QUIETER_MAIL_API_URL: runtimeEnv.QUIETER_MAIL_API_URL,
-      QUIETER_DEPLOYMENT_ENV: runtimeEnv.QUIETER_DEPLOYMENT_ENV,
-      QUIETER_GMAIL_AI_AUTOMATION_ENABLED: runtimeEnv.QUIETER_GMAIL_AI_AUTOMATION_ENABLED,
-      QUIETER_LOCAL_BILLING_BYPASS: runtimeEnv.QUIETER_LOCAL_BILLING_BYPASS,
-      QUIETER_PREVIEW_PERSONAS_ENABLED: runtimeEnv.QUIETER_PREVIEW_PERSONAS_ENABLED,
+      QUIETER_PREVIEW_PERSONAS_ENABLED:
+        runtimeEnv.QUIETER_PREVIEW_PERSONAS_ENABLED,
       R2_ACCESS_KEY_ID: runtimeEnv.R2_ACCESS_KEY_ID,
       R2_ACCOUNT_ID: runtimeEnv.R2_ACCOUNT_ID,
       R2_BUCKET: runtimeEnv.R2_BUCKET,
@@ -76,18 +90,24 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       SENTRY_ENVIRONMENT: runtimeEnv.SENTRY_ENVIRONMENT,
       SENTRY_ORG: runtimeEnv.SENTRY_ORG,
       SENTRY_PROJECT: runtimeEnv.SENTRY_PROJECT,
+      SES_CONFIGURATION_SET_NAME: runtimeEnv.SES_CONFIGURATION_SET_NAME,
+      SES_FEEDBACK_TOPIC_ARN: runtimeEnv.SES_FEEDBACK_TOPIC_ARN,
       VITE_LOGO_DEV_PUBLISHABLE_KEY: runtimeEnv.VITE_LOGO_DEV_PUBLISHABLE_KEY,
     },
     server: {
       APP_SITE_PASSWORD: optionalString,
       AWS_DEFAULT_REGION: optionalString,
       AWS_REGION: optionalString,
+      BACKFILL_BATCH_SIZE: optionalString,
+      BACKFILL_CONCURRENCY: optionalString,
       BETTER_AUTH_APP_NAME: z.string().trim().min(1).default("quieter"),
       BETTER_AUTH_SECRET: optionalString,
       BETTER_AUTH_TRUSTED_ORIGINS: optionalString,
       BETTER_AUTH_URL: optionalHttpUrl,
       CHAT_GENERATION_START_TOKEN: optionalString,
       CHAT_GENERATION_START_URL: optionalHttpUrl,
+      CLOUDFLARE_ACCOUNT_ID: optionalString,
+      CLOUDFLARE_AI_API_TOKEN: optionalString,
       CONNECTOR_TOKEN_ENCRYPTION_KEY: optionalString,
       DATABASE_MIGRATION_URL: optionalUrl,
       DATABASE_URL: optionalUrl,
@@ -95,8 +115,9 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       GMAIL_CREDENTIAL_ROTATION_TOKEN: optionalString,
       GMAIL_LIVE_SYNC_TOKEN_SECRET: optionalString,
       GMAIL_LIVE_SYNC_URL: webSocketUrl.optional(),
+      GMAIL_PUBSUB_PROCESS_TOKEN: optionalString,
       GMAIL_PUBSUB_PUSH_AUDIENCE: optionalHttpUrl,
-      GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT: z.string().trim().email().optional(),
+      GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT: z.email().optional(),
       GMAIL_PUBSUB_QUEUE_URL: optionalUrl,
       GMAIL_PUBSUB_SUBSCRIPTION: optionalString,
       GMAIL_PUBSUB_TOPIC: optionalString,
@@ -110,26 +131,27 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       GOOGLE_GMAIL_CLIENT_SECRET: optionalString,
       LINEAR_CLIENT_ID: optionalString,
       LINEAR_CLIENT_SECRET: optionalString,
-      MAIL_BUCKET: optionalString,
       MAILBOX_ACTION_QUEUE_URL: optionalUrl,
+      MAIL_BUCKET: optionalString,
       MAIL_RECEIPT_ROLE_ARN: optionalString,
       MAIL_RECEIPT_RULE_SET_NAME: optionalString,
       MAIL_RECEIPT_TOPIC_ARN: optionalString,
       NODE_ENV: nodeEnvironment,
       OPENROUTER_API_KEY: optionalString,
       POLAR_ACCESS_TOKEN: optionalString,
+      POLAR_CREDIT_USAGE_SYNC_LIMIT: optionalString,
       POLAR_ORGANIZATION_ID: optionalString,
       POLAR_PRODUCT_MANAGED_ID: optionalString,
       POLAR_PRODUCT_PRO_ID: optionalString,
       POLAR_SANDBOX: optionalBooleanString,
       POLAR_WEBHOOK_SECRET: optionalString,
       QUIETER_AUTH_MAIL_MODE: z.enum(["api", "console"]).default("api"),
-      QUIETER_AUTH_MAIL_SENDER: z.string().trim().email().default("auth@quieter.email"),
+      QUIETER_AUTH_MAIL_SENDER: z.email().default("auth@quieter.email"),
+      QUIETER_DEPLOYMENT_ENV: z.enum(["local", "production"]).default("local"),
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED: optionalBooleanString,
       QUIETER_LOCAL_BILLING_BYPASS: optionalBooleanString,
       QUIETER_MAIL_API_KEY: optionalString,
       QUIETER_MAIL_API_URL: optionalHttpUrl,
-      QUIETER_DEPLOYMENT_ENV: z.enum(["local", "preview", "production"]).default("local"),
       QUIETER_PREVIEW_PERSONAS_ENABLED: optionalBooleanString,
       R2_ACCESS_KEY_ID: optionalString,
       R2_ACCOUNT_ID: optionalString,
@@ -141,6 +163,8 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       SENTRY_ENVIRONMENT: optionalString,
       SENTRY_ORG: optionalString,
       SENTRY_PROJECT: optionalString,
+      SES_CONFIGURATION_SET_NAME: optionalString,
+      SES_FEEDBACK_TOPIC_ARN: optionalString,
       VITE_LOGO_DEV_PUBLISHABLE_KEY: optionalString,
     },
   });
@@ -148,7 +172,10 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
 export const serverEnv = createServerEnv();
 
 type ServerStringKey = {
-  [Key in keyof typeof serverEnv]-?: Exclude<(typeof serverEnv)[Key], undefined> extends string
+  [Key in keyof typeof serverEnv]-?: Exclude<
+    (typeof serverEnv)[Key],
+    undefined
+  > extends string
     ? Key
     : never;
 }[keyof typeof serverEnv];
@@ -156,7 +183,7 @@ type ServerStringKey = {
 export const requireServerEnv = (name: ServerStringKey) => {
   const value = serverEnv[name];
 
-  if (typeof value !== "string" || !value) {
+  if (typeof value !== "string" || value === "") {
     throw new Error(`${name} environment variable is missing.`);
   }
 

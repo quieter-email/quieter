@@ -1,10 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
+
 import {
   getSitePasswordToken,
   isCorrectSitePassword,
   sitePasswordCookieName,
   sitePasswordMaxAgeSeconds,
-} from "~/lib/site-password.server";
+} from "#/lib/site-password.server";
 
 export const Route = createFileRoute("/api/site-password")({
   server: {
@@ -15,7 +16,13 @@ export const Route = createFileRoute("/api/site-password")({
         const returnTo = getSafeReturnTo(formData.get("returnTo"), request);
         const token = getSitePasswordToken();
 
-        if (typeof password !== "string" || !token || !isCorrectSitePassword(password)) {
+        if (
+          typeof password !== "string" ||
+          token === null ||
+          token === undefined ||
+          token === "" ||
+          !isCorrectSitePassword(password)
+        ) {
           return redirectWithPasswordError(returnTo, request.url);
         }
 
@@ -31,13 +38,26 @@ export const Route = createFileRoute("/api/site-password")({
   },
 });
 
-const getSafeReturnTo = (value: FormDataEntryValue | null, request: Request) => {
-  const returnTo =
-    typeof value === "string"
-      ? value
-      : new URL(request.headers.get("referer") ?? request.url).searchParams.get("returnTo");
+const getSafeReturnTo = (
+  value: FormDataEntryValue | null,
+  request: Request
+) => {
+  let returnTo: string | null;
+  if (typeof value === "string") {
+    returnTo = value;
+  } else {
+    const referer = request.headers.get("referer") ?? request.url;
+    returnTo = URL.canParse(referer)
+      ? new URL(referer).searchParams.get("returnTo")
+      : null;
+  }
 
-  if (!returnTo || !returnTo.startsWith("/") || returnTo.startsWith("//")) {
+  if (
+    returnTo === null ||
+    returnTo === "" ||
+    !returnTo.startsWith("/") ||
+    returnTo.startsWith("//")
+  ) {
     return "/";
   }
 
@@ -74,4 +94,5 @@ const serializeSitePasswordCookie = (token: string, requestUrl: string) => {
     .join("; ");
 };
 
-const isSecureRequest = (requestUrl: string) => new URL(requestUrl).protocol === "https:";
+const isSecureRequest = (requestUrl: string) =>
+  new URL(requestUrl).protocol === "https:";

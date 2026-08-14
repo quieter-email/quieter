@@ -16,14 +16,9 @@ flowchart LR
   AWS --> MailInfra["SES, S3, SNS, SQS, WebSocket"]
 ```
 
-Behavior-producing AI agents share the scoped dynamic knowledge boundary in
-[`docs/ai-memory.md`](./ai-memory.md). Personal knowledge follows one user, mailbox knowledge follows
-the mailbox and is more specific, and all retrieval and mutation goes through
-`packages/orpc/src/ai-memory.ts`.
+Behavior-producing AI agents share the scoped dynamic knowledge boundary in [`docs/ai-memory.md`](./ai-memory.md). Personal knowledge follows one user, mailbox knowledge follows the mailbox and is more specific, and all retrieval and mutation goes through `packages/orpc/src/ai-memory.ts`.
 
-`apps/web` owns routing, rendering, browser state, server functions, and HTTP API handlers.
-Database-backed business logic crosses through `packages/orpc`. Shared packages own provider and
-domain-specific behavior.
+`apps/web` owns routing, rendering, browser state, server functions, and HTTP API handlers. Database-backed business logic crosses through `packages/orpc`. Shared packages own provider and domain-specific behavior.
 
 ## Workspace Boundaries
 
@@ -37,8 +32,7 @@ TanStack Start application containing:
 - TanStack Query configuration and persisted caches
 - consent-gated browser analytics
 
-API handlers remain under `apps/web/src/routes/api/**`. Request-scoped auth and SSR data use route
-loaders or TanStack Start server functions.
+API handlers remain under `apps/web/src/routes/api/**`. Request-scoped auth and SSR data use route loaders or TanStack Start server functions.
 
 ### `packages/orpc`
 
@@ -60,11 +54,9 @@ Owns the Drizzle schema, client, migrations, schema-drift checks, and migration 
 
 ### `packages/mail` and `packages/gmail`
 
-`packages/mail` contains provider-independent mail behavior: schemas, MIME construction, raw parsing,
-content extraction, draft anchors, and avatar derivation.
+`packages/mail` contains provider-independent mail behavior: schemas, MIME construction, raw parsing, content extraction, draft anchors, and avatar derivation.
 
-`packages/gmail` contains Gmail REST calls and Gmail-specific draft parsing. It does not own encrypted
-credential storage or token refresh.
+`packages/gmail` contains Gmail REST calls and Gmail-specific draft parsing. It does not own encrypted credential storage or token refresh.
 
 ### Other Packages
 
@@ -90,15 +82,13 @@ Every connected Gmail account and managed address is a persisted mailbox with a 
 - Personal is always available but is not a Better Auth organization.
 - `user.defaultMailboxId` is the global fallback across Personal and organizations.
 
-Mailbox-scoped state, queries, caches, chats, compose sessions, and mutations must always include
-`mailboxId`.
+Mailbox-scoped state, queries, caches, chats, compose sessions, and mutations must always include `mailboxId`.
 
 ## Gmail Synchronization
 
 The browser initially loads mailbox state through oRPC. Gmail REST work runs server-side.
 
-Unfiltered mailbox views can apply Gmail history updates. Filtered search and Drafts refresh
-manually. Foreground polling remains the reliability fallback.
+Unfiltered mailbox views can apply Gmail history updates. Filtered search and Drafts refresh manually. Foreground polling remains the reliability fallback.
 
 For Pro mailboxes:
 
@@ -133,20 +123,15 @@ Chats are mailbox-scoped.
 
 1. `chat.sendMessage` persists the user message, a run record, and a draft assistant row.
 2. The server starts generation in-process or through the SST queue/workflow.
-3. The browser opens the observation-only run SSE endpoint, which combines same-process events with
-   database-backed rejoin polling.
-4. Server-side generation streams draft events and atomically persists debounced drafts, independent
-   of browser connection lifetime.
-5. Cancellation immediately terminalizes the persisted run and draft, aborts a local controller when
-   present, and remains visible to remote workers through the persisted cancel state.
+3. The browser opens the observation-only run SSE endpoint, which combines same-process events with database-backed rejoin polling.
+4. Server-side generation streams draft events and atomically persists debounced drafts, independent of browser connection lifetime.
+5. Cancellation immediately terminalizes the persisted run and draft, aborts a local controller when present, and remains visible to remote workers through the persisted cancel state.
 
-Historical chat state is loaded once through `chat.get`; the browser does not poll for generated
-tokens or own generation lifetime.
+Historical chat state is loaded once through `chat.get`; the browser does not poll for generated tokens or own generation lifetime.
 
 ## Consent and Observability
 
-c15t runs in offline mode. Consent preferences stay in the browser and do not require an API route,
-database tables, or migrations.
+c15t runs in offline mode. Consent preferences stay in the browser and do not require an API route, database tables, or migrations.
 
 - PostHog and Speed Insights load only after `measurement` consent.
 - Client Sentry remains enabled in production and is disclosed in the privacy policy.
@@ -154,18 +139,28 @@ database tables, or migrations.
 
 ## Billing
 
-Billing subscriptions are user-scoped. Paid plans are `managed` and `pro`; Gmail and bring-your-own
-key access do not require checkout.
+Billing subscriptions are user-scoped. Paid plans are `managed` and `pro`; Gmail and bring-your-own key access do not require checkout.
 
-PayKit and Polar handle product synchronization, checkout, subscription events, and usage events.
-Organization mail usage is measured separately and billed according to plan-specific markup.
+PayKit and Polar handle product synchronization, checkout, subscription events, and usage events. Organization mail usage is measured separately and billed according to plan-specific markup.
 
 ## Infrastructure Ownership
 
-SST provisions the mail bucket, receipt topic and role, queues, workflows, function URLs, Gmail
-notification ingress, live-sync WebSocket, and maintenance schedules.
+SST provisions the mail bucket, receipt topic and role, queues, workflows, function URLs, Gmail notification ingress, live-sync WebSocket, and maintenance schedules.
 
-Cloudflare Workers hosts the web application. SST builds and publishes production, binds deployment
-outputs directly, and provisions the fixed review infrastructure. Review promotions upload a
-credential-free pull-request artifact with trusted default-branch Wrangler configuration; the
-pull-request build never receives deployment credentials.
+Cloudflare Workers hosts the web application. SST builds and publishes production and binds deployment outputs directly.
+
+### SST configuration layout
+
+The root [`sst.config.ts`](../sst.config.ts) owns only app-wide SST settings and delegates resource composition to [`infra/`](../infra):
+
+- `stage.ts` centralizes stage flags, domains, and deployment environment names.
+- `runtime.ts` normalizes `@quieter/env` values and shared Worker/function environment groups.
+- `secrets.ts` declares stage-aware `sst.Secret` resources and Cloudflare secret bindings.
+- `database.ts` owns the Cloudflare Hyperdrive binding.
+- `web.ts` owns the TanStack Start Worker and its common bindings.
+- `chat.ts` and `actions.ts` own chat generation and mailbox-action resources.
+- `mail.ts` owns SES receipt storage, processing, ingress, and send permissions.
+- `gmail.ts` owns Gmail live-sync and Pub/Sub resources across AWS and Cloudflare.
+- `app.ts` is the small stage-aware composition entry point; `types.ts` contains shared infra boundary types.
+
+SST is the runtime source of truth for application credentials and tokens; their canonical names live in `packages/env/src/sst-secrets.ts`. Cloudflare receives them as secret-text bindings, while AWS functions receive values derived from SST secret outputs. Deployment environment variables are reserved for non-secret configuration such as feature switches, resource identifiers, domains, and provider deployment credentials.

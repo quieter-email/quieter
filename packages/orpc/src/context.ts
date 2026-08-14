@@ -11,12 +11,12 @@ export type OrpcContext = {
 } & RequestHeadersPluginContext &
   ResponseHeadersPluginContext;
 
-export function createOrpcContext(
+export const createOrpcContext = (
   options: {
     req?: Request;
     headers?: HeadersInit;
-  } = {},
-): OrpcContext {
+  } = {}
+): OrpcContext => {
   assertDatabaseConfigured();
 
   return {
@@ -24,6 +24,7 @@ export function createOrpcContext(
     headers: new Headers(options.req?.headers ?? options.headers),
     signal: options.req?.signal,
   };
-}
+};
 
-export const getRequestHeaders = (context: OrpcContext) => context.reqHeaders ?? context.headers;
+export const getRequestHeaders = (context: OrpcContext): Headers =>
+  context.reqHeaders ?? context.headers;

@@ -1,10 +1,11 @@
 "use client";
 
-import type { ComponentPropsWithoutRef } from "react";
 import { cva } from "class-variance-authority";
+import type { ComponentPropsWithoutRef } from "react";
 import { Drawer as DrawerPrimitive } from "vaul";
-import type { ButtonProps } from "./button";
+
 import { cn } from "../../lib/cn";
+import type { ButtonProps } from "./button";
 
 export const Drawer = DrawerPrimitive.Root;
 export const DrawerPortal = DrawerPrimitive.Portal;
@@ -17,7 +18,7 @@ export const DrawerTrigger = ({
     className={cn(
       "squircle",
       className,
-      "transition-transform duration-100 ease-out focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
+      "transition-transform duration-100 ease-out focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
     )}
     {...props}
   />
@@ -60,7 +61,7 @@ export const DrawerContent = ({
         "data-[vaul-drawer-direction=top]:inset-x-0 data-[vaul-drawer-direction=top]:top-0 data-[vaul-drawer-direction=top]:max-h-[96vh] data-[vaul-drawer-direction=top]:rounded-b-xl data-[vaul-drawer-direction=top]:border-b",
         "data-[vaul-drawer-direction=left]:inset-y-0 data-[vaul-drawer-direction=left]:left-0 data-[vaul-drawer-direction=left]:h-full data-[vaul-drawer-direction=left]:w-[min(92vw,32rem)] data-[vaul-drawer-direction=left]:rounded-r-2xl data-[vaul-drawer-direction=left]:border-r",
         "data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:h-full data-[vaul-drawer-direction=right]:w-[min(92vw,32rem)] data-[vaul-drawer-direction=right]:rounded-l-2xl data-[vaul-drawer-direction=right]:border-l",
-        className,
+        className
       )}
       {...props}
     >
@@ -70,17 +71,29 @@ export const DrawerContent = ({
   </DrawerPortal>
 );
 
-export const DrawerHeader = ({ className, ...props }: ComponentPropsWithoutRef<"div">) => (
+export const DrawerHeader = ({
+  className,
+  ...props
+}: ComponentPropsWithoutRef<"div">) => (
   <div className={cn("border-b px-5 py-4", className)} {...props} />
 );
 
-export const DrawerBody = ({ className, ...props }: ComponentPropsWithoutRef<"div">) => (
+export const DrawerBody = ({
+  className,
+  ...props
+}: ComponentPropsWithoutRef<"div">) => (
   <div className={cn("flex-1 px-5 py-4", className)} {...props} />
 );
 
-export const DrawerFooter = ({ className, ...props }: ComponentPropsWithoutRef<"div">) => (
+export const DrawerFooter = ({
+  className,
+  ...props
+}: ComponentPropsWithoutRef<"div">) => (
   <div
-    className={cn("flex items-center justify-end gap-2 border-t px-5 py-4", className)}
+    className={cn(
+      "flex items-center justify-end gap-2 border-t px-5 py-4",
+      className
+    )}
     {...props}
   />
 );
@@ -99,28 +112,31 @@ export const DrawerDescription = ({
   className,
   ...props
 }: ComponentPropsWithoutRef<typeof DrawerPrimitive.Description>) => (
-  <DrawerPrimitive.Description className={cn("mt-2 text-sm text-muted-fg", className)} {...props} />
+  <DrawerPrimitive.Description
+    className={cn("mt-2 text-sm text-muted-fg", className)}
+    {...props}
+  />
 );
 
 const drawerCloseButtonVariants = cva(
   "squircle inline-flex min-w-20 shrink-0 items-center justify-center gap-2 rounded-md px-3.5 text-[13px] font-medium whitespace-nowrap transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/45 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
   {
+    defaultVariants: {
+      variant: "outline",
+    },
     variants: {
       variant: {
         default:
           "h-8 bg-primary text-primary-fg shadow-sm hover:bg-primary/90 active:bg-primary/85",
-        outline:
-          "h-8 border border-border bg-bg-surface text-fg shadow-sm hover:bg-muted active:bg-muted/80",
-        ghost:
-          "h-8 bg-transparent text-muted-fg hover:bg-muted hover:text-fg active:bg-muted/80 active:text-fg",
         destructive:
           "h-8 bg-destructive text-destructive-fg shadow-sm hover:bg-destructive/90 active:bg-destructive/85",
+        ghost:
+          "h-8 bg-transparent text-muted-fg hover:bg-muted hover:text-fg active:bg-muted/80 active:text-fg",
+        outline:
+          "h-8 border border-border bg-bg-surface text-fg shadow-sm hover:bg-muted active:bg-muted/80",
       },
     },
-    defaultVariants: {
-      variant: "outline",
-    },
-  },
+  }
 );
 
 export const DrawerCloseButton = ({

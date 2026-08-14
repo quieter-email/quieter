@@ -1,12 +1,19 @@
 "use client";
 
-import type { MessagePart } from "@tanstack/ai";
 import { composeEmailInputSchema } from "@quieter/ai/chat-agent";
+import type { MessagePart } from "@tanstack/ai";
 import { useNavigate } from "@tanstack/react-router";
 import { m, useReducedMotion } from "motion/react";
-import { getAppPresenceMotion } from "~/features/motion/app-motion";
-import type { GmailSearchToolResult, ModifyMailToolResult, ResolveComposeTool } from "../../types";
+import type { ReactNode } from "react";
+
+import { getAppPresenceMotion } from "#/features/motion/app-motion";
+
 import { parseToolArguments, parseToolResult } from "../../domain/chat-tools";
+import type {
+  GmailSearchToolResult,
+  ModifyMailToolResult,
+  ResolveComposeTool,
+} from "../../types";
 import { InlineComposeTool } from "./inline-compose-tool";
 import { AttachmentTool } from "./tools/attachment-tool";
 import { LabelsTool } from "./tools/labels-tool";
@@ -21,6 +28,22 @@ import { ToolStep } from "./tools/tool-step";
 type ToolCall = Extract<MessagePart, { type: "tool-call" }>;
 type ToolResult = Extract<MessagePart, { type: "tool-result" }>;
 
+const isModifyMailAction = (
+  value: unknown
+): value is ModifyMailToolResult["action"] =>
+  value === "archive" ||
+  value === "mark_read" ||
+  value === "mark_unread" ||
+  value === "star" ||
+  value === "trash" ||
+  value === "unstar" ||
+  value === "untrash";
+
+const isModifyMailTarget = (
+  value: unknown
+): value is ModifyMailToolResult["target"] =>
+  value === "message" || value === "thread";
+
 type ToolPartProps = {
   actionsDisabled?: boolean;
   animateEntrance?: boolean;
@@ -32,9 +55,12 @@ type ToolPartProps = {
   result?: ToolResult;
 };
 
-const getResultError = (parsed: ReturnType<typeof parseToolResult>, result?: ToolResult) => {
+const getResultError = (
+  parsed: ReturnType<typeof parseToolResult>,
+  result?: ToolResult
+) => {
   if (result?.state === "error") {
-    return result.error || "Something went wrong.";
+    return result.error ?? "Something went wrong.";
   }
 
   if ("data" in parsed && parsed.data.status === "error") {
@@ -42,6 +68,278 @@ const getResultError = (parsed: ReturnType<typeof parseToolResult>, result?: Too
   }
 
   return null;
+};
+
+const isComposeReady = (state: ToolCall["state"]) =>
+  state === "input-complete" ||
+  state === "approval-requested" ||
+  state === "approval-responded";
+
+const ComposeToolPart = ({
+  actionsDisabled,
+  animateEntrance,
+  assistantMessageId,
+  call,
+  composeMotion,
+  onResolveCompose,
+  parsed,
+  result,
+}: {
+  actionsDisabled?: boolean;
+  animateEntrance: boolean;
+  assistantMessageId?: string;
+  call: ToolCall;
+  composeMotion: ReturnType<typeof getAppPresenceMotion>;
+  onResolveCompose?: ResolveComposeTool;
+  parsed: ReturnType<typeof parseToolResult>;
+  result?: ToolResult;
+}) => {
+  const initial = composeEmailInputSchema.safeParse(
+    ("input" in call ? call.input : undefined) ??
+      parseToolArguments(call.arguments)
+  );
+  if (
+    !isComposeReady(call.state) ||
+    !initial.success ||
+    assistantMessageId === undefined ||
+    assistantMessageId === "" ||
+    onResolveCompose === undefined
+  ) {
+    return null;
+  }
+
+  const composeResult =
+    parsed.kind === "compose-email" ? parsed.data : undefined;
+  return (
+    <m.div
+      {...composeMotion}
+      className="py-1"
+      initial={animateEntrance ? composeMotion.initial : false}
+    >
+      <InlineComposeTool
+        disabled={actionsDisabled}
+        initial={initial.data}
+        onResolve={async (action, message) => {
+          if (action === "decline") {
+            await onResolveCompose({
+              action,
+              assistantMessageId,
+              toolCallId: call.id,
+            });
+            return;
+          }
+
+          if (!message) {
+            throw new Error("The email content is missing.");
+          }
+
+          await onResolveCompose({
+            action,
+            assistantMessageId,
+            message,
+            toolCallId: call.id,
+          });
+        }}
+        processing={call.state === "approval-responded" && !result}
+        result={composeResult}
+      />
+    </m.div>
+  );
+};
+
+type ToolPartRendererProps = {
+  args: Record<string, unknown>;
+  error: string | null;
+  name: string;
+  nested: boolean;
+  onOpenMessage: (
+    category: GmailSearchToolResult["category"],
+    messageId: string
+  ) => void;
+  parsed: ReturnType<typeof parseToolResult>;
+  pending: boolean;
+};
+
+const getStringArgument = (args: Record<string, unknown>, key: string) =>
+  typeof args[key] === "string" ? args[key] : "";
+
+const getArrayLengthArgument = (args: Record<string, unknown>, key: string) =>
+  Array.isArray(args[key]) ? args[key].length : undefined;
+
+const getCalendarDetail = (
+  args: Record<string, unknown>,
+  parsed: ReturnType<typeof parseToolResult>
+) => {
+  if (
+    parsed.kind === "google-calendar-event" &&
+    parsed.data.status === "success"
+  ) {
+    return parsed.data.summary;
+  }
+  return getStringArgument(args, "summary");
+};
+
+const getLinearMetadataDetail = (
+  parsed: ReturnType<typeof parseToolResult>
+) => {
+  if (
+    parsed.kind === "linear-issue-metadata" &&
+    parsed.data.status === "success"
+  ) {
+    return `${parsed.data.teams.length} team${parsed.data.teams.length === 1 ? "" : "s"}`;
+  }
+  return "";
+};
+
+const getLinearIssueDetail = (
+  args: Record<string, unknown>,
+  parsed: ReturnType<typeof parseToolResult>
+) => {
+  if (
+    parsed.kind === "linear-issue-create" &&
+    parsed.data.status === "success"
+  ) {
+    return parsed.data.identifier;
+  }
+  return getStringArgument(args, "title");
+};
+
+const toolPartRenderers: Record<
+  string,
+  (props: ToolPartRendererProps) => ReactNode
+> = {
+  create_google_calendar_event: ({ args, error, nested, parsed, pending }) => (
+    <ToolStep
+      nested={nested}
+      detail={getCalendarDetail(args, parsed)}
+      error={error}
+      label={pending ? "Adding calendar event" : "Added calendar event"}
+      pending={pending}
+    />
+  ),
+  create_linear_issue: ({ args, error, nested, parsed, pending }) => (
+    <ToolStep
+      nested={nested}
+      detail={getLinearIssueDetail(args, parsed)}
+      error={error}
+      label={pending ? "Creating Linear issue" : "Created Linear issue"}
+      pending={pending}
+    />
+  ),
+  get_mailbox_overview: ({ error, nested, parsed, pending }) => (
+    <OverviewTool
+      nested={nested}
+      data={parsed.kind === "mailbox-overview" ? parsed.data : undefined}
+      error={error}
+      pending={pending}
+    />
+  ),
+  list_gmail_labels: ({ error, nested, parsed, pending }) => (
+    <LabelsTool
+      nested={nested}
+      data={parsed.kind === "gmail-labels" ? parsed.data : undefined}
+      error={error}
+      pending={pending}
+    />
+  ),
+  list_linear_issue_metadata: ({ error, nested, parsed, pending }) => (
+    <ToolStep
+      nested={nested}
+      detail={getLinearMetadataDetail(parsed)}
+      error={error}
+      label={pending ? "Reading Linear workspace" : "Read Linear workspace"}
+      pending={pending}
+    />
+  ),
+  modify_mail: ({ args, error, nested, parsed, pending }) => (
+    <ModifyTool
+      action={isModifyMailAction(args.action) ? args.action : undefined}
+      nested={nested}
+      data={parsed.kind === "modify-mail" ? parsed.data : undefined}
+      error={error}
+      pending={pending}
+      target={isModifyMailTarget(args.target) ? args.target : undefined}
+    />
+  ),
+  read_gmail_attachment: ({ error, nested, parsed, pending }) => (
+    <AttachmentTool
+      data={parsed.kind === "gmail-attachment" ? parsed.data : undefined}
+      error={error}
+      nested={nested}
+      pending={pending}
+    />
+  ),
+  read_gmail_message: ({ error, nested, onOpenMessage, parsed, pending }) => (
+    <MessageTool
+      nested={nested}
+      data={parsed.kind === "gmail-message" ? parsed.data : undefined}
+      error={error}
+      onOpenMessage={onOpenMessage}
+      pending={pending}
+    />
+  ),
+  read_gmail_messages: ({
+    args,
+    error,
+    nested,
+    onOpenMessage,
+    parsed,
+    pending,
+  }) => (
+    <MessagesTool
+      nested={nested}
+      data={parsed.kind === "gmail-messages" ? parsed.data : undefined}
+      error={error}
+      onOpenMessage={onOpenMessage}
+      pending={pending}
+      requestedCount={getArrayLengthArgument(args, "messageIds")}
+    />
+  ),
+  read_gmail_thread: ({
+    args,
+    error,
+    nested,
+    onOpenMessage,
+    parsed,
+    pending,
+  }) => (
+    <ThreadTool
+      nested={nested}
+      data={parsed.kind === "gmail-thread" ? parsed.data : undefined}
+      error={error}
+      onOpenMessage={onOpenMessage}
+      pending={pending}
+      threadId={getStringArgument(args, "threadId")}
+    />
+  ),
+  search_gmail: ({ args, error, nested, onOpenMessage, parsed, pending }) => (
+    <SearchTool
+      nested={nested}
+      data={parsed.kind === "gmail-search" ? parsed.data : undefined}
+      error={error}
+      onOpenMessage={onOpenMessage}
+      pending={pending}
+      query={getStringArgument(args, "query")}
+    />
+  ),
+};
+
+const ToolPartRenderer = (props: ToolPartRendererProps): ReactNode => {
+  const { error, name, nested, parsed, pending } = props;
+  const renderer = toolPartRenderers[name];
+  return renderer === undefined ? (
+    <ToolStep
+      nested={nested}
+      detail={name}
+      error={
+        error ?? (parsed.kind === "unknown" ? "Unsupported tool result." : null)
+      }
+      label={pending ? "Running tool" : "Ran tool"}
+      pending={pending}
+    />
+  ) : (
+    renderer(props)
+  );
 };
 
 export const ToolPart = ({
@@ -55,17 +353,24 @@ export const ToolPart = ({
   result,
 }: ToolPartProps) => {
   const shouldReduceMotion = useReducedMotion();
-  const composeMotion = getAppPresenceMotion({ reducedMotion: shouldReduceMotion });
+  const composeMotion = getAppPresenceMotion({
+    reducedMotion: shouldReduceMotion,
+  });
   const navigate = useNavigate({ from: "/" });
   const name = call?.name ?? "unknown";
   const parsed = parseToolResult(name, result?.content ?? "");
   const pending = !result && isStreaming;
   const error =
     getResultError(parsed, result) ??
-    (!result && !isStreaming && name !== "compose_email" ? "This step did not finish." : null);
+    (!result && !isStreaming && name !== "compose_email"
+      ? "This step did not finish."
+      : null);
   const args = call ? parseToolArguments(call.arguments) : {};
 
-  const openMessage = (category: GmailSearchToolResult["category"], messageId: string) => {
+  const openMessage = (
+    category: GmailSearchToolResult["category"],
+    messageId: string
+  ) => {
     void navigate({
       search: (previous) => ({
         mailbox: category,
@@ -79,222 +384,31 @@ export const ToolPart = ({
   };
 
   if (name === "compose_email" && call) {
-    const isReady =
-      call.state === "input-complete" ||
-      call.state === "approval-requested" ||
-      call.state === "approval-responded";
-    const initial = composeEmailInputSchema.safeParse(
-      ("input" in call ? call.input : undefined) ?? parseToolArguments(call.arguments),
+    const compose = (
+      <ComposeToolPart
+        actionsDisabled={actionsDisabled}
+        animateEntrance={animateEntrance}
+        assistantMessageId={assistantMessageId}
+        call={call}
+        composeMotion={composeMotion}
+        onResolveCompose={onResolveCompose}
+        parsed={parsed}
+        result={result}
+      />
     );
-    const composeResult = parsed.kind === "compose-email" ? parsed.data : undefined;
-
-    if (isReady && initial.success && assistantMessageId && onResolveCompose) {
-      return (
-        <m.div
-          {...composeMotion}
-          className="py-1"
-          initial={animateEntrance ? composeMotion.initial : false}
-        >
-          <InlineComposeTool
-            disabled={actionsDisabled}
-            initial={initial.data}
-            onResolve={(action, message) => {
-              if (action === "decline") {
-                return onResolveCompose({
-                  action,
-                  assistantMessageId,
-                  toolCallId: call.id,
-                });
-              }
-
-              if (!message) {
-                return Promise.reject(new Error("The email content is missing."));
-              }
-
-              return onResolveCompose({
-                action,
-                assistantMessageId,
-                message,
-                toolCallId: call.id,
-              });
-            }}
-            processing={call.state === "approval-responded" && !result}
-            result={composeResult}
-          />
-        </m.div>
-      );
+    if (compose !== null) {
+      return compose;
     }
   }
 
-  if (name === "search_gmail") {
-    return (
-      <SearchTool
-        nested={nested}
-        data={parsed.kind === "gmail-search" ? parsed.data : undefined}
-        error={error}
-        onOpenMessage={openMessage}
-        pending={pending}
-        query={typeof args.query === "string" ? args.query : undefined}
-      />
-    );
-  }
-
-  if (name === "read_gmail_thread") {
-    return (
-      <ThreadTool
-        nested={nested}
-        data={parsed.kind === "gmail-thread" ? parsed.data : undefined}
-        error={error}
-        onOpenMessage={openMessage}
-        pending={pending}
-        threadId={typeof args.threadId === "string" ? args.threadId : undefined}
-      />
-    );
-  }
-
-  if (name === "read_gmail_message") {
-    return (
-      <MessageTool
-        nested={nested}
-        data={parsed.kind === "gmail-message" ? parsed.data : undefined}
-        error={error}
-        onOpenMessage={openMessage}
-        pending={pending}
-      />
-    );
-  }
-
-  if (name === "read_gmail_messages") {
-    return (
-      <MessagesTool
-        nested={nested}
-        data={parsed.kind === "gmail-messages" ? parsed.data : undefined}
-        error={error}
-        onOpenMessage={openMessage}
-        pending={pending}
-        requestedCount={Array.isArray(args.messageIds) ? args.messageIds.length : undefined}
-      />
-    );
-  }
-
-  if (name === "read_gmail_attachment") {
-    return (
-      <AttachmentTool
-        data={parsed.kind === "gmail-attachment" ? parsed.data : undefined}
-        error={error}
-        nested={nested}
-        pending={pending}
-      />
-    );
-  }
-
-  if (name === "get_mailbox_overview") {
-    return (
-      <OverviewTool
-        nested={nested}
-        data={parsed.kind === "mailbox-overview" ? parsed.data : undefined}
-        error={error}
-        pending={pending}
-      />
-    );
-  }
-
-  if (name === "list_gmail_labels") {
-    return (
-      <LabelsTool
-        nested={nested}
-        data={parsed.kind === "gmail-labels" ? parsed.data : undefined}
-        error={error}
-        pending={pending}
-      />
-    );
-  }
-
-  if (name === "modify_mail") {
-    return (
-      <ModifyTool
-        action={
-          typeof args.action === "string"
-            ? (args.action as ModifyMailToolResult["action"])
-            : undefined
-        }
-        nested={nested}
-        data={parsed.kind === "modify-mail" ? parsed.data : undefined}
-        error={error}
-        pending={pending}
-        target={
-          typeof args.target === "string"
-            ? (args.target as ModifyMailToolResult["target"])
-            : undefined
-        }
-      />
-    );
-  }
-
-  if (name === "create_google_calendar_event") {
-    const data = parsed.kind === "google-calendar-event" ? parsed.data : undefined;
-    const summary =
-      data?.status === "success"
-        ? data.summary
-        : typeof args.summary === "string"
-          ? args.summary
-          : undefined;
-
-    return (
-      <ToolStep
-        nested={nested}
-        detail={summary}
-        error={error}
-        label={pending ? "Adding calendar event" : "Added calendar event"}
-        pending={pending}
-      />
-    );
-  }
-
-  if (name === "list_linear_issue_metadata") {
-    const data = parsed.kind === "linear-issue-metadata" ? parsed.data : undefined;
-    const detail =
-      data?.status === "success"
-        ? `${data.teams.length} team${data.teams.length === 1 ? "" : "s"}`
-        : undefined;
-
-    return (
-      <ToolStep
-        nested={nested}
-        detail={detail}
-        error={error}
-        label={pending ? "Reading Linear workspace" : "Read Linear workspace"}
-        pending={pending}
-      />
-    );
-  }
-
-  if (name === "create_linear_issue") {
-    const data = parsed.kind === "linear-issue-create" ? parsed.data : undefined;
-    const detail =
-      data?.status === "success"
-        ? data.identifier
-        : typeof args.title === "string"
-          ? args.title
-          : undefined;
-
-    return (
-      <ToolStep
-        nested={nested}
-        detail={detail}
-        error={error}
-        label={pending ? "Creating Linear issue" : "Created Linear issue"}
-        pending={pending}
-      />
-    );
-  }
-
   return (
-    <ToolStep
+    <ToolPartRenderer
+      args={args}
+      error={error}
+      name={name}
       nested={nested}
-      detail={call ? name : undefined}
-      error={error ?? (parsed.kind === "unknown" ? "Unsupported tool result." : null)}
-      label={pending ? "Running tool" : "Ran tool"}
+      onOpenMessage={openMessage}
+      parsed={parsed}
       pending={pending}
     />
   );

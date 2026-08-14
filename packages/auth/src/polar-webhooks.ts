@@ -6,9 +6,14 @@ import { serverEnv } from "@quieter/env/server";
 import { betterAuth } from "better-auth";
 
 const polarWebhookAuth =
-  serverEnv.POLAR_ACCESS_TOKEN && serverEnv.POLAR_WEBHOOK_SECRET
+  serverEnv.POLAR_ACCESS_TOKEN !== null &&
+  serverEnv.POLAR_ACCESS_TOKEN !== undefined &&
+  serverEnv.POLAR_ACCESS_TOKEN !== "" &&
+  serverEnv.POLAR_WEBHOOK_SECRET !== null &&
+  serverEnv.POLAR_WEBHOOK_SECRET !== undefined &&
+  serverEnv.POLAR_WEBHOOK_SECRET !== ""
     ? betterAuth({
-        baseURL: serverEnv.BETTER_AUTH_URL || "http://localhost:3000",
+        baseURL: serverEnv.BETTER_AUTH_URL ?? "http://localhost:3000",
         plugins: [
           polar({
             client: new Polar({
@@ -48,5 +53,6 @@ const polarWebhookAuth =
       })
     : null;
 
-export const handlePolarWebhookRequest = (request: Request) =>
-  polarWebhookAuth?.handler(request) ?? new Response("Not Found", { status: 404 });
+export const handlePolarWebhookRequest = async (request: Request) =>
+  (await polarWebhookAuth?.handler(request)) ??
+  new Response("Not Found", { status: 404 });

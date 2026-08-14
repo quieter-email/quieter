@@ -1,92 +1,112 @@
 import { describe, expect, test } from "vite-plus/test";
-import type { ListMessagesPageResult, MessageListItem, ThreadMessagesResult } from "../gmail";
+
+import type {
+  ListMessagesPageResult,
+  MessageListItem,
+  ThreadMessagesResult,
+} from "../gmail";
 import {
   applyMessageLabelChangesLocally,
   applyThreadLabelChangesLocally,
   mergeRefreshedMailboxPagesIntoQueryData,
   upsertMessageInThreadData,
-  type MessagesQueryData,
 } from "./data";
+import type { MessagesQueryData } from "./data";
 
-const message = (id: string, extras: Partial<MessageListItem> = {}): MessageListItem => ({
+const message = (
+  id: string,
+  extras: Partial<MessageListItem> = {}
+): MessageListItem => ({
   id,
   threadId: `thread-${id}`,
   ...extras,
 });
 
-const page = (messages: MessageListItem[], nextPageToken?: string): ListMessagesPageResult => ({
+const page = (
+  messages: MessageListItem[],
+  nextPageToken?: string
+): ListMessagesPageResult => ({
   messages,
   nextPageToken,
 });
 
-describe("mergeRefreshedMailboxPagesIntoQueryData", () => {
+describe(mergeRefreshedMailboxPagesIntoQueryData, () => {
   test("preserves unrefreshed persisted pages behind a refreshed prefix", () => {
     const previous: MessagesQueryData = {
+      pageParams: [undefined, "old-page-2", "old-page-3"],
       pages: [
         page([message("a", { bodyHtml: "<p>cached a</p>" })], "old-page-2"),
         page([message("b"), message("c")], "old-page-3"),
         page([message("d")]),
       ],
-      pageParams: [undefined, "old-page-2", "old-page-3"],
     };
 
     const next = mergeRefreshedMailboxPagesIntoQueryData(
       previous,
       [page([message("x"), message("a")], "new-page-2")],
       [undefined],
-      { preserveUnrefreshedPages: true },
+      { preserveUnrefreshedPages: true }
     );
 
-    expect(next.pages.map((currentPage) => currentPage.messages.map((item) => item.id))).toEqual([
-      ["x", "a"],
-      ["b", "c"],
-      ["d"],
-    ]);
+    expect(
+      next.pages.map((currentPage) =>
+        currentPage.messages.map((item) => item.id)
+      )
+    ).toStrictEqual([["x", "a"], ["b", "c"], ["d"]]);
     expect(next.pages[0].messages[1].bodyHtml).toBe("<p>cached a</p>");
-    expect(next.pageParams).toEqual([undefined, "old-page-2", "old-page-3"]);
+    expect(next.pageParams).toStrictEqual([
+      undefined,
+      "old-page-2",
+      "old-page-3",
+    ]);
   });
 
   test("drops stale tail pages when the refreshed prefix reaches the end", () => {
     const previous: MessagesQueryData = {
-      pages: [page([message("a")], "old-page-2"), page([message("b")])],
       pageParams: [undefined, "old-page-2"],
+      pages: [page([message("a")], "old-page-2"), page([message("b")])],
     };
 
     const next = mergeRefreshedMailboxPagesIntoQueryData(
       previous,
       [page([message("a")])],
       [undefined],
-      { preserveUnrefreshedPages: true },
+      { preserveUnrefreshedPages: true }
     );
 
-    expect(next.pages.map((currentPage) => currentPage.messages.map((item) => item.id))).toEqual([
-      ["a"],
-    ]);
-    expect(next.pageParams).toEqual([undefined]);
+    expect(
+      next.pages.map((currentPage) =>
+        currentPage.messages.map((item) => item.id)
+      )
+    ).toStrictEqual([["a"]]);
+    expect(next.pageParams).toStrictEqual([undefined]);
   });
 });
 
-describe("upsertMessageInThreadData", () => {
+describe(upsertMessageInThreadData, () => {
   test("adds a newly synced message to an already cached thread", () => {
     const previous: ThreadMessagesResult = {
-      threadId: "thread-a",
       messages: [
-        message("a", { threadId: "thread-a", internalDate: "1000" }),
-        message("c", { threadId: "thread-a", internalDate: "3000" }),
+        message("a", { internalDate: "1000", threadId: "thread-a" }),
+        message("c", { internalDate: "3000", threadId: "thread-a" }),
       ],
+      threadId: "thread-a",
     };
 
     const next = upsertMessageInThreadData(
       previous,
-      message("b", { threadId: "thread-a", internalDate: "2000" }),
+      message("b", { internalDate: "2000", threadId: "thread-a" })
     );
 
-    expect(next?.messages.map((item) => item.id)).toEqual(["a", "b", "c"]);
+    expect(next?.messages.map((item) => item.id)).toStrictEqual([
+      "a",
+      "b",
+      "c",
+    ]);
   });
 
   test("preserves loaded body details when refreshing an existing thread message", () => {
     const previous: ThreadMessagesResult = {
-      threadId: "thread-a",
       messages: [
         message("a", {
           bodyHtml: "<p>loaded</p>",
@@ -94,11 +114,12 @@ describe("upsertMessageInThreadData", () => {
           threadId: "thread-a",
         }),
       ],
+      threadId: "thread-a",
     };
 
     const next = upsertMessageInThreadData(
       previous,
-      message("a", { isUnread: false, threadId: "thread-a" }),
+      message("a", { isUnread: false, threadId: "thread-a" })
     );
 
     expect(next?.messages[0]).toMatchObject({
@@ -109,28 +130,28 @@ describe("upsertMessageInThreadData", () => {
   });
 });
 
-describe("applyMessageLabelChangesLocally", () => {
+describe(applyMessageLabelChangesLocally, () => {
   test("archives a message by removing the inbox label only", () => {
     const next = applyMessageLabelChangesLocally(
       message("a", { labelIds: ["INBOX", "IMPORTANT", "UNREAD"] }),
-      { removeLabelIds: ["INBOX"] },
+      { removeLabelIds: ["INBOX"] }
     );
 
-    expect(next.labelIds).toEqual(["IMPORTANT", "UNREAD"]);
+    expect(next.labelIds).toStrictEqual(["IMPORTANT", "UNREAD"]);
   });
 });
 
-describe("applyThreadLabelChangesLocally", () => {
+describe(applyThreadLabelChangesLocally, () => {
   test("updates the thread label snapshot along with the message metadata", () => {
     const next = applyThreadLabelChangesLocally(
       message("a", {
         labelIds: ["INBOX", "old"],
         threadLabelIds: ["old", "keep"],
       }),
-      { addLabelIds: ["new"], removeLabelIds: ["old"] },
+      { addLabelIds: ["new"], removeLabelIds: ["old"] }
     );
 
-    expect(next.labelIds).toEqual(["INBOX", "new"]);
-    expect(next.threadLabelIds).toEqual(["keep", "new"]);
+    expect(next.labelIds).toStrictEqual(["INBOX", "new"]);
+    expect(next.threadLabelIds).toStrictEqual(["keep", "new"]);
   });
 });

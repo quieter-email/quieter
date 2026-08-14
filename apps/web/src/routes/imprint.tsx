@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { LegalDocumentPage } from "~/features/legal/components/legal-document-page";
+
+import { LegalDocumentPage } from "#/features/legal/components/legal-document-page";
 
 export const Route = createFileRoute("/imprint")({
   component: ImprintPage,
@@ -26,12 +27,18 @@ function ImprintPage() {
       <h2>Contact</h2>
       <p>
         Support:{" "}
-        <a className="underline hover:text-fg" href="mailto:support@quieter.email">
+        <a
+          className="underline hover:text-fg"
+          href="mailto:support@quieter.email"
+        >
           support@quieter.email
         </a>
         <br />
         Legal:{" "}
-        <a className="underline hover:text-fg" href="mailto:legal@quieter.email">
+        <a
+          className="underline hover:text-fg"
+          href="mailto:legal@quieter.email"
+        >
           legal@quieter.email
         </a>
       </p>

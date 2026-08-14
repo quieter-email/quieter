@@ -4,6 +4,7 @@
 - [Architecture](architecture.md)
 - [Responsive mail baseline](responsive-mail.md)
 - [Database safety](database-safety.md)
+- [Outbound mail feedback](outbound-mail-feedback.md)
 - [Deployment and operations](deployment.md)
 
 Public repository policies live at the root:
@@ -12,5 +13,4 @@ Public repository policies live at the root:
 - [Contribution policy](../CONTRIBUTING.md)
 - [License](../LICENSE)
 
-`AGENTS.md` contains stricter implementation instructions for coding agents and maintainers. It is
-not a substitute for the architecture and operations documentation.
+`AGENTS.md` contains stricter implementation instructions for coding agents and maintainers. It is not a substitute for the architecture and operations documentation.

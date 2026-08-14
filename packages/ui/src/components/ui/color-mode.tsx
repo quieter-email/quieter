@@ -8,8 +8,8 @@ import {
   useMemo,
   useState,
   useSyncExternalStore,
-  type PropsWithChildren,
 } from "react";
+import type { PropsWithChildren } from "react";
 
 export const COLOR_MODE_STORAGE_KEY = "quieter-color-mode";
 
@@ -32,54 +32,101 @@ type ColorModeContextValue = {
 
 const ColorModeContext = createContext<ColorModeContextValue | null>(null);
 
-const subscribeToHydration = () => () => {};
+const subscribeToHydration = () => () => {
+  /* hydration snapshot only */
+};
 const getClientHydrationSnapshot = () => true;
 const getServerHydrationSnapshot = () => false;
 
 const subscribeToSystemColorMode = (onStoreChange: () => void) => {
   const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
   mediaQuery.addEventListener("change", onStoreChange);
-  return () => mediaQuery.removeEventListener("change", onStoreChange);
+  return () => {
+    mediaQuery.removeEventListener("change", onStoreChange);
+  };
 };
 
-const getSystemColorModeSnapshot = () => window.matchMedia("(prefers-color-scheme: dark)").matches;
+const getSystemColorModeSnapshot = () =>
+  window.matchMedia("(prefers-color-scheme: dark)").matches;
 
 const isConfigColorMode = (value: string | null): value is ConfigColorMode =>
   value === "light" || value === "dark" || value === "system";
+
+const readStoredColorMode = (
+  initialColorMode: ConfigColorMode
+): ConfigColorMode => {
+  if (typeof window === "undefined") {
+    return initialColorMode;
+  }
+
+  const storedColorMode = localStorage.getItem(COLOR_MODE_STORAGE_KEY);
+  return isConfigColorMode(storedColorMode)
+    ? storedColorMode
+    : initialColorMode;
+};
+
+const resolveColorMode = (
+  configColorMode: ConfigColorMode,
+  systemIsDark: boolean
+): ColorMode => {
+  if (configColorMode === "system") {
+    return systemIsDark ? "dark" : "light";
+  }
+
+  return configColorMode;
+};
+
+const getNextColorMode = (
+  configColorMode: ConfigColorMode
+): ConfigColorMode => {
+  if (configColorMode === "light") {
+    return "dark";
+  }
+
+  if (configColorMode === "dark") {
+    return "system";
+  }
+
+  return "light";
+};
+
+const colorModeScript = (initialColorMode: ConfigColorMode) =>
+  `try{const stored=localStorage.getItem("${COLOR_MODE_STORAGE_KEY}");const configured=stored==="light"||stored==="dark"||stored==="system"?stored:"${initialColorMode}";const mode=location.pathname==="/home"?"dark":configured==="system"?(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):configured;document.documentElement.classList.add(mode);document.documentElement.style.colorScheme=mode}catch{}`;
 
 export const ColorModeProvider = ({
   children,
   forcedTheme,
   initialColorMode = "system",
 }: ColorModeProviderProps) => {
-  const [configColorMode, setConfigColorMode] = useState(initialColorMode);
+  const [configColorMode, setConfigColorMode] = useState<ConfigColorMode>(() =>
+    readStoredColorMode(initialColorMode)
+  );
   const isMounted = useSyncExternalStore(
     subscribeToHydration,
     getClientHydrationSnapshot,
-    getServerHydrationSnapshot,
+    getServerHydrationSnapshot
   );
   const systemIsDark = useSyncExternalStore(
     subscribeToSystemColorMode,
     getSystemColorModeSnapshot,
-    () => initialColorMode === "dark",
+    () => initialColorMode === "dark"
   );
   const colorMode =
-    forcedTheme ??
-    (configColorMode === "system" ? (systemIsDark ? "dark" : "light") : configColorMode);
+    forcedTheme ?? resolveColorMode(configColorMode, systemIsDark);
 
   useEffect(() => {
-    const storedColorMode = localStorage.getItem(COLOR_MODE_STORAGE_KEY);
-    if (isConfigColorMode(storedColorMode)) {
-      setConfigColorMode(storedColorMode);
-    }
-
     const handleStorage = (event: StorageEvent) => {
-      if (event.key === COLOR_MODE_STORAGE_KEY && isConfigColorMode(event.newValue)) {
+      if (
+        event.key === COLOR_MODE_STORAGE_KEY &&
+        isConfigColorMode(event.newValue)
+      ) {
         setConfigColorMode(event.newValue);
       }
     };
     window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+    };
   }, []);
 
   useEffect(() => {
@@ -94,8 +141,7 @@ export const ColorModeProvider = ({
   }, []);
 
   const cycleColorMode = useCallback(() => {
-    const next =
-      configColorMode === "light" ? "dark" : configColorMode === "dark" ? "system" : "light";
+    const next = getNextColorMode(configColorMode);
     localStorage.setItem(COLOR_MODE_STORAGE_KEY, next);
     setConfigColorMode(next);
   }, [configColorMode]);
@@ -109,10 +155,21 @@ export const ColorModeProvider = ({
       isMounted,
       setColorMode,
     }),
-    [colorMode, configColorMode, cycleColorMode, forcedTheme, isMounted, setColorMode],
+    [
+      colorMode,
+      configColorMode,
+      cycleColorMode,
+      forcedTheme,
+      isMounted,
+      setColorMode,
+    ]
   );
 
-  return <ColorModeContext.Provider value={value}>{children}</ColorModeContext.Provider>;
+  return (
+    <ColorModeContext.Provider value={value}>
+      {children}
+    </ColorModeContext.Provider>
+  );
 };
 
 export const useColorMode = () => {
@@ -133,10 +190,5 @@ export const ColorModeScript = ({
 }: {
   initialColorMode?: ConfigColorMode;
 }) => (
-  <script
-    dangerouslySetInnerHTML={{
-      __html: `try{const stored=localStorage.getItem("${COLOR_MODE_STORAGE_KEY}");const configured=stored==="light"||stored==="dark"||stored==="system"?stored:"${initialColorMode}";const mode=location.pathname==="/home"?"dark":configured==="system"?(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):configured;document.documentElement.classList.add(mode);document.documentElement.style.colorScheme=mode}catch{}`,
-    }}
-    suppressHydrationWarning
-  />
+  <script suppressHydrationWarning>{colorModeScript(initialColorMode)}</script>
 );

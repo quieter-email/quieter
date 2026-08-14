@@ -11,12 +11,14 @@ type CollectVisibleMessageRefreshBatchArgs = {
 export const queueVisibleMessageRefreshIds = (
   queuedMessageIds: Set<string>,
   messageIds: readonly string[],
-  skipMessageIds: ReadonlySet<string>,
+  skipMessageIds: ReadonlySet<string>
 ) => {
   let hasQueuedMessage = false;
 
   for (const messageId of messageIds) {
-    if (skipMessageIds.has(messageId)) continue;
+    if (skipMessageIds.has(messageId)) {
+      continue;
+    }
     queuedMessageIds.add(messageId);
     hasQueuedMessage = true;
   }
@@ -56,7 +58,9 @@ export const collectVisibleMessageRefreshBatch = ({
     inFlightMessageIds.add(messageId);
     recentAttemptByMessageId.set(messageId, now);
 
-    if (messageIds.length === maxBatchSize) break;
+    if (messageIds.length === maxBatchSize) {
+      break;
+    }
   }
 
   return messageIds;

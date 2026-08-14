@@ -4,4 +4,4 @@ export const setGmailUsefulDetails = async (input: {
   enabled: boolean;
   mailboxId: string;
   userId: string;
-}) => setMailboxUsefulDetails(input);
+}) => await setMailboxUsefulDetails(input);

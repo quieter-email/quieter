@@ -14,73 +14,73 @@ export type SettingsNavItem = {
 
 export const SETTINGS_NAV_ITEMS = [
   {
-    tab: "appearance",
-    title: "Appearance",
     description: "Choose how Quieter looks.",
     section: "preferences",
+    tab: "appearance",
+    title: "Appearance",
   },
   {
-    tab: "ai",
-    title: "AI",
     description: "Choose models and review what Quieter remembers.",
     section: "preferences",
+    tab: "ai",
+    title: "AI",
   },
   {
-    tab: "reading",
-    title: "Reading",
     description: "Choose how messages are displayed.",
     section: "preferences",
+    tab: "reading",
+    title: "Reading",
   },
   {
-    tab: "shortcuts",
-    title: "Keyboard shortcuts",
     description: "See the shortcuts available in Quieter.",
     section: "preferences",
+    tab: "shortcuts",
+    title: "Keyboard shortcuts",
   },
   {
-    tab: "privacy",
-    title: "Privacy",
     description: "Manage your privacy preferences.",
     section: "preferences",
+    tab: "privacy",
+    title: "Privacy",
   },
   {
+    description: "Settings for local development.",
+    developmentOnly: true,
+    section: "preferences",
     tab: "development",
     title: "Development",
-    description: "Settings for local development.",
-    section: "preferences",
-    developmentOnly: true,
   },
   {
-    tab: "mailboxes",
-    title: "Mailboxes",
     description: "Manage the mailboxes connected to Quieter.",
     section: "workspace",
+    tab: "mailboxes",
+    title: "Mailboxes",
   },
   {
-    tab: "actions",
-    title: "Actions",
     description: "Build mailbox workflows that react to incoming mail.",
     section: "workspace",
+    tab: "actions",
+    title: "Actions",
   },
   {
-    tab: "organization",
-    title: "Teams",
     description: "Manage your teams and organization settings.",
     section: "workspace",
+    tab: "organization",
+    title: "Teams",
   },
   {
-    tab: "connectors",
-    title: "Connectors",
     description: "Connect outside services for mail actions and chat.",
     section: "workspace",
+    tab: "connectors",
+    title: "Connectors",
   },
   {
-    tab: "account",
-    title: "Account",
     description: "Manage your Quieter account.",
     section: "personal",
+    tab: "account",
+    title: "Account",
   },
-] as const satisfies ReadonlyArray<SettingsNavItem>;
+] as const satisfies readonly SettingsNavItem[];
 
 export const SETTINGS_SECTION_LABELS = {
   personal: "Personal",
@@ -89,5 +89,5 @@ export const SETTINGS_SECTION_LABELS = {
 } as const satisfies Record<SettingsNavSection, string>;
 
 export const SETTINGS_DETAIL_TITLES = Object.fromEntries(
-  SETTINGS_NAV_ITEMS.map(({ tab, title }) => [tab, { title }]),
-) as Record<SettingsDetailTab, { title: string }>;
+  SETTINGS_NAV_ITEMS.map(({ tab, title }) => [tab, { title }])
+);

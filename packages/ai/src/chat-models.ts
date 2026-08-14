@@ -74,7 +74,7 @@ export const chatModelGroups: readonly ChatModelGroup[] = [
 ];
 
 export const chatModelSchema = z.enum(chatModels.map(({ value }) => value));
-export type ChatModel = z.infer<typeof chatModelSchema>;
+export type ChatModel = (typeof chatModels)[number]["value"];
 
 export const defaultChatModel: ChatModel = "openai/gpt-5.6-luna";
 export const CHAT_TITLE_MODEL = defaultChatModel;

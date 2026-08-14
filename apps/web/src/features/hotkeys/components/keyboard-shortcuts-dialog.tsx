@@ -11,11 +11,11 @@ import {
   FullPageDialogHeader,
   FullPageDialogTitle,
 } from "@quieter/ui/full-page-dialog";
-import { formatForDisplay, type Hotkey, type RegisterableHotkey } from "@tanstack/react-hotkeys";
-import {
-  KEYBOARD_SHORTCUTS,
-  type KeyboardShortcut,
-} from "~/features/hotkeys/domain/keyboard-shortcuts";
+import { formatForDisplay } from "@tanstack/react-hotkeys";
+import type { Hotkey, RegisterableHotkey } from "@tanstack/react-hotkeys";
+
+import { KEYBOARD_SHORTCUTS } from "#/features/hotkeys/domain/keyboard-shortcuts";
+import type { KeyboardShortcut } from "#/features/hotkeys/domain/keyboard-shortcuts";
 
 type KeyboardShortcutsDialogProps = {
   onOpenChange: (open: boolean) => void;
@@ -35,16 +35,15 @@ type ShortcutViewSection = {
 
 const SHORTCUT_VIEW_SECTIONS: readonly ShortcutViewSection[] = [
   {
-    title: "Basics",
     items: [
       { id: "show-keyboard-shortcuts" },
       { id: "compose" },
       { id: "focus-search" },
       { context: "Compose", id: "compose-send" },
     ],
+    title: "Basics",
   },
   {
-    title: "Go to",
     items: [
       { id: "go-inbox", label: "Inbox" },
       { id: "go-archive", label: "Archive" },
@@ -55,9 +54,9 @@ const SHORTCUT_VIEW_SECTIONS: readonly ShortcutViewSection[] = [
       { id: "go-trash", label: "Trash" },
       { id: "go-chat", label: "Chat" },
     ],
+    title: "Go to",
   },
   {
-    title: "Conversations",
     items: [
       { id: "list-next-conversation" },
       { id: "list-previous-conversation" },
@@ -67,18 +66,18 @@ const SHORTCUT_VIEW_SECTIONS: readonly ShortcutViewSection[] = [
       { id: "list-clear-selection" },
       { id: "list-labels" },
     ],
+    title: "Conversations",
   },
   {
-    title: "Message",
     items: [
       { id: "detail-reply" },
       { id: "detail-reply-all" },
       { id: "detail-forward" },
       { id: "detail-back" },
     ],
+    title: "Message",
   },
   {
-    title: "Mail actions",
     items: [
       { context: "List", id: "list-archive" },
       { context: "List and detail", id: "list-trash" },
@@ -86,10 +85,13 @@ const SHORTCUT_VIEW_SECTIONS: readonly ShortcutViewSection[] = [
       { context: "List and detail", id: "list-mark-read" },
       { context: "List and detail", id: "list-mark-unread" },
     ],
+    title: "Mail actions",
   },
 ];
 
-const shortcutById = new Map(KEYBOARD_SHORTCUTS.map((shortcut) => [shortcut.id, shortcut]));
+const shortcutById = new Map(
+  KEYBOARD_SHORTCUTS.map((shortcut) => [shortcut.id, shortcut])
+);
 
 const getShortcutById = (id: string) => {
   const shortcut = shortcutById.get(id);
@@ -99,13 +101,13 @@ const getShortcutById = (id: string) => {
   return shortcut;
 };
 
-const formatSingleHotkey = (hotkey: RegisterableHotkey | (string & {})) =>
-  typeof hotkey === "object" && hotkey.key === "/" && hotkey.shift
+const formatSingleHotkey = (hotkey: RegisterableHotkey) =>
+  typeof hotkey === "object" && hotkey.key === "/" && hotkey.shift === true
     ? "?"
     : formatForDisplay(hotkey, { separatorToken: "+" });
 
 const getShortcutDisplay = (shortcut: KeyboardShortcut): string[][] => {
-  const sequence = shortcut.sequence;
+  const { sequence } = shortcut;
   if (sequence) {
     return [sequence.map((hotkey: Hotkey) => formatSingleHotkey(hotkey))];
   }
@@ -114,7 +116,7 @@ const getShortcutDisplay = (shortcut: KeyboardShortcut): string[][] => {
 };
 
 const KeyBadge = ({ value }: { value: string }) => (
-  <kbd className="squircle inline-flex h-6 min-w-6 items-center justify-center rounded-md border border-border bg-bg-surface px-1.5 font-mono text-[11px] font-medium text-fg shadow-xs">
+  <kbd className="squircle inline-flex h-6 min-w-6 items-center justify-center rounded-md border border-border bg-bg-surface px-1.5 font-mono text-micro font-medium text-fg shadow-xs">
     {value}
   </kbd>
 );
@@ -125,15 +127,23 @@ const ShortcutKeys = ({ shortcut }: { shortcut: KeyboardShortcut }) => (
       const bindingKey = binding.join("-");
 
       return (
-        <div className="flex items-center gap-1" key={`${shortcut.id}-${bindingKey}`}>
+        <div
+          className="flex items-center gap-1"
+          key={`${shortcut.id}-${bindingKey}`}
+        >
           {binding.map((key, keyIndex) => (
-            <span className="flex items-center gap-1" key={`${shortcut.id}-${key}-${keyIndex}`}>
-              {keyIndex > 0 && <span className="text-[11px] text-muted-fg">then</span>}
+            <span
+              className="flex items-center gap-1"
+              key={`${shortcut.id}-${bindingKey}-${key}`}
+            >
+              {keyIndex > 0 && (
+                <span className="text-micro text-muted-fg">then</span>
+              )}
               <KeyBadge value={key} />
             </span>
           ))}
           {bindingIndex < bindings.length - 1 && (
-            <span className="text-[11px] text-muted-fg">or</span>
+            <span className="text-micro text-muted-fg">or</span>
           )}
         </div>
       );
@@ -143,26 +153,32 @@ const ShortcutKeys = ({ shortcut }: { shortcut: KeyboardShortcut }) => (
 
 const ShortcutRow = ({ item }: { item: ShortcutViewItem }) => {
   const shortcut = getShortcutById(item.id);
-  const context = item.context ?? (shortcut.status === "coming-soon" ? "Later" : null);
+  const context =
+    item.context ?? (shortcut.status === "coming-soon" ? "Later" : null);
 
   return (
     <div className="grid min-h-10 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-border px-3 py-2 last:border-b-0">
       <div className="min-w-0">
         <p
-          className={cn("truncate text-[0.8rem] font-normal text-fg", {
+          className={cn("truncate text-body-sm font-normal text-fg", {
             "text-muted-fg": shortcut.status === "coming-soon",
           })}
         >
           {item.label ?? shortcut.label}
         </p>
-        {context && <p className="mt-0.5 truncate text-xs/5 text-muted-fg">{context}</p>}
+        {context !== undefined && context !== "" ? (
+          <p className="mt-0.5 truncate text-xs/5 text-muted-fg">{context}</p>
+        ) : null}
       </div>
       <ShortcutKeys shortcut={shortcut} />
     </div>
   );
 };
 
-export const KeyboardShortcutsDialog = ({ onOpenChange, open }: KeyboardShortcutsDialogProps) => (
+export const KeyboardShortcutsDialog = ({
+  onOpenChange,
+  open,
+}: KeyboardShortcutsDialogProps) => (
   <FullPageDialog onOpenChange={onOpenChange} open={open}>
     <FullPageDialogContent data-keyboard-shortcuts-dialog>
       <FullPageDialogHeader>
@@ -177,11 +193,19 @@ export const KeyboardShortcutsDialog = ({ onOpenChange, open }: KeyboardShortcut
       <FullPageDialogBody className="px-4 py-5 sm:px-6">
         <div className="mx-auto w-full max-w-4xl columns-1 gap-4 lg:columns-2">
           {SHORTCUT_VIEW_SECTIONS.map((section) => (
-            <section className="mb-4 break-inside-avoid space-y-2" key={section.title}>
-              <h2 className="px-1 text-sm font-normal text-fg">{section.title}</h2>
+            <section
+              className="mb-4 break-inside-avoid space-y-2"
+              key={section.title}
+            >
+              <h2 className="px-1 text-sm font-normal text-fg">
+                {section.title}
+              </h2>
               <div className="squircle overflow-hidden rounded-lg border border-border bg-bg/58">
                 {section.items.map((item) => (
-                  <ShortcutRow item={item} key={`${section.title}-${item.id}`} />
+                  <ShortcutRow
+                    item={item}
+                    key={`${section.title}-${item.id}`}
+                  />
                 ))}
               </div>
             </section>

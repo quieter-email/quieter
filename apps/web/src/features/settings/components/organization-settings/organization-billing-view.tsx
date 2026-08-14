@@ -1,6 +1,7 @@
 "use client";
 
-import type { UserBillingOverview } from "~/features/settings/domain/billing";
+import type { UserBillingOverview } from "#/features/settings/domain/billing";
+
 import { SettingsBackButton, SettingsCard } from "../settings-layout";
 import { OrganizationBillingSettings } from "./organization-billing-settings";
 import { OrganizationMailUsageSettings } from "./organization-mail-usage-settings";
@@ -29,7 +30,9 @@ export const OrganizationBillingView = ({
 
     <div>
       <h1 className="text-base font-semibold text-fg">Billing</h1>
-      <p className="mt-1 text-sm text-muted-fg">Plans, usage balance, and overage controls.</p>
+      <p className="mt-1 text-sm text-muted-fg">
+        Plans, usage balance, and overage controls.
+      </p>
     </div>
 
     <SettingsCard>

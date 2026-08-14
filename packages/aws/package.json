@@ -11,6 +11,7 @@
     "./gmail-pubsub-process": "./src/gmail-pubsub-process.ts",
     "./inbound": "./src/inbound.ts",
     "./mailbox-action-consumer": "./src/mailbox-action-consumer.ts",
+    "./outbound-feedback": "./src/outbound-feedback.ts",
     "./outbound": "./src/outbound.ts",
     "./receipt": "./src/receipt.ts"
   },
@@ -28,6 +29,7 @@
     "@quieter/billing": "workspace:*",
     "@quieter/database": "workspace:*",
     "@quieter/env": "workspace:*",
+    "@quieter/observability": "workspace:*",
     "@quieter/orpc": "workspace:*",
     "@sentry/node": "catalog:",
     "drizzle-orm": "catalog:",
@@ -38,6 +40,7 @@
     "@quieter/config": "workspace:*",
     "@types/node": "catalog:",
     "typescript": "catalog:",
+    "vite": "catalog:",
     "vite-plus": "catalog:"
   }
 }

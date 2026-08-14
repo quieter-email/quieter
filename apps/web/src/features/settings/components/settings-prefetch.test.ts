@@ -1,5 +1,6 @@
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, test, vi } from "vite-plus/test";
+
 import {
   prefetchMailboxSettingsDetail,
   prefetchOrganizationSettingsDetail,
@@ -8,7 +9,9 @@ import {
 
 const createQueryClient = () => {
   const queryClient = new QueryClient();
-  const prefetchQuery = vi.spyOn(queryClient, "prefetchQuery").mockResolvedValue(undefined);
+  const prefetchQuery = vi
+    .spyOn(queryClient, "prefetchQuery")
+    .mockResolvedValue();
   return { prefetchQuery, queryClient };
 };
 
@@ -19,10 +22,9 @@ describe("settings prefetch hierarchy", () => {
     await prefetchSettingsTab(queryClient, "mailboxes");
 
     expect(prefetchQuery).toHaveBeenCalledTimes(2);
-    expect(prefetchQuery.mock.calls.map(([options]) => options.queryKey)).toEqual([
-      ["mailboxes"],
-      ["user-billing"],
-    ]);
+    expect(
+      prefetchQuery.mock.calls.map(([options]) => options.queryKey)
+    ).toStrictEqual([["mailboxes"], ["user-billing"]]);
   });
 
   test("keeps exact team intent prefetching as a deduplicated fallback", async () => {
@@ -30,8 +32,8 @@ describe("settings prefetch hierarchy", () => {
 
     await prefetchOrganizationSettingsDetail(queryClient, "team-one");
 
-    expect(prefetchQuery).toHaveBeenCalledTimes(1);
-    expect(prefetchQuery.mock.calls[0]?.[0].queryKey).toEqual([
+    expect(prefetchQuery).toHaveBeenCalledOnce();
+    expect(prefetchQuery.mock.calls[0]?.[0].queryKey).toStrictEqual([
       "auth",
       "organization",
       "team-one",
@@ -55,7 +57,9 @@ describe("settings prefetch hierarchy", () => {
 
     await prefetchSettingsTab(queryClient, "actions");
 
-    expect(prefetchQuery.mock.calls.map(([options]) => options.queryKey)).toEqual([
+    expect(
+      prefetchQuery.mock.calls.map(([options]) => options.queryKey)
+    ).toStrictEqual([
       ["mailboxes"],
       ["connectors"],
       ["mailbox-actions", "gmail-one"],
@@ -80,7 +84,9 @@ describe("settings prefetch hierarchy", () => {
       provider: "managed",
     });
 
-    expect(prefetchQuery.mock.calls.map(([options]) => options.queryKey)).toEqual([
+    expect(
+      prefetchQuery.mock.calls.map(([options]) => options.queryKey)
+    ).toStrictEqual([
       ["auth", "organization", "team-one", "full"],
       ["organization", "team-one", "divisions"],
       ["mail", "managed-mailbox-details", "managed-one"],

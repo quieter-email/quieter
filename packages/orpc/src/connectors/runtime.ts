@@ -1,19 +1,22 @@
 import type { LinearClient } from "@linear/sdk";
+import { ORPCError } from "@orpc/server";
 import type {
   LinearIssueCreateInput,
   LinearIssueCreateResult,
   LinearIssueMetadataResult,
 } from "@quieter/ai/chat-agent";
-import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
-import { connectorCredential, type ConnectorProvider } from "@quieter/database/schema";
+import { connectorCredential } from "@quieter/database/schema";
+import type { ConnectorProvider } from "@quieter/database/schema";
 import { requireServerEnv } from "@quieter/env/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
+
 import {
   decryptGmailCredentialSecret,
   encryptGmailCredentialSecret,
 } from "../gmail-credential-crypto";
+import { hasText } from "../text";
 
 export const GOOGLE_CALENDAR_CONNECTOR_PROVIDER = "google_calendar" as const;
 export const LINEAR_CONNECTOR_PROVIDER = "linear" as const;
@@ -43,8 +46,14 @@ export type GoogleCalendarEventInput = {
   summary: string;
 };
 
-type LinearIssueMetadataSuccess = Extract<LinearIssueMetadataResult, { status: "success" }>;
-type LinearIssueCreateSuccess = Extract<LinearIssueCreateResult, { status: "success" }>;
+type LinearIssueMetadataSuccess = Extract<
+  LinearIssueMetadataResult,
+  { status: "success" }
+>;
+type LinearIssueCreateSuccess = Extract<
+  LinearIssueCreateResult,
+  { status: "success" }
+>;
 export type LinearIssueCreateDraft = LinearIssueCreateInput;
 export type LinearIssueMetadata = Omit<LinearIssueMetadataSuccess, "status">;
 export type LinearMcpToolDescriptor = {
@@ -114,7 +123,7 @@ const googleApiErrorSchema = z.object({
 });
 
 const googleCalendarEventResponseSchema = z.object({
-  htmlLink: z.string().url().optional(),
+  htmlLink: z.url().optional(),
   id: z.string().min(1),
   summary: z.string().optional(),
 });
@@ -159,25 +168,41 @@ const getConnectorOAuthClient = (provider: ConnectorProvider) => {
     return getLinearOAuthClient();
   }
 
-  throw new ORPCError("BAD_REQUEST", { message: "Connector is not supported." });
+  throw new ORPCError("BAD_REQUEST", {
+    message: "Connector is not supported.",
+  });
 };
 
 const getConnectorCredentialEncryptionKey = () =>
   requireServerEnv("CONNECTOR_TOKEN_ENCRYPTION_KEY");
 
 const encryptConnectorSecret = (value: string) =>
-  encryptGmailCredentialSecret(value, { legacyKey: getConnectorCredentialEncryptionKey() });
+  encryptGmailCredentialSecret(value, {
+    legacyKey: getConnectorCredentialEncryptionKey(),
+  });
 
 const decryptConnectorSecret = (value: string) =>
-  decryptGmailCredentialSecret(value, { legacyKey: getConnectorCredentialEncryptionKey() });
+  decryptGmailCredentialSecret(value, {
+    legacyKey: getConnectorCredentialEncryptionKey(),
+  });
 
 const normalizeOAuthScope = (scope: string | string[]) =>
   Array.isArray(scope) ? scope.join(" ") : scope;
 
+class ConnectorHttpError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ConnectorHttpError";
+    this.status = status;
+  }
+}
+
 const createGoogleApiError = async (response: Response) => {
   const body = await response.text().catch(() => "");
   const parsedBody = (() => {
-    if (!body.trim()) {
+    if (!hasText(body.trim())) {
       return null;
     }
 
@@ -188,13 +213,24 @@ const createGoogleApiError = async (response: Response) => {
     }
   })();
   const message =
-    parsedBody?.error.message ||
-    body ||
-    `Google Calendar request failed with status ${response.status}.`;
-  const error = new Error(message) as Error & { status: number };
-  error.status = response.status;
-  return error;
+    parsedBody?.error.message ??
+    (hasText(body)
+      ? body
+      : `Google Calendar request failed with status ${response.status}.`);
+  return new ConnectorHttpError(message, response.status);
 };
+
+const hasCachedConnectorAccessToken = (record: {
+  accessTokenExpiresAt: Date | null;
+  encryptedAccessToken: string | null;
+}): record is {
+  accessTokenExpiresAt: Date;
+  encryptedAccessToken: string;
+} =>
+  hasText(record.encryptedAccessToken) &&
+  record.accessTokenExpiresAt !== null &&
+  record.accessTokenExpiresAt.getTime() >
+    Date.now() + CONNECTOR_ACCESS_TOKEN_EXPIRY_BUFFER_MS;
 
 export const hasConnectedConnector = async (input: {
   provider: ConnectorProvider;
@@ -207,8 +243,8 @@ export const hasConnectedConnector = async (input: {
       and(
         eq(connectorCredential.userId, input.userId),
         eq(connectorCredential.provider, input.provider),
-        eq(connectorCredential.status, "connected"),
-      ),
+        eq(connectorCredential.status, "connected")
+      )
     )
     .limit(1);
 
@@ -225,7 +261,7 @@ const refreshConnectorAccessToken = async (record: {
   id: string;
   provider: ConnectorProvider;
 }) => {
-  if (!record.encryptedRefreshToken) {
+  if (!hasText(record.encryptedRefreshToken)) {
     await db
       .update(connectorCredential)
       .set({ status: "needs_reconnect", updatedAt: new Date() })
@@ -235,7 +271,9 @@ const refreshConnectorAccessToken = async (record: {
 
   const config = getConnectorOAuthClient(record.provider);
   const response = await fetch(
-    record.provider === LINEAR_CONNECTOR_PROVIDER ? LINEAR_TOKEN_URL : GOOGLE_TOKEN_URL,
+    record.provider === LINEAR_CONNECTOR_PROVIDER
+      ? LINEAR_TOKEN_URL
+      : GOOGLE_TOKEN_URL,
     {
       body: new URLSearchParams({
         client_id: config.clientId,
@@ -245,15 +283,17 @@ const refreshConnectorAccessToken = async (record: {
       }),
       headers: { "content-type": "application/x-www-form-urlencoded" },
       method: "POST",
-    },
+    }
   );
 
   if (!response.ok) {
     const body = await response
       .json()
-      .then((value: unknown) => z.object({ error: z.string().optional() }).safeParse(value))
+      .then((value: unknown) =>
+        z.object({ error: z.string().optional() }).safeParse(value)
+      )
       .catch(() => null);
-    const errorCode = body?.success ? body.data.error : undefined;
+    const errorCode = body?.success === true ? body.data.error : undefined;
     const permanentErrors =
       record.provider === LINEAR_CONNECTOR_PROVIDER
         ? permanentLinearTokenErrors
@@ -261,7 +301,7 @@ const refreshConnectorAccessToken = async (record: {
     if (
       response.status === 400 ||
       response.status === 401 ||
-      (errorCode && permanentErrors.has(errorCode))
+      (errorCode !== undefined && permanentErrors.has(errorCode))
     ) {
       await db
         .update(connectorCredential)
@@ -271,7 +311,7 @@ const refreshConnectorAccessToken = async (record: {
     }
 
     throw new Error(
-      `${connectorDefinitions[record.provider].displayName} token refresh failed with status ${response.status}.`,
+      `${connectorDefinitions[record.provider].displayName} token refresh failed with status ${response.status}.`
     );
   }
 
@@ -283,15 +323,18 @@ const refreshConnectorAccessToken = async (record: {
   await db
     .update(connectorCredential)
     .set({
-      accessTokenExpiresAt: new Date(now.getTime() + refreshed.expires_in * 1000),
+      accessTokenExpiresAt: new Date(
+        now.getTime() + refreshed.expires_in * 1000
+      ),
       encryptedAccessToken: encryptConnectorSecret(refreshed.access_token),
       encryptedRefreshToken:
-        "refresh_token" in refreshed && refreshed.refresh_token
+        "refresh_token" in refreshed && hasText(refreshed.refresh_token)
           ? encryptConnectorSecret(refreshed.refresh_token)
           : record.encryptedRefreshToken,
-      scopes: refreshed.scope
-        ? normalizeOAuthScope(refreshed.scope)
-        : connectorDefinitions[record.provider].scopes.join(" "),
+      scopes:
+        refreshed.scope === undefined
+          ? connectorDefinitions[record.provider].scopes.join(" ")
+          : normalizeOAuthScope(refreshed.scope),
       status: "connected",
       updatedAt: now,
     })
@@ -317,12 +360,12 @@ const getAuthorizedConnectorAccessToken = async (input: {
     .where(
       and(
         eq(connectorCredential.userId, input.userId),
-        eq(connectorCredential.provider, input.provider),
-      ),
+        eq(connectorCredential.provider, input.provider)
+      )
     )
     .limit(1);
 
-  if (!record) {
+  if (record === undefined) {
     throw new ORPCError("BAD_REQUEST", {
       message: `Connect ${connectorDefinitions[input.provider].displayName} before using this action.`,
     });
@@ -332,11 +375,7 @@ const getAuthorizedConnectorAccessToken = async (input: {
     throw getConnectorRepairRequiredError(record.provider);
   }
 
-  if (
-    record.encryptedAccessToken &&
-    record.accessTokenExpiresAt &&
-    record.accessTokenExpiresAt.getTime() > Date.now() + CONNECTOR_ACCESS_TOKEN_EXPIRY_BUFFER_MS
-  ) {
+  if (hasCachedConnectorAccessToken(record)) {
     return decryptConnectorSecret(record.encryptedAccessToken);
   }
 
@@ -357,12 +396,12 @@ const refreshAuthorizedConnectorAccessToken = async (input: {
     .where(
       and(
         eq(connectorCredential.userId, input.userId),
-        eq(connectorCredential.provider, input.provider),
-      ),
+        eq(connectorCredential.provider, input.provider)
+      )
     )
     .limit(1);
 
-  if (!record) {
+  if (record === undefined) {
     throw new ORPCError("BAD_REQUEST", {
       message: `Connect ${connectorDefinitions[input.provider].displayName} before using this action.`,
     });
@@ -373,24 +412,20 @@ const refreshAuthorizedConnectorAccessToken = async (input: {
 
 const runAuthorizedConnector = async <TValue>(
   input: { provider: ConnectorProvider; signal?: AbortSignal; userId: string },
-  runner: (accessToken: string, signal?: AbortSignal) => Promise<TValue>,
+  runner: (accessToken: string, signal?: AbortSignal) => Promise<TValue>
 ) => {
   const accessToken = await getAuthorizedConnectorAccessToken(input);
 
   try {
     return await runner(accessToken, input.signal);
   } catch (error) {
-    if (
-      typeof error !== "object" ||
-      error === null ||
-      !("status" in error) ||
-      (error as { status?: unknown }).status !== 401
-    ) {
+    if (!(error instanceof ConnectorHttpError) || error.status !== 401) {
       throw error;
     }
   }
 
-  const refreshedAccessToken = await refreshAuthorizedConnectorAccessToken(input);
+  const refreshedAccessToken =
+    await refreshAuthorizedConnectorAccessToken(input);
   return await runner(refreshedAccessToken, input.signal);
 };
 
@@ -411,20 +446,20 @@ const getAuthorizedConnectorCredentialAccessToken = async (input: {
     })
     .from(connectorCredential)
     .where(
-      input.userId
+      input.userId === undefined
         ? and(
             eq(connectorCredential.id, input.credentialId),
-            eq(connectorCredential.provider, input.provider),
-            eq(connectorCredential.userId, input.userId),
+            eq(connectorCredential.provider, input.provider)
           )
         : and(
             eq(connectorCredential.id, input.credentialId),
             eq(connectorCredential.provider, input.provider),
-          ),
+            eq(connectorCredential.userId, input.userId)
+          )
     )
     .limit(1);
 
-  if (!record) {
+  if (record === undefined) {
     throw new ORPCError("BAD_REQUEST", {
       message: `Connect ${connectorDefinitions[input.provider].displayName} before using this action.`,
     });
@@ -434,12 +469,9 @@ const getAuthorizedConnectorCredentialAccessToken = async (input: {
     throw getConnectorRepairRequiredError(record.provider);
   }
 
-  const accessToken =
-    record.encryptedAccessToken &&
-    record.accessTokenExpiresAt &&
-    record.accessTokenExpiresAt.getTime() > Date.now() + CONNECTOR_ACCESS_TOKEN_EXPIRY_BUFFER_MS
-      ? decryptConnectorSecret(record.encryptedAccessToken)
-      : await refreshConnectorAccessToken(record);
+  const accessToken = hasCachedConnectorAccessToken(record)
+    ? decryptConnectorSecret(record.encryptedAccessToken)
+    : await refreshConnectorAccessToken(record);
 
   return { accessToken, userId: record.userId };
 };
@@ -457,20 +489,20 @@ const refreshAuthorizedConnectorCredentialAccessToken = async (input: {
     })
     .from(connectorCredential)
     .where(
-      input.userId
+      input.userId === undefined
         ? and(
             eq(connectorCredential.id, input.credentialId),
-            eq(connectorCredential.provider, input.provider),
-            eq(connectorCredential.userId, input.userId),
+            eq(connectorCredential.provider, input.provider)
           )
         : and(
             eq(connectorCredential.id, input.credentialId),
             eq(connectorCredential.provider, input.provider),
-          ),
+            eq(connectorCredential.userId, input.userId)
+          )
     )
     .limit(1);
 
-  if (!record) {
+  if (record === undefined) {
     throw new ORPCError("BAD_REQUEST", {
       message: `Connect ${connectorDefinitions[input.provider].displayName} before using this action.`,
     });
@@ -489,26 +521,30 @@ const runAuthorizedConnectorCredential = async <TValue>(
   runner: (
     accessToken: string,
     credential: { userId: string },
-    signal?: AbortSignal,
-  ) => Promise<TValue>,
+    signal?: AbortSignal
+  ) => Promise<TValue>
 ) => {
   const credential = await getAuthorizedConnectorCredentialAccessToken(input);
 
   try {
-    return await runner(credential.accessToken, { userId: credential.userId }, input.signal);
+    return await runner(
+      credential.accessToken,
+      { userId: credential.userId },
+      input.signal
+    );
   } catch (error) {
-    if (
-      typeof error !== "object" ||
-      error === null ||
-      !("status" in error) ||
-      (error as { status?: unknown }).status !== 401
-    ) {
+    if (!(error instanceof ConnectorHttpError) || error.status !== 401) {
       throw error;
     }
   }
 
-  const refreshedAccessToken = await refreshAuthorizedConnectorCredentialAccessToken(input);
-  return await runner(refreshedAccessToken, { userId: credential.userId }, input.signal);
+  const refreshedAccessToken =
+    await refreshAuthorizedConnectorCredentialAccessToken(input);
+  return await runner(
+    refreshedAccessToken,
+    { userId: credential.userId },
+    input.signal
+  );
 };
 
 const postGoogleCalendarEvent = async (input: {
@@ -516,15 +552,18 @@ const postGoogleCalendarEvent = async (input: {
   event: GoogleCalendarEventDraft;
   signal?: AbortSignal;
 }) => {
-  const response = await fetch(`${GOOGLE_CALENDAR_API_URL}/calendars/primary/events`, {
-    body: JSON.stringify(input.event),
-    headers: {
-      authorization: `Bearer ${input.accessToken}`,
-      "content-type": "application/json",
-    },
-    method: "POST",
-    signal: input.signal,
-  });
+  const response = await fetch(
+    `${GOOGLE_CALENDAR_API_URL}/calendars/primary/events`,
+    {
+      body: JSON.stringify(input.event),
+      headers: {
+        authorization: `Bearer ${input.accessToken}`,
+        "content-type": "application/json",
+      },
+      method: "POST",
+      signal: input.signal,
+    }
+  );
 
   if (!response.ok) {
     throw await createGoogleApiError(response);
@@ -546,29 +585,31 @@ type GoogleCalendarEventDraft = {
 };
 
 const normalizeGoogleCalendarEventDate = (
-  value: GoogleCalendarEventInput["start"],
+  value: GoogleCalendarEventInput["start"]
 ): GoogleCalendarEventDraft["start"] => {
-  if (value.date && !value.dateTime) {
+  if (hasText(value.date) && !hasText(value.dateTime)) {
     return { date: value.date };
   }
 
-  if (value.dateTime && !value.date) {
-    return value.timeZone
-      ? { dateTime: value.dateTime, timeZone: value.timeZone }
-      : { dateTime: value.dateTime };
+  if (hasText(value.dateTime) && !hasText(value.date)) {
+    if (hasText(value.timeZone)) {
+      return { dateTime: value.dateTime, timeZone: value.timeZone };
+    }
+    return { dateTime: value.dateTime };
   }
 
   throw new ORPCError("BAD_REQUEST", {
-    message: "Calendar events require exactly one date or date-time for both start and end.",
+    message:
+      "Calendar events require exactly one date or date-time for both start and end.",
   });
 };
 
 const normalizeGoogleCalendarEvent = (
-  event: GoogleCalendarEventInput,
+  event: GoogleCalendarEventInput
 ): GoogleCalendarEventDraft => ({
-  ...(event.description ? { description: event.description } : {}),
+  ...(hasText(event.description) ? { description: event.description } : {}),
   end: normalizeGoogleCalendarEventDate(event.end),
-  ...(event.location ? { location: event.location } : {}),
+  ...(hasText(event.location) ? { location: event.location } : {}),
   start: normalizeGoogleCalendarEventDate(event.start),
   summary: event.summary,
 });
@@ -580,12 +621,29 @@ const createLinearClient = async (accessToken: string) => {
 
 export const getLinearMcpEndpoint = () => LINEAR_MCP_URL;
 
+const resolveLinearDisplayName = (viewer: {
+  displayName: string | null | undefined;
+  email: string;
+  name: string | null | undefined;
+}) => {
+  if (hasText(viewer.displayName)) {
+    return viewer.displayName;
+  }
+  if (hasText(viewer.name)) {
+    return viewer.name;
+  }
+  return viewer.email;
+};
+
 export const getLinearIdentityFromAccessToken = async (accessToken: string) => {
   const client = await createLinearClient(accessToken);
-  const [viewer, organization] = await Promise.all([client.viewer, client.organization]);
+  const [viewer, organization] = await Promise.all([
+    client.viewer,
+    client.organization,
+  ]);
   return {
     accountEmail: viewer.email,
-    displayName: viewer.displayName ?? viewer.name ?? viewer.email,
+    displayName: resolveLinearDisplayName(viewer),
     providerAccountId: viewer.id,
     providerWorkspaceId: organization.id,
     providerWorkspaceName: organization.name,
@@ -616,21 +674,20 @@ const normalizeLinearMcpToolName = (name: string) =>
   name
     .trim()
     .toLowerCase()
-    .replace(/^linear[-_:]/, "")
-    .replace(/^linear_/, "");
+    .replace(/^linear[-_:]/u, "")
+    .replace(/^linear_/u, "");
 
 const isAllowedLinearMcpReadTool = (tool: LinearMcpToolDescriptor) =>
   allowedLinearMcpReadTools.has(normalizeLinearMcpToolName(tool.name));
 
-const createConnectorHttpError = (message: string, status: number) => {
-  const error = new Error(message) as Error & { status: number };
-  error.status = status;
-  return error;
-};
+const createConnectorHttpError = (message: string, status: number) =>
+  new ConnectorHttpError(message, status);
 
 const truncateJsonValue = (value: unknown, maxLength: number) => {
   const serialized = JSON.stringify(value);
-  if (!serialized || serialized.length <= maxLength) return value;
+  if (serialized === undefined || serialized.length <= maxLength) {
+    return value;
+  }
 
   return {
     truncated: true,
@@ -638,23 +695,31 @@ const truncateJsonValue = (value: unknown, maxLength: number) => {
   };
 };
 
-const parseMcpResponseText = (input: { contentType: string; requestId: number; text: string }) => {
-  if (!input.text.trim()) return undefined;
+type McpResponse = z.infer<typeof mcpResponseSchema>;
+
+const parseMcpResponseText = (input: {
+  contentType: string;
+  requestId: number;
+  text: string;
+}): McpResponse | undefined => {
+  if (!hasText(input.text.trim())) {
+    return undefined;
+  }
 
   if (!input.contentType.includes("text/event-stream")) {
     return mcpResponseSchema.parse(JSON.parse(input.text));
   }
 
   const messages = input.text
-    .split(/\r?\n\r?\n/)
+    .split(/\r?\n\r?\n/u)
     .map((block) =>
       block
-        .split(/\r?\n/)
+        .split(/\r?\n/u)
         .filter((line) => line.startsWith("data:"))
         .map((line) => line.slice("data:".length).trim())
-        .join("\n"),
+        .join("\n")
     )
-    .filter((data) => data && data !== "[DONE]")
+    .filter((data) => hasText(data) && data !== "[DONE]")
     .map((data) => mcpResponseSchema.parse(JSON.parse(data)));
 
   return (
@@ -677,20 +742,26 @@ const postLinearMcpMessage = async (input: {
       authorization: `Bearer ${input.accessToken}`,
       "content-type": "application/json",
       "mcp-protocol-version": LINEAR_MCP_PROTOCOL_VERSION,
-      ...(input.sessionId ? { "mcp-session-id": input.sessionId } : {}),
+      ...(hasText(input.sessionId)
+        ? { "mcp-session-id": input.sessionId }
+        : {}),
     },
     method: "POST",
     signal: input.signal,
   });
   const sessionId = response.headers.get("mcp-session-id") ?? input.sessionId;
 
-  if (response.status === 202) return { result: undefined, sessionId };
+  if (response.status === 202) {
+    return { result: undefined, sessionId };
+  }
 
   const text = await response.text().catch(() => "");
   if (!response.ok) {
     throw createConnectorHttpError(
-      text || `Linear MCP request failed with status ${response.status}.`,
-      response.status,
+      hasText(text)
+        ? text
+        : `Linear MCP request failed with status ${response.status}.`,
+      response.status
     );
   }
 
@@ -706,7 +777,10 @@ const postLinearMcpMessage = async (input: {
   return { result: parsed?.result, sessionId };
 };
 
-const createLinearMcpSession = async (input: { accessToken: string; signal?: AbortSignal }) => {
+const createLinearMcpSession = async (input: {
+  accessToken: string;
+  signal?: AbortSignal;
+}) => {
   const initialized = await postLinearMcpMessage({
     accessToken: input.accessToken,
     body: {
@@ -725,7 +799,7 @@ const createLinearMcpSession = async (input: { accessToken: string; signal?: Abo
     requestId: 1,
     signal: input.signal,
   });
-  if (!initialized.sessionId) {
+  if (!hasText(initialized.sessionId)) {
     throw new Error("Linear MCP did not return a session id.");
   }
 
@@ -745,7 +819,7 @@ const createLinearMcpSession = async (input: { accessToken: string; signal?: Abo
 
 const listLinearMcpTools = async (
   accessToken: string,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<LinearMcpToolDescriptor[]> => {
   const session = await createLinearMcpSession({ accessToken, signal });
   const listed = await postLinearMcpMessage({
@@ -771,6 +845,96 @@ const listLinearMcpTools = async (
     .filter(isAllowedLinearMcpReadTool);
 };
 
+const callSingleLinearMcpTool = async (input: {
+  accessToken: string;
+  allowedTools: Map<string, LinearMcpToolDescriptor>;
+  call: LinearMcpToolCallInput;
+  index: number;
+  maxOutputBytes: number;
+  sessionId: string;
+  signal?: AbortSignal;
+}): Promise<LinearMcpToolCallResult> => {
+  const startedAt = Date.now();
+  if (!input.allowedTools.has(input.call.toolName)) {
+    return {
+      arguments: input.call.arguments,
+      durationMs: Date.now() - startedAt,
+      error: "Tool is not in the Linear MCP read allowlist.",
+      status: "error",
+      toolName: input.call.toolName,
+    };
+  }
+
+  try {
+    const response = await postLinearMcpMessage({
+      accessToken: input.accessToken,
+      body: {
+        id: 10 + input.index,
+        jsonrpc: "2.0",
+        method: "tools/call",
+        params: {
+          arguments: input.call.arguments ?? {},
+          name: input.call.toolName,
+        },
+      },
+      requestId: 10 + input.index,
+      sessionId: input.sessionId,
+      signal: input.signal,
+    });
+    return {
+      arguments: input.call.arguments,
+      durationMs: Date.now() - startedAt,
+      output: truncateJsonValue(response.result, input.maxOutputBytes),
+      status: "success",
+      toolName: input.call.toolName,
+    };
+  } catch (error) {
+    return {
+      arguments: input.call.arguments,
+      durationMs: Date.now() - startedAt,
+      error:
+        error instanceof Error ? error.message : "Linear MCP tool call failed.",
+      status: "error",
+      toolName: input.call.toolName,
+    };
+  }
+};
+
+const callLinearMcpToolsSequentially = async (input: {
+  accessToken: string;
+  allowedTools: Map<string, LinearMcpToolDescriptor>;
+  calls: LinearMcpToolCallInput[];
+  maxOutputBytes: number;
+  sessionId: string;
+  signal?: AbortSignal;
+  startIndex?: number;
+}): Promise<LinearMcpToolCallResult[]> => {
+  if (input.calls.length === 0) {
+    return [];
+  }
+
+  const [call, ...remainingCalls] = input.calls;
+  const startIndex = input.startIndex ?? 0;
+  const result = await callSingleLinearMcpTool({
+    accessToken: input.accessToken,
+    allowedTools: input.allowedTools,
+    call,
+    index: startIndex,
+    maxOutputBytes: input.maxOutputBytes,
+    sessionId: input.sessionId,
+    signal: input.signal,
+  });
+
+  return [
+    result,
+    ...(await callLinearMcpToolsSequentially({
+      ...input,
+      calls: remainingCalls,
+      startIndex: startIndex + 1,
+    })),
+  ];
+};
+
 const callLinearMcpTools = async (input: {
   accessToken: string;
   calls: LinearMcpToolCallInput[];
@@ -785,61 +949,20 @@ const callLinearMcpTools = async (input: {
     signal: input.signal,
   });
   const maxCalls = input.maxCalls ?? 4;
-  const maxOutputBytes = input.maxOutputBytes ?? 8_000;
-  const results: LinearMcpToolCallResult[] = [];
+  const maxOutputBytes = input.maxOutputBytes ?? 8000;
 
-  for (const [index, call] of input.calls.slice(0, maxCalls).entries()) {
-    const startedAt = Date.now();
-    if (!allowedTools.has(call.toolName)) {
-      results.push({
-        arguments: call.arguments,
-        durationMs: Date.now() - startedAt,
-        error: "Tool is not in the Linear MCP read allowlist.",
-        status: "error",
-        toolName: call.toolName,
-      });
-      continue;
-    }
-
-    try {
-      const response = await postLinearMcpMessage({
-        accessToken: input.accessToken,
-        body: {
-          id: 10 + index,
-          jsonrpc: "2.0",
-          method: "tools/call",
-          params: {
-            arguments: call.arguments ?? {},
-            name: call.toolName,
-          },
-        },
-        requestId: 10 + index,
-        sessionId: session.sessionId,
-        signal: input.signal,
-      });
-      results.push({
-        arguments: call.arguments,
-        durationMs: Date.now() - startedAt,
-        output: truncateJsonValue(response.result, maxOutputBytes),
-        status: "success",
-        toolName: call.toolName,
-      });
-    } catch (error) {
-      results.push({
-        arguments: call.arguments,
-        durationMs: Date.now() - startedAt,
-        error: error instanceof Error ? error.message : "Linear MCP tool call failed.",
-        status: "error",
-        toolName: call.toolName,
-      });
-    }
-  }
-
-  return results;
+  return await callLinearMcpToolsSequentially({
+    accessToken: input.accessToken,
+    allowedTools,
+    calls: input.calls.slice(0, maxCalls),
+    maxOutputBytes,
+    sessionId: session.sessionId,
+    signal: input.signal,
+  });
 };
 
 const readLinearIssueMetadata = async (
-  accessToken: string,
+  accessToken: string
 ): Promise<LinearIssueMetadataSuccess> => {
   const client = await createLinearClient(accessToken);
   const [teams, labels, states, projects, users] = await Promise.all([
@@ -893,22 +1016,26 @@ const readLinearIssueMetadata = async (
 
 const createLinearIssue = async (
   accessToken: string,
-  issue: LinearIssueCreateInput,
+  issue: LinearIssueCreateInput
 ): Promise<LinearIssueCreateSuccess> => {
   const client = await createLinearClient(accessToken);
   const issueInput: Parameters<LinearClient["createIssue"]>[0] = {
-    ...(issue.assigneeId ? { assigneeId: issue.assigneeId } : {}),
-    ...(issue.description ? { description: issue.description } : {}),
-    ...(issue.labelIds?.length ? { labelIds: issue.labelIds } : {}),
-    ...(issue.priority ? { priority: issue.priority } : {}),
-    ...(issue.projectId ? { projectId: issue.projectId } : {}),
-    ...(issue.stateId ? { stateId: issue.stateId } : {}),
+    ...(hasText(issue.assigneeId) ? { assigneeId: issue.assigneeId } : {}),
+    ...(hasText(issue.description) ? { description: issue.description } : {}),
+    ...(issue.labelIds !== undefined && issue.labelIds.length > 0
+      ? { labelIds: issue.labelIds }
+      : {}),
+    ...(issue.priority !== undefined && issue.priority !== 0
+      ? { priority: issue.priority }
+      : {}),
+    ...(hasText(issue.projectId) ? { projectId: issue.projectId } : {}),
+    ...(hasText(issue.stateId) ? { stateId: issue.stateId } : {}),
     teamId: issue.teamId,
     title: issue.title,
   };
   const payload = await client.createIssue(issueInput);
   const createdIssue = await payload.issue;
-  if (!payload.success || !createdIssue) {
+  if (!payload.success || createdIssue === undefined) {
     throw new Error("Linear did not create the issue.");
   }
 
@@ -931,7 +1058,7 @@ export const listLinearIssueMetadataForUser = async (input: {
       signal: input.signal,
       userId: input.userId,
     },
-    async (accessToken) => await readLinearIssueMetadata(accessToken),
+    async (accessToken) => await readLinearIssueMetadata(accessToken)
   );
 
 export const listLinearIssueMetadataForCredential = async (input: {
@@ -955,7 +1082,7 @@ export const listLinearIssueMetadataForCredential = async (input: {
         teams: metadata.teams,
         users: metadata.users,
       };
-    },
+    }
   );
 
 export const listLinearMcpToolsForCredential = async (input: {
@@ -970,7 +1097,8 @@ export const listLinearMcpToolsForCredential = async (input: {
       signal: input.signal,
       userId: input.userId,
     },
-    async (accessToken, _credential, signal) => await listLinearMcpTools(accessToken, signal),
+    async (accessToken, _credential, signal) =>
+      await listLinearMcpTools(accessToken, signal)
   );
 
 export const runLinearMcpToolCallsForCredential = async (input: {
@@ -995,7 +1123,7 @@ export const runLinearMcpToolCallsForCredential = async (input: {
         maxCalls: input.maxCalls,
         maxOutputBytes: input.maxOutputBytes,
         signal,
-      }),
+      })
   );
 
 export const createLinearIssueForUser = async (input: {
@@ -1009,7 +1137,7 @@ export const createLinearIssueForUser = async (input: {
       signal: input.signal,
       userId: input.userId,
     },
-    async (accessToken) => await createLinearIssue(accessToken, input.issue),
+    async (accessToken) => await createLinearIssue(accessToken, input.issue)
   );
 
 export const createLinearIssueForCredential = async (input: {
@@ -1033,8 +1161,28 @@ export const createLinearIssueForCredential = async (input: {
         title: issue.title,
         url: issue.url,
       };
-    },
+    }
   );
+
+const createGoogleCalendarEvent = async (input: {
+  accessToken: string;
+  event: GoogleCalendarEventInput;
+  signal?: AbortSignal;
+}) => {
+  const eventDraft = normalizeGoogleCalendarEvent(input.event);
+  const event = await postGoogleCalendarEvent({
+    accessToken: input.accessToken,
+    event: eventDraft,
+    signal: input.signal,
+  });
+
+  return {
+    htmlLink: event.htmlLink,
+    id: event.id,
+    status: "success" as const,
+    summary: event.summary ?? eventDraft.summary,
+  };
+};
 
 export const createGoogleCalendarEventForUser = async (input: {
   event: GoogleCalendarEventInput;
@@ -1047,19 +1195,31 @@ export const createGoogleCalendarEventForUser = async (input: {
       signal: input.signal,
       userId: input.userId,
     },
-    async (accessToken, signal) => {
-      const eventDraft = normalizeGoogleCalendarEvent(input.event);
-      const event = await postGoogleCalendarEvent({
+    async (accessToken, signal) =>
+      await createGoogleCalendarEvent({
         accessToken,
-        event: eventDraft,
+        event: input.event,
         signal,
-      });
+      })
+  );
 
-      return {
-        htmlLink: event.htmlLink,
-        id: event.id,
-        status: "success" as const,
-        summary: event.summary ?? eventDraft.summary,
-      };
+export const createGoogleCalendarEventForCredential = async (input: {
+  credentialId: string;
+  event: GoogleCalendarEventInput;
+  signal?: AbortSignal;
+  userId?: string;
+}) =>
+  await runAuthorizedConnectorCredential(
+    {
+      credentialId: input.credentialId,
+      provider: GOOGLE_CALENDAR_CONNECTOR_PROVIDER,
+      signal: input.signal,
+      userId: input.userId,
     },
+    async (accessToken, _credential, signal) =>
+      await createGoogleCalendarEvent({
+        accessToken,
+        event: input.event,
+        signal,
+      })
   );

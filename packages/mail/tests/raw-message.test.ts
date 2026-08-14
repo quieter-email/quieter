@@ -1,7 +1,11 @@
 import { describe, expect, test } from "vite-plus/test";
-import { parseRawMailAttachments, parseRawMailMessage } from "../src/raw-message";
 
-describe("parseRawMailMessage", () => {
+import {
+  parseRawMailAttachments,
+  parseRawMailMessage,
+} from "../src/raw-message";
+
+describe(parseRawMailMessage, () => {
   test("parses envelope, thread, and body fields from RFC822 mail", async () => {
     const message = await parseRawMailMessage(
       [
@@ -15,7 +19,7 @@ describe("parseRawMailMessage", () => {
         'Content-Type: text/plain; charset="UTF-8"',
         "",
         "The managed mailbox is connected.",
-      ].join("\r\n"),
+      ].join("\r\n")
     );
 
     expect(message).toMatchObject({
@@ -50,7 +54,7 @@ describe("parseRawMailMessage", () => {
         "",
         "SGVsbG8=",
         "--mixed--",
-      ].join("\r\n"),
+      ].join("\r\n")
     );
 
     expect(attachment).toMatchObject({

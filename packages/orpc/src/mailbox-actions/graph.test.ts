@@ -1,10 +1,13 @@
 import { describe, expect, test } from "vite-plus/test";
+
 import {
   createDefaultMailboxActionGraph,
-  type MailboxActionEdge,
-  type MailboxActionGraph,
-  type MailboxActionNode,
   validateMailboxActionGraph,
+} from "./graph";
+import type {
+  MailboxActionEdge,
+  MailboxActionGraph,
+  MailboxActionNode,
 } from "./graph";
 
 const position = { x: 0, y: 0 };
@@ -41,7 +44,7 @@ const edge = (
   id: string,
   source: string,
   sourcePort: string,
-  target: string,
+  target: string
 ): MailboxActionEdge => ({
   id,
   source,
@@ -50,39 +53,42 @@ const edge = (
   targetPort: "in",
 });
 
-const graph = (nodes: MailboxActionNode[], edges: MailboxActionEdge[]): MailboxActionGraph => ({
+const graph = (
+  nodes: MailboxActionNode[],
+  edges: MailboxActionEdge[]
+): MailboxActionGraph => ({
   edges,
   nodes,
   version: 1,
 });
 
-describe("validateMailboxActionGraph", () => {
-  test("accepts a direct trigger to deterministic Linear issue action", () => {
+describe(validateMailboxActionGraph, () => {
+  test("accepts a direct trigger to a configured connector step", () => {
     const result = validateMailboxActionGraph(
       graph(
         [
           trigger(),
           {
             config: {
-              credentialId: "linear-credential",
-              teamId: "team-id",
-              title: "{{email.subject}}",
+              credentialId: "connector-credential",
+              instructions: "File anything that describes work to track.",
+              provider: "linear",
             },
-            id: "linear",
+            id: "connector",
             position,
-            type: "linear_create_issue",
+            type: "connector_agent",
           },
         ],
-        [edge("trigger-linear", "trigger", "out", "linear")],
-      ),
+        [edge("trigger-connector", "trigger", "out", "connector")]
+      )
     );
 
-    expect(result.valid).toBe(true);
+    expect(result.valid).toBeTruthy();
   });
 
   test("accepts a chain of twenty AI conditions", () => {
     const conditions = Array.from({ length: 20 }, (_item, index) =>
-      condition(`condition-${index}`),
+      condition(`condition-${index}`)
     );
     const nodes = [trigger(), ...conditions, stop()];
     const edges = [
@@ -94,13 +100,13 @@ describe("validateMailboxActionGraph", () => {
             `condition-${index}-condition-${index + 1}`,
             node.id,
             "yes",
-            `condition-${index + 1}`,
-          ),
+            `condition-${index + 1}`
+          )
         ),
       edge("condition-19-stop", "condition-19", "yes", "stop"),
     ];
 
-    expect(validateMailboxActionGraph(graph(nodes, edges)).valid).toBe(true);
+    expect(validateMailboxActionGraph(graph(nodes, edges)).valid).toBeTruthy();
   });
 
   test("accepts routers, split branches, variables, and merge nodes", () => {
@@ -135,20 +141,25 @@ describe("validateMailboxActionGraph", () => {
           edge("bug-merge", "bug", "out", "merge"),
           edge("feature-merge", "feature", "out", "merge"),
           edge("merge-stop", "merge", "out", "stop"),
-        ],
-      ),
+        ]
+      )
     );
 
-    expect(result.valid).toBe(true);
+    expect(result.valid).toBeTruthy();
   });
 
   test("rejects invalid ports", () => {
     const result = validateMailboxActionGraph(
-      graph([trigger(), stop()], [edge("bad-port", "trigger", "missing", "stop")]),
+      graph(
+        [trigger(), stop()],
+        [edge("bad-port", "trigger", "missing", "stop")]
+      )
     );
 
-    expect(result.valid).toBe(false);
-    expect(result.errors).toContain("Edge bad-port uses an invalid source port.");
+    expect(result.valid).toBeFalsy();
+    expect(result.errors).toContain(
+      "Edge bad-port uses an invalid source port."
+    );
     expect(result.issues).toContainEqual({
       edgeId: "bad-port",
       message: "Edge bad-port uses an invalid source port.",
@@ -160,11 +171,11 @@ describe("validateMailboxActionGraph", () => {
     const result = validateMailboxActionGraph(
       graph(
         [trigger(), stop(), variable("orphan")],
-        [edge("trigger-stop", "trigger", "out", "stop")],
-      ),
+        [edge("trigger-stop", "trigger", "out", "stop")]
+      )
     );
 
-    expect(result.valid).toBe(false);
+    expect(result.valid).toBeFalsy();
     expect(result.errors).toContain("Node orphan is unreachable.");
   });
 
@@ -176,20 +187,25 @@ describe("validateMailboxActionGraph", () => {
           edge("trigger-condition", "trigger", "out", "condition"),
           edge("condition-loop", "condition", "yes", "loop"),
           edge("loop-condition", "loop", "out", "condition"),
-        ],
-      ),
+        ]
+      )
     );
 
-    expect(result.valid).toBe(false);
+    expect(result.valid).toBeFalsy();
     expect(result.errors).toContain("Workflow loops are not supported yet.");
   });
 
   test("keeps the default graph parseable while semantically incomplete", () => {
-    const result = validateMailboxActionGraph(createDefaultMailboxActionGraph());
+    const result = validateMailboxActionGraph(
+      createDefaultMailboxActionGraph()
+    );
 
     expect(result.graph).not.toBeNull();
-    expect(result.valid).toBe(false);
-    expect(result.errors).toContain("Linear node linear needs a connected Linear account.");
-    expect(result.errors).toContain("Linear node linear needs a target Linear team.");
+    expect(result.valid).toBeFalsy();
+    expect(result.errors).toContain("Step connector needs a connected app.");
+    expect(result.errors).toContain(
+      "Step connector needs a connected account."
+    );
+    expect(result.errors).toContain("Step connector needs an instruction.");
   });
 });

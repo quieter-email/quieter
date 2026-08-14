@@ -1,11 +1,12 @@
 import type { UIMessage } from "@tanstack/ai";
+
 import type { ChatTurn } from "../types";
 
 export const createChatTurns = (messages: UIMessage[]): ChatTurn[] => {
   const turns: ChatTurn[] = [];
 
-  for (let i = 0; i < messages.length; i++) {
-    const message = messages[i]!;
+  for (let i = 0; i < messages.length; i += 1) {
+    const message = messages[i];
 
     if (message.role === "user") {
       const next = messages[i + 1];
@@ -16,7 +17,7 @@ export const createChatTurns = (messages: UIMessage[]): ChatTurn[] => {
       });
 
       if (next?.role === "assistant") {
-        i++;
+        i += 1;
       }
       continue;
     }

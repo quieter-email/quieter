@@ -1,7 +1,12 @@
 import { describe, expect, test } from "vite-plus/test";
-import { KEYBOARD_SHORTCUT_CATEGORIES, KEYBOARD_SHORTCUTS } from "./keyboard-shortcuts";
 
-const bindingKey = (key: unknown) => (typeof key === "string" ? key : JSON.stringify(key));
+import {
+  KEYBOARD_SHORTCUT_CATEGORIES,
+  KEYBOARD_SHORTCUTS,
+} from "./keyboard-shortcuts";
+
+const bindingKey = (key: unknown) =>
+  typeof key === "string" ? key : JSON.stringify(key);
 
 describe("keyboard shortcuts registry", () => {
   test("uses unique ids", () => {
@@ -11,7 +16,9 @@ describe("keyboard shortcuts registry", () => {
 
   test("does not duplicate active bindings within a scope", () => {
     const bindings = KEYBOARD_SHORTCUTS.flatMap((shortcut) => {
-      if (shortcut.status === "coming-soon") return [];
+      if (shortcut.status === "coming-soon") {
+        return [];
+      }
 
       const keys = shortcut.sequence
         ? [shortcut.sequence.map(bindingKey).join(" ")]
@@ -23,10 +30,12 @@ describe("keyboard shortcuts registry", () => {
   });
 
   test("has at least one shortcut in every displayed category", () => {
-    const categories = new Set(KEYBOARD_SHORTCUTS.map((shortcut) => shortcut.category));
+    const categories = new Set(
+      KEYBOARD_SHORTCUTS.map((shortcut) => shortcut.category)
+    );
 
     for (const category of KEYBOARD_SHORTCUT_CATEGORIES) {
-      expect(categories.has(category)).toBe(true);
+      expect(categories.has(category)).toBeTruthy();
     }
   });
 });

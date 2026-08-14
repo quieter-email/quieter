@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
+
 import {
   parseStructuredSearchFilterToken,
   parseStructuredSearchQuery,
@@ -7,7 +8,9 @@ import {
 
 describe("structured message search", () => {
   test("parses added field filters", () => {
-    expect(parseStructuredSearchQuery("filename:payouts.csv cc:casey@example.com")).toEqual({
+    expect(
+      parseStructuredSearchQuery("filename:payouts.csv cc:casey@example.com")
+    ).toStrictEqual({
       filters: [
         { type: "filename", value: "payouts.csv" },
         { type: "cc", value: "casey@example.com" },
@@ -18,8 +21,10 @@ describe("structured message search", () => {
 
   test("parses underscore and fixed-value filters", () => {
     expect(
-      parseStructuredSearchQuery("older_than:30d newer_than:1y has:attachment is:unread is:spam"),
-    ).toEqual({
+      parseStructuredSearchQuery(
+        "older_than:30d newer_than:1y has:attachment is:unread is:spam"
+      )
+    ).toStrictEqual({
       filters: [
         { type: "older_than", value: "30d" },
         { type: "newer_than", value: "1y" },
@@ -37,13 +42,22 @@ describe("structured message search", () => {
   });
 
   test("parses managed label filters", () => {
-    expect(parseStructuredSearchFilterToken("is:spam")).toEqual({ type: "is", value: "spam" });
-    expect(parseStructuredSearchFilterToken("is:trash")).toEqual({ type: "is", value: "trash" });
+    expect(parseStructuredSearchFilterToken("is:spam")).toStrictEqual({
+      type: "is",
+      value: "spam",
+    });
+    expect(parseStructuredSearchFilterToken("is:trash")).toStrictEqual({
+      type: "is",
+      value: "trash",
+    });
   });
 
   test("serializes quoted values", () => {
-    expect(serializeStructuredSearchFilterToken({ type: "filename", value: "tax form.pdf" })).toBe(
-      'filename:"tax form.pdf"',
-    );
+    expect(
+      serializeStructuredSearchFilterToken({
+        type: "filename",
+        value: "tax form.pdf",
+      })
+    ).toBe('filename:"tax form.pdf"');
   });
 });

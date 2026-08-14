@@ -1,6 +1,7 @@
 import type { GmailUsefulDetailCandidate } from "@quieter/ai/extract-gmail-useful-detail";
 import type { MessageListItem } from "@quieter/gmail";
 import { describe, expect, test } from "vite-plus/test";
+
 import {
   buildGmailUsefulDetailPreferenceProfile,
   materializeGmailUsefulDetail,
@@ -16,7 +17,9 @@ const message = (input?: Partial<MessageListItem>): MessageListItem => ({
   ...input,
 });
 
-const candidate = (input: Partial<GmailUsefulDetailCandidate>): GmailUsefulDetailCandidate => ({
+const candidate = (
+  input: Partial<GmailUsefulDetailCandidate>
+): GmailUsefulDetailCandidate => ({
   carrier: null,
   code: null,
   confidence: "high",
@@ -40,7 +43,8 @@ describe("Gmail useful-detail materialization", () => {
   test("extracts verification codes without model classification", () => {
     const detail = materializeGmailVerificationCode({
       message: message({
-        bodyText: "Use code 123 456 to verify your sign-in. This code expires soon.",
+        bodyText:
+          "Use code 123 456 to verify your sign-in. This code expires soon.",
         from: "Example <login@example.com>",
         subject: "Your verification code",
       }),
@@ -115,7 +119,9 @@ describe("Gmail useful-detail materialization", () => {
         relevantUntil: "2026-06-14T11:59:00.000Z",
         service: "Example",
       }),
-      message: message({ internalDate: String(NOW.getTime() - 1000 * 60 * 11) }),
+      message: message({
+        internalDate: String(NOW.getTime() - 1000 * 60 * 11),
+      }),
       now: NOW,
     });
 
@@ -252,7 +258,8 @@ describe("Gmail useful-detail materialization", () => {
         relevantFrom: "2026-06-14T11:58:00.000Z",
         relevantUntil: "2026-07-25T20:30:00.000Z",
         service: "Zoo Palast Berlin",
-        summary: "Die Odyssee-70mm is booked for July 25 at 20:30 at Zoo Palast Berlin.",
+        summary:
+          "Die Odyssee-70mm is booked for July 25 at 20:30 at Zoo Palast Berlin.",
       }),
       message: message(),
       now: NOW,
@@ -282,8 +289,8 @@ describe("Gmail useful-detail materialization", () => {
       now: NOW,
     });
 
-    expect(detail?.summary?.endsWith("referen")).toBe(false);
-    expect(detail?.summary?.endsWith("referenc")).toBe(false);
+    expect(detail?.summary?.endsWith("referen")).toBeFalsy();
+    expect(detail?.summary?.endsWith("referenc")).toBeFalsy();
   });
 
   test("drops medium-confidence classifications", () => {
@@ -324,22 +331,25 @@ describe("Gmail useful-detail materialization", () => {
     ["GitHub <notifications@github.com>", "task"],
     ["Sentry <alerts@sentry.io>", "security_alert"],
     ["CodeRabbit <notifications@coderabbit.ai>", "application"],
-  ] as const)("drops automated engineering notifications from %s", (from, kind) => {
-    const detail = materializeGmailUsefulDetail({
-      candidate: candidate({
-        eventAt: "2026-06-15T09:00:00.000Z",
-        kind,
-        relevanceSource: "inferred",
-        relevantFrom: "2026-06-14T12:00:00.000Z",
-        relevantUntil: "2026-06-15T12:00:00.000Z",
-        summary: "Review or investigate this automated notification.",
-      }),
-      message: message({ from }),
-      now: NOW,
-    });
+  ] as const)(
+    "drops automated engineering notifications from %s",
+    (from, kind) => {
+      const detail = materializeGmailUsefulDetail({
+        candidate: candidate({
+          eventAt: "2026-06-15T09:00:00.000Z",
+          kind,
+          relevanceSource: "inferred",
+          relevantFrom: "2026-06-14T12:00:00.000Z",
+          relevantUntil: "2026-06-15T12:00:00.000Z",
+          summary: "Review or investigate this automated notification.",
+        }),
+        message: message({ from }),
+        now: NOW,
+      });
 
-    expect(detail).toBeNull();
-  });
+      expect(detail).toBeNull();
+    }
+  );
 
   test("drops tasks without an explicit deadline", () => {
     const detail = materializeGmailUsefulDetail({
@@ -411,7 +421,8 @@ describe("Gmail useful-detail materialization", () => {
         summary: "Apply for interview-stage research roles by June 20.",
       }),
       message: message({
-        bodyText: "Open position with interviews in July. Applications are open until June 20.",
+        bodyText:
+          "Open position with interviews in July. Applications are open until June 20.",
         from: "TU Berlin <jobs@example.edu>",
         subject: "Open position with interviews in July",
       }),
@@ -501,7 +512,7 @@ describe("Gmail useful-detail preference profile", () => {
       source: [{ count: 1, kind: "task", signal: "not_useful" }],
     });
 
-    expect(profile).toEqual({ avoidKinds: ["task"], preferKinds: [] });
+    expect(profile).toStrictEqual({ avoidKinds: ["task"], preferKinds: [] });
   });
 
   test("requires repeated global feedback before suppressing a category", () => {
@@ -509,14 +520,14 @@ describe("Gmail useful-detail preference profile", () => {
       buildGmailUsefulDetailPreferenceProfile({
         global: [{ count: 2, kind: "appointment", signal: "not_useful" }],
         source: [],
-      }),
-    ).toEqual({ avoidKinds: [], preferKinds: [] });
+      })
+    ).toStrictEqual({ avoidKinds: [], preferKinds: [] });
     expect(
       buildGmailUsefulDetailPreferenceProfile({
         global: [{ count: 3, kind: "appointment", signal: "not_useful" }],
         source: [],
-      }),
-    ).toEqual({ avoidKinds: ["appointment"], preferKinds: [] });
+      })
+    ).toStrictEqual({ avoidKinds: ["appointment"], preferKinds: [] });
   });
 
   test("lets sender-specific positive feedback override a global rejection", () => {
@@ -525,6 +536,9 @@ describe("Gmail useful-detail preference profile", () => {
       source: [{ count: 2, kind: "delivery", signal: "useful" }],
     });
 
-    expect(profile).toEqual({ avoidKinds: [], preferKinds: ["delivery"] });
+    expect(profile).toStrictEqual({
+      avoidKinds: [],
+      preferKinds: ["delivery"],
+    });
   });
 });

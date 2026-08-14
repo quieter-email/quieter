@@ -6,22 +6,23 @@ export const consentEnglishI18n = {
   messages: {
     en: {
       ...defaultTranslationConfig.translations.en,
-      cookieBanner: {
-        title: "We value your privacy",
-        description:
-          "Quieter uses essential cookies to run the app. With your permission, we also use measurement tools to understand usage and performance.",
-      },
       consentManagerDialog: {
+        description:
+          "Choose which optional cookies and measurement tools Quieter may use.",
         title: "Privacy Settings",
-        description: "Choose which optional cookies and measurement tools Quieter may use.",
       },
       consentTypes: {
         ...defaultTranslationConfig.translations.en.consentTypes,
         measurement: {
-          title: "Measurement",
           description:
             "Allow product analytics and performance measurement so we can understand usage and reliability.",
+          title: "Measurement",
         },
+      },
+      cookieBanner: {
+        description:
+          "Quieter uses essential cookies to run the app. With your permission, we also use measurement tools to understand usage and performance.",
+        title: "We value your privacy",
       },
     },
   },

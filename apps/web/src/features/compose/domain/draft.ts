@@ -1,9 +1,14 @@
 import type { ComposeDraftAnchor } from "@quieter/mail/compose/schema";
-import { rpc } from "~/lib/orpc";
+
+import { rpc } from "#/lib/orpc";
+
 import { serializeTemplatePlaceholders } from "./template-placeholders";
 
 const MAX_TOTAL_ATTACHMENT_BYTES = 24 * 1024 * 1024;
 const CONTENT_ID_PREFIX = "quieter-inline";
+
+const hasText = (value: string | null | undefined): value is string =>
+  typeof value === "string" && value.length > 0;
 
 type ComposeSaveStatus = "idle" | "saving" | "saved" | "error" | "sending";
 
@@ -61,60 +66,78 @@ type RuntimeBinary = {
 
 const runtimeBinaryById = new Map<string, RuntimeBinary>();
 
-const normalizeString = (value: string): string => value.replaceAll(/\u200B/g, "").trim();
+const normalizeString = (value: string): string =>
+  value.replaceAll("​", "").trim();
 
 export const createEmptyComposeDraft = (): ComposeDraftState => ({
-  localId: crypto.randomUUID(),
-  draftAnchor: null,
-  replyContext: null,
-  recipients: {
-    to: "",
-    cc: "",
-    bcc: "",
-  },
-  subject: "",
+  attachments: [],
   bodyHtml: "",
   bodyText: "",
-  attachments: [],
-  inlineImages: [],
-  saveStatus: "idle",
+  draftAnchor: null,
   errorMessage: null,
+  inlineImages: [],
+  localId: crypto.randomUUID(),
+  recipients: {
+    bcc: "",
+    cc: "",
+    to: "",
+  },
+  replyContext: null,
+  saveStatus: "idle",
+  subject: "",
   updatedAt: Date.now(),
 });
 
-export const cloneComposeDraft = (draft: ComposeDraftState): ComposeDraftState => ({
+export const cloneComposeDraft = (
+  draft: ComposeDraftState
+): ComposeDraftState => ({
   ...draft,
+  attachments: draft.attachments.map((attachment) => ({ ...attachment })),
   draftAnchor: draft.draftAnchor && { ...draft.draftAnchor },
+  inlineImages: draft.inlineImages.map((image) => ({ ...image })),
+  recipients: { ...draft.recipients },
   replyContext: draft.replyContext && {
     ...draft.replyContext,
     references: [...draft.replyContext.references],
   },
-  recipients: { ...draft.recipients },
-  attachments: draft.attachments.map((attachment) => ({ ...attachment })),
-  inlineImages: draft.inlineImages.map((image) => ({ ...image })),
 });
 
 const areReplyContextsEqual = (
   left: ComposeReplyContext | null | undefined,
-  right: ComposeReplyContext | null | undefined,
+  right: ComposeReplyContext | null | undefined
 ) => {
-  if (!left && !right) return true;
-  if (!left || !right) return false;
-  if (left.references.length !== right.references.length) return false;
-
-  for (const [index, reference] of left.references.entries()) {
-    if (reference !== right.references[index]) return false;
+  if (!left && !right) {
+    return true;
+  }
+  if (!left || !right) {
+    return false;
+  }
+  if (left.references.length !== right.references.length) {
+    return false;
   }
 
-  return left.threadId === right.threadId && left.messageHeaderId === right.messageHeaderId;
+  for (const [index, reference] of left.references.entries()) {
+    if (reference !== right.references[index]) {
+      return false;
+    }
+  }
+
+  return (
+    left.threadId === right.threadId &&
+    left.messageHeaderId === right.messageHeaderId
+  );
 };
 
 const areDraftAnchorsEqual = (
   left: ComposeDraftAnchor | null | undefined,
-  right: ComposeDraftAnchor | null | undefined,
+  right: ComposeDraftAnchor | null | undefined
 ) => {
-  if (!left && !right) return true;
-  if (!left || !right) return false;
+  if (!left && !right) {
+    return true;
+  }
+  if (!left || !right) {
+    return false;
+  }
 
   return (
     left.sourceMessageId === right.sourceMessageId &&
@@ -126,13 +149,17 @@ const areDraftAnchorsEqual = (
 
 const areComposeAssetsEqual = (
   left: readonly (ComposeAttachment | ComposeInlineImage)[],
-  right: readonly (ComposeAttachment | ComposeInlineImage)[],
+  right: readonly (ComposeAttachment | ComposeInlineImage)[]
 ) => {
-  if (left.length !== right.length) return false;
+  if (left.length !== right.length) {
+    return false;
+  }
 
   for (const [index, attachment] of left.entries()) {
     const other = right[index];
-    if (!other) return false;
+    if (other === undefined) {
+      return false;
+    }
 
     if (
       attachment.id === other.id &&
@@ -156,9 +183,9 @@ const areComposeAssetsEqual = (
 
 export const haveComposeDraftPersistedFieldsChanged = (
   current: ComposeDraftState,
-  next: ComposeDraftState,
-) => {
-  return !(
+  next: ComposeDraftState
+) =>
+  !(
     areDraftAnchorsEqual(current.draftAnchor, next.draftAnchor) &&
     areReplyContextsEqual(current.replyContext, next.replyContext) &&
     current.recipients.to === next.recipients.to &&
@@ -170,11 +197,12 @@ export const haveComposeDraftPersistedFieldsChanged = (
     areComposeAssetsEqual(current.attachments, next.attachments) &&
     areComposeAssetsEqual(current.inlineImages, next.inlineImages)
   );
-};
 
 const revokeRuntimeBinary = (id: string) => {
   const runtime = runtimeBinaryById.get(id);
-  if (!runtime) return;
+  if (!runtime) {
+    return;
+  }
   URL.revokeObjectURL(runtime.objectUrl);
   runtimeBinaryById.delete(id);
 };
@@ -201,16 +229,18 @@ export const clearComposeDraftRuntimeFiles = (draft: ComposeDraftState) => {
 };
 
 const htmlToText = (html: string): string => {
-  if (!html) return "";
+  if (!html) {
+    return "";
+  }
   if (typeof window === "undefined") {
     return html
-      .replace(/<[^>]+>/g, " ")
-      .replace(/\s+/g, " ")
+      .replaceAll(/<[^>]+>/gu, " ")
+      .replaceAll(/\s+/gu, " ")
       .trim();
   }
 
   const doc = new DOMParser().parseFromString(html, "text/html");
-  return doc.body.textContent?.replace(/\s+\n/g, "\n").trim() ?? "";
+  return doc.body.textContent?.replaceAll(/\s+\n/gu, "\n").trim() ?? "";
 };
 
 export const escapeComposeHtml = (value: string) =>
@@ -223,16 +253,18 @@ export const escapeComposeHtml = (value: string) =>
 
 export const textToComposeBodyHtml = (value: string): string => {
   const normalized = value.trim();
-  if (!normalized) return "";
+  if (!normalized) {
+    return "";
+  }
 
   return normalized
-    .split(/\r?\n(?:\r?\n)+/g)
+    .split(/\r?\n(?:\r?\n)+/gu)
     .map(
       (paragraph) =>
         `<p>${paragraph
-          .split(/\r?\n/g)
+          .split(/\r?\n/gu)
           .map((line) => (line ? escapeComposeHtml(line) : "<br>"))
-          .join("<br>")}</p>`,
+          .join("<br>")}</p>`
     )
     .join("");
 };
@@ -241,18 +273,25 @@ const COMPOSE_SIGNATURE_MARKER = "data-quieter-signature";
 
 export const appendComposeSignature = (
   draft: ComposeDraftState,
-  signature: { html: string | null | undefined; text: string | null | undefined },
+  signature: {
+    html: string | null | undefined;
+    text: string | null | undefined;
+  }
 ): ComposeDraftState => {
   const html = signature.html?.trim();
   const text = signature.text?.trim();
-  if (!html && !text) return draft;
-  if (draft.bodyHtml.includes(COMPOSE_SIGNATURE_MARKER)) return draft;
+  if (!hasText(html) && !hasText(text)) {
+    return draft;
+  }
+  if (draft.bodyHtml.includes(COMPOSE_SIGNATURE_MARKER)) {
+    return draft;
+  }
 
-  const signatureHtml = `<div ${COMPOSE_SIGNATURE_MARKER}="true"><br>${html || textToComposeBodyHtml(text ?? "")}</div>`;
+  const signatureHtml = `<div ${COMPOSE_SIGNATURE_MARKER}="true"><br>${hasText(html) ? html : textToComposeBodyHtml(text ?? "")}</div>`;
   const nextHtml = draft.bodyHtml.trim()
     ? `${draft.bodyHtml}${signatureHtml}`
     : signatureHtml.replace("<br>", "");
-  const signatureText = text || htmlToText(html ?? "");
+  const signatureText = hasText(text) ? text : htmlToText(html ?? "");
   const nextText = draft.bodyText.trim()
     ? `${draft.bodyText.trim()}\n\n${signatureText}`
     : signatureText;
@@ -262,10 +301,12 @@ export const appendComposeSignature = (
 
 const hasMeaningfulBodyHtml = (bodyHtml: string): boolean => {
   const normalizedHtml = bodyHtml.trim();
-  if (!normalizedHtml) return false;
+  if (!normalizedHtml) {
+    return false;
+  }
 
   if (typeof window === "undefined") {
-    return /<(img|video|audio|iframe)\b/i.test(normalizedHtml);
+    return /<(?:img|video|audio|iframe)\b/iu.test(normalizedHtml);
   }
 
   const doc = new DOMParser().parseFromString(normalizedHtml, "text/html");
@@ -274,7 +315,9 @@ const hasMeaningfulBodyHtml = (bodyHtml: string): boolean => {
 
 export const normalizeComposeBodyHtml = (bodyHtml: string): string => {
   const normalizedHtml = bodyHtml.trim();
-  if (!normalizedHtml) return "";
+  if (!normalizedHtml) {
+    return "";
+  }
 
   if (normalizeString(htmlToText(normalizedHtml))) {
     return normalizedHtml;
@@ -283,11 +326,14 @@ export const normalizeComposeBodyHtml = (bodyHtml: string): string => {
   return hasMeaningfulBodyHtml(normalizedHtml) ? normalizedHtml : "";
 };
 
-export const getRenderableComposeBodyHtml = (bodyHtml: string, bodyText: string): string =>
+export const getRenderableComposeBodyHtml = (
+  bodyHtml: string,
+  bodyText: string
+): string =>
   normalizeComposeBodyHtml(bodyHtml) || textToComposeBodyHtml(bodyText);
 
-export const hasComposeDraftContent = (draft: ComposeDraftState): boolean => {
-  return !!(
+export const hasComposeDraftContent = (draft: ComposeDraftState): boolean =>
+  !!(
     normalizeString(draft.recipients.to) ||
     normalizeString(draft.recipients.cc) ||
     normalizeString(draft.recipients.bcc) ||
@@ -297,9 +343,10 @@ export const hasComposeDraftContent = (draft: ComposeDraftState): boolean => {
     draft.attachments.length > 0 ||
     draft.inlineImages.length > 0
   );
-};
 
-const attachRuntimeFile = <T extends ComposeAttachment | ComposeInlineImage>(asset: T) => {
+const attachRuntimeFile = <T extends ComposeAttachment | ComposeInlineImage>(
+  asset: T
+) => {
   const runtimeFile = runtimeBinaryById.get(asset.id)?.file;
   if (!runtimeFile) {
     throw new Error(`Missing file payload for ${asset.name}.`);
@@ -316,22 +363,25 @@ type CreateComposeAssetOptions = {
   id?: string;
 };
 
-const createComposeAssetBase = (file: File, options: CreateComposeAssetOptions = {}) => {
+const createComposeAssetBase = (
+  file: File,
+  options: CreateComposeAssetOptions = {}
+) => {
   const id = options.id ?? crypto.randomUUID();
   rememberRuntimeFile(id, file);
 
   return {
-    id,
-    name: file.name,
-    mimeType: file.type || "application/octet-stream",
-    size: file.size,
     gmailAttachmentId: options.gmailAttachmentId,
+    id,
+    mimeType: file.type || "application/octet-stream",
+    name: file.name,
+    size: file.size,
   };
 };
 
 const createComposeInlineImageFromFile = (
   file: File,
-  options?: CreateComposeAssetOptions & { contentId?: string },
+  options?: CreateComposeAssetOptions & { contentId?: string }
 ): ComposeInlineImage => {
   const asset = createComposeAssetBase(file, options);
 
@@ -342,7 +392,7 @@ const createComposeInlineImageFromFile = (
   };
 };
 
-export const createComposeInlineImagesFromFiles = async (files: FileList | File[]) =>
+export const createComposeInlineImagesFromFiles = (files: FileList | File[]) =>
   Array.from(files, (file) => createComposeInlineImageFromFile(file));
 
 const assertAttachmentBudget = (draft: ComposeDraftState) => {
@@ -356,13 +406,19 @@ const assertAttachmentBudget = (draft: ComposeDraftState) => {
 };
 
 const findReferencedInlineImageIds = (html: string): Set<string> => {
-  if (!html || typeof window === "undefined") return new Set();
+  if (html.length === 0 || typeof window === "undefined") {
+    return new Set();
+  }
   const doc = new DOMParser().parseFromString(html, "text/html");
   const ids = new Set<string>();
 
-  for (const image of Array.from(doc.querySelectorAll("img[data-compose-inline-id]"))) {
-    const imageId = image.getAttribute("data-compose-inline-id");
-    if (imageId) ids.add(imageId);
+  for (const image of doc.querySelectorAll<HTMLImageElement>(
+    "img[data-compose-inline-id]"
+  )) {
+    const imageId = image.dataset.composeInlineId;
+    if (hasText(imageId)) {
+      ids.add(imageId);
+    }
   }
 
   return ids;
@@ -370,10 +426,12 @@ const findReferencedInlineImageIds = (html: string): Set<string> => {
 
 export const syncInlineImagesWithHtml = (
   draft: ComposeDraftState,
-  bodyHtml: string,
+  bodyHtml: string
 ): ComposeDraftState => {
   const referencedIds = findReferencedInlineImageIds(bodyHtml);
-  const nextInlineImages = draft.inlineImages.filter((image) => referencedIds.has(image.id));
+  const nextInlineImages = draft.inlineImages.filter((image) =>
+    referencedIds.has(image.id)
+  );
 
   return {
     ...draft,
@@ -384,10 +442,14 @@ export const syncInlineImagesWithHtml = (
   };
 };
 
-const serializeDraft = async (draft: ComposeDraftState) => {
+const serializeDraft = (draft: ComposeDraftState) => {
   assertAttachmentBudget(draft);
-  const inlineImages = draft.inlineImages.map((image) => attachRuntimeFile(image));
-  const attachments = draft.attachments.map((attachment) => attachRuntimeFile(attachment));
+  const inlineImages = draft.inlineImages.map((image) =>
+    attachRuntimeFile(image)
+  );
+  const attachments = draft.attachments.map((attachment) =>
+    attachRuntimeFile(attachment)
+  );
 
   return {
     ...draft,
@@ -400,27 +462,30 @@ const serializeDraft = async (draft: ComposeDraftState) => {
 export const saveComposeDraft = async (
   mailboxId: string,
   draft: ComposeDraftState,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<ComposeDraftState> => {
   const response = await rpc.mail.saveDraft(
-    { mailboxId, draft: await serializeDraft(draft) },
-    { signal },
+    { draft: serializeDraft(draft), mailboxId },
+    { signal }
   );
-  const bodyHtml = getRenderableComposeBodyHtml(response.bodyHtml, response.bodyText);
+  const bodyHtml = getRenderableComposeBodyHtml(
+    response.bodyHtml,
+    response.bodyText
+  );
 
   return {
     ...draft,
-    draftId: response.draftId,
-    draftAnchor: response.draftAnchor ?? null,
-    messageId: response.messageId ?? undefined,
     bodyHtml,
     bodyText: response.bodyText || htmlToText(bodyHtml),
-    subject: response.subject,
+    draftAnchor: response.draftAnchor ?? null,
+    draftId: response.draftId,
+    errorMessage: null,
+    lastSavedAt: Date.now(),
+    messageId: response.messageId ?? undefined,
     recipients: response.recipients,
     replyContext: response.replyContext ?? null,
     saveStatus: "saved",
-    errorMessage: null,
-    lastSavedAt: Date.now(),
+    subject: response.subject,
     updatedAt: Date.now(),
   };
 };
@@ -428,28 +493,41 @@ export const saveComposeDraft = async (
 export const sendComposeMessage = async (
   mailboxId: string,
   draft: ComposeDraftState,
-  signal?: AbortSignal,
-) => {
-  return rpc.mail.sendMessage({ mailboxId, message: await serializeDraft(draft) }, { signal });
-};
+  signal?: AbortSignal
+) =>
+  await rpc.mail.sendMessage(
+    { mailboxId, message: serializeDraft(draft) },
+    { signal }
+  );
 
 export const deleteComposeDraft = async (
   mailboxId: string,
   draft: ComposeDraftState,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ) => {
-  if (!draft.draftId) return;
-  await rpc.mail.deleteDraft({ mailboxId, draftId: draft.draftId }, { signal });
+  if (
+    draft.draftId === null ||
+    draft.draftId === undefined ||
+    draft.draftId === ""
+  ) {
+    return;
+  }
+  await rpc.mail.deleteDraft({ draftId: draft.draftId, mailboxId }, { signal });
 };
 
 export const attachInlineImagesToHtml = (
   draft: ComposeDraftState,
-  images: ComposeInlineImage[],
+  images: ComposeInlineImage[]
 ): string => {
-  if (typeof window === "undefined") return draft.bodyHtml;
+  if (typeof window === "undefined") {
+    return draft.bodyHtml;
+  }
 
-  const doc = new DOMParser().parseFromString(draft.bodyHtml || "<p></p>", "text/html");
-  const body = doc.body;
+  const doc = new DOMParser().parseFromString(
+    draft.bodyHtml || "<p></p>",
+    "text/html"
+  );
+  const { body } = doc;
 
   if (body.innerHTML.trim().length === 0) {
     body.innerHTML = "<p></p>";
@@ -459,13 +537,15 @@ export const attachInlineImagesToHtml = (
     const paragraph = doc.createElement("p");
     const element = doc.createElement("img");
     const objectUrl = getComposeRuntimeObjectUrl(image.id);
-    if (!objectUrl) continue;
+    if (!hasText(objectUrl)) {
+      continue;
+    }
 
     element.setAttribute("src", objectUrl);
     element.setAttribute("alt", image.name);
-    element.setAttribute("data-compose-inline-id", image.id);
-    paragraph.appendChild(element);
-    body.appendChild(paragraph);
+    element.dataset.composeInlineId = image.id;
+    paragraph.append(element);
+    body.append(paragraph);
   }
 
   return body.innerHTML.trim();

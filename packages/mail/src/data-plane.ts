@@ -103,7 +103,6 @@ export const getMailboxCapabilities = (input: {
 }): MailboxCapabilities => {
   if (input.provider === "api") {
     return {
-      categories: ["sent"],
       canArchive: false,
       canDeletePermanently: false,
       canManageKnowledge: false,
@@ -113,13 +112,15 @@ export const getMailboxCapabilities = (input: {
       canMoveToSpam: false,
       canMoveToTrash: false,
       canSend: false,
+      categories: ["sent"],
     };
   }
 
   const canRespond =
-    input.provider === "gmail" || input.role === "manager" || input.role === "responder";
+    input.provider === "gmail" ||
+    input.role === "manager" ||
+    input.role === "responder";
   return {
-    categories: ["inbox", "unread", "archive", "sent", "drafts", "trash", "spam"],
     canArchive: canRespond,
     canDeletePermanently: false,
     canManageKnowledge: input.provider === "gmail" || input.role === "manager",
@@ -129,5 +130,14 @@ export const getMailboxCapabilities = (input: {
     canMoveToSpam: canRespond,
     canMoveToTrash: canRespond,
     canSend: canRespond,
+    categories: [
+      "inbox",
+      "unread",
+      "archive",
+      "sent",
+      "drafts",
+      "trash",
+      "spam",
+    ],
   };
 };

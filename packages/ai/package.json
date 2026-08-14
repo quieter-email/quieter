@@ -11,6 +11,7 @@
     "./format-transcribed-email": "./src/format-transcribed-email.ts",
     "./generate-chat-title": "./src/generate-chat-title.ts",
     "./mailbox-actions": "./src/mailbox-actions.ts",
+    "./memory-embeddings": "./src/memory-embeddings.ts",
     "./openrouter": "./src/openrouter.ts",
     "./openrouter-transcription": "./src/openrouter-transcription.ts",
     "./run-chat-stream": "./src/run-chat-stream.ts",
@@ -20,6 +21,7 @@
   "dependencies": {
     "@quieter/env": "workspace:*",
     "@quieter/gmail": "workspace:*",
+    "@quieter/observability": "workspace:*",
     "@tanstack/ai": "catalog:",
     "@tanstack/ai-openrouter": "catalog:",
     "zod": "catalog:"
@@ -28,6 +30,7 @@
     "@quieter/config": "workspace:*",
     "@types/node": "catalog:",
     "typescript": "catalog:",
+    "vite": "catalog:",
     "vite-plus": "catalog:"
   }
 }

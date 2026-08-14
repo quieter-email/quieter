@@ -1,17 +1,19 @@
 /// <reference types="vite/client" />
 
 import { createRootRoute } from "@tanstack/react-router";
-import { RootComponent } from "~/components/root/root-component";
-import { RootErrorComponent } from "~/components/root/root-error-component";
-import { RootNotFoundComponent } from "~/components/root/root-not-found-component";
-import { clientEnv } from "~/env";
-import appCss from "~/styles.css?url";
 
-const faviconVariant = import.meta.env.DEV
-  ? "-dev"
-  : clientEnv.VITE_QUIETER_DEPLOYMENT_ENV === "preview"
-    ? "-review"
-    : "";
+import { RootComponent } from "#/components/root/root-component";
+import { RootErrorComponent } from "#/components/root/root-error-component";
+import { RootNotFoundComponent } from "#/components/root/root-not-found-component";
+
+import appCss from "../styles.css?url";
+
+const appCssHref: string = typeof appCss === "string" ? appCss : "";
+
+let faviconVariant = "";
+if (import.meta.env.DEV) {
+  faviconVariant = "-dev";
+}
 
 export const Route = createRootRoute({
   component: RootComponent,
@@ -57,7 +59,7 @@ export const Route = createRootRoute({
         rel: "mask-icon",
       },
       {
-        href: appCss,
+        href: appCssHref,
         rel: "stylesheet",
       },
     ],

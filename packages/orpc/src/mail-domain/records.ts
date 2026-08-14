@@ -1,37 +1,43 @@
+import { randomBytes } from "node:crypto";
+
+import { ORPCError } from "@orpc/server";
 import type {
   MailDomainCheckResult,
   MailDomainDnsRecord,
   MailDomainMode,
   MailDomainStatus,
 } from "@quieter/database/schema";
-import { ORPCError } from "@orpc/server";
-import { randomBytes } from "node:crypto";
 
 export type MailDomainCheck = MailDomainCheckResult["checks"][number];
 
-export const MAIL_DOMAIN_STATUS_VERIFIED = "verified" satisfies MailDomainStatus;
+export const MAIL_DOMAIN_STATUS_VERIFIED =
+  "verified" satisfies MailDomainStatus;
 const MAIL_DOMAIN_STATUS_FAILED = "failed" satisfies MailDomainStatus;
 const MAIL_FROM_PREFIX = "bounce";
 const OWNERSHIP_RECORD_PREFIX = "quieter-domain-verification=";
 export const DMARC_RECORD_PREFIX = "v=DMARC1; p=quarantine";
 
 export const isOptionalMailDomainDnsPurpose = (
-  purpose: MailDomainCheck["purpose"] | MailDomainDnsRecord["purpose"],
+  purpose: MailDomainCheck["purpose"] | MailDomainDnsRecord["purpose"]
 ) => purpose === "dmarc";
 
 export const normalizeMailDomain = (input: string) => {
   const trimmed = input.trim();
-  if (!trimmed) throw new ORPCError("BAD_REQUEST", { message: "Domain is required." });
+  if (!trimmed) {
+    throw new ORPCError("BAD_REQUEST", { message: "Domain is required." });
+  }
 
-  const withProtocol = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  const withProtocol = /^[a-z][a-z0-9+.-]*:\/\//iu.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
   let hostname: string;
   try {
-    hostname = new URL(withProtocol).hostname;
+    ({ hostname } = new URL(withProtocol));
   } catch {
     throw new ORPCError("BAD_REQUEST", { message: "Enter a valid domain." });
   }
 
-  const domain = hostname.toLowerCase().replace(/\.$/, "");
+  const domain = hostname.toLowerCase().replace(/\.$/u, "");
   const labels = domain.split(".");
   const valid =
     domain.length <= 253 &&
@@ -40,12 +46,14 @@ export const normalizeMailDomain = (input: string) => {
       (label) =>
         label.length >= 1 &&
         label.length <= 63 &&
-        /^[a-z0-9-]+$/.test(label) &&
+        /^[a-z0-9-]+$/u.test(label) &&
         !label.startsWith("-") &&
-        !label.endsWith("-"),
+        !label.endsWith("-")
     ) &&
-    /^[a-z]{2,}$/.test(labels.at(-1) ?? "");
-  if (!valid) throw new ORPCError("BAD_REQUEST", { message: "Enter a valid domain." });
+    /^[a-z]{2,}$/u.test(labels.at(-1) ?? "");
+  if (!valid) {
+    throw new ORPCError("BAD_REQUEST", { message: "Enter a valid domain." });
+  }
   return domain;
 };
 
@@ -117,15 +125,17 @@ export const normalizeMailDomainDnsRecords = (records: MailDomainDnsRecord[]) =>
           required: false,
           value: DMARC_RECORD_PREFIX,
         }
-      : record,
+      : record
   );
 
-export const createMailDomainOwnershipToken = () => randomBytes(24).toString("base64url");
+export const createMailDomainOwnershipToken = () =>
+  randomBytes(24).toString("base64url");
 
 export const getMailDomainOwnershipToken = (records: MailDomainDnsRecord[]) => {
   const record = records.find(
     (candidate) =>
-      candidate.purpose === "ownership" && candidate.value.startsWith(OWNERSHIP_RECORD_PREFIX),
+      candidate.purpose === "ownership" &&
+      candidate.value.startsWith(OWNERSHIP_RECORD_PREFIX)
   );
   return record?.value.slice(OWNERSHIP_RECORD_PREFIX.length) ?? null;
 };
@@ -136,9 +146,13 @@ const isNonDnsStatusCheck = (check: MailDomainCheck) =>
   check.purpose === "receipt_rule";
 
 /** Domain verification is required DNS. DMARC is recommended; provider sending and inbound routing can lag. */
-export const aggregateMailDomainStatus = (checks: MailDomainCheck[]): MailDomainStatus => {
+export const aggregateMailDomainStatus = (
+  checks: MailDomainCheck[]
+): MailDomainStatus => {
   const requiredChecks = checks.filter(
-    (check) => !isNonDnsStatusCheck(check) && !isOptionalMailDomainDnsPurpose(check.purpose),
+    (check) =>
+      !isNonDnsStatusCheck(check) &&
+      !isOptionalMailDomainDnsPurpose(check.purpose)
   );
   return requiredChecks.length > 0 && requiredChecks.every((check) => check.ok)
     ? MAIL_DOMAIN_STATUS_VERIFIED

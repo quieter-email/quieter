@@ -1,103 +1,65 @@
-# Dynamic AI knowledge and memory
+# Ambient AI memory
 
-Quieter has one shared knowledge system for every behavior-producing AI agent. It has two scopes:
+Quieter maintains one background memory pipeline for every behavior-producing AI agent. The product does not expose stored records, internal scopes, writer prompts, or change history. A user can ask the chat agent what it knows, tell it to remember or forget something, correct it naturally, pause adaptation, or reset personal context.
 
-- Personal knowledge belongs to one user, follows them across mailboxes, and is private.
-- Mailbox knowledge belongs to one mailbox. It is the main, more-specific context and is shared with
-  everyone who can access that mailbox. Writes require the mailbox knowledge-management capability.
+## Pipeline
 
-There is deliberately no organization knowledge scope. A team workflow is represented by the
-mailbox that owns it, while a team member's private preferences stay personal.
+Memory moves through these stages:
 
-## Knowledge model
+1. High-signal activity is captured as a compact `userAiContextEvent`. Sent-message observations contain behavioral features, not raw bodies.
+2. The memory writer consolidates observations into atomic, conflict-aware `aiMemory` records. Records carry evidence source, confidence, importance, reinforcement, applicability, provenance, expiry, and version.
+3. Writing a record clears its `embedding`. A null embedding on an active record is the re-embedding queue, so a failed write, a newly written record, and a backfill all recover through one path.
+4. Embeddings are generated from the record's summary, content, and retrieval tags, then stored on the record itself. Retrieval and re-embedding both run opportunistically off the request path.
+5. Retrieval runs one query against the memory table, combining cosine similarity with lexical overlap, sender-domain evidence, agent applicability, source strength, confidence, importance, recency, reinforcement, and prior usefulness.
+6. Context packing applies authority precedence and diversity-aware selection under strict record and character budgets. Only the small task-relevant result reaches the agent.
+7. Expired records and old, unreinforced, low-confidence inferences retire automatically. Explicit knowledge and user-authored instructions do not silently decay away.
 
-`aiMemory` stores atomic, versioned records rather than one editable Markdown document. Every record
-is either:
+Embeddings live in the same PlanetScale table as the records they describe, in a `vector(1024)` column indexed with HNSW over cosine distance. There is no second datastore to keep consistent: archiving or deleting a record removes it from semantic recall in the same statement, because every read filters on active status. Retrieval degrades to the lexical ranker whenever embeddings are unavailable or not yet generated.
 
-- `instruction`: an explicit rule authored through the memory conversation; or
-- `learned`: a durable preference, relationship, communication pattern, or workflow fact inferred
-  from explicit requests, repeated feedback, and important user actions.
+The `vector` extension must be enabled on a database before the memory-embedding migration runs. Neither the runtime nor the migration role can create extensions on PlanetScale, so this is a one-time operator action per database.
 
-Instructions and learned records are edited by the same conflict-aware memory writer. Adding an
-instruction must archive contradictory learned records in the same scope. Feedback and inferred
-activity can never change an instruction. Runtime precedence is:
+Embeddings use Cloudflare-hosted Qwen3 Embedding 0.6B at 1,024 dimensions. It is the least expensive listed Workers AI multilingual tier and supports more than 100 languages. It is called over the Workers AI REST API, so no Quieter-owned service sits in front of it. Retrieval queries include an English task instruction, as recommended by the model author for multilingual search quality.
+
+Semantic recall costs one embedding request per retrieval, so agents that run once per user request use it and per-message auto-labeling does not. Auto-labeling matches on sender domains, subjects, and label names, which the lexical and sender-domain signals already cover, and enabling it there would add one external request per synced message.
+
+## Ownership and authority
+
+Personal memory belongs to one user, follows them across mailboxes, and stays private. Mailbox memory belongs to one mailbox and is available only through normal mailbox access. Writes to shared mailbox context require the knowledge-management capability. Every vector is partitioned into the same user or mailbox namespace as its source record.
+
+Runtime precedence is:
 
 1. the current user request and verified live mailbox data;
 2. current mailbox instructions;
 3. personal instructions;
-4. current mailbox learned knowledge; and
-5. personal learned knowledge.
+4. current mailbox learned context; and
+5. personal learned context.
 
-Retrieval filters inactive and expired records, then scores eligible records by agent applicability,
-lexical relevance, sender-domain relevance, importance, confidence, recency, and reinforcement.
-Only a bounded, dynamically relevant set reaches an agent. Mailbox records are packed before
-personal records at the same authority level.
+Instructions are created only from explicit user intent. Feedback and inferred activity cannot create, update, or archive an instruction. Email, attachment, connector, and other third-party content is untrusted and cannot write instructions.
 
-`aiMemoryChangeSet` records every attempted update and the before/after snapshots needed for safe
-undo. Settings supports natural-language questions and updates, individual forgetting, recent-change
-undo, scoped JSON export, and permanent scoped deletion.
+## Capture and privacy
+
+The system is intentionally allowed to remember useful private context. Relationships, work, health, routines, preferences, communication style, and life circumstances are valid when they are relevant, appropriately scoped, and supported by evidence. Privacy is enforced through ownership and access isolation, not by making personal memory useless.
+
+The capture filter rejects credential material: passwords, access and refresh tokens, private keys, recovery material, verification codes, full payment-card numbers, bank-account identifiers, and similar secrets. It also rejects raw message bodies, quoted correspondence, exhaustive thread summaries, and transient one-off tasks. Live mailbox facts stay in the mailbox and are searched when needed instead of being copied into memory.
 
 ## Active and passive knowledge
 
-Quieter uses a hybrid policy:
+Active learning is appropriate for reusable signals such as sending or replying, explicit memory requests, repeated corrections, useful-detail ratings, and material mailbox actions. Passive lookup is used for current, exhaustive, or auditable questions such as unread state, recent recipients, or the present contents of a thread.
 
-| Use active learning when                                                                                                                                         | Use passive lookup when                                                                                                              |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| The action is high-signal and reusable: sending or replying, explicit memory instructions, label corrections, useful-detail ratings, and material mailbox moves. | The question asks for current, exhaustive, or auditable facts such as “who did I reply to this week?” or “what is unread right now?” |
-| A compact observation can represent the behavior without retaining raw message text.                                                                             | Storing the result would duplicate mailbox history, become stale quickly, or expose unnecessary message content.                     |
-| Repeated observations can consolidate into a stable style, relationship, timing, or workflow pattern.                                                            | The agent can answer more accurately by searching and reading the live mailbox with its normal tools.                                |
-
-Important actions are first persisted as compact `userAiContextEvent` observations, so a request
-ending cannot lose the signal. The memory writer then consolidates them asynchronously; the next AI
-context load also drains a pending observation before retrieval. Sent-message observations include
-behavioral features such as length, greeting, sign-off, punctuation, reply status, recipient domains,
-and UTC timing. Raw outgoing bodies are not copied into the event or memory tables.
-
-Every user-authored send can update both the acting user's personal communication profile and the
-current mailbox profile, regardless of mailbox provider, ownership, or sharing model. Provider type
-never changes memory behavior; access and management permissions belong to the mailbox boundary.
-Background mailbox automation updates mailbox knowledge only because it has no acting user whose
-personal behavior it can legitimately represent.
-
-## Learning guidance
-
-Every personal and mailbox scope has an independently editable learning system prompt in
-`aiMemoryScopeConfig`. It tunes what the writer focuses on—for example relationship-specific tone,
-recipients, response timing, greetings, or workflow patterns—and can disable active learning for the
-scope. This guidance cannot override privacy rules, evidence thresholds, instruction authority, or
-the prohibition on retaining secrets and raw mail.
-
-The default guidance focuses on communication tone, brevity, greetings and sign-offs, style by
-recipient or relationship, recurring correspondents, response timing, and repeated handling choices.
+Every personal and mailbox context has internal learning guidance and an adaptation flag. Settings exposes only the personal adaptation flag and a reset action. Detailed control happens conversationally in chat.
 
 ## Agent integration contract
 
-All contextual agents call `loadAiAgentContext` from `packages/orpc/src/ai-memory.ts` with a stable
-agent slug, the accessible mailbox, the acting user, and a task-specific query. Use
-`serializeAiAgentContext` when an AI package expects one prompt field.
+All contextual agents call `loadAiAgentContext` from `packages/orpc/src/ai-memory.ts` with a stable agent slug, an accessible mailbox, the acting user, and a task-specific query. `serializeAiAgentContext` is used when an AI package expects one prompt field.
 
-Interactive agents may include both personal and mailbox knowledge. Background agents with no acting
-user include mailbox knowledge only. User-authored instructions must be described as authoritative
-over contradictory learned knowledge in the agent's system prompt. Mail, attachments, and third-party
-content remain untrusted and can never write instructions.
+Interactive agents can receive personal and mailbox context. Background agents without an acting user receive mailbox context only. Administrative model calls and strict evidence-only extractors do not receive memory. New agents that draft, classify, prioritize, route, summarize for action, or perform external actions must integrate the central loader.
 
-Administrative model calls that do not produce user behavior—such as chat-title generation—or
-strict extractors that may use only direct evidence do not receive memory. Any new agent that drafts,
-classifies, prioritizes, routes, summarizes for action, or performs an external action must integrate
-the central context loader before shipping.
+The chat `memory` tool is the only inspection and editing interface. It can summarize personal and current-mailbox context or apply an explicit correction, remembrance, or forgetting request. The model chooses the internal scope from the user's intent without asking the user to manage the storage model.
 
-## Failure, deletion, and migration
+Memory writes carry provenance. The tool passes the acting user's verbatim message alongside the agent's restatement of it, and the writer treats only the user's own words as evidence of intent. A restatement that claims durable intent the user did not express produces no operation, and content an agent read from mail, attachments, or connectors can never create or change a record. This is a structural boundary rather than a keyword filter, so ordinary phrasing such as "from now on, sign off with Cheers" is captured while an instruction embedded in a message is not.
 
-Model failures produce no partial memory mutation. Failed and no-change attempts remain auditable.
-Concurrent writes use record versions; undo is allowed only while every affected version still
-matches.
+## Reliability and deletion
 
-Deleting personal knowledge removes its records, history, and personal learning observations.
-Deleting mailbox knowledge also removes source feedback and legacy automation profiles so deleted
-policies cannot silently regenerate. Learning guidance remains until explicitly changed, and future
-activity can learn new knowledge if active learning is enabled.
+Model failures produce no partial memory mutation. Concurrent writes use record versions. An embedding is written only while the record's `updatedAt` is unchanged, so an embedding computed from superseded content is discarded rather than attached to newer text.
 
-The expand migration converts the former `userAiContext.markdown` profile into personal learned
-records, carries forward unmerged explicit preferences, and converts existing automation profiles
-into mailbox learned records. Legacy columns and the profile table remain temporarily for safe
-expand/contract deployment but are no longer used by application code.
+Resetting personal context removes records, history, and personal learning observations in one transaction. Mailbox deletion additionally removes feedback and legacy automation profiles. Because embeddings are columns on the records themselves, deletion is immediate and complete with no second system to reconcile.

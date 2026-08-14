@@ -14,6 +14,9 @@ type SenderAvatarProps = {
 
 type AvatarStatus = "error" | "loaded";
 
+const hasText = (value: string | null | undefined): value is string =>
+  value !== null && value !== undefined && value !== "";
+
 export const SenderAvatar = ({
   avatarUrlDark,
   avatarUrlLight,
@@ -22,16 +25,24 @@ export const SenderAvatar = ({
   labelClassName,
 }: SenderAvatarProps) => {
   const { colorMode } = useColorMode();
-  const [avatarStatusByUrl, setAvatarStatusByUrl] = useState<Record<string, AvatarStatus>>({});
+  const [avatarStatusByUrl, setAvatarStatusByUrl] = useState<
+    Record<string, AvatarStatus>
+  >({});
   const activeAvatarUrl =
-    colorMode === "dark" ? (avatarUrlDark ?? avatarUrlLight) : (avatarUrlLight ?? avatarUrlDark);
-  const activeAvatarStatus = activeAvatarUrl ? avatarStatusByUrl[activeAvatarUrl] : undefined;
-  const canRenderAvatar = !!activeAvatarUrl && activeAvatarStatus !== "error";
-  const showFallback = !activeAvatarUrl || activeAvatarStatus !== "loaded";
+    colorMode === "dark"
+      ? (avatarUrlDark ?? avatarUrlLight)
+      : (avatarUrlLight ?? avatarUrlDark);
+  const activeAvatarStatus = hasText(activeAvatarUrl)
+    ? avatarStatusByUrl[activeAvatarUrl]
+    : undefined;
+  const canRenderAvatar =
+    hasText(activeAvatarUrl) && activeAvatarStatus !== "error";
+  const showFallback =
+    !hasText(activeAvatarUrl) || activeAvatarStatus !== "loaded";
 
   const updateAvatarStatus = (url: string, status: AvatarStatus) => {
     setAvatarStatusByUrl((current) =>
-      current[url] === status ? current : { ...current, [url]: status },
+      current[url] === status ? current : { ...current, [url]: status }
     );
   };
 
@@ -40,12 +51,12 @@ export const SenderAvatar = ({
       className={cn(
         "relative flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg text-sm font-medium text-muted-fg",
         { "bg-muted/80": showFallback },
-        className,
+        className
       )}
     >
       {showFallback && <span className={labelClassName}>{fallbackLabel}</span>}
 
-      {canRenderAvatar && activeAvatarUrl && (
+      {canRenderAvatar && hasText(activeAvatarUrl) ? (
         <img
           alt=""
           aria-hidden="true"
@@ -61,7 +72,7 @@ export const SenderAvatar = ({
           }}
           src={activeAvatarUrl}
         />
-      )}
+      ) : null}
     </div>
   );
 };

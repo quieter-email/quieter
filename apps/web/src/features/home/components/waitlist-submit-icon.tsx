@@ -1,5 +1,11 @@
-import { Add01Icon, Cancel01Icon, Loading03Icon, Tick01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
+import {
+  Add01Icon,
+  Cancel01Icon,
+  Loading03Icon,
+  Tick01Icon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import type { IconSvgElement } from "@hugeicons/react";
 import { AnimatePresence, m } from "motion/react";
 
 export type WaitlistIconState = "error" | "idle" | "loading" | "success";
@@ -15,7 +21,7 @@ export const WaitlistSubmitIcon = ({ state }: { state: WaitlistIconState }) => (
   <AnimatePresence initial={false} mode="popLayout">
     <m.span
       animate={{ opacity: 1, scale: 1 }}
-      className="grid place-items-center will-change-[transform,opacity]"
+      className="grid place-items-center"
       exit={{ opacity: 0, scale: 0.9 }}
       initial={{ opacity: 0.5, scale: 0.9 }}
       key={state}

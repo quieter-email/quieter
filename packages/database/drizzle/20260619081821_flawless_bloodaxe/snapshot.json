@@ -7992,7 +7992,12 @@
     },
     {
       "nameExplicit": true,
-      "columns": ["organizationId", "periodStart", "target", "milestonePercent"],
+      "columns": [
+        "organizationId",
+        "periodStart",
+        "target",
+        "milestonePercent"
+      ],
       "nullsNotDistinct": false,
       "name": "organization_mail_usage_alert_event_period_milestone_unique",
       "entityType": "uniques",

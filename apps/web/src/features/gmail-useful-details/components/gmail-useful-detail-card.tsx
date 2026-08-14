@@ -1,15 +1,21 @@
 "use client";
 
-import type { RouterOutputs } from "@quieter/orpc";
-import { Cancel01Icon, Copy01Icon, ThumbsDownIcon, ThumbsUpIcon } from "@hugeicons/core-free-icons";
+import {
+  Cancel01Icon,
+  Copy01Icon,
+  ThumbsDownIcon,
+  ThumbsUpIcon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import type { RouterOutputs } from "@quieter/orpc";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { getGmailUsefulDetailsQueryKey } from "~/lib/gmail/useful-details-query";
-import { orpc } from "~/lib/orpc";
+
+import { getGmailUsefulDetailsQueryKey } from "#/lib/gmail/useful-details-query";
+import { orpc } from "#/lib/orpc";
 
 type UsefulDetailsData = RouterOutputs["mail"]["listGmailUsefulDetails"];
 export type GmailUsefulDetail = UsefulDetailsData["items"][number];
@@ -42,6 +48,9 @@ const summaryFirstKinds = new Set<GmailUsefulDetail["kind"]>([
   "travel",
 ]);
 
+const hasText = (value: string | null | undefined): value is string =>
+  value !== null && value !== undefined && value !== "";
+
 const copyText = async (value: string) => {
   try {
     await navigator.clipboard.writeText(value);
@@ -53,19 +62,23 @@ const copyText = async (value: string) => {
 
 const getDetailMetadata = (detail: GmailUsefulDetail) => {
   if (detail.kind === "verification_code") {
-    return detail.code ? [detail.code] : [];
+    return hasText(detail.code) ? [detail.code] : [];
   }
 
   return [
-    detail.kind === "delivery" && detail.status ? deliveryStatusLabels[detail.status] : null,
-    detail.eventAt ? eventDateFormatter.format(new Date(detail.eventAt)) : null,
+    detail.kind === "delivery" && hasText(detail.status)
+      ? deliveryStatusLabels[detail.status]
+      : null,
+    detail.eventAt instanceof Date
+      ? eventDateFormatter.format(detail.eventAt)
+      : null,
     detail.location,
     detail.reference,
   ].filter((value): value is string => Boolean(value));
 };
 
 const getDetailText = (detail: GmailUsefulDetail, metadata: string[]) => {
-  if (detail.summary && summaryFirstKinds.has(detail.kind)) {
+  if (hasText(detail.summary) && summaryFirstKinds.has(detail.kind)) {
     return {
       headline: detail.summary,
       kicker: metadata.includes(detail.title) ? null : detail.title,
@@ -96,28 +109,35 @@ export const GmailUsefulDetailCard = ({
       toast.error("Could not save your preference.");
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: getGmailUsefulDetailsQueryKey(mailboxId) });
+      await queryClient.invalidateQueries({
+        queryKey: getGmailUsefulDetailsQueryKey(mailboxId),
+      });
     },
   });
   const copyValue =
-    detail.kind === "verification_code" ? detail.code : (detail.trackingNumber ?? detail.reference);
+    detail.kind === "verification_code"
+      ? detail.code
+      : (detail.trackingNumber ?? detail.reference);
   const metadata = getDetailMetadata(detail);
   const detailText = getDetailText(detail, metadata);
-  const isVerificationCode = detail.kind === "verification_code" && !!detail.code;
+  const isVerificationCode =
+    detail.kind === "verification_code" && hasText(detail.code);
   const feedback = feedbackMutation.isError
     ? detail.feedback
     : (feedbackMutation.variables?.feedback ?? detail.feedback);
   const content = isVerificationCode ? (
     <span className="block min-w-0">
-      <span className="block text-xs/4 font-medium text-muted-fg">{detailText.headline}</span>
+      <span className="block text-xs/4 font-medium text-muted-fg">
+        {detailText.headline}
+      </span>
       <span className="mt-2 block font-mono text-xl font-medium tracking-widest text-fg">
         {detail.code}
       </span>
-      {detailText.kicker && (
+      {hasText(detailText.kicker) ? (
         <span className="mt-2 block text-xs/4 wrap-break-word text-muted-fg">
           {detailText.kicker}
         </span>
-      )}
+      ) : null}
     </span>
   ) : (
     <span className="block min-w-0">
@@ -133,11 +153,11 @@ export const GmailUsefulDetailCard = ({
           ))}
         </span>
       )}
-      {detailText.kicker && (
+      {hasText(detailText.kicker) ? (
         <span className="mt-1.5 block text-xs/4 wrap-break-word text-muted-fg">
           {detailText.kicker}
         </span>
-      )}
+      ) : null}
     </span>
   );
 
@@ -148,11 +168,15 @@ export const GmailUsefulDetailCard = ({
           "relative z-10 grid min-w-0 grid-cols-1 items-start gap-x-3 gap-y-2 rounded-xl bg-card px-4 py-3.5 shadow-xs sm:grid-cols-[minmax(0,1fr)_auto]",
           {
             "bg-q-red": detail.kind === "security_alert",
-          },
+          }
         )}
       >
         {onOpen ? (
-          <button className="min-w-0 rounded-md text-left" onClick={onOpen} type="button">
+          <button
+            className="min-w-0 rounded-md text-left"
+            onClick={onOpen}
+            type="button"
+          >
             {content}
           </button>
         ) : (
@@ -160,7 +184,7 @@ export const GmailUsefulDetailCard = ({
         )}
 
         <div className="flex shrink-0 items-center gap-0.5 justify-self-end">
-          {copyValue && (
+          {hasText(copyValue) ? (
             <Button
               className="mr-1 h-8 gap-1.5 rounded-lg bg-secondary/65 px-2.5 text-xs hover:bg-secondary"
               onClick={() => void copyText(copyValue)}
@@ -168,10 +192,14 @@ export const GmailUsefulDetailCard = ({
               type="button"
               variant="ghost"
             >
-              <HugeiconsIcon aria-hidden className="size-3.5" icon={Copy01Icon} />
+              <HugeiconsIcon
+                aria-hidden
+                className="size-3.5"
+                icon={Copy01Icon}
+              />
               {isVerificationCode ? "Copy code" : "Copy"}
             </Button>
-          )}
+          ) : null}
 
           <IconButtonTooltip label="Useful">
             <button
@@ -181,15 +209,23 @@ export const GmailUsefulDetailCard = ({
                 "flex size-8 shrink-0 items-center justify-center rounded-md text-muted-fg hover:bg-muted hover:text-fg disabled:pointer-events-none disabled:opacity-50",
                 {
                   "bg-muted text-fg": feedback === "useful",
-                },
+                }
               )}
               disabled={feedbackMutation.isPending}
-              onClick={() =>
-                feedbackMutation.mutate({ feedback: "useful", id: detail.id, mailboxId })
-              }
+              onClick={() => {
+                feedbackMutation.mutate({
+                  feedback: "useful",
+                  id: detail.id,
+                  mailboxId,
+                });
+              }}
               type="button"
             >
-              <HugeiconsIcon aria-hidden className="size-4" icon={ThumbsUpIcon} />
+              <HugeiconsIcon
+                aria-hidden
+                className="size-4"
+                icon={ThumbsUpIcon}
+              />
             </button>
           </IconButtonTooltip>
 
@@ -201,15 +237,23 @@ export const GmailUsefulDetailCard = ({
                 "flex size-8 shrink-0 items-center justify-center rounded-md text-muted-fg hover:bg-muted hover:text-fg disabled:pointer-events-none disabled:opacity-50",
                 {
                   "bg-muted text-fg": feedback === "not_useful",
-                },
+                }
               )}
               disabled={feedbackMutation.isPending}
-              onClick={() =>
-                feedbackMutation.mutate({ feedback: "not_useful", id: detail.id, mailboxId })
-              }
+              onClick={() => {
+                feedbackMutation.mutate({
+                  feedback: "not_useful",
+                  id: detail.id,
+                  mailboxId,
+                });
+              }}
               type="button"
             >
-              <HugeiconsIcon aria-hidden className="size-4" icon={ThumbsDownIcon} />
+              <HugeiconsIcon
+                aria-hidden
+                className="size-4"
+                icon={ThumbsDownIcon}
+              />
             </button>
           </IconButtonTooltip>
 
@@ -221,7 +265,11 @@ export const GmailUsefulDetailCard = ({
                 onClick={onDismiss}
                 type="button"
               >
-                <HugeiconsIcon aria-hidden className="size-4" icon={Cancel01Icon} />
+                <HugeiconsIcon
+                  aria-hidden
+                  className="size-4"
+                  icon={Cancel01Icon}
+                />
               </button>
             </IconButtonTooltip>
           )}

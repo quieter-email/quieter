@@ -25,13 +25,25 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { z } from "zod";
-import { setDemoModeEnabled } from "~/features/settings/domain/demo-mode-setting";
-import { setManagedDemoModeEnabled } from "~/features/settings/domain/managed-demo-mode-setting";
-import { authClient } from "~/lib/auth";
-import { orpc } from "~/lib/orpc";
-import { clearPreviewPersonaCookie, setPreviewPersona } from "~/lib/preview-personas";
-import { queryPersister } from "~/lib/query-persister";
-import { SettingsCard, SettingsFieldRow, SettingsSection } from "./settings-layout";
+
+import { setDemoModeEnabled } from "#/features/settings/domain/demo-mode-setting";
+import { setManagedDemoModeEnabled } from "#/features/settings/domain/managed-demo-mode-setting";
+import { authClient } from "#/lib/auth";
+import { orpc } from "#/lib/orpc";
+import {
+  clearPreviewPersonaCookie,
+  setPreviewPersona,
+} from "#/lib/preview-personas";
+import { queryPersister } from "#/lib/query-persister";
+
+import {
+  SettingsCard,
+  SettingsFieldRow,
+  SettingsSection,
+} from "./settings-layout";
+
+const getMutationErrorMessage = (error: unknown, fallback: string) =>
+  error instanceof Error ? error.message : fallback;
 
 type SettingsUser = {
   email: string;
@@ -42,38 +54,113 @@ type AccountSettingsPanelProps = {
   initialUser: SettingsUser;
 };
 
-const passkeyDateFormatter = new Intl.DateTimeFormat("en", { dateStyle: "medium" });
+const passkeyDateFormatter = new Intl.DateTimeFormat("en", {
+  dateStyle: "medium",
+});
 
 const formatPasskeyDate = (value: AuthPasskey["createdAt"]) => {
-  if (!value) return "Recently added";
+  if (value === undefined || value === null) {
+    return "Recently added";
+  }
 
   const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return "Recently added";
+  if (Number.isNaN(date.getTime())) {
+    return "Recently added";
+  }
 
   return passkeyDateFormatter.format(date);
 };
 
+const getPasskeyLabel = (passkey: AuthPasskey) => {
+  const trimmedName = passkey.name?.trim() ?? "";
+  return trimmedName === "" ? passkey.deviceType : trimmedName;
+};
+
+const renderPasskeyList = (
+  isPasskeysPending: boolean,
+  passkeys: AuthPasskey[],
+  removingPasskeyId: string | null,
+  onRemovePasskey: (passkeyId: string) => void
+) => {
+  if (isPasskeysPending) {
+    return <p className="text-sm text-muted-fg">Loading passkeys…</p>;
+  }
+
+  if (passkeys.length === 0) {
+    return <p className="text-sm text-muted-fg">No passkeys.</p>;
+  }
+
+  return passkeys.map((passkey) => (
+    <div className="flex items-center justify-between gap-4" key={passkey.id}>
+      <div className="min-w-0">
+        <p className="text-sm text-fg">{getPasskeyLabel(passkey)}</p>
+        <p className="mt-1 text-sm text-muted-fg">
+          {formatPasskeyDate(passkey.createdAt)}
+        </p>
+      </div>
+
+      <Button
+        disabled={removingPasskeyId === passkey.id}
+        onClick={() => {
+          onRemovePasskey(passkey.id);
+        }}
+        size="sm"
+        variant="outline"
+      >
+        {removingPasskeyId === passkey.id ? (
+          <HugeiconsIcon
+            aria-hidden
+            className="size-4 animate-spin"
+            icon={Loading03Icon}
+          />
+        ) : (
+          <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
+        )}
+        Remove
+      </Button>
+    </div>
+  ));
+};
+
 const EditNameDialog = ({
   currentName,
-  onSessionRefresh,
+  handleSessionRefresh,
 }: {
   currentName: string;
-  onSessionRefresh: () => Promise<unknown>;
+  handleSessionRefresh: () => Promise<unknown>;
 }) => {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
   const updateUserMutation = useMutation({
     mutationFn: async (input: { name: string }) => {
-      const response = await authClient.updateUser(input);
-      if (response.error) {
-        throw new Error(response.error.message ?? "Could not update name.");
+      const response: unknown = await authClient.$fetch("/update-user", {
+        body: input,
+        method: "POST",
+        throw: false,
+      });
+      if (
+        typeof response === "object" &&
+        response !== null &&
+        "error" in response &&
+        response.error !== null &&
+        response.error !== undefined
+      ) {
+        const authError = response.error;
+        const message =
+          typeof authError === "object" &&
+          authError !== null &&
+          "message" in authError &&
+          typeof authError.message === "string"
+            ? authError.message
+            : "Could not update name.";
+        throw new Error(message);
       }
       return response;
     },
     mutationKey: ["auth", "update-user"],
     onSuccess: async () => {
-      await onSessionRefresh();
+      await handleSessionRefresh();
       await queryClient.invalidateQueries();
     },
   });
@@ -87,10 +174,11 @@ const EditNameDialog = ({
       try {
         await updateUserMutation.mutateAsync({ name: value.name.trim() });
         setOpen(false);
-        resetDialog();
+        setSubmitError(null);
+        form.reset({ name: currentName });
       } catch (mutationError) {
         setSubmitError(
-          (mutationError as { message?: string })?.message ?? "Could not update name.",
+          getMutationErrorMessage(mutationError, "Could not update name.")
         );
       }
     },
@@ -123,7 +211,9 @@ const EditNameDialog = ({
       <Dialog
         onOpenChange={(nextOpen) => {
           setOpen(nextOpen);
-          if (!nextOpen) resetDialog();
+          if (!nextOpen) {
+            resetDialog();
+          }
         }}
         open={open}
       >
@@ -144,7 +234,9 @@ const EditNameDialog = ({
                     <TextFieldInput
                       aria-invalid={field.state.meta.errors.length > 0}
                       name={field.name}
-                      onBlur={() => field.handleBlur()}
+                      onBlur={() => {
+                        field.handleBlur();
+                      }}
                       onChange={(event) => {
                         setSubmitError(null);
                         field.handleChange(event.target.value);
@@ -152,7 +244,10 @@ const EditNameDialog = ({
                       value={field.state.value}
                     />
                     {field.state.meta.errors.map((error) => (
-                      <p className="text-sm text-destructive" key={error?.message}>
+                      <p
+                        className="text-sm text-destructive"
+                        key={error?.message}
+                      >
                         {error?.message}
                       </p>
                     ))}
@@ -160,16 +255,32 @@ const EditNameDialog = ({
                 )}
               </form.Field>
 
-              {submitError && <p className="text-sm text-destructive">{submitError}</p>}
+              {submitError === null ? null : (
+                <p className="text-sm text-destructive">{submitError}</p>
+              )}
             </DialogBody>
 
             <DialogFooter>
-              <DialogCloseButton disabled={updateUserMutation.isPending}>Cancel</DialogCloseButton>
-              <Button disabled={updateUserMutation.isPending} size="sm" type="submit">
+              <DialogCloseButton disabled={updateUserMutation.isPending}>
+                Cancel
+              </DialogCloseButton>
+              <Button
+                disabled={updateUserMutation.isPending}
+                size="sm"
+                type="submit"
+              >
                 {updateUserMutation.isPending ? (
-                  <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-4 animate-spin"
+                    icon={Loading03Icon}
+                  />
                 ) : (
-                  <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-4"
+                    icon={Edit01Icon}
+                  />
                 )}
                 Save
               </Button>
@@ -191,7 +302,7 @@ const EditEmailDialog = ({ currentEmail }: { currentEmail: string }) => {
         orpc.auth.getUserStatus.queryOptions({
           input: { email: input.newEmail },
           staleTime: 0,
-        }),
+        })
       );
 
       if (status.exists) {
@@ -200,7 +311,9 @@ const EditEmailDialog = ({ currentEmail }: { currentEmail: string }) => {
 
       const response = await authClient.changeEmail(input);
       if (response.error) {
-        throw new Error(response.error.message ?? "Could not start email change.");
+        throw new Error(
+          response.error.message ?? "Could not start email change."
+        );
       }
       return response;
     },
@@ -222,7 +335,10 @@ const EditEmailDialog = ({ currentEmail }: { currentEmail: string }) => {
         });
       } catch (mutationError) {
         setSubmitError(
-          (mutationError as { message?: string })?.message ?? "Could not start email change.",
+          getMutationErrorMessage(
+            mutationError,
+            "Could not start email change."
+          )
         );
       }
     },
@@ -233,13 +349,17 @@ const EditEmailDialog = ({ currentEmail }: { currentEmail: string }) => {
           .string()
           .trim()
           .min(1, "Email is required.")
-          .email("Enter a valid email.")
-          .regex(
-            new RegExp(
-              `^(?!${currentEmail.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$).+$`,
-              "i",
-            ),
-            "Enter a different email.",
+          .refine(
+            (value) => z.email().safeParse(value).success,
+            "Enter a valid email."
+          )
+          .refine(
+            (value) =>
+              new RegExp(
+                `^(?!${currentEmail.trim().replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&")}$).+$`,
+                "iu"
+              ).test(value),
+            "Enter a different email."
           ),
       }),
     },
@@ -266,7 +386,9 @@ const EditEmailDialog = ({ currentEmail }: { currentEmail: string }) => {
       <Dialog
         onOpenChange={(nextOpen) => {
           setOpen(nextOpen);
-          if (!nextOpen) resetDialog();
+          if (!nextOpen) {
+            resetDialog();
+          }
         }}
         open={open}
       >
@@ -289,7 +411,9 @@ const EditEmailDialog = ({ currentEmail }: { currentEmail: string }) => {
                       autoCapitalize="none"
                       autoCorrect="off"
                       name={field.name}
-                      onBlur={() => field.handleBlur()}
+                      onBlur={() => {
+                        field.handleBlur();
+                      }}
                       onChange={(event) => {
                         setSubmitError(null);
                         field.handleChange(event.target.value);
@@ -298,7 +422,10 @@ const EditEmailDialog = ({ currentEmail }: { currentEmail: string }) => {
                       value={field.state.value}
                     />
                     {field.state.meta.errors.map((error) => (
-                      <p className="text-sm text-destructive" key={error?.message}>
+                      <p
+                        className="text-sm text-destructive"
+                        key={error?.message}
+                      >
                         {error?.message}
                       </p>
                     ))}
@@ -306,16 +433,32 @@ const EditEmailDialog = ({ currentEmail }: { currentEmail: string }) => {
                 )}
               </form.Field>
 
-              {submitError && <p className="text-sm text-destructive">{submitError}</p>}
+              {submitError === null ? null : (
+                <p className="text-sm text-destructive">{submitError}</p>
+              )}
             </DialogBody>
 
             <DialogFooter>
-              <DialogCloseButton disabled={changeEmailMutation.isPending}>Cancel</DialogCloseButton>
-              <Button disabled={changeEmailMutation.isPending} size="sm" type="submit">
+              <DialogCloseButton disabled={changeEmailMutation.isPending}>
+                Cancel
+              </DialogCloseButton>
+              <Button
+                disabled={changeEmailMutation.isPending}
+                size="sm"
+                type="submit"
+              >
                 {changeEmailMutation.isPending ? (
-                  <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-4 animate-spin"
+                    icon={Loading03Icon}
+                  />
                 ) : (
-                  <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-4"
+                    icon={Edit01Icon}
+                  />
                 )}
                 Save
               </Button>
@@ -334,17 +477,34 @@ const PasskeysDialog = ({
   isPasskeysPending: boolean;
   passkeys: AuthPasskey[];
 }) => {
-  const [removingPasskeyId, setRemovingPasskeyId] = useState<string | null>(null);
+  const [removingPasskeyId, setRemovingPasskeyId] = useState<string | null>(
+    null
+  );
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
   const addPasskeyMutation = useMutation({
     mutationFn: async (name: string) => {
+      const trimmedName = name.trim();
       const response = await authClient.passkey.addPasskey({
-        name: name.trim() || undefined,
+        name: trimmedName === "" ? undefined : trimmedName,
       });
-      if (response?.error) {
-        throw new Error(response.error.message ?? "Could not create a passkey.");
+      if (
+        typeof response === "object" &&
+        response !== null &&
+        "error" in response &&
+        response.error !== null &&
+        response.error !== undefined
+      ) {
+        const authError = response.error;
+        const message =
+          typeof authError === "object" &&
+          authError !== null &&
+          "message" in authError &&
+          typeof authError.message === "string"
+            ? authError.message
+            : "Could not create a passkey.";
+        throw new Error(message);
       }
       return response;
     },
@@ -355,14 +515,27 @@ const PasskeysDialog = ({
   });
   const deletePasskeyMutation = useMutation({
     mutationFn: async (input: { id: string }) => {
-      const response = (await authClient.$fetch("/passkey/delete-passkey", {
+      const response = await authClient.$fetch("/passkey/delete-passkey", {
         body: input,
         method: "POST",
         throw: false,
-      })) as { error?: { message?: string } };
+      });
 
-      if (response.error) {
-        throw new Error(response.error.message ?? "Could not remove the passkey.");
+      if (
+        typeof response === "object" &&
+        response !== null &&
+        "error" in response &&
+        response.error !== null &&
+        response.error !== undefined
+      ) {
+        const errorMessage =
+          typeof response.error === "object" &&
+          response.error !== null &&
+          "message" in response.error &&
+          typeof response.error.message === "string"
+            ? response.error.message
+            : "Could not remove the passkey.";
+        throw new Error(errorMessage);
       }
       return response;
     },
@@ -374,8 +547,8 @@ const PasskeysDialog = ({
 
   const supportsPasskeys =
     typeof window !== "undefined" &&
-    typeof window.PublicKeyCredential !== "undefined" &&
-    typeof window.isSecureContext !== "undefined" &&
+    window.PublicKeyCredential !== undefined &&
+    window.isSecureContext !== undefined &&
     window.isSecureContext;
   const form = useForm({
     defaultValues: {
@@ -394,7 +567,7 @@ const PasskeysDialog = ({
         form.reset({ label: "" });
       } catch (mutationError) {
         setSubmitError(
-          (mutationError as { message?: string })?.message ?? "Could not create a passkey.",
+          getMutationErrorMessage(mutationError, "Could not create a passkey.")
         );
       }
     },
@@ -419,10 +592,14 @@ const PasskeysDialog = ({
       setRemovingPasskeyId(null);
     } catch (mutationError) {
       setSubmitError(
-        (mutationError as { message?: string })?.message ?? "Could not remove the passkey.",
+        getMutationErrorMessage(mutationError, "Could not remove the passkey.")
       );
       setRemovingPasskeyId(null);
     }
+  };
+
+  const handleRemovePasskeyClick = (passkeyId: string) => {
+    void handlePasskeyDelete(passkeyId);
   };
 
   return (
@@ -442,7 +619,9 @@ const PasskeysDialog = ({
       <Dialog
         onOpenChange={(nextOpen) => {
           setOpen(nextOpen);
-          if (!nextOpen) resetDialog();
+          if (!nextOpen) {
+            resetDialog();
+          }
         }}
         open={open}
       >
@@ -463,7 +642,9 @@ const PasskeysDialog = ({
                   <TextField>
                     <TextFieldInput
                       name={field.name}
-                      onBlur={() => field.handleBlur()}
+                      onBlur={() => {
+                        field.handleBlur();
+                      }}
                       onChange={(event) => {
                         setSubmitError(null);
                         field.handleChange(event.target.value);
@@ -481,54 +662,34 @@ const PasskeysDialog = ({
                 type="submit"
               >
                 {addPasskeyMutation.isPending ? (
-                  <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-4 animate-spin"
+                    icon={Loading03Icon}
+                  />
                 ) : (
-                  <HugeiconsIcon aria-hidden className="size-4" icon={Key02Icon} />
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-4"
+                    icon={Key02Icon}
+                  />
                 )}
                 Add passkey
               </Button>
             </form>
 
             <div className="space-y-3">
-              {isPasskeysPending ? (
-                <p className="text-sm text-muted-fg">Loading passkeys…</p>
-              ) : passkeys.length === 0 ? (
-                <p className="text-sm text-muted-fg">No passkeys.</p>
-              ) : (
-                passkeys.map((passkey) => (
-                  <div className="flex items-center justify-between gap-4" key={passkey.id}>
-                    <div className="min-w-0">
-                      <p className="text-sm text-fg">
-                        {passkey.name?.trim() || passkey.deviceType}
-                      </p>
-                      <p className="mt-1 text-sm text-muted-fg">
-                        {formatPasskeyDate(passkey.createdAt)}
-                      </p>
-                    </div>
-
-                    <Button
-                      disabled={removingPasskeyId === passkey.id}
-                      onClick={() => void handlePasskeyDelete(passkey.id)}
-                      size="sm"
-                      variant="outline"
-                    >
-                      {removingPasskeyId === passkey.id ? (
-                        <HugeiconsIcon
-                          aria-hidden
-                          className="size-4 animate-spin"
-                          icon={Loading03Icon}
-                        />
-                      ) : (
-                        <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
-                      )}
-                      Remove
-                    </Button>
-                  </div>
-                ))
+              {renderPasskeyList(
+                isPasskeysPending,
+                passkeys,
+                removingPasskeyId,
+                handleRemovePasskeyClick
               )}
             </div>
 
-            {submitError && <p className="text-sm text-destructive">{submitError}</p>}
+            {submitError === null ? null : (
+              <p className="text-sm text-destructive">{submitError}</p>
+            )}
           </DialogBody>
 
           <DialogFooter>
@@ -551,7 +712,9 @@ const DeleteAccountDialog = () => {
         callbackURL: "/home",
       });
       if (response.error) {
-        throw new Error(response.error.message ?? "Could not delete the account.");
+        throw new Error(
+          response.error.message ?? "Could not delete the account."
+        );
       }
       return response;
     },
@@ -575,7 +738,10 @@ const DeleteAccountDialog = () => {
         await deleteAccountMutation.mutateAsync();
       } catch (mutationError) {
         setSubmitError(
-          (mutationError as { message?: string })?.message ?? "Could not delete the account.",
+          getMutationErrorMessage(
+            mutationError,
+            "Could not delete the account."
+          )
         );
       }
     },
@@ -586,7 +752,7 @@ const DeleteAccountDialog = () => {
           .string()
           .trim()
           .toLowerCase()
-          .regex(/^delete my account$/, 'Type "delete my account".'),
+          .regex(/^delete my account$/u, 'Type "delete my account".'),
       }),
     },
   });
@@ -612,7 +778,9 @@ const DeleteAccountDialog = () => {
       <Dialog
         onOpenChange={(nextOpen) => {
           setOpen(nextOpen);
-          if (!nextOpen) resetDialog();
+          if (!nextOpen) {
+            resetDialog();
+          }
         }}
         open={open}
       >
@@ -628,7 +796,8 @@ const DeleteAccountDialog = () => {
           >
             <DialogBody className="space-y-3">
               <p className="text-sm text-muted-fg">
-                Type <span className="font-medium text-fg">delete my account</span>
+                Type{" "}
+                <span className="font-medium text-fg">delete my account</span>
               </p>
 
               <form.Field name="confirmation">
@@ -637,7 +806,9 @@ const DeleteAccountDialog = () => {
                     <TextFieldInput
                       aria-invalid={field.state.meta.errors.length > 0}
                       name={field.name}
-                      onBlur={() => field.handleBlur()}
+                      onBlur={() => {
+                        field.handleBlur();
+                      }}
                       onChange={(event) => {
                         setSubmitError(null);
                         field.handleChange(event.target.value);
@@ -646,7 +817,10 @@ const DeleteAccountDialog = () => {
                       value={field.state.value}
                     />
                     {field.state.meta.errors.map((error) => (
-                      <p className="text-sm text-destructive" key={error?.message}>
+                      <p
+                        className="text-sm text-destructive"
+                        key={error?.message}
+                      >
                         {error?.message}
                       </p>
                     ))}
@@ -654,7 +828,9 @@ const DeleteAccountDialog = () => {
                 )}
               </form.Field>
 
-              {submitError && <p className="text-sm text-destructive">{submitError}</p>}
+              {submitError === null ? null : (
+                <p className="text-sm text-destructive">{submitError}</p>
+              )}
             </DialogBody>
 
             <DialogFooter>
@@ -668,9 +844,17 @@ const DeleteAccountDialog = () => {
                 variant="destructive"
               >
                 {deleteAccountMutation.isPending ? (
-                  <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-4 animate-spin"
+                    icon={Loading03Icon}
+                  />
                 ) : (
-                  <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-4"
+                    icon={Delete02Icon}
+                  />
                 )}
                 Delete
               </Button>
@@ -682,7 +866,9 @@ const DeleteAccountDialog = () => {
   );
 };
 
-export const AccountSettingsPanel = ({ initialUser }: AccountSettingsPanelProps) => {
+export const AccountSettingsPanel = ({
+  initialUser,
+}: AccountSettingsPanelProps) => {
   const [sessionError, setSessionError] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -725,8 +911,14 @@ export const AccountSettingsPanel = ({ initialUser }: AccountSettingsPanelProps)
     try {
       await signOutMutation.mutateAsync();
     } catch (mutationError) {
-      setSessionError((mutationError as { message?: string })?.message ?? "Could not sign out.");
+      setSessionError(
+        getMutationErrorMessage(mutationError, "Could not sign out.")
+      );
     }
+  };
+
+  const handleSignOutClick = () => {
+    void handleSignOut();
   };
 
   return (
@@ -735,7 +927,10 @@ export const AccountSettingsPanel = ({ initialUser }: AccountSettingsPanelProps)
         <SettingsCard>
           <SettingsFieldRow
             action={
-              <EditNameDialog currentName={user.name} onSessionRefresh={sessionState.refetch} />
+              <EditNameDialog
+                currentName={user.name}
+                handleSessionRefresh={sessionState.refetch}
+              />
             }
             label="Name"
             value={user.name}
@@ -753,24 +948,39 @@ export const AccountSettingsPanel = ({ initialUser }: AccountSettingsPanelProps)
         <SettingsCard>
           <SettingsFieldRow
             action={
-              <PasskeysDialog isPasskeysPending={passkeysState.isPending} passkeys={passkeys} />
+              <PasskeysDialog
+                isPasskeysPending={passkeysState.isPending}
+                passkeys={passkeys}
+              />
             }
             label="Passkeys"
-            value={passkeys.length === 1 ? "1 Passkey" : `${passkeys.length} Passkeys`}
+            value={
+              passkeys.length === 1
+                ? "1 Passkey"
+                : `${passkeys.length} Passkeys`
+            }
           />
 
           <SettingsFieldRow
             action={
               <Button
                 disabled={signOutMutation.isPending}
-                onClick={() => void handleSignOut()}
+                onClick={handleSignOutClick}
                 size="sm"
                 variant="outline"
               >
                 {signOutMutation.isPending ? (
-                  <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-4 animate-spin"
+                    icon={Loading03Icon}
+                  />
                 ) : (
-                  <HugeiconsIcon aria-hidden className="size-4" icon={Logout03Icon} />
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-4"
+                    icon={Logout03Icon}
+                  />
                 )}
                 Sign out
               </Button>
@@ -779,7 +989,9 @@ export const AccountSettingsPanel = ({ initialUser }: AccountSettingsPanelProps)
             value="Current browser session"
           />
         </SettingsCard>
-        {sessionError && <p className="px-1 text-sm text-destructive">{sessionError}</p>}
+        {sessionError === null ? null : (
+          <p className="px-1 text-sm text-destructive">{sessionError}</p>
+        )}
       </SettingsSection>
 
       <SettingsSection title="Danger zone">

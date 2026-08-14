@@ -2,7 +2,11 @@ import { db } from "@quieter/database/client";
 import { rateLimitBucket } from "@quieter/database/schema";
 import { sql } from "drizzle-orm";
 
-export const consumeRateLimit = async (input: { key: string; limit: number; windowMs: number }) => {
+export const consumeRateLimit = async (input: {
+  key: string;
+  limit: number;
+  windowMs: number;
+}) => {
   const now = new Date();
   const expiresAt = new Date(now.getTime() + input.windowMs);
   const nowValue = now.toISOString();
@@ -29,7 +33,7 @@ export const consumeRateLimit = async (input: { key: string; limit: number; wind
     });
 
   return {
-    allowed: !!bucket && bucket.count <= input.limit,
+    allowed: bucket !== undefined && bucket.count <= input.limit,
     remaining: Math.max(0, input.limit - (bucket?.count ?? input.limit)),
     resetAt: bucket?.expiresAt ?? expiresAt,
   };

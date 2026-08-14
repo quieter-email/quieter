@@ -9,8 +9,8 @@ const actionLabels: Record<ModifyMailToolResult["action"], string> = {
   mark_unread: "Marked unread",
   star: "Starred",
   trash: "Moved to trash",
-  untrash: "Restored from trash",
   unstar: "Unstarred",
+  untrash: "Restored from trash",
 };
 
 const pendingActionLabels: Record<ModifyMailToolResult["action"], string> = {
@@ -19,9 +19,12 @@ const pendingActionLabels: Record<ModifyMailToolResult["action"], string> = {
   mark_unread: "Marking unread",
   star: "Starring",
   trash: "Moving to trash",
-  untrash: "Restoring",
   unstar: "Unstarring",
+  untrash: "Restoring",
 };
+
+const hasText = (value: string | null | undefined): value is string =>
+  value !== null && value !== undefined && value !== "";
 
 type ModifyToolProps = {
   action?: ModifyMailToolResult["action"];
@@ -42,19 +45,26 @@ export const ModifyTool = ({
 }: ModifyToolProps) => {
   const resolvedAction = data?.action ?? action;
   const resolvedTarget = data?.target ?? target;
-  const label = resolvedAction
-    ? pending
+  let label: string;
+  if (resolvedAction === undefined) {
+    label = pending ? "Updating mail" : "Updated mail";
+  } else {
+    label = pending
       ? pendingActionLabels[resolvedAction]
-      : actionLabels[resolvedAction]
-    : pending
-      ? "Updating mail"
-      : "Updated mail";
-  const meta =
-    resolvedTarget && (data?.id || !pending)
-      ? resolvedTarget === "thread"
-        ? "thread"
-        : "message"
-      : undefined;
+      : actionLabels[resolvedAction];
+  }
+  let meta: string | undefined;
+  if (hasText(resolvedTarget) && (hasText(data?.id) || !pending)) {
+    meta = resolvedTarget === "thread" ? "thread" : "message";
+  }
 
-  return <ToolStep error={error} label={label} meta={meta} nested={nested} pending={pending} />;
+  return (
+    <ToolStep
+      error={error}
+      label={label}
+      meta={meta}
+      nested={nested}
+      pending={pending}
+    />
+  );
 };

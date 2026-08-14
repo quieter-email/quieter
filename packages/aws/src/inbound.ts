@@ -3,13 +3,16 @@ import { serverEnv } from "@quieter/env/server";
 import { recordInboundManagedMessage } from "@quieter/orpc/managed-mail/ingestion";
 import { Resource } from "sst";
 import { z } from "zod";
+
 import {
   bearerTokenMatches,
   getBearerToken,
   parseEventJson,
   toJson,
-  type LambdaFunctionUrlEvent,
-  type LambdaFunctionUrlResponse,
+} from "./function-url";
+import type {
+  LambdaFunctionUrlEvent,
+  LambdaFunctionUrlResponse,
 } from "./function-url";
 import { deleteMailObjectUnlessTracked } from "./mail-object-retention";
 import {
@@ -30,16 +33,25 @@ const inboundPayloadSchema = z
     recipients: z.array(z.string().trim().min(3)).min(1),
     subject: z.string().trim().min(1).nullish(),
   })
-  .refine((input) => !!(input.rawMime || input.rawMimeBase64), {
-    message: "Either rawMime or rawMimeBase64 is required.",
-    path: ["rawMime"],
-  });
+  .refine(
+    (input) =>
+      (input.rawMime !== null &&
+        input.rawMime !== undefined &&
+        input.rawMime.length > 0) ||
+      (input.rawMimeBase64 !== null &&
+        input.rawMimeBase64 !== undefined &&
+        input.rawMimeBase64.length > 0),
+    {
+      message: "Either rawMime or rawMimeBase64 is required.",
+      path: ["rawMime"],
+    }
+  );
 
 let s3Client: S3Client | null = null;
 
 const getS3Client = () => {
   s3Client ??= new S3Client({
-    region: serverEnv.AWS_REGION || serverEnv.AWS_DEFAULT_REGION,
+    region: serverEnv.AWS_REGION ?? serverEnv.AWS_DEFAULT_REGION,
   });
 
   return s3Client;
@@ -47,14 +59,14 @@ const getS3Client = () => {
 
 const getMailObjectKey = (receivedAt: Date) =>
   `mail/inbound/${String(receivedAt.getUTCFullYear())}/${String(
-    receivedAt.getUTCMonth() + 1,
+    receivedAt.getUTCMonth() + 1
   ).padStart(
     2,
-    "0",
+    "0"
   )}/${String(receivedAt.getUTCDate()).padStart(2, "0")}/${crypto.randomUUID()}.eml`;
 
 export const handler = async (
-  event: LambdaFunctionUrlEvent,
+  event: LambdaFunctionUrlEvent
 ): Promise<LambdaFunctionUrlResponse> => {
   try {
     const method = event.requestContext?.http?.method?.toUpperCase();
@@ -64,7 +76,7 @@ export const handler = async (
         {
           error: "Method not allowed",
         },
-        405,
+        405
       );
     }
 
@@ -75,7 +87,7 @@ export const handler = async (
         {
           error: "Unauthorized",
         },
-        401,
+        401
       );
     }
 
@@ -87,50 +99,52 @@ export const handler = async (
           error: "Invalid inbound payload",
           issues: parsed.error.issues,
         },
-        400,
+        400
       );
     }
 
     const receivedAt = parsed.data.receivedAt ?? new Date();
     const s3Key = getMailObjectKey(receivedAt);
     const providerMessageId =
-      parsed.data.providerMessageId?.trim() ||
-      parsed.data.messageIdHeader?.trim() ||
+      parsed.data.providerMessageId?.trim() ??
+      parsed.data.messageIdHeader?.trim() ??
       crypto.randomUUID();
-    const rawMessage = parsed.data.rawMimeBase64
-      ? Buffer.from(parsed.data.rawMimeBase64, "base64")
-      : Buffer.from(parsed.data.rawMime ?? "", "utf8");
+    const rawMimeBase64 = parsed.data.rawMimeBase64 ?? "";
+    const rawMessage =
+      rawMimeBase64 === ""
+        ? Buffer.from(parsed.data.rawMime ?? "", "utf-8")
+        : Buffer.from(rawMimeBase64, "base64");
     const rawObjectProvider = getCanonicalRawMailProvider();
     const rawObjectBucket = getCanonicalRawMailBucket(Resource.MailBucket.name);
 
-    if (rawObjectProvider === "s3") {
-      await getS3Client().send(
-        new PutObjectCommand({
-          Body: rawMessage,
-          Bucket: Resource.MailBucket.name,
-          ContentType: "message/rfc822",
-          Key: s3Key,
-        }),
-      );
-    } else {
-      await putRawMailObject(
-        {
-          bucket: rawObjectBucket,
-          key: s3Key,
-          provider: rawObjectProvider,
-        },
-        {
-          Body: rawMessage,
-          ContentLength: rawMessage.byteLength,
-          ContentType: "message/rfc822",
-        },
-      );
-    }
-    const recipients = Array.from(
-      new Set(
-        parsed.data.recipients.map((recipient) => recipient.trim().toLowerCase()).filter(Boolean),
+    await (rawObjectProvider === "s3"
+      ? getS3Client().send(
+          new PutObjectCommand({
+            Body: rawMessage,
+            Bucket: Resource.MailBucket.name,
+            ContentType: "message/rfc822",
+            Key: s3Key,
+          })
+        )
+      : putRawMailObject(
+          {
+            bucket: rawObjectBucket,
+            key: s3Key,
+            provider: rawObjectProvider,
+          },
+          {
+            Body: rawMessage,
+            ContentLength: rawMessage.byteLength,
+            ContentType: "message/rfc822",
+          }
+        ));
+    const recipients = [
+      ...new Set(
+        parsed.data.recipients
+          .map((recipient) => recipient.trim().toLowerCase())
+          .filter(Boolean)
       ),
-    );
+    ];
     let mailboxIds: string[];
     try {
       mailboxIds = await recordInboundManagedMessage({
@@ -142,7 +156,8 @@ export const handler = async (
         rawSizeBytes: rawMessage.byteLength,
         receivedAt,
         recipients,
-        s3Bucket: rawObjectProvider === "s3" ? Resource.MailBucket.name : undefined,
+        s3Bucket:
+          rawObjectProvider === "s3" ? Resource.MailBucket.name : undefined,
         s3Key: rawObjectProvider === "s3" ? s3Key : undefined,
       });
     } catch (error) {
@@ -163,23 +178,22 @@ export const handler = async (
       {
         mailboxIds,
         providerMessageId,
-        recipients,
         rawObjectBucket,
         rawObjectKey: s3Key,
         rawObjectProvider,
+        recipients,
         stored,
       },
-      201,
+      201
     );
   } catch (error) {
     await reportAwsError(error, "MailIngress");
-    console.error(error);
 
     return toJson(
       {
         error: "Could not ingest the mail message.",
       },
-      500,
+      500
     );
   }
 };

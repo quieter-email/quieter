@@ -16,7 +16,8 @@
   },
   "dependencies": {
     "@quieter/env": "workspace:*",
-    "postal-mime": "^2.7.5",
+    "fast-xml-parser": "catalog:",
+    "postal-mime": "^2.7.6",
     "zod": "catalog:"
   },
   "devDependencies": {
@@ -24,6 +25,7 @@
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:",
+    "vite": "catalog:",
     "vite-plus": "catalog:"
   }
 }

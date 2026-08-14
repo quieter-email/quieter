@@ -1,11 +1,14 @@
 import { ORPCError, os } from "@orpc/server";
 import { getSessionWithOrganization } from "@quieter/auth/session";
 import { isGmailRateLimitedError } from "@quieter/gmail";
-import { mailCategorySchema } from "@quieter/mail/data-plane";
 import { z } from "zod";
-import { getRequestHeaders, type OrpcContext } from "../context";
+
+import { getRequestHeaders } from "../context";
+import type { OrpcContext } from "../context";
 import { orpcErrorMap } from "../errors";
 import { runAuthorizedGmailMailbox } from "../gmail-mailbox-access";
+
+export { mailCategorySchema as mailboxCategorySchema } from "@quieter/mail/data-plane";
 
 export const base = os.errors(orpcErrorMap).$context<OrpcContext>();
 export const publicProcedure = base;
@@ -19,28 +22,28 @@ export type ProtectedContext = OrpcContext & {
   userId: string;
 };
 
-export const protectedProcedure = base.use(async ({ context, errors, next }) => {
-  const headers = getRequestHeaders(context);
-  const session = await getSessionWithOrganization(headers);
+export const protectedProcedure = base.use(
+  async ({ context, errors, next }) => {
+    const headers = getRequestHeaders(context);
+    const session = await getSessionWithOrganization(headers);
 
-  if (!session?.user || !session.session) {
-    throw errors.UNAUTHORIZED();
-  }
+    if (session?.user === undefined || session.session === undefined) {
+      throw errors.UNAUTHORIZED();
+    }
 
-  return next({
-    context: {
-      ...context,
-      user: {
-        email: session.user.email,
-        id: session.user.id,
-        name: session.user.name,
+    return await next({
+      context: {
+        ...context,
+        user: {
+          email: session.user.email,
+          id: session.user.id,
+          name: session.user.name,
+        },
+        userId: session.user.id,
       },
-      userId: session.user.id,
-    },
-  });
-});
-
-export const mailboxCategorySchema = mailCategorySchema;
+    });
+  }
+);
 
 export const historySyncMailboxCategorySchema = z.enum([
   "inbox",
@@ -54,7 +57,10 @@ export const mailboxIdSchema = z.string().trim().min(1);
 export const gmailUserLabelNameSchema = z.string().trim().min(1).max(225);
 export const mailboxSwitcherOrderSchema = z.object({
   groupIds: z.array(z.string().trim().min(1)),
-  mailboxIdsByGroupId: z.record(z.string().trim().min(1), z.array(z.string().trim().min(1))),
+  mailboxIdsByGroupId: z.record(
+    z.string().trim().min(1),
+    z.array(z.string().trim().min(1))
+  ),
 });
 
 const toRetryAfterSeconds = (retryAfterMs?: number) =>
@@ -80,10 +86,10 @@ const rethrowKnownRateLimit = (context: OrpcContext, error: unknown): never => {
 
 export const callWithRateLimitHandling = async <TValue>(
   context: OrpcContext,
-  callback: () => Promise<TValue>,
+  work: Promise<TValue>
 ): Promise<TValue> => {
   try {
-    return await callback();
+    return await work;
   } catch (error) {
     return rethrowKnownRateLimit(context, error);
   }
@@ -92,7 +98,7 @@ export const callWithRateLimitHandling = async <TValue>(
 export const callGmail = async <TValue>(
   context: ProtectedContext,
   mailboxId: string,
-  runner: (accessToken: string, signal?: AbortSignal) => Promise<TValue>,
+  runner: (accessToken: string, signal?: AbortSignal) => Promise<TValue>
 ): Promise<TValue> => {
   try {
     return await runAuthorizedGmailMailbox(
@@ -100,7 +106,7 @@ export const callGmail = async <TValue>(
         mailboxId,
         userId: context.userId,
       },
-      (accessToken) => runner(accessToken, context.signal),
+      async (accessToken) => await runner(accessToken, context.signal)
     );
   } catch (error) {
     return rethrowKnownRateLimit(context, error);

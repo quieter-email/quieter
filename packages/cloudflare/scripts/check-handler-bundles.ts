@@ -1,11 +1,28 @@
+/// <reference types="bun-types" />
 import { rm } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import path from "node:path";
 
-const packageRoot = resolve(import.meta.dir, "..");
-const outputDirectory = join(packageRoot, ".bundle-check");
+const packageRoot = path.resolve(import.meta.dirname, "..");
+const outputDirectory = path.join(packageRoot, ".bundle-check");
 const entrypoints = ["worker.ts", "chat-generation-worker.ts"].map((fileName) =>
-  join(packageRoot, "src", fileName),
+  path.join(packageRoot, "src", fileName)
 );
+
+const formatBuildLog = (log: unknown): string => {
+  if (typeof log === "string") {
+    return log;
+  }
+  if (log instanceof Error) {
+    return log.message;
+  }
+  if (typeof log === "object" && log !== null && "message" in log) {
+    const { message } = log;
+    if (typeof message === "string") {
+      return message;
+    }
+  }
+  return JSON.stringify(log) ?? "Unknown build error.";
+};
 
 await rm(outputDirectory, { force: true, recursive: true });
 try {
@@ -20,11 +37,15 @@ try {
   });
 
   if (!result.success) {
-    for (const log of result.logs) console.error(log);
+    for (const log of result.logs) {
+      process.stderr.write(`${formatBuildLog(log)}\n`);
+    }
     throw new Error("Cloudflare worker bundle check failed.");
   }
 } finally {
   await rm(outputDirectory, { force: true, recursive: true });
 }
 
-console.log(`Bundled ${entrypoints.length} Cloudflare workers successfully.`);
+process.stdout.write(
+  `Bundled ${entrypoints.length} Cloudflare workers successfully.\n`
+);

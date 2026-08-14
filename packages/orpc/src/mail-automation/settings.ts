@@ -6,7 +6,11 @@ import {
   mailboxAutomationSettings,
 } from "@quieter/database/schema";
 import { eq } from "drizzle-orm";
-import { assertAccessibleMailbox, getAuthorizedManagedMailbox } from "../mailbox/service";
+
+import {
+  assertAccessibleMailbox,
+  getAuthorizedManagedMailbox,
+} from "../mailbox/service";
 import { assertMailAutomationAiBudget } from "./ai-budget";
 
 const assertAutomationAccess = async (input: {
@@ -91,7 +95,7 @@ export const setMailboxUsefulDetails = async (input: {
       usefulDetailsEnabled: input.enabled,
     })
     .onConflictDoUpdate({
-      set: { usefulDetailsEnabled: input.enabled, updatedAt: now },
+      set: { updatedAt: now, usefulDetailsEnabled: input.enabled },
       target: mailboxAutomationSettings.mailboxId,
     });
 
@@ -111,7 +115,9 @@ export const setMailboxUsefulDetails = async (input: {
   }
 
   if (!input.enabled) {
-    await db.delete(gmailUsefulDetail).where(eq(gmailUsefulDetail.mailboxId, input.mailboxId));
+    await db
+      .delete(gmailUsefulDetail)
+      .where(eq(gmailUsefulDetail.mailboxId, input.mailboxId));
   }
 
   return { enabled: input.enabled, mailboxId: input.mailboxId };

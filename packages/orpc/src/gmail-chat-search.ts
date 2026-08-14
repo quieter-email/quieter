@@ -23,24 +23,43 @@ import {
   markThreadAsUnread,
   moveMessageToTrash,
   moveThreadToTrash,
-  type MailboxCategory,
   untrashMessage,
   untrashThread,
   updateMessageLabels,
   updateThreadLabels,
 } from "@quieter/gmail";
+import type { MailboxCategory } from "@quieter/gmail";
+
 import { syncGmailLabels } from "./gmail-labels";
 import {
   getAuthorizedGmailMailbox,
   markGmailMailboxNeedsReconnect,
   refreshAuthorizedGmailAccessToken,
 } from "./gmail-mailbox-access";
+import { hasText } from "./text";
 
 const isGmailAuthError = (error: unknown) =>
   isGmailServiceError(error) &&
   error.status === 401 &&
-  (error.googleReason?.toLowerCase() === "autherror" ||
-    error.googleStatus?.toUpperCase() === "UNAUTHENTICATED");
+  ((hasText(error.googleReason) &&
+    error.googleReason.toLowerCase() === "autherror") ||
+    (hasText(error.googleStatus) &&
+      error.googleStatus.toUpperCase() === "UNAUTHENTICATED"));
+
+const trimMessageBody = (
+  bodyText: string | null | undefined,
+  snippet: string | null | undefined
+) => {
+  if (hasText(bodyText)) {
+    return bodyText.trim();
+  }
+
+  if (hasText(snippet)) {
+    return snippet.trim();
+  }
+
+  return "";
+};
 
 type GmailChatRequest = {
   mailboxId: string;
@@ -50,7 +69,7 @@ type GmailChatRequest = {
 
 const runAuthorizedGmailChatRequest = async <T>(
   input: GmailChatRequest,
-  request: (accessToken: string) => Promise<T>,
+  request: (accessToken: string) => Promise<T>
 ) => {
   const { accessToken, mailbox } = await getAuthorizedGmailMailbox({
     mailboxId: input.mailboxId,
@@ -87,9 +106,9 @@ export const searchGmailForUser = async (
     maxResults: number;
     pageToken?: string;
     query: string;
-  },
+  }
 ): Promise<GmailSearchResult> =>
-  runAuthorizedGmailChatRequest(input, async (accessToken) => {
+  await runAuthorizedGmailChatRequest(input, async (accessToken) => {
     const result = await listMessagesForAgent(accessToken, {
       mailbox: input.category,
       maxResults: input.maxResults,
@@ -119,8 +138,8 @@ export const searchGmailForUser = async (
   });
 
 const THREAD_MESSAGE_LIMIT = 12;
-const THREAD_MESSAGE_BODY_LIMIT = 2_000;
-const MESSAGE_BODY_LIMIT = 8_000;
+const THREAD_MESSAGE_BODY_LIMIT = 2000;
+const MESSAGE_BODY_LIMIT = 8000;
 const ATTACHMENT_CONTENT_LIMIT = 50_000;
 const ATTACHMENT_SIZE_LIMIT = 1_000_000;
 const TEXT_ATTACHMENT_EXTENSIONS = new Set([
@@ -142,20 +161,26 @@ const GMAIL_INBOX_LABEL = "INBOX";
 const GMAIL_NON_SPAM_TRASH_UNREAD_QUERY = "is:unread -in:spam -in:trash";
 
 const getUnreadOverviewQuery = (category: MailboxCategory) =>
-  category === "spam" || category === "trash" ? "is:unread" : GMAIL_NON_SPAM_TRASH_UNREAD_QUERY;
+  category === "spam" || category === "trash"
+    ? "is:unread"
+    : GMAIL_NON_SPAM_TRASH_UNREAD_QUERY;
 
 export const readGmailThreadForUser = async (
-  input: GmailChatRequest & { category: MailboxCategory; threadId: string },
+  input: GmailChatRequest & { category: MailboxCategory; threadId: string }
 ): Promise<GmailThreadResult> =>
-  runAuthorizedGmailChatRequest(input, async (accessToken) => {
-    const thread = await getThreadWithDetails(accessToken, input.threadId, input.signal);
+  await runAuthorizedGmailChatRequest(input, async (accessToken) => {
+    const thread = await getThreadWithDetails(
+      accessToken,
+      input.threadId,
+      input.signal
+    );
     const includedMessages = thread.messages.slice(-THREAD_MESSAGE_LIMIT);
 
     return {
       category: input.category,
       fetchedAt: new Date().toISOString(),
       messages: includedMessages.map((message) => {
-        const body = message.bodyText?.trim() || message.snippet?.trim() || "";
+        const body = trimMessageBody(message.bodyText, message.snippet);
 
         return {
           attachmentCount: message.attachments?.length ?? 0,
@@ -169,7 +194,10 @@ export const readGmailThreadForUser = async (
           to: message.to,
         };
       }),
-      omittedMessageCount: Math.max(0, thread.messages.length - includedMessages.length),
+      omittedMessageCount: Math.max(
+        0,
+        thread.messages.length - includedMessages.length
+      ),
       snippet: thread.snippet,
       status: "success",
       subject: thread.subject,
@@ -178,11 +206,15 @@ export const readGmailThreadForUser = async (
   });
 
 export const readGmailMessageForUser = async (
-  input: GmailChatRequest & { category: MailboxCategory; messageId: string },
+  input: GmailChatRequest & { category: MailboxCategory; messageId: string }
 ): Promise<GmailMessageResult> =>
-  runAuthorizedGmailChatRequest(input, async (accessToken) => {
-    const message = await getMessageWithDetails(accessToken, input.messageId, input.signal);
-    const body = message.bodyText?.trim() || message.snippet?.trim() || "";
+  await runAuthorizedGmailChatRequest(input, async (accessToken) => {
+    const message = await getMessageWithDetails(
+      accessToken,
+      input.messageId,
+      input.signal
+    );
+    const body = trimMessageBody(message.bodyText, message.snippet);
 
     return {
       attachmentCount: message.attachments?.length ?? 0,
@@ -205,14 +237,18 @@ export const readGmailMessageForUser = async (
   });
 
 export const readGmailMessagesForUser = async (
-  input: GmailChatRequest & { category: MailboxCategory; messageIds: string[] },
+  input: GmailChatRequest & { category: MailboxCategory; messageIds: string[] }
 ): Promise<GmailMessagesResult> =>
-  runAuthorizedGmailChatRequest(input, async (accessToken) => {
+  await runAuthorizedGmailChatRequest(input, async (accessToken) => {
     const fetchedAt = new Date().toISOString();
     const results = await Promise.allSettled(
       input.messageIds.map(async (messageId) => {
-        const message = await getMessageWithDetails(accessToken, messageId, input.signal);
-        const body = message.bodyText?.trim() || message.snippet?.trim() || "";
+        const message = await getMessageWithDetails(
+          accessToken,
+          messageId,
+          input.signal
+        );
+        const body = trimMessageBody(message.bodyText, message.snippet);
 
         return {
           attachmentCount: message.attachments?.length ?? 0,
@@ -232,7 +268,7 @@ export const readGmailMessagesForUser = async (
           threadId: message.threadId,
           to: message.to,
         };
-      }),
+      })
     );
 
     return {
@@ -244,13 +280,15 @@ export const readGmailMessagesForUser = async (
                   result.reason instanceof Error
                     ? result.reason.message
                     : "Could not read this message.",
-                messageId: input.messageIds[index]!,
+                messageId: input.messageIds[index],
               },
             ]
-          : [],
+          : []
       ),
       fetchedAt,
-      messages: results.flatMap((result) => (result.status === "fulfilled" ? [result.value] : [])),
+      messages: results.flatMap((result) =>
+        result.status === "fulfilled" ? [result.value] : []
+      ),
       status: "success",
     };
   });
@@ -260,12 +298,16 @@ export const readGmailAttachmentForUser = async (
     attachmentId: string;
     category: MailboxCategory;
     messageId: string;
-  },
+  }
 ): Promise<GmailAttachmentResult> =>
-  runAuthorizedGmailChatRequest(input, async (accessToken) => {
-    const message = await getMessageWithDetails(accessToken, input.messageId, input.signal);
+  await runAuthorizedGmailChatRequest(input, async (accessToken) => {
+    const message = await getMessageWithDetails(
+      accessToken,
+      input.messageId,
+      input.signal
+    );
     const metadata = message.attachments?.find(
-      (attachment) => attachment.attachmentId === input.attachmentId,
+      (attachment) => attachment.attachmentId === input.attachmentId
     );
 
     if (!metadata) {
@@ -279,7 +321,9 @@ export const readGmailAttachmentForUser = async (
     const extension = metadata.fileName.split(".").at(-1)?.toLowerCase() ?? "";
     if (
       !metadata.mimeType.startsWith("text/") &&
-      !["application/json", "application/xml", "application/yaml"].includes(metadata.mimeType) &&
+      !["application/json", "application/xml", "application/yaml"].includes(
+        metadata.mimeType
+      ) &&
       !TEXT_ATTACHMENT_EXTENSIONS.has(extension)
     ) {
       throw new Error("This attachment type cannot be read as text in chat.");
@@ -289,16 +333,19 @@ export const readGmailAttachmentForUser = async (
       accessToken,
       input.messageId,
       input.attachmentId,
-      input.signal,
+      input.signal
     );
-    if (!attachment.data) {
+    if (!hasText(attachment.data)) {
       throw new Error("The attachment did not contain readable data.");
     }
 
     const base64 = attachment.data.replaceAll("-", "+").replaceAll("_", "/");
     const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
     const binary = atob(padded);
-    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    const bytes = Uint8Array.from(
+      binary,
+      (character) => character.codePointAt(0) ?? 0
+    );
     const content = new TextDecoder().decode(bytes).replaceAll("\0", "");
 
     return {
@@ -315,22 +362,22 @@ export const readGmailAttachmentForUser = async (
   });
 
 export const listGmailLabelsForUser = async (
-  input: GmailChatRequest & { category: MailboxCategory },
+  input: GmailChatRequest & { category: MailboxCategory }
 ): Promise<GmailLabelListResult> =>
-  runAuthorizedGmailChatRequest(input, async (accessToken) => {
+  await runAuthorizedGmailChatRequest(input, async (accessToken) => {
     const labels = await syncGmailLabels(
       input.mailboxId,
-      await listLabels(accessToken, input.signal),
+      await listLabels(accessToken, input.signal)
     );
 
     return {
       category: input.category,
       fetchedAt: new Date().toISOString(),
       labels: labels.map((label) => ({
-        id: label.id,
-        name: label.name,
         description: label.description,
+        id: label.id,
         inclusionCriteria: label.inclusionCriteria,
+        name: label.name,
         type: label.type === "user" ? "user" : "system",
       })),
       status: "success",
@@ -343,88 +390,108 @@ export const modifyMailForUser = async (
     category: MailboxCategory;
     id: string;
     target: ModifyMailResult["target"];
-  },
+  }
 ): Promise<ModifyMailResult> =>
-  runAuthorizedGmailChatRequest(input, async (accessToken) => {
+  await runAuthorizedGmailChatRequest(input, async (accessToken) => {
     const { action, id, target } = input;
 
     if (target === "thread") {
       switch (action) {
-        case "mark_read":
+        case "mark_read": {
           await markThreadAsRead(accessToken, id, input.signal);
           break;
-        case "mark_unread":
+        }
+        case "mark_unread": {
           await markThreadAsUnread(accessToken, id, input.signal);
           break;
-        case "star":
+        }
+        case "star": {
           await updateThreadLabels(
             accessToken,
             id,
             { addLabelIds: [GMAIL_STARRED_LABEL] },
-            input.signal,
+            input.signal
           );
           break;
-        case "unstar":
+        }
+        case "unstar": {
           await updateThreadLabels(
             accessToken,
             id,
             { removeLabelIds: [GMAIL_STARRED_LABEL] },
-            input.signal,
+            input.signal
           );
           break;
-        case "archive":
+        }
+        case "archive": {
           await updateThreadLabels(
             accessToken,
             id,
             { removeLabelIds: [GMAIL_INBOX_LABEL] },
-            input.signal,
+            input.signal
           );
           break;
-        case "trash":
+        }
+        case "trash": {
           await moveThreadToTrash(accessToken, id, input.signal);
           break;
-        case "untrash":
+        }
+        case "untrash": {
           await untrashThread(accessToken, id, input.signal);
           break;
+        }
+        default: {
+          break;
+        }
       }
     } else {
       switch (action) {
-        case "mark_read":
+        case "mark_read": {
           await markMessageAsRead(accessToken, id, input.signal);
           break;
-        case "mark_unread":
+        }
+        case "mark_unread": {
           await markMessageAsUnread(accessToken, id, input.signal);
           break;
-        case "star":
+        }
+        case "star": {
           await updateMessageLabels(
             accessToken,
             id,
             { addLabelIds: [GMAIL_STARRED_LABEL] },
-            input.signal,
+            input.signal
           );
           break;
-        case "unstar":
+        }
+        case "unstar": {
           await updateMessageLabels(
             accessToken,
             id,
             { removeLabelIds: [GMAIL_STARRED_LABEL] },
-            input.signal,
+            input.signal
           );
           break;
-        case "archive":
+        }
+        case "archive": {
           await updateMessageLabels(
             accessToken,
             id,
             { removeLabelIds: [GMAIL_INBOX_LABEL] },
-            input.signal,
+            input.signal
           );
           break;
-        case "trash":
+        }
+        case "trash": {
           await moveMessageToTrash(accessToken, id, input.signal);
           break;
-        case "untrash":
+        }
+        case "untrash": {
           await untrashMessage(accessToken, id, input.signal);
           break;
+        }
+        default: {
+          break;
+        }
       }
     }
 
@@ -438,34 +505,39 @@ export const modifyMailForUser = async (
   });
 
 export const getMailboxOverviewForUser = async (
-  input: GmailChatRequest & { category: MailboxCategory },
+  input: GmailChatRequest & { category: MailboxCategory }
 ): Promise<MailboxOverviewResult> =>
-  runAuthorizedGmailChatRequest(input, async (accessToken) => {
-    const [profile, categoryMessages, unreadMessages, starredMessages, attachmentMessages] =
-      await Promise.all([
-        getGmailProfile(accessToken, input.signal),
-        getGmailMessageCount(accessToken, {
-          mailbox: input.category,
-          signal: input.signal,
-        }),
-        getGmailMessageCount(accessToken, {
-          mailbox: input.category,
-          accurateUpTo: 200,
-          countBy: "threads",
-          query: getUnreadOverviewQuery(input.category),
-          signal: input.signal,
-        }),
-        getGmailMessageCount(accessToken, {
-          mailbox: input.category,
-          query: "is:starred",
-          signal: input.signal,
-        }),
-        getGmailMessageCount(accessToken, {
-          mailbox: input.category,
-          query: "has:attachment",
-          signal: input.signal,
-        }),
-      ]);
+  await runAuthorizedGmailChatRequest(input, async (accessToken) => {
+    const [
+      profile,
+      categoryMessages,
+      unreadMessages,
+      starredMessages,
+      attachmentMessages,
+    ] = await Promise.all([
+      getGmailProfile(accessToken, input.signal),
+      getGmailMessageCount(accessToken, {
+        mailbox: input.category,
+        signal: input.signal,
+      }),
+      getGmailMessageCount(accessToken, {
+        accurateUpTo: 200,
+        countBy: "threads",
+        mailbox: input.category,
+        query: getUnreadOverviewQuery(input.category),
+        signal: input.signal,
+      }),
+      getGmailMessageCount(accessToken, {
+        mailbox: input.category,
+        query: "is:starred",
+        signal: input.signal,
+      }),
+      getGmailMessageCount(accessToken, {
+        mailbox: input.category,
+        query: "has:attachment",
+        signal: input.signal,
+      }),
+    ]);
 
     return {
       attachmentMessages,

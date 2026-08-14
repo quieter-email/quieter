@@ -4,16 +4,22 @@ export const Route = createFileRoute("/api/orpc/$")({
   server: {
     handlers: {
       ANY: async ({ request }) => {
-        const [{ ORPCError }, { createOrpcContext }, { createOrpcHandler }, { reportServerError }] =
-          await Promise.all([
-            import("@orpc/server"),
-            import("@quieter/orpc/context"),
-            import("@quieter/orpc/server"),
-            import("~/lib/server-error-reporting"),
-          ]);
+        const [
+          { ORPCError },
+          { createOrpcContext },
+          { createOrpcHandler },
+          { reportServerError },
+        ] = await Promise.all([
+          import("@orpc/server"),
+          import("@quieter/orpc/context"),
+          import("@quieter/orpc/server"),
+          import("#/lib/server-error-reporting"),
+        ]);
         const orpcHandler = createOrpcHandler({
           reportError: (error) => {
-            if (error instanceof ORPCError && error.status < 500) return;
+            if (error instanceof ORPCError && error.status < 500) {
+              return;
+            }
             reportServerError(error, "orpc");
           },
         });

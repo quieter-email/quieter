@@ -1,4 +1,5 @@
 import { getRouteApi } from "@tanstack/react-router";
+
 import { SettingsScreen } from "./settings-screen";
 
 const settingsRoute = getRouteApi("/settings");

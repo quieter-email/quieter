@@ -1,8 +1,9 @@
-import type { MessagePart } from "@tanstack/ai";
 import { cn } from "@quieter/ui/cn";
-import type { ResolveComposeTool } from "../../types";
+import type { MessagePart } from "@tanstack/ai";
+
 import { hasVisibleAssistantContent } from "../../domain/assistant-content";
 import { shouldUngroupTool } from "../../domain/tool-summaries";
+import type { ResolveComposeTool } from "../../types";
 import { ThinkingIndicator } from "../thinking-indicator";
 import { TextPart } from "./text-part";
 import { ThinkingPart } from "./thinking-part";
@@ -13,44 +14,69 @@ type ToolCall = Extract<MessagePart, { type: "tool-call" }>;
 type ToolResult = Extract<MessagePart, { type: "tool-result" }>;
 
 type RenderSegment =
-  | { index: number; part: Extract<MessagePart, { type: "text" }>; type: "text" }
-  | { index: number; part: Extract<MessagePart, { type: "thinking" }>; type: "thinking" }
   | {
-      items: Array<{ call: ToolCall; result?: ToolResult }>;
+      index: number;
+      part: Extract<MessagePart, { type: "text" }>;
+      type: "text";
+    }
+  | {
+      index: number;
+      part: Extract<MessagePart, { type: "thinking" }>;
+      type: "thinking";
+    }
+  | {
+      items: { call: ToolCall; result?: ToolResult }[];
       type: "tools";
     }
   | { result: ToolResult; type: "orphan-result" };
 
-const getLastThinkingIndex = (parts: MessagePart[]) =>
-  parts.reduce<number>((last, part, index) => (part.type === "thinking" ? index : last), -1);
+const getLastThinkingIndex = (parts: MessagePart[]) => {
+  let lastIndex = -1;
+  for (const [index, part] of parts.entries()) {
+    if (part.type === "thinking") {
+      lastIndex = index;
+    }
+  }
+  return lastIndex;
+};
 
-const getLastTextIndex = (parts: MessagePart[]) =>
-  parts.reduce<number>(
-    (last, part, index) =>
-      part.type === "text" && typeof part.content === "string" && part.content.trim()
-        ? index
-        : last,
-    -1,
-  );
+const getLastTextIndex = (parts: MessagePart[]) => {
+  let lastIndex = -1;
+  for (const [index, part] of parts.entries()) {
+    if (
+      part.type === "text" &&
+      typeof part.content === "string" &&
+      part.content.trim()
+    ) {
+      lastIndex = index;
+    }
+  }
+  return lastIndex;
+};
 
 const getPartKey = (part: MessagePart, index: number) => {
   if (part.type === "text" || part.type === "thinking") {
-    const partId = "id" in part && typeof part.id === "string" ? part.id : index;
+    const partId =
+      "id" in part && typeof part.id === "string" ? part.id : index;
     return `${part.type}:${partId}`;
   }
 
-  if (part.type === "tool-call") return `tool-call:${part.id}`;
-  if (part.type === "tool-result") return `tool-result:${part.toolCallId}`;
+  if (part.type === "tool-call") {
+    return `tool-call:${part.id}`;
+  }
+  if (part.type === "tool-result") {
+    return `tool-result:${part.toolCallId}`;
+  }
   return part.type;
 };
 
 const buildSegments = (
   parts: MessagePart[],
   toolCalls: Map<string, ToolCall>,
-  toolResults: Map<string, ToolResult>,
+  toolResults: Map<string, ToolResult>
 ): RenderSegment[] => {
   const segments: RenderSegment[] = [];
-  let toolBuffer: Array<{ call: ToolCall; result?: ToolResult }> = [];
+  let toolBuffer: { call: ToolCall; result?: ToolResult }[] = [];
 
   const flushTools = () => {
     if (toolBuffer.length === 0) {
@@ -120,12 +146,14 @@ export const AssistantParts = ({
   const lastThinkingIndex = getLastThinkingIndex(parts);
   const lastTextIndex = isStreaming ? getLastTextIndex(parts) : -1;
   const toolCalls = new Map(
-    parts.flatMap((part) => (part.type === "tool-call" ? [[part.id, part] as const] : [])),
+    parts.flatMap((part) =>
+      part.type === "tool-call" ? [[part.id, part] as const] : []
+    )
   );
   const toolResults = new Map(
     parts.flatMap((part) =>
-      part.type === "tool-result" ? [[part.toolCallId, part] as const] : [],
-    ),
+      part.type === "tool-result" ? [[part.toolCallId, part] as const] : []
+    )
   );
   const segments = buildSegments(parts, toolCalls, toolResults);
 
@@ -133,7 +161,9 @@ export const AssistantParts = ({
   const showThinking = !hasVisible && isStreaming;
 
   return (
-    <div className={cn("flex min-h-5 flex-col gap-2", { "min-h-6": showThinking })}>
+    <div
+      className={cn("flex min-h-5 flex-col gap-2", { "min-h-6": showThinking })}
+    >
       {showThinking ? <ThinkingIndicator /> : null}
       {segments.map((segment) => {
         if (segment.type === "text") {
@@ -178,8 +208,11 @@ export const AssistantParts = ({
           );
         }
 
-        if (segment.items.length === 1 && shouldUngroupTool(segment.items[0]!.call)) {
-          const item = segment.items[0]!;
+        if (
+          segment.items.length === 1 &&
+          shouldUngroupTool(segment.items[0].call)
+        ) {
+          const [item] = segment.items;
           return (
             <ToolPart
               actionsDisabled={actionsDisabled}

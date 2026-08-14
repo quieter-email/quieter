@@ -1,6 +1,7 @@
 import { ORGANIZATION_API_KEY_CONFIG_ID } from "@quieter/auth/organization-api-key";
 import { queryOptions } from "@tanstack/react-query";
-import { authClient } from "~/lib/auth";
+
+import { authClient } from "#/lib/auth";
 
 export const getOrganizationApiKeysQueryKey = (organizationId: string) =>
   ["organization-api-keys", organizationId] as const;

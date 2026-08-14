@@ -3,102 +3,153 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { lazy, Suspense } from "react";
-import type { SettingsTab } from "~/features/settings/domain/settings-tab";
-import { WorkspaceDitherBackground } from "~/components/workspace-dither-background";
-import { isDemoModeAvailable } from "~/features/settings/domain/demo-mode-setting";
-import { SETTINGS_DETAIL_TITLES } from "~/features/settings/domain/settings-navigation";
-import { settingsRouteApi } from "~/lib/route-apis";
+
+import { WorkspaceDitherBackground } from "#/components/workspace-dither-background";
+import { isDemoModeAvailable } from "#/features/settings/domain/demo-mode-setting";
+import { SETTINGS_DETAIL_TITLES } from "#/features/settings/domain/settings-navigation";
+import type { SettingsTab } from "#/features/settings/domain/settings-tab";
+import { settingsRouteApi } from "#/lib/route-apis";
+
 import { BillingCheckoutResult } from "./billing-checkout-result";
 import { ConnectorConnectionResult } from "./connector-connection-result";
 import { SettingsDataPrefetch } from "./settings-data-prefetch";
 import { SettingsBackButton, SettingsLoadingState } from "./settings-layout";
 import { SettingsOverviewPanel } from "./settings-overview-panel";
 import { prefetchSettingsTab } from "./settings-prefetch";
+import { SettingsSearch } from "./settings-search";
 
-const AccountSettingsPanel = lazy(() =>
-  import("./account-settings-panel").then(({ AccountSettingsPanel: component }) => ({
-    default: component,
-  })),
+const AccountSettingsPanel = lazy(
+  async () =>
+    await import("./account-settings-panel").then(
+      ({ AccountSettingsPanel: component }) => ({
+        default: component,
+      })
+    )
 );
-const ActionsSettingsPanel = lazy(() =>
-  import("./actions-settings-panel").then(({ ActionsSettingsPanel: component }) => ({
-    default: component,
-  })),
+const ActionsSettingsPanel = lazy(
+  async () =>
+    await import("./actions-settings-panel").then(
+      ({ ActionsSettingsPanel: component }) => ({
+        default: component,
+      })
+    )
 );
-const AiSettingsPanel = lazy(() =>
-  import("./ai-settings-panel").then(({ AiSettingsPanel: component }) => ({
-    default: component,
-  })),
+const AiSettingsPanel = lazy(
+  async () =>
+    await import("./ai-settings-panel").then(
+      ({ AiSettingsPanel: component }) => ({
+        default: component,
+      })
+    )
 );
-const ConnectorsSettingsPanel = lazy(() =>
-  import("./connectors-settings-panel").then(({ ConnectorsSettingsPanel: component }) => ({
-    default: component,
-  })),
+const ConnectorsSettingsPanel = lazy(
+  async () =>
+    await import("./connectors-settings-panel").then(
+      ({ ConnectorsSettingsPanel: component }) => ({
+        default: component,
+      })
+    )
 );
-const MailboxesSettingsPanel = lazy(() =>
-  import("./mailboxes-settings-panel").then(({ MailboxesSettingsPanel: component }) => ({
-    default: component,
-  })),
+const MailboxesSettingsPanel = lazy(
+  async () =>
+    await import("./mailboxes-settings-panel").then(
+      ({ MailboxesSettingsPanel: component }) => ({
+        default: component,
+      })
+    )
 );
-const OrganizationSettingsPanel = lazy(() =>
-  import("./organization-settings-panel").then(({ OrganizationSettingsPanel: component }) => ({
-    default: component,
-  })),
+const OrganizationSettingsPanel = lazy(
+  async () =>
+    await import("./organization-settings-panel").then(
+      ({ OrganizationSettingsPanel: component }) => ({
+        default: component,
+      })
+    )
 );
-const preferenceSettingsPanels = () => import("./preference-settings-panels");
-const AppearanceSettingsPanel = lazy(() =>
-  preferenceSettingsPanels().then(({ AppearanceSettingsPanel: component }) => ({
-    default: component,
-  })),
+const preferenceSettingsPanels = async () =>
+  await import("./preference-settings-panels");
+const AppearanceSettingsPanel = lazy(
+  async () =>
+    await preferenceSettingsPanels().then(
+      ({ AppearanceSettingsPanel: component }) => ({
+        default: component,
+      })
+    )
 );
-const DevelopmentSettingsPanel = lazy(() =>
-  preferenceSettingsPanels().then(({ DevelopmentSettingsPanel: component }) => ({
-    default: component,
-  })),
+const DevelopmentSettingsPanel = lazy(
+  async () =>
+    await preferenceSettingsPanels().then(
+      ({ DevelopmentSettingsPanel: component }) => ({
+        default: component,
+      })
+    )
 );
-const DevelopmentSettingsUnavailable = lazy(() =>
-  preferenceSettingsPanels().then(({ DevelopmentSettingsUnavailable: component }) => ({
-    default: component,
-  })),
+const DevelopmentSettingsUnavailable = lazy(
+  async () =>
+    await preferenceSettingsPanels().then(
+      ({ DevelopmentSettingsUnavailable: component }) => ({
+        default: component,
+      })
+    )
 );
-const PrivacySettingsPanel = lazy(() =>
-  preferenceSettingsPanels().then(({ PrivacySettingsPanel: component }) => ({
-    default: component,
-  })),
+const PrivacySettingsPanel = lazy(
+  async () =>
+    await preferenceSettingsPanels().then(
+      ({ PrivacySettingsPanel: component }) => ({
+        default: component,
+      })
+    )
 );
-const ReadingSettingsPanel = lazy(() =>
-  preferenceSettingsPanels().then(({ ReadingSettingsPanel: component }) => ({
-    default: component,
-  })),
+const ReadingSettingsPanel = lazy(
+  async () =>
+    await preferenceSettingsPanels().then(
+      ({ ReadingSettingsPanel: component }) => ({
+        default: component,
+      })
+    )
 );
-const ShortcutsSettingsPanel = lazy(() =>
-  preferenceSettingsPanels().then(({ ShortcutsSettingsPanel: component }) => ({
-    default: component,
-  })),
+const ShortcutsSettingsPanel = lazy(
+  async () =>
+    await preferenceSettingsPanels().then(
+      ({ ShortcutsSettingsPanel: component }) => ({
+        default: component,
+      })
+    )
 );
 
-const preloadSettingsPanel = (tab: SettingsTab) => {
+const preloadSettingsPanel = async (tab: SettingsTab) => {
   switch (tab) {
-    case "account":
-      return import("./account-settings-panel");
-    case "actions":
-      return import("./actions-settings-panel");
-    case "ai":
-      return import("./ai-settings-panel");
-    case "connectors":
-      return import("./connectors-settings-panel");
-    case "mailboxes":
-      return import("./mailboxes-settings-panel");
-    case "organization":
-      return import("./organization-settings-panel");
+    case "account": {
+      return await import("./account-settings-panel");
+    }
+    case "actions": {
+      return await import("./actions-settings-panel");
+    }
+    case "ai": {
+      return await import("./ai-settings-panel");
+    }
+    case "connectors": {
+      return await import("./connectors-settings-panel");
+    }
+    case "mailboxes": {
+      return await import("./mailboxes-settings-panel");
+    }
+    case "organization": {
+      return await import("./organization-settings-panel");
+    }
     case "appearance":
     case "development":
     case "privacy":
     case "reading":
-    case "shortcuts":
-      return preferenceSettingsPanels();
-    default:
-      return Promise.resolve();
+    case "shortcuts": {
+      return await preferenceSettingsPanels();
+    }
+    case "overview": {
+      return null;
+    }
+    default: {
+      throw new Error("Unsupported settings tab.");
+    }
   }
 };
 
@@ -107,6 +158,44 @@ type SettingsUser = {
   emailVerified: boolean;
   image?: string | null;
   name: string;
+};
+
+const SettingsBackNavigation = ({
+  domainId,
+  mailboxId,
+  onBackToApp,
+  onBackToMailboxes,
+  onBackToOverview,
+  organizationId,
+  tab,
+}: {
+  domainId: string;
+  mailboxId: string;
+  onBackToApp: () => void;
+  onBackToMailboxes: () => void;
+  onBackToOverview: () => void;
+  organizationId: string;
+  tab: SettingsTab;
+}) => {
+  if (tab === "overview") {
+    return <SettingsBackButton onClick={onBackToApp}>Back</SettingsBackButton>;
+  }
+
+  if (tab === "mailboxes" && mailboxId !== "") {
+    return (
+      <SettingsBackButton onClick={onBackToMailboxes}>
+        Mailboxes
+      </SettingsBackButton>
+    );
+  }
+
+  if (tab === "organization" && (organizationId !== "" || domainId !== "")) {
+    return null;
+  }
+
+  return (
+    <SettingsBackButton onClick={onBackToOverview}>Settings</SettingsBackButton>
+  );
 };
 
 type SettingsScreenProps = {
@@ -118,17 +207,18 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
   const navigate = useNavigate({
     from: "/settings",
   });
-  const { domainId, from, mailboxId, organizationId, tab } = settingsRouteApi.useSearch();
+  const { domainId, from, mailboxId, organizationId, tab } =
+    settingsRouteApi.useSearch();
 
   const setTab = (nextTab: SettingsTab) => {
     void navigate({
       search: (previous) => ({
         ...previous,
-        tab: nextTab,
-        mailboxId: "",
         domainId: "",
+        mailboxId: "",
         organizationId: "",
         organizationView: "overview",
+        tab: nextTab,
       }),
       to: ".",
     });
@@ -155,13 +245,24 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
       <BillingCheckoutResult />
       <ConnectorConnectionResult />
       <WorkspaceDitherBackground />
-      {tab === "overview" ? (
-        <SettingsBackButton onClick={goBackToApp}>Back</SettingsBackButton>
-      ) : tab === "mailboxes" && mailboxId ? (
-        <SettingsBackButton onClick={goBackToMailboxes}>Mailboxes</SettingsBackButton>
-      ) : tab === "organization" && (organizationId || domainId) ? null : (
-        <SettingsBackButton onClick={() => setTab("overview")}>Settings</SettingsBackButton>
-      )}
+      <SettingsBackNavigation
+        domainId={domainId}
+        mailboxId={mailboxId}
+        onBackToApp={goBackToApp}
+        onBackToMailboxes={goBackToMailboxes}
+        onBackToOverview={() => {
+          setTab("overview");
+        }}
+        organizationId={organizationId}
+        tab={tab}
+      />
+      <SettingsSearch
+        onPrefetchTab={(nextTab) => {
+          void prefetchSettingsTab(queryClient, nextTab);
+          void preloadSettingsPanel(nextTab);
+        }}
+        onSelectTab={setTab}
+      />
       <div className="relative z-10 min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-205 px-5 py-8 md:px-8 md:py-14">
           {tab === "overview" ? (
@@ -177,7 +278,9 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
             <div className="space-y-8">
               {detail && tab !== "actions" && tab !== "mailboxes" && (
                 <header>
-                  <h1 className="text-xl font-normal tracking-tight text-fg">{detail.title}</h1>
+                  <h1 className="text-xl font-normal tracking-tight text-fg">
+                    {detail.title}
+                  </h1>
                 </header>
               )}
 
@@ -200,7 +303,9 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
                   ) : (
                     <DevelopmentSettingsUnavailable />
                   ))}
-                {tab === "account" && <AccountSettingsPanel initialUser={initialUser} />}
+                {tab === "account" && (
+                  <AccountSettingsPanel initialUser={initialUser} />
+                )}
                 {tab === "mailboxes" && <MailboxesSettingsPanel />}
                 {tab === "actions" && <ActionsSettingsPanel />}
                 {tab === "connectors" && <ConnectorsSettingsPanel />}

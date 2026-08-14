@@ -2,13 +2,17 @@
 
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { MailboxCategory } from "~/lib/gmail/gmail";
-import type { ThreadListEntry } from "~/lib/gmail/thread-list";
-import { shouldIgnoreAppShortcut } from "~/features/hotkeys/domain/hotkey-guards";
+
+import { shouldIgnoreAppShortcut } from "#/features/hotkeys/domain/hotkey-guards";
+import { delay, scheduleFireAndForget } from "#/lib/delay";
+import type { MailboxCategory } from "#/lib/gmail/gmail";
+import type { ThreadListEntry } from "#/lib/gmail/thread-list";
+
 import type { ThreadPressGesture } from "./message-list-types";
 
 const SCROLL_TOP_EPSILON_PX = 2;
 const SCROLL_WAIT_TIMEOUT_MS = 600;
+const FRAME_DELAY_MS = 32;
 
 type SelectionState = {
   scopeKey: string;
@@ -17,45 +21,20 @@ type SelectionState = {
 };
 
 const waitForSmoothScrollTop = async (element: HTMLDivElement) => {
-  await new Promise<void>((resolve) => {
-    let done = false;
-
-    const cleanup = () => {
-      element.removeEventListener("scroll", onScroll);
-      element.removeEventListener("scrollend", onScrollEnd as EventListener);
-      clearTimeout(timeoutId);
-    };
-
-    const finish = () => {
-      if (done) return;
-      done = true;
-      cleanup();
-      resolve();
-    };
-
-    const onScroll = () => {
-      if (element.scrollTop <= SCROLL_TOP_EPSILON_PX) finish();
-    };
-
-    const onScrollEnd = () => finish();
-    const timeoutId = setTimeout(finish, SCROLL_WAIT_TIMEOUT_MS);
-
-    element.addEventListener("scroll", onScroll, { passive: true });
-
-    if ("onscrollend" in element) {
-      element.addEventListener("scrollend", onScrollEnd as EventListener, { passive: true });
+  const deadline = Date.now() + SCROLL_WAIT_TIMEOUT_MS;
+  const poll = async (): Promise<void> => {
+    if (element.scrollTop <= SCROLL_TOP_EPSILON_PX || Date.now() >= deadline) {
+      return;
     }
-
-    if (element.scrollTop <= SCROLL_TOP_EPSILON_PX) finish();
-  });
+    await delay(FRAME_DELAY_MS);
+    await poll();
+  };
+  await poll();
 };
 
 const waitForNextPaint = async () => {
-  await new Promise<void>((resolve) => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => resolve());
-    });
-  });
+  await delay(FRAME_DELAY_MS);
+  await delay(FRAME_DELAY_MS);
 };
 
 export const useMessageListSelection = ({
@@ -81,7 +60,7 @@ export const useMessageListSelection = ({
   const selectionScopeKey = `${mailboxId}:${activeMailbox}:${searchQuery}`;
   const loadedThreadIdSet = useMemo(
     () => new Set(threadedMessages.map((thread) => thread.threadId)),
-    [threadedMessages],
+    [threadedMessages]
   );
   const [selectionState, setSelectionState] = useState<SelectionState>(() => ({
     scopeKey: selectionScopeKey,
@@ -98,38 +77,53 @@ export const useMessageListSelection = ({
             selectedThreadIds: new Set<string>(),
             selectionAnchorThreadId: null,
           },
-    [selectionScopeKey, selectionState],
+    [selectionScopeKey, selectionState]
   );
   const selectedThreadIds = useMemo(
     () =>
       new Set(
-        Array.from(scopedSelectionState.selectedThreadIds).filter((threadId) =>
-          loadedThreadIdSet.has(threadId),
-        ),
+        [...scopedSelectionState.selectedThreadIds].filter((threadId) =>
+          loadedThreadIdSet.has(threadId)
+        )
       ),
-    [loadedThreadIdSet, scopedSelectionState.selectedThreadIds],
+    [loadedThreadIdSet, scopedSelectionState.selectedThreadIds]
   );
-  const selectionAnchorThreadId =
-    scopedSelectionState.selectionAnchorThreadId &&
-    loadedThreadIdSet.has(scopedSelectionState.selectionAnchorThreadId)
-      ? scopedSelectionState.selectionAnchorThreadId
-      : null;
+  const selectionAnchorThreadId = (() => {
+    const anchorId = scopedSelectionState.selectionAnchorThreadId;
+    if ((anchorId ?? "") === "" || !loadedThreadIdSet.has(anchorId ?? "")) {
+      return null;
+    }
+    return anchorId;
+  })();
   const selectedThreads = useMemo(
     () =>
-      Array.from(selectedThreadIds).flatMap((threadId) => {
-        const thread = threadedMessages.find((entry) => entry.threadId === threadId);
+      [...selectedThreadIds].flatMap((threadId) => {
+        const thread = threadedMessages.find(
+          (entry) => entry.threadId === threadId
+        );
         return thread ? [thread] : [];
       }),
-    [selectedThreadIds, threadedMessages],
+    [selectedThreadIds, threadedMessages]
   );
   const allSelected =
-    threadedMessages.length > 0 && selectedThreadIds.size === threadedMessages.length;
-  const selectionIndeterminate = selectedThreadIds.size > 0 && !allSelected;
-  const focusedThread =
-    (focusedThreadId && threadedMessages.find((thread) => thread.threadId === focusedThreadId)) ||
-    (activeThreadId && threadedMessages.find((thread) => thread.threadId === activeThreadId)) ||
-    threadedMessages[0] ||
-    null;
+    threadedMessages.length > 0 &&
+    selectedThreadIds.size === threadedMessages.length;
+  const selectionIndeterminate =
+    selectedThreadIds.size > 0 &&
+    selectedThreadIds.size !== threadedMessages.length;
+  const focusedThread = (() => {
+    const focusedById =
+      (focusedThreadId ?? "") === ""
+        ? undefined
+        : threadedMessages.find(
+            (thread) => thread.threadId === focusedThreadId
+          );
+    const focusedByActive =
+      (activeThreadId ?? "") === ""
+        ? undefined
+        : threadedMessages.find((thread) => thread.threadId === activeThreadId);
+    return focusedById ?? focusedByActive ?? threadedMessages[0] ?? null;
+  })();
   const resolvedFocusedThreadId = focusedThread?.threadId ?? null;
   const activeThreadIdRef = useRef(activeThreadId);
   const focusedThreadIdRef = useRef(focusedThreadId);
@@ -158,19 +152,28 @@ export const useMessageListSelection = ({
   ]);
 
   const scrollListToTop = useCallback(() => {
-    if (!scrollRef.current || scrollRef.current.scrollTop <= SCROLL_TOP_EPSILON_PX) {
+    if (
+      !scrollRef.current ||
+      scrollRef.current.scrollTop <= SCROLL_TOP_EPSILON_PX
+    ) {
       return false;
     }
 
     isProgrammaticScrollToTopRef.current = true;
 
     const scrollElement = scrollRef.current;
-    scrollElement.scrollTo({ top: 0, behavior: "smooth" });
-    void waitForSmoothScrollTop(scrollElement)
-      .then(() => waitForNextPaint())
-      .finally(() => {
-        isProgrammaticScrollToTopRef.current = false;
-      });
+    scrollElement.scrollTo({ behavior: "smooth", top: 0 });
+
+    const finishScroll = async () => {
+      const [scrollResult] = await Promise.allSettled([
+        waitForSmoothScrollTop(scrollElement),
+      ]);
+      if (scrollResult.status === "fulfilled") {
+        await Promise.allSettled([waitForNextPaint()]);
+      }
+      isProgrammaticScrollToTopRef.current = false;
+    };
+    scheduleFireAndForget(finishScroll);
 
     return true;
   }, []);
@@ -184,19 +187,22 @@ export const useMessageListSelection = ({
         };
       }
 
+      const anchorId = current.selectionAnchorThreadId;
+      const resolvedAnchor =
+        (anchorId ?? "") !== "" && loadedThreadIdSet.has(anchorId ?? "")
+          ? anchorId
+          : null;
+
       return {
         selectedThreadIds: new Set(
-          Array.from(current.selectedThreadIds).filter((threadId) =>
-            loadedThreadIdSet.has(threadId),
-          ),
+          [...current.selectedThreadIds].filter((threadId) =>
+            loadedThreadIdSet.has(threadId)
+          )
         ),
-        selectionAnchorThreadId:
-          current.selectionAnchorThreadId && loadedThreadIdSet.has(current.selectionAnchorThreadId)
-            ? current.selectionAnchorThreadId
-            : null,
+        selectionAnchorThreadId: resolvedAnchor,
       };
     },
-    [loadedThreadIdSet, selectionScopeKey],
+    [loadedThreadIdSet, selectionScopeKey]
   );
 
   const setSelection = useCallback(
@@ -207,14 +213,14 @@ export const useMessageListSelection = ({
       }) => {
         selectedThreadIds: Set<string>;
         selectionAnchorThreadId: string | null;
-      },
+      }
     ) => {
       setSelectionState((current) => ({
         scopeKey: selectionScopeKey,
         ...updater(getCurrentSelectionState(current)),
       }));
     },
-    [getCurrentSelectionState, selectionScopeKey],
+    [getCurrentSelectionState, selectionScopeKey]
   );
 
   const clearSelection = useCallback(() => {
@@ -233,7 +239,7 @@ export const useMessageListSelection = ({
         selectionAnchorThreadId: threadId,
       });
     },
-    [selectionScopeKey],
+    [selectionScopeKey]
   );
 
   const toggleThreadSelection = useCallback(
@@ -252,21 +258,23 @@ export const useMessageListSelection = ({
         };
       });
     },
-    [setSelection],
+    [setSelection]
   );
 
   const startAdditiveSelection = useCallback(
     (threadId: string) => {
       setSelection(() => {
-        const activeThreadId = activeThreadIdRef.current;
-        const threadedMessages = threadedMessagesRef.current;
+        const currentActiveThreadId = activeThreadIdRef.current;
+        const currentThreadedMessages = threadedMessagesRef.current;
         const next = new Set<string>();
 
         if (
-          activeThreadId &&
-          threadedMessages.find((thread) => thread.threadId === activeThreadId)
+          (currentActiveThreadId ?? "") !== "" &&
+          currentThreadedMessages.some(
+            (thread) => thread.threadId === currentActiveThreadId
+          )
         ) {
-          next.add(activeThreadId);
+          next.add(currentActiveThreadId ?? "");
         }
 
         next.add(threadId);
@@ -276,36 +284,48 @@ export const useMessageListSelection = ({
         };
       });
     },
-    [setSelection],
+    [setSelection]
   );
 
   const selectThreadRange = useCallback(
     (threadId: string, additive: boolean) => {
-      const activeThreadId = activeThreadIdRef.current;
-      const selectionAnchorThreadId = selectionAnchorThreadIdRef.current;
-      const threadedMessages = threadedMessagesRef.current;
-      const targetIndex = threadedMessages.findIndex((thread) => thread.threadId === threadId);
+      const currentActiveThreadId = activeThreadIdRef.current;
+      const currentSelectionAnchorThreadId = selectionAnchorThreadIdRef.current;
+      const currentThreadedMessages = threadedMessagesRef.current;
+      const targetIndex = currentThreadedMessages.findIndex(
+        (thread) => thread.threadId === threadId
+      );
+      const activeThreadEntry =
+        (currentActiveThreadId ?? "") === ""
+          ? undefined
+          : currentThreadedMessages.find(
+              (thread) => thread.threadId === currentActiveThreadId
+            );
       const fallbackAnchorThreadId =
-        selectionAnchorThreadId ??
-        ((activeThreadId &&
-          threadedMessages.find((thread) => thread.threadId === activeThreadId)) ||
-          null);
-      const anchorIndex = fallbackAnchorThreadId
-        ? threadedMessages.findIndex((thread) => thread.threadId === fallbackAnchorThreadId)
-        : undefined;
+        currentSelectionAnchorThreadId ?? activeThreadEntry?.threadId;
+      const anchorIndex =
+        (fallbackAnchorThreadId ?? "") === ""
+          ? -1
+          : currentThreadedMessages.findIndex(
+              (thread) => thread.threadId === fallbackAnchorThreadId
+            );
 
-      if (targetIndex < 0) return;
+      if (targetIndex === -1) {
+        return;
+      }
 
       setSelection((current) => {
-        if (anchorIndex == null || anchorIndex < 0) {
+        if (anchorIndex < 0) {
           if (additive) {
             const next = new Set(current.selectedThreadIds);
 
             if (
-              activeThreadId &&
-              threadedMessages.find((thread) => thread.threadId === activeThreadId)
+              (currentActiveThreadId ?? "") !== "" &&
+              currentThreadedMessages.some(
+                (thread) => thread.threadId === currentActiveThreadId
+              )
             ) {
-              next.add(activeThreadId);
+              next.add(currentActiveThreadId ?? "");
             }
 
             next.add(threadId);
@@ -321,14 +341,16 @@ export const useMessageListSelection = ({
           };
         }
 
-        const next = additive ? new Set(current.selectedThreadIds) : new Set<string>();
+        const next = additive
+          ? new Set(current.selectedThreadIds)
+          : new Set<string>();
         const startIndex = Math.min(anchorIndex, targetIndex);
         const endIndex = Math.max(anchorIndex, targetIndex);
 
         for (let index = startIndex; index <= endIndex; index += 1) {
-          const rangeThreadId = threadedMessages[index].threadId;
-          if (rangeThreadId) {
-            next.add(rangeThreadId);
+          const rangeThreadId = currentThreadedMessages[index]?.threadId;
+          if ((rangeThreadId ?? "") !== "") {
+            next.add(rangeThreadId ?? "");
           }
         }
 
@@ -338,45 +360,51 @@ export const useMessageListSelection = ({
         };
       });
     },
-    [setSelection],
+    [setSelection]
   );
 
   const toggleAllLoadedThreads = useCallback(
     (selected: boolean) => {
+      const firstThreadId = threadedMessages[0]?.threadId ?? null;
       setSelectionState({
         scopeKey: selectionScopeKey,
         selectedThreadIds: selected
           ? new Set(threadedMessages.map((thread) => thread.threadId))
           : new Set(),
-        selectionAnchorThreadId: (selected && threadedMessages[0]?.threadId) || null,
+        selectionAnchorThreadId: selected ? firstThreadId : null,
       });
     },
-    [selectionScopeKey, threadedMessages],
+    [selectionScopeKey, threadedMessages]
   );
 
   const handleThreadSelectionPress = useCallback(
     (thread: ThreadListEntry, gesture: ThreadPressGesture) => {
       setFocusedThreadId(thread.threadId);
-      const selectedThreadIds = selectedThreadIdsRef.current;
+      const currentSelectedThreadIds = selectedThreadIdsRef.current;
 
       if (gesture.range) {
         selectThreadRange(thread.threadId, gesture.additive);
         return;
       }
 
-      if (selectedThreadIds.size == 0 && gesture.additive) {
+      if (currentSelectedThreadIds.size === 0 && gesture.additive) {
         startAdditiveSelection(thread.threadId);
         return;
       }
 
-      if (selectedThreadIds.size == 0 && !gesture.additive) {
+      if (currentSelectedThreadIds.size === 0 && !gesture.additive) {
         selectSingleThread(thread.threadId);
         return;
       }
 
       toggleThreadSelection(thread.threadId);
     },
-    [selectSingleThread, selectThreadRange, startAdditiveSelection, toggleThreadSelection],
+    [
+      selectSingleThread,
+      selectThreadRange,
+      startAdditiveSelection,
+      toggleThreadSelection,
+    ]
   );
 
   const consumeFocusRingRequest = useCallback(() => {
@@ -393,20 +421,20 @@ export const useMessageListSelection = ({
     (thread: ThreadListEntry, gesture: ThreadPressGesture) => {
       focusRingRequestedRef.current = false;
       setFocusedThreadId(thread.threadId);
-      const activeThreadId = activeThreadIdRef.current;
-      const selectedThreadIds = selectedThreadIdsRef.current;
+      const currentActiveThreadId = activeThreadIdRef.current;
+      const currentSelectedThreadIds = selectedThreadIdsRef.current;
 
       if (gesture.range) {
         selectThreadRange(thread.threadId, gesture.additive);
         return;
       }
 
-      if (selectedThreadIds.size == 0 && gesture.additive) {
+      if (currentSelectedThreadIds.size === 0 && gesture.additive) {
         startAdditiveSelection(thread.threadId);
         return;
       }
 
-      if (selectedThreadIds.size > 0 && !gesture.additive) {
+      if (currentSelectedThreadIds.size > 0 && !gesture.additive) {
         toggleThreadSelection(thread.threadId);
         return;
       }
@@ -421,34 +449,57 @@ export const useMessageListSelection = ({
         selectionAnchorThreadId: thread.threadId,
       }));
 
-      if (activeThreadId !== null && activeThreadId === thread.threadId) {
+      if (
+        (currentActiveThreadId ?? "") !== "" &&
+        currentActiveThreadId === thread.threadId
+      ) {
         onDeactivateActiveMessageRef.current();
         return;
       }
 
       onActivateMessageRef.current(thread.anchorMessage.id);
     },
-    [selectThreadRange, setSelection, startAdditiveSelection, toggleThreadSelection],
+    [
+      selectThreadRange,
+      setSelection,
+      startAdditiveSelection,
+      toggleThreadSelection,
+    ]
   );
 
   const focusThreadByOffset = useCallback((offset: number) => {
-    const threadedMessages = threadedMessagesRef.current;
-    if (threadedMessages.length === 0) return;
+    const currentThreadedMessages = threadedMessagesRef.current;
+    if (currentThreadedMessages.length === 0) {
+      return;
+    }
 
-    const currentFocusedThreadId = focusedThreadIdRef.current ?? activeThreadIdRef.current;
-    const currentIndex = currentFocusedThreadId
-      ? threadedMessages.findIndex((thread) => thread.threadId === currentFocusedThreadId)
-      : -1;
-    const nextIndex =
-      currentIndex === -1
-        ? offset > 0
-          ? 0
-          : threadedMessages.length - 1
-        : Math.max(0, Math.min(threadedMessages.length - 1, currentIndex + offset));
-    const nextThreadId = threadedMessages[nextIndex]?.threadId;
-    if (nextThreadId) {
+    const currentFocusedThreadId =
+      focusedThreadIdRef.current ?? activeThreadIdRef.current;
+    const currentIndex =
+      (currentFocusedThreadId ?? "") === ""
+        ? -1
+        : currentThreadedMessages.findIndex(
+            (thread) => thread.threadId === currentFocusedThreadId
+          );
+
+    let nextIndex: number;
+    if (currentIndex === -1) {
+      if (offset > 0) {
+        nextIndex = 0;
+      } else {
+        nextIndex = currentThreadedMessages.length - 1;
+      }
+    } else {
+      nextIndex = Math.max(
+        0,
+        Math.min(currentThreadedMessages.length - 1, currentIndex + offset)
+      );
+    }
+
+    const nextThreadId = currentThreadedMessages[nextIndex]?.threadId;
+    if ((nextThreadId ?? "") !== "") {
       focusRingRequestedRef.current = true;
-      setFocusedThreadId(nextThreadId);
+      setFocusedThreadId(nextThreadId ?? null);
     }
   }, []);
   const focusThread = useCallback((threadId: string | null) => {
@@ -456,28 +507,40 @@ export const useMessageListSelection = ({
   }, []);
 
   const openFocusedThread = useCallback(() => {
-    const threadedMessages = threadedMessagesRef.current;
-    const currentFocusedThreadId = focusedThreadIdRef.current ?? activeThreadIdRef.current;
-    const thread =
-      (currentFocusedThreadId &&
-        threadedMessages.find((entry) => entry.threadId === currentFocusedThreadId)) ||
-      threadedMessages[0];
+    const currentThreadedMessages = threadedMessagesRef.current;
+    const currentFocusedThreadId =
+      focusedThreadIdRef.current ?? activeThreadIdRef.current;
+    const threadByFocus =
+      (currentFocusedThreadId ?? "") === ""
+        ? undefined
+        : currentThreadedMessages.find(
+            (entry) => entry.threadId === currentFocusedThreadId
+          );
+    const thread = threadByFocus ?? currentThreadedMessages[0];
 
-    if (!thread) return;
+    if (thread === undefined) {
+      return;
+    }
     focusRingRequestedRef.current = true;
     setFocusedThreadId(thread.threadId);
     onActivateMessageRef.current(thread.anchorMessage.id);
   }, []);
 
   const toggleFocusedThreadSelection = useCallback(() => {
-    const threadedMessages = threadedMessagesRef.current;
-    const currentFocusedThreadId = focusedThreadIdRef.current ?? activeThreadIdRef.current;
-    const thread =
-      (currentFocusedThreadId &&
-        threadedMessages.find((entry) => entry.threadId === currentFocusedThreadId)) ||
-      threadedMessages[0];
+    const currentThreadedMessages = threadedMessagesRef.current;
+    const currentFocusedThreadId =
+      focusedThreadIdRef.current ?? activeThreadIdRef.current;
+    const threadByFocus =
+      (currentFocusedThreadId ?? "") === ""
+        ? undefined
+        : currentThreadedMessages.find(
+            (entry) => entry.threadId === currentFocusedThreadId
+          );
+    const thread = threadByFocus ?? currentThreadedMessages[0];
 
-    if (!thread) return;
+    if (thread === undefined) {
+      return;
+    }
     focusRingRequestedRef.current = true;
     setFocusedThreadId(thread.threadId);
     toggleThreadSelection(thread.threadId);
@@ -486,7 +549,9 @@ export const useMessageListSelection = ({
   useHotkey(
     "Mod+A",
     (event) => {
-      if (shouldIgnoreAppShortcut(event)) return;
+      if (shouldIgnoreAppShortcut(event)) {
+        return;
+      }
       toggleAllLoadedThreads(true);
     },
     {
@@ -494,13 +559,15 @@ export const useMessageListSelection = ({
       ignoreInputs: true,
       preventDefault: true,
       stopPropagation: true,
-    },
+    }
   );
 
   useHotkey(
     "Escape",
     (event) => {
-      if (shouldIgnoreAppShortcut(event)) return;
+      if (shouldIgnoreAppShortcut(event)) {
+        return;
+      }
       clearSelection();
     },
     {
@@ -508,29 +575,29 @@ export const useMessageListSelection = ({
       ignoreInputs: true,
       preventDefault: true,
       stopPropagation: true,
-    },
+    }
   );
 
   return {
     allSelected,
     clearSelection,
     consumeFocusRingRequest,
-    focusedThread,
-    focusedThreadId: resolvedFocusedThreadId,
-    keyboardFocusedThreadId: focusedThreadId,
     focusThread,
     focusThreadByOffset,
+    focusedThread,
+    focusedThreadId: resolvedFocusedThreadId,
     handleThreadPress,
     handleThreadSelectionPress,
     isProgrammaticScrollToTopRef,
+    keyboardFocusedThreadId: focusedThreadId,
     openFocusedThread,
     requestFocusRing,
     scrollListToTop,
     scrollRef,
+    selectSingleThread,
     selectedThreadIds,
     selectedThreads,
     selectionIndeterminate,
-    selectSingleThread,
     toggleAllLoadedThreads,
     toggleFocusedThreadSelection,
   };

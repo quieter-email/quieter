@@ -1,6 +1,9 @@
 "use client";
 
-import type { ComposeEmailInput, ComposeEmailResult } from "@quieter/ai/chat-agent";
+import type {
+  ComposeEmailInput,
+  ComposeEmailResult,
+} from "@quieter/ai/chat-agent";
 import {
   composeDraftFormValuesSchema,
   composeSendFormValuesSchema,
@@ -9,27 +12,33 @@ import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { useForm } from "@tanstack/react-form";
 import { AnimatePresence, m, useReducedMotion } from "motion/react";
-import { type FormEvent, useState } from "react";
-import type { ComposeFormValues } from "~/features/compose/domain/compose-form";
-import { ComposeEditor, ComposeEditorBody } from "~/features/compose/components/compose-editor";
+import { useState } from "react";
+import type { SubmitEvent } from "react";
+
+import {
+  ComposeEditor,
+  ComposeEditorBody,
+} from "#/features/compose/components/compose-editor";
+import type { ComposeFormValues } from "#/features/compose/domain/compose-form";
 import {
   getRenderableComposeBodyHtml,
   normalizeComposeBodyHtml,
-} from "~/features/compose/domain/draft";
-import { getAppPresenceMotion } from "~/features/motion/app-motion";
+} from "#/features/compose/domain/draft";
+import { getAppPresenceMotion } from "#/features/motion/app-motion";
+
 import type { InlineComposeAction } from "../../types";
 import { ToolStep } from "./tools/tool-step";
 
 type InlineComposeToolProps = {
   disabled?: boolean;
   initial: ComposeEmailInput;
-  onResolve: (action: InlineComposeAction, message?: ComposeFormValues) => Promise<void>;
+  onResolve: (
+    action: InlineComposeAction,
+    message?: ComposeFormValues
+  ) => Promise<void>;
   processing?: boolean;
   result?: ComposeEmailResult;
 };
-
-const fieldClass =
-  "h-8 w-full min-w-0 bg-transparent px-0 text-sm text-fg placeholder:text-muted-fg/60";
 
 const ComposeField = ({
   label,
@@ -45,13 +54,15 @@ const ComposeField = ({
   value: string;
 }) => (
   <label className="flex min-w-0 items-center gap-3 border-b border-border py-1.5 last:border-b-0">
-    <span className="w-12 shrink-0 text-[11px] text-muted-fg">{label}</span>
+    <span className="w-12 shrink-0 text-micro text-muted-fg">{label}</span>
     {readOnly ? (
-      <span className={cn(fieldClass, "truncate")}>{value || "—"}</span>
+      <span className="h-8 w-full min-w-0 truncate bg-transparent px-0 text-sm text-fg">
+        {value || "—"}
+      </span>
     ) : (
       <input
         aria-label={label}
-        className={fieldClass}
+        className="h-8 w-full min-w-0 bg-transparent px-0 text-sm text-fg placeholder:text-muted-fg/60"
         onBlur={onBlur}
         onChange={(event) => onChange?.(event.target.value)}
         value={value}
@@ -65,7 +76,9 @@ const ComposeReceipt = ({ result }: { result: ComposeEmailResult }) => {
     return null;
   }
 
-  const detail = [result.to ? `To ${result.to}` : "", result.subject].filter(Boolean).join(" ");
+  const detail = [result.to ? `To ${result.to}` : "", result.subject]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <ToolStep
@@ -83,8 +96,10 @@ const ComposeDeclinedView = ({
   initial: ComposeEmailInput;
 }) => {
   const [expanded, setExpanded] = useState(defaultExpanded);
-  const bodyHtml = getRenderableComposeBodyHtml("", initial.bodyText);
-  const detail = [initial.to ? `To ${initial.to}` : "", initial.subject].filter(Boolean).join(" ");
+  const bodyText = initial.bodyText.trim();
+  const detail = [initial.to ? `To ${initial.to}` : "", initial.subject]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <ToolStep
@@ -92,19 +107,22 @@ const ComposeDeclinedView = ({
       expandable
       expanded={expanded}
       label="Declined draft"
-      onToggle={() => setExpanded((current) => !current)}
+      onToggle={() => {
+        setExpanded((current) => !current);
+      }}
     >
       <div className="space-y-0">
         <ComposeField label="To" readOnly value={initial.to} />
-        {initial.cc.trim() ? <ComposeField label="Cc" readOnly value={initial.cc} /> : null}
-        {initial.bcc.trim() ? <ComposeField label="Bcc" readOnly value={initial.bcc} /> : null}
+        {initial.cc.trim() ? (
+          <ComposeField label="Cc" readOnly value={initial.cc} />
+        ) : null}
+        {initial.bcc.trim() ? (
+          <ComposeField label="Bcc" readOnly value={initial.bcc} />
+        ) : null}
         <ComposeField label="Subject" readOnly value={initial.subject} />
         <div className="py-2 text-sm/relaxed text-muted-fg">
-          {bodyHtml ? (
-            <div
-              className="typeset typeset-docs max-w-[37em]"
-              dangerouslySetInnerHTML={{ __html: bodyHtml }}
-            />
+          {bodyText ? (
+            <p className="max-w-[37em] whitespace-pre-wrap">{bodyText}</p>
           ) : (
             <p>No message body.</p>
           )}
@@ -124,7 +142,8 @@ export const InlineComposeTool = ({
   const shouldReduceMotion = useReducedMotion();
   const [showCc, setShowCc] = useState(!!initial.cc.trim());
   const [showBcc, setShowBcc] = useState(!!initial.bcc.trim());
-  const [pendingAction, setPendingAction] = useState<InlineComposeAction | null>(null);
+  const [pendingAction, setPendingAction] =
+    useState<InlineComposeAction | null>(null);
   const [error, setError] = useState<string | null>(null);
   const form = useForm({
     defaultValues: {
@@ -146,7 +165,7 @@ export const InlineComposeTool = ({
   }
 
   const resolve = async (action: InlineComposeAction) => {
-    if (disabled || processing || pendingAction) {
+    if (disabled === true || processing === true || pendingAction !== null) {
       return;
     }
 
@@ -160,7 +179,7 @@ export const InlineComposeTool = ({
         setError(
           actionError instanceof Error && actionError.message
             ? actionError.message
-            : "Could not decline the email.",
+            : "Could not decline the email."
         );
         setPendingAction(null);
       }
@@ -184,38 +203,42 @@ export const InlineComposeTool = ({
     try {
       await onResolve(action, parsed.data);
     } catch (actionError) {
+      const fallbackMessage =
+        action === "send"
+          ? "Could not send the email."
+          : "Could not save the draft.";
       setError(
         actionError instanceof Error && actionError.message
           ? actionError.message
-          : action === "send"
-            ? "Could not send the email."
-            : "Could not save the draft.",
+          : fallbackMessage
       );
       setPendingAction(null);
     }
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     void resolve("send");
   };
-  const isBusy = !!(processing || pendingAction);
+  const isBusy = processing === true || pendingAction !== null;
 
   return (
     <form className="border-l border-border pl-3" onSubmit={handleSubmit}>
       <div className="mb-2 flex items-center justify-between gap-3">
         <p className="text-xs text-muted-fg">
-          {processing ? "Sending email" : "Draft email"}
+          {processing === true ? "Sending email" : "Draft email"}
           {initial.subject.trim() ? (
             <span className="text-fg/75">{` "${initial.subject}"`}</span>
           ) : null}
         </p>
-        <div className="flex shrink-0 items-center gap-2 text-[11px]">
+        <div className="flex shrink-0 items-center gap-2 text-micro">
           <button
             className={cn("text-muted-fg transition-colors hover:text-fg", {
               "text-fg": showCc,
             })}
-            onClick={() => setShowCc((current) => !current)}
+            onClick={() => {
+              setShowCc((current) => !current);
+            }}
             type="button"
           >
             Cc
@@ -224,7 +247,9 @@ export const InlineComposeTool = ({
             className={cn("text-muted-fg transition-colors hover:text-fg", {
               "text-fg": showBcc,
             })}
-            onClick={() => setShowBcc((current) => !current)}
+            onClick={() => {
+              setShowBcc((current) => !current);
+            }}
             type="button"
           >
             Bcc
@@ -232,7 +257,7 @@ export const InlineComposeTool = ({
         </div>
       </div>
 
-      <fieldset disabled={disabled || isBusy}>
+      <fieldset disabled={disabled === true || isBusy}>
         <form.Field name="to">
           {(field) => (
             <ComposeField
@@ -294,12 +319,13 @@ export const InlineComposeTool = ({
           {(field) => (
             <ComposeEditor
               density="compact"
-              disabled={disabled || isBusy}
+              disabled={disabled === true || isBusy}
               html={field.state.value}
               onBlur={field.handleBlur}
               onChange={({ html, text }) => {
                 if (
-                  normalizeComposeBodyHtml(html) !== normalizeComposeBodyHtml(field.state.value) ||
+                  normalizeComposeBodyHtml(html) !==
+                    normalizeComposeBodyHtml(field.state.value) ||
                   text !== form.state.values.bodyText
                 ) {
                   setError(null);
@@ -307,7 +333,9 @@ export const InlineComposeTool = ({
                 field.handleChange(html);
                 form.setFieldValue("bodyText", text);
               }}
-              onInlineImageFiles={() => undefined}
+              onInlineImageFiles={(files) => {
+                void files;
+              }}
             >
               <ComposeEditorBody className="mt-2 p-4" />
             </ComposeEditor>
@@ -318,7 +346,7 @@ export const InlineComposeTool = ({
       <div className="mt-3 flex items-center gap-2">
         <div className="min-w-0 flex-1">
           <AnimatePresence initial={false}>
-            {error ? (
+            {error !== null && error !== undefined && error !== "" ? (
               <m.p
                 {...getAppPresenceMotion({
                   distance: 2,
@@ -333,7 +361,7 @@ export const InlineComposeTool = ({
           </AnimatePresence>
         </div>
         <Button
-          disabled={disabled || isBusy}
+          disabled={disabled === true || isBusy}
           onClick={() => void resolve("decline")}
           size="sm"
           type="button"
@@ -342,7 +370,7 @@ export const InlineComposeTool = ({
           {pendingAction === "decline" ? "Declining…" : "Decline"}
         </Button>
         <Button
-          disabled={disabled || isBusy}
+          disabled={disabled === true || isBusy}
           onClick={() => void resolve("save_draft")}
           size="sm"
           type="button"
@@ -350,7 +378,7 @@ export const InlineComposeTool = ({
         >
           {pendingAction === "save_draft" ? "Saving…" : "Save draft"}
         </Button>
-        <Button disabled={disabled || isBusy} size="sm" type="submit">
+        <Button disabled={disabled === true || isBusy} size="sm" type="submit">
           {pendingAction === "send" ? "Sending…" : "Send"}
         </Button>
       </div>

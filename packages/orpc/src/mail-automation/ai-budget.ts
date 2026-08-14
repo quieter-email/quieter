@@ -4,6 +4,8 @@ import { hasUserBillingFeature } from "@quieter/billing/entitlements";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
 import { serverEnv } from "@quieter/env/server";
 
+import { hasText } from "../text";
+
 export const MAIL_AUTOMATION_AI_PAUSED_MESSAGE =
   "AI automation is paused until usage balance is available.";
 
@@ -27,7 +29,7 @@ export const resolveMailAutomationAiBudgetStatus = (input: {
     } as const;
   }
 
-  if (input.missingOrganization) {
+  if (input.missingOrganization === true) {
     return {
       allowed: false,
       message: "AI automation requires a mailbox assigned to a team.",
@@ -50,7 +52,8 @@ export const resolveMailAutomationAiBudgetStatus = (input: {
   if (!input.hasAccount || !input.usage) {
     return {
       allowed: false,
-      message: "AI automation is unavailable until team billing usage is available.",
+      message:
+        "AI automation is unavailable until team billing usage is available.",
       reason: "billing_usage_unavailable",
     } as const;
   }
@@ -79,7 +82,7 @@ export const getMailAutomationAiBudgetStatus = async (input: {
       runtimeEnabled,
     });
   }
-  if (!input.organizationId) {
+  if (!hasText(input.organizationId)) {
     return resolveMailAutomationAiBudgetStatus({
       hasAccess: false,
       hasAccount: false,
@@ -100,7 +103,9 @@ export const getMailAutomationAiBudgetStatus = async (input: {
     hasAccount: !!entitlement.account,
     hasUnlimitedAccess: entitlement.hasUnlimitedAccess,
     runtimeEnabled,
-    usage: entitlement.account ? await getBillingCreditUsage(entitlement.account) : undefined,
+    usage: entitlement.account
+      ? await getBillingCreditUsage(entitlement.account)
+      : undefined,
   });
 };
 

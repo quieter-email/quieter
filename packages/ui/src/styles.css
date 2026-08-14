@@ -54,6 +54,10 @@
   --q-pink: oklch(0.63 0.16 345);
   --q-purple: oklch(0.6 0.16 300);
   --border: oklch(0.84 0.002 264 / 0.6);
+  --border-strong: oklch(0.78 0.002 264 / 0.9);
+  /* Form-control fill. Distinct from the canvas without the harsh drop of
+     `--bg-elevated`, which is a sunken *panel* surface, not a field. */
+  --input: oklch(1 0.002 264);
   --ring: oklch(0.708 0.003 264);
   --scrollbar-thumb: var(--secondary);
   --chart-1: oklch(0.32 0.002 264);
@@ -73,11 +77,15 @@
   --shadow-color: oklch(0 0 0);
   --shadow-2xs: 0 1px 2px 0 oklch(0 0 0 / 0.03);
   --shadow-xs: 0 1px 2px 0 oklch(0 0 0 / 0.04);
-  --shadow-sm: 0 1px 3px 0 oklch(0 0 0 / 0.06), 0 1px 2px -1px oklch(0 0 0 / 0.06);
+  --shadow-sm:
+    0 1px 3px 0 oklch(0 0 0 / 0.06), 0 1px 2px -1px oklch(0 0 0 / 0.06);
   --shadow: 0 1px 3px 0 oklch(0 0 0 / 0.07), 0 1px 2px -1px oklch(0 0 0 / 0.07);
-  --shadow-md: 0 4px 6px -1px oklch(0 0 0 / 0.07), 0 2px 4px -2px oklch(0 0 0 / 0.05);
-  --shadow-lg: 0 10px 15px -3px oklch(0 0 0 / 0.07), 0 4px 6px -4px oklch(0 0 0 / 0.05);
-  --shadow-xl: 0 20px 25px -5px oklch(0 0 0 / 0.07), 0 8px 10px -6px oklch(0 0 0 / 0.05);
+  --shadow-md:
+    0 4px 6px -1px oklch(0 0 0 / 0.07), 0 2px 4px -2px oklch(0 0 0 / 0.05);
+  --shadow-lg:
+    0 10px 15px -3px oklch(0 0 0 / 0.07), 0 4px 6px -4px oklch(0 0 0 / 0.05);
+  --shadow-xl:
+    0 20px 25px -5px oklch(0 0 0 / 0.07), 0 8px 10px -6px oklch(0 0 0 / 0.05);
   --shadow-2xl: 0 25px 50px -12px oklch(0 0 0 / 0.15);
   --shadow-elevation: 0 8px 24px -8px oklch(0 0 0 / 0.08);
   --shadow-elevation-sm: 0 4px 12px -4px oklch(0 0 0 / 0.06);
@@ -92,7 +100,8 @@
   --bg-surface: oklch(0.255 0.003 264);
   --bg-elevated: oklch(0.145 0 264);
   --fg: oklch(1 0.002 264);
-  --card: var(--bg-elevated);
+  /* Raised, like light mode. `--bg-elevated` sits below the canvas in dark. */
+  --card: var(--bg-surface);
   --card-fg: var(--fg);
   --popover: var(--bg);
   --popover-fg: var(--fg);
@@ -120,6 +129,10 @@
   --q-pink: oklch(0.75 0.16 345);
   --q-purple: oklch(0.72 0.16 300);
   --border: oklch(0.25 0.004 264 / 0.6);
+  --border-strong: oklch(0.38 0.004 264 / 0.9);
+  /* Recessed from the 0.218 canvas by roughly the same step that `--card` is
+     raised, rather than dropping all the way to `--bg-elevated` at 0.145. */
+  --input: oklch(0.185 0.003 264);
   --ring: oklch(0.44 0.004 264);
   --scrollbar-thumb: var(--secondary);
   --chart-1: oklch(0.42 0.003 264);
@@ -129,11 +142,15 @@
   --chart-5: oklch(0.82 0.003 264);
   --shadow-2xs: 0 1px 2px 0 oklch(0 0 0 / 0.15);
   --shadow-xs: 0 1px 2px 0 oklch(0 0 0 / 0.2);
-  --shadow-sm: 0 1px 3px 0 oklch(0 0 0 / 0.2), 0 1px 2px -1px oklch(0 0 0 / 0.15);
+  --shadow-sm:
+    0 1px 3px 0 oklch(0 0 0 / 0.2), 0 1px 2px -1px oklch(0 0 0 / 0.15);
   --shadow: 0 1px 3px 0 oklch(0 0 0 / 0.25), 0 1px 2px -1px oklch(0 0 0 / 0.2);
-  --shadow-md: 0 4px 6px -1px oklch(0 0 0 / 0.25), 0 2px 4px -2px oklch(0 0 0 / 0.15);
-  --shadow-lg: 0 10px 15px -3px oklch(0 0 0 / 0.25), 0 4px 6px -4px oklch(0 0 0 / 0.15);
-  --shadow-xl: 0 20px 25px -5px oklch(0 0 0 / 0.25), 0 8px 10px -6px oklch(0 0 0 / 0.15);
+  --shadow-md:
+    0 4px 6px -1px oklch(0 0 0 / 0.25), 0 2px 4px -2px oklch(0 0 0 / 0.15);
+  --shadow-lg:
+    0 10px 15px -3px oklch(0 0 0 / 0.25), 0 4px 6px -4px oklch(0 0 0 / 0.15);
+  --shadow-xl:
+    0 20px 25px -5px oklch(0 0 0 / 0.25), 0 8px 10px -6px oklch(0 0 0 / 0.15);
   --shadow-2xl: 0 25px 50px -12px oklch(0 0 0 / 0.4);
   --shadow-elevation: 0 8px 24px -8px oklch(0 0 0 / 0.25);
   --shadow-elevation-sm: 0 4px 12px -4px oklch(0 0 0 / 0.2);
@@ -172,6 +189,8 @@
   --color-q-pink: var(--q-pink);
   --color-q-purple: var(--q-purple);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
   --color-ring: var(--ring);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
@@ -206,6 +225,8 @@
   --text-body-sm--line-height: 1.45;
   --text-caption: 0.75rem;
   --text-caption--line-height: 1.35;
+  --text-micro: 0.6875rem;
+  --text-micro--line-height: 1.3;
 
   --blur-glass: 18px;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);

@@ -4,7 +4,9 @@ export const ORGANIZATION_SETTINGS_VIEWS = [
   "divisions",
   "domains",
   "api-keys",
+  "suppressions",
   "billing",
   "danger",
 ] as const;
-export type OrganizationSettingsView = (typeof ORGANIZATION_SETTINGS_VIEWS)[number];
+export type OrganizationSettingsView =
+  (typeof ORGANIZATION_SETTINGS_VIEWS)[number];

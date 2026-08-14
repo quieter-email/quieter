@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import {
@@ -7,19 +9,22 @@ import {
   managedMailMessageLabel,
   managedMailRule,
   managedMailSavedView,
-  type ManagedMailMailboxState,
 } from "@quieter/database/schema";
+import type { ManagedMailMailboxState } from "@quieter/database/schema";
 import { MAILBOX_LABELS } from "@quieter/gmail";
 import {
   mailboxLabelColorSchema,
   managedMailboxRuleActionSchema,
-  type MailboxLabel,
-  type ManagedMailboxRuleAction,
+} from "@quieter/mail/mailbox-organization";
+import type {
+  MailboxLabel,
+  ManagedMailboxRuleAction,
 } from "@quieter/mail/mailbox-organization";
 import { structuredMailSearchSchema } from "@quieter/mail/search";
 import { and, asc, countDistinct, eq, sql } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
+
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
+import { hasText } from "../../text";
 import { getManagedMessageLabelIds } from "../messages/service";
 import { normalizeManagedOrganizationName } from "../organization/normalize-name";
 import {
@@ -27,7 +32,9 @@ import {
   updateManagedMessageLabelAssignments,
 } from "./repository";
 
-const toMailboxLabel = (record: typeof managedMailLabel.$inferSelect): MailboxLabel => ({
+const toMailboxLabel = (
+  record: typeof managedMailLabel.$inferSelect
+): MailboxLabel => ({
   color: mailboxLabelColorSchema.parse(record.color),
   description: record.description,
   id: record.id,
@@ -48,12 +55,24 @@ const getMailboxStateFromLabelChanges = (input: {
   addLabelIds?: string[];
   removeLabelIds?: string[];
 }): ManagedMailMailboxState | null => {
-  const addLabelIds = new Set(input.addLabelIds ?? []);
-  const removeLabelIds = new Set(input.removeLabelIds ?? []);
+  const addLabelIds =
+    input.addLabelIds === undefined
+      ? new Set<string>()
+      : new Set(input.addLabelIds);
+  const removeLabelIds =
+    input.removeLabelIds === undefined
+      ? new Set<string>()
+      : new Set(input.removeLabelIds);
 
-  if (addLabelIds.has(MAILBOX_LABELS.trash)) return "trash";
-  if (addLabelIds.has(MAILBOX_LABELS.spam)) return "spam";
-  if (removeLabelIds.has(MAILBOX_LABELS.inbox)) return "archived";
+  if (addLabelIds.has(MAILBOX_LABELS.trash)) {
+    return "trash";
+  }
+  if (addLabelIds.has(MAILBOX_LABELS.spam)) {
+    return "spam";
+  }
+  if (removeLabelIds.has(MAILBOX_LABELS.inbox)) {
+    return "archived";
+  }
   if (
     addLabelIds.has(MAILBOX_LABELS.inbox) ||
     addLabelIds.has(MAILBOX_LABELS.sent) ||
@@ -66,7 +85,10 @@ const getMailboxStateFromLabelChanges = (input: {
   return null;
 };
 
-export const listManagedLabels = async (input: { mailboxId: string; userId: string }) => {
+export const listManagedLabels = async (input: {
+  mailboxId: string;
+  userId: string;
+}) => {
   await getAuthorizedManagedMailbox(input);
   const labels = await db
     .select()
@@ -76,7 +98,10 @@ export const listManagedLabels = async (input: { mailboxId: string; userId: stri
   return labels.map(toMailboxLabel);
 };
 
-export const listManagedLabelCounts = async (input: { mailboxId: string; userId: string }) => {
+export const listManagedLabelCounts = async (input: {
+  mailboxId: string;
+  userId: string;
+}) => {
   await getAuthorizedManagedMailbox(input);
   return await db
     .select({
@@ -84,7 +109,10 @@ export const listManagedLabelCounts = async (input: { mailboxId: string; userId:
       labelId: managedMailMessageLabel.labelId,
     })
     .from(managedMailMessageLabel)
-    .innerJoin(managedMailMessage, eq(managedMailMessage.id, managedMailMessageLabel.messageId))
+    .innerJoin(
+      managedMailMessage,
+      eq(managedMailMessage.id, managedMailMessageLabel.messageId)
+    )
     .where(eq(managedMailMessageLabel.mailboxId, input.mailboxId))
     .groupBy(managedMailMessageLabel.labelId);
 };
@@ -101,7 +129,7 @@ export const createManagedLabel = async (input: {
     requiredRoles: ["manager"],
     userId: input.userId,
   });
-  const name = input.name.replace(/\s+/g, " ").trim();
+  const name = input.name.replaceAll(/\s+/gu, " ").trim();
   const now = new Date();
   const [record] = await db
     .insert(managedMailLabel)
@@ -109,7 +137,7 @@ export const createManagedLabel = async (input: {
       color: mailboxLabelColorSchema.parse(input.color),
       createdAt: now,
       createdByUserId: input.userId,
-      description: input.description?.trim() || null,
+      description: hasText(input.description) ? input.description.trim() : null,
       id: randomUUID(),
       mailboxId: input.mailboxId,
       name,
@@ -136,25 +164,40 @@ export const updateManagedLabel = async (input: {
     requiredRoles: ["manager"],
     userId: input.userId,
   });
-  const name = input.name?.replace(/\s+/g, " ").trim();
+  const name = input.name?.replaceAll(/\s+/gu, " ").trim();
+  const descriptionUpdate =
+    input.description === undefined
+      ? {}
+      : {
+          description: hasText(input.description)
+            ? input.description.trim()
+            : null,
+        };
   const [record] = await db
     .update(managedMailLabel)
     .set({
-      ...(input.color ? { color: mailboxLabelColorSchema.parse(input.color) } : {}),
-      ...(input.description !== undefined
-        ? { description: input.description?.trim() || null }
+      ...(input.color === undefined
+        ? {}
+        : { color: mailboxLabelColorSchema.parse(input.color) }),
+      ...descriptionUpdate,
+      ...(hasText(name)
+        ? { name, normalizedName: normalizeManagedOrganizationName(name) }
         : {}),
-      ...(name ? { name, normalizedName: normalizeManagedOrganizationName(name) } : {}),
-      ...(input.position !== undefined ? { position: input.position } : {}),
-      ...(input.visible !== undefined ? { visible: input.visible } : {}),
+      ...(input.position === undefined ? {} : { position: input.position }),
+      ...(input.visible === undefined ? {} : { visible: input.visible }),
       updatedAt: new Date(),
       updatedByUserId: input.userId,
     })
     .where(
-      and(eq(managedMailLabel.id, input.labelId), eq(managedMailLabel.mailboxId, input.mailboxId)),
+      and(
+        eq(managedMailLabel.id, input.labelId),
+        eq(managedMailLabel.mailboxId, input.mailboxId)
+      )
     )
     .returning();
-  if (!record) throw new ORPCError("NOT_FOUND", { message: "Label not found." });
+  if (record === undefined) {
+    throw new ORPCError("NOT_FOUND", { message: "Label not found." });
+  }
   return toMailboxLabel(record);
 };
 
@@ -176,9 +219,12 @@ export const reorderManagedLabels = async (input: {
         .update(managedMailLabel)
         .set({ position, updatedAt: now, updatedByUserId: input.userId })
         .where(
-          and(eq(managedMailLabel.id, labelId), eq(managedMailLabel.mailboxId, input.mailboxId)),
-        ),
-    ),
+          and(
+            eq(managedMailLabel.id, labelId),
+            eq(managedMailLabel.mailboxId, input.mailboxId)
+          )
+        )
+    )
   );
   return { labelIds: input.labelIds };
 };
@@ -197,88 +243,117 @@ export const deleteManagedLabel = async (input: {
     .select({ id: managedMailLabel.id, name: managedMailLabel.name })
     .from(managedMailLabel)
     .where(
-      and(eq(managedMailLabel.id, input.labelId), eq(managedMailLabel.mailboxId, input.mailboxId)),
+      and(
+        eq(managedMailLabel.id, input.labelId),
+        eq(managedMailLabel.mailboxId, input.mailboxId)
+      )
     )
     .limit(1);
-  if (!label) throw new ORPCError("NOT_FOUND", { message: "Label not found." });
+  if (label === undefined) {
+    throw new ORPCError("NOT_FOUND", { message: "Label not found." });
+  }
 
   const [views, rules] = await Promise.all([
     db
       .select()
       .from(managedMailSavedView)
       .where(eq(managedMailSavedView.mailboxId, input.mailboxId)),
-    db.select().from(managedMailRule).where(eq(managedMailRule.mailboxId, input.mailboxId)),
+    db
+      .select()
+      .from(managedMailRule)
+      .where(eq(managedMailRule.mailboxId, input.mailboxId)),
   ]);
-  for (const view of views) {
-    const search = structuredMailSearchSchema.parse(view.search);
-    const nextFilters = search.filters.filter(
-      (filter) =>
-        !(
-          filter.type === "label" &&
-          normalizeManagedOrganizationName(filter.value) ===
-            normalizeManagedOrganizationName(label.name)
-        ),
-    );
-    if (nextFilters.length !== search.filters.length) {
+  await Promise.all(
+    views.map(async (view) => {
+      const search = structuredMailSearchSchema.parse(view.search);
+      const nextFilters = search.filters.filter(
+        (filter) =>
+          !(
+            filter.type === "label" &&
+            normalizeManagedOrganizationName(filter.value) ===
+              normalizeManagedOrganizationName(label.name)
+          )
+      );
+      if (nextFilters.length === search.filters.length) {
+        return;
+      }
       await db
         .update(managedMailSavedView)
         .set({
           disabledReason:
-            nextFilters.length === 0 && !search.text ? "This view needs new filters." : null,
+            nextFilters.length === 0 && !hasText(search.text)
+              ? "This view needs new filters."
+              : null,
           search: { ...search, filters: nextFilters },
           updatedAt: new Date(),
         })
         .where(eq(managedMailSavedView.id, view.id));
-    }
-  }
-  for (const rule of rules) {
-    const labelIds = rule.labelIds.filter((labelId) => labelId !== input.labelId);
-    const parsedActions = managedMailboxRuleActionSchema.array().safeParse(rule.actions);
-    const actions: ManagedMailboxRuleAction[] | undefined = parsedActions.success
-      ? parsedActions.data.reduce<ManagedMailboxRuleAction[]>((nextActions, action) => {
+    })
+  );
+  await Promise.all(
+    rules.map(async (rule) => {
+      const labelIds = rule.labelIds.filter(
+        (labelId) => labelId !== input.labelId
+      );
+      const parsedActions = managedMailboxRuleActionSchema
+        .array()
+        .safeParse(rule.actions);
+      let actions: ManagedMailboxRuleAction[] | undefined;
+      if (parsedActions.success) {
+        actions = [];
+        for (const action of parsedActions.data) {
           if (action.kind !== "set-labels") {
-            nextActions.push(action);
-            return nextActions;
+            actions.push(action);
+            continue;
           }
           const nextAction: ManagedMailboxRuleAction = {
             ...action,
-            addIds: action.addIds.filter((labelId) => labelId !== input.labelId),
-            removeIds: action.removeIds.filter((labelId) => labelId !== input.labelId),
+            addIds: action.addIds.filter(
+              (labelId) => labelId !== input.labelId
+            ),
+            removeIds: action.removeIds.filter(
+              (labelId) => labelId !== input.labelId
+            ),
           };
           if (nextAction.addIds.length > 0 || nextAction.removeIds.length > 0) {
-            nextActions.push(nextAction);
+            actions.push(nextAction);
           }
-          return nextActions;
-        }, [])
-      : undefined;
-    const referencesDeletedLabel =
-      rule.labelIds.includes(input.labelId) ||
-      (parsedActions.success &&
-        parsedActions.data.some(
-          (action) =>
-            action.kind === "set-labels" &&
-            (action.addIds.includes(input.labelId) || action.removeIds.includes(input.labelId)),
-        ));
-    if (!referencesDeletedLabel) {
-      continue;
-    }
-    const hasAction = actions
-      ? actions.some((action) => action.kind !== "stop-processing")
-      : labelIds.length > 0;
-    await db
-      .update(managedMailRule)
-      .set({
-        actions,
-        enabled: hasAction && rule.enabled,
-        labelIds,
-        updatedAt: new Date(),
-      })
-      .where(eq(managedMailRule.id, rule.id));
-  }
+        }
+      }
+      const referencesDeletedLabel =
+        rule.labelIds.includes(input.labelId) ||
+        (parsedActions.success &&
+          parsedActions.data.some(
+            (action) =>
+              action.kind === "set-labels" &&
+              (action.addIds.includes(input.labelId) ||
+                action.removeIds.includes(input.labelId))
+          ));
+      if (!referencesDeletedLabel) {
+        return;
+      }
+      const hasAction =
+        actions === undefined
+          ? labelIds.length > 0
+          : actions.some((action) => action.kind !== "stop-processing");
+      await db
+        .update(managedMailRule)
+        .set({
+          actions,
+          enabled: hasAction && rule.enabled,
+          labelIds,
+          updatedAt: new Date(),
+        })
+        .where(eq(managedMailRule.id, rule.id));
+    })
+  );
   await db
     .delete(managedMailLabel)
     .where(
-      and(eq(managedMailLabel.id, input.labelId), eq(managedMailLabel.mailboxId, input.mailboxId)),
+      and(
+        eq(managedMailLabel.id, input.labelId),
+        eq(managedMailLabel.mailboxId, input.mailboxId)
+      )
     );
   return { id: input.labelId };
 };
@@ -306,8 +381,8 @@ export const updateManagedThreadLabels = async (input: {
     .where(
       and(
         eq(managedMailMessage.mailboxId, input.mailboxId),
-        eq(managedMailMessage.threadId, input.threadId),
-      ),
+        eq(managedMailMessage.threadId, input.threadId)
+      )
     );
   if (messages.length === 0) {
     throw new ORPCError("NOT_FOUND", { message: "Message thread not found." });
@@ -321,8 +396,8 @@ export const updateManagedThreadLabels = async (input: {
         .where(
           and(
             eq(managedMailMessage.mailboxId, input.mailboxId),
-            eq(managedMailMessage.threadId, input.threadId),
-          ),
+            eq(managedMailMessage.threadId, input.threadId)
+          )
         );
     }
     const assignments = await updateManagedMessageLabelAssignments({
@@ -335,23 +410,30 @@ export const updateManagedThreadLabels = async (input: {
     });
     await tx
       .update(mailbox)
-      .set({ contentRevision: sql`${mailbox.contentRevision} + 1`, updatedAt: new Date() })
+      .set({
+        contentRevision: sql`${mailbox.contentRevision} + 1`,
+        updatedAt: new Date(),
+      })
       .where(eq(mailbox.id, input.mailboxId));
     return assignments;
   });
-  const messagesById = new Map(messages.map((message) => [message.id, message]));
+  const messagesById = new Map(
+    messages.map((message) => [message.id, message])
+  );
   return {
     messages: updated.map((message) => {
       const record = messagesById.get(message.id);
       if (!record) {
-        throw new ORPCError("INTERNAL_SERVER_ERROR", { message: "Message metadata is missing." });
+        throw new ORPCError("INTERNAL_SERVER_ERROR", {
+          message: "Message metadata is missing.",
+        });
       }
       return {
         ...message,
         isUnread: !record.isRead,
         labelIds: getManagedMessageLabelIds(
           { ...record, mailboxState: mailboxState ?? record.mailboxState },
-          message.labelIds,
+          message.labelIds
         ),
       };
     }),
@@ -382,11 +464,13 @@ export const updateSingleManagedMessageLabels = async (input: {
     .where(
       and(
         eq(managedMailMessage.mailboxId, input.mailboxId),
-        eq(managedMailMessage.id, input.messageId),
-      ),
+        eq(managedMailMessage.id, input.messageId)
+      )
     )
     .limit(1);
-  if (!message) throw new ORPCError("NOT_FOUND", { message: "Message not found." });
+  if (message === undefined) {
+    throw new ORPCError("NOT_FOUND", { message: "Message not found." });
+  }
   const mailboxState = getMailboxStateFromLabelChanges(input);
   const updated = await db.transaction(async (tx) => {
     if (mailboxState) {
@@ -396,8 +480,8 @@ export const updateSingleManagedMessageLabels = async (input: {
         .where(
           and(
             eq(managedMailMessage.mailboxId, input.mailboxId),
-            eq(managedMailMessage.id, input.messageId),
-          ),
+            eq(managedMailMessage.id, input.messageId)
+          )
         );
     }
     const [assignment] = await updateManagedMessageLabelAssignments({
@@ -410,7 +494,10 @@ export const updateSingleManagedMessageLabels = async (input: {
     });
     await tx
       .update(mailbox)
-      .set({ contentRevision: sql`${mailbox.contentRevision} + 1`, updatedAt: new Date() })
+      .set({
+        contentRevision: sql`${mailbox.contentRevision} + 1`,
+        updatedAt: new Date(),
+      })
       .where(eq(mailbox.id, input.mailboxId));
     return assignment;
   });
@@ -419,7 +506,7 @@ export const updateSingleManagedMessageLabels = async (input: {
     isUnread: !message.isRead,
     labelIds: getManagedMessageLabelIds(
       { ...message, mailboxState: mailboxState ?? message.mailboxState },
-      updated.labelIds,
+      updated.labelIds
     ),
   };
 };

@@ -1,21 +1,25 @@
+import { createHash, randomBytes, randomUUID } from "node:crypto";
+
 import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import {
   connectorCredential,
   connectorOAuthState,
-  type ConnectorProvider,
 } from "@quieter/database/schema";
+import type { ConnectorProvider } from "@quieter/database/schema";
 import { requireServerEnv, serverEnv } from "@quieter/env/server";
 import { getMessageAttachment } from "@quieter/gmail";
 import { and, eq, lt } from "drizzle-orm";
-import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
+
 import {
   decryptGmailCredentialSecret,
   encryptGmailCredentialSecret,
 } from "../gmail-credential-crypto";
 import { runAuthorizedGmailMailbox } from "../gmail-mailbox-access";
-import { parseIcsToGoogleCalendarEvent, type GoogleCalendarEventDraft } from "./ical";
+import { hasText } from "../text";
+import { parseIcsToGoogleCalendarEvent } from "./ical";
+import type { GoogleCalendarEventDraft } from "./ical";
 import {
   getLinearIdentityFromAccessToken,
   LINEAR_AUTHORIZATION_URL,
@@ -41,7 +45,10 @@ export const CONNECTOR_PROVIDERS = [
 ] as const;
 export const connectorProviderSchema = z.enum(CONNECTOR_PROVIDERS);
 
-export type ConnectorConnectionStatus = "connected" | "needs_reconnect" | "not_connected";
+export type ConnectorConnectionStatus =
+  | "connected"
+  | "needs_reconnect"
+  | "not_connected";
 export type GoogleCalendarEventInput = {
   description?: string;
   end: {
@@ -59,7 +66,7 @@ export type GoogleCalendarEventInput = {
 };
 export type ConnectorListItem = {
   accountEmail?: string | null;
-  accounts: Array<{
+  accounts: {
     accountEmail?: string | null;
     displayName?: string | null;
     id: string;
@@ -67,7 +74,7 @@ export type ConnectorListItem = {
     providerWorkspaceId?: string | null;
     providerWorkspaceName?: string | null;
     status: ConnectorConnectionStatus;
-  }>;
+  }[];
   connectedAt?: Date;
   description: string;
   displayName: string;
@@ -127,7 +134,7 @@ const linearRefreshResponseSchema = z.object({
 
 const googleTokenInfoSchema = z.object({
   aud: z.string().min(1),
-  email: z.string().email(),
+  email: z.email(),
   email_verified: z.enum(["true", "false"]),
   exp: z.coerce.number().int().positive(),
   iss: z.enum(["accounts.google.com", "https://accounts.google.com"]),
@@ -144,14 +151,15 @@ const googleApiErrorSchema = z.object({
 });
 
 const googleCalendarEventResponseSchema = z.object({
-  htmlLink: z.string().url().optional(),
+  htmlLink: z.url().optional(),
   id: z.string().min(1),
   summary: z.string().optional(),
 });
 
 const connectorDefinitions = {
   [GOOGLE_CALENDAR_CONNECTOR_PROVIDER]: {
-    description: "Add calendar invitations from mail and let chat create events.",
+    description:
+      "Add calendar invitations from mail and let chat create events.",
     displayName: "Google Calendar",
     scopes: GOOGLE_CALENDAR_SCOPES,
     supportsChatTools: true,
@@ -172,9 +180,19 @@ const connectorDefinitions = {
   }
 >;
 
+export const getConnectorDisplayName = (provider: ConnectorProvider) =>
+  connectorDefinitions[provider].displayName;
+
 const normalizeReturnTo = (returnTo: string | undefined) => {
   const normalized = returnTo?.trim();
-  return normalized?.startsWith("/") && !normalized.startsWith("//") ? normalized : "/settings";
+  if (
+    hasText(normalized) &&
+    normalized.startsWith("/") &&
+    !normalized.startsWith("//")
+  ) {
+    return normalized;
+  }
+  return "/settings";
 };
 
 const createCodeVerifier = () => randomBytes(48).toString("base64url");
@@ -192,26 +210,26 @@ const getLinearOAuthClient = () => ({
 });
 
 const isGoogleCalendarClientConfigured = () =>
-  !!(
-    serverEnv.GOOGLE_CALENDAR_CLIENT_ID &&
-    serverEnv.GOOGLE_CALENDAR_CLIENT_SECRET &&
-    serverEnv.CONNECTOR_TOKEN_ENCRYPTION_KEY
-  );
+  hasText(serverEnv.GOOGLE_CALENDAR_CLIENT_ID) &&
+  hasText(serverEnv.GOOGLE_CALENDAR_CLIENT_SECRET) &&
+  hasText(serverEnv.CONNECTOR_TOKEN_ENCRYPTION_KEY);
 
 const isGoogleCalendarOAuthConfigured = () =>
-  !!serverEnv.BETTER_AUTH_URL && isGoogleCalendarClientConfigured();
+  hasText(serverEnv.BETTER_AUTH_URL) && isGoogleCalendarClientConfigured();
 
 const isLinearClientConfigured = () =>
-  !!(
-    serverEnv.LINEAR_CLIENT_ID &&
-    serverEnv.LINEAR_CLIENT_SECRET &&
-    serverEnv.CONNECTOR_TOKEN_ENCRYPTION_KEY
-  );
+  hasText(serverEnv.LINEAR_CLIENT_ID) &&
+  hasText(serverEnv.LINEAR_CLIENT_SECRET) &&
+  hasText(serverEnv.CONNECTOR_TOKEN_ENCRYPTION_KEY);
 
-const isLinearOAuthConfigured = () => !!serverEnv.BETTER_AUTH_URL && isLinearClientConfigured();
+const isLinearOAuthConfigured = () =>
+  hasText(serverEnv.BETTER_AUTH_URL) && isLinearClientConfigured();
 
 const assertConnectorConfigured = (provider: ConnectorProvider) => {
-  if (provider === GOOGLE_CALENDAR_CONNECTOR_PROVIDER && isGoogleCalendarOAuthConfigured()) {
+  if (
+    provider === GOOGLE_CALENDAR_CONNECTOR_PROVIDER &&
+    isGoogleCalendarOAuthConfigured()
+  ) {
     return;
   }
   if (provider === LINEAR_CONNECTOR_PROVIDER && isLinearOAuthConfigured()) {
@@ -231,38 +249,46 @@ const getConnectorOAuthClient = (provider: ConnectorProvider) => {
     return getLinearOAuthClient();
   }
 
-  throw new ORPCError("BAD_REQUEST", { message: "Connector is not supported." });
+  throw new ORPCError("BAD_REQUEST", {
+    message: "Connector is not supported.",
+  });
 };
 
 const getConnectorOAuthConfig = (provider: ConnectorProvider) => {
   assertConnectorConfigured(provider);
 
   if (provider === GOOGLE_CALENDAR_CONNECTOR_PROVIDER) {
-    const baseUrl = requireServerEnv("BETTER_AUTH_URL").replace(/\/+$/, "");
+    const baseUrl = requireServerEnv("BETTER_AUTH_URL").replace(/\/+$/u, "");
     return {
       ...getGoogleCalendarOAuthClient(),
       redirectUri: `${baseUrl}/api/connectors/callback`,
     };
   }
   if (provider === LINEAR_CONNECTOR_PROVIDER) {
-    const baseUrl = requireServerEnv("BETTER_AUTH_URL").replace(/\/+$/, "");
+    const baseUrl = requireServerEnv("BETTER_AUTH_URL").replace(/\/+$/u, "");
     return {
       ...getLinearOAuthClient(),
       redirectUri: `${baseUrl}/api/connectors/callback`,
     };
   }
 
-  throw new ORPCError("BAD_REQUEST", { message: "Connector is not supported." });
+  throw new ORPCError("BAD_REQUEST", {
+    message: "Connector is not supported.",
+  });
 };
 
 const getConnectorCredentialEncryptionKey = () =>
   requireServerEnv("CONNECTOR_TOKEN_ENCRYPTION_KEY");
 
 const encryptConnectorSecret = (value: string) =>
-  encryptGmailCredentialSecret(value, { legacyKey: getConnectorCredentialEncryptionKey() });
+  encryptGmailCredentialSecret(value, {
+    legacyKey: getConnectorCredentialEncryptionKey(),
+  });
 
 const decryptConnectorSecret = (value: string) =>
-  decryptGmailCredentialSecret(value, { legacyKey: getConnectorCredentialEncryptionKey() });
+  decryptGmailCredentialSecret(value, {
+    legacyKey: getConnectorCredentialEncryptionKey(),
+  });
 
 const normalizeOAuthScope = (scope: string | string[]) =>
   Array.isArray(scope) ? scope.join(" ") : scope;
@@ -270,14 +296,24 @@ const normalizeOAuthScope = (scope: string | string[]) =>
 const splitGrantedScopes = (scope: string | string[]) =>
   new Set(
     normalizeOAuthScope(scope)
-      .split(/[\s,]+/)
-      .filter(Boolean),
+      .split(/[\s,]+/u)
+      .filter(Boolean)
   );
+
+class ConnectorHttpError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ConnectorHttpError";
+    this.status = status;
+  }
+}
 
 const createGoogleApiError = async (response: Response) => {
   const body = await response.text().catch(() => "");
   const parsedBody = (() => {
-    if (!body.trim()) {
+    if (!hasText(body.trim())) {
       return null;
     }
 
@@ -288,18 +324,17 @@ const createGoogleApiError = async (response: Response) => {
     }
   })();
   const message =
-    parsedBody?.error.message ||
-    body ||
-    `Google Calendar request failed with status ${response.status}.`;
-  const error = new Error(message) as Error & { status: number };
-  error.status = response.status;
-  return error;
+    parsedBody?.error.message ??
+    (hasText(body)
+      ? body
+      : `Google Calendar request failed with status ${response.status}.`);
+  return new ConnectorHttpError(message, response.status);
 };
 
 const exchangeGoogleAuthorizationCode = async (
   provider: ConnectorProvider,
   code: string,
-  codeVerifier: string,
+  codeVerifier: string
 ) => {
   const config = getConnectorOAuthConfig(provider);
   const response = await fetch(GOOGLE_TOKEN_URL, {
@@ -321,9 +356,14 @@ const exchangeGoogleAuthorizationCode = async (
   return googleTokenResponseSchema.parse(await response.json());
 };
 
-const validateGoogleIdToken = async (provider: ConnectorProvider, idToken: string) => {
+const validateGoogleIdToken = async (
+  provider: ConnectorProvider,
+  idToken: string
+) => {
   const config = getConnectorOAuthConfig(provider);
-  const response = await fetch(`${GOOGLE_TOKEN_INFO_URL}?id_token=${encodeURIComponent(idToken)}`);
+  const response = await fetch(
+    `${GOOGLE_TOKEN_INFO_URL}?id_token=${encodeURIComponent(idToken)}`
+  );
   if (!response.ok) {
     throw new Error("Google returned an invalid identity token.");
   }
@@ -339,7 +379,10 @@ const validateGoogleIdToken = async (provider: ConnectorProvider, idToken: strin
   return tokenInfo;
 };
 
-const exchangeLinearAuthorizationCode = async (code: string, codeVerifier: string) => {
+const exchangeLinearAuthorizationCode = async (
+  code: string,
+  codeVerifier: string
+) => {
   const config = getConnectorOAuthConfig(LINEAR_CONNECTOR_PROVIDER);
   const response = await fetch(LINEAR_TOKEN_URL, {
     body: new URLSearchParams({
@@ -360,12 +403,11 @@ const exchangeLinearAuthorizationCode = async (code: string, codeVerifier: strin
   return linearTokenResponseSchema.parse(await response.json());
 };
 
-const getLinearIdentity = async (accessToken: string) => {
-  return await getLinearIdentityFromAccessToken(accessToken);
-};
+const getLinearIdentity = async (accessToken: string) =>
+  await getLinearIdentityFromAccessToken(accessToken);
 
 export const listConnectors = async (
-  userId: string,
+  userId: string
 ): Promise<{ connectors: ConnectorListItem[] }> => {
   const credentials = await db
     .select({
@@ -384,9 +426,17 @@ export const listConnectors = async (
 
   return {
     connectors: CONNECTOR_PROVIDERS.map((provider) => {
-      const providerCredentials = credentials.filter((row) => row.provider === provider);
-      const credential = providerCredentials[0];
+      const providerCredentials = credentials.filter(
+        (row) => row.provider === provider
+      );
+      const [credential] = providerCredentials;
       const definition = connectorDefinitions[provider];
+      let isConfigured = false;
+      if (provider === GOOGLE_CALENDAR_CONNECTOR_PROVIDER) {
+        isConfigured = isGoogleCalendarOAuthConfigured();
+      } else if (provider === LINEAR_CONNECTOR_PROVIDER) {
+        isConfigured = isLinearOAuthConfigured();
+      }
 
       return {
         accountEmail: credential?.accountEmail,
@@ -402,12 +452,7 @@ export const listConnectors = async (
         connectedAt: credential?.createdAt,
         description: definition.description,
         displayName: definition.displayName,
-        isConfigured:
-          provider === GOOGLE_CALENDAR_CONNECTOR_PROVIDER
-            ? isGoogleCalendarOAuthConfigured()
-            : provider === LINEAR_CONNECTOR_PROVIDER
-              ? isLinearOAuthConfigured()
-              : false,
+        isConfigured,
         provider,
         status: credential?.status ?? "not_connected",
         supportsChatTools: definition.supportsChatTools,
@@ -422,7 +467,9 @@ export const startConnectorOAuth = async (input: {
   userId: string;
 }) => {
   assertConnectorConfigured(input.provider);
-  await db.delete(connectorOAuthState).where(lt(connectorOAuthState.expiresAt, new Date()));
+  await db
+    .delete(connectorOAuthState)
+    .where(lt(connectorOAuthState.expiresAt, new Date()));
 
   const state = randomBytes(32).toString("base64url");
   const codeVerifier = createCodeVerifier();
@@ -442,10 +489,13 @@ export const startConnectorOAuth = async (input: {
   const authorizationUrl = new URL(
     input.provider === LINEAR_CONNECTOR_PROVIDER
       ? LINEAR_AUTHORIZATION_URL
-      : GOOGLE_AUTHORIZATION_URL,
+      : GOOGLE_AUTHORIZATION_URL
   );
   authorizationUrl.searchParams.set("client_id", config.clientId);
-  authorizationUrl.searchParams.set("code_challenge", createCodeChallenge(codeVerifier));
+  authorizationUrl.searchParams.set(
+    "code_challenge",
+    createCodeChallenge(codeVerifier)
+  );
   authorizationUrl.searchParams.set("code_challenge_method", "S256");
   authorizationUrl.searchParams.set("redirect_uri", config.redirectUri);
   authorizationUrl.searchParams.set("response_type", "code");
@@ -453,7 +503,7 @@ export const startConnectorOAuth = async (input: {
     "scope",
     input.provider === LINEAR_CONNECTOR_PROVIDER
       ? definition.scopes.join(",")
-      : definition.scopes.join(" "),
+      : definition.scopes.join(" ")
   );
   authorizationUrl.searchParams.set("state", state);
   if (input.provider === GOOGLE_CALENDAR_CONNECTOR_PROVIDER) {
@@ -475,8 +525,10 @@ export const completeConnectorOAuth = async (input: {
 }) => {
   const { auth } = await import("@quieter/auth");
   const session = await auth.api.getSession({ headers: input.headers });
-  if (!session?.user || !session.session) {
-    throw new ORPCError("UNAUTHORIZED", { message: "Sign in before connecting this account." });
+  if (session?.user === undefined || session.session === undefined) {
+    throw new ORPCError("UNAUTHORIZED", {
+      message: "Sign in before connecting this account.",
+    });
   }
 
   const [oauthState] = await db
@@ -485,7 +537,7 @@ export const completeConnectorOAuth = async (input: {
     .returning();
 
   if (
-    !oauthState ||
+    oauthState === undefined ||
     oauthState.userId !== session.user.id ||
     oauthState.expiresAt.getTime() <= Date.now()
   ) {
@@ -501,12 +553,17 @@ export const completeConnectorOAuth = async (input: {
     const tokenResponse = await exchangeGoogleAuthorizationCode(
       oauthState.provider,
       input.code,
-      oauthState.codeVerifier,
+      oauthState.codeVerifier
     );
-    const tokenInfo = await validateGoogleIdToken(oauthState.provider, tokenResponse.id_token);
+    const tokenInfo = await validateGoogleIdToken(
+      oauthState.provider,
+      tokenResponse.id_token
+    );
     const grantedScopes = splitGrantedScopes(tokenResponse.scope);
     if (!definition.scopes.every((scope) => grantedScopes.has(scope))) {
-      throw new Error("Google did not grant all required connector permissions.");
+      throw new Error(
+        "Google did not grant all required connector permissions."
+      );
     }
 
     const [existingCredential] = await db
@@ -519,33 +576,40 @@ export const completeConnectorOAuth = async (input: {
       .where(
         and(
           eq(connectorCredential.userId, session.user.id),
-          eq(connectorCredential.provider, oauthState.provider),
-        ),
+          eq(connectorCredential.provider, oauthState.provider)
+        )
       )
       .limit(1);
-    if (existingCredential && existingCredential.providerAccountId !== tokenInfo.sub) {
+    if (
+      existingCredential !== undefined &&
+      existingCredential.providerAccountId !== tokenInfo.sub
+    ) {
       throw new ORPCError("BAD_REQUEST", {
         message: `Reconnect ${connectorDefinitions[oauthState.provider].displayName} with the same Google account, or disconnect it first.`,
       });
     }
 
-    const encryptedRefreshToken = tokenResponse.refresh_token
+    const encryptedRefreshToken = hasText(tokenResponse.refresh_token)
       ? encryptConnectorSecret(tokenResponse.refresh_token)
       : existingCredential?.encryptedRefreshToken;
-    if (!encryptedRefreshToken) {
+    if (!hasText(encryptedRefreshToken)) {
       throw new Error(
-        "Google did not return an offline refresh token. Reconnect and grant access.",
+        "Google did not return an offline refresh token. Reconnect and grant access."
       );
     }
 
     await db
       .insert(connectorCredential)
       .values({
-        accessTokenExpiresAt: new Date(now.getTime() + tokenResponse.expires_in * 1000),
+        accessTokenExpiresAt: new Date(
+          now.getTime() + tokenResponse.expires_in * 1000
+        ),
         accountEmail: tokenInfo.email,
         createdAt: now,
         displayName: tokenInfo.name ?? tokenInfo.email,
-        encryptedAccessToken: encryptConnectorSecret(tokenResponse.access_token),
+        encryptedAccessToken: encryptConnectorSecret(
+          tokenResponse.access_token
+        ),
         encryptedRefreshToken,
         id: existingCredential?.id ?? randomUUID(),
         provider: oauthState.provider,
@@ -557,10 +621,14 @@ export const completeConnectorOAuth = async (input: {
       })
       .onConflictDoUpdate({
         set: {
-          accessTokenExpiresAt: new Date(now.getTime() + tokenResponse.expires_in * 1000),
+          accessTokenExpiresAt: new Date(
+            now.getTime() + tokenResponse.expires_in * 1000
+          ),
           accountEmail: tokenInfo.email,
           displayName: tokenInfo.name ?? tokenInfo.email,
-          encryptedAccessToken: encryptConnectorSecret(tokenResponse.access_token),
+          encryptedAccessToken: encryptConnectorSecret(
+            tokenResponse.access_token
+          ),
           encryptedRefreshToken,
           providerAccountId: tokenInfo.sub,
           scopes: tokenResponse.scope,
@@ -576,15 +644,17 @@ export const completeConnectorOAuth = async (input: {
   } else {
     const tokenResponse = await exchangeLinearAuthorizationCode(
       input.code,
-      oauthState.codeVerifier,
+      oauthState.codeVerifier
     );
     const grantedScopes = splitGrantedScopes(tokenResponse.scope);
     if (!definition.scopes.every((scope) => grantedScopes.has(scope))) {
-      throw new Error("Linear did not grant all required connector permissions.");
-    }
-    if (!tokenResponse.refresh_token) {
       throw new Error(
-        "Linear did not return an offline refresh token. Reconnect and grant access.",
+        "Linear did not grant all required connector permissions."
+      );
+    }
+    if (!hasText(tokenResponse.refresh_token)) {
+      throw new Error(
+        "Linear did not return an offline refresh token. Reconnect and grant access."
       );
     }
 
@@ -593,12 +663,18 @@ export const completeConnectorOAuth = async (input: {
     await db
       .insert(connectorCredential)
       .values({
-        accessTokenExpiresAt: new Date(now.getTime() + tokenResponse.expires_in * 1000),
+        accessTokenExpiresAt: new Date(
+          now.getTime() + tokenResponse.expires_in * 1000
+        ),
         accountEmail: identity.accountEmail,
         createdAt: now,
         displayName: identity.displayName,
-        encryptedAccessToken: encryptConnectorSecret(tokenResponse.access_token),
-        encryptedRefreshToken: encryptConnectorSecret(tokenResponse.refresh_token),
+        encryptedAccessToken: encryptConnectorSecret(
+          tokenResponse.access_token
+        ),
+        encryptedRefreshToken: encryptConnectorSecret(
+          tokenResponse.refresh_token
+        ),
         id: randomUUID(),
         metadata: {},
         provider: oauthState.provider,
@@ -612,11 +688,17 @@ export const completeConnectorOAuth = async (input: {
       })
       .onConflictDoUpdate({
         set: {
-          accessTokenExpiresAt: new Date(now.getTime() + tokenResponse.expires_in * 1000),
+          accessTokenExpiresAt: new Date(
+            now.getTime() + tokenResponse.expires_in * 1000
+          ),
           accountEmail: identity.accountEmail,
           displayName: identity.displayName,
-          encryptedAccessToken: encryptConnectorSecret(tokenResponse.access_token),
-          encryptedRefreshToken: encryptConnectorSecret(tokenResponse.refresh_token),
+          encryptedAccessToken: encryptConnectorSecret(
+            tokenResponse.access_token
+          ),
+          encryptedRefreshToken: encryptConnectorSecret(
+            tokenResponse.refresh_token
+          ),
           metadata: {},
           providerWorkspaceId: identity.providerWorkspaceId,
           providerWorkspaceName: identity.providerWorkspaceName,
@@ -647,8 +729,8 @@ export const disconnectConnector = async (input: {
     .where(
       and(
         eq(connectorCredential.userId, input.userId),
-        eq(connectorCredential.provider, input.provider),
-      ),
+        eq(connectorCredential.provider, input.provider)
+      )
     )
     .returning({ id: connectorCredential.id });
 
@@ -666,8 +748,8 @@ export const hasConnectedConnector = async (input: {
       and(
         eq(connectorCredential.userId, input.userId),
         eq(connectorCredential.provider, input.provider),
-        eq(connectorCredential.status, "connected"),
-      ),
+        eq(connectorCredential.status, "connected")
+      )
     )
     .limit(1);
 
@@ -679,12 +761,24 @@ const getConnectorRepairRequiredError = (provider: ConnectorProvider) =>
     message: `Reconnect ${connectorDefinitions[provider].displayName} before using this action.`,
   });
 
+const hasCachedConnectorAccessToken = (record: {
+  accessTokenExpiresAt: Date | null;
+  encryptedAccessToken: string | null;
+}): record is {
+  accessTokenExpiresAt: Date;
+  encryptedAccessToken: string;
+} =>
+  hasText(record.encryptedAccessToken) &&
+  record.accessTokenExpiresAt !== null &&
+  record.accessTokenExpiresAt.getTime() >
+    Date.now() + CONNECTOR_ACCESS_TOKEN_EXPIRY_BUFFER_MS;
+
 const refreshConnectorAccessToken = async (record: {
   encryptedRefreshToken: string | null;
   id: string;
   provider: ConnectorProvider;
 }) => {
-  if (!record.encryptedRefreshToken) {
+  if (!hasText(record.encryptedRefreshToken)) {
     await db
       .update(connectorCredential)
       .set({ status: "needs_reconnect", updatedAt: new Date() })
@@ -694,7 +788,9 @@ const refreshConnectorAccessToken = async (record: {
 
   const config = getConnectorOAuthClient(record.provider);
   const response = await fetch(
-    record.provider === LINEAR_CONNECTOR_PROVIDER ? LINEAR_TOKEN_URL : GOOGLE_TOKEN_URL,
+    record.provider === LINEAR_CONNECTOR_PROVIDER
+      ? LINEAR_TOKEN_URL
+      : GOOGLE_TOKEN_URL,
     {
       body: new URLSearchParams({
         client_id: config.clientId,
@@ -704,15 +800,17 @@ const refreshConnectorAccessToken = async (record: {
       }),
       headers: { "content-type": "application/x-www-form-urlencoded" },
       method: "POST",
-    },
+    }
   );
 
   if (!response.ok) {
     const body = await response
       .json()
-      .then((value: unknown) => z.object({ error: z.string().optional() }).safeParse(value))
+      .then((value: unknown) =>
+        z.object({ error: z.string().optional() }).safeParse(value)
+      )
       .catch(() => null);
-    const errorCode = body?.success ? body.data.error : undefined;
+    const errorCode = body?.success === true ? body.data.error : undefined;
     const permanentErrors =
       record.provider === LINEAR_CONNECTOR_PROVIDER
         ? permanentLinearTokenErrors
@@ -720,7 +818,7 @@ const refreshConnectorAccessToken = async (record: {
     if (
       response.status === 400 ||
       response.status === 401 ||
-      (errorCode && permanentErrors.has(errorCode))
+      (errorCode !== undefined && permanentErrors.has(errorCode))
     ) {
       await db
         .update(connectorCredential)
@@ -730,7 +828,7 @@ const refreshConnectorAccessToken = async (record: {
     }
 
     throw new Error(
-      `${connectorDefinitions[record.provider].displayName} token refresh failed with status ${response.status}.`,
+      `${connectorDefinitions[record.provider].displayName} token refresh failed with status ${response.status}.`
     );
   }
 
@@ -742,15 +840,18 @@ const refreshConnectorAccessToken = async (record: {
   await db
     .update(connectorCredential)
     .set({
-      accessTokenExpiresAt: new Date(now.getTime() + refreshed.expires_in * 1000),
+      accessTokenExpiresAt: new Date(
+        now.getTime() + refreshed.expires_in * 1000
+      ),
       encryptedAccessToken: encryptConnectorSecret(refreshed.access_token),
       encryptedRefreshToken:
-        "refresh_token" in refreshed && refreshed.refresh_token
+        "refresh_token" in refreshed && hasText(refreshed.refresh_token)
           ? encryptConnectorSecret(refreshed.refresh_token)
           : record.encryptedRefreshToken,
-      scopes: refreshed.scope
-        ? normalizeOAuthScope(refreshed.scope)
-        : connectorDefinitions[record.provider].scopes.join(" "),
+      scopes:
+        refreshed.scope === undefined
+          ? connectorDefinitions[record.provider].scopes.join(" ")
+          : normalizeOAuthScope(refreshed.scope),
       status: "connected",
       updatedAt: now,
     })
@@ -776,12 +877,12 @@ const getAuthorizedConnectorAccessToken = async (input: {
     .where(
       and(
         eq(connectorCredential.userId, input.userId),
-        eq(connectorCredential.provider, input.provider),
-      ),
+        eq(connectorCredential.provider, input.provider)
+      )
     )
     .limit(1);
 
-  if (!record) {
+  if (record === undefined) {
     throw new ORPCError("BAD_REQUEST", {
       message: `Connect ${connectorDefinitions[input.provider].displayName} before using this action.`,
     });
@@ -791,11 +892,7 @@ const getAuthorizedConnectorAccessToken = async (input: {
     throw getConnectorRepairRequiredError(record.provider);
   }
 
-  if (
-    record.encryptedAccessToken &&
-    record.accessTokenExpiresAt &&
-    record.accessTokenExpiresAt.getTime() > Date.now() + CONNECTOR_ACCESS_TOKEN_EXPIRY_BUFFER_MS
-  ) {
+  if (hasCachedConnectorAccessToken(record)) {
     return decryptConnectorSecret(record.encryptedAccessToken);
   }
 
@@ -816,12 +913,12 @@ const refreshAuthorizedConnectorAccessToken = async (input: {
     .where(
       and(
         eq(connectorCredential.userId, input.userId),
-        eq(connectorCredential.provider, input.provider),
-      ),
+        eq(connectorCredential.provider, input.provider)
+      )
     )
     .limit(1);
 
-  if (!record) {
+  if (record === undefined) {
     throw new ORPCError("BAD_REQUEST", {
       message: `Connect ${connectorDefinitions[input.provider].displayName} before using this action.`,
     });
@@ -839,7 +936,7 @@ const getAuthorizedConnectorCredentialAccessToken = async (input: {
     eq(connectorCredential.id, input.credentialId),
     eq(connectorCredential.provider, input.provider),
   ];
-  if (input.userId) {
+  if (input.userId !== undefined) {
     conditions.push(eq(connectorCredential.userId, input.userId));
   }
 
@@ -857,7 +954,7 @@ const getAuthorizedConnectorCredentialAccessToken = async (input: {
     .where(and(...conditions))
     .limit(1);
 
-  if (!record) {
+  if (record === undefined) {
     throw new ORPCError("BAD_REQUEST", {
       message: `Connect ${connectorDefinitions[input.provider].displayName} before using this action.`,
     });
@@ -867,12 +964,9 @@ const getAuthorizedConnectorCredentialAccessToken = async (input: {
     throw getConnectorRepairRequiredError(record.provider);
   }
 
-  const accessToken =
-    record.encryptedAccessToken &&
-    record.accessTokenExpiresAt &&
-    record.accessTokenExpiresAt.getTime() > Date.now() + CONNECTOR_ACCESS_TOKEN_EXPIRY_BUFFER_MS
-      ? decryptConnectorSecret(record.encryptedAccessToken)
-      : await refreshConnectorAccessToken(record);
+  const accessToken = hasCachedConnectorAccessToken(record)
+    ? decryptConnectorSecret(record.encryptedAccessToken)
+    : await refreshConnectorAccessToken(record);
 
   return { accessToken, userId: record.userId };
 };
@@ -886,7 +980,7 @@ const refreshAuthorizedConnectorCredentialAccessToken = async (input: {
     eq(connectorCredential.id, input.credentialId),
     eq(connectorCredential.provider, input.provider),
   ];
-  if (input.userId) {
+  if (input.userId !== undefined) {
     conditions.push(eq(connectorCredential.userId, input.userId));
   }
 
@@ -900,7 +994,7 @@ const refreshAuthorizedConnectorCredentialAccessToken = async (input: {
     .where(and(...conditions))
     .limit(1);
 
-  if (!record) {
+  if (record === undefined) {
     throw new ORPCError("BAD_REQUEST", {
       message: `Connect ${connectorDefinitions[input.provider].displayName} before using this action.`,
     });
@@ -911,24 +1005,20 @@ const refreshAuthorizedConnectorCredentialAccessToken = async (input: {
 
 export const runAuthorizedConnector = async <TValue>(
   input: { provider: ConnectorProvider; signal?: AbortSignal; userId: string },
-  runner: (accessToken: string, signal?: AbortSignal) => Promise<TValue>,
+  runner: (accessToken: string, signal?: AbortSignal) => Promise<TValue>
 ) => {
   const accessToken = await getAuthorizedConnectorAccessToken(input);
 
   try {
     return await runner(accessToken, input.signal);
   } catch (error) {
-    if (
-      typeof error !== "object" ||
-      error === null ||
-      !("status" in error) ||
-      (error as { status?: unknown }).status !== 401
-    ) {
+    if (!(error instanceof ConnectorHttpError) || error.status !== 401) {
       throw error;
     }
   }
 
-  const refreshedAccessToken = await refreshAuthorizedConnectorAccessToken(input);
+  const refreshedAccessToken =
+    await refreshAuthorizedConnectorAccessToken(input);
   return await runner(refreshedAccessToken, input.signal);
 };
 
@@ -942,26 +1032,30 @@ export const runAuthorizedConnectorCredential = async <TValue>(
   runner: (
     accessToken: string,
     credential: { userId: string },
-    signal?: AbortSignal,
-  ) => Promise<TValue>,
+    signal?: AbortSignal
+  ) => Promise<TValue>
 ) => {
   const credential = await getAuthorizedConnectorCredentialAccessToken(input);
 
   try {
-    return await runner(credential.accessToken, { userId: credential.userId }, input.signal);
+    return await runner(
+      credential.accessToken,
+      { userId: credential.userId },
+      input.signal
+    );
   } catch (error) {
-    if (
-      typeof error !== "object" ||
-      error === null ||
-      !("status" in error) ||
-      (error as { status?: unknown }).status !== 401
-    ) {
+    if (!(error instanceof ConnectorHttpError) || error.status !== 401) {
       throw error;
     }
   }
 
-  const refreshedAccessToken = await refreshAuthorizedConnectorCredentialAccessToken(input);
-  return await runner(refreshedAccessToken, { userId: credential.userId }, input.signal);
+  const refreshedAccessToken =
+    await refreshAuthorizedConnectorCredentialAccessToken(input);
+  return await runner(
+    refreshedAccessToken,
+    { userId: credential.userId },
+    input.signal
+  );
 };
 
 const postGoogleCalendarEvent = async (input: {
@@ -991,29 +1085,31 @@ const postGoogleCalendarEvent = async (input: {
 };
 
 const normalizeGoogleCalendarEventDate = (
-  value: GoogleCalendarEventInput["start"],
+  value: GoogleCalendarEventInput["start"]
 ): GoogleCalendarEventDraft["start"] => {
-  if (value.date && !value.dateTime) {
+  if (hasText(value.date) && !hasText(value.dateTime)) {
     return { date: value.date };
   }
 
-  if (value.dateTime && !value.date) {
-    return value.timeZone
-      ? { dateTime: value.dateTime, timeZone: value.timeZone }
-      : { dateTime: value.dateTime };
+  if (hasText(value.dateTime) && !hasText(value.date)) {
+    if (hasText(value.timeZone)) {
+      return { dateTime: value.dateTime, timeZone: value.timeZone };
+    }
+    return { dateTime: value.dateTime };
   }
 
   throw new ORPCError("BAD_REQUEST", {
-    message: "Calendar events require exactly one date or date-time for both start and end.",
+    message:
+      "Calendar events require exactly one date or date-time for both start and end.",
   });
 };
 
 const normalizeGoogleCalendarEvent = (
-  event: GoogleCalendarEventInput,
+  event: GoogleCalendarEventInput
 ): GoogleCalendarEventDraft => ({
-  ...(event.description ? { description: event.description } : {}),
+  ...(hasText(event.description) ? { description: event.description } : {}),
   end: normalizeGoogleCalendarEventDate(event.end),
-  ...(event.location ? { location: event.location } : {}),
+  ...(hasText(event.location) ? { location: event.location } : {}),
   start: normalizeGoogleCalendarEventDate(event.start),
   summary: event.summary,
 });
@@ -1044,11 +1140,14 @@ export const createGoogleCalendarEventForUser = async (input: {
         status: "success" as const,
         summary: event.summary ?? eventDraft.summary,
       };
-    },
+    }
   );
 
 const decodeBase64UrlText = (value: string) =>
-  Buffer.from(value.replaceAll("-", "+").replaceAll("_", "/"), "base64").toString("utf8");
+  Buffer.from(
+    value.replaceAll("-", "+").replaceAll("_", "/"),
+    "base64"
+  ).toString("utf-8");
 
 export const addIcsAttachmentToGoogleCalendar = async (input: {
   attachmentId: string;
@@ -1060,9 +1159,14 @@ export const addIcsAttachmentToGoogleCalendar = async (input: {
   const attachment = await runAuthorizedGmailMailbox(
     { mailboxId: input.mailboxId, userId: input.userId },
     async (accessToken) =>
-      await getMessageAttachment(accessToken, input.messageId, input.attachmentId, input.signal),
+      await getMessageAttachment(
+        accessToken,
+        input.messageId,
+        input.attachmentId,
+        input.signal
+      )
   );
-  if (!attachment.data) {
+  if (!hasText(attachment.data)) {
     throw new ORPCError("BAD_REQUEST", {
       message: "This calendar invitation could not be read.",
     });
@@ -1070,7 +1174,9 @@ export const addIcsAttachmentToGoogleCalendar = async (input: {
 
   const parsedEvent = (() => {
     try {
-      return parseIcsToGoogleCalendarEvent(decodeBase64UrlText(attachment.data));
+      return parseIcsToGoogleCalendarEvent(
+        decodeBase64UrlText(attachment.data)
+      );
     } catch {
       throw new ORPCError("BAD_REQUEST", {
         message: "This calendar invitation could not be imported.",
@@ -1100,7 +1206,7 @@ export const addIcsAttachmentToGoogleCalendar = async (input: {
         status: "success" as const,
         summary: event.summary ?? parsedEvent.summary,
       };
-    },
+    }
   );
 
   return importedEvent;

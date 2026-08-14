@@ -3,14 +3,16 @@ import {
   applyLabelIdChanges,
   isMessageUnread,
   removeUnreadLabel,
-  type ListMessagesPageResult,
-  type MessageListItem,
-  type ThreadMessagesResult,
+} from "../gmail";
+import type {
+  ListMessagesPageResult,
+  MessageListItem,
+  ThreadMessagesResult,
 } from "../gmail";
 
 export type MessagesQueryData = {
   pages: ListMessagesPageResult[];
-  pageParams: Array<string | undefined>;
+  pageParams: (string | undefined)[];
 };
 
 type MergeRefreshedMailboxPagesOptions = {
@@ -28,22 +30,27 @@ export type ThreadMetadataMutationResult = {
   messages: MessageMetadataMutationResult[];
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
 export type LabelChangeSet = {
   addLabelIds?: readonly string[];
   removeLabelIds?: readonly string[];
 };
 
-export const isMessagesQueryData = (value: unknown): value is MessagesQueryData => {
-  if (!value || typeof value !== "object") return false;
+export const isMessagesQueryData = (
+  value: unknown
+): value is MessagesQueryData => {
+  if (!isRecord(value)) {
+    return false;
+  }
 
-  const pages = Reflect.get(value, "pages");
-  const pageParams = Reflect.get(value, "pageParams");
-  return Array.isArray(pages) && Array.isArray(pageParams);
+  return Array.isArray(value.pages) && Array.isArray(value.pageParams);
 };
 
 const buildCachedMessageLookup = (
   data: MessagesQueryData | undefined,
-  pageCount = data?.pages.length ?? 0,
+  pageCount = data?.pages.length ?? 0
 ) => {
   const messagesById = new Map<string, MessageListItem>();
 
@@ -58,7 +65,7 @@ const buildCachedMessageLookup = (
 
 export const mergeMessagePreservingLoadedDetails = (
   currentMessage: MessageListItem,
-  syncedMessage: MessageListItem,
+  syncedMessage: MessageListItem
 ): MessageListItem => ({
   ...syncedMessage,
   attachments: syncedMessage.attachments ?? currentMessage.attachments,
@@ -66,29 +73,32 @@ export const mergeMessagePreservingLoadedDetails = (
   bodyText: syncedMessage.bodyText ?? currentMessage.bodyText,
   draftAnchor: syncedMessage.draftAnchor ?? currentMessage.draftAnchor,
   draftId: syncedMessage.draftId ?? currentMessage.draftId,
-  senderAvatarUrls: syncedMessage.senderAvatarUrls ?? currentMessage.senderAvatarUrls,
+  senderAvatarUrls:
+    syncedMessage.senderAvatarUrls ?? currentMessage.senderAvatarUrls,
   threadAttachmentCount:
     syncedMessage.threadAttachmentCount ?? currentMessage.threadAttachmentCount,
-  threadMessageCount: syncedMessage.threadMessageCount ?? currentMessage.threadMessageCount,
-  unsubscribeMailto: syncedMessage.unsubscribeMailto ?? currentMessage.unsubscribeMailto,
+  threadMessageCount:
+    syncedMessage.threadMessageCount ?? currentMessage.threadMessageCount,
+  unsubscribeMailto:
+    syncedMessage.unsubscribeMailto ?? currentMessage.unsubscribeMailto,
   unsubscribeUrl: syncedMessage.unsubscribeUrl ?? currentMessage.unsubscribeUrl,
 });
 
 export const mergeRefreshedMailboxPagesIntoQueryData = (
   previous: MessagesQueryData | undefined,
   refreshedPages: ListMessagesPageResult[],
-  refreshedPageParams: Array<string | undefined>,
-  options: MergeRefreshedMailboxPagesOptions = {},
+  refreshedPageParams: (string | undefined)[],
+  options: MergeRefreshedMailboxPagesOptions = {}
 ): MessagesQueryData => {
-  if (!previous?.pages.length) {
-    return { pages: refreshedPages, pageParams: refreshedPageParams };
+  if (previous === undefined || previous.pages.length === 0) {
+    return { pageParams: refreshedPageParams, pages: refreshedPages };
   }
 
   const cachedById = buildCachedMessageLookup(
     previous,
-    options.preserveUnrefreshedPages
+    options.preserveUnrefreshedPages === true
       ? Math.min(previous.pages.length, refreshedPages.length + 1)
-      : previous.pages.length,
+      : previous.pages.length
   );
   const pages = refreshedPages.map((page) => ({
     ...page,
@@ -99,36 +109,47 @@ export const mergeRefreshedMailboxPagesIntoQueryData = (
         : message;
     }),
   }));
-  const lastRefreshedPage = refreshedPages[refreshedPages.length - 1];
+  const lastRefreshedPage = refreshedPages.at(-1);
 
   if (
-    !options.preserveUnrefreshedPages ||
-    !lastRefreshedPage?.nextPageToken ||
+    options.preserveUnrefreshedPages !== true ||
+    lastRefreshedPage?.nextPageToken === null ||
+    lastRefreshedPage?.nextPageToken === undefined ||
+    lastRefreshedPage.nextPageToken === "" ||
     refreshedPages.length >= previous.pages.length
   ) {
-    return { pages, pageParams: refreshedPageParams };
+    return { pageParams: refreshedPageParams, pages };
   }
 
   const refreshedMessageIds = new Set(
-    pages.flatMap((page) => page.messages.map((message) => message.id)),
+    pages.flatMap((page) => page.messages.map((message) => message.id))
   );
-  const preservedPages = previous.pages.slice(refreshedPages.length).map((page) => ({
-    ...page,
-    messages: page.messages.filter((message) => !refreshedMessageIds.has(message.id)),
-  }));
+  const preservedPages = previous.pages
+    .slice(refreshedPages.length)
+    .map((page) => ({
+      ...page,
+      messages: page.messages.filter(
+        (message) => !refreshedMessageIds.has(message.id)
+      ),
+    }));
 
   return {
+    pageParams: [
+      ...refreshedPageParams,
+      ...previous.pageParams.slice(refreshedPageParams.length),
+    ],
     pages: [...pages, ...preservedPages],
-    pageParams: [...refreshedPageParams, ...previous.pageParams.slice(refreshedPageParams.length)],
   };
 };
 
 export const updateFirstPageHistoryId = (
   data: MessagesQueryData | undefined,
-  historyId: string,
+  historyId: string
 ): MessagesQueryData | undefined => {
   const firstPage = data?.pages[0];
-  if (!data || !firstPage || firstPage.historyId === historyId) return data;
+  if (!data || !firstPage || firstPage.historyId === historyId) {
+    return data;
+  }
 
   return {
     ...data,
@@ -139,18 +160,24 @@ export const updateFirstPageHistoryId = (
 export const updateMessagesInQueryData = (
   data: MessagesQueryData | undefined,
   predicate: (message: MessageListItem) => boolean,
-  updater: (message: MessageListItem) => MessageListItem,
+  updater: (message: MessageListItem) => MessageListItem
 ): MessagesQueryData | undefined => {
-  if (!data) return data;
+  if (!data) {
+    return data;
+  }
 
   let hasChanges = false;
   const pages = data.pages.map((page) => {
     let pageChanged = false;
     const messages = page.messages.map((message) => {
-      if (!predicate(message)) return message;
+      if (!predicate(message)) {
+        return message;
+      }
 
       const nextMessage = updater(message);
-      if (nextMessage === message) return message;
+      if (nextMessage === message) {
+        return message;
+      }
 
       hasChanges = true;
       pageChanged = true;
@@ -166,13 +193,23 @@ export const updateMessagesInQueryData = (
 export const updateMessageInQueryData = (
   data: MessagesQueryData | undefined,
   messageId: string,
-  updater: (message: MessageListItem) => MessageListItem,
-) => updateMessagesInQueryData(data, (message) => message.id === messageId, updater);
+  updater: (message: MessageListItem) => MessageListItem
+) =>
+  updateMessagesInQueryData(
+    data,
+    (message) => message.id === messageId,
+    updater
+  );
 
-export const findMessageInQueryData = (data: MessagesQueryData | undefined, messageId: string) => {
+export const findMessageInQueryData = (
+  data: MessagesQueryData | undefined,
+  messageId: string
+) => {
   for (const page of data?.pages ?? []) {
     for (const message of page.messages) {
-      if (message.id === messageId) return message;
+      if (message.id === messageId) {
+        return message;
+      }
     }
   }
 
@@ -181,14 +218,18 @@ export const findMessageInQueryData = (data: MessagesQueryData | undefined, mess
 
 export const removeMessagesFromQueryData = (
   data: MessagesQueryData | undefined,
-  predicate: (message: MessageListItem) => boolean,
+  predicate: (message: MessageListItem) => boolean
 ): MessagesQueryData | undefined => {
-  if (!data) return data;
+  if (!data) {
+    return data;
+  }
 
   let hasChanges = false;
   const pages = data.pages.map((page) => {
     const messages = page.messages.filter((message) => !predicate(message));
-    if (messages.length === page.messages.length) return page;
+    if (messages.length === page.messages.length) {
+      return page;
+    }
 
     hasChanges = true;
     return { ...page, messages };
@@ -200,24 +241,33 @@ export const removeMessagesFromQueryData = (
 export const updateMessageInThreadData = (
   data: ThreadMessagesResult | undefined,
   messageId: string,
-  updater: (message: MessageListItem) => MessageListItem,
-): ThreadMessagesResult | undefined => {
-  return updateMessagesInThreadData(data, (message) => message.id === messageId, updater);
-};
+  updater: (message: MessageListItem) => MessageListItem
+): ThreadMessagesResult | undefined =>
+  updateMessagesInThreadData(
+    data,
+    (message) => message.id === messageId,
+    updater
+  );
 
 export const updateMessagesInThreadData = (
   data: ThreadMessagesResult | undefined,
   predicate: (message: MessageListItem) => boolean,
-  updater: (message: MessageListItem) => MessageListItem,
+  updater: (message: MessageListItem) => MessageListItem
 ): ThreadMessagesResult | undefined => {
-  if (!data) return data;
+  if (!data) {
+    return data;
+  }
 
   let hasChanges = false;
   const messages = data.messages.map((message) => {
-    if (!predicate(message)) return message;
+    if (!predicate(message)) {
+      return message;
+    }
 
     const nextMessage = updater(message);
-    if (nextMessage === message) return message;
+    if (nextMessage === message) {
+      return message;
+    }
 
     hasChanges = true;
     return nextMessage;
@@ -228,21 +278,30 @@ export const updateMessagesInThreadData = (
 
 export const upsertMessageInThreadData = (
   data: ThreadMessagesResult | undefined,
-  nextMessage: MessageListItem,
+  nextMessage: MessageListItem
 ): ThreadMessagesResult | undefined => {
-  if (!data || data.threadId !== nextMessage.threadId) return data;
+  if (!data || data.threadId !== nextMessage.threadId) {
+    return data;
+  }
 
-  const currentIndex = data.messages.findIndex((message) => message.id === nextMessage.id);
-  if (currentIndex >= 0) {
+  const currentIndex = data.messages.findIndex(
+    (message) => message.id === nextMessage.id
+  );
+  if (currentIndex !== -1) {
     return updateMessageInThreadData(data, nextMessage.id, (message) =>
-      mergeMessagePreservingLoadedDetails(message, nextMessage),
+      mergeMessagePreservingLoadedDetails(message, nextMessage)
     );
   }
 
-  const messageOrder = new Map(data.messages.map((message, index) => [message.id, index]));
-  const messages = [...data.messages, nextMessage].sort((left, right) => {
-    const timestampDifference = getMessageSortTimestamp(left) - getMessageSortTimestamp(right);
-    if (timestampDifference !== 0) return timestampDifference;
+  const messageOrder = new Map(
+    data.messages.map((message, index) => [message.id, index])
+  );
+  const messages = [...data.messages, nextMessage].toSorted((left, right) => {
+    const timestampDifference =
+      getMessageSortTimestamp(left) - getMessageSortTimestamp(right);
+    if (timestampDifference !== 0) {
+      return timestampDifference;
+    }
 
     const leftOrder = messageOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER;
     const rightOrder = messageOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER;
@@ -254,34 +313,62 @@ export const upsertMessageInThreadData = (
 
 export const removeMessagesFromThreadData = (
   data: ThreadMessagesResult | undefined,
-  predicate: (message: MessageListItem) => boolean,
+  predicate: (message: MessageListItem) => boolean
 ): ThreadMessagesResult | undefined => {
-  if (!data) return data;
+  if (!data) {
+    return data;
+  }
 
   const messages = data.messages.filter((message) => !predicate(message));
-  return messages.length === data.messages.length ? data : { ...data, messages };
+  return messages.length === data.messages.length
+    ? data
+    : { ...data, messages };
 };
 
-export const markMessageReadLocally = (message: MessageListItem): MessageListItem => {
-  if (!isMessageUnread(message)) return message;
-  return { ...message, labelIds: removeUnreadLabel(message.labelIds), isUnread: false };
+export const markMessageReadLocally = (
+  message: MessageListItem
+): MessageListItem => {
+  if (!isMessageUnread(message)) {
+    return message;
+  }
+  return {
+    ...message,
+    isUnread: false,
+    labelIds: removeUnreadLabel(message.labelIds),
+  };
 };
 
-export const markMessageUnreadLocally = (message: MessageListItem): MessageListItem => {
-  if (isMessageUnread(message)) return message;
-  return { ...message, labelIds: addUnreadLabel(message.labelIds), isUnread: true };
+export const markMessageUnreadLocally = (
+  message: MessageListItem
+): MessageListItem => {
+  if (isMessageUnread(message)) {
+    return message;
+  }
+  return {
+    ...message,
+    isUnread: true,
+    labelIds: addUnreadLabel(message.labelIds),
+  };
 };
 
 const areLabelIdsEquivalent = (
   left: readonly string[] | undefined,
-  right: readonly string[] | undefined,
+  right: readonly string[] | undefined
 ) => {
-  if (!left?.length && !right?.length) return true;
-  if (!left || !right || left.length !== right.length) return false;
+  const leftLength = left?.length ?? 0;
+  const rightLength = right?.length ?? 0;
+  if (leftLength === 0 && rightLength === 0) {
+    return true;
+  }
+  if (left === undefined || right === undefined || leftLength !== rightLength) {
+    return false;
+  }
 
   const rightSet = new Set(right);
   for (const labelId of left) {
-    if (!rightSet.has(labelId)) return false;
+    if (!rightSet.has(labelId)) {
+      return false;
+    }
   }
 
   return true;
@@ -289,7 +376,7 @@ const areLabelIdsEquivalent = (
 
 export const applyMessageMetadata = (
   message: MessageListItem,
-  next: { labelIds?: string[]; isUnread: boolean; threadLabelIds?: string[] },
+  next: { labelIds?: string[]; isUnread: boolean; threadLabelIds?: string[] }
 ): MessageListItem => {
   const threadLabelIds = next.threadLabelIds ?? message.threadLabelIds;
   if (
@@ -302,32 +389,36 @@ export const applyMessageMetadata = (
 
   return {
     ...message,
-    labelIds: next.labelIds,
     isUnread: next.isUnread,
+    labelIds: next.labelIds,
     threadLabelIds,
   };
 };
 
-export const toMessageMetadataById = (updates: readonly MessageMetadataMutationResult[]) =>
-  new Map(updates.map((update) => [update.id, update] as const));
+export const toMessageMetadataById = (
+  updates: readonly MessageMetadataMutationResult[]
+) => new Map(updates.map((update) => [update.id, update] as const));
 
 export const applyMessageLabelChangesLocally = (
   message: MessageListItem,
-  changes: LabelChangeSet,
+  changes: LabelChangeSet
 ) => {
   const labelIds = applyLabelIdChanges(message.labelIds, changes);
   return applyMessageMetadata(message, {
-    labelIds,
     isUnread: isMessageUnread({ labelIds }),
+    labelIds,
   });
 };
 
 export const applyThreadLabelChangesLocally = (
   message: MessageListItem,
-  changes: LabelChangeSet,
+  changes: LabelChangeSet
 ) => {
   const labelIds = applyLabelIdChanges(message.labelIds, changes);
-  const threadLabelIds = applyLabelIdChanges(message.threadLabelIds ?? message.labelIds, changes);
+  const threadLabelIds = applyLabelIdChanges(
+    message.threadLabelIds ?? message.labelIds,
+    changes
+  );
   return applyMessageMetadata(message, {
     isUnread: isMessageUnread({ labelIds }),
     labelIds,
@@ -336,101 +427,147 @@ export const applyThreadLabelChangesLocally = (
 };
 
 const getMessageSortTimestamp = (
-  message: Pick<MessageListItem, "date" | "internalDate">,
+  message: Pick<MessageListItem, "date" | "internalDate">
 ): number => {
   const source = message.internalDate ?? message.date;
-  if (!source) return 0;
+  if (source === null || source === undefined || source === "") {
+    return 0;
+  }
 
   const numeric = Number(source);
-  const parsedDate = Number.isFinite(numeric) ? new Date(numeric) : new Date(source);
+  const parsedDate = Number.isFinite(numeric)
+    ? new Date(numeric)
+    : new Date(source);
   const timestamp = parsedDate.getTime();
 
   return Number.isNaN(timestamp) ? 0 : timestamp;
 };
 
-export const applySyncDeltaToQueryData = (
-  data: MessagesQueryData | undefined,
+const mergeSyncedMessages = (
+  currentMessages: readonly MessageListItem[],
   updatedMessages: readonly MessageListItem[],
-  removedMessageIds: readonly string[],
-): MessagesQueryData | undefined => {
-  if (!data?.pages.length) return data;
-
-  const currentMessages = data.pages.flatMap((page) => page.messages);
-  if (!currentMessages.length && !updatedMessages.length && !removedMessageIds.length) {
-    return data;
-  }
-
+  removedMessageIds: readonly string[]
+) => {
   const updatedMessagesById = new Map(
-    updatedMessages.map((message) => [message.id, message] as const),
+    updatedMessages.map((message) => [message.id, message] as const)
   );
   const removedMessageIdsSet = new Set(removedMessageIds);
-  const currentMessageOrder = new Map(
-    currentMessages.map((message, index) => [message.id, index] as const),
-  );
-  const oldestLoadedMessage = currentMessages[currentMessages.length - 1];
+  const nextMessages = currentMessages.flatMap((message) => {
+    if (removedMessageIdsSet.has(message.id)) {
+      return [];
+    }
+
+    const synced = updatedMessagesById.get(message.id);
+    return [
+      synced ? mergeMessagePreservingLoadedDetails(message, synced) : message,
+    ];
+  });
+  const nextMessageIds = new Set(nextMessages.map((message) => message.id));
+  const oldestLoadedMessage = currentMessages.at(-1);
   const oldestLoadedTimestamp = oldestLoadedMessage
     ? getMessageSortTimestamp(oldestLoadedMessage)
     : Number.NEGATIVE_INFINITY;
 
-  const nextMessages: MessageListItem[] = [];
-  for (const message of currentMessages) {
-    if (removedMessageIdsSet.has(message.id)) continue;
-
-    const synced = updatedMessagesById.get(message.id);
-    nextMessages.push(synced ? mergeMessagePreservingLoadedDetails(message, synced) : message);
-  }
-  const nextMessageIds = new Set(nextMessages.map((message) => message.id));
-
   for (const updatedMessage of updatedMessages) {
-    if (nextMessageIds.has(updatedMessage.id)) continue;
-
     if (
-      !currentMessages.length ||
-      getMessageSortTimestamp(updatedMessage) >= oldestLoadedTimestamp
+      !nextMessageIds.has(updatedMessage.id) &&
+      (!currentMessages.length ||
+        getMessageSortTimestamp(updatedMessage) >= oldestLoadedTimestamp)
     ) {
       nextMessages.push(updatedMessage);
       nextMessageIds.add(updatedMessage.id);
     }
   }
 
-  nextMessages.sort((left, right) => {
-    const timestampDifference = getMessageSortTimestamp(right) - getMessageSortTimestamp(left);
-    if (timestampDifference !== 0) return timestampDifference;
+  return nextMessages;
+};
 
-    const leftOrder = currentMessageOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER;
-    const rightOrder = currentMessageOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER;
+const sortMessages = (
+  messages: MessageListItem[],
+  currentMessages: readonly MessageListItem[]
+) => {
+  const currentMessageOrder = new Map(
+    currentMessages.map((message, index) => [message.id, index] as const)
+  );
+
+  messages.sort((left, right) => {
+    const timestampDifference =
+      getMessageSortTimestamp(right) - getMessageSortTimestamp(left);
+    if (timestampDifference !== 0) {
+      return timestampDifference;
+    }
+
+    const leftOrder =
+      currentMessageOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER;
+    const rightOrder =
+      currentMessageOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER;
     return leftOrder - rightOrder;
   });
+};
 
-  const nextPages: ListMessagesPageResult[] = [];
-  const nextPageParams: Array<string | undefined> = [];
+const paginateMessages = (
+  data: MessagesQueryData,
+  messages: MessageListItem[]
+): ListMessagesPageResult[] => {
+  const pages: ListMessagesPageResult[] = [];
   let messageIndex = 0;
 
   for (const [pageIndex, page] of data.pages.entries()) {
-    const remainingMessageCount = nextMessages.length - messageIndex;
-    if (pageIndex > 0 && remainingMessageCount <= 0) break;
+    const remainingMessageCount = messages.length - messageIndex;
+    if (pageIndex > 0 && remainingMessageCount <= 0) {
+      break;
+    }
 
     const basePageSize =
-      page.messages.length > 0 || pageIndex > 0 ? page.messages.length : remainingMessageCount;
+      page.messages.length > 0 || pageIndex > 0
+        ? page.messages.length
+        : remainingMessageCount;
     const pageSize =
       pageIndex === data.pages.length - 1
         ? Math.max(basePageSize, remainingMessageCount)
         : basePageSize;
-    const messages = nextMessages.slice(messageIndex, messageIndex + pageSize);
+    const pageMessages = messages.slice(messageIndex, messageIndex + pageSize);
 
-    nextPages.push({ ...page, messages });
-    nextPageParams.push(data.pageParams[pageIndex]);
-    messageIndex += messages.length;
+    pages.push({ ...page, messages: pageMessages });
+    messageIndex += pageMessages.length;
   }
 
-  if (nextPages.length === 0) {
-    nextPages.push({ ...data.pages[0], messages: [] });
-    nextPageParams.push(data.pageParams[0]);
+  if (pages.length === 0) {
+    pages.push({ ...data.pages[0], messages: [] });
   }
+
+  return pages;
+};
+
+export const applySyncDeltaToQueryData = (
+  data: MessagesQueryData | undefined,
+  updatedMessages: readonly MessageListItem[],
+  removedMessageIds: readonly string[]
+): MessagesQueryData | undefined => {
+  if (data === undefined || data.pages.length === 0) {
+    return data;
+  }
+
+  const currentMessages = data.pages.flatMap((page) => page.messages);
+  if (
+    !currentMessages.length &&
+    !updatedMessages.length &&
+    !removedMessageIds.length
+  ) {
+    return data;
+  }
+
+  const nextMessages = mergeSyncedMessages(
+    currentMessages,
+    updatedMessages,
+    removedMessageIds
+  );
+  sortMessages(nextMessages, currentMessages);
+  const nextPages = paginateMessages(data, nextMessages);
 
   return {
     ...data,
+    pageParams: data.pageParams.slice(0, nextPages.length),
     pages: nextPages,
-    pageParams: nextPageParams,
   };
 };

@@ -1,7 +1,8 @@
 import { describe, expect, test } from "vite-plus/test";
+
 import { buildSendMimeMessage, sendMessageInputSchema } from "../src/send";
 
-describe("sendMessageInputSchema", () => {
+describe("send message input schema", () => {
   test("accepts display-name senders and string recipients", () => {
     const result = sendMessageInputSchema.safeParse({
       from: "Demo <demo@example.com>",
@@ -11,10 +12,10 @@ describe("sendMessageInputSchema", () => {
       to: "to@example.com",
     });
 
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.to).toEqual(["to@example.com"]);
-    }
+    expect(result.success).toBeTruthy();
+    expect(result.success ? result.data.to : []).toStrictEqual([
+      "to@example.com",
+    ]);
   });
 
   test("rejects structural custom headers", () => {
@@ -26,7 +27,7 @@ describe("sendMessageInputSchema", () => {
       to: ["to@example.com"],
     });
 
-    expect(result.success).toBe(false);
+    expect(result.success).toBeFalsy();
   });
 
   test("rejects malformed attachment content", () => {
@@ -43,7 +44,7 @@ describe("sendMessageInputSchema", () => {
       to: ["to@example.com"],
     });
 
-    expect(result.success).toBe(false);
+    expect(result.success).toBeFalsy();
   });
 
   test("rejects inline attachments without html", () => {
@@ -61,11 +62,11 @@ describe("sendMessageInputSchema", () => {
       to: ["to@example.com"],
     });
 
-    expect(result.success).toBe(false);
+    expect(result.success).toBeFalsy();
   });
 });
 
-describe("buildSendMimeMessage", () => {
+describe("build send MIME message", () => {
   test("builds raw MIME with display sender, omitted bcc header, custom headers, and attachments", () => {
     const built = buildSendMimeMessage(
       {
@@ -89,17 +90,30 @@ describe("buildSendMimeMessage", () => {
       {
         messageId: "<message@example.com>",
         sentAt: new Date("2026-06-29T12:00:00.000Z"),
-      },
+      }
     );
 
-    expect(built.raw).toContain("From: Demo <demo@example.com>");
-    expect(built.raw).toContain("Message-ID: <message@example.com>");
-    expect(built.raw).toContain("X-Customer: acme");
-    expect(built.raw).toContain('Content-Disposition: attachment; filename="hello.txt"');
-    expect(built.raw).not.toContain("Bcc:");
-    expect(built.attachmentSizeBytes).toBe(5);
-    expect(built.to).toEqual(["to@example.com"]);
-    expect(built.bcc).toEqual(["hidden@example.com"]);
+    expect({
+      attachmentSizeBytes: built.attachmentSizeBytes,
+      bcc: built.bcc,
+      hasBccHeader: built.raw.includes("Bcc:"),
+      hasCustomerHeader: built.raw.includes("X-Customer: acme"),
+      hasDisposition: built.raw.includes(
+        'Content-Disposition: attachment; filename="hello.txt"'
+      ),
+      hasFrom: built.raw.includes("From: Demo <demo@example.com>"),
+      hasMessageId: built.raw.includes("Message-ID: <message@example.com>"),
+      to: built.to,
+    }).toStrictEqual({
+      attachmentSizeBytes: 5,
+      bcc: ["hidden@example.com"],
+      hasBccHeader: false,
+      hasCustomerHeader: true,
+      hasDisposition: true,
+      hasFrom: true,
+      hasMessageId: true,
+      to: ["to@example.com"],
+    });
   });
 
   test("folds long headers and wraps quoted-printable body lines", () => {
@@ -116,7 +130,7 @@ describe("buildSendMimeMessage", () => {
       {
         messageId: "<message@example.com>",
         sentAt: new Date("2026-06-29T12:00:00.000Z"),
-      },
+      }
     );
 
     expect(built.raw).toContain("\r\n ");

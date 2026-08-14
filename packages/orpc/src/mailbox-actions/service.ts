@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import {
@@ -7,21 +9,30 @@ import {
   mailboxActionRevision,
 } from "@quieter/database/schema";
 import { and, desc, eq, sql } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
-import { getAuthorizedManagedMailbox, MAILBOX_PROVIDER_GMAIL } from "../mailbox/access";
+
+import {
+  getAuthorizedManagedMailbox,
+  MAILBOX_PROVIDER_GMAIL,
+} from "../mailbox/access";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import { assertOrganizationManager } from "../organization/divisions";
+import { hasText } from "../text";
 import {
   createDefaultMailboxActionGraph,
-  type MailboxActionGraph,
-  type MailboxActionNode,
-  type MailboxActionValidationIssue,
   validateMailboxActionGraph,
+} from "./graph";
+import type {
+  MailboxActionGraph,
+  MailboxActionNode,
+  MailboxActionValidationIssue,
 } from "./graph";
 
 const RECENT_REVISION_LIMIT = 50;
 
-const assertMailboxActionConfigurator = async (input: { mailboxId: string; userId: string }) => {
+const assertMailboxActionConfigurator = async (input: {
+  mailboxId: string;
+  userId: string;
+}) => {
   const [record] = await db
     .select({
       id: mailbox.id,
@@ -33,7 +44,7 @@ const assertMailboxActionConfigurator = async (input: { mailboxId: string; userI
     .where(eq(mailbox.id, input.mailboxId))
     .limit(1);
 
-  if (!record) {
+  if (record === undefined) {
     throw new ORPCError("NOT_FOUND", { message: "Mailbox not found." });
   }
 
@@ -52,7 +63,9 @@ const assertMailboxActionConfigurator = async (input: { mailboxId: string; userI
     });
     return record;
   } catch (error) {
-    if (!(error instanceof ORPCError)) throw error;
+    if (!(error instanceof ORPCError)) {
+      throw error;
+    }
   }
 
   await assertOrganizationManager({
@@ -62,7 +75,10 @@ const assertMailboxActionConfigurator = async (input: { mailboxId: string; userI
   return record;
 };
 
-const getActionForUser = async (input: { actionId: string; userId: string }) => {
+const getActionForUser = async (input: {
+  actionId: string;
+  userId: string;
+}) => {
   const [record] = await db
     .select({
       draftRevisionId: mailboxAction.draftRevisionId,
@@ -79,58 +95,81 @@ const getActionForUser = async (input: { actionId: string; userId: string }) => 
     .where(eq(mailboxAction.id, input.actionId))
     .limit(1);
 
-  if (!record) {
+  if (record === undefined) {
     throw new ORPCError("NOT_FOUND", { message: "Action not found." });
   }
 
-  await assertAccessibleMailbox({ mailboxId: record.mailboxId, userId: input.userId });
+  await assertAccessibleMailbox({
+    mailboxId: record.mailboxId,
+    userId: input.userId,
+  });
   return record;
 };
 
-const getConfigurableActionForUser = async (input: { actionId: string; userId: string }) => {
+const getConfigurableActionForUser = async (input: {
+  actionId: string;
+  userId: string;
+}) => {
   const action = await getActionForUser(input);
-  await assertMailboxActionConfigurator({ mailboxId: action.mailboxId, userId: input.userId });
+  await assertMailboxActionConfigurator({
+    mailboxId: action.mailboxId,
+    userId: input.userId,
+  });
   return action;
 };
 
-const linearNodes = (graph: MailboxActionGraph) =>
+const connectorAgentNodes = (graph: MailboxActionGraph) =>
   graph.nodes.filter(
-    (
-      node,
-    ): node is Extract<MailboxActionNode, { type: "linear_agent_issue" | "linear_create_issue" }> =>
-      node.type === "linear_agent_issue" || node.type === "linear_create_issue",
+    (node): node is Extract<MailboxActionNode, { type: "connector_agent" }> =>
+      node.type === "connector_agent"
   );
 
-const validateLinearCredentialOwnershipIssues = async (input: {
+/**
+ * A step may only use a connector account that this user has actually
+ * connected, and the account must belong to the app the step names.
+ */
+const validateConnectorCredentialOwnershipIssues = async (input: {
   graph: MailboxActionGraph;
   userId: string;
 }): Promise<MailboxActionValidationIssue[]> => {
-  const issues: MailboxActionValidationIssue[] = [];
-  for (const node of linearNodes(input.graph)) {
-    if (!node.config.credentialId) continue;
-    const [credential] = await db
-      .select({ id: connectorCredential.id })
-      .from(connectorCredential)
-      .where(
-        and(
-          eq(connectorCredential.id, node.config.credentialId),
-          eq(connectorCredential.provider, "linear"),
-          eq(connectorCredential.status, "connected"),
-          eq(connectorCredential.userId, input.userId),
-        ),
-      )
-      .limit(1);
-    if (!credential) {
-      issues.push({
-        message: `Linear node ${node.id} uses a Linear account that is not connected.`,
-        nodeId: node.id,
-      });
-    }
-  }
-  return issues;
+  const nodes = connectorAgentNodes(input.graph).filter(
+    (node) =>
+      hasText(node.config.credentialId) && node.config.provider !== undefined
+  );
+  const results = await Promise.all(
+    nodes.map(async (node) => {
+      const { credentialId, provider } = node.config;
+      if (!hasText(credentialId) || provider === undefined) {
+        return null;
+      }
+      const [credential] = await db
+        .select({ id: connectorCredential.id })
+        .from(connectorCredential)
+        .where(
+          and(
+            eq(connectorCredential.id, credentialId),
+            eq(connectorCredential.provider, provider),
+            eq(connectorCredential.status, "connected"),
+            eq(connectorCredential.userId, input.userId)
+          )
+        )
+        .limit(1);
+      if (credential === undefined) {
+        return {
+          message: `Step ${node.id} uses an account that is not connected.`,
+          nodeId: node.id,
+        } satisfies MailboxActionValidationIssue;
+      }
+      return null;
+    })
+  );
+  return results.filter((issue) => issue !== null);
 };
 
-export const listMailboxActions = async (input: { mailboxId: string; userId: string }) => {
+export const listMailboxActions = async (input: {
+  mailboxId: string;
+  userId: string;
+}) => {
   await assertAccessibleMailbox(input);
   const rows = await db
     .select({
@@ -150,7 +189,10 @@ export const listMailboxActions = async (input: { mailboxId: string; userId: str
   return { actions: rows };
 };
 
-export const getMailboxAction = async (input: { actionId: string; userId: string }) => {
+export const getMailboxAction = async (input: {
+  actionId: string;
+  userId: string;
+}) => {
   const action = await getActionForUser(input);
   const revisions = await db
     .select({
@@ -186,6 +228,8 @@ export const createMailboxAction = async (input: {
   const revisionId = randomUUID();
   const graph = createDefaultMailboxActionGraph();
   const validation = validateMailboxActionGraph(graph);
+  const trimmedName = input.name?.trim();
+  const actionName = hasText(trimmedName) ? trimmedName : "New action";
 
   await db.transaction(async (tx) => {
     await tx.insert(mailboxAction).values({
@@ -194,7 +238,7 @@ export const createMailboxAction = async (input: {
       enabled: false,
       id: actionId,
       mailboxId: input.mailboxId,
-      name: input.name?.trim() || "New action",
+      name: actionName,
       organizationId: selectedMailbox.organizationId,
       status: "ready",
       updatedAt: now,
@@ -226,17 +270,21 @@ export const saveMailboxActionDraft = async (input: {
 }) => {
   const action = await getConfigurableActionForUser(input);
   const parsed = validateMailboxActionGraph(input.graph);
-  if (!parsed.graph) {
+  if (parsed.graph === null) {
     throw new ORPCError("BAD_REQUEST", {
       message: parsed.errors.join(" "),
     });
   }
+  const { graph } = parsed;
 
   const now = new Date();
   const revisionId = randomUUID();
   let revisionNumber = 1;
+  const trimmedName = input.name?.trim();
   await db.transaction(async (tx) => {
-    await tx.execute(sql`select 1 from "mailboxAction" where "id" = ${action.id} for update`);
+    await tx.execute(
+      sql`select 1 from "mailboxAction" where "id" = ${action.id} for update`
+    );
     const [latestRevision] = await tx
       .select({ revisionNumber: mailboxActionRevision.revisionNumber })
       .from(mailboxActionRevision)
@@ -249,16 +297,17 @@ export const saveMailboxActionDraft = async (input: {
       actionId: action.id,
       createdAt: now,
       createdByUserId: input.userId,
-      graph: parsed.graph,
+      graph,
       id: revisionId,
       revisionNumber,
       validationErrors: parsed.errors,
       validationStatus: parsed.valid ? "valid" : "invalid",
     });
+    const nameUpdate = hasText(trimmedName) ? { name: trimmedName } : {};
     await tx
       .update(mailboxAction)
       .set({
-        ...(input.name?.trim() ? { name: input.name.trim() } : {}),
+        ...nameUpdate,
         draftRevisionId: revisionId,
         updatedAt: now,
       })
@@ -272,10 +321,15 @@ export const saveMailboxActionDraft = async (input: {
   };
 };
 
-export const publishMailboxAction = async (input: { actionId: string; userId: string }) => {
+export const publishMailboxAction = async (input: {
+  actionId: string;
+  userId: string;
+}) => {
   const action = await getConfigurableActionForUser(input);
-  if (!action.draftRevisionId) {
-    throw new ORPCError("BAD_REQUEST", { message: "Save a draft before publishing." });
+  if (!hasText(action.draftRevisionId)) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Save a draft before publishing.",
+    });
   }
 
   const [draft] = await db
@@ -289,19 +343,21 @@ export const publishMailboxAction = async (input: { actionId: string; userId: st
     .where(eq(mailboxActionRevision.id, action.draftRevisionId))
     .limit(1);
 
-  if (!draft) {
-    throw new ORPCError("BAD_REQUEST", { message: "Draft revision was not found." });
+  if (draft === undefined) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Draft revision was not found.",
+    });
   }
 
   const validation = validateMailboxActionGraph(draft.graph);
   const credentialIssues = validation.graph
-    ? await validateLinearCredentialOwnershipIssues({
+    ? await validateConnectorCredentialOwnershipIssues({
         graph: validation.graph,
         userId: input.userId,
       })
     : [];
   const validationErrors = [...validation.issues, ...credentialIssues].map(
-    (issue) => issue.message,
+    (issue) => issue.message
   );
   if (validationErrors.length > 0) {
     await db
@@ -337,8 +393,10 @@ export const setMailboxActionEnabled = async (input: {
   userId: string;
 }) => {
   const action = await getConfigurableActionForUser(input);
-  if (input.enabled && !action.publishedRevisionId) {
-    throw new ORPCError("BAD_REQUEST", { message: "Publish this action before enabling it." });
+  if (input.enabled && !hasText(action.publishedRevisionId)) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Publish this action before enabling it.",
+    });
   }
 
   const now = new Date();
@@ -350,7 +408,10 @@ export const setMailboxActionEnabled = async (input: {
   return { enabled: input.enabled };
 };
 
-export const deleteMailboxAction = async (input: { actionId: string; userId: string }) => {
+export const deleteMailboxAction = async (input: {
+  actionId: string;
+  userId: string;
+}) => {
   const action = await getConfigurableActionForUser(input);
   await db.delete(mailboxAction).where(eq(mailboxAction.id, action.id));
   return { deleted: true as const };

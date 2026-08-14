@@ -13,7 +13,7 @@ export const withSecurityHeaders = (response: Response) => {
       "object-src 'none'",
       "script-src 'self' 'unsafe-inline'",
       "style-src 'self' 'unsafe-inline' https:",
-    ].join("; "),
+    ].join("; ")
   );
   headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   headers.set("Referrer-Policy", "strict-origin-when-cross-origin");

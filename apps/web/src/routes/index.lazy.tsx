@@ -1,12 +1,16 @@
 import { createLazyFileRoute } from "@tanstack/react-router";
-import { InboxPageClient } from "~/features/mailbox/components/inbox-page-client";
+
+import { InboxPageClient } from "#/features/mailbox/components/inbox-page-client";
 
 export const Route = createLazyFileRoute("/")({
   component: InboxRouteComponent,
 });
 
 function InboxRouteComponent() {
-  const { user } = Route.useLoaderData();
+  const loaderData = Route.useLoaderData();
+  if (!("user" in loaderData)) {
+    return null;
+  }
 
-  return <InboxPageClient user={user} />;
+  return <InboxPageClient user={loaderData.user} />;
 }

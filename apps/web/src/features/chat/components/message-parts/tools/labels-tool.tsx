@@ -1,8 +1,12 @@
 "use client";
 
 import { useState } from "react";
+
 import type { GmailLabelListToolResult } from "../../../types";
 import { ToolStep } from "./tool-step";
+
+const hasText = (value: string | null | undefined): value is string =>
+  value !== null && value !== undefined && value !== "";
 
 type LabelsToolProps = {
   nested?: boolean;
@@ -11,17 +15,22 @@ type LabelsToolProps = {
   pending: boolean;
 };
 
-export const LabelsTool = ({ nested = false, data, error, pending }: LabelsToolProps) => {
+export const LabelsTool = ({
+  nested = false,
+  data,
+  error,
+  pending,
+}: LabelsToolProps) => {
   const [expanded, setExpanded] = useState(false);
   const success = data?.status === "success" ? data : null;
-  const userLabels = success?.labels.filter((label) => label.type === "user") ?? [];
-  const meta = pending
-    ? undefined
-    : error
-      ? undefined
-      : success
-        ? `${success.labels.length} label${success.labels.length === 1 ? "" : "s"}`
-        : undefined;
+  const userLabels =
+    success?.labels.filter((label) => label.type === "user") ?? [];
+  let meta: string | undefined;
+  if (pending || hasText(error)) {
+    meta = undefined;
+  } else if (success !== null) {
+    meta = `${success.labels.length} label${success.labels.length === 1 ? "" : "s"}`;
+  }
 
   return (
     <ToolStep
@@ -31,18 +40,20 @@ export const LabelsTool = ({ nested = false, data, error, pending }: LabelsToolP
       expanded={expanded}
       label={pending ? "Listing labels" : "Listed labels"}
       meta={meta}
-      onToggle={() => setExpanded((current) => !current)}
+      onToggle={() => {
+        setExpanded((current) => !current);
+      }}
       pending={pending}
     >
       {success ? (
         <div className="space-y-2">
           {userLabels.length > 0 ? (
             <div>
-              <p className="mb-1 text-[11px] text-muted-fg/75">Custom</p>
+              <p className="mb-1 text-micro text-muted-fg/75">Custom</p>
               <div className="flex flex-wrap gap-1.5">
                 {userLabels.map((label) => (
                   <span
-                    className="rounded-full border border-border px-2 py-0.5 text-[11px] text-fg/80"
+                    className="rounded-full border border-border px-2 py-0.5 text-micro text-fg/80"
                     key={label.id}
                   >
                     {label.name}
@@ -51,7 +62,7 @@ export const LabelsTool = ({ nested = false, data, error, pending }: LabelsToolP
               </div>
             </div>
           ) : null}
-          <p className="text-[11px] text-muted-fg/75">
+          <p className="text-micro text-muted-fg/75">
             {success.labels.length - userLabels.length} system label
             {success.labels.length - userLabels.length === 1 ? "" : "s"}
           </p>

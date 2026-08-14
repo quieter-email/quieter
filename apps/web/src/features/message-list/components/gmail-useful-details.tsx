@@ -1,15 +1,16 @@
 "use client";
 
-import type { RouterOutputs } from "@quieter/orpc";
+import type { RouterInputs, RouterOutputs } from "@quieter/orpc";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { GmailUsefulDetailCard } from "~/features/gmail-useful-details/components/gmail-useful-detail-card";
+
+import { GmailUsefulDetailCard } from "#/features/gmail-useful-details/components/gmail-useful-detail-card";
 import {
   getGmailUsefulDetailsQueryKey,
   gmailUsefulDetailsQueryOptions,
-} from "~/lib/gmail/useful-details-query";
-import { orpc } from "~/lib/orpc";
+} from "#/lib/gmail/useful-details-query";
+import { orpc } from "#/lib/orpc";
 
 type UsefulDetailsData = RouterOutputs["mail"]["listGmailUsefulDetails"];
 
@@ -22,10 +23,26 @@ export const GmailUsefulDetails = ({
 }) => {
   const queryClient = useQueryClient();
   const queryKey = getGmailUsefulDetailsQueryKey(mailboxId);
-  const { data: detailsData } = useQuery(gmailUsefulDetailsQueryOptions(mailboxId));
+  const { data: detailsData } = useQuery(
+    gmailUsefulDetailsQueryOptions(mailboxId)
+  );
+  const dismissMutationOptions =
+    orpc.mail.dismissGmailUsefulDetail.mutationOptions();
   const [now, setNow] = useState(() => Date.now());
-  const dismissMutation = useMutation({
-    ...orpc.mail.dismissGmailUsefulDetail.mutationOptions(),
+  const dismissMutation = useMutation<
+    RouterOutputs["mail"]["dismissGmailUsefulDetail"],
+    unknown,
+    RouterInputs["mail"]["dismissGmailUsefulDetail"],
+    { previous: UsefulDetailsData | undefined }
+  >({
+    mutationFn: dismissMutationOptions.mutationFn,
+    mutationKey: dismissMutationOptions.mutationKey,
+    onError: (_error, _variables, context) => {
+      if (context !== null && context !== undefined) {
+        queryClient.setQueryData(queryKey, context.previous);
+      }
+      toast.error("Could not dismiss this update.");
+    },
     onMutate: async ({ id }) => {
       await queryClient.cancelQueries({ queryKey });
       const previous = queryClient.getQueryData<UsefulDetailsData>(queryKey);
@@ -35,33 +52,39 @@ export const GmailUsefulDetails = ({
               ...current,
               items: current.items.filter((item) => item.id !== id),
             }
-          : current,
+          : current
       );
       return { previous };
-    },
-    onError: (_error, _variables, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(queryKey, context.previous);
-      }
-      toast.error("Could not dismiss this update.");
     },
   });
 
   const items = detailsData?.items ?? [];
-  const hasExpiringCode = items.some((item) => item.kind === "verification_code");
+  const hasExpiringCode = items.some(
+    (item) => item.kind === "verification_code"
+  );
 
-  useEffect(() => {
-    if (!hasExpiringCode) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 1000 * 15);
-    return () => window.clearInterval(timer);
+  useEffect((): (() => void) | undefined => {
+    if (!hasExpiringCode) {
+      return undefined;
+    }
+    const timer = window.setInterval(() => {
+      setNow(Date.now());
+    }, 1000 * 15);
+    return () => {
+      window.clearInterval(timer);
+    };
   }, [hasExpiringCode]);
 
-  useEffect(() => {
-    if (!detailsData?.nextRelevantAt) return;
+  useEffect((): (() => void) | undefined => {
+    if (!detailsData?.nextRelevantAt) {
+      return undefined;
+    }
     const delay = new Date(detailsData.nextRelevantAt).getTime() - Date.now();
     if (delay <= 0) {
-      void queryClient.invalidateQueries({ queryKey: getGmailUsefulDetailsQueryKey(mailboxId) });
-      return;
+      void queryClient.invalidateQueries({
+        queryKey: getGmailUsefulDetailsQueryKey(mailboxId),
+      });
+      return undefined;
     }
 
     const timer = window.setTimeout(
@@ -69,13 +92,17 @@ export const GmailUsefulDetails = ({
         void queryClient.invalidateQueries({
           queryKey: getGmailUsefulDetailsQueryKey(mailboxId),
         }),
-      Math.min(delay, 2_147_483_647),
+      Math.min(delay, 2_147_483_647)
     );
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+    };
   }, [detailsData?.nextRelevantAt, mailboxId, queryClient]);
 
-  const visibleItems = items.filter((item) => new Date(item.expiresAt).getTime() > now);
-  if (!detailsData?.enabled || visibleItems.length === 0) {
+  const visibleItems = items.filter(
+    (item) => new Date(item.expiresAt).getTime() > now
+  );
+  if (detailsData?.enabled !== true || visibleItems.length === 0) {
     return null;
   }
 
@@ -87,8 +114,12 @@ export const GmailUsefulDetails = ({
             <GmailUsefulDetailCard
               detail={detail}
               mailboxId={mailboxId}
-              onDismiss={() => dismissMutation.mutate({ id: detail.id, mailboxId })}
-              onOpen={() => onActivateMessage(detail.gmailMessageId, detail.gmailThreadId)}
+              onDismiss={() => {
+                dismissMutation.mutate({ id: detail.id, mailboxId });
+              }}
+              onOpen={() => {
+                onActivateMessage(detail.gmailMessageId, detail.gmailThreadId);
+              }}
             />
           </div>
         ))}

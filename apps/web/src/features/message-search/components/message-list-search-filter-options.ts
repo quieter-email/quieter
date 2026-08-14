@@ -1,4 +1,3 @@
-import type { IconSvgElement } from "@hugeicons/react";
 import {
   Archive02Icon,
   Calendar01Icon,
@@ -13,14 +12,16 @@ import {
   MailOpen02Icon,
   MailSend02Icon,
 } from "@hugeicons/core-free-icons";
-import type { SearchFilterChip } from "~/features/message-search/state/message-list-search-state";
+import type { IconSvgElement } from "@hugeicons/react";
 
-export const searchFilterOptions: ReadonlyArray<{
+import type { SearchFilterChip } from "#/features/message-search/state/message-list-search-state";
+
+export const searchFilterOptions: readonly {
   filter: SearchFilterChip;
   hint: string;
   icon: IconSvgElement;
   label: string;
-}> = [
+}[] = [
   {
     filter: { type: "is", value: "unread" },
     hint: "is:unread",
@@ -63,8 +64,18 @@ export const searchFilterOptions: ReadonlyArray<{
     icon: Delete01Icon,
     label: "Trash",
   },
-  { filter: { type: "before", value: "" }, hint: "before:", icon: Calendar01Icon, label: "Before" },
-  { filter: { type: "after", value: "" }, hint: "after:", icon: Calendar03Icon, label: "After" },
+  {
+    filter: { type: "before", value: "" },
+    hint: "before:",
+    icon: Calendar01Icon,
+    label: "Before",
+  },
+  {
+    filter: { type: "after", value: "" },
+    hint: "after:",
+    icon: Calendar03Icon,
+    label: "After",
+  },
   {
     filter: { type: "older_than", value: "" },
     hint: "older_than:",
@@ -77,10 +88,30 @@ export const searchFilterOptions: ReadonlyArray<{
     icon: Calendar03Icon,
     label: "Newer than",
   },
-  { filter: { type: "from", value: "" }, hint: "from:", icon: MailAtSign01Icon, label: "From" },
-  { filter: { type: "to", value: "" }, hint: "to:", icon: MailAtSign02Icon, label: "To" },
-  { filter: { type: "cc", value: "" }, hint: "cc:", icon: MailAtSign02Icon, label: "Cc" },
-  { filter: { type: "bcc", value: "" }, hint: "bcc:", icon: MailAtSign02Icon, label: "Bcc" },
+  {
+    filter: { type: "from", value: "" },
+    hint: "from:",
+    icon: MailAtSign01Icon,
+    label: "From",
+  },
+  {
+    filter: { type: "to", value: "" },
+    hint: "to:",
+    icon: MailAtSign02Icon,
+    label: "To",
+  },
+  {
+    filter: { type: "cc", value: "" },
+    hint: "cc:",
+    icon: MailAtSign02Icon,
+    label: "Cc",
+  },
+  {
+    filter: { type: "bcc", value: "" },
+    hint: "bcc:",
+    icon: MailAtSign02Icon,
+    label: "Bcc",
+  },
   {
     filter: { type: "subject", value: "" },
     hint: "subject:",

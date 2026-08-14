@@ -1,5 +1,5 @@
-import { isSandboxMailboxId } from "~/lib/gmail/demo-mail";
-import { rpc } from "~/lib/orpc";
+import { rpc } from "#/lib/orpc";
+import { isSandboxMailboxId } from "#/lib/sandbox-mailbox";
 
 const loadAttachmentFromServer = async (
   mailboxId: string,
@@ -7,11 +7,11 @@ const loadAttachmentFromServer = async (
   attachmentId: string,
   fileName: string,
   mimeType: string,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ) => {
   const attachment = await rpc.mail.getAttachment(
     { attachmentId, fileName, mailboxId, messageId, mimeType },
-    { signal },
+    { signal }
   );
   return attachment.file;
 };
@@ -22,7 +22,7 @@ export const downloadAttachmentFromServer = async (
   attachmentId: string,
   fileName: string,
   mimeType: string,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ) => {
   if (isSandboxMailboxId(mailboxId)) {
     throw new Error("This attachment can't be downloaded here.");
@@ -34,21 +34,21 @@ export const downloadAttachmentFromServer = async (
     attachmentId,
     fileName,
     mimeType,
-    signal,
+    signal
   );
   const objectUrl = URL.createObjectURL(file);
   const anchor = document.createElement("a");
 
-  anchor.href = objectUrl;
-  anchor.download = file.name;
-  anchor.rel = "noopener";
-  document.body.append(anchor);
-  anchor.click();
-  anchor.remove();
-
-  window.setTimeout(() => {
+  try {
+    anchor.href = objectUrl;
+    anchor.download = file.name;
+    anchor.rel = "noopener";
+    document.body.append(anchor);
+    anchor.click();
+  } finally {
+    anchor.remove();
     URL.revokeObjectURL(objectUrl);
-  }, 0);
+  }
 
   return file;
 };

@@ -1,6 +1,10 @@
 "use client";
 
-import { useConsentManager, useHeadlessConsentUI, useTranslations } from "@c15t/react";
+import {
+  useConsentManager,
+  useHeadlessConsentUI,
+  useTranslations,
+} from "@c15t/react";
 import { Button } from "@quieter/ui/button";
 import {
   Dialog,
@@ -15,9 +19,15 @@ import { Switch, SwitchThumb } from "@quieter/ui/switch";
 
 export const ConsentPreferencesDialog = () => {
   const translations = useTranslations();
-  const { getDisplayedConsents, selectedConsents, setSelectedConsent } = useConsentManager();
-  const { closeUI, dialog, openDialog, performDialogAction, saveCustomPreferences } =
-    useHeadlessConsentUI();
+  const { getDisplayedConsents, selectedConsents, setSelectedConsent } =
+    useConsentManager();
+  const {
+    closeUI,
+    dialog,
+    openDialog,
+    performDialogAction,
+    saveCustomPreferences,
+  } = useHeadlessConsentUI();
 
   return (
     <Dialog
@@ -34,14 +44,17 @@ export const ConsentPreferencesDialog = () => {
       <DialogContent className="w-[min(92vw,34rem)]">
         <DialogHeader>
           <DialogTitle>{translations.consentManagerDialog.title}</DialogTitle>
-          <DialogDescription>{translations.consentManagerDialog.description}</DialogDescription>
+          <DialogDescription>
+            {translations.consentManagerDialog.description}
+          </DialogDescription>
         </DialogHeader>
 
         <DialogBody className="space-y-4 pt-0">
           {getDisplayedConsents().map((config) => {
             const category = config.name;
             const copy = translations.consentTypes[category];
-            const isDisabled = category === "necessary" || config.disabled === true;
+            const isDisabled =
+              category === "necessary" || config.disabled === true;
 
             return (
               <div
@@ -49,20 +62,25 @@ export const ConsentPreferencesDialog = () => {
                 key={category}
               >
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-fg">{copy?.title ?? category}</p>
-                  <p className="mt-1 text-sm/6 text-muted-fg">{copy?.description ?? ""}</p>
+                  <p className="text-sm font-medium text-fg">
+                    {copy?.title ?? category}
+                  </p>
+                  <p className="mt-1 text-sm/6 text-muted-fg">
+                    {copy?.description ?? ""}
+                  </p>
                 </div>
 
                 <Switch
                   aria-label={copy?.title ?? category}
                   checked={selectedConsents[category]}
-                  className="h-5 w-9 shrink-0 overflow-hidden rounded-full border border-border bg-muted p-0.5 data-checked:border-primary data-checked:bg-primary"
+                  className="shrink-0"
+                  size="sm"
                   disabled={isDisabled}
                   onCheckedChange={(checked) => {
                     setSelectedConsent(category, checked);
                   }}
                 >
-                  <SwitchThumb className="size-4 bg-bg-surface data-checked:translate-x-4 data-checked:bg-primary-fg" />
+                  <SwitchThumb />
                 </Switch>
               </div>
             );

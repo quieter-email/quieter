@@ -6,24 +6,26 @@ import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { authClient } from "~/lib/auth";
+
+import { runDetached } from "#/features/settings/components/mailboxes-settings-shared";
+import { authClient } from "#/lib/auth";
+
 import {
   SettingsCard,
   SettingsNavigationRow,
   SettingsLoadingState,
   SettingsRows,
   SettingsSection,
-  settingsRowPaddingClass,
+  settingsSurfaceVariants,
 } from "../settings-layout";
 import { prefetchOrganizationSettingsDetail } from "../settings-prefetch";
 import {
-  type OrganizationSummary,
-  type UserInvitation,
   formatDate,
   formatRoleLabel,
   getUserInvitationsQueryKey,
   userInvitationsQueryOptions,
 } from "./domain";
+import type { OrganizationSummary, UserInvitation } from "./domain";
 import { OrganizationFormDialog } from "./organization-form-dialog";
 import { SettingsRow } from "./settings-row";
 
@@ -31,46 +33,65 @@ const PendingInvitationsSection = () => {
   const sessionState = authClient.useSession();
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
-  const [pendingInvitationId, setPendingInvitationId] = useState<string | null>(null);
+  const [pendingInvitationId, setPendingInvitationId] = useState<string | null>(
+    null
+  );
   const userId = sessionState.data?.user.id ?? "";
   const {
     data: userInvitations = [],
     error: userInvitationsError,
     isPending: areUserInvitationsPending,
-  } = useQuery(userInvitationsQueryOptions(userId, !!sessionState.data?.user.email));
+  } = useQuery(
+    userInvitationsQueryOptions(
+      userId,
+      (sessionState.data?.user.email ?? "") !== ""
+    )
+  );
   const acceptInvitationMutation = useMutation({
     mutationFn: async (invitationId: string) => {
-      const response = await authClient.organization.acceptInvitation({ invitationId });
+      const response = await authClient.organization.acceptInvitation({
+        invitationId,
+      });
       if (response.error) {
-        throw new Error(response.error.message ?? "Could not accept invitation.");
+        throw new Error(
+          response.error.message ?? "Could not accept invitation."
+        );
       }
       return response;
     },
     mutationKey: ["auth", "organization", "accept-invitation"],
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: getUserInvitationsQueryKey(userId) });
+      await queryClient.invalidateQueries({
+        queryKey: getUserInvitationsQueryKey(userId),
+      });
     },
   });
   const rejectInvitationMutation = useMutation({
     mutationFn: async (invitationId: string) => {
-      const response = await authClient.organization.rejectInvitation({ invitationId });
+      const response = await authClient.organization.rejectInvitation({
+        invitationId,
+      });
       if (response.error) {
-        throw new Error(response.error.message ?? "Could not reject invitation.");
+        throw new Error(
+          response.error.message ?? "Could not reject invitation."
+        );
       }
       return response;
     },
     mutationKey: ["auth", "organization", "reject-invitation"],
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: getUserInvitationsQueryKey(userId) });
+      await queryClient.invalidateQueries({
+        queryKey: getUserInvitationsQueryKey(userId),
+      });
     },
   });
   const invitations = userInvitations.toSorted((left, right) =>
-    left.organizationName.localeCompare(right.organizationName),
+    left.organizationName.localeCompare(right.organizationName)
   );
 
   const handleInvitationAction = async (
     invitation: UserInvitation,
-    action: "accept" | "reject",
+    action: "accept" | "reject"
   ) => {
     setError(null);
 
@@ -86,16 +107,22 @@ const PendingInvitationsSection = () => {
       await rejectInvitationMutation.mutateAsync(invitation.id);
       setPendingInvitationId(null);
     } catch (mutationError) {
-      setError(
-        (mutationError as { message?: string })?.message ??
-          (action === "accept" ? "Could not accept invitation." : "Could not reject invitation."),
-      );
+      if (mutationError instanceof Error) {
+        const { message: errorMessage } = mutationError;
+        setError(errorMessage);
+      } else if (action === "accept") {
+        setError("Could not accept invitation.");
+      } else {
+        setError("Could not reject invitation.");
+      }
       setPendingInvitationId(null);
     }
   };
 
   if (areUserInvitationsPending) {
-    return <SettingsLoadingState className="min-h-15" label="Loading invitations" />;
+    return (
+      <SettingsLoadingState className="min-h-15" label="Loading invitations" />
+    );
   }
 
   if (userInvitationsError) {
@@ -115,7 +142,8 @@ const PendingInvitationsSection = () => {
       {invitations.map((invitation) => {
         const isPending =
           pendingInvitationId === invitation.id &&
-          (acceptInvitationMutation.isPending || rejectInvitationMutation.isPending);
+          (acceptInvitationMutation.isPending ||
+            rejectInvitationMutation.isPending);
 
         return (
           <SettingsRow
@@ -123,7 +151,11 @@ const PendingInvitationsSection = () => {
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   disabled={isPending}
-                  onClick={() => void handleInvitationAction(invitation, "accept")}
+                  onClick={() => {
+                    runDetached(async () => {
+                      await handleInvitationAction(invitation, "accept");
+                    });
+                  }}
                   size="sm"
                 >
                   {isPending && acceptInvitationMutation.isPending && (
@@ -138,7 +170,11 @@ const PendingInvitationsSection = () => {
 
                 <Button
                   disabled={isPending}
-                  onClick={() => void handleInvitationAction(invitation, "reject")}
+                  onClick={() => {
+                    runDetached(async () => {
+                      await handleInvitationAction(invitation, "reject");
+                    });
+                  }}
                   size="sm"
                   variant="outline"
                 >
@@ -159,7 +195,16 @@ const PendingInvitationsSection = () => {
           />
         );
       })}
-      {error && <p className={cn("text-sm text-destructive", settingsRowPaddingClass)}>{error}</p>}
+      {(error ?? "") === "" ? null : (
+        <p
+          className={cn(
+            "text-sm text-destructive",
+            settingsSurfaceVariants({ variant: "padding" })
+          )}
+        >
+          {error}
+        </p>
+      )}
     </SettingsCard>
   );
 };
@@ -185,29 +230,43 @@ export const OrganizationsListView = ({
       </div>
 
       <SettingsSection title="Your teams">
-        {isPending ? (
-          <SettingsLoadingState label="Loading teams" />
-        ) : error ? (
-          <p className="text-sm text-destructive">{error}</p>
-        ) : organizations.length > 0 ? (
-          <SettingsRows>
-            {organizations
-              .toSorted((left, right) => left.name.localeCompare(right.name))
-              .map((organization) => (
-                <SettingsNavigationRow
-                  description={organization.slug}
-                  key={organization.id}
-                  onClick={() => onSelectOrganization(organization.id)}
-                  onIntent={() =>
-                    void prefetchOrganizationSettingsDetail(queryClient, organization.id)
-                  }
-                  title={organization.name}
-                />
-              ))}
-          </SettingsRows>
-        ) : (
-          <p className="text-sm text-muted-fg">No teams yet.</p>
-        )}
+        {(() => {
+          if (isPending) {
+            return <SettingsLoadingState label="Loading teams" />;
+          }
+          if ((error ?? "") !== "") {
+            return <p className="text-sm text-destructive">{error}</p>;
+          }
+          if (organizations.length > 0) {
+            return (
+              <SettingsRows>
+                {organizations
+                  .toSorted((left, right) =>
+                    left.name.localeCompare(right.name)
+                  )
+                  .map((organization) => (
+                    <SettingsNavigationRow
+                      description={organization.slug}
+                      key={organization.id}
+                      onClick={() => {
+                        onSelectOrganization(organization.id);
+                      }}
+                      onIntent={() => {
+                        runDetached(async () => {
+                          await prefetchOrganizationSettingsDetail(
+                            queryClient,
+                            organization.id
+                          );
+                        });
+                      }}
+                      title={organization.name}
+                    />
+                  ))}
+              </SettingsRows>
+            );
+          }
+          return <p className="text-sm text-muted-fg">No teams yet.</p>;
+        })()}
       </SettingsSection>
 
       <PendingInvitationsSection />

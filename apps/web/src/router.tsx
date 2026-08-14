@@ -1,12 +1,16 @@
 import * as Sentry from "@sentry/tanstackstart-react";
 import { createRouter } from "@tanstack/react-router";
+
 import { clientEnv } from "./env";
 import { shouldDiscardClientError } from "./lib/client-error-reporting";
 import { routeTree } from "./routeTree.gen";
 
-const isSentryEnabled = !import.meta.env.DEV && !!clientEnv.VITE_SENTRY_DSN;
+const isSentryEnabled =
+  !import.meta.env.DEV &&
+  clientEnv.VITE_SENTRY_DSN !== undefined &&
+  clientEnv.VITE_SENTRY_DSN !== "";
 
-export function getRouter() {
+export const getRouter = () => {
   const router = createRouter({
     defaultPendingMinMs: 0,
     routeTree,
@@ -20,13 +24,12 @@ export function getRouter() {
       dsn: clientEnv.VITE_SENTRY_DSN,
       enableLogs: false,
       environment: import.meta.env.MODE,
-      sendDefaultPii: false,
       tracesSampleRate: 0.05,
     });
   }
 
   return router;
-}
+};
 
 declare module "@tanstack/react-router" {
   interface Register {

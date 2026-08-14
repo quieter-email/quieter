@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import type { GmailAttachmentToolResult } from "../../../types";
+
 import { truncateToolDetail } from "../../../domain/tool-summaries";
+import type { GmailAttachmentToolResult } from "../../../types";
 import { ToolStep } from "./tool-step";
 
 export const AttachmentTool = ({
@@ -26,9 +27,15 @@ export const AttachmentTool = ({
       expandable={!!success}
       expanded={expanded}
       label={pending ? "Reading attachment" : "Read attachment"}
-      meta={success ? `${Math.max(1, Math.round(success.size / 1_024))} KB` : undefined}
+      meta={
+        success
+          ? `${Math.max(1, Math.round(success.size / 1024))} KB`
+          : undefined
+      }
       nested={nested}
-      onToggle={() => setExpanded((current) => !current)}
+      onToggle={() => {
+        setExpanded((current) => !current);
+      }}
       pending={pending}
     >
       {success ? (

@@ -1,7 +1,8 @@
 "use client";
 
-import type { ComponentPropsWithoutRef } from "react";
 import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
+import type { ComponentPropsWithoutRef } from "react";
+
 import { cn } from "../../lib/cn";
 
 export const Popover = PopoverPrimitive.Root;
@@ -15,7 +16,7 @@ export const PopoverTrigger = ({
     className={cn(
       "squircle",
       className,
-      "transition-transform duration-100 ease-out focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
+      "transition-transform duration-100 ease-out focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
     )}
     {...props}
   />
@@ -45,7 +46,7 @@ export const PopoverContent = ({
       <PopoverPrimitive.Popup
         className={cn(
           "z-50 max-w-sm min-w-52 origin-(--transform-origin) rounded-lg border bg-popover p-4 text-popover-fg shadow-md transition-[opacity,transform] duration-150 ease-out will-change-[opacity,transform] data-ending-style:scale-95 data-ending-style:opacity-0 data-instant:transition-none data-starting-style:scale-95 data-starting-style:opacity-0",
-          className,
+          className
         )}
         {...props}
       >
@@ -59,7 +60,10 @@ export const PopoverTitle = ({
   className,
   ...props
 }: ComponentPropsWithoutRef<typeof PopoverPrimitive.Title>) => (
-  <PopoverPrimitive.Title className={cn("text-sm font-semibold text-fg", className)} {...props} />
+  <PopoverPrimitive.Title
+    className={cn("text-sm font-semibold text-fg", className)}
+    {...props}
+  />
 );
 
 export const PopoverDescription = ({
@@ -79,7 +83,7 @@ export const PopoverArrow = ({
   <PopoverPrimitive.Arrow
     className={cn(
       "pointer-events-none absolute size-2.5 rotate-45 rounded-sm bg-popover data-[side=bottom]:-top-1.25 data-[side=bottom]:border-t data-[side=bottom]:border-l data-[side=left]:-right-1.25 data-[side=left]:border-t data-[side=left]:border-r data-[side=right]:-left-1.25 data-[side=right]:border-b data-[side=right]:border-l data-[side=top]:-bottom-1.25 data-[side=top]:border-r data-[side=top]:border-b",
-      className,
+      className
     )}
     {...props}
   />
@@ -92,7 +96,7 @@ export const PopoverBackdrop = ({
   <PopoverPrimitive.Backdrop
     className={cn(
       "fixed inset-0 z-50 bg-black/50 backdrop-blur-sm transition-opacity duration-150 ease-out data-ending-style:opacity-0 data-starting-style:opacity-0",
-      className,
+      className
     )}
     {...props}
   />

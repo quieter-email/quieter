@@ -1,17 +1,20 @@
 "use client";
 
-import { chatModelSchema, defaultChatModel, type ChatModel } from "@quieter/ai/chat-models";
+import { chatModelSchema, defaultChatModel } from "@quieter/ai/chat-models";
+import type { ChatModel } from "@quieter/ai/chat-models";
 import { useSyncExternalStore } from "react";
 
 const DEFAULT_CHAT_MODEL_STORAGE_KEY = "quieter:default-chat-model";
 const DEFAULT_CHAT_MODEL_CHANGE_EVENT = "quieter:default-chat-model-change";
 
 const readDefaultChatModel = (): ChatModel => {
-  if (typeof window === "undefined") return defaultChatModel;
+  if (typeof window === "undefined") {
+    return defaultChatModel;
+  }
 
   try {
     const storedModel = chatModelSchema.safeParse(
-      window.localStorage.getItem(DEFAULT_CHAT_MODEL_STORAGE_KEY),
+      window.localStorage.getItem(DEFAULT_CHAT_MODEL_STORAGE_KEY)
     );
     return storedModel.success ? storedModel.data : defaultChatModel;
   } catch {
@@ -21,7 +24,9 @@ const readDefaultChatModel = (): ChatModel => {
 
 const subscribeToDefaultChatModel = (callback: () => void) => {
   const handleStorage = (event: StorageEvent) => {
-    if (event.key === DEFAULT_CHAT_MODEL_STORAGE_KEY) callback();
+    if (event.key === DEFAULT_CHAT_MODEL_STORAGE_KEY) {
+      callback();
+    }
   };
 
   window.addEventListener("storage", handleStorage);
@@ -43,4 +48,8 @@ export const setDefaultChatModel = (model: ChatModel) => {
 };
 
 export const useDefaultChatModel = () =>
-  useSyncExternalStore(subscribeToDefaultChatModel, readDefaultChatModel, () => defaultChatModel);
+  useSyncExternalStore(
+    subscribeToDefaultChatModel,
+    readDefaultChatModel,
+    () => defaultChatModel
+  );

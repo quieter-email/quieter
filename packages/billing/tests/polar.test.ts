@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vite-plus/test";
-import { createBillingCheckoutMetadata, createBillingPortalSession } from "../src";
+
+import {
+  createBillingCheckoutMetadata,
+  createBillingPortalSession,
+} from "../src";
 import { resolvePolarServer } from "../src/polar";
 
 describe("Polar server selection", () => {
@@ -9,22 +13,24 @@ describe("Polar server selection", () => {
         deploymentEnvironment: "production",
         nodeEnvironment: "production",
         polarSandbox: true,
-      }),
+      })
     ).toBe("production");
   });
 
   test("allows explicit sandbox mode outside production", () => {
     expect(
       resolvePolarServer({
-        deploymentEnvironment: "preview",
+        deploymentEnvironment: "local",
         nodeEnvironment: "production",
         polarSandbox: true,
-      }),
+      })
     ).toBe("sandbox");
   });
 
   test("defaults local development and tests to sandbox", () => {
-    expect(resolvePolarServer({ nodeEnvironment: "development" })).toBe("sandbox");
+    expect(resolvePolarServer({ nodeEnvironment: "development" })).toBe(
+      "sandbox"
+    );
     expect(resolvePolarServer({ nodeEnvironment: "test" })).toBe("sandbox");
   });
 });
@@ -37,7 +43,9 @@ describe("Polar checkout metadata", () => {
       userId: "user-1",
     });
 
-    expect(metadata.customerMetadata.quieterOrganizationId).toBe("organization-1");
+    expect(metadata.customerMetadata.quieterOrganizationId).toBe(
+      "organization-1"
+    );
     expect(metadata.metadata.quieterOrganizationId).toBe("organization-1");
   });
 });
@@ -49,8 +57,8 @@ describe("Polar customer portal", () => {
         organizationId: "organization-1",
         returnUrl: "https://quieter.email/settings",
         userId: "user-1",
-      }),
-    ).toEqual({
+      })
+    ).toStrictEqual({
       externalCustomerId: "organization:organization-1",
       externalMemberId: "user-1",
       returnUrl: "https://quieter.email/settings",

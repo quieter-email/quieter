@@ -1,33 +1,37 @@
-import { serializeStructuredSearchState } from "@quieter/mail/search";
 import { isRepeatableMailSearchFilter } from "@quieter/mail/search";
-import {
-  normalizeLabelSelectionKey,
-  type SearchFilterChip,
-} from "~/features/message-search/state/message-list-search-state";
+
+import { normalizeLabelSelectionKey } from "#/features/message-search/state/message-list-search-state";
+import type { SearchFilterChip } from "#/features/message-search/state/message-list-search-state";
+
 import type { DropdownDirection } from "./message-list-search-types";
 
+export { serializeStructuredSearchState } from "@quieter/mail/search";
+
 const initialCalendarFallbackMonth = new Date(0);
+// react-doctor-disable-next-line react-doctor/no-impure-call-at-module-scope -- This is the browser snapshot for useSyncExternalStore; the server snapshot above is intentionally static.
 const clientCalendarFallbackMonth = new Date();
 
-export const filterChipClassName =
-  "squircle inline-flex h-6 min-w-0 max-w-full shrink-0 items-center rounded-lg bg-bg-elevated/55 px-2.5 text-[13px] text-fg shadow-xs transition-colors duration-150 ease-out ring-1 ring-border/80 ring-inset hover:bg-bg-elevated/70 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-ring/45";
-
-export const subscribeToCalendarFallbackMonth = () => () => {};
+export const subscribeToCalendarFallbackMonth = () => () => {
+  // The server snapshot is static; the browser value changes only on reload.
+};
 export const getCalendarFallbackMonth = () => clientCalendarFallbackMonth;
-export const getServerCalendarFallbackMonth = () => initialCalendarFallbackMonth;
+export const getServerCalendarFallbackMonth = () =>
+  initialCalendarFallbackMonth;
 
 export const formatDateFilterValue = (date: Date) =>
   `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
 
-export const parseDateFilterValue = (value: string) => {
-  const match = /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/.exec(value.trim());
+export const parseDateFilterValue = (value: string): Date | undefined => {
+  const match = /^(?<year>\d{4})\/(?<month>\d{1,2})\/(?<day>\d{1,2})$/u.exec(
+    value.trim()
+  );
   if (!match) {
     return undefined;
   }
 
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
+  const year = Number(match.groups?.year);
+  const month = Number(match.groups?.month);
+  const day = Number(match.groups?.day);
   const date = new Date(year, month - 1, day);
   if (
     Number.isNaN(date.getTime()) ||
@@ -41,38 +45,55 @@ export const parseDateFilterValue = (value: string) => {
   return date;
 };
 
-export { serializeStructuredSearchState };
+export const getDropdownDirection = (key: string): DropdownDirection | null => {
+  if (key === "ArrowDown") {
+    return "next";
+  }
+  if (key === "ArrowUp") {
+    return "previous";
+  }
+  return null;
+};
 
-export const getDropdownDirection = (key: string): DropdownDirection | null =>
-  key === "ArrowDown" ? "next" : key === "ArrowUp" ? "previous" : null;
+export const isDateFilter = ({ type }: SearchFilterChip) =>
+  type === "after" || type === "before";
 
-export const isDateFilter = ({ type }: SearchFilterChip) => type === "after" || type === "before";
+export const isFixedValueFilter = ({ type }: SearchFilterChip) =>
+  type === "has" || type === "is";
 
-export const isFixedValueFilter = ({ type }: SearchFilterChip) => type === "has" || type === "is";
-
-export const shouldFocusFilterValueEnd = (filter: SearchFilterChip | undefined) =>
-  !!filter && filter.type !== "label" && !isFixedValueFilter(filter);
+export const shouldFocusFilterValueEnd = (
+  filter: SearchFilterChip | undefined
+) => !!filter && filter.type !== "label" && !isFixedValueFilter(filter);
 
 export const isCaretAtStart = (input: HTMLInputElement) =>
   input.selectionStart === 0 && input.selectionEnd === 0;
 
 export const isCaretAtEnd = (input: HTMLInputElement) =>
-  input.selectionStart === input.value.length && input.selectionEnd === input.value.length;
+  input.selectionStart === input.value.length &&
+  input.selectionEnd === input.value.length;
 
-export const findLabelFilterIndex = (filters: readonly SearchFilterChip[], labelName: string) => {
+export const findLabelFilterIndex = (
+  filters: readonly SearchFilterChip[],
+  labelName: string
+) => {
   const labelKey = normalizeLabelSelectionKey(labelName);
   return filters.findIndex(
-    (filter) => filter.type === "label" && normalizeLabelSelectionKey(filter.value) === labelKey,
+    (filter) =>
+      filter.type === "label" &&
+      normalizeLabelSelectionKey(filter.value) === labelKey
   );
 };
 
-export const cycleSearchFilter = (filters: readonly SearchFilterChip[], index: number) => {
+export const cycleSearchFilter = (
+  filters: readonly SearchFilterChip[],
+  index: number
+) => {
   const filter = filters[index];
-  if (!filter) {
+  if (filter === undefined) {
     return [...filters];
   }
 
-  if (filter.negated) {
+  if (filter.negated === true) {
     return filters.filter((_, filterIndex) => filterIndex !== index);
   }
 
@@ -83,7 +104,7 @@ export const cycleSearchFilter = (filters: readonly SearchFilterChip[], index: n
 
 export const upsertFilter = (
   filters: readonly SearchFilterChip[],
-  nextFilter: SearchFilterChip,
+  nextFilter: SearchFilterChip
 ) => {
   if (nextFilter.type === "label") {
     const existingIndex = findLabelFilterIndex(filters, nextFilter.value);
@@ -96,7 +117,8 @@ export const upsertFilter = (
 
   if (isRepeatableMailSearchFilter(nextFilter.type)) {
     const unfinishedIndex = filters.findIndex(
-      (filter) => filter.type === nextFilter.type && filter.value.trim().length === 0,
+      (filter) =>
+        filter.type === nextFilter.type && filter.value.trim().length === 0
     );
     if (unfinishedIndex !== -1) {
       return { filters: [...filters], index: unfinishedIndex };
@@ -104,7 +126,9 @@ export const upsertFilter = (
     return { filters: [...filters, nextFilter], index: filters.length };
   }
 
-  const existingIndex = filters.findIndex((filter) => filter.type === nextFilter.type);
+  const existingIndex = filters.findIndex(
+    (filter) => filter.type === nextFilter.type
+  );
   if (existingIndex === -1) {
     return { filters: [...filters, nextFilter], index: filters.length };
   }

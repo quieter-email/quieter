@@ -1,7 +1,9 @@
-import type { ChatMessagePart } from "@quieter/database/schema";
+import type { ChatMessagePart } from "@quieter/orpc/chat-contracts";
 import type { MessagePart } from "@tanstack/ai";
 
-export const hasVisibleAssistantContent = (parts: Array<ChatMessagePart | MessagePart>) =>
+export const hasVisibleAssistantContent = (
+  parts: (ChatMessagePart | MessagePart)[]
+) =>
   parts.some((part) => {
     if (part.type === "tool-call" || part.type === "tool-result") {
       return true;

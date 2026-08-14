@@ -43,5 +43,6 @@ yarn-error.log*
 # Local scratch (never commit)
 .scratch/
 
-# Cursor
-.cursor/
+# Cursor (keep Ultracite agent hooks committed)
+.cursor/*
+!.cursor/hooks.json

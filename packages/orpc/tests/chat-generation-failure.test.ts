@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
+
 import { getChatRunFailureMessage } from "../src/chat/generation/failure";
 
 describe("chat generation failures", () => {
@@ -8,13 +9,13 @@ describe("chat generation failures", () => {
     "Request failed: unauthorized",
   ])("reports authentication failures accurately: %s", (message) => {
     expect(getChatRunFailureMessage(new Error(message))).toBe(
-      "Quieter could not authenticate with a required service. Please contact support.",
+      "Quieter could not authenticate with a required service. Please contact support."
     );
   });
 
   test("keeps network failures distinct from authentication failures", () => {
     expect(getChatRunFailureMessage(new TypeError("fetch failed"))).toBe(
-      "The response connection was interrupted. Retry it to continue.",
+      "The response connection was interrupted. Retry it to continue."
     );
   });
 });

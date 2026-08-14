@@ -1,14 +1,39 @@
-import { serverEnv } from "@quieter/env/server";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+
+import { serverEnv } from "@quieter/env/server";
 
 export const sitePasswordCookieName = "quieter_site_unlock";
 export const sitePasswordMaxAgeSeconds = 60 * 60 * 24 * 400;
 
-export const isSitePasswordGateEnabled = () => serverEnv.NODE_ENV !== "development";
+export const isSitePasswordGateEnabled = () =>
+  serverEnv.NODE_ENV !== "development";
+
+const timingSafeEqualString = (actual: string, expected: string) => {
+  const actualBuffer = Buffer.from(actual);
+  const expectedBuffer = Buffer.from(expected);
+
+  return (
+    actualBuffer.length === expectedBuffer.length &&
+    timingSafeEqual(actualBuffer, expectedBuffer)
+  );
+};
+
+const formatSessionCookie = (cookies: Record<string, string>) => {
+  const sessionCookie =
+    cookies["__Secure-better-auth.session_token"] ??
+    cookies["better-auth.session_token"];
+  const cookieName = cookies["__Secure-better-auth.session_token"]
+    ? "__Secure-better-auth.session_token"
+    : "better-auth.session_token";
+  return `${cookieName}=${sessionCookie}`;
+};
 
 const getSitePassword = () => serverEnv.APP_SITE_PASSWORD ?? "";
 
-const getSigningSecret = () => serverEnv.BETTER_AUTH_SECRET || getSitePassword();
+const getSigningSecret = () => {
+  const configuredSecret = serverEnv.BETTER_AUTH_SECRET ?? "";
+  return configuredSecret.length > 0 ? configuredSecret : getSitePassword();
+};
 
 export const hasSitePasswordConfigured = () => getSitePassword().length > 0;
 
@@ -20,7 +45,9 @@ export const getSitePasswordToken = () => {
     return null;
   }
 
-  return createHash("sha256").update(`${password}:${signingSecret}`).digest("base64url");
+  return createHash("sha256")
+    .update(`${password}:${signingSecret}`)
+    .digest("base64url");
 };
 
 export const isCorrectSitePassword = (password: string) => {
@@ -36,7 +63,12 @@ export const isCorrectSitePassword = (password: string) => {
 export const isValidSitePasswordToken = (token: string | undefined) => {
   const expectedToken = getSitePasswordToken();
 
-  if (!expectedToken || !token) {
+  if (
+    expectedToken === null ||
+    expectedToken === "" ||
+    token === undefined ||
+    token === ""
+  ) {
     return false;
   }
 
@@ -45,18 +77,25 @@ export const isValidSitePasswordToken = (token: string | undefined) => {
 
 export const hasValidAuthSessionToken = async (
   cookies: Record<string, string>,
-  secret = serverEnv.BETTER_AUTH_SECRET,
+  secret = serverEnv.BETTER_AUTH_SECRET
 ) => {
-  if (!secret) return false;
+  if (secret === null || secret === undefined || secret === "") {
+    return false;
+  }
 
   const signedToken =
-    cookies["__Secure-better-auth.session_token"] ?? cookies["better-auth.session_token"];
+    cookies["__Secure-better-auth.session_token"] ??
+    cookies["better-auth.session_token"];
   const separatorIndex = signedToken?.lastIndexOf(".") ?? -1;
-  if (!signedToken || separatorIndex <= 0) return false;
+  if (!signedToken || separatorIndex <= 0) {
+    return false;
+  }
 
   const token = signedToken.slice(0, separatorIndex);
   const signature = signedToken.slice(separatorIndex + 1);
-  const expectedSignature = createHmac("sha256", secret).update(token).digest("base64");
+  const expectedSignature = createHmac("sha256", secret)
+    .update(token)
+    .digest("base64");
 
   // Reject tampered cookies first
   if (!timingSafeEqualString(signature, expectedSignature)) {
@@ -65,30 +104,20 @@ export const hasValidAuthSessionToken = async (
 
   // Validate that the session is actually live in the database
   try {
-    const { getSessionWithOrganization } = await import("@quieter/auth/session");
+    const { getSessionWithOrganization } =
+      await import("@quieter/auth/session");
     const headers = new Headers();
     headers.set("cookie", formatSessionCookie(cookies));
     const session = await getSessionWithOrganization(headers);
-    return !!session?.user && !!session?.session;
+    return (
+      session !== null &&
+      session !== undefined &&
+      session.user !== null &&
+      session.user !== undefined &&
+      session.session !== null &&
+      session.session !== undefined
+    );
   } catch {
     return false;
   }
-};
-
-const formatSessionCookie = (cookies: Record<string, string>) => {
-  const sessionCookie =
-    cookies["__Secure-better-auth.session_token"] ?? cookies["better-auth.session_token"];
-  const cookieName = cookies["__Secure-better-auth.session_token"]
-    ? "__Secure-better-auth.session_token"
-    : "better-auth.session_token";
-  return `${cookieName}=${sessionCookie}`;
-};
-
-const timingSafeEqualString = (actual: string, expected: string) => {
-  const actualBuffer = Buffer.from(actual);
-  const expectedBuffer = Buffer.from(expected);
-
-  return (
-    actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer)
-  );
 };

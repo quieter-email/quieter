@@ -1,19 +1,29 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import type { OrganizationSettingsView } from "~/features/settings/domain/organization-settings-view";
-import { getTeamBilling, userBillingQueryOptions } from "~/features/settings/domain/billing";
-import { SettingsBackButton, SettingsErrorState, SettingsLoadingState } from "../settings-layout";
+
+import {
+  getTeamBilling,
+  userBillingQueryOptions,
+} from "#/features/settings/domain/billing";
+import type { OrganizationSettingsView } from "#/features/settings/domain/organization-settings-view";
+
+import {
+  SettingsBackButton,
+  SettingsErrorState,
+  SettingsLoadingState,
+} from "../settings-layout";
 import { ApiKeysView } from "./api-keys-view";
 import { DivisionsView } from "./divisions-view";
 import {
-  type OrganizationSummary,
   fullOrganizationQueryOptions,
   hasOrganizationPermission,
   normalizeOrganizationRole,
 } from "./domain";
+import type { OrganizationSummary } from "./domain";
 import { DomainDetailView } from "./domain-detail-view";
 import { DomainsView } from "./domains-view";
+import { MailSuppressionsView } from "./mail-suppressions-view";
 import { MembersView } from "./members-view";
 import { OrganizationBillingView } from "./organization-billing-view";
 import { OrganizationDangerView } from "./organization-danger-view";
@@ -30,6 +40,7 @@ export const OrganizationDetailView = ({
   onOpenDomains,
   onOpenDomain,
   onOpenMembers,
+  onOpenSuppressions,
   organization,
   userId,
   view,
@@ -44,6 +55,7 @@ export const OrganizationDetailView = ({
   onOpenDomains: () => void;
   onOpenDomain: (domainId: string) => void;
   onOpenMembers: () => void;
+  onOpenSuppressions: () => void;
   organization: OrganizationSummary;
   userId: string;
   view: OrganizationSettingsView;
@@ -61,10 +73,15 @@ export const OrganizationDetailView = ({
     isPending: isBillingPending,
     isSuccess: isBillingSuccess,
   } = useQuery(userBillingQueryOptions());
-  const activeMember = fullOrganization?.members.find((member) => member.userId === userId) ?? null;
-  const activeRole = activeMember && normalizeOrganizationRole(activeMember.role);
+  const activeMember =
+    fullOrganization?.members.find((member) => member.userId === userId) ??
+    null;
+  const activeRole =
+    activeMember && normalizeOrganizationRole(activeMember.role);
   const pendingInvitations =
-    fullOrganization?.invitations.filter((invitation) => invitation.status === "pending") ?? [];
+    fullOrganization?.invitations.filter(
+      (invitation) => invitation.status === "pending"
+    ) ?? [];
   const canCancelInvitations = hasOrganizationPermission(activeRole, {
     invitation: ["cancel"],
   });
@@ -84,7 +101,8 @@ export const OrganizationDetailView = ({
     organization: ["update"],
   });
   const teamBilling = getTeamBilling(billing, organization.id);
-  const canUseTeamFeatures = isBillingSuccess && teamBilling?.hasAccess === true;
+  const canUseTeamFeatures =
+    isBillingSuccess && teamBilling?.hasAccess === true;
 
   if (isFullOrganizationPending) {
     return (
@@ -101,7 +119,9 @@ export const OrganizationDetailView = ({
         <SettingsBackButton onClick={onBackToList}>Teams</SettingsBackButton>
         <SettingsErrorState
           message={fullOrganizationError.message ?? "Could not load team."}
-          onRetry={() => void refetchFullOrganization()}
+          onRetry={() => {
+            void refetchFullOrganization();
+          }}
         />
       </>
     );
@@ -183,6 +203,16 @@ export const OrganizationDetailView = ({
     );
   }
 
+  if (view === "suppressions") {
+    return (
+      <MailSuppressionsView
+        canViewSuppressions={canUpdateOrganization}
+        onBack={onBackToOrganization}
+        organization={fullOrganization}
+      />
+    );
+  }
+
   if (view === "billing") {
     return (
       <OrganizationBillingView
@@ -226,6 +256,7 @@ export const OrganizationDetailView = ({
       onOpenDivisions={onOpenDivisions}
       onOpenDomains={onOpenDomains}
       onOpenMembers={onOpenMembers}
+      onOpenSuppressions={onOpenSuppressions}
       organization={organization}
       pendingInvitationsCount={pendingInvitations.length}
     />

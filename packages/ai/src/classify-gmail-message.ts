@@ -1,10 +1,13 @@
-import { chat, type ChatMiddleware } from "@tanstack/ai";
+import { chat } from "@tanstack/ai";
+import type { ChatMiddleware } from "@tanstack/ai";
 import { z } from "zod";
-import { defaultAutoLabelModel, type ChatModel } from "./chat-models";
+
+import { defaultAutoLabelModel } from "./chat-models";
+import type { ChatModel } from "./chat-models";
 import { createOpenRouterAdapter } from "./openrouter";
 
 export type AutomationMailMessage = {
-  attachments?: Array<{ fileName: string; mimeType: string }>;
+  attachments?: { fileName: string; mimeType: string }[];
   bodyHtml?: string | null;
   bodyText?: string | null;
   date?: string | null;
@@ -27,7 +30,7 @@ export type MailAutoLabelCandidate = {
 
 export type GmailAutoLabelCandidate = MailAutoLabelCandidate;
 
-export const AI_MEMORY_CONTEXT_MAX_LENGTH = 6_000;
+export const AI_MEMORY_CONTEXT_MAX_LENGTH = 6000;
 
 export const buildAutoLabelPromptInput = ({
   labels,
@@ -49,13 +52,15 @@ export const buildAutoLabelPromptInput = ({
       fileName,
       mimeType,
     })),
-    body: (message.bodyText ?? message.bodyHtml ?? "").slice(0, 6_000),
+    body: (message.bodyText ?? message.bodyHtml ?? "").slice(0, 6000),
     from: message.from,
     snippet: message.snippet,
     subject: message.subject,
     to: message.to,
   },
-  ...(memoryContext
+  ...(memoryContext !== null &&
+  memoryContext !== undefined &&
+  memoryContext !== ""
     ? { relevantMemory: memoryContext.slice(0, AI_MEMORY_CONTEXT_MAX_LENGTH) }
     : {}),
 });
@@ -65,16 +70,16 @@ const gmailAutoLabelSchema = z.object({
     z.object({
       applies: z.boolean(),
       labelId: z.string(),
-    }),
+    })
   ),
 });
 
 export const sanitizeAutoLabelSelection = (
   labelIds: string[],
-  availableLabelIds: ReadonlySet<string>,
+  availableLabelIds: ReadonlySet<string>
 ): string[] => {
-  const selected = Array.from(new Set(labelIds)).filter((labelId) =>
-    availableLabelIds.has(labelId),
+  const selected = [...new Set(labelIds)].filter((labelId) =>
+    availableLabelIds.has(labelId)
   );
 
   if (selected.length === 0 || availableLabelIds.size < 2) {
@@ -93,11 +98,13 @@ export const sanitizeAutoLabelSelection = (
 };
 
 export const resolveAutoLabelDecisions = (
-  decisions: Array<{ applies: boolean; labelId: string }>,
-  eligibleLabelIds: ReadonlySet<string>,
+  decisions: { applies: boolean; labelId: string }[],
+  eligibleLabelIds: ReadonlySet<string>
 ) => {
   const selectedLabelIds = decisions
-    .filter((decision) => decision.applies && eligibleLabelIds.has(decision.labelId))
+    .filter(
+      (decision) => decision.applies && eligibleLabelIds.has(decision.labelId)
+    )
     .map((decision) => decision.labelId);
 
   return sanitizeAutoLabelSelection(selectedLabelIds, eligibleLabelIds);
@@ -131,14 +138,14 @@ export const classifyMailMessage = async ({
             labels,
             memoryContext,
             message,
-          }),
+          })
         ),
         role: "user",
       },
     ],
     middleware,
     modelOptions: {
-      maxCompletionTokens: Math.min(4_000, 200 + labels.length * 30),
+      maxCompletionTokens: Math.min(4000, 200 + labels.length * 30),
     },
     outputSchema: gmailAutoLabelSchema,
     systemPrompts: [

@@ -1,11 +1,12 @@
 import type { MessagePart } from "@tanstack/ai";
+
 import { parseToolArguments, parseToolResult } from "./chat-tools";
 
 type ToolCall = Extract<MessagePart, { type: "tool-call" }>;
 type ToolResult = Extract<MessagePart, { type: "tool-result" }>;
 
 export const truncateToolDetail = (value: string, maxLength = 42) => {
-  const normalized = value.replace(/^["']|["']$/g, "").trim();
+  const normalized = value.replaceAll(/^["']|["']$/gu, "").trim();
   if (normalized.length <= maxLength) {
     return normalized;
   }
@@ -16,267 +17,337 @@ export const truncateToolDetail = (value: string, maxLength = 42) => {
 const countLabel = (count: number, singular: string, plural = `${singular}s`) =>
   `${count} ${count === 1 ? singular : plural}`;
 
-export const summarizeToolCalls = (
-  items: Array<{ call: ToolCall; pending: boolean; result?: ToolResult }>,
-) => {
-  const counts = {
-    attachment: 0,
-    calendar: 0,
-    compose: 0,
-    labels: 0,
-    linearCreate: 0,
-    linearMetadata: 0,
-    message: 0,
-    modify: 0,
-    overview: 0,
-    search: 0,
-    thread: 0,
-  };
-  let pendingCount = 0;
+type ToolCounts = {
+  attachment: number;
+  calendar: number;
+  compose: number;
+  labels: number;
+  linearCreate: number;
+  linearMetadata: number;
+  message: number;
+  modify: number;
+  overview: number;
+  search: number;
+  thread: number;
+};
 
-  for (const { call, pending } of items) {
-    if (pending) {
-      pendingCount += 1;
-    }
+const createToolCounts = (): ToolCounts => ({
+  attachment: 0,
+  calendar: 0,
+  compose: 0,
+  labels: 0,
+  linearCreate: 0,
+  linearMetadata: 0,
+  message: 0,
+  modify: 0,
+  overview: 0,
+  search: 0,
+  thread: 0,
+});
 
-    if (call.name === "compose_email") {
+const incrementToolCount = (counts: ToolCounts, call: ToolCall) => {
+  switch (call.name) {
+    case "compose_email": {
       counts.compose += 1;
-      continue;
+      break;
     }
-
-    if (call.name === "create_google_calendar_event") {
+    case "create_google_calendar_event": {
       counts.calendar += 1;
-      continue;
+      break;
     }
-
-    if (call.name === "search_gmail") {
+    case "search_gmail": {
       counts.search += 1;
-      continue;
+      break;
     }
-
-    if (call.name === "read_gmail_thread") {
+    case "read_gmail_thread": {
       counts.thread += 1;
-      continue;
+      break;
     }
-
-    if (call.name === "read_gmail_message") {
+    case "read_gmail_message": {
       counts.message += 1;
-      continue;
+      break;
     }
-
-    if (call.name === "read_gmail_messages") {
-      const messageIds = parseToolArguments(call.arguments).messageIds;
+    case "read_gmail_messages": {
+      const { messageIds } = parseToolArguments(call.arguments);
       counts.message += Array.isArray(messageIds) ? messageIds.length : 1;
-      continue;
+      break;
     }
-
-    if (call.name === "read_gmail_attachment") {
+    case "read_gmail_attachment": {
       counts.attachment += 1;
-      continue;
+      break;
     }
-
-    if (call.name === "get_mailbox_overview") {
+    case "get_mailbox_overview": {
       counts.overview += 1;
-      continue;
+      break;
     }
-
-    if (call.name === "list_gmail_labels") {
+    case "list_gmail_labels": {
       counts.labels += 1;
-      continue;
+      break;
     }
-
-    if (call.name === "modify_mail") {
+    case "modify_mail": {
       counts.modify += 1;
-      continue;
+      break;
     }
-
-    if (call.name === "list_linear_issue_metadata") {
+    case "list_linear_issue_metadata": {
       counts.linearMetadata += 1;
-      continue;
+      break;
     }
-
-    if (call.name === "create_linear_issue") {
+    case "create_linear_issue": {
       counts.linearCreate += 1;
+      break;
+    }
+    default: {
+      break;
     }
   }
+};
 
-  if (pendingCount > 0) {
-    const active = items.find((item) => item.pending);
-    if (active?.call.name === "search_gmail") {
-      const query = parseToolArguments(active.call.arguments).query;
-      return typeof query === "string" && query.trim()
+const summarizePendingTool = (active: ToolCall): string => {
+  switch (active.name) {
+    case "search_gmail": {
+      const { query } = parseToolArguments(active.arguments);
+      return typeof query === "string" && query.trim() !== ""
         ? `Searching "${truncateToolDetail(query)}"`
         : "Searching mail";
     }
-
-    if (active?.call.name === "read_gmail_thread") {
+    case "read_gmail_thread": {
       return "Reading thread";
     }
-
-    if (active?.call.name === "read_gmail_message" || active?.call.name === "read_gmail_messages") {
-      return active.call.name === "read_gmail_messages" ? "Reading messages" : "Reading message";
+    case "read_gmail_message": {
+      return "Reading message";
     }
-
-    if (active?.call.name === "read_gmail_attachment") {
+    case "read_gmail_messages": {
+      return "Reading messages";
+    }
+    case "read_gmail_attachment": {
       return "Reading attachment";
     }
-
-    if (active?.call.name === "compose_email") {
+    case "compose_email": {
       return "Drafting email";
     }
-
-    if (active?.call.name === "create_google_calendar_event") {
+    case "create_google_calendar_event": {
       return "Adding calendar event";
     }
-
-    if (active?.call.name === "list_linear_issue_metadata") {
+    case "list_linear_issue_metadata": {
       return "Reading Linear workspace";
     }
-
-    if (active?.call.name === "create_linear_issue") {
+    case "create_linear_issue": {
       return "Creating Linear issue";
     }
-
-    return "Working";
+    default: {
+      return "Working";
+    }
   }
+};
 
+const summarizeCompletedTools = (counts: ToolCounts, itemCount: number) => {
   const parts: string[] = [];
 
   if (counts.search > 0) {
-    parts.push(counts.search === 1 ? "searched mail" : `searched mail ${counts.search}×`);
+    parts.push(
+      counts.search === 1 ? "searched mail" : `searched mail ${counts.search}×`
+    );
   }
 
   if (counts.thread > 0) {
     parts.push(`read ${countLabel(counts.thread, "thread")}`);
   }
-
   if (counts.message > 0) {
     parts.push(`read ${countLabel(counts.message, "message")}`);
   }
-
   if (counts.attachment > 0) {
     parts.push(`read ${countLabel(counts.attachment, "attachment")}`);
   }
-
   if (counts.overview > 0) {
     parts.push("checked mailbox");
   }
-
   if (counts.labels > 0) {
     parts.push("listed labels");
   }
-
   if (counts.modify > 0) {
     parts.push(`updated mail ${counts.modify}×`);
   }
-
   if (counts.compose > 0) {
-    parts.push(counts.compose === 1 ? "drafted email" : `drafted ${counts.compose} emails`);
-  }
-
-  if (counts.calendar > 0) {
     parts.push(
-      counts.calendar === 1 ? "added calendar event" : `added ${counts.calendar} calendar events`,
+      counts.compose === 1
+        ? "drafted email"
+        : `drafted ${counts.compose} emails`
     );
   }
-
+  if (counts.calendar > 0) {
+    parts.push(
+      counts.calendar === 1
+        ? "added calendar event"
+        : `added ${counts.calendar} calendar events`
+    );
+  }
   if (counts.linearMetadata > 0) {
     parts.push("checked Linear");
   }
-
   if (counts.linearCreate > 0) {
     parts.push(
       counts.linearCreate === 1
         ? "created Linear issue"
-        : `created ${counts.linearCreate} Linear issues`,
+        : `created ${counts.linearCreate} Linear issues`
     );
   }
 
-  if (parts.length === 0) {
-    return `${items.length} step${items.length === 1 ? "" : "s"}`;
-  }
-
-  return parts.join(", ");
+  return parts.length === 0
+    ? `${itemCount} step${itemCount === 1 ? "" : "s"}`
+    : parts.join(", ");
 };
 
-export const getActiveToolDetail = (call: ToolCall, result?: ToolResult): string | undefined => {
+export const summarizeToolCalls = (
+  items: { call: ToolCall; pending: boolean; result?: ToolResult }[]
+) => {
+  const counts = createToolCounts();
+  for (const { call } of items) {
+    incrementToolCount(counts, call);
+  }
+
+  const active = items.find((item) => item.pending)?.call;
+  return active === undefined
+    ? summarizeCompletedTools(counts, items.length)
+    : summarizePendingTool(active);
+};
+
+const getSuccessfulSubject = (
+  parsed: ReturnType<typeof parseToolResult>,
+  kind: "gmail-thread" | "gmail-message"
+) => {
+  if (parsed.kind !== kind || parsed.data.status !== "success") {
+    return null;
+  }
+  const { subject } = parsed.data;
+  return typeof subject === "string" && subject !== "" ? subject : null;
+};
+
+const getToolDetailForThread = (
+  args: Record<string, unknown>,
+  parsed: ReturnType<typeof parseToolResult>
+) =>
+  getSuccessfulSubject(parsed, "gmail-thread") ??
+  (typeof args.threadId === "string"
+    ? truncateToolDetail(args.threadId, 16)
+    : undefined);
+
+const getToolDetailForCalendar = (
+  args: Record<string, unknown>,
+  parsed: ReturnType<typeof parseToolResult>
+) => {
+  if (
+    parsed.kind === "google-calendar-event" &&
+    parsed.data.status === "success"
+  ) {
+    return parsed.data.summary
+      ? truncateToolDetail(parsed.data.summary)
+      : undefined;
+  }
+  return typeof args.summary === "string"
+    ? truncateToolDetail(args.summary)
+    : undefined;
+};
+
+const getToolDetailForLinearIssue = (
+  args: Record<string, unknown>,
+  parsed: ReturnType<typeof parseToolResult>
+) => {
+  if (
+    parsed.kind === "linear-issue-create" &&
+    parsed.data.status === "success"
+  ) {
+    return parsed.data.title
+      ? truncateToolDetail(parsed.data.title)
+      : undefined;
+  }
+  return typeof args.title === "string"
+    ? truncateToolDetail(args.title)
+    : undefined;
+};
+
+const getToolDetailForAttachment = (
+  parsed: ReturnType<typeof parseToolResult>
+) => {
+  if (
+    parsed.kind === "gmail-attachment" &&
+    parsed.data.status === "success" &&
+    parsed.data.fileName
+  ) {
+    return truncateToolDetail(parsed.data.fileName);
+  }
+  return null;
+};
+
+const getToolDetailForCompose = (args: Record<string, unknown>) => {
+  if (typeof args.subject === "string" && args.subject.trim() !== "") {
+    return truncateToolDetail(args.subject);
+  }
+  return null;
+};
+
+const getToolDetailForLinearMetadata = (
+  parsed: ReturnType<typeof parseToolResult>
+) => {
+  if (
+    parsed.kind === "linear-issue-metadata" &&
+    parsed.data.status === "success"
+  ) {
+    return countLabel(parsed.data.teams.length, "team");
+  }
+  return null;
+};
+
+const toOptionalDetail = (detail: string | null): string | undefined =>
+  detail === null || detail === "" ? undefined : detail;
+
+export const getActiveToolDetail = (
+  call: ToolCall,
+  result?: ToolResult
+): string | undefined => {
   const args = parseToolArguments(call.arguments);
   const parsed = parseToolResult(call.name, result?.content ?? "");
 
-  if (call.name === "search_gmail" && typeof args.query === "string") {
-    return truncateToolDetail(args.query);
-  }
-
-  if (call.name === "read_gmail_thread") {
-    if (parsed.kind === "gmail-thread" && parsed.data.status === "success" && parsed.data.subject) {
-      return truncateToolDetail(parsed.data.subject);
+  switch (call.name) {
+    case "search_gmail": {
+      return typeof args.query === "string"
+        ? truncateToolDetail(args.query)
+        : undefined;
     }
-
-    return typeof args.threadId === "string" ? truncateToolDetail(args.threadId, 16) : undefined;
-  }
-
-  if (call.name === "read_gmail_message") {
-    if (
-      parsed.kind === "gmail-message" &&
-      parsed.data.status === "success" &&
-      parsed.data.subject
-    ) {
-      return truncateToolDetail(parsed.data.subject);
+    case "read_gmail_thread": {
+      return getToolDetailForThread(args, parsed);
     }
-  }
-
-  if (call.name === "read_gmail_messages") {
-    const messageIds = args.messageIds;
-    return Array.isArray(messageIds) ? countLabel(messageIds.length, "message") : undefined;
-  }
-
-  if (call.name === "read_gmail_attachment") {
-    if (
-      parsed.kind === "gmail-attachment" &&
-      parsed.data.status === "success" &&
-      parsed.data.fileName
-    ) {
-      return truncateToolDetail(parsed.data.fileName);
+    case "read_gmail_message": {
+      const subject = getSuccessfulSubject(parsed, "gmail-message");
+      return toOptionalDetail(
+        subject === null ? null : truncateToolDetail(subject)
+      );
     }
-
-    return undefined;
-  }
-
-  if (call.name === "compose_email" && typeof args.subject === "string" && args.subject.trim()) {
-    return truncateToolDetail(args.subject);
-  }
-
-  if (call.name === "create_google_calendar_event") {
-    if (
-      parsed.kind === "google-calendar-event" &&
-      parsed.data.status === "success" &&
-      parsed.data.summary
-    ) {
-      return truncateToolDetail(parsed.data.summary);
+    case "read_gmail_messages": {
+      const { messageIds } = args;
+      return Array.isArray(messageIds)
+        ? countLabel(messageIds.length, "message")
+        : undefined;
     }
-
-    return typeof args.summary === "string" ? truncateToolDetail(args.summary) : undefined;
-  }
-
-  if (call.name === "list_linear_issue_metadata") {
-    if (parsed.kind === "linear-issue-metadata" && parsed.data.status === "success") {
-      return countLabel(parsed.data.teams.length, "team");
+    case "read_gmail_attachment": {
+      return toOptionalDetail(getToolDetailForAttachment(parsed));
+    }
+    case "compose_email": {
+      return toOptionalDetail(getToolDetailForCompose(args));
+    }
+    case "create_google_calendar_event": {
+      return getToolDetailForCalendar(args, parsed);
+    }
+    case "list_linear_issue_metadata": {
+      return toOptionalDetail(getToolDetailForLinearMetadata(parsed));
+    }
+    case "create_linear_issue": {
+      return getToolDetailForLinearIssue(args, parsed);
+    }
+    default: {
+      return undefined;
     }
   }
-
-  if (call.name === "create_linear_issue") {
-    if (
-      parsed.kind === "linear-issue-create" &&
-      parsed.data.status === "success" &&
-      parsed.data.title
-    ) {
-      return truncateToolDetail(parsed.data.title);
-    }
-
-    return typeof args.title === "string" ? truncateToolDetail(args.title) : undefined;
-  }
-
-  return undefined;
 };
 
-export const shouldUngroupTool = (call: ToolCall) => call.name === "compose_email";
+export const shouldUngroupTool = (call: ToolCall) =>
+  call.name === "compose_email";

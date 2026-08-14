@@ -1,7 +1,8 @@
 "use client";
 
-import type { ComponentPropsWithoutRef } from "react";
 import { Fieldset as FieldsetPrimitive } from "@base-ui/react/fieldset";
+import type { ComponentPropsWithoutRef } from "react";
+
 import { cn } from "../../lib/cn";
 
 export const Fieldset = ({

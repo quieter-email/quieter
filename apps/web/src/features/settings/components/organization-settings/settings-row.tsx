@@ -1,9 +1,8 @@
-import type { ReactNode } from "react";
 import { Button } from "@quieter/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@quieter/ui/tooltip";
-import { SettingsFieldRow } from "../settings-layout";
+import type { ReactNode } from "react";
 
-export { SettingsFieldRow as SettingsRow };
+export { SettingsFieldRow as SettingsRow } from "../settings-layout";
 
 export const MutedActionButton = ({
   buttonClassName,

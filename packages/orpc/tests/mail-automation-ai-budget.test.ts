@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
+
 import {
   MAIL_AUTOMATION_AI_PAUSED_MESSAGE,
   resolveMailAutomationAiBudgetStatus,
@@ -44,7 +45,7 @@ describe("mail automation AI budget", () => {
         hasUnlimitedAccess: false,
         missingOrganization: true,
         runtimeEnabled: true,
-      }),
+      })
     ).toMatchObject({
       allowed: false,
       reason: "missing_organization",
@@ -57,7 +58,7 @@ describe("mail automation AI budget", () => {
         hasUnlimitedAccess: false,
         runtimeEnabled: true,
         usage: { costMicroCents: 0, creditAmountMicroCents: 1 },
-      }),
+      })
     ).toMatchObject({
       allowed: false,
       reason: "plan_ineligible",
@@ -71,7 +72,7 @@ describe("mail automation AI budget", () => {
         hasAccount: false,
         hasUnlimitedAccess: false,
         runtimeEnabled: true,
-      }),
+      })
     ).toMatchObject({
       allowed: false,
       reason: "billing_usage_unavailable",
@@ -83,7 +84,7 @@ describe("mail automation AI budget", () => {
         hasAccount: true,
         hasUnlimitedAccess: false,
         runtimeEnabled: true,
-      }),
+      })
     ).toMatchObject({
       allowed: false,
       reason: "billing_usage_unavailable",
@@ -98,7 +99,7 @@ describe("mail automation AI budget", () => {
         hasUnlimitedAccess: false,
         runtimeEnabled: true,
         usage: { costMicroCents: 1, creditAmountMicroCents: 2 },
-      }),
+      })
     ).toMatchObject({ allowed: true });
 
     expect(
@@ -107,7 +108,7 @@ describe("mail automation AI budget", () => {
         hasAccount: false,
         hasUnlimitedAccess: true,
         runtimeEnabled: true,
-      }),
+      })
     ).toMatchObject({ allowed: true });
   });
 });

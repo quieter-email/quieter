@@ -1,70 +1,81 @@
-import type { AnyTextAdapter } from "@tanstack/ai";
 import { serverEnv } from "@quieter/env/server";
 import { createOpenRouterText } from "@tanstack/ai-openrouter";
-import { defaultChatModel, type ChatModel } from "./chat-models";
+import { z } from "zod";
 
-type OpenRouterModel = Parameters<typeof createOpenRouterText>[0];
+import { chatModelSchema, defaultChatModel } from "./chat-models";
+import type { ChatModel } from "./chat-models";
 
-const withZeroDataRetention = <TAdapter extends AnyTextAdapter>(adapter: TAdapter): TAdapter => {
-  type ProviderOptions = TAdapter["~types"]["providerOptions"];
-  type ProviderPreferences = ProviderOptions extends { provider?: infer TProvider }
-    ? TProvider
-    : Record<string, unknown>;
+type OpenRouterCatalogModel = Parameters<typeof createOpenRouterText>[0];
+type OpenRouterTextAdapter = ReturnType<typeof createOpenRouterText>;
+type OpenRouterProviderOptions =
+  OpenRouterTextAdapter["~types"]["providerOptions"];
 
-  const addProviderPreference = (modelOptions: ProviderOptions | undefined): ProviderOptions => {
-    const current = (modelOptions ?? {}) as ProviderOptions & {
-      provider?: ProviderPreferences;
-    };
+const isPresentString = (value: string | undefined): value is string =>
+  value !== undefined && value !== "";
 
-    return {
-      ...current,
-      provider: {
-        ...current.provider,
-        zdr: true,
+const openRouterModelSchema = z.custom<OpenRouterCatalogModel>(
+  (value) => chatModelSchema.safeParse(value).success
+);
+
+const addProviderPreference = (
+  modelOptions: OpenRouterProviderOptions | undefined
+): OpenRouterProviderOptions => ({
+  ...modelOptions,
+  provider: {
+    ...modelOptions?.provider,
+    zdr: true,
+  },
+});
+
+const withZeroDataRetention = (
+  adapter: OpenRouterTextAdapter
+): OpenRouterTextAdapter => {
+  const originalChatStream = adapter.chatStream.bind(adapter);
+  adapter.chatStream = (options) =>
+    originalChatStream({
+      ...options,
+      modelOptions: addProviderPreference(options.modelOptions),
+    });
+
+  const originalStructuredOutput = adapter.structuredOutput.bind(adapter);
+  adapter.structuredOutput = async (options) =>
+    await originalStructuredOutput({
+      ...options,
+      chatOptions: {
+        ...options.chatOptions,
+        modelOptions: addProviderPreference(options.chatOptions.modelOptions),
       },
-    } as ProviderOptions;
-  };
+    });
 
-  return {
-    ...adapter,
-    chatStream: (options: Parameters<TAdapter["chatStream"]>[0]) =>
-      adapter.chatStream({
-        ...options,
-        modelOptions: addProviderPreference(options.modelOptions),
-      }),
-    structuredOutput: (options: Parameters<TAdapter["structuredOutput"]>[0]) =>
-      adapter.structuredOutput({
+  if (adapter.structuredOutputStream !== undefined) {
+    const originalStructuredOutputStream =
+      adapter.structuredOutputStream.bind(adapter);
+    adapter.structuredOutputStream = (options) =>
+      originalStructuredOutputStream({
         ...options,
         chatOptions: {
           ...options.chatOptions,
           modelOptions: addProviderPreference(options.chatOptions.modelOptions),
         },
-      }),
-    structuredOutputStream: adapter.structuredOutputStream
-      ? (options: Parameters<NonNullable<TAdapter["structuredOutputStream"]>>[0]) =>
-          adapter.structuredOutputStream?.({
-            ...options,
-            chatOptions: {
-              ...options.chatOptions,
-              modelOptions: addProviderPreference(options.chatOptions.modelOptions),
-            },
-          })
-      : undefined,
-  } as TAdapter;
+      });
+  }
+
+  return adapter;
 };
 
-export const createOpenRouterAdapter = (model: ChatModel = defaultChatModel) => {
+export const createOpenRouterAdapter = (
+  model: ChatModel = defaultChatModel
+) => {
   const apiKey = serverEnv.OPENROUTER_API_KEY;
 
-  if (!apiKey) {
+  if (!isPresentString(apiKey)) {
     throw new Error("AI features are temporarily unavailable.");
   }
 
-  // The generated provider model union can lag OpenRouter's live catalog.
   return withZeroDataRetention(
-    createOpenRouterText(model as OpenRouterModel, apiKey, {
+    createOpenRouterText(openRouterModelSchema.parse(model), apiKey, {
       appTitle: "quieter",
       httpReferer: "https://quieter.email",
-    }),
+    })
   );
 };

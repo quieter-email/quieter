@@ -397,6 +397,12 @@
       "skillPath": "better-auth/twoFactor/SKILL.md",
       "computedHash": "c4f3a299c62c1985b774b7c28e53b7e55c565dbf973fd52b08899e4bcfffa3f9"
     },
+    "ultracite": {
+      "source": "haydenbleasel/ultracite",
+      "sourceType": "github",
+      "skillPath": "skills/ultracite/SKILL.md",
+      "computedHash": "432f74a03949c62a3fa7778d1cd967687b06d327b791abfcccecd6333b74e252"
+    },
     "unsafe-checker": {
       "source": "fjrevoredo/mini-diarium",
       "sourceType": "github",

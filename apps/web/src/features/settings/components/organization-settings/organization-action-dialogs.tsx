@@ -1,6 +1,10 @@
 "use client";
 
-import { Delete02Icon, Loading03Icon, Logout03Icon } from "@hugeicons/core-free-icons";
+import {
+  Delete02Icon,
+  Loading03Icon,
+  Logout03Icon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import {
@@ -17,8 +21,11 @@ import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { z } from "zod";
-import { authClient } from "~/lib/auth";
-import { type FullOrganization, getFullOrganizationQueryKey } from "./domain";
+
+import { authClient } from "#/lib/auth";
+
+import { getFullOrganizationQueryKey } from "./domain";
+import type { FullOrganization } from "./domain";
 
 export const LeaveOrganizationDialog = ({
   onLeft,
@@ -60,10 +67,13 @@ export const LeaveOrganizationDialog = ({
       try {
         await leaveOrganizationMutation.mutateAsync();
         setOpen(false);
-        resetDialog();
+        setSubmitError(null);
+        form.reset({ confirmation: "" });
       } catch (mutationError) {
         setSubmitError(
-          mutationError instanceof Error ? mutationError.message : "Could not leave team.",
+          mutationError instanceof Error
+            ? mutationError.message
+            : "Could not leave team."
         );
       }
     },
@@ -74,7 +84,7 @@ export const LeaveOrganizationDialog = ({
           .string()
           .trim()
           .toLowerCase()
-          .regex(/^leave team$/, 'Type "leave team".'),
+          .regex(/^leave team$/u, 'Type "leave team".'),
       }),
     },
   });
@@ -100,7 +110,9 @@ export const LeaveOrganizationDialog = ({
       <Dialog
         onOpenChange={(nextOpen) => {
           setOpen(nextOpen);
-          if (!nextOpen) resetDialog();
+          if (!nextOpen) {
+            resetDialog();
+          }
         }}
         open={open}
       >
@@ -125,7 +137,9 @@ export const LeaveOrganizationDialog = ({
                     <TextFieldInput
                       aria-invalid={field.state.meta.errors.length > 0}
                       name={field.name}
-                      onBlur={() => field.handleBlur()}
+                      onBlur={() => {
+                        field.handleBlur();
+                      }}
                       onChange={(event) => {
                         setSubmitError(null);
                         field.handleChange(event.target.value);
@@ -134,7 +148,10 @@ export const LeaveOrganizationDialog = ({
                       value={field.state.value}
                     />
                     {field.state.meta.errors.map((error) => (
-                      <p className="text-sm text-destructive" key={error?.message}>
+                      <p
+                        className="text-sm text-destructive"
+                        key={error?.message}
+                      >
                         {error?.message}
                       </p>
                     ))}
@@ -142,7 +159,11 @@ export const LeaveOrganizationDialog = ({
                 )}
               </form.Field>
 
-              {submitError && <p className="text-sm text-destructive">{submitError}</p>}
+              {submitError !== null &&
+              submitError !== undefined &&
+              submitError !== "" ? (
+                <p className="text-sm text-destructive">{submitError}</p>
+              ) : null}
             </DialogBody>
 
             <DialogFooter>
@@ -156,9 +177,17 @@ export const LeaveOrganizationDialog = ({
                 variant="destructive"
               >
                 {leaveOrganizationMutation.isPending ? (
-                  <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-4 animate-spin"
+                    icon={Loading03Icon}
+                  />
                 ) : (
-                  <HugeiconsIcon aria-hidden className="size-4" icon={Logout03Icon} />
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-4"
+                    icon={Logout03Icon}
+                  />
                 )}
                 Leave
               </Button>
@@ -210,10 +239,13 @@ export const DeleteOrganizationDialog = ({
       try {
         await deleteOrganizationMutation.mutateAsync();
         setOpen(false);
-        resetDialog();
+        setSubmitError(null);
+        form.reset({ confirmation: "" });
       } catch (mutationError) {
         setSubmitError(
-          mutationError instanceof Error ? mutationError.message : "Could not delete team.",
+          mutationError instanceof Error
+            ? mutationError.message
+            : "Could not delete team."
         );
       }
     },
@@ -224,7 +256,7 @@ export const DeleteOrganizationDialog = ({
           .string()
           .trim()
           .toLowerCase()
-          .regex(/^delete team$/, 'Type "delete team".'),
+          .regex(/^delete team$/u, 'Type "delete team".'),
       }),
     },
   });
@@ -250,7 +282,9 @@ export const DeleteOrganizationDialog = ({
       <Dialog
         onOpenChange={(nextOpen) => {
           setOpen(nextOpen);
-          if (!nextOpen) resetDialog();
+          if (!nextOpen) {
+            resetDialog();
+          }
         }}
         open={open}
       >
@@ -275,7 +309,9 @@ export const DeleteOrganizationDialog = ({
                     <TextFieldInput
                       aria-invalid={field.state.meta.errors.length > 0}
                       name={field.name}
-                      onBlur={() => field.handleBlur()}
+                      onBlur={() => {
+                        field.handleBlur();
+                      }}
                       onChange={(event) => {
                         setSubmitError(null);
                         field.handleChange(event.target.value);
@@ -284,7 +320,10 @@ export const DeleteOrganizationDialog = ({
                       value={field.state.value}
                     />
                     {field.state.meta.errors.map((error) => (
-                      <p className="text-sm text-destructive" key={error?.message}>
+                      <p
+                        className="text-sm text-destructive"
+                        key={error?.message}
+                      >
                         {error?.message}
                       </p>
                     ))}
@@ -292,11 +331,17 @@ export const DeleteOrganizationDialog = ({
                 )}
               </form.Field>
 
-              {submitError && <p className="text-sm text-destructive">{submitError}</p>}
+              {submitError !== null &&
+              submitError !== undefined &&
+              submitError !== "" ? (
+                <p className="text-sm text-destructive">{submitError}</p>
+              ) : null}
             </DialogBody>
 
             <DialogFooter>
-              <DialogCloseButton disabled={deleteOrganizationMutation.isPending}>
+              <DialogCloseButton
+                disabled={deleteOrganizationMutation.isPending}
+              >
                 Cancel
               </DialogCloseButton>
               <Button
@@ -306,9 +351,17 @@ export const DeleteOrganizationDialog = ({
                 variant="destructive"
               >
                 {deleteOrganizationMutation.isPending ? (
-                  <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-4 animate-spin"
+                    icon={Loading03Icon}
+                  />
                 ) : (
-                  <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-4"
+                    icon={Delete02Icon}
+                  />
                 )}
                 Delete
               </Button>

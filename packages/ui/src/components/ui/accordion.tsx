@@ -1,7 +1,8 @@
 "use client";
 
-import type { ComponentPropsWithoutRef, ReactNode } from "react";
 import { Accordion as AccordionPrimitive } from "@base-ui/react/accordion";
+import type { ComponentPropsWithoutRef, ReactNode } from "react";
+
 import { cn } from "../../lib/cn";
 import { ChevronDownIcon } from "./icons";
 
@@ -35,7 +36,7 @@ export const AccordionTrigger = ({
   <AccordionPrimitive.Trigger
     className={cn(
       "squircle flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-medium text-fg transition-transform duration-100 ease-out hover:bg-muted/40 focus-visible:border-ring focus-visible:bg-muted/40 focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
-      className,
+      className
     )}
     {...props}
   >
@@ -51,7 +52,10 @@ export const AccordionPanel = ({
   ...props
 }: ComponentPropsWithoutRef<typeof AccordionPrimitive.Panel>) => (
   <AccordionPrimitive.Panel
-    className={cn("overflow-hidden border-t px-4 py-3 text-sm text-muted-fg", className)}
+    className={cn(
+      "overflow-hidden border-t px-4 py-3 text-sm text-muted-fg",
+      className
+    )}
     {...props}
   />
 );

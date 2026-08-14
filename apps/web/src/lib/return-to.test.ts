@@ -1,11 +1,14 @@
 import { describe, expect, test } from "vite-plus/test";
+
 import { getSafeAuthReturnTo } from "./return-to";
 
-describe("getSafeAuthReturnTo", () => {
+describe(getSafeAuthReturnTo, () => {
   test("keeps same-origin paths with search and hash", () => {
-    expect(getSafeAuthReturnTo("/?compose=mailto&mailto=mailto%3Aalex%40example.com#top")).toBe(
-      "/?compose=mailto&mailto=mailto%3Aalex%40example.com#top",
-    );
+    expect(
+      getSafeAuthReturnTo(
+        "/?compose=mailto&mailto=mailto%3Aalex%40example.com#top"
+      )
+    ).toBe("/?compose=mailto&mailto=mailto%3Aalex%40example.com#top");
   });
 
   test("rejects missing, absolute, protocol-relative, and backslash paths", () => {
@@ -16,6 +19,8 @@ describe("getSafeAuthReturnTo", () => {
   });
 
   test("normalizes same-origin path traversal", () => {
-    expect(getSafeAuthReturnTo("/settings/../?mailbox=inbox")).toBe("/?mailbox=inbox");
+    expect(getSafeAuthReturnTo("/settings/../?mailbox=inbox")).toBe(
+      "/?mailbox=inbox"
+    );
   });
 });

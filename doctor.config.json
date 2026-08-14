@@ -2,7 +2,7 @@
   "ignore": {
     "overrides": [
       {
-        "files": ["src/**", "instrument.server.mjs"],
+        "files": ["src/**", "instrument.server.ts"],
         "rules": ["deslop/unused-file"]
       }
     ]

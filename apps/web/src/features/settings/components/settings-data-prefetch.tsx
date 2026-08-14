@@ -1,11 +1,13 @@
 "use client";
 
 import { usePrefetchQuery } from "@tanstack/react-query";
-import type { SettingsTab } from "~/features/settings/domain/settings-tab";
-import { authClient } from "~/lib/auth";
-import { connectorsQueryOptions } from "~/lib/connectors-query";
-import { mailboxesQueryOptions } from "~/lib/mailboxes-query";
-import { orpc } from "~/lib/orpc";
+
+import type { SettingsTab } from "#/features/settings/domain/settings-tab";
+import { authClient } from "#/lib/auth";
+import { connectorsQueryOptions } from "#/lib/connectors-query";
+import { mailboxesQueryOptions } from "#/lib/mailboxes-query";
+import { orpc } from "#/lib/orpc";
+
 import { userBillingQueryOptions } from "../domain/billing";
 import { fullOrganizationQueryOptions } from "./organization-settings/domain";
 
@@ -14,7 +16,11 @@ const AccountDataPrefetch = () => {
   return null;
 };
 
-const OrganizationDetailPrefetch = ({ organizationId }: { organizationId: string }) => {
+const OrganizationDetailPrefetch = ({
+  organizationId,
+}: {
+  organizationId: string;
+}) => {
   usePrefetchQuery(fullOrganizationQueryOptions(organizationId));
   return null;
 };
@@ -23,7 +29,10 @@ const OrganizationDataPrefetch = () => {
   const organizations = authClient.useListOrganizations();
 
   return organizations.data?.map((organization) => (
-    <OrganizationDetailPrefetch key={organization.id} organizationId={organization.id} />
+    <OrganizationDetailPrefetch
+      key={organization.id}
+      organizationId={organization.id}
+    />
   ));
 };
 

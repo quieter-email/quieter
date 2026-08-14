@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { LegalDocumentPage } from "~/features/legal/components/legal-document-page";
+
+import { LegalDocumentPage } from "#/features/legal/components/legal-document-page";
 
 export const Route = createFileRoute("/cookies")({
   component: CookiesPage,
@@ -15,8 +16,9 @@ function CookiesPage() {
       title="Cookie Policy"
     >
       <p>
-        Cookies are small files stored on your device. We use cookies and similar storage to operate
-        Quieter, remember your preferences, and—only with consent—measure product usage.
+        Cookies are small files stored on your device. We use cookies and
+        similar storage to operate Quieter, remember your preferences, and—only
+        with consent—measure product usage.
       </p>
 
       <h2>Strictly necessary</h2>
@@ -28,14 +30,20 @@ function CookiesPage() {
 
       <h2>Measurement (consent required)</h2>
       <ul>
-        <li>Product analytics cookies for page views and identified usage in production.</li>
-        <li>Performance measurement for understanding page speed and reliability.</li>
+        <li>
+          Product analytics cookies for page views and identified usage in
+          production.
+        </li>
+        <li>
+          Performance measurement for understanding page speed and reliability.
+        </li>
       </ul>
 
       <h2>Manage preferences</h2>
       <p>
-        You can accept or reject non-essential cookies from the banner on your first visit and
-        change your choice at any time from the footer link or Settings.
+        You can accept or reject non-essential cookies from the banner on your
+        first visit and change your choice at any time from the footer link or
+        Settings.
       </p>
     </LegalDocumentPage>
   );

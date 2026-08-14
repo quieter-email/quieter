@@ -19,10 +19,11 @@
   },
   "dependencies": {
     "@orpc/server": "catalog:",
-    "@polar-sh/sdk": "^0.48.1",
+    "@polar-sh/sdk": "^0.49.0",
     "@quieter/ai": "workspace:*",
     "@quieter/database": "workspace:*",
     "@quieter/env": "workspace:*",
+    "@quieter/observability": "workspace:*",
     "drizzle-orm": "catalog:",
     "zod": "catalog:"
   },
@@ -30,6 +31,7 @@
     "@quieter/config": "workspace:*",
     "@types/node": "catalog:",
     "typescript": "catalog:",
+    "vite": "catalog:",
     "vite-plus": "catalog:"
   }
 }

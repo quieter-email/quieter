@@ -1,19 +1,23 @@
 "use client";
 
-import { type SetStateAction, useCallback, useState } from "react";
+import { useCallback, useState } from "react";
+import type { SetStateAction } from "react";
 
 export const useWorkspaceUiState = () => {
-  const [isMobileSidebarOpen, setIsMobileSidebarOpenState] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
-  const setIsMobileSidebarOpen = useCallback((action: SetStateAction<boolean>) => {
-    setIsMobileSidebarOpenState((current) => {
-      const next = typeof action === "function" ? action(current) : action;
-      return current === next ? current : next;
-    });
-  }, []);
+  const updateMobileSidebarOpen = useCallback(
+    (action: SetStateAction<boolean>) => {
+      setIsMobileSidebarOpen((current) => {
+        const next = typeof action === "function" ? action(current) : action;
+        return current === next ? current : next;
+      });
+    },
+    []
+  );
 
   return {
     isMobileSidebarOpen,
-    setIsMobileSidebarOpen,
+    setIsMobileSidebarOpen: updateMobileSidebarOpen,
   };
 };

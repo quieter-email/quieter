@@ -167,7 +167,11 @@ const FRAGMENT_SHADER_SOURCE = `
   }
 `;
 
-const createShader = (gl: WebGLRenderingContext, type: number, source: string) => {
+const createShader = (
+  gl: WebGLRenderingContext,
+  type: number,
+  source: string
+) => {
   const shader = gl.createShader(type);
 
   if (!shader) {
@@ -177,7 +181,7 @@ const createShader = (gl: WebGLRenderingContext, type: number, source: string) =
   gl.shaderSource(shader, source);
   gl.compileShader(shader);
 
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+  if (gl.getShaderParameter(shader, gl.COMPILE_STATUS) !== true) {
     gl.deleteShader(shader);
     return null;
   }
@@ -187,14 +191,18 @@ const createShader = (gl: WebGLRenderingContext, type: number, source: string) =
 
 const createProgram = (gl: WebGLRenderingContext) => {
   const vertexShader = createShader(gl, gl.VERTEX_SHADER, VERTEX_SHADER_SOURCE);
-  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, FRAGMENT_SHADER_SOURCE);
+  const fragmentShader = createShader(
+    gl,
+    gl.FRAGMENT_SHADER,
+    FRAGMENT_SHADER_SOURCE
+  );
 
-  if (!vertexShader || !fragmentShader) {
-    if (vertexShader) {
+  if (vertexShader === null || fragmentShader === null) {
+    if (vertexShader !== null) {
       gl.deleteShader(vertexShader);
     }
 
-    if (fragmentShader) {
+    if (fragmentShader !== null) {
       gl.deleteShader(fragmentShader);
     }
 
@@ -203,7 +211,7 @@ const createProgram = (gl: WebGLRenderingContext) => {
 
   const program = gl.createProgram();
 
-  if (!program) {
+  if (program === null) {
     gl.deleteShader(vertexShader);
     gl.deleteShader(fragmentShader);
     return null;
@@ -215,7 +223,7 @@ const createProgram = (gl: WebGLRenderingContext) => {
   gl.deleteShader(vertexShader);
   gl.deleteShader(fragmentShader);
 
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+  if (gl.getProgramParameter(program, gl.LINK_STATUS) !== true) {
     gl.deleteProgram(program);
     return null;
   }
@@ -226,7 +234,7 @@ const createProgram = (gl: WebGLRenderingContext) => {
 export const ContourLines = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  useEffect(() => {
+  useEffect((): (() => void) | undefined => {
     const canvas = canvasRef.current;
 
     if (!canvas) {
@@ -237,8 +245,8 @@ export const ContourLines = () => {
       alpha: false,
       antialias: false,
       depth: false,
-      preserveDrawingBuffer: false,
       premultipliedAlpha: false,
+      preserveDrawingBuffer: false,
       stencil: false,
     });
 
@@ -250,7 +258,7 @@ export const ContourLines = () => {
     const program = createProgram(gl);
     const positionBuffer = gl.createBuffer();
 
-    if (!program || !positionBuffer) {
+    if (program === null || positionBuffer === null) {
       return;
     }
 
@@ -272,14 +280,20 @@ export const ContourLines = () => {
     const startedAt = performance.now();
 
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    gl.bufferData(
+      gl.ARRAY_BUFFER,
+      new Float32Array([-1, -1, 3, -1, -1, 3]),
+      gl.STATIC_DRAW
+    );
     activateProgram(program);
     gl.enableVertexAttribArray(positionLocation);
     gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
     gl.disable(gl.BLEND);
     gl.clearColor(0, 0, 0, 1);
 
-    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const prefersReducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
 
     const resize = () => {
       const rect = canvas.getBoundingClientRect();
@@ -333,27 +347,25 @@ export const ContourLines = () => {
     resize();
     resizeObserver.observe(canvas);
 
-    if (prefersReducedMotion) {
-      gl.uniform1f(timeLocation, 0);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-
-      return () => {
-        resizeObserver.disconnect();
-        gl.deleteBuffer(positionBuffer);
-        gl.deleteProgram(program);
-      };
-    }
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    raf = requestAnimationFrame(render);
-
-    return () => {
+    const cleanup = () => {
       cancelAnimationFrame(raf);
       resizeObserver.disconnect();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       gl.deleteBuffer(positionBuffer);
       gl.deleteProgram(program);
     };
+
+    if (prefersReducedMotion) {
+      gl.uniform1f(timeLocation, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+      return cleanup;
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    raf = requestAnimationFrame(render);
+
+    return cleanup;
   }, []);
 
   return <canvas ref={canvasRef} className="absolute inset-0 z-0 size-full" />;

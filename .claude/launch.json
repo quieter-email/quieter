@@ -3,18 +3,14 @@
   "configurations": [
     {
       "name": "web",
-      "runtimeExecutable": "bun",
+      "runtimeExecutable": "node_modules/.bin/vp",
       "runtimeArgs": [
-        "--cwd",
-        "apps/web",
-        "--env-file=../../.env.local",
-        "vp",
         "dev",
+        "apps/web",
         "--port",
         "3000",
-        "--strictPort",
         "--configLoader",
-        "runner"
+        "native"
       ],
       "port": 3000
     }

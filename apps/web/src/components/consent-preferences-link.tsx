@@ -1,7 +1,7 @@
 "use client";
 
-import type { ReactNode } from "react";
 import { useHeadlessConsentUI } from "@c15t/react";
+import type { ReactNode } from "react";
 
 export const ConsentPreferencesLink = ({
   children = "Manage privacy preferences",
@@ -15,7 +15,12 @@ export const ConsentPreferencesLink = ({
   const { openDialog } = useHeadlessConsentUI();
 
   return (
-    <button className={className} onClick={openDialog} tabIndex={tabIndex} type="button">
+    <button
+      className={className}
+      onClick={openDialog}
+      tabIndex={tabIndex}
+      type="button"
+    >
       {children}
     </button>
   );

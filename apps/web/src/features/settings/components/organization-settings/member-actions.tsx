@@ -13,20 +13,18 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@quieter/ui/tooltip";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { authClient } from "~/lib/auth";
+
+import { authClient } from "#/lib/auth";
+import { getErrorMessage } from "#/lib/orpc-errors";
+
+import { settingsSurfaceVariants } from "../settings-layout";
 import {
-  settingsInsetDividerClass,
-  settingsInsetRowClass,
-  settingsRowPaddingClass,
-} from "../settings-layout";
-import {
-  type OrganizationMember,
-  type OrganizationRoleOption,
   formatRoleLabel,
   getFullOrganizationQueryKey,
   hasOrganizationRole,
   organizationRoleOptions,
 } from "./domain";
+import type { OrganizationMember, OrganizationRoleOption } from "./domain";
 
 export const MemberActions = ({
   activeMember,
@@ -81,8 +79,11 @@ export const MemberActions = ({
     },
   });
   const isActiveMember = member.userId === activeMember?.userId;
-  const isPending = removeMemberMutation.isPending || updateMemberRoleMutation.isPending;
-  const unavailableReason = isActiveMember ? "Unavailable for yourself" : "No permission";
+  const isPending =
+    removeMemberMutation.isPending || updateMemberRoleMutation.isPending;
+  const unavailableReason = isActiveMember
+    ? "Unavailable for yourself"
+    : "No permission";
   const getRoleDisabledReason = (role: OrganizationRoleOption) =>
     hasOrganizationRole(member.role, role) ? "Current role" : unavailableReason;
 
@@ -92,7 +93,7 @@ export const MemberActions = ({
     try {
       await removeMemberMutation.mutateAsync();
     } catch (mutationError) {
-      setError((mutationError as { message?: string })?.message ?? "Could not remove member.");
+      setError(getErrorMessage(mutationError, "Could not remove member."));
     }
   };
 
@@ -102,18 +103,26 @@ export const MemberActions = ({
     try {
       await updateMemberRoleMutation.mutateAsync(role);
     } catch (mutationError) {
-      setError((mutationError as { message?: string })?.message ?? "Could not update role.");
+      setError(getErrorMessage(mutationError, "Could not update role."));
     }
   };
 
   return (
     <div className="space-y-1">
-      <div className={cn(settingsInsetRowClass, settingsInsetDividerClass, "gap-3")}>
+      <div
+        className={cn(
+          settingsSurfaceVariants({ variant: "insetRow" }),
+          settingsSurfaceVariants({ variant: "divider" }),
+          "gap-3"
+        )}
+      >
         <div className="min-w-0 flex-1 text-left">
           <p className="truncate text-sm font-medium text-fg">
             {member.user.name || member.user.email}
           </p>
-          <p className="mt-0.5 truncate text-xs text-muted-fg">{member.user.email}</p>
+          <p className="mt-0.5 truncate text-xs text-muted-fg">
+            {member.user.email}
+          </p>
         </div>
 
         <p className="shrink-0 text-sm text-muted-fg">
@@ -131,19 +140,31 @@ export const MemberActions = ({
                 variant="ghost"
               />
             }
-            onClick={() => setError(null)}
+            onClick={() => {
+              setError(null);
+            }}
           >
             {isPending ? (
-              <HugeiconsIcon aria-hidden className="size-4 animate-spin" icon={Loading03Icon} />
+              <HugeiconsIcon
+                aria-hidden
+                className="size-4 animate-spin"
+                icon={Loading03Icon}
+              />
             ) : (
-              <HugeiconsIcon aria-hidden className="size-4" icon={MoreVerticalIcon} />
+              <HugeiconsIcon
+                aria-hidden
+                className="size-4"
+                icon={MoreVerticalIcon}
+              />
             )}
           </DropdownMenuTrigger>
 
           <DropdownMenuContent align="end">
             {organizationRoleOptions.map((role) => {
               const isDisabled =
-                isActiveMember || !canUpdateMemberRole || hasOrganizationRole(member.role, role);
+                isActiveMember ||
+                !canUpdateMemberRole ||
+                hasOrganizationRole(member.role, role);
               const item = (
                 <DropdownMenuItem
                   closeOnSelect={!isDisabled}
@@ -163,7 +184,9 @@ export const MemberActions = ({
                   <TooltipTrigger className="block" render={<div />}>
                     {item}
                   </TooltipTrigger>
-                  <TooltipContent side="left">{getRoleDisabledReason(role)}</TooltipContent>
+                  <TooltipContent side="left">
+                    {getRoleDisabledReason(role)}
+                  </TooltipContent>
                 </Tooltip>
               ) : (
                 <div key={role}>{item}</div>
@@ -173,7 +196,11 @@ export const MemberActions = ({
             {isActiveMember || !canRemoveMembers ? (
               <Tooltip>
                 <TooltipTrigger className="block" render={<div />}>
-                  <DropdownMenuItem className="text-destructive" closeOnSelect={false} disabled>
+                  <DropdownMenuItem
+                    className="text-destructive"
+                    closeOnSelect={false}
+                    disabled
+                  >
                     Remove
                   </DropdownMenuItem>
                 </TooltipTrigger>
@@ -192,11 +219,17 @@ export const MemberActions = ({
         </DropdownMenu>
       </div>
 
-      {error && (
-        <p className={cn("text-sm text-destructive", settingsRowPaddingClass)} role="alert">
+      {error !== null && error !== undefined && error !== "" ? (
+        <p
+          className={cn(
+            "text-sm text-destructive",
+            settingsSurfaceVariants({ variant: "padding" })
+          )}
+          role="alert"
+        >
           {error}
         </p>
-      )}
+      ) : null}
     </div>
   );
 };

@@ -1,48 +1,19 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { zodValidator } from "@tanstack/zod-adapter";
 import { z } from "zod";
-import { SettingsLoadingPage } from "~/features/settings/components/settings-loading-page";
-import { ORGANIZATION_SETTINGS_VIEWS } from "~/features/settings/domain/organization-settings-view";
-import { SETTINGS_TABS } from "~/features/settings/domain/settings-tab";
-import { getSessionUser } from "~/lib/auth.functions";
+
+import { SettingsLoadingPage } from "#/features/settings/components/settings-loading-page";
+import { ORGANIZATION_SETTINGS_VIEWS } from "#/features/settings/domain/organization-settings-view";
+import { SETTINGS_TABS } from "#/features/settings/domain/settings-tab";
+import { getSessionUser } from "#/lib/auth.functions";
 
 const SettingsPendingPage = () => {
   const { tab } = Route.useSearch();
   return <SettingsLoadingPage tab={tab} />;
 };
 
+// react-doctor-disable-next-line react-doctor/tanstack-start-route-property-order -- The repository's TanStack Router lint rule owns this generated route property order.
 export const Route = createFileRoute("/settings")({
-  validateSearch: zodValidator(
-    z.object({
-      from: z
-        .string()
-        .trim()
-        .transform((value) =>
-          value && value.startsWith("/") && !value.startsWith("//") ? value : "/",
-        )
-        .catch("/")
-        .default("/"),
-      billing: z.enum(["canceled", "success"]).optional().catch(undefined),
-      checkoutId: z.uuid().optional().catch(undefined),
-      connector: z.enum(["connected", "error"]).optional().catch(undefined),
-      domainConnect: z
-        .enum(["canceled", "error", "needs_dns", "verified"])
-        .optional()
-        .catch(undefined),
-      domainId: z.string().trim().catch("").default(""),
-      gmail: z.enum(["connected", "error"]).optional().catch(undefined),
-      tab: z.string().trim().pipe(z.enum(SETTINGS_TABS)).catch("overview").default("overview"),
-      mailboxId: z.string().trim().catch("").default(""),
-      organizationId: z.string().trim().catch("").default(""),
-      organizationView: z
-        .string()
-        .trim()
-        .pipe(z.enum(ORGANIZATION_SETTINGS_VIEWS))
-        .catch("overview")
-        .default("overview"),
-    }),
-  ),
-  ssr: "data-only",
   loader: async () => {
     const user = await getSessionUser();
 
@@ -52,9 +23,53 @@ export const Route = createFileRoute("/settings")({
       });
     }
 
+    if (user.needsOnboarding) {
+      throw redirect({
+        search: { returnTo: "/settings" },
+        to: "/onboarding",
+      });
+    }
+
     return {
       user,
     };
   },
   pendingComponent: SettingsPendingPage,
+  ssr: "data-only",
+  validateSearch: zodValidator(
+    z.object({
+      billing: z.enum(["canceled", "success"]).optional(),
+      checkoutId: z.uuid().optional(),
+      connector: z.enum(["connected", "error"]).optional(),
+      domainConnect: z
+        .enum(["canceled", "error", "needs_dns", "verified"])
+        .optional(),
+      domainId: z.string().trim().catch("").default(""),
+      from: z
+        .string()
+        .trim()
+        .transform((value) =>
+          value && value.startsWith("/") && !value.startsWith("//")
+            ? value
+            : "/"
+        )
+        .catch("/")
+        .default("/"),
+      gmail: z.enum(["connected", "error"]).optional(),
+      mailboxId: z.string().trim().catch("").default(""),
+      organizationId: z.string().trim().catch("").default(""),
+      organizationView: z
+        .string()
+        .trim()
+        .pipe(z.enum(ORGANIZATION_SETTINGS_VIEWS))
+        .catch("overview")
+        .default("overview"),
+      tab: z
+        .string()
+        .trim()
+        .pipe(z.enum(SETTINGS_TABS))
+        .catch("overview")
+        .default("overview"),
+    })
+  ),
 });

@@ -1,23 +1,34 @@
 "use client";
 
+import {
+  ArrowRight01Icon,
+  Cancel01Icon,
+  Tag01Icon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import type { IconSvgElement } from "@hugeicons/react";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
-import { ArrowRight01Icon, Cancel01Icon, Tag01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { cn } from "@quieter/ui/cn";
 import { LazyMotion, domAnimation, AnimatePresence, m } from "motion/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { mailboxLabelSearchPillSurfaceClassNameByColor } from "~/features/message-labels/domain/mailbox-label-presentation";
-import {
-  normalizeLabelSelectionKey,
-  type SearchFilterChip,
-  type StructuredSearchState,
-} from "~/features/message-search/state/message-list-search-state";
-import { searchFilterOptions } from "./message-list-search-filter-options";
+
+import { mailboxLabelSearchPillSurfaceClassNameByColor } from "#/features/message-labels/domain/mailbox-label-presentation";
+import { normalizeLabelSelectionKey } from "#/features/message-search/state/message-list-search-state";
+import type {
+  SearchFilterChip,
+  StructuredSearchState,
+} from "#/features/message-search/state/message-list-search-state";
+
+import type { searchFilterOptions } from "./message-list-search-filter-options";
+
+const hasText = (value: string | null | undefined): value is string =>
+  typeof value === "string" && value.length > 0;
 
 const createSearchFilterSections = (
-  options: typeof searchFilterOptions,
-): ReadonlyArray<{ label: string; options: typeof searchFilterOptions }> => [
+  options: typeof searchFilterOptions
+): readonly { label: string; options: typeof searchFilterOptions }[] => [
   {
     label: "Status",
     options: options.filter((option) => option.filter.type === "is"),
@@ -25,31 +36,39 @@ const createSearchFilterSections = (
   {
     label: "Date",
     options: options.filter((option) =>
-      ["after", "before", "newer_than", "older_than"].includes(option.filter.type),
+      ["after", "before", "newer_than", "older_than"].includes(
+        option.filter.type
+      )
     ),
   },
   {
     label: "People",
-    options: options.filter((option) => ["bcc", "cc", "from", "to"].includes(option.filter.type)),
+    options: options.filter((option) =>
+      ["bcc", "cc", "from", "to"].includes(option.filter.type)
+    ),
   },
   {
     label: "Content",
     options: options.filter((option) =>
-      ["content", "filename", "has", "subject"].includes(option.filter.type),
+      ["content", "filename", "has", "subject"].includes(option.filter.type)
     ),
   },
 ];
 
 const getSearchFilterOptionState = (
   filters: readonly SearchFilterChip[],
-  optionFilter: SearchFilterChip,
+  optionFilter: SearchFilterChip
 ) => {
   const filter = filters.find(
-    (filter) =>
-      filter.type === optionFilter.type &&
-      (optionFilter.value.length === 0 || filter.value === optionFilter.value),
+    (candidateFilter) =>
+      candidateFilter.type === optionFilter.type &&
+      (optionFilter.value.length === 0 ||
+        candidateFilter.value === optionFilter.value)
   );
-  return filter ? (filter.negated ? "exclude" : "include") : null;
+  if (filter === undefined) {
+    return null;
+  }
+  return filter.negated === true ? "exclude" : "include";
 };
 
 const SearchDropdownSectionLabel = ({ children }: { children: string }) => (
@@ -78,18 +97,23 @@ const SearchDropdownRow = ({
       "relative flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-[13px] text-fg hover:bg-muted focus-visible:z-10 focus-visible:border-ring focus-visible:bg-muted focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none",
       className,
       {
-        "bg-muted": highlighted && !className,
-        "bg-accent": active && !className,
-        "ring-1 ring-ring/45 ring-inset": active && !highlighted && !!className,
-        "ring-2 ring-ring/60 ring-inset": highlighted && !!className,
-      },
+        "bg-accent": active && !hasText(className),
+        "bg-muted": highlighted && !hasText(className),
+        "ring-1 ring-ring/45 ring-inset":
+          active && !highlighted && hasText(className),
+        "ring-2 ring-ring/60 ring-inset": highlighted && hasText(className),
+      }
     )}
     onClick={onClick}
     type="button"
   >
-    <HugeiconsIcon aria-hidden className="size-3.5 shrink-0 text-muted-fg" icon={icon} />
+    <HugeiconsIcon
+      aria-hidden
+      className="size-3.5 shrink-0 text-muted-fg"
+      icon={icon}
+    />
     <span className="min-w-0 flex-1 truncate">{label}</span>
-    {hint && <span className="text-[11px] text-muted-fg">{hint}</span>}
+    {hasText(hint) && <span className="text-micro text-muted-fg">{hint}</span>}
   </button>
 );
 
@@ -132,8 +156,12 @@ export const MessageListSearchDropdown = ({
 }) => {
   const searchFilterSections = createSearchFilterSections(filterOptions);
   const [isLabelsSubmenuOpen, setIsLabelsSubmenuOpen] = useState(false);
-  const [labelsLayout, setLabelsLayout] = useState<LabelsSubmenuLayout>(initialLabelsSubmenuLayout);
-  const closeLabelsSubmenuTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [labelsLayout, setLabelsLayout] = useState<LabelsSubmenuLayout>(
+    initialLabelsSubmenuLayout
+  );
+  const closeLabelsSubmenuTimeoutRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
   const labelsInlineRef = useRef<HTMLDivElement>(null);
   const labelsSubmenuRef = useRef<HTMLDivElement>(null);
   const labelsTriggerRef = useRef<HTMLButtonElement>(null);
@@ -142,7 +170,7 @@ export const MessageListSearchDropdown = ({
     if (filter.type === "label") {
       selectedUserLabelStates.set(
         normalizeLabelSelectionKey(filter.value),
-        filter.negated ? "exclude" : "include",
+        filter.negated === true ? "exclude" : "include"
       );
     }
   }
@@ -189,48 +217,86 @@ export const MessageListSearchDropdown = ({
     const viewportGap = 8;
     const top = Math.min(
       triggerRect.top,
-      Math.max(viewportGap, window.innerHeight - submenuHeight - viewportGap),
+      Math.max(viewportGap, window.innerHeight - submenuHeight - viewportGap)
     );
     setLabelsLayout({
       coneHeight: submenuHeight,
       coneOriginY: triggerRect.top + triggerRect.height / 2 - top,
       left: Math.min(
         triggerRect.right + viewportGap,
-        Math.max(viewportGap, window.innerWidth - submenuWidth - viewportGap),
+        Math.max(viewportGap, window.innerWidth - submenuWidth - viewportGap)
       ),
       top,
     });
-  }, [showLabelsSubmenu, isLoadingLabels, labelsErrorMessage, userLabels.length]);
+  }, [
+    showLabelsSubmenu,
+    isLoadingLabels,
+    labelsErrorMessage,
+    userLabels.length,
+  ]);
 
   useLayoutEffect(() => {
-    if (!showLabelsSubmenu || window.matchMedia("(min-width: 1024px)").matches) return;
+    if (
+      !showLabelsSubmenu ||
+      window.matchMedia("(min-width: 1024px)").matches
+    ) {
+      return;
+    }
     labelsInlineRef.current?.scrollIntoView({ block: "nearest" });
   }, [showLabelsSubmenu]);
 
-  const labelsContent = labelsErrorMessage ? (
-    <div className="px-2.5 py-2 text-[13px] text-fg">{labelsErrorMessage}</div>
-  ) : isLoadingLabels ? (
-    <div className="px-2.5 py-2 text-[13px] text-muted-fg">Loading labels…</div>
-  ) : userLabels.length > 0 ? (
-    <div className="flex flex-col gap-0.5">
-      {userLabels.map((label) => {
-        const selectionState = selectedUserLabelStates.get(normalizeLabelSelectionKey(label.name));
-        return (
-          <SearchDropdownRow
-            active={selectionState !== undefined}
-            className={mailboxLabelSearchPillSurfaceClassNameByColor[label.color ?? "gray"]}
-            highlighted={highlightedItemKey === `label:${normalizeLabelSelectionKey(label.name)}`}
-            icon={Tag01Icon}
-            key={label.id}
-            label={selectionState === "exclude" ? `Not ${label.name}` : label.name}
-            onClick={() => onToggleLabel(label.name)}
-          />
-        );
-      })}
-    </div>
-  ) : (
-    <div className="px-2.5 py-2 text-[13px] text-muted-fg">No custom labels.</div>
-  );
+  let labelsContent: ReactNode;
+  if (hasText(labelsErrorMessage)) {
+    labelsContent = (
+      <div className="px-2.5 py-2 text-[13px] text-fg">
+        {labelsErrorMessage}
+      </div>
+    );
+  } else if (isLoadingLabels) {
+    labelsContent = (
+      <div className="px-2.5 py-2 text-[13px] text-muted-fg">
+        Loading labels…
+      </div>
+    );
+  } else if (userLabels.length > 0) {
+    labelsContent = (
+      <div className="flex flex-col gap-0.5">
+        {userLabels.map((label) => {
+          const selectionState = selectedUserLabelStates.get(
+            normalizeLabelSelectionKey(label.name)
+          );
+          return (
+            <SearchDropdownRow
+              active={selectionState !== undefined}
+              className={
+                mailboxLabelSearchPillSurfaceClassNameByColor[
+                  label.color ?? "gray"
+                ]
+              }
+              highlighted={
+                highlightedItemKey ===
+                `label:${normalizeLabelSelectionKey(label.name)}`
+              }
+              icon={Tag01Icon}
+              key={label.id}
+              label={
+                selectionState === "exclude" ? `Not ${label.name}` : label.name
+              }
+              onClick={() => {
+                onToggleLabel(label.name);
+              }}
+            />
+          );
+        })}
+      </div>
+    );
+  } else {
+    labelsContent = (
+      <div className="px-2.5 py-2 text-[13px] text-muted-fg">
+        No custom labels.
+      </div>
+    );
+  }
 
   const labelsSubmenu =
     showLabelsSubmenu &&
@@ -257,10 +323,14 @@ export const MessageListSearchDropdown = ({
             className="pointer-events-auto"
             fill="transparent"
             onPointerEnter={(event) => {
-              if (event.pointerType === "mouse") cancelCloseLabelsSubmenu();
+              if (event.pointerType === "mouse") {
+                cancelCloseLabelsSubmenu();
+              }
             }}
             onPointerLeave={(event) => {
-              if (event.pointerType === "mouse") scheduleCloseLabelsSubmenu();
+              if (event.pointerType === "mouse") {
+                scheduleCloseLabelsSubmenu();
+              }
             }}
             points={`0 ${labelsLayout.coneOriginY} 8 0 8 ${labelsLayout.coneHeight}`}
           />
@@ -269,17 +339,21 @@ export const MessageListSearchDropdown = ({
           aria-label="Labels"
           className="pointer-events-auto absolute top-0 left-2 max-h-[calc(100dvh-1rem)] w-72 overflow-x-hidden overflow-y-auto overscroll-contain rounded-lg bg-popover p-1 shadow-lg"
           onPointerEnter={(event) => {
-            if (event.pointerType === "mouse") cancelCloseLabelsSubmenu();
+            if (event.pointerType === "mouse") {
+              cancelCloseLabelsSubmenu();
+            }
           }}
           onPointerLeave={(event) => {
-            if (event.pointerType === "mouse") scheduleCloseLabelsSubmenu();
+            if (event.pointerType === "mouse") {
+              scheduleCloseLabelsSubmenu();
+            }
           }}
           ref={labelsSubmenuRef}
         >
           {labelsContent}
         </div>
       </div>,
-      document.body,
+      document.body
     );
 
   return (
@@ -287,14 +361,19 @@ export const MessageListSearchDropdown = ({
       <AnimatePresence initial={false}>
         {isOpen && (
           <m.div
-            animate={{ scale: 1, transformOrigin: "top", opacity: 1, y: 0 }}
+            animate={{ opacity: 1, scale: 1, transformOrigin: "top", y: 0 }}
             exit={{
+              opacity: 0,
               scale: 0.95,
               transformOrigin: "top",
-              opacity: 0,
               y: -10,
             }}
-            initial={{ scale: 0.95, transformOrigin: "top", opacity: 0, y: -10 }}
+            initial={{
+              opacity: 0,
+              scale: 0.95,
+              transformOrigin: "top",
+              y: -10,
+            }}
             transition={{ duration: 0.1, ease: "easeOut" }}
             aria-label="Search filters"
             className="fixed inset-x-2 top-[calc(env(safe-area-inset-top)+4.5rem)] z-30 flex max-h-56 flex-col overflow-hidden rounded-lg bg-popover p-2 shadow-lg lg:absolute lg:inset-x-0 lg:top-full lg:mt-2 lg:max-h-72"
@@ -307,11 +386,13 @@ export const MessageListSearchDropdown = ({
               <div className="flex flex-col gap-3">
                 {searchFilterSections.map((section) => (
                   <div className="flex flex-col gap-1" key={section.label}>
-                    <SearchDropdownSectionLabel>{section.label}</SearchDropdownSectionLabel>
+                    <SearchDropdownSectionLabel>
+                      {section.label}
+                    </SearchDropdownSectionLabel>
                     {section.options.map((option) => {
                       const selectionState = getSearchFilterOptionState(
                         draftSearchState.filters,
-                        option.filter,
+                        option.filter
                       );
                       return (
                         <SearchDropdownRow
@@ -320,13 +401,21 @@ export const MessageListSearchDropdown = ({
                             highlightedItemKey ===
                             `filter:${option.filter.type}:${option.filter.value}`
                           }
-                          hint={selectionState === "exclude" ? `-${option.hint}` : option.hint}
+                          hint={
+                            selectionState === "exclude"
+                              ? `-${option.hint}`
+                              : option.hint
+                          }
                           icon={option.icon}
                           key={`${option.filter.type}:${option.filter.value}`}
                           label={
-                            selectionState === "exclude" ? `Not ${option.label}` : option.label
+                            selectionState === "exclude"
+                              ? `Not ${option.label}`
+                              : option.label
                           }
-                          onClick={() => onSelectFilter(option.filter)}
+                          onClick={() => {
+                            onSelectFilter(option.filter);
+                          }}
                         />
                       );
                     })}
@@ -338,12 +427,16 @@ export const MessageListSearchDropdown = ({
                   <div
                     className="relative"
                     onPointerEnter={(event) => {
-                      if (event.pointerType !== "mouse") return;
+                      if (event.pointerType !== "mouse") {
+                        return;
+                      }
                       cancelCloseLabelsSubmenu();
                       setIsLabelsSubmenuOpen(true);
                     }}
                     onPointerLeave={(event) => {
-                      if (event.pointerType === "mouse") scheduleCloseLabelsSubmenu();
+                      if (event.pointerType === "mouse") {
+                        scheduleCloseLabelsSubmenu();
+                      }
                     }}
                   >
                     <button
@@ -352,9 +445,9 @@ export const MessageListSearchDropdown = ({
                       className={cn(
                         "relative z-50 flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-[13px] text-fg hover:bg-muted focus-visible:border-ring focus-visible:bg-muted focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none",
                         {
-                          "bg-muted": isLabelHighlighted,
                           "bg-accent": selectedUserLabelStates.size > 0,
-                        },
+                          "bg-muted": isLabelHighlighted,
+                        }
                       )}
                       onClick={() => {
                         setIsLabelsSubmenuOpen((open) => !open);
@@ -370,9 +463,12 @@ export const MessageListSearchDropdown = ({
                       <span className="min-w-0 flex-1 truncate">Labels</span>
                       <HugeiconsIcon
                         aria-hidden
-                        className={cn("size-3.5 shrink-0 text-muted-fg transition-transform", {
-                          "rotate-90 lg:rotate-0": showLabelsSubmenu,
-                        })}
+                        className={cn(
+                          "size-3.5 shrink-0 text-muted-fg transition-transform",
+                          {
+                            "rotate-90 lg:rotate-0": showLabelsSubmenu,
+                          }
+                        )}
                         icon={ArrowRight01Icon}
                       />
                     </button>
@@ -410,7 +506,11 @@ export const MessageListSearchDropdown = ({
                 onClick={onDismiss}
                 type="button"
               >
-                <HugeiconsIcon aria-hidden className="size-3.5" icon={Cancel01Icon} />
+                <HugeiconsIcon
+                  aria-hidden
+                  className="size-3.5"
+                  icon={Cancel01Icon}
+                />
                 Close search
               </button>
             </div>

@@ -1,3 +1,4 @@
 declare module "cloudflare:workers" {
-  interface ProvidedEnv extends Env {}
+  // ProvidedEnv mirrors the generated Env bindings for worker tests.
+  type ProvidedEnv = Env;
 }

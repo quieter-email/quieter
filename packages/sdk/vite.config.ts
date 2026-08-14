@@ -2,11 +2,11 @@ import { defineConfig } from "vite-plus";
 
 export default defineConfig({
   pack: {
-    entry: ["src/index.ts"],
     deps: {
-      skipNodeModulesBundle: true,
+      neverBundle: true,
     },
     dts: true,
+    entry: ["src/index.ts"],
     fixedExtension: false,
     format: "esm",
     platform: "browser",

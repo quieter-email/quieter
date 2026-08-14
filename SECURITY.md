@@ -2,16 +2,13 @@
 
 ## Supported Versions
 
-Quieter is deep-alpha software and has no supported production release. Security reports should
-target the current `main` branch.
+Quieter is deep-alpha software and has no supported production release. Security reports should target the current `main` branch.
 
 ## Reporting a Vulnerability
 
-Use
-[GitHub private vulnerability reporting](https://github.com/quieter-email/quieter/security/advisories/new).
+Use [GitHub private vulnerability reporting](https://github.com/quieter-email/quieter/security/advisories/new).
 
-Do not disclose vulnerabilities through public issues, discussions, pull requests, social media, or
-public proof-of-concept repositories.
+Do not disclose vulnerabilities through public issues, discussions, pull requests, social media, or public proof-of-concept repositories.
 
 Include:
 

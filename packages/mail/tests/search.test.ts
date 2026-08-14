@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
+
 import {
   isMailSearchFilterSupported,
   parseStructuredSearchQuery,
@@ -8,10 +9,10 @@ import {
 describe("structured mail search", () => {
   test("round-trips repeated and negated filters", () => {
     const search = parseStructuredSearchQuery(
-      'from:billing@example.com from:receipts@example.com -subject:"test message" is:unread',
+      'from:billing@example.com from:receipts@example.com -subject:"test message" is:unread'
     );
 
-    expect(search).toEqual({
+    expect(search).toStrictEqual({
       filters: [
         { type: "from", value: "billing@example.com" },
         { type: "from", value: "receipts@example.com" },
@@ -21,15 +22,25 @@ describe("structured mail search", () => {
       text: "",
     });
     expect(serializeStructuredSearchState(search)).toBe(
-      'from:billing@example.com from:receipts@example.com -subject:"test message" is:unread',
+      'from:billing@example.com from:receipts@example.com -subject:"test message" is:unread'
     );
   });
 
   test("keeps managed-only filters out of Gmail capabilities", () => {
-    expect(isMailSearchFilterSupported("managed", { type: "subject", value: "invoice" })).toBe(
-      true,
-    );
-    expect(isMailSearchFilterSupported("gmail", { type: "subject", value: "invoice" })).toBe(false);
-    expect(isMailSearchFilterSupported("gmail", { type: "is", value: "outbound" })).toBe(false);
+    expect(
+      isMailSearchFilterSupported("managed", {
+        type: "subject",
+        value: "invoice",
+      })
+    ).toBeTruthy();
+    expect(
+      isMailSearchFilterSupported("gmail", {
+        type: "subject",
+        value: "invoice",
+      })
+    ).toBeFalsy();
+    expect(
+      isMailSearchFilterSupported("gmail", { type: "is", value: "outbound" })
+    ).toBeFalsy();
   });
 });

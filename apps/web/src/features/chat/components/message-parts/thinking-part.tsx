@@ -5,7 +5,9 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { cn } from "@quieter/ui/cn";
 import { AnimatePresence, m, useReducedMotion } from "motion/react";
 import { useState } from "react";
-import { getAppPresenceMotion } from "~/features/motion/app-motion";
+
+import { getAppPresenceMotion } from "#/features/motion/app-motion";
+
 import { MarkdownContent } from "../markdown-content";
 import { LoadingDots } from "../thinking-indicator";
 
@@ -30,7 +32,9 @@ export const ThinkingPart = ({ content, isActive }: ThinkingPartProps) => {
         aria-label={hasReasoning ? "Toggle reasoning" : "Thinking"}
         className="group flex w-fit items-center gap-1 py-0.5 text-left"
         disabled={!hasReasoning}
-        onClick={() => setExpanded((prev) => !prev)}
+        onClick={() => {
+          setExpanded((prev) => !prev);
+        }}
         type="button"
       >
         <span className="inline-flex items-center gap-1.5 text-xs text-muted-fg">
@@ -45,10 +49,10 @@ export const ThinkingPart = ({ content, isActive }: ThinkingPartProps) => {
               "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",
               {
                 "rotate-90 opacity-100": expanded,
-                "transition-none": shouldReduceMotion,
+                "transition-none": shouldReduceMotion === true,
                 "transition-transform duration-(--app-motion-duration-enter) ease-(--app-motion-ease-out)":
-                  !shouldReduceMotion,
-              },
+                  shouldReduceMotion !== true,
+              }
             )}
             icon={ArrowRight01Icon}
           />
@@ -56,7 +60,9 @@ export const ThinkingPart = ({ content, isActive }: ThinkingPartProps) => {
       </button>
       <AnimatePresence initial={false}>
         {expanded && hasReasoning ? (
-          <m.div {...getAppPresenceMotion({ reducedMotion: shouldReduceMotion })}>
+          <m.div
+            {...getAppPresenceMotion({ reducedMotion: shouldReduceMotion })}
+          >
             <div className="py-1">
               <MarkdownContent markdown={content} />
             </div>

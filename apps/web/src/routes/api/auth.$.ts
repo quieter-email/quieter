@@ -1,30 +1,31 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 const handleAuthRequest = async (request: Request) => {
-  const pathname = new URL(request.url).pathname.replace(/\/+$/, "");
+  const pathname = new URL(request.url).pathname.replace(/\/+$/u, "");
 
   if (pathname === "/api/auth/polar/webhooks") {
-    const { handlePolarWebhookRequest } = await import("@quieter/auth/polar-webhooks");
-    return handlePolarWebhookRequest(request);
+    const { handlePolarWebhookRequest } =
+      await import("@quieter/auth/polar-webhooks");
+    return await handlePolarWebhookRequest(request);
   }
 
   if (request.method === "GET" && pathname === "/api/auth/get-session") {
     const { handleSessionRequest } = await import("@quieter/auth/session");
-    return handleSessionRequest(request);
+    return await handleSessionRequest(request);
   }
 
   const { auth } = await import("@quieter/auth");
-  return auth.handler(request);
+  return await auth.handler(request);
 };
 
 export const Route = createFileRoute("/api/auth/$")({
   server: {
     handlers: {
-      DELETE: async ({ request }) => handleAuthRequest(request),
-      GET: async ({ request }) => handleAuthRequest(request),
-      PATCH: async ({ request }) => handleAuthRequest(request),
-      POST: async ({ request }) => handleAuthRequest(request),
-      PUT: async ({ request }) => handleAuthRequest(request),
+      DELETE: async ({ request }) => await handleAuthRequest(request),
+      GET: async ({ request }) => await handleAuthRequest(request),
+      PATCH: async ({ request }) => await handleAuthRequest(request),
+      POST: async ({ request }) => await handleAuthRequest(request),
+      PUT: async ({ request }) => await handleAuthRequest(request),
     },
   },
 });

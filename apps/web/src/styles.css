@@ -15,7 +15,8 @@
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-property: color, background-color, border-color, box-shadow, opacity !important;
+    transition-property:
+      color, background-color, border-color, box-shadow, opacity !important;
     transition-delay: 0ms !important;
     transition-duration: var(--app-motion-duration-feedback) !important;
     transition-timing-function: var(--app-motion-ease-out) !important;

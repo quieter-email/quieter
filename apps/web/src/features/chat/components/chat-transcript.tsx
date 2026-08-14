@@ -12,10 +12,15 @@ import {
 } from "@quieter/ui/scroll-area";
 import { AnimatePresence, m, useReducedMotion } from "motion/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { getAppPresenceMotion } from "~/features/motion/app-motion";
+
+import { getAppPresenceMotion } from "#/features/motion/app-motion";
+
 import type { ChatTurn, ResolveComposeTool } from "../types";
 import { ChatError } from "./chat-error";
-import { createChatTurnEntranceState, trackChatTurnEntrances } from "./chat-turn-entrance";
+import {
+  createChatTurnEntranceState,
+  trackChatTurnEntrances,
+} from "./chat-turn-entrance";
 import { ConversationTurn } from "./conversation-turn";
 
 type ChatTranscriptProps = {
@@ -36,9 +41,11 @@ const scrollTranscriptToBottom = (
   viewport: HTMLDivElement | null,
   behavior: ScrollBehavior,
   isNearBottomRef: { current: boolean },
-  setShowScrollButton: (show: boolean) => void,
+  setShowScrollButton: (show: boolean) => void
 ) => {
-  if (!viewport) return;
+  if (!viewport) {
+    return;
+  }
 
   viewport.scrollTo({ behavior, top: viewport.scrollHeight });
   isNearBottomRef.current = true;
@@ -60,42 +67,62 @@ export const ChatTranscript = ({
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const isNearBottomRef = useRef(true);
+  // react-doctor-disable-next-line react-doctor/rerender-lazy-ref-init -- Entrance tracking must remain one stable mutable session across renders.
   const turnEntranceStateRef = useRef(createChatTurnEntranceState());
   const [showScrollButton, setShowScrollButton] = useState(false);
   const retryAssistantId = turns.at(-1)?.assistant?.id;
-  const enteringTurnIds = trackChatTurnEntrances(
+  // react-doctor-disable-next-line react-hooks-js/refs -- The entrance tracker is intentionally mutable render-time bookkeeping.
+  // react-doctor-disable-next-line react-hooks-js/refs -- The tracker is intentionally a stable mutable render-time session.
+  const { enteringTurnIds, newTurnIds } = trackChatTurnEntrances(
     turnEntranceStateRef.current,
     turns.map((turn) => turn.id),
-    hydrated,
+    hydrated
   );
 
-  useEffect(() => {
+  useEffect((): (() => void) | undefined => {
     const viewport = viewportRef.current;
     const content = contentRef.current;
-    if (!viewport || !content) return;
+    if (!viewport || !content) {
+      return;
+    }
 
     const resizeObserver = new ResizeObserver(() => {
       if (isNearBottomRef.current) {
-        scrollTranscriptToBottom(viewportRef.current, "auto", isNearBottomRef, setShowScrollButton);
+        scrollTranscriptToBottom(
+          viewportRef.current,
+          "auto",
+          isNearBottomRef,
+          setShowScrollButton
+        );
       }
     });
 
     resizeObserver.observe(content);
-    return () => resizeObserver.disconnect();
+    return () => {
+      resizeObserver.disconnect();
+    };
   }, []);
 
   useLayoutEffect(() => {
     if (isNearBottomRef.current) {
-      scrollTranscriptToBottom(viewportRef.current, "auto", isNearBottomRef, setShowScrollButton);
+      scrollTranscriptToBottom(
+        viewportRef.current,
+        "auto",
+        isNearBottomRef,
+        setShowScrollButton
+      );
     }
   }, [isStreaming, turns]);
 
   const handleScroll = () => {
     const viewport = viewportRef.current;
-    if (!viewport) return;
+    if (!viewport) {
+      return;
+    }
 
     const { clientHeight, scrollHeight, scrollTop } = viewport;
-    const nearBottom = scrollHeight - scrollTop - clientHeight < SCROLL_THRESHOLD;
+    const nearBottom =
+      scrollHeight - scrollTop - clientHeight < SCROLL_THRESHOLD;
     isNearBottomRef.current = nearBottom;
     setShowScrollButton(!nearBottom);
   };
@@ -114,6 +141,7 @@ export const ChatTranscript = ({
                 const turnMotion = getAppPresenceMotion({
                   reducedMotion: shouldReduceMotion,
                 });
+                const animateEntrance = newTurnIds.has(turn.id);
 
                 return (
                   <m.div
@@ -123,7 +151,7 @@ export const ChatTranscript = ({
                   >
                     <ConversationTurn
                       actionsDisabled={actionsDisabled}
-                      animateEntrance={turnEntranceStateRef.current.newTurnIds.has(turn.id)}
+                      animateEntrance={animateEntrance}
                       isLastTurn={index === turns.length - 1}
                       isStreaming={isStreaming && index === turns.length - 1}
                       onCopy={onCopy}
@@ -136,15 +164,27 @@ export const ChatTranscript = ({
                 );
               })}
               <AnimatePresence initial={false}>
-                {errorMessage ? (
+                {errorMessage !== null &&
+                errorMessage !== undefined &&
+                errorMessage !== "" ? (
                   <m.div
                     key="chat-error"
-                    {...getAppPresenceMotion({ reducedMotion: shouldReduceMotion })}
+                    {...getAppPresenceMotion({
+                      reducedMotion: shouldReduceMotion,
+                    })}
                   >
                     <ChatError
                       disabled={actionsDisabled}
                       message={errorMessage}
-                      onRetry={retryAssistantId ? () => onRegenerate(retryAssistantId) : undefined}
+                      onRetry={
+                        retryAssistantId !== null &&
+                        retryAssistantId !== undefined &&
+                        retryAssistantId !== ""
+                          ? () => {
+                              onRegenerate(retryAssistantId);
+                            }
+                          : undefined
+                      }
                     />
                   </m.div>
                 ) : null}
@@ -168,19 +208,23 @@ export const ChatTranscript = ({
               aria-label="Scroll to bottom"
               className={cn(
                 "pointer-events-auto flex items-center gap-1.5 rounded-full border border-border bg-bg/95 px-3 py-1.5 text-xs text-muted-fg shadow-sm backdrop-blur-sm",
-                "transition-colors hover:bg-muted/60 hover:text-fg",
+                "transition-colors hover:bg-muted/60 hover:text-fg"
               )}
-              onClick={() =>
+              onClick={() => {
                 scrollTranscriptToBottom(
                   viewportRef.current,
                   "smooth",
                   isNearBottomRef,
-                  setShowScrollButton,
-                )
-              }
+                  setShowScrollButton
+                );
+              }}
               type="button"
             >
-              <HugeiconsIcon aria-hidden className="size-3" icon={ArrowDown01Icon} />
+              <HugeiconsIcon
+                aria-hidden
+                className="size-3"
+                icon={ArrowDown01Icon}
+              />
               New messages
             </m.button>
           ) : null}

@@ -12,6 +12,7 @@ import {
   mailboxOverviewResultSchema,
   modifyMailResultSchema,
 } from "@quieter/ai/chat-agent";
+
 import type {
   ComposeEmailResult,
   GoogleCalendarEventToolResult,
@@ -29,7 +30,7 @@ import type {
 
 export const parseToolArguments = (value: unknown): Record<string, unknown> => {
   if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-    return value as Record<string, unknown>;
+    return Object.fromEntries(Object.entries(value));
   }
 
   if (typeof value !== "string") {
@@ -37,9 +38,11 @@ export const parseToolArguments = (value: unknown): Record<string, unknown> => {
   }
 
   try {
-    const parsed = JSON.parse(value);
-    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
+    const parsed: unknown = JSON.parse(value);
+    return typeof parsed === "object" &&
+      parsed !== null &&
+      !Array.isArray(parsed)
+      ? Object.fromEntries(Object.entries(parsed))
       : {};
   } catch {
     return {};
@@ -73,92 +76,106 @@ export type ParsedToolResult =
   | { data: ModifyMailToolResult; kind: "modify-mail" }
   | { kind: "unknown"; value: unknown };
 
-export const parseToolResult = (toolName: string, value: unknown): ParsedToolResult => {
+type ToolResultSchema<T> = {
+  safeParse: (
+    value: unknown
+  ) => { success: true; data: T } | { success: false };
+};
+
+const parseToolSchema = <T>(
+  schema: ToolResultSchema<T>,
+  value: unknown,
+  createResult: (data: T) => ParsedToolResult
+): ParsedToolResult => {
+  const result = schema.safeParse(value);
+  return result.success
+    ? createResult(result.data)
+    : { kind: "unknown", value };
+};
+
+export const parseToolResult = (
+  toolName: string,
+  value: unknown
+): ParsedToolResult => {
   const parsed = parseToolJson(value);
 
-  if (toolName === "compose_email") {
-    const result = composeEmailResultSchema.safeParse(parsed);
-    return result.success
-      ? { data: result.data, kind: "compose-email" }
-      : { kind: "unknown", value: parsed };
+  switch (toolName) {
+    case "compose_email": {
+      return parseToolSchema(composeEmailResultSchema, parsed, (data) => ({
+        data,
+        kind: "compose-email",
+      }));
+    }
+    case "create_google_calendar_event": {
+      return parseToolSchema(
+        googleCalendarCreateEventResultSchema,
+        parsed,
+        (data) => ({ data, kind: "google-calendar-event" })
+      );
+    }
+    case "search_gmail": {
+      return parseToolSchema(gmailSearchResultSchema, parsed, (data) => ({
+        data,
+        kind: "gmail-search",
+      }));
+    }
+    case "read_gmail_thread": {
+      return parseToolSchema(gmailThreadResultSchema, parsed, (data) => ({
+        data,
+        kind: "gmail-thread",
+      }));
+    }
+    case "get_mailbox_overview": {
+      return parseToolSchema(mailboxOverviewResultSchema, parsed, (data) => ({
+        data,
+        kind: "mailbox-overview",
+      }));
+    }
+    case "read_gmail_message": {
+      return parseToolSchema(gmailMessageResultSchema, parsed, (data) => ({
+        data,
+        kind: "gmail-message",
+      }));
+    }
+    case "read_gmail_messages": {
+      return parseToolSchema(gmailMessagesResultSchema, parsed, (data) => ({
+        data,
+        kind: "gmail-messages",
+      }));
+    }
+    case "read_gmail_attachment": {
+      return parseToolSchema(gmailAttachmentResultSchema, parsed, (data) => ({
+        data,
+        kind: "gmail-attachment",
+      }));
+    }
+    case "list_gmail_labels": {
+      return parseToolSchema(gmailLabelListResultSchema, parsed, (data) => ({
+        data,
+        kind: "gmail-labels",
+      }));
+    }
+    case "modify_mail": {
+      return parseToolSchema(modifyMailResultSchema, parsed, (data) => ({
+        data,
+        kind: "modify-mail",
+      }));
+    }
+    case "list_linear_issue_metadata": {
+      return parseToolSchema(
+        linearIssueMetadataResultSchema,
+        parsed,
+        (data) => ({ data, kind: "linear-issue-metadata" })
+      );
+    }
+    case "create_linear_issue": {
+      return parseToolSchema(linearIssueCreateResultSchema, parsed, (data) => ({
+        data,
+        kind: "linear-issue-create",
+      }));
+    }
+    default: {
+      return { kind: "unknown", value: parsed };
+    }
   }
-
-  if (toolName === "create_google_calendar_event") {
-    const result = googleCalendarCreateEventResultSchema.safeParse(parsed);
-    return result.success
-      ? { data: result.data, kind: "google-calendar-event" }
-      : { kind: "unknown", value: parsed };
-  }
-
-  if (toolName === "search_gmail") {
-    const result = gmailSearchResultSchema.safeParse(parsed);
-    return result.success
-      ? { data: result.data, kind: "gmail-search" }
-      : { kind: "unknown", value: parsed };
-  }
-
-  if (toolName === "read_gmail_thread") {
-    const result = gmailThreadResultSchema.safeParse(parsed);
-    return result.success
-      ? { data: result.data, kind: "gmail-thread" }
-      : { kind: "unknown", value: parsed };
-  }
-
-  if (toolName === "get_mailbox_overview") {
-    const result = mailboxOverviewResultSchema.safeParse(parsed);
-    return result.success
-      ? { data: result.data, kind: "mailbox-overview" }
-      : { kind: "unknown", value: parsed };
-  }
-
-  if (toolName === "read_gmail_message") {
-    const result = gmailMessageResultSchema.safeParse(parsed);
-    return result.success
-      ? { data: result.data, kind: "gmail-message" }
-      : { kind: "unknown", value: parsed };
-  }
-
-  if (toolName === "read_gmail_messages") {
-    const result = gmailMessagesResultSchema.safeParse(parsed);
-    return result.success
-      ? { data: result.data, kind: "gmail-messages" }
-      : { kind: "unknown", value: parsed };
-  }
-
-  if (toolName === "read_gmail_attachment") {
-    const result = gmailAttachmentResultSchema.safeParse(parsed);
-    return result.success
-      ? { data: result.data, kind: "gmail-attachment" }
-      : { kind: "unknown", value: parsed };
-  }
-
-  if (toolName === "list_gmail_labels") {
-    const result = gmailLabelListResultSchema.safeParse(parsed);
-    return result.success
-      ? { data: result.data, kind: "gmail-labels" }
-      : { kind: "unknown", value: parsed };
-  }
-
-  if (toolName === "modify_mail") {
-    const result = modifyMailResultSchema.safeParse(parsed);
-    return result.success
-      ? { data: result.data, kind: "modify-mail" }
-      : { kind: "unknown", value: parsed };
-  }
-
-  if (toolName === "list_linear_issue_metadata") {
-    const result = linearIssueMetadataResultSchema.safeParse(parsed);
-    return result.success
-      ? { data: result.data, kind: "linear-issue-metadata" }
-      : { kind: "unknown", value: parsed };
-  }
-
-  if (toolName === "create_linear_issue") {
-    const result = linearIssueCreateResultSchema.safeParse(parsed);
-    return result.success
-      ? { data: result.data, kind: "linear-issue-create" }
-      : { kind: "unknown", value: parsed };
-  }
-
-  return { kind: "unknown", value: parsed };
 };

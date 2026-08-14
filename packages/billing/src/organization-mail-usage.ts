@@ -5,10 +5,13 @@ import {
   organizationMailUsageAlertEvent,
   organizationMailUsageEvent,
   organizationMailUsageSettings,
-  type OrganizationMailUsageAlertTarget,
-  type OrganizationMailUsageDirection,
+} from "@quieter/database/schema";
+import type {
+  OrganizationMailUsageAlertTarget,
+  OrganizationMailUsageDirection,
 } from "@quieter/database/schema";
 import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
+
 import { getBillingCreditUsage, recordBillingCreditUsage } from "./credits";
 import { getOrganizationBillingEntitlement } from "./entitlements";
 import {
@@ -50,11 +53,17 @@ export const DEFAULT_ORGANIZATION_MAIL_USAGE_SETTINGS = {
 } satisfies OrganizationMailUsageSettings;
 
 const getBillingPeriod = (start: Date | null, end: Date | null) => {
-  if (start && end) return { end, start };
+  if (start && end) {
+    return { end, start };
+  }
 
   const now = new Date();
-  const calendarStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  const calendarEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+  const calendarStart = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)
+  );
+  const calendarEnd = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)
+  );
 
   return { end: calendarEnd, start: calendarStart };
 };
@@ -66,14 +75,14 @@ const getManagedUsageCostMicroCents = (sesCostUsdMicroCents: number) =>
 
 export const withOrganizationMailUsageLock = async <T>(
   organizationId: string,
-  callback: () => Promise<T>,
-) => {
+  work: () => Promise<T>
+): Promise<T> => {
   const connection = await db.$client.reserve();
   let locked = false;
   try {
     await connection`select pg_advisory_lock(hashtextextended(${organizationId}, 0))`;
     locked = true;
-    return await callback();
+    return await work();
   } finally {
     if (locked) {
       await connection`select pg_advisory_unlock(hashtextextended(${organizationId}, 0))`;
@@ -82,22 +91,26 @@ export const withOrganizationMailUsageLock = async <T>(
   }
 };
 
-export const normalizeOrganizationMailAlertMilestones = (milestones: number[]) =>
-  Array.from(
-    new Set(
+export const normalizeOrganizationMailAlertMilestones = (
+  milestones: number[]
+) =>
+  [
+    ...new Set(
       milestones
         .map((milestone) => Math.round(milestone))
-        .filter((milestone) => milestone > 0 && milestone <= 100),
+        .filter((milestone) => milestone > 0 && milestone <= 100)
     ),
-  ).sort((left, right) => left - right);
+  ].toSorted((left, right) => left - right);
 
 export const getOrganizationMailUsageSettings = async (
-  organizationId: string,
+  organizationId: string
 ): Promise<OrganizationMailUsageSettings> => {
   const [settings] = await db
     .select({
-      alertMilestonePercents: organizationMailUsageSettings.alertMilestonePercents,
-      monthlyOverageLimitMicroCents: organizationMailUsageSettings.monthlyOverageLimitMicroCents,
+      alertMilestonePercents:
+        organizationMailUsageSettings.alertMilestonePercents,
+      monthlyOverageLimitMicroCents:
+        organizationMailUsageSettings.monthlyOverageLimitMicroCents,
       overageEnabled: organizationMailUsageSettings.overageEnabled,
     })
     .from(organizationMailUsageSettings)
@@ -105,7 +118,7 @@ export const getOrganizationMailUsageSettings = async (
     .limit(1);
 
   const normalized = normalizeOrganizationMailAlertMilestones(
-    settings?.alertMilestonePercents ?? [],
+    settings?.alertMilestonePercents ?? []
   );
 
   return {
@@ -117,7 +130,8 @@ export const getOrganizationMailUsageSettings = async (
       settings?.monthlyOverageLimitMicroCents ??
       DEFAULT_ORGANIZATION_MAIL_USAGE_SETTINGS.monthlyOverageLimitMicroCents,
     overageEnabled:
-      settings?.overageEnabled ?? DEFAULT_ORGANIZATION_MAIL_USAGE_SETTINGS.overageEnabled,
+      settings?.overageEnabled ??
+      DEFAULT_ORGANIZATION_MAIL_USAGE_SETTINGS.overageEnabled,
   };
 };
 
@@ -129,7 +143,7 @@ export const updateOrganizationMailUsageSettings = async (input: {
 }) => {
   const now = new Date();
   const alertMilestonePercents = normalizeOrganizationMailAlertMilestones(
-    input.alertMilestonePercents,
+    input.alertMilestonePercents
   );
   const settings = {
     alertMilestonePercents:
@@ -156,8 +170,10 @@ export const updateOrganizationMailUsageSettings = async (input: {
       target: organizationMailUsageSettings.organizationId,
     })
     .returning({
-      alertMilestonePercents: organizationMailUsageSettings.alertMilestonePercents,
-      monthlyOverageLimitMicroCents: organizationMailUsageSettings.monthlyOverageLimitMicroCents,
+      alertMilestonePercents:
+        organizationMailUsageSettings.alertMilestonePercents,
+      monthlyOverageLimitMicroCents:
+        organizationMailUsageSettings.monthlyOverageLimitMicroCents,
       overageEnabled: organizationMailUsageSettings.overageEnabled,
     });
 
@@ -173,15 +189,19 @@ export const estimateOutboundOrganizationMailUsage = (input: {
   text?: string;
   to: string[];
 }): OrganizationMailUsageEstimate => {
-  const recipientCount = new Set([...(input.to ?? []), ...(input.cc ?? []), ...(input.bcc ?? [])])
-    .size;
+  const recipientCount = new Set([
+    ...(input.to ?? []),
+    ...(input.cc ?? []),
+    ...(input.bcc ?? []),
+  ]).size;
   const messageSizeBytes = Buffer.byteLength(
     `${input.subject}\n${input.text ?? ""}\n${input.html ?? ""}`,
-    "utf8",
+    "utf-8"
   );
   const attachmentSizeBytes = input.attachmentSizeBytes ?? 0;
   const attachmentDataCostMicroCents =
-    (attachmentSizeBytes / 1_073_741_824) * SES_OUTBOUND_ATTACHMENT_DATA_MICROCENTS_PER_GB;
+    (attachmentSizeBytes / 1_073_741_824) *
+    SES_OUTBOUND_ATTACHMENT_DATA_MICROCENTS_PER_GB;
 
   return {
     attachmentSizeBytes,
@@ -191,7 +211,8 @@ export const estimateOutboundOrganizationMailUsage = (input: {
     messageSizeBytes,
     recipientCount,
     sesCostMicroCents: Math.ceil(
-      recipientCount * SES_OUTBOUND_MESSAGE_MICROCENTS + attachmentDataCostMicroCents,
+      recipientCount * SES_OUTBOUND_MESSAGE_MICROCENTS +
+        attachmentDataCostMicroCents
     ),
   };
 };
@@ -201,9 +222,12 @@ export const estimateInboundOrganizationMailUsage = (input: {
   recipientCount: number;
 }): OrganizationMailUsageEstimate => {
   const incomingChunkCount =
-    input.messageSizeBytes > 0 ? Math.floor(input.messageSizeBytes / SES_INBOUND_CHUNK_BYTES) : 0;
+    input.messageSizeBytes > 0
+      ? Math.floor(input.messageSizeBytes / SES_INBOUND_CHUNK_BYTES)
+      : 0;
   const incomingDataCostMicroCents =
-    (input.messageSizeBytes / SES_INBOUND_CHUNK_BYTES) * SES_INBOUND_CHUNK_MICROCENTS;
+    (input.messageSizeBytes / SES_INBOUND_CHUNK_BYTES) *
+    SES_INBOUND_CHUNK_MICROCENTS;
 
   return {
     attachmentSizeBytes: 0,
@@ -212,7 +236,9 @@ export const estimateInboundOrganizationMailUsage = (input: {
     messageCount: 1,
     messageSizeBytes: input.messageSizeBytes,
     recipientCount: input.recipientCount,
-    sesCostMicroCents: Math.ceil(SES_INBOUND_MESSAGE_MICROCENTS + incomingDataCostMicroCents),
+    sesCostMicroCents: Math.ceil(
+      SES_INBOUND_MESSAGE_MICROCENTS + incomingDataCostMicroCents
+    ),
   };
 };
 
@@ -231,14 +257,14 @@ const getPeriodUsageMicroCents = async (input: {
       and(
         eq(organizationMailUsageEvent.organizationId, input.organizationId),
         gte(organizationMailUsageEvent.createdAt, input.start),
-        lt(organizationMailUsageEvent.createdAt, input.end),
-      ),
+        lt(organizationMailUsageEvent.createdAt, input.end)
+      )
     )
     .limit(1);
 
   return {
-    billableCostMicroCents: Number(usage?.billableCostMicroCents ?? 0),
-    sesCostMicroCents: Number(usage?.sesCostMicroCents ?? 0),
+    billableCostMicroCents: usage?.billableCostMicroCents ?? 0,
+    sesCostMicroCents: usage?.sesCostMicroCents ?? 0,
   };
 };
 
@@ -257,50 +283,58 @@ const recordOrganizationMailUsageAlerts = async (input: {
     thresholdMicroCents: number;
   };
 
-  const alerts = input.settings.alertMilestonePercents.flatMap((milestonePercent) => {
-    const includedUsageThreshold = Math.ceil(
-      input.creditAmountMicroCents * (milestonePercent / 100),
-    );
-    const includedUsageAlert: AlertCandidate[] =
-      input.usage.sesCostMicroCents >= includedUsageThreshold
-        ? [
-            {
-              target: "included_usage",
-              thresholdMicroCents: includedUsageThreshold,
-            },
-          ]
-        : [];
-    const overageLimitThreshold =
-      input.settings.monthlyOverageLimitMicroCents == null
-        ? null
-        : Math.ceil(input.settings.monthlyOverageLimitMicroCents * (milestonePercent / 100));
-    const overageLimitAlert: AlertCandidate[] =
-      overageLimitThreshold != null && input.usage.billableCostMicroCents >= overageLimitThreshold
-        ? [
-            {
-              target: "overage_limit",
-              thresholdMicroCents: overageLimitThreshold,
-            },
-          ]
-        : [];
+  const alerts = input.settings.alertMilestonePercents.flatMap(
+    (milestonePercent) => {
+      const includedUsageThreshold = Math.ceil(
+        input.creditAmountMicroCents * (milestonePercent / 100)
+      );
+      const includedUsageAlert: AlertCandidate[] =
+        input.usage.sesCostMicroCents >= includedUsageThreshold
+          ? [
+              {
+                target: "included_usage",
+                thresholdMicroCents: includedUsageThreshold,
+              },
+            ]
+          : [];
+      const overageLimitThreshold =
+        input.settings.monthlyOverageLimitMicroCents === null
+          ? null
+          : Math.ceil(
+              input.settings.monthlyOverageLimitMicroCents *
+                (milestonePercent / 100)
+            );
+      const overageLimitAlert: AlertCandidate[] =
+        overageLimitThreshold !== null &&
+        input.usage.billableCostMicroCents >= overageLimitThreshold
+          ? [
+              {
+                target: "overage_limit",
+                thresholdMicroCents: overageLimitThreshold,
+              },
+            ]
+          : [];
 
-    return [...includedUsageAlert, ...overageLimitAlert].map((alert) => ({
-      ...alert,
-      createdAt: new Date(),
-      id: crypto.randomUUID(),
-      milestonePercent,
-      organizationId: input.organizationId,
-      periodEnd: input.period.end,
-      periodStart: input.period.start,
-      target: alert.target,
-      usageMicroCents:
-        alert.target === "included_usage"
-          ? input.usage.sesCostMicroCents
-          : input.usage.billableCostMicroCents,
-    }));
-  });
+      return [...includedUsageAlert, ...overageLimitAlert].map((alert) => ({
+        ...alert,
+        createdAt: new Date(),
+        id: crypto.randomUUID(),
+        milestonePercent,
+        organizationId: input.organizationId,
+        periodEnd: input.period.end,
+        periodStart: input.period.start,
+        target: alert.target,
+        usageMicroCents:
+          alert.target === "included_usage"
+            ? input.usage.sesCostMicroCents
+            : input.usage.billableCostMicroCents,
+      }));
+    }
+  );
 
-  if (alerts.length === 0) return;
+  if (alerts.length === 0) {
+    return;
+  }
 
   await db
     .insert(organizationMailUsageAlertEvent)
@@ -333,17 +367,21 @@ export const assertCanConsumeOrganizationMailUsage = async (input: {
 
   const period = getBillingPeriod(
     entitlement.account?.currentPeriodStart ?? null,
-    entitlement.account?.currentPeriodEnd ?? null,
+    entitlement.account?.currentPeriodEnd ?? null
   );
 
-  if (entitlement.account) {
+  if (entitlement.account !== null) {
     const usage = await getBillingCreditUsage(entitlement.account);
-    const costMicroCents = getManagedUsageCostMicroCents(input.estimate.sesCostMicroCents);
+    const costMicroCents = getManagedUsageCostMicroCents(
+      input.estimate.sesCostMicroCents
+    );
     const projectedBillableCostMicroCents = Math.max(
       0,
-      usage.costMicroCents + costMicroCents - usage.creditAmountMicroCents,
+      usage.costMicroCents + costMicroCents - usage.creditAmountMicroCents
     );
-    const settings = await getOrganizationMailUsageSettings(input.organizationId);
+    const settings = await getOrganizationMailUsageSettings(
+      input.organizationId
+    );
 
     if (projectedBillableCostMicroCents > 0 && !settings.overageEnabled) {
       throw new ORPCError("FORBIDDEN", {
@@ -353,11 +391,13 @@ export const assertCanConsumeOrganizationMailUsage = async (input: {
     }
 
     if (
-      settings.monthlyOverageLimitMicroCents != null &&
+      settings.monthlyOverageLimitMicroCents !== null &&
+      settings.monthlyOverageLimitMicroCents !== undefined &&
       projectedBillableCostMicroCents > settings.monthlyOverageLimitMicroCents
     ) {
       throw new ORPCError("FORBIDDEN", {
-        message: "This team's usage limit has been reached for the billing period.",
+        message:
+          "This team's usage limit has been reached for the billing period.",
         status: 403,
       });
     }
@@ -366,7 +406,9 @@ export const assertCanConsumeOrganizationMailUsage = async (input: {
   return { entitlement, period };
 };
 
-export const recordOrganizationMailUsage = async (input: OrganizationMailUsageInput) => {
+export const recordOrganizationMailUsage = async (
+  input: OrganizationMailUsageInput
+) => {
   const { entitlement, period } = await assertCanConsumeOrganizationMailUsage({
     estimate: input,
     organizationId: input.organizationId,
@@ -376,7 +418,9 @@ export const recordOrganizationMailUsage = async (input: OrganizationMailUsageIn
     : await getOrganizationMailUsageSettings(input.organizationId);
   const now = new Date();
   const dedupeKey = `${input.direction}:${input.organizationId}:${input.providerMessageId}`;
-  const customerCostMicroCents = getManagedUsageCostMicroCents(input.sesCostMicroCents);
+  const customerCostMicroCents = getManagedUsageCostMicroCents(
+    input.sesCostMicroCents
+  );
   const [insertedUsageEvent] = await db
     .insert(organizationMailUsageEvent)
     .values({
@@ -401,23 +445,25 @@ export const recordOrganizationMailUsage = async (input: OrganizationMailUsageIn
     .returning({
       id: organizationMailUsageEvent.id,
     });
-  const usageEvent =
-    insertedUsageEvent ??
-    (
-      await db
-        .select({ id: organizationMailUsageEvent.id })
-        .from(organizationMailUsageEvent)
-        .where(eq(organizationMailUsageEvent.dedupeKey, dedupeKey))
-        .limit(1)
-    )[0];
+  let usageEvent = insertedUsageEvent;
+  if (usageEvent === undefined) {
+    const existingUsageEvents = await db
+      .select({ id: organizationMailUsageEvent.id })
+      .from(organizationMailUsageEvent)
+      .where(eq(organizationMailUsageEvent.dedupeKey, dedupeKey))
+      .limit(1);
+    const [existingUsageEvent] = existingUsageEvents;
+    usageEvent = existingUsageEvent;
+  }
 
-  if (!usageEvent) {
+  if (usageEvent === undefined) {
     throw new Error("Could not persist team mail usage.");
   }
 
-  const creditUsage =
-    entitlement.account &&
-    (await recordBillingCreditUsage({
+  let creditUsage: Awaited<ReturnType<typeof recordBillingCreditUsage>> | null =
+    null;
+  if (entitlement.account !== null) {
+    creditUsage = await recordBillingCreditUsage({
       account: entitlement.account,
       category: "mail",
       costMicroCents: customerCostMicroCents,
@@ -427,20 +473,26 @@ export const recordOrganizationMailUsage = async (input: OrganizationMailUsageIn
         organizationId: input.organizationId,
         providerMessageId: input.providerMessageId,
       },
-    }));
+    });
+  }
   const billableCostMicroCents = creditUsage?.billableCostMicroCents ?? 0;
 
   await db
     .update(organizationMailUsageEvent)
     .set({
       billableCostMicroCents,
-      includedSesCostMicroCents: Math.max(0, customerCostMicroCents - billableCostMicroCents),
+      includedSesCostMicroCents: Math.max(
+        0,
+        customerCostMicroCents - billableCostMicroCents
+      ),
       polarEventReportedAt: creditUsage?.polarEventReportedAt ?? null,
     })
     .where(eq(organizationMailUsageEvent.id, usageEvent.id));
 
-  if (entitlement.account) {
-    const creditUsageOverview = await getBillingCreditUsage(entitlement.account);
+  if (entitlement.account !== null) {
+    const creditUsageOverview = await getBillingCreditUsage(
+      entitlement.account
+    );
     await recordOrganizationMailUsageAlerts({
       creditAmountMicroCents: creditUsageOverview.creditAmountMicroCents,
       organizationId: input.organizationId,
@@ -456,14 +508,16 @@ export const recordOrganizationMailUsage = async (input: OrganizationMailUsageIn
   return usageEvent;
 };
 
-export const getOrganizationMailUsageOverview = async (organizationId: string) => {
+export const getOrganizationMailUsageOverview = async (
+  organizationId: string
+) => {
   const entitlement = await getOrganizationBillingEntitlement({
     feature: "organizationMail",
     organizationId,
   });
   const period = getBillingPeriod(
     entitlement.account?.currentPeriodStart ?? null,
-    entitlement.account?.currentPeriodEnd ?? null,
+    entitlement.account?.currentPeriodEnd ?? null
   );
   const [settings, mailUsage, creditUsage] = await Promise.all([
     getOrganizationMailUsageSettings(organizationId),
@@ -476,7 +530,8 @@ export const getOrganizationMailUsageOverview = async (organizationId: string) =
   ]);
   const creditAmountMicroCents = creditUsage?.creditAmountMicroCents ?? 0;
   const usedCreditMicroCents =
-    creditUsage?.costMicroCents ?? getManagedUsageCostMicroCents(mailUsage.sesCostMicroCents);
+    creditUsage?.costMicroCents ??
+    getManagedUsageCostMicroCents(mailUsage.sesCostMicroCents);
 
   return {
     hasAccess: entitlement.hasAccess,
@@ -501,19 +556,28 @@ export const recordInboundOrganizationMailUsage = async (input: {
   providerMessageId: string;
   recipients: string[];
 }) => {
-  const normalizedRecipients = Array.from(
-    new Set(input.recipients.map((recipient) => recipient.trim().toLowerCase()).filter(Boolean)),
-  );
-  const domains = Array.from(
-    new Set(
+  const normalizedRecipients = [
+    ...new Set(
+      input.recipients
+        .map((recipient) => recipient.trim().toLowerCase())
+        .filter(Boolean)
+    ),
+  ];
+  const domains = [
+    ...new Set(
       normalizedRecipients.flatMap((recipient) => {
         const domain = recipient.split("@").at(1);
-        return domain ? [domain] : [];
-      }),
+        if (domain === undefined || domain === "") {
+          return [];
+        }
+        return [domain];
+      })
     ),
-  );
+  ];
 
-  if (domains.length === 0) return;
+  if (domains.length === 0) {
+    return;
+  }
 
   const domainRows = await db
     .select({
@@ -521,20 +585,29 @@ export const recordInboundOrganizationMailUsage = async (input: {
       organizationId: mailDomain.organizationId,
     })
     .from(mailDomain)
-    .where(and(eq(mailDomain.status, "verified"), inArray(mailDomain.domain, domains)));
+    .where(
+      and(
+        eq(mailDomain.status, "verified"),
+        inArray(mailDomain.domain, domains)
+      )
+    );
   const organizationIds = new Set(domainRows.map((row) => row.organizationId));
 
   await Promise.all(
-    Array.from(organizationIds).map(async (organizationId) => {
+    [...organizationIds].map(async (organizationId) => {
       const orgDomains = new Set(
-        domainRows.filter((row) => row.organizationId === organizationId).map((row) => row.domain),
+        domainRows
+          .filter((row) => row.organizationId === organizationId)
+          .map((row) => row.domain)
       );
       const orgRecipients = normalizedRecipients.filter((recipient) => {
         const domain = recipient.split("@").at(1);
-        return domain != null && orgDomains.has(domain);
+        return domain !== undefined && domain !== "" && orgDomains.has(domain);
       });
 
-      if (orgRecipients.length === 0) return;
+      if (orgRecipients.length === 0) {
+        return;
+      }
 
       const estimate = estimateInboundOrganizationMailUsage({
         messageSizeBytes: input.messageSizeBytes,
@@ -549,6 +622,6 @@ export const recordInboundOrganizationMailUsage = async (input: {
         organizationId,
         providerMessageId: input.providerMessageId,
       });
-    }),
+    })
   );
 };

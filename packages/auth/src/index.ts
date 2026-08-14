@@ -7,8 +7,17 @@ import { tables } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
-import { createAccessControl, magicLink, organization, lastLoginMethod } from "better-auth/plugins";
+import {
+  APIError,
+  createAuthMiddleware,
+  getSessionFromCtx,
+} from "better-auth/api";
+import {
+  createAccessControl,
+  magicLink,
+  organization,
+  lastLoginMethod,
+} from "better-auth/plugins";
 import {
   adminAc,
   defaultStatements,
@@ -16,6 +25,7 @@ import {
   ownerAc,
 } from "better-auth/plugins/organization/access";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
+
 import { GOOGLE_AUTH_SCOPES } from "./google-scopes";
 import {
   assertCanDeleteOrganization,
@@ -26,6 +36,58 @@ import {
 } from "./organization";
 import { ORGANIZATION_API_KEY_CONFIG_ID } from "./organization-api-key";
 import { readTermsAcceptedAtFromRequest } from "./terms-acceptance";
+
+const throwPlanRequiredError = (plan: string, description: string) => {
+  throw new APIError("FORBIDDEN", {
+    message: `${description} requires ${plan} billing.`,
+  });
+};
+
+const getOrganizationIdFromBody = (body: unknown) => {
+  if (
+    body !== null &&
+    body !== undefined &&
+    typeof body === "object" &&
+    "organizationId" in body &&
+    typeof body.organizationId === "string"
+  ) {
+    return body.organizationId;
+  }
+
+  return null;
+};
+
+const handleOrganizationMembershipGuard = async (
+  path: string,
+  currentUser: { email: string; id: string; name: string },
+  organizationId: string
+) => {
+  if (path === "/organization/leave") {
+    await assertCanLeaveOrganization(currentUser, organizationId);
+    return;
+  }
+
+  await assertCanDeleteOrganization(currentUser, organizationId);
+};
+
+const handleApiKeyCreateGuard = async (body: unknown) => {
+  const requirement = BILLING_FEATURES.organizationApiKeys;
+  const organizationId = getOrganizationIdFromBody(body);
+  const entitlement =
+    organizationId === null || organizationId === undefined
+      ? null
+      : await getOrganizationBillingEntitlement({
+          feature: "organizationApiKeys",
+          organizationId,
+        });
+
+  if (entitlement?.hasAccess !== true) {
+    throwPlanRequiredError(
+      requirement.requirementLabel,
+      requirement.description
+    );
+  }
+};
 
 const appName = serverEnv.BETTER_AUTH_APP_NAME;
 const organizationAccessControl = createAccessControl({
@@ -45,7 +107,7 @@ const memberRole = organizationAccessControl.newRole({
   apiKey: ["read"],
 });
 
-const baseURL = serverEnv.BETTER_AUTH_URL || "http://localhost:3000";
+const baseURL = serverEnv.BETTER_AUTH_URL ?? "http://localhost:3000";
 const trustedOrigins = [
   baseURL,
   ...(serverEnv.BETTER_AUTH_TRUSTED_ORIGINS?.split(",")
@@ -64,6 +126,9 @@ const organizationApiKeyPlugin = apiKey({
 });
 
 export const auth = betterAuth({
+  account: {
+    updateAccountOnSignIn: true,
+  },
   advanced: {
     ipAddress: {
       ipAddressHeaders: ["cf-connecting-ip"],
@@ -71,119 +136,36 @@ export const auth = betterAuth({
   },
   appName,
   baseURL,
-  trustedOrigins,
   database: drizzleAdapter(db, {
     provider: "pg",
     schema: tables,
   }),
-  hooks: {
-    before: createAuthMiddleware(async (ctx) => {
-      const requiresSession =
-        ctx.path === "/get-session" ||
-        ctx.path.startsWith("/organization") ||
-        ctx.path === "/api-key/create";
-
-      if (!requiresSession) return;
-
-      const currentSession = await getSessionFromCtx(ctx, {
-        disableCookieCache: true,
-      }).catch(() => null);
-
-      if (!currentSession?.user || !currentSession.session) return;
-
-      if (
-        (ctx.path === "/organization/leave" || ctx.path === "/organization/delete") &&
-        ctx.body &&
-        typeof ctx.body === "object" &&
-        "organizationId" in ctx.body &&
-        typeof ctx.body.organizationId === "string"
-      ) {
-        if (ctx.path === "/organization/leave") {
-          await assertCanLeaveOrganization(currentSession.user, ctx.body.organizationId);
-        } else {
-          await assertCanDeleteOrganization(currentSession.user, ctx.body.organizationId);
-        }
-      }
-
-      if (ctx.path === "/api-key/create") {
-        const requirement = BILLING_FEATURES.organizationApiKeys;
-        const organizationId =
-          ctx.body &&
-          typeof ctx.body === "object" &&
-          "organizationId" in ctx.body &&
-          typeof ctx.body.organizationId === "string"
-            ? ctx.body.organizationId
-            : null;
-        const entitlement = organizationId
-          ? await getOrganizationBillingEntitlement({
-              feature: "organizationApiKeys",
-              organizationId,
-            })
-          : null;
-
-        if (!entitlement?.hasAccess) {
-          throwPlanRequiredError(requirement.requirementLabel, requirement.description);
-        }
-      }
-
-      if (ctx.path === "/get-session") {
-        return {
-          context: {
-            query: {
-              ...ctx.query,
-              disableCookieCache: true,
-            },
-          },
-        };
-      }
-    }),
-  },
   databaseHooks: {
     user: {
       create: {
         after: async (createdUser) => {
           await ensureUserOrganizationState(createdUser);
         },
-        before: async (createdUser, context) => {
-          const hasAcceptedTerms = !!readTermsAcceptedAtFromRequest(context?.request);
-
-          if (!hasAcceptedTerms) {
-            throw new APIError("BAD_REQUEST", {
-              message: "Accept the Terms of Service and Privacy Policy to create an account.",
-            });
-          }
-
-          return {
+        /**
+         * Acceptance is recorded during onboarding, not at account creation,
+         * so the account may exist before it. The onboarding gate keeps the
+         * product unusable until `termsAcceptedAt` is set, and a stale
+         * acceptance cookie from a previous flow still counts.
+         */
+        before: async (createdUser, context) =>
+          await Promise.resolve({
             data: {
               ...createdUser,
-              termsAcceptedAt: new Date(),
+              termsAcceptedAt:
+                readTermsAcceptedAtFromRequest(context?.request) ?? null,
             },
-          };
-        },
+          }),
       },
       delete: {
         before: async (deletedUser) => {
           await cleanupOrganizationsForDeletedUser(deletedUser.id);
         },
       },
-    },
-  },
-  account: {
-    updateAccountOnSignIn: true,
-  },
-  user: {
-    additionalFields: {
-      termsAcceptedAt: {
-        input: false,
-        required: false,
-        type: "date",
-      },
-    },
-    changeEmail: {
-      enabled: true,
-    },
-    deleteUser: {
-      enabled: true,
     },
   },
   emailVerification: {
@@ -195,13 +177,57 @@ export const auth = betterAuth({
       });
     },
   },
-  socialProviders: {
-    google: {
-      clientId: serverEnv.GOOGLE_AUTH_CLIENT_ID ?? "",
-      clientSecret: serverEnv.GOOGLE_AUTH_CLIENT_SECRET ?? "",
-      disableImplicitSignUp: serverEnv.QUIETER_DEPLOYMENT_ENV !== "preview",
-      scope: [...GOOGLE_AUTH_SCOPES],
-    },
+  hooks: {
+    before: createAuthMiddleware(async (ctx) => {
+      const requiresSession =
+        ctx.path === "/get-session" ||
+        ctx.path.startsWith("/organization") ||
+        ctx.path === "/api-key/create";
+
+      if (!requiresSession) {
+        return;
+      }
+
+      const currentSession = await getSessionFromCtx(ctx, {
+        disableCookieCache: true,
+      }).catch(() => null);
+
+      if (
+        currentSession?.user === null ||
+        currentSession?.user === undefined ||
+        currentSession.session === null ||
+        currentSession.session === undefined
+      ) {
+        return;
+      }
+
+      const organizationId = getOrganizationIdFromBody(ctx.body);
+      if (
+        (ctx.path === "/organization/leave" ||
+          ctx.path === "/organization/delete") &&
+        organizationId !== null &&
+        organizationId !== undefined
+      ) {
+        await handleOrganizationMembershipGuard(
+          ctx.path,
+          currentSession.user,
+          organizationId
+        );
+      }
+
+      if (ctx.path === "/api-key/create") {
+        await handleApiKeyCreateGuard(ctx.body);
+      }
+
+      if (ctx.path === "/get-session") {
+        Object.assign(ctx, {
+          query: {
+            ...ctx.query,
+            disableCookieCache: true,
+          },
+        });
+      }
+    }),
   },
   plugins: [
     passkey(),
@@ -214,7 +240,9 @@ export const auth = betterAuth({
           }: {
             organization: { id: string };
           }) => {
-            await cleanupMailboxesForDeletedOrganization(deletedOrganization.id);
+            await cleanupMailboxesForDeletedOrganization(
+              deletedOrganization.id
+            );
           },
         },
       },
@@ -238,14 +266,41 @@ export const auth = betterAuth({
     // Must be last so Set-Cookie from other plugins is forwarded on TanStack Start.
     tanstackStartCookies(),
   ] as const,
+  socialProviders: {
+    google: {
+      clientId: serverEnv.GOOGLE_AUTH_CLIENT_ID ?? "",
+      clientSecret: serverEnv.GOOGLE_AUTH_CLIENT_SECRET ?? "",
+      disableImplicitSignUp: true,
+      scope: [...GOOGLE_AUTH_SCOPES],
+    },
+  },
+  trustedOrigins,
+  user: {
+    additionalFields: {
+      onboardingCompletedAt: {
+        input: false,
+        required: false,
+        type: "date",
+      },
+      termsAcceptedAt: {
+        input: false,
+        required: false,
+        type: "date",
+      },
+    },
+    changeEmail: {
+      enabled: true,
+    },
+    deleteUser: {
+      enabled: true,
+    },
+  },
 });
-export const organizationApiKeyApi = auth.api as typeof auth.api &
-  Pick<typeof organizationApiKeyPlugin.endpoints, "verifyApiKey">;
-
-export { GOOGLE_AUTH_SCOPES };
-
-const throwPlanRequiredError = (plan: string, description: string) => {
-  throw new APIError("FORBIDDEN", {
-    message: `${description} requires ${plan} billing.`,
-  });
+const organizationApiKeyApi: typeof auth.api &
+  Pick<typeof organizationApiKeyPlugin.endpoints, "verifyApiKey"> = {
+  ...auth.api,
+  verifyApiKey: organizationApiKeyPlugin.endpoints.verifyApiKey,
 };
+export { organizationApiKeyApi };
+
+export { GOOGLE_AUTH_SCOPES } from "./google-scopes";
