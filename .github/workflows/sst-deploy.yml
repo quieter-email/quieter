@@ -60,8 +60,11 @@ jobs:
       - name: Install dependencies
         run: vp install --frozen-lockfile
 
-      - name: Build deployment artifacts
-        run: vp run -r build
+      - name: Build deployment configuration
+        run: |
+          vp run @quieter/env#build
+          vp run @quieter/observability#build
+          vp run @quieter/sdk#build
 
       - name: Configure production runtime secrets
         env:
