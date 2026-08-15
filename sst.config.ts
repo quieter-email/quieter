@@ -16,6 +16,13 @@ export default $config({
     };
   },
   async run() {
+    $transform(sst.aws.Function, (args) => {
+      args.nodejs ??= {};
+      args.nodejs.esbuild ??= {};
+      args.nodejs.esbuild.external ??= [];
+      args.nodejs.esbuild.external.push("@tanstack/react-start/server");
+    });
+
     const { createInfrastructure } = await import("./infra/app");
     const { createSecretInfrastructure } = await import("./infra/secrets");
     const secrets = createSecretInfrastructure();
