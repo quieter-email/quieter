@@ -50,7 +50,7 @@ import {
   touchChatRunHeartbeat,
   updateRunStatus,
 } from "../../chat-run-store";
-import { createLinearMcpToolSource } from "../../connectors/linear-mcp-tools";
+import { createLinearMcpToolSource } from "../../connectors/linear-mcp";
 import {
   createGoogleCalendarEventForUser,
   GOOGLE_CALENDAR_CONNECTOR_PROVIDER,

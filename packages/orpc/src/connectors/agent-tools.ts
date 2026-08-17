@@ -4,11 +4,11 @@ import type { JSONSchema } from "@tanstack/ai";
 import { z } from "zod";
 
 import {
-  createGoogleCalendarEventForCredential,
   isMutatingLinearMcpTool,
   listLinearMcpToolsForCredential,
   runLinearMcpToolCallsForCredential,
-} from "./runtime";
+} from "./linear-mcp";
+import { createGoogleCalendarEventForCredential } from "./runtime";
 
 /**
  * One tool a connector exposes to a mailbox action. `mutates` decides whether

@@ -19,7 +19,6 @@ const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_CALENDAR_API_URL = "https://www.googleapis.com/calendar/v3";
 export const LINEAR_AUTHORIZATION_URL = "https://linear.app/oauth/authorize";
 export const LINEAR_MCP_URL = "https://mcp.linear.app/mcp";
-const LINEAR_MCP_PROTOCOL_VERSION = "2025-06-18";
 export const LINEAR_TOKEN_URL = "https://api.linear.app/oauth/token";
 const permanentGoogleTokenErrors = new Set(["invalid_grant", "invalid_token"]);
 const permanentLinearTokenErrors = new Set(["invalid_grant", "invalid_token"]);
@@ -38,24 +37,6 @@ export type GoogleCalendarEventInput = {
     timeZone?: string;
   };
   summary: string;
-};
-
-export type LinearMcpToolDescriptor = {
-  description?: string;
-  inputSchema?: unknown;
-  name: string;
-};
-export type LinearMcpToolCallInput = {
-  arguments?: Record<string, unknown>;
-  toolName: string;
-};
-export type LinearMcpToolCallResult = {
-  arguments?: Record<string, unknown>;
-  durationMs: number;
-  error?: string;
-  output?: unknown;
-  status: "error" | "success";
-  toolName: string;
 };
 
 export const GOOGLE_CALENDAR_SCOPES = [
@@ -113,28 +94,6 @@ const googleCalendarEventResponseSchema = z.object({
   htmlLink: z.url().optional(),
   id: z.string().min(1),
   summary: z.string().optional(),
-});
-
-const mcpToolSchema = z.object({
-  description: z.string().optional(),
-  inputSchema: z.unknown().optional(),
-  name: z.string().min(1),
-});
-
-const mcpToolsListResultSchema = z.object({
-  tools: z.array(mcpToolSchema),
-});
-
-const mcpResponseSchema = z.object({
-  error: z
-    .object({
-      code: z.number().optional(),
-      message: z.string().optional(),
-    })
-    .optional(),
-  id: z.union([z.string(), z.number(), z.null()]).optional(),
-  jsonrpc: z.string().optional(),
-  result: z.unknown().optional(),
 });
 
 const getGoogleCalendarOAuthClient = () => ({
@@ -666,306 +625,6 @@ export const getLinearIdentityFromAccessToken = async (accessToken: string) => {
   };
 };
 
-const normalizeLinearMcpToolName = (name: string) =>
-  name
-    .trim()
-    .toLowerCase()
-    .replace(/^linear[-_:]/u, "")
-    .replace(/^linear_/u, "");
-
-const LINEAR_MCP_READ_PREFIXES = ["get_", "list_", "search_"];
-
-/**
- * Linear names its tools by verb, so the prefix is what separates a lookup from a
- * change. Anything that is not plainly a read is treated as mutating, which routes it
- * through the write path and its approval instead of running unattended.
- */
-export const isMutatingLinearMcpTool = (tool: LinearMcpToolDescriptor) => {
-  const name = normalizeLinearMcpToolName(tool.name);
-  return !LINEAR_MCP_READ_PREFIXES.some((prefix) => name.startsWith(prefix));
-};
-
-const createConnectorHttpError = (message: string, status: number) =>
-  new ConnectorHttpError(message, status);
-
-const truncateJsonValue = (value: unknown, maxLength: number) => {
-  const serialized = JSON.stringify(value);
-  if (serialized === undefined || serialized.length <= maxLength) {
-    return value;
-  }
-
-  return {
-    truncated: true,
-    value: serialized.slice(0, maxLength),
-  };
-};
-
-type McpResponse = z.infer<typeof mcpResponseSchema>;
-
-const parseMcpResponseText = (input: {
-  contentType: string;
-  requestId: number;
-  text: string;
-}): McpResponse | undefined => {
-  if (!hasText(input.text.trim())) {
-    return undefined;
-  }
-
-  if (!input.contentType.includes("text/event-stream")) {
-    return mcpResponseSchema.parse(JSON.parse(input.text));
-  }
-
-  const messages = input.text
-    .split(/\r?\n\r?\n/u)
-    .map((block) =>
-      block
-        .split(/\r?\n/u)
-        .filter((line) => line.startsWith("data:"))
-        .map((line) => line.slice("data:".length).trim())
-        .join("\n")
-    )
-    .filter((data) => hasText(data) && data !== "[DONE]")
-    .map((data) => mcpResponseSchema.parse(JSON.parse(data)));
-
-  return (
-    messages.find((message) => message.id === input.requestId) ??
-    messages.find((message) => "result" in message || "error" in message)
-  );
-};
-
-const postLinearMcpMessage = async (input: {
-  accessToken: string;
-  body: unknown;
-  requestId?: number;
-  sessionId?: string;
-  signal?: AbortSignal;
-}) => {
-  const response = await fetch(LINEAR_MCP_URL, {
-    body: JSON.stringify(input.body),
-    headers: {
-      accept: "application/json, text/event-stream",
-      authorization: `Bearer ${input.accessToken}`,
-      "content-type": "application/json",
-      "mcp-protocol-version": LINEAR_MCP_PROTOCOL_VERSION,
-      ...(hasText(input.sessionId)
-        ? { "mcp-session-id": input.sessionId }
-        : {}),
-    },
-    method: "POST",
-    signal: input.signal,
-  });
-  const sessionId = response.headers.get("mcp-session-id") ?? input.sessionId;
-
-  if (response.status === 202) {
-    return { result: undefined, sessionId };
-  }
-
-  const text = await response.text().catch(() => "");
-  if (!response.ok) {
-    throw createConnectorHttpError(
-      hasText(text)
-        ? text
-        : `Linear MCP request failed with status ${response.status}.`,
-      response.status
-    );
-  }
-
-  const parsed = parseMcpResponseText({
-    contentType: response.headers.get("content-type") ?? "",
-    requestId: input.requestId ?? 0,
-    text,
-  });
-  if (parsed?.error) {
-    throw new Error(parsed.error.message ?? "Linear MCP returned an error.");
-  }
-
-  return { result: parsed?.result, sessionId };
-};
-
-const createLinearMcpSession = async (input: {
-  accessToken: string;
-  signal?: AbortSignal;
-}) => {
-  const initialized = await postLinearMcpMessage({
-    accessToken: input.accessToken,
-    body: {
-      id: 1,
-      jsonrpc: "2.0",
-      method: "initialize",
-      params: {
-        capabilities: {},
-        clientInfo: {
-          name: "quieter-mailbox-actions",
-          version: "0.1.0",
-        },
-        protocolVersion: LINEAR_MCP_PROTOCOL_VERSION,
-      },
-    },
-    requestId: 1,
-    signal: input.signal,
-  });
-  if (!hasText(initialized.sessionId)) {
-    throw new Error("Linear MCP did not return a session id.");
-  }
-
-  await postLinearMcpMessage({
-    accessToken: input.accessToken,
-    body: {
-      jsonrpc: "2.0",
-      method: "notifications/initialized",
-      params: {},
-    },
-    sessionId: initialized.sessionId,
-    signal: input.signal,
-  });
-
-  return { sessionId: initialized.sessionId };
-};
-
-const listLinearMcpTools = async (
-  accessToken: string,
-  signal?: AbortSignal
-): Promise<LinearMcpToolDescriptor[]> => {
-  const session = await createLinearMcpSession({ accessToken, signal });
-  const listed = await postLinearMcpMessage({
-    accessToken,
-    body: {
-      id: 2,
-      jsonrpc: "2.0",
-      method: "tools/list",
-      params: {},
-    },
-    requestId: 2,
-    sessionId: session.sessionId,
-    signal,
-  });
-  const result = mcpToolsListResultSchema.parse(listed.result);
-
-  // Every tool the workspace exposes is offered. The connection is the user's own
-  // per-user OAuth grant, so Linear has already scoped what this token may do.
-  return result.tools.map((tool) => ({
-    description: tool.description,
-    inputSchema: tool.inputSchema,
-    name: tool.name,
-  }));
-};
-
-const callSingleLinearMcpTool = async (input: {
-  accessToken: string;
-  allowedTools: Map<string, LinearMcpToolDescriptor>;
-  call: LinearMcpToolCallInput;
-  index: number;
-  maxOutputBytes: number;
-  sessionId: string;
-  signal?: AbortSignal;
-}): Promise<LinearMcpToolCallResult> => {
-  const startedAt = Date.now();
-  if (!input.allowedTools.has(input.call.toolName)) {
-    return {
-      arguments: input.call.arguments,
-      durationMs: Date.now() - startedAt,
-      error: "Tool is not in the Linear MCP read allowlist.",
-      status: "error",
-      toolName: input.call.toolName,
-    };
-  }
-
-  try {
-    const response = await postLinearMcpMessage({
-      accessToken: input.accessToken,
-      body: {
-        id: 10 + input.index,
-        jsonrpc: "2.0",
-        method: "tools/call",
-        params: {
-          arguments: input.call.arguments ?? {},
-          name: input.call.toolName,
-        },
-      },
-      requestId: 10 + input.index,
-      sessionId: input.sessionId,
-      signal: input.signal,
-    });
-    return {
-      arguments: input.call.arguments,
-      durationMs: Date.now() - startedAt,
-      output: truncateJsonValue(response.result, input.maxOutputBytes),
-      status: "success",
-      toolName: input.call.toolName,
-    };
-  } catch (error) {
-    return {
-      arguments: input.call.arguments,
-      durationMs: Date.now() - startedAt,
-      error:
-        error instanceof Error ? error.message : "Linear MCP tool call failed.",
-      status: "error",
-      toolName: input.call.toolName,
-    };
-  }
-};
-
-const callLinearMcpToolsSequentially = async (input: {
-  accessToken: string;
-  allowedTools: Map<string, LinearMcpToolDescriptor>;
-  calls: LinearMcpToolCallInput[];
-  maxOutputBytes: number;
-  sessionId: string;
-  signal?: AbortSignal;
-  startIndex?: number;
-}): Promise<LinearMcpToolCallResult[]> => {
-  if (input.calls.length === 0) {
-    return [];
-  }
-
-  const [call, ...remainingCalls] = input.calls;
-  const startIndex = input.startIndex ?? 0;
-  const result = await callSingleLinearMcpTool({
-    accessToken: input.accessToken,
-    allowedTools: input.allowedTools,
-    call,
-    index: startIndex,
-    maxOutputBytes: input.maxOutputBytes,
-    sessionId: input.sessionId,
-    signal: input.signal,
-  });
-
-  return [
-    result,
-    ...(await callLinearMcpToolsSequentially({
-      ...input,
-      calls: remainingCalls,
-      startIndex: startIndex + 1,
-    })),
-  ];
-};
-
-const callLinearMcpTools = async (input: {
-  accessToken: string;
-  calls: LinearMcpToolCallInput[];
-  maxCalls?: number;
-  maxOutputBytes?: number;
-  signal?: AbortSignal;
-}): Promise<LinearMcpToolCallResult[]> => {
-  const tools = await listLinearMcpTools(input.accessToken, input.signal);
-  const allowedTools = new Map(tools.map((tool) => [tool.name, tool]));
-  const session = await createLinearMcpSession({
-    accessToken: input.accessToken,
-    signal: input.signal,
-  });
-  const maxCalls = input.maxCalls ?? 4;
-  const maxOutputBytes = input.maxOutputBytes ?? 8000;
-
-  return await callLinearMcpToolsSequentially({
-    accessToken: input.accessToken,
-    allowedTools,
-    calls: input.calls.slice(0, maxCalls),
-    maxOutputBytes,
-    sessionId: session.sessionId,
-    signal: input.signal,
-  });
-};
-
 /** A refreshed token for the caller's own Linear connection, for the MCP client. */
 export const getLinearAccessTokenForUser = async (input: { userId: string }) =>
   await getAuthorizedConnectorAccessToken({
@@ -973,47 +632,12 @@ export const getLinearAccessTokenForUser = async (input: { userId: string }) =>
     userId: input.userId,
   });
 
-export const listLinearMcpToolsForUser = async (input: {
-  signal?: AbortSignal;
-  userId: string;
-}): Promise<LinearMcpToolDescriptor[]> =>
-  await runAuthorizedConnector(
-    {
-      provider: LINEAR_CONNECTOR_PROVIDER,
-      signal: input.signal,
-      userId: input.userId,
-    },
-    async (accessToken, signal) => await listLinearMcpTools(accessToken, signal)
-  );
-
-export const runLinearMcpToolCallsForUser = async (input: {
-  calls: LinearMcpToolCallInput[];
-  maxCalls?: number;
-  maxOutputBytes?: number;
-  signal?: AbortSignal;
-  userId: string;
-}): Promise<LinearMcpToolCallResult[]> =>
-  await runAuthorizedConnector(
-    {
-      provider: LINEAR_CONNECTOR_PROVIDER,
-      signal: input.signal,
-      userId: input.userId,
-    },
-    async (accessToken, signal) =>
-      await callLinearMcpTools({
-        accessToken,
-        calls: input.calls,
-        maxCalls: input.maxCalls,
-        maxOutputBytes: input.maxOutputBytes,
-        signal,
-      })
-  );
-
-export const listLinearMcpToolsForCredential = async (input: {
+/** The same, for a mailbox action acting on one stored connection. */
+export const getLinearAccessTokenForCredential = async (input: {
   credentialId: string;
   signal?: AbortSignal;
   userId?: string;
-}): Promise<LinearMcpToolDescriptor[]> =>
+}) =>
   await runAuthorizedConnectorCredential(
     {
       credentialId: input.credentialId,
@@ -1021,33 +645,7 @@ export const listLinearMcpToolsForCredential = async (input: {
       signal: input.signal,
       userId: input.userId,
     },
-    async (accessToken, _credential, signal) =>
-      await listLinearMcpTools(accessToken, signal)
-  );
-
-export const runLinearMcpToolCallsForCredential = async (input: {
-  calls: LinearMcpToolCallInput[];
-  credentialId: string;
-  maxCalls?: number;
-  maxOutputBytes?: number;
-  signal?: AbortSignal;
-  userId?: string;
-}): Promise<LinearMcpToolCallResult[]> =>
-  await runAuthorizedConnectorCredential(
-    {
-      credentialId: input.credentialId,
-      provider: LINEAR_CONNECTOR_PROVIDER,
-      signal: input.signal,
-      userId: input.userId,
-    },
-    async (accessToken, _credential, signal) =>
-      await callLinearMcpTools({
-        accessToken,
-        calls: input.calls,
-        maxCalls: input.maxCalls,
-        maxOutputBytes: input.maxOutputBytes,
-        signal,
-      })
+    async (accessToken) => await Promise.resolve(accessToken)
   );
 
 const createGoogleCalendarEvent = async (input: {
