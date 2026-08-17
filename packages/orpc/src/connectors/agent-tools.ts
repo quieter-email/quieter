@@ -1,17 +1,14 @@
-import {
-  googleCalendarCreateEventInputSchema,
-  linearIssueCreateInputSchema,
-} from "@quieter/ai/chat-agent";
+import { googleCalendarCreateEventInputSchema } from "@quieter/ai/chat-agent";
 import type { ConnectorProvider } from "@quieter/database/schema";
 import type { JSONSchema } from "@tanstack/ai";
 import { z } from "zod";
 
 import {
-  createGoogleCalendarEventForCredential,
-  createLinearIssueForCredential,
+  isMutatingLinearMcpTool,
   listLinearMcpToolsForCredential,
   runLinearMcpToolCallsForCredential,
-} from "./runtime";
+} from "./linear-mcp";
+import { createGoogleCalendarEventForCredential } from "./runtime";
 
 /**
  * One tool a connector exposes to a mailbox action. `mutates` decides whether
@@ -34,6 +31,25 @@ const asJsonSchema = (value: unknown): JSONSchema =>
   typeof value === "object" && value !== null
     ? value
     : { additionalProperties: true, type: "object" };
+
+/**
+ * A write is recorded against whatever it created, so the action layer can link to it
+ * later. MCP results are server-shaped, so the identifiers are read defensively and
+ * simply left out when the tool does not report them.
+ */
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const getLinearMcpResultReference = (output: unknown) => {
+  if (!isRecord(output)) {
+    return {};
+  }
+
+  return {
+    ...(typeof output.id === "string" ? { externalId: output.id } : {}),
+    ...(typeof output.url === "string" ? { externalUrl: output.url } : {}),
+  };
+};
 
 export type ConnectorAgentToolCall = {
   arguments?: Record<string, unknown>;
@@ -73,7 +89,6 @@ type ConnectorAgentAdapter = {
   ) => Awaitable<ConnectorAgentToolResult>;
 };
 
-export const LINEAR_CREATE_ISSUE_TOOL = "create_linear_issue";
 export const GOOGLE_CALENDAR_CREATE_EVENT_TOOL = "create_google_calendar_event";
 
 const toJsonSchema = (schema: z.ZodType) =>
@@ -114,23 +129,14 @@ const timed = async (
 
 const linearAdapter: ConnectorAgentAdapter = {
   listTools: async (input) => {
-    const readTools = await listLinearMcpToolsForCredential(input);
+    const tools = await listLinearMcpToolsForCredential(input);
 
-    return [
-      ...readTools.map((tool) => ({
-        description: tool.description,
-        inputSchema: asJsonSchema(tool.inputSchema),
-        mutates: false,
-        name: tool.name,
-      })),
-      {
-        description:
-          "Create one issue in the connected Linear workspace. Pick the team from the workspaces this connection can reach.",
-        inputSchema: toJsonSchema(linearIssueCreateInputSchema),
-        mutates: true,
-        name: LINEAR_CREATE_ISSUE_TOOL,
-      },
-    ];
+    return tools.map((tool) => ({
+      description: tool.description,
+      inputSchema: asJsonSchema(tool.inputSchema),
+      mutates: isMutatingLinearMcpTool(tool),
+      name: tool.name,
+    }));
   },
   runReadCalls: async (input) => {
     const results = await runLinearMcpToolCallsForCredential({
@@ -148,19 +154,25 @@ const linearAdapter: ConnectorAgentAdapter = {
       toolName: result.toolName,
     }));
   },
+  // Writes take the same MCP path as reads; only the approval around them differs.
   runWriteCall: async (input) =>
     await timed(input.call, async () => {
-      const issue = await createLinearIssueForCredential({
+      const [result] = await runLinearMcpToolCallsForCredential({
+        calls: [input.call],
         credentialId: input.credentialId,
-        issue: linearIssueCreateInputSchema.parse(input.call.arguments ?? {}),
+        maxCalls: 1,
         signal: input.signal,
         userId: input.userId,
       });
 
+      if (result === undefined || result.status === "error") {
+        throw new Error(result?.error ?? "Linear rejected the change.");
+      }
+
+      const reference = getLinearMcpResultReference(result.output);
       return {
-        externalId: issue.id,
-        externalUrl: issue.url,
-        output: issue,
+        ...reference,
+        output: result.output,
         status: "success" as const,
       };
     }),

@@ -131,11 +131,11 @@ Use create_google_calendar_event only when the user clearly asks to create or sc
 
 The tool creates events on the user's primary Google Calendar. Do not claim an event was created unless the tool returns success.`;
 
-export const linearToolsPrompt = `Linear is connected for this user.
+export const linearToolsPrompt = `Linear is connected for this user, and its tools are whatever that workspace exposes.
 
-When the user asks to create, inspect, or prepare a Linear issue, use the Linear tools. Use list_linear_issue_metadata before creating an issue unless the needed team and ids are already known from this conversation.
+Look up teams, labels, workflow states and projects before creating or changing anything, so ids come from the workspace rather than from a guess.
 
-Create Linear issues only when the user asks for that outcome or confirms it. Do not claim an issue was created unless create_linear_issue returns success.`;
+Changing the workspace needs the user's approval, so make the intent of a change clear before asking for it, and only when the user asked for that outcome. Do not claim anything was created or changed unless the tool reported success.`;
 
 const toolErrorSchema = z.object({
   error: z.string(),
@@ -569,135 +569,6 @@ export const googleCalendarCreateEventToolDef = toolDefinition({
   outputSchema: googleCalendarCreateEventResultSchema,
 });
 
-export const linearIssueMetadataResultSchema = z.discriminatedUnion("status", [
-  z.object({
-    labels: z.array(
-      z.object({
-        color: z.string(),
-        description: z.string().nullable().optional(),
-        id: z.string(),
-        isGroup: z.boolean(),
-        name: z.string(),
-        parentId: z.string().nullable().optional(),
-        teamId: z.string().nullable().optional(),
-      })
-    ),
-    projects: z.array(
-      z.object({
-        description: z.string().nullable().optional(),
-        id: z.string(),
-        name: z.string(),
-      })
-    ),
-    states: z.array(
-      z.object({
-        color: z.string(),
-        id: z.string(),
-        name: z.string(),
-        teamId: z.string().nullable().optional(),
-        type: z.string(),
-      })
-    ),
-    status: z.literal("success"),
-    teams: z.array(
-      z.object({
-        description: z.string().nullable().optional(),
-        displayName: z.string(),
-        id: z.string(),
-        key: z.string(),
-        name: z.string(),
-      })
-    ),
-    users: z.array(
-      z.object({
-        active: z.boolean(),
-        displayName: z.string(),
-        email: z.string(),
-        id: z.string(),
-        isAssignable: z.boolean(),
-        name: z.string(),
-      })
-    ),
-  }),
-  toolErrorSchema,
-]);
-
-export type LinearIssueMetadataResult = z.infer<
-  typeof linearIssueMetadataResultSchema
->;
-
-const linearIssuePrioritySchema = z.union([
-  z.literal(0),
-  z.literal(1),
-  z.literal(2),
-  z.literal(3),
-  z.literal(4),
-]);
-
-export const linearIssueCreateInputSchema = z.object({
-  assigneeId: z.string().trim().min(1).optional().meta({
-    description: "Optional Linear user id from list_linear_issue_metadata.",
-  }),
-  description: z.string().trim().max(20_000).optional().meta({
-    description: "Issue body in Markdown.",
-  }),
-  labelIds: z.array(z.string().trim().min(1)).max(20).optional().meta({
-    description: "Linear label ids from list_linear_issue_metadata.",
-  }),
-  priority: linearIssuePrioritySchema.optional().meta({
-    description:
-      "Linear priority: 0 = No priority, 1 = Urgent, 2 = High, 3 = Medium, 4 = Low.",
-  }),
-  projectId: z.string().trim().min(1).optional().meta({
-    description: "Optional Linear project id from list_linear_issue_metadata.",
-  }),
-  stateId: z.string().trim().min(1).optional().meta({
-    description:
-      "Optional Linear workflow state id from list_linear_issue_metadata.",
-  }),
-  teamId: z.string().trim().min(1).meta({
-    description: "Linear team id from list_linear_issue_metadata.",
-  }),
-  title: z.string().trim().min(1).max(255).meta({
-    description: "Issue title.",
-  }),
-});
-
-export const linearIssueCreateResultSchema = z.discriminatedUnion("status", [
-  z.object({
-    id: z.string(),
-    identifier: z.string(),
-    status: z.literal("success"),
-    title: z.string(),
-    url: z.string().optional(),
-  }),
-  toolErrorSchema.extend({
-    title: z.string(),
-  }),
-]);
-
-export type LinearIssueCreateInput = z.infer<
-  typeof linearIssueCreateInputSchema
->;
-export type LinearIssueCreateResult = z.infer<
-  typeof linearIssueCreateResultSchema
->;
-
-export const linearIssueMetadataToolDef = toolDefinition({
-  description:
-    "List Linear teams, labels, workflow states, projects, and users for issue creation.",
-  inputSchema: z.object({}),
-  name: "list_linear_issue_metadata",
-  outputSchema: linearIssueMetadataResultSchema,
-});
-
-export const linearIssueCreateToolDef = toolDefinition({
-  description: "Create one issue in the user's connected Linear workspace.",
-  inputSchema: linearIssueCreateInputSchema,
-  name: "create_linear_issue",
-  outputSchema: linearIssueCreateResultSchema,
-});
-
 export type GmailToolsContext = {
   category: MailboxCategory;
   getMailboxOverview: () => Promise<MailboxOverviewResult>;
@@ -729,13 +600,6 @@ export type GoogleCalendarToolsContext = {
   createGoogleCalendarEvent: (
     input: GoogleCalendarCreateEventInput
   ) => Promise<GoogleCalendarCreateEventResult>;
-};
-
-export type LinearToolsContext = {
-  createLinearIssue: (
-    input: LinearIssueCreateInput
-  ) => Promise<LinearIssueCreateResult>;
-  listLinearIssueMetadata: () => Promise<LinearIssueMetadataResult>;
 };
 
 export type AiMemoryResult = {
@@ -985,41 +849,6 @@ export const createGoogleCalendarEventServerTool = (
             : "Could not create the calendar event.",
         status: "error",
         summary: input.summary,
-      };
-    }
-  });
-
-export const createLinearIssueMetadataServerTool = (
-  context: LinearToolsContext
-): AnyTool =>
-  linearIssueMetadataToolDef.server(async () => {
-    try {
-      return await context.listLinearIssueMetadata();
-    } catch (error) {
-      return {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Could not list Linear metadata.",
-        status: "error",
-      };
-    }
-  });
-
-export const createLinearIssueServerTool = (
-  context: LinearToolsContext
-): AnyTool =>
-  linearIssueCreateToolDef.server(async (input) => {
-    try {
-      return await context.createLinearIssue(input);
-    } catch (error) {
-      return {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Could not create the Linear issue.",
-        status: "error",
-        title: input.title,
       };
     }
   });

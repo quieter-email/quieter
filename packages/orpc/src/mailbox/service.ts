@@ -1,7 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { ORPCError } from "@orpc/server";
-import { getSessionWithOrganization } from "@quieter/auth/session";
 import { db } from "@quieter/database/client";
 import type {
   MailboxConnectionStatus,
@@ -1082,6 +1081,10 @@ export const completeGmailOAuth = async (input: {
   headers: Headers;
   state: string;
 }) => {
+  // Only this browser callback reads a session. Importing the session helper at module
+  // scope pulls better-auth and its Kysely adapter into every handler that touches a
+  // mailbox, including the chat generation worker, which authenticates with a token.
+  const { getSessionWithOrganization } = await import("@quieter/auth/session");
   const session = await getSessionWithOrganization(input.headers);
   if (session?.user === undefined || session.session === undefined) {
     throw new ORPCError("UNAUTHORIZED", {

@@ -29,13 +29,9 @@ import {
 } from "./runtime";
 
 export {
-  createLinearIssueForCredential,
   getLinearMcpEndpoint,
   LINEAR_CONNECTOR_PROVIDER,
   LINEAR_SCOPES,
-  listLinearIssueMetadataForCredential as listLinearIssueMetadata,
-  type LinearIssueCreateDraft,
-  type LinearIssueMetadata,
 } from "./runtime";
 
 export const GOOGLE_CALENDAR_CONNECTOR_PROVIDER = "google_calendar" as const;

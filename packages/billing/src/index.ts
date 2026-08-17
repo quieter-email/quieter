@@ -1,6 +1,5 @@
 import { ORPCError } from "@orpc/server";
 import type { Subscription } from "@polar-sh/sdk/models/components/subscription.js";
-import { ResourceNotFound } from "@polar-sh/sdk/models/errors/resourcenotfound.js";
 import { db } from "@quieter/database/client";
 import {
   billingSubscription,
@@ -193,7 +192,8 @@ export const createBillingCheckout = async (input: {
 
   if (activeSubscription) {
     if (activeSubscription.plan !== input.product) {
-      const updatedSubscription = await getPolarClient().subscriptions.update({
+      const polarClient = await getPolarClient();
+      const updatedSubscription = await polarClient.subscriptions.update({
         id: activeSubscription.providerSubscriptionId,
         subscriptionUpdate: {
           productId: providerProductId,
@@ -211,7 +211,7 @@ export const createBillingCheckout = async (input: {
     product: input.product,
     userId: input.userId,
   });
-  const polar = getPolarClient();
+  const polar = await getPolarClient();
   const externalCustomerId = `organization:${input.organizationId}`;
   let teamCustomerId: string | undefined;
 
@@ -221,6 +221,9 @@ export const createBillingCheckout = async (input: {
     });
     teamCustomerId = externalCustomer.id;
   } catch (error) {
+    // Resolved from the module cache: the call above already loaded the SDK.
+    const { ResourceNotFound } =
+      await import("@polar-sh/sdk/models/errors/resourcenotfound.js");
     if (!(error instanceof ResourceNotFound)) {
       throw error;
     }
@@ -265,7 +268,8 @@ export const createBillingPortal = async (input: {
     return { portalUrl: returnUrl };
   }
 
-  const session = await getPolarClient().customerSessions.create(
+  const portalClient = await getPolarClient();
+  const session = await portalClient.customerSessions.create(
     createBillingPortalSession({
       organizationId: input.organizationId,
       returnUrl,
@@ -345,7 +349,7 @@ export const syncBillingCheckout = async (input: {
     return { synced: false };
   }
 
-  const polar = getPolarClient();
+  const polar = await getPolarClient();
   const checkout = await polar.checkouts.get({ id: input.checkoutId });
   const checkoutUserId = checkout.metadata[BILLING_METADATA_USER_ID];
 

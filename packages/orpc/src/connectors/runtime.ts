@@ -1,10 +1,4 @@
-import type { LinearClient } from "@linear/sdk";
 import { ORPCError } from "@orpc/server";
-import type {
-  LinearIssueCreateInput,
-  LinearIssueCreateResult,
-  LinearIssueMetadataResult,
-} from "@quieter/ai/chat-agent";
 import { db } from "@quieter/database/client";
 import { connectorCredential } from "@quieter/database/schema";
 import type { ConnectorProvider } from "@quieter/database/schema";
@@ -25,7 +19,6 @@ const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_CALENDAR_API_URL = "https://www.googleapis.com/calendar/v3";
 export const LINEAR_AUTHORIZATION_URL = "https://linear.app/oauth/authorize";
 export const LINEAR_MCP_URL = "https://mcp.linear.app/mcp";
-const LINEAR_MCP_PROTOCOL_VERSION = "2025-06-18";
 export const LINEAR_TOKEN_URL = "https://api.linear.app/oauth/token";
 const permanentGoogleTokenErrors = new Set(["invalid_grant", "invalid_token"]);
 const permanentLinearTokenErrors = new Set(["invalid_grant", "invalid_token"]);
@@ -46,41 +39,16 @@ export type GoogleCalendarEventInput = {
   summary: string;
 };
 
-type LinearIssueMetadataSuccess = Extract<
-  LinearIssueMetadataResult,
-  { status: "success" }
->;
-type LinearIssueCreateSuccess = Extract<
-  LinearIssueCreateResult,
-  { status: "success" }
->;
-export type LinearIssueCreateDraft = LinearIssueCreateInput;
-export type LinearIssueMetadata = Omit<LinearIssueMetadataSuccess, "status">;
-export type LinearMcpToolDescriptor = {
-  description?: string;
-  inputSchema?: unknown;
-  name: string;
-};
-export type LinearMcpToolCallInput = {
-  arguments?: Record<string, unknown>;
-  toolName: string;
-};
-export type LinearMcpToolCallResult = {
-  arguments?: Record<string, unknown>;
-  durationMs: number;
-  error?: string;
-  output?: unknown;
-  status: "error" | "success";
-  toolName: string;
-};
-
 export const GOOGLE_CALENDAR_SCOPES = [
   "openid",
   "https://www.googleapis.com/auth/userinfo.email",
   "https://www.googleapis.com/auth/userinfo.profile",
   "https://www.googleapis.com/auth/calendar.events",
 ] as const;
-export const LINEAR_SCOPES = ["read", "issues:create"] as const;
+// The agent reaches Linear through the workspace's own tools, so the grant has to
+// cover the changes those tools make. Connections made under the older, narrower
+// grant keep working for reads and fail the rest until they are reconnected.
+export const LINEAR_SCOPES = ["read", "write"] as const;
 
 const connectorDefinitions = {
   [GOOGLE_CALENDAR_CONNECTOR_PROVIDER]: {
@@ -126,28 +94,6 @@ const googleCalendarEventResponseSchema = z.object({
   htmlLink: z.url().optional(),
   id: z.string().min(1),
   summary: z.string().optional(),
-});
-
-const mcpToolSchema = z.object({
-  description: z.string().optional(),
-  inputSchema: z.unknown().optional(),
-  name: z.string().min(1),
-});
-
-const mcpToolsListResultSchema = z.object({
-  tools: z.array(mcpToolSchema),
-});
-
-const mcpResponseSchema = z.object({
-  error: z
-    .object({
-      code: z.number().optional(),
-      message: z.string().optional(),
-    })
-    .optional(),
-  id: z.union([z.string(), z.number(), z.null()]).optional(),
-  jsonrpc: z.string().optional(),
-  result: z.unknown().optional(),
 });
 
 const getGoogleCalendarOAuthClient = () => ({
@@ -256,10 +202,32 @@ const getConnectorRepairRequiredError = (provider: ConnectorProvider) =>
     message: `Reconnect ${connectorDefinitions[provider].displayName} before using this action.`,
   });
 
+/**
+ * A refresh returns a token carrying the scopes the user originally granted. When the
+ * response omits them, the stored grant is what the token still has — writing the
+ * connector's current definition instead would claim scopes this credential never got.
+ */
+const getRefreshedScopes = (
+  record: { scopes: string | null },
+  scope: string | string[] | undefined
+) => (scope === undefined ? (record.scopes ?? "") : normalizeOAuthScope(scope));
+
+/** A grant missing a scope the connector now needs cannot serve its tools. */
+const hasRequiredConnectorScopes = (
+  provider: ConnectorProvider,
+  scopes: string
+) => {
+  const granted = new Set(scopes.split(" ").filter((value) => value !== ""));
+  return connectorDefinitions[provider].scopes.every((scope) =>
+    granted.has(scope)
+  );
+};
+
 const refreshConnectorAccessToken = async (record: {
   encryptedRefreshToken: string | null;
   id: string;
   provider: ConnectorProvider;
+  scopes: string | null;
 }) => {
   if (!hasText(record.encryptedRefreshToken)) {
     await db
@@ -320,6 +288,7 @@ const refreshConnectorAccessToken = async (record: {
       ? linearRefreshResponseSchema.parse(await response.json())
       : googleRefreshResponseSchema.parse(await response.json());
   const now = new Date();
+  const scopes = getRefreshedScopes(record, refreshed.scope);
   await db
     .update(connectorCredential)
     .set({
@@ -331,11 +300,13 @@ const refreshConnectorAccessToken = async (record: {
         "refresh_token" in refreshed && hasText(refreshed.refresh_token)
           ? encryptConnectorSecret(refreshed.refresh_token)
           : record.encryptedRefreshToken,
-      scopes:
-        refreshed.scope === undefined
-          ? connectorDefinitions[record.provider].scopes.join(" ")
-          : normalizeOAuthScope(refreshed.scope),
-      status: "connected",
+      scopes,
+      // An older, narrower grant still refreshes, but it cannot do what the connector
+      // now asks of it, so it is surfaced as needing a reconnect rather than silently
+      // failing at the first call that needs the missing scope.
+      status: hasRequiredConnectorScopes(record.provider, scopes)
+        ? "connected"
+        : "needs_reconnect",
       updatedAt: now,
     })
     .where(eq(connectorCredential.id, record.id));
@@ -354,6 +325,7 @@ const getAuthorizedConnectorAccessToken = async (input: {
       encryptedRefreshToken: connectorCredential.encryptedRefreshToken,
       id: connectorCredential.id,
       provider: connectorCredential.provider,
+      scopes: connectorCredential.scopes,
       status: connectorCredential.status,
     })
     .from(connectorCredential)
@@ -391,6 +363,7 @@ const refreshAuthorizedConnectorAccessToken = async (input: {
       encryptedRefreshToken: connectorCredential.encryptedRefreshToken,
       id: connectorCredential.id,
       provider: connectorCredential.provider,
+      scopes: connectorCredential.scopes,
     })
     .from(connectorCredential)
     .where(
@@ -441,6 +414,7 @@ const getAuthorizedConnectorCredentialAccessToken = async (input: {
       encryptedRefreshToken: connectorCredential.encryptedRefreshToken,
       id: connectorCredential.id,
       provider: connectorCredential.provider,
+      scopes: connectorCredential.scopes,
       status: connectorCredential.status,
       userId: connectorCredential.userId,
     })
@@ -486,6 +460,7 @@ const refreshAuthorizedConnectorCredentialAccessToken = async (input: {
       encryptedRefreshToken: connectorCredential.encryptedRefreshToken,
       id: connectorCredential.id,
       provider: connectorCredential.provider,
+      scopes: connectorCredential.scopes,
     })
     .from(connectorCredential)
     .where(
@@ -614,17 +589,44 @@ const normalizeGoogleCalendarEvent = (
   summary: event.summary,
 });
 
-const createLinearClient = async (accessToken: string) => {
-  const { LinearClient } = await import("@linear/sdk");
-  return new LinearClient({ accessToken });
-};
-
 export const getLinearMcpEndpoint = () => LINEAR_MCP_URL;
 
+const LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql";
+/** The one Linear read that is not a tool call: naming the connection being made. */
+const LINEAR_IDENTITY_QUERY = `query ConnectorIdentity {
+  viewer { displayName email id name }
+  organization { id name }
+}`;
+
+const LINEAR_IDENTITY_TIMEOUT_MS = 10_000;
+
+/**
+ * GraphQL reports failures inside a 200, so an error body has to be read rather than
+ * inferred from the status.
+ */
+const linearGraphqlErrorSchema = z.object({
+  errors: z.array(z.object({ message: z.string().optional() })).min(1),
+});
+
+const linearIdentitySchema = z.object({
+  data: z.object({
+    organization: z.object({
+      id: z.string(),
+      name: z.string(),
+    }),
+    viewer: z.object({
+      displayName: z.string().nullish(),
+      email: z.string(),
+      id: z.string(),
+      name: z.string().nullish(),
+    }),
+  }),
+});
+
 const resolveLinearDisplayName = (viewer: {
-  displayName: string | null | undefined;
+  displayName?: string | null;
   email: string;
-  name: string | null | undefined;
+  name?: string | null;
 }) => {
   if (hasText(viewer.displayName)) {
     return viewer.displayName;
@@ -636,513 +638,61 @@ const resolveLinearDisplayName = (viewer: {
 };
 
 export const getLinearIdentityFromAccessToken = async (accessToken: string) => {
-  const client = await createLinearClient(accessToken);
-  const [viewer, organization] = await Promise.all([
-    client.viewer,
-    client.organization,
-  ]);
-  return {
-    accountEmail: viewer.email,
-    displayName: resolveLinearDisplayName(viewer),
-    providerAccountId: viewer.id,
-    providerWorkspaceId: organization.id,
-    providerWorkspaceName: organization.name,
-  };
-};
-
-const allowedLinearMcpReadTools = new Set([
-  "get_cycle",
-  "get_document",
-  "get_issue",
-  "get_issue_status",
-  "get_project",
-  "get_team",
-  "get_user",
-  "list_comments",
-  "list_cycles",
-  "list_documents",
-  "list_issue_labels",
-  "list_issue_statuses",
-  "list_issues",
-  "list_projects",
-  "list_teams",
-  "list_users",
-  "search_issues",
-]);
-
-const normalizeLinearMcpToolName = (name: string) =>
-  name
-    .trim()
-    .toLowerCase()
-    .replace(/^linear[-_:]/u, "")
-    .replace(/^linear_/u, "");
-
-const isAllowedLinearMcpReadTool = (tool: LinearMcpToolDescriptor) =>
-  allowedLinearMcpReadTools.has(normalizeLinearMcpToolName(tool.name));
-
-const createConnectorHttpError = (message: string, status: number) =>
-  new ConnectorHttpError(message, status);
-
-const truncateJsonValue = (value: unknown, maxLength: number) => {
-  const serialized = JSON.stringify(value);
-  if (serialized === undefined || serialized.length <= maxLength) {
-    return value;
-  }
-
-  return {
-    truncated: true,
-    value: serialized.slice(0, maxLength),
-  };
-};
-
-type McpResponse = z.infer<typeof mcpResponseSchema>;
-
-const parseMcpResponseText = (input: {
-  contentType: string;
-  requestId: number;
-  text: string;
-}): McpResponse | undefined => {
-  if (!hasText(input.text.trim())) {
-    return undefined;
-  }
-
-  if (!input.contentType.includes("text/event-stream")) {
-    return mcpResponseSchema.parse(JSON.parse(input.text));
-  }
-
-  const messages = input.text
-    .split(/\r?\n\r?\n/u)
-    .map((block) =>
-      block
-        .split(/\r?\n/u)
-        .filter((line) => line.startsWith("data:"))
-        .map((line) => line.slice("data:".length).trim())
-        .join("\n")
-    )
-    .filter((data) => hasText(data) && data !== "[DONE]")
-    .map((data) => mcpResponseSchema.parse(JSON.parse(data)));
-
-  return (
-    messages.find((message) => message.id === input.requestId) ??
-    messages.find((message) => "result" in message || "error" in message)
-  );
-};
-
-const postLinearMcpMessage = async (input: {
-  accessToken: string;
-  body: unknown;
-  requestId?: number;
-  sessionId?: string;
-  signal?: AbortSignal;
-}) => {
-  const response = await fetch(LINEAR_MCP_URL, {
-    body: JSON.stringify(input.body),
+  const response = await fetch(LINEAR_GRAPHQL_URL, {
+    body: JSON.stringify({ query: LINEAR_IDENTITY_QUERY }),
     headers: {
-      accept: "application/json, text/event-stream",
-      authorization: `Bearer ${input.accessToken}`,
-      "content-type": "application/json",
-      "mcp-protocol-version": LINEAR_MCP_PROTOCOL_VERSION,
-      ...(hasText(input.sessionId)
-        ? { "mcp-session-id": input.sessionId }
-        : {}),
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
     },
     method: "POST",
-    signal: input.signal,
+    // This runs while someone waits on the connect screen, so a stalled Linear must
+    // fail rather than hold the request open.
+    signal: AbortSignal.timeout(LINEAR_IDENTITY_TIMEOUT_MS),
   });
-  const sessionId = response.headers.get("mcp-session-id") ?? input.sessionId;
 
-  if (response.status === 202) {
-    return { result: undefined, sessionId };
-  }
-
-  const text = await response.text().catch(() => "");
   if (!response.ok) {
-    throw createConnectorHttpError(
-      hasText(text)
-        ? text
-        : `Linear MCP request failed with status ${response.status}.`,
+    throw new ConnectorHttpError(
+      "Linear rejected the connection.",
       response.status
     );
   }
 
-  const parsed = parseMcpResponseText({
-    contentType: response.headers.get("content-type") ?? "",
-    requestId: input.requestId ?? 0,
-    text,
-  });
-  if (parsed?.error) {
-    throw new Error(parsed.error.message ?? "Linear MCP returned an error.");
+  const body: unknown = await response.json();
+  const failure = linearGraphqlErrorSchema.safeParse(body);
+  if (failure.success) {
+    throw new ConnectorHttpError(
+      failure.data.errors[0].message ?? "Linear rejected the connection.",
+      response.status
+    );
   }
 
-  return { result: parsed?.result, sessionId };
-};
-
-const createLinearMcpSession = async (input: {
-  accessToken: string;
-  signal?: AbortSignal;
-}) => {
-  const initialized = await postLinearMcpMessage({
-    accessToken: input.accessToken,
-    body: {
-      id: 1,
-      jsonrpc: "2.0",
-      method: "initialize",
-      params: {
-        capabilities: {},
-        clientInfo: {
-          name: "quieter-mailbox-actions",
-          version: "0.1.0",
-        },
-        protocolVersion: LINEAR_MCP_PROTOCOL_VERSION,
-      },
-    },
-    requestId: 1,
-    signal: input.signal,
-  });
-  if (!hasText(initialized.sessionId)) {
-    throw new Error("Linear MCP did not return a session id.");
+  const parsed = linearIdentitySchema.safeParse(body);
+  if (!parsed.success) {
+    throw new ConnectorHttpError(
+      "Linear did not return the connected account.",
+      response.status
+    );
   }
-
-  await postLinearMcpMessage({
-    accessToken: input.accessToken,
-    body: {
-      jsonrpc: "2.0",
-      method: "notifications/initialized",
-      params: {},
-    },
-    sessionId: initialized.sessionId,
-    signal: input.signal,
-  });
-
-  return { sessionId: initialized.sessionId };
-};
-
-const listLinearMcpTools = async (
-  accessToken: string,
-  signal?: AbortSignal
-): Promise<LinearMcpToolDescriptor[]> => {
-  const session = await createLinearMcpSession({ accessToken, signal });
-  const listed = await postLinearMcpMessage({
-    accessToken,
-    body: {
-      id: 2,
-      jsonrpc: "2.0",
-      method: "tools/list",
-      params: {},
-    },
-    requestId: 2,
-    sessionId: session.sessionId,
-    signal,
-  });
-  const result = mcpToolsListResultSchema.parse(listed.result);
-
-  return result.tools
-    .map((tool) => ({
-      description: tool.description,
-      inputSchema: tool.inputSchema,
-      name: tool.name,
-    }))
-    .filter(isAllowedLinearMcpReadTool);
-};
-
-const callSingleLinearMcpTool = async (input: {
-  accessToken: string;
-  allowedTools: Map<string, LinearMcpToolDescriptor>;
-  call: LinearMcpToolCallInput;
-  index: number;
-  maxOutputBytes: number;
-  sessionId: string;
-  signal?: AbortSignal;
-}): Promise<LinearMcpToolCallResult> => {
-  const startedAt = Date.now();
-  if (!input.allowedTools.has(input.call.toolName)) {
-    return {
-      arguments: input.call.arguments,
-      durationMs: Date.now() - startedAt,
-      error: "Tool is not in the Linear MCP read allowlist.",
-      status: "error",
-      toolName: input.call.toolName,
-    };
-  }
-
-  try {
-    const response = await postLinearMcpMessage({
-      accessToken: input.accessToken,
-      body: {
-        id: 10 + input.index,
-        jsonrpc: "2.0",
-        method: "tools/call",
-        params: {
-          arguments: input.call.arguments ?? {},
-          name: input.call.toolName,
-        },
-      },
-      requestId: 10 + input.index,
-      sessionId: input.sessionId,
-      signal: input.signal,
-    });
-    return {
-      arguments: input.call.arguments,
-      durationMs: Date.now() - startedAt,
-      output: truncateJsonValue(response.result, input.maxOutputBytes),
-      status: "success",
-      toolName: input.call.toolName,
-    };
-  } catch (error) {
-    return {
-      arguments: input.call.arguments,
-      durationMs: Date.now() - startedAt,
-      error:
-        error instanceof Error ? error.message : "Linear MCP tool call failed.",
-      status: "error",
-      toolName: input.call.toolName,
-    };
-  }
-};
-
-const callLinearMcpToolsSequentially = async (input: {
-  accessToken: string;
-  allowedTools: Map<string, LinearMcpToolDescriptor>;
-  calls: LinearMcpToolCallInput[];
-  maxOutputBytes: number;
-  sessionId: string;
-  signal?: AbortSignal;
-  startIndex?: number;
-}): Promise<LinearMcpToolCallResult[]> => {
-  if (input.calls.length === 0) {
-    return [];
-  }
-
-  const [call, ...remainingCalls] = input.calls;
-  const startIndex = input.startIndex ?? 0;
-  const result = await callSingleLinearMcpTool({
-    accessToken: input.accessToken,
-    allowedTools: input.allowedTools,
-    call,
-    index: startIndex,
-    maxOutputBytes: input.maxOutputBytes,
-    sessionId: input.sessionId,
-    signal: input.signal,
-  });
-
-  return [
-    result,
-    ...(await callLinearMcpToolsSequentially({
-      ...input,
-      calls: remainingCalls,
-      startIndex: startIndex + 1,
-    })),
-  ];
-};
-
-const callLinearMcpTools = async (input: {
-  accessToken: string;
-  calls: LinearMcpToolCallInput[];
-  maxCalls?: number;
-  maxOutputBytes?: number;
-  signal?: AbortSignal;
-}): Promise<LinearMcpToolCallResult[]> => {
-  const tools = await listLinearMcpTools(input.accessToken, input.signal);
-  const allowedTools = new Map(tools.map((tool) => [tool.name, tool]));
-  const session = await createLinearMcpSession({
-    accessToken: input.accessToken,
-    signal: input.signal,
-  });
-  const maxCalls = input.maxCalls ?? 4;
-  const maxOutputBytes = input.maxOutputBytes ?? 8000;
-
-  return await callLinearMcpToolsSequentially({
-    accessToken: input.accessToken,
-    allowedTools,
-    calls: input.calls.slice(0, maxCalls),
-    maxOutputBytes,
-    sessionId: session.sessionId,
-    signal: input.signal,
-  });
-};
-
-const readLinearIssueMetadata = async (
-  accessToken: string
-): Promise<LinearIssueMetadataSuccess> => {
-  const client = await createLinearClient(accessToken);
-  const [teams, labels, states, projects, users] = await Promise.all([
-    client.teams({ first: 100 }),
-    client.issueLabels({ first: 200 }),
-    client.workflowStates({ first: 200 }),
-    client.projects({ first: 100 }),
-    client.users({ first: 100 }),
-  ]);
-
+  const { data } = parsed.data;
   return {
-    labels: labels.nodes.map((label) => ({
-      color: label.color,
-      description: label.description,
-      id: label.id,
-      isGroup: label.isGroup,
-      name: label.name,
-      parentId: label.parentId,
-      teamId: label.teamId,
-    })),
-    projects: projects.nodes.map((project) => ({
-      description: project.description,
-      id: project.id,
-      name: project.name,
-    })),
-    states: states.nodes.map((state) => ({
-      color: state.color,
-      id: state.id,
-      name: state.name,
-      teamId: state.teamId,
-      type: state.type,
-    })),
-    status: "success",
-    teams: teams.nodes.map((team) => ({
-      description: team.description,
-      displayName: team.displayName,
-      id: team.id,
-      key: team.key,
-      name: team.name,
-    })),
-    users: users.nodes.map((user) => ({
-      active: user.active,
-      displayName: user.displayName,
-      email: user.email,
-      id: user.id,
-      isAssignable: user.isAssignable,
-      name: user.name,
-    })),
+    accountEmail: data.viewer.email,
+    displayName: resolveLinearDisplayName(data.viewer),
+    providerAccountId: data.viewer.id,
+    providerWorkspaceId: data.organization.id,
+    providerWorkspaceName: data.organization.name,
   };
 };
 
-const createLinearIssue = async (
-  accessToken: string,
-  issue: LinearIssueCreateInput
-): Promise<LinearIssueCreateSuccess> => {
-  const client = await createLinearClient(accessToken);
-  const issueInput: Parameters<LinearClient["createIssue"]>[0] = {
-    ...(hasText(issue.assigneeId) ? { assigneeId: issue.assigneeId } : {}),
-    ...(hasText(issue.description) ? { description: issue.description } : {}),
-    ...(issue.labelIds !== undefined && issue.labelIds.length > 0
-      ? { labelIds: issue.labelIds }
-      : {}),
-    ...(issue.priority !== undefined && issue.priority !== 0
-      ? { priority: issue.priority }
-      : {}),
-    ...(hasText(issue.projectId) ? { projectId: issue.projectId } : {}),
-    ...(hasText(issue.stateId) ? { stateId: issue.stateId } : {}),
-    teamId: issue.teamId,
-    title: issue.title,
-  };
-  const payload = await client.createIssue(issueInput);
-  const createdIssue = await payload.issue;
-  if (!payload.success || createdIssue === undefined) {
-    throw new Error("Linear did not create the issue.");
-  }
+/** A refreshed token for the caller's own Linear connection, for the MCP client. */
+export const getLinearAccessTokenForUser = async (input: { userId: string }) =>
+  await getAuthorizedConnectorAccessToken({
+    provider: LINEAR_CONNECTOR_PROVIDER,
+    userId: input.userId,
+  });
 
-  return {
-    id: createdIssue.id,
-    identifier: createdIssue.identifier,
-    status: "success",
-    title: createdIssue.title,
-    url: createdIssue.url,
-  };
-};
-
-export const listLinearIssueMetadataForUser = async (input: {
-  signal?: AbortSignal;
-  userId: string;
-}): Promise<LinearIssueMetadataResult> =>
-  await runAuthorizedConnector(
-    {
-      provider: LINEAR_CONNECTOR_PROVIDER,
-      signal: input.signal,
-      userId: input.userId,
-    },
-    async (accessToken) => await readLinearIssueMetadata(accessToken)
-  );
-
-export const listLinearIssueMetadataForCredential = async (input: {
+/** The same, for a mailbox action acting on one stored connection. */
+export const getLinearAccessTokenForCredential = async (input: {
   credentialId: string;
-  signal?: AbortSignal;
-  userId?: string;
-}): Promise<LinearIssueMetadata> =>
-  await runAuthorizedConnectorCredential(
-    {
-      credentialId: input.credentialId,
-      provider: LINEAR_CONNECTOR_PROVIDER,
-      signal: input.signal,
-      userId: input.userId,
-    },
-    async (accessToken) => {
-      const metadata = await readLinearIssueMetadata(accessToken);
-      return {
-        labels: metadata.labels,
-        projects: metadata.projects,
-        states: metadata.states,
-        teams: metadata.teams,
-        users: metadata.users,
-      };
-    }
-  );
-
-export const listLinearMcpToolsForCredential = async (input: {
-  credentialId: string;
-  signal?: AbortSignal;
-  userId?: string;
-}): Promise<LinearMcpToolDescriptor[]> =>
-  await runAuthorizedConnectorCredential(
-    {
-      credentialId: input.credentialId,
-      provider: LINEAR_CONNECTOR_PROVIDER,
-      signal: input.signal,
-      userId: input.userId,
-    },
-    async (accessToken, _credential, signal) =>
-      await listLinearMcpTools(accessToken, signal)
-  );
-
-export const runLinearMcpToolCallsForCredential = async (input: {
-  calls: LinearMcpToolCallInput[];
-  credentialId: string;
-  maxCalls?: number;
-  maxOutputBytes?: number;
-  signal?: AbortSignal;
-  userId?: string;
-}): Promise<LinearMcpToolCallResult[]> =>
-  await runAuthorizedConnectorCredential(
-    {
-      credentialId: input.credentialId,
-      provider: LINEAR_CONNECTOR_PROVIDER,
-      signal: input.signal,
-      userId: input.userId,
-    },
-    async (accessToken, _credential, signal) =>
-      await callLinearMcpTools({
-        accessToken,
-        calls: input.calls,
-        maxCalls: input.maxCalls,
-        maxOutputBytes: input.maxOutputBytes,
-        signal,
-      })
-  );
-
-export const createLinearIssueForUser = async (input: {
-  issue: LinearIssueCreateInput;
-  signal?: AbortSignal;
-  userId: string;
-}): Promise<LinearIssueCreateResult> =>
-  await runAuthorizedConnector(
-    {
-      provider: LINEAR_CONNECTOR_PROVIDER,
-      signal: input.signal,
-      userId: input.userId,
-    },
-    async (accessToken) => await createLinearIssue(accessToken, input.issue)
-  );
-
-export const createLinearIssueForCredential = async (input: {
-  credentialId: string;
-  issue: LinearIssueCreateDraft;
   signal?: AbortSignal;
   userId?: string;
 }) =>
@@ -1153,15 +703,7 @@ export const createLinearIssueForCredential = async (input: {
       signal: input.signal,
       userId: input.userId,
     },
-    async (accessToken) => {
-      const issue = await createLinearIssue(accessToken, input.issue);
-      return {
-        id: issue.id,
-        identifier: issue.identifier,
-        title: issue.title,
-        url: issue.url,
-      };
-    }
+    async (accessToken) => await Promise.resolve(accessToken)
   );
 
 const createGoogleCalendarEvent = async (input: {

@@ -15,9 +15,7 @@ import {
   StarIcon,
   StarOffIcon,
   Tag01Icon,
-  TaskAdd01Icon,
   Undo02Icon,
-  WorkflowSquare01Icon,
   Wrench01Icon,
 } from "@hugeicons/core-free-icons";
 
@@ -45,10 +43,8 @@ const modifyMailIcons: Record<string, ToolIcon> = {
 const toolIcons: Record<string, ToolIcon> = {
   compose_email: PencilEdit01Icon,
   create_google_calendar_event: Calendar01Icon,
-  create_linear_issue: TaskAdd01Icon,
   get_mailbox_overview: Mailbox01Icon,
   list_gmail_labels: Tag01Icon,
-  list_linear_issue_metadata: WorkflowSquare01Icon,
   memory: Brain01Icon,
   read_gmail_attachment: Attachment01Icon,
   read_gmail_message: Mail01Icon,

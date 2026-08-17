@@ -7,8 +7,6 @@ import {
   gmailMessagesResultSchema,
   gmailSearchResultSchema,
   gmailThreadResultSchema,
-  linearIssueCreateResultSchema,
-  linearIssueMetadataResultSchema,
   mailboxOverviewResultSchema,
   modifyMailResultSchema,
 } from "@quieter/ai/chat-agent";
@@ -22,8 +20,6 @@ import type {
   GmailMessagesToolResult,
   GmailSearchToolResult,
   GmailThreadToolResult,
-  LinearIssueCreateToolResult,
-  LinearIssueMetadataToolResult,
   MailboxOverviewToolResult,
   ModifyMailToolResult,
 } from "../types";
@@ -70,8 +66,6 @@ export type ParsedToolResult =
   | { data: GmailMessagesToolResult; kind: "gmail-messages" }
   | { data: GmailSearchToolResult; kind: "gmail-search" }
   | { data: GmailThreadToolResult; kind: "gmail-thread" }
-  | { data: LinearIssueCreateToolResult; kind: "linear-issue-create" }
-  | { data: LinearIssueMetadataToolResult; kind: "linear-issue-metadata" }
   | { data: MailboxOverviewToolResult; kind: "mailbox-overview" }
   | { data: ModifyMailToolResult; kind: "modify-mail" }
   | { kind: "unknown"; value: unknown };
@@ -159,19 +153,6 @@ export const parseToolResult = (
       return parseToolSchema(modifyMailResultSchema, parsed, (data) => ({
         data,
         kind: "modify-mail",
-      }));
-    }
-    case "list_linear_issue_metadata": {
-      return parseToolSchema(
-        linearIssueMetadataResultSchema,
-        parsed,
-        (data) => ({ data, kind: "linear-issue-metadata" })
-      );
-    }
-    case "create_linear_issue": {
-      return parseToolSchema(linearIssueCreateResultSchema, parsed, (data) => ({
-        data,
-        kind: "linear-issue-create",
       }));
     }
     default: {

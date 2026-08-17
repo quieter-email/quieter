@@ -269,7 +269,8 @@ export const getOrganizationSubscription = async (organizationId: string) => {
     try {
       const [{ getPolarClient }, { syncBillingSubscription }] =
         await Promise.all([import("./polar"), import("./subscription-sync")]);
-      const subscription = await getPolarClient().subscriptions.get(
+      const polar = await getPolarClient();
+      const subscription = await polar.subscriptions.get(
         { id: providerSubscriptionId },
         { signal: AbortSignal.timeout(BILLING_RECONCILIATION_TIMEOUT_MS) }
       );

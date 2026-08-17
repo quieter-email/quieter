@@ -1,5 +1,5 @@
 import { ORPCError } from "@orpc/server";
-import { Polar } from "@polar-sh/sdk";
+import type { Polar } from "@polar-sh/sdk";
 import { serverEnv } from "@quieter/env/server";
 
 import { getPolarServer } from "./polar-config";
@@ -26,13 +26,20 @@ const getPolarAccessToken = () => {
 
 export const getPolarSandboxMode = () => getPolarServer() === "sandbox";
 
-export const getPolarClient = () => {
+/**
+ * The Polar SDK is a thousand generated modules. Loading it on demand keeps it out of
+ * the startup path of every handler that imports this package, most of which only
+ * report usage or read a plan.
+ */
+export const getPolarClient = async () => {
   if (polarClient !== null) {
     return polarClient;
   }
 
-  polarClient = new Polar({
-    accessToken: getPolarAccessToken(),
+  const accessToken = getPolarAccessToken();
+  const { Polar } = await import("@polar-sh/sdk");
+  polarClient ??= new Polar({
+    accessToken,
     server: getPolarServer(),
   });
 
@@ -48,7 +55,8 @@ export const ingestPolarEvents = async (
     organizationId?: string;
   }[]
 ) => {
-  await getPolarClient().events.ingest({
+  const polar = await getPolarClient();
+  await polar.events.ingest({
     events,
   });
 };

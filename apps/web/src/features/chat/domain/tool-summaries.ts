@@ -22,8 +22,6 @@ type ToolCounts = {
   calendar: number;
   compose: number;
   labels: number;
-  linearCreate: number;
-  linearMetadata: number;
   message: number;
   modify: number;
   overview: number;
@@ -36,8 +34,6 @@ const createToolCounts = (): ToolCounts => ({
   calendar: 0,
   compose: 0,
   labels: 0,
-  linearCreate: 0,
-  linearMetadata: 0,
   message: 0,
   modify: 0,
   overview: 0,
@@ -88,14 +84,6 @@ const incrementToolCount = (counts: ToolCounts, call: ToolCall) => {
       counts.modify += 1;
       break;
     }
-    case "list_linear_issue_metadata": {
-      counts.linearMetadata += 1;
-      break;
-    }
-    case "create_linear_issue": {
-      counts.linearCreate += 1;
-      break;
-    }
     default: {
       break;
     }
@@ -127,12 +115,6 @@ const summarizePendingTool = (active: ToolCall): string => {
     }
     case "create_google_calendar_event": {
       return "Adding calendar event";
-    }
-    case "list_linear_issue_metadata": {
-      return "Reading Linear workspace";
-    }
-    case "create_linear_issue": {
-      return "Creating Linear issue";
     }
     default: {
       return "Working";
@@ -179,16 +161,6 @@ const summarizeCompletedTools = (counts: ToolCounts, itemCount: number) => {
       counts.calendar === 1
         ? "added calendar event"
         : `added ${counts.calendar} calendar events`
-    );
-  }
-  if (counts.linearMetadata > 0) {
-    parts.push("checked Linear");
-  }
-  if (counts.linearCreate > 0) {
-    parts.push(
-      counts.linearCreate === 1
-        ? "created Linear issue"
-        : `created ${counts.linearCreate} Linear issues`
     );
   }
 
@@ -248,23 +220,6 @@ const getToolDetailForCalendar = (
     : undefined;
 };
 
-const getToolDetailForLinearIssue = (
-  args: Record<string, unknown>,
-  parsed: ReturnType<typeof parseToolResult>
-) => {
-  if (
-    parsed.kind === "linear-issue-create" &&
-    parsed.data.status === "success"
-  ) {
-    return parsed.data.title
-      ? truncateToolDetail(parsed.data.title)
-      : undefined;
-  }
-  return typeof args.title === "string"
-    ? truncateToolDetail(args.title)
-    : undefined;
-};
-
 const getToolDetailForAttachment = (
   parsed: ReturnType<typeof parseToolResult>
 ) => {
@@ -281,18 +236,6 @@ const getToolDetailForAttachment = (
 const getToolDetailForCompose = (args: Record<string, unknown>) => {
   if (typeof args.subject === "string" && args.subject.trim() !== "") {
     return truncateToolDetail(args.subject);
-  }
-  return null;
-};
-
-const getToolDetailForLinearMetadata = (
-  parsed: ReturnType<typeof parseToolResult>
-) => {
-  if (
-    parsed.kind === "linear-issue-metadata" &&
-    parsed.data.status === "success"
-  ) {
-    return countLabel(parsed.data.teams.length, "team");
   }
   return null;
 };
@@ -336,12 +279,6 @@ export const getActiveToolDetail = (
     }
     case "create_google_calendar_event": {
       return getToolDetailForCalendar(args, parsed);
-    }
-    case "list_linear_issue_metadata": {
-      return toOptionalDetail(getToolDetailForLinearMetadata(parsed));
-    }
-    case "create_linear_issue": {
-      return getToolDetailForLinearIssue(args, parsed);
     }
     default: {
       return undefined;

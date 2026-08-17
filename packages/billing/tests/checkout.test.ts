@@ -9,7 +9,7 @@ import { createBillingCheckout } from "../src";
 import type * as PolarModule from "../src/polar";
 import type * as SubscriptionSyncModule from "../src/subscription-sync";
 
-type PolarClient = ReturnType<typeof PolarModule.getPolarClient>;
+type PolarClient = Awaited<ReturnType<typeof PolarModule.getPolarClient>>;
 
 const polarCustomerSchema = z.custom<Customer>(
   (value) =>
@@ -89,8 +89,8 @@ vi.mock(import("../src/polar"), async (importOriginal) => {
   return {
     ...actual,
     getPolarApiOrganizationId: vi.fn<() => string>(),
-    getPolarClient: vi.fn<typeof actual.getPolarClient>(() => {
-      const polar = polarState.getPolarClient?.();
+    getPolarClient: vi.fn<typeof actual.getPolarClient>(async () => {
+      const polar = await polarState.getPolarClient?.();
       if (polar === undefined || polar === null) {
         throw new Error("Polar client is unavailable in tests.");
       }

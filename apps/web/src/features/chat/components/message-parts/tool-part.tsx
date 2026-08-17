@@ -185,31 +185,6 @@ const getCalendarDetail = (
   return getStringArgument(args, "summary");
 };
 
-const getLinearMetadataDetail = (
-  parsed: ReturnType<typeof parseToolResult>
-) => {
-  if (
-    parsed.kind === "linear-issue-metadata" &&
-    parsed.data.status === "success"
-  ) {
-    return `${parsed.data.teams.length} team${parsed.data.teams.length === 1 ? "" : "s"}`;
-  }
-  return "";
-};
-
-const getLinearIssueDetail = (
-  args: Record<string, unknown>,
-  parsed: ReturnType<typeof parseToolResult>
-) => {
-  if (
-    parsed.kind === "linear-issue-create" &&
-    parsed.data.status === "success"
-  ) {
-    return parsed.data.identifier;
-  }
-  return getStringArgument(args, "title");
-};
-
 const toolPartRenderers: Record<
   string,
   (props: ToolPartRendererProps) => ReactNode
@@ -233,25 +208,6 @@ const toolPartRenderers: Record<
       pending={pending}
     />
   ),
-  create_linear_issue: ({
-    active,
-    icon,
-    args,
-    error,
-    nested,
-    parsed,
-    pending,
-  }) => (
-    <ToolStep
-      active={active}
-      icon={icon}
-      nested={nested}
-      detail={getLinearIssueDetail(args, parsed)}
-      error={error}
-      label={pending ? "Creating Linear issue" : "Created Linear issue"}
-      pending={pending}
-    />
-  ),
   get_mailbox_overview: ({ active, icon, error, nested, parsed, pending }) => (
     <OverviewTool
       active={active}
@@ -269,24 +225,6 @@ const toolPartRenderers: Record<
       nested={nested}
       data={parsed.kind === "gmail-labels" ? parsed.data : undefined}
       error={error}
-      pending={pending}
-    />
-  ),
-  list_linear_issue_metadata: ({
-    active,
-    icon,
-    error,
-    nested,
-    parsed,
-    pending,
-  }) => (
-    <ToolStep
-      active={active}
-      icon={icon}
-      nested={nested}
-      detail={getLinearMetadataDetail(parsed)}
-      error={error}
-      label={pending ? "Reading Linear workspace" : "Read Linear workspace"}
       pending={pending}
     />
   ),

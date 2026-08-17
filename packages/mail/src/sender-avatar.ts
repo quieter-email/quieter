@@ -1,6 +1,6 @@
 import { publicEnv } from "@quieter/env/public";
 
-import { createBimiResolver } from "./bimi";
+import type { createBimiResolver } from "./bimi";
 
 const EMAIL_ADDRESS_PATTERN =
   /(?<email>[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+)/iu;
@@ -45,7 +45,18 @@ export type SenderAvatarHeader = {
   value: string;
 };
 
-const bimiResolver = createBimiResolver();
+let bimiResolver: ReturnType<typeof createBimiResolver> | null = null;
+
+/**
+ * BIMI records are XML, so resolving them costs an XML parser in every bundle that
+ * imports this module — including handlers that never render an avatar. The parser is
+ * loaded on the first resolve instead of at module scope.
+ */
+const getBimiResolver = async () => {
+  const { createBimiResolver: create } = await import("./bimi");
+  bimiResolver ??= create();
+  return bimiResolver;
+};
 
 export const extractSenderEmail = (
   value: string | undefined
@@ -133,7 +144,8 @@ export const getSenderAvatarUrls = async (
 
   const size = getClampedAvatarSize(opts?.size);
 
-  const bimiUrl = await bimiResolver.resolve({
+  const resolver = await getBimiResolver();
+  const bimiUrl = await resolver.resolve({
     domain,
     headers: opts?.headers ?? [],
   });
