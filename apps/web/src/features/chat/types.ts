@@ -13,8 +13,6 @@ export type {
   GmailMessagesResult as GmailMessagesToolResult,
   GmailSearchResult as GmailSearchToolResult,
   GmailThreadResult as GmailThreadToolResult,
-  LinearIssueCreateResult as LinearIssueCreateToolResult,
-  LinearIssueMetadataResult as LinearIssueMetadataToolResult,
   MailboxOverviewResult as MailboxOverviewToolResult,
   ModifyMailResult as ModifyMailToolResult,
 } from "@quieter/ai/chat-agent";

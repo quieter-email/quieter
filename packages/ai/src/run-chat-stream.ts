@@ -1,6 +1,7 @@
 import { chat, EventType, maxIterations, StreamProcessor } from "@tanstack/ai";
 import type {
   AnyTool,
+  ChatMCPOptions,
   ChatMiddleware,
   StreamChunk,
   StreamDurability,
@@ -93,6 +94,7 @@ export const runChatStream = async ({
   abortController,
   durability,
   initialMessages,
+  mcp,
   middleware,
   model,
   onMessagesChange,
@@ -103,6 +105,8 @@ export const runChatStream = async ({
   abortController?: AbortController;
   durability?: StreamDurability;
   initialMessages: UIMessage[];
+  /** Tool sources discovered in the agent loop, alongside the static `tools`. */
+  mcp?: ChatMCPOptions;
   middleware?: ChatMiddleware[];
   model: ChatModel;
   onMessagesChange?: (messages: UIMessage[]) => void;
@@ -124,6 +128,7 @@ export const runChatStream = async ({
     abortController,
     adapter: createOpenRouterAdapter(model),
     agentLoopStrategy: maxIterations(CHAT_AGENT_MAX_ITERATIONS),
+    mcp,
     messages: processor.getMessages(),
     middleware,
     modelOptions: {

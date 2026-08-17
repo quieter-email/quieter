@@ -8,8 +8,6 @@ import {
   createGmailMessagesServerTool,
   createGmailSearchServerTool,
   createGmailThreadServerTool,
-  createLinearIssueMetadataServerTool,
-  createLinearIssueServerTool,
   createMailboxOverviewServerTool,
   createModifyMailServerTool,
   googleCalendarToolsPrompt,
@@ -19,7 +17,6 @@ import {
 import type {
   GoogleCalendarToolsContext,
   GmailToolsContext,
-  LinearToolsContext,
   AiMemoryToolsContext,
 } from "@quieter/ai/chat-agent";
 import { chatModelSchema } from "@quieter/ai/chat-models";
@@ -53,13 +50,12 @@ import {
   touchChatRunHeartbeat,
   updateRunStatus,
 } from "../../chat-run-store";
+import { createLinearMcpToolSource } from "../../connectors/linear-mcp-tools";
 import {
   createGoogleCalendarEventForUser,
-  createLinearIssueForUser,
   GOOGLE_CALENDAR_CONNECTOR_PROVIDER,
   hasConnectedConnector,
   LINEAR_CONNECTOR_PROVIDER,
-  listLinearIssueMetadataForUser,
 } from "../../connectors/runtime";
 import {
   getMailboxOverviewForUser,
@@ -421,6 +417,26 @@ ${aiContext.memory}`);
 };
 
 /**
+ * Connected workspaces are reached through the user's own MCP connection, so the
+ * workspace decides which tools exist rather than this process mirroring a fixed set.
+ */
+const buildChatMcpOptions = (input: {
+  hasLinearConnector: boolean;
+  signal: AbortSignal;
+  userId: string;
+}) =>
+  input.hasLinearConnector
+    ? {
+        clients: [
+          createLinearMcpToolSource({
+            signal: input.signal,
+            userId: input.userId,
+          }),
+        ],
+      }
+    : undefined;
+
+/**
  * Bind a producer's lifetime to the request hosting it. The abort can land before the
  * run is claimed, when there is no controller to cancel yet, so the signal's current
  * state is adopted here and not only its future events.
@@ -694,6 +710,11 @@ export const runChatGeneration = async (
       abortController,
       durability,
       initialMessages: streamInitialMessages,
+      mcp: buildChatMcpOptions({
+        hasLinearConnector,
+        signal: abortController.signal,
+        userId: run.userId,
+      }),
       middleware: [usageMiddleware],
       model,
       onMessagesChange: (nextMessages) => {
@@ -892,26 +913,6 @@ export const runChatGeneration = async (
               }),
           };
           tools.push(createGoogleCalendarEventServerTool(calendarContext));
-        }
-
-        if (hasLinearConnector) {
-          const linearContext: LinearToolsContext = {
-            createLinearIssue: async (issue) =>
-              await createLinearIssueForUser({
-                issue,
-                signal: abortController.signal,
-                userId: run.userId,
-              }),
-            listLinearIssueMetadata: async () =>
-              await listLinearIssueMetadataForUser({
-                signal: abortController.signal,
-                userId: run.userId,
-              }),
-          };
-          tools.push(
-            createLinearIssueMetadataServerTool(linearContext),
-            createLinearIssueServerTool(linearContext)
-          );
         }
 
         return tools;

@@ -1,10 +1,4 @@
-import type { LinearClient } from "@linear/sdk";
 import { ORPCError } from "@orpc/server";
-import type {
-  LinearIssueCreateInput,
-  LinearIssueCreateResult,
-  LinearIssueMetadataResult,
-} from "@quieter/ai/chat-agent";
 import { db } from "@quieter/database/client";
 import { connectorCredential } from "@quieter/database/schema";
 import type { ConnectorProvider } from "@quieter/database/schema";
@@ -46,16 +40,6 @@ export type GoogleCalendarEventInput = {
   summary: string;
 };
 
-type LinearIssueMetadataSuccess = Extract<
-  LinearIssueMetadataResult,
-  { status: "success" }
->;
-type LinearIssueCreateSuccess = Extract<
-  LinearIssueCreateResult,
-  { status: "success" }
->;
-export type LinearIssueCreateDraft = LinearIssueCreateInput;
-export type LinearIssueMetadata = Omit<LinearIssueMetadataSuccess, "status">;
 export type LinearMcpToolDescriptor = {
   description?: string;
   inputSchema?: unknown;
@@ -80,7 +64,10 @@ export const GOOGLE_CALENDAR_SCOPES = [
   "https://www.googleapis.com/auth/userinfo.profile",
   "https://www.googleapis.com/auth/calendar.events",
 ] as const;
-export const LINEAR_SCOPES = ["read", "issues:create"] as const;
+// The agent reaches Linear through the workspace's own tools, so the grant has to
+// cover the changes those tools make. Connections made under the older, narrower
+// grant keep working for reads and fail the rest until they are reconnected.
+export const LINEAR_SCOPES = ["read", "write"] as const;
 
 const connectorDefinitions = {
   [GOOGLE_CALENDAR_CONNECTOR_PROVIDER]: {
@@ -614,17 +601,34 @@ const normalizeGoogleCalendarEvent = (
   summary: event.summary,
 });
 
-const createLinearClient = async (accessToken: string) => {
-  const { LinearClient } = await import("@linear/sdk");
-  return new LinearClient({ accessToken });
-};
-
 export const getLinearMcpEndpoint = () => LINEAR_MCP_URL;
 
+const LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql";
+/** The one Linear read that is not a tool call: naming the connection being made. */
+const LINEAR_IDENTITY_QUERY = `query ConnectorIdentity {
+  viewer { displayName email id name }
+  organization { id name }
+}`;
+
+const linearIdentitySchema = z.object({
+  data: z.object({
+    organization: z.object({
+      id: z.string(),
+      name: z.string(),
+    }),
+    viewer: z.object({
+      displayName: z.string().nullish(),
+      email: z.string(),
+      id: z.string(),
+      name: z.string().nullish(),
+    }),
+  }),
+});
+
 const resolveLinearDisplayName = (viewer: {
-  displayName: string | null | undefined;
+  displayName?: string | null;
   email: string;
-  name: string | null | undefined;
+  name?: string | null;
 }) => {
   if (hasText(viewer.displayName)) {
     return viewer.displayName;
@@ -636,39 +640,31 @@ const resolveLinearDisplayName = (viewer: {
 };
 
 export const getLinearIdentityFromAccessToken = async (accessToken: string) => {
-  const client = await createLinearClient(accessToken);
-  const [viewer, organization] = await Promise.all([
-    client.viewer,
-    client.organization,
-  ]);
+  const response = await fetch(LINEAR_GRAPHQL_URL, {
+    body: JSON.stringify({ query: LINEAR_IDENTITY_QUERY }),
+    headers: {
+      Authorization: accessToken,
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    throw new ConnectorHttpError(
+      "Linear rejected the connection.",
+      response.status
+    );
+  }
+
+  const { data } = linearIdentitySchema.parse(await response.json());
   return {
-    accountEmail: viewer.email,
-    displayName: resolveLinearDisplayName(viewer),
-    providerAccountId: viewer.id,
-    providerWorkspaceId: organization.id,
-    providerWorkspaceName: organization.name,
+    accountEmail: data.viewer.email,
+    displayName: resolveLinearDisplayName(data.viewer),
+    providerAccountId: data.viewer.id,
+    providerWorkspaceId: data.organization.id,
+    providerWorkspaceName: data.organization.name,
   };
 };
-
-const allowedLinearMcpReadTools = new Set([
-  "get_cycle",
-  "get_document",
-  "get_issue",
-  "get_issue_status",
-  "get_project",
-  "get_team",
-  "get_user",
-  "list_comments",
-  "list_cycles",
-  "list_documents",
-  "list_issue_labels",
-  "list_issue_statuses",
-  "list_issues",
-  "list_projects",
-  "list_teams",
-  "list_users",
-  "search_issues",
-]);
 
 const normalizeLinearMcpToolName = (name: string) =>
   name
@@ -677,8 +673,17 @@ const normalizeLinearMcpToolName = (name: string) =>
     .replace(/^linear[-_:]/u, "")
     .replace(/^linear_/u, "");
 
-const isAllowedLinearMcpReadTool = (tool: LinearMcpToolDescriptor) =>
-  allowedLinearMcpReadTools.has(normalizeLinearMcpToolName(tool.name));
+const LINEAR_MCP_READ_PREFIXES = ["get_", "list_", "search_"];
+
+/**
+ * Linear names its tools by verb, so the prefix is what separates a lookup from a
+ * change. Anything that is not plainly a read is treated as mutating, which routes it
+ * through the write path and its approval instead of running unattended.
+ */
+export const isMutatingLinearMcpTool = (tool: LinearMcpToolDescriptor) => {
+  const name = normalizeLinearMcpToolName(tool.name);
+  return !LINEAR_MCP_READ_PREFIXES.some((prefix) => name.startsWith(prefix));
+};
 
 const createConnectorHttpError = (message: string, status: number) =>
   new ConnectorHttpError(message, status);
@@ -836,13 +841,13 @@ const listLinearMcpTools = async (
   });
   const result = mcpToolsListResultSchema.parse(listed.result);
 
-  return result.tools
-    .map((tool) => ({
-      description: tool.description,
-      inputSchema: tool.inputSchema,
-      name: tool.name,
-    }))
-    .filter(isAllowedLinearMcpReadTool);
+  // Every tool the workspace exposes is offered. The connection is the user's own
+  // per-user OAuth grant, so Linear has already scoped what this token may do.
+  return result.tools.map((tool) => ({
+    description: tool.description,
+    inputSchema: tool.inputSchema,
+    name: tool.name,
+  }));
 };
 
 const callSingleLinearMcpTool = async (input: {
@@ -961,128 +966,40 @@ const callLinearMcpTools = async (input: {
   });
 };
 
-const readLinearIssueMetadata = async (
-  accessToken: string
-): Promise<LinearIssueMetadataSuccess> => {
-  const client = await createLinearClient(accessToken);
-  const [teams, labels, states, projects, users] = await Promise.all([
-    client.teams({ first: 100 }),
-    client.issueLabels({ first: 200 }),
-    client.workflowStates({ first: 200 }),
-    client.projects({ first: 100 }),
-    client.users({ first: 100 }),
-  ]);
-
-  return {
-    labels: labels.nodes.map((label) => ({
-      color: label.color,
-      description: label.description,
-      id: label.id,
-      isGroup: label.isGroup,
-      name: label.name,
-      parentId: label.parentId,
-      teamId: label.teamId,
-    })),
-    projects: projects.nodes.map((project) => ({
-      description: project.description,
-      id: project.id,
-      name: project.name,
-    })),
-    states: states.nodes.map((state) => ({
-      color: state.color,
-      id: state.id,
-      name: state.name,
-      teamId: state.teamId,
-      type: state.type,
-    })),
-    status: "success",
-    teams: teams.nodes.map((team) => ({
-      description: team.description,
-      displayName: team.displayName,
-      id: team.id,
-      key: team.key,
-      name: team.name,
-    })),
-    users: users.nodes.map((user) => ({
-      active: user.active,
-      displayName: user.displayName,
-      email: user.email,
-      id: user.id,
-      isAssignable: user.isAssignable,
-      name: user.name,
-    })),
-  };
-};
-
-const createLinearIssue = async (
-  accessToken: string,
-  issue: LinearIssueCreateInput
-): Promise<LinearIssueCreateSuccess> => {
-  const client = await createLinearClient(accessToken);
-  const issueInput: Parameters<LinearClient["createIssue"]>[0] = {
-    ...(hasText(issue.assigneeId) ? { assigneeId: issue.assigneeId } : {}),
-    ...(hasText(issue.description) ? { description: issue.description } : {}),
-    ...(issue.labelIds !== undefined && issue.labelIds.length > 0
-      ? { labelIds: issue.labelIds }
-      : {}),
-    ...(issue.priority !== undefined && issue.priority !== 0
-      ? { priority: issue.priority }
-      : {}),
-    ...(hasText(issue.projectId) ? { projectId: issue.projectId } : {}),
-    ...(hasText(issue.stateId) ? { stateId: issue.stateId } : {}),
-    teamId: issue.teamId,
-    title: issue.title,
-  };
-  const payload = await client.createIssue(issueInput);
-  const createdIssue = await payload.issue;
-  if (!payload.success || createdIssue === undefined) {
-    throw new Error("Linear did not create the issue.");
-  }
-
-  return {
-    id: createdIssue.id,
-    identifier: createdIssue.identifier,
-    status: "success",
-    title: createdIssue.title,
-    url: createdIssue.url,
-  };
-};
-
-export const listLinearIssueMetadataForUser = async (input: {
+export const listLinearMcpToolsForUser = async (input: {
   signal?: AbortSignal;
   userId: string;
-}): Promise<LinearIssueMetadataResult> =>
+}): Promise<LinearMcpToolDescriptor[]> =>
   await runAuthorizedConnector(
     {
       provider: LINEAR_CONNECTOR_PROVIDER,
       signal: input.signal,
       userId: input.userId,
     },
-    async (accessToken) => await readLinearIssueMetadata(accessToken)
+    async (accessToken, signal) => await listLinearMcpTools(accessToken, signal)
   );
 
-export const listLinearIssueMetadataForCredential = async (input: {
-  credentialId: string;
+export const runLinearMcpToolCallsForUser = async (input: {
+  calls: LinearMcpToolCallInput[];
+  maxCalls?: number;
+  maxOutputBytes?: number;
   signal?: AbortSignal;
-  userId?: string;
-}): Promise<LinearIssueMetadata> =>
-  await runAuthorizedConnectorCredential(
+  userId: string;
+}): Promise<LinearMcpToolCallResult[]> =>
+  await runAuthorizedConnector(
     {
-      credentialId: input.credentialId,
       provider: LINEAR_CONNECTOR_PROVIDER,
       signal: input.signal,
       userId: input.userId,
     },
-    async (accessToken) => {
-      const metadata = await readLinearIssueMetadata(accessToken);
-      return {
-        labels: metadata.labels,
-        projects: metadata.projects,
-        states: metadata.states,
-        teams: metadata.teams,
-        users: metadata.users,
-      };
-    }
+    async (accessToken, signal) =>
+      await callLinearMcpTools({
+        accessToken,
+        calls: input.calls,
+        maxCalls: input.maxCalls,
+        maxOutputBytes: input.maxOutputBytes,
+        signal,
+      })
   );
 
 export const listLinearMcpToolsForCredential = async (input: {
@@ -1124,44 +1041,6 @@ export const runLinearMcpToolCallsForCredential = async (input: {
         maxOutputBytes: input.maxOutputBytes,
         signal,
       })
-  );
-
-export const createLinearIssueForUser = async (input: {
-  issue: LinearIssueCreateInput;
-  signal?: AbortSignal;
-  userId: string;
-}): Promise<LinearIssueCreateResult> =>
-  await runAuthorizedConnector(
-    {
-      provider: LINEAR_CONNECTOR_PROVIDER,
-      signal: input.signal,
-      userId: input.userId,
-    },
-    async (accessToken) => await createLinearIssue(accessToken, input.issue)
-  );
-
-export const createLinearIssueForCredential = async (input: {
-  credentialId: string;
-  issue: LinearIssueCreateDraft;
-  signal?: AbortSignal;
-  userId?: string;
-}) =>
-  await runAuthorizedConnectorCredential(
-    {
-      credentialId: input.credentialId,
-      provider: LINEAR_CONNECTOR_PROVIDER,
-      signal: input.signal,
-      userId: input.userId,
-    },
-    async (accessToken) => {
-      const issue = await createLinearIssue(accessToken, input.issue);
-      return {
-        id: issue.id,
-        identifier: issue.identifier,
-        title: issue.title,
-        url: issue.url,
-      };
-    }
   );
 
 const createGoogleCalendarEvent = async (input: {
