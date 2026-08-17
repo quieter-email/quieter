@@ -18,28 +18,33 @@ type ThinkingPartProps = {
 
 export const ThinkingPart = ({ content, isActive }: ThinkingPartProps) => {
   const shouldReduceMotion = useReducedMotion();
-  const [expanded, setExpanded] = useState(false);
+  const [override, setOverride] = useState<boolean | null>(null);
   const hasReasoning = Boolean(content.trim());
+  // Follow the reasoning while it is being written, then fold it away once the model
+  // moves on. An explicit toggle wins until this part becomes active again.
+  const expanded = (override ?? isActive) && hasReasoning;
 
-  if (!isActive) {
+  if (!(hasReasoning || isActive)) {
     return null;
   }
 
   return (
     <div className="flex flex-col">
       <button
-        aria-expanded={expanded}
+        aria-expanded={hasReasoning ? expanded : undefined}
         aria-label={hasReasoning ? "Toggle reasoning" : "Thinking"}
-        className="group flex w-fit items-center gap-1 py-0.5 text-left"
+        className={cn("group flex w-fit items-center gap-1 py-0.5 text-left", {
+          "cursor-default": !hasReasoning,
+        })}
         disabled={!hasReasoning}
         onClick={() => {
-          setExpanded((prev) => !prev);
+          setOverride(!expanded);
         }}
         type="button"
       >
         <span className="inline-flex items-center gap-1.5 text-xs text-muted-fg">
-          <LoadingDots />
-          Thinking
+          {isActive ? <LoadingDots /> : null}
+          {isActive ? "Thinking" : "Thought process"}
         </span>
         {hasReasoning ? (
           <HugeiconsIcon
@@ -59,11 +64,11 @@ export const ThinkingPart = ({ content, isActive }: ThinkingPartProps) => {
         ) : null}
       </button>
       <AnimatePresence initial={false}>
-        {expanded && hasReasoning ? (
+        {expanded ? (
           <m.div
             {...getAppPresenceMotion({ reducedMotion: shouldReduceMotion })}
           >
-            <div className="py-1">
+            <div className="border-l border-border py-1 pl-3 text-muted-fg">
               <MarkdownContent markdown={content} />
             </div>
           </m.div>

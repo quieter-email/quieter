@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-
 import { formatMessageDate } from "../../../domain/chat-formatting";
 import { truncateToolDetail } from "../../../domain/tool-summaries";
 import type { GmailMessageToolResult } from "../../../types";
@@ -78,6 +76,7 @@ const MessageToolContent = ({
 );
 
 type MessageToolProps = {
+  active?: boolean;
   nested?: boolean;
   data?: GmailMessageToolResult;
   error?: string | null;
@@ -89,13 +88,13 @@ type MessageToolProps = {
 };
 
 export const MessageTool = ({
+  active,
   nested = false,
   data,
   error,
   onOpenMessage,
   pending,
 }: MessageToolProps) => {
-  const [expanded, setExpanded] = useState(false);
   const success = getSuccessfulMessage(data);
   const detail = hasText(success?.subject)
     ? `"${truncateToolDetail(success.subject)}"`
@@ -104,16 +103,13 @@ export const MessageTool = ({
 
   return (
     <ToolStep
+      active={active}
       nested={nested}
       detail={detail}
       error={error}
       expandable={!!success}
-      expanded={expanded}
       label={pending ? "Reading message" : "Read message"}
       meta={meta}
-      onToggle={() => {
-        setExpanded((current) => !current);
-      }}
       pending={pending}
     >
       {success ? (

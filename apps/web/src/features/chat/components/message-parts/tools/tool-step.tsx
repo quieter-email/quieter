@@ -4,6 +4,7 @@ import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { cn } from "@quieter/ui/cn";
 import { AnimatePresence, m, useReducedMotion } from "motion/react";
+import { useState } from "react";
 import type { ReactNode } from "react";
 
 import { getAppPresenceMotion } from "#/features/motion/app-motion";
@@ -11,15 +12,15 @@ import { getAppPresenceMotion } from "#/features/motion/app-motion";
 import { LoadingDots } from "../../thinking-indicator";
 
 type ToolStepProps = {
+  /** The step the model is on right now: show its result until the model moves on. */
+  active?: boolean;
   children?: ReactNode;
   detail?: string;
   error?: string | null;
-  expanded?: boolean;
   expandable?: boolean;
   label: string;
   meta?: string;
   nested?: boolean;
-  onToggle?: () => void;
   pending?: boolean;
 };
 
@@ -64,20 +65,23 @@ const hasRenderableChildren = (children: ReactNode) =>
   children !== "";
 
 export const ToolStep = ({
+  active = false,
   children,
   detail,
   error,
-  expanded = false,
   expandable = false,
   label,
   meta,
   nested = false,
-  onToggle,
   pending = false,
 }: ToolStepProps) => {
   const shouldReduceMotion = useReducedMotion();
+  const [override, setOverride] = useState<boolean | null>(null);
   const hasError = Boolean(error);
   const canExpand = expandable && !pending && !hasError;
+  // Reveal what the step found while it is the model's current step, then fold it away
+  // once the model moves on. An explicit toggle wins from then on.
+  const expanded = canExpand && (override ?? active);
   const leadingIndicator = getLeadingIndicator({
     canExpand,
     expanded,
@@ -98,7 +102,9 @@ export const ToolStep = ({
           }
         )}
         disabled={!canExpand}
-        onClick={canExpand ? onToggle : undefined}
+        onClick={() => {
+          setOverride(!expanded);
+        }}
         type="button"
       >
         {leadingIndicator}

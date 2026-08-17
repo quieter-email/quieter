@@ -1,7 +1,6 @@
 "use client";
 
 import { cn } from "@quieter/ui/cn";
-import { useState } from "react";
 
 import { formatMessageDate } from "../../../domain/chat-formatting";
 import { truncateToolDetail } from "../../../domain/tool-summaries";
@@ -12,6 +11,7 @@ const hasText = (value: string | null | undefined): value is string =>
   value !== null && value !== undefined && value !== "";
 
 type SearchToolProps = {
+  active?: boolean;
   nested?: boolean;
   data?: GmailSearchToolResult;
   error?: string | null;
@@ -24,6 +24,7 @@ type SearchToolProps = {
 };
 
 export const SearchTool = ({
+  active,
   nested = false,
   data,
   error,
@@ -31,7 +32,6 @@ export const SearchTool = ({
   pending,
   query,
 }: SearchToolProps) => {
-  const [expanded, setExpanded] = useState(false);
   const success = data?.status === "success" ? data : null;
   const messages = success?.messages ?? [];
   let meta: string | undefined;
@@ -47,16 +47,13 @@ export const SearchTool = ({
 
   return (
     <ToolStep
+      active={active}
       nested={nested}
       detail={detail}
       error={error}
       expandable={!!success && messages.length > 0}
-      expanded={expanded}
       label={pending ? "Searching mail" : "Searched mail"}
       meta={meta}
-      onToggle={() => {
-        setExpanded((current) => !current);
-      }}
       pending={pending}
     >
       {success ? (

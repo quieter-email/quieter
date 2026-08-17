@@ -22,6 +22,8 @@ type ToolResult = Extract<MessagePart, { type: "tool-result" }>;
 
 type ToolActivityGroupProps = {
   actionsDisabled?: boolean;
+  /** The tool call the model is on right now, if it is one of these. */
+  activeToolCallId?: string | null;
   animateEntrance?: boolean;
   assistantMessageId: string;
   isStreaming?: boolean;
@@ -31,6 +33,7 @@ type ToolActivityGroupProps = {
 
 export const ToolActivityGroup = ({
   actionsDisabled,
+  activeToolCallId = null,
   animateEntrance = false,
   assistantMessageId,
   isStreaming = false,
@@ -39,14 +42,14 @@ export const ToolActivityGroup = ({
 }: ToolActivityGroupProps) => {
   const shouldReduceMotion = useReducedMotion();
   const hasPending = isStreaming && items.some((item) => !item.result);
-  const [expanded, setExpanded] = useState(hasPending);
-  const [previousHasPending, setPreviousHasPending] = useState(hasPending);
-  if (previousHasPending !== hasPending) {
-    setPreviousHasPending(hasPending);
-    if (!hasPending) {
-      setExpanded(false);
-    }
-  }
+  const isActiveGroup =
+    hasPending ||
+    (activeToolCallId !== null &&
+      items.some((item) => item.call.id === activeToolCallId));
+  const [override, setOverride] = useState<boolean | null>(null);
+  // Follow the group while the model works through it, then fold it away. An explicit
+  // toggle wins until the model comes back to this group.
+  const expanded = override ?? isActiveGroup;
   const summaryItems = items.map((item) => ({
     call: item.call,
     pending: isStreaming && !item.result,
@@ -64,6 +67,7 @@ export const ToolActivityGroup = ({
     return (
       <ToolPart
         actionsDisabled={actionsDisabled}
+        active={item.call.id === activeToolCallId}
         animateEntrance={animateEntrance}
         assistantMessageId={assistantMessageId}
         call={item.call}
@@ -80,7 +84,7 @@ export const ToolActivityGroup = ({
         aria-expanded={expanded}
         className="group flex w-full items-center gap-2 text-left"
         onClick={() => {
-          setExpanded((current) => !current);
+          setOverride(!expanded);
         }}
         type="button"
       >
@@ -115,6 +119,7 @@ export const ToolActivityGroup = ({
               {items.map((item) => (
                 <ToolPart
                   actionsDisabled={actionsDisabled}
+                  active={item.call.id === activeToolCallId}
                   animateEntrance={animateEntrance}
                   assistantMessageId={assistantMessageId}
                   call={item.call}

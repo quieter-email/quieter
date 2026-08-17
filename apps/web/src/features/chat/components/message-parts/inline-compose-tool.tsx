@@ -95,7 +95,6 @@ const ComposeDeclinedView = ({
   defaultExpanded?: boolean;
   initial: ComposeEmailInput;
 }) => {
-  const [expanded, setExpanded] = useState(defaultExpanded);
   const bodyText = initial.bodyText.trim();
   const detail = [initial.to ? `To ${initial.to}` : "", initial.subject]
     .filter(Boolean)
@@ -103,13 +102,10 @@ const ComposeDeclinedView = ({
 
   return (
     <ToolStep
+      active={defaultExpanded}
       detail={detail ? `"${detail}"` : undefined}
       expandable
-      expanded={expanded}
       label="Declined draft"
-      onToggle={() => {
-        setExpanded((current) => !current);
-      }}
     >
       <div className="space-y-0">
         <ComposeField label="To" readOnly value={initial.to} />

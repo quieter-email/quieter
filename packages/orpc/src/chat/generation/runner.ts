@@ -48,6 +48,7 @@ import {
   isActiveChatRunStatus,
   isCancelRequested,
   persistChatRunDraft,
+  requeueChatRun,
   terminalizeChatRun,
   touchChatRunHeartbeat,
   updateRunStatus,
@@ -74,14 +75,14 @@ import { assertAccessibleMailbox } from "../../mailbox/service";
 import {
   createHubStreamDurability,
   peekChatRunHub,
-  releaseChatRunHub,
   sealChatRunHub,
 } from "../stream-hub";
 import { getChatRunFailureMessage, terminalizeFailedChatRun } from "./failure";
 import { registerChatRunController } from "./runtime";
 
 const DRAFT_PERSIST_INTERVAL_MS = 1000;
-const CANCEL_POLL_INTERVAL_MS = 250;
+/** In-isolate cancels abort immediately; this poll only covers cross-isolate cancels. */
+const CANCEL_POLL_INTERVAL_MS = 1000;
 const HEARTBEAT_INTERVAL_MS = 5000;
 const STALE_RUN_CLAIM_MS = 30_000;
 const MAIL_TOOL_TIMEOUT_MS = 25_000;
@@ -419,6 +420,11 @@ ${aiContext.memory}`);
   return prompts;
 };
 
+/**
+ * Execute one chat run. The caller owns the stream hub: it must release any hub left
+ * by a dead producer and create the fresh one before calling, so observers that
+ * attached first stay subscribed to the hub this run appends to.
+ */
 export const runChatGeneration = async (
   runId: string,
   options?: {
@@ -452,14 +458,20 @@ export const runChatGeneration = async (
     return;
   }
 
-  // Stale takeovers must not reuse a sealed in-memory hub from a prior attempt.
-  releaseChatRunHub(runId);
+  // Publish ownership in the same tick as the claim. Anything that decides whether to
+  // start a producer reads this, so a gap here is a window for a second one to start.
+  const abortController = new AbortController();
+  const unregisterController = registerChatRunController(
+    runId,
+    abortController
+  );
 
   const { assistantDraft, visibleMessages } =
     await loadChatGenerationMessages(run);
   const latestUserRequest = getLatestUserRequest(visibleMessages);
 
   if (!assistantDraft) {
+    unregisterController();
     await terminalizeFailedChatRun(
       runId,
       "This response could not be resumed. Retry it to continue."
@@ -467,15 +479,11 @@ export const runChatGeneration = async (
     return;
   }
 
-  const abortController = new AbortController();
-  const unregisterController = registerChatRunController(
-    runId,
-    abortController
-  );
   let persistTimeout: ReturnType<typeof setTimeout> | undefined;
   let pendingParts: ChatMessagePart[] = assistantDraft.parts;
   let pendingPersist = Promise.resolve();
   let cancelled = false;
+  let handedBack = false;
   let hasPersistedStreamingDraft = false;
   const usageReports: Promise<void>[] = [];
 
@@ -888,22 +896,32 @@ export const runChatGeneration = async (
     pendingParts = finalParts;
     await settleUsageReports();
     await drainAssistantDraftPersist();
+
+    // Reaching here means the stream finished. A signal that aborted this late — an
+    // observer disconnecting on the terminal chunk — must not undo a finished response.
     await terminalizeChatRun({
       parts: finalParts,
       runId,
-      status:
-        cancelled || abortController.signal.aborted ? "cancelled" : "complete",
+      status: cancelled ? "cancelled" : "complete",
     });
   } catch (error) {
     await settleUsageReports();
 
-    if (cancelled || abortController.signal.aborted) {
+    if (cancelled) {
       await drainAssistantDraftPersist();
       await terminalizeChatRun({
         parts: pendingParts,
         runId,
         status: "cancelled",
       });
+      return;
+    }
+
+    if (abortController.signal.aborted) {
+      // The host that was running this went away. Keep the draft and hand the run back
+      // so the next observer resumes it instead of finding a stalled response.
+      await drainAssistantDraftPersist();
+      handedBack = await requeueChatRun(runId);
       return;
     }
 
@@ -926,13 +944,19 @@ export const runChatGeneration = async (
     // closed empty/incomplete log as a clean stream end and spam reconnects.
     // If the producer exits while status is still active, emit incomplete so
     // subscribers are released (stale reclaim / DO restart can restart later).
+    // A handed-back run is the exception: it is queued for a successor, so closing the
+    // log without a terminal chunk is what makes observers reconnect and resume it.
     try {
       const [current] = await db
         .select({ status: chatRun.status })
         .from(chatRun)
         .where(eq(chatRun.id, runId))
         .limit(1);
-      if (current !== undefined && isActiveChatRunStatus(current.status)) {
+      if (
+        !handedBack &&
+        current !== undefined &&
+        isActiveChatRunStatus(current.status)
+      ) {
         const hub = peekChatRunHub(runId);
         if (hub && !hub.isClosed()) {
           hub.append([

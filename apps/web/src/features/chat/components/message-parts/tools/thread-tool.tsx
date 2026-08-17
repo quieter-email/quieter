@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-
 import { formatMessageDate } from "../../../domain/chat-formatting";
 import { truncateToolDetail } from "../../../domain/tool-summaries";
 import type { GmailThreadToolResult } from "../../../types";
@@ -11,6 +9,7 @@ const hasText = (value: string | null | undefined): value is string =>
   value !== null && value !== undefined && value !== "";
 
 type ThreadToolProps = {
+  active?: boolean;
   nested?: boolean;
   data?: GmailThreadToolResult;
   error?: string | null;
@@ -23,6 +22,7 @@ type ThreadToolProps = {
 };
 
 export const ThreadTool = ({
+  active,
   nested = false,
   data,
   error,
@@ -30,7 +30,6 @@ export const ThreadTool = ({
   pending,
   threadId,
 }: ThreadToolProps) => {
-  const [expanded, setExpanded] = useState(false);
   const success = data?.status === "success" ? data : null;
   const messageCount = success
     ? success.messages.length + success.omittedMessageCount
@@ -48,16 +47,13 @@ export const ThreadTool = ({
 
   return (
     <ToolStep
+      active={active}
       nested={nested}
       detail={detail}
       error={error}
       expandable={!!success && success.messages.length > 0}
-      expanded={expanded}
       label={pending ? "Reading thread" : "Read thread"}
       meta={meta}
-      onToggle={() => {
-        setExpanded((current) => !current);
-      }}
       pending={pending}
     >
       {success ? (

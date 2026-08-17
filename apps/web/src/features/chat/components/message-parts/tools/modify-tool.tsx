@@ -27,6 +27,7 @@ const hasText = (value: string | null | undefined): value is string =>
   value !== null && value !== undefined && value !== "";
 
 type ModifyToolProps = {
+  active?: boolean;
   action?: ModifyMailToolResult["action"];
   nested?: boolean;
   data?: ModifyMailToolResult;
@@ -36,6 +37,7 @@ type ModifyToolProps = {
 };
 
 export const ModifyTool = ({
+  active,
   action,
   nested = false,
   data,
@@ -60,6 +62,7 @@ export const ModifyTool = ({
 
   return (
     <ToolStep
+      active={active}
       error={error}
       label={label}
       meta={meta}

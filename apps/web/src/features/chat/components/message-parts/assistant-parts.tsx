@@ -1,7 +1,10 @@
 import { cn } from "@quieter/ui/cn";
 import type { MessagePart } from "@tanstack/ai";
 
-import { hasVisibleAssistantContent } from "../../domain/assistant-content";
+import {
+  getActiveToolCallId,
+  hasVisibleAssistantContent,
+} from "../../domain/assistant-content";
 import { shouldUngroupTool } from "../../domain/tool-summaries";
 import type { ResolveComposeTool } from "../../types";
 import { ThinkingIndicator } from "../thinking-indicator";
@@ -156,6 +159,7 @@ export const AssistantParts = ({
     )
   );
   const segments = buildSegments(parts, toolCalls, toolResults);
+  const activeToolCallId = isStreaming ? getActiveToolCallId(parts) : null;
 
   const hasVisible = hasVisibleAssistantContent(parts);
   const showThinking = !hasVisible && isStreaming;
@@ -216,6 +220,7 @@ export const AssistantParts = ({
           return (
             <ToolPart
               actionsDisabled={actionsDisabled}
+              active={item.call.id === activeToolCallId}
               animateEntrance={animateEntrance}
               assistantMessageId={assistantMessageId}
               call={item.call}
@@ -230,6 +235,7 @@ export const AssistantParts = ({
         return (
           <ToolActivityGroup
             actionsDisabled={actionsDisabled}
+            activeToolCallId={activeToolCallId}
             animateEntrance={animateEntrance}
             assistantMessageId={assistantMessageId}
             isStreaming={isStreaming}

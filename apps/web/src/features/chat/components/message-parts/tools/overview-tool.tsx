@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-
 import type { MailboxOverviewToolResult } from "../../../types";
 import { ToolStep } from "./tool-step";
 
@@ -9,6 +7,7 @@ const hasText = (value: string | null | undefined): value is string =>
   value !== null && value !== undefined && value !== "";
 
 type OverviewToolProps = {
+  active?: boolean;
   nested?: boolean;
   data?: MailboxOverviewToolResult;
   error?: string | null;
@@ -19,12 +18,12 @@ const formatCount = (value: number | undefined) =>
   typeof value === "number" ? value.toLocaleString() : "—";
 
 export const OverviewTool = ({
+  active,
   nested = false,
   data,
   error,
   pending,
 }: OverviewToolProps) => {
-  const [expanded, setExpanded] = useState(false);
   const success = data?.status === "success" ? data : null;
   let meta: string | undefined;
   if (pending || hasText(error)) {
@@ -35,16 +34,13 @@ export const OverviewTool = ({
 
   return (
     <ToolStep
+      active={active}
       nested={nested}
       detail={success?.emailAddress}
       error={error}
       expandable={!!success}
-      expanded={expanded}
       label={pending ? "Checking mailbox" : "Checked mailbox"}
       meta={meta}
-      onToggle={() => {
-        setExpanded((current) => !current);
-      }}
       pending={pending}
     >
       {success ? (
