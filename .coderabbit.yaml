@@ -2,15 +2,11 @@ reviews:
   auto_review:
     enabled: false
     auto_incremental_review: false
+  # Only generated artifacts are withheld. Hand-written code is in scope everywhere,
+  # so exclusions here should stay limited to files nobody edits by hand.
   path_filters:
+    - "!**/sst-env.d.ts"
+    - "!apps/web/src/routeTree.gen.ts"
+    - "!bun.lock"
+    - "!packages/cloudflare/worker-configuration.d.ts"
     - "!packages/database/drizzle/**/snapshot.json"
-    - "!apps/web/src/features/settings/**"
-    - "!apps/web/src/features/chat/**"
-    - "!apps/web/src/features/home/**"
-    - "!apps/web/src/features/compose/**"
-    - "!apps/web/src/features/hotkeys/**"
-    - "!apps/web/src/features/legal/**"
-    - "!apps/web/src/features/gmail-useful-details/**"
-    - "!apps/web/src/routes/**"
-    - "!apps/web/src/components/**"
-    - "!AGENTS.md"
