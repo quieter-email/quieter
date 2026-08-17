@@ -16,12 +16,15 @@ import {
 import type { ResolveComposeTool } from "../../../types";
 import { LoadingDots } from "../../thinking-indicator";
 import { ToolPart } from "../tool-part";
+import { toolGroupIcon } from "./tool-icons";
 
 type ToolCall = Extract<MessagePart, { type: "tool-call" }>;
 type ToolResult = Extract<MessagePart, { type: "tool-result" }>;
 
 type ToolActivityGroupProps = {
   actionsDisabled?: boolean;
+  /** The tool call the model is on right now, if it is one of these. */
+  activeToolCallId?: string | null;
   animateEntrance?: boolean;
   assistantMessageId: string;
   isStreaming?: boolean;
@@ -31,6 +34,7 @@ type ToolActivityGroupProps = {
 
 export const ToolActivityGroup = ({
   actionsDisabled,
+  activeToolCallId = null,
   animateEntrance = false,
   assistantMessageId,
   isStreaming = false,
@@ -39,14 +43,14 @@ export const ToolActivityGroup = ({
 }: ToolActivityGroupProps) => {
   const shouldReduceMotion = useReducedMotion();
   const hasPending = isStreaming && items.some((item) => !item.result);
-  const [expanded, setExpanded] = useState(hasPending);
-  const [previousHasPending, setPreviousHasPending] = useState(hasPending);
-  if (previousHasPending !== hasPending) {
-    setPreviousHasPending(hasPending);
-    if (!hasPending) {
-      setExpanded(false);
-    }
-  }
+  const isActiveGroup =
+    hasPending ||
+    (activeToolCallId !== null &&
+      items.some((item) => item.call.id === activeToolCallId));
+  const [override, setOverride] = useState<boolean | null>(null);
+  // Follow the group while the model works through it, then fold it away. An explicit
+  // toggle wins until the model comes back to this group.
+  const expanded = override ?? isActiveGroup;
   const summaryItems = items.map((item) => ({
     call: item.call,
     pending: isStreaming && !item.result,
@@ -64,6 +68,7 @@ export const ToolActivityGroup = ({
     return (
       <ToolPart
         actionsDisabled={actionsDisabled}
+        active={item.call.id === activeToolCallId}
         animateEntrance={animateEntrance}
         assistantMessageId={assistantMessageId}
         call={item.call}
@@ -78,18 +83,28 @@ export const ToolActivityGroup = ({
     <div className="py-1">
       <button
         aria-expanded={expanded}
-        className="group flex w-full items-center gap-2 text-left"
+        className="group flex w-full items-center gap-2.5 text-left"
         onClick={() => {
-          setExpanded((current) => !current);
+          setOverride(!expanded);
         }}
         type="button"
       >
-        {hasPending && isStreaming ? (
-          <LoadingDots />
-        ) : (
+        <HugeiconsIcon
+          aria-hidden
+          className="size-3.5 shrink-0 text-muted-fg/60"
+          icon={toolGroupIcon}
+        />
+        <span className="flex min-w-0 flex-1 items-baseline gap-x-2 truncate text-sm/5">
+          <span className="shrink-0 text-muted-fg capitalize">{summary}</span>
+          {activeDetail !== undefined && activeDetail !== "" ? (
+            <span className="truncate text-fg/75">{activeDetail}</span>
+          ) : null}
+        </span>
+        <span className="flex shrink-0 items-center gap-2">
+          {hasPending ? <LoadingDots /> : null}
           <HugeiconsIcon
             aria-hidden
-            className={cn("size-3.5 shrink-0 text-muted-fg/45", {
+            className={cn("size-3.5 text-muted-fg/50", {
               "rotate-90": expanded,
               "transition-none": shouldReduceMotion === true,
               "transition-transform duration-(--app-motion-duration-enter) ease-(--app-motion-ease-out)":
@@ -97,12 +112,6 @@ export const ToolActivityGroup = ({
             })}
             icon={ArrowRight01Icon}
           />
-        )}
-        <span className="min-w-0 flex-1 truncate text-sm/relaxed text-muted-fg">
-          <span className="capitalize">{summary}</span>
-          {activeDetail !== undefined && activeDetail !== "" ? (
-            <span className="ml-2 text-muted-fg/70">{activeDetail}</span>
-          ) : null}
         </span>
       </button>
 
@@ -111,10 +120,11 @@ export const ToolActivityGroup = ({
           <m.div
             {...getAppPresenceMotion({ reducedMotion: shouldReduceMotion })}
           >
-            <div className="mt-1.5 space-y-0.5 border-l border-border pl-3">
+            <div className="mt-0.5 ml-6">
               {items.map((item) => (
                 <ToolPart
                   actionsDisabled={actionsDisabled}
+                  active={item.call.id === activeToolCallId}
                   animateEntrance={animateEntrance}
                   assistantMessageId={assistantMessageId}
                   call={item.call}

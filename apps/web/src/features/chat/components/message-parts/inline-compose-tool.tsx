@@ -27,7 +27,10 @@ import {
 import { getAppPresenceMotion } from "#/features/motion/app-motion";
 
 import type { InlineComposeAction } from "../../types";
+import { getToolIcon } from "./tools/tool-icons";
 import { ToolStep } from "./tools/tool-step";
+
+const composeToolIcon = getToolIcon("compose_email");
 
 type InlineComposeToolProps = {
   disabled?: boolean;
@@ -83,19 +86,13 @@ const ComposeReceipt = ({ result }: { result: ComposeEmailResult }) => {
   return (
     <ToolStep
       detail={detail ? `"${detail}"` : undefined}
+      icon={composeToolIcon}
       label={result.status === "sent" ? "Sent email" : "Saved draft"}
     />
   );
 };
 
-const ComposeDeclinedView = ({
-  initial,
-  defaultExpanded = false,
-}: {
-  defaultExpanded?: boolean;
-  initial: ComposeEmailInput;
-}) => {
-  const [expanded, setExpanded] = useState(defaultExpanded);
+const ComposeDeclinedView = ({ initial }: { initial: ComposeEmailInput }) => {
   const bodyText = initial.bodyText.trim();
   const detail = [initial.to ? `To ${initial.to}` : "", initial.subject]
     .filter(Boolean)
@@ -105,11 +102,8 @@ const ComposeDeclinedView = ({
     <ToolStep
       detail={detail ? `"${detail}"` : undefined}
       expandable
-      expanded={expanded}
+      icon={composeToolIcon}
       label="Declined draft"
-      onToggle={() => {
-        setExpanded((current) => !current);
-      }}
     >
       <div className="space-y-0">
         <ComposeField label="To" readOnly value={initial.to} />
@@ -223,7 +217,10 @@ export const InlineComposeTool = ({
   const isBusy = processing === true || pendingAction !== null;
 
   return (
-    <form className="border-l border-border pl-3" onSubmit={handleSubmit}>
+    <form
+      className="rounded-md border border-border bg-bg-surface p-3"
+      onSubmit={handleSubmit}
+    >
       <div className="mb-2 flex items-center justify-between gap-3">
         <p className="text-xs text-muted-fg">
           {processing === true ? "Sending email" : "Draft email"}

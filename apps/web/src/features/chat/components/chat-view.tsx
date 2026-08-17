@@ -50,7 +50,11 @@ import { persistQueryByKey } from "#/lib/query-persister";
 import { createChatTurns } from "../domain/chat-turns";
 import { useChatRunStream } from "../hooks/use-chat-run-stream";
 import type { ChatRunStreamDone } from "../hooks/use-chat-run-stream";
-import type { ChatViewProps, ResolveComposeToolInput } from "../types";
+import type {
+  ChatTurn,
+  ChatViewProps,
+  ResolveComposeToolInput,
+} from "../types";
 import { ChatComposer } from "./chat-composer";
 import { ChatTranscript } from "./chat-transcript";
 
@@ -60,6 +64,8 @@ type StoredChatMessage = ChatQueryData["messages"][number];
 type ActiveChatRun = ChatQueryData["activeRun"];
 type ChatRunStartResult = RouterOutputs["chat"]["sendMessage"];
 
+/** Identifies the locally painted turn that stands in until the run record exists. */
+const PENDING_TURN_ID = "pending-turn";
 const MAX_TRANSCRIPTION_AUDIO_DURATION_MS = 60_000;
 const MAX_TRANSCRIPTION_AUDIO_BASE64_LENGTH = 14_000_000;
 
@@ -85,6 +91,43 @@ const normalizeChatMessages = (messages: StoredChatMessage[]): UIMessage[] =>
     parts: isUiMessagePartArray(message.parts) ? message.parts : [],
     role: message.role,
   }));
+
+type PendingPrompt = { chatKey: string; text: string } | null;
+
+/**
+ * The turn painted locally between submitting and the run record coming back, so the
+ * transcript shows the prompt and a thinking assistant instead of nothing.
+ */
+const createPendingTurn = (
+  pendingPrompt: PendingPrompt,
+  chatKey: string
+): ChatTurn | null => {
+  if (pendingPrompt === null || pendingPrompt.chatKey !== chatKey) {
+    return null;
+  }
+
+  return {
+    assistant: {
+      id: `${PENDING_TURN_ID}:assistant`,
+      parts: [],
+      role: "assistant",
+    },
+    id: PENDING_TURN_ID,
+    user: {
+      id: `${PENDING_TURN_ID}:user`,
+      parts: [{ content: pendingPrompt.text, type: "text" }],
+      role: "user",
+    },
+  };
+};
+
+const hasPendingChatAction = (mutations: ChatViewMutationSet) =>
+  mutations.createChatMutation.isPending ||
+  mutations.sendMessageMutation.isPending ||
+  mutations.cancelGenerationMutation.isPending ||
+  mutations.editUserMessageMutation.isPending ||
+  mutations.regenerateResponseMutation.isPending ||
+  mutations.resolveComposeToolMutation.isPending;
 
 const copyToClipboard = async (text: string) => {
   try {
@@ -457,6 +500,7 @@ const useChatViewStream = ({
   chatData,
   chatId,
   mailboxId,
+  model,
   queryClient,
   setStreamRunId,
   setStreamingAssistant,
@@ -466,6 +510,7 @@ const useChatViewStream = ({
   chatData: ChatQueryData | undefined;
   chatId: string | null;
   mailboxId: string;
+  model: ChatModel;
   queryClient: ReturnType<typeof useQueryClient>;
   setStreamRunId: (value: string | null) => void;
   setStreamingAssistant: (
@@ -481,6 +526,19 @@ const useChatViewStream = ({
     streamChatIdRef.current = result.chatId;
     const queryKey = getChatQueryKey(mailboxId, result.chatId);
 
+    const now = new Date();
+    // A chat created by this submit has no cached entry yet. Seeding one paints the turn
+    // immediately instead of waiting for the invalidating refetch to land.
+    const seeded: ChatQueryData = {
+      activeRun: result.activeRun,
+      createdAt: now,
+      id: result.chatId,
+      lastModel: model,
+      messages: result.messages,
+      title: null,
+      updatedAt: now,
+    };
+
     queryClient.setQueryData<ChatQueryData>(queryKey, (current) =>
       current
         ? {
@@ -488,14 +546,26 @@ const useChatViewStream = ({
             activeRun: result.activeRun,
             messages: result.messages,
           }
-        : current
+        : seeded
     );
     void persistQueryByKey(queryKey, queryClient);
+
+    if (!isActiveRun(result.activeRun)) {
+      // The run already reached a terminal status. Keep the persisted parts instead of
+      // blanking the message behind a "Thinking" placeholder that will never resolve.
+      streamChatIdRef.current = null;
+      setStreamRunId(null);
+      setStreamingAssistant(null);
+      return;
+    }
 
     setStreamRunId(result.runId);
     setStreamingAssistant({
       messageId: result.assistantMessageId,
-      parts: [{ content: "", type: "text" }],
+      // Seed from the stored draft so a resumed run keeps what it has already written.
+      parts: result.messages.find(
+        (message) => message.id === result.assistantMessageId
+      )?.parts ?? [{ content: "", type: "text" }],
     });
   };
 
@@ -633,6 +703,7 @@ const useChatViewActions = ({
   chatId,
   composerDisabled,
   commitStreamResult,
+  draftChatKey,
   input,
   isActionPending,
   isPreparingTranscription,
@@ -645,6 +716,7 @@ const useChatViewActions = ({
   queryClient,
   setInput,
   setIsPreparingTranscription,
+  setPendingPrompt,
   setStreamRunId,
   setStreamingAssistant,
   streamChatIdRef,
@@ -656,6 +728,7 @@ const useChatViewActions = ({
   beginAssistantStream: (result: ChatRunStartResult) => void;
   chatId: string | null;
   composerDisabled: boolean;
+  draftChatKey: string;
   commitStreamResult: (
     result: ChatRunStreamDone,
     resolvedChatId?: string | null
@@ -672,6 +745,7 @@ const useChatViewActions = ({
   queryClient: ReturnType<typeof useQueryClient>;
   setInput: (value: string | ((current: string) => string)) => void;
   setIsPreparingTranscription: (value: boolean) => void;
+  setPendingPrompt: (value: { chatKey: string; text: string } | null) => void;
   setStreamRunId: (value: string | null) => void;
   setStreamingAssistant: (
     value: { messageId: string; parts: ChatMessagePart[] } | null
@@ -692,6 +766,11 @@ const useChatViewActions = ({
       return;
     }
 
+    // Paint the turn before the round trip so the transcript is never blank while the
+    // chat record, the run, and its first tokens are still being created.
+    setPendingPrompt({ chatKey: chatId ?? draftChatKey, text: prompt });
+    setInput("");
+
     try {
       let nextChatId = chatId;
       if (!hasText(nextChatId)) {
@@ -700,6 +779,7 @@ const useChatViewActions = ({
         });
         nextChatId = createdChat.id;
         onChatIdChange(nextChatId);
+        setPendingPrompt({ chatKey: nextChatId, text: prompt });
       }
 
       const result = await mutations.sendMessageMutation.mutateAsync({
@@ -717,8 +797,10 @@ const useChatViewActions = ({
         message: prompt,
       });
       beginAssistantStream(result);
-      setInput("");
+      setPendingPrompt(null);
     } catch (error) {
+      setPendingPrompt(null);
+      setInput(prompt);
       toast.error(
         error instanceof Error && error.message
           ? error.message
@@ -1037,6 +1119,7 @@ export const ChatView = ({
   } | null>(null);
   const [isPreparingTranscription, setIsPreparingTranscription] =
     useState(false);
+  const [pendingPrompt, setPendingPrompt] = useState<PendingPrompt>(null);
   const { data: chatData } = useQuery({
     ...chatQueryOptions(mailboxId, chatId),
     refetchOnWindowFocus: true,
@@ -1061,20 +1144,11 @@ export const ChatView = ({
     },
   });
   const mutations = useChatViewMutations({ mailboxId, queryClient });
-  const {
-    cancelGenerationMutation,
-    createChatMutation,
-    editUserMessageMutation,
-    generateTitleMutation,
-    regenerateResponseMutation,
-    resolveComposeToolMutation,
-    sendMessageMutation,
-    transcribeAudioMutation,
-  } = mutations;
   const chatStream = useChatViewStream({
     chatData,
     chatId,
     mailboxId,
+    model,
     queryClient,
     setStreamRunId,
     setStreamingAssistant,
@@ -1101,18 +1175,16 @@ export const ChatView = ({
         }
       : message
   );
-  const turns = createChatTurns(visibleMessages);
-  const isStreaming = hasText(liveRunId);
-  const hasMessages = visibleMessages.length > 0 || hasText(chatId);
+  const pendingTurn = createPendingTurn(pendingPrompt, chatKey);
+  const turns = [
+    ...createChatTurns(visibleMessages),
+    ...(pendingTurn === null ? [] : [pendingTurn]),
+  ];
+  const isStreaming = hasText(liveRunId) || pendingTurn !== null;
+  const hasMessages = turns.length > 0 || hasText(chatId);
   const isTranscribingAudio =
-    isPreparingTranscription || transcribeAudioMutation.isPending;
-  const isActionPending =
-    createChatMutation.isPending ||
-    sendMessageMutation.isPending ||
-    cancelGenerationMutation.isPending ||
-    editUserMessageMutation.isPending ||
-    regenerateResponseMutation.isPending ||
-    resolveComposeToolMutation.isPending;
+    isPreparingTranscription || mutations.transcribeAudioMutation.isPending;
+  const isActionPending = hasPendingChatAction(mutations);
   const aiRequirement = BILLING_FEATURES.aiChat;
   const canUseAiChat = hasOrganizationAiAccess(billing, mailboxOrganizationId);
   const composerDisabled = isBillingPending || !canUseAiChat;
@@ -1127,6 +1199,7 @@ export const ChatView = ({
     chatId,
     commitStreamResult,
     composerDisabled,
+    draftChatKey,
     input,
     isActionPending,
     isPreparingTranscription,
@@ -1134,20 +1207,12 @@ export const ChatView = ({
     mailContext,
     mailboxId,
     model,
-    mutations: {
-      cancelGenerationMutation,
-      createChatMutation,
-      editUserMessageMutation,
-      generateTitleMutation,
-      regenerateResponseMutation,
-      resolveComposeToolMutation,
-      sendMessageMutation,
-      transcribeAudioMutation,
-    },
+    mutations,
     onChatIdChange,
     queryClient,
     setInput,
     setIsPreparingTranscription,
+    setPendingPrompt,
     setStreamRunId,
     setStreamingAssistant,
     streamChatIdRef,

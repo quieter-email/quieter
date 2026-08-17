@@ -8,6 +8,7 @@ import {
   createTerminalChatRunSseResponse,
   getChatRunHub,
   peekChatRunHub,
+  releaseChatRunHub,
 } from "@quieter/orpc/chat-stream-hub";
 import { DurableObject } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
@@ -75,7 +76,9 @@ export class ChatRunSession extends DurableObject<ChatGenerationEnv> {
     if (this.#generation !== null) {
       return;
     }
-    // Ensure observers can attach before the first token lands.
+    // A reclaimed run must not reuse the hub a dead producer left behind, and the fresh
+    // hub has to exist before observers attach so they tail what this run appends to.
+    releaseChatRunHub(runId);
     getChatRunHub(runId);
     const generation = (async () => {
       try {
@@ -108,10 +111,6 @@ export class ChatRunSession extends DurableObject<ChatGenerationEnv> {
     }
 
     if (request.method === "GET" && url.pathname === "/stream") {
-      const existing = peekChatRunHub(runId);
-      if (existing !== undefined && existing !== null) {
-        return createChatRunHubSseResponse(existing, request.signal);
-      }
       if (this.#generation !== null) {
         return createChatRunHubSseResponse(
           getChatRunHub(runId),
@@ -135,11 +134,18 @@ export class ChatRunSession extends DurableObject<ChatGenerationEnv> {
 
         if (isActiveChatRunStatus(run.status)) {
           // DO restarted (or stream beat start): reclaim and resume the producer.
+          // Attaching to the hub it left behind would tail a log nobody writes to.
           this.#ensureProducer(runId, true);
           return createChatRunHubSseResponse(
             getChatRunHub(runId),
             request.signal
           );
+        }
+
+        // Terminal run: replay the sealed hub so a late observer still gets the transcript.
+        const sealed = peekChatRunHub(runId);
+        if (sealed !== undefined && sealed !== null) {
+          return createChatRunHubSseResponse(sealed, request.signal);
         }
 
         return createTerminalChatRunSseResponse({

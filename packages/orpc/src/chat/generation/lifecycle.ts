@@ -7,39 +7,31 @@ import { runChatGeneration } from "./runner";
 import { abortChatRun } from "./runtime";
 
 const ENQUEUE_CHAT_RUN_TIMEOUT_MS = 10_000;
-const inFlightGenerations = new Map<string, Promise<void>>();
 
+/**
+ * Run a generation, terminalizing the run when the producer itself throws.
+ * Exclusivity is owned by the database claim in `runChatGeneration`, so a second
+ * concurrent caller for the same run simply no-ops instead of blocking here.
+ */
 export const ensureChatRunGeneration = async (
   runId: string,
   options?: {
     force?: boolean;
+    signal?: AbortSignal;
   }
 ) => {
-  const existing = inFlightGenerations.get(runId);
-  if (existing) {
-    await existing;
-    return;
-  }
-
-  const generation = (async () => {
+  try {
+    await runChatGeneration(runId, options);
+  } catch (error: unknown) {
+    reportError(error, { operation: "chat-generation:lifecycle" });
     try {
-      await runChatGeneration(runId, options);
-    } catch (error: unknown) {
-      reportError(error, { operation: "chat-generation:lifecycle" });
-      try {
-        await terminalizeFailedChatRun(runId, getChatRunFailureMessage(error));
-      } catch (updateError: unknown) {
-        reportError(updateError, {
-          operation: "chat-generation:terminalize-failure",
-        });
-      }
-    } finally {
-      inFlightGenerations.delete(runId);
+      await terminalizeFailedChatRun(runId, getChatRunFailureMessage(error));
+    } catch (updateError: unknown) {
+      reportError(updateError, {
+        operation: "chat-generation:terminalize-failure",
+      });
     }
-  })();
-
-  inFlightGenerations.set(runId, generation);
-  await generation;
+  }
 };
 
 const enqueueChatRun = async (runId: string) => {
@@ -88,12 +80,16 @@ const enqueueChatRun = async (runId: string) => {
   }
 };
 
+/**
+ * Hand a freshly created run to whatever executes it.
+ *
+ * Without a generation worker (local development) the run stays `queued` and the
+ * observation stream request starts the producer. Running it here instead would tie
+ * the generation to the mutation request: the caller would block for the whole
+ * response, and a reload would cancel the request and abandon the run mid-stream.
+ */
 export const startChatRun = async (runId: string) => {
   if (!hasText(serverEnv.CHAT_GENERATION_START_URL)) {
-    const generation = ensureChatRunGeneration(runId);
-    if (serverEnv.QUIETER_DEPLOYMENT_ENV === "local") {
-      await generation;
-    }
     return;
   }
 

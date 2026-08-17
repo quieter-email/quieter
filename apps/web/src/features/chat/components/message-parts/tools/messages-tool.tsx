@@ -1,15 +1,16 @@
 "use client";
 
-import { useState } from "react";
-
 import { truncateToolDetail } from "../../../domain/tool-summaries";
 import type { GmailMessagesToolResult } from "../../../types";
+import type { ToolIcon } from "./tool-icons";
 import { ToolStep } from "./tool-step";
 
 const hasText = (value: string | null | undefined): value is string =>
   value !== null && value !== undefined && value !== "";
 
 type MessagesToolProps = {
+  active?: boolean;
+  icon?: ToolIcon;
   data?: GmailMessagesToolResult;
   error?: string | null;
   nested?: boolean;
@@ -25,6 +26,8 @@ type MessagesToolProps = {
 };
 
 export const MessagesTool = ({
+  active,
+  icon,
   data,
   error,
   nested = false,
@@ -32,7 +35,6 @@ export const MessagesTool = ({
   pending,
   requestedCount,
 }: MessagesToolProps) => {
-  const [expanded, setExpanded] = useState(false);
   const success = data?.status === "success" ? data : null;
   const count = success?.messages.length ?? requestedCount;
   const detail =
@@ -42,10 +44,11 @@ export const MessagesTool = ({
 
   return (
     <ToolStep
+      active={active}
+      icon={icon}
       detail={detail}
       error={error}
       expandable={success !== null && success.messages.length > 0}
-      expanded={expanded}
       label={pending ? "Reading messages" : "Read messages"}
       meta={
         success !== null && success.failed.length > 0
@@ -53,9 +56,6 @@ export const MessagesTool = ({
           : undefined
       }
       nested={nested}
-      onToggle={() => {
-        setExpanded((current) => !current);
-      }}
       pending={pending}
     >
       {success ? (

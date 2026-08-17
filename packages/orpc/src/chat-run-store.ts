@@ -7,7 +7,7 @@ import type {
   ChatRunContext,
   ChatRunStatus,
 } from "@quieter/database/schema";
-import { and, desc, eq, gt, inArray } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull } from "drizzle-orm";
 
 export const ACTIVE_CHAT_RUN_STATUSES = [
   "queued",
@@ -89,6 +89,28 @@ export const updateRunStatus = async (
     )
     .returning({ id: chatRun.id });
   return updated !== undefined;
+};
+
+/**
+ * Hand an in-flight run back to the queue so the next observer can resume it.
+ *
+ * Used when the producer's host goes away for a reason that is not the user cancelling:
+ * the draft stays, and the run stays active rather than being reaped as stalled.
+ */
+export const requeueChatRun = async (runId: string) => {
+  const now = new Date();
+  const [requeued] = await db
+    .update(chatRun)
+    .set({ lastHeartbeatAt: now, status: "queued", updatedAt: now })
+    .where(
+      and(
+        eq(chatRun.id, runId),
+        isNull(chatRun.cancelRequestedAt),
+        inArray(chatRun.status, [...ACTIVE_CHAT_RUN_STATUSES])
+      )
+    )
+    .returning({ id: chatRun.id });
+  return requeued !== undefined;
 };
 
 export const touchChatRunHeartbeat = async (runId: string) => {
@@ -267,19 +289,6 @@ export const getAuthorizedChatRun = async (runId: string, userId: string) => {
   return run ?? null;
 };
 
-const hasVisibleAssistantContent = (parts: ChatMessagePart[]) =>
-  parts.some((part) => {
-    if (part.type === "tool-call" || part.type === "tool-result") {
-      return true;
-    }
-
-    return (
-      (part.type === "text" || part.type === "thinking") &&
-      typeof part.content === "string" &&
-      part.content.trim().length > 0
-    );
-  });
-
 const failStaleChatRun = async (run: { id: string; status: ChatRunStatus }) =>
   await terminalizeChatRun({
     error:
@@ -316,19 +325,12 @@ export const getActiveChatRunSummary = async (chatId: string) => {
     return null;
   }
 
-  const [assistantMessage] = await db
-    .select({ parts: chatMessage.parts })
-    .from(chatMessage)
-    .where(eq(chatMessage.id, activeRun.assistantMessageId))
-    .limit(1);
+  // Only the heartbeat decides liveness. A run that is still thinking, or still waiting
+  // on a slow mail lookup, has produced nothing visible yet and must not be reaped.
   const lastActivity =
     activeRun.lastHeartbeatAt ?? activeRun.updatedAt ?? activeRun.createdAt;
-  const isStale = Date.now() - lastActivity.getTime() > STALE_RUN_MS;
-  const isEmptyAndStale =
-    Date.now() - activeRun.createdAt.getTime() > STALE_RUN_MS &&
-    !hasVisibleAssistantContent(assistantMessage?.parts ?? []);
 
-  if (isStale || isEmptyAndStale) {
+  if (Date.now() - lastActivity.getTime() > STALE_RUN_MS) {
     await failStaleChatRun(activeRun);
     return null;
   }

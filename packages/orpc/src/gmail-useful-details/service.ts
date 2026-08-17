@@ -42,6 +42,9 @@ import { decryptSecret, encryptSecret } from "../gmail-mailbox-access";
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import { refreshUsefulDetailMemoryProfile } from "../mail-automation/memory";
 import { hasText } from "../text";
+import { getMailPlainText } from "./message-text";
+import { getSenderServiceName, getSenderSource } from "./sender";
+import { extractVerificationCode } from "./verification-code";
 
 const RETRY_BASE_MS = 1000 * 60 * 5;
 const RETRY_MAX_MS = 1000 * 60 * 60 * 24;
@@ -71,7 +74,7 @@ const MAX_RELEVANCE_HORIZON_MS = {
   security_alert: DAY_MS * 7,
   task: DAY_MS * 90,
   travel: DAY_MS * 365,
-  verification_code: 1000 * 60 * 30,
+  verification_code: 1000 * 60 * 60 * 2,
 } as const satisfies Record<GmailUsefulDetailKind, number>;
 const EVENT_DETAIL_VISIBLE_LEAD_MS: Partial<
   Record<GmailUsefulDetailKind, number>
@@ -136,13 +139,6 @@ const getErrorMessage = (error: unknown) =>
   error instanceof Error
     ? error.message.slice(0, 2000)
     : "Unknown useful-details error.";
-
-const getSenderSource = (from?: string | null) => {
-  const domain = from?.match(
-    /[A-Z0-9._%+-]+@(?<domain>[A-Z0-9.-]+\.[A-Z]{2,})/iu
-  )?.groups?.domain;
-  return hasText(domain) ? domain.toLowerCase().slice(0, 253) : null;
-};
 
 const serializeUsefulDetails = (
   items: {
@@ -241,33 +237,12 @@ const normalizeCode = (value: string | null) => {
     : null;
 };
 
-const verificationIntentPattern =
-  /\b(?:2fa|authentication|authorize|confirm|identity|login|one[-\s]?time|otp|passcode|sign[-\s]?in|two[-\s]?factor|verification|verify)\b/iu;
-const verificationCodePattern =
-  /\b(?:code|otp|passcode|pin)\b[^A-Za-z0-9]{0,24}(?<code>[A-Z0-9]{4,16}|[A-Z0-9]+(?:[ -][A-Z0-9]+)+)\b/giu;
-const numericVerificationCodePattern = /\b(?<code>\d(?:[ -]?\d){3,7})\b/gu;
-
-const buildVerificationCodeSearchText = (message: AutomationMailMessage) =>
-  [message.subject, message.snippet, message.bodyText, message.bodyHtml]
+const buildUsefulDetailRejectionText = (message: AutomationMailMessage) => {
+  const { body, subject } = getMailPlainText(message);
+  return [message.from, subject, body]
     .filter((part) => hasText(part))
-    .join("\n")
-    .replaceAll(/<[^>]+>/gu, " ")
-    .replaceAll(/&(?:nbsp|#160);/giu, " ")
-    .slice(0, 12_000);
-
-const buildUsefulDetailRejectionText = (message: AutomationMailMessage) =>
-  [
-    message.from,
-    message.subject,
-    message.snippet,
-    message.bodyText,
-    message.bodyHtml,
-  ]
-    .filter((part) => hasText(part))
-    .join("\n")
-    .replaceAll(/<[^>]+>/gu, " ")
-    .replaceAll(/&(?:nbsp|#160);/giu, " ")
-    .slice(0, 12_000);
+    .join("\n");
+};
 
 const isOverbroadUsefulDetail = (
   candidate: GmailUsefulDetailCandidate,
@@ -287,47 +262,6 @@ const isOverbroadUsefulDetail = (
   }
 
   return false;
-};
-
-const looksLikeVerificationContext = (
-  text: string,
-  index: number,
-  length: number
-) => {
-  const window = text.slice(
-    Math.max(0, index - 80),
-    Math.min(text.length, index + length + 80)
-  );
-  return verificationIntentPattern.test(window);
-};
-
-const extractVerificationCodeFromMessage = (message: AutomationMailMessage) => {
-  const text = buildVerificationCodeSearchText(message);
-  if (!verificationIntentPattern.test(text)) {
-    return null;
-  }
-
-  for (const match of text.matchAll(verificationCodePattern)) {
-    const code = normalizeCode(match.groups?.code ?? null);
-    if (
-      code !== null &&
-      looksLikeVerificationContext(text, match.index ?? 0, match[0].length)
-    ) {
-      return code;
-    }
-  }
-
-  for (const match of text.matchAll(numericVerificationCodePattern)) {
-    const code = normalizeCode(match.groups?.code ?? null);
-    if (
-      code !== null &&
-      looksLikeVerificationContext(text, match.index ?? 0, match[0].length)
-    ) {
-      return code;
-    }
-  }
-
-  return null;
 };
 
 const normalizeTrackingKey = (value: string) =>
@@ -667,6 +601,7 @@ const buildMaterializedUsefulDetailFields = ({
       trimText(candidate.service, 80) ??
       merchant ??
       carrier ??
+      trimText(getSenderServiceName(message.from), 80) ??
       defaultTitles[candidate.kind],
     trackingNumber,
   };
@@ -730,22 +665,20 @@ export const materializeGmailVerificationCode = ({
   message: AutomationMailMessage;
   now?: Date;
 }): MaterializedGmailUsefulDetail => {
-  const code = extractVerificationCodeFromMessage(message);
-  if (code === null) {
+  const extraction = extractVerificationCode(message);
+  if (extraction === null) {
     return null;
   }
 
   const receivedAt = getMessageReceivedAt(message, now);
-  const expiresAt = new Date(
-    receivedAt.getTime() + MAX_RELEVANCE_HORIZON_MS.verification_code
-  );
+  const expiresAt = new Date(receivedAt.getTime() + extraction.validForMs);
   if (expiresAt <= now) {
     return null;
   }
 
   return {
     carrier: null,
-    code,
+    code: extraction.code,
     dedupeKey: `message:${message.id}`,
     eventAt: null,
     expectedAt: null,
@@ -754,12 +687,11 @@ export const materializeGmailVerificationCode = ({
     location: null,
     receivedAt,
     reference: null,
-    relevanceSource: "inferred",
+    relevanceSource: extraction.hasExplicitValidity ? "explicit" : "inferred",
     relevantFrom: receivedAt,
     status: null,
     summary: null,
-    title:
-      trimText(message.from ?? null, 80) ?? defaultTitles.verification_code,
+    title: trimText(extraction.service, 80) ?? defaultTitles.verification_code,
     trackingNumber: null,
   };
 };
@@ -1079,18 +1011,30 @@ export const buildGmailUsefulDetailPreferenceProfile = ({
   return { avoidKinds, preferKinds };
 };
 
-const getGmailUsefulDetailPreferenceProfile = async (
-  mailboxId: string,
-  source: string | null,
-  userId: string,
-  message: AutomationMailMessage
-): Promise<{
+type UsefulDetailFeedbackPolicies = Awaited<
+  ReturnType<typeof loadUsefulDetailFeedbackPolicies>
+>;
+
+/**
+ * Only the model path needs this. It costs an embedding request plus memory
+ * ranking, so the verification-code fast path must never wait on it.
+ */
+const getGmailUsefulDetailPreferenceProfile = async ({
+  feedbackPolicies,
+  mailboxId,
+  message,
+  userId,
+}: {
+  feedbackPolicies: UsefulDetailFeedbackPolicies;
+  mailboxId: string;
+  message: AutomationMailMessage;
+  userId: string;
+}): Promise<{
   model: ChatModel;
   preferences: GmailUsefulDetailPreferenceProfile;
 }> => {
-  const [aiConfiguration, feedbackPolicies, memoryContext] = await Promise.all([
+  const [aiConfiguration, memoryContext] = await Promise.all([
     loadAiConfiguration({ userId }),
-    loadUsefulDetailFeedbackPolicies({ mailboxId, source }),
     loadAiAgentContext({
       agent: "useful_detail",
       includeUserScope: false,
@@ -1140,48 +1084,27 @@ export const processGmailUsefulDetailMessage = async ({
       return;
     }
 
-    let promptTokens = 0;
-    let completionTokens = 0;
-    let costUsd: number | undefined = 0;
-    let cachedTokens = 0;
-    let cacheWriteTokens = 0;
-    const usageMiddleware: ChatMiddleware = {
-      name: "gmail-useful-details-usage",
-      onUsage: (_context, usage) => {
-        promptTokens += usage.promptTokens;
-        completionTokens += usage.completionTokens;
-        costUsd =
-          costUsd === undefined || usage.cost === undefined
-            ? undefined
-            : costUsd + usage.cost;
-        cachedTokens += usage.promptTokensDetails?.cachedTokens ?? 0;
-        cacheWriteTokens += usage.promptTokensDetails?.cacheWriteTokens ?? 0;
-      },
-    };
     const source = getSenderSource(message.from);
-    const [[currentSettings], preferenceSettings] = await Promise.all([
+    const [[currentSettings], feedbackPolicies] = await Promise.all([
       db
         .select({ enabled: mailboxAutomationSettings.usefulDetailsEnabled })
         .from(mailboxAutomationSettings)
         .where(eq(mailboxAutomationSettings.mailboxId, mailboxId))
         .limit(1),
-      getGmailUsefulDetailPreferenceProfile(mailboxId, source, userId, message),
+      loadUsefulDetailFeedbackPolicies({ mailboxId, source }),
     ]);
-    const { model, preferences } = preferenceSettings;
     if (!currentSettings?.enabled) {
       await markEventProcessedWithoutUsage(event.id);
       return;
     }
-    if (preferences.avoidKinds.length === USEFUL_DETAIL_KINDS.length) {
-      await markEventProcessedWithoutUsage(event.id);
-      return;
-    }
 
-    const verificationCode = preferences.avoidKinds.includes(
-      "verification_code"
-    )
-      ? null
-      : materializeGmailVerificationCode({ message });
+    // Codes are read from the message itself, so this must happen before any
+    // memory or model work: a code the user is waiting on cannot queue behind
+    // an embedding request.
+    const verificationCode =
+      feedbackPolicies.get("verification_code") === "suppress"
+        ? null
+        : materializeGmailVerificationCode({ message });
     if (verificationCode) {
       event = await upsertGmailUsefulDetail({
         detail: verificationCode,
@@ -1200,6 +1123,36 @@ export const processGmailUsefulDetailMessage = async ({
       });
       return;
     }
+
+    const { model, preferences } = await getGmailUsefulDetailPreferenceProfile({
+      feedbackPolicies,
+      mailboxId,
+      message,
+      userId,
+    });
+    if (preferences.avoidKinds.length === USEFUL_DETAIL_KINDS.length) {
+      await markEventProcessedWithoutUsage(event.id);
+      return;
+    }
+
+    let promptTokens = 0;
+    let completionTokens = 0;
+    let costUsd: number | undefined = 0;
+    let cachedTokens = 0;
+    let cacheWriteTokens = 0;
+    const usageMiddleware: ChatMiddleware = {
+      name: "gmail-useful-details-usage",
+      onUsage: (_context, usage) => {
+        promptTokens += usage.promptTokens;
+        completionTokens += usage.completionTokens;
+        costUsd =
+          costUsd === undefined || usage.cost === undefined
+            ? undefined
+            : costUsd + usage.cost;
+        cachedTokens += usage.promptTokensDetails?.cachedTokens ?? 0;
+        cacheWriteTokens += usage.promptTokensDetails?.cacheWriteTokens ?? 0;
+      },
+    };
 
     const budgetStatus = await getMailAutomationAiBudgetStatus({
       organizationId:

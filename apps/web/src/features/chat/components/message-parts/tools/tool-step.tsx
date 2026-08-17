@@ -4,56 +4,27 @@ import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { cn } from "@quieter/ui/cn";
 import { AnimatePresence, m, useReducedMotion } from "motion/react";
+import { useState } from "react";
 import type { ReactNode } from "react";
 
 import { getAppPresenceMotion } from "#/features/motion/app-motion";
 
 import { LoadingDots } from "../../thinking-indicator";
+import type { ToolIcon } from "./tool-icons";
+import { unknownToolIcon } from "./tool-icons";
 
 type ToolStepProps = {
+  /** The step the model is on right now: show its result until the model moves on. */
+  active?: boolean;
   children?: ReactNode;
   detail?: string;
   error?: string | null;
-  expanded?: boolean;
   expandable?: boolean;
+  icon?: ToolIcon;
   label: string;
   meta?: string;
   nested?: boolean;
-  onToggle?: () => void;
   pending?: boolean;
-};
-
-const getLeadingIndicator = ({
-  canExpand,
-  expanded,
-  nested,
-  pending,
-  shouldReduceMotion,
-}: {
-  canExpand: boolean;
-  expanded: boolean;
-  nested: boolean;
-  pending: boolean;
-  shouldReduceMotion: boolean | null;
-}): ReactNode => {
-  if (pending) {
-    return <LoadingDots />;
-  }
-  if (nested && canExpand) {
-    return (
-      <HugeiconsIcon
-        aria-hidden
-        className={cn("size-3.5 shrink-0 text-muted-fg/45", {
-          "rotate-90": expanded,
-          "transition-none": shouldReduceMotion,
-          "transition-transform duration-(--app-motion-duration-enter) ease-(--app-motion-ease-out)":
-            shouldReduceMotion !== true,
-        })}
-        icon={ArrowRight01Icon}
-      />
-    );
-  }
-  return nested ? <span aria-hidden className="size-3.5 shrink-0" /> : null;
 };
 
 const hasRenderableChildren = (children: ReactNode) =>
@@ -63,53 +34,96 @@ const hasRenderableChildren = (children: ReactNode) =>
   children !== true &&
   children !== "";
 
+/**
+ * One right-hand slot for the row's state, so a step does not reflow as it settles:
+ * progress while it runs, then its result count, with disclosure alongside.
+ */
+const ToolStepTrailing = ({
+  canExpand,
+  expanded,
+  meta,
+  pending,
+  shouldReduceMotion,
+}: {
+  canExpand: boolean;
+  expanded: boolean;
+  meta?: string;
+  pending: boolean;
+  shouldReduceMotion: boolean | null;
+}) => (
+  <span className="flex shrink-0 items-center gap-2">
+    {pending ? <LoadingDots /> : null}
+    {!pending && meta !== undefined && meta !== "" ? (
+      <span className="text-xs text-muted-fg/65">{meta}</span>
+    ) : null}
+    {canExpand ? (
+      <HugeiconsIcon
+        aria-hidden
+        className={cn(
+          "size-3.5 text-muted-fg/50",
+          "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",
+          {
+            "rotate-90 opacity-100": expanded,
+            "transition-[transform,opacity] duration-(--app-motion-duration-enter) ease-(--app-motion-ease-out)":
+              shouldReduceMotion !== true,
+            "transition-none": shouldReduceMotion === true,
+          }
+        )}
+        icon={ArrowRight01Icon}
+      />
+    ) : null}
+  </span>
+);
+
 export const ToolStep = ({
+  active = false,
   children,
   detail,
   error,
-  expanded = false,
   expandable = false,
+  icon = unknownToolIcon,
   label,
   meta,
   nested = false,
-  onToggle,
   pending = false,
 }: ToolStepProps) => {
   const shouldReduceMotion = useReducedMotion();
+  const [override, setOverride] = useState<boolean | null>(null);
   const hasError = Boolean(error);
   const canExpand = expandable && !pending && !hasError;
-  const leadingIndicator = getLeadingIndicator({
-    canExpand,
-    expanded,
-    nested,
-    pending,
-    shouldReduceMotion,
-  });
+  // Reveal what the step found while it is the model's current step, then fold it away
+  // once the model moves on. An explicit toggle wins from then on.
+  const expanded = canExpand && (override ?? active);
 
   return (
-    <div className={cn({ "py-0.5": !nested, "py-1": nested })}>
+    <div className="py-1">
       <button
         aria-expanded={canExpand ? expanded : undefined}
         className={cn(
-          "group flex w-full max-w-full items-center gap-2 text-left",
+          "group flex w-full max-w-full items-center gap-2.5 text-left",
           {
             "cursor-default": !canExpand,
             "cursor-pointer": canExpand,
           }
         )}
         disabled={!canExpand}
-        onClick={canExpand ? onToggle : undefined}
+        onClick={() => {
+          setOverride(!expanded);
+        }}
         type="button"
       >
-        {leadingIndicator}
-        <span
-          className={cn("flex min-w-0 flex-1 items-baseline gap-x-2 truncate", {
-            "text-sm/5": !nested,
-            "text-sm/relaxed": nested,
+        <HugeiconsIcon
+          aria-hidden
+          className={cn("size-3.5 shrink-0", {
+            "text-destructive/80": hasError,
+            "text-muted-fg/60": !hasError && !pending,
+            "text-muted-fg/80": pending && !hasError,
           })}
-        >
+          icon={icon}
+        />
+        <span className="flex min-w-0 flex-1 items-baseline gap-x-2 truncate text-sm/5">
           <span
-            className={cn({
+            className={cn("shrink-0", {
               "text-destructive": hasError,
               "text-muted-fg": !hasError,
             })}
@@ -117,33 +131,19 @@ export const ToolStep = ({
             {label}
           </span>
           {detail !== undefined && detail !== "" ? (
-            <span className="text-fg/75">{detail}</span>
-          ) : null}
-          {meta !== undefined && meta !== "" ? (
-            <span className="text-muted-fg/65">{meta}</span>
+            <span className="truncate text-fg/75">{detail}</span>
           ) : null}
           {hasError ? (
-            <span className="border-l border-destructive/30 pl-2 text-destructive/90">
-              {error}
-            </span>
+            <span className="truncate text-destructive/90">{error}</span>
           ) : null}
         </span>
-        {!nested && canExpand ? (
-          <HugeiconsIcon
-            aria-hidden
-            className={cn(
-              "size-3.5 shrink-0 text-muted-fg/50",
-              "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",
-              {
-                "rotate-90 opacity-100": expanded,
-                "transition-none": shouldReduceMotion,
-                "transition-transform duration-(--app-motion-duration-enter) ease-(--app-motion-ease-out)":
-                  shouldReduceMotion !== true,
-              }
-            )}
-            icon={ArrowRight01Icon}
-          />
-        ) : null}
+        <ToolStepTrailing
+          canExpand={canExpand}
+          expanded={expanded}
+          meta={meta}
+          pending={pending}
+          shouldReduceMotion={shouldReduceMotion}
+        />
       </button>
 
       <AnimatePresence initial={false}>
@@ -152,10 +152,10 @@ export const ToolStep = ({
             {...getAppPresenceMotion({ reducedMotion: shouldReduceMotion })}
           >
             <div
-              className={cn("mt-1.5 border-l border-border", {
-                "ml-1.5 pl-3": nested,
-                "pl-3": !nested,
-              })}
+              className={cn(
+                "mt-1.5 rounded-md border border-border bg-bg-surface p-2.5",
+                { "ml-6": !nested }
+              )}
             >
               {children}
             </div>

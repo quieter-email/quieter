@@ -10,6 +10,7 @@ import { getAppPresenceMotion } from "#/features/motion/app-motion";
 
 import { MarkdownContent } from "../markdown-content";
 import { LoadingDots } from "../thinking-indicator";
+import { reasoningIcon } from "./tools/tool-icons";
 
 type ThinkingPartProps = {
   content: string;
@@ -18,52 +19,65 @@ type ThinkingPartProps = {
 
 export const ThinkingPart = ({ content, isActive }: ThinkingPartProps) => {
   const shouldReduceMotion = useReducedMotion();
-  const [expanded, setExpanded] = useState(false);
+  const [override, setOverride] = useState<boolean | null>(null);
   const hasReasoning = Boolean(content.trim());
+  // Follow the reasoning while it is being written, then fold it away once the model
+  // moves on. An explicit toggle wins until this part becomes active again.
+  const expanded = (override ?? isActive) && hasReasoning;
 
-  if (!isActive) {
+  if (!(hasReasoning || isActive)) {
     return null;
   }
 
   return (
-    <div className="flex flex-col">
+    <div className="py-1">
       <button
-        aria-expanded={expanded}
+        aria-expanded={hasReasoning ? expanded : undefined}
         aria-label={hasReasoning ? "Toggle reasoning" : "Thinking"}
-        className="group flex w-fit items-center gap-1 py-0.5 text-left"
+        className={cn(
+          "group flex w-full max-w-full items-center gap-2.5 text-left",
+          { "cursor-default": !hasReasoning }
+        )}
         disabled={!hasReasoning}
         onClick={() => {
-          setExpanded((prev) => !prev);
+          setOverride(!expanded);
         }}
         type="button"
       >
-        <span className="inline-flex items-center gap-1.5 text-xs text-muted-fg">
-          <LoadingDots />
-          Thinking
+        <HugeiconsIcon
+          aria-hidden
+          className="size-3.5 shrink-0 text-muted-fg/60"
+          icon={reasoningIcon}
+        />
+        <span className="min-w-0 flex-1 truncate text-sm/5 text-muted-fg">
+          {isActive ? "Thinking" : "Thought process"}
         </span>
-        {hasReasoning ? (
-          <HugeiconsIcon
-            aria-hidden
-            className={cn(
-              "size-3 shrink-0 text-muted-fg",
-              "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",
-              {
-                "rotate-90 opacity-100": expanded,
-                "transition-none": shouldReduceMotion === true,
-                "transition-transform duration-(--app-motion-duration-enter) ease-(--app-motion-ease-out)":
-                  shouldReduceMotion !== true,
-              }
-            )}
-            icon={ArrowRight01Icon}
-          />
-        ) : null}
+        <span className="flex shrink-0 items-center gap-2">
+          {isActive ? <LoadingDots /> : null}
+          {hasReasoning ? (
+            <HugeiconsIcon
+              aria-hidden
+              className={cn(
+                "size-3.5 text-muted-fg/50",
+                "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",
+                {
+                  "rotate-90 opacity-100": expanded,
+                  "transition-[transform,opacity] duration-(--app-motion-duration-enter) ease-(--app-motion-ease-out)":
+                    shouldReduceMotion !== true,
+                  "transition-none": shouldReduceMotion === true,
+                }
+              )}
+              icon={ArrowRight01Icon}
+            />
+          ) : null}
+        </span>
       </button>
       <AnimatePresence initial={false}>
-        {expanded && hasReasoning ? (
+        {expanded ? (
           <m.div
             {...getAppPresenceMotion({ reducedMotion: shouldReduceMotion })}
           >
-            <div className="py-1">
+            <div className="mt-1.5 ml-6 rounded-md border border-border bg-bg-surface p-2.5 text-xs/relaxed text-muted-fg">
               <MarkdownContent markdown={content} />
             </div>
           </m.div>

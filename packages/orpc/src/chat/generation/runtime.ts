@@ -18,3 +18,7 @@ export const abortChatRun = (runId: string) => {
   controller?.abort();
   return !!controller;
 };
+
+/** Whether this isolate is already producing the run, so a second one must not start. */
+export const isChatRunProducerActive = (runId: string) =>
+  activeRunControllers.has(runId);

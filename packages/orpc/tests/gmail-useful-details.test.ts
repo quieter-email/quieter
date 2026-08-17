@@ -55,7 +55,7 @@ describe("Gmail useful-detail materialization", () => {
       code: "123456",
       dedupeKey: "message:message-1",
       kind: "verification_code",
-      title: "Example <login@example.com>",
+      title: "Example",
     });
     expect(detail?.expiresAt.toISOString()).toBe("2026-06-14T12:28:00.000Z");
   });
