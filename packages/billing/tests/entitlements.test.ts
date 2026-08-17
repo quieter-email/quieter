@@ -20,7 +20,7 @@ import {
 import type * as PolarModule from "../src/polar";
 import type * as SubscriptionSyncModule from "../src/subscription-sync";
 
-type PolarClient = ReturnType<typeof PolarModule.getPolarClient>;
+type PolarClient = Awaited<ReturnType<typeof PolarModule.getPolarClient>>;
 
 const polarSubscriptionSchema = z.custom<Subscription>(
   (value) =>
@@ -253,8 +253,8 @@ describe("organization subscription reconciliation", () => {
     billingMocks.updateSet.mockReturnValue({
       where: billingMocks.updateReconciliationFailure,
     });
-    billingMocks.getPolarClient.mockImplementation(() => {
-      const polar = polarState.getPolarClient?.();
+    billingMocks.getPolarClient.mockImplementation(async () => {
+      const polar = await polarState.getPolarClient?.();
       if (polar === undefined || polar === null) {
         throw new Error("Polar client is unavailable in tests.");
       }
