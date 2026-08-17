@@ -966,6 +966,13 @@ const callLinearMcpTools = async (input: {
   });
 };
 
+/** A refreshed token for the caller's own Linear connection, for the MCP client. */
+export const getLinearAccessTokenForUser = async (input: { userId: string }) =>
+  await getAuthorizedConnectorAccessToken({
+    provider: LINEAR_CONNECTOR_PROVIDER,
+    userId: input.userId,
+  });
+
 export const listLinearMcpToolsForUser = async (input: {
   signal?: AbortSignal;
   userId: string;

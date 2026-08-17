@@ -422,18 +422,10 @@ ${aiContext.memory}`);
  */
 const buildChatMcpOptions = (input: {
   hasLinearConnector: boolean;
-  signal: AbortSignal;
   userId: string;
 }) =>
   input.hasLinearConnector
-    ? {
-        clients: [
-          createLinearMcpToolSource({
-            signal: input.signal,
-            userId: input.userId,
-          }),
-        ],
-      }
+    ? { clients: [createLinearMcpToolSource({ userId: input.userId })] }
     : undefined;
 
 /**
@@ -710,11 +702,7 @@ export const runChatGeneration = async (
       abortController,
       durability,
       initialMessages: streamInitialMessages,
-      mcp: buildChatMcpOptions({
-        hasLinearConnector,
-        signal: abortController.signal,
-        userId: run.userId,
-      }),
+      mcp: buildChatMcpOptions({ hasLinearConnector, userId: run.userId }),
       middleware: [usageMiddleware],
       model,
       onMessagesChange: (nextMessages) => {
