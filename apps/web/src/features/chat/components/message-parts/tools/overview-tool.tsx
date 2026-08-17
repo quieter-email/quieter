@@ -1,6 +1,7 @@
 "use client";
 
 import type { MailboxOverviewToolResult } from "../../../types";
+import type { ToolIcon } from "./tool-icons";
 import { ToolStep } from "./tool-step";
 
 const hasText = (value: string | null | undefined): value is string =>
@@ -8,6 +9,7 @@ const hasText = (value: string | null | undefined): value is string =>
 
 type OverviewToolProps = {
   active?: boolean;
+  icon?: ToolIcon;
   nested?: boolean;
   data?: MailboxOverviewToolResult;
   error?: string | null;
@@ -19,6 +21,7 @@ const formatCount = (value: number | undefined) =>
 
 export const OverviewTool = ({
   active,
+  icon,
   nested = false,
   data,
   error,
@@ -35,6 +38,7 @@ export const OverviewTool = ({
   return (
     <ToolStep
       active={active}
+      icon={icon}
       nested={nested}
       detail={success?.emailAddress}
       error={error}

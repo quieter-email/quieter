@@ -3,6 +3,7 @@
 import { formatMessageDate } from "../../../domain/chat-formatting";
 import { truncateToolDetail } from "../../../domain/tool-summaries";
 import type { GmailMessageToolResult } from "../../../types";
+import type { ToolIcon } from "./tool-icons";
 import { ToolStep } from "./tool-step";
 
 const hasText = (value: string | null | undefined): value is string =>
@@ -77,6 +78,7 @@ const MessageToolContent = ({
 
 type MessageToolProps = {
   active?: boolean;
+  icon?: ToolIcon;
   nested?: boolean;
   data?: GmailMessageToolResult;
   error?: string | null;
@@ -89,6 +91,7 @@ type MessageToolProps = {
 
 export const MessageTool = ({
   active,
+  icon,
   nested = false,
   data,
   error,
@@ -104,6 +107,7 @@ export const MessageTool = ({
   return (
     <ToolStep
       active={active}
+      icon={icon}
       nested={nested}
       detail={detail}
       error={error}

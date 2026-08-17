@@ -27,7 +27,10 @@ import {
 import { getAppPresenceMotion } from "#/features/motion/app-motion";
 
 import type { InlineComposeAction } from "../../types";
+import { getToolIcon } from "./tools/tool-icons";
 import { ToolStep } from "./tools/tool-step";
+
+const composeToolIcon = getToolIcon("compose_email");
 
 type InlineComposeToolProps = {
   disabled?: boolean;
@@ -83,6 +86,7 @@ const ComposeReceipt = ({ result }: { result: ComposeEmailResult }) => {
   return (
     <ToolStep
       detail={detail ? `"${detail}"` : undefined}
+      icon={composeToolIcon}
       label={result.status === "sent" ? "Sent email" : "Saved draft"}
     />
   );
@@ -105,6 +109,7 @@ const ComposeDeclinedView = ({
       active={defaultExpanded}
       detail={detail ? `"${detail}"` : undefined}
       expandable
+      icon={composeToolIcon}
       label="Declined draft"
     >
       <div className="space-y-0">
@@ -219,7 +224,10 @@ export const InlineComposeTool = ({
   const isBusy = processing === true || pendingAction !== null;
 
   return (
-    <form className="border-l border-border pl-3" onSubmit={handleSubmit}>
+    <form
+      className="rounded-md border border-border bg-bg-surface p-3"
+      onSubmit={handleSubmit}
+    >
       <div className="mb-2 flex items-center justify-between gap-3">
         <p className="text-xs text-muted-fg">
           {processing === true ? "Sending email" : "Draft email"}

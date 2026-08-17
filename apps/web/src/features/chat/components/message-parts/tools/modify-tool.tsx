@@ -1,6 +1,7 @@
 "use client";
 
 import type { ModifyMailToolResult } from "../../../types";
+import type { ToolIcon } from "./tool-icons";
 import { ToolStep } from "./tool-step";
 
 const actionLabels: Record<ModifyMailToolResult["action"], string> = {
@@ -28,6 +29,7 @@ const hasText = (value: string | null | undefined): value is string =>
 
 type ModifyToolProps = {
   active?: boolean;
+  icon?: ToolIcon;
   action?: ModifyMailToolResult["action"];
   nested?: boolean;
   data?: ModifyMailToolResult;
@@ -38,6 +40,7 @@ type ModifyToolProps = {
 
 export const ModifyTool = ({
   active,
+  icon,
   action,
   nested = false,
   data,
@@ -63,6 +66,7 @@ export const ModifyTool = ({
   return (
     <ToolStep
       active={active}
+      icon={icon}
       error={error}
       label={label}
       meta={meta}

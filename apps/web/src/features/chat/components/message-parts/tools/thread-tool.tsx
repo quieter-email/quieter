@@ -3,6 +3,7 @@
 import { formatMessageDate } from "../../../domain/chat-formatting";
 import { truncateToolDetail } from "../../../domain/tool-summaries";
 import type { GmailThreadToolResult } from "../../../types";
+import type { ToolIcon } from "./tool-icons";
 import { ToolStep } from "./tool-step";
 
 const hasText = (value: string | null | undefined): value is string =>
@@ -10,6 +11,7 @@ const hasText = (value: string | null | undefined): value is string =>
 
 type ThreadToolProps = {
   active?: boolean;
+  icon?: ToolIcon;
   nested?: boolean;
   data?: GmailThreadToolResult;
   error?: string | null;
@@ -23,6 +25,7 @@ type ThreadToolProps = {
 
 export const ThreadTool = ({
   active,
+  icon,
   nested = false,
   data,
   error,
@@ -48,6 +51,7 @@ export const ThreadTool = ({
   return (
     <ToolStep
       active={active}
+      icon={icon}
       nested={nested}
       detail={detail}
       error={error}

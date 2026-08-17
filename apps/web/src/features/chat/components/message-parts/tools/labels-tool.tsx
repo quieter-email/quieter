@@ -1,6 +1,7 @@
 "use client";
 
 import type { GmailLabelListToolResult } from "../../../types";
+import type { ToolIcon } from "./tool-icons";
 import { ToolStep } from "./tool-step";
 
 const hasText = (value: string | null | undefined): value is string =>
@@ -8,6 +9,7 @@ const hasText = (value: string | null | undefined): value is string =>
 
 type LabelsToolProps = {
   active?: boolean;
+  icon?: ToolIcon;
   nested?: boolean;
   data?: GmailLabelListToolResult;
   error?: string | null;
@@ -16,6 +18,7 @@ type LabelsToolProps = {
 
 export const LabelsTool = ({
   active,
+  icon,
   nested = false,
   data,
   error,
@@ -34,6 +37,7 @@ export const LabelsTool = ({
   return (
     <ToolStep
       active={active}
+      icon={icon}
       nested={nested}
       error={error}
       expandable={!!success && success.labels.length > 0}

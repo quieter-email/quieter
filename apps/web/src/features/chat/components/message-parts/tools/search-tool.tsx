@@ -5,6 +5,7 @@ import { cn } from "@quieter/ui/cn";
 import { formatMessageDate } from "../../../domain/chat-formatting";
 import { truncateToolDetail } from "../../../domain/tool-summaries";
 import type { GmailSearchToolResult } from "../../../types";
+import type { ToolIcon } from "./tool-icons";
 import { ToolStep } from "./tool-step";
 
 const hasText = (value: string | null | undefined): value is string =>
@@ -12,6 +13,7 @@ const hasText = (value: string | null | undefined): value is string =>
 
 type SearchToolProps = {
   active?: boolean;
+  icon?: ToolIcon;
   nested?: boolean;
   data?: GmailSearchToolResult;
   error?: string | null;
@@ -25,6 +27,7 @@ type SearchToolProps = {
 
 export const SearchTool = ({
   active,
+  icon,
   nested = false,
   data,
   error,
@@ -48,6 +51,7 @@ export const SearchTool = ({
   return (
     <ToolStep
       active={active}
+      icon={icon}
       nested={nested}
       detail={detail}
       error={error}

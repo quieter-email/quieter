@@ -2,16 +2,19 @@
 
 import { truncateToolDetail } from "../../../domain/tool-summaries";
 import type { GmailAttachmentToolResult } from "../../../types";
+import type { ToolIcon } from "./tool-icons";
 import { ToolStep } from "./tool-step";
 
 export const AttachmentTool = ({
   active,
+  icon,
   data,
   error,
   nested = false,
   pending,
 }: {
   active?: boolean;
+  icon?: ToolIcon;
   data?: GmailAttachmentToolResult;
   error?: string | null;
   nested?: boolean;
@@ -22,6 +25,7 @@ export const AttachmentTool = ({
   return (
     <ToolStep
       active={active}
+      icon={icon}
       detail={success ? `“${truncateToolDetail(success.fileName)}”` : undefined}
       error={error}
       expandable={!!success}

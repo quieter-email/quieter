@@ -2,6 +2,7 @@
 
 import { truncateToolDetail } from "../../../domain/tool-summaries";
 import type { GmailMessagesToolResult } from "../../../types";
+import type { ToolIcon } from "./tool-icons";
 import { ToolStep } from "./tool-step";
 
 const hasText = (value: string | null | undefined): value is string =>
@@ -9,6 +10,7 @@ const hasText = (value: string | null | undefined): value is string =>
 
 type MessagesToolProps = {
   active?: boolean;
+  icon?: ToolIcon;
   data?: GmailMessagesToolResult;
   error?: string | null;
   nested?: boolean;
@@ -25,6 +27,7 @@ type MessagesToolProps = {
 
 export const MessagesTool = ({
   active,
+  icon,
   data,
   error,
   nested = false,
@@ -42,6 +45,7 @@ export const MessagesTool = ({
   return (
     <ToolStep
       active={active}
+      icon={icon}
       detail={detail}
       error={error}
       expandable={success !== null && success.messages.length > 0}

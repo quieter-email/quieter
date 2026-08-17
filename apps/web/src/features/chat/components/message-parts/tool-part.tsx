@@ -23,6 +23,8 @@ import { ModifyTool } from "./tools/modify-tool";
 import { OverviewTool } from "./tools/overview-tool";
 import { SearchTool } from "./tools/search-tool";
 import { ThreadTool } from "./tools/thread-tool";
+import type { ToolIcon } from "./tools/tool-icons";
+import { getToolIcon } from "./tools/tool-icons";
 import { ToolStep } from "./tools/tool-step";
 
 type ToolCall = Extract<MessagePart, { type: "tool-call" }>;
@@ -152,6 +154,7 @@ const ComposeToolPart = ({
 type ToolPartRendererProps = {
   active: boolean;
   args: Record<string, unknown>;
+  icon: ToolIcon;
   error: string | null;
   name: string;
   nested: boolean;
@@ -213,6 +216,7 @@ const toolPartRenderers: Record<
 > = {
   create_google_calendar_event: ({
     active,
+    icon,
     args,
     error,
     nested,
@@ -221,6 +225,7 @@ const toolPartRenderers: Record<
   }) => (
     <ToolStep
       active={active}
+      icon={icon}
       nested={nested}
       detail={getCalendarDetail(args, parsed)}
       error={error}
@@ -228,9 +233,18 @@ const toolPartRenderers: Record<
       pending={pending}
     />
   ),
-  create_linear_issue: ({ active, args, error, nested, parsed, pending }) => (
+  create_linear_issue: ({
+    active,
+    icon,
+    args,
+    error,
+    nested,
+    parsed,
+    pending,
+  }) => (
     <ToolStep
       active={active}
+      icon={icon}
       nested={nested}
       detail={getLinearIssueDetail(args, parsed)}
       error={error}
@@ -238,27 +252,37 @@ const toolPartRenderers: Record<
       pending={pending}
     />
   ),
-  get_mailbox_overview: ({ active, error, nested, parsed, pending }) => (
+  get_mailbox_overview: ({ active, icon, error, nested, parsed, pending }) => (
     <OverviewTool
       active={active}
+      icon={icon}
       nested={nested}
       data={parsed.kind === "mailbox-overview" ? parsed.data : undefined}
       error={error}
       pending={pending}
     />
   ),
-  list_gmail_labels: ({ active, error, nested, parsed, pending }) => (
+  list_gmail_labels: ({ active, icon, error, nested, parsed, pending }) => (
     <LabelsTool
       active={active}
+      icon={icon}
       nested={nested}
       data={parsed.kind === "gmail-labels" ? parsed.data : undefined}
       error={error}
       pending={pending}
     />
   ),
-  list_linear_issue_metadata: ({ active, error, nested, parsed, pending }) => (
+  list_linear_issue_metadata: ({
+    active,
+    icon,
+    error,
+    nested,
+    parsed,
+    pending,
+  }) => (
     <ToolStep
       active={active}
+      icon={icon}
       nested={nested}
       detail={getLinearMetadataDetail(parsed)}
       error={error}
@@ -266,9 +290,10 @@ const toolPartRenderers: Record<
       pending={pending}
     />
   ),
-  modify_mail: ({ active, args, error, nested, parsed, pending }) => (
+  modify_mail: ({ active, icon, args, error, nested, parsed, pending }) => (
     <ModifyTool
       active={active}
+      icon={icon}
       action={isModifyMailAction(args.action) ? args.action : undefined}
       nested={nested}
       data={parsed.kind === "modify-mail" ? parsed.data : undefined}
@@ -277,9 +302,10 @@ const toolPartRenderers: Record<
       target={isModifyMailTarget(args.target) ? args.target : undefined}
     />
   ),
-  read_gmail_attachment: ({ active, error, nested, parsed, pending }) => (
+  read_gmail_attachment: ({ active, icon, error, nested, parsed, pending }) => (
     <AttachmentTool
       active={active}
+      icon={icon}
       data={parsed.kind === "gmail-attachment" ? parsed.data : undefined}
       error={error}
       nested={nested}
@@ -288,6 +314,7 @@ const toolPartRenderers: Record<
   ),
   read_gmail_message: ({
     active,
+    icon,
     error,
     nested,
     onOpenMessage,
@@ -296,6 +323,7 @@ const toolPartRenderers: Record<
   }) => (
     <MessageTool
       active={active}
+      icon={icon}
       nested={nested}
       data={parsed.kind === "gmail-message" ? parsed.data : undefined}
       error={error}
@@ -305,6 +333,7 @@ const toolPartRenderers: Record<
   ),
   read_gmail_messages: ({
     active,
+    icon,
     args,
     error,
     nested,
@@ -314,6 +343,7 @@ const toolPartRenderers: Record<
   }) => (
     <MessagesTool
       active={active}
+      icon={icon}
       nested={nested}
       data={parsed.kind === "gmail-messages" ? parsed.data : undefined}
       error={error}
@@ -324,6 +354,7 @@ const toolPartRenderers: Record<
   ),
   read_gmail_thread: ({
     active,
+    icon,
     args,
     error,
     nested,
@@ -333,6 +364,7 @@ const toolPartRenderers: Record<
   }) => (
     <ThreadTool
       active={active}
+      icon={icon}
       nested={nested}
       data={parsed.kind === "gmail-thread" ? parsed.data : undefined}
       error={error}
@@ -343,6 +375,7 @@ const toolPartRenderers: Record<
   ),
   search_gmail: ({
     active,
+    icon,
     args,
     error,
     nested,
@@ -352,6 +385,7 @@ const toolPartRenderers: Record<
   }) => (
     <SearchTool
       active={active}
+      icon={icon}
       nested={nested}
       data={parsed.kind === "gmail-search" ? parsed.data : undefined}
       error={error}
@@ -363,11 +397,12 @@ const toolPartRenderers: Record<
 };
 
 const ToolPartRenderer = (props: ToolPartRendererProps): ReactNode => {
-  const { active, error, name, nested, parsed, pending } = props;
+  const { active, error, icon, name, nested, parsed, pending } = props;
   const renderer = toolPartRenderers[name];
   return renderer === undefined ? (
     <ToolStep
       active={active}
+      icon={icon}
       nested={nested}
       detail={name}
       error={
@@ -445,6 +480,10 @@ export const ToolPart = ({
     <ToolPartRenderer
       active={active}
       args={args}
+      icon={getToolIcon(
+        name,
+        typeof args.action === "string" ? args.action : undefined
+      )}
       error={error}
       name={name}
       nested={nested}
