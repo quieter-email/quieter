@@ -11,6 +11,9 @@ const NON_LATIN_LETTER = /\p{Letter}/u;
 const LATIN_LETTER = /\p{Script=Latin}/u;
 const ASCII_ONLY = /^[\p{ASCII}]*$/u;
 
+const FOREIGN_SCRIPT_CHARACTER =
+  /[^\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}]/gu;
+
 const isNonLatinWord = (word: string) =>
   NON_LATIN_LETTER.test(word) && !LATIN_LETTER.test(word);
 
@@ -18,6 +21,9 @@ const isNonLatinWord = (word: string) =>
  * Models occasionally answer an ASCII request in an unrelated script, and the fragment
  * that survives the completion budget is meaningless to the user. Keep only the words
  * that could plausibly belong to the request.
+ *
+ * A word written entirely in another script goes as a whole, so its punctuation leaves
+ * with it. A word that merely ends in another script keeps its Latin side.
  */
 const dropForeignScriptWords = (title: string, prompt: string) => {
   if (!ASCII_ONLY.test(prompt)) {
@@ -26,7 +32,10 @@ const dropForeignScriptWords = (title: string, prompt: string) => {
 
   return title
     .split(" ")
-    .filter((word) => !isNonLatinWord(word))
+    .map((word) =>
+      isNonLatinWord(word) ? "" : word.replaceAll(FOREIGN_SCRIPT_CHARACTER, "")
+    )
+    .filter((word) => word.length > 0)
     .join(" ");
 };
 
@@ -37,6 +46,8 @@ const truncateAtWordBoundary = (title: string) => {
 
   const clipped = title.slice(0, MAX_CHAT_TITLE_LENGTH);
   const lastSpace = clipped.lastIndexOf(" ");
+  // A title without a single space in its first 80 characters has no boundary to cut on.
+  // The length cap still has to hold, so the hard clip is the only remaining option.
   return lastSpace > 0 ? clipped.slice(0, lastSpace) : clipped;
 };
 

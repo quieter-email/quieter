@@ -19,6 +19,10 @@ describe("chat title normalization", () => {
     expect(normalizeChatTitle("Greeting സന്ദ", "Hello")).toBe("Greeting");
   });
 
+  test("strips the foreign-script tail of a mixed word", () => {
+    expect(normalizeChatTitle("Greetingസന്ദ", "Hello")).toBe("Greeting");
+  });
+
   test("keeps the request's own script", () => {
     expect(normalizeChatTitle("Nachricht an Sarah", "Schreib an Sarah")).toBe(
       "Nachricht an Sarah"
@@ -37,6 +41,10 @@ describe("chat title normalization", () => {
     expect(title).toBe(
       "Find every single message that mentions the quarterly revenue reconciliation"
     );
+  });
+
+  test("clips a title that has no word boundary to cut on", () => {
+    expect(normalizeChatTitle("a".repeat(120), "any")).toBe("a".repeat(80));
   });
 
   test("returns an empty title when nothing usable survives", () => {

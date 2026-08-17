@@ -92,13 +92,7 @@ const ComposeReceipt = ({ result }: { result: ComposeEmailResult }) => {
   );
 };
 
-const ComposeDeclinedView = ({
-  initial,
-  defaultExpanded = false,
-}: {
-  defaultExpanded?: boolean;
-  initial: ComposeEmailInput;
-}) => {
+const ComposeDeclinedView = ({ initial }: { initial: ComposeEmailInput }) => {
   const bodyText = initial.bodyText.trim();
   const detail = [initial.to ? `To ${initial.to}` : "", initial.subject]
     .filter(Boolean)
@@ -106,7 +100,6 @@ const ComposeDeclinedView = ({
 
   return (
     <ToolStep
-      active={defaultExpanded}
       detail={detail ? `"${detail}"` : undefined}
       expandable
       icon={composeToolIcon}
