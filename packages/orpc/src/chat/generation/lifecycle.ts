@@ -17,6 +17,7 @@ export const ensureChatRunGeneration = async (
   runId: string,
   options?: {
     force?: boolean;
+    signal?: AbortSignal;
   }
 ) => {
   try {

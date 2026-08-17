@@ -2,10 +2,7 @@ import { withRequestDatabaseClient } from "@quieter/database/client";
 import { serverEnv } from "@quieter/env/server";
 
 import { getAuthorizedChatRun, isActiveChatRunStatus } from "./chat-run-store";
-import {
-  abortChatRun,
-  isChatRunProducerActive,
-} from "./chat/generation/runtime";
+import { isChatRunProducerActive } from "./chat/generation/runtime";
 import {
   createChatRunHubSseResponse,
   getChatRunHub,
@@ -46,13 +43,6 @@ const startLocalChatRunProducer = (runId: string, signal: AbortSignal) => {
     }
   };
 
-  const handBack = () => {
-    release();
-    // The producer cannot outlive the request hosting it. Stopping it explicitly requeues
-    // the run with its draft intact, so the next observer resumes a clean run.
-    abortChatRun(runId);
-  };
-
   void (async () => {
     try {
       // Deployed builds proxy to the generation worker, so the agent graph stays out of
@@ -62,13 +52,18 @@ const startLocalChatRunProducer = (runId: string, signal: AbortSignal) => {
       // Reclaiming is forced: only one isolate runs generations without a worker, and a
       // previous attempt's heartbeat can still look fresh when its host request was
       // cancelled rather than finished.
-      await ensureChatRunGeneration(runId, { force: true });
+      //
+      // The producer cannot outlive the request hosting it, so the run is stopped through
+      // this signal: it requeues the run with its draft intact, and the next observer
+      // resumes a clean run. Handing the signal down also covers an abort that lands
+      // before the generation has a controller to cancel.
+      await ensureChatRunGeneration(runId, { force: true, signal });
     } finally {
       release();
-      signal.removeEventListener("abort", handBack);
+      signal.removeEventListener("abort", release);
     }
   })();
-  signal.addEventListener("abort", handBack, { once: true });
+  signal.addEventListener("abort", release, { once: true });
 };
 
 const proxyChatRunStream = async (runId: string, request: Request) => {

@@ -421,6 +421,29 @@ ${aiContext.memory}`);
 };
 
 /**
+ * Bind a producer's lifetime to the request hosting it. The abort can land before the
+ * run is claimed, when there is no controller to cancel yet, so the signal's current
+ * state is adopted here and not only its future events.
+ */
+const linkHostAbort = (
+  abortController: AbortController,
+  signal: AbortSignal | undefined
+) => {
+  const handleHostAbort = () => {
+    abortController.abort();
+  };
+  signal?.addEventListener("abort", handleHostAbort, { once: true });
+
+  if (signal?.aborted === true) {
+    abortController.abort();
+  }
+
+  return () => {
+    signal?.removeEventListener("abort", handleHostAbort);
+  };
+};
+
+/**
  * Execute one chat run. The caller owns the stream hub: it must release any hub left
  * by a dead producer and create the fresh one before calling, so observers that
  * attached first stay subscribed to the hub this run appends to.
@@ -430,8 +453,11 @@ export const runChatGeneration = async (
   options?: {
     /** Reclaim even when heartbeat is fresh — Durable Object owner after restart. */
     force?: boolean;
+    /** Lifetime of the request hosting this producer, when one hosts it. */
+    signal?: AbortSignal;
   }
 ) => {
+  const { force, signal: hostSignal } = options ?? {};
   const [run] = await db
     .select()
     .from(chatRun)
@@ -448,11 +474,7 @@ export const runChatGeneration = async (
 
   const model = chatModelSchema.parse(run.model);
   const staleBefore = new Date(Date.now() - STALE_RUN_CLAIM_MS);
-  const claimed = await claimChatRun(
-    runId,
-    options?.force === true,
-    staleBefore
-  );
+  const claimed = await claimChatRun(runId, force === true, staleBefore);
 
   if (claimed === undefined) {
     return;
@@ -466,12 +488,18 @@ export const runChatGeneration = async (
     abortController
   );
 
+  const unlinkHostAbort = linkHostAbort(abortController, hostSignal);
+  const releaseController = () => {
+    unregisterController();
+    unlinkHostAbort();
+  };
+
   const { assistantDraft, visibleMessages } =
     await loadChatGenerationMessages(run);
   const latestUserRequest = getLatestUserRequest(visibleMessages);
 
   if (!assistantDraft) {
-    unregisterController();
+    releaseController();
     await terminalizeFailedChatRun(
       runId,
       "This response could not be resumed. Retry it to continue."
@@ -934,7 +962,7 @@ export const runChatGeneration = async (
   } finally {
     clearInterval(cancelPoll);
     clearInterval(heartbeat);
-    unregisterController();
+    releaseController();
 
     if (persistTimeout) {
       clearTimeout(persistTimeout);
