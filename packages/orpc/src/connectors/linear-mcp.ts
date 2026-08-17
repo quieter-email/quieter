@@ -7,6 +7,7 @@ import {
 } from "./runtime";
 
 const LINEAR_MCP_READ_PREFIXES = ["get_", "list_", "search_"];
+const MCP_REQUEST_TIMEOUT_MS = 20_000;
 const DEFAULT_MAX_CALLS = 4;
 const DEFAULT_MAX_OUTPUT_BYTES = 8000;
 
@@ -28,12 +29,39 @@ export const isMutatingLinearMcpTool = (tool: { name: string }) => {
 };
 
 /**
+ * Connecting and tool discovery take no signal of their own, but every request the
+ * client makes goes through this fetch, so cancellation and a ceiling are applied
+ * here instead. Without it a stalled Linear holds the caller open indefinitely.
+ */
+const createBoundedFetch = (signal?: AbortSignal): typeof fetch =>
+  Object.assign(
+    async (
+      input: Parameters<typeof fetch>[0],
+      init?: Parameters<typeof fetch>[1]
+    ) => {
+      const signals = [AbortSignal.timeout(MCP_REQUEST_TIMEOUT_MS)];
+      if (signal !== undefined) {
+        signals.push(signal);
+      }
+      if (init?.signal) {
+        signals.push(init.signal);
+      }
+
+      return await fetch(input, { ...init, signal: AbortSignal.any(signals) });
+    },
+    { preconnect: fetch.preconnect }
+  );
+
+/**
  * Connect to a Linear workspace over MCP.
  *
  * The client is imported on demand: it carries a JSON Schema validator that only
  * matters once a tool runs, and most work never reaches Linear at all.
  */
-const connectLinearMcpClient = async (accessToken: string) => {
+const connectLinearMcpClient = async (
+  accessToken: string,
+  signal?: AbortSignal
+) => {
   const [{ createMCPClient }, { CfWorkerJsonSchemaValidator }] =
     await Promise.all([
       import("@tanstack/ai-mcp"),
@@ -47,6 +75,7 @@ const connectLinearMcpClient = async (accessToken: string) => {
       jsonSchemaValidator: new CfWorkerJsonSchemaValidator(),
     },
     transport: {
+      fetch: createBoundedFetch(signal),
       headers: { Authorization: `Bearer ${accessToken}` },
       type: "http",
       url: LINEAR_MCP_URL,
@@ -57,10 +86,10 @@ const connectLinearMcpClient = async (accessToken: string) => {
 type LinearMcpClient = Awaited<ReturnType<typeof connectLinearMcpClient>>;
 
 const withLinearMcpClient = async <TValue>(
-  accessToken: string,
+  input: { accessToken: string; signal?: AbortSignal },
   run: (client: LinearMcpClient) => Promise<TValue>
 ) => {
-  const client = await connectLinearMcpClient(accessToken);
+  const client = await connectLinearMcpClient(input.accessToken, input.signal);
 
   try {
     return await run(client);
@@ -118,6 +147,7 @@ const callTool = async (input: {
   client: LinearMcpClient;
   call: LinearMcpToolCallInput;
   maxOutputBytes: number;
+  signal?: AbortSignal;
   tools: Map<string, AnyServerTool>;
 }): Promise<LinearMcpToolCallResult> => {
   const startedAt = Date.now();
@@ -137,7 +167,9 @@ const callTool = async (input: {
   }
 
   try {
-    const output: unknown = await tool.execute(input.call.arguments ?? {});
+    const output: unknown = await tool.execute(input.call.arguments ?? {}, {
+      abortSignal: input.signal,
+    });
     return {
       ...base,
       durationMs: Date.now() - startedAt,
@@ -162,6 +194,7 @@ const callToolsSequentially = async (input: {
   calls: LinearMcpToolCallInput[];
   client: LinearMcpClient;
   maxOutputBytes: number;
+  signal?: AbortSignal;
   tools: Map<string, AnyServerTool>;
 }): Promise<LinearMcpToolCallResult[]> => {
   const [call, ...remaining] = input.calls;
@@ -181,14 +214,16 @@ const runLinearMcpToolCalls = async (input: {
   calls: LinearMcpToolCallInput[];
   maxCalls?: number;
   maxOutputBytes?: number;
+  signal?: AbortSignal;
 }): Promise<LinearMcpToolCallResult[]> =>
-  await withLinearMcpClient(input.accessToken, async (client) => {
+  await withLinearMcpClient(input, async (client) => {
     const discovered = await client.tools();
 
     return await callToolsSequentially({
       calls: input.calls.slice(0, input.maxCalls ?? DEFAULT_MAX_CALLS),
       client,
       maxOutputBytes: input.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES,
+      signal: input.signal,
       tools: new Map(discovered.map((tool) => [tool.name, tool])),
     });
   });
@@ -199,10 +234,13 @@ export const listLinearMcpToolsForCredential = async (input: {
   userId?: string;
 }): Promise<LinearMcpToolDescriptor[]> => {
   const accessToken = await getLinearAccessTokenForCredential(input);
-  return await withLinearMcpClient(accessToken, async (client) => {
-    const tools = await client.tools();
-    return tools.map(toDescriptor);
-  });
+  return await withLinearMcpClient(
+    { accessToken, signal: input.signal },
+    async (client) => {
+      const tools = await client.tools();
+      return tools.map(toDescriptor);
+    }
+  );
 };
 
 export const runLinearMcpToolCallsForCredential = async (input: {
@@ -224,7 +262,10 @@ export const runLinearMcpToolCallsForCredential = async (input: {
  * the agent loop and the workspace decides which tools exist. A change to that
  * workspace is the user's to approve, and a tool's own name is what marks it.
  */
-export const createLinearMcpToolSource = (context: { userId: string }) => {
+export const createLinearMcpToolSource = (context: {
+  signal?: AbortSignal;
+  userId: string;
+}) => {
   let client: LinearMcpClient | null = null;
 
   return {
@@ -234,7 +275,8 @@ export const createLinearMcpToolSource = (context: { userId: string }) => {
     },
     tools: async (): Promise<AnyServerTool[]> => {
       client ??= await connectLinearMcpClient(
-        await getLinearAccessTokenForUser(context)
+        await getLinearAccessTokenForUser(context),
+        context.signal
       );
       const tools = await client.tools();
 

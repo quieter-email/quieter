@@ -202,10 +202,32 @@ const getConnectorRepairRequiredError = (provider: ConnectorProvider) =>
     message: `Reconnect ${connectorDefinitions[provider].displayName} before using this action.`,
   });
 
+/**
+ * A refresh returns a token carrying the scopes the user originally granted. When the
+ * response omits them, the stored grant is what the token still has — writing the
+ * connector's current definition instead would claim scopes this credential never got.
+ */
+const getRefreshedScopes = (
+  record: { scopes: string | null },
+  scope: string | string[] | undefined
+) => (scope === undefined ? (record.scopes ?? "") : normalizeOAuthScope(scope));
+
+/** A grant missing a scope the connector now needs cannot serve its tools. */
+const hasRequiredConnectorScopes = (
+  provider: ConnectorProvider,
+  scopes: string
+) => {
+  const granted = new Set(scopes.split(" ").filter((value) => value !== ""));
+  return connectorDefinitions[provider].scopes.every((scope) =>
+    granted.has(scope)
+  );
+};
+
 const refreshConnectorAccessToken = async (record: {
   encryptedRefreshToken: string | null;
   id: string;
   provider: ConnectorProvider;
+  scopes: string | null;
 }) => {
   if (!hasText(record.encryptedRefreshToken)) {
     await db
@@ -266,6 +288,7 @@ const refreshConnectorAccessToken = async (record: {
       ? linearRefreshResponseSchema.parse(await response.json())
       : googleRefreshResponseSchema.parse(await response.json());
   const now = new Date();
+  const scopes = getRefreshedScopes(record, refreshed.scope);
   await db
     .update(connectorCredential)
     .set({
@@ -277,11 +300,13 @@ const refreshConnectorAccessToken = async (record: {
         "refresh_token" in refreshed && hasText(refreshed.refresh_token)
           ? encryptConnectorSecret(refreshed.refresh_token)
           : record.encryptedRefreshToken,
-      scopes:
-        refreshed.scope === undefined
-          ? connectorDefinitions[record.provider].scopes.join(" ")
-          : normalizeOAuthScope(refreshed.scope),
-      status: "connected",
+      scopes,
+      // An older, narrower grant still refreshes, but it cannot do what the connector
+      // now asks of it, so it is surfaced as needing a reconnect rather than silently
+      // failing at the first call that needs the missing scope.
+      status: hasRequiredConnectorScopes(record.provider, scopes)
+        ? "connected"
+        : "needs_reconnect",
       updatedAt: now,
     })
     .where(eq(connectorCredential.id, record.id));
@@ -300,6 +325,7 @@ const getAuthorizedConnectorAccessToken = async (input: {
       encryptedRefreshToken: connectorCredential.encryptedRefreshToken,
       id: connectorCredential.id,
       provider: connectorCredential.provider,
+      scopes: connectorCredential.scopes,
       status: connectorCredential.status,
     })
     .from(connectorCredential)
@@ -337,6 +363,7 @@ const refreshAuthorizedConnectorAccessToken = async (input: {
       encryptedRefreshToken: connectorCredential.encryptedRefreshToken,
       id: connectorCredential.id,
       provider: connectorCredential.provider,
+      scopes: connectorCredential.scopes,
     })
     .from(connectorCredential)
     .where(
@@ -387,6 +414,7 @@ const getAuthorizedConnectorCredentialAccessToken = async (input: {
       encryptedRefreshToken: connectorCredential.encryptedRefreshToken,
       id: connectorCredential.id,
       provider: connectorCredential.provider,
+      scopes: connectorCredential.scopes,
       status: connectorCredential.status,
       userId: connectorCredential.userId,
     })
@@ -432,6 +460,7 @@ const refreshAuthorizedConnectorCredentialAccessToken = async (input: {
       encryptedRefreshToken: connectorCredential.encryptedRefreshToken,
       id: connectorCredential.id,
       provider: connectorCredential.provider,
+      scopes: connectorCredential.scopes,
     })
     .from(connectorCredential)
     .where(
@@ -569,6 +598,16 @@ const LINEAR_IDENTITY_QUERY = `query ConnectorIdentity {
   organization { id name }
 }`;
 
+const LINEAR_IDENTITY_TIMEOUT_MS = 10_000;
+
+/**
+ * GraphQL reports failures inside a 200, so an error body has to be read rather than
+ * inferred from the status.
+ */
+const linearGraphqlErrorSchema = z.object({
+  errors: z.array(z.object({ message: z.string().optional() })).min(1),
+});
+
 const linearIdentitySchema = z.object({
   data: z.object({
     organization: z.object({
@@ -602,10 +641,13 @@ export const getLinearIdentityFromAccessToken = async (accessToken: string) => {
   const response = await fetch(LINEAR_GRAPHQL_URL, {
     body: JSON.stringify({ query: LINEAR_IDENTITY_QUERY }),
     headers: {
-      Authorization: accessToken,
+      Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
     method: "POST",
+    // This runs while someone waits on the connect screen, so a stalled Linear must
+    // fail rather than hold the request open.
+    signal: AbortSignal.timeout(LINEAR_IDENTITY_TIMEOUT_MS),
   });
 
   if (!response.ok) {
@@ -615,7 +657,23 @@ export const getLinearIdentityFromAccessToken = async (accessToken: string) => {
     );
   }
 
-  const { data } = linearIdentitySchema.parse(await response.json());
+  const body: unknown = await response.json();
+  const failure = linearGraphqlErrorSchema.safeParse(body);
+  if (failure.success) {
+    throw new ConnectorHttpError(
+      failure.data.errors[0].message ?? "Linear rejected the connection.",
+      response.status
+    );
+  }
+
+  const parsed = linearIdentitySchema.safeParse(body);
+  if (!parsed.success) {
+    throw new ConnectorHttpError(
+      "Linear did not return the connected account.",
+      response.status
+    );
+  }
+  const { data } = parsed.data;
   return {
     accountEmail: data.viewer.email,
     displayName: resolveLinearDisplayName(data.viewer),
