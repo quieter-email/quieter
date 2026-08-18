@@ -80,7 +80,7 @@ const getMessageRowSurfaceOpacity = (
   if (isSelected) {
     return isHovered ? 0.9 : 0.75;
   }
-  return isHovered ? 0.5 : 0;
+  return isHovered ? 0.65 : 0;
 };
 
 const getMessageRowOpenAriaLabel = (

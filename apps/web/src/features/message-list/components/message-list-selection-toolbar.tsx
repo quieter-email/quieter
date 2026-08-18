@@ -33,7 +33,7 @@ const MessageListBulkActions = ({
       <DropdownMenuTrigger
         aria-label="Open bulk actions"
         aria-busy={pending || undefined}
-        className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl border border-transparent bg-control text-muted-fg shadow-none hover:bg-control-hover hover:text-fg active:bg-control-active active:text-fg disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0"
+        className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-control text-muted-fg shadow-xs hover:bg-control-hover hover:text-fg active:bg-control-active active:text-fg disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0"
         disabled={disabled || actions.length === 0}
         type="button"
       >
@@ -116,7 +116,7 @@ export const MessageListSelectionToolbar = ({
         <IconButtonTooltip label="Clear selection">
           <Button
             aria-label="Clear selection"
-            className="rounded-xl bg-control text-muted-fg shadow-none hover:bg-control-hover hover:text-fg [&_svg]:size-3.5"
+            className="rounded-xl border border-border bg-control text-muted-fg shadow-xs hover:bg-control-hover hover:text-fg [&_svg]:size-3.5"
             disabled={disabled}
             onClick={onClearSelection}
             size="icon"

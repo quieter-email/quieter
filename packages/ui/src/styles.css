@@ -24,17 +24,15 @@
   --font-geist-mono: "Geist Mono Variable", monospace;
   --bg: oklch(0.975 0.002 264);
   --bg-surface: oklch(1 0.002 264);
-  --bg-elevated: oklch(0.9 0.002 264);
+  --bg-elevated: oklch(0.94 0.002 264);
   --fg: oklch(0.15 0.002 264);
-  /* The one raised interactive surface. Field fills, quiet button fills, and
-     every floating layer (popover, dropdown, tooltip, dialog) share it, so a
-     menu and a text field read as the same material. One rung off the shell on
-     the 0.025 lightness ladder. `--control-hover` is what sits *on* that
-     surface -- ghost hover, menu highlight -- and so must stay a rung clear of
-     it, which is why `--muted` maps there rather than to `--control`. */
-  --control: oklch(0.9 0.002 264);
-  --control-hover: oklch(0.925 0.002 264);
-  --control-active: oklch(0.95 0.002 264);
+  /* Light tells surfaces apart with borders and shadows, so a control shares
+     the canvas colour instead of being tinted off it, and interaction steps
+     *darker* to stay legible against every surface. Dark has no borders to
+     speak of, so it inverts both halves: shades apart, interaction lighter. */
+  --control: var(--bg);
+  --control-hover: oklch(0.9 0.002 264);
+  --control-active: oklch(0.86 0.002 264);
   --card: var(--bg-surface);
   --card-fg: var(--fg);
   --popover: var(--control);
@@ -108,8 +106,6 @@
   --bg-surface: oklch(0.255 0.003 264);
   --bg-elevated: oklch(0.145 0 264);
   --fg: oklch(1 0.002 264);
-  /* Dark needs a wider lightness step than light for the same perceived
-     separation, so these rungs are 0.05 apart rather than 0.025. */
   --control: oklch(0.26 0.003 264);
   --control-hover: oklch(0.31 0.003 264);
   --control-active: oklch(0.36 0.003 264);
