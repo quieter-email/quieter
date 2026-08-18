@@ -581,9 +581,7 @@ export const MessageListSearchView = ({
               <ArrowInteractionButton
                 aria-label="Scroll to top"
                 className={searchControlVariants({ control: "toolbar" })}
-                onClick={() => {
-                  void onScrollToTop();
-                }}
+                onClick={onScrollToTop}
                 size="icon"
                 type="button"
                 variant="ghost"
