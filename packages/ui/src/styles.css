@@ -58,6 +58,13 @@
   /* Form-control fill. Distinct from the canvas without the harsh drop of
      `--bg-elevated`, which is a sunken *panel* surface, not a field. */
   --input: oklch(1 0.002 264);
+  /* Opaque fill for borderless chrome controls: the list search field and the
+     toolbar icon buttons flanking it. Sits one rung below the workspace panel
+     on the 0.025 lightness ladder; hover takes the next rung up. Distinct from
+     `--input`, which is the bordered fill for text fields and selects. */
+  --control: oklch(0.9 0.002 264);
+  --control-hover: oklch(0.925 0.002 264);
+  --control-active: oklch(0.95 0.002 264);
   --ring: oklch(0.708 0.003 264);
   --scrollbar-thumb: var(--secondary);
   --chart-1: oklch(0.32 0.002 264);
@@ -133,6 +140,11 @@
   /* Recessed from the 0.218 canvas by roughly the same step that `--card` is
      raised, rather than dropping all the way to `--bg-elevated` at 0.145. */
   --input: oklch(0.185 0.003 264);
+  /* Dark needs a wider lightness step than light for the same perceived
+     separation, so these rungs are 0.05 apart rather than 0.025. */
+  --control: oklch(0.26 0.003 264);
+  --control-hover: oklch(0.31 0.003 264);
+  --control-active: oklch(0.36 0.003 264);
   --ring: oklch(0.44 0.004 264);
   --scrollbar-thumb: var(--secondary);
   --chart-1: oklch(0.42 0.003 264);
@@ -191,6 +203,9 @@
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
   --color-input: var(--input);
+  --color-control: var(--control);
+  --color-control-hover: var(--control-hover);
+  --color-control-active: var(--control-active);
   --color-ring: var(--ring);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);

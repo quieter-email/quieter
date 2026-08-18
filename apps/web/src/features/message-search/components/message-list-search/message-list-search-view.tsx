@@ -34,7 +34,7 @@ const searchControlVariants = cva("", {
     control: {
       chip: "squircle inline-flex h-6 min-w-0 max-w-full shrink-0 items-center rounded-lg bg-bg-elevated/55 px-2.5 text-[13px] text-fg shadow-xs transition-colors duration-150 ease-out ring-1 ring-border/80 ring-inset hover:bg-bg-elevated/70 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-ring/45",
       toolbar:
-        "h-full w-9 rounded-xl bg-secondary/55 text-muted-fg shadow-none hover:bg-muted hover:text-fg [&_svg]:size-3.5",
+        "h-full w-9 rounded-xl bg-control text-muted-fg shadow-none hover:bg-control-hover hover:text-fg [&_svg]:size-3.5",
     },
   },
 });
@@ -183,7 +183,7 @@ export const MessageListSearchView = ({
             onBlur={handleSearchFieldBlur}
             ref={fieldRef}
           >
-            <div className="squircle flex min-h-9 min-w-0 items-center gap-1 rounded-xl border border-transparent bg-secondary/55 p-1 transition-colors duration-150 ease-out has-[input[data-slot=search-input]:focus-visible]:border-ring has-[input[data-slot=search-input]:focus-visible]:ring-1 has-[input[data-slot=search-input]:focus-visible]:ring-ring/45 has-[input[data-slot=search-input]:focus-visible]:outline-none">
+            <div className="squircle flex min-h-9 min-w-0 items-center gap-1 rounded-xl border border-transparent bg-control p-1 transition-colors duration-150 ease-out has-[input[data-slot=search-input]:focus-visible]:border-ring has-[input[data-slot=search-input]:focus-visible]:ring-1 has-[input[data-slot=search-input]:focus-visible]:ring-ring/45 has-[input[data-slot=search-input]:focus-visible]:outline-none">
               <div
                 className="flex min-w-0 flex-1 scroll-px-1 scrollbar-none items-center gap-1 overflow-x-auto overscroll-x-contain [&::-webkit-scrollbar]:hidden"
                 onMouseDown={(event) => {
@@ -447,7 +447,7 @@ export const MessageListSearchView = ({
                     <IconButtonTooltip key="clear-search" label="Clear search">
                       <Button
                         aria-label="Clear search"
-                        className="size-6 shrink-0 rounded-lg text-muted-fg hover:bg-muted hover:text-fg"
+                        className="size-6 shrink-0 rounded-lg text-muted-fg hover:bg-control-hover hover:text-fg"
                         onClick={(event) => {
                           event.stopPropagation();
                           clearSearch();
@@ -476,7 +476,7 @@ export const MessageListSearchView = ({
               <IconButtonTooltip label="Run search">
                 <Button
                   aria-label="Run search"
-                  className="size-6 shrink-0 rounded-lg text-muted-fg hover:bg-muted hover:text-fg"
+                  className="size-6 shrink-0 rounded-lg text-muted-fg hover:bg-control-hover hover:text-fg"
                   onClick={(event) => {
                     event.stopPropagation();
                     runSearch();
