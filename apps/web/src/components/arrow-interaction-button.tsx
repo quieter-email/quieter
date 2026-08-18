@@ -77,11 +77,21 @@ const arrowPrimaryInitial: Record<
   success: "successFrom",
 };
 
+type ArrowButtonClickEvent = Parameters<NonNullable<ButtonProps["onClick"]>>[0];
+
+type ArrowInteractionButtonProps = Omit<ButtonProps, "onClick"> & {
+  /**
+   * Returns whether the click did anything. `false` plays the rejected
+   * animation instead of the launch.
+   */
+  onClick: (event: ArrowButtonClickEvent) => boolean | Promise<boolean>;
+};
+
 export const ArrowInteractionButton = ({
   className,
   onClick,
   ...props
-}: ButtonProps) => {
+}: ArrowInteractionButtonProps) => {
   const shouldReduceMotion = useReducedMotion() ?? false;
   const [animation, setAnimation] = useState<{
     kind: ArrowIconMotionKind;
@@ -90,32 +100,19 @@ export const ArrowInteractionButton = ({
     kind: "idle",
     nonce: 0,
   });
-  type ArrowButtonClickEvent = Parameters<
-    NonNullable<ButtonProps["onClick"]>
-  >[0];
-  const handleClick = (event: ArrowButtonClickEvent) => {
-    try {
-      onClick?.(event);
-    } catch {
-      if (shouldReduceMotion) {
-        return;
-      }
-
-      setAnimation((previous) => ({
-        kind: "failure",
-        nonce: previous.nonce + 1,
-      }));
-      return;
-    }
-
+  const playAnimation = (kind: ArrowIconMotionKind) => {
     if (shouldReduceMotion) {
       return;
     }
 
-    setAnimation((previous) => ({
-      kind: "success",
-      nonce: previous.nonce + 1,
-    }));
+    setAnimation((previous) => ({ kind, nonce: previous.nonce + 1 }));
+  };
+  const handleClick = async (event: ArrowButtonClickEvent) => {
+    try {
+      playAnimation((await onClick(event)) ? "success" : "failure");
+    } catch {
+      playAnimation("failure");
+    }
   };
 
   return (
@@ -123,7 +120,7 @@ export const ArrowInteractionButton = ({
       {...props}
       className={cn("relative", className)}
       onClick={(event) => {
-        handleClick(event);
+        void handleClick(event);
       }}
     >
       <span aria-hidden="true" className="pointer-events-none opacity-0">
