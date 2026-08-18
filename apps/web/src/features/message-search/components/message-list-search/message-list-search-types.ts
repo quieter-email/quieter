@@ -3,7 +3,6 @@ export type MessageListSearchProps = {
   mailboxId: string;
   mailboxProvider: "api" | "gmail" | "managed";
   onRefresh: () => void | Promise<void>;
-  onOpenSidebar?: () => void;
   onScrollToTop: () => boolean | Promise<boolean>;
   onSearch: (query: string) => void;
   searchQuery: string;

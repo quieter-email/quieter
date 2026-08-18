@@ -60,4 +60,6 @@ export type MessageListBulkAction = {
   id: string;
   label: string;
   onSelect: () => void | Promise<void>;
+  /** Gets its own header button whenever the row is wide enough to hold one. */
+  promoted?: boolean;
 };
