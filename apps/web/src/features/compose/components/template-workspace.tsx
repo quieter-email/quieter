@@ -22,11 +22,11 @@ import {
 } from "@quieter/ui/alert-dialog";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
-import { Field, FieldControl, FieldLabel } from "@quieter/ui/field";
+import { FieldControl } from "@quieter/ui/field";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
 import { toast } from "@quieter/ui/toast";
-import { ToolbarButton, ToolbarSeparator } from "@quieter/ui/toolbar";
+import { ToolbarButton } from "@quieter/ui/toolbar";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
@@ -45,6 +45,13 @@ import {
   ComposeEditorToolbar,
 } from "./compose-editor";
 import type { ComposeEditorHandle } from "./compose-editor";
+import {
+  ComposerEditorFrame,
+  ComposerFieldGroup,
+  composerFieldControlClassName,
+  ComposerFieldRow,
+  ComposerFrame,
+} from "./composer-chrome";
 
 const hasText = (value: string | null | undefined): value is string =>
   value !== null && value !== undefined && value !== "";
@@ -330,36 +337,31 @@ export const TemplateWorkspace = ({
             </p>
           </div>
 
-          <templateForm.Field name="name">
-            {(field) => (
-              <Field className="w-full max-w-2xl gap-1">
-                <div className="flex items-center gap-3">
-                  <FieldLabel className="w-14 shrink-0 text-sm font-normal text-muted-fg">
-                    Name
-                  </FieldLabel>
-                  <FieldControl
-                    className="min-w-0 flex-1"
-                    disabled={!canEditCurrentTemplate}
-                    onBlur={() => {
-                      field.handleBlur();
-                    }}
-                    onChange={(event) => {
-                      field.handleChange(event.currentTarget.value);
-                    }}
-                    placeholder="Template name"
-                    value={field.state.value}
-                  />
-                </div>
-              </Field>
-            )}
-          </templateForm.Field>
+          {/* The same writing measure and capped height as the mail composer. */}
+          <ComposerFrame>
+            <ComposerFieldGroup>
+              <templateForm.Field name="name">
+                {(field) => (
+                  <ComposerFieldRow divided={false} label="Name">
+                    <FieldControl
+                      className={composerFieldControlClassName}
+                      disabled={!canEditCurrentTemplate}
+                      onBlur={() => {
+                        field.handleBlur();
+                      }}
+                      onChange={(event) => {
+                        field.handleChange(event.currentTarget.value);
+                      }}
+                      placeholder="Template name"
+                      value={field.state.value}
+                    />
+                  </ComposerFieldRow>
+                )}
+              </templateForm.Field>
+            </ComposerFieldGroup>
 
-          <templateForm.Field name="bodyHtml">
-            {(field) => (
-              <Field className="flex min-h-0 flex-1 flex-col gap-2">
-                <FieldLabel className="font-normal text-muted-fg">
-                  Message
-                </FieldLabel>
+            <templateForm.Field name="bodyHtml">
+              {(field) => (
                 <ComposeEditor
                   disabled={!canEditCurrentTemplate}
                   html={field.state.value}
@@ -375,9 +377,14 @@ export const TemplateWorkspace = ({
                   }}
                   ref={templateEditorRef}
                 >
-                  <div className="flex min-h-0 flex-1 flex-col gap-3">
-                    <ComposeEditorBody className="min-h-0 flex-1" />
+                  {/* One sheet: the toolbar is the editor's own footer band. */}
+                  <ComposerEditorFrame>
+                    <ComposeEditorBody
+                      chrome="seamless"
+                      className="min-h-0 flex-1"
+                    />
                     <ComposeEditorToolbar
+                      chrome="footer"
                       trailing={
                         <>
                           <IconButtonTooltip label="Insert placeholder">
@@ -450,9 +457,12 @@ export const TemplateWorkspace = ({
                               Delete
                             </ToolbarButton>
                           ) : null}
-                          <ToolbarSeparator />
                           {canEditCurrentTemplate ? (
-                            <ToolbarButton disabled={isSaving} type="submit">
+                            <ToolbarButton
+                              className="bg-primary text-primary-fg shadow-sm hover:bg-primary/90 hover:text-primary-fg active:bg-primary/85 active:text-primary-fg"
+                              disabled={isSaving}
+                              type="submit"
+                            >
                               {isSaving ? (
                                 <HugeiconsIcon
                                   className="animate-spin"
@@ -471,11 +481,11 @@ export const TemplateWorkspace = ({
                         </>
                       }
                     />
-                  </div>
+                  </ComposerEditorFrame>
                 </ComposeEditor>
-              </Field>
-            )}
-          </templateForm.Field>
+              )}
+            </templateForm.Field>
+          </ComposerFrame>
         </div>
       </form>
 

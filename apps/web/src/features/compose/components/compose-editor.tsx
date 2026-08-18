@@ -288,9 +288,15 @@ export const ComposeEditor = ({
 };
 
 export const ComposeEditorBody = ({
+  chrome = "default",
   className,
   invalid = false,
 }: {
+  /**
+   * `seamless` drops the card and its focus ring so the body can sit inside the
+   * composer sheet as one continuous surface.
+   */
+  chrome?: "default" | "seamless";
   className?: string;
   invalid?: boolean;
 }) => {
@@ -351,8 +357,12 @@ export const ComposeEditorBody = ({
       aria-invalid={invalid || undefined}
       className={cn(
         "squircle relative min-h-20 w-full overflow-hidden rounded-md border border-border bg-control text-sm text-fg shadow-sm transition-colors duration-150 ease-out",
-        "has-[.ProseMirror:focus-visible]:border-ring has-[.ProseMirror:focus-visible]:ring-1 has-[.ProseMirror:focus-visible]:ring-ring/45 has-[.ProseMirror:focus-visible]:outline-none",
-        "aria-invalid:border-destructive aria-invalid:focus-within:border-destructive aria-invalid:focus-within:ring-destructive/45",
+        {
+          "has-[.ProseMirror:focus-visible]:border-ring has-[.ProseMirror:focus-visible]:ring-1 has-[.ProseMirror:focus-visible]:ring-ring/45 has-[.ProseMirror:focus-visible]:outline-none aria-invalid:border-destructive aria-invalid:focus-within:border-destructive aria-invalid:focus-within:ring-destructive/45":
+            chrome === "default",
+          "rounded-none border-0 bg-transparent shadow-none":
+            chrome === "seamless",
+        },
         className,
         {
           "pointer-events-none opacity-50": disabled,
@@ -365,9 +375,12 @@ export const ComposeEditorBody = ({
 };
 
 export const ComposeEditorToolbar = ({
+  chrome = "default",
   className,
   trailing,
 }: {
+  /** `footer` seats the toolbar as the composer sheet's own band, not a floating bar. */
+  chrome?: "default" | "footer";
   className?: string;
   trailing?: ReactNode;
 }) => {
@@ -452,6 +465,10 @@ export const ComposeEditorToolbar = ({
     <Toolbar
       className={cn(
         "w-full min-w-0 shrink-0 rounded-md border-border bg-control",
+        {
+          "gap-1.5 rounded-none border-0 border-t border-border bg-bg-elevated px-2 py-1.5 shadow-none":
+            chrome === "footer",
+        },
         className
       )}
     >
