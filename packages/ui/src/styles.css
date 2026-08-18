@@ -137,8 +137,12 @@
   --q-red: oklch(0.72 0.18 25);
   --q-pink: oklch(0.75 0.16 345);
   --q-purple: oklch(0.72 0.16 300);
-  --border: oklch(0.25 0.004 264 / 0.6);
-  --border-strong: oklch(0.38 0.004 264 / 0.9);
+  /* Controls share their surface's fill in both themes, so the border is what
+     delineates them and has to be worth the same in each. At 0.25/0.6 this
+     read 0.035 against the workspace panel where light's reads 0.092, and a
+     shadow cannot make up the difference on a near-black ground. */
+  --border: oklch(0.3 0.004 264 / 0.7);
+  --border-strong: oklch(0.42 0.004 264 / 0.9);
   --input: var(--control);
   --ring: oklch(0.44 0.004 264);
   /* Needs more contrast than the control ladder gives; kept independent. */
