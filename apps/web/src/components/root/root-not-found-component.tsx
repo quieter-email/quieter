@@ -1,20 +1,44 @@
-import { Link } from "@tanstack/react-router";
+"use client";
 
-export const RootNotFoundComponent = () => (
-  <div className="grid min-h-dvh place-items-center bg-bg px-6 py-10">
-    <div className="w-full max-w-xl rounded-2xl border bg-bg-surface p-8 shadow-sm">
-      <h1 className="text-3xl font-medium tracking-tight text-fg">
-        Page not found
-      </h1>
-      <p className="mt-3 text-sm text-muted-fg">
-        The route you requested does not exist.
-      </p>
-      <Link
-        className="mt-6 inline-flex rounded-md border border-border bg-bg px-4 py-2 text-sm text-fg shadow-sm hover:border-fg/25 hover:bg-muted/60"
-        to="/"
-      >
-        Go to inbox
-      </Link>
-    </div>
-  </div>
-);
+import { Button, LinkButton } from "@quieter/ui/button";
+import { useCanGoBack, useLocation, useRouter } from "@tanstack/react-router";
+
+import { StatusScreen } from "#/components/root/status-screen";
+
+const MAX_SHOWN_PATH_LENGTH = 64;
+
+export const RootNotFoundComponent = () => {
+  const router = useRouter();
+  const canGoBack = useCanGoBack();
+  const pathname = useLocation({ select: (location) => location.pathname });
+
+  const shownPath =
+    pathname.length > MAX_SHOWN_PATH_LENGTH
+      ? `${pathname.slice(0, MAX_SHOWN_PATH_LENGTH)}…`
+      : pathname;
+
+  return (
+    <StatusScreen
+      actions={
+        <>
+          <LinkButton to="/">Back to inbox</LinkButton>
+          {canGoBack ? (
+            <Button
+              className="border-fg/20 bg-transparent text-fg hover:bg-fg/10"
+              onClick={() => {
+                router.history.back();
+              }}
+              variant="outline"
+            >
+              Go back
+            </Button>
+          ) : null}
+        </>
+      }
+      description="There is no page at this address. The link may be old, or it may have moved somewhere quieter."
+      ghost="404"
+      note={shownPath}
+      title="It’s pretty quiet here."
+    />
+  );
+};

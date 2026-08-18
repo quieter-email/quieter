@@ -1,6 +1,10 @@
+"use client";
+
+import { Button, LinkButton } from "@quieter/ui/button";
 import * as Sentry from "@sentry/tanstackstart-react";
-import { Link } from "@tanstack/react-router";
 import { useEffect } from "react";
+
+import { StatusScreen } from "#/components/root/status-screen";
 
 export const RootErrorComponent = ({
   error,
@@ -16,38 +20,35 @@ export const RootErrorComponent = ({
     }
   }, [error]);
 
-  const message =
+  const developerMessage =
     import.meta.env.DEV && error instanceof Error && error.message
       ? error.message
-      : "An unexpected error occurred while loading this screen.";
+      : undefined;
 
   return (
-    <div className="grid min-h-dvh place-items-center bg-bg px-6 py-10">
-      <div className="w-full max-w-xl rounded-2xl border bg-bg-surface p-8 shadow-sm">
-        <h1 className="text-3xl font-medium tracking-tight text-fg">
-          Something broke.
-        </h1>
-        <p className="mt-3 text-sm text-muted-fg">{message}</p>
-
-        <div className="mt-6 flex flex-wrap gap-3">
-          <button
-            className="rounded-md border border-border bg-bg px-4 py-2 text-sm text-fg shadow-sm hover:border-fg/25 hover:bg-muted/60"
+    <StatusScreen
+      actions={
+        <>
+          <Button
             onClick={() => {
               reset();
             }}
-            type="button"
           >
-            Retry
-          </button>
-
-          <Link
-            className="rounded-md border border-border bg-bg px-4 py-2 text-sm text-fg shadow-sm hover:border-fg/25 hover:bg-muted/60"
+            Try again
+          </Button>
+          <LinkButton
+            className="border-fg/20 bg-transparent text-fg hover:bg-fg/10"
             to="/"
+            variant="outline"
           >
             Back to inbox
-          </Link>
-        </div>
-      </div>
-    </div>
+          </LinkButton>
+        </>
+      }
+      ghost="error"
+      description="This screen stopped loading partway through. Nothing was sent and nothing was lost, so trying again is safe."
+      note={developerMessage}
+      title="Something broke on our end."
+    />
   );
 };

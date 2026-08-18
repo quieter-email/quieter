@@ -1,6 +1,8 @@
 import * as Sentry from "@sentry/tanstackstart-react";
 import { createRouter } from "@tanstack/react-router";
 
+import { RootErrorComponent } from "./components/root/root-error-component";
+import { RootNotFoundComponent } from "./components/root/root-not-found-component";
 import { clientEnv } from "./env";
 import { shouldDiscardClientError } from "./lib/client-error-reporting";
 import { routeTree } from "./routeTree.gen";
@@ -12,6 +14,10 @@ const isSentryEnabled =
 
 export const getRouter = () => {
   const router = createRouter({
+    // Without these, only the root route gets the branded screens and every
+    // other route falls back to the router's built-in error markup.
+    defaultErrorComponent: RootErrorComponent,
+    defaultNotFoundComponent: RootNotFoundComponent,
     defaultPendingMinMs: 0,
     routeTree,
     scrollRestoration: true,

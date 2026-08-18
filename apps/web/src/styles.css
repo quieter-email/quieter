@@ -79,3 +79,22 @@
     opacity: 0;
   }
 }
+
+/* Dead-end screens: the landing page's entrance, without the JS */
+.status-enter {
+  animation: status-enter 0.8s var(--app-motion-ease-out) both;
+}
+
+@keyframes status-enter {
+  from {
+    filter: blur(8px);
+    opacity: 0;
+    transform: translateY(16px);
+  }
+
+  to {
+    filter: blur(0);
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
