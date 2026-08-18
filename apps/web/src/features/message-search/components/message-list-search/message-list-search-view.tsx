@@ -32,7 +32,7 @@ import type { MessageListSearchController } from "./use-message-list-search-cont
 const searchControlVariants = cva("", {
   variants: {
     control: {
-      chip: "squircle inline-flex h-6 min-w-0 max-w-full shrink-0 items-center rounded-lg bg-bg-elevated/55 px-2.5 text-[13px] text-fg shadow-xs transition-colors duration-150 ease-out ring-1 ring-border/80 ring-inset hover:bg-bg-elevated/70 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-ring/45",
+      chip: "squircle inline-flex h-6 min-w-0 max-w-full shrink-0 items-center rounded-lg bg-control-hover px-2.5 text-[13px] text-fg shadow-xs transition-colors duration-150 ease-out ring-1 ring-border/80 ring-inset hover:bg-control-active focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-ring/45",
       toolbar:
         "h-full w-9 rounded-xl bg-control text-muted-fg shadow-none hover:bg-control-hover hover:text-fg [&_svg]:size-3.5",
     },
@@ -315,7 +315,7 @@ export const MessageListSearchView = ({
                         searchControlVariants({ control: "chip" }),
                         "gap-1",
                         {
-                          "bg-accent ring-2 ring-ring/30":
+                          "bg-control-active ring-2 ring-ring/30":
                             activeDateFilterIndex === index,
                         }
                       )}

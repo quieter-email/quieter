@@ -26,17 +26,26 @@
   --bg-surface: oklch(1 0.002 264);
   --bg-elevated: oklch(0.9 0.002 264);
   --fg: oklch(0.15 0.002 264);
+  /* The one raised interactive surface. Field fills, quiet button fills, and
+     every floating layer (popover, dropdown, tooltip, dialog) share it, so a
+     menu and a text field read as the same material. One rung off the shell on
+     the 0.025 lightness ladder. `--control-hover` is what sits *on* that
+     surface -- ghost hover, menu highlight -- and so must stay a rung clear of
+     it, which is why `--muted` maps there rather than to `--control`. */
+  --control: oklch(0.9 0.002 264);
+  --control-hover: oklch(0.925 0.002 264);
+  --control-active: oklch(0.95 0.002 264);
   --card: var(--bg-surface);
   --card-fg: var(--fg);
-  --popover: var(--bg-surface);
+  --popover: var(--control);
   --popover-fg: var(--fg);
   --primary: oklch(0.37 0.002 264);
   --primary-fg: oklch(0.985 0.002 264);
-  --secondary: oklch(0.875 0.002 264);
+  --secondary: var(--control);
   --secondary-fg: oklch(0.205 0.002 264);
-  --muted: oklch(0.925 0.002 264);
+  --muted: var(--control-hover);
   --muted-fg: oklch(0.45 0.003 264);
-  --accent: oklch(0.952 0.002 264);
+  --accent: var(--control-hover);
   --accent-fg: oklch(0.205 0.002 264);
   --destructive: oklch(0.48 0.19 27.33);
   --destructive-fg: oklch(0.985 0.002 264);
@@ -55,18 +64,10 @@
   --q-purple: oklch(0.6 0.16 300);
   --border: oklch(0.84 0.002 264 / 0.6);
   --border-strong: oklch(0.78 0.002 264 / 0.9);
-  /* Form-control fill. Distinct from the canvas without the harsh drop of
-     `--bg-elevated`, which is a sunken *panel* surface, not a field. */
-  --input: oklch(1 0.002 264);
-  /* Opaque fill for borderless chrome controls: the list search field and the
-     toolbar icon buttons flanking it. Sits one rung below the workspace panel
-     on the 0.025 lightness ladder; hover takes the next rung up. Distinct from
-     `--input`, which is the bordered fill for text fields and selects. */
-  --control: oklch(0.9 0.002 264);
-  --control-hover: oklch(0.925 0.002 264);
-  --control-active: oklch(0.95 0.002 264);
+  --input: var(--control);
   --ring: oklch(0.708 0.003 264);
-  --scrollbar-thumb: var(--secondary);
+  /* Needs more contrast than the control ladder gives; kept independent. */
+  --scrollbar-thumb: oklch(0.875 0.002 264);
   --chart-1: oklch(0.32 0.002 264);
   --chart-2: oklch(0.42 0.002 264);
   --chart-3: oklch(0.52 0.002 264);
@@ -107,18 +108,23 @@
   --bg-surface: oklch(0.255 0.003 264);
   --bg-elevated: oklch(0.145 0 264);
   --fg: oklch(1 0.002 264);
+  /* Dark needs a wider lightness step than light for the same perceived
+     separation, so these rungs are 0.05 apart rather than 0.025. */
+  --control: oklch(0.26 0.003 264);
+  --control-hover: oklch(0.31 0.003 264);
+  --control-active: oklch(0.36 0.003 264);
   /* Raised, like light mode. `--bg-elevated` sits below the canvas in dark. */
   --card: var(--bg-surface);
   --card-fg: var(--fg);
-  --popover: var(--bg);
+  --popover: var(--control);
   --popover-fg: var(--fg);
   --primary: oklch(0.95 0.002 264);
   --primary-fg: oklch(0.141 0.003 264);
-  --secondary: oklch(0.31 0.003 264);
+  --secondary: var(--control);
   --secondary-fg: oklch(1 0.002 264);
-  --muted: oklch(0.35 0.003 264);
+  --muted: var(--control-hover);
   --muted-fg: oklch(0.74 0.004 264);
-  --accent: oklch(0.33 0.003 264);
+  --accent: var(--control-hover);
   --accent-fg: oklch(0.985 0.002 264);
   --destructive: oklch(0.58 0.13 27.33);
   --destructive-fg: oklch(0.985 0.002 264);
@@ -137,16 +143,10 @@
   --q-purple: oklch(0.72 0.16 300);
   --border: oklch(0.25 0.004 264 / 0.6);
   --border-strong: oklch(0.38 0.004 264 / 0.9);
-  /* Recessed from the 0.218 canvas by roughly the same step that `--card` is
-     raised, rather than dropping all the way to `--bg-elevated` at 0.145. */
-  --input: oklch(0.185 0.003 264);
-  /* Dark needs a wider lightness step than light for the same perceived
-     separation, so these rungs are 0.05 apart rather than 0.025. */
-  --control: oklch(0.26 0.003 264);
-  --control-hover: oklch(0.31 0.003 264);
-  --control-active: oklch(0.36 0.003 264);
+  --input: var(--control);
   --ring: oklch(0.44 0.004 264);
-  --scrollbar-thumb: var(--secondary);
+  /* Needs more contrast than the control ladder gives; kept independent. */
+  --scrollbar-thumb: oklch(0.38 0.004 264);
   --chart-1: oklch(0.42 0.003 264);
   --chart-2: oklch(0.52 0.003 264);
   --chart-3: oklch(0.62 0.003 264);

@@ -44,19 +44,19 @@ const surfaceTokens = [
   { cls: "bg-bg-surface", name: "bg-surface", note: "raised" },
   { cls: "bg-bg-elevated", name: "bg-elevated", note: "sunken" },
   { cls: "bg-card", name: "card", note: "raised, both themes" },
-  { cls: "bg-muted", name: "muted", note: "quiet fill" },
-  { cls: "bg-secondary", name: "secondary", note: "quiet fill, stronger" },
-  { cls: "bg-control", name: "control", note: "chrome control, rest" },
+  { cls: "bg-muted", name: "muted", note: "alias of control-hover" },
+  { cls: "bg-secondary", name: "secondary", note: "alias of control" },
+  {
+    cls: "bg-control",
+    name: "control",
+    note: "fields, quiet buttons, popovers",
+  },
   {
     cls: "bg-control-hover",
     name: "control-hover",
-    note: "chrome control, hover",
+    note: "hover, menu highlight",
   },
-  {
-    cls: "bg-control-active",
-    name: "control-active",
-    note: "chrome control, pressed",
-  },
+  { cls: "bg-control-active", name: "control-active", note: "pressed" },
 ];
 
 const textTokens = [

@@ -35,9 +35,9 @@ const buttonVariants = cva(
         destructive:
           "bg-destructive text-destructive-fg shadow-sm hover:bg-destructive/90 active:bg-destructive/85",
         ghost:
-          "bg-transparent text-muted-fg hover:bg-muted hover:text-fg active:bg-muted/80 active:text-fg aria-[current=page]:bg-muted aria-[current=page]:text-fg",
+          "bg-transparent text-muted-fg hover:bg-muted hover:text-fg active:bg-control-active active:text-fg aria-[current=page]:bg-muted aria-[current=page]:text-fg",
         outline:
-          "border-border bg-bg-surface text-fg shadow-sm hover:bg-muted active:bg-muted/80",
+          "border-border bg-control text-fg shadow-sm hover:bg-control-hover active:bg-control-active",
       },
     },
   }
