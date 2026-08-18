@@ -3,12 +3,11 @@
 import {
   ArrowDown01Icon,
   ArrowRightDoubleIcon,
-  ArrowUpRight01Icon,
   Edit01Icon,
   Loading03Icon,
-  MailRemove01Icon,
   MailReply02Icon,
   MailReplyAll02Icon,
+  NotificationOff01Icon,
   ZoomInAreaIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -364,94 +363,58 @@ const MessageHeaderActions = ({
   return (
     <div
       className={cn(
-        "flex flex-wrap items-center justify-start gap-1 @md:justify-end @md:gap-0.5",
+        "flex flex-wrap items-center justify-start gap-1 @md:justify-end",
         className
       )}
     >
       {onContinueDraft !== undefined && (
-        <IconButtonTooltip label="Continue with draft">
-          <Button
-            aria-label="Continue with draft"
-            className="h-10 gap-1.5 px-2.5 text-muted-fg hover:text-fg @md:size-8 @md:px-0"
-            onClick={onContinueDraft}
-            type="button"
-            variant="ghost"
-          >
-            <HugeiconsIcon aria-hidden icon={Edit01Icon} />
-            <span className="@md:hidden">Draft</span>
-          </Button>
-        </IconButtonTooltip>
-      )}
-      <IconButtonTooltip label="Reply">
         <Button
-          aria-label="Reply"
-          className="h-10 gap-1.5 px-2.5 text-muted-fg hover:text-fg @md:size-8 @md:px-0"
-          onClick={onReply}
+          onClick={onContinueDraft}
+          size="sm"
           type="button"
           variant="ghost"
         >
-          <HugeiconsIcon aria-hidden icon={MailReply02Icon} />
-          <span className="@md:hidden">Reply</span>
+          <HugeiconsIcon aria-hidden icon={Edit01Icon} />
+          <span>Draft</span>
         </Button>
-      </IconButtonTooltip>
+      )}
+      <Button onClick={onReply} size="sm" type="button" variant="ghost">
+        <HugeiconsIcon aria-hidden icon={MailReply02Icon} />
+        <span>Reply</span>
+      </Button>
       {showReplyAll && (
-        <IconButtonTooltip label="Reply all">
-          <Button
-            aria-label="Reply all"
-            className="h-10 gap-1.5 px-2.5 text-muted-fg hover:text-fg @md:size-8 @md:px-0"
-            onClick={onReplyAll}
-            type="button"
-            variant="ghost"
-          >
-            <HugeiconsIcon aria-hidden icon={MailReplyAll02Icon} />
-            <span className="@md:hidden">Reply all</span>
-          </Button>
-        </IconButtonTooltip>
-      )}
-      <IconButtonTooltip label="Forward">
-        <Button
-          aria-label="Forward"
-          className="h-10 gap-1.5 px-2.5 text-muted-fg hover:text-fg @md:size-8 @md:px-0"
-          onClick={onForward}
-          type="button"
-          variant="ghost"
-        >
-          <HugeiconsIcon aria-hidden icon={ArrowRightDoubleIcon} />
-          <span className="@md:hidden">Forward</span>
+        <Button onClick={onReplyAll} size="sm" type="button" variant="ghost">
+          <HugeiconsIcon aria-hidden icon={MailReplyAll02Icon} />
+          <span>Reply all</span>
         </Button>
-      </IconButtonTooltip>
+      )}
+      <Button onClick={onForward} size="sm" type="button" variant="ghost">
+        <HugeiconsIcon aria-hidden icon={ArrowRightDoubleIcon} />
+        <span>Forward</span>
+      </Button>
       {onUnsubscribe !== undefined && (
         <IconButtonTooltip label="Unsubscribe">
           <Button
             aria-label="Unsubscribe"
-            className="h-10 gap-1.5 px-2.5 text-muted-fg hover:text-fg @md:size-8 @md:px-0"
             disabled={isPending === true && onUnsubscribe.kind === "mailto"}
             onClick={handleUnsubscribe}
+            size="icon-sm"
             type="button"
             variant="ghost"
           >
-            <HugeiconsIcon
-              aria-hidden
-              icon={
-                onUnsubscribe.kind === "mailto"
-                  ? MailRemove01Icon
-                  : ArrowUpRight01Icon
-              }
-            />
-            <span className="@md:hidden">Unsubscribe</span>
+            <HugeiconsIcon aria-hidden icon={NotificationOff01Icon} />
           </Button>
         </IconButtonTooltip>
       )}
       <IconButtonTooltip label="Details">
         <Button
           aria-label="Details"
-          className="h-10 gap-1.5 px-2.5 text-muted-fg hover:text-fg @md:size-8 @md:px-0"
           onClick={onDetails}
+          size="icon-sm"
           type="button"
           variant="ghost"
         >
           <HugeiconsIcon aria-hidden icon={ZoomInAreaIcon} />
-          <span className="@md:hidden">Details</span>
         </Button>
       </IconButtonTooltip>
     </div>
@@ -1430,9 +1393,9 @@ const MessageViewContent = (props: MessageViewContentProps) => {
 
   return (
     <article ref={viewRef} tabIndex={-1} className="@container w-full">
-      <header className="w-full border-b p-4 @sm:p-6">
-        <div className="flex min-w-0 flex-col items-start gap-3 @sm:grid @sm:grid-cols-[minmax(0,1fr)_auto] @sm:items-center @sm:gap-8">
-          <h1 className="min-w-0 text-lg/tight font-medium tracking-tight wrap-break-word text-fg @sm:text-xl">
+      <header className="w-full border-b p-3 @sm:px-5 @sm:py-4">
+        <div className="flex min-w-0 flex-col items-start gap-2 @sm:grid @sm:grid-cols-[minmax(0,1fr)_auto] @sm:items-center @sm:gap-4">
+          <h1 className="min-w-0 text-[15px]/tight font-medium tracking-tight wrap-break-word text-fg @sm:text-base">
             {subject}
           </h1>
 
@@ -1457,13 +1420,14 @@ const MessageViewContent = (props: MessageViewContentProps) => {
         </div>
 
         <MessageLabels
-          className="mt-3"
+          className="mt-2"
+          compact
           labelIds={threadLabelIds}
           labels={gmailLabels}
         />
 
         {apiSource !== null && apiSource !== undefined && (
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
             <span className="text-muted-fg">
               Sent through API from {apiSource.senderAddress}.
             </span>
@@ -1472,7 +1436,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
         )}
 
         {!isSingleMessageThread && (
-          <p className="mt-2 text-sm text-muted-fg">
+          <p className="mt-1.5 text-xs text-muted-fg">
             {visibleMessages.length}{" "}
             {visibleMessages.length === 1 ? "message" : "messages"}
           </p>
@@ -1480,7 +1444,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
 
         <MessageAttachments
           attachments={threadAttachments}
-          className="mt-4"
+          className="mt-3"
           mailboxId={mailboxId}
         />
       </header>

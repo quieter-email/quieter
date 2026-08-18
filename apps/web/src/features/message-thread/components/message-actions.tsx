@@ -2,7 +2,6 @@
 
 import {
   Archive02Icon,
-  ArrowUpRight01Icon,
   Delete01Icon,
   Delete02Icon,
   Edit01Icon,
@@ -11,6 +10,7 @@ import {
   MailOpen02Icon,
   Loading03Icon,
   MoreVerticalIcon,
+  NotificationOff01Icon,
   Tag01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -242,7 +242,7 @@ const createUnsubscribeEntry = (
     unsubscribeTarget.kind === "mailto"
       ? isBusy || !props.actions.onUnsubscribe
       : false,
-  icon: unsubscribeTarget.kind === "mailto" ? Mail01Icon : ArrowUpRight01Icon,
+  icon: NotificationOff01Icon,
   id: "unsubscribe",
   label: "Unsubscribe",
   onAction: () => {
@@ -429,13 +429,13 @@ export const MessageActionsDropdown = (props: MessageActionsDropdownProps) => {
           <DropdownMenuTrigger
             aria-label="Open message actions"
             aria-busy={isBusy || undefined}
-            className="inline-flex size-10 items-center justify-center rounded-md border border-border bg-bg shadow-sm hover:bg-muted/60 disabled:pointer-events-none disabled:opacity-50"
+            className="squircle inline-flex size-8 items-center justify-center rounded-md border border-border bg-control text-muted-fg shadow-sm hover:bg-control-hover hover:text-fg disabled:pointer-events-none disabled:opacity-50"
             disabled={isBusy}
             type="button"
           >
             <HugeiconsIcon
               aria-hidden
-              className={cn("size-4", { "animate-spin": isBusy })}
+              className={cn("size-3.5", { "animate-spin": isBusy })}
               icon={isBusy ? Loading03Icon : MoreVerticalIcon}
             />
           </DropdownMenuTrigger>
