@@ -5,6 +5,10 @@ import type {
   MailboxPendingActions,
 } from "#/features/mailbox/components/mailbox-action-handlers";
 import type {
+  MessageLabelsTarget,
+  MessageLabelsUpdate,
+} from "#/features/message-labels/domain/message-label-updates";
+import type {
   ListMessagesPageResult,
   MailboxCategory,
   MessageListItem,
@@ -39,6 +43,15 @@ export type MessageListProps = {
   onSearch: (query: string) => void;
   pendingActions: MailboxPendingActions;
   searchQuery: string;
+};
+
+export type MessageListBulkLabels = {
+  isPending: boolean;
+  mailboxId: string;
+  onApply: (updates: MessageLabelsUpdate[]) => Promise<void>;
+  onOpenChange: (open: boolean) => void;
+  open: boolean;
+  targets: readonly MessageLabelsTarget[];
 };
 
 export type MessageListBulkAction = {

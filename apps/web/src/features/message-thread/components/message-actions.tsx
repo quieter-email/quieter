@@ -11,7 +11,6 @@ import {
   Loading03Icon,
   MoreVerticalIcon,
   NotificationOff01Icon,
-  Tag01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { IconSvgElement } from "@hugeicons/react";
@@ -32,16 +31,16 @@ import {
 } from "@quieter/ui/dropdown-menu";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import type { CSSProperties, PropsWithChildren } from "react";
-import { useState } from "react";
 
-import { MessageLabelsDialog } from "#/features/message-labels/components/message-labels-dialog";
+import { MessageLabelsSubmenu } from "#/features/message-labels/components/message-labels-menu";
+import type {
+  MessageLabelsTarget,
+  MessageLabelsUpdate,
+} from "#/features/message-labels/domain/message-label-updates";
 import { isMessageUnread } from "#/lib/gmail/gmail";
 import type { MailboxCategory, MessageListItem } from "#/lib/gmail/gmail";
 
-import type {
-  LabelChanges,
-  ThreadActionHandlers,
-} from "./message-action-handlers";
+import type { ThreadActionHandlers } from "./message-action-handlers";
 import {
   getMessageUnsubscribeTarget,
   openUnsubscribeUrl,
@@ -55,7 +54,6 @@ type MessageActionsSharedProps = {
   threadLabelIds: readonly string[];
   isUnread?: boolean;
   isPending?: boolean;
-  labelNounPlural?: "labels";
 };
 
 type MessageActionsDropdownProps = MessageActionsSharedProps;
@@ -82,11 +80,38 @@ type MenuSeparator = {
   id: string;
 };
 
-type MenuEntry = MenuAction | MenuSeparator;
+type MenuLabels = {
+  type: "labels";
+  id: string;
+  label: string;
+  disabled: boolean;
+  isPending: boolean;
+  mailboxId: string;
+  onApply: (updates: MessageLabelsUpdate[]) => Promise<void>;
+  targets: readonly MessageLabelsTarget[];
+};
+
+type MenuEntry = MenuAction | MenuLabels | MenuSeparator;
+
+const renderLabelsEntry = (entry: MenuLabels) => (
+  <MessageLabelsSubmenu
+    disabled={entry.disabled}
+    isPending={entry.isPending}
+    key={entry.id}
+    label={entry.label}
+    mailboxId={entry.mailboxId}
+    onApply={entry.onApply}
+    targets={entry.targets}
+  />
+);
 
 const renderDropdownEntry = (entry: MenuEntry) => {
   if (entry.type === "separator") {
     return <DropdownMenuSeparator key={entry.id} />;
+  }
+
+  if (entry.type === "labels") {
+    return renderLabelsEntry(entry);
   }
 
   return (
@@ -107,6 +132,10 @@ const renderContextEntry = (entry: MenuEntry) => {
     return <ContextMenuSeparator key={entry.id} />;
   }
 
+  if (entry.type === "labels") {
+    return renderLabelsEntry(entry);
+  }
+
   return (
     <ContextMenuItem
       className={cn({ "text-destructive": entry.destructive })}
@@ -119,41 +148,6 @@ const renderContextEntry = (entry: MenuEntry) => {
     </ContextMenuItem>
   );
 };
-
-const MessageActionsDialogs = ({
-  isPending,
-  mailboxId,
-  message,
-  onOpenLabelsDialog,
-  onLabelsUpdate,
-  openLabelsDialog,
-  threadLabelIds,
-}: {
-  mailboxId: string;
-  message: MessageListItem;
-  threadLabelIds: readonly string[];
-  isPending: boolean;
-  openLabelsDialog: boolean;
-  onOpenLabelsDialog: (open: boolean) => void;
-  onLabelsUpdate?: (
-    threadId: string,
-    changes: LabelChanges
-  ) => void | Promise<void>;
-}) => (
-  <MessageLabelsDialog
-    isPending={isPending}
-    mailboxId={mailboxId}
-    onApply={async ([update]) => {
-      if (update === undefined || onLabelsUpdate === undefined) {
-        return;
-      }
-      await onLabelsUpdate(update.id, update);
-    }}
-    onOpenChange={onOpenLabelsDialog}
-    open={openLabelsDialog}
-    targets={[{ id: message.threadId, labelIds: threadLabelIds }]}
-  />
-);
 
 const createDraftEntries = (
   props: MessageActionsSharedProps,
@@ -216,20 +210,27 @@ const createReadStateEntry = (
 
 const createLabelsEntry = (
   props: MessageActionsSharedProps,
-  isBusy: boolean,
-  onOpenLabels: () => void
-): MenuAction | null => {
-  if (!props.actions.onUpdateLabels) {
+  isBusy: boolean
+): MenuLabels | null => {
+  const { onUpdateLabels } = props.actions;
+  if (!onUpdateLabels) {
     return null;
   }
 
   return {
     disabled: isBusy,
-    icon: Tag01Icon,
     id: "modify-labels",
-    label: `Modify ${props.labelNounPlural ?? "labels"}`,
-    onAction: onOpenLabels,
-    type: "item",
+    isPending: isBusy,
+    label: "Labels",
+    mailboxId: props.mailboxId,
+    onApply: async ([update]) => {
+      if (update === undefined) {
+        return;
+      }
+      await onUpdateLabels(update.id, update);
+    },
+    targets: [{ id: props.message.threadId, labelIds: props.threadLabelIds }],
+    type: "labels",
   };
 };
 
@@ -336,19 +337,17 @@ const createFolderEntries = (
 const createMessageActionEntries = ({
   isBusy,
   isUnread,
-  onOpenLabels,
   props,
   unsubscribeTarget,
 }: {
   isBusy: boolean;
   isUnread: boolean;
-  onOpenLabels: () => void;
   props: MessageActionsSharedProps;
   unsubscribeTarget: ReturnType<typeof getMessageUnsubscribeTarget>;
 }) => {
   const entries: MenuEntry[] = [];
   const readStateEntry = createReadStateEntry(props, isBusy, isUnread);
-  const labelsEntry = createLabelsEntry(props, isBusy, onOpenLabels);
+  const labelsEntry = createLabelsEntry(props, isBusy);
   const folderEntries = createFolderEntries(props, isBusy);
 
   if (readStateEntry !== null) {
@@ -368,86 +367,52 @@ const createMessageActionEntries = ({
 };
 
 const useMessageActionEntries = (props: MessageActionsSharedProps) => {
-  const { actions } = props;
   const isUnread = props.isUnread ?? isMessageUnread(props.message);
-  const isDraftMailbox = props.mailbox === "drafts";
   const isBusy = props.isPending === true;
-  const [openLabelsDialog, setOpenLabelsDialog] = useState(false);
-  const unsubscribeTarget = getMessageUnsubscribeTarget(props.message);
 
-  if (isDraftMailbox) {
-    return {
-      dialogs: null,
-      entries: createDraftEntries(props, isBusy),
-      isBusy,
-    };
+  if (props.mailbox === "drafts") {
+    return { entries: createDraftEntries(props, isBusy), isBusy };
   }
-
-  const entries = createMessageActionEntries({
-    isBusy,
-    isUnread,
-    onOpenLabels: () => {
-      setOpenLabelsDialog(true);
-    },
-    props,
-    unsubscribeTarget,
-  });
-
-  if (entries.length === 0) {
-    return { dialogs: null, entries, isBusy };
-  }
-
-  const dialogs = actions.onUpdateLabels ? (
-    <MessageActionsDialogs
-      isPending={isBusy}
-      mailboxId={props.mailboxId}
-      message={props.message}
-      onOpenLabelsDialog={setOpenLabelsDialog}
-      onLabelsUpdate={actions.onUpdateLabels}
-      openLabelsDialog={openLabelsDialog}
-      threadLabelIds={props.threadLabelIds}
-    />
-  ) : null;
 
   return {
-    dialogs,
-    entries,
+    entries: createMessageActionEntries({
+      isBusy,
+      isUnread,
+      props,
+      unsubscribeTarget: getMessageUnsubscribeTarget(props.message),
+    }),
     isBusy,
   };
 };
 
 export const MessageActionsDropdown = (props: MessageActionsDropdownProps) => {
-  const { dialogs, entries, isBusy } = useMessageActionEntries(props);
+  const { entries, isBusy } = useMessageActionEntries(props);
   if (entries.length === 0) {
-    return dialogs;
+    return null;
   }
 
   return (
-    <>
-      <DropdownMenu>
-        <IconButtonTooltip label="Message actions">
-          <DropdownMenuTrigger
-            aria-label="Open message actions"
-            aria-busy={isBusy || undefined}
-            className="squircle inline-flex size-8 items-center justify-center rounded-md border border-border bg-control text-muted-fg shadow-sm hover:bg-control-hover hover:text-fg disabled:pointer-events-none disabled:opacity-50"
-            disabled={isBusy}
-            type="button"
-          >
-            <HugeiconsIcon
-              aria-hidden
-              className={cn("size-3.5", { "animate-spin": isBusy })}
-              icon={isBusy ? Loading03Icon : MoreVerticalIcon}
-            />
-          </DropdownMenuTrigger>
-        </IconButtonTooltip>
+    <DropdownMenu>
+      <IconButtonTooltip label="Message actions">
+        <DropdownMenuTrigger
+          aria-label="Open message actions"
+          aria-busy={isBusy || undefined}
+          className="squircle inline-flex size-8 items-center justify-center rounded-md border border-border bg-control text-muted-fg shadow-sm hover:bg-control-hover hover:text-fg disabled:pointer-events-none disabled:opacity-50"
+          disabled={isBusy}
+          type="button"
+        >
+          <HugeiconsIcon
+            aria-hidden
+            className={cn("size-3.5", { "animate-spin": isBusy })}
+            icon={isBusy ? Loading03Icon : MoreVerticalIcon}
+          />
+        </DropdownMenuTrigger>
+      </IconButtonTooltip>
 
-        <DropdownMenuContent>
-          {entries.map((entry) => renderDropdownEntry(entry))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      {dialogs}
-    </>
+      <DropdownMenuContent>
+        {entries.map((entry) => renderDropdownEntry(entry))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 };
 
@@ -457,24 +422,20 @@ export const MessageActionsContextMenu = ({
   triggerStyle,
   ...props
 }: MessageActionsContextMenuProps) => {
-  const { dialogs, entries } = useMessageActionEntries(props);
+  const { entries } = useMessageActionEntries(props);
   if (entries.length === 0) {
     return children;
   }
 
   return (
-    <>
-      <ContextMenu>
-        <ContextMenuTrigger className={triggerClassName} style={triggerStyle}>
-          {children}
-        </ContextMenuTrigger>
+    <ContextMenu>
+      <ContextMenuTrigger className={triggerClassName} style={triggerStyle}>
+        {children}
+      </ContextMenuTrigger>
 
-        <ContextMenuContent>
-          {entries.map((entry) => renderContextEntry(entry))}
-        </ContextMenuContent>
-      </ContextMenu>
-
-      {dialogs}
-    </>
+      <ContextMenuContent>
+        {entries.map((entry) => renderContextEntry(entry))}
+      </ContextMenuContent>
+    </ContextMenu>
   );
 };

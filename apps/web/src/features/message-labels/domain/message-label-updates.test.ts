@@ -1,6 +1,26 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { getMessageLabelUpdates } from "./message-label-updates";
+import {
+  getMessageLabelSelection,
+  getMessageLabelUpdates,
+} from "./message-label-updates";
+
+describe(getMessageLabelSelection, () => {
+  it("reports how many of the selected conversations already carry a label", () => {
+    const targets = [
+      { id: "thread-1", labelIds: ["shared", "first-only"] },
+      { id: "thread-2", labelIds: ["shared"] },
+    ];
+
+    expect(getMessageLabelSelection(targets, "shared")).toBe("all");
+    expect(getMessageLabelSelection(targets, "first-only")).toBe("some");
+    expect(getMessageLabelSelection(targets, "unused")).toBe("none");
+  });
+
+  it("reports no selection when nothing is targeted", () => {
+    expect(getMessageLabelSelection([], "shared")).toBe("none");
+  });
+});
 
 describe(getMessageLabelUpdates, () => {
   it("adds and removes labels only where each selected conversation needs a change", () => {

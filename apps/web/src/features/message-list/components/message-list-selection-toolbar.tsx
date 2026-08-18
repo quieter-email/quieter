@@ -4,6 +4,7 @@ import {
   Cancel01Icon,
   Loading03Icon,
   MoreVerticalIcon,
+  Tag01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
@@ -17,7 +18,39 @@ import {
 } from "@quieter/ui/dropdown-menu";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 
-import type { MessageListBulkAction } from "./message-list-types";
+import { MessageLabelsMenu } from "#/features/message-labels/components/message-labels-menu";
+
+import type {
+  MessageListBulkAction,
+  MessageListBulkLabels,
+} from "./message-list-types";
+
+const bulkTriggerClassName =
+  "inline-flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-control text-muted-fg shadow-xs hover:bg-control-hover hover:text-fg active:bg-control-active active:text-fg disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0";
+
+const MessageListBulkLabelsMenu = ({
+  disabled,
+  labels,
+}: {
+  disabled: boolean;
+  labels: MessageListBulkLabels;
+}) => (
+  <MessageLabelsMenu
+    {...labels}
+    trigger={
+      <IconButtonTooltip label="Labels">
+        <DropdownMenuTrigger
+          aria-label="Modify labels"
+          className={bulkTriggerClassName}
+          disabled={disabled}
+          type="button"
+        >
+          <HugeiconsIcon aria-hidden icon={Tag01Icon} />
+        </DropdownMenuTrigger>
+      </IconButtonTooltip>
+    }
+  />
+);
 
 const MessageListBulkActions = ({
   actions,
@@ -33,7 +66,7 @@ const MessageListBulkActions = ({
       <DropdownMenuTrigger
         aria-label="Open bulk actions"
         aria-busy={pending || undefined}
-        className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-control text-muted-fg shadow-xs hover:bg-control-hover hover:text-fg active:bg-control-active active:text-fg disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0"
+        className={bulkTriggerClassName}
         disabled={disabled || actions.length === 0}
         type="button"
       >
@@ -68,6 +101,7 @@ export const MessageListSelectionToolbar = ({
   disabled,
   indeterminate,
   itemLabelPlural,
+  labels,
   onClearSelection,
   onToggleAll,
   selectedCount,
@@ -79,6 +113,7 @@ export const MessageListSelectionToolbar = ({
   disabled: boolean;
   indeterminate: boolean;
   itemLabelPlural: string;
+  labels: MessageListBulkLabels | null;
   onClearSelection: () => void;
   onToggleAll: (selected: boolean) => void;
   selectedCount: number;
@@ -108,6 +143,12 @@ export const MessageListSelectionToolbar = ({
       </div>
 
       <div className="flex items-center gap-2">
+        {labels !== null && (
+          <MessageListBulkLabelsMenu
+            disabled={disabled || selectedCount === 0}
+            labels={labels}
+          />
+        )}
         <MessageListBulkActions
           actions={actions}
           disabled={disabled || selectedCount === 0}

@@ -7,7 +7,6 @@ import {
   InboxIcon,
   Mail01Icon,
   MailOpen02Icon,
-  Tag01Icon,
 } from "@hugeicons/core-free-icons";
 import { toast } from "@quieter/ui/toast";
 import { useHotkeys } from "@tanstack/react-hotkeys";
@@ -20,7 +19,6 @@ import {
   omitDisabledHotkeys,
   shouldIgnoreAppShortcut,
 } from "#/features/hotkeys/domain/hotkey-guards";
-import { MessageLabelsDialog } from "#/features/message-labels/components/message-labels-dialog";
 import { MessageListSearch } from "#/features/message-search/components/message-list-search";
 import { appEaseOut, appMotionDuration } from "#/features/motion/app-motion";
 import type { MailboxCategory, MessageListItem } from "#/lib/gmail/gmail";
@@ -33,6 +31,7 @@ import { MessageListScrollPane } from "./message-list-scroll-pane";
 import { MessageListSelectionToolbar } from "./message-list-selection-toolbar";
 import type {
   MessageListBulkAction,
+  MessageListBulkLabels,
   MessageListProps,
 } from "./message-list-types";
 import { useMessageListSelection } from "./use-message-list-selection";
@@ -258,22 +257,16 @@ const getActionThreads = (
 
 const buildMessageListBulkActions = ({
   activeMailbox,
-  labelNounPlural,
   mailboxActions,
   mailboxProvider,
-  openBulkLabels,
   runBulkAction,
-  userLabels,
 }: {
   activeMailbox: MailboxCategory;
-  labelNounPlural: string;
   mailboxActions: MessageListProps["mailboxActions"];
   mailboxProvider: MessageListProps["mailboxProvider"];
-  openBulkLabels: () => void;
   runBulkAction: (
     action: (threads: ThreadListEntry[]) => void | Promise<void>
   ) => Promise<void>;
-  userLabels: { type: string }[];
 }): MessageListBulkAction[] => {
   if (mailboxProvider === "api") {
     return [];
@@ -317,32 +310,24 @@ const buildMessageListBulkActions = ({
     });
   }
 
-  actions.push({
-    icon: MailOpen02Icon,
-    id: "mark-threads-read",
-    label: "Mark as Read",
-    onSelect: async () => {
-      await runBulkAction(mailboxActions.markThreadsAsRead);
+  actions.push(
+    {
+      icon: MailOpen02Icon,
+      id: "mark-threads-read",
+      label: "Mark as Read",
+      onSelect: async () => {
+        await runBulkAction(mailboxActions.markThreadsAsRead);
+      },
     },
-  });
-
-  if (userLabels.length > 0) {
-    actions.push({
-      icon: Tag01Icon,
-      id: "modify-thread-labels",
-      label: `Modify ${labelNounPlural}`,
-      onSelect: openBulkLabels,
-    });
-  }
-
-  actions.push({
-    icon: Mail01Icon,
-    id: "mark-threads-unread",
-    label: "Mark as Unread",
-    onSelect: async () => {
-      await runBulkAction(mailboxActions.markThreadsAsUnread);
-    },
-  });
+    {
+      icon: Mail01Icon,
+      id: "mark-threads-unread",
+      label: "Mark as Unread",
+      onSelect: async () => {
+        await runBulkAction(mailboxActions.markThreadsAsUnread);
+      },
+    }
+  );
 
   if (mailboxProvider === "gmail" && activeMailbox === "inbox") {
     actions.push({
@@ -551,23 +536,42 @@ const useMessageListInteractions = ({
     }
   );
 
+  const bulkLabels: MessageListBulkLabels | null =
+    props.mailboxProvider === "api" ||
+    props.activeMailbox === "drafts" ||
+    userLabels.length === 0
+      ? null
+      : {
+          isPending: isBulkActionPending,
+          mailboxId: props.mailboxId,
+          onApply: async (updates) => {
+            await props.mailboxActions.updateThreadsLabels(
+              updates.map(({ id, ...changes }) => ({
+                ...changes,
+                threadId: id,
+              }))
+            );
+          },
+          onOpenChange: setIsBulkLabelsOpen,
+          open: isBulkLabelsOpen,
+          targets: selection.selectedThreads.map((thread) => ({
+            id: thread.threadId,
+            labelIds: thread.threadLabelIds,
+          })),
+        };
+
   return {
     bulkActions: buildMessageListBulkActions({
       activeMailbox: props.activeMailbox,
-      labelNounPlural: "labels",
       mailboxActions: props.mailboxActions,
       mailboxProvider: props.mailboxProvider,
-      openBulkLabels,
       runBulkAction,
-      userLabels,
     }),
+    bulkLabels,
     handleClearSelection: selection.clearSelection,
     handleScrollListToTop: selection.scrollListToTop,
     handleToggleAllLoadedThreads: selection.toggleAllLoadedThreads,
     isBulkActionPending,
-    isBulkLabelsOpen,
-    openBulkLabels,
-    setIsBulkLabelsOpen,
   };
 };
 
@@ -600,12 +604,11 @@ export const MessageList = (props: MessageListProps) => {
   });
   const {
     bulkActions,
+    bulkLabels,
     handleClearSelection,
     handleScrollListToTop,
     handleToggleAllLoadedThreads,
     isBulkActionPending,
-    isBulkLabelsOpen,
-    setIsBulkLabelsOpen,
   } = useMessageListInteractions({
     props,
     selection,
@@ -627,6 +630,7 @@ export const MessageList = (props: MessageListProps) => {
           itemLabelPlural={
             props.activeMailbox === "drafts" ? "drafts" : "conversations"
           }
+          labels={bulkLabels}
           onClearSelection={handleClearSelection}
           onToggleAll={handleToggleAllLoadedThreads}
           pending={isBulkActionPending}
@@ -687,22 +691,6 @@ export const MessageList = (props: MessageListProps) => {
           threadedMessages={threadedMessages}
         />
       </m.div>
-
-      <MessageLabelsDialog
-        isPending={isBulkActionPending}
-        mailboxId={props.mailboxId}
-        onApply={async (updates) => {
-          await props.mailboxActions.updateThreadsLabels(
-            updates.map(({ id, ...changes }) => ({ ...changes, threadId: id }))
-          );
-        }}
-        onOpenChange={setIsBulkLabelsOpen}
-        open={isBulkLabelsOpen}
-        targets={selection.selectedThreads.map((thread) => ({
-          id: thread.threadId,
-          labelIds: thread.threadLabelIds,
-        }))}
-      />
     </div>
   );
 };
