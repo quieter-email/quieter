@@ -9,7 +9,6 @@ import {
   composeSendFormValuesSchema,
 } from "@quieter/mail/compose/schema";
 import { Button } from "@quieter/ui/button";
-import { cn } from "@quieter/ui/cn";
 import { useForm } from "@tanstack/react-form";
 import { AnimatePresence, m, useReducedMotion } from "motion/react";
 import { useState } from "react";
@@ -126,6 +125,26 @@ const ComposeDeclinedView = ({ initial }: { initial: ComposeEmailInput }) => {
   );
 };
 
+const RecipientFieldToggle = ({
+  label,
+  onToggle,
+  shown,
+}: {
+  label: string;
+  onToggle: () => void;
+  shown: boolean;
+}) => (
+  <Button
+    aria-pressed={shown}
+    onClick={onToggle}
+    size="sm"
+    type="button"
+    variant={shown ? "outline" : "ghost"}
+  >
+    {label}
+  </Button>
+);
+
 export const InlineComposeTool = ({
   disabled,
   initial,
@@ -229,28 +248,20 @@ export const InlineComposeTool = ({
           ) : null}
         </p>
         <div className="flex shrink-0 items-center gap-2 text-micro">
-          <button
-            className={cn("text-muted-fg transition-colors hover:text-fg", {
-              "text-fg": showCc,
-            })}
-            onClick={() => {
+          <RecipientFieldToggle
+            label="Cc"
+            onToggle={() => {
               setShowCc((current) => !current);
             }}
-            type="button"
-          >
-            Cc
-          </button>
-          <button
-            className={cn("text-muted-fg transition-colors hover:text-fg", {
-              "text-fg": showBcc,
-            })}
-            onClick={() => {
+            shown={showCc}
+          />
+          <RecipientFieldToggle
+            label="Bcc"
+            onToggle={() => {
               setShowBcc((current) => !current);
             }}
-            type="button"
-          >
-            Bcc
-          </button>
+            shown={showBcc}
+          />
         </div>
       </div>
 
