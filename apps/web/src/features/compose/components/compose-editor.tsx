@@ -350,7 +350,7 @@ export const ComposeEditorBody = ({
     <div
       aria-invalid={invalid || undefined}
       className={cn(
-        "squircle relative min-h-20 w-full overflow-hidden rounded-md border border-border bg-bg-elevated text-sm text-fg shadow-sm transition-colors duration-150 ease-out",
+        "squircle relative min-h-20 w-full overflow-hidden rounded-md border border-border bg-control text-sm text-fg shadow-sm transition-colors duration-150 ease-out",
         "has-[.ProseMirror:focus-visible]:border-ring has-[.ProseMirror:focus-visible]:ring-1 has-[.ProseMirror:focus-visible]:ring-ring/45 has-[.ProseMirror:focus-visible]:outline-none",
         "aria-invalid:border-destructive aria-invalid:focus-within:border-destructive aria-invalid:focus-within:ring-destructive/45",
         className,
@@ -451,7 +451,7 @@ export const ComposeEditorToolbar = ({
   return (
     <Toolbar
       className={cn(
-        "w-full min-w-0 shrink-0 rounded-md border-border bg-bg-elevated",
+        "w-full min-w-0 shrink-0 rounded-md border-border bg-control",
         className
       )}
     >
@@ -462,7 +462,7 @@ export const ComposeEditorToolbar = ({
               aria-label={action.label}
               aria-pressed={action.active}
               className={cn("size-8 px-0", {
-                "bg-bg-surface text-fg shadow-sm": action.active,
+                "bg-control-active text-fg shadow-sm": action.active,
               })}
               disabled={disabled || action.disabled}
               onClick={() => {

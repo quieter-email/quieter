@@ -187,7 +187,7 @@ export const RegisterDomainDialog = ({
                             "squircle flex cursor-pointer gap-3 rounded-lg border p-4 transition-colors",
                             selected
                               ? "border-fg/30 bg-muted/40"
-                              : "border-border hover:bg-muted/20",
+                              : "border-border hover:bg-muted/60",
                             ""
                           )}
                           key={option.value}

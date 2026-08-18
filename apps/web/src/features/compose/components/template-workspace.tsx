@@ -403,7 +403,7 @@ export const TemplateWorkspace = ({
                                     scopeField.state.value === "personal"
                                   }
                                   className={cn({
-                                    "bg-bg-surface text-fg shadow-sm":
+                                    "bg-control-active text-fg shadow-sm":
                                       scopeField.state.value === "personal",
                                   })}
                                   disabled={!canEditCurrentTemplate}
@@ -419,7 +419,7 @@ export const TemplateWorkspace = ({
                                     scopeField.state.value === "team"
                                   }
                                   className={cn({
-                                    "bg-bg-surface text-fg shadow-sm":
+                                    "bg-control-active text-fg shadow-sm":
                                       scopeField.state.value === "team",
                                   })}
                                   disabled={

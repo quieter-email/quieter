@@ -861,7 +861,7 @@ export const SidebarLabelNav = ({
                             : null;
                         return (
                           <div className="rounded-lg" key={label.id}>
-                            <div className="squircle flex min-h-12 items-center gap-3 px-2 hover:bg-bg/50">
+                            <div className="squircle flex min-h-12 items-center gap-3 px-2 hover:bg-muted">
                               <ManagedLabelColorDot
                                 className="size-4"
                                 color={label.color}
@@ -982,7 +982,7 @@ export const SidebarLabelNav = ({
                                 >
                                   <DropdownMenuTrigger
                                     aria-label={`${label.name} options`}
-                                    className="inline-flex size-7 items-center justify-center rounded-md text-muted-fg hover:bg-bg/50 hover:text-fg"
+                                    className="inline-flex size-7 items-center justify-center rounded-md text-muted-fg hover:bg-muted hover:text-fg"
                                   >
                                     <HugeiconsIcon
                                       aria-hidden

@@ -302,7 +302,7 @@ const SidebarChatRow = ({
               <IconButtonTooltip label={`Options for "${title}"`}>
                 <DropdownMenuTrigger
                   aria-label={`Options for "${title}"`}
-                  className="squircle pointer-events-none relative z-20 mr-1 inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-transparent text-muted-fg opacity-0 transition-[opacity,background-color,color,transform] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) group-hover:pointer-events-auto group-hover:bg-bg/45 group-hover:opacity-100 hover:bg-bg/80 hover:text-fg focus-visible:pointer-events-auto focus-visible:bg-bg/60 focus-visible:text-fg focus-visible:opacity-100 active:scale-95 data-popup-open:pointer-events-auto data-popup-open:bg-bg/70 data-popup-open:text-fg data-popup-open:opacity-100"
+                  className="squircle pointer-events-none relative z-20 mr-1 inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-transparent text-muted-fg opacity-0 transition-[opacity,background-color,color,transform] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) group-hover:pointer-events-auto group-hover:bg-transparent group-hover:opacity-100 hover:bg-control-active hover:text-fg focus-visible:pointer-events-auto focus-visible:bg-control-active focus-visible:text-fg focus-visible:opacity-100 active:scale-95 data-popup-open:pointer-events-auto data-popup-open:bg-control-active data-popup-open:text-fg data-popup-open:opacity-100"
                 >
                   <HugeiconsIcon
                     aria-hidden

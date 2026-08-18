@@ -367,11 +367,6 @@ export const ComposeWorkspace = ({
                             aria-controls="compose-cc-field"
                             aria-expanded={state.showCc}
                             aria-pressed={state.showCc}
-                            className={
-                              state.showCc
-                                ? "border-border bg-bg-elevated text-fg shadow-sm hover:bg-bg-elevated"
-                                : undefined
-                            }
                             onClick={() => {
                               toggleRecipientVisibility("cc");
                             }}
@@ -384,11 +379,6 @@ export const ComposeWorkspace = ({
                             aria-controls="compose-bcc-field"
                             aria-expanded={state.showBcc}
                             aria-pressed={state.showBcc}
-                            className={
-                              state.showBcc
-                                ? "border-border bg-bg-elevated text-fg shadow-sm hover:bg-bg-elevated"
-                                : undefined
-                            }
                             onClick={() => {
                               toggleRecipientVisibility("bcc");
                             }}

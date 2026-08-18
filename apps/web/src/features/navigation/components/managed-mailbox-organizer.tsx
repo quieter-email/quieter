@@ -1057,7 +1057,7 @@ const ManagedMailboxSavedViewsPanel = (
 
           return (
             <div
-              className="squircle flex items-center gap-3 rounded-lg p-2 hover:bg-secondary/25"
+              className="squircle flex items-center gap-3 rounded-lg p-2 hover:bg-muted/60"
               key={view.id}
             >
               <span
@@ -1303,7 +1303,7 @@ const ManagedRuleActionEditor = (
           <Button
             aria-pressed={ruleActionKind === kind}
             className={cn({
-              "bg-bg shadow-sm": ruleActionKind === kind,
+              "bg-bg-surface shadow-sm": ruleActionKind === kind,
             })}
             key={kind}
             onClick={() => {
@@ -1323,7 +1323,7 @@ const ManagedRuleActionEditor = (
             <Button
               aria-pressed={ruleReadState === read}
               className={cn({
-                "bg-bg shadow-sm": ruleReadState === read,
+                "bg-bg-surface shadow-sm": ruleReadState === read,
               })}
               key={String(read)}
               onClick={() => {
@@ -1345,7 +1345,8 @@ const ManagedRuleActionEditor = (
               <Button
                 aria-pressed={ruleMoveDestination === destination}
                 className={cn({
-                  "bg-bg shadow-sm": ruleMoveDestination === destination,
+                  "bg-bg-surface shadow-sm":
+                    ruleMoveDestination === destination,
                 })}
                 key={destination}
                 onClick={() => {
@@ -1559,7 +1560,7 @@ const ManagedRuleBuilder = (props: ManagedMailboxOrganizerContentProps) => {
           <Button
             aria-pressed={ruleMatchMode === mode}
             className={cn({
-              "bg-bg shadow-sm": ruleMatchMode === mode,
+              "bg-bg-surface shadow-sm": ruleMatchMode === mode,
             })}
             key={mode}
             onClick={() => {

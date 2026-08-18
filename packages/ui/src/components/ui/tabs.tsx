@@ -13,7 +13,7 @@ export const TabsList = ({
 }: ComponentPropsWithoutRef<typeof TabsPrimitive.List>) => (
   <TabsPrimitive.List
     className={cn(
-      "squircle inline-flex h-10 items-center gap-1 rounded-lg bg-muted p-1",
+      "squircle inline-flex h-10 items-center gap-1 rounded-lg border border-border bg-bg-elevated p-1 shadow-sm",
       className
     )}
     {...props}
