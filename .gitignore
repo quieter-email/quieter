@@ -43,6 +43,12 @@ yarn-error.log*
 # Local scratch (never commit)
 .scratch/
 
+# Local agent tooling (never commit)
+.opencode/
+
+# Generated git hook scripts (source lives at .vite-hooks/pre-commit)
+.vite-hooks/_/
+
 # Cursor (keep Ultracite agent hooks committed)
 .cursor/*
 !.cursor/hooks.json
