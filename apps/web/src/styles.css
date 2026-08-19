@@ -39,22 +39,23 @@
   }
 }
 
+/* Thinking/loading dots — a traveling wave. Each dot is offset by a third of the
+   cycle so the peak clearly moves left to right instead of twitching in place. */
 .chat-loading-dot {
-  animation: chat-loading-dot 1.2s ease-in-out infinite;
+  animation: chat-loading-dot 1.5s ease-in-out infinite;
   transform-origin: center;
 }
 
 @keyframes chat-loading-dot {
   0%,
-  60%,
   100% {
-    opacity: 0.3;
-    transform: translateY(0) scale(0.8);
+    opacity: 0.45;
+    transform: scale(0.75);
   }
 
-  30% {
-    opacity: 0.9;
-    transform: translateY(-2px) scale(1);
+  33.333% {
+    opacity: 1;
+    transform: scale(1);
   }
 }
 
