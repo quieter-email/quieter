@@ -1,6 +1,12 @@
 "use client";
 
-import { LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
+import {
+  LazyMotion,
+  PresenceContext,
+  domAnimation,
+  m,
+  useReducedMotion,
+} from "motion/react";
 import type { PropsWithChildren } from "react";
 import { useState } from "react";
 
@@ -23,33 +29,35 @@ export const SpinWhileActive = ({ active, children }: SpinWhileActiveProps) => {
 
   return (
     <LazyMotion features={domAnimation}>
-      <m.div
-        key={isSpinning ? `spin-${turn}` : `idle-${turn}`}
-        animate={{ rotate: isSpinning ? 360 : 0 }}
-        initial={{ rotate: 0 }}
-        onAnimationComplete={() => {
-          if (!isSpinning) {
-            return;
-          }
+      <PresenceContext.Provider value={null}>
+        <m.div
+          key={isSpinning ? `spin-${turn}` : `idle-${turn}`}
+          animate={{ rotate: isSpinning ? 360 : 0 }}
+          initial={{ rotate: 0 }}
+          onAnimationComplete={() => {
+            if (!isSpinning) {
+              return;
+            }
 
-          if (active && prefersReducedMotion !== true) {
-            setTurn((currentTurn) => currentTurn + 1);
-            return;
-          }
+            if (active && prefersReducedMotion !== true) {
+              setTurn((currentTurn) => currentTurn + 1);
+              return;
+            }
 
-          setIsSpinning(false);
-        }}
-        transition={{
-          duration: prefersReducedMotion === true ? 0 : 1,
-          ease: [0.75, 0, 0.25, 1],
-          rotate: {
+            setIsSpinning(false);
+          }}
+          transition={{
             duration: prefersReducedMotion === true ? 0 : 1,
             ease: [0.75, 0, 0.25, 1],
-          },
-        }}
-      >
-        {children}
-      </m.div>
+            rotate: {
+              duration: prefersReducedMotion === true ? 0 : 1,
+              ease: [0.75, 0, 0.25, 1],
+            },
+          }}
+        >
+          {children}
+        </m.div>
+      </PresenceContext.Provider>
     </LazyMotion>
   );
 };

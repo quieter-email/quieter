@@ -7,6 +7,7 @@ import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import {
   AnimatePresence,
   LazyMotion,
+  PresenceContext,
   domAnimation,
   m,
   useReducedMotion,
@@ -68,7 +69,9 @@ export const MessageListHeader = ({
                   key="search"
                   {...rowMotion}
                 >
-                  {search}
+                  <PresenceContext.Provider value={null}>
+                    {search}
+                  </PresenceContext.Provider>
                 </m.div>
               ) : (
                 <m.div
@@ -76,7 +79,9 @@ export const MessageListHeader = ({
                   key="selection"
                   {...rowMotion}
                 >
-                  {selection}
+                  <PresenceContext.Provider value={null}>
+                    {selection}
+                  </PresenceContext.Provider>
                 </m.div>
               )}
             </AnimatePresence>
