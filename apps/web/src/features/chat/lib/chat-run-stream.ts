@@ -288,7 +288,7 @@ const consumeChatRunStreamResponse =
  * dead run instead of retrying forever.
  * @yields {StreamChunk} Stream chunks from the chat run SSE connection.
  */
-const followChatRunEvents = async function* followChatRunEvents({
+export const followChatRunEvents = async function* followChatRunEvents({
   runId,
   signal,
 }: {
