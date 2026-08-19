@@ -89,6 +89,17 @@ const isActiveRun = (activeRun: ActiveChatRun | null | undefined) =>
     activeRun.status === "running" ||
     activeRun.status === "waiting_on_tool");
 
+const isChatRunActiveLocally = (chatId: string | null) => {
+  if (!hasText(chatId)) {
+    return false;
+  }
+  const { locallyFailedChatId, streamChatId, streamRunId } = chatRunStore.state;
+  return (
+    (streamChatId === chatId && streamRunId !== null) ||
+    locallyFailedChatId === chatId
+  );
+};
+
 const normalizeChatMessages = (messages: StoredChatMessage[]): UIMessage[] =>
   messages.map((message) => ({
     createdAt:
@@ -438,15 +449,30 @@ const useChatViewMutations = ({
       });
     },
   });
-  const editUserMessageMutation = useMutation(
-    orpc.chat.editUserMessage.mutationOptions()
-  );
-  const regenerateResponseMutation = useMutation(
-    orpc.chat.regenerateResponse.mutationOptions()
-  );
-  const resolveComposeToolMutation = useMutation(
-    orpc.chat.resolveComposeTool.mutationOptions()
-  );
+  const editUserMessageMutation = useMutation({
+    ...orpc.chat.editUserMessage.mutationOptions(),
+    onSuccess: async (_result, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: getChatQueryKey(mailboxId, variables.chatId),
+      });
+    },
+  });
+  const regenerateResponseMutation = useMutation({
+    ...orpc.chat.regenerateResponse.mutationOptions(),
+    onSuccess: async (_result, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: getChatQueryKey(mailboxId, variables.chatId),
+      });
+    },
+  });
+  const resolveComposeToolMutation = useMutation({
+    ...orpc.chat.resolveComposeTool.mutationOptions(),
+    onSuccess: async (_result, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: getChatQueryKey(mailboxId, variables.chatId),
+      });
+    },
+  });
   const transcribeAudioMutation = useMutation({
     ...orpc.chat.transcribeAudio.mutationOptions(),
     onSuccess: async () => {
@@ -1211,7 +1237,16 @@ export const ChatView = ({
   );
   const { data: chatData } = useQuery({
     ...chatQueryOptions(mailboxId, chatId),
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: (query) => {
+      // A live stream is the source of truth while generating, and a locally failed run
+      // must not be re-imported on every focus (that drove the reconnect/error storm).
+      if (isChatRunActiveLocally(chatId)) {
+        return false;
+      }
+      const { data } = query.state;
+      return !isActiveRun(data?.activeRun);
+    },
+    staleTime: 30_000,
   });
   const chatKey = chatId ?? draftChatKey;
   const { handleModelChange, model } = useChatModelSelection({
