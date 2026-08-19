@@ -64,9 +64,8 @@ const statusFromStreamError = (
 const isTerminalChunk = (chunk: StreamChunk) =>
   chunk.type === EventType.RUN_FINISHED || chunk.type === EventType.RUN_ERROR;
 
-const waitForRetry = async (ms: number, signal?: AbortSignal) => {
-  await delay(ms, signal);
-};
+const isAborted = (signal: AbortSignal | undefined) =>
+  signal !== undefined && signal.aborted;
 
 type SseEvent = {
   chunk: StreamChunk;
@@ -136,7 +135,7 @@ const readSseChunk = async (
   reader: ReadableStreamDefaultReader<Uint8Array>,
   signal: AbortSignal | undefined
 ): Promise<{ done: boolean; value?: Uint8Array }> => {
-  if (signal?.aborted === true) {
+  if (isAborted(signal)) {
     return { done: true };
   }
   return await reader.read();
@@ -233,134 +232,65 @@ const consumeSseResponse = async function* consumeSseResponse(
   }
 };
 
-const shouldReconnectAfterStreamError = (
-  lastEventId: string | undefined,
-  reconnectAttempts: number
-): boolean => lastEventId !== undefined && reconnectAttempts + 1 <= 8;
+const MAX_RECONNECT_ATTEMPTS = 8;
+const RECONNECT_BUDGET_MS = 30_000;
+const RECONNECT_BASE_DELAY_MS = 250;
+const RECONNECT_MAX_DELAY_MS = 2000;
 
 type FollowChatRunState = {
+  budgetStartedAt: number;
   lastEventId?: string;
   reconnectAttempts: number;
+  sawTerminal: boolean;
   seen: Set<string>;
 };
 
-const followChatRunEventsStep = async function* followChatRunEventsStep({
-  runId,
-  signal,
-  state,
-}: {
-  runId: string;
-  signal?: AbortSignal;
-  state: FollowChatRunState;
-}): AsyncGenerator<StreamChunk> {
-  const consumeResponse = async function* consumeResponse(response: Response) {
-    let sawTerminal = false;
-    let progressed = false;
+const reconnectBudgetExhausted = (state: FollowChatRunState) =>
+  state.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS ||
+  Date.now() - state.budgetStartedAt > RECONNECT_BUDGET_MS;
 
-    try {
-      for await (const event of consumeSseResponse(response, signal)) {
-        if (event.id !== undefined) {
-          if (state.seen.has(event.id)) {
-            continue;
-          }
-          state.seen.add(event.id);
-          state.lastEventId = event.id;
-        }
-        progressed = true;
-        state.reconnectAttempts = 0;
-        if (isTerminalChunk(event.chunk)) {
-          sawTerminal = true;
-        }
-        yield event.chunk;
-      }
-    } catch (error) {
-      if (signal !== undefined && signal.aborted) {
-        return;
-      }
-      if (
-        shouldReconnectAfterStreamError(
-          state.lastEventId,
-          state.reconnectAttempts
-        )
-      ) {
-        state.reconnectAttempts += 1;
-        await waitForRetry(250, signal);
-        yield* followChatRunEventsStep({ runId, signal, state });
-        return;
-      }
-      throw error;
-    }
-
-    if (signal !== undefined && signal.aborted) {
-      return;
-    }
-    if (sawTerminal) {
-      return;
-    }
-    if (state.lastEventId === undefined) {
-      throw new ChatRunStreamError(
-        "Chat stream ended before the response finished.",
-        true
-      );
-    }
-
-    if (progressed) {
-      state.reconnectAttempts = 0;
-    } else {
-      state.reconnectAttempts += 1;
-      if (state.reconnectAttempts > 8) {
-        throw new ChatRunStreamError(
-          "Chat stream ended before the response finished.",
-          true
-        );
-      }
-    }
-    await waitForRetry(250, signal);
-    yield* followChatRunEventsStep({ runId, signal, state });
-  };
-
-  if (signal !== undefined && signal.aborted) {
-    return;
-  }
-
-  let response: Response;
-  try {
-    response = await openChatRunStream({
-      lastEventId: state.lastEventId,
-      runId,
-      signal,
-    });
-  } catch (error) {
-    if (signal !== undefined && signal.aborted) {
-      return;
-    }
-    state.reconnectAttempts += 1;
-    if (state.reconnectAttempts > 8) {
-      throw error;
-    }
-    await waitForRetry(250, signal);
-    yield* followChatRunEventsStep({ runId, signal, state });
-    return;
-  }
-
-  if (!response.ok) {
-    throw new ChatRunStreamError(
-      response.status === 401 || response.status === 403
-        ? "Unauthorized"
-        : `Chat stream failed (${response.status}).`,
-      response.status !== 401 && response.status !== 403
-    );
-  }
-
-  yield* consumeResponse(response);
+const waitForRetry = async (attempt: number, signal?: AbortSignal) => {
+  const retryDelay = Math.min(
+    RECONNECT_BASE_DELAY_MS * 2 ** attempt,
+    RECONNECT_MAX_DELAY_MS
+  );
+  await delay(retryDelay, signal);
 };
+
+const consumeChatRunStreamResponse =
+  async function* consumeChatRunStreamResponse(
+    response: Response,
+    signal: AbortSignal | undefined,
+    state: FollowChatRunState
+  ): AsyncGenerator<StreamChunk> {
+    for await (const event of consumeSseResponse(response, signal)) {
+      if (event.id !== undefined && event.id !== "") {
+        if (state.seen.has(event.id)) {
+          continue;
+        }
+        state.seen.add(event.id);
+        state.lastEventId = event.id;
+        // Progress proves the run is still alive — start a fresh failure window
+        // so a long healthy run (up to 90s) can still reconnect after a drop,
+        // but keep reconnectAttempts cumulative to avoid infinite retry.
+        state.budgetStartedAt = Date.now();
+      }
+      if (isTerminalChunk(event.chunk)) {
+        state.sawTerminal = true;
+      }
+      yield event.chunk;
+    }
+  };
 
 /**
  * Follow a run's live delivery stream (dump-then-live).
- * Reconnects after a drop until a terminal chunk arrives.
+ * Reconnects on any drop - resuming from the last delivered event id - with a single
+ * bounded backoff budget until a terminal chunk arrives. The time budget is a sliding
+ * failure window reset on progress (so a 40s healthy run can still reconnect), while
+ * the attempt counter is cumulative to avoid infinite retry.
  * @yields {StreamChunk} Stream chunks from the chat run SSE connection.
  */
-const followChatRunEvents = async function* followChatRunEvents({
+export const followChatRunEvents = async function* followChatRunEvents({
   runId,
   signal,
 }: {
@@ -368,10 +298,100 @@ const followChatRunEvents = async function* followChatRunEvents({
   signal?: AbortSignal;
 }): AsyncGenerator<StreamChunk> {
   const state: FollowChatRunState = {
+    budgetStartedAt: Date.now(),
     reconnectAttempts: 0,
+    sawTerminal: false,
     seen: new Set<string>(),
   };
-  yield* followChatRunEventsStep({ runId, signal, state });
+
+  while (true) {
+    if (isAborted(signal)) {
+      return;
+    }
+
+    let response: Response;
+    try {
+      // Stream reads are ordered; reconnecting here keeps resume offsets in one place.
+      // oxlint-disable-next-line eslint/no-await-in-loop
+      response = await openChatRunStream({
+        lastEventId: state.lastEventId,
+        runId,
+        signal,
+      });
+    } catch (error) {
+      if (isAborted(signal)) {
+        return;
+      }
+      if (reconnectBudgetExhausted(state)) {
+        throw error;
+      }
+      state.reconnectAttempts += 1;
+      // oxlint-disable-next-line eslint/no-await-in-loop
+      await waitForRetry(state.reconnectAttempts - 1, signal);
+      continue;
+    }
+
+    if (!response.ok) {
+      const isTransient = response.status === 429 || response.status >= 500;
+      if (isTransient) {
+        if (reconnectBudgetExhausted(state)) {
+          throw new ChatRunStreamError(
+            `Chat stream failed (${response.status}).`,
+            false
+          );
+        }
+        state.reconnectAttempts += 1;
+        // oxlint-disable-next-line eslint/no-await-in-loop
+        await waitForRetry(state.reconnectAttempts - 1, signal);
+        continue;
+      }
+      throw new ChatRunStreamError(
+        response.status === 401 || response.status === 403
+          ? "Unauthorized"
+          : `Chat stream failed (${response.status}).`,
+        false
+      );
+    }
+
+    try {
+      // The reconnect loop is inherently sequential; each iteration opens one stream.
+      // oxlint-disable-next-line eslint/no-await-in-loop
+      for await (const chunk of consumeChatRunStreamResponse(
+        response,
+        signal,
+        state
+      )) {
+        yield chunk;
+      }
+    } catch (error) {
+      if (isAborted(signal)) {
+        return;
+      }
+      if (reconnectBudgetExhausted(state)) {
+        throw error;
+      }
+      state.reconnectAttempts += 1;
+      // oxlint-disable-next-line eslint/no-await-in-loop
+      await waitForRetry(state.reconnectAttempts - 1, signal);
+      continue;
+    }
+
+    if (isAborted(signal)) {
+      return;
+    }
+    if (state.sawTerminal) {
+      return;
+    }
+    if (reconnectBudgetExhausted(state)) {
+      throw new ChatRunStreamError(
+        "Chat stream ended before the response finished.",
+        true
+      );
+    }
+    state.reconnectAttempts += 1;
+    // oxlint-disable-next-line eslint/no-await-in-loop
+    await waitForRetry(state.reconnectAttempts - 1, signal);
+  }
 };
 
 /**
@@ -456,7 +476,7 @@ export const consumeChatRunStream = async ({
       )
     );
   } catch (error) {
-    if (signal?.aborted === true) {
+    if (isAborted(signal)) {
       throw error;
     }
 
@@ -473,7 +493,7 @@ export const consumeChatRunStream = async ({
     throw new ChatRunStreamError(message, !unauthorized);
   }
 
-  if (signal?.aborted === true) {
+  if (isAborted(signal)) {
     throw new DOMException("Aborted", "AbortError");
   }
 

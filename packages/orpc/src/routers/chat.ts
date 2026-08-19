@@ -202,6 +202,23 @@ const assertCanUseAiCredits = async (
   }
 };
 
+const hasPendingComposeToolCall = (parts: ChatMessagePart[]): boolean => {
+  const completedToolCalls = new Set(
+    parts.flatMap((part) =>
+      part.type === "tool-result" && typeof part.toolCallId === "string"
+        ? [part.toolCallId]
+        : []
+    )
+  );
+  return parts.some(
+    (part) =>
+      part.type === "tool-call" &&
+      part.name === "compose_email" &&
+      typeof part.id === "string" &&
+      !completedToolCalls.has(part.id)
+  );
+};
+
 const assertCanRunChatGeneration = async (input: {
   allowPendingCompose?: boolean;
   chatId: string;
@@ -236,7 +253,7 @@ const assertCanRunChatGeneration = async (input: {
   }
 
   if (input.allowPendingCompose !== true) {
-    const assistantMessages = await db
+    const [latestAssistantMessage] = await db
       .select({ parts: chatMessage.parts })
       .from(chatMessage)
       .where(
@@ -244,25 +261,14 @@ const assertCanRunChatGeneration = async (input: {
           eq(chatMessage.chatId, authorizedChat.id),
           eq(chatMessage.role, "assistant")
         )
-      );
-    const hasPendingCompose = assistantMessages.some(({ parts }) => {
-      const completedToolCalls = new Set(
-        parts.flatMap((part) =>
-          part.type === "tool-result" && typeof part.toolCallId === "string"
-            ? [part.toolCallId]
-            : []
-        )
-      );
-      return parts.some(
-        (part) =>
-          part.type === "tool-call" &&
-          part.name === "compose_email" &&
-          typeof part.id === "string" &&
-          !completedToolCalls.has(part.id)
-      );
-    });
+      )
+      .orderBy(desc(chatMessage.position))
+      .limit(1);
 
-    if (hasPendingCompose) {
+    if (
+      latestAssistantMessage !== undefined &&
+      hasPendingComposeToolCall(latestAssistantMessage.parts)
+    ) {
       throw new ORPCError("CONFLICT", {
         message: "Resolve the pending email before continuing this chat.",
       });
@@ -290,16 +296,38 @@ const continueAssistantRunOrThrow = async (
   input: Parameters<typeof continueAssistantRun>[0]
 ) => await continueAssistantRun(input).catch(rethrowChatRunConflict);
 
-const startCreatedChatRun = async (runId: string) => {
-  try {
-    await startChatRun(runId);
-  } catch (error) {
-    reportError(error, { operation: "chat: start-run" });
-    await terminalizeFailedChatRun(
-      runId,
-      "The response could not start. Retry it to continue."
-    );
-  }
+/**
+ * Hand the run to the generation worker without blocking the RPC response.
+ *
+ * The observation SSE force-reclaims an active-but-unproduced run
+ * (`chat-generation-worker`), so enqueueing is an optimization, not a prerequisite:
+ * failing to reach the worker must not stall the mutation response. Explicit
+ * rejections are terminalized so the transcript surfaces a clear error; ambiguous
+ * failures (timeout / network) are left for SSE reclaim.
+ */
+const startCreatedChatRun = (runId: string) => {
+  void (async () => {
+    try {
+      await startChatRun(runId);
+    } catch (error) {
+      reportError(error, { operation: "chat: start-run" });
+      const message = error instanceof Error ? error.message : "";
+      const isExplicitRejection = /Failed to enqueue/iu.test(message);
+      if (!isExplicitRejection) {
+        return;
+      }
+      try {
+        await terminalizeFailedChatRun(
+          runId,
+          "The response could not start. Retry it to continue."
+        );
+      } catch (terminalizeError: unknown) {
+        reportError(terminalizeError, {
+          operation: "chat: terminalize-start-failure",
+        });
+      }
+    }
+  })();
 };
 
 const buildRunResponse = async ({
@@ -452,7 +480,7 @@ export const chatRouter = {
         userMessagePosition: userMessage.position,
       });
 
-      await startCreatedChatRun(runId);
+      startCreatedChatRun(runId);
 
       return await buildRunResponse({
         assistantMessageId,
@@ -702,7 +730,7 @@ export const chatRouter = {
         userMessagePosition: userMessage.position,
       });
 
-      await startCreatedChatRun(runId);
+      startCreatedChatRun(runId);
 
       return await buildRunResponse({
         assistantMessageId,
@@ -986,7 +1014,7 @@ export const chatRouter = {
         userId: context.userId,
       });
 
-      await startCreatedChatRun(runId);
+      startCreatedChatRun(runId);
 
       return await buildRunResponse({
         assistantMessageId,
@@ -1048,7 +1076,7 @@ export const chatRouter = {
         rethrowChatRunConflict(error);
       }
 
-      await startCreatedChatRun(runId);
+      startCreatedChatRun(runId);
 
       return await buildRunResponse({
         assistantMessageId,

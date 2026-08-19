@@ -2620,27 +2620,6 @@ export const chatRun = pgTable(
   ]
 );
 
-/** Append-only TanStack AI delivery-durability log for resumable chat observation. */
-export const chatRunStreamChunk = pgTable(
-  "chatRunStreamChunk",
-  {
-    chunk: jsonb("chunk").$type<Record<string, unknown>>().notNull(),
-    createdAt: timestamp("createdAt").notNull(),
-    offset: text("offset").notNull(),
-    runId: text("runId")
-      .notNull()
-      .references(() => chatRun.id, { onDelete: "cascade" }),
-    seq: bigint("seq", { mode: "number" }).notNull(),
-  },
-  (table) => [
-    primaryKey({ columns: [table.runId, table.seq] }),
-    unique("chat_run_stream_chunk_run_id_offset_unique").on(
-      table.runId,
-      table.offset
-    ),
-  ]
-);
-
 export const waitlistSignup = pgTable("waitlistSignup", {
   createdAt: timestamp("createdAt").notNull(),
   email: text("email").primaryKey(),

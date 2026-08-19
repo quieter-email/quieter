@@ -3,32 +3,11 @@
 import type { ChatMessagePart } from "@quieter/orpc/chat-contracts";
 import { useEffect, useRef } from "react";
 
-import {
-  ChatRunStreamError,
-  consumeChatRunStream,
-} from "../lib/chat-run-stream";
+import { consumeChatRunStream } from "../lib/chat-run-stream";
 import type { ChatRunStreamDone as ChatRunStreamDoneType } from "../lib/chat-run-stream";
 
 export type { ChatRunStreamDone } from "../lib/chat-run-stream";
 type ChatRunStreamDone = ChatRunStreamDoneType;
-
-const waitForRetry = async (attempt: number, signal: AbortSignal) => {
-  await new Promise<void>((resolve) => {
-    if (signal.aborted) {
-      resolve();
-      return;
-    }
-
-    let timeout = 0;
-    const finish = () => {
-      window.clearTimeout(timeout);
-      signal.removeEventListener("abort", finish);
-      resolve();
-    };
-    timeout = window.setTimeout(finish, Math.min(1000 * 2 ** attempt, 5000));
-    signal.addEventListener("abort", finish, { once: true });
-  });
-};
 
 export const useChatRunStream = ({
   assistantMessageId,
@@ -83,59 +62,35 @@ export const useChatRunStream = ({
     const controller = new AbortController();
 
     void (async () => {
-      let attempt = 0;
-
-      while (!controller.signal.aborted) {
-        try {
-          // Reconnect attempts must remain sequential so backoff is honored.
-          // oxlint-disable-next-line eslint/no-await-in-loop
-          const result = await consumeChatRunStream({
-            assistantMessageId: activeAssistantMessageId,
-            initialParts: initialPartsRef.current,
-            onDraft: (draft) => {
-              onDraftRef.current(draft);
-            },
-            runId,
-            signal: controller.signal,
-          });
-          if (!controller.signal.aborted) {
-            onDoneRef.current(result);
-          }
-          return;
-        } catch (error) {
-          if (controller.signal.aborted) {
-            return;
-          }
-
-          if (error instanceof DOMException && error.name === "AbortError") {
-            return;
-          }
-
-          if (!(error instanceof ChatRunStreamError) || error.retryable) {
-            if (attempt >= 8) {
-              onErrorRef.current(
-                error instanceof Error && error.message
-                  ? error.message
-                  : "Could not open chat stream."
-              );
-              return;
-            }
-
-            const retryAttempt = attempt;
-            attempt += 1;
-            // Retries must wait for the previous backoff before reconnecting.
-            // oxlint-disable-next-line eslint/no-await-in-loop
-            await waitForRetry(retryAttempt, controller.signal);
-            continue;
-          }
-
-          onErrorRef.current(
-            error instanceof Error && error.message
-              ? error.message
-              : "Could not open chat stream."
-          );
+      try {
+        // Reconnects are handled inside `consumeChatRunStream` with a single bounded
+        // backoff budget; this hook only awaits the terminal result.
+        const result = await consumeChatRunStream({
+          assistantMessageId: activeAssistantMessageId,
+          initialParts: initialPartsRef.current,
+          onDraft: (draft) => {
+            onDraftRef.current(draft);
+          },
+          runId,
+          signal: controller.signal,
+        });
+        if (!controller.signal.aborted) {
+          onDoneRef.current(result);
+        }
+      } catch (error) {
+        if (controller.signal.aborted) {
           return;
         }
+
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+
+        onErrorRef.current(
+          error instanceof Error && error.message
+            ? error.message
+            : "Could not open chat stream."
+        );
       }
     })();
 
