@@ -588,12 +588,18 @@ export const runChatGeneration = async (
   let pendingPersist = Promise.resolve();
   let cancelled = false;
   let handedBack = false;
+  let ownershipLost = false;
   let hasPersistedStreamingDraft = false;
   const usageReports: Promise<void>[] = [];
 
   const updateHeartbeat = async () => {
     try {
       const heartbeat = await touchChatRunHeartbeat(runId);
+      if (!heartbeat.live && !ownershipLost) {
+        ownershipLost = true;
+        abortController.abort();
+        return;
+      }
       if (heartbeat.cancelRequested && !cancelled) {
         cancelled = true;
         abortController.abort();
@@ -1000,6 +1006,11 @@ export const runChatGeneration = async (
     });
   } catch (error) {
     await settleUsageReports();
+
+    if (ownershipLost) {
+      await drainAssistantDraftPersist();
+      return;
+    }
 
     if (cancelled) {
       await drainAssistantDraftPersist();

@@ -301,8 +301,9 @@ const continueAssistantRunOrThrow = async (
  *
  * The observation SSE force-reclaims an active-but-unproduced run
  * (`chat-generation-worker`), so enqueueing is an optimization, not a prerequisite:
- * failing to reach the worker must not stall the mutation response. Failure is reported
- * and the run terminalized in the background so the transcript surfaces a clear error.
+ * failing to reach the worker must not stall the mutation response. Explicit
+ * rejections are terminalized so the transcript surfaces a clear error; ambiguous
+ * failures (timeout / network) are left for SSE reclaim.
  */
 const startCreatedChatRun = (runId: string) => {
   void (async () => {
@@ -310,6 +311,11 @@ const startCreatedChatRun = (runId: string) => {
       await startChatRun(runId);
     } catch (error) {
       reportError(error, { operation: "chat: start-run" });
+      const message = error instanceof Error ? error.message : "";
+      const isExplicitRejection = /Failed to enqueue/iu.test(message);
+      if (!isExplicitRejection) {
+        return;
+      }
       try {
         await terminalizeFailedChatRun(
           runId,

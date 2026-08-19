@@ -175,7 +175,7 @@ const handleChatRunStreamFailure = ({
 
   applyChatRunStreamResult({
     chatId,
-    mailboxId,
+    mailboxId: resolvedMailboxId,
     queryClient,
     resolvedChatId,
     result: {
@@ -187,7 +187,7 @@ const handleChatRunStreamFailure = ({
   });
   failChatRunStream({ chatId: resolvedChatId, mailboxId: resolvedMailboxId });
   void queryClient.invalidateQueries({
-    queryKey: getChatQueryKey(mailboxId, resolvedChatId),
+    queryKey: getChatQueryKey(resolvedMailboxId, resolvedChatId),
   });
 };
 
@@ -296,8 +296,6 @@ export const useChatViewStream = ({
       const resolvedChatId = streamChatId ?? chatId;
       if (hasText(resolvedChatId)) {
         commitChatRunStream(resolvedChatId);
-      }
-      if (hasText(resolvedChatId)) {
         void queryClient.invalidateQueries({
           queryKey: getChatQueryKey(mailboxId, resolvedChatId),
         });

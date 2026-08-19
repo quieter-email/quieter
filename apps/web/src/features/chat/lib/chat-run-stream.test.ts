@@ -1,6 +1,6 @@
 import { EventType } from "@tanstack/ai";
 import type { StreamChunk } from "@tanstack/ai";
-import { describe, expect, test, vi } from "vite-plus/test";
+import { afterEach, describe, expect, test, vi } from "vite-plus/test";
 
 import { followChatRunEvents } from "./chat-run-stream";
 
@@ -82,6 +82,10 @@ const chatStreamCallCount = (fetchMock: ChatStreamFetchMock) =>
   ).length;
 
 describe("followChatRunEvents reconnect loop", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   test("yields chunks through a clean terminal stream", async () => {
     const runId = "run-clean";
     const fetchMock = stubChatStreamFetch(() =>
@@ -101,7 +105,6 @@ describe("followChatRunEvents reconnect loop", () => {
       EventType.RUN_FINISHED,
     ]);
     expect(chatStreamCallCount(fetchMock)).toBe(1);
-    vi.unstubAllGlobals();
   });
 
   test("resumes from the last event id on a drop and dedupes replayed chunks", async () => {
@@ -130,7 +133,6 @@ describe("followChatRunEvents reconnect loop", () => {
 
     expect(deltas).toStrictEqual(["Hello"]);
     expect(chatStreamCallCount(fetchMock)).toBe(2);
-    vi.unstubAllGlobals();
   });
 
   test("gives up after the bounded reconnect budget instead of retrying forever", async () => {
@@ -147,6 +149,21 @@ describe("followChatRunEvents reconnect loop", () => {
 
     // One initial open plus the 8 allowed reconnects; it must stop, not loop forever.
     expect(chatStreamCallCount(fetchMock)).toBe(9);
-    vi.unstubAllGlobals();
+  });
+
+  test("exits silently when aborted during streaming", async () => {
+    const runId = "run-abort";
+    const controller = new AbortController();
+    controller.abort();
+
+    const chunks: StreamChunk[] = [];
+    for await (const chunk of followChatRunEvents({
+      runId,
+      signal: controller.signal,
+    })) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks).toStrictEqual([]);
   });
 });

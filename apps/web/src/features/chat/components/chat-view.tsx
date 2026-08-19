@@ -90,6 +90,7 @@ export const ChatView = ({
     chatData,
     chatKey,
     defaultModel,
+    mailboxId,
   });
   const audioRecorder = useAudioRecorder({
     mimeType: "audio/webm;codecs=opus",

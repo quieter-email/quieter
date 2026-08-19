@@ -238,18 +238,16 @@ const RECONNECT_BASE_DELAY_MS = 250;
 const RECONNECT_MAX_DELAY_MS = 2000;
 
 type FollowChatRunState = {
+  budgetStartedAt: number;
   lastEventId?: string;
   reconnectAttempts: number;
   sawTerminal: boolean;
   seen: Set<string>;
 };
 
-const reconnectBudgetExhausted = (
-  state: FollowChatRunState,
-  startedAt: number
-) =>
+const reconnectBudgetExhausted = (state: FollowChatRunState) =>
   state.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS ||
-  Date.now() - startedAt > RECONNECT_BUDGET_MS;
+  Date.now() - state.budgetStartedAt > RECONNECT_BUDGET_MS;
 
 const waitForRetry = async (attempt: number, signal?: AbortSignal) => {
   const retryDelay = Math.min(
@@ -272,6 +270,10 @@ const consumeChatRunStreamResponse =
         }
         state.seen.add(event.id);
         state.lastEventId = event.id;
+        // Progress proves the run is still alive — start a fresh failure window
+        // so a long healthy run (up to 90s) can still reconnect after a drop,
+        // but keep reconnectAttempts cumulative to avoid infinite retry.
+        state.budgetStartedAt = Date.now();
       }
       if (isTerminalChunk(event.chunk)) {
         state.sawTerminal = true;
@@ -283,9 +285,9 @@ const consumeChatRunStreamResponse =
 /**
  * Follow a run's live delivery stream (dump-then-live).
  * Reconnects on any drop - resuming from the last delivered event id - with a single
- * bounded backoff budget until a terminal chunk arrives. A healthy connection does not
- * drop, so the budget (attempts + elapsed time, never reset by progress) gives up on a
- * dead run instead of retrying forever.
+ * bounded backoff budget until a terminal chunk arrives. The time budget is a sliding
+ * failure window reset on progress (so a 40s healthy run can still reconnect), while
+ * the attempt counter is cumulative to avoid infinite retry.
  * @yields {StreamChunk} Stream chunks from the chat run SSE connection.
  */
 export const followChatRunEvents = async function* followChatRunEvents({
@@ -296,11 +298,11 @@ export const followChatRunEvents = async function* followChatRunEvents({
   signal?: AbortSignal;
 }): AsyncGenerator<StreamChunk> {
   const state: FollowChatRunState = {
+    budgetStartedAt: Date.now(),
     reconnectAttempts: 0,
     sawTerminal: false,
     seen: new Set<string>(),
   };
-  const startedAt = Date.now();
 
   while (true) {
     if (isAborted(signal)) {
@@ -320,7 +322,7 @@ export const followChatRunEvents = async function* followChatRunEvents({
       if (isAborted(signal)) {
         return;
       }
-      if (reconnectBudgetExhausted(state, startedAt)) {
+      if (reconnectBudgetExhausted(state)) {
         throw error;
       }
       state.reconnectAttempts += 1;
@@ -330,11 +332,24 @@ export const followChatRunEvents = async function* followChatRunEvents({
     }
 
     if (!response.ok) {
+      const isTransient = response.status === 429 || response.status >= 500;
+      if (isTransient) {
+        if (reconnectBudgetExhausted(state)) {
+          throw new ChatRunStreamError(
+            `Chat stream failed (${response.status}).`,
+            false
+          );
+        }
+        state.reconnectAttempts += 1;
+        // oxlint-disable-next-line eslint/no-await-in-loop
+        await waitForRetry(state.reconnectAttempts - 1, signal);
+        continue;
+      }
       throw new ChatRunStreamError(
         response.status === 401 || response.status === 403
           ? "Unauthorized"
           : `Chat stream failed (${response.status}).`,
-        response.status !== 401 && response.status !== 403
+        false
       );
     }
 
@@ -352,7 +367,7 @@ export const followChatRunEvents = async function* followChatRunEvents({
       if (isAborted(signal)) {
         return;
       }
-      if (reconnectBudgetExhausted(state, startedAt)) {
+      if (reconnectBudgetExhausted(state)) {
         throw error;
       }
       state.reconnectAttempts += 1;
@@ -367,7 +382,7 @@ export const followChatRunEvents = async function* followChatRunEvents({
     if (state.sawTerminal) {
       return;
     }
-    if (reconnectBudgetExhausted(state, startedAt)) {
+    if (reconnectBudgetExhausted(state)) {
       throw new ChatRunStreamError(
         "Chat stream ended before the response finished.",
         true

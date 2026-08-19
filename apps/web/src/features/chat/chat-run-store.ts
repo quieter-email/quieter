@@ -117,16 +117,29 @@ export const failChatRunStream = (input: {
   chatId: string;
   mailboxId?: string | null;
 }) => {
-  chatRunStore.setState((state) => ({
-    ...state,
-    locallyFailedChatId: input.chatId,
-    locallyFailedMailboxId:
-      input.mailboxId ?? state.streamMailboxId ?? state.locallyFailedMailboxId,
-    streamChatId: null,
-    streamMailboxId: null,
-    streamRunId: null,
-    streamingAssistant: null,
-  }));
+  chatRunStore.setState((state) => {
+    const isCurrentStream =
+      state.streamChatId === null || state.streamChatId === input.chatId;
+    const mailboxMatches =
+      input.mailboxId === undefined ||
+      input.mailboxId === null ||
+      state.streamMailboxId === null ||
+      state.streamMailboxId === input.mailboxId;
+    const shouldClearStream = isCurrentStream && mailboxMatches;
+
+    return {
+      ...state,
+      locallyFailedChatId: input.chatId,
+      locallyFailedMailboxId:
+        input.mailboxId ??
+        state.streamMailboxId ??
+        state.locallyFailedMailboxId,
+      streamChatId: shouldClearStream ? null : state.streamChatId,
+      streamMailboxId: shouldClearStream ? null : state.streamMailboxId,
+      streamRunId: shouldClearStream ? null : state.streamRunId,
+      streamingAssistant: shouldClearStream ? null : state.streamingAssistant,
+    };
+  });
 };
 
 export const clearChatRunStoreForMailbox = (mailboxId: string) => {

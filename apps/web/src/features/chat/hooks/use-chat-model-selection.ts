@@ -11,19 +11,27 @@ export const useChatModelSelection = ({
   chatData,
   chatKey,
   defaultModel,
+  mailboxId,
 }: {
   chatData: ChatQueryData | undefined;
   chatKey: string;
   defaultModel: ChatModel;
+  mailboxId: string;
 }) => {
   const [modelSelection, setModelSelection] = useState<{
     chatKey: string;
+    mailboxId: string;
     model: ChatModel;
   } | null>(null);
   const selectedModel = modelSelection?.model;
   const selectedChatKey = modelSelection?.chatKey;
+  const selectedMailboxId = modelSelection?.mailboxId;
   let model = defaultModel;
-  if (selectedChatKey === chatKey && selectedModel !== undefined) {
+  if (
+    selectedChatKey === chatKey &&
+    selectedMailboxId === mailboxId &&
+    selectedModel !== undefined
+  ) {
     model = selectedModel;
   } else if (
     (chatData?.messages.length ?? 0) > 0 &&
@@ -35,7 +43,7 @@ export const useChatModelSelection = ({
 
   const handleModelChange = (nextModel: ChatModel) => {
     setDefaultChatModel(nextModel);
-    setModelSelection({ chatKey, model: nextModel });
+    setModelSelection({ chatKey, mailboxId, model: nextModel });
   };
 
   return { handleModelChange, model };

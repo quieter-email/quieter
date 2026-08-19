@@ -8,14 +8,12 @@ import type { ComponentProps } from "react";
 import { MobileHeader } from "#/components/mobile-header";
 import { appEaseInOut, appMotionDuration } from "#/features/motion/app-motion";
 
+import { hasText } from "../lib/chat-view-helpers";
 import { ChatComposer } from "./chat-composer";
 import { ChatTranscript } from "./chat-transcript";
 
 type ChatComposerProps = ComponentProps<typeof ChatComposer>;
 type ChatTranscriptProps = ComponentProps<typeof ChatTranscript>;
-
-const hasText = (value: string | null | undefined): value is string =>
-  typeof value === "string" && value.length > 0;
 
 const PlanRequiredBlock = ({
   organizationId,
