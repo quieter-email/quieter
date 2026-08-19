@@ -24,8 +24,8 @@ const selectTriggerVariants = cva(
     },
     variants: {
       size: {
-        default: "h-9 px-3.5 text-sm [&_svg]:size-4",
-        sm: "h-8 px-3 text-[13px] [&_svg]:size-3.5",
+        default: "h-9 px-3.5 text-body [&_svg]:size-4",
+        sm: "h-8 px-3 text-body-sm [&_svg]:size-3.5",
       },
       variant: {
         default: "w-full border border-border bg-input text-fg shadow-sm",
@@ -133,7 +133,7 @@ export const SelectContent = ({
         <SelectPrimitive.Popup
           className={cn(
             "z-50 min-w-52 origin-(--transform-origin) overflow-hidden rounded-lg border bg-popover p-1 text-popover-fg shadow-md transition-[opacity,transform] duration-150 ease-out will-change-[opacity,transform] data-ending-style:scale-95 data-ending-style:opacity-0 data-instant:transition-none data-starting-style:scale-95 data-starting-style:opacity-0 data-[side=none]:min-w-(--anchor-width) data-[side=none]:duration-100 data-[side=none]:data-ending-style:scale-100 data-[side=none]:data-starting-style:scale-100",
-            size === "compact" && "min-w-40 p-0.5 text-xs",
+            size === "compact" && "min-w-40 p-0.5 text-caption",
             className
           )}
           {...props}
@@ -198,8 +198,8 @@ export const SelectItem = ({
   return (
     <SelectPrimitive.Item
       className={cn(
-        "squircle relative flex min-h-9 cursor-default scroll-my-1 items-center gap-2 rounded-md py-2 pr-8 pl-2.5 text-sm text-fg transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
-        size === "compact" && "min-h-7 gap-1.5 py-1 pr-7 pl-2 text-xs",
+        "squircle relative flex min-h-9 cursor-default scroll-my-1 items-center gap-2 rounded-md py-2 pr-8 pl-2.5 text-body text-fg transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
+        size === "compact" && "min-h-7 gap-1.5 py-1 pr-7 pl-2 text-caption",
         className
       )}
       {...props}
@@ -221,7 +221,7 @@ export const SelectGroupLabel = ({
   return (
     <SelectPrimitive.GroupLabel
       className={cn(
-        "px-2.5 py-1 text-xs text-muted-fg",
+        "px-2.5 py-1 text-caption text-muted-fg",
         size === "compact" && "px-2 py-0.5 text-micro",
         className
       )}

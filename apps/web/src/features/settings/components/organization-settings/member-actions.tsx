@@ -117,15 +117,15 @@ export const MemberActions = ({
         )}
       >
         <div className="min-w-0 flex-1 text-left">
-          <p className="truncate text-sm font-medium text-fg">
+          <p className="truncate text-body font-medium text-fg">
             {member.user.name || member.user.email}
           </p>
-          <p className="mt-0.5 truncate text-xs text-muted-fg">
+          <p className="mt-0.5 truncate text-caption text-muted-fg">
             {member.user.email}
           </p>
         </div>
 
-        <p className="shrink-0 text-sm text-muted-fg">
+        <p className="shrink-0 text-body text-muted-fg">
           {formatRoleLabel(member.role)}
           {isActiveMember ? " / You" : ""}
         </p>
@@ -222,7 +222,7 @@ export const MemberActions = ({
       {error !== null && error !== undefined && error !== "" ? (
         <p
           className={cn(
-            "text-sm text-destructive",
+            "text-body text-destructive",
             settingsSurfaceVariants({ variant: "padding" })
           )}
           role="alert"

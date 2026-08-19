@@ -14,7 +14,7 @@ export const ChatError = ({
   message: string;
   onRetry?: () => void;
 }) => (
-  <div className="flex items-start gap-3 rounded-lg border border-destructive/25 bg-destructive/5 p-3 text-sm">
+  <div className="flex items-start gap-3 rounded-lg border border-destructive/25 bg-destructive/5 p-3 text-body">
     <HugeiconsIcon
       aria-hidden
       className="mt-0.5 size-4 shrink-0 text-destructive"

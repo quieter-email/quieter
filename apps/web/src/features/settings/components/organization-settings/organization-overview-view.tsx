@@ -289,8 +289,10 @@ export const OrganizationOverviewView = ({
 
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
-          <h1 className="text-base font-normal text-fg">{organization.name}</h1>
-          <p className="mt-1 text-sm text-muted-fg">{organization.slug}</p>
+          <h1 className="text-body-lg font-normal text-fg">
+            {organization.name}
+          </h1>
+          <p className="mt-1 text-body text-muted-fg">{organization.slug}</p>
         </div>
 
         {updateOrganizationReason === null ? (

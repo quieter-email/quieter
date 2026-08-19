@@ -22,11 +22,11 @@ import {
 } from "@quieter/ui/alert-dialog";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
-import { Field, FieldControl, FieldLabel } from "@quieter/ui/field";
+import { FieldControl } from "@quieter/ui/field";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
 import { toast } from "@quieter/ui/toast";
-import { ToolbarButton, ToolbarSeparator } from "@quieter/ui/toolbar";
+import { ToolbarButton } from "@quieter/ui/toolbar";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
@@ -45,6 +45,13 @@ import {
   ComposeEditorToolbar,
 } from "./compose-editor";
 import type { ComposeEditorHandle } from "./compose-editor";
+import {
+  ComposerEditorFrame,
+  ComposerFieldGroup,
+  composerFieldControlClassName,
+  ComposerFieldRow,
+  ComposerFrame,
+} from "./composer-chrome";
 
 const hasText = (value: string | null | undefined): value is string =>
   value !== null && value !== undefined && value !== "";
@@ -178,14 +185,14 @@ export const TemplateWorkspace = ({
   let templateQueryState: ReactNode = null;
   if (templatesQuery.isPending) {
     templateQueryState = (
-      <div className="flex items-center justify-center gap-2 px-3 py-10 text-xs text-muted-fg">
+      <div className="flex items-center justify-center gap-2 px-3 py-10 text-caption text-muted-fg">
         <HugeiconsIcon className="size-3.5 animate-spin" icon={Loading03Icon} />
         Loading templates
       </div>
     );
   } else if (templatesQuery.isError) {
     templateQueryState = (
-      <p className="px-3 py-10 text-center text-xs/5 text-destructive">
+      <p className="px-3 py-10 text-center text-caption/5 text-destructive">
         Could not load templates.
       </p>
     );
@@ -198,8 +205,8 @@ export const TemplateWorkspace = ({
         : "Try a different search.";
     templateQueryState = (
       <div className="px-6 py-12 text-center">
-        <p className="text-sm font-medium text-fg">{emptyTitle}</p>
-        <p className="mt-1 text-xs/5 text-muted-fg">{emptyDescription}</p>
+        <p className="text-body font-medium text-fg">{emptyTitle}</p>
+        <p className="mt-1 text-caption/5 text-muted-fg">{emptyDescription}</p>
       </div>
     );
   }
@@ -227,7 +234,7 @@ export const TemplateWorkspace = ({
                 <HugeiconsIcon icon={SidebarLeftIcon} />
               </Button>
             </IconButtonTooltip>
-            <h1 className="min-w-0 flex-1 text-sm font-semibold tracking-tight text-fg">
+            <h1 className="min-w-0 flex-1 text-body font-semibold tracking-tight text-fg">
               Templates
             </h1>
             <Button onClick={startNewTemplate} size="sm" type="button">
@@ -287,7 +294,7 @@ export const TemplateWorkspace = ({
                 )}
               />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium">
+                <span className="block truncate text-body font-medium">
                   {template.name}
                 </span>
                 <span className="mt-1 flex items-center gap-2 text-micro text-muted-fg">
@@ -325,41 +332,36 @@ export const TemplateWorkspace = ({
                 <HugeiconsIcon icon={ArrowLeft01Icon} />
               </Button>
             </IconButtonTooltip>
-            <p className="text-sm font-medium tracking-tight text-fg">
+            <p className="text-body font-medium tracking-tight text-fg">
               {hasText(editingId) ? "Edit template" : "New template"}
             </p>
           </div>
 
-          <templateForm.Field name="name">
-            {(field) => (
-              <Field className="w-full max-w-2xl gap-1">
-                <div className="flex items-center gap-3">
-                  <FieldLabel className="w-14 shrink-0 text-sm font-normal text-muted-fg">
-                    Name
-                  </FieldLabel>
-                  <FieldControl
-                    className="min-w-0 flex-1"
-                    disabled={!canEditCurrentTemplate}
-                    onBlur={() => {
-                      field.handleBlur();
-                    }}
-                    onChange={(event) => {
-                      field.handleChange(event.currentTarget.value);
-                    }}
-                    placeholder="Template name"
-                    value={field.state.value}
-                  />
-                </div>
-              </Field>
-            )}
-          </templateForm.Field>
+          {/* The same writing measure and capped height as the mail composer. */}
+          <ComposerFrame>
+            <ComposerFieldGroup>
+              <templateForm.Field name="name">
+                {(field) => (
+                  <ComposerFieldRow divided={false} label="Name">
+                    <FieldControl
+                      className={composerFieldControlClassName}
+                      disabled={!canEditCurrentTemplate}
+                      onBlur={() => {
+                        field.handleBlur();
+                      }}
+                      onChange={(event) => {
+                        field.handleChange(event.currentTarget.value);
+                      }}
+                      placeholder="Template name"
+                      value={field.state.value}
+                    />
+                  </ComposerFieldRow>
+                )}
+              </templateForm.Field>
+            </ComposerFieldGroup>
 
-          <templateForm.Field name="bodyHtml">
-            {(field) => (
-              <Field className="flex min-h-0 flex-1 flex-col gap-2">
-                <FieldLabel className="font-normal text-muted-fg">
-                  Message
-                </FieldLabel>
+            <templateForm.Field name="bodyHtml">
+              {(field) => (
                 <ComposeEditor
                   disabled={!canEditCurrentTemplate}
                   html={field.state.value}
@@ -375,9 +377,14 @@ export const TemplateWorkspace = ({
                   }}
                   ref={templateEditorRef}
                 >
-                  <div className="flex min-h-0 flex-1 flex-col gap-3">
-                    <ComposeEditorBody className="min-h-0 flex-1" />
+                  {/* One sheet: the toolbar is the editor's own footer band. */}
+                  <ComposerEditorFrame>
+                    <ComposeEditorBody
+                      chrome="seamless"
+                      className="min-h-0 flex-1"
+                    />
                     <ComposeEditorToolbar
+                      chrome="footer"
                       trailing={
                         <>
                           <IconButtonTooltip label="Insert placeholder">
@@ -403,7 +410,7 @@ export const TemplateWorkspace = ({
                                     scopeField.state.value === "personal"
                                   }
                                   className={cn({
-                                    "bg-bg-surface text-fg shadow-sm":
+                                    "bg-control-active text-fg shadow-sm":
                                       scopeField.state.value === "personal",
                                   })}
                                   disabled={!canEditCurrentTemplate}
@@ -419,7 +426,7 @@ export const TemplateWorkspace = ({
                                     scopeField.state.value === "team"
                                   }
                                   className={cn({
-                                    "bg-bg-surface text-fg shadow-sm":
+                                    "bg-control-active text-fg shadow-sm":
                                       scopeField.state.value === "team",
                                   })}
                                   disabled={
@@ -450,9 +457,12 @@ export const TemplateWorkspace = ({
                               Delete
                             </ToolbarButton>
                           ) : null}
-                          <ToolbarSeparator />
                           {canEditCurrentTemplate ? (
-                            <ToolbarButton disabled={isSaving} type="submit">
+                            <ToolbarButton
+                              className="bg-primary text-primary-fg shadow-sm hover:bg-primary/90 hover:text-primary-fg active:bg-primary/85 active:text-primary-fg"
+                              disabled={isSaving}
+                              type="submit"
+                            >
                               {isSaving ? (
                                 <HugeiconsIcon
                                   className="animate-spin"
@@ -464,18 +474,18 @@ export const TemplateWorkspace = ({
                               Save
                             </ToolbarButton>
                           ) : (
-                            <span className="px-2 text-xs text-muted-fg">
+                            <span className="px-2 text-caption text-muted-fg">
                               Only team admins can edit
                             </span>
                           )}
                         </>
                       }
                     />
-                  </div>
+                  </ComposerEditorFrame>
                 </ComposeEditor>
-              </Field>
-            )}
-          </templateForm.Field>
+              )}
+            </templateForm.Field>
+          </ComposerFrame>
         </div>
       </form>
 
@@ -498,7 +508,7 @@ export const TemplateWorkspace = ({
                 : "This removes the template from your saved templates."}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogBody className="text-sm text-muted-fg">
+          <AlertDialogBody className="text-body text-muted-fg">
             Messages that already used this template will not change.
           </AlertDialogBody>
           <AlertDialogFooter>

@@ -1,18 +1,40 @@
-export type MessageLabelsDialogTarget = {
+export type MessageLabelsTarget = {
   id: string;
   labelIds: readonly string[];
 };
 
-export type MessageLabelsDialogUpdate = {
+export type MessageLabelsUpdate = {
   id: string;
   addLabelIds: string[];
   removeLabelIds: string[];
 };
 
+export type MessageLabelSelection = "all" | "none" | "some";
+
+export const getMessageLabelSelection = (
+  targets: readonly MessageLabelsTarget[],
+  labelId: string
+): MessageLabelSelection => {
+  if (targets.length === 0) {
+    return "none";
+  }
+
+  const selectedCount = targets.reduce(
+    (count, target) => count + Number(target.labelIds.includes(labelId)),
+    0
+  );
+
+  if (selectedCount === 0) {
+    return "none";
+  }
+
+  return selectedCount === targets.length ? "all" : "some";
+};
+
 export const getMessageLabelUpdates = (
-  targets: readonly MessageLabelsDialogTarget[],
+  targets: readonly MessageLabelsTarget[],
   draftLabels: Readonly<Record<string, boolean>>
-): MessageLabelsDialogUpdate[] =>
+): MessageLabelsUpdate[] =>
   targets.flatMap((target) => {
     const currentLabelIds = new Set(target.labelIds);
     const addLabelIds: string[] = [];

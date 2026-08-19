@@ -76,7 +76,7 @@ const AuthLastUsedHint = () => (
         }}
         transition={{ duration: 5, ease: "linear", repeat: Infinity }}
       />
-      <span className="squircle relative block rounded-[inherit] bg-bg px-2 py-1 text-[0.625rem] font-medium tracking-wide text-muted-fg">
+      <span className="squircle relative block rounded-[inherit] bg-bg px-2 py-1 text-micro font-medium tracking-wide text-muted-fg">
         Last used
       </span>
     </span>
@@ -263,7 +263,10 @@ const AuthCredentials = ({
                 value={field.state.value}
               />
               {field.state.meta.errors.map((error) => (
-                <p className="text-xs text-destructive" key={error?.message}>
+                <p
+                  className="text-caption text-destructive"
+                  key={error?.message}
+                >
                   {error?.message ?? "An unknown error occurred."}
                 </p>
               ))}
@@ -320,7 +323,7 @@ const AuthCredentials = ({
             errorMap.onSubmit && (
               <output
                 aria-live="assertive"
-                className="mt-4 text-sm text-destructive"
+                className="mt-4 text-body text-destructive"
               >
                 {errorMap.onSubmit.form}
               </output>
@@ -366,12 +369,18 @@ const AuthCredentials = ({
       </Button>
 
       {hasText(errors.google) ? (
-        <output aria-live="assertive" className="mt-4 text-sm text-destructive">
+        <output
+          aria-live="assertive"
+          className="mt-4 text-body text-destructive"
+        >
           {errors.google}
         </output>
       ) : null}
       {hasText(errors.passkey) ? (
-        <output aria-live="assertive" className="mt-4 text-sm text-destructive">
+        <output
+          aria-live="assertive"
+          className="mt-4 text-body text-destructive"
+        >
           {errors.passkey}
         </output>
       ) : null}
@@ -446,7 +455,7 @@ const PreviewPersonaPicker = ({ navigate }: { navigate: AuthNavigate }) => {
         ))}
       </div>
       {hasText(error) ? (
-        <output aria-live="assertive" className="text-sm text-destructive">
+        <output aria-live="assertive" className="text-body text-destructive">
           {error}
         </output>
       ) : null}
@@ -465,10 +474,10 @@ export const AuthScreen = () => {
           not. The visual sits second and is ordered right on wide viewports. */}
       <div className="flex size-full min-h-0 items-center justify-center px-6">
         <div className="w-full max-w-md">
-          <h1 className="text-3xl font-medium tracking-tight text-fg">
+          <h1 className="text-title-md font-medium tracking-tight text-fg">
             Continue to Quieter
           </h1>
-          <p className="mt-2 text-sm text-muted-fg">
+          <p className="mt-2 text-body text-muted-fg">
             Sign in, or create an account with the same address.
           </p>
 
@@ -483,7 +492,7 @@ export const AuthScreen = () => {
           {hasText(authError) ? (
             <output
               aria-live="assertive"
-              className="mt-4 text-sm text-destructive"
+              className="mt-4 text-body text-destructive"
             >
               {authError}
             </output>

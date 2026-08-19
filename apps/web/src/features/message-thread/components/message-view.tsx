@@ -3,12 +3,11 @@
 import {
   ArrowDown01Icon,
   ArrowRightDoubleIcon,
-  ArrowUpRight01Icon,
   Edit01Icon,
   Loading03Icon,
-  MailRemove01Icon,
   MailReply02Icon,
   MailReplyAll02Icon,
+  NotificationOff01Icon,
   ZoomInAreaIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -29,6 +28,7 @@ import { toast } from "@quieter/ui/toast";
 import { TooltipGroup } from "@quieter/ui/tooltip";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
@@ -221,6 +221,7 @@ const MessageHeaderContent = ({
   const participantRows = [
     { label: "To", value: formatEnvelopeValue(message.to) },
   ].filter((row) => (row.value ?? "") !== "");
+  /* oxlint-disable jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-static-element-interactions -- header text only stops click bubbling so selecting sender, date, or preview does not toggle the collapsed message. */
   const content = (
     <div className="w-full min-w-0 flex-1 select-text">
       <div className="flex w-full min-w-0 flex-wrap items-baseline justify-start gap-x-2 gap-y-1">
@@ -230,20 +231,33 @@ const MessageHeaderContent = ({
 
         <span
           className={cn(
-            "max-w-full min-w-0 shrink cursor-text truncate text-sm font-medium text-fg @sm:text-[15px]",
+            "max-w-full min-w-0 shrink cursor-text truncate text-body font-medium text-fg",
             senderNameClassName
           )}
+          onClick={(e) => {
+            e.stopPropagation();
+          }}
         >
           {senderName}
         </span>
 
         {senderEmail !== "" && (
-          <span className="max-w-full min-w-0 shrink cursor-text truncate text-xs text-muted-fg @sm:text-sm">
+          <span
+            className="max-w-full min-w-0 shrink cursor-text truncate text-caption text-muted-fg @sm:text-body"
+            onClick={(e) => {
+              e.stopPropagation();
+            }}
+          >
             {senderEmail}
           </span>
         )}
 
-        <span className="shrink-0 basis-full cursor-text text-xs whitespace-nowrap text-muted-fg @sm:basis-auto @sm:text-sm">
+        <span
+          className="shrink-0 basis-full cursor-text text-caption whitespace-nowrap text-muted-fg @sm:basis-auto @sm:text-body"
+          onClick={(e) => {
+            e.stopPropagation();
+          }}
+        >
           {date}
         </span>
 
@@ -251,20 +265,35 @@ const MessageHeaderContent = ({
       </div>
 
       {previewMode === "collapsed" && isExpanded === false ? (
-        <p className="mt-1 min-h-5 cursor-text truncate text-sm text-fg">
+        <p
+          className="mt-1 min-h-5 cursor-text truncate text-body text-fg"
+          onClick={(e) => {
+            e.stopPropagation();
+          }}
+        >
           {preview === "" ? <span aria-hidden>&nbsp;</span> : preview}
         </p>
       ) : (
         <div className="mt-1 min-h-5 space-y-1">
           {participantRows.map((row) => (
             <div
-              className="flex min-w-0 items-start gap-2 text-xs @sm:text-sm"
+              className="flex min-w-0 items-start gap-2 text-caption @sm:text-body"
               key={row.label}
             >
-              <span className="shrink-0 cursor-text text-muted-fg">
+              <span
+                className="shrink-0 cursor-text text-muted-fg"
+                onClick={(e) => {
+                  e.stopPropagation();
+                }}
+              >
                 {row.label}
               </span>
-              <span className="min-w-0 cursor-text wrap-break-word text-fg">
+              <span
+                className="min-w-0 cursor-text wrap-break-word text-fg"
+                onClick={(e) => {
+                  e.stopPropagation();
+                }}
+              >
                 {row.value}
               </span>
             </div>
@@ -273,6 +302,7 @@ const MessageHeaderContent = ({
       )}
     </div>
   );
+  /* oxlint-enable jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-static-element-interactions */
 
   return (
     <div className={cn("flex items-start gap-4", className)}>
@@ -338,6 +368,7 @@ const MessageHeaderContent = ({
 
 const MessageHeaderActions = ({
   className,
+  expanded,
   onContinueDraft,
   onDetails,
   onForward,
@@ -348,6 +379,7 @@ const MessageHeaderActions = ({
   showReplyAll = true,
 }: {
   className?: string;
+  expanded?: boolean;
   isPending?: boolean;
   onContinueDraft?: () => void;
   onDetails: () => void;
@@ -362,99 +394,76 @@ const MessageHeaderActions = ({
   };
 
   return (
-    <div
-      className={cn(
-        "flex flex-wrap items-center justify-start gap-1 @md:justify-end @md:gap-0.5",
-        className
-      )}
-    >
-      {onContinueDraft !== undefined && (
-        <IconButtonTooltip label="Continue with draft">
-          <Button
-            aria-label="Continue with draft"
-            className="h-10 gap-1.5 px-2.5 text-muted-fg hover:text-fg @md:size-8 @md:px-0"
-            onClick={onContinueDraft}
-            type="button"
-            variant="ghost"
-          >
-            <HugeiconsIcon aria-hidden icon={Edit01Icon} />
-            <span className="@md:hidden">Draft</span>
-          </Button>
-        </IconButtonTooltip>
-      )}
-      <IconButtonTooltip label="Reply">
-        <Button
-          aria-label="Reply"
-          className="h-10 gap-1.5 px-2.5 text-muted-fg hover:text-fg @md:size-8 @md:px-0"
-          onClick={onReply}
-          type="button"
-          variant="ghost"
+    <AnimatePresence>
+      {expanded !== false && (
+        <m.div
+          initial={{ opacity: 0, x: 10 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: 10 }}
+          transition={{ duration: 0.2, ease: [0.2, 1, 0.4, 1] }}
+          className={cn(
+            "flex flex-wrap items-center justify-start gap-1 @md:justify-end",
+            className
+          )}
         >
-          <HugeiconsIcon aria-hidden icon={MailReply02Icon} />
-          <span className="@md:hidden">Reply</span>
-        </Button>
-      </IconButtonTooltip>
-      {showReplyAll && (
-        <IconButtonTooltip label="Reply all">
-          <Button
-            aria-label="Reply all"
-            className="h-10 gap-1.5 px-2.5 text-muted-fg hover:text-fg @md:size-8 @md:px-0"
-            onClick={onReplyAll}
-            type="button"
-            variant="ghost"
-          >
-            <HugeiconsIcon aria-hidden icon={MailReplyAll02Icon} />
-            <span className="@md:hidden">Reply all</span>
+          {onContinueDraft !== undefined && (
+            <Button
+              onClick={onContinueDraft}
+              size="sm"
+              type="button"
+              variant="ghost"
+            >
+              <HugeiconsIcon aria-hidden icon={Edit01Icon} />
+              <span>Draft</span>
+            </Button>
+          )}
+          <Button onClick={onReply} size="sm" type="button" variant="ghost">
+            <HugeiconsIcon aria-hidden icon={MailReply02Icon} />
+            <span>Reply</span>
           </Button>
-        </IconButtonTooltip>
-      )}
-      <IconButtonTooltip label="Forward">
-        <Button
-          aria-label="Forward"
-          className="h-10 gap-1.5 px-2.5 text-muted-fg hover:text-fg @md:size-8 @md:px-0"
-          onClick={onForward}
-          type="button"
-          variant="ghost"
-        >
-          <HugeiconsIcon aria-hidden icon={ArrowRightDoubleIcon} />
-          <span className="@md:hidden">Forward</span>
-        </Button>
-      </IconButtonTooltip>
-      {onUnsubscribe !== undefined && (
-        <IconButtonTooltip label="Unsubscribe">
-          <Button
-            aria-label="Unsubscribe"
-            className="h-10 gap-1.5 px-2.5 text-muted-fg hover:text-fg @md:size-8 @md:px-0"
-            disabled={isPending === true && onUnsubscribe.kind === "mailto"}
-            onClick={handleUnsubscribe}
-            type="button"
-            variant="ghost"
-          >
-            <HugeiconsIcon
-              aria-hidden
-              icon={
-                onUnsubscribe.kind === "mailto"
-                  ? MailRemove01Icon
-                  : ArrowUpRight01Icon
-              }
-            />
-            <span className="@md:hidden">Unsubscribe</span>
+          {showReplyAll && (
+            <Button
+              onClick={onReplyAll}
+              size="sm"
+              type="button"
+              variant="ghost"
+            >
+              <HugeiconsIcon aria-hidden icon={MailReplyAll02Icon} />
+              <span>Reply all</span>
+            </Button>
+          )}
+          <Button onClick={onForward} size="sm" type="button" variant="ghost">
+            <HugeiconsIcon aria-hidden icon={ArrowRightDoubleIcon} />
+            <span>Forward</span>
           </Button>
-        </IconButtonTooltip>
+          {onUnsubscribe !== undefined && (
+            <IconButtonTooltip label="Unsubscribe">
+              <Button
+                aria-label="Unsubscribe"
+                disabled={isPending === true && onUnsubscribe.kind === "mailto"}
+                onClick={handleUnsubscribe}
+                size="icon-sm"
+                type="button"
+                variant="ghost"
+              >
+                <HugeiconsIcon aria-hidden icon={NotificationOff01Icon} />
+              </Button>
+            </IconButtonTooltip>
+          )}
+          <IconButtonTooltip label="Details">
+            <Button
+              aria-label="Details"
+              onClick={onDetails}
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+            >
+              <HugeiconsIcon aria-hidden icon={ZoomInAreaIcon} />
+            </Button>
+          </IconButtonTooltip>
+        </m.div>
       )}
-      <IconButtonTooltip label="Details">
-        <Button
-          aria-label="Details"
-          className="h-10 gap-1.5 px-2.5 text-muted-fg hover:text-fg @md:size-8 @md:px-0"
-          onClick={onDetails}
-          type="button"
-          variant="ghost"
-        >
-          <HugeiconsIcon aria-hidden icon={ZoomInAreaIcon} />
-          <span className="@md:hidden">Details</span>
-        </Button>
-      </IconButtonTooltip>
-    </div>
+    </AnimatePresence>
   );
 };
 
@@ -485,7 +494,7 @@ const MessageInspectorPanel = ({
 
   if (isInspectorPending) {
     inspectorBody = (
-      <div className="flex items-center gap-2 text-sm text-muted-fg">
+      <div className="flex items-center gap-2 text-body text-muted-fg">
         <HugeiconsIcon
           aria-hidden
           className="animate-spin"
@@ -496,7 +505,7 @@ const MessageInspectorPanel = ({
     );
   } else if (isInspectorError) {
     inspectorBody = (
-      <p className="text-sm text-destructive">
+      <p className="text-body text-destructive">
         {inspectorError.message ?? "Could not load message details."}
       </p>
     );
@@ -504,7 +513,7 @@ const MessageInspectorPanel = ({
     inspectorBody = (
       <>
         <section className="space-y-2">
-          <h3 className="text-sm font-semibold text-fg">Summary</h3>
+          <h3 className="text-body font-semibold text-fg">Summary</h3>
           {[
             { label: "Reference", value: inspector.messageHeaderId },
             { label: "Subject", value: inspector.subject },
@@ -514,7 +523,7 @@ const MessageInspectorPanel = ({
             (row.value?.trim() ?? "") === ""
               ? []
               : [
-                  <p className="text-sm text-fg" key={row.label}>
+                  <p className="text-body text-fg" key={row.label}>
                     <span className="font-semibold text-fg">{row.label}: </span>
                     <span className="wrap-break-word">{row.value}</span>
                   </p>,
@@ -523,10 +532,10 @@ const MessageInspectorPanel = ({
         </section>
 
         <section className="space-y-2">
-          <h3 className="text-sm font-semibold text-fg">Message headers</h3>
+          <h3 className="text-body font-semibold text-fg">Message headers</h3>
           {inspector.headers.map((header) => (
             <p
-              className="text-sm text-fg"
+              className="text-body text-fg"
               key={`${inspector.messageHeaderId}-${header.name}-${header.value}`}
             >
               <span className="font-semibold text-fg">{header.name}: </span>
@@ -537,8 +546,10 @@ const MessageInspectorPanel = ({
 
         {(inspector.rawText?.trim() ?? "") !== "" && (
           <section className="space-y-2">
-            <h3 className="text-sm font-semibold text-fg">Original message</h3>
-            <pre className="overflow-x-auto text-sm whitespace-pre-wrap text-fg">
+            <h3 className="text-body font-semibold text-fg">
+              Original message
+            </h3>
+            <pre className="overflow-x-auto text-body whitespace-pre-wrap text-fg">
               {inspector.rawText}
             </pre>
           </section>
@@ -546,8 +557,8 @@ const MessageInspectorPanel = ({
 
         {(inspector.raw?.trim() ?? "") !== "" && (
           <section className="space-y-2">
-            <h3 className="text-sm font-semibold text-fg">Gmail record</h3>
-            <pre className="overflow-x-auto text-sm break-all whitespace-pre-wrap text-fg">
+            <h3 className="text-body font-semibold text-fg">Gmail record</h3>
+            <pre className="overflow-x-auto text-body break-all whitespace-pre-wrap text-fg">
               {inspector.raw}
             </pre>
           </section>
@@ -555,8 +566,10 @@ const MessageInspectorPanel = ({
 
         {payloadText !== "" && (
           <section className="space-y-2">
-            <h3 className="text-sm font-semibold text-fg">Message structure</h3>
-            <pre className="overflow-x-auto text-sm whitespace-pre-wrap text-fg">
+            <h3 className="text-body font-semibold text-fg">
+              Message structure
+            </h3>
+            <pre className="overflow-x-auto text-body whitespace-pre-wrap text-fg">
               {payloadText}
             </pre>
           </section>
@@ -569,7 +582,7 @@ const MessageInspectorPanel = ({
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent className="w-[min(92vw,56rem)]">
         <DialogHeader>
-          <DialogTitle className="text-base font-bold">
+          <DialogTitle className="text-body-lg font-bold">
             Full details
           </DialogTitle>
           <DialogDescription className="text-fg">
@@ -726,24 +739,21 @@ const ThreadMessageCard = ({
   };
 
   return (
-    <section
-      className={cn("border-b transition-colors duration-200", {
-        "border-fg/40": isMessageUnread(message) && !expanded,
-      })}
-    >
-      <MessageHeaderContent
-        className="p-4 @sm:px-5 @sm:py-4"
-        deliveryStatus={
-          showsDelivery ? (
-            <MessageDeliveryStatus
-              mailboxId={mailboxId}
-              messageId={message.id}
-            />
-          ) : null
-        }
-        headerActions={
-          expanded ? (
+    <LazyMotion features={domAnimation}>
+      <section className={cn("transition-colors duration-200")}>
+        <MessageHeaderContent
+          className="p-4 @sm:px-5 @sm:py-4"
+          deliveryStatus={
+            showsDelivery ? (
+              <MessageDeliveryStatus
+                mailboxId={mailboxId}
+                messageId={message.id}
+              />
+            ) : null
+          }
+          headerActions={
             <MessageHeaderActions
+              expanded={expanded}
               onContinueDraft={linkedDraftMessage ? openLinkedDraft : undefined}
               onDetails={() => {
                 setDetailsDialogOpen(true);
@@ -767,49 +777,49 @@ const ThreadMessageCard = ({
                 currentUserEmail
               )}
             />
-          ) : null
-        }
-        isExpanded={expanded}
-        message={message}
-        onToggleExpanded={onToggleExpanded}
-        previewMode="collapsed"
-        trailing={
-          <MessageExpandButton
-            expanded={expanded}
-            messageId={message.id}
-            onToggleExpanded={onToggleExpanded}
-          />
-        }
-      />
-
-      {usefulDetails.length > 0 && (
-        <div className="space-y-1.5 px-4 pb-3 @sm:px-5">
-          {usefulDetails.map((detail) => (
-            <GmailUsefulDetailCard
-              detail={detail}
-              key={detail.id}
-              mailboxId={mailboxId}
-            />
-          ))}
-        </div>
-      )}
-
-      <div id={`message-body-${message.id}`}>
-        <ThreadMessageBody
-          expanded={expanded}
-          isLoading={isLoading}
+          }
+          isExpanded={expanded}
           message={message}
+          onToggleExpanded={onToggleExpanded}
+          previewMode="collapsed"
+          trailing={
+            <MessageExpandButton
+              expanded={expanded}
+              messageId={message.id}
+              onToggleExpanded={onToggleExpanded}
+            />
+          }
         />
-      </div>
 
-      <MessageInspectorPanel
-        deliveryEnabled={showsDelivery}
-        mailboxId={mailboxId}
-        message={message}
-        onOpenChange={setDetailsDialogOpen}
-        open={detailsDialogOpen}
-      />
-    </section>
+        {usefulDetails.length > 0 && (
+          <div className="space-y-1.5 px-4 pb-3 @sm:px-5">
+            {usefulDetails.map((detail) => (
+              <GmailUsefulDetailCard
+                detail={detail}
+                key={detail.id}
+                mailboxId={mailboxId}
+              />
+            ))}
+          </div>
+        )}
+
+        <div id={`message-body-${message.id}`}>
+          <ThreadMessageBody
+            expanded={expanded}
+            isLoading={isLoading}
+            message={message}
+          />
+        </div>
+
+        <MessageInspectorPanel
+          deliveryEnabled={showsDelivery}
+          mailboxId={mailboxId}
+          message={message}
+          onOpenChange={setDetailsDialogOpen}
+          open={detailsDialogOpen}
+        />
+      </section>
+    </LazyMotion>
   );
 };
 
@@ -904,7 +914,7 @@ const SingleMessageCard = ({
           />
         }
         message={message}
-        senderNameClassName="text-base"
+        senderNameClassName="text-body-lg"
       />
 
       {usefulDetails.length > 0 && (
@@ -1045,7 +1055,7 @@ const ApiSourceAction = ({
     apiSource.senderMailboxId !== ""
   ) {
     return (
-      <span className="squircle rounded-md bg-muted px-2 py-1 text-xs text-muted-fg">
+      <span className="squircle rounded-md bg-muted px-2 py-1 text-caption text-muted-fg">
         {apiSource.includedInMailbox
           ? "Included in mailbox"
           : "Mailbox copy disabled"}
@@ -1430,11 +1440,19 @@ const MessageViewContent = (props: MessageViewContentProps) => {
 
   return (
     <article ref={viewRef} tabIndex={-1} className="@container w-full">
-      <header className="w-full border-b p-4 @sm:p-6">
-        <div className="flex min-w-0 flex-col items-start gap-3 @sm:grid @sm:grid-cols-[minmax(0,1fr)_auto] @sm:items-center @sm:gap-8">
-          <h1 className="min-w-0 text-lg/tight font-medium tracking-tight wrap-break-word text-fg @sm:text-xl">
-            {subject}
-          </h1>
+      <header className="w-full border-b p-3 @sm:px-5 @sm:py-4">
+        <div className="flex min-w-0 flex-col items-start gap-2 @sm:grid @sm:grid-cols-[minmax(0,1fr)_auto] @sm:items-center @sm:gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="min-w-0 text-body/tight font-medium tracking-tight wrap-break-word text-fg @sm:text-body-lg">
+              {subject}
+            </h1>
+            {!isSingleMessageThread && (
+              <p className="text-caption text-muted-fg">
+                {visibleMessages.length}{" "}
+                {visibleMessages.length === 1 ? "message" : "messages"}
+              </p>
+            )}
+          </div>
 
           {mailboxProvider !== "api" && (
             <div className="shrink-0 @sm:justify-self-end">
@@ -1457,13 +1475,14 @@ const MessageViewContent = (props: MessageViewContentProps) => {
         </div>
 
         <MessageLabels
-          className="mt-3"
+          className="mt-2"
+          compact
           labelIds={threadLabelIds}
           labels={gmailLabels}
         />
 
         {apiSource !== null && apiSource !== undefined && (
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-caption">
             <span className="text-muted-fg">
               Sent through API from {apiSource.senderAddress}.
             </span>
@@ -1471,16 +1490,9 @@ const MessageViewContent = (props: MessageViewContentProps) => {
           </div>
         )}
 
-        {!isSingleMessageThread && (
-          <p className="mt-2 text-sm text-muted-fg">
-            {visibleMessages.length}{" "}
-            {visibleMessages.length === 1 ? "message" : "messages"}
-          </p>
-        )}
-
         <MessageAttachments
           attachments={threadAttachments}
-          className="mt-4"
+          className="mt-3"
           mailboxId={mailboxId}
         />
       </header>

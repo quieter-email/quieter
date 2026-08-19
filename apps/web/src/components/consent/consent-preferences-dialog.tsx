@@ -62,10 +62,10 @@ export const ConsentPreferencesDialog = () => {
                 key={category}
               >
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-fg">
+                  <p className="text-body font-medium text-fg">
                     {copy?.title ?? category}
                   </p>
-                  <p className="mt-1 text-sm/6 text-muted-fg">
+                  <p className="mt-1 text-body/6 text-muted-fg">
                     {copy?.description ?? ""}
                   </p>
                 </div>

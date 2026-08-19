@@ -177,7 +177,7 @@ export const OrganizationFormDialog = ({
                     />
                     {field.state.meta.errors.map((error) => (
                       <p
-                        className="text-sm text-destructive"
+                        className="text-body text-destructive"
                         key={error?.message}
                       >
                         {error?.message}
@@ -205,7 +205,7 @@ export const OrganizationFormDialog = ({
                     />
                     {field.state.meta.errors.map((error) => (
                       <p
-                        className="text-sm text-destructive"
+                        className="text-body text-destructive"
                         key={error?.message}
                       >
                         {error?.message}
@@ -216,7 +216,7 @@ export const OrganizationFormDialog = ({
               </form.Field>
 
               {(submitError ?? "") === "" ? null : (
-                <p className="text-sm text-destructive">{submitError}</p>
+                <p className="text-body text-destructive">{submitError}</p>
               )}
             </DialogBody>
 

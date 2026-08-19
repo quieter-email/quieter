@@ -7,7 +7,6 @@ import {
   InboxIcon,
   Mail01Icon,
   MailOpen02Icon,
-  Tag01Icon,
 } from "@hugeicons/core-free-icons";
 import { toast } from "@quieter/ui/toast";
 import { useHotkeys } from "@tanstack/react-hotkeys";
@@ -20,7 +19,6 @@ import {
   omitDisabledHotkeys,
   shouldIgnoreAppShortcut,
 } from "#/features/hotkeys/domain/hotkey-guards";
-import { MessageLabelsDialog } from "#/features/message-labels/components/message-labels-dialog";
 import { MessageListSearch } from "#/features/message-search/components/message-list-search";
 import { appEaseOut, appMotionDuration } from "#/features/motion/app-motion";
 import type { MailboxCategory, MessageListItem } from "#/lib/gmail/gmail";
@@ -29,10 +27,12 @@ import { buildThreadListEntries } from "#/lib/gmail/thread-list";
 import type { ThreadListEntry } from "#/lib/gmail/thread-list";
 
 import { GmailUsefulDetails } from "./gmail-useful-details";
+import { MessageListHeader } from "./message-list-header";
 import { MessageListScrollPane } from "./message-list-scroll-pane";
 import { MessageListSelectionToolbar } from "./message-list-selection-toolbar";
 import type {
   MessageListBulkAction,
+  MessageListBulkLabels,
   MessageListProps,
 } from "./message-list-types";
 import { useMessageListSelection } from "./use-message-list-selection";
@@ -53,6 +53,29 @@ const buildDraftListEntry = (message: MessageListItem): ThreadListEntry => ({
 
 const formatConversationCount = (count: number) =>
   `${count} ${count === 1 ? "conversation" : "conversations"}`;
+
+/**
+ * One source of truth for action feedback, so a menu click and its keyboard
+ * shortcut always confirm the same thing.
+ */
+const threadActionSuccessMessage = {
+  archive: (threads: ThreadListEntry[]) =>
+    `${formatConversationCount(threads.length)} archived.`,
+  deleteDrafts: (threads: ThreadListEntry[]) =>
+    `${threads.length} ${threads.length === 1 ? "draft" : "drafts"} deleted.`,
+  markRead: (threads: ThreadListEntry[]) =>
+    `${formatConversationCount(threads.length)} marked as Read.`,
+  markSpam: (threads: ThreadListEntry[]) =>
+    `${formatConversationCount(threads.length)} marked as Spam.`,
+  markUnread: (threads: ThreadListEntry[]) =>
+    `${formatConversationCount(threads.length)} marked as Unread.`,
+  moveToInbox: (threads: ThreadListEntry[]) =>
+    `${formatConversationCount(threads.length)} moved to Inbox.`,
+  moveToTrash: (threads: ThreadListEntry[]) =>
+    `${formatConversationCount(threads.length)} moved to Trash.`,
+  unmarkSpam: (threads: ThreadListEntry[]) =>
+    `${formatConversationCount(threads.length)} removed from Spam.`,
+} as const;
 
 type MessageListHotkeyContext = {
   actionHotkeysEnabled: boolean;
@@ -152,7 +175,7 @@ const buildMessageListHotkeys = (
       }
       void context.runActionThreads(
         context.mailboxActions.archiveThreads,
-        (threads) => `${formatConversationCount(threads.length)} archived.`
+        threadActionSuccessMessage.archive
       );
     },
     hotkey: "E",
@@ -170,8 +193,7 @@ const buildMessageListHotkeys = (
       }
       void context.runActionThreads(
         context.mailboxActions.moveThreadsToTrash,
-        (threads) =>
-          `${formatConversationCount(threads.length)} moved to Trash.`
+        threadActionSuccessMessage.moveToTrash
       );
     },
     hotkey: "Shift+3",
@@ -189,8 +211,7 @@ const buildMessageListHotkeys = (
       }
       void context.runActionThreads(
         context.mailboxActions.markThreadsAsSpam,
-        (threads) =>
-          `${formatConversationCount(threads.length)} marked as Spam.`
+        threadActionSuccessMessage.markSpam
       );
     },
     hotkey: "Shift+1",
@@ -208,8 +229,7 @@ const buildMessageListHotkeys = (
       }
       void context.runActionThreads(
         context.mailboxActions.markThreadsAsRead,
-        (threads) =>
-          `${formatConversationCount(threads.length)} marked as Read.`
+        threadActionSuccessMessage.markRead
       );
     },
     hotkey: "Shift+I",
@@ -222,8 +242,7 @@ const buildMessageListHotkeys = (
       }
       void context.runActionThreads(
         context.mailboxActions.markThreadsAsUnread,
-        (threads) =>
-          `${formatConversationCount(threads.length)} marked as Unread.`
+        threadActionSuccessMessage.markUnread
       );
     },
     hotkey: "Shift+U",
@@ -258,22 +277,17 @@ const getActionThreads = (
 
 const buildMessageListBulkActions = ({
   activeMailbox,
-  labelNounPlural,
   mailboxActions,
   mailboxProvider,
-  openBulkLabels,
-  runBulkAction,
-  userLabels,
+  runActionThreads,
 }: {
   activeMailbox: MailboxCategory;
-  labelNounPlural: string;
   mailboxActions: MessageListProps["mailboxActions"];
   mailboxProvider: MessageListProps["mailboxProvider"];
-  openBulkLabels: () => void;
-  runBulkAction: (
-    action: (threads: ThreadListEntry[]) => void | Promise<void>
+  runActionThreads: (
+    action: (threads: ThreadListEntry[]) => void | Promise<void>,
+    successMessage: (threads: ThreadListEntry[]) => string
   ) => Promise<void>;
-  userLabels: { type: string }[];
 }): MessageListBulkAction[] => {
   if (mailboxProvider === "api") {
     return [];
@@ -287,8 +301,12 @@ const buildMessageListBulkActions = ({
         id: "delete-drafts",
         label: "Delete drafts",
         onSelect: async () => {
-          await runBulkAction(mailboxActions.deleteDrafts);
+          await runActionThreads(
+            mailboxActions.deleteDrafts,
+            threadActionSuccessMessage.deleteDrafts
+          );
         },
+        promoted: true,
       },
     ];
   }
@@ -301,8 +319,12 @@ const buildMessageListBulkActions = ({
       id: "archive-threads",
       label: "Archive",
       onSelect: async () => {
-        await runBulkAction(mailboxActions.archiveThreads);
+        await runActionThreads(
+          mailboxActions.archiveThreads,
+          threadActionSuccessMessage.archive
+        );
       },
+      promoted: true,
     });
   }
 
@@ -312,37 +334,41 @@ const buildMessageListBulkActions = ({
       id: "move-threads-inbox",
       label: "Move to Inbox",
       onSelect: async () => {
-        await runBulkAction(mailboxActions.untrashThreads);
+        await runActionThreads(
+          mailboxActions.untrashThreads,
+          threadActionSuccessMessage.moveToInbox
+        );
       },
+      promoted: true,
     });
   }
 
-  actions.push({
-    icon: MailOpen02Icon,
-    id: "mark-threads-read",
-    label: "Mark as Read",
-    onSelect: async () => {
-      await runBulkAction(mailboxActions.markThreadsAsRead);
+  actions.push(
+    {
+      icon: MailOpen02Icon,
+      id: "mark-threads-read",
+      label: "Mark as Read",
+      onSelect: async () => {
+        await runActionThreads(
+          mailboxActions.markThreadsAsRead,
+          threadActionSuccessMessage.markRead
+        );
+      },
+      promoted: true,
     },
-  });
-
-  if (userLabels.length > 0) {
-    actions.push({
-      icon: Tag01Icon,
-      id: "modify-thread-labels",
-      label: `Modify ${labelNounPlural}`,
-      onSelect: openBulkLabels,
-    });
-  }
-
-  actions.push({
-    icon: Mail01Icon,
-    id: "mark-threads-unread",
-    label: "Mark as Unread",
-    onSelect: async () => {
-      await runBulkAction(mailboxActions.markThreadsAsUnread);
-    },
-  });
+    {
+      icon: Mail01Icon,
+      id: "mark-threads-unread",
+      label: "Mark as Unread",
+      onSelect: async () => {
+        await runActionThreads(
+          mailboxActions.markThreadsAsUnread,
+          threadActionSuccessMessage.markUnread
+        );
+      },
+      promoted: true,
+    }
+  );
 
   if (mailboxProvider === "gmail" && activeMailbox === "inbox") {
     actions.push({
@@ -351,7 +377,10 @@ const buildMessageListBulkActions = ({
       id: "mark-threads-spam",
       label: "Mark as Spam",
       onSelect: async () => {
-        await runBulkAction(mailboxActions.markThreadsAsSpam);
+        await runActionThreads(
+          mailboxActions.markThreadsAsSpam,
+          threadActionSuccessMessage.markSpam
+        );
       },
     });
   }
@@ -362,8 +391,12 @@ const buildMessageListBulkActions = ({
       id: "unmark-threads-spam",
       label: "Unmark as Spam",
       onSelect: async () => {
-        await runBulkAction(mailboxActions.unmarkThreadsAsSpam);
+        await runActionThreads(
+          mailboxActions.unmarkThreadsAsSpam,
+          threadActionSuccessMessage.unmarkSpam
+        );
       },
+      promoted: true,
     });
   }
 
@@ -374,8 +407,12 @@ const buildMessageListBulkActions = ({
       id: "move-threads-trash",
       label: "Move to Trash",
       onSelect: async () => {
-        await runBulkAction(mailboxActions.moveThreadsToTrash);
+        await runActionThreads(
+          mailboxActions.moveThreadsToTrash,
+          threadActionSuccessMessage.moveToTrash
+        );
       },
+      promoted: true,
     });
   }
 
@@ -402,23 +439,6 @@ const useMessageListInteractions = ({
       props.pendingActions.isThreadActionPending(thread.threadId)
   );
 
-  const runBulkAction = async (
-    action: (threads: ThreadListEntry[]) => void | Promise<void>
-  ) => {
-    if (selection.selectedThreads.length === 0) {
-      return;
-    }
-
-    try {
-      await action(selection.selectedThreads);
-    } catch (error) {
-      toast.error(
-        error instanceof Error && error.message
-          ? error.message
-          : "Could not update messages."
-      );
-    }
-  };
   const runActionThreads = async (
     action: (threads: ThreadListEntry[]) => void | Promise<void>,
     successMessage: (threads: ThreadListEntry[]) => string
@@ -434,6 +454,7 @@ const useMessageListInteractions = ({
     try {
       await action(threads);
       toast.success(successMessage(threads));
+      selection.clearSelection();
     } catch (error) {
       toast.error(
         error instanceof Error && error.message
@@ -551,23 +572,42 @@ const useMessageListInteractions = ({
     }
   );
 
+  const bulkLabels: MessageListBulkLabels | null =
+    props.mailboxProvider === "api" ||
+    props.activeMailbox === "drafts" ||
+    userLabels.length === 0
+      ? null
+      : {
+          isPending: isBulkActionPending,
+          mailboxId: props.mailboxId,
+          onApply: async (updates) => {
+            await props.mailboxActions.updateThreadsLabels(
+              updates.map(({ id, ...changes }) => ({
+                ...changes,
+                threadId: id,
+              }))
+            );
+          },
+          onOpenChange: setIsBulkLabelsOpen,
+          open: isBulkLabelsOpen,
+          targets: selection.selectedThreads.map((thread) => ({
+            id: thread.threadId,
+            labelIds: thread.threadLabelIds,
+          })),
+        };
+
   return {
     bulkActions: buildMessageListBulkActions({
       activeMailbox: props.activeMailbox,
-      labelNounPlural: "labels",
       mailboxActions: props.mailboxActions,
       mailboxProvider: props.mailboxProvider,
-      openBulkLabels,
-      runBulkAction,
-      userLabels,
+      runActionThreads,
     }),
+    bulkLabels,
     handleClearSelection: selection.clearSelection,
     handleScrollListToTop: selection.scrollListToTop,
     handleToggleAllLoadedThreads: selection.toggleAllLoadedThreads,
     isBulkActionPending,
-    isBulkLabelsOpen,
-    openBulkLabels,
-    setIsBulkLabelsOpen,
   };
 };
 
@@ -600,12 +640,11 @@ export const MessageList = (props: MessageListProps) => {
   });
   const {
     bulkActions,
+    bulkLabels,
     handleClearSelection,
     handleScrollListToTop,
     handleToggleAllLoadedThreads,
     isBulkActionPending,
-    isBulkLabelsOpen,
-    setIsBulkLabelsOpen,
   } = useMessageListInteractions({
     props,
     selection,
@@ -613,37 +652,44 @@ export const MessageList = (props: MessageListProps) => {
     userLabels,
   });
 
+  const isSelecting =
+    selection.selectedThreadIds.size > 0 && props.mailboxProvider !== "api";
   const scrollPaneKey = `${props.mailboxId}:${props.activeMailbox}:${props.searchQuery}`;
 
   return (
     <div className="@container flex min-h-0 flex-1 flex-col">
-      {selection.selectedThreadIds.size > 0 &&
-      props.mailboxProvider !== "api" ? (
-        <MessageListSelectionToolbar
-          actions={bulkActions}
-          allSelected={selection.allSelected}
-          disabled={props.isPending || isBulkActionPending}
-          indeterminate={selection.selectionIndeterminate}
-          itemLabelPlural={
-            props.activeMailbox === "drafts" ? "drafts" : "conversations"
-          }
-          onClearSelection={handleClearSelection}
-          onToggleAll={handleToggleAllLoadedThreads}
-          pending={isBulkActionPending}
-          selectedCount={selection.selectedThreadIds.size}
-        />
-      ) : (
-        <MessageListSearch
-          isRefreshing={props.isRefreshing}
-          mailboxId={props.mailboxId}
-          mailboxProvider={props.mailboxProvider}
-          onOpenSidebar={props.onOpenSidebar}
-          onRefresh={props.onRefresh}
-          onScrollToTop={handleScrollListToTop}
-          onSearch={props.onSearch}
-          searchQuery={props.searchQuery}
-        />
-      )}
+      <MessageListHeader
+        onOpenSidebar={props.onOpenSidebar}
+        search={
+          <MessageListSearch
+            isRefreshing={props.isRefreshing}
+            mailboxId={props.mailboxId}
+            mailboxProvider={props.mailboxProvider}
+            onRefresh={props.onRefresh}
+            onScrollToTop={handleScrollListToTop}
+            onSearch={props.onSearch}
+            searchQuery={props.searchQuery}
+          />
+        }
+        selection={
+          isSelecting ? (
+            <MessageListSelectionToolbar
+              actions={bulkActions}
+              allSelected={selection.allSelected}
+              disabled={props.isPending || isBulkActionPending}
+              indeterminate={selection.selectionIndeterminate}
+              itemLabelPlural={
+                props.activeMailbox === "drafts" ? "drafts" : "conversations"
+              }
+              labels={bulkLabels}
+              onClearSelection={handleClearSelection}
+              onToggleAll={handleToggleAllLoadedThreads}
+              pending={isBulkActionPending}
+              selectedCount={selection.selectedThreadIds.size}
+            />
+          ) : null
+        }
+      />
 
       {props.mailboxProvider === "gmail" &&
         props.activeMailbox === "inbox" &&
@@ -687,22 +733,6 @@ export const MessageList = (props: MessageListProps) => {
           threadedMessages={threadedMessages}
         />
       </m.div>
-
-      <MessageLabelsDialog
-        isPending={isBulkActionPending}
-        mailboxId={props.mailboxId}
-        onApply={async (updates) => {
-          await props.mailboxActions.updateThreadsLabels(
-            updates.map(({ id, ...changes }) => ({ ...changes, threadId: id }))
-          );
-        }}
-        onOpenChange={setIsBulkLabelsOpen}
-        open={isBulkLabelsOpen}
-        targets={selection.selectedThreads.map((thread) => ({
-          id: thread.threadId,
-          labelIds: thread.threadLabelIds,
-        }))}
-      />
     </div>
   );
 };

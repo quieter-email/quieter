@@ -323,7 +323,7 @@ const MailboxInboxStatus = ({
   }
 
   if (mailbox.provider === "api") {
-    return <span className="text-xs text-muted-fg">Send only</span>;
+    return <span className="text-caption text-muted-fg">Send only</span>;
   }
 
   if (mailbox.unreadNonSpamCount === 0) {
@@ -331,7 +331,7 @@ const MailboxInboxStatus = ({
   }
 
   return (
-    <span className="text-xs text-muted-fg">
+    <span className="text-caption text-muted-fg">
       {formatUnreadCount(mailbox.unreadNonSpamCount)}
     </span>
   );
@@ -352,11 +352,11 @@ const MailboxSummary = ({
       className={cn("flex min-w-0 items-center gap-2 rounded-md", className)}
     >
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm/5 text-fg">
+        <p className="truncate text-body/5 text-fg">
           {displayName ?? mailbox.emailAddress}
         </p>
         {displayName !== null && (
-          <p className="truncate text-xs/4 text-muted-fg">
+          <p className="truncate text-caption/4 text-muted-fg">
             {mailbox.emailAddress}
           </p>
         )}
@@ -487,7 +487,7 @@ const SortableGroup = ({
                 icon={ArrowRight01Icon}
               />
             </m.span>
-            <span className="min-w-0 flex-1 truncate text-xs text-muted-fg">
+            <span className="min-w-0 flex-1 truncate text-caption text-muted-fg">
               {group.name}
             </span>
           </button>
@@ -832,10 +832,10 @@ export const MailboxSwitcherDropdown = ({
                 ease: appEaseOut,
               }}
             >
-              <p className="truncate text-[13px]/5 font-medium tracking-tight text-fg">
+              <p className="truncate text-body-sm/5 font-medium tracking-tight text-fg">
                 {primaryLabel}
               </p>
-              <p className="mt-1 truncate text-xs text-muted-fg">
+              <p className="mt-1 truncate text-caption text-muted-fg">
                 {secondaryLabel}
               </p>
             </m.div>
@@ -944,7 +944,7 @@ export const MailboxSwitcherDropdown = ({
                                             {needsReconnect && (
                                               <button
                                                 aria-label={`Reconnect ${mailbox.emailAddress} through Google`}
-                                                className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-destructive/20 bg-destructive/10 px-1.5 text-xs font-medium text-destructive transition-[color,transform] duration-100 hover:text-destructive/80 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-colors motion-reduce:active:scale-100"
+                                                className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-destructive/20 bg-destructive/10 px-1.5 text-caption font-medium text-destructive transition-[color,transform] duration-100 hover:text-destructive/80 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-colors motion-reduce:active:scale-100"
                                                 data-mailbox-switcher-navigation-action
                                                 disabled={isReconnecting}
                                                 onClick={(event) => {
@@ -1014,7 +1014,7 @@ export const MailboxSwitcherDropdown = ({
                               }}
                             </MailboxRows>
                           ) : (
-                            <p className="px-2 py-1 text-sm text-muted-fg">
+                            <p className="px-2 py-1 text-body text-muted-fg">
                               No Mailbox
                             </p>
                           )}
@@ -1043,7 +1043,7 @@ export const MailboxSwitcherDropdown = ({
                   )}
                 </>
               ) : (
-                <div className="rounded-md px-2.5 py-2 text-sm text-muted-fg">
+                <div className="rounded-md px-2.5 py-2 text-body text-muted-fg">
                   No Mailbox
                 </div>
               )}

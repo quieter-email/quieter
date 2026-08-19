@@ -51,7 +51,7 @@ export const MobileHeader = ({
         </Button>
       </IconButtonTooltip>
       {title === undefined || title === "" ? null : (
-        <p className="truncate text-sm font-medium tracking-tight text-fg">
+        <p className="truncate text-body font-medium tracking-tight text-fg">
           {title}
         </p>
       )}

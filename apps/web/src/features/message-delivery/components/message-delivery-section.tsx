@@ -58,7 +58,7 @@ const DiagnosticRow = ({
   }
 
   return (
-    <p className="text-xs text-muted-fg">
+    <p className="text-caption text-muted-fg">
       <span className="font-medium text-fg">{label}: </span>
       <span className="wrap-break-word">{trimmed}</span>
     </p>
@@ -68,17 +68,17 @@ const DiagnosticRow = ({
 const DeliveryEventRow = ({ event }: { event: MessageDeliveryEvent }) => (
   <li className="space-y-1 border-t border-border/60 pt-2 first:border-t-0 first:pt-0">
     <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-      <span className="text-sm text-fg">
+      <span className="text-body text-fg">
         {getDeliveryStatusLabel(event.eventType)}
       </span>
-      <span className="text-xs text-muted-fg">
+      <span className="text-caption text-muted-fg">
         {eventTimeFormatter.format(event.occurredAt)}
       </span>
     </div>
 
     {hasDeliveryDiagnostics(event) ? (
       <Collapsible>
-        <CollapsibleTrigger className="text-xs text-muted-fg underline underline-offset-2 hover:text-fg">
+        <CollapsibleTrigger className="text-caption text-muted-fg underline underline-offset-2 hover:text-fg">
           Technical details
         </CollapsibleTrigger>
         <CollapsiblePanel>
@@ -118,7 +118,7 @@ const DeliveryRecipientItem = ({
             <Pill tone={PILL_TONES[getDeliveryStatusTone(recipient.status)]}>
               {getDeliveryStatusLabel(recipient.status)}
             </Pill>
-            <span className="text-xs font-normal text-muted-fg">
+            <span className="text-caption font-normal text-muted-fg">
               {eventTimeFormatter.format(recipient.lastEventAt)}
             </span>
           </span>
@@ -136,7 +136,7 @@ const DeliveryRecipientItem = ({
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-muted-fg">No events recorded yet.</p>
+          <p className="text-body text-muted-fg">No events recorded yet.</p>
         )}
       </AccordionPanel>
     </AccordionItem>
@@ -150,7 +150,7 @@ const DeliveryRecipients = ({
 }) => {
   if (delivery.recipients.length === 0) {
     return (
-      <p className="text-sm text-muted-fg">
+      <p className="text-body text-muted-fg">
         Recipient updates appear here once the receiving mail servers respond.
       </p>
     );
@@ -198,14 +198,14 @@ export const MessageDeliverySection = ({
 
   return (
     <section className="space-y-3">
-      <h3 className="text-sm font-semibold text-fg">Delivery</h3>
+      <h3 className="text-body font-semibold text-fg">Delivery</h3>
 
       {isDeliveryPending ? (
-        <p className="text-sm text-muted-fg">Loading delivery status…</p>
+        <p className="text-body text-muted-fg">Loading delivery status…</p>
       ) : null}
 
       {isDeliveryError ? (
-        <p className="text-sm text-destructive">
+        <p className="text-body text-destructive">
           {deliveryError.message ?? "Could not load delivery status."}
         </p>
       ) : null}
@@ -216,7 +216,7 @@ export const MessageDeliverySection = ({
             <Pill tone={PILL_TONES[getDeliveryStatusTone(status)]}>
               {summaryLabel}
             </Pill>
-            <span className="text-sm text-muted-fg">
+            <span className="text-body text-muted-fg">
               {getDeliveryStatusDescription(status)}
             </span>
           </div>

@@ -85,8 +85,8 @@ const ManagedMailboxIntelligenceRow = ({
           htmlFor={usefulDetailsSwitchId}
         >
           <span className="min-w-0 flex-1">
-            <span className="block text-sm text-fg">Useful details</span>
-            <span className="mt-0.5 block text-xs/5 text-muted-fg">
+            <span className="block text-body text-fg">Useful details</span>
+            <span className="mt-0.5 block text-caption/5 text-muted-fg">
               Show codes, deliveries, and deadlines above the inbox.
               {!hasAutomationAccess && " Requires Pro access for this team."}
             </span>
@@ -111,8 +111,8 @@ const ManagedMailboxIntelligenceRow = ({
           htmlFor={autoLabelSwitchId}
         >
           <span className="min-w-0 flex-1">
-            <span className="block text-sm text-fg">Auto-label</span>
-            <span className="mt-0.5 block text-xs/5 text-muted-fg">
+            <span className="block text-body text-fg">Auto-label</span>
+            <span className="mt-0.5 block text-caption/5 text-muted-fg">
               Label new Inbox mail using existing shared labels.
               {!hasAutomationAccess && " Requires Pro access for this team."}
             </span>
@@ -187,7 +187,7 @@ export const ManagedMailboxDetailSettings = ({
                 "gap-4"
               )}
             >
-              <span className="min-w-0 flex-1 text-sm text-fg">
+              <span className="min-w-0 flex-1 text-body text-fg">
                 Display name
               </span>
               <TextFieldInput
@@ -207,7 +207,7 @@ export const ManagedMailboxDetailSettings = ({
                 "gap-4"
               )}
             >
-              <span className="min-w-0 flex-1 text-sm text-fg">
+              <span className="min-w-0 flex-1 text-body text-fg">
                 Primary division
               </span>
               <Select
@@ -251,10 +251,10 @@ export const ManagedMailboxDetailSettings = ({
               htmlFor={includeApiMessagesSwitchId}
             >
               <span className="min-w-0 flex-1">
-                <span className="block text-sm text-fg">
+                <span className="block text-body text-fg">
                   Include API messages
                 </span>
-                <span className="mt-0.5 block text-xs/5 text-muted-fg">
+                <span className="mt-0.5 block text-caption/5 text-muted-fg">
                   Also show messages sent from this exact address through the
                   team API.
                 </span>
@@ -307,7 +307,7 @@ export const ManagedMailboxDetailSettings = ({
                     )}
                     key={division.id}
                   >
-                    <span className="min-w-0 flex-1 truncate text-sm text-fg">
+                    <span className="min-w-0 flex-1 truncate text-body text-fg">
                       {division.name}
                     </span>
                     <Select
@@ -350,7 +350,7 @@ export const ManagedMailboxDetailSettings = ({
               })}
             </SettingsInsetRows>
           ) : (
-            <p className="p-6 text-sm text-muted-fg">
+            <p className="p-6 text-body text-muted-fg">
               This team has no divisions yet.
             </p>
           )}
@@ -379,10 +379,10 @@ export const ManagedMailboxDetailSettings = ({
                   key={member.id}
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm text-fg">
+                    <span className="block truncate text-body text-fg">
                       {memberName}
                     </span>
-                    <span className="block truncate text-xs text-muted-fg">
+                    <span className="block truncate text-caption text-muted-fg">
                       {member.user.email}
                     </span>
                   </span>

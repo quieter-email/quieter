@@ -48,21 +48,25 @@ export const BillingProductCard = ({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h3 className="text-base font-semibold text-fg">{product.name}</h3>
+            <h3 className="text-body-lg font-semibold text-fg">
+              {product.name}
+            </h3>
             {isCurrent && (
               <span className="squircle rounded-full border border-primary/40 px-2 py-0.5 text-micro font-medium text-primary">
                 Current
               </span>
             )}
           </div>
-          <p className="mt-1.5 text-sm/6 text-muted-fg">
+          <p className="mt-1.5 text-body/6 text-muted-fg">
             {product.description}
           </p>
         </div>
         <div className="flex shrink-0 flex-col gap-3 sm:items-end">
-          <p className="text-2xl font-semibold tracking-tight text-fg">
+          <p className="text-title-md font-semibold tracking-tight text-fg">
             {moneyFormatter.format(product.monthlyPriceCents / 100)}
-            <span className="ml-1 text-sm font-normal text-muted-fg">/mo</span>
+            <span className="ml-1 text-body font-normal text-muted-fg">
+              /mo
+            </span>
           </p>
           <Button
             className="w-full sm:w-auto"
@@ -90,7 +94,7 @@ export const BillingProductCard = ({
           </Button>
         </div>
       </div>
-      <ul className="mt-4 flex flex-col gap-2 text-sm text-muted-fg">
+      <ul className="mt-4 flex flex-col gap-2 text-body text-muted-fg">
         {product.features.map((feature) => (
           <li className="flex items-start gap-2" key={feature}>
             <HugeiconsIcon

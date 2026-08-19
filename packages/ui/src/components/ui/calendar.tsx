@@ -59,16 +59,16 @@ export const Calendar = ({
           defaultClassNames.button_previous
         ),
         caption_label: cn(
-          "text-sm font-medium text-fg",
+          "text-body font-medium text-fg",
           defaultClassNames.caption_label
         ),
         chevron: cn("text-current", defaultClassNames.chevron),
         day: cn(
-          "flex size-8 items-center justify-center p-0 text-sm",
+          "flex size-8 items-center justify-center p-0 text-body",
           defaultClassNames.day
         ),
         day_button: cn(
-          "squircle inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-transparent p-0 text-[13px] font-normal text-fg transition-transform duration-100 ease-out select-none hover:bg-muted hover:text-fg focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+          "squircle inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-transparent p-0 text-body-sm font-normal text-fg transition-transform duration-100 ease-out select-none hover:bg-muted hover:text-fg focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0",
           defaultClassNames.day_button
         ),
         disabled: cn(
@@ -97,7 +97,7 @@ export const Calendar = ({
           "text-muted-fg/45 [&>button]:text-muted-fg/45",
           defaultClassNames.outside
         ),
-        root: cn("w-fit text-sm text-fg", defaultClassNames.root),
+        root: cn("w-fit text-body text-fg", defaultClassNames.root),
         selected: cn(
           "[&>button]:bg-primary [&>button]:text-primary-fg [&>button]:shadow-sm [&>button]:hover:bg-primary [&>button]:hover:text-primary-fg [&>button]:focus:bg-primary [&>button]:focus:text-primary-fg",
           defaultClassNames.selected

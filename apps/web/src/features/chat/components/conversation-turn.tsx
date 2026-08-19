@@ -96,7 +96,7 @@ export const ConversationTurn = ({
             <div className="flex w-full max-w-[85%] flex-col gap-2 sm:max-w-[75%]">
               <Textarea
                 aria-label="Edit message"
-                className="min-h-20 resize-none rounded-lg px-3.5 text-sm/relaxed"
+                className="min-h-20 resize-none rounded-lg px-3.5 text-body/relaxed"
                 onChange={(event) => {
                   setEditDraft(event.target.value);
                 }}
@@ -124,7 +124,7 @@ export const ConversationTurn = ({
             </div>
           ) : (
             <>
-              <div className="max-w-[85%] rounded-lg bg-muted px-3.5 py-2 text-sm/relaxed text-fg sm:max-w-[75%]">
+              <div className="max-w-[85%] rounded-lg bg-muted px-3.5 py-2 text-body/relaxed text-fg sm:max-w-[75%]">
                 <UserParts parts={turn.user.parts} />
               </div>
               {showActions ? (

@@ -44,7 +44,7 @@ const TemplateScopeBadge = ({
 }) => (
   <span
     className={cn(
-      "rounded-full border px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase",
+      "rounded-full border px-2 py-0.5 text-micro font-medium tracking-wide uppercase",
       {
         "border-border bg-muted/45 text-muted-fg": scope === "personal",
         "border-primary/20 bg-primary/8 text-primary": scope === "team",
@@ -82,20 +82,20 @@ export const ComposeTemplatePicker = ({
   let templateQueryState: ReactNode = null;
   if (templatesQuery.isPending) {
     templateQueryState = (
-      <div className="flex items-center justify-center gap-2 px-3 py-8 text-xs text-muted-fg">
+      <div className="flex items-center justify-center gap-2 px-3 py-8 text-caption text-muted-fg">
         <HugeiconsIcon className="size-3.5 animate-spin" icon={Loading03Icon} />
         Loading templates
       </div>
     );
   } else if (templatesQuery.isError) {
     templateQueryState = (
-      <p className="px-3 py-8 text-center text-xs/5 text-destructive">
+      <p className="px-3 py-8 text-center text-caption/5 text-destructive">
         Could not load templates.
       </p>
     );
   } else if (filteredTemplates.length === 0) {
     templateQueryState = (
-      <p className="px-3 py-8 text-center text-xs/5 text-muted-fg">
+      <p className="px-3 py-8 text-center text-caption/5 text-muted-fg">
         {templates.length === 0
           ? "No templates yet."
           : "No templates match this search."}
@@ -154,7 +154,7 @@ export const ComposeTemplatePicker = ({
               type="button"
             >
               <span className="min-w-0">
-                <span className="block truncate text-sm font-medium text-fg">
+                <span className="block truncate text-body font-medium text-fg">
                   {template.name}
                 </span>
               </span>
@@ -283,7 +283,7 @@ export const TemplatePlaceholderSuggestion = ({
         currentSuggestion !== undefined &&
         currentSuggestion !== "" ? (
           <>
-            <p className="mt-3 rounded-lg border border-primary/15 bg-primary/5 px-3 py-2.5 text-sm/6 text-fg">
+            <p className="mt-3 rounded-lg border border-primary/15 bg-primary/5 px-3 py-2.5 text-body/6 text-fg">
               {currentSuggestion}
             </p>
             <div className="mt-3 flex justify-end gap-2">
@@ -320,7 +320,7 @@ export const TemplatePlaceholderSuggestion = ({
             </div>
           </>
         ) : (
-          <div className="flex items-center gap-2 py-5 text-sm text-muted-fg">
+          <div className="flex items-center gap-2 py-5 text-body text-muted-fg">
             <HugeiconsIcon
               className="size-4 animate-spin"
               icon={Loading03Icon}

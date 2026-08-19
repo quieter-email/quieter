@@ -140,7 +140,7 @@ export const ComposeEditor = ({
     editorProps: {
       attributes: {
         class:
-          "min-h-full bg-transparent text-sm text-fg outline-none [&_.ProseMirror-selectednode.quieter-template-placeholder]:border-fg [&_.is-editor-empty:first-child::before]:pointer-events-none [&_.is-editor-empty:first-child::before]:float-left [&_.is-editor-empty:first-child::before]:h-0 [&_.is-editor-empty:first-child::before]:text-muted-fg [&_.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.quieter-template-placeholder]:mx-1 [&_.quieter-template-placeholder]:inline-block [&_.quieter-template-placeholder]:min-w-20 [&_.quieter-template-placeholder]:cursor-text [&_.quieter-template-placeholder]:border-b [&_.quieter-template-placeholder]:border-muted-fg [&_.quieter-template-placeholder]:px-1 [&_.quieter-template-placeholder]:text-transparent [&_.quieter-template-placeholder]:selection:bg-primary/20 [&_.quieter-template-placeholder]:hover:border-fg [&_a]:text-fg [&_a]:underline [&_blockquote]:my-3 [&_blockquote]:border-l [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-muted-fg [&_img]:my-3 [&_img]:max-h-48 [&_img]:max-w-full [&_img]:rounded-md [&_img]:object-contain [&_li]:my-0.5 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-0 [&_p+p]:mt-2 [&_s]:text-muted-fg [&_strong]:font-semibold [&_u]:underline [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-5",
+          "min-h-full bg-transparent text-body text-fg outline-none [&_.ProseMirror-selectednode.quieter-template-placeholder]:border-fg [&_.is-editor-empty:first-child::before]:pointer-events-none [&_.is-editor-empty:first-child::before]:float-left [&_.is-editor-empty:first-child::before]:h-0 [&_.is-editor-empty:first-child::before]:text-muted-fg [&_.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.quieter-template-placeholder]:mx-1 [&_.quieter-template-placeholder]:inline-block [&_.quieter-template-placeholder]:min-w-20 [&_.quieter-template-placeholder]:cursor-text [&_.quieter-template-placeholder]:border-b [&_.quieter-template-placeholder]:border-muted-fg [&_.quieter-template-placeholder]:px-1 [&_.quieter-template-placeholder]:text-transparent [&_.quieter-template-placeholder]:selection:bg-primary/20 [&_.quieter-template-placeholder]:hover:border-fg [&_a]:text-fg [&_a]:underline [&_blockquote]:my-3 [&_blockquote]:border-l [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-muted-fg [&_img]:my-3 [&_img]:max-h-48 [&_img]:max-w-full [&_img]:rounded-md [&_img]:object-contain [&_li]:my-0.5 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-0 [&_p+p]:mt-2 [&_s]:text-muted-fg [&_strong]:font-semibold [&_u]:underline [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-5",
       },
     },
     extensions: [
@@ -288,9 +288,15 @@ export const ComposeEditor = ({
 };
 
 export const ComposeEditorBody = ({
+  chrome = "default",
   className,
   invalid = false,
 }: {
+  /**
+   * `seamless` drops the card and its focus ring so the body can sit inside the
+   * composer sheet as one continuous surface.
+   */
+  chrome?: "default" | "seamless";
   className?: string;
   invalid?: boolean;
 }) => {
@@ -350,9 +356,13 @@ export const ComposeEditorBody = ({
     <div
       aria-invalid={invalid || undefined}
       className={cn(
-        "squircle relative min-h-20 w-full overflow-hidden rounded-md border border-border bg-bg-elevated text-sm text-fg shadow-sm transition-colors duration-150 ease-out",
-        "has-[.ProseMirror:focus-visible]:border-ring has-[.ProseMirror:focus-visible]:ring-1 has-[.ProseMirror:focus-visible]:ring-ring/45 has-[.ProseMirror:focus-visible]:outline-none",
-        "aria-invalid:border-destructive aria-invalid:focus-within:border-destructive aria-invalid:focus-within:ring-destructive/45",
+        "squircle relative min-h-20 w-full overflow-hidden rounded-md border border-border bg-control text-body text-fg shadow-sm transition-colors duration-150 ease-out",
+        {
+          "has-[.ProseMirror:focus-visible]:border-ring has-[.ProseMirror:focus-visible]:ring-1 has-[.ProseMirror:focus-visible]:ring-ring/45 has-[.ProseMirror:focus-visible]:outline-none aria-invalid:border-destructive aria-invalid:focus-within:border-destructive aria-invalid:focus-within:ring-destructive/45":
+            chrome === "default",
+          "rounded-none border-0 bg-transparent shadow-none":
+            chrome === "seamless",
+        },
         className,
         {
           "pointer-events-none opacity-50": disabled,
@@ -365,9 +375,12 @@ export const ComposeEditorBody = ({
 };
 
 export const ComposeEditorToolbar = ({
+  chrome = "default",
   className,
   trailing,
 }: {
+  /** `footer` seats the toolbar as the composer sheet's own band, not a floating bar. */
+  chrome?: "default" | "footer";
   className?: string;
   trailing?: ReactNode;
 }) => {
@@ -451,7 +464,11 @@ export const ComposeEditorToolbar = ({
   return (
     <Toolbar
       className={cn(
-        "w-full min-w-0 shrink-0 rounded-md border-border bg-bg-elevated",
+        "w-full min-w-0 shrink-0 rounded-md border-border bg-control",
+        {
+          "gap-1.5 rounded-none border-0 border-t border-border bg-bg-elevated px-2 py-1.5 shadow-none":
+            chrome === "footer",
+        },
         className
       )}
     >
@@ -462,7 +479,7 @@ export const ComposeEditorToolbar = ({
               aria-label={action.label}
               aria-pressed={action.active}
               className={cn("size-8 px-0", {
-                "bg-bg-surface text-fg shadow-sm": action.active,
+                "bg-control-active text-fg shadow-sm": action.active,
               })}
               disabled={disabled || action.disabled}
               onClick={() => {

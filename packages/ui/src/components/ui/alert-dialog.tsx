@@ -76,7 +76,10 @@ export const AlertDialogTitle = ({
   ...props
 }: ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Title>) => (
   <AlertDialogPrimitive.Title
-    className={cn("text-base font-semibold tracking-tight text-fg", className)}
+    className={cn(
+      "text-body-lg font-semibold tracking-tight text-fg",
+      className
+    )}
     {...props}
   />
 );
@@ -86,13 +89,13 @@ export const AlertDialogDescription = ({
   ...props
 }: ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Description>) => (
   <AlertDialogPrimitive.Description
-    className={cn("mt-2 text-sm text-muted-fg", className)}
+    className={cn("mt-2 text-body text-muted-fg", className)}
     {...props}
   />
 );
 
 const alertDialogCloseButtonVariants = cva(
-  "squircle inline-flex min-w-20 shrink-0 items-center justify-center gap-2 rounded-md px-3.5 text-[13px] font-medium whitespace-nowrap transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/45 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
+  "squircle inline-flex min-w-20 shrink-0 items-center justify-center gap-2 rounded-md px-3.5 text-body-sm font-medium whitespace-nowrap transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/45 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
   {
     defaultVariants: {
       variant: "outline",

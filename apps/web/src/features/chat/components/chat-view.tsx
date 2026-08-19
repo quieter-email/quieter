@@ -148,7 +148,7 @@ const PlanRequiredBlock = ({
   const navigate = useNavigate();
 
   return (
-    <div className="mb-3 rounded-lg border border-border bg-secondary/35 p-3 text-sm">
+    <div className="mb-3 rounded-lg border border-border bg-secondary/35 p-3 text-body">
       <p className="font-medium text-fg">Upgrade required</p>
       <p className="mt-1 text-muted-fg">
         AI chat requires {requirementLabel} billing with available credits.
@@ -239,7 +239,7 @@ const ChatViewLayout = ({
       />
       {hasMessages && hasText(chatTitle) ? (
         <header className="hidden shrink-0 items-center border-b border-border px-4 py-3 lg:flex">
-          <h1 className="truncate text-sm font-medium tracking-tight text-fg">
+          <h1 className="truncate text-body font-medium tracking-tight text-fg">
             {chatTitle}
           </h1>
         </header>

@@ -64,7 +64,7 @@ export const SearchTool = ({
         <div className="space-y-0.5">
           {messages.map((message) => (
             <button
-              className="flex w-full items-baseline gap-2 rounded-sm py-0.5 text-left text-xs transition-colors hover:text-fg"
+              className="flex w-full items-baseline gap-2 rounded-sm py-0.5 text-left text-caption transition-colors hover:text-fg"
               key={message.id}
               onClick={() => {
                 onOpenMessage(success.category, message.id);

@@ -80,7 +80,7 @@ const getMessageRowSurfaceOpacity = (
   if (isSelected) {
     return isHovered ? 0.9 : 0.75;
   }
-  return isHovered ? 0.5 : 0;
+  return isHovered ? 0.65 : 0;
 };
 
 const getMessageRowOpenAriaLabel = (
@@ -149,7 +149,7 @@ const MessageRowMetaBadge = ({
   title: string;
 }) => (
   <span
-    className="squircle inline-flex h-4.5 shrink-0 items-center gap-1 rounded-md border border-border bg-bg/75 px-1 text-[10.5px] font-medium text-muted-fg tabular-nums shadow-xs"
+    className="squircle inline-flex h-4.5 shrink-0 items-center gap-1 rounded-md border border-border bg-bg/75 px-1 text-micro font-medium text-muted-fg tabular-nums shadow-xs"
     title={title}
   >
     <HugeiconsIcon aria-hidden className="size-3" icon={icon} />
@@ -299,7 +299,7 @@ const MessageRowDetails = ({
   <div className="relative z-10 flex min-w-0 flex-1 items-center gap-2 px-2 @sm:gap-3 @sm:px-3">
     <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 overflow-hidden">
       <div className="flex w-full min-w-0 items-center justify-between gap-2">
-        <p className="min-w-0 truncate text-left text-[13px]/4.5 text-fg">
+        <p className="min-w-0 truncate text-left text-body-sm/4.5 text-fg">
           {isDraftMailbox && (
             <span className="font-medium text-muted-fg">To </span>
           )}
@@ -349,7 +349,7 @@ const MessageRowDetails = ({
 
       <div className="flex w-full min-w-0 items-center gap-1.5">
         <p
-          className={cn("min-w-0 flex-1 truncate text-left text-[13px]/4.5", {
+          className={cn("min-w-0 flex-1 truncate text-left text-body-sm/4.5", {
             "font-medium text-fg": unread,
             "text-muted-fg": !unread,
           })}
@@ -727,7 +727,7 @@ const MessageRowContent = ({
   const isActionPending =
     pendingActions.isMessageActionPending(anchorMessage.id) ||
     pendingActions.isThreadActionPending(thread.threadId);
-  const metaTextClassName = cn("text-xs tabular-nums", {
+  const metaTextClassName = cn("text-caption tabular-nums", {
     "font-semibold text-fg/90": unread,
     "text-fg/75": isActive && !unread,
     "text-muted-fg": !unread,

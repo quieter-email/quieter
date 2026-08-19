@@ -52,9 +52,9 @@ export const labelsQueryOptions = (mailboxId: string, enabled = true) =>
       if (isSandboxMailboxId(mailboxId)) {
         return getDemoLabels().map((label, position) => ({
           ...label,
-          color: null,
-          description: null,
-          inclusionCriteria: null,
+          color: label.color ?? null,
+          description: label.description ?? null,
+          inclusionCriteria: label.inclusionCriteria ?? null,
           position,
           provider: "gmail" as const,
           type:

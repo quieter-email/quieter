@@ -52,7 +52,7 @@ export const FullPageDialogTitle = ({
   ...props
 }: ComponentPropsWithoutRef<typeof DialogPrimitive.Title>) => (
   <DialogPrimitive.Title
-    className={cn("text-sm font-semibold tracking-tight", className)}
+    className={cn("text-body font-semibold tracking-tight", className)}
     {...props}
   />
 );
@@ -62,7 +62,7 @@ export const FullPageDialogDescription = ({
   ...props
 }: ComponentPropsWithoutRef<typeof DialogPrimitive.Description>) => (
   <DialogPrimitive.Description
-    className={cn("text-sm text-muted-fg", className)}
+    className={cn("text-body text-muted-fg", className)}
     {...props}
   />
 );

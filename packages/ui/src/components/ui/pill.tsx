@@ -7,16 +7,20 @@ import type { ComponentPropsWithoutRef } from "react";
 import { cn } from "../../lib/cn";
 
 export const pillVariants = cva(
-  "squircle inline-flex shrink-0 items-center justify-center rounded-full font-medium leading-none whitespace-nowrap",
+  "squircle inline-flex shrink-0 items-center justify-center rounded-full font-medium whitespace-nowrap",
   {
     defaultVariants: {
       size: "sm",
       tone: "gray",
     },
     variants: {
+      // Padding, not a fixed height: the label should sit in the pill rather
+      // than fill it, and the box grows from the type instead of cropping it.
+      // The leading rides on the size token because tailwind-merge drops a
+      // standalone `leading-*` that a font size later in the merge overrides.
       size: {
-        sm: "h-5 px-2 text-micro",
-        xs: "h-4 px-1.5 text-[10px]",
+        sm: "px-2.5 py-1.5 text-micro/none",
+        xs: "px-2 py-1 text-micro/none",
       },
       tone: {
         "access-manager": "bg-q-purple/15 text-q-purple",

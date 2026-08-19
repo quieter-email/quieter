@@ -72,7 +72,7 @@ const getSearchFilterOptionState = (
 };
 
 const SearchDropdownSectionLabel = ({ children }: { children: string }) => (
-  <p className="px-2.5 pb-1 text-xs text-muted-fg">{children}</p>
+  <p className="px-2.5 pb-1 text-caption text-muted-fg">{children}</p>
 );
 
 const SearchDropdownRow = ({
@@ -94,7 +94,7 @@ const SearchDropdownRow = ({
 }) => (
   <button
     className={cn(
-      "relative flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-[13px] text-fg hover:bg-muted focus-visible:z-10 focus-visible:border-ring focus-visible:bg-muted focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none",
+      "relative flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-body-sm text-fg hover:bg-muted focus-visible:z-10 focus-visible:border-ring focus-visible:bg-muted focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none",
       className,
       {
         "bg-accent": active && !hasText(className),
@@ -248,13 +248,13 @@ export const MessageListSearchDropdown = ({
   let labelsContent: ReactNode;
   if (hasText(labelsErrorMessage)) {
     labelsContent = (
-      <div className="px-2.5 py-2 text-[13px] text-fg">
+      <div className="px-2.5 py-2 text-body-sm text-fg">
         {labelsErrorMessage}
       </div>
     );
   } else if (isLoadingLabels) {
     labelsContent = (
-      <div className="px-2.5 py-2 text-[13px] text-muted-fg">
+      <div className="px-2.5 py-2 text-body-sm text-muted-fg">
         Loading labels…
       </div>
     );
@@ -292,7 +292,7 @@ export const MessageListSearchDropdown = ({
     );
   } else {
     labelsContent = (
-      <div className="px-2.5 py-2 text-[13px] text-muted-fg">
+      <div className="px-2.5 py-2 text-body-sm text-muted-fg">
         No custom labels.
       </div>
     );
@@ -443,7 +443,7 @@ export const MessageListSearchDropdown = ({
                       aria-expanded={showLabelsSubmenu}
                       aria-haspopup="true"
                       className={cn(
-                        "relative z-50 flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-[13px] text-fg hover:bg-muted focus-visible:border-ring focus-visible:bg-muted focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none",
+                        "relative z-50 flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-body-sm text-fg hover:bg-muted focus-visible:border-ring focus-visible:bg-muted focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none",
                         {
                           "bg-accent": selectedUserLabelStates.size > 0,
                           "bg-muted": isLabelHighlighted,
@@ -502,7 +502,7 @@ export const MessageListSearchDropdown = ({
 
             <div className="mt-1 shrink-0 lg:hidden">
               <button
-                className="flex h-7 w-full items-center justify-center gap-1.5 rounded-md text-xs text-muted-fg hover:bg-muted hover:text-fg active:bg-muted"
+                className="flex h-7 w-full items-center justify-center gap-1.5 rounded-md text-caption text-muted-fg hover:bg-muted hover:text-fg active:bg-muted"
                 onClick={onDismiss}
                 type="button"
               >

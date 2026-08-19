@@ -44,11 +44,23 @@ const surfaceTokens = [
   { cls: "bg-bg-surface", name: "bg-surface", note: "raised" },
   { cls: "bg-bg-elevated", name: "bg-elevated", note: "sunken" },
   { cls: "bg-card", name: "card", note: "raised, both themes" },
-  { cls: "bg-muted", name: "muted", note: "quiet fill" },
-  { cls: "bg-secondary", name: "secondary", note: "quiet fill, stronger" },
+  { cls: "bg-muted", name: "muted", note: "alias of control-hover" },
+  { cls: "bg-secondary", name: "secondary", note: "alias of control" },
+  {
+    cls: "bg-control",
+    name: "control",
+    note: "fields, quiet buttons, popovers",
+  },
+  {
+    cls: "bg-control-hover",
+    name: "control-hover",
+    note: "hover, menu highlight",
+  },
+  { cls: "bg-control-active", name: "control-active", note: "pressed" },
 ];
 
 const textTokens = [
+  { cls: "text-display-lg", name: "display-lg" },
   { cls: "text-display-md", name: "display-md" },
   { cls: "text-title-lg", name: "title-lg" },
   { cls: "text-title-md", name: "title-md" },
@@ -150,7 +162,7 @@ export const DesignSystemShowcase = () => {
         </Section>
 
         <Section
-          description="Every size in the product comes from this scale."
+          description="Every size in the product comes from this scale. No arbitrary sizes: if a design lands between two steps, take the smaller one."
           title="Typography"
         >
           <div className="space-y-2">
@@ -225,7 +237,7 @@ export const DesignSystemShowcase = () => {
             <div className="squircle w-80 rounded-md border border-border bg-input px-3 py-2 shadow-sm focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/45">
               <TokenField
                 aria-label="Token field"
-                className="max-h-32 min-h-16 overflow-y-auto text-sm"
+                className="max-h-32 min-h-16 overflow-y-auto text-body"
                 onChange={setTokenFieldValue}
                 placeholder="Type @ to mention an app…"
                 tokens={showcaseTokens}
@@ -280,6 +292,12 @@ export const DesignSystemShowcase = () => {
               </Pill>
             ))}
           </div>
+          <Row label="Sizes">
+            <Pill tone="blue">Default</Pill>
+            <Pill size="xs" tone="blue">
+              Compact
+            </Pill>
+          </Row>
         </Section>
 
         <Section title="Mobile header">

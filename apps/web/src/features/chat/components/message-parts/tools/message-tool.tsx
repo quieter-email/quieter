@@ -69,7 +69,7 @@ const MessageToolContent = ({
           .join(", ")}
       </p>
     ) : null}
-    <p className="mt-1 text-xs/relaxed whitespace-pre-wrap text-muted-fg">
+    <p className="mt-1 text-caption/relaxed whitespace-pre-wrap text-muted-fg">
       {success.body?.trim() ?? success.snippet?.trim() ?? "(No content)"}
       {success.bodyTruncated ? "…" : ""}
     </p>

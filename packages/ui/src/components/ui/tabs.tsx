@@ -13,7 +13,7 @@ export const TabsList = ({
 }: ComponentPropsWithoutRef<typeof TabsPrimitive.List>) => (
   <TabsPrimitive.List
     className={cn(
-      "squircle inline-flex h-10 items-center gap-1 rounded-lg bg-muted p-1",
+      "squircle inline-flex h-10 items-center gap-1 rounded-lg border border-border bg-bg-elevated p-1 shadow-sm",
       className
     )}
     {...props}
@@ -26,7 +26,7 @@ export const TabsTab = ({
 }: ComponentPropsWithoutRef<typeof TabsPrimitive.Tab>) => (
   <TabsPrimitive.Tab
     className={cn(
-      "squircle inline-flex min-h-8 min-w-0 items-center justify-center rounded-md px-3 text-sm font-medium text-muted-fg transition-transform duration-100 ease-out focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] data-active:bg-bg-surface data-active:text-fg data-active:shadow-sm data-disabled:pointer-events-none data-disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100",
+      "squircle inline-flex min-h-8 min-w-0 items-center justify-center rounded-md px-3 text-body font-medium text-muted-fg transition-transform duration-100 ease-out focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] data-active:bg-bg-surface data-active:text-fg data-active:shadow-sm data-disabled:pointer-events-none data-disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100",
       className
     )}
     {...props}

@@ -117,8 +117,8 @@ const Price = ({
   value: number;
 }) => (
   <div className="min-w-0 py-3 md:px-4 md:first:pl-0 md:last:pr-0">
-    <p className="text-xs text-muted-fg">{label}</p>
-    <p className="mt-1 font-mono text-sm font-medium text-fg">
+    <p className="text-caption text-muted-fg">{label}</p>
+    <p className="mt-1 font-mono text-body font-medium text-fg">
       {rateFormatter.format(value)}
       <span className="font-sans font-normal text-muted-fg"> {suffix}</span>
     </p>
@@ -231,7 +231,7 @@ const UsageBreakdown = ({
       <div className="mt-3 grid gap-x-5 gap-y-2 sm:grid-cols-2 xl:grid-cols-3">
         {items.map((item) => (
           <div
-            className="flex min-w-0 items-center gap-2 text-xs"
+            className="flex min-w-0 items-center gap-2 text-caption"
             key={item.kind}
           >
             <span
@@ -302,7 +302,7 @@ const ManagedUsageMilestoneRow = ({
         </NumberFieldGroup>
       </NumberField>
 
-      <div className="flex min-w-0 flex-1 flex-wrap gap-x-3 gap-y-1 text-xs text-muted-fg">
+      <div className="flex min-w-0 flex-1 flex-wrap gap-x-3 gap-y-1 text-caption text-muted-fg">
         <span>
           <span className="font-mono text-fg">
             {includedThresholdCents === null
@@ -476,14 +476,14 @@ const ManagedUsageSettingsControls = ({
 
     {milestoneError !== null && milestoneError !== "" ? (
       <SettingsInsetRow>
-        <p className="text-xs text-destructive">{milestoneError}</p>
+        <p className="text-caption text-destructive">{milestoneError}</p>
       </SettingsInsetRow>
     ) : null}
 
     {canManageOrganizationMailUsage ? (
       <SettingsInsetRow className="justify-end gap-3">
         {hasUnsavedChanges ? (
-          <p className="text-xs text-muted-fg">Unsaved changes</p>
+          <p className="text-caption text-muted-fg">Unsaved changes</p>
         ) : null}
         <Button
           disabled={
@@ -646,14 +646,14 @@ const ManagedUsageSettingsForm = ({
       <div className="mt-5 px-4 md:px-6">
         <div className="flex items-end justify-between gap-4">
           <div>
-            <p className="font-mono text-xl font-semibold text-fg">
+            <p className="font-mono text-title-sm font-semibold text-fg">
               {formatMoney(managedUsageCostCents)}
             </p>
-            <p className="mt-1 text-xs text-muted-fg">
+            <p className="mt-1 text-caption text-muted-fg">
               used across team features
             </p>
           </div>
-          <p className="text-right text-xs text-muted-fg">
+          <p className="text-right text-caption text-muted-fg">
             {formatMoney(includedUsageCents)} monthly usage balance
             <br />
             {formatMoney(overview.usage.billableCostCents)} overage
@@ -713,7 +713,7 @@ const ManagedUsageSettingsForm = ({
       />
 
       {!canManageOrganizationMailUsage && (
-        <p className="px-4 pt-1 pb-3 text-xs text-muted-fg md:px-6">
+        <p className="px-4 pt-1 pb-3 text-caption text-muted-fg md:px-6">
           Only admins and owners can change team credit settings.
         </p>
       )}

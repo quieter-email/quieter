@@ -39,7 +39,7 @@ export const AttachmentTool = ({
       pending={pending}
     >
       {success ? (
-        <p className="text-xs/relaxed whitespace-pre-wrap text-muted-fg">
+        <p className="text-caption/relaxed whitespace-pre-wrap text-muted-fg">
           {success.content || "(No text content)"}
           {success.contentTruncated ? "…" : ""}
         </p>

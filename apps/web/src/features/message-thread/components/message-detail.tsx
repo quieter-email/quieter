@@ -97,7 +97,7 @@ export const MessageDetail = ({
     messageContent = (
       <Suspense
         fallback={
-          <div className="grid h-full place-items-center text-sm text-muted-fg">
+          <div className="grid h-full place-items-center text-body text-muted-fg">
             <HugeiconsIcon
               className="animate-spin text-muted-fg"
               icon={Loading03Icon}

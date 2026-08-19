@@ -628,7 +628,7 @@ export const SidebarLabelNav = ({
       return (
         <SidebarEntrance
           animateEntrance={shouldAnimateEntrance}
-          className="px-2 py-1 text-xs text-muted-fg"
+          className="px-2 py-1 text-caption text-muted-fg"
           index={9}
         >
           Loading {labelNounPlural}…
@@ -639,7 +639,7 @@ export const SidebarLabelNav = ({
       return (
         <SidebarEntrance
           animateEntrance={shouldAnimateEntrance}
-          className="px-2 py-1 text-xs text-destructive"
+          className="px-2 py-1 text-caption text-destructive"
           index={9}
         >
           Could not load {labelNounPlural}.
@@ -650,7 +650,7 @@ export const SidebarLabelNav = ({
       return (
         <SidebarEntrance
           animateEntrance={shouldAnimateEntrance}
-          className="px-2 py-1 text-xs text-muted-fg"
+          className="px-2 py-1 text-caption text-muted-fg"
           index={9}
         >
           No {labelNounPlural} shown.
@@ -674,7 +674,7 @@ export const SidebarLabelNav = ({
             active={isActive}
             aria-pressed={isActive}
             className={cn(
-              "squircle h-7 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-left text-xs font-light",
+              "squircle h-7 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-left text-caption font-light",
               {
                 "text-fg": isActive || labelHovered,
                 "text-muted-fg": !isActive && !labelHovered,
@@ -712,7 +712,7 @@ export const SidebarLabelNav = ({
             <ManagedLabelColorDot color={label.color} />
             <span className="min-w-0 truncate">{label.name}</span>
             {mailboxProvider === "managed" ? (
-              <span className="ml-auto text-[10px] text-muted-fg tabular-nums">
+              <span className="ml-auto text-micro text-muted-fg tabular-nums">
                 {managedLabelCountById.get(label.id) ?? 0}
               </span>
             ) : null}
@@ -729,7 +729,7 @@ export const SidebarLabelNav = ({
         className="mb-1 flex items-center justify-between px-2"
         index={8}
       >
-        <p className="text-xs font-medium text-muted-fg">{labelTitle}</p>
+        <p className="text-caption font-medium text-muted-fg">{labelTitle}</p>
         {canManage && (
           <IconButtonTooltip label={`Edit ${labelNounPlural}`}>
             <Button
@@ -784,7 +784,7 @@ export const SidebarLabelNav = ({
           <FullPageDialogBody>
             <div className="mx-auto w-full max-w-3xl px-5 py-8 sm:px-8 sm:py-10">
               <div className="mb-8">
-                <h2 className="text-xl font-semibold tracking-tight">
+                <h2 className="text-title-sm font-semibold tracking-tight">
                   {labelTitle}
                 </h2>
                 <FullPageDialogDescription className="mt-1">
@@ -830,21 +830,21 @@ export const SidebarLabelNav = ({
                 {(() => {
                   if (areLabelsPending) {
                     return (
-                      <p className="py-3 text-sm text-muted-fg">
+                      <p className="py-3 text-body text-muted-fg">
                         Loading {labelNounPlural}…
                       </p>
                     );
                   }
                   if (labelsUnavailable) {
                     return (
-                      <p className="py-3 text-sm text-destructive">
+                      <p className="py-3 text-body text-destructive">
                         Could not load {labelNounPlural}.
                       </p>
                     );
                   }
                   if (userLabels.length === 0) {
                     return (
-                      <p className="py-3 text-sm text-muted-fg">
+                      <p className="py-3 text-body text-muted-fg">
                         No {labelNounPlural} yet.
                       </p>
                     );
@@ -861,16 +861,18 @@ export const SidebarLabelNav = ({
                             : null;
                         return (
                           <div className="rounded-lg" key={label.id}>
-                            <div className="squircle flex min-h-12 items-center gap-3 px-2 hover:bg-bg/50">
+                            <div className="squircle flex min-h-12 items-center gap-3 px-2 hover:bg-muted">
                               <ManagedLabelColorDot
                                 className="size-4"
                                 color={label.color}
                               />
                               <div className="min-w-0 flex-1">
-                                <p className="truncate text-sm">{label.name}</p>
+                                <p className="truncate text-body">
+                                  {label.name}
+                                </p>
                                 {labelDescription !== undefined &&
                                 labelDescription !== "" ? (
-                                  <p className="truncate text-xs text-muted-fg">
+                                  <p className="truncate text-caption text-muted-fg">
                                     {labelDescription}
                                   </p>
                                 ) : null}
@@ -982,7 +984,7 @@ export const SidebarLabelNav = ({
                                 >
                                   <DropdownMenuTrigger
                                     aria-label={`${label.name} options`}
-                                    className="inline-flex size-7 items-center justify-center rounded-md text-muted-fg hover:bg-bg/50 hover:text-fg"
+                                    className="inline-flex size-7 items-center justify-center rounded-md text-muted-fg hover:bg-muted hover:text-fg"
                                   >
                                     <HugeiconsIcon
                                       aria-hidden
@@ -1224,7 +1226,7 @@ export const SidebarLabelNav = ({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogBody>
-            <p className="text-sm text-fg">
+            <p className="text-body text-fg">
               Delete{" "}
               {hasText(deletingLabel?.name)
                 ? `"${deletingLabel.name}"`

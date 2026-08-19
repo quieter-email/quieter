@@ -87,7 +87,7 @@ export const ThreadTool = ({
                   </span>
                 ) : null}
               </div>
-              <p className="mt-0.5 line-clamp-3 text-xs/relaxed whitespace-pre-wrap text-muted-fg">
+              <p className="mt-0.5 line-clamp-3 text-caption/relaxed whitespace-pre-wrap text-muted-fg">
                 {message.body?.trim() ??
                   message.snippet?.trim() ??
                   "(No content)"}

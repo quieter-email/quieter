@@ -61,7 +61,7 @@ export const PopoverTitle = ({
   ...props
 }: ComponentPropsWithoutRef<typeof PopoverPrimitive.Title>) => (
   <PopoverPrimitive.Title
-    className={cn("text-sm font-semibold text-fg", className)}
+    className={cn("text-body font-semibold text-fg", className)}
     {...props}
   />
 );
@@ -71,7 +71,7 @@ export const PopoverDescription = ({
   ...props
 }: ComponentPropsWithoutRef<typeof PopoverPrimitive.Description>) => (
   <PopoverPrimitive.Description
-    className={cn("mt-1 text-sm text-muted-fg", className)}
+    className={cn("mt-1 text-body text-muted-fg", className)}
     {...props}
   />
 );

@@ -304,7 +304,7 @@ export const MessageListScrollPane = ({
       {isLoadingEmptyMessages && <MessageListLoadingSkeleton />}
 
       {list.isError && (
-        <p className="px-2 py-8 text-sm text-destructive">
+        <p className="px-2 py-8 text-body text-destructive">
           {list.error instanceof Error
             ? list.error.message
             : "Could not load messages."}
@@ -366,11 +366,13 @@ export const MessageListScrollPane = ({
       {!isLoadingEmptyMessages &&
         !list.isError &&
         threadedMessages.length === 0 && (
-          <p className="px-2 py-8 text-sm text-muted-fg">{emptyMessageLabel}</p>
+          <p className="px-2 py-8 text-body text-muted-fg">
+            {emptyMessageLabel}
+          </p>
         )}
 
       {!list.isError && threadedMessages.length > 0 && (
-        <p className="px-2 py-5 text-center text-xs text-muted-fg">
+        <p className="px-2 py-5 text-center text-caption text-muted-fg">
           {list.isFetchingNextPage || list.hasNextPage ? (
             <HugeiconsIcon
               className="mx-auto animate-spin text-muted-fg"

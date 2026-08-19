@@ -52,7 +52,7 @@ export const MailboxSignatureSettings = ({
             value={signatureText}
           />
           <div className="flex items-center justify-between gap-3">
-            <p className="text-xs text-muted-fg">
+            <p className="text-caption text-muted-fg">
               Leave it empty to send without a signature.
             </p>
             <Button

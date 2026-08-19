@@ -49,7 +49,7 @@ export const SenderAvatar = ({
   return (
     <div
       className={cn(
-        "relative flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg text-sm font-medium text-muted-fg",
+        "relative flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg text-body font-medium text-muted-fg",
         { "bg-muted/80": showFallback },
         className
       )}
