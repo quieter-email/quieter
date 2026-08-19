@@ -2620,34 +2620,6 @@ export const chatRun = pgTable(
   ]
 );
 
-/**
- * Append-only TanStack AI delivery-durability log for resumable chat observation.
- * NOTE: unused since the in-memory hub / Durable Object replaced it (2026-08-19).
- * Kept in schema until the contract (destructive) migration to drop it is reviewed
- * and deployed manually — see `drizzle/20260819212823_confused_santa_claus` (generated
- * but not committed as expand-safe). The table is never written; dropping is safe
- * once the code that referenced `stream-durability.ts` is gone.
- */
-export const chatRunStreamChunk = pgTable(
-  "chatRunStreamChunk",
-  {
-    chunk: jsonb("chunk").$type<Record<string, unknown>>().notNull(),
-    createdAt: timestamp("createdAt").notNull(),
-    offset: text("offset").notNull(),
-    runId: text("runId")
-      .notNull()
-      .references(() => chatRun.id, { onDelete: "cascade" }),
-    seq: bigint("seq", { mode: "number" }).notNull(),
-  },
-  (table) => [
-    primaryKey({ columns: [table.runId, table.seq] }),
-    unique("chat_run_stream_chunk_run_id_offset_unique").on(
-      table.runId,
-      table.offset
-    ),
-  ]
-);
-
 export const waitlistSignup = pgTable("waitlistSignup", {
   createdAt: timestamp("createdAt").notNull(),
   email: text("email").primaryKey(),
