@@ -45,7 +45,6 @@ import {
 } from "#/lib/chat-query";
 import { connectorsQueryOptions } from "#/lib/connectors-query";
 import { orpc } from "#/lib/orpc";
-import { persistQueryByKey } from "#/lib/query-persister";
 
 import { createChatTurns } from "../domain/chat-turns";
 import { useChatRunStream } from "../hooks/use-chat-run-stream";
@@ -420,10 +419,6 @@ const useChatViewMutations = ({
       queryClient.setQueryData<ChatQueryData>(chatQueryKey, (current) =>
         current ? { ...current, title: updatedChat.title } : current
       );
-      void Promise.all([
-        persistQueryByKey(chatsQueryKey, queryClient),
-        persistQueryByKey(chatQueryKey, queryClient),
-      ]);
     },
   });
   const cancelGenerationMutation = useMutation({
@@ -548,7 +543,6 @@ const useChatViewStream = ({
           }
         : seeded
     );
-    void persistQueryByKey(queryKey, queryClient);
 
     if (!isActiveRun(result.activeRun)) {
       // The run already reached a terminal status. Keep the persisted parts instead of
@@ -620,7 +614,6 @@ const useChatViewStream = ({
         ),
       };
     });
-    void persistQueryByKey(queryKey, queryClient);
   };
 
   useChatRunStream({
@@ -661,7 +654,6 @@ const useChatViewStream = ({
         queryClient.setQueryData<ChatQueryData>(queryKey, (current) =>
           current ? { ...current, activeRun: null } : current
         );
-        void persistQueryByKey(queryKey, queryClient);
         void queryClient.invalidateQueries({ queryKey });
       }
 
@@ -856,7 +848,6 @@ const useChatViewActions = ({
           }
         : current
     );
-    void persistQueryByKey(queryKey, queryClient);
     setStreamRunId(null);
     setStreamingAssistant(null);
     streamChatIdRef.current = null;

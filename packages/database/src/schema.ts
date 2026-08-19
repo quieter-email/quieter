@@ -2620,7 +2620,11 @@ export const chatRun = pgTable(
   ]
 );
 
-/** Append-only TanStack AI delivery-durability log for resumable chat observation. */
+/**
+ * Append-only TanStack AI delivery-durability log for resumable chat observation.
+ * NOTE: unused since the in-memory hub / Durable Object replaced it; kept in schema
+ * until the contract (destructive) migration to drop it is reviewed and deployed manually.
+ */
 export const chatRunStreamChunk = pgTable(
   "chatRunStreamChunk",
   {
