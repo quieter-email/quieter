@@ -113,6 +113,10 @@ export const requeueChatRun = async (runId: string) => {
   return requeued !== undefined;
 };
 
+/**
+ * Bump the run's heartbeat and, in the same write, report whether a cancel was requested.
+ * Folding the cancel check into the heartbeat removes a separate per-second query per run.
+ */
 export const touchChatRunHeartbeat = async (runId: string) => {
   const now = new Date();
   const [updated] = await db
@@ -124,8 +128,18 @@ export const touchChatRunHeartbeat = async (runId: string) => {
         inArray(chatRun.status, [...ACTIVE_CHAT_RUN_STATUSES])
       )
     )
-    .returning({ id: chatRun.id });
-  return updated !== undefined;
+    .returning({
+      cancelRequestedAt: chatRun.cancelRequestedAt,
+      id: chatRun.id,
+    });
+
+  return {
+    cancelRequested:
+      updated !== undefined &&
+      updated.cancelRequestedAt !== undefined &&
+      updated.cancelRequestedAt !== null,
+    live: updated !== undefined,
+  };
 };
 
 export const persistChatRunDraft = async (input: {

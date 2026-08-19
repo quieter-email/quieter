@@ -43,7 +43,6 @@ import { and, eq, inArray, isNull, lt, or } from "drizzle-orm";
 import { loadAiAgentContext, requestAiMemoryUpdate } from "../../ai-memory";
 import {
   isActiveChatRunStatus,
-  isCancelRequested,
   persistChatRunDraft,
   requeueChatRun,
   terminalizeChatRun,
@@ -77,11 +76,13 @@ import { getChatRunFailureMessage, terminalizeFailedChatRun } from "./failure";
 import { registerChatRunController } from "./runtime";
 
 const DRAFT_PERSIST_INTERVAL_MS = 1000;
-/** In-isolate cancels abort immediately; this poll only covers cross-isolate cancels. */
-const CANCEL_POLL_INTERVAL_MS = 1000;
 const HEARTBEAT_INTERVAL_MS = 5000;
 const STALE_RUN_CLAIM_MS = 30_000;
 const MAIL_TOOL_TIMEOUT_MS = 25_000;
+/** Most recent messages sent to the model on long chats; memory recall covers older context. */
+const CHAT_HISTORY_WINDOW_MESSAGES = 40;
+/** Absolute budget for a generation; a run that streams nothing still resolves after this. */
+const CHAT_GENERATION_TIMEOUT_MS = 90_000;
 
 const runMailTool = async <T>(
   runSignal: AbortSignal,
@@ -340,9 +341,11 @@ const loadChatGenerationMessages = async (run: ChatRunRecord) => {
     .from(chatMessage)
     .where(eq(chatMessage.chatId, run.chatId))
     .orderBy(chatMessage.position);
-  const visibleMessages = messages.filter(
-    (message) => message.role === "user" || message.role === "assistant"
-  );
+  const visibleMessages = messages
+    .filter(
+      (message) => message.role === "user" || message.role === "assistant"
+    )
+    .slice(-CHAT_HISTORY_WINDOW_MESSAGES);
   const assistantDraft = visibleMessages.find(
     (message) => message.id === run.assistantMessageId
   );
@@ -460,6 +463,49 @@ const linkHostAbort = (
 };
 
 /**
+ * Close a finished producer's hub so late observers stop reconnecting. While the run is
+ * still active (unless handed back) emit an `incomplete` error chunk so subscribers are
+ * released instead of spamming reconnects; a handed-back run stays open so the next
+ * observer resumes it.
+ */
+const finalizeChatRunHub = async (runId: string, handedBack: boolean) => {
+  try {
+    const [current] = await db
+      .select({ status: chatRun.status })
+      .from(chatRun)
+      .where(eq(chatRun.id, runId))
+      .limit(1);
+    if (
+      !handedBack &&
+      current !== undefined &&
+      isActiveChatRunStatus(current.status)
+    ) {
+      const hub = peekChatRunHub(runId);
+      if (hub && !hub.isClosed()) {
+        hub.append([
+          {
+            code: "incomplete",
+            message: "Generation stopped unexpectedly.",
+            timestamp: Date.now(),
+            type: EventType.RUN_ERROR,
+          },
+        ]);
+      }
+    }
+    sealChatRunHub(runId);
+  } catch (cleanupError) {
+    reportError(cleanupError, {
+      operation: "chat-generation:finalize-stream-hub",
+    });
+    try {
+      sealChatRunHub(runId);
+    } catch {
+      // Preserve the original runner error if sealing also fails.
+    }
+  }
+};
+
+/**
  * Execute one chat run. The caller owns the stream hub: it must release any hub left
  * by a dead producer and create the fresh one before calling, so observers that
  * attached first stay subscribed to the hub this run appends to.
@@ -531,30 +577,30 @@ export const runChatGeneration = async (
   let hasPersistedStreamingDraft = false;
   const usageReports: Promise<void>[] = [];
 
-  const pollCancellation = async () => {
+  const updateHeartbeat = async () => {
     try {
-      const shouldCancel = await isCancelRequested(runId);
-      if (shouldCancel && !cancelled) {
+      const heartbeat = await touchChatRunHeartbeat(runId);
+      if (heartbeat.cancelRequested && !cancelled) {
         cancelled = true;
         abortController.abort();
       }
     } catch (error: unknown) {
-      reportError(error, { operation: "chat-generation:check-cancellation" });
-    }
-  };
-  const updateHeartbeat = async () => {
-    try {
-      await touchChatRunHeartbeat(runId);
-    } catch (error: unknown) {
       reportError(error, { operation: "chat-generation:update-heartbeat" });
     }
   };
-  const cancelPoll = setInterval(() => {
-    void pollCancellation();
-  }, CANCEL_POLL_INTERVAL_MS);
+  // In-isolate cancels abort immediately via the runtime registry; the heartbeat fold
+  // covers cross-isolate cancels (and the remote-cancel fallback) at the same cadence.
   const heartbeat = setInterval(() => {
     void updateHeartbeat();
   }, HEARTBEAT_INTERVAL_MS);
+
+  // A run must not hang forever: abort (and fail) after the overall budget even if the
+  // provider streams nothing, so "Thinking" resolves instead of persisting indefinitely.
+  let timedOut = false;
+  const generationTimeout = setTimeout(() => {
+    timedOut = true;
+    abortController.abort();
+  }, CHAT_GENERATION_TIMEOUT_MS);
 
   const drainAssistantDraftPersist = async () => {
     if (persistTimeout) {
@@ -683,20 +729,25 @@ export const runChatGeneration = async (
       visibleMessages.filter((message) => message.id !== run.assistantMessageId)
     );
     const streamStartMessageCount = streamInitialMessages.length;
-    const hasGoogleCalendarConnector = await checkConnector(
-      GOOGLE_CALENDAR_CONNECTOR_PROVIDER,
-      "chat-generation:inspect-google-calendar-connector"
-    );
-    const hasLinearConnector = await checkConnector(
-      LINEAR_CONNECTOR_PROVIDER,
-      "chat-generation:inspect-linear-connector"
-    );
-    const aiContext = await loadAiAgentContext({
-      agent: "chat",
-      mailboxId: run.mailboxId,
-      query: getChatMemoryQuery(visibleMessages),
-      userId: run.userId,
-    });
+    // These are fully independent; running them in parallel cuts the pre-stream setup
+    // (connector checks + memory embedding) to a single round of round-trips.
+    const [hasGoogleCalendarConnector, hasLinearConnector, aiContext] =
+      await Promise.all([
+        checkConnector(
+          GOOGLE_CALENDAR_CONNECTOR_PROVIDER,
+          "chat-generation:inspect-google-calendar-connector"
+        ),
+        checkConnector(
+          LINEAR_CONNECTOR_PROVIDER,
+          "chat-generation:inspect-linear-connector"
+        ),
+        loadAiAgentContext({
+          agent: "chat",
+          mailboxId: run.mailboxId,
+          query: getChatMemoryQuery(visibleMessages),
+          userId: run.userId,
+        }),
+      ]);
     const mailboxContext = getMailboxContext(run);
     const systemPrompts = buildSystemPrompts({
       aiContext,
@@ -946,6 +997,16 @@ export const runChatGeneration = async (
       return;
     }
 
+    if (timedOut) {
+      await drainAssistantDraftPersist();
+      await terminalizeFailedChatRun(
+        runId,
+        "The response took too long and was stopped. Try again.",
+        { id: run.assistantMessageId, parts: pendingParts }
+      );
+      return;
+    }
+
     if (abortController.signal.aborted) {
       // The host that was running this went away. Keep the draft and hand the run back
       // so the next observer resumes it instead of finding a stalled response.
@@ -961,7 +1022,7 @@ export const runChatGeneration = async (
       parts: pendingParts,
     });
   } finally {
-    clearInterval(cancelPoll);
+    clearTimeout(generationTimeout);
     clearInterval(heartbeat);
     releaseController();
 
@@ -975,39 +1036,6 @@ export const runChatGeneration = async (
     // subscribers are released (stale reclaim / DO restart can restart later).
     // A handed-back run is the exception: it is queued for a successor, so closing the
     // log without a terminal chunk is what makes observers reconnect and resume it.
-    try {
-      const [current] = await db
-        .select({ status: chatRun.status })
-        .from(chatRun)
-        .where(eq(chatRun.id, runId))
-        .limit(1);
-      if (
-        !handedBack &&
-        current !== undefined &&
-        isActiveChatRunStatus(current.status)
-      ) {
-        const hub = peekChatRunHub(runId);
-        if (hub && !hub.isClosed()) {
-          hub.append([
-            {
-              code: "incomplete",
-              message: "Generation stopped unexpectedly.",
-              timestamp: Date.now(),
-              type: EventType.RUN_ERROR,
-            },
-          ]);
-        }
-      }
-      sealChatRunHub(runId);
-    } catch (cleanupError) {
-      reportError(cleanupError, {
-        operation: "chat-generation:finalize-stream-hub",
-      });
-      try {
-        sealChatRunHub(runId);
-      } catch {
-        // Preserve the original runner error if sealing also fails.
-      }
-    }
+    await finalizeChatRunHub(runId, handedBack);
   }
 };
