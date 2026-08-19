@@ -285,15 +285,6 @@ export const cancelActiveChatRun = async (input: {
     };
   });
 
-export const isCancelRequested = async (runId: string) => {
-  const [row] = await db
-    .select({ cancelRequestedAt: chatRun.cancelRequestedAt })
-    .from(chatRun)
-    .where(eq(chatRun.id, runId))
-    .limit(1);
-  return !!row?.cancelRequestedAt;
-};
-
 export const getAuthorizedChatRun = async (runId: string, userId: string) => {
   const [run] = await db
     .select()

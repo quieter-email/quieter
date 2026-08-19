@@ -2622,8 +2622,11 @@ export const chatRun = pgTable(
 
 /**
  * Append-only TanStack AI delivery-durability log for resumable chat observation.
- * NOTE: unused since the in-memory hub / Durable Object replaced it; kept in schema
- * until the contract (destructive) migration to drop it is reviewed and deployed manually.
+ * NOTE: unused since the in-memory hub / Durable Object replaced it (2026-08-19).
+ * Kept in schema until the contract (destructive) migration to drop it is reviewed
+ * and deployed manually — see `drizzle/20260819212823_confused_santa_claus` (generated
+ * but not committed as expand-safe). The table is never written; dropping is safe
+ * once the code that referenced `stream-durability.ts` is gone.
  */
 export const chatRunStreamChunk = pgTable(
   "chatRunStreamChunk",

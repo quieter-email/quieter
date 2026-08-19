@@ -79,10 +79,20 @@ const DRAFT_PERSIST_INTERVAL_MS = 1000;
 const HEARTBEAT_INTERVAL_MS = 5000;
 const STALE_RUN_CLAIM_MS = 30_000;
 const MAIL_TOOL_TIMEOUT_MS = 25_000;
-/** Most recent messages sent to the model on long chats; memory recall covers older context. */
-const CHAT_HISTORY_WINDOW_MESSAGES = 40;
+/**
+ * Most recent messages sent to the model on long chats; memory recall covers older context.
+ * Kept generous for quality, but windowed to cut first-token latency/tokens on long chats.
+ * Override per-run via `ChatGenerationOptions.historyWindowMessages` (e.g. for experiments).
+ */
+export const CHAT_HISTORY_WINDOW_MESSAGES = 40;
 /** Absolute budget for a generation; a run that streams nothing still resolves after this. */
-const CHAT_GENERATION_TIMEOUT_MS = 90_000;
+export const CHAT_GENERATION_TIMEOUT_MS = 90_000;
+
+export type ChatGenerationOptions = {
+  force?: boolean;
+  historyWindowMessages?: number;
+  signal?: AbortSignal;
+};
 
 const runMailTool = async <T>(
   runSignal: AbortSignal,
@@ -330,7 +340,12 @@ const claimChatRun = async (
   return claimed;
 };
 
-const loadChatGenerationMessages = async (run: ChatRunRecord) => {
+const loadChatGenerationMessages = async (
+  run: ChatRunRecord,
+  options?: { historyWindowMessages?: number }
+) => {
+  const windowMessages =
+    options?.historyWindowMessages ?? CHAT_HISTORY_WINDOW_MESSAGES;
   const messages: ChatGenerationMessage[] = await db
     .select({
       createdAt: chatMessage.createdAt,
@@ -345,7 +360,7 @@ const loadChatGenerationMessages = async (run: ChatRunRecord) => {
     .filter(
       (message) => message.role === "user" || message.role === "assistant"
     )
-    .slice(-CHAT_HISTORY_WINDOW_MESSAGES);
+    .slice(-windowMessages);
   const assistantDraft = visibleMessages.find(
     (message) => message.id === run.assistantMessageId
   );
@@ -512,14 +527,9 @@ const finalizeChatRunHub = async (runId: string, handedBack: boolean) => {
  */
 export const runChatGeneration = async (
   runId: string,
-  options?: {
-    /** Reclaim even when heartbeat is fresh — Durable Object owner after restart. */
-    force?: boolean;
-    /** Lifetime of the request hosting this producer, when one hosts it. */
-    signal?: AbortSignal;
-  }
+  options?: ChatGenerationOptions
 ) => {
-  const { force, signal: hostSignal } = options ?? {};
+  const { force, historyWindowMessages, signal: hostSignal } = options ?? {};
   const [run] = await db
     .select()
     .from(chatRun)
@@ -556,8 +566,12 @@ export const runChatGeneration = async (
     unlinkHostAbort();
   };
 
-  const { assistantDraft, visibleMessages } =
-    await loadChatGenerationMessages(run);
+  const { assistantDraft, visibleMessages } = await loadChatGenerationMessages(
+    run,
+    {
+      historyWindowMessages,
+    }
+  );
   const latestUserRequest = getLatestUserRequest(visibleMessages);
 
   if (!assistantDraft) {
@@ -999,6 +1013,14 @@ export const runChatGeneration = async (
 
     if (timedOut) {
       await drainAssistantDraftPersist();
+      reportError(
+        new Error(
+          `Chat generation timed out after ${CHAT_GENERATION_TIMEOUT_MS}ms for run ${runId}`
+        ),
+        {
+          operation: "chat-generation:timeout",
+        }
+      );
       await terminalizeFailedChatRun(
         runId,
         "The response took too long and was stopped. Try again.",
