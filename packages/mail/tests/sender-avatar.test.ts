@@ -1,7 +1,13 @@
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, test, vi } from "vite-plus/test";
 
 import { createBimiResolver, sanitizeBimiSvg } from "../src/bimi";
 import { getSenderAvatarUrls } from "../src/sender-avatar";
+
+// Disable the logo.dev fallback so getSenderAvatarUrls returns undefined whether
+// or not VITE_LOGO_DEV_PUBLISHABLE_KEY is configured in the local or CI env.
+vi.mock(import("@quieter/env/public"), () => ({
+  publicEnv: { VITE_LOGO_DEV_PUBLISHABLE_KEY: "" },
+}));
 
 const VALID_SVG = (label: string) => `
   <svg xmlns="http://www.w3.org/2000/svg" version="1.2" baseProfile="tiny-ps" viewBox="0 0 128 128">
