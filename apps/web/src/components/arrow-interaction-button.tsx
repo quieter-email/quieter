@@ -5,7 +5,13 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import type { ButtonProps } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
-import { LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
+import {
+  LazyMotion,
+  PresenceContext,
+  domAnimation,
+  m,
+  useReducedMotion,
+} from "motion/react";
 import { useState } from "react";
 
 type ArrowIconMotionKind = "idle" | "success" | "failure";
@@ -127,31 +133,33 @@ export const ArrowInteractionButton = ({
         <HugeiconsIcon icon={ArrowUp01Icon} />
       </span>
       <LazyMotion features={domAnimation}>
-        <span className="pointer-events-none absolute inset-0 inline-grid place-items-center overflow-hidden">
-          <span aria-hidden="true" className="pointer-events-none opacity-0">
-            <HugeiconsIcon icon={ArrowUp01Icon} />
-          </span>
-          <m.span
-            key={`primary-${animation.kind}-${animation.nonce}`}
-            animate={animation.kind}
-            className="pointer-events-none absolute inset-0 inline-grid place-items-center"
-            initial={arrowPrimaryInitial[animation.kind]}
-            variants={arrowPrimaryVariants}
-          >
-            <HugeiconsIcon icon={ArrowUp01Icon} />
-          </m.span>
-          {animation.kind === "success" && (
+        <PresenceContext.Provider value={null}>
+          <span className="pointer-events-none absolute inset-0 inline-grid place-items-center overflow-hidden">
+            <span aria-hidden="true" className="pointer-events-none opacity-0">
+              <HugeiconsIcon icon={ArrowUp01Icon} />
+            </span>
             <m.span
-              key={`secondary-${animation.nonce}`}
-              animate="to"
+              key={`primary-${animation.kind}-${animation.nonce}`}
+              animate={animation.kind}
               className="pointer-events-none absolute inset-0 inline-grid place-items-center"
-              initial="from"
-              variants={arrowSecondaryVariants}
+              initial={arrowPrimaryInitial[animation.kind]}
+              variants={arrowPrimaryVariants}
             >
               <HugeiconsIcon icon={ArrowUp01Icon} />
             </m.span>
-          )}
-        </span>
+            {animation.kind === "success" && (
+              <m.span
+                key={`secondary-${animation.nonce}`}
+                animate="to"
+                className="pointer-events-none absolute inset-0 inline-grid place-items-center"
+                initial="from"
+                variants={arrowSecondaryVariants}
+              >
+                <HugeiconsIcon icon={ArrowUp01Icon} />
+              </m.span>
+            )}
+          </span>
+        </PresenceContext.Provider>
       </LazyMotion>
     </Button>
   );
