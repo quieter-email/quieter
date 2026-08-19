@@ -1,4 +1,4 @@
-[![badge](https://shieldcn.dev/npm/quieter.svg?variant=secondary&size=xs&font=geist&logo=npm&color=191a1c&valueColor=ffffff&labelTextColor=8f8f8f)](https://www.npmjs.com/package/quieter) [![badge](https://shieldcn.dev/github/quieter-email/quieter/license.svg?variant=secondary&size=xs&font=geist&logo=npm&color=191a1c&valueColor=ffffff&labelTextColor=8f8f8f)](https://github.com/quieter-email/quieter) [![badge](https://shieldcn.dev/x/mention/quieteremail.svg?variant=secondary&size=xs&font=geist&logo=npm&color=191a1c&valueColor=ffffff&labelTextColor=8f8f8f)](https://x.com/quieteremail)
+[![badge](https://shieldcn.dev/npm/quieter.svg?variant=secondary&size=xs&font=geist&color=191a1c&valueColor=ffffff&labelTextColor=8f8f8f)](https://www.npmjs.com/package/quieter) [![badge](https://shieldcn.dev/github/quieter-email/quieter/license.svg?variant=secondary&size=xs&font=geist&color=191a1c&valueColor=ffffff&labelTextColor=8f8f8f)](https://github.com/quieter-email/quieter) [![badge](https://shieldcn.dev/x/mention/quieteremail.svg?variant=secondary&size=xs&font=geist&color=191a1c&valueColor=ffffff&labelTextColor=8f8f8f)](https://x.com/quieteremail)
 
 # Quieter
 
