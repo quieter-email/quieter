@@ -332,19 +332,6 @@ export const followChatRunEvents = async function* followChatRunEvents({
     }
 
     if (!response.ok) {
-      const isTransient = response.status === 429 || response.status >= 500;
-      if (isTransient) {
-        if (reconnectBudgetExhausted(state)) {
-          throw new ChatRunStreamError(
-            `Chat stream failed (${response.status}).`,
-            false
-          );
-        }
-        state.reconnectAttempts += 1;
-        // oxlint-disable-next-line eslint/no-await-in-loop
-        await waitForRetry(state.reconnectAttempts - 1, signal);
-        continue;
-      }
       throw new ChatRunStreamError(
         response.status === 401 || response.status === 403
           ? "Unauthorized"

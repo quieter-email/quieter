@@ -140,7 +140,7 @@ export const ChatView = ({
   const isActionPending = hasPendingChatAction(mutations);
   const aiRequirement = BILLING_FEATURES.aiChat;
   const canUseAiChat = hasOrganizationAiAccess(billing, mailboxOrganizationId);
-  const composerDisabled = isBillingPending || !canUseAiChat;
+  const composerDisabled = !isBillingPending && !canUseAiChat;
   const errorMessage =
     activeRun?.error ?? chatData?.messages.at(-1)?.error ?? undefined;
 

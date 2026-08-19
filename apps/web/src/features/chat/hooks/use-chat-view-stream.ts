@@ -1,6 +1,7 @@
 "use client";
 
 import type { ChatModel } from "@quieter/ai/chat-models";
+import { reportError } from "@quieter/observability";
 import type { useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "@tanstack/react-store";
 
@@ -314,6 +315,11 @@ export const useChatViewStream = ({
       updateChatRunDraft({ messageId: assistantMessageId, parts });
     },
     onError: (message) => {
+      if (/Chat stream failed \(5\d\d\)/iu.test(message)) {
+        reportError(new Error(message), {
+          operation: "chat:stream-failure",
+        });
+      }
       handleChatRunStreamFailure({
         chatId,
         liveAssistantMessageId,
