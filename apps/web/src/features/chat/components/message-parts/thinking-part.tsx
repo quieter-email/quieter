@@ -49,12 +49,14 @@ export const ThinkingPart = ({ content, isActive }: ThinkingPartProps) => {
           className="size-3.5 shrink-0 text-muted-fg/60"
           icon={reasoningIcon}
         />
-        <span className="min-w-0 flex-1 truncate text-body/5 text-muted-fg">
-          {isActive ? "Thinking" : "Thought process"}
-        </span>
-        <span className="flex shrink-0 items-center gap-2">
+        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+          <span className="truncate text-body/5 text-muted-fg">
+            {isActive ? "Thinking" : "Thought process"}
+          </span>
           {isActive ? <LoadingDots /> : null}
-          {hasReasoning ? (
+        </span>
+        {hasReasoning ? (
+          <span className="flex shrink-0 items-center gap-2">
             <HugeiconsIcon
               aria-hidden
               className={cn(
@@ -69,8 +71,8 @@ export const ThinkingPart = ({ content, isActive }: ThinkingPartProps) => {
               )}
               icon={ArrowRight01Icon}
             />
-          ) : null}
-        </span>
+          </span>
+        ) : null}
       </button>
       <AnimatePresence initial={false}>
         {expanded ? (
