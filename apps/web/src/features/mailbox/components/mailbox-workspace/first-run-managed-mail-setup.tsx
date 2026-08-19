@@ -95,10 +95,10 @@ const FirstRunSetupHeader = ({
         <HugeiconsIcon aria-hidden className="size-4" icon={ArrowLeft01Icon} />
         Back
       </Button>
-      <h1 className="text-lg font-semibold tracking-tight text-fg">
+      <h1 className="text-body-lg font-semibold tracking-tight text-fg">
         Set up managed mail
       </h1>
-      <p className="mt-1 max-w-2xl text-sm text-muted-fg">
+      <p className="mt-1 max-w-2xl text-body text-muted-fg">
         Send and receive from your own domain with managed mailboxes and API
         keys.
       </p>
@@ -137,7 +137,7 @@ const FirstRunSetupNavigation = ({
       {setupSteps.map((step) => (
         <div
           className={cn(
-            "flex items-center gap-2 rounded-md px-3 py-2 text-sm",
+            "flex items-center gap-2 rounded-md px-3 py-2 text-body",
             {
               "bg-secondary/40 text-muted-fg": !stepStatus[step.id],
               "bg-success/10 text-success": stepStatus[step.id],
@@ -177,7 +177,7 @@ const FirstRunBillingStep = ({
   organizationName: string;
 }) => {
   const accessContent = hasManagedAccess ? (
-    <p className="inline-flex items-center gap-2 text-sm text-success">
+    <p className="inline-flex items-center gap-2 text-body text-success">
       <HugeiconsIcon
         aria-hidden
         className="size-4"
@@ -203,7 +203,7 @@ const FirstRunBillingStep = ({
     </div>
   );
   const content = isBillingPending ? (
-    <p className="inline-flex items-center gap-2 text-sm text-muted-fg">
+    <p className="inline-flex items-center gap-2 text-body text-muted-fg">
       <HugeiconsIcon
         aria-hidden
         className="size-4 animate-spin"
@@ -218,10 +218,10 @@ const FirstRunBillingStep = ({
   return (
     <section className="space-y-3">
       <div>
-        <h2 className="text-sm font-medium text-fg">
+        <h2 className="text-body font-medium text-fg">
           1. Choose managed access
         </h2>
-        <p className="mt-1 text-sm text-muted-fg">
+        <p className="mt-1 text-body text-muted-fg">
           Managed mail requires a Managed or Pro subscription for{" "}
           {organizationName}.
         </p>
@@ -247,7 +247,7 @@ const FirstRunDomainStep = ({
       <div className="flex flex-wrap items-center gap-2">
         {verifiedDomains.map((verifiedDomain) => (
           <span
-            className="rounded-md border border-success/30 bg-success/10 px-2.5 py-1 text-sm text-success"
+            className="rounded-md border border-success/30 bg-success/10 px-2.5 py-1 text-body text-success"
             key={verifiedDomain.id}
           >
             {verifiedDomain.domain}
@@ -274,8 +274,8 @@ const FirstRunDomainStep = ({
   return (
     <section className="space-y-3 border-t border-border pt-5">
       <div>
-        <h2 className="text-sm font-medium text-fg">2. Verify your domain</h2>
-        <p className="mt-1 text-sm text-muted-fg">
+        <h2 className="text-body font-medium text-fg">2. Verify your domain</h2>
+        <p className="mt-1 text-body text-muted-fg">
           Add a domain so Quieter can create managed mailboxes for your
           addresses.
         </p>
@@ -288,7 +288,7 @@ const FirstRunDomainStep = ({
             <HugeiconsIcon aria-hidden className="size-4" icon={Globe02Icon} />
             Register domain
           </Button>
-          <p className="text-sm text-muted-fg">
+          <p className="text-body text-muted-fg">
             Choose billing before verifying a domain.
           </p>
         </div>
@@ -324,15 +324,15 @@ const FirstRunMailboxStep = ({
 }) => (
   <section className="space-y-3 border-t border-border pt-5">
     <div>
-      <h2 className="text-sm font-medium text-fg">
+      <h2 className="text-body font-medium text-fg">
         3. Create a managed mailbox
       </h2>
-      <p className="mt-1 text-sm text-muted-fg">
+      <p className="mt-1 text-body text-muted-fg">
         Start with an address like support@yourdomain.com.
       </p>
     </div>
     {hasManagedMailbox ? (
-      <p className="inline-flex items-center gap-2 text-sm text-success">
+      <p className="inline-flex items-center gap-2 text-body text-success">
         <HugeiconsIcon
           aria-hidden
           className="size-4"
@@ -355,7 +355,7 @@ const FirstRunMailboxStep = ({
             placeholder="support"
             value={localPart}
           />
-          <span aria-hidden className="text-sm text-muted-fg select-none">
+          <span aria-hidden className="text-body text-muted-fg select-none">
             @
           </span>
           {verifiedDomains.length > 0 ? (
@@ -389,7 +389,7 @@ const FirstRunMailboxStep = ({
               </SelectContent>
             </Select>
           ) : (
-            <span className="px-2.5 text-sm text-muted-fg">
+            <span className="px-2.5 text-body text-muted-fg">
               {isDomainsPending ? "loading…" : "verified domain"}
             </span>
           )}
@@ -437,7 +437,7 @@ const FirstRunApiKeyStep = ({
     if (hasCreatedApiKey) {
       return (
         <div className="space-y-3">
-          <p className="inline-flex items-center gap-2 text-sm text-success">
+          <p className="inline-flex items-center gap-2 text-body text-success">
             <HugeiconsIcon
               aria-hidden
               className="size-4"
@@ -446,7 +446,7 @@ const FirstRunApiKeyStep = ({
             API key created. Store it before leaving this screen.
           </p>
           <button
-            className="w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-left font-mono text-xs break-all text-fg hover:bg-secondary/50"
+            className="w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-left font-mono text-caption break-all text-fg hover:bg-secondary/50"
             onClick={() => {
               if (createdApiKey !== null) {
                 void navigator.clipboard.writeText(createdApiKey);
@@ -458,7 +458,7 @@ const FirstRunApiKeyStep = ({
             {createdApiKey}
           </button>
           <a
-            className="squircle inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md border border-border bg-bg-surface px-3.5 text-[13px] text-fg shadow-sm transition-transform duration-100 ease-out select-none hover:bg-muted/60 active:scale-[0.97] active:bg-muted/80"
+            className="squircle inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md border border-border bg-bg-surface px-3.5 text-body-sm text-fg shadow-sm transition-transform duration-100 ease-out select-none hover:bg-muted/60 active:scale-[0.97] active:bg-muted/80"
             href="/api/openapi"
             rel="noreferrer"
             target="_blank"
@@ -472,7 +472,7 @@ const FirstRunApiKeyStep = ({
     if (hasApiKey) {
       return (
         <div className="space-y-2">
-          <p className="inline-flex items-center gap-2 text-sm text-success">
+          <p className="inline-flex items-center gap-2 text-body text-success">
             <HugeiconsIcon
               aria-hidden
               className="size-4"
@@ -481,7 +481,7 @@ const FirstRunApiKeyStep = ({
             This organization already has an API key.
           </p>
           <a
-            className="squircle inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md border border-border bg-bg-surface px-3.5 text-[13px] text-fg shadow-sm transition-transform duration-100 ease-out select-none hover:bg-muted/60 active:scale-[0.97] active:bg-muted/80"
+            className="squircle inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md border border-border bg-bg-surface px-3.5 text-body-sm text-fg shadow-sm transition-transform duration-100 ease-out select-none hover:bg-muted/60 active:scale-[0.97] active:bg-muted/80"
             href="/api/openapi"
             rel="noreferrer"
             target="_blank"
@@ -512,7 +512,7 @@ const FirstRunApiKeyStep = ({
           Create API key
         </Button>
         <a
-          className="squircle inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-transparent px-3.5 text-[13px] text-muted-fg transition-transform duration-100 ease-out select-none hover:bg-muted/60 hover:text-fg active:scale-[0.97] active:bg-muted/60 active:text-fg"
+          className="squircle inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-transparent px-3.5 text-body-sm text-muted-fg transition-transform duration-100 ease-out select-none hover:bg-muted/60 hover:text-fg active:scale-[0.97] active:bg-muted/60 active:text-fg"
           href="/api/openapi"
           rel="noreferrer"
           target="_blank"
@@ -526,8 +526,8 @@ const FirstRunApiKeyStep = ({
   return (
     <section className="space-y-3 border-t border-border pt-5">
       <div>
-        <h2 className="text-sm font-medium text-fg">4. Create an API key</h2>
-        <p className="mt-1 text-sm text-muted-fg">
+        <h2 className="text-body font-medium text-fg">4. Create an API key</h2>
+        <p className="mt-1 text-body text-muted-fg">
           Use an organization API key to send messages through{" "}
           <span className="font-mono">/api/v1/send</span>.
         </p>

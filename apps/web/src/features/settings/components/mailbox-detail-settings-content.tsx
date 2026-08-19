@@ -182,8 +182,8 @@ export const MailboxDetailSettingsContent = ({
       {isManagedNonManager && (
         <SettingsSection title="Mailbox settings">
           <SettingsCard className="p-6">
-            <p className="text-sm text-fg">Manager access required</p>
-            <p className="mt-1 max-w-2xl text-sm/6 text-muted-fg">
+            <p className="text-body text-fg">Manager access required</p>
+            <p className="mt-1 max-w-2xl text-body/6 text-muted-fg">
               A mailbox manager can change shared-inbox features, routing, and
               member access. Your current role still lets you use every mail
               action included with that role.
@@ -218,8 +218,8 @@ export const MailboxDetailSettingsContent = ({
       {isApi && (
         <SettingsSection title="Mailbox capabilities">
           <SettingsCard className="p-6">
-            <p className="text-sm text-fg">Send-only mailbox</p>
-            <p className="mt-1 max-w-2xl text-sm/6 text-muted-fg">
+            <p className="text-body text-fg">Send-only mailbox</p>
+            <p className="mt-1 max-w-2xl text-body/6 text-muted-fg">
               This address sends through your team API. Its domain and access
               are managed in team settings.
             </p>

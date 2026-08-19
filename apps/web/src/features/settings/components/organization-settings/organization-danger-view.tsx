@@ -52,8 +52,8 @@ export const OrganizationDangerView = ({
       </SettingsBackButton>
 
       <div>
-        <h1 className="text-base font-semibold text-fg">Danger zone</h1>
-        <p className="mt-1 text-sm text-muted-fg">
+        <h1 className="text-body-lg font-semibold text-fg">Danger zone</h1>
+        <p className="mt-1 text-body text-muted-fg">
           Leave this team or delete it permanently.
         </p>
       </div>

@@ -83,18 +83,18 @@ const renderPasskeyList = (
   onRemovePasskey: (passkeyId: string) => void
 ) => {
   if (isPasskeysPending) {
-    return <p className="text-sm text-muted-fg">Loading passkeys…</p>;
+    return <p className="text-body text-muted-fg">Loading passkeys…</p>;
   }
 
   if (passkeys.length === 0) {
-    return <p className="text-sm text-muted-fg">No passkeys.</p>;
+    return <p className="text-body text-muted-fg">No passkeys.</p>;
   }
 
   return passkeys.map((passkey) => (
     <div className="flex items-center justify-between gap-4" key={passkey.id}>
       <div className="min-w-0">
-        <p className="text-sm text-fg">{getPasskeyLabel(passkey)}</p>
-        <p className="mt-1 text-sm text-muted-fg">
+        <p className="text-body text-fg">{getPasskeyLabel(passkey)}</p>
+        <p className="mt-1 text-body text-muted-fg">
           {formatPasskeyDate(passkey.createdAt)}
         </p>
       </div>
@@ -245,7 +245,7 @@ const EditNameDialog = ({
                     />
                     {field.state.meta.errors.map((error) => (
                       <p
-                        className="text-sm text-destructive"
+                        className="text-body text-destructive"
                         key={error?.message}
                       >
                         {error?.message}
@@ -256,7 +256,7 @@ const EditNameDialog = ({
               </form.Field>
 
               {submitError === null ? null : (
-                <p className="text-sm text-destructive">{submitError}</p>
+                <p className="text-body text-destructive">{submitError}</p>
               )}
             </DialogBody>
 
@@ -423,7 +423,7 @@ const EditEmailDialog = ({ currentEmail }: { currentEmail: string }) => {
                     />
                     {field.state.meta.errors.map((error) => (
                       <p
-                        className="text-sm text-destructive"
+                        className="text-body text-destructive"
                         key={error?.message}
                       >
                         {error?.message}
@@ -434,7 +434,7 @@ const EditEmailDialog = ({ currentEmail }: { currentEmail: string }) => {
               </form.Field>
 
               {submitError === null ? null : (
-                <p className="text-sm text-destructive">{submitError}</p>
+                <p className="text-body text-destructive">{submitError}</p>
               )}
             </DialogBody>
 
@@ -688,7 +688,7 @@ const PasskeysDialog = ({
             </div>
 
             {submitError === null ? null : (
-              <p className="text-sm text-destructive">{submitError}</p>
+              <p className="text-body text-destructive">{submitError}</p>
             )}
           </DialogBody>
 
@@ -795,7 +795,7 @@ const DeleteAccountDialog = () => {
             }}
           >
             <DialogBody className="space-y-3">
-              <p className="text-sm text-muted-fg">
+              <p className="text-body text-muted-fg">
                 Type{" "}
                 <span className="font-medium text-fg">delete my account</span>
               </p>
@@ -818,7 +818,7 @@ const DeleteAccountDialog = () => {
                     />
                     {field.state.meta.errors.map((error) => (
                       <p
-                        className="text-sm text-destructive"
+                        className="text-body text-destructive"
                         key={error?.message}
                       >
                         {error?.message}
@@ -829,7 +829,7 @@ const DeleteAccountDialog = () => {
               </form.Field>
 
               {submitError === null ? null : (
-                <p className="text-sm text-destructive">{submitError}</p>
+                <p className="text-body text-destructive">{submitError}</p>
               )}
             </DialogBody>
 
@@ -990,7 +990,7 @@ export const AccountSettingsPanel = ({
           />
         </SettingsCard>
         {sessionError === null ? null : (
-          <p className="px-1 text-sm text-destructive">{sessionError}</p>
+          <p className="px-1 text-body text-destructive">{sessionError}</p>
         )}
       </SettingsSection>
 

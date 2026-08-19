@@ -51,7 +51,7 @@ const CalendarLinkActions = ({ links }: { links: CalendarLink[] }) => {
         >
           <HugeiconsIcon className="size-4 shrink-0" icon={Calendar03Icon} />
         </div>
-        <p className="min-w-0 text-sm/snug text-muted-fg">
+        <p className="min-w-0 text-body/snug text-muted-fg">
           {links.length === 1
             ? "This message includes a calendar event."
             : "This message includes calendar events."}
@@ -224,7 +224,7 @@ const HtmlMessageBodyContent = ({
             >
               <HugeiconsIcon className="size-4 shrink-0" icon={Image01Icon} />
             </div>
-            <p className="min-w-0 text-sm/snug text-muted-fg">
+            <p className="min-w-0 text-body/snug text-muted-fg">
               Remote images are hidden for security reasons.
             </p>
           </div>
@@ -282,7 +282,7 @@ const PlainTextMessageBody = ({ text }: { text: string }) => {
   return (
     <>
       <CalendarLinkActions links={calendarLinks} />
-      <p className="bg-transparent p-4 text-base/7 wrap-break-word whitespace-pre-wrap text-fg">
+      <p className="bg-transparent p-4 text-body-lg/7 wrap-break-word whitespace-pre-wrap text-fg">
         {segments.map((segment) =>
           segment.kind === "link" ? (
             <a

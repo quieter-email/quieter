@@ -13,7 +13,7 @@ import type { ComponentRef, ReactNode, Ref } from "react";
 import { cn } from "../../lib/cn";
 
 const buttonVariants = cva(
-  "squircle inline-flex border border-transparent shrink-0 items-center justify-center gap-2 rounded-md text-sm whitespace-nowrap transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/45 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "squircle inline-flex border border-transparent shrink-0 items-center justify-center gap-2 rounded-md text-body whitespace-nowrap transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/45 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     defaultVariants: {
       size: "default",
@@ -21,13 +21,13 @@ const buttonVariants = cva(
     },
     variants: {
       size: {
-        default: "h-9 px-4 text-sm [&_svg]:size-4",
+        default: "h-9 px-4 text-body [&_svg]:size-4",
         icon: "size-9 p-0 [&_svg]:size-4",
         "icon-lg": "size-10 p-0 [&_svg]:size-4.5",
         "icon-sm": "size-8 p-0 [&_svg]:size-3.5",
         "icon-xs": "size-7 p-0 [&_svg]:size-3.5",
-        lg: "h-10 px-5 text-base [&_svg]:size-4.5",
-        sm: "h-8 px-3.5 text-[13px] [&_svg]:size-3.5",
+        lg: "h-10 px-5 text-body-lg [&_svg]:size-4.5",
+        sm: "h-8 px-3.5 text-body-sm [&_svg]:size-3.5",
       },
       variant: {
         default:

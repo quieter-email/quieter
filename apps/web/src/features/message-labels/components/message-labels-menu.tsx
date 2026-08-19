@@ -67,7 +67,7 @@ const MessageLabelsMenuItems = ({
 
   if (areLabelsPending) {
     return (
-      <div className="flex items-center gap-2 px-2.5 py-2 text-sm text-muted-fg">
+      <div className="flex items-center gap-2 px-2.5 py-2 text-body text-muted-fg">
         <HugeiconsIcon
           aria-hidden
           className="size-4 animate-spin"
@@ -80,7 +80,7 @@ const MessageLabelsMenuItems = ({
 
   if (isError && !labels) {
     return (
-      <p className="px-2.5 py-2 text-sm text-destructive">
+      <p className="px-2.5 py-2 text-body text-destructive">
         {labelsError?.message ?? "Could not load labels."}
       </p>
     );
@@ -89,7 +89,7 @@ const MessageLabelsMenuItems = ({
   const userLabels = getUserLabels(labels ?? []);
   if (userLabels.length === 0) {
     return (
-      <p className="px-2.5 py-2 text-sm text-muted-fg">No custom labels.</p>
+      <p className="px-2.5 py-2 text-body text-muted-fg">No custom labels.</p>
     );
   }
 

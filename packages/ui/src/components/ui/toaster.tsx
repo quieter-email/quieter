@@ -107,12 +107,12 @@ const ToastItem = ({ toast: item }: { toast: Toast.Root.ToastObject }) => {
           {item.title !== null &&
           item.title !== undefined &&
           item.title !== "" ? (
-            <Toast.Title className="text-sm font-semibold text-current" />
+            <Toast.Title className="text-body font-semibold text-current" />
           ) : null}
           {item.description !== null &&
           item.description !== undefined &&
           item.description !== "" ? (
-            <Toast.Description className="text-sm text-current/75" />
+            <Toast.Description className="text-body text-current/75" />
           ) : null}
         </div>
         <Toast.Close

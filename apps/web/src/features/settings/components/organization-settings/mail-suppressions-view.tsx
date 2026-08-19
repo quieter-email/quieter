@@ -50,7 +50,7 @@ export const MailSuppressionsView = ({
       <SettingsCard>
         <p
           className={cn(
-            "text-sm text-muted-fg",
+            "text-body text-muted-fg",
             settingsSurfaceVariants({ variant: "padding" })
           )}
         >
@@ -66,7 +66,7 @@ export const MailSuppressionsView = ({
     suppressionsContent = (
       <p
         className={cn(
-          "text-sm text-destructive",
+          "text-body text-destructive",
           settingsSurfaceVariants({ variant: "padding" })
         )}
       >
@@ -91,7 +91,7 @@ export const MailSuppressionsView = ({
             <span className="block">
               Blocked since {dateFormatter.format(suppression.createdAt)}
             </span>
-            <span className="mt-0.5 block truncate font-mono text-xs text-muted-fg">
+            <span className="mt-0.5 block truncate font-mono text-caption text-muted-fg">
               From message {suppression.sourceProviderMessageId}
             </span>
           </SettingsRow>
@@ -103,7 +103,7 @@ export const MailSuppressionsView = ({
       <SettingsCard>
         <p
           className={cn(
-            "text-center text-sm text-muted-fg",
+            "text-center text-body text-muted-fg",
             settingsSurfaceVariants({ variant: "padding" })
           )}
         >
@@ -120,8 +120,10 @@ export const MailSuppressionsView = ({
       </SettingsBackButton>
 
       <div>
-        <h1 className="text-base font-semibold text-fg">Blocked recipients</h1>
-        <p className="mt-1 text-sm text-muted-fg">
+        <h1 className="text-body-lg font-semibold text-fg">
+          Blocked recipients
+        </h1>
+        <p className="mt-1 text-body text-muted-fg">
           These addresses bounced permanently or reported a message as spam. New
           messages to them are stopped before another delivery attempt, which
           keeps this team able to reach everyone else.

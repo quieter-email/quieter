@@ -153,7 +153,7 @@ export const PrivacySettingsPanel = () => (
     <SettingsRows>
       <SettingsRow
         action={
-          <ConsentPreferencesLink className="squircle inline-flex h-8 items-center justify-center rounded-md border border-border bg-bg px-3 text-sm font-medium text-fg transition-colors hover:bg-muted/60" />
+          <ConsentPreferencesLink className="squircle inline-flex h-8 items-center justify-center rounded-md border border-border bg-bg px-3 text-body font-medium text-fg transition-colors hover:bg-muted/60" />
         }
         title="Cookie and analytics preferences"
       >
@@ -223,7 +223,7 @@ export const DevelopmentSettingsUnavailable = () => (
           className="mt-0.5 size-4 shrink-0 text-muted-fg"
           icon={CodeIcon}
         />
-        <p className="text-sm text-muted-fg">
+        <p className="text-body text-muted-fg">
           Local demo mailbox options are only available in development builds.
         </p>
       </div>

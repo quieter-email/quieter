@@ -49,7 +49,7 @@ export const ThinkingPart = ({ content, isActive }: ThinkingPartProps) => {
           className="size-3.5 shrink-0 text-muted-fg/60"
           icon={reasoningIcon}
         />
-        <span className="min-w-0 flex-1 truncate text-sm/5 text-muted-fg">
+        <span className="min-w-0 flex-1 truncate text-body/5 text-muted-fg">
           {isActive ? "Thinking" : "Thought process"}
         </span>
         <span className="flex shrink-0 items-center gap-2">
@@ -77,7 +77,7 @@ export const ThinkingPart = ({ content, isActive }: ThinkingPartProps) => {
           <m.div
             {...getAppPresenceMotion({ reducedMotion: shouldReduceMotion })}
           >
-            <div className="mt-1.5 ml-6 rounded-md border border-border bg-bg-surface p-2.5 text-xs/relaxed text-muted-fg">
+            <div className="mt-1.5 ml-6 rounded-md border border-border bg-bg-surface p-2.5 text-caption/relaxed text-muted-fg">
               <MarkdownContent markdown={content} />
             </div>
           </m.div>

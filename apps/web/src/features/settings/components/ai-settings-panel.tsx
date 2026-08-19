@@ -292,7 +292,7 @@ const AiPersonalizationSection = ({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogBody>
-            <p className="text-sm text-muted-fg">
+            <p className="text-body text-muted-fg">
               Shared mailbox behavior is not affected. You can also ask Quieter
               to forget or correct individual things in chat.
             </p>

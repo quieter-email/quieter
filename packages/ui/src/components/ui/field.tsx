@@ -22,9 +22,9 @@ const fieldControlVariants = cva(
         ghost: "border-0 bg-transparent shadow-none read-only:bg-transparent",
       },
       size: {
-        default: "h-9 px-3 text-sm",
-        lg: "h-10 px-4 text-base",
-        sm: "h-8 px-3 text-[13px]",
+        default: "h-9 px-3 text-body",
+        lg: "h-10 px-4 text-body-lg",
+        sm: "h-8 px-3 text-body-sm",
       },
     },
   }
@@ -45,7 +45,7 @@ export const FieldLabel = ({
   ...props
 }: ComponentPropsWithoutRef<typeof FieldPrimitive.Label>) => (
   <FieldPrimitive.Label
-    className={cn("text-sm font-medium text-fg", className)}
+    className={cn("text-body font-medium text-fg", className)}
     {...props}
   />
 );
@@ -55,7 +55,7 @@ export const FieldDescription = ({
   ...props
 }: ComponentPropsWithoutRef<typeof FieldPrimitive.Description>) => (
   <FieldPrimitive.Description
-    className={cn("text-sm text-muted-fg", className)}
+    className={cn("text-body text-muted-fg", className)}
     {...props}
   />
 );
@@ -65,7 +65,7 @@ export const FieldError = ({
   ...props
 }: ComponentPropsWithoutRef<typeof FieldPrimitive.Error>) => (
   <FieldPrimitive.Error
-    className={cn("text-sm text-destructive", className)}
+    className={cn("text-body text-destructive", className)}
     {...props}
   />
 );

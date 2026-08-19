@@ -202,7 +202,7 @@ const CreatedApiKeyReveal = ({
 
     <DialogBody className="space-y-3">
       <button
-        className="squircle w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-left font-mono text-xs break-all text-fg hover:bg-secondary/50"
+        className="squircle w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-left font-mono text-caption break-all text-fg hover:bg-secondary/50"
         onClick={() => {
           runDetached(async () => {
             await copyText(createdKey);
@@ -212,7 +212,7 @@ const CreatedApiKeyReveal = ({
       >
         {createdKey}
       </button>
-      <p className="text-sm text-muted-fg">Click the key to copy it.</p>
+      <p className="text-body text-muted-fg">Click the key to copy it.</p>
     </DialogBody>
 
     <DialogFooter>
@@ -364,7 +364,7 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
                       />
                       {field.state.meta.errors.map((error) => (
                         <p
-                          className="text-sm text-destructive"
+                          className="text-body text-destructive"
                           key={error?.message}
                         >
                           {error?.message}
@@ -417,7 +417,7 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
                       </Select>
                       {field.state.meta.errors.map((error) => (
                         <p
-                          className="text-sm text-destructive"
+                          className="text-body text-destructive"
                           key={error?.message}
                         >
                           {error?.message}
@@ -428,7 +428,7 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
                 </form.Field>
 
                 {submitError === null ? null : (
-                  <p className="text-sm text-destructive">{submitError}</p>
+                  <p className="text-body text-destructive">{submitError}</p>
                 )}
               </DialogBody>
 
@@ -600,7 +600,7 @@ const ResetApiKeyDialog = ({
             </AlertDialogHeader>
 
             <AlertDialogBody>
-              <p className="text-sm text-muted-fg">
+              <p className="text-body text-muted-fg">
                 Update any integrations that still use the old key.
               </p>
             </AlertDialogBody>
@@ -645,7 +645,7 @@ const ResetApiKeyDialog = ({
 
             <AlertDialogBody className="space-y-3">
               <button
-                className="squircle w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-left font-mono text-xs break-all text-fg hover:bg-secondary/50"
+                className="squircle w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-left font-mono text-caption break-all text-fg hover:bg-secondary/50"
                 onClick={() => {
                   runDetached(async () => {
                     await copyText(createdKey);
@@ -655,7 +655,9 @@ const ResetApiKeyDialog = ({
               >
                 {createdKey}
               </button>
-              <p className="text-sm text-muted-fg">Click the key to copy it.</p>
+              <p className="text-body text-muted-fg">
+                Click the key to copy it.
+              </p>
             </AlertDialogBody>
 
             <AlertDialogFooter>
@@ -743,7 +745,9 @@ const DeleteApiKeyDialog = ({
         </AlertDialogHeader>
 
         <AlertDialogBody>
-          <p className="text-sm text-muted-fg">This action cannot be undone.</p>
+          <p className="text-body text-muted-fg">
+            This action cannot be undone.
+          </p>
         </AlertDialogBody>
 
         <AlertDialogFooter>
@@ -801,7 +805,7 @@ const ApiKeysListSection = ({
     return (
       <p
         className={cn(
-          "text-sm text-destructive",
+          "text-body text-destructive",
           settingsSurfaceVariants({ variant: "padding" })
         )}
       >
@@ -813,7 +817,7 @@ const ApiKeysListSection = ({
     return (
       <p
         className={cn(
-          "text-center text-sm text-muted-fg",
+          "text-center text-body text-muted-fg",
           settingsSurfaceVariants({ variant: "padding" })
         )}
       >
@@ -888,8 +892,8 @@ export const ApiKeysView = ({
 
       <div className="flex flex-col gap-3 @md:flex-row @md:items-start @md:justify-between">
         <div>
-          <h1 className="text-base font-semibold text-fg">API keys</h1>
-          <p className="mt-1 text-sm text-muted-fg">
+          <h1 className="text-body-lg font-semibold text-fg">API keys</h1>
+          <p className="mt-1 text-body text-muted-fg">
             {formatCount(apiKeys.length, "Key", "Keys")}
           </p>
         </div>

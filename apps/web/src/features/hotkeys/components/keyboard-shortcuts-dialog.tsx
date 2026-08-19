@@ -167,7 +167,9 @@ const ShortcutRow = ({ item }: { item: ShortcutViewItem }) => {
           {item.label ?? shortcut.label}
         </p>
         {context !== undefined && context !== "" ? (
-          <p className="mt-0.5 truncate text-xs/5 text-muted-fg">{context}</p>
+          <p className="mt-0.5 truncate text-caption/5 text-muted-fg">
+            {context}
+          </p>
         ) : null}
       </div>
       <ShortcutKeys shortcut={shortcut} />
@@ -197,7 +199,7 @@ export const KeyboardShortcutsDialog = ({
               className="mb-4 break-inside-avoid space-y-2"
               key={section.title}
             >
-              <h2 className="px-1 text-sm font-normal text-fg">
+              <h2 className="px-1 text-body font-normal text-fg">
                 {section.title}
               </h2>
               <div className="squircle overflow-hidden rounded-lg border border-border bg-bg/58">

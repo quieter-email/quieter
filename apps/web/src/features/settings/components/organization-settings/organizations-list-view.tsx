@@ -127,7 +127,7 @@ const PendingInvitationsSection = () => {
 
   if (userInvitationsError) {
     return (
-      <p className="text-sm text-destructive">
+      <p className="text-body text-destructive">
         {userInvitationsError.message ?? "Could not load invitations."}
       </p>
     );
@@ -198,7 +198,7 @@ const PendingInvitationsSection = () => {
       {(error ?? "") === "" ? null : (
         <p
           className={cn(
-            "text-sm text-destructive",
+            "text-body text-destructive",
             settingsSurfaceVariants({ variant: "padding" })
           )}
         >
@@ -225,7 +225,7 @@ export const OrganizationsListView = ({
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-sm font-normal text-fg">Teams</h1>
+        <h1 className="text-body font-normal text-fg">Teams</h1>
         <OrganizationFormDialog />
       </div>
 
@@ -235,7 +235,7 @@ export const OrganizationsListView = ({
             return <SettingsLoadingState label="Loading teams" />;
           }
           if ((error ?? "") !== "") {
-            return <p className="text-sm text-destructive">{error}</p>;
+            return <p className="text-body text-destructive">{error}</p>;
           }
           if (organizations.length > 0) {
             return (
@@ -265,7 +265,7 @@ export const OrganizationsListView = ({
               </SettingsRows>
             );
           }
-          return <p className="text-sm text-muted-fg">No teams yet.</p>;
+          return <p className="text-body text-muted-fg">No teams yet.</p>;
         })()}
       </SettingsSection>
 

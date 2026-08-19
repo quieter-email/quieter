@@ -74,7 +74,7 @@ export const ManagedMailboxManagerSettingsSection = ({
 
   if (managedMailboxQuery.data === undefined) {
     return (
-      <SettingsCard className="p-6 text-sm text-destructive">
+      <SettingsCard className="p-6 text-body text-destructive">
         {managedMailboxQuery.error?.message ??
           "Could not load shared inbox settings."}
       </SettingsCard>

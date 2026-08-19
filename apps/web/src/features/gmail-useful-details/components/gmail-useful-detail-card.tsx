@@ -127,25 +127,25 @@ export const GmailUsefulDetailCard = ({
     : (feedbackMutation.variables?.feedback ?? detail.feedback);
   const content = isVerificationCode ? (
     <span className="block min-w-0">
-      <span className="block text-xs/4 font-medium text-muted-fg">
+      <span className="block text-caption/4 font-medium text-muted-fg">
         {detailText.headline}
       </span>
-      <span className="mt-2 block font-mono text-xl font-medium tracking-widest text-fg">
+      <span className="mt-2 block font-mono text-title-sm font-medium tracking-widest text-fg">
         {detail.code}
       </span>
       {hasText(detailText.kicker) ? (
-        <span className="mt-2 block text-xs/4 wrap-break-word text-muted-fg">
+        <span className="mt-2 block text-caption/4 wrap-break-word text-muted-fg">
           {detailText.kicker}
         </span>
       ) : null}
     </span>
   ) : (
     <span className="block min-w-0">
-      <span className="block text-sm/5 font-semibold wrap-break-word text-fg">
+      <span className="block text-body/5 font-semibold wrap-break-word text-fg">
         {detailText.headline}
       </span>
       {metadata.length > 0 && (
-        <span className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs/4 font-medium text-fg/70">
+        <span className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-caption/4 font-medium text-fg/70">
           {metadata.map((value) => (
             <span className="wrap-break-word" key={value}>
               {value}
@@ -154,7 +154,7 @@ export const GmailUsefulDetailCard = ({
         </span>
       )}
       {hasText(detailText.kicker) ? (
-        <span className="mt-1.5 block text-xs/4 wrap-break-word text-muted-fg">
+        <span className="mt-1.5 block text-caption/4 wrap-break-word text-muted-fg">
           {detailText.kicker}
         </span>
       ) : null}
@@ -186,7 +186,7 @@ export const GmailUsefulDetailCard = ({
         <div className="flex shrink-0 items-center gap-0.5 justify-self-end">
           {hasText(copyValue) ? (
             <Button
-              className="mr-1 h-8 gap-1.5 rounded-lg bg-secondary/65 px-2.5 text-xs hover:bg-secondary"
+              className="mr-1 h-8 gap-1.5 rounded-lg bg-secondary/65 px-2.5 text-caption hover:bg-secondary"
               onClick={() => void copyText(copyValue)}
               size="sm"
               type="button"

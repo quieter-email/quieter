@@ -127,7 +127,7 @@ export const LeaveOrganizationDialog = ({
             }}
           >
             <DialogBody className="space-y-3">
-              <p className="text-sm text-muted-fg">
+              <p className="text-body text-muted-fg">
                 Type <span className="font-medium text-fg">leave team</span>
               </p>
 
@@ -149,7 +149,7 @@ export const LeaveOrganizationDialog = ({
                     />
                     {field.state.meta.errors.map((error) => (
                       <p
-                        className="text-sm text-destructive"
+                        className="text-body text-destructive"
                         key={error?.message}
                       >
                         {error?.message}
@@ -162,7 +162,7 @@ export const LeaveOrganizationDialog = ({
               {submitError !== null &&
               submitError !== undefined &&
               submitError !== "" ? (
-                <p className="text-sm text-destructive">{submitError}</p>
+                <p className="text-body text-destructive">{submitError}</p>
               ) : null}
             </DialogBody>
 
@@ -299,7 +299,7 @@ export const DeleteOrganizationDialog = ({
             }}
           >
             <DialogBody className="space-y-3">
-              <p className="text-sm text-muted-fg">
+              <p className="text-body text-muted-fg">
                 Type <span className="font-medium text-fg">delete team</span>
               </p>
 
@@ -321,7 +321,7 @@ export const DeleteOrganizationDialog = ({
                     />
                     {field.state.meta.errors.map((error) => (
                       <p
-                        className="text-sm text-destructive"
+                        className="text-body text-destructive"
                         key={error?.message}
                       >
                         {error?.message}
@@ -334,7 +334,7 @@ export const DeleteOrganizationDialog = ({
               {submitError !== null &&
               submitError !== undefined &&
               submitError !== "" ? (
-                <p className="text-sm text-destructive">{submitError}</p>
+                <p className="text-body text-destructive">{submitError}</p>
               ) : null}
             </DialogBody>
 

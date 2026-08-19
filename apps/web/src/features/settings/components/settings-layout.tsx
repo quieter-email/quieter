@@ -30,7 +30,7 @@ export const settingsSurfaceVariants = cva("", {
       rowShell:
         "squircle relative flex w-full items-center gap-4 px-4 py-3 after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border/60 after:content-[''] last:after:hidden @md:px-6 @md:after:inset-x-6",
       title: "text-body-sm font-normal text-fg",
-      value: "text-xs/4 text-muted-fg",
+      value: "text-caption/4 text-muted-fg",
     },
   },
 });
@@ -70,9 +70,11 @@ export const SettingsPageHeader = ({
   <div className="@container">
     <header className="flex flex-col gap-3 @md:flex-row @md:items-end @md:justify-between">
       <div className="min-w-0">
-        <h1 className="text-xl font-normal tracking-tight text-fg">{title}</h1>
+        <h1 className="text-title-sm font-normal tracking-tight text-fg">
+          {title}
+        </h1>
         {children !== undefined && children !== null ? (
-          <div className="mt-2 max-w-2xl text-sm/6 text-muted-fg">
+          <div className="mt-2 max-w-2xl text-body/6 text-muted-fg">
             {children}
           </div>
         ) : null}
@@ -98,10 +100,10 @@ export const SettingsSection = ({
       (description !== undefined && description !== null)) && (
       <div>
         {(title ?? "") === "" ? null : (
-          <h2 className="text-sm font-normal text-fg">{title}</h2>
+          <h2 className="text-body font-normal text-fg">{title}</h2>
         )}
         {description !== undefined && description !== null ? (
-          <div className="mt-1 max-w-3xl text-sm/6 text-muted-fg">
+          <div className="mt-1 max-w-3xl text-body/6 text-muted-fg">
             {description}
           </div>
         ) : null}
@@ -325,7 +327,9 @@ export const SettingsNavigationRow = ({
       </span>
     </span>
     {meta !== undefined && meta !== null ? (
-      <span className="hidden text-xs text-muted-fg @sm:block">{meta}</span>
+      <span className="hidden text-caption text-muted-fg @sm:block">
+        {meta}
+      </span>
     ) : null}
     <HugeiconsIcon
       aria-hidden
@@ -374,7 +378,7 @@ export const SettingsErrorState = ({
   onRetry: () => void;
 }) => (
   <SettingsCard className="flex min-h-15 items-center justify-between gap-4 px-4 py-3">
-    <p role="alert" className="text-sm text-destructive">
+    <p role="alert" className="text-body text-destructive">
       {message}
     </p>
     <Button onClick={onRetry} size="sm" type="button" variant="outline">

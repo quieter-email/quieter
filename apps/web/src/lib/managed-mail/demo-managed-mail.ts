@@ -6,6 +6,7 @@ import type {
 import type { MailSearchFilter } from "@quieter/mail/search";
 import type { QueryClient } from "@tanstack/react-query";
 
+import { clientEnv } from "#/env";
 import type { ComposeDraftState } from "#/features/compose/domain/draft";
 import { parseStructuredSearchQuery } from "#/features/message-search/state/message-list-search-state";
 import {
@@ -27,9 +28,9 @@ import type { ThreadListEntry } from "#/lib/gmail/thread-list";
 import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
 
 export const DEMO_MANAGED_MAILBOX_ID = "demo:managed-mailbox";
-const DEMO_MANAGED_EMAIL_ADDRESS = "support@dev.quieter.test";
+const DEMO_MANAGED_EMAIL_ADDRESS = "support@quieter.com";
 const DEMO_MANAGED_MAIL_STORAGE_KEY = "quieter:managed-demo-mail-state";
-const DEMO_MANAGED_MAIL_STATE_VERSION = 1;
+const DEMO_MANAGED_MAIL_STATE_VERSION = 2;
 const MANAGED_DEMO_THREAD_QUERY_VERSION = 3;
 
 const hasText = (value: string | null | undefined): value is string =>
@@ -106,6 +107,30 @@ const createInitialLabels = (): ManagedDemoLabel[] => [
 
 const labelIds = (...ids: string[]) => ids;
 
+const getDemoSenderAvatarUrls = (
+  from: string | undefined
+): { dark: string; light: string } | undefined => {
+  if (from === undefined || from === "") {
+    return undefined;
+  }
+  const match =
+    /(?<email>[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@(?<domain>[a-z0-9-]+(?:\.[a-z0-9-]+)+))/iu.exec(
+      from
+    );
+  const domain = match?.groups?.domain?.toLowerCase();
+  if (domain === undefined || domain === "") {
+    return undefined;
+  }
+  const token = clientEnv.VITE_LOGO_DEV_PUBLISHABLE_KEY;
+  if (token === undefined || token === "") {
+    return undefined;
+  }
+  return {
+    dark: `https://img.logo.dev/${encodeURIComponent(domain)}?token=${token}&size=64&theme=dark&format=webp&fallback=404`,
+    light: `https://img.logo.dev/${encodeURIComponent(domain)}?token=${token}&size=64&theme=light&format=webp&fallback=404`,
+  };
+};
+
 const createMessage = (
   id: string,
   fields: Omit<
@@ -118,6 +143,8 @@ const createMessage = (
   id,
   internalDate: fields.date ?? daysAgo(0),
   messageHeaderId: `<${id}@managed-demo.quieter.local>`,
+  senderAvatarUrls:
+    fields.senderAvatarUrls ?? getDemoSenderAvatarUrls(fields.from),
   threadId: fields.threadId ?? id,
   ...fields,
 });
@@ -131,7 +158,7 @@ const createInitialDemoState = (): ManagedDemoMailState => ({
       bodyText:
         "Hi,\n\nOur finance team keeps getting redirected after login. Can you confirm whether SSO is enabled for our account?\n\nThanks,\nJordan",
       date: daysAgo(0.2),
-      from: "Jordan Lee <jordan@acme.example>",
+      from: "Jordan Lee <jordan@linear.app>",
       labelIds: labelIds(
         MAILBOX_LABELS.inbox,
         MAILBOX_LABELS.unread,
@@ -154,7 +181,7 @@ const createInitialDemoState = (): ManagedDemoMailState => ({
       snippet: "SSO is enabled. I reset the stale session on your side.",
       subject: "Re: Cannot access billing portal",
       threadId: "managed-demo-thread-support",
-      to: "Jordan Lee <jordan@acme.example>",
+      to: "Jordan Lee <jordan@linear.app>",
     }),
     createMessage("managed-demo-msg-3", {
       bodyHtml:
@@ -162,7 +189,7 @@ const createInitialDemoState = (): ManagedDemoMailState => ({
       bodyText:
         "Hello,\n\nPlease confirm receipt of invoice 4821 and let us know the expected payment date.\n\nRegards,\nAccounts Payable",
       date: daysAgo(1.1),
-      from: "Accounts Payable <ap@vendor.example>",
+      from: "Accounts Payable <billing@stripe.com>",
       labelIds: labelIds(
         MAILBOX_LABELS.inbox,
         MAILBOX_LABELS.unread,
@@ -179,7 +206,7 @@ const createInitialDemoState = (): ManagedDemoMailState => ({
       bodyText:
         "Team,\n\nWe need the managed mailbox live before the partner launch on Monday. Can you confirm the DNS checklist is complete?\n\nMorgan",
       date: daysAgo(0.05),
-      from: "Morgan Ellis <morgan@partner.example>",
+      from: "Morgan Ellis <morgan@notion.so>",
       labelIds: labelIds(
         MAILBOX_LABELS.inbox,
         MAILBOX_LABELS.unread,
@@ -205,13 +232,13 @@ const createInitialDemoState = (): ManagedDemoMailState => ({
         "Sharing the latest label and saved view counts from local fixtures.",
       subject: "Weekly managed mail summary",
       threadId: "managed-demo-thread-sent",
-      to: "Onboarding <onboarding@quieter.example>",
+      to: "Onboarding <onboarding@quieter.com>",
     }),
     createMessage("managed-demo-msg-6", {
       bodyHtml: "<p>Claim your reward immediately.</p>",
       bodyText: "Claim your reward immediately.",
       date: daysAgo(3),
-      from: "Prize Desk <winner@spam.example>",
+      from: "Prize Desk <rewards@promo-claim.net>",
       isUnread: false,
       labelIds: labelIds(MAILBOX_LABELS.spam),
       snippet: "Claim your reward immediately.",
@@ -223,7 +250,7 @@ const createInitialDemoState = (): ManagedDemoMailState => ({
       bodyHtml: "<p>This message belongs in trash for local UI testing.</p>",
       bodyText: "This message belongs in trash for local UI testing.",
       date: daysAgo(4),
-      from: "Old Thread <old@example.com>",
+      from: "Old Thread <archive@company-history.org>",
       isUnread: false,
       labelIds: labelIds(MAILBOX_LABELS.trash),
       snippet: "This message belongs in trash for local UI testing.",

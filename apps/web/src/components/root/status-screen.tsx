@@ -44,12 +44,14 @@ const ghostStyle = (ghost: string): CSSProperties => ({
 
 export const StatusScreen = ({
   actions,
+  danger,
   description,
   ghost,
   note,
   title,
 }: {
   actions: ReactNode;
+  danger?: boolean;
   description: string;
   /** Oversized watermark behind the headline. */
   ghost: string;
@@ -60,14 +62,14 @@ export const StatusScreen = ({
   <main className="dark relative flex min-h-dvh flex-col overflow-hidden bg-black text-fg">
     <div aria-hidden className="absolute inset-0">
       <Suspense fallback={null}>
-        <StatusAtmosphere fadeBottom="black" fadeTop="black" />
+        <StatusAtmosphere fadeBottom="black" fadeTop="black" danger={danger} />
       </Suspense>
     </div>
 
     <div className="relative z-10 flex min-h-dvh flex-col items-center justify-center px-6 py-16 text-center">
       <span
         aria-hidden
-        className="status-enter pointer-events-none absolute top-1/2 left-1/2 -translate-1/2 font-serif leading-none tracking-[-0.04em] text-fg/[0.05] select-none"
+        className="status-enter pointer-events-none absolute top-1/2 left-1/2 -translate-1/2 font-serif leading-none tracking-[-0.04em] text-fg/5 select-none"
         style={ghostStyle(ghost)}
       >
         {ghost}
@@ -75,14 +77,14 @@ export const StatusScreen = ({
 
       <div className="relative flex w-full max-w-160 flex-col items-center">
         <h1
-          className="status-enter font-serif text-[2rem] leading-[1.32] font-normal tracking-[-0.014em] text-balance text-fg sm:text-[2.5rem] md:text-[3rem] md:leading-[1.28]"
+          className="status-enter font-serif text-title-lg leading-[1.32] font-normal tracking-[-0.014em] text-balance text-fg md:text-display-md md:leading-[1.28]"
           style={enterAfter(0.12)}
         >
           {title}
         </h1>
 
         <p
-          className="status-enter mt-6 max-w-125 text-[15px] leading-[1.7] text-balance text-muted-fg"
+          className="status-enter mt-6 max-w-125 text-body leading-[1.7] text-balance text-muted-fg"
           style={enterAfter(0.2)}
         >
           {description}
@@ -90,7 +92,7 @@ export const StatusScreen = ({
 
         {note === undefined ? null : (
           <p
-            className="status-enter mt-5 max-w-125 truncate font-mono text-xs text-fg/40"
+            className="status-enter mt-5 max-w-125 truncate font-mono text-caption text-fg/40"
             style={enterAfter(0.26)}
           >
             {note}

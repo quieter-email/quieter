@@ -12,7 +12,7 @@ export const LoadingDots = () => (
 
 /** The turn's first row, before the model has produced anything to show. */
 export const ThinkingIndicator = () => (
-  <p className="flex items-center gap-2.5 py-1 text-sm/5 text-muted-fg">
+  <p className="flex items-center gap-2.5 py-1 text-body/5 text-muted-fg">
     <HugeiconsIcon
       aria-hidden
       className="size-3.5 shrink-0 text-muted-fg/60"

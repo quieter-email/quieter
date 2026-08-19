@@ -54,8 +54,8 @@ export const GmailMailboxDetailSections = ({
             htmlFor={usefulDetailsSwitchId}
           >
             <span className="min-w-0 flex-1">
-              <span className="block text-sm text-fg">Useful details</span>
-              <span className="mt-0.5 block text-xs/5 text-muted-fg">
+              <span className="block text-body text-fg">Useful details</span>
+              <span className="mt-0.5 block text-caption/5 text-muted-fg">
                 Show codes, deliveries, and deadlines above the inbox.
                 {!hasAutomationAccess && " Requires Pro access for this team."}
               </span>
@@ -82,8 +82,8 @@ export const GmailMailboxDetailSections = ({
             htmlFor={autoLabelSwitchId}
           >
             <span className="min-w-0 flex-1">
-              <span className="block text-sm text-fg">Auto-label</span>
-              <span className="mt-0.5 block text-xs/5 text-muted-fg">
+              <span className="block text-body text-fg">Auto-label</span>
+              <span className="mt-0.5 block text-caption/5 text-muted-fg">
                 Label new Inbox mail using each label&apos;s inclusion criteria.
                 {!hasAutomationAccess && " Requires Pro access for this team."}
               </span>

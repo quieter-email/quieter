@@ -78,10 +78,10 @@ const FeatureSection = ({ body, id, image, imageFirst, title }: Feature) => (
         className={cn("flex flex-col gap-3", imageFirst && "md:order-2")}
         delay={imageFirst ? 0.08 : 0}
       >
-        <h2 className="font-serif text-2xl/snug font-normal tracking-[-0.012em] text-fg md:text-[1.625rem]">
+        <h2 className="font-serif text-title-md/snug font-normal tracking-[-0.012em] text-fg">
           {title}
         </h2>
-        <p className="max-w-[320px] text-[15px] leading-[1.73] text-muted-fg">
+        <p className="max-w-[320px] text-body leading-[1.73] text-muted-fg">
           {body}
         </p>
       </Reveal>
@@ -101,7 +101,7 @@ const Pricing = () => (
     <div className="mx-auto w-full max-w-220">
       <Reveal
         as="h2"
-        className="text-center font-serif text-2xl/snug font-normal tracking-[-0.012em] text-fg md:text-[1.625rem]"
+        className="text-center font-serif text-title-md/snug font-normal tracking-[-0.012em] text-fg"
       >
         Pricing
       </Reveal>
@@ -113,16 +113,16 @@ const Pricing = () => (
             delay={index * 0.07}
             key={product.name}
           >
-            <dt className="w-37.5 shrink-0 text-base text-fg">
+            <dt className="w-37.5 shrink-0 text-body-lg text-fg">
               {product.name}
             </dt>
-            <dd className="min-w-60 flex-1 text-[15px] leading-[1.73] text-muted-fg">
+            <dd className="min-w-60 flex-1 text-body leading-[1.73] text-muted-fg">
               {product.description}
             </dd>
-            <dd className="ml-auto text-base text-fg tabular-nums">
+            <dd className="ml-auto text-body-lg text-fg tabular-nums">
               ${product.monthlyPriceCents / 100}
             </dd>
-            <dd className="w-16 text-right text-[15px] text-muted-fg/70">
+            <dd className="w-16 text-right text-body text-muted-fg/70">
               / month
             </dd>
           </Reveal>
@@ -141,7 +141,7 @@ const Closing = () => (
     <div className="relative z-10 flex w-full max-w-220 flex-col items-center text-fg">
       <Reveal
         as="h2"
-        className="max-w-205 text-center font-serif text-[1.75rem] leading-[1.42] font-normal tracking-[-0.014em] text-balance text-fg sm:text-[2.25rem] md:text-[2.875rem] md:leading-[1.48]"
+        className="max-w-205 text-center font-serif text-title-md leading-[1.42] font-normal tracking-[-0.014em] text-balance text-fg sm:text-title-lg md:text-display-md md:leading-[1.48]"
       >
         Email can do more without asking more from you.
       </Reveal>

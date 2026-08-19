@@ -58,13 +58,13 @@ const ComposeField = ({
   <label className="flex min-w-0 items-center gap-3 border-b border-border py-1.5 last:border-b-0">
     <span className="w-12 shrink-0 text-micro text-muted-fg">{label}</span>
     {readOnly ? (
-      <span className="h-8 w-full min-w-0 truncate bg-transparent px-0 text-sm text-fg">
+      <span className="h-8 w-full min-w-0 truncate bg-transparent px-0 text-body text-fg">
         {value || "—"}
       </span>
     ) : (
       <input
         aria-label={label}
-        className="h-8 w-full min-w-0 bg-transparent px-0 text-sm text-fg placeholder:text-muted-fg/60"
+        className="h-8 w-full min-w-0 bg-transparent px-0 text-body text-fg placeholder:text-muted-fg/60"
         onBlur={onBlur}
         onChange={(event) => onChange?.(event.target.value)}
         value={value}
@@ -113,7 +113,7 @@ const ComposeDeclinedView = ({ initial }: { initial: ComposeEmailInput }) => {
           <ComposeField label="Bcc" readOnly value={initial.bcc} />
         ) : null}
         <ComposeField label="Subject" readOnly value={initial.subject} />
-        <div className="py-2 text-sm/relaxed text-muted-fg">
+        <div className="py-2 text-body/relaxed text-muted-fg">
           {bodyText ? (
             <p className="max-w-[37em] whitespace-pre-wrap">{bodyText}</p>
           ) : (
@@ -241,7 +241,7 @@ export const InlineComposeTool = ({
       onSubmit={handleSubmit}
     >
       <div className="mb-2 flex items-center justify-between gap-3">
-        <p className="text-xs text-muted-fg">
+        <p className="text-caption text-muted-fg">
           {processing === true ? "Sending email" : "Draft email"}
           {initial.subject.trim() ? (
             <span className="text-fg/75">{` "${initial.subject}"`}</span>
@@ -361,7 +361,7 @@ export const InlineComposeTool = ({
                   reducedMotion: shouldReduceMotion,
                 })}
                 aria-live="polite"
-                className="truncate text-xs text-destructive"
+                className="truncate text-caption text-destructive"
               >
                 {error}
               </m.p>

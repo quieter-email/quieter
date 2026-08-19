@@ -23,7 +23,7 @@ export const SliderValue = ({
   ...props
 }: ComponentPropsWithoutRef<typeof SliderPrimitive.Value>) => (
   <SliderPrimitive.Value
-    className={cn("min-w-10 text-sm text-muted-fg", className)}
+    className={cn("min-w-10 text-body text-muted-fg", className)}
     {...props}
   />
 );

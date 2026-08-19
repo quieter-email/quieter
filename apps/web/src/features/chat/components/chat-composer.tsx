@@ -51,7 +51,7 @@ const ChatComposerStatus = ({
       <m.output
         {...statusMotion}
         aria-live="polite"
-        className="flex h-6 items-center gap-2 px-4 text-xs text-muted-fg"
+        className="flex h-6 items-center gap-2 px-4 text-caption text-muted-fg"
         key={recording ? "recording" : "transcribing"}
       >
         {recording ? (
@@ -108,7 +108,7 @@ export const ChatComposer = ({
       <div className="px-4 pt-4 pb-2">
         <TokenField
           aria-label="Message"
-          className="max-h-40 min-h-14 overflow-y-auto text-sm data-[empty=true]:before:text-muted-fg/50"
+          className="max-h-40 min-h-14 overflow-y-auto text-body data-[empty=true]:before:text-muted-fg/50"
           disabled={disabled}
           onChange={onInputChange}
           onKeyDown={onInputKeyDown}

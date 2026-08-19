@@ -58,14 +58,14 @@ export const EmptyMessageState = ({
         <VerticalSlot>
           <div>
             {title !== null && title !== undefined && title !== "" ? (
-              <p className="text-sm font-semibold tracking-tight text-fg">
+              <p className="text-body font-semibold tracking-tight text-fg">
                 {title}
               </p>
             ) : null}
             {description !== null &&
             description !== undefined &&
             description !== "" ? (
-              <p className="mt-1.5 text-sm text-muted-fg">{description}</p>
+              <p className="mt-1.5 text-body text-muted-fg">{description}</p>
             ) : null}
           </div>
         </VerticalSlot>

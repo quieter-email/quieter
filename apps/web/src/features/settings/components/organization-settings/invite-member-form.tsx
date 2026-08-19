@@ -115,7 +115,7 @@ export const InviteMemberForm = ({
                   <div id={emailErrorId} role="alert">
                     {field.state.meta.errors.map((error) => (
                       <p
-                        className="text-sm text-destructive"
+                        className="text-body text-destructive"
                         key={error?.message}
                       >
                         {error?.message}
@@ -153,7 +153,10 @@ export const InviteMemberForm = ({
       {submitError !== null &&
       submitError !== undefined &&
       submitError !== "" ? (
-        <p className="px-4 pb-3 text-sm text-destructive @md:px-6" role="alert">
+        <p
+          className="px-4 pb-3 text-body text-destructive @md:px-6"
+          role="alert"
+        >
           {submitError}
         </p>
       ) : null}

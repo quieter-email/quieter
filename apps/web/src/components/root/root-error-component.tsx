@@ -45,8 +45,9 @@ export const RootErrorComponent = ({
           </LinkButton>
         </>
       }
-      ghost="error"
-      description="This screen stopped loading partway through. Nothing was sent and nothing was lost, so trying again is safe."
+      ghost="5XX"
+      danger
+      description="An error occurred while loading this page. Please try again. If the problem persists, please contact support."
       note={developerMessage}
       title="Something broke on our end."
     />

@@ -185,14 +185,14 @@ export const TemplateWorkspace = ({
   let templateQueryState: ReactNode = null;
   if (templatesQuery.isPending) {
     templateQueryState = (
-      <div className="flex items-center justify-center gap-2 px-3 py-10 text-xs text-muted-fg">
+      <div className="flex items-center justify-center gap-2 px-3 py-10 text-caption text-muted-fg">
         <HugeiconsIcon className="size-3.5 animate-spin" icon={Loading03Icon} />
         Loading templates
       </div>
     );
   } else if (templatesQuery.isError) {
     templateQueryState = (
-      <p className="px-3 py-10 text-center text-xs/5 text-destructive">
+      <p className="px-3 py-10 text-center text-caption/5 text-destructive">
         Could not load templates.
       </p>
     );
@@ -205,8 +205,8 @@ export const TemplateWorkspace = ({
         : "Try a different search.";
     templateQueryState = (
       <div className="px-6 py-12 text-center">
-        <p className="text-sm font-medium text-fg">{emptyTitle}</p>
-        <p className="mt-1 text-xs/5 text-muted-fg">{emptyDescription}</p>
+        <p className="text-body font-medium text-fg">{emptyTitle}</p>
+        <p className="mt-1 text-caption/5 text-muted-fg">{emptyDescription}</p>
       </div>
     );
   }
@@ -234,7 +234,7 @@ export const TemplateWorkspace = ({
                 <HugeiconsIcon icon={SidebarLeftIcon} />
               </Button>
             </IconButtonTooltip>
-            <h1 className="min-w-0 flex-1 text-sm font-semibold tracking-tight text-fg">
+            <h1 className="min-w-0 flex-1 text-body font-semibold tracking-tight text-fg">
               Templates
             </h1>
             <Button onClick={startNewTemplate} size="sm" type="button">
@@ -294,7 +294,7 @@ export const TemplateWorkspace = ({
                 )}
               />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium">
+                <span className="block truncate text-body font-medium">
                   {template.name}
                 </span>
                 <span className="mt-1 flex items-center gap-2 text-micro text-muted-fg">
@@ -332,7 +332,7 @@ export const TemplateWorkspace = ({
                 <HugeiconsIcon icon={ArrowLeft01Icon} />
               </Button>
             </IconButtonTooltip>
-            <p className="text-sm font-medium tracking-tight text-fg">
+            <p className="text-body font-medium tracking-tight text-fg">
               {hasText(editingId) ? "Edit template" : "New template"}
             </p>
           </div>
@@ -474,7 +474,7 @@ export const TemplateWorkspace = ({
                               Save
                             </ToolbarButton>
                           ) : (
-                            <span className="px-2 text-xs text-muted-fg">
+                            <span className="px-2 text-caption text-muted-fg">
                               Only team admins can edit
                             </span>
                           )}
@@ -508,7 +508,7 @@ export const TemplateWorkspace = ({
                 : "This removes the template from your saved templates."}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogBody className="text-sm text-muted-fg">
+          <AlertDialogBody className="text-body text-muted-fg">
             Messages that already used this template will not change.
           </AlertDialogBody>
           <AlertDialogFooter>

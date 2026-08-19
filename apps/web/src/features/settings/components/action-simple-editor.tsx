@@ -396,7 +396,7 @@ const ActionRuleFields = ({
           <div className="squircle rounded-md border border-border bg-input px-3 py-2 shadow-sm transition-colors duration-150 ease-out focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/45">
             <TokenField
               aria-label="Action instruction"
-              className="max-h-72 min-h-32 overflow-y-auto text-sm"
+              className="max-h-72 min-h-32 overflow-y-auto text-body"
               onChange={setInstructions}
               placeholder={DEFAULT_ACTION_INSTRUCTIONS}
               suggestionsLabel="Connectors"
@@ -899,7 +899,7 @@ const ActionEditorRuleSection = ({
         <p className={settingsSurfaceVariants({ variant: "title" })}>
           Missing before publish
         </p>
-        <ul className="mt-2 space-y-1 text-sm text-destructive">
+        <ul className="mt-2 space-y-1 text-body text-destructive">
           {validationErrors.map((message) => (
             <li key={message}>{message}</li>
           ))}
@@ -1100,7 +1100,7 @@ const ActionEditorSavedActionsSection = ({
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogBody>
-                  <p className="text-sm text-muted-fg">
+                  <p className="text-body text-muted-fg">
                     This cannot be undone.
                   </p>
                 </AlertDialogBody>

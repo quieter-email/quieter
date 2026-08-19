@@ -36,7 +36,7 @@ export const NumberFieldInput = ({
 }: ComponentPropsWithoutRef<typeof NumberFieldPrimitive.Input>) => (
   <NumberFieldPrimitive.Input
     className={cn(
-      "h-9 w-full border-0 bg-transparent px-3 text-center text-sm text-fg shadow-none transition-colors duration-150 ease-out placeholder:text-muted-fg read-only:bg-transparent focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:focus-visible:ring-destructive/45",
+      "h-9 w-full border-0 bg-transparent px-3 text-center text-body text-fg shadow-none transition-colors duration-150 ease-out placeholder:text-muted-fg read-only:bg-transparent focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:focus-visible:ring-destructive/45",
       className
     )}
     {...props}

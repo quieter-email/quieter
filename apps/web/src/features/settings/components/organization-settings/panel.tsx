@@ -172,7 +172,7 @@ export const OrganizationSettingsPanel = () => {
         <SettingsBackButton onClick={navigateToOrganizationsList}>
           Teams
         </SettingsBackButton>
-        <p className="text-sm text-destructive">
+        <p className="text-body text-destructive">
           {loadError.message ?? "Could not load teams."}
         </p>
       </>

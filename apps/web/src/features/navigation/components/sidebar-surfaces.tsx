@@ -20,9 +20,9 @@ const sidebarSurfaceFadeTransition = {
 export const sidebarSurfaceVariants = cva("squircle rounded-md", {
   variants: {
     surface: {
-      active: "pointer-events-none absolute inset-0 z-0 bg-control-active/25",
-      hover: "bg-muted",
-      hoverItem: "block size-full bg-muted",
+      active: "pointer-events-none absolute inset-0 z-0 bg-control-active",
+      hover: "dark:bg-muted/40 bg-muted/60",
+      hoverItem: "block size-full dark:bg-muted/40 bg-muted/60",
     },
   },
 });

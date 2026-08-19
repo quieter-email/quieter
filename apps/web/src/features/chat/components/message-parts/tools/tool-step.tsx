@@ -54,7 +54,7 @@ const ToolStepTrailing = ({
   <span className="flex shrink-0 items-center gap-2">
     {pending ? <LoadingDots /> : null}
     {!pending && meta !== undefined && meta !== "" ? (
-      <span className="text-xs text-muted-fg/65">{meta}</span>
+      <span className="text-caption text-muted-fg/65">{meta}</span>
     ) : null}
     {canExpand ? (
       <HugeiconsIcon
@@ -121,7 +121,7 @@ export const ToolStep = ({
           })}
           icon={icon}
         />
-        <span className="flex min-w-0 flex-1 items-baseline gap-x-2 truncate text-sm/5">
+        <span className="flex min-w-0 flex-1 items-baseline gap-x-2 truncate text-body/5">
           <span
             className={cn("shrink-0", {
               "text-destructive": hasError,

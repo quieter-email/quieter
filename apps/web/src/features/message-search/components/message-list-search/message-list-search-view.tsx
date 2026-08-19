@@ -398,7 +398,7 @@ export const MessageListSearchView = ({
                 autoCapitalize="off"
                 autoComplete="off"
                 autoCorrect="off"
-                className="box-border field-sizing-content h-6 max-w-full min-w-[3ch] shrink-0 grow basis-auto bg-transparent pl-2 text-[13px] text-fg outline-none placeholder:text-muted-fg"
+                className="box-border field-sizing-content h-6 max-w-full min-w-[3ch] shrink-0 grow basis-auto bg-transparent pl-2 text-body-sm text-fg outline-none placeholder:text-muted-fg"
                 data-slot="search-input"
                 onChange={(event) => {
                   updateSearchText(event.currentTarget.value);

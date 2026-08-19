@@ -64,8 +64,8 @@ export const MembersView = ({
       </SettingsBackButton>
 
       <div>
-        <h1 className="text-base font-semibold text-fg">Members</h1>
-        <p className="mt-1 text-sm text-muted-fg">
+        <h1 className="text-body-lg font-semibold text-fg">Members</h1>
+        <p className="mt-1 text-body text-muted-fg">
           {formatCount(organization.members.length, "Member", "Members")}
         </p>
       </div>
@@ -120,7 +120,7 @@ export const MembersView = ({
         {visibleMembers.length === 0 && (
           <p
             className={cn(
-              "text-center text-sm text-muted-fg",
+              "text-center text-body text-muted-fg",
               settingsSurfaceVariants({ variant: "padding" })
             )}
           >

@@ -20,7 +20,7 @@ const Hero = () => (
     </div>
 
     <div className="dark relative z-10 flex w-full max-w-220 flex-col items-center text-fg">
-      <h1 className="text-center font-serif text-[2.125rem] leading-[1.32] font-normal tracking-[-0.014em] text-balance text-fg sm:text-[2.75rem] md:text-[3.125rem] md:leading-[1.44]">
+      <h1 className="text-center font-serif text-title-lg leading-[1.32] font-normal tracking-[-0.014em] text-balance text-fg sm:text-display-md md:leading-[1.44]">
         <Entrance as="span" className="block">
           <span className="text-muted-fg">The full</span> email{" "}
           <span className="text-muted-fg">stack</span>
@@ -32,7 +32,7 @@ const Hero = () => (
 
       <Entrance
         as="p"
-        className="mt-6 max-w-160 text-center text-[15px] leading-[1.7] text-balance text-muted-fg md:text-base"
+        className="mt-6 max-w-160 text-center text-body leading-[1.7] text-balance text-muted-fg md:text-body-lg"
         delay={0.18}
       >
         Your Gmail, your team&rsquo;s mailboxes and the mail your product sends,
@@ -60,7 +60,7 @@ export const HomePage = () => {
       <HomeSmoothScroll>
         <div className="min-h-dvh bg-bg-elevated text-fg">
           <LinkButton
-            className="fixed top-4 right-4 z-20 h-8 border-border bg-card/60 px-3 text-xs text-muted-fg shadow-none backdrop-blur-sm hover:bg-muted hover:text-fg"
+            className="fixed top-4 right-4 z-20 h-8 border-border bg-card/60 px-3 text-caption text-muted-fg shadow-none backdrop-blur-sm hover:bg-muted hover:text-fg"
             search={{ returnTo: "/auth" }}
             to="/site-password"
             variant="outline"

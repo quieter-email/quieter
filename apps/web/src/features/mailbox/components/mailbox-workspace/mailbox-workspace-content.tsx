@@ -143,7 +143,7 @@ const ComposeWorkspaceLoading = ({
       <output
         aria-label="Loading composer"
         aria-live="polite"
-        className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col items-center justify-center gap-3 p-6 text-sm text-muted-fg sm:p-8"
+        className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col items-center justify-center gap-3 p-6 text-body text-muted-fg sm:p-8"
       >
         <HugeiconsIcon
           aria-hidden
@@ -221,10 +221,10 @@ const NoMailboxWorkspace = ({
               className="mx-auto size-5 text-muted-fg"
               icon={Mail01Icon}
             />
-            <h1 className="mt-5 text-lg font-semibold tracking-tight text-fg">
+            <h1 className="mt-5 text-body-lg font-semibold tracking-tight text-fg">
               Connect a mailbox
             </h1>
-            <p className="mx-auto mt-2 max-w-md text-sm text-muted-fg">
+            <p className="mx-auto mt-2 max-w-md text-body text-muted-fg">
               Connect Gmail, or set up managed mail to send and receive from
               your own domain with managed mailboxes and API keys.
             </p>
@@ -235,7 +235,7 @@ const NoMailboxWorkspace = ({
                 onClick={onConnectGmail}
                 type="button"
               >
-                <span className="flex items-center gap-2 text-sm font-medium text-fg">
+                <span className="flex items-center gap-2 text-body font-medium text-fg">
                   <HugeiconsIcon
                     aria-hidden
                     className={cn("size-4", {
@@ -245,7 +245,7 @@ const NoMailboxWorkspace = ({
                   />
                   {isConnectingGmail ? "Opening Google" : "Connect Gmail"}
                 </span>
-                <span className="mt-2 block text-sm text-muted-fg">
+                <span className="mt-2 block text-body text-muted-fg">
                   Add an existing Gmail or Google Workspace inbox.
                 </span>
               </button>
@@ -256,7 +256,7 @@ const NoMailboxWorkspace = ({
                 }}
                 type="button"
               >
-                <span className="flex items-center gap-2 text-sm font-medium text-fg">
+                <span className="flex items-center gap-2 text-body font-medium text-fg">
                   <HugeiconsIcon
                     aria-hidden
                     className="size-4"
@@ -264,7 +264,7 @@ const NoMailboxWorkspace = ({
                   />
                   Set up managed mail
                 </span>
-                <span className="mt-2 block text-sm text-muted-fg">
+                <span className="mt-2 block text-body text-muted-fg">
                   Use your own domain with managed mailboxes and API keys.
                 </span>
               </button>
@@ -275,7 +275,7 @@ const NoMailboxWorkspace = ({
               </LinkButton>
             </div>
             {hasText(connectError) ? (
-              <p className="mt-3 text-sm text-destructive">{connectError}</p>
+              <p className="mt-3 text-body text-destructive">{connectError}</p>
             ) : null}
           </m.div>
         )}
@@ -379,10 +379,10 @@ export const MailboxWorkspaceContent = ({
           className="max-w-md space-y-3 text-center"
           {...workspaceContentMotion}
         >
-          <h1 className="text-lg font-semibold tracking-tight text-fg">
+          <h1 className="text-body-lg font-semibold tracking-tight text-fg">
             Reconnect Google
           </h1>
-          <p className="text-sm text-muted-fg">
+          <p className="text-body text-muted-fg">
             This account needs to reconnect through Google before Quieter can
             load mail.
           </p>
@@ -407,7 +407,9 @@ export const MailboxWorkspaceContent = ({
               Reconnect
             </Button>
             {hasText(reconnectError) ? (
-              <p className="mt-3 text-sm text-destructive">{reconnectError}</p>
+              <p className="mt-3 text-body text-destructive">
+                {reconnectError}
+              </p>
             ) : null}
           </div>
         </m.div>

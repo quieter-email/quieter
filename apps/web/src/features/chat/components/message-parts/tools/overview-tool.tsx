@@ -48,7 +48,7 @@ export const OverviewTool = ({
       pending={pending}
     >
       {success ? (
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-fg">
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-caption text-muted-fg">
           <div className="flex justify-between gap-3">
             <dt>Messages</dt>
             <dd className="text-fg/80 tabular-nums">

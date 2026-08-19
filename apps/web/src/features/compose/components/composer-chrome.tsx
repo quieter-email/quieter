@@ -47,7 +47,7 @@ export const ComposerFieldGroup = ({
  * the group reading as one surface while still marking where the caret is.
  */
 export const composerFieldControlClassName =
-  "h-11 min-w-0 flex-1 rounded-none border-0 bg-transparent px-0 text-sm shadow-none read-only:bg-transparent focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-none";
+  "h-11 min-w-0 flex-1 rounded-none border-0 bg-transparent px-0 text-body shadow-none read-only:bg-transparent focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-none";
 
 const composerFieldRowClassName =
   "flex items-center gap-3 px-4 transition-colors duration-150 ease-out focus-within:bg-bg-surface";
@@ -71,14 +71,14 @@ export const ComposerFieldRow = ({
     className={cn("gap-0", { "border-b border-border": divided }, className)}
   >
     <div className={composerFieldRowClassName}>
-      <FieldLabel className="w-16 shrink-0 text-sm font-normal text-muted-fg">
+      <FieldLabel className="w-16 shrink-0 text-body font-normal text-muted-fg">
         {label}
       </FieldLabel>
       {children}
       {trailing}
     </div>
     {error === undefined ? null : (
-      <FieldError className="px-4 pb-2 pl-20 text-xs">{error}</FieldError>
+      <FieldError className="px-4 pb-2 pl-20 text-caption">{error}</FieldError>
     )}
   </Field>
 );

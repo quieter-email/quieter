@@ -232,7 +232,7 @@ export const MessageListSelectionToolbar = ({
           </Checkbox>
         </IconButtonTooltip>
 
-        <p className="truncate text-sm font-medium text-fg">
+        <p className="truncate text-body font-medium text-fg">
           {selectedCount} selected
         </p>
 

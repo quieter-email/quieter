@@ -198,7 +198,7 @@ export const MailboxDetailGeneralSection = ({
                   Reconnect
                 </Button>
               ) : (
-                <span className="text-xs text-muted-fg">Connected</span>
+                <span className="text-caption text-muted-fg">Connected</span>
               )
             }
             title="Connection"

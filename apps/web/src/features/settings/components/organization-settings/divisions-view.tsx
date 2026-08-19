@@ -172,7 +172,7 @@ const CreateDivisionDialog = ({
                     />
                     {field.state.meta.errors.map((error) => (
                       <p
-                        className="text-sm text-destructive"
+                        className="text-body text-destructive"
                         key={error?.message}
                       >
                         {error?.message}
@@ -205,7 +205,7 @@ const CreateDivisionDialog = ({
               {submitError !== null &&
               submitError !== undefined &&
               submitError !== "" ? (
-                <p className="text-sm text-destructive">{submitError}</p>
+                <p className="text-body text-destructive">{submitError}</p>
               ) : null}
             </DialogBody>
 
@@ -349,7 +349,7 @@ const EditDivisionFieldDialog = ({
                     />
                     {formField.state.meta.errors.map((error) => (
                       <p
-                        className="text-sm text-destructive"
+                        className="text-body text-destructive"
                         key={error?.message}
                       >
                         {error?.message}
@@ -362,7 +362,7 @@ const EditDivisionFieldDialog = ({
               {submitError !== null &&
               submitError !== undefined &&
               submitError !== "" ? (
-                <p className="text-sm text-destructive">{submitError}</p>
+                <p className="text-body text-destructive">{submitError}</p>
               ) : null}
             </DialogBody>
 
@@ -441,7 +441,9 @@ const DeleteDivisionDialog = ({
         </AlertDialogHeader>
 
         <AlertDialogBody>
-          <p className="text-sm text-muted-fg">This action cannot be undone.</p>
+          <p className="text-body text-muted-fg">
+            This action cannot be undone.
+          </p>
         </AlertDialogBody>
 
         <AlertDialogFooter>
@@ -509,8 +511,8 @@ const DivisionDetailView = ({
       <SettingsBackButton onClick={onBack}>Divisions</SettingsBackButton>
 
       <div>
-        <h1 className="text-base font-semibold text-fg">{division.name}</h1>
-        <p className="mt-1 text-sm text-muted-fg">
+        <h1 className="text-body-lg font-semibold text-fg">{division.name}</h1>
+        <p className="mt-1 text-body text-muted-fg">
           {formatCount(division.members.length, "Member")},{" "}
           {formatCount(division.mailboxCount, "Mailbox", "Mailboxes")}
         </p>
@@ -603,10 +605,10 @@ const DivisionDetailView = ({
                       <CheckboxIndicator />
                     </Checkbox>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm text-fg">
+                      <span className="block truncate text-body text-fg">
                         {memberRecord.user.name || memberRecord.user.email}
                       </span>
-                      <span className="mt-0.5 block truncate text-xs text-muted-fg">
+                      <span className="mt-0.5 block truncate text-caption text-muted-fg">
                         {memberRecord.user.email}
                       </span>
                     </span>
@@ -617,7 +619,7 @@ const DivisionDetailView = ({
           ) : (
             <p
               className={cn(
-                "text-sm text-muted-fg",
+                "text-body text-muted-fg",
                 settingsSurfaceVariants({ variant: "padding" })
               )}
             >
@@ -694,7 +696,7 @@ export const DivisionsView = ({
     divisionsContent = (
       <p
         className={cn(
-          "text-sm text-destructive",
+          "text-body text-destructive",
           settingsSurfaceVariants({ variant: "padding" })
         )}
       >
@@ -721,7 +723,7 @@ export const DivisionsView = ({
     divisionsContent = (
       <p
         className={cn(
-          "text-center text-sm text-muted-fg",
+          "text-center text-body text-muted-fg",
           settingsSurfaceVariants({ variant: "padding" })
         )}
       >
@@ -738,8 +740,8 @@ export const DivisionsView = ({
 
       <div className="flex flex-col gap-3 @md:flex-row @md:items-start @md:justify-between">
         <div>
-          <h1 className="text-base font-semibold text-fg">Divisions</h1>
-          <p className="mt-1 text-sm text-muted-fg">
+          <h1 className="text-body-lg font-semibold text-fg">Divisions</h1>
+          <p className="mt-1 text-body text-muted-fg">
             {formatCount(divisions.length, "Division")}
           </p>
         </div>

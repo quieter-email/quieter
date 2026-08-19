@@ -94,7 +94,7 @@ export const OnboardingScreen = () => {
     <main className="min-h-dvh bg-bg text-fg">
       <div className="mx-auto w-full max-w-xl px-6 py-12 md:py-16">
         <header>
-          <h1 className="text-3xl font-medium tracking-tight text-fg">
+          <h1 className="text-title-md font-medium tracking-tight text-fg">
             Welcome to Quieter
           </h1>
           <p className="mt-2 text-body-sm text-muted-fg">

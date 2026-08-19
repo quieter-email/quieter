@@ -163,7 +163,7 @@ export const RegisterDomainDialog = ({
                     />
                     {field.state.meta.errors.map((error) => (
                       <p
-                        className="text-sm text-destructive"
+                        className="text-body text-destructive"
                         key={error?.message}
                       >
                         {error?.message}
@@ -176,7 +176,7 @@ export const RegisterDomainDialog = ({
               <form.Field name="mode">
                 {(field) => (
                   <fieldset className="space-y-2">
-                    <legend className="mb-2 text-sm font-medium text-fg">
+                    <legend className="mb-2 text-body font-medium text-fg">
                       Mail mode
                     </legend>
                     {modeOptions.map((option) => {
@@ -205,10 +205,10 @@ export const RegisterDomainDialog = ({
                             value={option.value}
                           />
                           <span>
-                            <span className="block text-sm font-medium text-fg">
+                            <span className="block text-body font-medium text-fg">
                               {option.label}
                             </span>
-                            <span className="mt-1 block text-xs/5 text-muted-fg">
+                            <span className="mt-1 block text-caption/5 text-muted-fg">
                               {option.description}
                             </span>
                           </span>
@@ -222,7 +222,7 @@ export const RegisterDomainDialog = ({
               {submitError !== null &&
               submitError !== undefined &&
               submitError !== "" ? (
-                <p className="text-sm text-destructive">{submitError}</p>
+                <p className="text-body text-destructive">{submitError}</p>
               ) : null}
 
               <DialogFooter className="px-0 pb-0">

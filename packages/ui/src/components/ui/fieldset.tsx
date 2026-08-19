@@ -20,7 +20,7 @@ export const FieldsetLegend = ({
   ...props
 }: ComponentPropsWithoutRef<typeof FieldsetPrimitive.Legend>) => (
   <FieldsetPrimitive.Legend
-    className={cn("px-1 text-sm font-semibold text-fg", className)}
+    className={cn("px-1 text-body font-semibold text-fg", className)}
     {...props}
   />
 );

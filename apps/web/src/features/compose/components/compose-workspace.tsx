@@ -575,7 +575,7 @@ export const ComposeWorkspace = ({
           {hasText(state.draft.errorMessage) ? (
             <div
               aria-live="polite"
-              className="flex min-w-0 shrink-0 items-start gap-2 text-sm text-destructive"
+              className="flex min-w-0 shrink-0 items-start gap-2 text-body text-destructive"
               role="alert"
             >
               <HugeiconsIcon

@@ -42,6 +42,7 @@ uniform float uFadeTop;
 uniform float uFadeBottom;
 uniform vec3 uFadeColorTop;
 uniform vec3 uFadeColorBottom;
+uniform float uDanger;
 
 // Per-frame globals (same for every pixel)
 uniform float uMood;
@@ -190,13 +191,13 @@ void main() {
   ambient *= mix(1.0, 0.6, textSafe * 0.65);
 
   vec3 black = vec3(0.0);
-  vec3 charcoal = vec3(0.045, 0.05, 0.06);
-  vec3 navy = vec3(0.07, 0.09, 0.13);
-  vec3 dustyBlue = vec3(0.15, 0.19, 0.27);
-  vec3 steel = vec3(0.32, 0.36, 0.42);
-  vec3 offWhite = vec3(0.8, 0.82, 0.86);
+  vec3 charcoal = mix(vec3(0.045, 0.05, 0.06), vec3(0.052, 0.032, 0.034), uDanger);
+  vec3 navy = mix(vec3(0.07, 0.09, 0.13), vec3(0.14, 0.04, 0.05), uDanger);
+  vec3 dustyBlue = mix(vec3(0.15, 0.19, 0.27), vec3(0.3, 0.08, 0.09), uDanger);
+  vec3 steel = mix(vec3(0.32, 0.36, 0.42), vec3(0.4, 0.26, 0.26), uDanger);
+  vec3 offWhite = mix(vec3(0.8, 0.82, 0.86), vec3(0.84, 0.78, 0.77), uDanger);
 
-  float blueAmt = mix(0.4, 0.85, mood);
+  float blueAmt = mix(0.4, 0.85, mood) * mix(1.0, 1.12, uDanger);
   float blueTone = valueNoise3(vec3(q * 1.6 + uSeed.xy, t * 0.12));
   vec3 color = mix(black, charcoal, clamp(ambient + 0.3, 0.0, 1.0));
   color = mix(color, navy, clamp(blueField * 0.65 * blueAmt * mix(0.7, 1.15, blueTone), 0.0, 1.0));
@@ -246,6 +247,8 @@ type AtmosphericBackgroundProps = {
   fadeTop?: FadeTarget;
   /** Fade the bottom edge into this band color (hard cut to the section below). */
   fadeBottom?: FadeTarget;
+  /** Deep red atmosphere (errors). Default false. */
+  danger?: boolean;
 };
 
 const fadeTargetRgb = (target: FadeTarget | undefined) =>
@@ -381,6 +384,7 @@ const ATMOSPHERIC_UNIFORM_NAMES = [
   "cosA",
   "cosB",
   "cosC",
+  "danger",
   "drift",
   "fadeBottom",
   "fadeColorBottom",
@@ -415,6 +419,7 @@ const getAtmosphericGlLocations = (
   cosA: gl.getUniformLocation(program, "uCosA"),
   cosB: gl.getUniformLocation(program, "uCosB"),
   cosC: gl.getUniformLocation(program, "uCosC"),
+  danger: gl.getUniformLocation(program, "uDanger"),
   drift: gl.getUniformLocation(program, "uDrift"),
   fadeBottom: gl.getUniformLocation(program, "uFadeBottom"),
   fadeColorBottom: gl.getUniformLocation(program, "uFadeColorBottom"),
@@ -472,6 +477,7 @@ export const AtmosphericBackground = ({
   fadeTop,
   grain = 1,
   intensity = 1,
+  danger,
 }: AtmosphericBackgroundProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [ready, setReady] = useState(false);
@@ -703,6 +709,7 @@ export const AtmosphericBackground = ({
         cosA: cosALocation,
         cosB: cosBLocation,
         cosC: cosCLocation,
+        danger: dangerLocation,
         drift: driftLocation,
         fadeBottom: fadeBottomLocation,
         fadeColorBottom: fadeColorBottomLocation,
@@ -752,6 +759,7 @@ export const AtmosphericBackground = ({
       gl.uniform2f(cosALocation, cosA[0], cosA[1]);
       gl.uniform2f(cosBLocation, cosB[0], cosB[1]);
       gl.uniform2f(cosCLocation, cosC[0], cosC[1]);
+      gl.uniform1f(dangerLocation, danger === true ? 1 : 0);
 
       const prefersReducedMotion = window.matchMedia(
         "(prefers-reduced-motion: reduce)"
@@ -785,7 +793,7 @@ export const AtmosphericBackground = ({
       intersection.disconnect();
       teardownGl();
     };
-  }, [animate, fadeBottom, fadeTop, grain, intensity, session]);
+  }, [animate, danger, fadeBottom, fadeTop, grain, intensity, session]);
 
   return (
     <div

@@ -35,7 +35,7 @@ export const AccordionTrigger = ({
 }) => (
   <AccordionPrimitive.Trigger
     className={cn(
-      "squircle flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-medium text-fg transition-transform duration-100 ease-out hover:bg-muted/40 focus-visible:border-ring focus-visible:bg-muted/40 focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
+      "squircle flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-body font-medium text-fg transition-transform duration-100 ease-out hover:bg-muted/40 focus-visible:border-ring focus-visible:bg-muted/40 focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
       className
     )}
     {...props}
@@ -53,7 +53,7 @@ export const AccordionPanel = ({
 }: ComponentPropsWithoutRef<typeof AccordionPrimitive.Panel>) => (
   <AccordionPrimitive.Panel
     className={cn(
-      "overflow-hidden border-t px-4 py-3 text-sm text-muted-fg",
+      "overflow-hidden border-t px-4 py-3 text-body text-muted-fg",
       className
     )}
     {...props}

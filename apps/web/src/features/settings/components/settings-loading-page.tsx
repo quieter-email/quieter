@@ -58,12 +58,14 @@ const SettingsPendingOverview = () => {
   return (
     <div className="w-full space-y-8">
       <header>
-        <h1 className="text-xl font-normal tracking-tight text-fg">Settings</h1>
+        <h1 className="text-title-sm font-normal tracking-tight text-fg">
+          Settings
+        </h1>
       </header>
 
       {SETTINGS_SECTIONS.map((section) => (
         <section className="space-y-4" key={section}>
-          <h2 className="text-sm font-normal text-fg">
+          <h2 className="text-body font-normal text-fg">
             {SETTINGS_SECTION_LABELS[section]}
           </h2>
           <div className="squircle @container overflow-hidden rounded-lg border border-border bg-bg/58">
@@ -89,7 +91,7 @@ const SettingsPendingOverview = () => {
                       <p className="truncate text-body-sm font-normal text-fg">
                         {title}
                       </p>
-                      <p className="mt-0.5 truncate text-xs/4 text-muted-fg">
+                      <p className="mt-0.5 truncate text-caption/4 text-muted-fg">
                         {description}
                       </p>
                     </div>
@@ -132,7 +134,7 @@ export const SettingsLoadingPage = ({
       ) : (
         <div className="space-y-8">
           <header>
-            <h1 className="text-xl font-normal tracking-tight text-fg">
+            <h1 className="text-title-sm font-normal tracking-tight text-fg">
               {SETTINGS_DETAIL_TITLES[tab].title}
             </h1>
           </header>

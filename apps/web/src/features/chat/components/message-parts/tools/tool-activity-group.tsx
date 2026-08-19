@@ -94,7 +94,7 @@ export const ToolActivityGroup = ({
           className="size-3.5 shrink-0 text-muted-fg/60"
           icon={toolGroupIcon}
         />
-        <span className="flex min-w-0 flex-1 items-baseline gap-x-2 truncate text-sm/5">
+        <span className="flex min-w-0 flex-1 items-baseline gap-x-2 truncate text-body/5">
           <span className="shrink-0 text-muted-fg capitalize">{summary}</span>
           {activeDetail !== undefined && activeDetail !== "" ? (
             <span className="truncate text-fg/75">{activeDetail}</span>

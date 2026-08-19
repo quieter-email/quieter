@@ -278,7 +278,7 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
             <div className="space-y-8">
               {detail && tab !== "actions" && tab !== "mailboxes" && (
                 <header>
-                  <h1 className="text-xl font-normal tracking-tight text-fg">
+                  <h1 className="text-title-sm font-normal tracking-tight text-fg">
                     {detail.title}
                   </h1>
                 </header>

@@ -15,9 +15,9 @@ const avatarRootVariants = cva(
     },
     variants: {
       size: {
-        default: "size-10 text-sm",
-        lg: "size-12 text-base",
-        sm: "size-8 text-xs",
+        default: "size-10 text-body",
+        lg: "size-12 text-body-lg",
+        sm: "size-8 text-caption",
       },
     },
   }

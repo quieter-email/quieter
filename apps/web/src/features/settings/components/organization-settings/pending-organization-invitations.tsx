@@ -122,7 +122,7 @@ export const PendingOrganizationInvitations = ({
         {(error ?? "") !== "" && (
           <p
             className={cn(
-              "text-sm text-destructive",
+              "text-body text-destructive",
               settingsSurfaceVariants({ variant: "padding" })
             )}
             role="alert"

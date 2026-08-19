@@ -152,9 +152,9 @@ const SavedViewsSection = ({
   views,
 }: SavedViewsSectionProps) => (
   <section className="mt-4">
-    <p className="mb-1 px-2 text-xs font-medium text-muted-fg">{title}</p>
+    <p className="mb-1 px-2 text-caption font-medium text-muted-fg">{title}</p>
     {views.length === 0 ? (
-      <p className="px-2 py-1 text-xs text-muted-fg">{emptyMessage}</p>
+      <p className="px-2 py-1 text-caption text-muted-fg">{emptyMessage}</p>
     ) : (
       <nav aria-label={title} className="flex flex-col">
         {views.map((view) => {
@@ -165,7 +165,7 @@ const SavedViewsSection = ({
               active={active}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "squircle h-7 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-left text-xs font-light",
+                "squircle h-7 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-left text-caption font-light",
                 {
                   "text-fg": active,
                   "text-muted-fg": !active,
@@ -994,7 +994,7 @@ const ManagedMailboxSavedViewsPanel = (
 
   return (
     <section>
-      <h2 className="text-lg font-semibold tracking-tight">Saved views</h2>
+      <h2 className="text-body-lg font-semibold tracking-tight">Saved views</h2>
       <FullPageDialogDescription className="mt-1">
         Save the current search for quick access from the sidebar.
       </FullPageDialogDescription>
@@ -1067,10 +1067,10 @@ const ManagedMailboxSavedViewsPanel = (
                   mailboxLabelDotClassNameByColor[getSavedViewColor(view.color)]
                 )}
               />
-              <span className="min-w-0 flex-1 truncate text-sm">
+              <span className="min-w-0 flex-1 truncate text-body">
                 {view.name}
               </span>
-              <span className="text-xs text-muted-fg">
+              <span className="text-caption text-muted-fg">
                 {view.ownerUserId === null ? "Shared" : "Personal"}
               </span>
               {(view.ownerUserId !== null || canManage) && (
@@ -1290,7 +1290,7 @@ const ManagedRuleActionEditor = (
 
   return (
     <div className="squircle space-y-2 rounded-lg bg-secondary/40 p-3">
-      <p className="text-xs font-medium text-muted-fg">Then</p>
+      <p className="text-caption font-medium text-muted-fg">Then</p>
       <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
         {(
           [
@@ -1376,7 +1376,7 @@ const ManagedRuleActionEditor = (
             value={ruleForwardRecipients}
           />
           <label
-            className="flex items-center gap-2 text-sm"
+            className="flex items-center gap-2 text-body"
             htmlFor="rule-forward-includes-attachments"
           >
             <Checkbox
@@ -1391,7 +1391,7 @@ const ManagedRuleActionEditor = (
         </div>
       ) : null}
       <label
-        className="flex items-center gap-2 text-sm"
+        className="flex items-center gap-2 text-body"
         htmlFor="rule-stop-processing"
       >
         <Checkbox
@@ -1419,12 +1419,12 @@ const ManagedRuleLabelsEditor = (
 
   return ruleActionKind === "set-labels" ? (
     <div className="squircle space-y-2 rounded-lg bg-secondary/40 p-3">
-      <p className="text-xs font-medium text-muted-fg">Labels</p>
+      <p className="text-caption font-medium text-muted-fg">Labels</p>
       {(labelsData ?? []).flatMap((label) =>
         label.type === "user"
           ? [
               <label
-                className="flex items-center gap-2 text-sm"
+                className="flex items-center gap-2 text-body"
                 htmlFor={`rule-label-${label.id}`}
                 key={label.id}
               >
@@ -1483,7 +1483,7 @@ const ManagedRulePreviewActions = (
   return (
     <>
       {preview ? (
-        <p className="text-sm text-muted-fg">
+        <p className="text-body text-muted-fg">
           {preview.count} matching conversation
           {preview.count === 1 ? "" : "s"}
         </p>
@@ -1628,8 +1628,8 @@ const ManagedRuleRow = (props: ManagedRuleRowProps) => {
         icon={Tag01Icon}
       />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm">{rule.name}</p>
-        <p className="text-xs text-muted-fg">
+        <p className="truncate text-body">{rule.name}</p>
+        <p className="text-caption text-muted-fg">
           {rule.enabled ? "Enabled" : "Disabled"} /{" "}
           {getRuleActionLabel(
             getManagedMailboxRuleActions({
@@ -1877,11 +1877,11 @@ const ManagedRuleBackfill = (props: ManagedMailboxOrganizerContentProps) => {
   const { backfillData, cancelBackfill, cancelBackfillMutation } = props;
 
   return backfillData ? (
-    <div className="mt-4 rounded-lg border bg-muted/30 p-3 text-sm">
+    <div className="mt-4 rounded-lg border bg-muted/30 p-3 text-body">
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="font-medium">Historical rule run</p>
-          <p className="text-xs text-muted-fg">
+          <p className="text-caption text-muted-fg">
             {backfillData.processedCount} processed {backfillData.matchedCount}{" "}
             matched
           </p>
@@ -1901,7 +1901,7 @@ const ManagedRuleBackfill = (props: ManagedMailboxOrganizerContentProps) => {
             Cancel
           </Button>
         ) : (
-          <span className="text-xs text-muted-fg capitalize">
+          <span className="text-caption text-muted-fg capitalize">
             {backfillData.status}
           </span>
         )}
@@ -1917,7 +1917,9 @@ const ManagedMailboxRulesPanel = (
 
   return (
     <section>
-      <h2 className="text-lg font-semibold tracking-tight">Automatic rules</h2>
+      <h2 className="text-body-lg font-semibold tracking-tight">
+        Automatic rules
+      </h2>
       <FullPageDialogDescription className="mt-1">
         Match new inbound mail with the same filters used by search, then apply
         a predictable action.
@@ -1929,7 +1931,7 @@ const ManagedMailboxRulesPanel = (
           <ManagedRuleBackfill {...props} />
         </>
       ) : (
-        <p className="mt-5 text-sm text-muted-fg">
+        <p className="mt-5 text-body text-muted-fg">
           Mailbox managers configure automatic rules.
         </p>
       )}

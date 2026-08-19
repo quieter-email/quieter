@@ -114,8 +114,8 @@ const MailboxesListContent = ({
   if (groups.length === 0) {
     return (
       <SettingsCard className="p-6">
-        <p className="text-sm text-fg">No mailboxes yet</p>
-        <p className="mt-1 text-sm/6 text-muted-fg">
+        <p className="text-body text-fg">No mailboxes yet</p>
+        <p className="mt-1 text-body/6 text-muted-fg">
           Connect Gmail or create a shared inbox to start using Quieter.
         </p>
       </SettingsCard>
@@ -126,7 +126,7 @@ const MailboxesListContent = ({
     <div className="space-y-5">
       {groups.map((group) => (
         <div className="space-y-2" key={group.id}>
-          <p className="px-1 text-xs text-muted-fg">{group.name}</p>
+          <p className="px-1 text-caption text-muted-fg">{group.name}</p>
           <SettingsRows>
             {group.mailboxes.map((mailbox) => (
               <SettingsNavigationRow
@@ -238,7 +238,7 @@ const AddMailboxDialog = ({
   const renderManagedInboxForm = () => {
     if (isCreateManagedOrganizationPending) {
       return (
-        <p className="squircle rounded-md border border-border bg-muted/15 px-3 py-2 text-xs/5 text-muted-fg">
+        <p className="squircle rounded-md border border-border bg-muted/15 px-3 py-2 text-caption/5 text-muted-fg">
           Checking your team access…
         </p>
       );
@@ -246,7 +246,7 @@ const AddMailboxDialog = ({
 
     if (!canCreateManagedMailbox) {
       return (
-        <p className="squircle rounded-md border border-border bg-muted/15 px-3 py-2 text-xs/5 text-muted-fg">
+        <p className="squircle rounded-md border border-border bg-muted/15 px-3 py-2 text-caption/5 text-muted-fg">
           Only a team owner or admin can create a shared inbox for this team.
         </p>
       );
@@ -275,7 +275,7 @@ const AddMailboxDialog = ({
             placeholder="support"
             value={managedLocalPart}
           />
-          <span aria-hidden className="text-sm text-muted-fg select-none">
+          <span aria-hidden className="text-body text-muted-fg select-none">
             @
           </span>
           {verifiedDomains.length > 0 ? (
@@ -306,7 +306,7 @@ const AddMailboxDialog = ({
               </SelectContent>
             </Select>
           ) : (
-            <span className="px-2.5 text-sm text-muted-fg">
+            <span className="px-2.5 text-body text-muted-fg">
               {areManagedDomainsLoading ? "loading…" : "no receiving domain"}
             </span>
           )}
@@ -337,14 +337,14 @@ const AddMailboxDialog = ({
           </SelectContent>
         </Select>
         {verifiedDomains.length === 0 && !areManagedDomainsLoading && (
-          <p className="text-xs/5 text-muted-fg">
+          <p className="text-caption/5 text-muted-fg">
             Add and verify a send-and-receive domain in{" "}
             {selectedManagedOrganization?.name ?? "team"} settings before
             creating a shared inbox.
           </p>
         )}
         {createManagedMailboxMutation.isError && (
-          <p className="text-sm text-destructive">
+          <p className="text-body text-destructive">
             {createManagedMailboxMutation.error?.message ??
               "Could not create shared inbox."}
           </p>
@@ -388,8 +388,8 @@ const AddMailboxDialog = ({
         <DialogBody className="space-y-6">
           <div className="space-y-3">
             <div>
-              <p className="text-sm text-fg">Gmail</p>
-              <p className="mt-1 text-xs/5 text-muted-fg">
+              <p className="text-body text-fg">Gmail</p>
+              <p className="mt-1 text-caption/5 text-muted-fg">
                 Choose the team where this private mailbox should appear.
               </p>
             </div>
@@ -438,8 +438,8 @@ const AddMailboxDialog = ({
 
           <div className="space-y-3 border-t border-border pt-5">
             <div>
-              <p className="text-sm text-fg">Shared inbox</p>
-              <p className="mt-1 text-xs/5 text-muted-fg">
+              <p className="text-body text-fg">Shared inbox</p>
+              <p className="mt-1 text-caption/5 text-muted-fg">
                 Team owners and admins can create an address on a verified
                 domain with incoming mail enabled.
               </p>

@@ -39,7 +39,7 @@ export const MessageListHeader = ({
   };
 
   return (
-    <div className="bg-transparent p-2 @sm:px-4 @sm:pt-4 @sm:pb-3">
+    <div className="relative z-20 bg-transparent p-2 @sm:px-4 @sm:pt-4 @sm:pb-3">
       <div className="flex min-w-0 items-stretch gap-2">
         {onOpenSidebar && (
           <div className="flex self-stretch lg:hidden">

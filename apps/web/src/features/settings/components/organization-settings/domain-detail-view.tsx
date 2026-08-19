@@ -76,7 +76,7 @@ const copyDnsValue = async (value: string) => {
     toast.success(
       <>
         Copied{" "}
-        <code className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-xs font-normal break-all">
+        <code className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-caption font-normal break-all">
           {value}
         </code>
       </>,
@@ -91,7 +91,7 @@ const DnsCopyCell = ({ value }: { value: string }) => (
   <button
     aria-label={`Copy ${value}`}
     className={cn(
-      "squircle max-w-full min-w-0 rounded-md px-1.5 py-0.5 text-left font-mono text-xs text-fg",
+      "squircle max-w-full min-w-0 rounded-md px-1.5 py-0.5 text-left font-mono text-caption text-fg",
       "transition-[transform,background-color] duration-100 ease-out",
       "hover:bg-muted/70",
       "active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
@@ -129,7 +129,7 @@ const RecordState = ({
   return (
     <span
       className={cn(
-        "inline-flex w-fit items-center rounded-full px-2 py-0.5 text-[0.7rem] font-medium",
+        "inline-flex w-fit items-center rounded-full px-2 py-0.5 text-micro font-medium",
         className
       )}
     >
@@ -467,7 +467,7 @@ const DomainHeader = ({
     {domainConnect === undefined ? null : (
       <div
         className={cn(
-          "squircle @container flex flex-col gap-3 rounded-lg border px-4 py-3 text-sm @sm:flex-row @sm:items-center @sm:justify-between",
+          "squircle @container flex flex-col gap-3 rounded-lg border px-4 py-3 text-body @sm:flex-row @sm:items-center @sm:justify-between",
           getDomainConnectBannerClass(domainConnect)
         )}
       >
@@ -512,9 +512,9 @@ const DomainStatusSummary = ({
             className={cn("size-5", getStatusIconClass(status.tone))}
             icon={getStatusIcon(status.tone)}
           />
-          <h2 className="text-base font-medium text-fg">{status.label}</h2>
+          <h2 className="text-body-lg font-medium text-fg">{status.label}</h2>
         </div>
-        <p className="mt-2 max-w-lg text-sm/6 text-muted-fg">
+        <p className="mt-2 max-w-lg text-body/6 text-muted-fg">
           {status.description}
         </p>
       </div>
@@ -524,8 +524,8 @@ const DomainStatusSummary = ({
         ["Incoming mail", domain.mode === "send_only" ? "Off" : "Enabled"],
       ].map(([label, value]) => (
         <div className="border-l border-border pl-4" key={label}>
-          <p className="text-xs text-muted-fg">{label}</p>
-          <p className="mt-1 text-sm font-medium text-fg">{value}</p>
+          <p className="text-caption text-muted-fg">{label}</p>
+          <p className="mt-1 text-body font-medium text-fg">{value}</p>
         </div>
       ))}
     </div>
@@ -553,13 +553,13 @@ const DomainConnectCard = ({
     <SettingsCard className="@container p-3.5 @md:px-4">
       <div className="flex flex-col gap-3 @md:flex-row @md:items-center @md:justify-between">
         <div className="min-w-0">
-          <p className="text-sm font-medium text-fg">
+          <p className="text-body font-medium text-fg">
             {availability?.available === true
               ? `Connect with ${availability.provider.displayName}`
               : "Checking your DNS provider…"}
           </p>
           {availability?.available === true ? (
-            <p className="mt-0.5 text-xs text-muted-fg">
+            <p className="mt-0.5 text-caption text-muted-fg">
               Authorize the exact records, then Quieter verifies DNS when you
               return.
             </p>
@@ -609,7 +609,7 @@ const DomainDnsRecordsTable = ({
         <tr
           className={cn(
             dnsTableColumns,
-            "rounded-md bg-muted/35 px-3 py-1.5 text-xs font-medium text-muted-fg"
+            "rounded-md bg-muted/35 px-3 py-1.5 text-caption font-medium text-muted-fg"
           )}
         >
           <th scope="col">Type</th>
@@ -650,14 +650,14 @@ const DomainDnsRecordsTable = ({
               </td>
               <td className="min-w-0">
                 {priority === null ? (
-                  <span className="px-1.5 font-mono text-xs text-muted-fg">
+                  <span className="px-1.5 font-mono text-caption text-muted-fg">
                     -
                   </span>
                 ) : (
                   <DnsCopyCell value={priority} />
                 )}
               </td>
-              <td className="min-w-0 px-1.5 text-xs text-fg">Auto</td>
+              <td className="min-w-0 px-1.5 text-caption text-fg">Auto</td>
               <td>
                 <RecordState
                   message={getDnsRecordStatusMessage(check, record.required)}
@@ -757,8 +757,8 @@ const DomainMailModeSection = ({
               key={option.value}
             >
               <div>
-                <p className="text-sm font-medium text-fg">{option.label}</p>
-                <p className="mt-1 text-xs/5 text-muted-fg">
+                <p className="text-body font-medium text-fg">{option.label}</p>
+                <p className="mt-1 text-caption/5 text-muted-fg">
                   {optionBlockedReason ?? option.description}
                 </p>
               </div>
@@ -812,9 +812,9 @@ const DomainDeliverySection = ({
               key={item.purpose}
             >
               <div>
-                <span className="text-sm text-fg">{item.label}</span>
+                <span className="text-body text-fg">{item.label}</span>
                 {item.required ? null : (
-                  <p className="mt-0.5 text-xs text-muted-fg">
+                  <p className="mt-0.5 text-caption text-muted-fg">
                     Recommended. Any valid policy works; quarantine is
                     preferred.
                   </p>
@@ -865,8 +865,8 @@ const DomainDangerSection = ({
       <SettingsCard className="p-5">
         <div className="@container flex flex-col gap-4 @md:flex-row @md:items-center @md:justify-between">
           <div>
-            <p className="text-sm font-medium text-fg">Remove domain</p>
-            <p className="mt-1 text-xs/5 text-muted-fg">
+            <p className="text-body font-medium text-fg">Remove domain</p>
+            <p className="mt-1 text-caption/5 text-muted-fg">
               {data.managedMailboxCount > 0
                 ? `Remove or migrate ${data.managedMailboxCount} shared ${data.managedMailboxCount === 1 ? "inbox" : "inboxes"} first.`
                 : "This stops Quieter from sending or receiving mail for the domain."}
@@ -918,7 +918,7 @@ const DomainDangerSection = ({
             This action disconnects the domain from Quieter.
           </DialogDescription>
         </DialogHeader>
-        <DialogBody className="space-y-3 text-sm text-muted-fg">
+        <DialogBody className="space-y-3 text-body text-muted-fg">
           <p>Sending and incoming mail will stop for this domain.</p>
           <p>
             Remove the DNS records at your provider after this domain is
@@ -1050,7 +1050,7 @@ export const DomainDetailView = ({
     return (
       <>
         <SettingsBackButton onClick={onBack}>Domains</SettingsBackButton>
-        <SettingsCard className="p-6 text-sm text-destructive">
+        <SettingsCard className="p-6 text-body text-destructive">
           {error?.message ?? "Domain not found."}
         </SettingsCard>
       </>
