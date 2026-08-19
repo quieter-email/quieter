@@ -40,6 +40,7 @@
 ## Code style
 
 - Keep types strict. Avoid `any`, unnecessary casts, effects, abstractions used once, placeholders, dead fallbacks, and obsolete compatibility branches.
+- Keep comments minimal — only for hacky or high-complexity code where intent isn't obvious from the code itself.
 - Use TanStack Query for server state and TanStack Store for complex client-only workflows.
 - Use named theme colors. Do not use arbitrary Tailwind colors.
 - Do not use native `<select>` or direct Base UI/Vaul imports in app code. Use only native interactive elements if absolutely necessary, otherwise use the `@quieter/ui` package or extend shared components.
