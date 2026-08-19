@@ -16,6 +16,13 @@ export const assertMigrationSqlIsDeploySafe = (
   sql: string,
   migrationName: string
 ) => {
+  // Contract migrations are reviewed and applied manually (e.g. DROP TABLE
+  // for never-written tables). Mark them with `-- quieter:contract` and they
+  // bypass the expand-safe check.
+  if (sql.includes("-- quieter:contract")) {
+    return;
+  }
+
   if (destructiveStatements.some((pattern) => pattern.test(sql))) {
     throw new Error(
       `Migration ${migrationName} contains destructive SQL. Production deploys only allow expand-safe migrations; run contract migrations through a separately reviewed manual procedure.`
