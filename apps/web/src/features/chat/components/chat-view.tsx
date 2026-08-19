@@ -3,7 +3,6 @@
 import type { ChatModel } from "@quieter/ai/chat-models";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
 import type { RouterInputs, RouterOutputs } from "@quieter/orpc";
-import type { ChatMessagePart } from "@quieter/orpc/chat-contracts";
 import { Button } from "@quieter/ui/button";
 import { toast } from "@quieter/ui/toast";
 import type { UIMessage } from "@tanstack/ai";
@@ -11,6 +10,7 @@ import { useAudioRecorder } from "@tanstack/ai-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { UseMutationResult } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import { useSelector } from "@tanstack/react-store";
 import {
   domMax,
   LayoutGroup,
@@ -18,7 +18,7 @@ import {
   m,
   useReducedMotion,
 } from "motion/react";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import type { ComponentProps, KeyboardEvent, SubmitEvent } from "react";
 
 import { MobileHeader } from "#/components/mobile-header";
@@ -46,6 +46,15 @@ import {
 import { connectorsQueryOptions } from "#/lib/connectors-query";
 import { orpc } from "#/lib/orpc";
 
+import {
+  beginChatRunStream,
+  chatRunStore,
+  commitChatRunStream,
+  failChatRunStream,
+  setChatPendingPrompt,
+  updateChatRunDraft,
+} from "../chat-run-store";
+import type { ChatStreamingAssistant } from "../chat-run-store";
 import { createChatTurns } from "../domain/chat-turns";
 import { useChatRunStream } from "../hooks/use-chat-run-stream";
 import type { ChatRunStreamDone } from "../hooks/use-chat-run-stream";
@@ -491,34 +500,174 @@ const useChatModelSelection = ({
   return { handleModelChange, model };
 };
 
+const getLiveRunState = ({
+  activeRun,
+  chatData,
+  chatId,
+  locallyFailedChatId,
+  streamChatId,
+  streamRunId,
+  streamingAssistant,
+}: {
+  activeRun: ActiveChatRun | null;
+  chatData: ChatQueryData | undefined;
+  chatId: string | null;
+  locallyFailedChatId: string | null;
+  streamChatId: string | null;
+  streamRunId: string | null;
+  streamingAssistant: ChatStreamingAssistant | null;
+}) => {
+  // A stream is only live for the chat being viewed; a leftover stream from another chat
+  // (navigation) must not reconnect here. Once the stream gives up it is marked failed so
+  // the server-side active run is not re-imported and reconnected on every focus.
+  const hasLiveStream =
+    streamChatId === chatId && locallyFailedChatId !== chatId;
+  const canResumeServerRun =
+    locallyFailedChatId !== chatId && isActiveRun(activeRun);
+
+  if (hasLiveStream) {
+    return {
+      liveAssistantMessageId: streamingAssistant?.messageId ?? null,
+      liveAssistantParts: streamingAssistant?.parts,
+      liveRunId: streamRunId,
+    };
+  }
+
+  if (!canResumeServerRun) {
+    return {
+      liveAssistantMessageId: null,
+      liveAssistantParts: undefined,
+      liveRunId: null,
+    };
+  }
+
+  const liveAssistantMessageId = activeRun?.assistantMessageId ?? null;
+  const liveAssistantParts = hasText(liveAssistantMessageId)
+    ? chatData?.messages.find(
+        (message) => message.id === liveAssistantMessageId
+      )?.parts
+    : undefined;
+
+  return {
+    liveAssistantMessageId,
+    liveAssistantParts,
+    liveRunId: activeRun?.id ?? null,
+  };
+};
+
+const applyChatRunStreamResult = ({
+  chatId,
+  mailboxId,
+  queryClient,
+  resolvedChatId,
+  result,
+}: {
+  chatId: string | null;
+  mailboxId: string;
+  queryClient: ReturnType<typeof useQueryClient>;
+  resolvedChatId?: string | null;
+  result: ChatRunStreamDone;
+}) => {
+  const targetChatId = resolvedChatId ?? chatId;
+
+  if (!hasText(targetChatId) || !hasText(result.assistantMessageId)) {
+    return;
+  }
+
+  const queryKey = getChatQueryKey(mailboxId, targetChatId);
+  let messageStatus: "cancelled" | "complete" | "failed" = "complete";
+  if (result.status === "failed") {
+    messageStatus = "failed";
+  } else if (result.status === "cancelled") {
+    messageStatus = "cancelled";
+  }
+
+  queryClient.setQueryData<ChatQueryData>(queryKey, (current) => {
+    if (!current) {
+      return current;
+    }
+
+    return {
+      ...current,
+      activeRun: null,
+      messages: current.messages.map((message: StoredChatMessage) =>
+        message.id === result.assistantMessageId
+          ? {
+              ...message,
+              error: result.error ?? null,
+              parts: result.parts,
+              status: messageStatus,
+            }
+          : message
+      ),
+    };
+  });
+};
+
+const handleChatRunStreamFailure = ({
+  chatId,
+  liveAssistantMessageId,
+  liveAssistantParts,
+  mailboxId,
+  message,
+  queryClient,
+  streamChatId,
+}: {
+  chatId: string | null;
+  liveAssistantMessageId: string | null;
+  liveAssistantParts: ChatStreamingAssistant["parts"] | undefined;
+  mailboxId: string;
+  message: string;
+  queryClient: ReturnType<typeof useQueryClient>;
+  streamChatId: string | null;
+}) => {
+  // One persistent surface: write the failure into the cached message so the inline
+  // ChatError banner shows it, mark the run locally failed so it is not reconnected,
+  // then refresh. No toast - a reconnect storm must not spam notifications.
+  const resolvedChatId = streamChatId ?? chatId;
+  const failedMessageId = liveAssistantMessageId ?? "";
+
+  if (!hasText(resolvedChatId)) {
+    failChatRunStream("");
+    return;
+  }
+
+  applyChatRunStreamResult({
+    chatId,
+    mailboxId,
+    queryClient,
+    resolvedChatId,
+    result: {
+      assistantMessageId: failedMessageId,
+      error: message,
+      parts: liveAssistantParts ?? [],
+      status: "failed",
+    },
+  });
+  failChatRunStream(resolvedChatId);
+  void queryClient.invalidateQueries({
+    queryKey: getChatQueryKey(mailboxId, resolvedChatId),
+  });
+};
+
 const useChatViewStream = ({
   chatData,
   chatId,
   mailboxId,
   model,
   queryClient,
-  setStreamRunId,
-  setStreamingAssistant,
-  streamRunId,
-  streamingAssistant,
 }: {
   chatData: ChatQueryData | undefined;
   chatId: string | null;
   mailboxId: string;
   model: ChatModel;
   queryClient: ReturnType<typeof useQueryClient>;
-  setStreamRunId: (value: string | null) => void;
-  setStreamingAssistant: (
-    value: { messageId: string; parts: ChatMessagePart[] } | null
-  ) => void;
-  streamRunId: string | null;
-  streamingAssistant: { messageId: string; parts: ChatMessagePart[] } | null;
 }) => {
-  const streamChatIdRef = useRef<string | null>(null);
   const activeRun = chatData?.activeRun ?? null;
+  const { locallyFailedChatId, streamChatId, streamRunId, streamingAssistant } =
+    useSelector(chatRunStore, (state) => state);
 
   const beginAssistantStream = (result: ChatRunStartResult) => {
-    streamChatIdRef.current = result.chatId;
     const queryKey = getChatQueryKey(mailboxId, result.chatId);
 
     const now = new Date();
@@ -547,72 +696,43 @@ const useChatViewStream = ({
     if (!isActiveRun(result.activeRun)) {
       // The run already reached a terminal status. Keep the persisted parts instead of
       // blanking the message behind a "Thinking" placeholder that will never resolve.
-      streamChatIdRef.current = null;
-      setStreamRunId(null);
-      setStreamingAssistant(null);
+      commitChatRunStream(result.chatId);
+      setChatPendingPrompt(null);
       return;
     }
 
-    setStreamRunId(result.runId);
-    setStreamingAssistant({
-      messageId: result.assistantMessageId,
+    beginChatRunStream({
+      assistantMessageId: result.assistantMessageId,
+      chatId: result.chatId,
       // Seed from the stored draft so a resumed run keeps what it has already written.
       parts: result.messages.find(
         (message) => message.id === result.assistantMessageId
       )?.parts ?? [{ content: "", type: "text" }],
+      runId: result.runId,
     });
   };
 
-  const liveRunId =
-    streamRunId ?? (isActiveRun(activeRun) ? (activeRun?.id ?? null) : null);
-  const liveAssistantMessageId =
-    streamingAssistant?.messageId ??
-    (isActiveRun(activeRun) ? (activeRun?.assistantMessageId ?? null) : null);
-  const liveAssistantParts =
-    streamingAssistant?.parts ??
-    (hasText(liveAssistantMessageId)
-      ? chatData?.messages.find(
-          (message) => message.id === liveAssistantMessageId
-        )?.parts
-      : undefined);
+  const { liveAssistantMessageId, liveAssistantParts, liveRunId } =
+    getLiveRunState({
+      activeRun,
+      chatData,
+      chatId,
+      locallyFailedChatId,
+      streamChatId,
+      streamRunId,
+      streamingAssistant,
+    });
 
   const commitStreamResult = (
     result: ChatRunStreamDone,
     resolvedChatId?: string | null
   ) => {
-    const targetChatId = resolvedChatId ?? streamChatIdRef.current ?? chatId;
-
-    if (!hasText(targetChatId) || !hasText(result.assistantMessageId)) {
-      return;
-    }
-
-    const queryKey = getChatQueryKey(mailboxId, targetChatId);
-    let messageStatus: "cancelled" | "complete" | "failed" = "complete";
-    if (result.status === "failed") {
-      messageStatus = "failed";
-    } else if (result.status === "cancelled") {
-      messageStatus = "cancelled";
-    }
-
-    queryClient.setQueryData<ChatQueryData>(queryKey, (current) => {
-      if (!current) {
-        return current;
-      }
-
-      return {
-        ...current,
-        activeRun: null,
-        messages: current.messages.map((message: StoredChatMessage) =>
-          message.id === result.assistantMessageId
-            ? {
-                ...message,
-                error: result.error ?? null,
-                parts: result.parts,
-                status: messageStatus,
-              }
-            : message
-        ),
-      };
+    applyChatRunStreamResult({
+      chatId,
+      mailboxId,
+      queryClient,
+      resolvedChatId,
+      result,
     });
   };
 
@@ -621,12 +741,11 @@ const useChatViewStream = ({
     enabled: hasText(liveRunId) && hasText(liveAssistantMessageId),
     initialParts: liveAssistantParts,
     onDone: (result) => {
-      commitStreamResult(result);
-      const resolvedChatId = streamChatIdRef.current ?? chatId;
-      setStreamRunId(null);
-      setStreamingAssistant(null);
-      streamChatIdRef.current = null;
-
+      commitStreamResult(result, streamChatId);
+      const resolvedChatId = streamChatId ?? chatId;
+      if (hasText(resolvedChatId)) {
+        commitChatRunStream(resolvedChatId);
+      }
       if (hasText(resolvedChatId)) {
         void queryClient.invalidateQueries({
           queryKey: getChatQueryKey(mailboxId, resolvedChatId),
@@ -643,23 +762,18 @@ const useChatViewStream = ({
       }
     },
     onDraft: ({ assistantMessageId, parts }) => {
-      setStreamingAssistant({ messageId: assistantMessageId, parts });
+      updateChatRunDraft({ messageId: assistantMessageId, parts });
     },
     onError: (message) => {
-      toast.error(message);
-      const resolvedChatId = streamChatIdRef.current ?? chatId;
-
-      if (hasText(resolvedChatId)) {
-        const queryKey = getChatQueryKey(mailboxId, resolvedChatId);
-        queryClient.setQueryData<ChatQueryData>(queryKey, (current) =>
-          current ? { ...current, activeRun: null } : current
-        );
-        void queryClient.invalidateQueries({ queryKey });
-      }
-
-      setStreamRunId(null);
-      setStreamingAssistant(null);
-      streamChatIdRef.current = null;
+      handleChatRunStreamFailure({
+        chatId,
+        liveAssistantMessageId,
+        liveAssistantParts,
+        mailboxId,
+        message,
+        queryClient,
+        streamChatId,
+      });
     },
     runId: liveRunId,
   });
@@ -668,10 +782,7 @@ const useChatViewStream = ({
     activeRun,
     beginAssistantStream,
     commitStreamResult,
-    liveAssistantMessageId,
-    liveAssistantParts,
     liveRunId,
-    streamChatIdRef,
   };
 };
 
@@ -708,11 +819,6 @@ const useChatViewActions = ({
   queryClient,
   setInput,
   setIsPreparingTranscription,
-  setPendingPrompt,
-  setStreamRunId,
-  setStreamingAssistant,
-  streamChatIdRef,
-  streamingAssistant,
 }: {
   activeMailbox: ChatViewProps["activeMailbox"];
   activeRun: ActiveChatRun | null;
@@ -737,14 +843,11 @@ const useChatViewActions = ({
   queryClient: ReturnType<typeof useQueryClient>;
   setInput: (value: string | ((current: string) => string)) => void;
   setIsPreparingTranscription: (value: boolean) => void;
-  setPendingPrompt: (value: { chatKey: string; text: string } | null) => void;
-  setStreamRunId: (value: string | null) => void;
-  setStreamingAssistant: (
-    value: { messageId: string; parts: ChatMessagePart[] } | null
-  ) => void;
-  streamChatIdRef: { current: string | null };
-  streamingAssistant: { messageId: string; parts: ChatMessagePart[] } | null;
 }) => {
+  const { streamChatId, streamingAssistant } = useSelector(
+    chatRunStore,
+    (state) => state
+  );
   const submitPrompt = async () => {
     const prompt = input.trim();
     if (
@@ -760,7 +863,7 @@ const useChatViewActions = ({
 
     // Paint the turn before the round trip so the transcript is never blank while the
     // chat record, the run, and its first tokens are still being created.
-    setPendingPrompt({ chatKey: chatId ?? draftChatKey, text: prompt });
+    setChatPendingPrompt({ chatKey: chatId ?? draftChatKey, text: prompt });
     setInput("");
 
     try {
@@ -771,7 +874,7 @@ const useChatViewActions = ({
         });
         nextChatId = createdChat.id;
         onChatIdChange(nextChatId);
-        setPendingPrompt({ chatKey: nextChatId, text: prompt });
+        setChatPendingPrompt({ chatKey: nextChatId, text: prompt });
       }
 
       const result = await mutations.sendMessageMutation.mutateAsync({
@@ -789,9 +892,8 @@ const useChatViewActions = ({
         message: prompt,
       });
       beginAssistantStream(result);
-      setPendingPrompt(null);
     } catch (error) {
-      setPendingPrompt(null);
+      setChatPendingPrompt(null);
       setInput(prompt);
       toast.error(
         error instanceof Error && error.message
@@ -819,7 +921,7 @@ const useChatViewActions = ({
   };
 
   const stop = async () => {
-    const activeChatId = streamChatIdRef.current ?? chatId;
+    const activeChatId = streamChatId ?? chatId;
 
     if (!hasText(activeChatId) || !isStreaming) {
       return;
@@ -848,9 +950,7 @@ const useChatViewActions = ({
           }
         : current
     );
-    setStreamRunId(null);
-    setStreamingAssistant(null);
-    streamChatIdRef.current = null;
+    commitChatRunStream(activeChatId);
 
     try {
       const result = await mutations.cancelGenerationMutation.mutateAsync({
@@ -1103,14 +1203,12 @@ export const ChatView = ({
     [connectorsData]
   );
   const defaultModel = useDefaultChatModel();
-  const [streamRunId, setStreamRunId] = useState<string | null>(null);
-  const [streamingAssistant, setStreamingAssistant] = useState<{
-    messageId: string;
-    parts: ChatMessagePart[];
-  } | null>(null);
   const [isPreparingTranscription, setIsPreparingTranscription] =
     useState(false);
-  const [pendingPrompt, setPendingPrompt] = useState<PendingPrompt>(null);
+  const { pendingPrompt, streamingAssistant } = useSelector(
+    chatRunStore,
+    (state) => state
+  );
   const { data: chatData } = useQuery({
     ...chatQueryOptions(mailboxId, chatId),
     refetchOnWindowFocus: true,
@@ -1141,18 +1239,9 @@ export const ChatView = ({
     mailboxId,
     model,
     queryClient,
-    setStreamRunId,
-    setStreamingAssistant,
-    streamRunId,
-    streamingAssistant,
   });
-  const {
-    activeRun,
-    beginAssistantStream,
-    commitStreamResult,
-    liveRunId,
-    streamChatIdRef,
-  } = chatStream;
+  const { activeRun, beginAssistantStream, commitStreamResult, liveRunId } =
+    chatStream;
 
   const visibleMessages = (
     chatData ? normalizeChatMessages(chatData.messages) : []
@@ -1203,11 +1292,6 @@ export const ChatView = ({
     queryClient,
     setInput,
     setIsPreparingTranscription,
-    setPendingPrompt,
-    setStreamRunId,
-    setStreamingAssistant,
-    streamChatIdRef,
-    streamingAssistant,
   });
   const {
     handleEditSubmit,
