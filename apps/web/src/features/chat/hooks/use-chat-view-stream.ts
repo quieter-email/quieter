@@ -330,6 +330,21 @@ export const useChatViewStream = ({
         streamChatId,
         streamMailboxId,
       });
+      const resolvedChatId = streamChatId ?? chatId;
+      const resolvedMailboxId = streamMailboxId ?? mailboxId;
+      if (hasText(resolvedChatId) && hasText(resolvedMailboxId)) {
+        void (async () => {
+          try {
+            const { rpc } = await import("#/lib/orpc");
+            await rpc.chat.cancelGeneration(
+              { chatId: resolvedChatId, mailboxId: resolvedMailboxId },
+              { signal: AbortSignal.timeout(5000) }
+            );
+          } catch {
+            void 0;
+          }
+        })();
+      }
     },
     runId: liveRunId,
   });

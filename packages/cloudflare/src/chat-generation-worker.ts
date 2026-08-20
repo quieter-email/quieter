@@ -1,5 +1,6 @@
 import { db, withRequestDatabaseClient } from "@quieter/database/client";
 import { chatRun } from "@quieter/database/schema";
+import { reportError } from "@quieter/observability";
 import { ensureChatRunGeneration } from "@quieter/orpc/chat-generation-lifecycle";
 import { abortChatRun } from "@quieter/orpc/chat-generation-runtime";
 import { isActiveChatRunStatus } from "@quieter/orpc/chat-run-store";
@@ -118,42 +119,47 @@ export class ChatRunSession extends DurableObject<ChatGenerationEnv> {
         );
       }
 
-      return await withRequestDatabaseClient(async () => {
-        const [run] = await db
-          .select({
-            error: chatRun.error,
-            status: chatRun.status,
-          })
-          .from(chatRun)
-          .where(eq(chatRun.id, runId))
-          .limit(1);
+      try {
+        return await withRequestDatabaseClient(async () => {
+          const [run] = await db
+            .select({
+              error: chatRun.error,
+              status: chatRun.status,
+            })
+            .from(chatRun)
+            .where(eq(chatRun.id, runId))
+            .limit(1);
 
-        if (run === undefined) {
-          return Response.json({ error: "Not found" }, { status: 404 });
-        }
+          if (run === undefined) {
+            return Response.json({ error: "Not found" }, { status: 404 });
+          }
 
-        if (isActiveChatRunStatus(run.status)) {
-          // DO restarted (or stream beat start): reclaim and resume the producer.
-          // Attaching to the hub it left behind would tail a log nobody writes to.
-          this.#ensureProducer(runId, true);
-          return createChatRunHubSseResponse(
-            getChatRunHub(runId),
-            request.signal
-          );
-        }
+          if (isActiveChatRunStatus(run.status)) {
+            this.#ensureProducer(runId, true);
+            return createChatRunHubSseResponse(
+              getChatRunHub(runId),
+              request.signal
+            );
+          }
 
-        // Terminal run: replay the sealed hub so a late observer still gets the transcript.
-        const sealed = peekChatRunHub(runId);
-        if (sealed !== undefined && sealed !== null) {
-          return createChatRunHubSseResponse(sealed, request.signal);
-        }
+          const sealed = peekChatRunHub(runId);
+          if (sealed !== undefined && sealed !== null) {
+            return createChatRunHubSseResponse(sealed, request.signal);
+          }
 
-        return createTerminalChatRunSseResponse({
-          error: run.error,
-          runId,
-          status: run.status,
+          return createTerminalChatRunSseResponse({
+            error: run.error,
+            runId,
+            status: run.status,
+          });
         });
-      });
+      } catch (error) {
+        reportError(error, { operation: "chat-generation-worker:stream" });
+        return Response.json(
+          { error: "Internal Server Error" },
+          { status: 500 }
+        );
+      }
     }
 
     return new Response(null, { status: 404 });
