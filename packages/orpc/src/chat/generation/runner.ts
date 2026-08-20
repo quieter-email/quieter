@@ -1009,6 +1009,13 @@ export const runChatGeneration = async (
 
     if (ownershipLost) {
       await drainAssistantDraftPersist();
+      reportError(new Error(`Chat run ${runId} lost ownership`), {
+        operation: "chat-generation:ownership-lost",
+      });
+      await terminalizeFailedChatRun(runId, "Response interrupted", {
+        id: run.assistantMessageId,
+        parts: pendingParts,
+      });
       return;
     }
 

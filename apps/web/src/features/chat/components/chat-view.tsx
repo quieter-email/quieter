@@ -139,8 +139,10 @@ export const ChatView = ({
     isPreparingTranscription || mutations.transcribeAudioMutation.isPending;
   const isActionPending = hasPendingChatAction(mutations);
   const aiRequirement = BILLING_FEATURES.aiChat;
-  const canUseAiChat = hasOrganizationAiAccess(billing, mailboxOrganizationId);
-  const composerDisabled = !isBillingPending && !canUseAiChat;
+  const canUseAiChat = billing
+    ? hasOrganizationAiAccess(billing, mailboxOrganizationId)
+    : true;
+  const composerDisabled = !canUseAiChat;
   const errorMessage =
     activeRun?.error ?? chatData?.messages.at(-1)?.error ?? undefined;
 
