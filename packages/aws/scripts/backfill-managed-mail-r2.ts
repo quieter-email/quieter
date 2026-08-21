@@ -17,7 +17,7 @@ const endpoint =
   serverEnv.R2_ENDPOINT ??
   `https://${requireServerEnv("R2_ACCOUNT_ID")}.r2.cloudflarestorage.com`;
 const awsRegion =
-  serverEnv.AWS_REGION ?? serverEnv.AWS_DEFAULT_REGION ?? "us-east-1";
+  serverEnv.AWS_REGION ?? serverEnv.AWS_DEFAULT_REGION ?? "eu-central-1";
 
 const source = new S3Client({
   region: awsRegion,
