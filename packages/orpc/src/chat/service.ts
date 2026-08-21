@@ -59,7 +59,6 @@ import { assertAiChatCredits } from "./access";
 import { createLinearChatTools } from "./linear-tools";
 
 const CHAT_HISTORY_WINDOW_MESSAGES = 30;
-const CHAT_MAX_STEPS = 6;
 const CHAT_MAX_COMPLETION_TOKENS = 2048;
 const MAIL_TOOL_TIMEOUT_MS = 25_000;
 
@@ -1079,7 +1078,10 @@ export const createAiChatResponse = async (input: {
         },
       },
     },
-    stopWhen: isStepCount(CHAT_MAX_STEPS),
+    // The SDK defaults to a single step, which would end the turn right
+    // after the first tool round; the model may chain tools for as long as
+    // the request stays open.
+    stopWhen: isStepCount(Number.MAX_SAFE_INTEGER),
     toolApproval: {
       ...(hasGoogleCalendarConnector
         ? { create_google_calendar_event: "user-approval" as const }
