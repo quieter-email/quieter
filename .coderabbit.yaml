@@ -10,3 +10,4 @@ reviews:
     - "!bun.lock"
     - "!packages/cloudflare/worker-configuration.d.ts"
     - "!packages/database/drizzle/**/snapshot.json"
+    - "!packages/database/drizzle/**/migration.sql"
