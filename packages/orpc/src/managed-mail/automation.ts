@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { chatModelSchema } from "@quieter/ai/chat-models";
 import type { ChatModel } from "@quieter/ai/chat-models";
+import type { AiUsageReport } from "@quieter/ai/chat-usage";
 import { classifyMailMessage } from "@quieter/ai/classify-gmail-message";
 import type {
   AutomationMailMessage,
@@ -21,7 +22,6 @@ import {
 } from "@quieter/database/schema";
 import { MAILBOX_LABELS } from "@quieter/gmail";
 import { reportError } from "@quieter/observability";
-import type { ChatMiddleware } from "@tanstack/ai";
 import { and, eq, isNull, lte, or } from "drizzle-orm";
 
 import {
@@ -312,23 +312,12 @@ const processManagedAutoLabelMessage = async (input: {
         return;
       }
 
-      let promptTokens = 0;
-      let completionTokens = 0;
-      let costUsd: number | undefined = 0;
-      let cachedTokens = 0;
-      let cacheWriteTokens = 0;
-      const usageMiddleware: ChatMiddleware = {
-        name: "managed-auto-label-usage",
-        onUsage: (_context, usage) => {
-          promptTokens += usage.promptTokens;
-          completionTokens += usage.completionTokens;
-          costUsd =
-            costUsd === undefined || usage.cost === undefined
-              ? undefined
-              : costUsd + usage.cost;
-          cachedTokens += usage.promptTokensDetails?.cachedTokens ?? 0;
-          cacheWriteTokens += usage.promptTokensDetails?.cacheWriteTokens ?? 0;
-        },
+      let usage: AiUsageReport = {
+        cacheWriteTokens: 0,
+        cachedTokens: 0,
+        completionTokens: 0,
+        costUsd: undefined,
+        promptTokens: 0,
       };
       const budgetStatus = await getMailAutomationAiBudgetStatus({
         organizationId: input.organizationId,
@@ -350,20 +339,22 @@ const processManagedAutoLabelMessage = async (input: {
           })
         ),
         message,
-        middleware: [usageMiddleware],
         model: input.autoLabelContext.model,
+        onUsage: (reportedUsage) => {
+          usage = reportedUsage;
+        },
       });
       const [classified] = await db
         .update(gmailAutoLabelEvent)
         .set({
-          cacheWriteTokens,
-          cachedTokens,
-          completionTokens,
-          costUsd: costUsd ?? null,
+          cacheWriteTokens: usage.cacheWriteTokens,
+          cachedTokens: usage.cachedTokens,
+          completionTokens: usage.completionTokens,
+          costUsd: usage.costUsd ?? null,
           labelIds,
           lastError: null,
           model: input.autoLabelContext.model,
-          promptTokens,
+          promptTokens: usage.promptTokens,
           updatedAt: new Date(),
         })
         .where(eq(gmailAutoLabelEvent.id, event.id))

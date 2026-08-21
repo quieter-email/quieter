@@ -121,10 +121,12 @@ Outbound:
 
 Chats are mailbox-scoped.
 
-1. TanStack AI `useChat` sends one authenticated AG-UI request to `POST /api/chat`.
-2. The server authorizes the mailbox-scoped thread, persists the user message, and loads canonical history from PostgreSQL.
-3. TanStack AI runs the model with read-only Gmail tools and streams its native SSE protocol directly to the browser.
-4. Successful completion persists one assistant message. Cancelling the browser request aborts the model request and does not create a successful assistant row.
+1. The AI SDK `useChat` hook posts to `POST /api/chat`, sending the mailbox context, selected model, and only the newest client message.
+2. The server authorizes the mailbox-scoped thread, persists the user message, and rebuilds the canonical transcript from PostgreSQL; client-sent history is never trusted.
+3. The AI SDK runs the model with Gmail, memory, Linear, calendar, and compose tools and streams its UI message protocol directly to the browser.
+4. Tools that change state (`modify_mail`, `memory`, `linear_write`, `create_google_calendar_event`) require explicit user approval through the AI SDK's tool approval flow; pending approvals live in the persisted assistant message parts, so they survive reloads without a separate resume protocol.
+5. `compose_email` is resolved entirely in the browser: the model proposes a draft, the user edits it in an inline composer, and the chosen Send/Save-draft/Decline outcome flows back as a client tool result.
+6. Successful completion persists one assistant message inside the stream's end callback. Cancelling the browser request aborts the model call while server-side consumption still settles the turn as cancelled.
 
 Historical chat state is loaded through `chat.get`. The application does not maintain a second run protocol, stream hub, replay worker, or client-side stream processor. A streaming assistant message reserves the active turn and is finalized as complete, failed, or cancelled; transcript queries refresh only while such a message is active.
 
@@ -157,7 +159,7 @@ The root [`sst.config.ts`](../sst.config.ts) owns only app-wide SST settings and
 - `secrets.ts` declares stage-aware `sst.Secret` resources and Cloudflare secret bindings.
 - `database.ts` owns the Cloudflare Hyperdrive binding.
 - `web.ts` owns the TanStack Start Worker and its common bindings.
-- `actions.ts` owns mailbox-action resources; chat generation runs in the web request through TanStack AI.
+- `actions.ts` owns mailbox-action resources; chat generation runs in the web request through the AI SDK.
 - `mail.ts` owns SES receipt storage, processing, ingress, and send permissions.
 - `gmail.ts` owns Gmail live-sync and Pub/Sub resources across AWS and Cloudflare.
 - `app.ts` is the small stage-aware composition entry point; `types.ts` contains shared infra boundary types.

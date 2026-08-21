@@ -1,42 +1,29 @@
+import type { UIMessage } from "ai";
+
+export type ChatToolPart = Extract<
+  UIMessage["parts"][number],
+  { toolCallId: string }
+> & {
+  state: string;
+  type: string;
+};
+
+export const isChatToolPart = (
+  part: UIMessage["parts"][number]
+): part is ChatToolPart =>
+  typeof part.type === "string" &&
+  part.type.startsWith("tool-") &&
+  "toolCallId" in part;
+
+export const getToolName = (partType: string) =>
+  partType.startsWith("tool-") ? partType.slice("tool-".length) : partType;
+
 export type ChatToolApproval = {
-  approve: (editedArgs?: Record<string, unknown>) => void;
-  canResolve: boolean;
+  approve: () => void;
+  deny: () => void;
   id: string;
-  originalArgs: unknown;
-  reject: () => void;
-  status: "pending" | "validating" | "staged" | "submitting" | "error";
   toolCallId: string;
   toolName: string;
-};
-
-export const parseToolArguments = (value: unknown): Record<string, unknown> => {
-  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-    return Object.fromEntries(Object.entries(value));
-  }
-  if (typeof value !== "string") {
-    return {};
-  }
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return typeof parsed === "object" &&
-      parsed !== null &&
-      !Array.isArray(parsed)
-      ? Object.fromEntries(Object.entries(parsed))
-      : {};
-  } catch {
-    return {};
-  }
-};
-
-export const parseToolResult = (content: unknown): unknown => {
-  if (typeof content !== "string") {
-    return content;
-  }
-  try {
-    return JSON.parse(content) as unknown;
-  } catch {
-    return content;
-  }
 };
 
 export const humanizeToolName = (name: string) =>

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { ORPCError } from "@orpc/server";
+import type { AiUsageReport } from "@quieter/ai/chat-usage";
 import {
   CONNECTOR_AGENT_MAX_WRITE_CALLS,
   evaluateMailboxActionCondition,
@@ -28,8 +29,8 @@ import {
 } from "@quieter/database/schema";
 import { getMessageWithDetails } from "@quieter/gmail";
 import { reportError } from "@quieter/observability";
-import { toolDefinition } from "@tanstack/ai";
-import type { AnyTool, ChatMiddleware } from "@tanstack/ai";
+import { jsonSchema, tool } from "ai";
+import type { ToolSet } from "ai";
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { z } from "zod";
 
@@ -67,11 +68,11 @@ type NodeResult = {
   variables?: Record<string, unknown>;
 };
 
-type MailboxActionUsageMiddlewareFactory = (input: {
+type MailboxActionUsageReporter = (input: {
   model: typeof MAILBOX_ACTION_CONDITION_MODEL;
   nodeId: string;
   stepRunId: string;
-}) => ChatMiddleware[];
+}) => ((usage: AiUsageReport) => void) | undefined;
 
 const MAX_NODE_EXECUTIONS = 500;
 const RUN_LEASE_MS = 10 * 60 * 1000;
@@ -258,41 +259,54 @@ const createConnectorStepTools = (
   identity: ConnectorStepIdentity,
   tools: ConnectorAgentTool[],
   effects: Awaited<ReturnType<typeof runConnectorWriteCall>>[]
-): AnyTool[] =>
-  tools.map((tool) =>
-    toolDefinition({
-      description: tool.description ?? tool.name,
-      inputSchema: tool.inputSchema,
-      name: tool.name,
-    }).server(async (args) => {
-      const call: ConnectorAgentToolCall = {
-        arguments: toolArgumentsSchema.parse(args ?? {}),
-        toolName: tool.name,
-      };
+): ToolSet =>
+  Object.fromEntries(
+    tools.map((connectorTool) => {
+      // MCP-authored schemas pass through verbatim; the provider validates
+      // the call against them.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+      const inputSchema = connectorTool.inputSchema as Parameters<
+        typeof jsonSchema<Record<string, unknown>>
+      >[0];
+      return [
+        connectorTool.name,
+        tool({
+          description: connectorTool.description ?? connectorTool.name,
+          execute: async (args) => {
+            const call: ConnectorAgentToolCall = {
+              arguments: toolArgumentsSchema.parse(args ?? {}),
+              toolName: connectorTool.name,
+            };
 
-      if (!tool.mutates) {
-        const [result] = await runConnectorAgentReadCalls({
-          calls: [call],
-          credentialId: identity.credentialId,
-          provider: identity.provider,
-        });
-        return result ?? { error: "Tool returned nothing.", status: "error" };
-      }
+            if (!connectorTool.mutates) {
+              const [result] = await runConnectorAgentReadCalls({
+                calls: [call],
+                credentialId: identity.credentialId,
+                provider: identity.provider,
+              });
+              return (
+                result ?? { error: "Tool returned nothing.", status: "error" }
+              );
+            }
 
-      if (effects.length >= CONNECTOR_AGENT_MAX_WRITE_CALLS) {
-        return {
-          error: `This step has already made ${CONNECTOR_AGENT_MAX_WRITE_CALLS} changes, which is the limit. Finish without further changes.`,
-          status: "error",
-        };
-      }
+            if (effects.length >= CONNECTOR_AGENT_MAX_WRITE_CALLS) {
+              return {
+                error: `This step has already made ${CONNECTOR_AGENT_MAX_WRITE_CALLS} changes, which is the limit. Finish without further changes.`,
+                status: "error",
+              };
+            }
 
-      const result = await runConnectorWriteCall({
-        ...identity,
-        call,
-        callIndex: effects.length,
-      });
-      effects.push(result);
-      return result;
+            const result = await runConnectorWriteCall({
+              ...identity,
+              call,
+              callIndex: effects.length,
+            });
+            effects.push(result);
+            return result;
+          },
+          inputSchema: jsonSchema<Record<string, unknown>>(inputSchema),
+        }),
+      ];
     })
   );
 
@@ -305,7 +319,7 @@ const executeNode = async (input: {
   revisionId: string;
   runId: string;
   stepRunId: string;
-  usageMiddleware: MailboxActionUsageMiddlewareFactory;
+  usageReporter: MailboxActionUsageReporter;
 }): Promise<NodeResult> => {
   const context: ActionExecutionContext = {
     branchPath: input.frame.branchPath,
@@ -323,7 +337,7 @@ const executeNode = async (input: {
         criteria: input.node.config.criteria,
         email: input.email,
         memoryContext: input.memoryContext,
-        middleware: input.usageMiddleware({
+        onUsage: input.usageReporter({
           model: MAILBOX_ACTION_CONDITION_MODEL,
           nodeId: input.node.id,
           stepRunId: input.stepRunId,
@@ -346,7 +360,7 @@ const executeNode = async (input: {
         email: input.email,
         fallbackPort: input.node.config.fallbackPort,
         memoryContext: input.memoryContext,
-        middleware: input.usageMiddleware({
+        onUsage: input.usageReporter({
           model: MAILBOX_ACTION_CONDITION_MODEL,
           nodeId: input.node.id,
           stepRunId: input.stepRunId,
@@ -398,13 +412,13 @@ const executeNode = async (input: {
 
       try {
         const result = await runConnectorAgentStep({
-          abortController,
+          abortSignal: abortController.signal,
           connectorName,
           context,
           email: input.email,
           instructions,
           memoryContext: input.memoryContext,
-          middleware: input.usageMiddleware({
+          onUsage: input.usageReporter({
             model: MAILBOX_ACTION_CONNECTOR_AGENT_MODEL,
             nodeId: input.node.id,
             stepRunId: input.stepRunId,
@@ -517,46 +531,43 @@ export const executeMailboxActionRun = async (runId: string) => {
       .where(eq(mailboxAction.id, run.actionId))
       .limit(1);
     const usageIndexesByStepRunId = new Map<string, number>();
-    const createUsageMiddleware: MailboxActionUsageMiddlewareFactory = ({
+    const createUsageReporter: MailboxActionUsageReporter = ({
       model,
       nodeId: _nodeId,
       stepRunId,
     }) => {
-      const billingUserId = actionOwner?.userId;
-      if (!hasText(billingUserId)) {
-        return [];
-      }
-      return [
-        {
-          name: "mailbox-action-ai-usage",
-          onUsage: (usageContext, usage) => {
-            const usageIndex = usageIndexesByStepRunId.get(stepRunId) ?? 0;
-            usageIndexesByStepRunId.set(stepRunId, usageIndex + 1);
-            const externalId = `mailbox-action:${run.id}:${stepRunId}:${usageIndex}`;
-            usageContext.defer(
-              (async () => {
-                try {
-                  await reportAiUsage({
-                    completionTokens: usage.completionTokens,
-                    costUsd: usage.cost,
-                    externalId,
-                    mailboxId: run.mailboxId,
-                    model,
-                    promptTokens: usage.promptTokens,
-                    promptTokensDetails: usage.promptTokensDetails,
-                    usageKind: "aiChat",
-                    userId: billingUserId,
-                  });
-                } catch (error: unknown) {
-                  reportError(error, {
-                    operation: "mailbox-actions:report-ai-usage",
-                  });
-                }
-              })()
-            );
-          },
-        },
-      ];
+      const externalIdFor = (usageIndex: number) =>
+        `mailbox-action:${run.id}:${stepRunId}:${usageIndex}`;
+      return (usage) => {
+        const billingUserId = actionOwner?.userId;
+        if (!hasText(billingUserId)) {
+          return;
+        }
+        const usageIndex = usageIndexesByStepRunId.get(stepRunId) ?? 0;
+        usageIndexesByStepRunId.set(stepRunId, usageIndex + 1);
+        void (async () => {
+          try {
+            await reportAiUsage({
+              completionTokens: usage.completionTokens,
+              costUsd: usage.costUsd,
+              externalId: externalIdFor(usageIndex),
+              mailboxId: run.mailboxId,
+              model,
+              promptTokens: usage.promptTokens,
+              promptTokensDetails: {
+                cacheWriteTokens: usage.cacheWriteTokens,
+                cachedTokens: usage.cachedTokens,
+              },
+              usageKind: "aiChat",
+              userId: billingUserId,
+            });
+          } catch (error: unknown) {
+            reportError(error, {
+              operation: "mailbox-actions:report-ai-usage",
+            });
+          }
+        })();
+      };
     };
     const email = await loadActionEmailInput({
       mailboxId: run.mailboxId,
@@ -643,7 +654,7 @@ export const executeMailboxActionRun = async (runId: string) => {
         revisionId: run.revisionId,
         runId: run.id,
         stepRunId,
-        usageMiddleware: createUsageMiddleware,
+        usageReporter: createUsageReporter,
       });
       const mergedVariables = { ...item.frame.variables, ...result.variables };
       const previousOutputs = {

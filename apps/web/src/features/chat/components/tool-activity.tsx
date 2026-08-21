@@ -20,7 +20,6 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   aiMemoryResultSchema,
-  composeEmailInputSchema,
   composeEmailResultSchema,
   gmailAttachmentResultSchema,
   gmailLabelListResultSchema,
@@ -39,22 +38,22 @@ import {
   CollapsiblePanel,
   CollapsibleTrigger,
 } from "@quieter/ui/collapsible";
-import type { MessagePart } from "@tanstack/ai";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import type { ReactNode } from "react";
 
-import {
-  humanizeToolName,
-  parseToolArguments,
-  parseToolResult,
-} from "../domain/chat-tools";
-import type { ChatToolApproval } from "../domain/chat-tools";
+import { getToolName, humanizeToolName } from "../domain/chat-tools";
+import type { ChatToolApproval, ChatToolPart } from "../domain/chat-tools";
+import { parseComposeProposal } from "../domain/compose-proposal";
 import { ComposeToolApproval } from "./compose-tool-approval";
 
-type ToolCall = Extract<MessagePart, { type: "tool-call" }>;
-type ToolResult = Extract<MessagePart, { type: "tool-result" }>;
 type ToolIcon = typeof Wrench01Icon;
+
+const TOOL_PART_TERMINAL_STATES = new Set([
+  "output-available",
+  "output-error",
+  "output-denied",
+]);
 
 const toolIcons: Record<string, ToolIcon> = {
   compose_email: PencilEdit01Icon,
@@ -136,9 +135,14 @@ const getToolDetail = (name: string, args: Record<string, unknown>) => {
   }
 };
 
-const getResultError = (result: ToolResult | undefined, data: unknown) => {
-  if (result?.state === "error") {
-    return result.error ?? "The tool could not finish.";
+const getResultError = (part: ChatToolPart, data: unknown) => {
+  if (part.state === "output-error") {
+    return typeof part.errorText === "string"
+      ? part.errorText
+      : "The tool could not finish.";
+  }
+  if (part.state === "output-denied") {
+    return "You declined this action.";
   }
   return typeof data === "object" &&
     data !== null &&
@@ -440,7 +444,7 @@ const GenericApproval = ({
       <Button
         disabled={disabled}
         onClick={() => {
-          approval.reject();
+          approval.deny();
         }}
         size="sm"
         type="button"
@@ -463,12 +467,11 @@ const GenericApproval = ({
 );
 
 const getToolLabel = (input: {
-  awaitingApproval: boolean;
   name: string;
   pending: boolean;
-  staleApproval: boolean;
+  waitingForUser: boolean;
 }) => {
-  if (input.awaitingApproval || input.staleApproval) {
+  if (input.waitingForUser) {
     return `Approve ${humanizeToolName(input.name).toLowerCase()}`;
   }
   const labels = toolLabels[input.name];
@@ -478,81 +481,85 @@ const getToolLabel = (input: {
   return labels?.complete ?? humanizeToolName(input.name);
 };
 
+export type ComposeSubmitAction = "send" | "save_draft";
+
 export const ToolActivity = ({
   approval,
-  call,
+  composeBusy,
   isStreaming,
-  result,
-  resuming,
+  onComposeDecline,
+  onComposeSubmit,
+  part,
 }: {
   approval?: ChatToolApproval;
-  call: ToolCall;
+  composeBusy: boolean;
   isStreaming: boolean;
-  result?: ToolResult;
-  resuming: boolean;
+  onComposeDecline: (toolCallId: string) => void;
+  onComposeSubmit: (
+    toolCallId: string,
+    action: ComposeSubmitAction,
+    values: {
+      bcc: string;
+      bodyText: string;
+      cc: string;
+      subject: string;
+      to: string;
+    }
+  ) => void;
+  part: ChatToolPart;
 }) => {
   const navigate = useNavigate({ from: "/" });
-  const args = parseToolArguments(call.input ?? call.arguments);
-  const data = parseToolResult(result?.content);
-  const error = getResultError(result, data);
-  const awaitingApproval = approval !== undefined && result === undefined;
-  // A persisted approval that lost its live interrupt (for example an unload
-  // before the resume snapshot was saved) can no longer be resolved here.
-  const staleApproval =
-    approval === undefined &&
-    result === undefined &&
-    call.state === "approval-requested";
-  const pending = result === undefined && !awaitingApproval && isStreaming;
+  const name = getToolName(part.type);
+  const args =
+    typeof part.input === "object" &&
+    part.input !== null &&
+    !Array.isArray(part.input)
+      ? Object.fromEntries(Object.entries(part.input))
+      : {};
+  const data = part.output;
+  const error = getResultError(part, data);
+  const composeProposal =
+    name === "compose_email" ? parseComposeProposal(part) : null;
+  const awaitingApproval =
+    part.state === "approval-requested" || composeProposal !== null;
+  const terminal = TOOL_PART_TERMINAL_STATES.has(part.state);
+  const pending = !terminal && !awaitingApproval && isStreaming;
   const shouldExpand = awaitingApproval || pending || error !== "";
   // Null lets the row follow shouldExpand until the user takes over, so an
   // automatically expanded row can still be collapsed manually.
   const [manuallyOpen, setManuallyOpen] = useState<boolean | null>(null);
   const open = manuallyOpen ?? shouldExpand;
   const label = getToolLabel({
-    awaitingApproval,
-    name: call.name,
+    name,
     pending,
-    staleApproval,
+    waitingForUser: awaitingApproval,
   });
-  const detail = getToolDetail(call.name, args);
-  const actionsDisabled =
-    resuming ||
-    approval?.canResolve === false ||
-    approval?.status === "submitting" ||
-    approval?.status === "validating";
-  const composeInput =
-    call.name === "compose_email" && approval !== undefined
-      ? composeEmailInputSchema.safeParse(approval.originalArgs)
-      : null;
+  const detail = getToolDetail(name, args);
   let content: ReactNode;
-  if (awaitingApproval && composeInput?.success === true) {
+  if (composeProposal !== null) {
     content = (
       <ComposeToolApproval
-        disabled={actionsDisabled}
-        initial={composeInput.data}
-        onApprove={(editedArgs) => {
-          approval.approve(editedArgs);
+        disabled={composeBusy}
+        initial={composeProposal.input}
+        onDecline={() => {
+          onComposeDecline(composeProposal.toolCallId);
         }}
-        onReject={() => {
-          approval.reject();
+        onSubmit={(action, values) => {
+          onComposeSubmit(composeProposal.toolCallId, action, values);
         }}
       />
     );
   } else if (awaitingApproval && approval !== undefined) {
     content = (
-      <GenericApproval
-        approval={approval}
-        args={args}
-        disabled={actionsDisabled}
-      />
+      <GenericApproval approval={approval} args={args} disabled={false} />
     );
-  } else if (staleApproval) {
+  } else if (awaitingApproval) {
     content = <RawJson value={args} />;
   } else {
     content = (
       <ToolResultContent
         data={data}
-        name={call.name}
+        name={name}
         onOpenMessage={(category, messageId) => {
           void navigate({
             search: (previous) => ({
@@ -569,8 +576,8 @@ export const ToolActivity = ({
     );
   }
   const expandable = content !== null && content !== undefined;
-  const isWorking = pending || (resuming && result === undefined);
-  let statusIcon = toolIcons[call.name] ?? Wrench01Icon;
+  const isWorking = pending;
+  let statusIcon = toolIcons[name] ?? Wrench01Icon;
   if (isWorking) {
     statusIcon = Loading03Icon;
   }

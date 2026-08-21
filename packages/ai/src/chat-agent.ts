@@ -1,8 +1,8 @@
 import { MAILBOX_LABELS } from "@quieter/gmail";
 import type { MailboxCategory } from "@quieter/gmail";
 import { reportError } from "@quieter/observability";
-import { toolDefinition } from "@tanstack/ai";
-import type { AnyTool } from "@tanstack/ai";
+import { tool } from "ai";
+import type { ToolSet } from "ai";
 import { z } from "zod";
 
 const mailboxCategories = Object.keys(MAILBOX_LABELS).filter(
@@ -137,35 +137,13 @@ When @Linear is requested, call linear_list_tools first. It discovers the tools 
 
 Look up teams, labels, workflow states and projects before creating or changing anything, so ids come from the workspace rather than from a guess. Do not claim anything was created or changed unless the tool reported success.`;
 
-const linearToolCallInputSchema = z.object({
+export const linearToolCallInputSchema = z.object({
   arguments: z.record(z.string(), z.unknown()).default({}).meta({
     description: "Arguments for the discovered Linear tool.",
   }),
   toolName: z.string().trim().min(1).max(256).meta({
     description: "The exact tool name returned by linear_list_tools.",
   }),
-});
-
-export const linearListToolsToolDef = toolDefinition({
-  description:
-    "Discover the tools available in the connected Linear workspace. Use only after the user explicitly mentions @Linear, and use this before any other Linear tool.",
-  inputSchema: z.object({}),
-  name: "linear_list_tools",
-});
-
-export const linearReadToolDef = toolDefinition({
-  description:
-    "Call a read-only Linear tool returned by linear_list_tools. Use this only for tool names beginning with get_, list_, or search_.",
-  inputSchema: linearToolCallInputSchema,
-  name: "linear_read",
-});
-
-export const linearWriteToolDef = toolDefinition({
-  description:
-    "Call a mutating Linear tool returned by linear_list_tools. Use this for tool names that do not begin with get_, list_, or search_. The user must approve the change.",
-  inputSchema: linearToolCallInputSchema,
-  name: "linear_write",
-  needsApproval: true,
 });
 
 const toolErrorSchema = z.object({
@@ -202,27 +180,6 @@ export const gmailSearchResultSchema = z.discriminatedUnion("status", [
 
 export type GmailSearchResult = z.infer<typeof gmailSearchResultSchema>;
 
-export const gmailSearchToolDef = toolDefinition({
-  description:
-    "Search the selected Gmail mailbox with Gmail search syntax and return matching message summaries.",
-  inputSchema: z.object({
-    maxResults: z.number().int().min(1).max(50).default(10).meta({
-      description:
-        "Maximum summaries to return. Match the user's requested count, up to 50.",
-    }),
-    pageToken: z.string().trim().max(2000).optional().meta({
-      description:
-        "Continuation token returned by a previous search_gmail call. Omit it for the first page.",
-    }),
-    query: z.string().trim().min(1).max(500).meta({
-      description:
-        "Gmail search query. Can be free text or use Gmail operators.",
-    }),
-  }),
-  name: "search_gmail",
-  outputSchema: gmailSearchResultSchema,
-});
-
 export const gmailThreadResultSchema = z.discriminatedUnion("status", [
   z.object({
     category: z.enum(mailboxCategories),
@@ -253,18 +210,6 @@ export const gmailThreadResultSchema = z.discriminatedUnion("status", [
 ]);
 
 export type GmailThreadResult = z.infer<typeof gmailThreadResultSchema>;
-
-export const gmailThreadToolDef = toolDefinition({
-  description:
-    "Read the selected Gmail conversation, including bounded message bodies and attachment counts.",
-  inputSchema: z.object({
-    threadId: z.string().trim().min(1).max(256).meta({
-      description: "Gmail thread id, usually from a search_gmail result.",
-    }),
-  }),
-  name: "read_gmail_thread",
-  outputSchema: gmailThreadResultSchema,
-});
 
 export const mailboxOverviewResultSchema = z.discriminatedUnion("status", [
   z.object({
@@ -333,23 +278,6 @@ export const composeEmailResultSchema = z.discriminatedUnion("status", [
 export type ComposeEmailInput = z.infer<typeof composeEmailInputSchema>;
 export type ComposeEmailResult = z.infer<typeof composeEmailResultSchema>;
 
-export const composeEmailToolDef = toolDefinition({
-  description:
-    "Open an editable inline email composer with a proposed message. The user must explicitly send, save the draft, or decline before the assistant continues.",
-  inputSchema: composeEmailInputSchema,
-  name: "compose_email",
-  needsApproval: true,
-  outputSchema: composeEmailResultSchema,
-});
-
-export const mailboxOverviewToolDef = toolDefinition({
-  description:
-    "Get totals and estimated unread, starred, and attachment message counts for the selected mailbox.",
-  inputSchema: z.object({}),
-  name: "get_mailbox_overview",
-  outputSchema: mailboxOverviewResultSchema,
-});
-
 export const gmailMessageResultSchema = z.discriminatedUnion("status", [
   z.object({
     attachmentCount: z.number().int().nonnegative(),
@@ -384,18 +312,6 @@ export const gmailMessageResultSchema = z.discriminatedUnion("status", [
 
 export type GmailMessageResult = z.infer<typeof gmailMessageResultSchema>;
 
-export const gmailMessageToolDef = toolDefinition({
-  description:
-    "Read one Gmail message with its full body and attachment metadata.",
-  inputSchema: z.object({
-    messageId: z.string().trim().min(1).max(256).meta({
-      description: "Gmail message id, usually from a search_gmail result.",
-    }),
-  }),
-  name: "read_gmail_message",
-  outputSchema: gmailMessageResultSchema,
-});
-
 export const gmailMessagesResultSchema = z.discriminatedUnion("status", [
   z.object({
     failed: z.array(
@@ -412,18 +328,6 @@ export const gmailMessagesResultSchema = z.discriminatedUnion("status", [
 ]);
 
 export type GmailMessagesResult = z.infer<typeof gmailMessagesResultSchema>;
-
-export const gmailMessagesToolDef = toolDefinition({
-  description: "Read up to 20 Gmail messages in one live mailbox request.",
-  inputSchema: z.object({
-    messageIds: z.array(z.string().trim().min(1).max(256)).min(1).max(20).meta({
-      description:
-        "Gmail message ids, usually selected from search_gmail results.",
-    }),
-  }),
-  name: "read_gmail_messages",
-  outputSchema: gmailMessagesResultSchema,
-});
 
 export const gmailAttachmentResultSchema = z.discriminatedUnion("status", [
   z.object({
@@ -444,17 +348,6 @@ export const gmailAttachmentResultSchema = z.discriminatedUnion("status", [
 ]);
 
 export type GmailAttachmentResult = z.infer<typeof gmailAttachmentResultSchema>;
-
-export const gmailAttachmentToolDef = toolDefinition({
-  description:
-    "Read bounded text from a supported Gmail attachment using its message and attachment ids.",
-  inputSchema: z.object({
-    attachmentId: z.string().trim().min(1).max(512),
-    messageId: z.string().trim().min(1).max(256),
-  }),
-  name: "read_gmail_attachment",
-  outputSchema: gmailAttachmentResultSchema,
-});
 
 export const gmailLabelListResultSchema = z.discriminatedUnion("status", [
   z.object({
@@ -477,13 +370,6 @@ export const gmailLabelListResultSchema = z.discriminatedUnion("status", [
 ]);
 
 export type GmailLabelListResult = z.infer<typeof gmailLabelListResultSchema>;
-
-export const gmailLabelListToolDef = toolDefinition({
-  description: "List Gmail labels available in the selected mailbox.",
-  inputSchema: z.object({}),
-  name: "list_gmail_labels",
-  outputSchema: gmailLabelListResultSchema,
-});
 
 const modifyMailActions = [
   "mark_read",
@@ -512,25 +398,6 @@ export const modifyMailResultSchema = z.discriminatedUnion("status", [
 ]);
 
 export type ModifyMailResult = z.infer<typeof modifyMailResultSchema>;
-
-export const modifyMailToolDef = toolDefinition({
-  description:
-    "Apply a mailbox action to a Gmail message or thread: mark_read, mark_unread, star, unstar, archive, trash, or untrash.",
-  inputSchema: z.object({
-    action: z.enum(modifyMailActions).meta({
-      description: "Mailbox action to apply.",
-    }),
-    id: z.string().trim().min(1).max(256).meta({
-      description: "Gmail message id or thread id, depending on target.",
-    }),
-    target: z.enum(["message", "thread"]).meta({
-      description: "Whether id refers to a message or a thread.",
-    }),
-  }),
-  name: "modify_mail",
-  needsApproval: true,
-  outputSchema: modifyMailResultSchema,
-});
 
 const googleCalendarEventDateSchema = z
   .object({
@@ -598,33 +465,32 @@ export type GoogleCalendarCreateEventResult = z.infer<
   typeof googleCalendarCreateEventResultSchema
 >;
 
-export const googleCalendarCreateEventToolDef = toolDefinition({
-  description: "Create an event on the user's connected Google Calendar.",
-  inputSchema: googleCalendarCreateEventInputSchema,
-  name: "create_google_calendar_event",
-  needsApproval: true,
-  outputSchema: googleCalendarCreateEventResultSchema,
-});
-
 export type GmailReadOnlyToolsContext = {
   category: MailboxCategory;
-  getMailboxOverview: () => Promise<MailboxOverviewResult>;
-  listGmailLabels: () => Promise<GmailLabelListResult>;
+  getMailboxOverview: (signal?: AbortSignal) => Promise<MailboxOverviewResult>;
+  listGmailLabels: (signal?: AbortSignal) => Promise<GmailLabelListResult>;
   readGmailAttachment: (input: {
     attachmentId: string;
     messageId: string;
+    signal?: AbortSignal;
   }) => Promise<GmailAttachmentResult>;
   readGmailMessage: (input: {
     messageId: string;
+    signal?: AbortSignal;
   }) => Promise<GmailMessageResult>;
   readGmailMessages: (input: {
     messageIds: string[];
+    signal?: AbortSignal;
   }) => Promise<GmailMessagesResult>;
-  readGmailThread: (input: { threadId: string }) => Promise<GmailThreadResult>;
+  readGmailThread: (input: {
+    signal?: AbortSignal;
+    threadId: string;
+  }) => Promise<GmailThreadResult>;
   searchGmail: (input: {
     maxResults: number;
     pageToken?: string;
     query: string;
+    signal?: AbortSignal;
   }) => Promise<GmailSearchResult>;
 };
 
@@ -632,18 +498,9 @@ export type GmailToolsContext = GmailReadOnlyToolsContext & {
   modifyMail: (input: {
     action: (typeof modifyMailActions)[number];
     id: string;
+    signal?: AbortSignal;
     target: "message" | "thread";
   }) => Promise<ModifyMailResult>;
-};
-
-export type GoogleCalendarToolsContext = {
-  createGoogleCalendarEvent: (
-    input: GoogleCalendarCreateEventInput
-  ) => Promise<GoogleCalendarCreateEventResult>;
-};
-
-export type ComposeEmailToolsContext = {
-  composeEmail: (input: ComposeEmailInput) => Promise<ComposeEmailResult>;
 };
 
 export type AiMemoryResult = {
@@ -655,30 +512,6 @@ export const aiMemoryResultSchema = z.object({
   answer: z.string().optional(),
   status: z.enum(["answered", "skipped", "updated"]),
 });
-
-export const aiMemoryToolDef = toolDefinition({
-  description:
-    "Inspect, remember, correct, or forget durable context when the user explicitly asks.",
-  inputSchema: z.object({
-    request: z.string().trim().min(1).max(2000).meta({
-      description: "A concise restatement of the user's memory request.",
-    }),
-    scope: z.enum(["both", "mailbox", "personal"]).meta({
-      description:
-        "Use both only to inspect memory. Use personal for context that follows the person, or mailbox for shared mailbox-specific context.",
-    }),
-  }),
-  name: "memory",
-  needsApproval: true,
-  outputSchema: aiMemoryResultSchema,
-});
-
-export type AiMemoryToolsContext = {
-  useMemory: (input: {
-    request: string;
-    scope: "both" | "mailbox" | "personal";
-  }) => Promise<AiMemoryResult>;
-};
 
 const getMailboxToolErrorMessage = (
   operation: string,
@@ -715,208 +548,336 @@ const getMailboxToolErrorMessage = (
   return fallback;
 };
 
-export const createGmailSearchServerTool = (
-  context: GmailReadOnlyToolsContext
-): AnyTool =>
-  gmailSearchToolDef.server(async ({ query, maxResults, pageToken }) => {
-    try {
-      return await context.searchGmail({
-        maxResults: maxResults ?? 10,
-        pageToken:
-          pageToken !== null && pageToken !== undefined && pageToken !== ""
-            ? pageToken
-            : undefined,
-        query,
-      });
-    } catch (error) {
-      return {
-        category: context.category,
-        error: getMailboxToolErrorMessage(
-          "search",
-          error,
-          "The mailbox search could not be completed. Try a narrower query."
-        ),
-        query,
-        status: "error",
-      };
-    }
-  });
+/**
+ * Builds the executable Gmail mailbox tool set. Tool executions receive the
+ * generation's abort signal through the AI SDK execute options.
+ */
+export const createGmailChatTools = (context: GmailToolsContext): ToolSet => ({
+  get_mailbox_overview: tool({
+    description:
+      "Get totals and estimated unread, starred, and attachment message counts for the selected mailbox.",
+    execute: async (_input, { abortSignal }) => {
+      try {
+        return await context.getMailboxOverview(abortSignal);
+      } catch (error) {
+        return {
+          category: context.category,
+          error: getMailboxToolErrorMessage(
+            "overview",
+            error,
+            "The mailbox summary could not be refreshed. Try again."
+          ),
+          status: "error",
+        };
+      }
+    },
+    inputSchema: z.object({}),
+    outputSchema: mailboxOverviewResultSchema,
+  }),
 
-export const createGmailMessagesServerTool = (
-  context: GmailReadOnlyToolsContext
-): AnyTool =>
-  gmailMessagesToolDef.server(async ({ messageIds }) => {
-    try {
-      return await context.readGmailMessages({ messageIds });
-    } catch (error) {
-      return {
-        error: getMailboxToolErrorMessage(
-          "batch read",
-          error,
-          "Those messages could not be loaded. Refresh the mailbox and retry."
-        ),
-        status: "error",
-      };
-    }
-  });
+  list_gmail_labels: tool({
+    description: "List Gmail labels available in the selected mailbox.",
+    execute: async (_input, { abortSignal }) => {
+      try {
+        return await context.listGmailLabels(abortSignal);
+      } catch (error) {
+        return {
+          category: context.category,
+          error: getMailboxToolErrorMessage(
+            "label list",
+            error,
+            "Mailbox labels could not be refreshed. Try again."
+          ),
+          status: "error",
+        };
+      }
+    },
+    inputSchema: z.object({}),
+    outputSchema: gmailLabelListResultSchema,
+  }),
 
-export const createGmailAttachmentServerTool = (
-  context: GmailReadOnlyToolsContext
-): AnyTool =>
-  gmailAttachmentToolDef.server(async ({ attachmentId, messageId }) => {
-    try {
-      return await context.readGmailAttachment({ attachmentId, messageId });
-    } catch (error) {
-      return {
-        attachmentId,
-        error: getMailboxToolErrorMessage(
-          "attachment read",
-          error,
-          "That attachment could not be read. Open the message and retry."
-        ),
-        messageId,
-        status: "error",
-      };
-    }
-  });
+  modify_mail: tool({
+    description:
+      "Apply a mailbox action to a Gmail message or thread: mark_read, mark_unread, star, unstar, archive, trash, or untrash.",
+    execute: async ({ action, id, target }, { abortSignal }) => {
+      try {
+        return await context.modifyMail({
+          action,
+          id,
+          signal: abortSignal,
+          target,
+        });
+      } catch (error) {
+        return {
+          action,
+          category: context.category,
+          error: getMailboxToolErrorMessage(
+            "mail action",
+            error,
+            "The mail action could not be completed. Refresh the mailbox and try again."
+          ),
+          id,
+          status: "error",
+          target,
+        };
+      }
+    },
+    inputSchema: z.object({
+      action: z.enum(modifyMailActions).meta({
+        description: "Mailbox action to apply.",
+      }),
+      id: z.string().trim().min(1).max(256).meta({
+        description: "Gmail message id or thread id, depending on target.",
+      }),
+      target: z.enum(["message", "thread"]).meta({
+        description: "Whether id refers to a message or a thread.",
+      }),
+    }),
+    outputSchema: modifyMailResultSchema,
+  }),
 
-export const createGmailThreadServerTool = (
-  context: GmailReadOnlyToolsContext
-): AnyTool =>
-  gmailThreadToolDef.server(async ({ threadId }) => {
-    try {
-      return await context.readGmailThread({ threadId });
-    } catch (error) {
-      return {
-        category: context.category,
-        error: getMailboxToolErrorMessage(
-          "thread read",
-          error,
-          "That conversation could not be loaded. Refresh the mailbox and retry."
-        ),
-        status: "error",
-        threadId,
-      };
-    }
-  });
+  read_gmail_attachment: tool({
+    description:
+      "Read bounded text from a supported Gmail attachment using its message and attachment ids.",
+    execute: async ({ attachmentId, messageId }, { abortSignal }) => {
+      try {
+        return await context.readGmailAttachment({
+          attachmentId,
+          messageId,
+          signal: abortSignal,
+        });
+      } catch (error) {
+        return {
+          attachmentId,
+          error: getMailboxToolErrorMessage(
+            "attachment read",
+            error,
+            "That attachment could not be read. Open the message and retry."
+          ),
+          messageId,
+          status: "error",
+        };
+      }
+    },
+    inputSchema: z.object({
+      attachmentId: z.string().trim().min(1).max(512),
+      messageId: z.string().trim().min(1).max(256),
+    }),
+    outputSchema: gmailAttachmentResultSchema,
+  }),
 
-export const createMailboxOverviewServerTool = (
-  context: GmailReadOnlyToolsContext
-): AnyTool =>
-  mailboxOverviewToolDef.server(async () => {
-    try {
-      return await context.getMailboxOverview();
-    } catch (error) {
-      return {
-        category: context.category,
-        error: getMailboxToolErrorMessage(
-          "overview",
-          error,
-          "The mailbox summary could not be refreshed. Try again."
-        ),
-        status: "error",
-      };
-    }
-  });
+  read_gmail_message: tool({
+    description:
+      "Read one Gmail message with its full body and attachment metadata.",
+    execute: async ({ messageId }, { abortSignal }) => {
+      try {
+        return await context.readGmailMessage({
+          messageId,
+          signal: abortSignal,
+        });
+      } catch (error) {
+        return {
+          category: context.category,
+          error: getMailboxToolErrorMessage(
+            "message read",
+            error,
+            "That message could not be loaded. Refresh the mailbox and retry."
+          ),
+          messageId,
+          status: "error",
+        };
+      }
+    },
+    inputSchema: z.object({
+      messageId: z.string().trim().min(1).max(256).meta({
+        description: "Gmail message id, usually from a search_gmail result.",
+      }),
+    }),
+    outputSchema: gmailMessageResultSchema,
+  }),
 
-export const createGmailMessageServerTool = (
-  context: GmailReadOnlyToolsContext
-): AnyTool =>
-  gmailMessageToolDef.server(async ({ messageId }) => {
-    try {
-      return await context.readGmailMessage({ messageId });
-    } catch (error) {
-      return {
-        category: context.category,
-        error: getMailboxToolErrorMessage(
-          "message read",
-          error,
-          "That message could not be loaded. Refresh the mailbox and retry."
-        ),
-        messageId,
-        status: "error",
-      };
-    }
-  });
+  read_gmail_messages: tool({
+    description: "Read up to 20 Gmail messages in one live mailbox request.",
+    execute: async ({ messageIds }, { abortSignal }) => {
+      try {
+        return await context.readGmailMessages({
+          messageIds,
+          signal: abortSignal,
+        });
+      } catch (error) {
+        return {
+          error: getMailboxToolErrorMessage(
+            "batch read",
+            error,
+            "Those messages could not be loaded. Refresh the mailbox and retry."
+          ),
+          status: "error",
+        };
+      }
+    },
+    inputSchema: z.object({
+      messageIds: z
+        .array(z.string().trim().min(1).max(256))
+        .min(1)
+        .max(20)
+        .meta({
+          description:
+            "Gmail message ids, usually selected from search_gmail results.",
+        }),
+    }),
+    outputSchema: gmailMessagesResultSchema,
+  }),
 
-export const createGmailLabelListServerTool = (
-  context: GmailReadOnlyToolsContext
-): AnyTool =>
-  gmailLabelListToolDef.server(async () => {
-    try {
-      return await context.listGmailLabels();
-    } catch (error) {
-      return {
-        category: context.category,
-        error: getMailboxToolErrorMessage(
-          "label list",
-          error,
-          "Mailbox labels could not be refreshed. Try again."
-        ),
-        status: "error",
-      };
-    }
-  });
+  read_gmail_thread: tool({
+    description:
+      "Read the selected Gmail conversation, including bounded message bodies and attachment counts.",
+    execute: async ({ threadId }, { abortSignal }) => {
+      try {
+        return await context.readGmailThread({ signal: abortSignal, threadId });
+      } catch (error) {
+        return {
+          category: context.category,
+          error: getMailboxToolErrorMessage(
+            "thread read",
+            error,
+            "That conversation could not be loaded. Refresh the mailbox and retry."
+          ),
+          status: "error",
+          threadId,
+        };
+      }
+    },
+    inputSchema: z.object({
+      threadId: z.string().trim().min(1).max(256).meta({
+        description: "Gmail thread id, usually from a search_gmail result.",
+      }),
+    }),
+    outputSchema: gmailThreadResultSchema,
+  }),
 
-export const createModifyMailServerTool = (
-  context: GmailToolsContext
-): AnyTool =>
-  modifyMailToolDef.server(async ({ action, id, target }) => {
-    try {
-      return await context.modifyMail({ action, id, target });
-    } catch (error) {
-      return {
-        action,
-        category: context.category,
-        error: getMailboxToolErrorMessage(
-          "mail action",
-          error,
-          "The mail action could not be completed. Refresh the mailbox and try again."
-        ),
-        id,
-        status: "error",
-        target,
-      };
-    }
-  });
+  search_gmail: tool({
+    description:
+      "Search the selected Gmail mailbox with Gmail search syntax and return matching message summaries.",
+    execute: async ({ query, maxResults, pageToken }, { abortSignal }) => {
+      try {
+        return await context.searchGmail({
+          maxResults: maxResults ?? 10,
+          pageToken:
+            pageToken !== null && pageToken !== undefined && pageToken !== ""
+              ? pageToken
+              : undefined,
+          query,
+          signal: abortSignal,
+        });
+      } catch (error) {
+        return {
+          category: context.category,
+          error: getMailboxToolErrorMessage(
+            "search",
+            error,
+            "The mailbox search could not be completed. Try a narrower query."
+          ),
+          query,
+          status: "error",
+        };
+      }
+    },
+    inputSchema: z.object({
+      maxResults: z.number().int().min(1).max(50).default(10).meta({
+        description:
+          "Maximum summaries to return. Match the user's requested count, up to 50.",
+      }),
+      pageToken: z.string().trim().max(2000).optional().meta({
+        description:
+          "Continuation token returned by a previous search_gmail call. Omit it for the first page.",
+      }),
+      query: z.string().trim().min(1).max(500).meta({
+        description:
+          "Gmail search query. Can be free text or use Gmail operators.",
+      }),
+    }),
+    outputSchema: gmailSearchResultSchema,
+  }),
+});
 
-export const createComposeEmailServerTool = (
-  context: ComposeEmailToolsContext
-): AnyTool =>
-  composeEmailToolDef.server(
-    async (input) =>
-      await context.composeEmail(composeEmailInputSchema.parse(input))
-  );
+/**
+ * The compose proposal is rendered and resolved entirely in the browser: the
+ * user edits the draft in an inline composer and returns the chosen outcome
+ * through a client tool response, so the model always sees what actually
+ * happened.
+ */
+export const createComposeEmailChatTool = (): ToolSet => ({
+  compose_email: tool({
+    description:
+      "Open an editable inline email composer with a proposed message. The user must explicitly send, save the draft, or decline before the assistant continues.",
+    inputSchema: composeEmailInputSchema,
+  }),
+});
 
-export const createGoogleCalendarEventServerTool = (
-  context: GoogleCalendarToolsContext
-): AnyTool =>
-  googleCalendarCreateEventToolDef.server(async (input) => {
-    try {
-      return await context.createGoogleCalendarEvent(input);
-    } catch (error) {
-      return {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Could not create the calendar event.",
-        status: "error",
-        summary: input.summary,
-      };
-    }
-  });
+export type AiMemoryToolsContext = {
+  useMemory: (input: {
+    request: string;
+    scope: "both" | "mailbox" | "personal";
+  }) => Promise<AiMemoryResult>;
+};
 
-export const createAiMemoryServerTool = (
+export const createAiMemoryChatTool = (
   context: AiMemoryToolsContext
-): AnyTool =>
-  aiMemoryToolDef.server(async (input) => {
-    try {
-      return await context.useMemory(input);
-    } catch (error) {
-      reportError(error, {
-        operation: "ai-memory:remember-preference",
-        requestLength: input.request.length,
-      });
-      return { status: "skipped" };
-    }
-  });
+): ToolSet => ({
+  memory: tool({
+    description:
+      "Inspect, remember, correct, or forget durable context when the user explicitly asks.",
+    execute: async (input) => {
+      try {
+        return await context.useMemory(input);
+      } catch (error) {
+        reportError(error, {
+          operation: "ai-memory:remember-preference",
+          requestLength: input.request.length,
+        });
+        return { status: "skipped" };
+      }
+    },
+    inputSchema: z.object({
+      request: z.string().trim().min(1).max(2000).meta({
+        description: "A concise restatement of the user's memory request.",
+      }),
+      scope: z.enum(["both", "mailbox", "personal"]).meta({
+        description:
+          "Use both only to inspect memory. Use personal for context that follows the person, or mailbox for shared mailbox-specific context.",
+      }),
+    }),
+    outputSchema: aiMemoryResultSchema,
+  }),
+});
+
+export type GoogleCalendarToolsContext = {
+  createGoogleCalendarEvent: (
+    input: GoogleCalendarCreateEventInput,
+    signal?: AbortSignal
+  ) => Promise<GoogleCalendarCreateEventResult>;
+};
+
+export const createGoogleCalendarChatTool = (
+  context: GoogleCalendarToolsContext
+): ToolSet => ({
+  create_google_calendar_event: tool({
+    description: "Create an event on the user's connected Google Calendar.",
+    execute: async (input, { abortSignal }) => {
+      try {
+        return await context.createGoogleCalendarEvent(input, abortSignal);
+      } catch (error) {
+        return {
+          error:
+            error instanceof Error
+              ? error.message
+              : "Could not create the calendar event.",
+          status: "error",
+          summary: input.summary,
+        };
+      }
+    },
+    inputSchema: googleCalendarCreateEventInputSchema,
+    outputSchema: googleCalendarCreateEventResultSchema,
+  }),
+});

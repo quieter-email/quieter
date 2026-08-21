@@ -1,11 +1,10 @@
 import { chatModelSchema } from "@quieter/ai/chat-models";
 import type { ChatMessagePart } from "@quieter/database/schema";
 import { mailCategorySchema } from "@quieter/mail/data-plane";
-import type { MessagePart, RunAgentResumeItem, UIMessage } from "@tanstack/ai";
+import type { UIMessage } from "ai";
 import { z } from "zod";
 
 const identifierSchema = z.string().trim().min(1).max(128);
-const runIdSchema = identifierSchema.regex(/^[\w:.-]+$/u);
 const promptSchema = z.string().trim().min(1).max(10_000);
 const contextSchema = z
   .object({
@@ -30,7 +29,7 @@ export const createChatTitle = (prompt: string) => {
   return `${normalized.slice(0, CHAT_TITLE_LENGTH).trimEnd()}...`;
 };
 
-export const chatForwardedPropsSchema = z
+const forwardedPropsSchema = z
   .object({
     category: mailCategorySchema,
     context: contextSchema.optional(),
@@ -39,32 +38,35 @@ export const chatForwardedPropsSchema = z
   })
   .strict();
 
-const clientUserMessageSchema = z
-  .object({
-    content: promptSchema,
-    createdAt: z.union([z.string(), z.date()]).optional(),
-    id: identifierSchema,
-    parts: z
-      .array(
-        z
-          .object({
-            content: promptSchema,
-            type: z.literal("text"),
-          })
-          .strict()
-      )
-      .length(1),
-    role: z.literal("user"),
-  })
-  .strict()
-  .refine((message) => message.content === message.parts[0]?.content, {
-    message: "The user message content and text part must match.",
-  });
+const clientUserMessageSchema = z.object({
+  id: identifierSchema,
+  parts: z
+    .array(
+      z.looseObject({
+        text: promptSchema,
+        type: z.literal("text"),
+      })
+    )
+    .min(1),
+  role: z.literal("user"),
+});
 
-type ValidatedChatRequestBase = {
-  forwardedProps: z.infer<typeof chatForwardedPropsSchema>;
-  runId: string;
+const clientAssistantMessageSchema = z.object({
+  id: identifierSchema,
+  parts: z.array(
+    z.looseObject({
+      state: z.string(),
+      toolCallId: z.string().min(1),
+      type: z.string().startsWith("tool-"),
+    })
+  ),
+  role: z.literal("assistant"),
+});
+
+export type ValidatedChatRequestBase = {
+  forwardedProps: z.infer<typeof forwardedPropsSchema>;
   threadId: string;
+  trigger: "submit-message" | "regenerate-message";
 };
 
 export type ValidatedChatRequest = ValidatedChatRequestBase &
@@ -77,154 +79,136 @@ export type ValidatedChatRequest = ValidatedChatRequestBase &
         };
       }
     | {
-        kind: "resume";
-        parentRunId: string;
-        resume: RunAgentResumeItem[];
+        assistantMessageId: string;
+        kind: "continue";
+        toolDecisions: Map<string, boolean>;
+        toolOutputs: Map<string, unknown>;
+      }
+    | {
+        kind: "regenerate";
       }
   );
 
-const resumeItemSchema = z
+const chatRequestBodySchema = z
   .object({
-    interruptId: identifierSchema,
-    payload: z.unknown().optional(),
-    status: z.enum(["resolved", "cancelled"]),
+    category: mailCategorySchema,
+    context: contextSchema.optional(),
+    mailboxId: identifierSchema,
+    message: z.unknown(),
+    model: chatModelSchema,
+    threadId: z.uuid(),
+    trigger: z.enum(["submit-message", "regenerate-message"]),
   })
   .strict();
 
-const parentRunIdRequiresResume = z.undefined({
-  error: "A parent run id requires interrupt resume entries.",
-});
+/**
+ * Validates the transport body sent by `DefaultChatTransport`. Only the last
+ * client message is inspected: the transcript itself is rebuilt from the
+ * database, so a tampered history cannot influence the model.
+ */
+export const validateChatRequest = (body: unknown): ValidatedChatRequest => {
+  const parsedBody = chatRequestBodySchema.parse(body);
+  const { threadId } = parsedBody;
+  const forwardedProps = forwardedPropsSchema.parse({
+    category: parsedBody.category,
+    ...(parsedBody.context === undefined
+      ? {}
+      : { context: parsedBody.context }),
+    mailboxId: parsedBody.mailboxId,
+    model: parsedBody.model,
+  });
 
-export const validateChatRequest = (params: {
-  forwardedProps: Record<string, unknown>;
-  messages: readonly unknown[];
-  parentRunId?: string;
-  resume?: readonly unknown[];
-  runId: string;
-  threadId: string;
-}): ValidatedChatRequest => {
-  const threadId = z.uuid().parse(params.threadId);
-  const runId = runIdSchema.parse(params.runId);
-  const forwardedProps = chatForwardedPropsSchema.parse(params.forwardedProps);
-  const resume =
-    params.resume === undefined
-      ? undefined
-      : z.array(resumeItemSchema).min(1).parse(params.resume);
-  if (resume !== undefined) {
+  if (parsedBody.trigger === "regenerate-message") {
     return {
       forwardedProps,
-      kind: "resume",
-      parentRunId: runIdSchema.parse(params.parentRunId),
-      resume,
-      runId,
+      kind: "regenerate",
       threadId,
+      trigger: parsedBody.trigger,
     };
   }
-  if (params.parentRunId !== undefined) {
-    parentRunIdRequiresResume.parse(params.parentRunId);
+
+  const messageRole = z
+    .looseObject({ role: z.string() })
+    .parse(parsedBody.message).role;
+
+  if (messageRole === "user") {
+    const userMessage = clientUserMessageSchema.parse(parsedBody.message);
+    if (userMessage.parts.length !== 1) {
+      throw new z.ZodError([
+        {
+          code: "custom",
+          message: "The chat message must contain exactly one text part.",
+          path: ["message", "parts"],
+        },
+      ]);
+    }
+    return {
+      forwardedProps,
+      kind: "message",
+      threadId,
+      trigger: parsedBody.trigger,
+      userMessage: {
+        id: userMessage.id,
+        text: userMessage.parts[0]?.text ?? "",
+      },
+    };
   }
-  const latestUserMessage = params.messages.findLast(
-    (message) =>
-      typeof message === "object" &&
-      message !== null &&
-      Reflect.get(message, "role") === "user"
+
+  const assistantMessage = clientAssistantMessageSchema.parse(
+    parsedBody.message
   );
-  const userMessage = clientUserMessageSchema.parse(latestUserMessage);
+  const toolDecisions = new Map<string, boolean>();
+  const toolOutputs = new Map<string, unknown>();
+  for (const part of assistantMessage.parts) {
+    if (part.state === "approval-responded") {
+      const approval = z
+        .looseObject({ approved: z.boolean(), id: z.string().min(1) })
+        .parse(part.approval);
+      toolDecisions.set(part.toolCallId, approval.approved);
+    } else if (part.state === "output-available") {
+      toolOutputs.set(part.toolCallId, part.output);
+    }
+  }
+  if (toolDecisions.size === 0 && toolOutputs.size === 0) {
+    throw new z.ZodError([
+      {
+        code: "custom",
+        message: "The assistant message carries no client resolutions.",
+        path: ["message"],
+      },
+    ]);
+  }
 
   return {
+    assistantMessageId: assistantMessage.id,
     forwardedProps,
-    kind: "message",
-    runId,
+    kind: "continue",
     threadId,
-    userMessage: {
-      id: userMessage.id,
-      text: userMessage.content,
-    },
+    toolDecisions,
+    toolOutputs,
+    trigger: parsedBody.trigger,
   };
 };
 
-const toolCallStates = new Set([
-  "approval-requested",
-  "approval-responded",
-  "awaiting-input",
-  "complete",
-  "error",
-  "input-complete",
-  "input-streaming",
-]);
+type UIMessagePart = UIMessage["parts"][number];
 
-const toolResultStates = new Set(["complete", "error", "streaming"]);
-
-const storedToolApprovalSchema = z.object({
-  approved: z.boolean().optional(),
-  id: z.string().min(1),
-  needsApproval: z.boolean(),
-});
-
-type ToolCallPart = Extract<MessagePart, { type: "tool-call" }>;
-type ToolResultPart = Extract<MessagePart, { type: "tool-result" }>;
-
-const isToolCallState = (value: unknown): value is ToolCallPart["state"] =>
-  typeof value === "string" && toolCallStates.has(value);
-
-const isToolResultState = (value: unknown): value is ToolResultPart["state"] =>
-  typeof value === "string" && toolResultStates.has(value);
-
-const toToolCallPart = (part: ChatMessagePart): ToolCallPart | null => {
-  if (
-    typeof part.id !== "string" ||
-    typeof part.name !== "string" ||
-    typeof part.arguments !== "string" ||
-    !isToolCallState(part.state)
-  ) {
-    return null;
+const isRenderablePart = (part: ChatMessagePart): boolean => {
+  if (part.type === "text") {
+    return typeof part.text === "string";
   }
-  const approval = storedToolApprovalSchema.safeParse(part.approval);
-  return {
-    arguments: part.arguments,
-    ...(approval.success ? { approval: approval.data } : {}),
-    id: part.id,
-    ...(part.input === undefined ? {} : { input: part.input }),
-    name: part.name,
-    ...(part.output === undefined ? {} : { output: part.output }),
-    state: part.state,
-    type: "tool-call",
-  };
+  if (typeof part.type !== "string" || part.type === "") {
+    return false;
+  }
+  if (part.type === "step-start") {
+    return true;
+  }
+  return part.type.startsWith("tool-") && typeof part.toolCallId === "string";
 };
 
-const toToolResultPart = (part: ChatMessagePart): ToolResultPart | null => {
-  if (
-    typeof part.toolCallId !== "string" ||
-    typeof part.content !== "string" ||
-    !isToolResultState(part.state)
-  ) {
-    return null;
-  }
-  return {
-    content: part.content,
-    ...(typeof part.error === "string" ? { error: part.error } : {}),
-    state: part.state,
-    toolCallId: part.toolCallId,
-    type: "tool-result",
-  };
-};
-
-const toCanonicalPart = (part: ChatMessagePart): MessagePart | null => {
-  if (part.type === "text" && typeof part.content === "string") {
-    return { content: part.content, type: "text" };
-  }
-  if (part.type === "thinking" && typeof part.content === "string") {
-    return { content: part.content, type: "thinking" };
-  }
-  if (part.type === "tool-call") {
-    return toToolCallPart(part);
-  }
-  if (part.type === "tool-result") {
-    return toToolResultPart(part);
-  }
-  return null;
-};
-
+/**
+ * Maps persisted message rows onto AI SDK UI messages. Parts are stored in
+ * their native UI message shape, so this only drops malformed entries.
+ */
 export const toCanonicalTranscript = (
   messages: readonly {
     createdAt: Date;
@@ -237,19 +221,18 @@ export const toCanonicalTranscript = (
     if (message.role !== "assistant" && message.role !== "user") {
       return [];
     }
-    const parts = message.parts.flatMap((part) => {
-      const canonical = toCanonicalPart(part);
-      return canonical === null ? [] : [canonical];
-    });
+    const parts = message.parts.filter(isRenderablePart);
     if (parts.length === 0) {
       return [];
     }
     return [
       {
-        createdAt: message.createdAt,
         id: message.id,
-        parts,
+        // Parts round-trip as opaque JSON; convertToModelMessages validates
+        // the shapes it consumes.
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+        parts: parts as UIMessagePart[],
         role: message.role,
-      },
+      } satisfies UIMessage,
     ];
   });

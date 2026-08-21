@@ -195,17 +195,13 @@ export type ChatMessageStatus =
   | "complete"
   | "failed"
   | "cancelled";
+/**
+ * One UI message part as streamed by the AI runtime. The shape is owned by the
+ * chat feature; storage treats it as opaque JSON.
+ */
 export type ChatMessagePart = {
   type: string;
-  content?: unknown;
   [key: string]: unknown;
-};
-export type ChatMessageResume = {
-  pendingInterrupts: unknown[];
-  resumeState: {
-    runId: string;
-    threadId: string;
-  };
 };
 export type UserAiContextEventKind =
   | "auto_label_feedback"
@@ -2557,7 +2553,6 @@ export const chatMessage = pgTable(
     id: text("id").primaryKey(),
     parts: jsonb("parts").$type<ChatMessagePart[]>().notNull(),
     position: integer("position").notNull(),
-    resume: jsonb("resume").$type<ChatMessageResume>(),
     role: text("role").$type<ChatMessageRole>().notNull(),
     status: text("status")
       .$type<ChatMessageStatus>()

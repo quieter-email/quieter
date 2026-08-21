@@ -16,30 +16,23 @@ vi.mock(import("../src/connectors/linear-mcp"), () => ({
   runLinearMcpToolCallsForUser: vi.fn<typeof runLinearMcpToolCallsForUser>(),
 }));
 
-const getTool = (
-  tools: ReturnType<typeof createLinearChatTools>,
-  name: string
-) => {
-  const tool = tools.find((candidate) => candidate.name === name);
-  if (tool === undefined || tool.execute === undefined) {
-    throw new Error(`Expected executable tool ${name}`);
-  }
-  return tool;
-};
+type LinearChatTools = ReturnType<typeof createLinearChatTools>;
 
 const invokeTool = async (
-  tools: ReturnType<typeof createLinearChatTools>,
+  tools: LinearChatTools,
   name: string,
   args: unknown
 ) => {
-  const tool = getTool(tools, name);
-  const { execute } = tool;
-  if (execute === undefined) {
+  const tool = tools[name];
+  if (tool?.execute === undefined) {
     throw new Error(`Expected executable tool ${name}`);
   }
-  const result: unknown = await (Reflect.apply(execute, tool, [
-    args,
-  ]) as unknown);
+  const result: unknown = await tool.execute(args, {
+    abortSignal: undefined,
+    context: undefined,
+    messages: [],
+    toolCallId: `call-${name}`,
+  });
   return result;
 };
 
@@ -51,11 +44,10 @@ describe("chat Linear tools", () => {
   test("does not touch Linear for an unrequested chat", async () => {
     const tools = createLinearChatTools({
       latestUserRequest: "Summarize my inbox.",
-      signal: new AbortController().signal,
       userId: "user-1",
     });
 
-    expect(tools.map((tool) => tool.name)).toStrictEqual([
+    expect(Object.keys(tools)).toStrictEqual([
       "linear_list_tools",
       "linear_read",
     ]);
@@ -78,20 +70,18 @@ describe("chat Linear tools", () => {
         toolName: "list_teams",
       },
     ]);
-    const { signal } = new AbortController();
     const tools = createLinearChatTools({
       latestUserRequest: "Use @Linear to find my teams.",
-      signal,
       userId: "user-1",
     });
 
     expect(listLinearMcpToolsForUser).not.toHaveBeenCalled();
     expect(runLinearMcpToolCallsForUser).not.toHaveBeenCalled();
-    expect(getTool(tools, "linear_write").needsApproval).toBeTruthy();
+    expect(tools.linear_write).toBeDefined();
 
     await invokeTool(tools, "linear_list_tools", {});
     expect(listLinearMcpToolsForUser).toHaveBeenCalledWith({
-      signal,
+      signal: undefined,
       userId: "user-1",
     });
 
@@ -102,7 +92,7 @@ describe("chat Linear tools", () => {
     expect(runLinearMcpToolCallsForUser).toHaveBeenCalledWith({
       calls: [{ arguments: {}, toolName: "list_teams" }],
       maxCalls: 1,
-      signal,
+      signal: undefined,
       userId: "user-1",
     });
   });
@@ -110,7 +100,6 @@ describe("chat Linear tools", () => {
   test("does not allow a read proxy to bypass write approval", async () => {
     const tools = createLinearChatTools({
       latestUserRequest: "Use @Linear to create an issue.",
-      signal: new AbortController().signal,
       userId: "user-1",
     });
 

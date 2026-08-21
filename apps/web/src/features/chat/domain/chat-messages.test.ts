@@ -1,5 +1,5 @@
-import type { RouterOutputs } from "@quieter/orpc";
-import type { MessagePart } from "@tanstack/ai";
+import type { ChatMessagePart } from "@quieter/database/schema";
+import type { UIMessage } from "ai";
 import { describe, expect, test } from "vite-plus/test";
 
 import {
@@ -8,77 +8,73 @@ import {
   toInitialMessages,
 } from "./chat-messages";
 
-type StoredMessage = RouterOutputs["chat"]["get"]["messages"][number];
+type StoredMessage = {
+  createdAt: Date;
+  error: string | null;
+  id: string;
+  parts: ChatMessagePart[];
+  position: number;
+  role: "assistant" | "system" | "user";
+  status: "cancelled" | "complete" | "failed" | "streaming";
+};
 
 describe("chat message conversion", () => {
-  test("normalizes persisted messages and drops unsupported parts", () => {
-    const storedMessage = {
+  test("projects persisted rows onto UI messages and skips system rows", () => {
+    const storedMessage: StoredMessage = {
       createdAt: new Date("2026-08-20T10:00:00.000Z"),
       error: null,
       id: "message-1",
       parts: [
-        { content: "Hello", type: "text" },
+        { text: "Hello", type: "text" },
         {
-          approval: {
-            id: "approval-tool-1",
-            needsApproval: true,
-          },
-          arguments: '{"action":"archive"}',
-          id: "tool-1",
           input: { action: "archive" },
-          name: "modify_mail",
-          state: "approval-requested",
-          type: "tool-call",
+          output: { status: "success" },
+          state: "output-available",
+          toolCallId: "tool-1",
+          type: "tool-modify_mail",
         },
         { secret: "not rendered", type: "provider-detail" },
       ],
       position: 0,
-      resume: null,
       role: "assistant",
       status: "complete",
-    } satisfies StoredMessage;
+    };
 
     expect(toInitialMessages([storedMessage])).toStrictEqual([
       {
-        createdAt: new Date("2026-08-20T10:00:00.000Z"),
         id: "message-1",
-        parts: [
-          { content: "Hello", type: "text" },
-          {
-            approval: {
-              id: "approval-tool-1",
-              needsApproval: true,
-            },
-            arguments: '{"action":"archive"}',
-            id: "tool-1",
-            input: { action: "archive" },
-            name: "modify_mail",
-            state: "approval-requested",
-            type: "tool-call",
-          },
-        ],
+        parts: storedMessage.parts,
         role: "assistant",
       },
     ]);
+
+    expect(
+      toInitialMessages([
+        {
+          ...storedMessage,
+          id: "system-1",
+          role: "system",
+        },
+      ])
+    ).toStrictEqual([]);
   });
 
-  test("joins visible text without exposing thinking or tool data", () => {
-    const parts: MessagePart[] = [
-      { content: "First", type: "text" },
-      { content: "private reasoning", type: "thinking" },
-      { content: "Second", type: "text" },
+  test("joins visible text without exposing other part types", () => {
+    const parts: UIMessage["parts"] = [
+      { text: "First", type: "text" },
+      { text: "Reasoning", type: "reasoning" },
+      { text: "Second", type: "text" },
     ];
 
     expect(getMessageText(parts)).toBe("First\n\nSecond");
   });
 
   test("collapses streaming work into one neutral status", () => {
-    const toolPart: MessagePart = {
-      arguments: "{}",
-      id: "tool-1",
-      name: "search_mail",
-      state: "input-complete",
-      type: "tool-call",
+    const toolPart: UIMessage["parts"][number] = {
+      input: {},
+      state: "input-available",
+      toolCallId: "tool-1",
+      type: "tool-search_gmail",
     };
 
     expect(getAssistantProgress([toolPart], true)).toBe(
@@ -88,7 +84,7 @@ describe("chat message conversion", () => {
     expect(getAssistantProgress([], true)).toBe("Thinking…");
     expect(
       getAssistantProgress(
-        [toolPart, { content: "Here is what I found.", type: "text" }],
+        [toolPart, { text: "Here is what I found.", type: "text" }],
         true
       )
     ).toBeNull();

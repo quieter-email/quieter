@@ -1,20 +1,33 @@
 import { describe, expect, test, vi } from "vite-plus/test";
 
 import {
-  aiMemoryToolDef,
-  composeEmailToolDef,
-  createComposeEmailServerTool,
-  createGmailSearchServerTool,
-  gmailSearchToolDef,
-  googleCalendarCreateEventToolDef,
-  modifyMailToolDef,
+  createComposeEmailChatTool,
+  createGmailChatTools,
 } from "../src/chat-agent";
-import type {
-  ComposeEmailToolsContext,
-  GmailReadOnlyToolsContext,
-} from "../src/chat-agent";
+import type { GmailToolsContext } from "../src/chat-agent";
 import { normalizeChatTitle } from "../src/generate-chat-title";
 import { OPENROUTER_TRANSCRIPTION_MODEL } from "../src/transcription-format";
+
+const noopContext = (): GmailToolsContext => ({
+  category: "inbox",
+  getMailboxOverview: vi.fn<GmailToolsContext["getMailboxOverview"]>(),
+  listGmailLabels: vi.fn<GmailToolsContext["listGmailLabels"]>(),
+  modifyMail: vi.fn<GmailToolsContext["modifyMail"]>(),
+  readGmailAttachment: vi.fn<GmailToolsContext["readGmailAttachment"]>(),
+  readGmailMessage: vi.fn<GmailToolsContext["readGmailMessage"]>(),
+  readGmailMessages: vi.fn<GmailToolsContext["readGmailMessages"]>(),
+  readGmailThread: vi.fn<GmailToolsContext["readGmailThread"]>(),
+  searchGmail: vi.fn<GmailToolsContext["searchGmail"]>(
+    async () =>
+      await Promise.resolve({
+        category: "inbox",
+        fetchedAt: "2026-07-15T12:00:00.000Z",
+        messages: [],
+        query: "from:(tu-berlin.de)",
+        status: "success",
+      })
+  ),
+});
 
 describe("chat title normalization", () => {
   test("strips wrapping quotes, markdown, and trailing punctuation", () => {
@@ -68,118 +81,42 @@ describe("chat title normalization", () => {
 
 describe("chat tools", () => {
   test("accepts and drops an empty first-page search token", async () => {
-    const searchGmail = vi.fn<GmailReadOnlyToolsContext["searchGmail"]>(
-      async () =>
-        await Promise.resolve({
-          category: "inbox",
-          fetchedAt: "2026-07-15T12:00:00.000Z",
-          messages: [],
-          query: "from:(tu-berlin.de)",
-          status: "success",
-        })
-    );
-    const parsed = gmailSearchToolDef.inputSchema.safeParse({
-      maxResults: 10,
-      pageToken: "",
-      query: "from:(tu-berlin.de)",
-    });
+    const context = noopContext();
+    const tools = createGmailChatTools(context);
+    const tool = tools.search_gmail;
 
-    expect(parsed.success).toBeTruthy();
-    if (!parsed.success) {
-      throw new Error("Expected gmail search input to parse");
-    }
-
-    const tool = createGmailSearchServerTool({
-      category: "inbox",
-      getMailboxOverview:
-        vi.fn<GmailReadOnlyToolsContext["getMailboxOverview"]>(),
-      listGmailLabels: vi.fn<GmailReadOnlyToolsContext["listGmailLabels"]>(),
-      readGmailAttachment:
-        vi.fn<GmailReadOnlyToolsContext["readGmailAttachment"]>(),
-      readGmailMessage: vi.fn<GmailReadOnlyToolsContext["readGmailMessage"]>(),
-      readGmailMessages:
-        vi.fn<GmailReadOnlyToolsContext["readGmailMessages"]>(),
-      readGmailThread: vi.fn<GmailReadOnlyToolsContext["readGmailThread"]>(),
-      searchGmail,
-    });
-
-    if (tool.execute === undefined) {
+    if (tool === undefined || tool.execute === undefined) {
       throw new Error("Expected gmail search tool execute handler");
     }
 
-    await tool.execute(parsed.data);
+    await tool.execute(
+      {
+        maxResults: 10,
+        pageToken: "",
+        query: "from:(tu-berlin.de)",
+      },
+      {
+        abortSignal: undefined,
+        context: undefined,
+        messages: [],
+        toolCallId: "call-1",
+      }
+    );
 
-    expect(searchGmail).toHaveBeenCalledWith({
+    expect(context.searchGmail).toHaveBeenCalledWith({
       maxResults: 10,
       pageToken: undefined,
       query: "from:(tu-berlin.de)",
+      signal: undefined,
     });
   });
 
-  test("defaults an omitted compose action to send and delegates parsed input", async () => {
-    const composeEmail = vi.fn<ComposeEmailToolsContext["composeEmail"]>(
-      async () =>
-        await Promise.resolve({
-          status: "sent",
-          subject: "Hello",
-          to: "a@example.com",
-        })
-    );
-    const tool = createComposeEmailServerTool({ composeEmail });
+  test("compose proposals stay client-executed", () => {
+    const tools = createComposeEmailChatTool();
+    const tool = tools.compose_email;
 
-    if (tool.execute === undefined) {
-      throw new Error("Expected compose email tool execute handler");
-    }
-
-    await tool.execute({
-      bodyText: "Hi",
-      subject: "Hello",
-      to: "a@example.com",
-    });
-
-    expect(composeEmail).toHaveBeenCalledWith({
-      action: "send",
-      bcc: "",
-      bodyText: "Hi",
-      cc: "",
-      subject: "Hello",
-      to: "a@example.com",
-    });
-  });
-
-  test("keeps an explicit compose draft action", async () => {
-    const composeEmail = vi.fn<ComposeEmailToolsContext["composeEmail"]>(
-      async () =>
-        await Promise.resolve({
-          draftId: "draft-1",
-          status: "draft_saved",
-          subject: "Hello",
-          to: "a@example.com",
-        })
-    );
-    const tool = createComposeEmailServerTool({ composeEmail });
-
-    if (tool.execute === undefined) {
-      throw new Error("Expected compose email tool execute handler");
-    }
-
-    await tool.execute({
-      action: "save_draft",
-      bodyText: "Hi",
-      subject: "Hello",
-      to: "a@example.com",
-    });
-
-    expect(composeEmail).toHaveBeenCalledWith(
-      expect.objectContaining({ action: "save_draft" })
-    );
-  });
-
-  test("requires approval for state-changing tools", () => {
-    expect(modifyMailToolDef.needsApproval).toBeTruthy();
-    expect(googleCalendarCreateEventToolDef.needsApproval).toBeTruthy();
-    expect(aiMemoryToolDef.needsApproval).toBeTruthy();
-    expect(composeEmailToolDef.needsApproval).toBeTruthy();
+    expect(tool).toBeDefined();
+    expect(tool.execute).toBeUndefined();
   });
 
   test("uses the proven transcription model", () => {

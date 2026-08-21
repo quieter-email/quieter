@@ -13,24 +13,32 @@ import type { SubmitEvent } from "react";
 
 type ComposeToolApprovalProps = {
   disabled: boolean;
-  initial: ComposeEmailInput;
-  onApprove: (input: ComposeEmailInput) => void;
-  onReject: () => void;
+  initial: Omit<ComposeEmailInput, "action">;
+  onDecline: () => void;
+  onSubmit: (
+    action: ComposeEmailInput["action"],
+    values: {
+      bcc: string;
+      bodyText: string;
+      cc: string;
+      subject: string;
+      to: string;
+    }
+  ) => void;
 };
 
 export const ComposeToolApproval = ({
   disabled,
   initial,
-  onApprove,
-  onReject,
+  onDecline,
+  onSubmit,
 }: ComposeToolApprovalProps) => {
   const [message, setMessage] = useState(initial);
   const [error, setError] = useState("");
 
-  const approve = (action: ComposeEmailInput["action"]) => {
+  const submit = (action: ComposeEmailInput["action"]) => {
     const values = {
       bcc: message.bcc,
-      bodyHtml: "",
       bodyText: message.bodyText,
       cc: message.cc,
       subject: message.subject,
@@ -45,12 +53,12 @@ export const ComposeToolApproval = ({
       return;
     }
     setError("");
-    onApprove({ action, ...parsed.data });
+    onSubmit(action, values);
   };
 
   const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
-    approve("send");
+    submit("send");
   };
 
   return (
@@ -117,7 +125,7 @@ export const ComposeToolApproval = ({
         )}
         <Button
           disabled={disabled}
-          onClick={onReject}
+          onClick={onDecline}
           size="sm"
           type="button"
           variant="ghost"
@@ -127,7 +135,7 @@ export const ComposeToolApproval = ({
         <Button
           disabled={disabled}
           onClick={() => {
-            approve("save_draft");
+            submit("save_draft");
           }}
           size="sm"
           type="button"

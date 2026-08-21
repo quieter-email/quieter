@@ -1,4 +1,3 @@
-import { chatParamsFromRequestBody } from "@tanstack/ai";
 import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/api/chat")({
@@ -12,23 +11,23 @@ export const Route = createFileRoute("/api/chat")({
           return new Response("Unauthorized", { status: 401 });
         }
 
-        // The validated prompt is capped at 10k characters; the transcript the
-        // client resends stays well under this generous parse guard.
+        // The validated prompt is capped at 10k characters; the transport body
+        // carries one message, so this generous parse guard is plenty.
         const contentLength = Number(request.headers.get("content-length"));
         if (Number.isFinite(contentLength) && contentLength > 1_000_000) {
           return new Response("Chat request body too large.", { status: 413 });
         }
 
-        let params: Awaited<ReturnType<typeof chatParamsFromRequestBody>>;
+        let body: unknown;
         try {
-          params = await chatParamsFromRequestBody(await request.json());
+          body = await request.json();
         } catch {
-          return new Response("Invalid AG-UI request body.", { status: 400 });
+          return new Response("Invalid chat request body.", { status: 400 });
         }
 
         try {
           const { createAiChatResponse } = await import("@quieter/orpc/chat");
-          return await createAiChatResponse({ params, request, userId });
+          return await createAiChatResponse({ body, request, userId });
         } catch (error) {
           const { ChatRequestError } = await import("@quieter/orpc/chat");
           if (error instanceof ChatRequestError) {

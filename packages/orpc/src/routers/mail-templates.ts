@@ -7,7 +7,6 @@ import { db } from "@quieter/database/client";
 import { mailTemplate, member } from "@quieter/database/schema";
 import type { MailTemplateScope } from "@quieter/database/schema";
 import { reportError } from "@quieter/observability";
-import type { ChatMiddleware } from "@tanstack/ai";
 import { and, desc, eq, or } from "drizzle-orm";
 import { z } from "zod";
 
@@ -248,38 +247,31 @@ export const mailTemplatesRouter = {
         TEMPLATE_PLACEHOLDER_SUGGESTION_MODEL,
       } = await import("@quieter/ai/suggest-template-placeholder");
       const requestId = crypto.randomUUID();
-      const usageMiddleware: ChatMiddleware = {
-        name: "polar-ai-template-placeholder-usage",
-        onUsage: (usageContext, usage) => {
-          usageContext.defer(
-            (async () => {
-              try {
-                await reportAiUsage({
-                  chatId: null,
-                  completionTokens: usage.completionTokens,
-                  costUsd: usage.cost,
-                  externalId: `template-placeholder:${requestId}`,
-                  mailboxId: input.mailboxId,
-                  model: TEMPLATE_PLACEHOLDER_SUGGESTION_MODEL,
-                  promptTokens: usage.promptTokens,
-                  promptTokensDetails: usage.promptTokensDetails,
-                  usageKind: "aiChat",
-                  userId: context.userId,
-                });
-              } catch (error: unknown) {
-                reportError(error, {
-                  operation: "mail-templates:report-placeholder-usage",
-                });
-              }
-            })()
-          );
-        },
-      };
       let value: string;
       try {
         const suggested = await suggestTemplatePlaceholder({
           bodyText: input.bodyText,
-          middleware: [usageMiddleware],
+          onUsage: (usage) => {
+            void reportAiUsage({
+              chatId: null,
+              completionTokens: usage.completionTokens,
+              costUsd: usage.costUsd,
+              externalId: `template-placeholder:${requestId}`,
+              mailboxId: input.mailboxId,
+              model: TEMPLATE_PLACEHOLDER_SUGGESTION_MODEL,
+              promptTokens: usage.promptTokens,
+              promptTokensDetails: {
+                cacheWriteTokens: usage.cacheWriteTokens,
+                cachedTokens: usage.cachedTokens,
+              },
+              usageKind: "aiChat",
+              userId: context.userId,
+            }).catch((error: unknown) => {
+              reportError(error, {
+                operation: "mail-templates:report-placeholder-usage",
+              });
+            });
+          },
           placeholder: input.placeholder,
           recipients: input.recipients,
           subject: input.subject,

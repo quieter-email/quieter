@@ -1,26 +1,20 @@
 "use client";
 
-import {
-  aiMemoryToolDef,
-  composeEmailInputSchema,
-  composeEmailToolDef,
-  googleCalendarCreateEventToolDef,
-  modifyMailToolDef,
-} from "@quieter/ai/chat-agent";
+import { useChat } from "@ai-sdk/react";
+import type { ComposeEmailResult } from "@quieter/ai/chat-agent";
 import type { ChatModel } from "@quieter/ai/chat-models";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
 import type { RouterOutputs } from "@quieter/orpc";
 import { Button } from "@quieter/ui/button";
 import { toast } from "@quieter/ui/toast";
-import {
-  fetchServerSentEvents,
-  useAudioRecorder,
-  useChat,
-} from "@tanstack/ai-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import {
+  DefaultChatTransport,
+  lastAssistantMessageIsCompleteWithApprovalResponses,
+} from "ai";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent, SubmitEvent } from "react";
 
 import { MobileHeader } from "#/components/mobile-header";
@@ -34,6 +28,7 @@ import {
   USER_BILLING_QUERY_KEY,
   userBillingQueryOptions,
 } from "#/features/settings/domain/billing";
+import { useAudioRecorder } from "#/lib/audio-recorder";
 import type { BrowserAudioRecording } from "#/lib/audio-transcription";
 import {
   getTranscriptionAudioFormat,
@@ -50,10 +45,30 @@ import { shouldRetryOrpcError } from "#/lib/orpc-errors";
 
 import { toInitialMessages } from "../domain/chat-messages";
 import type { ChatToolApproval } from "../domain/chat-tools";
+import { getToolName, isChatToolPart } from "../domain/chat-tools";
+import { toChatComposeMessageInput } from "../domain/compose-proposal";
 import type { ChatViewProps } from "../types";
 import { ChatComposer } from "./chat-composer";
 import { ChatTranscript } from "./chat-transcript";
 
+const CHAT_API_ENDPOINT = "/api/chat";
+const MAX_TRANSCRIPTION_AUDIO_DURATION_MS = 60_000;
+const MAX_TRANSCRIPTION_AUDIO_BASE64_LENGTH = 14_000_000;
+const CHAT_SETTLEMENT_DELAY_MS = 150;
+const CHAT_SETTLEMENT_ATTEMPTS = 10;
+
+type ChatData = RouterOutputs["chat"]["get"];
+
+type ComposeValues = {
+  bcc: string;
+  bodyText: string;
+  cc: string;
+  subject: string;
+  to: string;
+};
+
+// The transport reports error bodies through statusText so the composer can
+// show the server's reason (for example a 409 for a busy chat).
 const fetchChat = Object.assign(
   async (
     input: Parameters<typeof fetch>[0],
@@ -76,80 +91,6 @@ const fetchChat = Object.assign(
   },
   { preconnect: fetch.preconnect }
 );
-
-const CHAT_CONNECTION = fetchServerSentEvents("/api/chat", {
-  fetchClient: fetchChat,
-});
-const CHAT_TOOLS = [
-  aiMemoryToolDef.client(),
-  composeEmailToolDef.client(),
-  googleCalendarCreateEventToolDef.client(),
-  modifyMailToolDef.client(),
-] as const;
-const MAX_TRANSCRIPTION_AUDIO_DURATION_MS = 60_000;
-const MAX_TRANSCRIPTION_AUDIO_BASE64_LENGTH = 14_000_000;
-const CHAT_SETTLEMENT_DELAY_MS = 150;
-const CHAT_SETTLEMENT_ATTEMPTS = 10;
-
-type ChatData = RouterOutputs["chat"]["get"];
-type InitialResumeSnapshot = NonNullable<
-  Parameters<typeof useChat>[0]["initialResumeSnapshot"]
->;
-
-const isPendingInterrupt = (
-  value: unknown
-): value is NonNullable<InitialResumeSnapshot["pendingInterrupts"]>[number] =>
-  typeof value === "object" &&
-  value !== null &&
-  "id" in value &&
-  typeof value.id === "string" &&
-  "reason" in value &&
-  typeof value.reason === "string";
-
-const toInitialResumeSnapshot = (
-  value: ChatData["messages"][number]["resume"] | null | undefined
-): InitialResumeSnapshot | undefined => {
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    Array.isArray(value) ||
-    typeof value.resumeState !== "object" ||
-    value.resumeState === null ||
-    typeof value.resumeState.runId !== "string" ||
-    typeof value.resumeState.threadId !== "string" ||
-    !Array.isArray(value.pendingInterrupts) ||
-    !value.pendingInterrupts.every(isPendingInterrupt)
-  ) {
-    return undefined;
-  }
-  return {
-    pendingInterrupts: value.pendingInterrupts,
-    resumeState: value.resumeState,
-  };
-};
-
-const getChatErrorMessage = (
-  error: Error | undefined,
-  message: ChatData["messages"][number] | undefined,
-  isStreaming: boolean
-) => {
-  if (isStreaming) {
-    return "";
-  }
-  if (message?.status === "failed") {
-    return message.error ?? "The answer could not be completed.";
-  }
-  if (message?.status === "cancelled") {
-    return "Answer stopped.";
-  }
-  if (message?.status === "streaming") {
-    return "This answer is still running. Retry if it was interrupted.";
-  }
-  if (error !== undefined && error.message !== "") {
-    return error.message;
-  }
-  return "";
-};
 
 const fetchSettledChat = async (
   queryClient: QueryClient,
@@ -177,28 +118,6 @@ const fetchSettledChat = async (
     chatId,
     attemptsRemaining - 1
   );
-};
-
-const getChatSessionState = (input: {
-  canUseAiChat: boolean;
-  isLoading: boolean;
-  isPreparingTranscription: boolean;
-  persistedStatus: string | undefined;
-  resuming: boolean;
-  status: string;
-  transcriptionPending: boolean;
-}) => {
-  const isStreaming =
-    input.isLoading || input.resuming || input.status === "streaming";
-  const isTranscribing =
-    input.isPreparingTranscription || input.transcriptionPending;
-  const hasPersistedStream =
-    input.persistedStatus === "streaming" && !isStreaming;
-  return {
-    disabled: !input.canUseAiChat || hasPersistedStream,
-    isStreaming,
-    isTranscribing,
-  };
 };
 
 const PlanRequired = ({
@@ -236,7 +155,7 @@ const PlanRequired = ({
   );
 };
 
-// This component owns one chat client's transport, media, persistence, and composer state.
+// This component owns one chat session's transport, media, persistence, and composer state.
 const ChatSession = ({
   activeMailbox,
   canUseAiChat,
@@ -261,6 +180,7 @@ const ChatSession = ({
   const [selectedModel, setSelectedModel] = useState<ChatModel | null>(null);
   const [isPreparingTranscription, setIsPreparingTranscription] =
     useState(false);
+  const [isResolvingCompose, setIsResolvingCompose] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
   const { data: connectorsData } = useQuery(connectorsQueryOptions());
   const connectorTokens = getConnectorTokens(connectorsData);
@@ -273,121 +193,27 @@ const ChatSession = ({
   });
   const audioRecorder = useAudioRecorder({
     mimeType: "audio/webm;codecs=opus",
-    onComplete: ({ base64, blob, durationMs, mimeType }) =>
-      ({ base64, blob, durationMs, mimeType }) satisfies BrowserAudioRecording,
-    onError: () => {
-      toast.error("Could not access your microphone.");
-    },
   });
-  const {
-    error,
-    interrupts,
-    isLoading,
-    messages,
-    reload,
-    resuming,
-    sendMessage,
-    setMessages,
-    status,
-    stop,
-  } = useChat({
-    connection: CHAT_CONNECTION,
-    forwardedProps: {
-      category: activeMailbox,
-      ...(mailContext === undefined ? {} : { context: mailContext }),
-      mailboxId,
-      model,
-    },
-    initialMessages: toInitialMessages<typeof CHAT_TOOLS>(
-      chatData?.messages ?? []
-    ),
-    initialResumeSnapshot: toInitialResumeSnapshot(
-      chatData?.messages.at(-1)?.resume
-    ),
-    queue: "drop",
-    threadId,
-    tools: CHAT_TOOLS,
-  });
-  const approvals: ChatToolApproval[] = interrupts.flatMap((interrupt) => {
-    if (interrupt.kind !== "tool-approval") {
-      return [];
-    }
-    return [
-      {
-        approve: (editedArgs) => {
-          if (interrupt.toolName === "compose_email") {
-            const parsed = composeEmailInputSchema.safeParse(editedArgs);
-            if (parsed.success) {
-              interrupt.resolveInterrupt(true, { editedArgs: parsed.data });
-              return;
-            }
-          }
-          interrupt.resolveInterrupt(true);
-        },
-        canResolve: interrupt.canResolve,
-        id: interrupt.id,
-        originalArgs: interrupt.originalArgs,
-        reject: () => {
-          interrupt.resolveInterrupt(false);
-        },
-        status: interrupt.status,
-        toolCallId: interrupt.toolCallId,
-        toolName: interrupt.toolName,
-      },
-    ];
-  });
-  const hasMessages = messages.some((message) => message.role !== "system");
-  const persistedLastMessage = chatData?.messages.at(-1);
-  const {
-    disabled: sessionDisabled,
-    isStreaming,
-    isTranscribing,
-  } = getChatSessionState({
-    canUseAiChat,
-    isLoading,
-    isPreparingTranscription,
-    persistedStatus: persistedLastMessage?.status,
-    resuming,
-    status,
-    transcriptionPending: transcribeAudio.isPending,
-  });
-  const disabled = sessionDisabled || approvals.length > 0 || isRetrying;
-  const errorMessage = getChatErrorMessage(
-    error,
-    persistedLastMessage,
-    isStreaming
+
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: CHAT_API_ENDPOINT,
+        fetch: fetchChat,
+        prepareSendMessagesRequest: ({ messages, trigger }) => ({
+          body: {
+            category: activeMailbox,
+            ...(mailContext === undefined ? {} : { context: mailContext }),
+            mailboxId,
+            message: messages.at(-1),
+            model,
+            threadId,
+            trigger,
+          },
+        }),
+      }),
+    [activeMailbox, mailContext, mailboxId, model, threadId]
   );
-
-  useEffect(() => {
-    isCurrentSessionRef.current = true;
-    return () => {
-      isCurrentSessionRef.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    const revision = chatData?.updatedAt.toString() ?? null;
-    if (
-      isStreaming ||
-      chatData === undefined ||
-      revision === appliedChatRevisionRef.current
-    ) {
-      return;
-    }
-    setMessages(toInitialMessages<typeof CHAT_TOOLS>(chatData.messages));
-    appliedChatRevisionRef.current = revision;
-  }, [chatData, isStreaming, setMessages]);
-
-  // Another tab or device may be generating into this chat. This observer adds
-  // polling only while a persisted stream exists and this client is idle; it
-  // shares the cache entry above, so no duplicate requests are created.
-  useQuery({
-    ...chatQueryOptions(mailboxId, chatId),
-    refetchInterval: (query) =>
-      isStreaming || query.state.data?.messages.at(-1)?.status !== "streaming"
-        ? false
-        : 1000,
-  });
 
   const synchronizeChat = async () => {
     await Promise.all([
@@ -411,21 +237,190 @@ const ChatSession = ({
     }
   };
 
+  const {
+    addToolApprovalResponse,
+    addToolOutput,
+    clearError,
+    error,
+    messages,
+    regenerate,
+    sendMessage,
+    setMessages,
+    status,
+    stop,
+  } = useChat({
+    id: threadId,
+    messages: toInitialMessages(chatData?.messages ?? []),
+    onFinish: () => {
+      void synchronizeChat();
+    },
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
+    transport,
+  });
+
+  const persistedLastMessage = chatData?.messages.at(-1);
+  const isStreaming = status === "streaming" || status === "submitted";
+  const isTranscribing = isPreparingTranscription || transcribeAudio.isPending;
+  const hasPersistedStream =
+    persistedLastMessage?.status === "streaming" && !isStreaming;
+
+  const approvals: ChatToolApproval[] = messages.flatMap((message) =>
+    message.role === "assistant"
+      ? message.parts.flatMap((part) => {
+          if (
+            !isChatToolPart(part) ||
+            part.state !== "approval-requested" ||
+            part.approval === undefined ||
+            part.approval.isAutomatic === true
+          ) {
+            return [];
+          }
+          const approvalId = part.approval.id;
+          return [
+            {
+              approve: () => {
+                void addToolApprovalResponse({
+                  approved: true,
+                  id: approvalId,
+                });
+              },
+              deny: () => {
+                void addToolApprovalResponse({
+                  approved: false,
+                  id: approvalId,
+                });
+              },
+              id: approvalId,
+              toolCallId: part.toolCallId,
+              toolName: getToolName(part.type),
+            },
+          ];
+        })
+      : []
+  );
+
+  const disabled =
+    !canUseAiChat ||
+    hasPersistedStream ||
+    approvals.length > 0 ||
+    isRetrying ||
+    isResolvingCompose ||
+    isStreaming ||
+    isTranscribing ||
+    audioRecorder.isRecording;
+  const errorMessage = (() => {
+    if (isStreaming) {
+      return "";
+    }
+    if (persistedLastMessage?.status === "failed") {
+      return persistedLastMessage.error ?? "The answer could not be completed.";
+    }
+    if (persistedLastMessage?.status === "cancelled") {
+      return "Answer stopped.";
+    }
+    if (persistedLastMessage?.status === "streaming") {
+      return "This answer is still running. Retry if it was interrupted.";
+    }
+    if (error !== undefined && error.message !== "") {
+      return error.message;
+    }
+    return "";
+  })();
+
+  useEffect(() => {
+    isCurrentSessionRef.current = true;
+    return () => {
+      isCurrentSessionRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const revision = chatData?.updatedAt.toString() ?? null;
+    if (
+      isStreaming ||
+      chatData === undefined ||
+      revision === appliedChatRevisionRef.current
+    ) {
+      return;
+    }
+    setMessages(toInitialMessages(chatData.messages));
+    appliedChatRevisionRef.current = revision;
+  }, [chatData, isStreaming, setMessages]);
+
+  // Another tab or device may be generating into this chat. This observer adds
+  // polling only while a persisted stream exists and this client is idle; it
+  // shares the cache entry above, so no duplicate requests are created.
+  useQuery({
+    ...chatQueryOptions(mailboxId, chatId),
+    refetchInterval: (query) =>
+      isStreaming || query.state.data?.messages.at(-1)?.status !== "streaming"
+        ? false
+        : 1000,
+  });
+
+  const resolveCompose = async (
+    toolCallId: string,
+    action: "decline" | "save_draft" | "send",
+    values?: ComposeValues
+  ) => {
+    setIsResolvingCompose(true);
+    let output: ComposeEmailResult;
+    try {
+      if (action === "decline" || values === undefined) {
+        output = { status: "declined" };
+      } else {
+        const composeInput = toChatComposeMessageInput(values);
+        if (action === "save_draft") {
+          const draft = await rpc.mail.saveDraft({
+            draft: composeInput,
+            mailboxId,
+          });
+          output = {
+            draftId: draft.draftId,
+            ...(draft.messageId === null ? {} : { messageId: draft.messageId }),
+            status: "draft_saved",
+            subject: values.subject,
+            to: values.to,
+          };
+        } else {
+          const sent = await rpc.mail.sendMessage({
+            mailboxId,
+            message: composeInput,
+          });
+          output = {
+            messageId: sent.id,
+            status: "sent",
+            subject: values.subject,
+            ...(sent.threadId === undefined ? {} : { threadId: sent.threadId }),
+            to: values.to,
+          };
+        }
+      }
+    } catch {
+      addToolOutput({
+        errorText: "The email could not be sent.",
+        state: "output-error",
+        tool: "compose_email",
+        toolCallId,
+      });
+      setIsResolvingCompose(false);
+      await sendMessage();
+      return;
+    }
+    addToolOutput({ output, tool: "compose_email", toolCallId });
+    setIsResolvingCompose(false);
+    await sendMessage();
+  };
+
   const submitPrompt = async () => {
     const prompt = input.trim();
-    if (
-      !prompt ||
-      disabled ||
-      isLoading ||
-      isTranscribing ||
-      audioRecorder.isRecording
-    ) {
+    if (!prompt || disabled) {
       return;
     }
 
     setInput("");
     try {
-      await sendMessage(prompt);
+      await sendMessage({ text: prompt });
     } catch (sendError) {
       if (
         isCurrentSessionRef.current &&
@@ -460,12 +455,17 @@ const ChatSession = ({
           if (chatId === null && isCurrentSessionRef.current) {
             onChatIdChange(threadId);
           }
+          clearError();
           return;
         }
+        clearError();
+        await regenerate();
       } catch {
-        // Reload handles requests that failed before the chat was persisted.
+        // Nothing was persisted for this turn yet; resending the transcript
+        // lets the server create the missing rows.
+        clearError();
+        await sendMessage();
       }
-      await reload();
       await synchronizeChat();
     } finally {
       setIsRetrying(false);
@@ -495,7 +495,7 @@ const ChatSession = ({
     try {
       await audioRecorder.start();
     } catch {
-      toast.error("Could not start recording.");
+      toast.error("Could not access your microphone.");
     }
   };
 
@@ -509,7 +509,9 @@ const ChatSession = ({
         return;
       }
 
-      const recording = await normalizeTranscriptionRecording(nativeRecording);
+      const recording = (await normalizeTranscriptionRecording(
+        nativeRecording
+      )) satisfies BrowserAudioRecording;
       const format = getTranscriptionAudioFormat(recording.mimeType);
       if (!format) {
         toast.error("This recording could not be prepared for transcription.");
@@ -570,7 +572,9 @@ const ChatSession = ({
         onRecordingStop={() => {
           void stopRecording();
         }}
-        onStop={stop}
+        onStop={() => {
+          void stop();
+        }}
         onSubmit={handleSubmit}
         recording={audioRecorder.isRecording}
         recordingSupported={audioRecorder.isSupported}
@@ -581,14 +585,18 @@ const ChatSession = ({
     </div>
   );
 
+  const hasVisibleMessages = messages.some(
+    (message) => message.role !== "system"
+  );
+
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <MobileHeader
         leading="sidebar"
         onLeadingClick={onOpenSidebar}
-        title={hasMessages ? (chatData?.title ?? undefined) : undefined}
+        title={hasVisibleMessages ? (chatData?.title ?? undefined) : undefined}
       />
-      {hasMessages &&
+      {hasVisibleMessages &&
       chatData?.title !== null &&
       chatData?.title !== undefined &&
       chatData.title !== "" ? (
@@ -598,18 +606,24 @@ const ChatSession = ({
           </h1>
         </header>
       ) : null}
-      {hasMessages ? (
+      {hasVisibleMessages ? (
         <>
           <ChatTranscript
             approvals={approvals}
+            composeBusy={isResolvingCompose}
             errorMessage={errorMessage}
             isStreaming={isStreaming}
             messages={messages}
+            onComposeDecline={(toolCallId) => {
+              void resolveCompose(toolCallId, "decline");
+            }}
+            onComposeSubmit={(toolCallId, action, values) => {
+              void resolveCompose(toolCallId, action, values);
+            }}
             onRetry={() => {
               void retryLastTurn();
             }}
             retrying={isRetrying}
-            resuming={resuming}
           />
           <div className="shrink-0 px-4 pb-4 sm:px-6 lg:pb-6">{composer}</div>
         </>

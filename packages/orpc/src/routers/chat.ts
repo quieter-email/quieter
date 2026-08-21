@@ -97,7 +97,6 @@ export const chatRouter = {
           id: chatMessage.id,
           parts: chatMessage.parts,
           position: chatMessage.position,
-          resume: chatMessage.resume,
           role: chatMessage.role,
           status: chatMessage.status,
         })
@@ -222,31 +221,27 @@ export const chatRouter = {
               try {
                 return await formatTranscribedEmail({
                   memoryContext: serializeAiAgentContext(memoryContext),
-                  middleware: [
-                    {
-                      name: "polar-ai-transcribed-email-format-usage",
-                      onUsage: (usageContext, usage) => {
-                        usageContext.defer(
-                          reportAiUsage({
-                            chatId: input.chatId ?? null,
-                            completionTokens: usage.completionTokens,
-                            costUsd: usage.cost,
-                            externalId: `chat-transcription-format:${result.id}`,
-                            mailboxId: input.mailboxId,
-                            model: TRANSCRIBED_EMAIL_FORMAT_MODEL,
-                            promptTokens: usage.promptTokens,
-                            promptTokensDetails: usage.promptTokensDetails,
-                            usageKind: "aiChat",
-                            userId: context.userId,
-                          }).catch((error: unknown) => {
-                            reportError(error, {
-                              operation: "chat:report-transcription-usage",
-                            });
-                          })
-                        );
+                  onUsage: (usage) => {
+                    void reportAiUsage({
+                      chatId: input.chatId ?? null,
+                      completionTokens: usage.completionTokens,
+                      costUsd: usage.costUsd,
+                      externalId: `chat-transcription-format:${crypto.randomUUID()}`,
+                      mailboxId: input.mailboxId,
+                      model: TRANSCRIBED_EMAIL_FORMAT_MODEL,
+                      promptTokens: usage.promptTokens,
+                      promptTokensDetails: {
+                        cacheWriteTokens: usage.cacheWriteTokens,
+                        cachedTokens: usage.cachedTokens,
                       },
-                    },
-                  ],
+                      usageKind: "aiChat",
+                      userId: context.userId,
+                    }).catch((error: unknown) => {
+                      reportError(error, {
+                        operation: "chat:report-transcription-usage",
+                      });
+                    });
+                  },
                   transcript: text,
                 });
               } catch (error: unknown) {
@@ -258,16 +253,16 @@ export const chatRouter = {
             })()
           : text;
 
-      const cost = result.usage?.cost;
+      const { cost } = result.usage;
       if (typeof cost === "number" && Number.isFinite(cost) && cost > 0) {
         await reportAiUsage({
           chatId: input.chatId ?? null,
-          completionTokens: result.usage?.completionTokens ?? 0,
+          completionTokens: result.usage.completionTokens,
           costUsd: cost,
-          externalId: `chat-transcription:${result.id}`,
+          externalId: `chat-transcription:${crypto.randomUUID()}`,
           mailboxId: input.mailboxId,
           model: OPENROUTER_TRANSCRIPTION_MODEL,
-          promptTokens: result.usage?.promptTokens ?? 0,
+          promptTokens: result.usage.promptTokens,
           usageKind: "aiChat",
           userId: context.userId,
         });

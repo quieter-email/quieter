@@ -1,57 +1,41 @@
 import { ORPCError } from "@orpc/server";
 import {
-  createAiMemoryServerTool,
-  createComposeEmailServerTool,
-  createGoogleCalendarEventServerTool,
-  createGmailAttachmentServerTool,
-  createGmailLabelListServerTool,
-  createGmailMessageServerTool,
-  createGmailMessagesServerTool,
-  createGmailSearchServerTool,
-  createGmailThreadServerTool,
-  createMailboxOverviewServerTool,
-  createModifyMailServerTool,
+  createAiMemoryChatTool,
+  createComposeEmailChatTool,
+  createGmailChatTools,
+  createGoogleCalendarChatTool,
   gmailToolsPrompt,
   googleCalendarToolsPrompt,
   linearToolsPrompt,
 } from "@quieter/ai/chat-agent";
 import type {
   AiMemoryToolsContext,
-  ComposeEmailToolsContext,
   GmailToolsContext,
-  GoogleCalendarToolsContext,
 } from "@quieter/ai/chat-agent";
 import { CHAT_TITLE_MODEL } from "@quieter/ai/chat-models";
-import { createOpenRouterAdapter } from "@quieter/ai/openrouter";
+import { summarizeAiUsage } from "@quieter/ai/chat-usage";
+import { createChatModel } from "@quieter/ai/openrouter";
 import { reportAiUsage } from "@quieter/billing";
 import { db } from "@quieter/database/client";
 import { chat as chatTable, chatMessage } from "@quieter/database/schema";
 import type {
   ChatMessagePart,
-  ChatMessageResume,
   ChatMessageStatus,
 } from "@quieter/database/schema";
 import type { MailboxCategory } from "@quieter/gmail";
 import { reportError } from "@quieter/observability";
 import {
-  chat,
-  EventType,
-  maxIterations,
-  modelMessagesToUIMessages,
-  toServerSentEventsResponse,
-} from "@tanstack/ai";
-import type {
-  ChatMiddleware,
-  Interrupt,
-  MessagePart,
-  ModelMessage,
-  StreamChunk,
-} from "@tanstack/ai";
-import { and, desc, eq } from "drizzle-orm";
+  convertToModelMessages,
+  createUIMessageStreamResponse,
+  isStepCount,
+  streamText,
+  toUIMessageStream,
+} from "ai";
+import type { UIMessage } from "ai";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { ZodError } from "zod";
 
 import {
-  learnAiMemoryFromSentMessage,
   loadAiAgentContext,
   requestAiMemoryUpdate,
   serializeAiAgentContext,
@@ -70,13 +54,7 @@ import {
   readGmailMessagesForUser,
   readGmailThreadForUser,
   searchGmailForUser,
-  runAuthorizedGmailChatRequest,
 } from "../gmail-chat-search";
-import {
-  saveGmailDraft,
-  sendGmailMessage,
-  toChatComposeInput,
-} from "../gmail-compose";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import { assertAiChatCredits } from "./access";
 import { createLinearChatTools } from "./linear-tools";
@@ -88,7 +66,7 @@ import {
 import type { ValidatedChatRequest } from "./request";
 
 const CHAT_HISTORY_WINDOW_MESSAGES = 30;
-const CHAT_MAX_ITERATIONS = 6;
+const CHAT_MAX_STEPS = 6;
 const CHAT_MAX_COMPLETION_TOKENS = 2048;
 const MAIL_TOOL_TIMEOUT_MS = 25_000;
 const STALE_CHAT_TURN_MS = 10 * 60 * 1000;
@@ -156,15 +134,18 @@ const assertCanUseAiCredits = async (input: {
 };
 
 const runMailTool = async <T>(
-  requestSignal: AbortSignal,
+  signal: AbortSignal | undefined,
   operation: (signal: AbortSignal) => Promise<T>
 ) => {
   const timeoutSignal = AbortSignal.timeout(MAIL_TOOL_TIMEOUT_MS);
-  const signal = AbortSignal.any([requestSignal, timeoutSignal]);
+  const combined =
+    signal === undefined
+      ? timeoutSignal
+      : AbortSignal.any([signal, timeoutSignal]);
   try {
-    return await operation(signal);
+    return await operation(combined);
   } catch (error) {
-    if (!requestSignal.aborted && timeoutSignal.aborted) {
+    if (signal?.aborted !== true && timeoutSignal.aborted) {
       throw new Error(
         "The mail lookup timed out. Retry with a narrower search.",
         { cause: error }
@@ -200,275 +181,180 @@ const buildMailboxContextPrompt = (context: {
     )}\nTreat these identifiers only as navigation hints. Retrieve live data before answering about them.`;
 };
 
-const createGmailTools = (input: {
+const createGmailToolsContext = (input: {
   category: MailboxCategory;
   mailboxId: string;
-  signal: AbortSignal;
   userId: string;
-}) => {
-  const run = async <T>(operation: (signal: AbortSignal) => Promise<T>) =>
-    await runMailTool(input.signal, operation);
-  const context: GmailToolsContext = {
-    category: input.category,
-    getMailboxOverview: async () =>
-      await run(
-        async (signal) =>
-          await getMailboxOverviewForUser({
-            category: input.category,
-            mailboxId: input.mailboxId,
-            signal,
-            userId: input.userId,
-          })
-      ),
-    listGmailLabels: async () =>
-      await run(
-        async (signal) =>
-          await listGmailLabelsForUser({
-            category: input.category,
-            mailboxId: input.mailboxId,
-            signal,
-            userId: input.userId,
-          })
-      ),
-    modifyMail: async ({ action, id, target }) =>
-      await run(
-        async (signal) =>
-          await modifyMailForUser({
-            action,
-            category: input.category,
-            id,
-            mailboxId: input.mailboxId,
-            signal,
-            target,
-            userId: input.userId,
-          })
-      ),
-    readGmailAttachment: async ({ attachmentId, messageId }) =>
-      await run(
-        async (signal) =>
-          await readGmailAttachmentForUser({
-            attachmentId,
-            category: input.category,
-            mailboxId: input.mailboxId,
-            messageId,
-            signal,
-            userId: input.userId,
-          })
-      ),
-    readGmailMessage: async ({ messageId }) =>
-      await run(
-        async (signal) =>
-          await readGmailMessageForUser({
-            category: input.category,
-            mailboxId: input.mailboxId,
-            messageId,
-            signal,
-            userId: input.userId,
-          })
-      ),
-    readGmailMessages: async ({ messageIds }) =>
-      await run(
-        async (signal) =>
-          await readGmailMessagesForUser({
-            category: input.category,
-            mailboxId: input.mailboxId,
-            messageIds,
-            signal,
-            userId: input.userId,
-          })
-      ),
-    readGmailThread: async ({ threadId }) =>
-      await run(
-        async (signal) =>
-          await readGmailThreadForUser({
-            category: input.category,
-            mailboxId: input.mailboxId,
-            signal,
-            threadId,
-            userId: input.userId,
-          })
-      ),
-    searchGmail: async ({ maxResults, pageToken, query }) =>
-      await run(
-        async (signal) =>
-          await searchGmailForUser({
-            category: input.category,
-            mailboxId: input.mailboxId,
-            maxResults,
-            pageToken,
-            query,
-            signal,
-            userId: input.userId,
-          })
-      ),
-  };
+}): GmailToolsContext => ({
+  category: input.category,
+  getMailboxOverview: async (signal) =>
+    await runMailTool(
+      signal,
+      async (runSignal) =>
+        await getMailboxOverviewForUser({
+          category: input.category,
+          mailboxId: input.mailboxId,
+          signal: runSignal,
+          userId: input.userId,
+        })
+    ),
+  listGmailLabels: async (signal) =>
+    await runMailTool(
+      signal,
+      async (runSignal) =>
+        await listGmailLabelsForUser({
+          category: input.category,
+          mailboxId: input.mailboxId,
+          signal: runSignal,
+          userId: input.userId,
+        })
+    ),
+  modifyMail: async ({ action, id, signal, target }) =>
+    await runMailTool(
+      signal,
+      async (runSignal) =>
+        await modifyMailForUser({
+          action,
+          category: input.category,
+          id,
+          mailboxId: input.mailboxId,
+          signal: runSignal,
+          target,
+          userId: input.userId,
+        })
+    ),
+  readGmailAttachment: async ({ attachmentId, messageId, signal }) =>
+    await runMailTool(
+      signal,
+      async (runSignal) =>
+        await readGmailAttachmentForUser({
+          attachmentId,
+          category: input.category,
+          mailboxId: input.mailboxId,
+          messageId,
+          signal: runSignal,
+          userId: input.userId,
+        })
+    ),
+  readGmailMessage: async ({ messageId, signal }) =>
+    await runMailTool(
+      signal,
+      async (runSignal) =>
+        await readGmailMessageForUser({
+          category: input.category,
+          mailboxId: input.mailboxId,
+          messageId,
+          signal: runSignal,
+          userId: input.userId,
+        })
+    ),
+  readGmailMessages: async ({ messageIds, signal }) =>
+    await runMailTool(
+      signal,
+      async (runSignal) =>
+        await readGmailMessagesForUser({
+          category: input.category,
+          mailboxId: input.mailboxId,
+          messageIds,
+          signal: runSignal,
+          userId: input.userId,
+        })
+    ),
+  readGmailThread: async ({ signal, threadId }) =>
+    await runMailTool(
+      signal,
+      async (runSignal) =>
+        await readGmailThreadForUser({
+          category: input.category,
+          mailboxId: input.mailboxId,
+          signal: runSignal,
+          threadId,
+          userId: input.userId,
+        })
+    ),
+  searchGmail: async ({ maxResults, pageToken, query, signal }) =>
+    await runMailTool(
+      signal,
+      async (runSignal) =>
+        await searchGmailForUser({
+          category: input.category,
+          mailboxId: input.mailboxId,
+          maxResults,
+          pageToken,
+          query,
+          signal: runSignal,
+          userId: input.userId,
+        })
+    ),
+});
 
-  return [
-    createGmailAttachmentServerTool(context),
-    createGmailLabelListServerTool(context),
-    createGmailMessageServerTool(context),
-    createGmailMessagesServerTool(context),
-    createGmailSearchServerTool(context),
-    createGmailThreadServerTool(context),
-    createMailboxOverviewServerTool(context),
-    createModifyMailServerTool(context),
-  ];
-};
-
-const createComposeEmailTool = (input: {
-  mailboxId: string;
-  signal: AbortSignal;
-  userId: string;
-}) => {
-  const context: ComposeEmailToolsContext = {
-    composeEmail: async ({ action, ...message }) => {
-      const composeInput = toChatComposeInput(message);
-      return await runMailTool(
-        input.signal,
-        async (signal) =>
-          await runAuthorizedGmailChatRequest(
-            {
-              mailboxId: input.mailboxId,
-              signal,
-              userId: input.userId,
-            },
-            async (accessToken) => {
-              if (action === "save_draft") {
-                const draft = await saveGmailDraft(
-                  accessToken,
-                  composeInput,
-                  signal
-                );
-                return {
-                  draftId: draft.draftId,
-                  messageId: draft.messageId ?? undefined,
-                  status: "draft_saved" as const,
-                  subject: draft.subject,
-                  to: draft.recipients.to,
-                };
-              }
-
-              const sent = await sendGmailMessage(
-                accessToken,
-                composeInput,
-                signal
-              );
-              // Best-effort learning must not extend the timed tool operation:
-              // a slow memory update could otherwise fail an already-sent email.
-              void learnAiMemoryFromSentMessage({
-                bodyText: message.bodyText,
-                isReply: false,
-                mailboxId: input.mailboxId,
-                recipients: [message.to, message.cc, message.bcc].join(","),
-                userId: input.userId,
-              }).catch((error: unknown) => {
-                reportError(error, {
-                  operation: "chat:learn-from-sent-message",
-                });
-              });
-              return {
-                messageId: sent.id,
-                status: "sent" as const,
-                subject: message.subject,
-                threadId: sent.threadId,
-                to: message.to,
-              };
-            }
-          )
-      );
-    },
-  };
-  return createComposeEmailServerTool(context);
-};
-
-const getLatestUserRequest = (
-  messages: readonly { parts: MessagePart[]; role: string }[]
-) =>
-  messages
+const getLatestUserRequest = (transcript: readonly UIMessage[]) =>
+  transcript
     .findLast((message) => message.role === "user")
     ?.parts.flatMap((part) =>
-      part.type === "text" && typeof part.content === "string"
-        ? [part.content]
-        : []
+      part.type === "text" && typeof part.text === "string" ? [part.text] : []
     )
     .join(" ")
     .slice(0, 4000) ?? "";
 
-const createMemoryTool = (input: {
+const createMemoryToolContext = (input: {
   latestUserRequest: string;
   mailboxId: string;
   userId: string;
-}) => {
-  const context: AiMemoryToolsContext = {
-    useMemory: async ({ request, scope }) => {
-      if (input.latestUserRequest.trim() === "") {
-        return { status: "skipped" };
-      }
-      const selectedMailbox = await assertAccessibleMailbox({
-        mailboxId: input.mailboxId,
-        userId: input.userId,
-      });
-      const requestedScopes =
-        scope === "both"
-          ? (["user", "mailbox"] as const)
-          : ([scope === "personal" ? "user" : "mailbox"] as const);
-      const answers = await Promise.all(
-        requestedScopes.map(async (requestedScope) => {
-          const canMutate =
-            scope !== "both" &&
-            (requestedScope === "user" ||
-              selectedMailbox.capabilities.canManageKnowledge);
-          const result = await requestAiMemoryUpdate({
-            allowMutations: canMutate,
-            changeSetSource: "chat",
-            mailboxId: input.mailboxId,
-            request,
-            scope: requestedScope,
-            userId: input.userId,
-            userMessage: input.latestUserRequest,
-          });
-          return {
-            answer: result.answer,
-            changed: result.status === "applied",
-            scope: requestedScope,
-          };
-        })
-      );
-      return {
-        answer: answers
-          .map(({ answer, scope: answerScope }) =>
-            answers.length === 1
-              ? answer
-              : `${answerScope === "user" ? "Personal" : "This mailbox"}: ${answer}`
-          )
-          .join("\n\n"),
-        status: answers.some(({ changed }) => changed)
-          ? ("updated" as const)
-          : ("answered" as const),
-      };
-    },
-  };
-  return createAiMemoryServerTool(context);
-};
-
-const createCalendarTool = (input: { signal: AbortSignal; userId: string }) => {
-  const context: GoogleCalendarToolsContext = {
-    createGoogleCalendarEvent: async (event) =>
-      await createGoogleCalendarEventForUser({
-        event,
-        signal: input.signal,
-        userId: input.userId,
-      }),
-  };
-  return createGoogleCalendarEventServerTool(context);
-};
+}): AiMemoryToolsContext => ({
+  useMemory: async ({ request, scope }) => {
+    if (input.latestUserRequest.trim() === "") {
+      return { status: "skipped" };
+    }
+    const selectedMailbox = await assertAccessibleMailbox({
+      mailboxId: input.mailboxId,
+      userId: input.userId,
+    });
+    const requestedScopes =
+      scope === "both"
+        ? (["user", "mailbox"] as const)
+        : ([scope === "personal" ? "user" : "mailbox"] as const);
+    const answers = await Promise.all(
+      requestedScopes.map(async (requestedScope) => {
+        const canMutate =
+          scope !== "both" &&
+          (requestedScope === "user" ||
+            selectedMailbox.capabilities.canManageKnowledge);
+        const result = await requestAiMemoryUpdate({
+          allowMutations: canMutate,
+          changeSetSource: "chat",
+          mailboxId: input.mailboxId,
+          request,
+          scope: requestedScope,
+          userId: input.userId,
+          userMessage: input.latestUserRequest,
+        });
+        return {
+          answer: result.answer,
+          changed: result.status === "applied",
+          scope: requestedScope,
+        };
+      })
+    );
+    return {
+      answer: answers
+        .map(({ answer, scope: answerScope }) =>
+          answers.length === 1
+            ? answer
+            : `${answerScope === "user" ? "Personal" : "This mailbox"}: ${answer}`
+        )
+        .join("\n\n"),
+      status: answers.some(({ changed }) => changed)
+        ? ("updated" as const)
+        : ("answered" as const),
+    };
+  },
+});
 
 const getStoredMessageText = (parts: ChatMessagePart[]) =>
   parts
     .flatMap((part) =>
-      part.type === "text" && typeof part.content === "string"
-        ? [part.content]
-        : []
+      part.type === "text" && typeof part.text === "string" ? [part.text] : []
     )
     .join("");
 
@@ -485,21 +371,6 @@ const isMatchingUserMessage = (
   message.userId === input.userId &&
   message.role === "user" &&
   getStoredMessageText(message.parts) === input.text;
-
-const isRetryableAssistantMessage = (
-  assistantMessage:
-    | { createdAt: Date; id: string; status: ChatMessageStatus }
-    | undefined,
-  lastMessageId: string | undefined,
-  now: Date
-) =>
-  assistantMessage !== undefined &&
-  lastMessageId === assistantMessage.id &&
-  (assistantMessage.status === "cancelled" ||
-    assistantMessage.status === "failed" ||
-    (assistantMessage.status === "streaming" &&
-      now.getTime() - assistantMessage.createdAt.getTime() >=
-        STALE_CHAT_TURN_MS));
 
 const isStaleStreamingMessage = (
   message: { createdAt: Date; status: ChatMessageStatus },
@@ -586,7 +457,13 @@ const startChatTurn = async (input: {
             )
             .limit(1);
           if (
-            isRetryableAssistantMessage(assistantMessage, lastMessage?.id, now)
+            assistantMessage !== undefined &&
+            lastMessage?.id === assistantMessage.id &&
+            (assistantMessage.status === "cancelled" ||
+              assistantMessage.status === "failed" ||
+              (assistantMessage.status === "streaming" &&
+                now.getTime() - assistantMessage.createdAt.getTime() >=
+                  STALE_CHAT_TURN_MS))
           ) {
             await tx
               .update(chatMessage)
@@ -595,7 +472,6 @@ const startChatTurn = async (input: {
                 error: null,
                 generationId,
                 parts: [],
-                resume: null,
                 status: "streaming",
               })
               .where(eq(chatMessage.id, assistantMessage.id));
@@ -637,7 +513,6 @@ const startChatTurn = async (input: {
           .set({
             error: "The answer was interrupted.",
             generationId: null,
-            resume: null,
             status: "failed",
           })
           .where(eq(chatMessage.id, lastMessage.id));
@@ -655,7 +530,7 @@ const startChatTurn = async (input: {
         createdAt: now,
         error: null,
         id: input.messageId,
-        parts: [{ content: input.text, type: "text" }],
+        parts: [{ text: input.text, type: "text" }],
         position: userPosition,
         role: "user",
         status: "complete",
@@ -708,29 +583,25 @@ const generateChatTitleInBackground = (input: {
       const { generateChatTitle } =
         await import("@quieter/ai/generate-chat-title");
       const title = await generateChatTitle({
-        middleware: [
-          {
-            name: "polar-ai-chat-title-usage",
-            onUsage: (usageContext, usage) => {
-              usageContext.defer(
-                reportAiUsage({
-                  chatId: input.chatId,
-                  completionTokens: usage.completionTokens,
-                  costUsd: usage.cost,
-                  externalId: `chat-title:${input.chatId}`,
-                  mailboxId: input.mailboxId,
-                  model: CHAT_TITLE_MODEL,
-                  promptTokens: usage.promptTokens,
-                  promptTokensDetails: usage.promptTokensDetails,
-                  usageKind: "aiChat",
-                  userId: input.userId,
-                }).catch((error: unknown) => {
-                  reportError(error, { operation: "chat:report-title-usage" });
-                })
-              );
+        onUsage: (usage) => {
+          void reportAiUsage({
+            chatId: input.chatId,
+            completionTokens: usage.completionTokens,
+            costUsd: usage.costUsd,
+            externalId: `chat-title:${input.chatId}`,
+            mailboxId: input.mailboxId,
+            model: CHAT_TITLE_MODEL,
+            promptTokens: usage.promptTokens,
+            promptTokensDetails: {
+              cacheWriteTokens: usage.cacheWriteTokens,
+              cachedTokens: usage.cachedTokens,
             },
-          },
-        ],
+            usageKind: "aiChat",
+            userId: input.userId,
+          }).catch((error: unknown) => {
+            reportError(error, { operation: "chat:report-title-usage" });
+          });
+        },
         prompt: input.prompt,
       });
       if (title === "") {
@@ -753,10 +624,186 @@ const generateChatTitleInBackground = (input: {
   })();
 };
 
-const resumeChatTurn = async (input: {
+const isPendingToolPart = (part: unknown): boolean => {
+  if (typeof part !== "object" || part === null) {
+    return false;
+  }
+  const type: unknown = Reflect.get(part, "type");
+  if (typeof type !== "string" || !type.startsWith("tool-")) {
+    return false;
+  }
+  const toolCallId: unknown = Reflect.get(part, "toolCallId");
+  if (typeof toolCallId !== "string") {
+    return false;
+  }
+  const state: unknown = Reflect.get(part, "state");
+  return state === "approval-requested" || state === "input-available";
+};
+
+const readApprovalId = (part: UIMessage["parts"][number]): string => {
+  const approval: unknown = Reflect.get(part, "approval");
+  if (
+    typeof approval !== "object" ||
+    approval === null ||
+    !("id" in approval)
+  ) {
+    return crypto.randomUUID();
+  }
+  const id: unknown = Reflect.get(approval, "id");
+  return typeof id === "string" ? id : crypto.randomUUID();
+};
+
+/**
+ * Applies the client's approval decisions and compose outcomes onto the
+ * canonical copy of the paused assistant message. The database stays the
+ * source of truth; the client only contributes which pending item resolved
+ * and how.
+ */
+const applyClientResolutions = (
+  message: UIMessage,
+  resolutions: {
+    toolDecisions: Map<string, boolean>;
+    toolOutputs: Map<string, unknown>;
+  }
+) => ({
+  ...message,
+  parts: message.parts.map((part): UIMessage["parts"][number] => {
+    const type: unknown = Reflect.get(part, "type");
+    if (typeof type !== "string" || !type.startsWith("tool-")) {
+      return part;
+    }
+    const toolCallId: unknown = Reflect.get(part, "toolCallId");
+    if (typeof toolCallId !== "string") {
+      return part;
+    }
+    const state: unknown = Reflect.get(part, "state");
+    const decision = resolutions.toolDecisions.get(toolCallId);
+    if (decision !== undefined && state === "approval-requested") {
+      // Part unions make this override awkward to express directly.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+      return {
+        ...part,
+        approval: {
+          approved: decision,
+          id: readApprovalId(part),
+        },
+        state: "approval-responded",
+      } as unknown as UIMessage["parts"][number];
+    }
+    if (
+      resolutions.toolOutputs.has(toolCallId) &&
+      state === "input-available"
+    ) {
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+      return {
+        ...part,
+        output: resolutions.toolOutputs.get(toolCallId),
+        state: "output-available",
+      } as unknown as UIMessage["parts"][number];
+    }
+    return part;
+  }),
+});
+
+/**
+ * Reopens a settled assistant message that ended waiting on the user. The
+ * stored parts stay untouched until the continuation persists its outcome, so
+ * an interrupted continuation simply returns to the paused state.
+ */
+const continueChatTurn = async (input: {
+  assistantMessageId: string;
   chatId: string;
   mailboxId: string;
-  parentRunId: string;
+  toolDecisions: Map<string, boolean>;
+  toolOutputs: Map<string, unknown>;
+  userId: string;
+}) => {
+  const pendingParts = await db
+    .select({ parts: chatMessage.parts, status: chatMessage.status })
+    .from(chatMessage)
+    .where(
+      and(
+        eq(chatMessage.id, input.assistantMessageId),
+        eq(chatMessage.chatId, input.chatId)
+      )
+    )
+    .limit(1);
+  const [stored] = pendingParts;
+  if (stored?.status !== "complete") {
+    throw new ChatRequestError(
+      409,
+      "This approval is no longer waiting for a response."
+    );
+  }
+  const pendingIds = new Set(
+    stored.parts
+      .filter(isPendingToolPart)
+      .map((part) => String(Reflect.get(part, "toolCallId")))
+  );
+  const resolvesSomething =
+    [...input.toolDecisions.keys()].some((toolCallId) =>
+      pendingIds.has(toolCallId)
+    ) ||
+    [...input.toolOutputs.keys()].some((toolCallId) =>
+      pendingIds.has(toolCallId)
+    );
+  if (!resolvesSomething) {
+    throw new ChatRequestError(
+      409,
+      "This approval is no longer waiting for a response."
+    );
+  }
+
+  const generationId = crypto.randomUUID();
+  await db
+    .transaction(async (tx) => {
+      const [authorizedChat] = await tx
+        .select({ id: chatTable.id })
+        .from(chatTable)
+        .where(
+          and(
+            eq(chatTable.id, input.chatId),
+            eq(chatTable.mailboxId, input.mailboxId),
+            eq(chatTable.userId, input.userId)
+          )
+        )
+        .limit(1)
+        .for("update");
+      if (authorizedChat === undefined) {
+        throw new ChatRequestError(404, "Chat not found.");
+      }
+      const [updated] = await tx
+        .update(chatMessage)
+        .set({
+          error: null,
+          generationId,
+          status: "streaming",
+        })
+        .where(
+          and(
+            eq(chatMessage.id, input.assistantMessageId),
+            eq(chatMessage.chatId, input.chatId),
+            isNull(chatMessage.generationId),
+            eq(chatMessage.status, "complete"),
+            eq(chatMessage.userId, input.userId)
+          )
+        )
+        .returning({ id: chatMessage.id });
+      if (updated === undefined) {
+        throw new ChatRequestError(409, "The active chat answer changed.");
+      }
+    })
+    .catch(toConflict);
+  return { assistantMessageId: input.assistantMessageId, generationId };
+};
+
+/**
+ * Restarts a failed, cancelled, or stale answer. A completed answer is never
+ * regenerated here; the client refetches instead of asking again.
+ */
+const regenerateChatTurn = async (input: {
+  chatId: string;
+  mailboxId: string;
   userId: string;
 }) =>
   await db
@@ -776,12 +823,12 @@ const resumeChatTurn = async (input: {
       if (authorizedChat === undefined) {
         throw new ChatRequestError(404, "Chat not found.");
       }
-      const [assistantMessage] = await tx
+      const now = new Date();
+      const [lastMessage] = await tx
         .select({
           createdAt: chatMessage.createdAt,
           id: chatMessage.id,
-          parts: chatMessage.parts,
-          resume: chatMessage.resume,
+          position: chatMessage.position,
           role: chatMessage.role,
           status: chatMessage.status,
         })
@@ -789,81 +836,53 @@ const resumeChatTurn = async (input: {
         .where(eq(chatMessage.chatId, input.chatId))
         .orderBy(desc(chatMessage.position))
         .limit(1);
-      if (
-        assistantMessage?.role !== "assistant" ||
-        assistantMessage.status !== "complete" ||
-        assistantMessage.resume?.resumeState.runId !== input.parentRunId
-      ) {
-        throw new ChatRequestError(
-          409,
-          "This approval is no longer waiting for a response."
-        );
+      if (lastMessage === undefined) {
+        throw new ChatRequestError(409, "There is no answer to retry yet.");
       }
       const generationId = crypto.randomUUID();
-      const [updated] = await tx
-        .update(chatMessage)
-        .set({
+      if (lastMessage.role === "user") {
+        const assistantMessageId = crypto.randomUUID();
+        await tx.insert(chatMessage).values({
+          chatId: input.chatId,
+          createdAt: now,
           error: null,
           generationId,
+          id: assistantMessageId,
+          parts: [],
+          position: lastMessage.position + 1,
+          role: "assistant",
+          status: "streaming",
+          userId: input.userId,
+        });
+        return { assistantMessageId, generationId, removedAssistantId: null };
+      }
+      const retryable =
+        lastMessage.status === "cancelled" ||
+        lastMessage.status === "failed" ||
+        isStaleStreamingMessage(lastMessage, now);
+      if (!retryable) {
+        throw new ChatRequestError(
+          409,
+          "This answer cannot be retried right now."
+        );
+      }
+      await tx
+        .update(chatMessage)
+        .set({
+          createdAt: now,
+          error: null,
+          generationId,
+          parts: [],
           status: "streaming",
         })
-        .where(
-          and(
-            eq(chatMessage.id, assistantMessage.id),
-            eq(chatMessage.status, "complete")
-          )
-        )
-        .returning({ id: chatMessage.id });
-      if (updated === undefined) {
-        throw new ChatRequestError(409, "The active chat answer changed.");
-      }
+        .where(eq(chatMessage.id, lastMessage.id));
       return {
-        assistantMessageId: assistantMessage.id,
+        assistantMessageId: lastMessage.id,
         generationId,
-        resume: assistantMessage.resume,
-        resumedAssistant: {
-          createdAt: assistantMessage.createdAt,
-          id: assistantMessage.id,
-          parts: assistantMessage.parts,
-          role: "assistant" as const,
-        },
+        removedAssistantId: lastMessage.id,
       };
     })
     .catch(toConflict);
-
-const beginChatTurn = async (input: {
-  request: ValidatedChatRequest;
-  userId: string;
-}) => {
-  const { forwardedProps, threadId } = input.request;
-  if (input.request.kind === "message") {
-    const started = await startChatTurn({
-      chatId: threadId,
-      mailboxId: forwardedProps.mailboxId,
-      messageId: input.request.userMessage.id,
-      text: input.request.userMessage.text,
-      userId: input.userId,
-    });
-    return {
-      ...started,
-      previousResume: null,
-      resumedAssistant: undefined,
-    };
-  }
-  const resumed = await resumeChatTurn({
-    chatId: threadId,
-    mailboxId: forwardedProps.mailboxId,
-    parentRunId: input.request.parentRunId,
-    userId: input.userId,
-  });
-  return {
-    assistantMessageId: resumed.assistantMessageId,
-    createdChat: false,
-    generationId: resumed.generationId,
-    previousResume: resumed.resume,
-    resumedAssistant: resumed.resumedAssistant,
-  };
-};
 
 const settleAssistantMessage = async (input: {
   assistantMessageId: string;
@@ -872,7 +891,6 @@ const settleAssistantMessage = async (input: {
   generationId: string;
   mailboxId: string;
   parts: ChatMessagePart[];
-  resume?: ChatMessageResume | null;
   status: "cancelled" | "complete" | "failed";
   userId: string;
 }) => {
@@ -900,7 +918,6 @@ const settleAssistantMessage = async (input: {
           error: input.error,
           generationId: null,
           parts: input.parts,
-          resume: input.resume ?? null,
           status: input.status,
         })
         .where(
@@ -925,89 +942,6 @@ const settleAssistantMessage = async (input: {
     .catch(toConflict);
 };
 
-const toStoredParts = (parts: MessagePart[]): ChatMessagePart[] =>
-  parts.map((part) => ({ ...part }));
-
-const getCurrentTurnParts = (
-  messages: readonly ModelMessage[],
-  interrupts: readonly Interrupt[] = []
-) => {
-  const uiMessages = modelMessagesToUIMessages([...messages]);
-  const lastUserIndex = uiMessages.findLastIndex(
-    (message) => message.role === "user"
-  );
-  const parts = toStoredParts(
-    uiMessages
-      .slice(lastUserIndex + 1)
-      .flatMap((message) => (message.role === "assistant" ? message.parts : []))
-  );
-  if (interrupts.length === 0) {
-    return parts;
-  }
-  const approvals = new Map(
-    interrupts.flatMap((interrupt) =>
-      interrupt.toolCallId === undefined
-        ? []
-        : [[interrupt.toolCallId, interrupt.id] as const]
-    )
-  );
-  return parts.map((part) => {
-    if (part.type !== "tool-call" || typeof part.id !== "string") {
-      return part;
-    }
-    const approvalId = approvals.get(part.id);
-    return approvalId === undefined
-      ? part
-      : {
-          ...part,
-          approval: {
-            id: approvalId,
-            needsApproval: true,
-          },
-          state: "approval-requested",
-        };
-  });
-};
-
-const getResumeSnapshot = (
-  chunk: StreamChunk,
-  threadId: string
-): ChatMessageResume | null => {
-  if (
-    chunk.type !== EventType.RUN_FINISHED ||
-    chunk.outcome?.type !== "interrupt"
-  ) {
-    return null;
-  }
-  return {
-    pendingInterrupts: chunk.outcome.interrupts,
-    resumeState: { runId: chunk.runId, threadId },
-  };
-};
-export const settleChatStreamBeforeTerminal =
-  async function* settleChatStreamBeforeTerminal(
-    stream: AsyncIterable<StreamChunk>
-  ): AsyncGenerator<StreamChunk> {
-    let terminalChunk: StreamChunk | undefined;
-    for await (const chunk of stream) {
-      if (terminalChunk !== undefined) {
-        yield terminalChunk;
-        terminalChunk = undefined;
-      }
-      if (
-        chunk.type === EventType.RUN_FINISHED ||
-        chunk.type === EventType.RUN_ERROR
-      ) {
-        terminalChunk = chunk;
-      } else {
-        yield chunk;
-      }
-    }
-    if (terminalChunk !== undefined) {
-      yield terminalChunk;
-    }
-  };
-
 const loadCanonicalTranscript = async (chatId: string) => {
   const messages = await db
     .select({
@@ -1028,26 +962,16 @@ const loadCanonicalTranscript = async (chatId: string) => {
 const prepareChatContext = async (input: {
   context: { messageId?: string; query?: string; threadId?: string };
   mailboxId: string;
-  resumedAssistant?: {
-    createdAt: Date;
-    id: string;
-    parts: ChatMessagePart[];
-    role: "assistant";
-  };
   threadId: string;
+  transcript: readonly UIMessage[];
   userId: string;
 }) => {
-  const storedMessages = await loadCanonicalTranscript(input.threadId);
-  const messages =
-    input.resumedAssistant === undefined
-      ? storedMessages
-      : [...storedMessages, ...toCanonicalTranscript([input.resumedAssistant])];
-  const memoryQuery = messages
+  const memoryQuery = input.transcript
     .filter((message) => message.role === "user")
     .slice(-3)
     .flatMap((message) =>
       message.parts.flatMap((part) =>
-        part.type === "text" ? [part.content] : []
+        part.type === "text" && typeof part.text === "string" ? [part.text] : []
       )
     )
     .join(" ")
@@ -1060,64 +984,19 @@ const prepareChatContext = async (input: {
   });
   return {
     mailboxContextPrompt: buildMailboxContextPrompt(input.context),
-    messages,
     serializedAiContext: serializeAiAgentContext(aiContext),
-  };
-};
-
-const createUsageMiddleware = (input: {
-  chatId: string;
-  mailboxId: string;
-  model: string;
-  userId: string;
-}): ChatMiddleware => {
-  const usageId = crypto.randomUUID();
-  let usageIndex = 0;
-  return {
-    name: "polar-ai-chat-usage",
-    onUsage: (context, usage) => {
-      const index = usageIndex;
-      usageIndex += 1;
-      context.defer(
-        (async () => {
-          try {
-            await reportAiUsage({
-              chatId: input.chatId,
-              completionTokens: usage.completionTokens,
-              costUsd: usage.cost,
-              externalId: `${usageId}:${index}`,
-              mailboxId: input.mailboxId,
-              model: input.model,
-              promptTokens: usage.promptTokens,
-              promptTokensDetails: usage.promptTokensDetails,
-              usageKind: "aiChat",
-              userId: input.userId,
-            });
-          } catch (error: unknown) {
-            reportError(error, { operation: "chat:report-ai-usage" });
-          }
-        })()
-      );
-    },
   };
 };
 
 // The request coordinates authorization, persistence, tool availability, and streaming in one boundary.
 export const createAiChatResponse = async (input: {
-  params: {
-    forwardedProps: Record<string, unknown>;
-    messages: readonly unknown[];
-    parentRunId?: string;
-    resume?: readonly unknown[];
-    runId: string;
-    threadId: string;
-  };
+  body: unknown;
   request: Request;
   userId: string;
 }) => {
-  let validated: ReturnType<typeof validateChatRequest>;
+  let validated: ValidatedChatRequest;
   try {
-    validated = validateChatRequest(input.params);
+    validated = validateChatRequest(input.body);
   } catch (error) {
     if (error instanceof ZodError) {
       throw new ChatRequestError(400, "Invalid chat request.", {
@@ -1126,7 +1005,7 @@ export const createAiChatResponse = async (input: {
     }
     throw error;
   }
-  const { forwardedProps, runId, threadId } = validated;
+  const { forwardedProps, threadId } = validated;
   let accessibleMailbox: Awaited<ReturnType<typeof assertAccessibleMailbox>>;
   try {
     accessibleMailbox = await assertAccessibleMailbox({
@@ -1146,31 +1025,78 @@ export const createAiChatResponse = async (input: {
     organizationId: accessibleMailbox.organizationId,
     userId: input.userId,
   });
-  const adapter = createOpenRouterAdapter(forwardedProps.model);
-  const {
-    assistantMessageId,
-    createdChat,
-    generationId,
-    previousResume,
-    resumedAssistant,
-  } = await beginChatTurn({ request: validated, userId: input.userId });
-  if (validated.kind === "message" && createdChat) {
-    generateChatTitleInBackground({
+
+  const storedTranscript = await loadCanonicalTranscript(threadId);
+  let transcript: UIMessage[];
+  let assistantMessageId: string;
+  let createdChat = false;
+  let generationId: string;
+
+  if (validated.kind === "message") {
+    const started = await startChatTurn({
       chatId: threadId,
-      fallbackTitle: createChatTitle(validated.userMessage.text),
       mailboxId: forwardedProps.mailboxId,
-      prompt: validated.userMessage.text,
+      messageId: validated.userMessage.id,
+      text: validated.userMessage.text,
       userId: input.userId,
     });
+    ({ assistantMessageId, createdChat, generationId } = started);
+    transcript = [
+      ...storedTranscript,
+      {
+        id: validated.userMessage.id,
+        parts: [{ text: validated.userMessage.text, type: "text" }],
+        role: "user",
+      } satisfies UIMessage,
+    ];
+    if (createdChat) {
+      generateChatTitleInBackground({
+        chatId: threadId,
+        fallbackTitle: createChatTitle(validated.userMessage.text),
+        mailboxId: forwardedProps.mailboxId,
+        prompt: validated.userMessage.text,
+        userId: input.userId,
+      });
+    }
+  } else if (validated.kind === "continue") {
+    const continued = await continueChatTurn({
+      assistantMessageId: validated.assistantMessageId,
+      chatId: threadId,
+      mailboxId: forwardedProps.mailboxId,
+      toolDecisions: validated.toolDecisions,
+      toolOutputs: validated.toolOutputs,
+      userId: input.userId,
+    });
+    ({ assistantMessageId, generationId } = continued);
+    transcript = storedTranscript.map((message, index) =>
+      index === storedTranscript.length - 1 &&
+      message.role === "assistant" &&
+      message.id === validated.assistantMessageId
+        ? applyClientResolutions(message, validated)
+        : message
+    );
+  } else {
+    const regenerated = await regenerateChatTurn({
+      chatId: threadId,
+      mailboxId: forwardedProps.mailboxId,
+      userId: input.userId,
+    });
+    ({ assistantMessageId, generationId } = regenerated);
+    transcript =
+      regenerated.removedAssistantId === null
+        ? storedTranscript
+        : storedTranscript.filter(
+            (message) => message.id !== regenerated.removedAssistantId
+          );
   }
-  let currentParts = resumedAssistant?.parts ?? [];
+
   let preparedContext: Awaited<ReturnType<typeof prepareChatContext>>;
   try {
     preparedContext = await prepareChatContext({
       context: forwardedProps.context ?? {},
       mailboxId: forwardedProps.mailboxId,
-      ...(resumedAssistant === undefined ? {} : { resumedAssistant }),
       threadId,
+      transcript,
       userId: input.userId,
     });
   } catch (error) {
@@ -1180,16 +1106,15 @@ export const createAiChatResponse = async (input: {
       error: "The answer could not be started.",
       generationId,
       mailboxId: forwardedProps.mailboxId,
-      parts: currentParts,
-      ...(previousResume === null ? {} : { resume: previousResume }),
-      status: previousResume === null ? "failed" : "complete",
+      parts: [],
+      status: "failed",
       userId: input.userId,
     });
     throw error;
   }
-  const { mailboxContextPrompt, messages, serializedAiContext } =
-    preparedContext;
-  const latestUserRequest = getLatestUserRequest(messages);
+  const { mailboxContextPrompt, serializedAiContext } = preparedContext;
+
+  const latestUserRequest = getLatestUserRequest(transcript);
   const checkConnector = async (
     provider: typeof GOOGLE_CALENDAR_CONNECTOR_PROVIDER
   ) => {
@@ -1203,178 +1128,167 @@ export const createAiChatResponse = async (input: {
   const hasGoogleCalendarConnector = await checkConnector(
     GOOGLE_CALENDAR_CONNECTOR_PROVIDER
   );
-  const abortController = new AbortController();
-  const abortRequest = () => {
-    abortController.abort(input.request.signal.reason);
-  };
-  input.request.signal.addEventListener("abort", abortRequest, { once: true });
-  if (input.request.signal.aborted) {
-    abortRequest();
-  }
-  const persistenceMiddleware: ChatMiddleware = {
-    name: "chat-message-persistence",
-    onAbort: async (context) => {
-      input.request.signal.removeEventListener("abort", abortRequest);
-      currentParts = getCurrentTurnParts(context.messages);
-      await settleAssistantMessage({
-        assistantMessageId,
-        chatId: threadId,
-        error: null,
-        generationId,
+
+  const gmailContext = createGmailToolsContext({
+    category: forwardedProps.category,
+    mailboxId: forwardedProps.mailboxId,
+    userId: input.userId,
+  });
+  const tools = {
+    ...createGmailChatTools(gmailContext),
+    ...createComposeEmailChatTool(),
+    ...createAiMemoryChatTool(
+      createMemoryToolContext({
+        latestUserRequest,
         mailboxId: forwardedProps.mailboxId,
-        parts: currentParts,
-        ...(previousResume === null ? {} : { resume: previousResume }),
-        status: previousResume === null ? "cancelled" : "complete",
-        userId: input.userId,
-      });
-    },
-    onChunk: async (context, chunk) => {
-      const resumeSnapshot = getResumeSnapshot(chunk, threadId);
-      const interrupts =
-        chunk.type === EventType.RUN_FINISHED &&
-        chunk.outcome?.type === "interrupt"
-          ? chunk.outcome.interrupts
-          : [];
-      currentParts = getCurrentTurnParts(context.messages, interrupts);
-      if (resumeSnapshot !== null) {
-        input.request.signal.removeEventListener("abort", abortRequest);
-        await settleAssistantMessage({
-          assistantMessageId,
-          chatId: threadId,
-          error: null,
-          generationId,
-          mailboxId: forwardedProps.mailboxId,
-          parts: currentParts,
-          resume: resumeSnapshot,
-          status: "complete",
-          userId: input.userId,
-        });
-      }
-      return chunk;
-    },
-    onError: async (context, info) => {
-      input.request.signal.removeEventListener("abort", abortRequest);
-      reportError(info.error, { operation: "chat:generation" });
-      currentParts = getCurrentTurnParts(context.messages);
-      await settleAssistantMessage({
-        assistantMessageId,
-        chatId: threadId,
-        error: "The answer could not be completed.",
-        generationId,
-        mailboxId: forwardedProps.mailboxId,
-        parts: currentParts,
-        ...(previousResume === null ? {} : { resume: previousResume }),
-        status: previousResume === null ? "failed" : "complete",
-        userId: input.userId,
-      });
-    },
-    onFinish: async (context) => {
-      input.request.signal.removeEventListener("abort", abortRequest);
-      currentParts = getCurrentTurnParts(context.messages);
-      await settleAssistantMessage({
-        assistantMessageId,
-        chatId: threadId,
-        error: null,
-        generationId,
-        mailboxId: forwardedProps.mailboxId,
-        parts: currentParts,
-        status: "complete",
-        userId: input.userId,
-      });
-    },
-  };
-  const tools = [
-    ...createGmailTools({
-      category: forwardedProps.category,
-      mailboxId: forwardedProps.mailboxId,
-      signal: abortController.signal,
-      userId: input.userId,
-    }),
-    createComposeEmailTool({
-      mailboxId: forwardedProps.mailboxId,
-      signal: abortController.signal,
-      userId: input.userId,
-    }),
-    createMemoryTool({
-      latestUserRequest,
-      mailboxId: forwardedProps.mailboxId,
-      userId: input.userId,
-    }),
-    ...createLinearChatTools({
-      latestUserRequest,
-      signal: abortController.signal,
-      userId: input.userId,
-    }),
-  ];
-  if (hasGoogleCalendarConnector) {
-    tools.push(
-      createCalendarTool({
-        signal: abortController.signal,
         userId: input.userId,
       })
-    );
-  }
-  let stream: AsyncIterable<StreamChunk>;
-  try {
-    stream = chat({
-      abortController,
-      adapter,
-      agentLoopStrategy: maxIterations(CHAT_MAX_ITERATIONS),
-      messages,
-      middleware: [
-        createUsageMiddleware({
-          chatId: threadId,
-          mailboxId: forwardedProps.mailboxId,
-          model: forwardedProps.model,
-          userId: input.userId,
-        }),
-        persistenceMiddleware,
-      ],
-      modelOptions: {
-        maxCompletionTokens: CHAT_MAX_COMPLETION_TOKENS,
-        parallelToolCalls: true,
-        reasoning: { effort: "medium" },
-      },
-      ...(validated.kind === "resume"
-        ? {
-            parentRunId: validated.parentRunId,
-            resume: validated.resume,
+    ),
+    ...createLinearChatTools({
+      latestUserRequest,
+      userId: input.userId,
+    }),
+    ...(hasGoogleCalendarConnector
+      ? createGoogleCalendarChatTool({
+          createGoogleCalendarEvent: async (event, signal) =>
+            await createGoogleCalendarEventForUser({
+              event,
+              signal,
+              userId: input.userId,
+            }),
+        })
+      : {}),
+  };
+
+  const systemPrompt = [
+    gmailToolsPrompt,
+    ...(mailboxContextPrompt === null ? [] : [mailboxContextPrompt]),
+    ...(serializedAiContext === null
+      ? []
+      : [
+          `The following user-authored instructions and learned memory were loaded through Quieter's authorized AI context. Follow them unless they conflict with the current request, safety rules, or verified mailbox data.\n\n${serializedAiContext}`,
+        ]),
+    ...(hasGoogleCalendarConnector ? [googleCalendarToolsPrompt] : []),
+    linearToolsPrompt,
+  ].join("\n\n");
+
+  const usageId = crypto.randomUUID();
+  let generationFailed = false;
+  const modelMessages = await convertToModelMessages(transcript);
+  const startGeneration = () =>
+    streamText({
+      abortSignal: input.request.signal,
+      instructions: systemPrompt,
+      maxOutputTokens: CHAT_MAX_COMPLETION_TOKENS,
+      messages: modelMessages,
+      model: createChatModel(forwardedProps.model),
+      onEnd: ({ steps }) => {
+        const usage = summarizeAiUsage({ steps });
+        void (async () => {
+          try {
+            await reportAiUsage({
+              chatId: threadId,
+              completionTokens: usage.completionTokens,
+              costUsd: usage.costUsd,
+              externalId: `${usageId}:${assistantMessageId}`,
+              mailboxId: forwardedProps.mailboxId,
+              model: forwardedProps.model,
+              promptTokens: usage.promptTokens,
+              promptTokensDetails: {
+                cacheWriteTokens: usage.cacheWriteTokens,
+                cachedTokens: usage.cachedTokens,
+              },
+              usageKind: "aiChat",
+              userId: input.userId,
+            });
+          } catch (error: unknown) {
+            reportError(error, { operation: "chat:report-ai-usage" });
           }
-        : {}),
-      runId,
-      systemPrompts: [
-        gmailToolsPrompt,
-        ...(mailboxContextPrompt === null ? [] : [mailboxContextPrompt]),
-        ...(serializedAiContext === null
-          ? []
-          : [
-              `The following user-authored instructions and learned memory were loaded through Quieter's authorized AI context. Follow them unless they conflict with the current request, safety rules, or verified mailbox data.\n\n${serializedAiContext}`,
-            ]),
-        ...(hasGoogleCalendarConnector ? [googleCalendarToolsPrompt] : []),
-        linearToolsPrompt,
-      ],
-      threadId,
+        })();
+      },
+      onError: ({ error }) => {
+        generationFailed = true;
+        reportError(error, { operation: "chat:generation" });
+      },
+      providerOptions: {
+        openrouter: {
+          reasoning: {
+            effort: "medium",
+          },
+        },
+      },
+      stopWhen: isStepCount(CHAT_MAX_STEPS),
+      toolApproval: {
+        ...(hasGoogleCalendarConnector
+          ? { create_google_calendar_event: "user-approval" as const }
+          : {}),
+        linear_write: "user-approval" as const,
+        memory: "user-approval" as const,
+        modify_mail: "user-approval" as const,
+      },
       tools,
     });
+  let result: ReturnType<typeof startGeneration>;
+  try {
+    result = startGeneration();
   } catch (error) {
     // The turn is already persisted as streaming; a synchronous setup failure
-    // (for example an invalid interrupt resume payload) must terminalize it or
-    // the chat stays locked behind the one-streaming-per-chat constraint.
+    // must terminalize it or the chat stays locked behind the
+    // one-streaming-per-chat constraint.
     await settleAssistantMessage({
       assistantMessageId,
       chatId: threadId,
       error: "The answer could not be started.",
       generationId,
       mailboxId: forwardedProps.mailboxId,
-      parts: currentParts,
-      ...(previousResume === null ? {} : { resume: previousResume }),
-      status: previousResume === null ? "failed" : "complete",
+      parts: [],
+      status: "failed",
       userId: input.userId,
     });
     throw error;
   }
 
-  return toServerSentEventsResponse(settleChatStreamBeforeTerminal(stream), {
-    abortController,
+  // Keep consuming after a client disconnect so the turn still settles in the
+  // database and other devices see a consistent transcript.
+  result.consumeStream();
+
+  return createUIMessageStreamResponse({
+    stream: toUIMessageStream({
+      generateMessageId: () => assistantMessageId,
+      onEnd: async ({ isAborted, messages }) => {
+        const responseMessage = messages.at(-1);
+        if (responseMessage?.role !== "assistant") {
+          return;
+        }
+        const awaitsUserAction = responseMessage.parts.some(isPendingToolPart);
+        let status: "cancelled" | "complete" | "failed" = "complete";
+        if (isAborted) {
+          status = "cancelled";
+        } else if (generationFailed) {
+          status = "failed";
+        }
+        try {
+          await settleAssistantMessage({
+            assistantMessageId,
+            chatId: threadId,
+            error:
+              status === "failed" ? "The answer could not be completed." : null,
+            generationId,
+            mailboxId: forwardedProps.mailboxId,
+            parts: responseMessage.parts,
+            status:
+              awaitsUserAction && status === "complete" ? "complete" : status,
+            userId: input.userId,
+          });
+        } catch (error) {
+          if (!(error instanceof ChatRequestError)) {
+            reportError(error, { operation: "chat:settle-assistant-message" });
+          }
+        }
+      },
+      onError: () => "The answer could not be completed.",
+      originalMessages: transcript,
+      stream: result.stream,
+    }),
   });
 };
