@@ -1,3 +1,4 @@
+import { composeEmailResultSchema } from "@quieter/ai/chat-agent";
 import { chatModelSchema } from "@quieter/ai/chat-models";
 import type { ChatMessagePart } from "@quieter/database/schema";
 import { mailCategorySchema } from "@quieter/mail/data-plane";
@@ -166,7 +167,21 @@ export const validateChatRequest = (body: unknown): ValidatedChatRequest => {
         .parse(part.approval);
       toolDecisions.set(part.toolCallId, approval.approved);
     } else if (part.state === "output-available") {
-      toolOutputs.set(part.toolCallId, part.output);
+      // Compose proposals are the only client-resolved tools; anything else
+      // claiming a client-side result is untrusted input.
+      if (part.type !== "tool-compose_email") {
+        throw new z.ZodError([
+          {
+            code: "custom",
+            message: "This tool result cannot be supplied by the client.",
+            path: ["message", "parts"],
+          },
+        ]);
+      }
+      toolOutputs.set(
+        part.toolCallId,
+        composeEmailResultSchema.parse(part.output)
+      );
     }
   }
   if (toolDecisions.size === 0 && toolOutputs.size === 0) {
@@ -196,7 +211,7 @@ const isRenderablePart = (part: ChatMessagePart): boolean => {
   if (part.type === "text") {
     return typeof part.text === "string";
   }
-  if (typeof part.type !== "string" || part.type === "") {
+  if (part.type === "") {
     return false;
   }
   if (part.type === "step-start") {

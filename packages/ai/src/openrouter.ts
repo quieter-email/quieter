@@ -1,5 +1,6 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { serverEnv } from "@quieter/env/server";
+import { z } from "zod";
 
 import type { ChatModel } from "./chat-models";
 import { chatModelSchema } from "./chat-models";
@@ -21,16 +22,11 @@ const getOpenRouterProvider = () => {
   return cachedProvider;
 };
 
-export type ChatUsageReport = {
-  cacheWriteTokens: number;
-  cachedTokens: number;
-  completionTokens: number;
-  costUsd: number | undefined;
-  promptTokens: number;
-};
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
+const openRouterUsageMetadataSchema = z.looseObject({
+  openrouter: z.looseObject({
+    usage: z.looseObject({ cost: z.number() }),
+  }),
+});
 
 /**
  * Reads the OpenRouter usage accounting payload enabled through the model's
@@ -38,20 +34,9 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
  */
 export const readChatUsageCostUsd = (
   providerMetadata: unknown
-): number | undefined => {
-  if (!isRecord(providerMetadata)) {
-    return undefined;
-  }
-  const { openrouter } = providerMetadata;
-  if (!isRecord(openrouter)) {
-    return undefined;
-  }
-  const { usage } = openrouter;
-  if (!isRecord(usage)) {
-    return undefined;
-  }
-  return typeof usage.cost === "number" ? usage.cost : undefined;
-};
+): number | undefined =>
+  openRouterUsageMetadataSchema.safeParse(providerMetadata).data?.openrouter
+    ?.usage?.cost;
 
 /**
  * Creates the language model for a chat model id with zero-data-retention

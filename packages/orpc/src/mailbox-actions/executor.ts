@@ -259,8 +259,11 @@ const createConnectorStepTools = (
   identity: ConnectorStepIdentity,
   tools: ConnectorAgentTool[],
   effects: Awaited<ReturnType<typeof runConnectorWriteCall>>[]
-): ToolSet =>
-  Object.fromEntries(
+): ToolSet => {
+  // Reserved synchronously before each write awaits, so parallel tool calls in
+  // one step cannot collide on the same idempotency key.
+  let nextWriteCallIndex = 0;
+  return Object.fromEntries(
     tools.map((connectorTool) => {
       // MCP-authored schemas pass through verbatim; the provider validates
       // the call against them.
@@ -289,19 +292,21 @@ const createConnectorStepTools = (
               );
             }
 
-            if (effects.length >= CONNECTOR_AGENT_MAX_WRITE_CALLS) {
+            if (nextWriteCallIndex >= CONNECTOR_AGENT_MAX_WRITE_CALLS) {
               return {
                 error: `This step has already made ${CONNECTOR_AGENT_MAX_WRITE_CALLS} changes, which is the limit. Finish without further changes.`,
                 status: "error",
               };
             }
+            const callIndex = nextWriteCallIndex;
+            nextWriteCallIndex += 1;
 
             const result = await runConnectorWriteCall({
               ...identity,
               call,
-              callIndex: effects.length,
+              callIndex,
             });
-            effects.push(result);
+            effects[callIndex] = result;
             return result;
           },
           inputSchema: jsonSchema<Record<string, unknown>>(inputSchema),
@@ -309,6 +314,7 @@ const createConnectorStepTools = (
       ];
     })
   );
+};
 
 const executeNode = async (input: {
   actionId: string;

@@ -1,3 +1,4 @@
+import { TRANSCRIBED_EMAIL_FORMAT_MODEL } from "./chat-models";
 import type { AiUsageReport } from "./chat-usage";
 import { runTextGeneration } from "./generation";
 
@@ -14,6 +15,7 @@ export const formatTranscribedEmail = async ({
 }) => {
   const result = await runTextGeneration({
     maxOutputTokens: 700,
+    model: TRANSCRIBED_EMAIL_FORMAT_MODEL,
     ...(onUsage === undefined ? {} : { onUsage }),
     prompt: `<transcript>\n${transcript}\n</transcript>`,
     reasoningEffort: "minimal",

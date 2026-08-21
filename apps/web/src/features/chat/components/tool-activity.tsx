@@ -45,6 +45,7 @@ import type { ReactNode } from "react";
 import { getToolName, humanizeToolName } from "../domain/chat-tools";
 import type { ChatToolApproval, ChatToolPart } from "../domain/chat-tools";
 import { parseComposeProposal } from "../domain/compose-proposal";
+import type { ComposeValues } from "../domain/compose-proposal";
 import { ComposeToolApproval } from "./compose-tool-approval";
 
 type ToolIcon = typeof Wrench01Icon;
@@ -137,9 +138,7 @@ const getToolDetail = (name: string, args: Record<string, unknown>) => {
 
 const getResultError = (part: ChatToolPart, data: unknown) => {
   if (part.state === "output-error") {
-    return typeof part.errorText === "string"
-      ? part.errorText
-      : "The tool could not finish.";
+    return part.errorText;
   }
   if (part.state === "output-denied") {
     return "You declined this action.";
@@ -498,13 +497,7 @@ export const ToolActivity = ({
   onComposeSubmit: (
     toolCallId: string,
     action: ComposeSubmitAction,
-    values: {
-      bcc: string;
-      bodyText: string;
-      cc: string;
-      subject: string;
-      to: string;
-    }
+    values: ComposeValues
   ) => void;
   part: ChatToolPart;
 }) => {
@@ -551,7 +544,7 @@ export const ToolActivity = ({
     );
   } else if (awaitingApproval && approval !== undefined) {
     content = (
-      <GenericApproval approval={approval} args={args} disabled={false} />
+      <GenericApproval approval={approval} args={args} disabled={isStreaming} />
     );
   } else if (awaitingApproval) {
     content = <RawJson value={args} />;

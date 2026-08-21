@@ -640,17 +640,13 @@ const isPendingToolPart = (part: unknown): boolean => {
   return state === "approval-requested" || state === "input-available";
 };
 
-const readApprovalId = (part: UIMessage["parts"][number]): string => {
+const readStoredApprovalId = (part: object): string | null => {
   const approval: unknown = Reflect.get(part, "approval");
-  if (
-    typeof approval !== "object" ||
-    approval === null ||
-    !("id" in approval)
-  ) {
-    return crypto.randomUUID();
+  if (typeof approval !== "object" || approval === null) {
+    return null;
   }
   const id: unknown = Reflect.get(approval, "id");
-  return typeof id === "string" ? id : crypto.randomUUID();
+  return typeof id === "string" && id !== "" ? id : null;
 };
 
 /**
@@ -679,13 +675,19 @@ const applyClientResolutions = (
     const state: unknown = Reflect.get(part, "state");
     const decision = resolutions.toolDecisions.get(toolCallId);
     if (decision !== undefined && state === "approval-requested") {
+      const approvalId = readStoredApprovalId(part);
+      if (approvalId === null) {
+        // continueChatTurn rejects corrupted approvals before the turn is
+        // reopened; this guard only satisfies the type.
+        return part;
+      }
       // Part unions make this override awkward to express directly.
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion
       return {
         ...part,
         approval: {
           approved: decision,
-          id: readApprovalId(part),
+          id: approvalId,
         },
         state: "approval-responded",
       } as unknown as UIMessage["parts"][number];
@@ -735,10 +737,25 @@ const continueChatTurn = async (input: {
       "This approval is no longer waiting for a response."
     );
   }
+  const pendingToolParts = stored.parts.filter(isPendingToolPart);
+  for (const part of pendingToolParts) {
+    if (
+      Reflect.get(part, "state") === "approval-requested" &&
+      readStoredApprovalId(part) === null
+    ) {
+      // Validate before reopening the turn so a corrupted row cannot strand
+      // the message in the streaming state.
+      reportError(new Error("Stored approval part has no id."), {
+        operation: "chat:continue-malformed-approval",
+      });
+      throw new ChatRequestError(
+        409,
+        "This approval is no longer waiting for a response."
+      );
+    }
+  }
   const pendingIds = new Set(
-    stored.parts
-      .filter(isPendingToolPart)
-      .map((part) => String(Reflect.get(part, "toolCallId")))
+    pendingToolParts.map((part) => String(Reflect.get(part, "toolCallId")))
   );
   const resolvesSomething =
     [...input.toolDecisions.keys()].some((toolCallId) =>
@@ -1174,6 +1191,15 @@ export const createAiChatResponse = async (input: {
 
   const usageId = crypto.randomUUID();
   let generationFailed = false;
+  // The UI message pipeline can be cancelled by a client disconnect before the
+  // abort chunk arrives, so settlement waits for this barrier: the detached
+  // consumer below resolves it only after the generation reached its terminal
+  // state and all failure/abort flags are final.
+  let resolveGenerationTerminal!: () => void;
+  // oxlint-disable-next-line promise/avoid-new -- shared terminal barrier
+  const generationTerminal = new Promise<void>((resolve) => {
+    resolveGenerationTerminal = resolve;
+  });
   const modelMessages = await convertToModelMessages(transcript);
   const startGeneration = () =>
     streamText({
@@ -1250,19 +1276,29 @@ export const createAiChatResponse = async (input: {
 
   // Keep consuming after a client disconnect so the turn still settles in the
   // database and other devices see a consistent transcript.
-  result.consumeStream();
+  void (async () => {
+    try {
+      await result.consumeStream({
+        onError: (error) => {
+          reportError(error, { operation: "chat:consume-stream" });
+        },
+      });
+    } finally {
+      resolveGenerationTerminal();
+    }
+  })();
 
   return createUIMessageStreamResponse({
     stream: toUIMessageStream({
       generateMessageId: () => assistantMessageId,
-      onEnd: async ({ isAborted, messages }) => {
+      onEnd: async ({ messages }) => {
+        await generationTerminal;
         const responseMessage = messages.at(-1);
         if (responseMessage?.role !== "assistant") {
           return;
         }
-        const awaitsUserAction = responseMessage.parts.some(isPendingToolPart);
         let status: "cancelled" | "complete" | "failed" = "complete";
-        if (isAborted) {
+        if (input.request.signal.aborted) {
           status = "cancelled";
         } else if (generationFailed) {
           status = "failed";
@@ -1276,8 +1312,7 @@ export const createAiChatResponse = async (input: {
             generationId,
             mailboxId: forwardedProps.mailboxId,
             parts: responseMessage.parts,
-            status:
-              awaitsUserAction && status === "complete" ? "complete" : status,
+            status,
             userId: input.userId,
           });
         } catch (error) {

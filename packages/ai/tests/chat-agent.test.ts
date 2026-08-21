@@ -3,6 +3,7 @@ import { describe, expect, test, vi } from "vite-plus/test";
 import {
   createComposeEmailChatTool,
   createGmailChatTools,
+  gmailSearchResultSchema,
 } from "../src/chat-agent";
 import type { GmailToolsContext } from "../src/chat-agent";
 import { normalizeChatTitle } from "../src/generate-chat-title";
@@ -109,6 +110,36 @@ describe("chat tools", () => {
       query: "from:(tu-berlin.de)",
       signal: undefined,
     });
+  });
+
+  test("reports a failed search through the tool's output schema", async () => {
+    const context = noopContext();
+    vi.mocked(context.searchGmail).mockRejectedValueOnce(
+      new Error("The mailbox took too long to respond.")
+    );
+    const tools = createGmailChatTools(context);
+    const tool = tools.search_gmail;
+
+    if (tool === undefined || tool.execute === undefined) {
+      throw new Error("Expected gmail search tool execute handler");
+    }
+
+    const result: unknown = await tool.execute(
+      {
+        maxResults: 10,
+        pageToken: "",
+        query: "from:(tu-berlin.de)",
+      },
+      {
+        abortSignal: undefined,
+        context: undefined,
+        messages: [],
+        toolCallId: "call-1",
+      }
+    );
+
+    const parsed = gmailSearchResultSchema.safeParse(result);
+    expect(parsed.success && parsed.data.status === "error").toBeTruthy();
   });
 
   test("compose proposals stay client-executed", () => {

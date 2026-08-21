@@ -7,6 +7,7 @@ import { BILLING_FEATURES } from "@quieter/billing/plans";
 import type { RouterOutputs } from "@quieter/orpc";
 import { Button } from "@quieter/ui/button";
 import { toast } from "@quieter/ui/toast";
+import * as Sentry from "@sentry/tanstackstart-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -29,7 +30,6 @@ import {
   userBillingQueryOptions,
 } from "#/features/settings/domain/billing";
 import { useAudioRecorder } from "#/lib/audio-recorder";
-import type { BrowserAudioRecording } from "#/lib/audio-transcription";
 import {
   getTranscriptionAudioFormat,
   normalizeTranscriptionRecording,
@@ -39,6 +39,7 @@ import {
   getChatQueryKey,
   getChatsQueryKey,
 } from "#/lib/chat-query";
+import { isExpectedClientError } from "#/lib/client-error-reporting";
 import { connectorsQueryOptions } from "#/lib/connectors-query";
 import { orpc, rpc } from "#/lib/orpc";
 import { shouldRetryOrpcError } from "#/lib/orpc-errors";
@@ -47,6 +48,7 @@ import { toInitialMessages } from "../domain/chat-messages";
 import type { ChatToolApproval } from "../domain/chat-tools";
 import { getToolName, isChatToolPart } from "../domain/chat-tools";
 import { toChatComposeMessageInput } from "../domain/compose-proposal";
+import type { ComposeValues } from "../domain/compose-proposal";
 import type { ChatViewProps } from "../types";
 import { ChatComposer } from "./chat-composer";
 import { ChatTranscript } from "./chat-transcript";
@@ -58,14 +60,6 @@ const CHAT_SETTLEMENT_DELAY_MS = 150;
 const CHAT_SETTLEMENT_ATTEMPTS = 10;
 
 type ChatData = RouterOutputs["chat"]["get"];
-
-type ComposeValues = {
-  bcc: string;
-  bodyText: string;
-  cc: string;
-  subject: string;
-  to: string;
-};
 
 // The transport reports error bodies through statusText so the composer can
 // show the server's reason (for example a 409 for a busy chat).
@@ -396,9 +390,29 @@ const ChatSession = ({
           };
         }
       }
-    } catch {
+    } catch (composeError) {
+      // Authorization and user-state failures are expected; anything else is a
+      // defect worth reporting.
+      if (!isExpectedClientError(composeError)) {
+        const errorStatus =
+          typeof composeError === "object" &&
+          composeError !== null &&
+          "status" in composeError
+            ? composeError.status
+            : undefined;
+        if (!(typeof errorStatus === "number" && errorStatus < 500)) {
+          Sentry.captureException(composeError, {
+            tags: { boundary: "chat-compose" },
+          });
+        }
+      }
+      const errorText =
+        action === "save_draft"
+          ? "The draft could not be saved."
+          : "The email could not be sent.";
+      toast.error(errorText);
       addToolOutput({
-        errorText: "The email could not be sent.",
+        errorText,
         state: "output-error",
         tool: "compose_email",
         toolCallId,
@@ -509,9 +523,7 @@ const ChatSession = ({
         return;
       }
 
-      const recording = (await normalizeTranscriptionRecording(
-        nativeRecording
-      )) satisfies BrowserAudioRecording;
+      const recording = await normalizeTranscriptionRecording(nativeRecording);
       const format = getTranscriptionAudioFormat(recording.mimeType);
       if (!format) {
         toast.error("This recording could not be prepared for transcription.");

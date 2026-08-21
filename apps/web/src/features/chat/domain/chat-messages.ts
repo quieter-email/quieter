@@ -1,6 +1,8 @@
 import type { RouterOutputs } from "@quieter/orpc";
 import type { UIMessage } from "ai";
 
+import { isChatToolPart } from "./chat-tools";
+
 type StoredMessage = RouterOutputs["chat"]["get"]["messages"][number];
 
 /**
@@ -27,7 +29,11 @@ export const toInitialMessages = (messages: StoredMessage[]): UIMessage[] =>
 export const getMessageText = (parts: UIMessage["parts"]) =>
   parts
     .flatMap((part) =>
-      part.type === "text" && part.text.trim() ? [part.text.trim()] : []
+      part.type === "text" &&
+      typeof part.text === "string" &&
+      part.text.trim() !== ""
+        ? [part.text.trim()]
+        : []
     )
     .join("\n\n");
 
@@ -42,12 +48,12 @@ export const getAssistantProgress = (
   for (let index = parts.length - 1; index >= 0; index -= 1) {
     const part = parts[index];
     if (part?.type === "text") {
-      if (part.text.trim()) {
+      if (typeof part.text === "string" && part.text.trim() !== "") {
         return null;
       }
       continue;
     }
-    if (typeof part?.type === "string" && part.type.startsWith("tool-")) {
+    if (part !== undefined && isChatToolPart(part)) {
       return "Working with your mail…";
     }
   }

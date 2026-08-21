@@ -1,5 +1,3 @@
-import { Buffer } from "node:buffer";
-
 import { serverEnv } from "@quieter/env/server";
 import { z } from "zod";
 
@@ -44,13 +42,6 @@ const openRouterTranscriptionResponseSchema = z.object({
     .optional(),
 });
 
-const getBase64Audio = (audio: string | ArrayBuffer): string => {
-  if (typeof audio === "string") {
-    return audio.includes(",") ? audio.slice(audio.indexOf(",") + 1) : audio;
-  }
-  return Buffer.from(audio).toString("base64");
-};
-
 const isTranscriptionTimeoutError = (error: unknown) =>
   (error instanceof DOMException &&
     (error.name === "AbortError" || error.name === "TimeoutError")) ||
@@ -71,12 +62,17 @@ export const generateOpenRouterTranscription = async (input: {
   }
 
   try {
+    // The browser transport may send a data URL; only the payload after the
+    // comma is valid base64 audio data.
+    const { audioBase64 } = input;
     const response = await fetch(
       "https://openrouter.ai/api/v1/audio/transcriptions",
       {
         body: JSON.stringify({
           input_audio: {
-            data: getBase64Audio(input.audioBase64),
+            data: audioBase64.includes(",")
+              ? audioBase64.slice(audioBase64.indexOf(",") + 1)
+              : audioBase64,
             format: input.format,
           },
           model: OPENROUTER_TRANSCRIPTION_MODEL,
@@ -93,7 +89,10 @@ export const generateOpenRouterTranscription = async (input: {
     );
 
     if (!response.ok) {
-      throw new Error(getTranscriptionRequestError(response.status));
+      const detail = await response.text().catch(() => "");
+      throw new Error(getTranscriptionRequestError(response.status), {
+        cause: { detail, status: response.status },
+      });
     }
 
     const result = openRouterTranscriptionResponseSchema.parse(

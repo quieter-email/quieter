@@ -356,6 +356,9 @@ const processManagedAutoLabelMessage = async (input: {
           model: input.autoLabelContext.model,
           promptTokens: usage.promptTokens,
           updatedAt: new Date(),
+          // Unreportable usage is terminal; only retryable reporting failures
+          // keep usageReportedAt unset.
+          usageReportedAt: usage.costUsd === undefined ? new Date() : null,
         })
         .where(eq(gmailAutoLabelEvent.id, event.id))
         .returning();

@@ -10,6 +10,7 @@ import { useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
 import type { ChatToolApproval } from "../domain/chat-tools";
+import type { ComposeValues } from "../domain/compose-proposal";
 import { ChatMessage } from "./chat-message";
 
 type ChatTranscriptProps = {
@@ -22,13 +23,7 @@ type ChatTranscriptProps = {
   onComposeSubmit: (
     toolCallId: string,
     action: "send" | "save_draft",
-    values: {
-      bcc: string;
-      bodyText: string;
-      cc: string;
-      subject: string;
-      to: string;
-    }
+    values: ComposeValues
   ) => void;
   onRetry: () => void;
   retrying: boolean;

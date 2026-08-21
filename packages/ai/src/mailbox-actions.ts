@@ -48,35 +48,29 @@ const routerResultSchema = z.object({
   rationale: z.string().max(1000),
 });
 
-const actionPromptPayloadSchema = z.record(z.string(), z.unknown());
-
-const parseActionPromptInput = (serialized: string) =>
-  actionPromptPayloadSchema.parse(JSON.parse(serialized));
-
-const serializeActionPromptInput = (input: {
+const buildActionPromptInput = (input: {
   context: ActionExecutionContext;
   email: ActionEmailInput;
   instructions?: string;
   memoryContext?: string | null;
-}) =>
-  JSON.stringify({
-    branchPath: input.context.branchPath,
-    email: {
-      attachments: input.email.attachments,
-      body: (input.email.bodyText ?? input.email.bodyHtml ?? "").slice(0, 8000),
-      date: input.email.date,
-      from: input.email.from,
-      provider: input.email.provider,
-      snippet: input.email.snippet,
-      subject: input.email.subject,
-      threadId: input.email.threadId,
-      to: input.email.to,
-    },
-    instructions: input.instructions?.slice(0, 4000),
-    memoryContext: input.memoryContext?.slice(0, 6000),
-    previousOutputs: input.context.previousOutputs,
-    variables: input.context.variables,
-  });
+}) => ({
+  branchPath: input.context.branchPath,
+  email: {
+    attachments: input.email.attachments,
+    body: (input.email.bodyText ?? input.email.bodyHtml ?? "").slice(0, 8000),
+    date: input.email.date,
+    from: input.email.from,
+    provider: input.email.provider,
+    snippet: input.email.snippet,
+    subject: input.email.subject,
+    threadId: input.email.threadId,
+    to: input.email.to,
+  },
+  instructions: input.instructions?.slice(0, 4000),
+  memoryContext: input.memoryContext?.slice(0, 6000),
+  previousOutputs: input.context.previousOutputs,
+  variables: input.context.variables,
+});
 
 export const evaluateMailboxActionCondition = async (input: {
   context: ActionExecutionContext;
@@ -88,12 +82,14 @@ export const evaluateMailboxActionCondition = async (input: {
   await runStructuredGeneration({
     maxOutputTokens: 900,
     ...(input.onUsage === undefined ? {} : { onUsage: input.onUsage }),
-    prompt: serializeActionPromptInput({
-      context: input.context,
-      email: input.email,
-      instructions: input.criteria,
-      memoryContext: input.memoryContext,
-    }),
+    prompt: JSON.stringify(
+      buildActionPromptInput({
+        context: input.context,
+        email: input.email,
+        instructions: input.criteria,
+        memoryContext: input.memoryContext,
+      })
+    ),
     schema: conditionResultSchema,
     system: `Decide whether the email and explicit workflow context satisfy the user's condition.
 
@@ -121,14 +117,12 @@ export const routeMailboxAction = async (input: {
     prompt: JSON.stringify({
       fallbackPort: input.fallbackPort,
       ports: input.ports,
-      workflowInput: parseActionPromptInput(
-        serializeActionPromptInput({
-          context: input.context,
-          email: input.email,
-          instructions: input.routingInstructions,
-          memoryContext: input.memoryContext,
-        })
-      ),
+      workflowInput: buildActionPromptInput({
+        context: input.context,
+        email: input.email,
+        instructions: input.routingInstructions,
+        memoryContext: input.memoryContext,
+      }),
     }),
     schema: routerResultSchema,
     system: `Choose exactly one output port for this workflow item.
@@ -174,14 +168,12 @@ export const runConnectorAgentStep = async (input: {
     ...(input.onUsage === undefined ? {} : { onUsage: input.onUsage }),
     prompt: JSON.stringify({
       connector: input.connectorName,
-      workflowInput: parseActionPromptInput(
-        serializeActionPromptInput({
-          context: input.context,
-          email: input.email,
-          instructions: input.instructions,
-          memoryContext: input.memoryContext,
-        })
-      ),
+      workflowInput: buildActionPromptInput({
+        context: input.context,
+        email: input.email,
+        instructions: input.instructions,
+        memoryContext: input.memoryContext,
+      }),
     }),
     schema: connectorAgentResultSchema,
     system: `Carry out the workflow instructions for this email using the connector's tools.

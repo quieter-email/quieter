@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { TEMPLATE_PLACEHOLDER_SUGGESTION_MODEL } from "./chat-models";
 import type { AiUsageReport } from "./chat-usage";
 import { runStructuredGeneration } from "./generation";
 
@@ -26,6 +27,7 @@ export const suggestTemplatePlaceholder = async ({
 }) => {
   const result = await runStructuredGeneration({
     maxOutputTokens: 180,
+    model: TEMPLATE_PLACEHOLDER_SUGGESTION_MODEL,
     ...(onUsage === undefined ? {} : { onUsage }),
     prompt: JSON.stringify({
       currentDraft: {

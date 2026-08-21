@@ -14,24 +14,27 @@ import { hasLinearConnectorMention } from "./request";
 const LINEAR_REQUEST_REQUIRED_ERROR =
   "Linear tools require an explicit @Linear request.";
 
-const linearListToolsResultSchema = z.object({
-  status: z.literal("success"),
-  tools: z.array(
-    z.object({
-      description: z.string().optional(),
-      inputSchema: z.unknown().optional(),
-      name: z.string(),
-    })
-  ),
-});
+const linearListToolsResultSchema = z.union([
+  z.object({ error: z.string(), status: z.literal("error") }),
+  z.object({
+    status: z.literal("success"),
+    tools: z.array(
+      z.object({
+        description: z.string().optional(),
+        inputSchema: z.unknown().optional(),
+        name: z.string(),
+      })
+    ),
+  }),
+]);
 
 const linearToolCallResultSchema = z.object({
   arguments: z.record(z.string(), z.unknown()).optional(),
-  durationMs: z.number(),
+  durationMs: z.number().optional(),
   error: z.string().optional(),
   output: z.unknown().optional(),
   status: z.enum(["error", "success"]),
-  toolName: z.string(),
+  toolName: z.string().optional(),
 });
 
 const getLinearToolError = (operation: string, error: unknown) => {

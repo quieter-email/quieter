@@ -8,6 +8,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -777,6 +778,19 @@ const MailboxWorkspaceBody = ({
     messageId !== undefined && messageId !== null && messageId !== "";
   const hasThreadId =
     threadId !== undefined && threadId !== null && threadId !== "";
+  // Stable identity: the chat transport rebuilds itself when this object
+  // changes, so a fresh literal every render would recreate it needlessly.
+  const chatContext = useMemo(
+    () =>
+      hasMessageId || hasThreadId || normalizedChatQuery !== ""
+        ? {
+            messageId,
+            query: normalizedChatQuery === "" ? undefined : normalizedChatQuery,
+            threadId,
+          }
+        : undefined,
+    [hasMessageId, hasThreadId, messageId, normalizedChatQuery, threadId]
+  );
 
   return (
     <MailboxWorkspaceContent
@@ -784,16 +798,7 @@ const MailboxWorkspaceBody = ({
       activeMailbox={
         isTemplateMailbox || isComposeMailbox ? null : activeMailbox
       }
-      chatContext={
-        hasMessageId || hasThreadId || normalizedChatQuery !== ""
-          ? {
-              messageId,
-              query:
-                normalizedChatQuery === "" ? undefined : normalizedChatQuery,
-              threadId,
-            }
-          : undefined
-      }
+      chatContext={chatContext}
       draftChatKey={draftChatKey}
       isComposeMailbox={isComposeMailbox}
       isManagedDemoMode={isManagedDemoMode}

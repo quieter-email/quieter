@@ -811,6 +811,7 @@ export const createComposeEmailChatTool = (): ToolSet => ({
     description:
       "Open an editable inline email composer with a proposed message. The user must explicitly send, save the draft, or decline before the assistant continues.",
     inputSchema: composeEmailInputSchema,
+    outputSchema: composeEmailResultSchema,
   }),
 });
 
@@ -868,10 +869,11 @@ export const createGoogleCalendarChatTool = (
         return await context.createGoogleCalendarEvent(input, abortSignal);
       } catch (error) {
         return {
-          error:
-            error instanceof Error
-              ? error.message
-              : "Could not create the calendar event.",
+          error: getMailboxToolErrorMessage(
+            "calendar-create-event",
+            error,
+            "Could not create the calendar event."
+          ),
           status: "error",
           summary: input.summary,
         };

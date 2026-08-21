@@ -3,10 +3,7 @@ import type { UIMessage } from "ai";
 export type ChatToolPart = Extract<
   UIMessage["parts"][number],
   { toolCallId: string }
-> & {
-  state: string;
-  type: string;
-};
+>;
 
 export const isChatToolPart = (
   part: UIMessage["parts"][number]

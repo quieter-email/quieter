@@ -11,19 +11,16 @@ import { Textarea } from "@quieter/ui/textarea";
 import { useState } from "react";
 import type { SubmitEvent } from "react";
 
+import { composeBodyHtmlFromText } from "../domain/compose-proposal";
+import type { ComposeValues } from "../domain/compose-proposal";
+
 type ComposeToolApprovalProps = {
   disabled: boolean;
   initial: Omit<ComposeEmailInput, "action">;
   onDecline: () => void;
   onSubmit: (
     action: ComposeEmailInput["action"],
-    values: {
-      bcc: string;
-      bodyText: string;
-      cc: string;
-      subject: string;
-      to: string;
-    }
+    values: ComposeValues
   ) => void;
 };
 
@@ -37,8 +34,11 @@ export const ComposeToolApproval = ({
   const [error, setError] = useState("");
 
   const submit = (action: ComposeEmailInput["action"]) => {
+    // The form schemas require the HTML alternative too, so validate against
+    // the exact HTML that saving or sending will produce.
     const values = {
       bcc: message.bcc,
+      bodyHtml: composeBodyHtmlFromText(message.bodyText),
       bodyText: message.bodyText,
       cc: message.cc,
       subject: message.subject,
@@ -53,7 +53,13 @@ export const ComposeToolApproval = ({
       return;
     }
     setError("");
-    onSubmit(action, values);
+    onSubmit(action, {
+      bcc: parsed.data.bcc,
+      bodyText: parsed.data.bodyText,
+      cc: parsed.data.cc,
+      subject: parsed.data.subject,
+      to: parsed.data.to,
+    });
   };
 
   const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {

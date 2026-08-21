@@ -2,19 +2,33 @@ import { composeEmailInputSchema } from "@quieter/ai/chat-agent";
 import type { ComposeEmailInput } from "@quieter/ai/chat-agent";
 import type { RouterInputs } from "@quieter/orpc";
 
-type ChatToolPartLike = {
-  input?: unknown;
-  state: string;
-  toolCallId: string;
-  type: string;
+import type { ChatToolPart } from "./chat-tools";
+
+export type ComposeValues = {
+  bcc: string;
+  bodyText: string;
+  cc: string;
+  subject: string;
+  to: string;
 };
+
+/**
+ * Builds the HTML alternative from plain text. Shared by draft saving and
+ * sending so the validated body matches what actually goes out.
+ */
+export const composeBodyHtmlFromText = (bodyText: string) =>
+  `<p>${bodyText
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\n", "<br>")}</p>`;
 
 /**
  * Reads the draft the model proposed for an open compose_email tool call.
  * Returns null for anything that is not a live, schema-valid proposal.
  */
 export const parseComposeProposal = (
-  part: ChatToolPartLike
+  part: ChatToolPart
 ): {
   input: Omit<ComposeEmailInput, "action">;
   toolCallId: string;
@@ -30,21 +44,13 @@ export const parseComposeProposal = (
   return { input: proposal, toolCallId: part.toolCallId };
 };
 
-export const toChatComposeMessageInput = (message: {
-  bcc: string;
-  bodyText: string;
-  cc: string;
-  subject: string;
-  to: string;
-}): RouterInputs["mail"]["sendMessage"]["message"] => ({
+export const toChatComposeMessageInput = (
+  message: ComposeValues
+): RouterInputs["mail"]["sendMessage"]["message"] => ({
   attachments: [],
   // The MIME builder substitutes an empty alternative with "<p></p>", which
   // HTML-preferring clients would render as a blank email.
-  bodyHtml: `<p>${message.bodyText
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll("\n", "<br>")}</p>`,
+  bodyHtml: composeBodyHtmlFromText(message.bodyText),
   bodyText: message.bodyText,
   inlineImages: [],
   localId: crypto.randomUUID(),

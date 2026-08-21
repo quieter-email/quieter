@@ -32,30 +32,38 @@ export type ConnectorAgentTool = {
   name: string;
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
-
 /**
  * An MCP server describes its tools with schemas we never author, so they
  * arrive untyped. They are passed to the model as-is; anything that is not an
  * object becomes a permissive schema and the provider validates the call.
  */
 const asJsonSchema = (value: unknown): ToolInputJsonSchema => {
-  if (isRecord(value) && value.type === "object") {
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "type" in value &&
+    value.type === "object"
+  ) {
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion
     return value as ToolInputJsonSchema;
   }
   return { additionalProperties: true, properties: {}, type: "object" };
 };
 
+const linearMcpReferenceSchema = z.looseObject({
+  id: z.string().optional(),
+  url: z.string().optional(),
+});
+
 const getLinearMcpResultReference = (output: unknown) => {
-  if (!isRecord(output)) {
+  const parsed = linearMcpReferenceSchema.safeParse(output);
+  if (!parsed.success) {
     return {};
   }
 
   return {
-    ...(typeof output.id === "string" ? { externalId: output.id } : {}),
-    ...(typeof output.url === "string" ? { externalUrl: output.url } : {}),
+    ...(parsed.data.id === undefined ? {} : { externalId: parsed.data.id }),
+    ...(parsed.data.url === undefined ? {} : { externalUrl: parsed.data.url }),
   };
 };
 

@@ -1180,6 +1180,9 @@ export const processGmailUsefulDetailMessage = async ({
         processedAt: now,
         promptTokens: usage.promptTokens,
         updatedAt: now,
+        // Unreportable usage is terminal; only retryable reporting failures
+        // keep usageReportedAt unset.
+        usageReportedAt: usage.costUsd === undefined ? now : null,
       })
       .where(eq(gmailUsefulDetailEvent.id, event.id));
 

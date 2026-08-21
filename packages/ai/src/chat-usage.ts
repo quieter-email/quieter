@@ -48,14 +48,14 @@ export const summarizeAiUsage = (input: {
     cacheWriteTokens = toCount(totalUsage.inputTokenDetails?.cacheWriteTokens);
   }
 
-  let costUsd: number | undefined = 0;
+  let costUsd: number | undefined;
   for (const step of steps) {
     const stepCost = readChatUsageCostUsd(step.providerMetadata);
     if (stepCost === undefined) {
       costUsd = undefined;
       break;
     }
-    costUsd += stepCost;
+    costUsd = (costUsd ?? 0) + stepCost;
   }
 
   return {

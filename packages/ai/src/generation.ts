@@ -55,6 +55,7 @@ export const runStructuredGeneration = async <TOutput>(input: {
 
 /** Plain-text generation variant for prompts that return prose. */
 export const runTextGeneration = async (input: {
+  abortSignal?: AbortSignal;
   maxOutputTokens: number;
   model?: ChatModel;
   onUsage?: (usage: AiUsageReport) => void;
@@ -63,6 +64,9 @@ export const runTextGeneration = async (input: {
   system: string;
 }): Promise<string> => {
   const result = await generateText({
+    ...(input.abortSignal === undefined
+      ? {}
+      : { abortSignal: input.abortSignal }),
     instructions: input.system,
     maxOutputTokens: input.maxOutputTokens,
     model: createChatModel(input.model ?? defaultChatModel),

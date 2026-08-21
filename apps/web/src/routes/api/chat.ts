@@ -12,9 +12,15 @@ export const Route = createFileRoute("/api/chat")({
         }
 
         // The validated prompt is capped at 10k characters; the transport body
-        // carries one message, so this generous parse guard is plenty.
-        const contentLength = Number(request.headers.get("content-length"));
-        if (Number.isFinite(contentLength) && contentLength > 1_000_000) {
+        // carries one message, so this generous parse guard is plenty. The
+        // browser transport always sends Content-Length; a missing or invalid
+        // header cannot be size-checked, so it is rejected up front.
+        const contentLengthHeader = request.headers.get("content-length");
+        const contentLength = Number(contentLengthHeader);
+        if (contentLengthHeader === null || Number.isNaN(contentLength)) {
+          return new Response("Chat request length required.", { status: 411 });
+        }
+        if (contentLength > 1_000_000) {
           return new Response("Chat request body too large.", { status: 413 });
         }
 

@@ -1,5 +1,6 @@
 import { createMCPClient } from "@ai-sdk/mcp";
 import type { MCPClient } from "@ai-sdk/mcp";
+import { z } from "zod";
 
 import {
   getLinearAccessTokenForCredential,
@@ -108,6 +109,11 @@ export type LinearMcpToolCallResult = {
  * conversation it is meant to inform. Oversized output is reported as a string rather
  * than dropped, so the model can still act on the part that fits.
  */
+const linearMcpErrorTextSchema = z.looseObject({
+  text: z.string(),
+  type: z.literal("text"),
+});
+
 const truncateToolOutput = (output: unknown, maxOutputBytes: number) => {
   const serialized = JSON.stringify(output) ?? "";
   if (serialized.length <= maxOutputBytes) {
@@ -136,6 +142,32 @@ const callTool = async (input: {
       arguments: input.call.arguments ?? {},
       name: input.call.toolName,
     });
+    // MCP reports in-band tool failures through isError instead of the
+    // transport rejecting, so a resolved result can still be an error.
+    if (
+      typeof output === "object" &&
+      output !== null &&
+      "isError" in output &&
+      output.isError === true
+    ) {
+      const contentItems =
+        "content" in output && Array.isArray(output.content)
+          ? output.content
+          : [];
+      const detail = contentItems
+        .flatMap((item) => {
+          const parsed = linearMcpErrorTextSchema.safeParse(item);
+          return parsed.success ? [parsed.data.text] : [];
+        })
+        .join("\n")
+        .slice(0, 500);
+      return {
+        ...base,
+        durationMs: Date.now() - startedAt,
+        error: detail === "" ? "The Linear tool reported an error." : detail,
+        status: "error",
+      };
+    }
     return {
       ...base,
       durationMs: Date.now() - startedAt,

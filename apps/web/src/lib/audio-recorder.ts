@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export type AudioRecorderRecording = {
   base64: string;
@@ -40,6 +40,31 @@ export const useAudioRecorder = (options: UseAudioRecorderOptions) => {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const startedAtRef = useRef(0);
+  // Set synchronously while a start() call is between its availability check
+  // and ownership of the recorder, so concurrent calls cannot both acquire a
+  // stream while awaiting getUserMedia.
+  const startingRef = useRef(false);
+  // Tracks whether getUserMedia resolved for an unmounted component, so the
+  // late stream is stopped immediately instead of keeping the mic hot.
+  const unmountedRef = useRef(false);
+  const activeStreamRef = useRef<MediaStream | null>(null);
+
+  useEffect(() => {
+    unmountedRef.current = false;
+    return () => {
+      unmountedRef.current = true;
+      const recorder = recorderRef.current;
+      recorderRef.current = null;
+      if (recorder !== null && recorder.state !== "inactive") {
+        recorder.stop();
+      }
+      const stream = activeStreamRef.current;
+      activeStreamRef.current = null;
+      if (stream !== null) {
+        stopStreamTracks(stream);
+      }
+    };
+  }, []);
 
   const isSupported =
     typeof window !== "undefined" &&
@@ -47,30 +72,49 @@ export const useAudioRecorder = (options: UseAudioRecorderOptions) => {
     MediaRecorder.isTypeSupported(mimeType);
 
   const start = useCallback(async () => {
-    if (!isSupported || isRecording) {
+    if (!isSupported || isRecording || startingRef.current) {
       throw new Error("Audio recording is unavailable.");
     }
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const recorder = new MediaRecorder(stream, { mimeType });
-    chunksRef.current = [];
-    recorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        chunksRef.current.push(event.data);
+    startingRef.current = true;
+    let stream: MediaStream | null = null;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (unmountedRef.current) {
+        stopStreamTracks(stream);
+        throw new Error("Audio recording is unavailable.");
       }
-    };
-    recorder.onstop = () => {
-      stopStreamTracks(stream);
-      setIsRecording(false);
-    };
-    recorder.addEventListener("error", () => {
-      stopStreamTracks(stream);
-      setIsRecording(false);
-      recorderRef.current = null;
-    });
-    recorderRef.current = recorder;
-    startedAtRef.current = Date.now();
-    recorder.start();
-    setIsRecording(true);
+      activeStreamRef.current = stream;
+      const ownedStream = stream;
+      const recorder = new MediaRecorder(ownedStream, { mimeType });
+      chunksRef.current = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunksRef.current.push(event.data);
+        }
+      };
+      recorder.onstop = () => {
+        stopStreamTracks(ownedStream);
+        activeStreamRef.current = null;
+        setIsRecording(false);
+      };
+      recorder.addEventListener("error", () => {
+        stopStreamTracks(ownedStream);
+        activeStreamRef.current = null;
+        setIsRecording(false);
+        recorderRef.current = null;
+      });
+      recorderRef.current = recorder;
+      startedAtRef.current = Date.now();
+      recorder.start();
+      setIsRecording(true);
+    } catch (error) {
+      if (stream !== null && activeStreamRef.current !== stream) {
+        stopStreamTracks(stream);
+      }
+      throw error;
+    } finally {
+      startingRef.current = false;
+    }
   }, [isRecording, isSupported, mimeType]);
 
   const stop = useCallback(async (): Promise<AudioRecorderRecording> => {

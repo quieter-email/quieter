@@ -106,6 +106,90 @@ describe("chat request validation", () => {
     expect(continued?.assistantMessageId).toBe("assistant-1");
   });
 
+  test("collects a denied decision from an assistant continuation message", () => {
+    const body = validBody();
+    body.message = {
+      id: "assistant-1",
+      parts: [
+        {
+          approval: { approved: false, id: "approval-1" },
+          state: "approval-responded",
+          toolCallId: "tool-1",
+          type: "tool-modify_mail",
+        },
+      ],
+      role: "assistant",
+    };
+
+    const validated = validateChatRequest(body);
+    expect(validated.kind).toBe("continue");
+    const continued = validated.kind === "continue" ? validated : undefined;
+    expect(continued?.toolDecisions.get("tool-1")).toBeFalsy();
+  });
+
+  test("accepts a compose outcome as the only client-resolvable tool output", () => {
+    const body = validBody();
+    body.message = {
+      id: "assistant-1",
+      parts: [
+        {
+          input: { subject: "Hello", to: "a@example.com" },
+          output: { status: "declined" },
+          state: "output-available",
+          toolCallId: "tool-1",
+          type: "tool-compose_email",
+        },
+      ],
+      role: "assistant",
+    };
+
+    const validated = validateChatRequest(body);
+    expect(validated.kind).toBe("continue");
+    const continued = validated.kind === "continue" ? validated : undefined;
+    expect(continued?.toolOutputs.get("tool-1")).toStrictEqual({
+      status: "declined",
+    });
+  });
+
+  test("rejects client-supplied outputs for server-executed tools", () => {
+    const body = validBody();
+    body.message = {
+      id: "assistant-1",
+      parts: [
+        {
+          output: { forged: true, status: "success" },
+          state: "output-available",
+          toolCallId: "tool-1",
+          type: "tool-modify_mail",
+        },
+      ],
+      role: "assistant",
+    };
+
+    expect(() => validateChatRequest(body)).toThrow(
+      /cannot be supplied by the client/iu
+    );
+  });
+
+  test("rejects malformed compose outcomes", () => {
+    const body = validBody();
+    body.message = {
+      id: "assistant-1",
+      parts: [
+        {
+          input: {},
+          output: { status: "sent" },
+          state: "output-available",
+          toolCallId: "tool-1",
+          type: "tool-compose_email",
+        },
+      ],
+      role: "assistant",
+    };
+
+    expect(() => validateChatRequest(body)).toThrow(/invalid_type/iu);
+  });
+
   test("rejects an assistant message without client resolutions", () => {
     const body = validBody();
     body.message = {
