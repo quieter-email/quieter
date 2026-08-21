@@ -126,7 +126,7 @@ Chats are mailbox-scoped. There is no cross-request resumability: each POST carr
 3. The AI SDK runs the model with Gmail, memory, Linear, calendar, and compose tools and streams its UI message protocol directly to the browser.
 4. Tools that change state (`modify_mail`, `memory`, `linear_write`, `create_google_calendar_event`) require explicit user approval through the AI SDK's tool approval flow; a turn that ends on an approval prompt is persisted with its pending parts, so the decision can be validated server-side against what is actually pending.
 5. `compose_email` is resolved entirely in the browser: the model proposes a draft, the user edits it in an inline composer, and the chosen Send/Save-draft/Decline outcome flows back as a client tool result.
-6. When the stream finishes normally, the server persists one assistant row (inserting it for new turns, updating the paused row when continuing). Aborted or failed turns persist nothing; reloading mid-answer shows the transcript without that answer.
+6. Stopping or disconnecting mid-answer keeps whatever was generated so far: the server writes the partial assistant row when the stream ends. Failed generations persist nothing; reloading mid-answer shows the transcript including any partial answer.
 7. Successful completion also refreshes billing usage and the chat title in the background. There is no streaming status column, generation lock, or cross-device polling: the composer disables itself locally while a request is in flight.
 
 ## Consent and Observability

@@ -1095,13 +1095,20 @@ export const createAiChatResponse = async (input: {
     stream: toUIMessageStream({
       generateMessageId: () => assistantMessageId,
       onEnd: async ({ messages }) => {
-        // A disconnected or failed turn leaves nothing behind; the next
-        // request rebuilds from what is actually stored.
-        if (input.request.signal.aborted || generationFailed) {
+        // Stopping keeps whatever was generated so far; only a failed
+        // generation leaves nothing behind, since its partial output cannot
+        // be told apart from a broken answer.
+        if (generationFailed) {
           return;
         }
         const responseMessage = messages.at(-1);
         if (responseMessage?.role !== "assistant") {
+          return;
+        }
+        const hasContent = responseMessage.parts.some(
+          (part) => part.type !== "step-start"
+        );
+        if (!hasContent) {
           return;
         }
         try {
