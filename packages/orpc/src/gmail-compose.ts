@@ -33,7 +33,13 @@ export const toChatComposeInput = (
   message: ChatComposeMessage
 ): ComposeMessageInput => ({
   attachments: [],
-  bodyHtml: "",
+  // The MIME builder substitutes an empty alternative with "<p></p>", which
+  // HTML-preferring clients would render as a blank email.
+  bodyHtml: `<p>${message.bodyText
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\n", "<br>")}</p>`,
   bodyText: message.bodyText,
   inlineImages: [],
   localId: crypto.randomUUID(),

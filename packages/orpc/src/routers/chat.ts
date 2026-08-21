@@ -249,7 +249,10 @@ export const chatRouter = {
                   ],
                   transcript: text,
                 });
-              } catch {
+              } catch (error: unknown) {
+                reportError(error, {
+                  operation: "chat:format-transcribed-email",
+                });
                 return text;
               }
             })()

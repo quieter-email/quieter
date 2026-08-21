@@ -504,8 +504,10 @@ export const ToolActivity = ({
     call.state === "approval-requested";
   const pending = result === undefined && !awaitingApproval && isStreaming;
   const shouldExpand = awaitingApproval || pending || error !== "";
-  const [manuallyOpen, setManuallyOpen] = useState(false);
-  const open = shouldExpand || manuallyOpen;
+  // Null lets the row follow shouldExpand until the user takes over, so an
+  // automatically expanded row can still be collapsed manually.
+  const [manuallyOpen, setManuallyOpen] = useState<boolean | null>(null);
+  const open = manuallyOpen ?? shouldExpand;
   const label = getToolLabel({
     awaitingApproval,
     name: call.name,
@@ -567,8 +569,9 @@ export const ToolActivity = ({
     );
   }
   const expandable = content !== null && content !== undefined;
+  const isWorking = pending || (resuming && result === undefined);
   let statusIcon = toolIcons[call.name] ?? Wrench01Icon;
-  if (pending || resuming) {
+  if (isWorking) {
     statusIcon = Loading03Icon;
   }
   if (error !== "") {
@@ -586,9 +589,9 @@ export const ToolActivity = ({
           <HugeiconsIcon
             aria-hidden
             className={cn("size-3.5 shrink-0", {
-              "animate-spin text-muted-fg": pending || resuming,
+              "animate-spin text-muted-fg": isWorking,
               "text-destructive": error !== "",
-              "text-muted-fg/70": !pending && !resuming && error === "",
+              "text-muted-fg/70": !isWorking && error === "",
             })}
             icon={statusIcon}
           />

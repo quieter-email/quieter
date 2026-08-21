@@ -354,7 +354,9 @@ const createComposeEmailTool = (input: {
                 composeInput,
                 signal
               );
-              await learnAiMemoryFromSentMessage({
+              // Best-effort learning must not extend the timed tool operation:
+              // a slow memory update could otherwise fail an already-sent email.
+              void learnAiMemoryFromSentMessage({
                 bodyText: message.bodyText,
                 isReply: false,
                 mailboxId: input.mailboxId,

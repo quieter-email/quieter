@@ -110,10 +110,14 @@ const toInitialResumeSnapshot = (
   value: ChatData["messages"][number]["resume"] | null | undefined
 ): InitialResumeSnapshot | undefined => {
   if (
+    typeof value !== "object" ||
     value === null ||
-    value === undefined ||
+    Array.isArray(value) ||
+    typeof value.resumeState !== "object" ||
+    value.resumeState === null ||
     typeof value.resumeState.runId !== "string" ||
     typeof value.resumeState.threadId !== "string" ||
+    !Array.isArray(value.pendingInterrupts) ||
     !value.pendingInterrupts.every(isPendingInterrupt)
   ) {
     return undefined;

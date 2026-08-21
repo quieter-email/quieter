@@ -1,10 +1,18 @@
 import { describe, expect, test, vi } from "vite-plus/test";
 
 import {
+  aiMemoryToolDef,
+  composeEmailToolDef,
+  createComposeEmailServerTool,
   createGmailSearchServerTool,
   gmailSearchToolDef,
+  googleCalendarCreateEventToolDef,
+  modifyMailToolDef,
 } from "../src/chat-agent";
-import type { GmailReadOnlyToolsContext } from "../src/chat-agent";
+import type {
+  ComposeEmailToolsContext,
+  GmailReadOnlyToolsContext,
+} from "../src/chat-agent";
 import { normalizeChatTitle } from "../src/generate-chat-title";
 import { OPENROUTER_TRANSCRIPTION_MODEL } from "../src/transcription-format";
 
@@ -106,6 +114,72 @@ describe("chat tools", () => {
       pageToken: undefined,
       query: "from:(tu-berlin.de)",
     });
+  });
+
+  test("defaults an omitted compose action to send and delegates parsed input", async () => {
+    const composeEmail = vi.fn<ComposeEmailToolsContext["composeEmail"]>(
+      async () =>
+        await Promise.resolve({
+          status: "sent",
+          subject: "Hello",
+          to: "a@example.com",
+        })
+    );
+    const tool = createComposeEmailServerTool({ composeEmail });
+
+    if (tool.execute === undefined) {
+      throw new Error("Expected compose email tool execute handler");
+    }
+
+    await tool.execute({
+      bodyText: "Hi",
+      subject: "Hello",
+      to: "a@example.com",
+    });
+
+    expect(composeEmail).toHaveBeenCalledWith({
+      action: "send",
+      bcc: "",
+      bodyText: "Hi",
+      cc: "",
+      subject: "Hello",
+      to: "a@example.com",
+    });
+  });
+
+  test("keeps an explicit compose draft action", async () => {
+    const composeEmail = vi.fn<ComposeEmailToolsContext["composeEmail"]>(
+      async () =>
+        await Promise.resolve({
+          draftId: "draft-1",
+          status: "draft_saved",
+          subject: "Hello",
+          to: "a@example.com",
+        })
+    );
+    const tool = createComposeEmailServerTool({ composeEmail });
+
+    if (tool.execute === undefined) {
+      throw new Error("Expected compose email tool execute handler");
+    }
+
+    await tool.execute({
+      action: "save_draft",
+      bodyText: "Hi",
+      subject: "Hello",
+      to: "a@example.com",
+    });
+
+    expect(composeEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "save_draft" })
+    );
+  });
+
+  test("requires approval for state-changing tools", () => {
+    expect(modifyMailToolDef.needsApproval).toBeTruthy();
+    expect(googleCalendarCreateEventToolDef.needsApproval).toBeTruthy();
+    expect(aiMemoryToolDef.needsApproval).toBeTruthy();
+    expect(composeEmailToolDef.needsApproval).toBeTruthy();
   });
 
   test("uses the proven transcription model", () => {

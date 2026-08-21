@@ -6,6 +6,7 @@ import { Button } from "@quieter/ui/button";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { toast } from "@quieter/ui/toast";
 import type { UIMessage } from "@tanstack/ai";
+import type { ReactNode } from "react";
 
 import { getAssistantProgress, getMessageText } from "../domain/chat-messages";
 import type { ChatToolApproval } from "../domain/chat-tools";
@@ -64,35 +65,38 @@ export const ChatMessage = ({
     return null;
   }
 
+  // Parts are append-only while streaming, so a per-message text ordinal is the
+  // only stable identity; keying on content would remount on every delta.
+  const renderedParts: ReactNode[] = [];
+  let textOrdinal = 0;
+  for (const part of message.parts) {
+    if (part.type === "text" && part.content.trim() !== "") {
+      textOrdinal += 1;
+      renderedParts.push(
+        <MarkdownContent
+          isStreaming={isStreaming}
+          key={`${message.id}:text:${textOrdinal}`}
+          markdown={part.content}
+        />
+      );
+    } else if (part.type === "tool-call") {
+      const approval = approvalsByCall.get(part.id);
+      renderedParts.push(
+        <ToolActivity
+          {...(approval === undefined ? {} : { approval })}
+          call={part}
+          isStreaming={isStreaming}
+          key={part.id}
+          result={toolResults.get(part.id)}
+          resuming={resuming}
+        />
+      );
+    }
+  }
+
   return (
     <article className="group/message min-w-0 text-fg">
-      <div className="space-y-2">
-        {message.parts.map((part) => {
-          if (part.type === "text" && part.content.trim() !== "") {
-            return (
-              <MarkdownContent
-                key={`${message.id}:text:${part.content}`}
-                isStreaming={isStreaming}
-                markdown={part.content}
-              />
-            );
-          }
-          if (part.type === "tool-call") {
-            const approval = approvalsByCall.get(part.id);
-            return (
-              <ToolActivity
-                key={part.id}
-                {...(approval === undefined ? {} : { approval })}
-                call={part}
-                isStreaming={isStreaming}
-                result={toolResults.get(part.id)}
-                resuming={resuming}
-              />
-            );
-          }
-          return null;
-        })}
-      </div>
+      <div className="space-y-2">{renderedParts}</div>
       {progress ? (
         <p aria-live="polite" className="mt-2 text-body text-muted-fg">
           {progress}

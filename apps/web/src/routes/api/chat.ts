@@ -12,6 +12,13 @@ export const Route = createFileRoute("/api/chat")({
           return new Response("Unauthorized", { status: 401 });
         }
 
+        // The validated prompt is capped at 10k characters; the transcript the
+        // client resends stays well under this generous parse guard.
+        const contentLength = Number(request.headers.get("content-length"));
+        if (Number.isFinite(contentLength) && contentLength > 1_000_000) {
+          return new Response("Chat request body too large.", { status: 413 });
+        }
+
         let params: Awaited<ReturnType<typeof chatParamsFromRequestBody>>;
         try {
           params = await chatParamsFromRequestBody(await request.json());

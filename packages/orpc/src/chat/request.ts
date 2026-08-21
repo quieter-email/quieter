@@ -86,6 +86,10 @@ const resumeItemSchema = z
   })
   .strict();
 
+const parentRunIdRequiresResume = z.undefined({
+  error: "A parent run id requires interrupt resume entries.",
+});
+
 export const validateChatRequest = (params: {
   forwardedProps: Record<string, unknown>;
   messages: readonly unknown[];
@@ -112,7 +116,7 @@ export const validateChatRequest = (params: {
     };
   }
   if (params.parentRunId !== undefined) {
-    throw new Error("A parent run id requires interrupt resume entries.");
+    parentRunIdRequiresResume.parse(params.parentRunId);
   }
   const latestUserMessage = params.messages.findLast(
     (message) =>
