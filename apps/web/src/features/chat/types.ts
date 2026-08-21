@@ -1,21 +1,4 @@
-import type { UIMessage } from "@tanstack/ai";
-
-import type { ComposeFormValues } from "#/features/compose/domain/compose-form";
 import type { MailboxCategory } from "#/lib/gmail/gmail";
-
-export type {
-  ComposeEmailInput,
-  ComposeEmailResult,
-  GoogleCalendarCreateEventResult as GoogleCalendarEventToolResult,
-  GmailAttachmentResult as GmailAttachmentToolResult,
-  GmailLabelListResult as GmailLabelListToolResult,
-  GmailMessageResult as GmailMessageToolResult,
-  GmailMessagesResult as GmailMessagesToolResult,
-  GmailSearchResult as GmailSearchToolResult,
-  GmailThreadResult as GmailThreadToolResult,
-  MailboxOverviewResult as MailboxOverviewToolResult,
-  ModifyMailResult as ModifyMailToolResult,
-} from "@quieter/ai/chat-agent";
 
 export type ChatViewProps = {
   activeMailbox: MailboxCategory;
@@ -30,29 +13,4 @@ export type ChatViewProps = {
   mailboxOrganizationId: string;
   onChatIdChange: (chatId: string) => void;
   onOpenSidebar: () => void;
-};
-
-export type InlineComposeAction = "decline" | "save_draft" | "send";
-
-export type ResolveComposeToolInput =
-  | {
-      action: "decline";
-      assistantMessageId: string;
-      toolCallId: string;
-    }
-  | {
-      action: "save_draft" | "send";
-      assistantMessageId: string;
-      message: ComposeFormValues;
-      toolCallId: string;
-    };
-
-export type ResolveComposeTool = (
-  input: ResolveComposeToolInput
-) => Promise<void>;
-
-export type ChatTurn = {
-  assistant: UIMessage | null;
-  id: string;
-  user: UIMessage | null;
 };

@@ -48,6 +48,7 @@
 - Give icon-only controls a shared tooltip and concise `aria-label`.
 - Preserve existing layout, density, and hierarchy during incremental UI work.
 - Do not use the middle-dot character or any HTML/entity/escape spelling; prefer styled div elements as separators or just commas.
+- The lint rules in this codebase are very strict. Try to adhere to them, but if working around a warning or error would be too complicated or overly complex for the situation, it is acceptable to disable the lint rule for that specific line or function with an inline suppression comment.
 
 ## Finish
 

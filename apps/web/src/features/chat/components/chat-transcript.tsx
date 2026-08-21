@@ -2,82 +2,52 @@
 
 import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
-import {
-  ScrollArea,
-  ScrollAreaContent,
-  ScrollAreaScrollbar,
-  ScrollAreaThumb,
-  ScrollAreaViewport,
-} from "@quieter/ui/scroll-area";
-import { AnimatePresence, m, useReducedMotion } from "motion/react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import type { UIMessage } from "@tanstack/ai";
+import { useReducedMotion } from "motion/react";
+import { useEffect, useRef, useState } from "react";
 
-import { getAppPresenceMotion } from "#/features/motion/app-motion";
-
-import type { ChatTurn, ResolveComposeTool } from "../types";
-import { ChatError } from "./chat-error";
-import {
-  createChatTurnEntranceState,
-  trackChatTurnEntrances,
-} from "./chat-turn-entrance";
-import { ConversationTurn } from "./conversation-turn";
+import type { ChatToolApproval } from "../domain/chat-tools";
+import { ChatMessage } from "./chat-message";
 
 type ChatTranscriptProps = {
-  actionsDisabled?: boolean;
+  approvals: ChatToolApproval[];
   errorMessage?: string;
-  hydrated: boolean;
   isStreaming: boolean;
-  onCopy: (text: string) => void;
-  onEditSubmit: (userMessageId: string, message: string) => void;
-  onRegenerate: (assistantMessageId: string) => void;
-  onResolveCompose: ResolveComposeTool;
-  turns: ChatTurn[];
+  messages: UIMessage[];
+  onRetry: () => void;
+  resuming: boolean;
 };
 
-const SCROLL_THRESHOLD = 96;
-
-const scrollTranscriptToBottom = (
-  viewport: HTMLDivElement | null,
-  behavior: ScrollBehavior,
-  isNearBottomRef: { current: boolean },
-  setShowScrollButton: (show: boolean) => void
-) => {
-  if (!viewport) {
-    return;
-  }
-
-  viewport.scrollTo({ behavior, top: viewport.scrollHeight });
-  isNearBottomRef.current = true;
-  setShowScrollButton(false);
-};
+const SCROLL_THRESHOLD = 120;
 
 export const ChatTranscript = ({
-  actionsDisabled,
+  approvals,
   errorMessage,
-  hydrated,
   isStreaming,
-  onCopy,
-  onEditSubmit,
-  onRegenerate,
-  onResolveCompose,
-  turns,
+  messages,
+  onRetry,
+  resuming,
 }: ChatTranscriptProps) => {
   const shouldReduceMotion = useReducedMotion();
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const isNearBottomRef = useRef(true);
-  // react-doctor-disable-next-line react-doctor/rerender-lazy-ref-init -- Entrance tracking must remain one stable mutable session across renders.
-  const turnEntranceStateRef = useRef(createChatTurnEntranceState());
+  const lastScrollTopRef = useRef(0);
   const [showScrollButton, setShowScrollButton] = useState(false);
-  const retryAssistantId = turns.at(-1)?.assistant?.id;
-  // react-doctor-disable-next-line react-hooks-js/refs -- The entrance tracker is intentionally mutable render-time bookkeeping.
-  // react-doctor-disable-next-line react-hooks-js/refs -- The tracker is intentionally a stable mutable render-time session.
-  const { enteringTurnIds, newTurnIds } = trackChatTurnEntrances(
-    turnEntranceStateRef.current,
-    turns.map((turn) => turn.id),
-    hydrated
-  );
+
+  const scrollToBottom = (behavior: ScrollBehavior) => {
+    const viewport = viewportRef.current;
+    if (!viewport) {
+      return;
+    }
+
+    isNearBottomRef.current = true;
+    setShowScrollButton(false);
+    viewport.scrollTo({ behavior, top: viewport.scrollHeight });
+  };
 
   useEffect((): (() => void) | undefined => {
     const viewport = viewportRef.current;
@@ -88,31 +58,16 @@ export const ChatTranscript = ({
 
     const resizeObserver = new ResizeObserver(() => {
       if (isNearBottomRef.current) {
-        scrollTranscriptToBottom(
-          viewportRef.current,
-          "auto",
-          isNearBottomRef,
-          setShowScrollButton
-        );
+        scrollToBottom(shouldReduceMotion === true ? "auto" : "smooth");
       }
     });
 
     resizeObserver.observe(content);
+    scrollToBottom("auto");
     return () => {
       resizeObserver.disconnect();
     };
-  }, []);
-
-  useLayoutEffect(() => {
-    if (isNearBottomRef.current) {
-      scrollTranscriptToBottom(
-        viewportRef.current,
-        "auto",
-        isNearBottomRef,
-        setShowScrollButton
-      );
-    }
-  }, [isStreaming, turns]);
+  }, [shouldReduceMotion]);
 
   const handleScroll = () => {
     const viewport = viewportRef.current;
@@ -121,114 +76,90 @@ export const ChatTranscript = ({
     }
 
     const { clientHeight, scrollHeight, scrollTop } = viewport;
-    const nearBottom =
-      scrollHeight - scrollTop - clientHeight < SCROLL_THRESHOLD;
-    isNearBottomRef.current = nearBottom;
-    setShowScrollButton(!nearBottom);
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    const scrolledUp = scrollTop < lastScrollTopRef.current - 1;
+
+    if (distanceFromBottom < SCROLL_THRESHOLD) {
+      isNearBottomRef.current = true;
+    } else if (scrolledUp) {
+      isNearBottomRef.current = false;
+    }
+
+    lastScrollTopRef.current = scrollTop;
+    setShowScrollButton(!isNearBottomRef.current);
   };
+
+  const lastMessage = messages.at(-1);
+  const streamingAssistantId =
+    isStreaming && lastMessage?.role === "assistant"
+      ? lastMessage.id
+      : undefined;
 
   return (
     <div className="relative min-h-0 flex-1">
-      <ScrollArea className="h-full">
-        <ScrollAreaViewport onScroll={handleScroll} ref={viewportRef}>
-          <ScrollAreaContent>
+      <div
+        ref={viewportRef}
+        className="h-full overflow-y-auto overscroll-contain"
+        onScroll={handleScroll}
+      >
+        <div
+          ref={contentRef}
+          className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-4 pt-8 pb-12 sm:gap-10 sm:px-6 sm:pt-12"
+        >
+          {messages.map((message) => (
+            <ChatMessage
+              key={message.id}
+              approvals={approvals}
+              isStreaming={
+                isStreaming &&
+                message.role === "assistant" &&
+                message.id === streamingAssistantId
+              }
+              message={message}
+              resuming={resuming}
+            />
+          ))}
+          {isStreaming && streamingAssistantId === undefined ? (
+            <p aria-live="polite" className="text-body text-muted-fg">
+              Thinking…
+            </p>
+          ) : null}
+          {errorMessage !== undefined && errorMessage !== "" ? (
             <div
-              ref={contentRef}
-              className="mx-auto flex w-full max-w-2xl flex-col gap-5 px-4 py-8 pb-10 sm:px-6"
+              className="flex items-center gap-3 text-body text-muted-fg"
+              role="alert"
             >
-              {turns.map((turn, index) => {
-                const animateTurnEntrance = enteringTurnIds.has(turn.id);
-                const turnMotion = getAppPresenceMotion({
-                  reducedMotion: shouldReduceMotion,
-                });
-                const animateEntrance = newTurnIds.has(turn.id);
-
-                return (
-                  <m.div
-                    key={turn.id}
-                    {...turnMotion}
-                    initial={animateTurnEntrance ? turnMotion.initial : false}
-                  >
-                    <ConversationTurn
-                      actionsDisabled={actionsDisabled}
-                      animateEntrance={animateEntrance}
-                      isLastTurn={index === turns.length - 1}
-                      isStreaming={isStreaming && index === turns.length - 1}
-                      onCopy={onCopy}
-                      onEditSubmit={onEditSubmit}
-                      onRegenerate={onRegenerate}
-                      onResolveCompose={onResolveCompose}
-                      turn={turn}
-                    />
-                  </m.div>
-                );
-              })}
-              <AnimatePresence initial={false}>
-                {errorMessage !== null &&
-                errorMessage !== undefined &&
-                errorMessage !== "" ? (
-                  <m.div
-                    key="chat-error"
-                    {...getAppPresenceMotion({
-                      reducedMotion: shouldReduceMotion,
-                    })}
-                  >
-                    <ChatError
-                      disabled={actionsDisabled}
-                      message={errorMessage}
-                      onRetry={
-                        retryAssistantId !== null &&
-                        retryAssistantId !== undefined &&
-                        retryAssistantId !== ""
-                          ? () => {
-                              onRegenerate(retryAssistantId);
-                            }
-                          : undefined
-                      }
-                    />
-                  </m.div>
-                ) : null}
-              </AnimatePresence>
+              <span>{errorMessage}</span>
+              <Button onClick={onRetry} size="sm" type="button" variant="ghost">
+                Try again
+              </Button>
             </div>
-          </ScrollAreaContent>
-        </ScrollAreaViewport>
-        <ScrollAreaScrollbar orientation="vertical">
-          <ScrollAreaThumb />
-        </ScrollAreaScrollbar>
-      </ScrollArea>
+          ) : null}
+        </div>
+      </div>
 
       <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center">
-        <AnimatePresence initial={false}>
-          {showScrollButton ? (
-            <m.button
-              {...getAppPresenceMotion({
-                distance: 4,
-                reducedMotion: shouldReduceMotion,
-              })}
-              aria-label="Scroll to bottom"
+        {showScrollButton ? (
+          <IconButtonTooltip label="Scroll to latest message">
+            <button
+              aria-label="Scroll to latest message"
               className={cn(
-                "pointer-events-auto flex items-center gap-1.5 rounded-full border border-border bg-bg/95 px-3 py-1.5 text-caption text-muted-fg shadow-sm backdrop-blur-sm",
-                "transition-colors hover:bg-muted/60 hover:text-fg"
+                "pointer-events-auto flex size-8 items-center justify-center rounded-full border border-border bg-bg/95 text-muted-fg shadow-sm backdrop-blur-sm",
+                "transition-colors hover:bg-muted hover:text-fg"
               )}
               onClick={() => {
-                scrollTranscriptToBottom(
-                  viewportRef.current,
-                  "smooth",
-                  isNearBottomRef,
-                  setShowScrollButton
-                );
+                scrollToBottom(shouldReduceMotion === true ? "auto" : "smooth");
               }}
               type="button"
             >
               <HugeiconsIcon
                 aria-hidden
-                className="size-3"
+                className="size-3.5"
                 icon={ArrowDown01Icon}
               />
-              New messages
-            </m.button>
-          ) : null}
-        </AnimatePresence>
+            </button>
+          </IconButtonTooltip>
+        ) : null}
       </div>
     </div>
   );

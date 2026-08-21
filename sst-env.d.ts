@@ -6,24 +6,6 @@
 
 declare module "sst" {
   export interface Resource {
-    "ChatGenerationEnqueue": {
-      "name": string
-      "type": "sst.aws.Function"
-      "url": string
-    }
-    "ChatGenerationQueue": {
-      "type": "sst.aws.Queue"
-      "url": string
-    }
-    "ChatGenerationStartToken": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "ChatGenerationWorkflow": {
-      "name": string
-      "qualifier": string
-      "type": "sst.aws.Workflow"
-    }
     "GmailLiveSyncApi": {
       "managementEndpoint": string
       "type": "sst.aws.ApiGatewayWebSocket"

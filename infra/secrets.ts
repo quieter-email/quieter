@@ -54,12 +54,3 @@ export const createSecretInfrastructure = () => {
 
   return { secretBindings, secretResources };
 };
-
-export const selectSecretBindings = (
-  secretBindings: SecretBindings,
-  names: readonly SstSecretName[]
-) =>
-  names.flatMap((name) => {
-    const binding = secretBindings[name];
-    return binding === undefined ? [] : [binding];
-  });

@@ -50,7 +50,7 @@ describe("server environment", () => {
   test("rejects non-HTTP service URLs", () => {
     expect(() =>
       createServerEnv({
-        CHAT_GENERATION_START_URL: "file:///tmp/chat",
+        BETTER_AUTH_URL: "file:///tmp/auth",
         NODE_ENV: "test",
       })
     ).toThrow(/HTTP or HTTPS/u);

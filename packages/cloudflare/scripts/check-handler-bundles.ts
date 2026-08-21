@@ -4,9 +4,7 @@ import path from "node:path";
 
 const packageRoot = path.resolve(import.meta.dirname, "..");
 const outputDirectory = path.join(packageRoot, ".bundle-check");
-const entrypoints = ["worker.ts", "chat-generation-worker.ts"].map((fileName) =>
-  path.join(packageRoot, "src", fileName)
-);
+const entrypoints = [path.join(packageRoot, "src", "worker.ts")];
 
 const formatBuildLog = (log: unknown): string => {
   if (typeof log === "string") {
