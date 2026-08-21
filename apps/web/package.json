@@ -16,6 +16,7 @@
     "preview": "vp preview"
   },
   "dependencies": {
+    "@ai-sdk/react": "catalog:",
     "@barkleapp/css-sanitizer": "1.0.0",
     "@better-auth/api-key": "1.5.0",
     "@better-auth/passkey": "catalog:",
@@ -40,8 +41,6 @@
     "@quieter/orpc": "workspace:*",
     "@quieter/ui": "workspace:*",
     "@sentry/tanstackstart-react": "^10.69.0",
-    "@tanstack/ai": "catalog:",
-    "@tanstack/ai-react": "catalog:",
     "@tanstack/hotkeys": "catalog:",
     "@tanstack/query-core": "catalog:",
     "@tanstack/query-persist-client-core": "catalog:",
@@ -63,6 +62,7 @@
     "@tiptap/pm": "^3.29.2",
     "@tiptap/react": "^3.29.2",
     "@tiptap/starter-kit": "^3.29.2",
+    "ai": "catalog:",
     "better-auth": "catalog:",
     "class-variance-authority": "^0.7.1",
     "color": "^5.0.3",

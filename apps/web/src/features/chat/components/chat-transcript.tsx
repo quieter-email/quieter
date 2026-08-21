@@ -5,33 +5,42 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
-import type { UIMessage } from "@tanstack/ai";
+import type { UIMessage } from "ai";
 import { useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
 import type { ChatToolApproval } from "../domain/chat-tools";
+import type { ComposeValues } from "../domain/compose-proposal";
 import { ChatMessage } from "./chat-message";
 
 type ChatTranscriptProps = {
   approvals: ChatToolApproval[];
+  composeBusy: boolean;
   errorMessage?: string;
   isStreaming: boolean;
   messages: UIMessage[];
+  onComposeDecline: (toolCallId: string) => void;
+  onComposeSubmit: (
+    toolCallId: string,
+    action: "send" | "save_draft",
+    values: ComposeValues
+  ) => void;
   onRetry: () => void;
   retrying: boolean;
-  resuming: boolean;
 };
 
 const SCROLL_THRESHOLD = 120;
 
 export const ChatTranscript = ({
   approvals,
+  composeBusy,
   errorMessage,
   isStreaming,
   messages,
+  onComposeDecline,
+  onComposeSubmit,
   onRetry,
   retrying,
-  resuming,
 }: ChatTranscriptProps) => {
   const shouldReduceMotion = useReducedMotion();
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -110,15 +119,17 @@ export const ChatTranscript = ({
         >
           {messages.map((message) => (
             <ChatMessage
-              key={message.id}
               approvals={approvals}
+              composeBusy={composeBusy}
               isStreaming={
                 isStreaming &&
                 message.role === "assistant" &&
                 message.id === streamingAssistantId
               }
+              key={message.id}
               message={message}
-              resuming={resuming}
+              onComposeDecline={onComposeDecline}
+              onComposeSubmit={onComposeSubmit}
             />
           ))}
           {isStreaming && streamingAssistantId === undefined ? (

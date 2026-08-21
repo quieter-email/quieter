@@ -1,6 +1,5 @@
 import { googleCalendarCreateEventInputSchema } from "@quieter/ai/chat-agent";
 import type { ConnectorProvider } from "@quieter/database/schema";
-import type { JSONSchema } from "@tanstack/ai";
 import { z } from "zod";
 
 import {
@@ -11,13 +10,24 @@ import {
 import { createGoogleCalendarEventForCredential } from "./runtime";
 
 /**
+ * A JSON Schema object describing a connector tool's input. MCP servers author
+ * these schemas, so they arrive untyped.
+ */
+export type ToolInputJsonSchema = {
+  properties?: Record<string, unknown>;
+  required?: string[];
+  type: "object";
+  [key: string]: unknown;
+};
+
+/**
  * One tool a connector exposes to a mailbox action. `mutates` decides whether
  * the executor has to guard the call with an idempotency record, so it is the
  * only thing the action layer needs to know about a connector's capabilities.
  */
 export type ConnectorAgentTool = {
   description?: string;
-  inputSchema: JSONSchema;
+  inputSchema: ToolInputJsonSchema;
   mutates: boolean;
   name: string;
 };
@@ -27,27 +37,33 @@ export type ConnectorAgentTool = {
  * arrive untyped. They are passed to the model as-is; anything that is not an
  * object becomes a permissive schema and the provider validates the call.
  */
-const asJsonSchema = (value: unknown): JSONSchema =>
-  typeof value === "object" && value !== null
-    ? value
-    : { additionalProperties: true, type: "object" };
+const asJsonSchema = (value: unknown): ToolInputJsonSchema => {
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "type" in value &&
+    value.type === "object"
+  ) {
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+    return value as ToolInputJsonSchema;
+  }
+  return { additionalProperties: true, properties: {}, type: "object" };
+};
 
-/**
- * A write is recorded against whatever it created, so the action layer can link to it
- * later. MCP results are server-shaped, so the identifiers are read defensively and
- * simply left out when the tool does not report them.
- */
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
+const linearMcpReferenceSchema = z.looseObject({
+  id: z.string().optional(),
+  url: z.string().optional(),
+});
 
 const getLinearMcpResultReference = (output: unknown) => {
-  if (!isRecord(output)) {
+  const parsed = linearMcpReferenceSchema.safeParse(output);
+  if (!parsed.success) {
     return {};
   }
 
   return {
-    ...(typeof output.id === "string" ? { externalId: output.id } : {}),
-    ...(typeof output.url === "string" ? { externalUrl: output.url } : {}),
+    ...(parsed.data.id === undefined ? {} : { externalId: parsed.data.id }),
+    ...(parsed.data.url === undefined ? {} : { externalUrl: parsed.data.url }),
   };
 };
 

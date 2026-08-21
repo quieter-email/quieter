@@ -14,6 +14,7 @@ import {
   defaultAutoLabelModel,
   defaultUsefulDetailModel,
 } from "@quieter/ai/chat-models";
+import type { AiUsageReport } from "@quieter/ai/chat-usage";
 import { reportAiUsage } from "@quieter/billing";
 import { getBillingCreditUsage } from "@quieter/billing/credits";
 import { hasUserBillingFeature } from "@quieter/billing/entitlements";
@@ -37,7 +38,6 @@ import type {
   UserAiContextEventKind,
 } from "@quieter/database/schema";
 import { reportError } from "@quieter/observability";
-import type { ChatMiddleware } from "@tanstack/ai";
 import {
   and,
   desc,
@@ -780,35 +780,20 @@ const applyAiMemoryPlan = async ({
   return appliedChangeSet.changeSet;
 };
 
-const createUsageMiddleware = () => {
-  let promptTokens = 0;
-  let completionTokens = 0;
-  let costUsd: number | undefined = 0;
-  let cachedTokens = 0;
-  let cacheWriteTokens = 0;
-  const middleware: ChatMiddleware = {
-    name: "dynamic-ai-memory-usage",
-    onUsage: (_context, usage) => {
-      promptTokens += usage.promptTokens;
-      completionTokens += usage.completionTokens;
-      costUsd =
-        costUsd === undefined || usage.cost === undefined
-          ? undefined
-          : costUsd + usage.cost;
-      cachedTokens += usage.promptTokensDetails?.cachedTokens ?? 0;
-      cacheWriteTokens += usage.promptTokensDetails?.cacheWriteTokens ?? 0;
-    },
-  };
-
+const createUsageCollector = () => {
+  let collected: AiUsageReport | undefined;
   return {
-    middleware,
-    usage: () => ({
-      cacheWriteTokens,
-      cachedTokens,
-      completionTokens,
-      costUsd,
-      promptTokens,
-    }),
+    collect: (usage: AiUsageReport) => {
+      collected = usage;
+    },
+    usage: (): AiUsageReport =>
+      collected ?? {
+        cacheWriteTokens: 0,
+        cachedTokens: 0,
+        completionTokens: 0,
+        costUsd: undefined,
+        promptTokens: 0,
+      },
   };
 };
 
@@ -820,7 +805,7 @@ const reportMemoryUsage = async ({
 }: {
   externalId: string;
   mailboxId?: string | null;
-  usage: ReturnType<ReturnType<typeof createUsageMiddleware>["usage"]>;
+  usage: AiUsageReport;
   userId: string;
 }) => {
   try {
@@ -873,7 +858,7 @@ export const requestAiMemoryUpdate = async ({
     listScopeMemories(scope.scopeKey),
     loadAiMemoryScopeConfig(scope),
   ]);
-  const usage = createUsageMiddleware();
+  const usage = createUsageCollector();
 
   try {
     const plan = await planAiMemoryUpdate({
@@ -881,7 +866,7 @@ export const requestAiMemoryUpdate = async ({
       learningGuidance: allowMutations
         ? config.learningPrompt
         : `${config.learningPrompt}\n\nThis interaction is read-only. Answer the question and return zero operations.`,
-      middleware: [usage.middleware],
+      onUsage: usage.collect,
       request: normalizedRequest,
       source: "explicit",
       userMessage,
@@ -1107,13 +1092,13 @@ export const refreshAiMemoryFromEvent = async ({
     kind: event.kind,
     metadata: event.metadata,
   });
-  const usage = createUsageMiddleware();
+  const usage = createUsageCollector();
 
   try {
     const plan = await planAiMemoryUpdate({
       currentMemories: current.map(toEditorMemory),
       learningGuidance: config.learningPrompt,
-      middleware: [usage.middleware],
+      onUsage: usage.collect,
       request,
       source: memorySource,
     });

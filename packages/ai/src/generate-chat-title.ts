@@ -1,8 +1,6 @@
-import { chat } from "@tanstack/ai";
-import type { ChatMiddleware } from "@tanstack/ai";
-
 import { CHAT_TITLE_MODEL } from "./chat-models";
-import { createOpenRouterAdapter } from "./openrouter";
+import type { AiUsageReport } from "./chat-usage";
+import { runTextGeneration } from "./generation";
 
 export { CHAT_TITLE_MODEL } from "./chat-models";
 
@@ -61,32 +59,21 @@ export const normalizeChatTitle = (title: string, prompt: string) => {
 };
 
 export const generateChatTitle = async ({
-  middleware,
+  onUsage,
   prompt,
 }: {
-  middleware?: ChatMiddleware[];
+  onUsage?: (usage: AiUsageReport) => void;
   prompt: string;
 }) => {
-  const title = await chat({
-    adapter: createOpenRouterAdapter(CHAT_TITLE_MODEL),
-    messages: [
-      {
-        content: `<chat_request>\n${prompt}\n</chat_request>`,
-        role: "user",
-      },
-    ],
-    middleware,
-    modelOptions: {
-      // Reasoning tokens are billed against this budget too. A tight cap truncates the
-      // title mid-word, which is how titles end up as broken fragments.
-      maxCompletionTokens: 128,
-      reasoning: {
-        effort: "minimal",
-      },
-    },
-    stream: false,
-    systemPrompts: [
-      `Generate a concise 2 to 5 word title that describes the user's request inside <chat_request>.
+  const title = await runTextGeneration({
+    maxOutputTokens: 128,
+    model: CHAT_TITLE_MODEL,
+    // Reasoning tokens are billed against this budget too. A tight cap truncates the
+    // title mid-word, which is how titles end up as broken fragments.
+    reasoningEffort: "minimal",
+    ...(onUsage === undefined ? {} : { onUsage }),
+    prompt: `<chat_request>\n${prompt}\n</chat_request>`,
+    system: `Generate a concise 2 to 5 word title that describes the user's request inside <chat_request>.
 
 Write the title in the same language the request is written in. When the request has no clear language — a greeting, a single word, punctuation, or anything else ambiguous — write the title in English. Never mix scripts or languages within one title.
 
@@ -99,7 +86,6 @@ Examples:
 - "Hello" -> New Conversation
 
 Return only the title with no quotes, markdown, explanation, or ending punctuation.`,
-    ],
   });
 
   return normalizeChatTitle(title, prompt);

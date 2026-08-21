@@ -10,7 +10,6 @@ import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { FieldControl, FieldError } from "@quieter/ui/field";
 import { ToolbarButton } from "@quieter/ui/toolbar";
-import { useAudioRecorder } from "@tanstack/ai-react";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
@@ -19,8 +18,8 @@ import { useRef, useState } from "react";
 import { MobileHeader } from "#/components/mobile-header";
 import { WorkspaceSection } from "#/components/workspace-section";
 import { USER_BILLING_QUERY_KEY } from "#/features/settings/domain/billing";
+import { useAudioRecorder } from "#/lib/audio-recorder";
 import { getTranscriptionAudioFormat } from "#/lib/audio-transcription";
-import type { BrowserAudioRecording } from "#/lib/audio-transcription";
 import { orpc } from "#/lib/orpc";
 
 import type { ComposeFormValues } from "../domain/compose-form";
@@ -186,13 +185,6 @@ export const ComposeWorkspace = ({
   } = compose;
   const audioRecorder = useAudioRecorder({
     mimeType: "audio/webm;codecs=opus",
-    onComplete: ({ base64, blob, durationMs, mimeType }) =>
-      ({
-        base64,
-        blob,
-        durationMs,
-        mimeType,
-      }) satisfies BrowserAudioRecording,
   });
   const transcribeAudioMutation = useMutation({
     ...orpc.chat.transcribeAudio.mutationOptions(),

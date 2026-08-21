@@ -40,6 +40,7 @@
 ## Code style
 
 - Keep types strict. Avoid `any`, unnecessary casts, effects, abstractions used once, placeholders, dead fallbacks, and obsolete compatibility branches.
+- Do not create trivial single-line or single-statement helper functions (e.g. `isRecord`, `parseJson`); inline the expression directly at each call site, even if that means slight duplication in multiple places.
 - Keep comments minimal — only for hacky or high-complexity code where intent isn't obvious from the code itself.
 - Use TanStack Query for server state and TanStack Store for complex client-only workflows.
 - Use named theme colors. Do not use arbitrary Tailwind colors.

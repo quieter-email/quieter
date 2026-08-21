@@ -11,26 +11,34 @@ import { Textarea } from "@quieter/ui/textarea";
 import { useState } from "react";
 import type { SubmitEvent } from "react";
 
+import { composeBodyHtmlFromText } from "../domain/compose-proposal";
+import type { ComposeValues } from "../domain/compose-proposal";
+
 type ComposeToolApprovalProps = {
   disabled: boolean;
-  initial: ComposeEmailInput;
-  onApprove: (input: ComposeEmailInput) => void;
-  onReject: () => void;
+  initial: Omit<ComposeEmailInput, "action">;
+  onDecline: () => void;
+  onSubmit: (
+    action: ComposeEmailInput["action"],
+    values: ComposeValues
+  ) => void;
 };
 
 export const ComposeToolApproval = ({
   disabled,
   initial,
-  onApprove,
-  onReject,
+  onDecline,
+  onSubmit,
 }: ComposeToolApprovalProps) => {
   const [message, setMessage] = useState(initial);
   const [error, setError] = useState("");
 
-  const approve = (action: ComposeEmailInput["action"]) => {
+  const submit = (action: ComposeEmailInput["action"]) => {
+    // The form schemas require the HTML alternative too, so validate against
+    // the exact HTML that saving or sending will produce.
     const values = {
       bcc: message.bcc,
-      bodyHtml: "",
+      bodyHtml: composeBodyHtmlFromText(message.bodyText),
       bodyText: message.bodyText,
       cc: message.cc,
       subject: message.subject,
@@ -45,12 +53,18 @@ export const ComposeToolApproval = ({
       return;
     }
     setError("");
-    onApprove({ action, ...parsed.data });
+    onSubmit(action, {
+      bcc: parsed.data.bcc,
+      bodyText: parsed.data.bodyText,
+      cc: parsed.data.cc,
+      subject: parsed.data.subject,
+      to: parsed.data.to,
+    });
   };
 
   const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
-    approve("send");
+    submit("send");
   };
 
   return (
@@ -117,7 +131,7 @@ export const ComposeToolApproval = ({
         )}
         <Button
           disabled={disabled}
-          onClick={onReject}
+          onClick={onDecline}
           size="sm"
           type="button"
           variant="ghost"
@@ -127,7 +141,7 @@ export const ComposeToolApproval = ({
         <Button
           disabled={disabled}
           onClick={() => {
-            approve("save_draft");
+            submit("save_draft");
           }}
           size="sm"
           type="button"

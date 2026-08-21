@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { ORPCError } from "@orpc/server";
 import { chatModelSchema } from "@quieter/ai/chat-models";
 import type { ChatModel } from "@quieter/ai/chat-models";
+import type { AiUsageReport } from "@quieter/ai/chat-usage";
 import type { AutomationMailMessage } from "@quieter/ai/classify-gmail-message";
 import { extractMailUsefulDetail } from "@quieter/ai/extract-gmail-useful-detail";
 import type {
@@ -27,7 +28,6 @@ import type {
 } from "@quieter/database/schema";
 import { MAILBOX_LABELS } from "@quieter/gmail";
 import { reportError } from "@quieter/observability";
-import type { ChatMiddleware } from "@tanstack/ai";
 import { and, asc, eq, gt, isNull, lte, or } from "drizzle-orm";
 
 import {
@@ -916,7 +916,9 @@ const upsertGmailUsefulDetail = async ({
         processedAt: now,
         promptTokens: usage.promptTokens,
         updatedAt: now,
-        usageReportedAt: hasText(model) ? null : now,
+        // Cost-less AI extractions are terminal; only retryable reporting
+        // failures keep usageReportedAt unset.
+        usageReportedAt: !hasText(model) || usage.costUsd === null ? now : null,
       })
       .where(eq(gmailUsefulDetailEvent.id, event.id));
   });
@@ -929,7 +931,8 @@ const upsertGmailUsefulDetail = async ({
     model,
     processedAt: now,
     promptTokens: usage.promptTokens,
-    usageReportedAt: hasText(model) ? event.usageReportedAt : now,
+    usageReportedAt:
+      !hasText(model) || usage.costUsd === null ? now : event.usageReportedAt,
   };
 };
 
@@ -1135,23 +1138,12 @@ export const processGmailUsefulDetailMessage = async ({
       return;
     }
 
-    let promptTokens = 0;
-    let completionTokens = 0;
-    let costUsd: number | undefined = 0;
-    let cachedTokens = 0;
-    let cacheWriteTokens = 0;
-    const usageMiddleware: ChatMiddleware = {
-      name: "gmail-useful-details-usage",
-      onUsage: (_context, usage) => {
-        promptTokens += usage.promptTokens;
-        completionTokens += usage.completionTokens;
-        costUsd =
-          costUsd === undefined || usage.cost === undefined
-            ? undefined
-            : costUsd + usage.cost;
-        cachedTokens += usage.promptTokensDetails?.cachedTokens ?? 0;
-        cacheWriteTokens += usage.promptTokensDetails?.cacheWriteTokens ?? 0;
-      },
+    let usage: AiUsageReport = {
+      cacheWriteTokens: 0,
+      cachedTokens: 0,
+      completionTokens: 0,
+      costUsd: undefined,
+      promptTokens: 0,
     };
 
     const budgetStatus = await getMailAutomationAiBudgetStatus({
@@ -1166,8 +1158,10 @@ export const processGmailUsefulDetailMessage = async ({
 
     const candidate = await extractMailUsefulDetail({
       message,
-      middleware: [usageMiddleware],
       model,
+      onUsage: (reportedUsage) => {
+        usage = reportedUsage;
+      },
       preferences,
     });
     const detail = materializeGmailUsefulDetail({
@@ -1179,16 +1173,19 @@ export const processGmailUsefulDetailMessage = async ({
     const eventUpdate = db
       .update(gmailUsefulDetailEvent)
       .set({
-        cacheWriteTokens,
-        cachedTokens,
-        completionTokens,
-        costUsd: costUsd ?? null,
+        cacheWriteTokens: usage.cacheWriteTokens,
+        cachedTokens: usage.cachedTokens,
+        completionTokens: usage.completionTokens,
+        costUsd: usage.costUsd ?? null,
         lastError: null,
         model,
         nextAttemptAt: null,
         processedAt: now,
-        promptTokens,
+        promptTokens: usage.promptTokens,
         updatedAt: now,
+        // Unreportable usage is terminal; only retryable reporting failures
+        // keep usageReportedAt unset.
+        usageReportedAt: usage.costUsd === undefined ? now : null,
       })
       .where(eq(gmailUsefulDetailEvent.id, event.id));
 
@@ -1201,11 +1198,11 @@ export const processGmailUsefulDetailMessage = async ({
         model,
         source,
         usage: {
-          cacheWriteTokens,
-          cachedTokens,
-          completionTokens,
-          costUsd: costUsd ?? null,
-          promptTokens,
+          cacheWriteTokens: usage.cacheWriteTokens,
+          cachedTokens: usage.cachedTokens,
+          completionTokens: usage.completionTokens,
+          costUsd: usage.costUsd ?? null,
+          promptTokens: usage.promptTokens,
         },
       });
       const [latestSettings] = await db

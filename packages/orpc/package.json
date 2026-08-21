@@ -30,6 +30,7 @@
     "./waitlist": "./src/waitlist.ts"
   },
   "dependencies": {
+    "@ai-sdk/mcp": "catalog:",
     "@aws-sdk/client-s3": "catalog:",
     "@aws-sdk/client-ses": "catalog:",
     "@aws-sdk/client-sesv2": "catalog:",
@@ -44,8 +45,7 @@
     "@quieter/gmail": "workspace:*",
     "@quieter/mail": "workspace:*",
     "@quieter/observability": "workspace:*",
-    "@tanstack/ai": "catalog:",
-    "@tanstack/ai-mcp": "catalog:"
+    "ai": "catalog:"
   },
   "devDependencies": {
     "@orpc/client": "catalog:",

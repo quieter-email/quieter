@@ -5,11 +5,12 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { toast } from "@quieter/ui/toast";
-import type { UIMessage } from "@tanstack/ai";
+import type { UIMessage } from "ai";
 import type { ReactNode } from "react";
 
 import { getAssistantProgress, getMessageText } from "../domain/chat-messages";
 import type { ChatToolApproval } from "../domain/chat-tools";
+import { isChatToolPart } from "../domain/chat-tools";
 import { MarkdownContent } from "./markdown-content";
 import { ToolActivity } from "./tool-activity";
 
@@ -24,14 +25,28 @@ const copyMessage = async (text: string) => {
 
 export const ChatMessage = ({
   approvals,
+  composeBusy,
   isStreaming,
   message,
-  resuming,
+  onComposeDecline,
+  onComposeSubmit,
 }: {
   approvals: ChatToolApproval[];
+  composeBusy: boolean;
   isStreaming: boolean;
   message: UIMessage;
-  resuming: boolean;
+  onComposeDecline: (toolCallId: string) => void;
+  onComposeSubmit: (
+    toolCallId: string,
+    action: "send" | "save_draft",
+    values: {
+      bcc: string;
+      bodyText: string;
+      cc: string;
+      subject: string;
+      to: string;
+    }
+  ) => void;
 }) => {
   const text = getMessageText(message.parts);
 
@@ -49,45 +64,42 @@ export const ChatMessage = ({
     );
   }
 
-  const toolResults = new Map(
-    message.parts.flatMap((part) =>
-      part.type === "tool-result" ? [[part.toolCallId, part] as const] : []
-    )
-  );
   const approvalsByCall = new Map(
     approvals.map((approval) => [approval.toolCallId, approval] as const)
   );
-  const hasToolCalls = message.parts.some((part) => part.type === "tool-call");
-  const progress = hasToolCalls
+  const hasToolParts = message.parts.some((part) => isChatToolPart(part));
+  const progress = hasToolParts
     ? null
     : getAssistantProgress(message.parts, isStreaming);
-  if (!text && progress === null && !hasToolCalls) {
+  if (!text && progress === null && !hasToolParts) {
     return null;
   }
 
-  // Parts are append-only while streaming, so a per-message text ordinal is the
-  // only stable identity; keying on content would remount on every delta.
+  // Parts are append-only while streaming, so a per-part ordinal plus tool
+  // call id is the only stable identity; keying on content would remount on
+  // every delta.
   const renderedParts: ReactNode[] = [];
   let textOrdinal = 0;
   for (const part of message.parts) {
-    if (part.type === "text" && part.content.trim() !== "") {
+    if (part.type === "text" && part.text.trim() !== "") {
       textOrdinal += 1;
       renderedParts.push(
         <MarkdownContent
           key={`${message.id}:text:${textOrdinal}`}
-          markdown={part.content}
+          markdown={part.text}
         />
       );
-    } else if (part.type === "tool-call") {
-      const approval = approvalsByCall.get(part.id);
+    } else if (isChatToolPart(part)) {
+      const approval = approvalsByCall.get(part.toolCallId);
       renderedParts.push(
         <ToolActivity
           {...(approval === undefined ? {} : { approval })}
-          call={part}
+          composeBusy={composeBusy}
           isStreaming={isStreaming}
-          key={part.id}
-          result={toolResults.get(part.id)}
-          resuming={resuming}
+          key={part.toolCallId}
+          onComposeDecline={onComposeDecline}
+          onComposeSubmit={onComposeSubmit}
+          part={part}
         />
       );
     }

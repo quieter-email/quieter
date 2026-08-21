@@ -1,23 +1,17 @@
-import { Buffer } from "node:buffer";
-
 import { serverEnv } from "@quieter/env/server";
-import { generateTranscription } from "@tanstack/ai";
-import type { TranscriptionAdapter } from "@tanstack/ai";
 import { z } from "zod";
 
 import { OPENROUTER_TRANSCRIPTION_MODEL } from "./transcription-format";
 import type { OpenRouterAudioFormat } from "./transcription-format";
 
-type OpenRouterTranscriptionOptions = {
-  format: OpenRouterAudioFormat;
-};
-
-type OpenRouterTranscriptionAdapter = TranscriptionAdapter<
-  typeof OPENROUTER_TRANSCRIPTION_MODEL,
-  OpenRouterTranscriptionOptions
->;
-
 const OPENROUTER_TRANSCRIPTION_TIMEOUT_MS = 60_000;
+
+export type OpenRouterTranscriptionUsage = {
+  completionTokens: number;
+  cost: number | undefined;
+  durationSeconds: number | undefined;
+  promptTokens: number;
+};
 
 const getTranscriptionRequestError = (status: number) => {
   if (status === 400 || status === 422) {
@@ -48,139 +42,78 @@ const openRouterTranscriptionResponseSchema = z.object({
     .optional(),
 });
 
-const getBase64Audio = async (audio: string | File | Blob | ArrayBuffer) => {
-  if (typeof audio === "string") {
-    return audio.includes(",") ? audio.slice(audio.indexOf(",") + 1) : audio;
-  }
-
-  if (audio instanceof ArrayBuffer) {
-    return Buffer.from(audio).toString("base64");
-  }
-
-  return Buffer.from(await audio.arrayBuffer()).toString("base64");
-};
-
 const isTranscriptionTimeoutError = (error: unknown) =>
   (error instanceof DOMException &&
     (error.name === "AbortError" || error.name === "TimeoutError")) ||
   (error instanceof Error && /timed?\s*out|timeout/iu.test(error.message));
 
-const buildTranscriptionResult = (
-  model: typeof OPENROUTER_TRANSCRIPTION_MODEL,
-  response: Response,
-  result: z.infer<typeof openRouterTranscriptionResponseSchema>
-) => {
-  const id = response.headers.get("x-generation-id") ?? crypto.randomUUID();
-  const promptTokens = result.usage?.input_tokens ?? 0;
-  const completionTokens = result.usage?.output_tokens ?? 0;
-
-  return {
-    duration: result.usage?.seconds,
-    id,
-    model,
-    text: result.text,
-    usage: {
-      completionTokens,
-      cost: result.usage?.cost,
-      durationSeconds: result.usage?.seconds,
-      promptTokens,
-      totalTokens:
-        result.usage?.total_tokens ?? promptTokens + completionTokens,
-      unitsBilled: result.usage?.seconds,
-    },
-  };
-};
-
-export const createOpenRouterTranscriptionAdapter = (
-  model = OPENROUTER_TRANSCRIPTION_MODEL
-): OpenRouterTranscriptionAdapter => {
-  const apiKey = serverEnv.OPENROUTER_API_KEY;
-
-  if ((apiKey ?? "") === "") {
-    throw new Error("AI features are temporarily unavailable.");
-  }
-
-  return {
-    kind: "transcription",
-    model,
-    name: "openrouter",
-    transcribe: async (
-      options: Parameters<OpenRouterTranscriptionAdapter["transcribe"]>[0]
-    ) => {
-      options.logger.request("activity=transcription provider=openrouter", {
-        format: options.modelOptions?.format,
-        model,
-        provider: "openrouter",
-      });
-
-      try {
-        const response = await fetch(
-          "https://openrouter.ai/api/v1/audio/transcriptions",
-          {
-            body: JSON.stringify({
-              input_audio: {
-                data: await getBase64Audio(options.audio),
-                format: options.modelOptions?.format ?? "webm",
-              },
-              language: options.language,
-              model,
-            }),
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-              "Content-Type": "application/json",
-              "HTTP-Referer": "https://quieter.email",
-              "X-Title": "quieter",
-            },
-            method: "POST",
-            signal: AbortSignal.timeout(OPENROUTER_TRANSCRIPTION_TIMEOUT_MS),
-          }
-        );
-
-        if (!response.ok) {
-          const responseBody = await response.text().catch(() => "");
-          options.logger.errors("transcription request rejected", {
-            responseBody: responseBody.slice(0, 1000),
-            status: response.status,
-          });
-          throw new Error(getTranscriptionRequestError(response.status));
-        }
-
-        const result = openRouterTranscriptionResponseSchema.parse(
-          await response.json()
-        );
-
-        return buildTranscriptionResult(model, response, result);
-      } catch (error: unknown) {
-        options.logger.errors("transcription activity failed", {
-          error,
-          source: "openrouter",
-        });
-        if (isTranscriptionTimeoutError(error)) {
-          throw new Error(
-            "Transcription took too long. Try a shorter recording.",
-            { cause: error }
-          );
-        }
-
-        throw error;
-      }
-    },
-    "~types": {
-      providerOptions: {
-        format: "webm",
-      },
-    },
-  };
-};
-
+/**
+ * Transcribes audio through OpenRouter's transcription endpoint and returns
+ * the text plus usage for billing.
+ */
 export const generateOpenRouterTranscription = async (input: {
   audioBase64: string;
   format: OpenRouterAudioFormat;
-}) =>
-  await generateTranscription({
-    adapter: createOpenRouterTranscriptionAdapter(),
-    audio: input.audioBase64,
-    modelOptions: {
-      format: input.format,
-    },
-  });
+}): Promise<{ text: string; usage: OpenRouterTranscriptionUsage }> => {
+  const apiKey = serverEnv.OPENROUTER_API_KEY;
+
+  if (apiKey === undefined || apiKey === "") {
+    throw new Error("AI features are temporarily unavailable.");
+  }
+
+  try {
+    // The browser transport may send a data URL; only the payload after the
+    // comma is valid base64 audio data.
+    const { audioBase64 } = input;
+    const response = await fetch(
+      "https://openrouter.ai/api/v1/audio/transcriptions",
+      {
+        body: JSON.stringify({
+          input_audio: {
+            data: audioBase64.includes(",")
+              ? audioBase64.slice(audioBase64.indexOf(",") + 1)
+              : audioBase64,
+            format: input.format,
+          },
+          model: OPENROUTER_TRANSCRIPTION_MODEL,
+        }),
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://quieter.email",
+          "X-Title": "quieter",
+        },
+        method: "POST",
+        signal: AbortSignal.timeout(OPENROUTER_TRANSCRIPTION_TIMEOUT_MS),
+      }
+    );
+
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(getTranscriptionRequestError(response.status), {
+        cause: { detail, status: response.status },
+      });
+    }
+
+    const result = openRouterTranscriptionResponseSchema.parse(
+      await response.json()
+    );
+    return {
+      text: result.text,
+      usage: {
+        completionTokens: result.usage?.output_tokens ?? 0,
+        cost: result.usage?.cost,
+        durationSeconds: result.usage?.seconds,
+        promptTokens: result.usage?.input_tokens ?? 0,
+      },
+    };
+  } catch (error: unknown) {
+    if (isTranscriptionTimeoutError(error)) {
+      throw new Error("Transcription took too long. Try a shorter recording.", {
+        cause: error,
+      });
+    }
+
+    throw error;
+  }
+};
