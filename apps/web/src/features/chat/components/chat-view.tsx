@@ -130,8 +130,12 @@ const toInitialResumeSnapshot = (
 
 const getChatErrorMessage = (
   error: Error | undefined,
-  message: ChatData["messages"][number] | undefined
+  message: ChatData["messages"][number] | undefined,
+  isStreaming: boolean
 ) => {
+  if (isStreaming) {
+    return "";
+  }
   if (message?.status === "failed") {
     return message.error ?? "The answer could not be completed.";
   }
@@ -257,6 +261,7 @@ const ChatSession = ({
   const [selectedModel, setSelectedModel] = useState<ChatModel | null>(null);
   const [isPreparingTranscription, setIsPreparingTranscription] =
     useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
   const { data: connectorsData } = useQuery(connectorsQueryOptions());
   const connectorTokens = getConnectorTokens(connectorsData);
   const model = selectedModel ?? defaultModel;
@@ -346,8 +351,12 @@ const ChatSession = ({
     status,
     transcriptionPending: transcribeAudio.isPending,
   });
-  const disabled = sessionDisabled || approvals.length > 0;
-  const errorMessage = getChatErrorMessage(error, persistedLastMessage);
+  const disabled = sessionDisabled || approvals.length > 0 || isRetrying;
+  const errorMessage = getChatErrorMessage(
+    error,
+    persistedLastMessage,
+    isStreaming
+  );
 
   useEffect(() => {
     isCurrentSessionRef.current = true;
@@ -429,30 +438,38 @@ const ChatSession = ({
   };
 
   const retryLastTurn = async () => {
-    try {
-      const persistedChat = await rpc.chat.get({
-        chatId: threadId,
-        mailboxId,
-      });
-      const lastMessage = persistedChat.messages.at(-1);
-      if (
-        lastMessage?.role === "assistant" &&
-        lastMessage.status === "complete"
-      ) {
-        queryClient.setQueryData(
-          getChatQueryKey(mailboxId, threadId),
-          persistedChat
-        );
-        if (chatId === null && isCurrentSessionRef.current) {
-          onChatIdChange(threadId);
-        }
-        return;
-      }
-    } catch {
-      // Reload handles requests that failed before the chat was persisted.
+    if (isRetrying || isStreaming) {
+      return;
     }
-    await reload();
-    await synchronizeChat();
+    setIsRetrying(true);
+    try {
+      try {
+        const persistedChat = await rpc.chat.get({
+          chatId: threadId,
+          mailboxId,
+        });
+        const lastMessage = persistedChat.messages.at(-1);
+        if (
+          lastMessage?.role === "assistant" &&
+          lastMessage.status === "complete"
+        ) {
+          queryClient.setQueryData(
+            getChatQueryKey(mailboxId, threadId),
+            persistedChat
+          );
+          if (chatId === null && isCurrentSessionRef.current) {
+            onChatIdChange(threadId);
+          }
+          return;
+        }
+      } catch {
+        // Reload handles requests that failed before the chat was persisted.
+      }
+      await reload();
+      await synchronizeChat();
+    } finally {
+      setIsRetrying(false);
+    }
   };
 
   const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
@@ -591,6 +608,7 @@ const ChatSession = ({
             onRetry={() => {
               void retryLastTurn();
             }}
+            retrying={isRetrying}
             resuming={resuming}
           />
           <div className="shrink-0 px-4 pb-4 sm:px-6 lg:pb-6">{composer}</div>

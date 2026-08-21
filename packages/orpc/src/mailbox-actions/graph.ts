@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { connectorProviderSchema } from "../connectors/service";
+import { connectorProviderSchema } from "../connectors/contracts";
 import { hasText } from "../text";
 
 export const MAILBOX_ACTION_GRAPH_VERSION = 1 as const;

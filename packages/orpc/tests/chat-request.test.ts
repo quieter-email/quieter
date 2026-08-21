@@ -5,6 +5,7 @@ import { describe, expect, test } from "vite-plus/test";
 
 import {
   createChatTitle,
+  hasLinearConnectorMention,
   toCanonicalTranscript,
   validateChatRequest,
 } from "../src/chat/request";
@@ -29,6 +30,12 @@ const validParams = () => ({
 });
 
 describe("chat request validation", () => {
+  test("requires an explicit Linear mention before enabling Linear tools", () => {
+    expect(hasLinearConnectorMention("Create a Linear issue")).toBeFalsy();
+    expect(hasLinearConnectorMention("Create @Linear issue")).toBeTruthy();
+    expect(hasLinearConnectorMention("@Linearity is not Linear")).toBeFalsy();
+  });
+
   test("creates a compact first-message title", () => {
     expect(createChatTitle("  Summarize\n\nmy unread messages  ")).toBe(
       "Summarize my unread messages"

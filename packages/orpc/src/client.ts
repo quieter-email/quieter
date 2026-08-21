@@ -7,6 +7,7 @@ import type { AppRouter } from "./routers/index";
 
 type HeaderMap = Record<string, string>;
 type OrpcClientContext = Record<never, never>;
+type UrlSource = string | URL | (() => string | URL | Promise<string | URL>);
 
 export type { AppRouter } from "./routers/index";
 export type AppRouterClient = RouterClient<AppRouter, OrpcClientContext>;
@@ -14,7 +15,7 @@ export type RouterInputs = InferClientInputs<AppRouterClient>;
 export type RouterOutputs = InferClientOutputs<AppRouterClient>;
 
 export const createOrpcClient = (options?: {
-  url?: string | URL;
+  url?: UrlSource;
   headers?: HeaderMap | (() => HeaderMap | Promise<HeaderMap>);
 }): AppRouterClient => {
   const headers = options?.headers;

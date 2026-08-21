@@ -83,6 +83,7 @@ import { assertAccessibleMailbox } from "../mailbox/service";
 import { assertAiChatCredits } from "./access";
 import {
   createChatTitle,
+  hasLinearConnectorMention,
   toCanonicalTranscript,
   validateChatRequest,
 } from "./request";
@@ -1190,6 +1191,9 @@ export const createAiChatResponse = async (input: {
   }
   const { mailboxContextPrompt, messages, serializedAiContext } =
     preparedContext;
+  const linearRequested = hasLinearConnectorMention(
+    getLatestUserRequest(messages)
+  );
   const checkConnector = async (
     provider:
       | typeof GOOGLE_CALENDAR_CONNECTOR_PROVIDER
@@ -1204,7 +1208,9 @@ export const createAiChatResponse = async (input: {
   };
   const [hasGoogleCalendarConnector, hasLinearConnector] = await Promise.all([
     checkConnector(GOOGLE_CALENDAR_CONNECTOR_PROVIDER),
-    checkConnector(LINEAR_CONNECTOR_PROVIDER),
+    linearRequested
+      ? checkConnector(LINEAR_CONNECTOR_PROVIDER)
+      : Promise.resolve(false),
   ]);
   const abortController = new AbortController();
   const abortRequest = () => {

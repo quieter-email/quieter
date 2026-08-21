@@ -18,6 +18,10 @@ import {
 } from "../gmail-credential-crypto";
 import { runAuthorizedGmailMailbox } from "../gmail-mailbox-access";
 import { hasText } from "../text";
+import {
+  CONNECTOR_PROVIDERS,
+  GOOGLE_CALENDAR_CONNECTOR_PROVIDER,
+} from "./contracts";
 import { parseIcsToGoogleCalendarEvent } from "./ical";
 import type { GoogleCalendarEventDraft } from "./ical";
 import {
@@ -34,12 +38,11 @@ export {
   LINEAR_SCOPES,
 } from "./runtime";
 
-export const GOOGLE_CALENDAR_CONNECTOR_PROVIDER = "google_calendar" as const;
-export const CONNECTOR_PROVIDERS = [
+export {
+  CONNECTOR_PROVIDERS,
+  connectorProviderSchema,
   GOOGLE_CALENDAR_CONNECTOR_PROVIDER,
-  LINEAR_CONNECTOR_PROVIDER,
-] as const;
-export const connectorProviderSchema = z.enum(CONNECTOR_PROVIDERS);
+} from "./contracts";
 
 export type ConnectorConnectionStatus =
   | "connected"

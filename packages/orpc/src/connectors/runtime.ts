@@ -11,9 +11,15 @@ import {
   encryptGmailCredentialSecret,
 } from "../gmail-credential-crypto";
 import { hasText } from "../text";
+import {
+  GOOGLE_CALENDAR_CONNECTOR_PROVIDER,
+  LINEAR_CONNECTOR_PROVIDER,
+} from "./contracts";
 
-export const GOOGLE_CALENDAR_CONNECTOR_PROVIDER = "google_calendar" as const;
-export const LINEAR_CONNECTOR_PROVIDER = "linear" as const;
+export {
+  GOOGLE_CALENDAR_CONNECTOR_PROVIDER,
+  LINEAR_CONNECTOR_PROVIDER,
+} from "./contracts";
 const CONNECTOR_ACCESS_TOKEN_EXPIRY_BUFFER_MS = 60 * 1000;
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_CALENDAR_API_URL = "https://www.googleapis.com/calendar/v3";
