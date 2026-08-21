@@ -96,14 +96,14 @@ type InitialResumeSnapshot = NonNullable<
   Parameters<typeof useChat>[0]["initialResumeSnapshot"]
 >;
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
-
 const isPendingInterrupt = (
   value: unknown
 ): value is NonNullable<InitialResumeSnapshot["pendingInterrupts"]>[number] =>
-  isRecord(value) &&
+  typeof value === "object" &&
+  value !== null &&
+  "id" in value &&
   typeof value.id === "string" &&
+  "reason" in value &&
   typeof value.reason === "string";
 
 const toInitialResumeSnapshot = (
@@ -229,7 +229,6 @@ const PlanRequired = ({
 };
 
 // This component owns one chat client's transport, media, persistence, and composer state.
-// eslint-disable-next-line complexity
 const ChatSession = ({
   activeMailbox,
   canUseAiChat,

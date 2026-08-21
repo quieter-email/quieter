@@ -45,6 +45,14 @@ export default defineConfig({
     },
     overrides: [
       {
+        // Linear control flow reads better than artificial helper extraction;
+        // the complexity gate pushed code into worse shapes to satisfy a number.
+        files: ["**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}"],
+        rules: {
+          complexity: "off",
+        },
+      },
+      {
         files: ["apps/web/src/router.tsx", "apps/web/src/types/posthog.d.ts"],
         rules: {
           // These declarations augment existing module/global types and must merge.

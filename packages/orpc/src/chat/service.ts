@@ -1045,7 +1045,6 @@ const createUsageMiddleware = (input: {
 };
 
 // The request coordinates authorization, persistence, tool availability, and streaming in one boundary.
-// eslint-disable-next-line complexity
 export const createAiChatResponse = async (input: {
   params: {
     forwardedProps: Record<string, unknown>;
@@ -1240,58 +1239,77 @@ export const createAiChatResponse = async (input: {
       })
     );
   }
-  const stream = chat({
-    abortController,
-    adapter,
-    agentLoopStrategy: maxIterations(CHAT_MAX_ITERATIONS),
-    messages,
-    ...(hasLinearConnector
-      ? {
-          mcp: {
-            clients: [
-              createLinearMcpToolSource({
-                signal: abortController.signal,
-                userId: input.userId,
-              }),
-            ],
-          },
-        }
-      : {}),
-    middleware: [
-      createUsageMiddleware({
-        chatId: threadId,
-        mailboxId: forwardedProps.mailboxId,
-        model: forwardedProps.model,
-        userId: input.userId,
-      }),
-      persistenceMiddleware,
-    ],
-    modelOptions: {
-      maxCompletionTokens: CHAT_MAX_COMPLETION_TOKENS,
-      parallelToolCalls: true,
-      reasoning: { effort: "medium" },
-    },
-    ...(validated.kind === "resume"
-      ? {
-          parentRunId: validated.parentRunId,
-          resume: validated.resume,
-        }
-      : {}),
-    runId,
-    systemPrompts: [
-      gmailToolsPrompt,
-      ...(mailboxContextPrompt === null ? [] : [mailboxContextPrompt]),
-      ...(serializedAiContext === null
-        ? []
-        : [
-            `The following user-authored instructions and learned memory were loaded through Quieter's authorized AI context. Follow them unless they conflict with the current request, safety rules, or verified mailbox data.\n\n${serializedAiContext}`,
-          ]),
-      ...(hasGoogleCalendarConnector ? [googleCalendarToolsPrompt] : []),
-      ...(hasLinearConnector ? [linearToolsPrompt] : []),
-    ],
-    threadId,
-    tools,
-  });
+  let stream: AsyncIterable<StreamChunk>;
+  try {
+    stream = chat({
+      abortController,
+      adapter,
+      agentLoopStrategy: maxIterations(CHAT_MAX_ITERATIONS),
+      messages,
+      ...(hasLinearConnector
+        ? {
+            mcp: {
+              clients: [
+                createLinearMcpToolSource({
+                  signal: abortController.signal,
+                  userId: input.userId,
+                }),
+              ],
+            },
+          }
+        : {}),
+      middleware: [
+        createUsageMiddleware({
+          chatId: threadId,
+          mailboxId: forwardedProps.mailboxId,
+          model: forwardedProps.model,
+          userId: input.userId,
+        }),
+        persistenceMiddleware,
+      ],
+      modelOptions: {
+        maxCompletionTokens: CHAT_MAX_COMPLETION_TOKENS,
+        parallelToolCalls: true,
+        reasoning: { effort: "medium" },
+      },
+      ...(validated.kind === "resume"
+        ? {
+            parentRunId: validated.parentRunId,
+            resume: validated.resume,
+          }
+        : {}),
+      runId,
+      systemPrompts: [
+        gmailToolsPrompt,
+        ...(mailboxContextPrompt === null ? [] : [mailboxContextPrompt]),
+        ...(serializedAiContext === null
+          ? []
+          : [
+              `The following user-authored instructions and learned memory were loaded through Quieter's authorized AI context. Follow them unless they conflict with the current request, safety rules, or verified mailbox data.\n\n${serializedAiContext}`,
+            ]),
+        ...(hasGoogleCalendarConnector ? [googleCalendarToolsPrompt] : []),
+        ...(hasLinearConnector ? [linearToolsPrompt] : []),
+      ],
+      threadId,
+      tools,
+    });
+  } catch (error) {
+    // The turn is already persisted as streaming; a synchronous setup failure
+    // (for example an invalid interrupt resume payload) must terminalize it or
+    // the chat stays locked behind the one-streaming-per-chat constraint.
+    await settleAssistantMessage({
+      assistantMessageId,
+      chatId: threadId,
+      error: "The answer could not be started.",
+      generationId,
+      mailboxId: forwardedProps.mailboxId,
+      parts: currentParts,
+      ...(previousResume === null ? {} : { resume: previousResume }),
+      status: previousResume === null ? "failed" : "complete",
+      userId: input.userId,
+    });
+    throw error;
+  }
 
   return toServerSentEventsResponse(settleChatStreamBeforeTerminal(stream), {
     abortController,

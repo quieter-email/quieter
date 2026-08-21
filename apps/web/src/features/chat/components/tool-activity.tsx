@@ -18,7 +18,20 @@ import {
   Wrench01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { composeEmailInputSchema } from "@quieter/ai/chat-agent";
+import {
+  aiMemoryResultSchema,
+  composeEmailInputSchema,
+  composeEmailResultSchema,
+  gmailAttachmentResultSchema,
+  gmailLabelListResultSchema,
+  gmailMessageResultSchema,
+  gmailMessagesResultSchema,
+  gmailSearchResultSchema,
+  gmailThreadResultSchema,
+  googleCalendarCreateEventResultSchema,
+  mailboxOverviewResultSchema,
+} from "@quieter/ai/chat-agent";
+import type { MailboxOverviewResult } from "@quieter/ai/chat-agent";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import {
@@ -32,9 +45,7 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 
 import {
-  getString,
   humanizeToolName,
-  isRecord,
   parseToolArguments,
   parseToolResult,
 } from "../domain/chat-tools";
@@ -94,30 +105,30 @@ const truncate = (value: string, maxLength = 54) =>
 const getToolDetail = (name: string, args: Record<string, unknown>) => {
   switch (name) {
     case "compose_email": {
-      return getString(args, "subject");
+      return typeof args.subject === "string" ? args.subject : "";
     }
     case "create_google_calendar_event": {
-      return getString(args, "summary");
+      return typeof args.summary === "string" ? args.summary : "";
     }
     case "modify_mail": {
       return [
-        getString(args, "action").replaceAll("_", " "),
-        getString(args, "target"),
+        typeof args.action === "string" ? args.action.replaceAll("_", " ") : "",
+        typeof args.target === "string" ? args.target : "",
       ]
         .filter((value) => value !== "")
         .join(" ");
     }
     case "read_gmail_attachment": {
-      return getString(args, "attachmentId");
+      return typeof args.attachmentId === "string" ? args.attachmentId : "";
     }
     case "read_gmail_message": {
-      return getString(args, "messageId");
+      return typeof args.messageId === "string" ? args.messageId : "";
     }
     case "read_gmail_thread": {
-      return getString(args, "threadId");
+      return typeof args.threadId === "string" ? args.threadId : "";
     }
     case "search_gmail": {
-      return getString(args, "query");
+      return typeof args.query === "string" ? args.query : "";
     }
     default: {
       return "";
@@ -129,32 +140,47 @@ const getResultError = (result: ToolResult | undefined, data: unknown) => {
   if (result?.state === "error") {
     return result.error ?? "The tool could not finish.";
   }
-  return isRecord(data) &&
+  return typeof data === "object" &&
+    data !== null &&
+    !Array.isArray(data) &&
+    "status" in data &&
     data.status === "error" &&
+    "error" in data &&
     typeof data.error === "string"
     ? data.error
     : "";
 };
 
+const RawJson = ({ value }: { value: unknown }) => (
+  <pre className="max-h-64 overflow-auto text-caption whitespace-pre-wrap text-muted-fg">
+    {truncate(JSON.stringify(value, null, 2), 4000)}
+  </pre>
+);
+
 const ResultList = ({
+  category,
   items,
   onOpenMessage,
 }: {
-  items: unknown[];
+  category?: string;
+  items: {
+    category?: string;
+    from?: string;
+    id: string;
+    subject?: string;
+  }[];
   onOpenMessage: (category: string, messageId: string) => void;
 }) => (
   <div className="space-y-1">
-    {items.flatMap((item) => {
-      if (!isRecord(item)) {
-        return [];
-      }
-      const id = getString(item, "id");
-      const subject = getString(item, "subject") || "(No subject)";
-      const from = getString(item, "from");
-      const category = getString(item, "category");
+    {items.map((item) => {
+      const itemCategory = item.category ?? category ?? "";
+      const from = item.from ?? "";
+      const subject = item.subject ?? "";
       const row = (
         <span className="flex min-w-0 flex-1 items-baseline gap-2">
-          <span className="min-w-0 flex-1 truncate text-fg/85">{subject}</span>
+          <span className="min-w-0 flex-1 truncate text-fg/85">
+            {subject === "" ? "(No subject)" : subject}
+          </span>
           {from === "" ? null : (
             <span className="max-w-40 shrink-0 truncate text-muted-fg">
               {from}
@@ -162,29 +188,30 @@ const ResultList = ({
           )}
         </span>
       );
-      return [
-        id !== "" && category !== "" ? (
-          <button
-            className="flex w-full rounded-sm py-1 text-left text-caption transition-colors hover:text-fg"
-            key={id}
-            onClick={() => {
-              onOpenMessage(category, id);
-            }}
-            type="button"
-          >
-            {row}
-          </button>
-        ) : (
-          <div className="flex py-1 text-caption" key={id || subject}>
-            {row}
-          </div>
-        ),
-      ];
+      return itemCategory === "" ? (
+        <div className="flex py-1 text-caption" key={item.id}>
+          {row}
+        </div>
+      ) : (
+        <button
+          className="flex w-full rounded-sm py-1 text-left text-caption transition-colors hover:text-fg"
+          key={item.id}
+          onClick={() => {
+            onOpenMessage(itemCategory, item.id);
+          }}
+          type="button"
+        >
+          {row}
+        </button>
+      );
     })}
   </div>
 );
 
-const OverviewResult = ({ data }: { data: Record<string, unknown> }) => {
+const OverviewResult = ({ data }: { data: MailboxOverviewResult }) => {
+  if (data.status !== "success") {
+    return null;
+  }
   const entries = [
     ["Messages", data.totalMessages],
     ["Threads", data.totalThreads],
@@ -205,7 +232,6 @@ const OverviewResult = ({ data }: { data: Record<string, unknown> }) => {
 };
 
 // Tool payloads intentionally share one compact renderer with specialized branches.
-// eslint-disable-next-line complexity
 const ToolResultContent = ({
   data,
   name,
@@ -215,125 +241,157 @@ const ToolResultContent = ({
   name: string;
   onOpenMessage: (category: string, messageId: string) => void;
 }): ReactNode => {
-  if (!isRecord(data)) {
+  if (typeof data !== "object" || data === null || Array.isArray(data)) {
     return data === null || data === undefined ? null : (
-      <pre className="max-h-64 overflow-auto text-caption whitespace-pre-wrap text-muted-fg">
-        {truncate(JSON.stringify(data), 4000)}
-      </pre>
+      <RawJson value={data} />
     );
   }
+
   if (name === "get_mailbox_overview") {
-    return <OverviewResult data={data} />;
+    const parsed = mailboxOverviewResultSchema.safeParse(data);
+    return parsed.success ? <OverviewResult data={parsed.data} /> : null;
   }
-  if (name === "search_gmail" || name === "read_gmail_messages") {
+
+  if (name === "search_gmail") {
+    const parsed = gmailSearchResultSchema.safeParse(data);
+    if (!parsed.success || parsed.data.status !== "success") {
+      return null;
+    }
     return (
       <ResultList
-        items={Array.isArray(data.messages) ? data.messages : []}
-        onOpenMessage={(category, messageId) => {
-          onOpenMessage(category || getString(data, "category"), messageId);
-        }}
+        category={parsed.data.category}
+        items={parsed.data.messages}
+        onOpenMessage={onOpenMessage}
       />
     );
   }
+
+  if (name === "read_gmail_messages") {
+    const parsed = gmailMessagesResultSchema.safeParse(data);
+    if (!parsed.success || parsed.data.status !== "success") {
+      return null;
+    }
+    return (
+      <ResultList items={parsed.data.messages} onOpenMessage={onOpenMessage} />
+    );
+  }
+
   if (name === "read_gmail_thread") {
+    const parsed = gmailThreadResultSchema.safeParse(data);
+    if (!parsed.success || parsed.data.status !== "success") {
+      return null;
+    }
+    const subject = parsed.data.subject ?? "";
     return (
       <div className="space-y-3">
         <p className="text-body font-medium">
-          {getString(data, "subject") || "(No subject)"}
+          {subject === "" ? "(No subject)" : subject}
         </p>
-        {(Array.isArray(data.messages) ? data.messages : []).flatMap(
-          (message) =>
-            isRecord(message)
-              ? [
-                  <div
-                    className="border-l border-border pl-3"
-                    key={getString(message, "id")}
-                  >
-                    <p className="truncate text-caption text-muted-fg">
-                      {getString(message, "from") || "Unknown sender"}
-                    </p>
-                    <p className="mt-1 line-clamp-5 text-caption/relaxed whitespace-pre-wrap text-fg/80">
-                      {getString(message, "body") ||
-                        getString(message, "snippet") ||
-                        "(No content)"}
-                    </p>
-                  </div>,
-                ]
-              : []
-        )}
+        {parsed.data.messages.map((message) => {
+          const from = message.from ?? "";
+          const content = message.body === "" ? message.snippet : message.body;
+          return (
+            <div className="border-l border-border pl-3" key={message.id}>
+              <p className="truncate text-caption text-muted-fg">
+                {from === "" ? "Unknown sender" : from}
+              </p>
+              <p className="mt-1 line-clamp-5 text-caption/relaxed whitespace-pre-wrap text-fg/80">
+                {content === undefined || content === ""
+                  ? "(No content)"
+                  : content}
+              </p>
+            </div>
+          );
+        })}
       </div>
     );
   }
+
   if (name === "read_gmail_message") {
-    const id = getString(data, "id");
-    const category = getString(data, "category");
+    const parsed = gmailMessageResultSchema.safeParse(data);
+    if (!parsed.success || parsed.data.status !== "success") {
+      return null;
+    }
+    const { body, category, from, id, snippet, subject } = parsed.data;
+    const content = body === "" ? snippet : body;
     return (
       <button
         className="block w-full text-left"
-        disabled={id === "" || category === ""}
         onClick={() => {
           onOpenMessage(category, id);
         }}
         type="button"
       >
         <p className="text-body font-medium">
-          {getString(data, "subject") || "(No subject)"}
+          {subject === undefined || subject === "" ? "(No subject)" : subject}
         </p>
-        <p className="mt-1 text-caption text-muted-fg">
-          {getString(data, "from")}
-        </p>
+        <p className="mt-1 text-caption text-muted-fg">{from}</p>
         <p className="mt-2 line-clamp-8 text-caption/relaxed whitespace-pre-wrap text-fg/80">
-          {getString(data, "body") ||
-            getString(data, "snippet") ||
-            "(No content)"}
+          {content === undefined || content === "" ? "(No content)" : content}
         </p>
       </button>
     );
   }
+
   if (name === "read_gmail_attachment") {
+    const parsed = gmailAttachmentResultSchema.safeParse(data);
+    if (!parsed.success || parsed.data.status !== "success") {
+      return null;
+    }
     return (
       <div>
-        <p className="text-caption font-medium">
-          {getString(data, "fileName")}
-        </p>
+        <p className="text-caption font-medium">{parsed.data.fileName}</p>
         <pre className="mt-2 max-h-64 overflow-auto text-caption/relaxed whitespace-pre-wrap text-muted-fg">
-          {truncate(getString(data, "content"), 4000)}
+          {truncate(parsed.data.content, 4000)}
         </pre>
       </div>
     );
   }
+
   if (name === "list_gmail_labels") {
+    const parsed = gmailLabelListResultSchema.safeParse(data);
+    if (!parsed.success || parsed.data.status !== "success") {
+      return null;
+    }
     return (
       <div className="flex flex-wrap gap-1.5">
-        {(Array.isArray(data.labels) ? data.labels : []).flatMap((label) =>
-          isRecord(label)
-            ? [
-                <span
-                  className="rounded-md bg-muted px-2 py-1 text-micro text-muted-fg"
-                  key={getString(label, "id")}
-                >
-                  {getString(label, "name")}
-                </span>,
-              ]
-            : []
-        )}
+        {parsed.data.labels.map((label) => (
+          <span
+            className="rounded-md bg-muted px-2 py-1 text-micro text-muted-fg"
+            key={label.id}
+          >
+            {label.name}
+          </span>
+        ))}
       </div>
     );
   }
-  const answer = getString(data, "answer");
-  if (name === "memory" && answer !== "") {
+
+  if (name === "memory") {
+    const parsed = aiMemoryResultSchema.safeParse(data);
+    if (
+      !parsed.success ||
+      parsed.data.answer === undefined ||
+      parsed.data.answer === ""
+    ) {
+      return null;
+    }
     return (
       <p className="text-caption/relaxed whitespace-pre-wrap text-muted-fg">
-        {answer}
+        {parsed.data.answer}
       </p>
     );
   }
-  const link = getString(data, "htmlLink");
-  if (name === "create_google_calendar_event" && link !== "") {
-    return (
+
+  if (name === "create_google_calendar_event") {
+    const parsed = googleCalendarCreateEventResultSchema.safeParse(data);
+    if (!parsed.success || parsed.data.status !== "success") {
+      return null;
+    }
+    return parsed.data.htmlLink === undefined ? null : (
       <a
         className="text-link text-caption hover:underline"
-        href={link}
+        href={parsed.data.htmlLink}
         rel="noreferrer"
         target="_blank"
       >
@@ -341,11 +399,30 @@ const ToolResultContent = ({
       </a>
     );
   }
-  return (
-    <pre className="max-h-64 overflow-auto text-caption whitespace-pre-wrap text-muted-fg">
-      {truncate(JSON.stringify(data, null, 2), 4000)}
-    </pre>
-  );
+
+  if (name === "compose_email") {
+    const parsed = composeEmailResultSchema.safeParse(data);
+    if (!parsed.success) {
+      return null;
+    }
+    if (parsed.data.status === "sent") {
+      return (
+        <p className="text-caption/relaxed text-muted-fg">
+          Sent to {parsed.data.to}
+        </p>
+      );
+    }
+    if (parsed.data.status === "draft_saved") {
+      return (
+        <p className="text-caption/relaxed text-muted-fg">
+          Draft saved to {parsed.data.to}
+        </p>
+      );
+    }
+    return <p className="text-caption/relaxed text-muted-fg">Declined</p>;
+  }
+
+  return <RawJson value={data} />;
 };
 
 const GenericApproval = ({
@@ -358,9 +435,7 @@ const GenericApproval = ({
   disabled: boolean;
 }) => (
   <div className="space-y-3">
-    <pre className="max-h-56 overflow-auto text-caption whitespace-pre-wrap text-muted-fg">
-      {truncate(JSON.stringify(args, null, 2), 4000)}
-    </pre>
+    <RawJson value={args} />
     <div className="flex justify-end gap-2">
       <Button
         disabled={disabled}
@@ -402,8 +477,6 @@ const getToolLabel = (input: {
   return labels?.complete ?? humanizeToolName(input.name);
 };
 
-// State, approval, specialized details, and disclosure all converge in this row.
-// eslint-disable-next-line complexity
 export const ToolActivity = ({
   approval,
   call,
@@ -419,7 +492,7 @@ export const ToolActivity = ({
 }) => {
   const navigate = useNavigate({ from: "/" });
   const args = parseToolArguments(call.input ?? call.arguments);
-  const data = parseToolResult(call.name, result?.content);
+  const data = parseToolResult(result?.content);
   const error = getResultError(result, data);
   const awaitingApproval = approval !== undefined && result === undefined;
   const pending = result === undefined && !awaitingApproval && isStreaming;

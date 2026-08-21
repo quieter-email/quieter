@@ -134,9 +134,6 @@ export const validateChatRequest = (params: {
   };
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
-
 const toolCallStates = new Set([
   "approval-requested",
   "approval-responded",
@@ -148,6 +145,12 @@ const toolCallStates = new Set([
 ]);
 
 const toolResultStates = new Set(["complete", "error", "streaming"]);
+
+const storedToolApprovalSchema = z.object({
+  approved: z.boolean().optional(),
+  id: z.string().min(1),
+  needsApproval: z.boolean(),
+});
 
 type ToolCallPart = Extract<MessagePart, { type: "tool-call" }>;
 type ToolResultPart = Extract<MessagePart, { type: "tool-result" }>;
@@ -167,18 +170,10 @@ const toToolCallPart = (part: ChatMessagePart): ToolCallPart | null => {
   ) {
     return null;
   }
-  const approval = isRecord(part.approval)
-    ? {
-        ...(typeof part.approval.approved === "boolean"
-          ? { approved: part.approval.approved }
-          : {}),
-        id: typeof part.approval.id === "string" ? part.approval.id : "",
-        needsApproval: part.approval.needsApproval === true,
-      }
-    : undefined;
+  const approval = storedToolApprovalSchema.safeParse(part.approval);
   return {
     arguments: part.arguments,
-    ...(approval !== undefined && approval.id !== "" ? { approval } : {}),
+    ...(approval.success ? { approval: approval.data } : {}),
     id: part.id,
     ...(part.input === undefined ? {} : { input: part.input }),
     name: part.name,

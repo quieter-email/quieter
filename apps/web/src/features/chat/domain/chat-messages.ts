@@ -1,9 +1,17 @@
+import type { ChatMessagePart } from "@quieter/database/schema";
 import type { RouterOutputs } from "@quieter/orpc";
 import type { MessagePart } from "@tanstack/ai";
 import type { UIMessage } from "@tanstack/ai-react";
 import type { AnyClientTool } from "@tanstack/ai/client";
+import { z } from "zod";
 
 type StoredMessage = RouterOutputs["chat"]["get"]["messages"][number];
+
+const storedToolApprovalSchema = z.object({
+  approved: z.boolean().optional(),
+  id: z.string().min(1),
+  needsApproval: z.boolean(),
+});
 
 type ToolCallState = Extract<MessagePart, { type: "tool-call" }>["state"];
 type ToolResultState = Extract<MessagePart, { type: "tool-result" }>["state"];
@@ -20,63 +28,47 @@ const isToolCallState = (value: unknown): value is ToolCallState =>
 const isToolResultState = (value: unknown): value is ToolResultState =>
   value === "streaming" || value === "complete" || value === "error";
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
-
 // Every supported native part has a distinct runtime shape at this storage boundary.
-// eslint-disable-next-line complexity
-const toMessagePart = (value: unknown): MessagePart | null => {
-  if (!isRecord(value) || typeof value.type !== "string") {
-    return null;
+const toMessagePart = (part: ChatMessagePart): MessagePart | null => {
+  if (part.type === "text" && typeof part.content === "string") {
+    return { content: part.content, type: "text" };
   }
 
-  if (value.type === "text" && typeof value.content === "string") {
-    return { content: value.content, type: "text" };
-  }
-
-  if (value.type === "thinking" && typeof value.content === "string") {
-    return { content: value.content, type: "thinking" };
+  if (part.type === "thinking" && typeof part.content === "string") {
+    return { content: part.content, type: "thinking" };
   }
 
   if (
-    value.type === "tool-call" &&
-    typeof value.id === "string" &&
-    typeof value.name === "string" &&
-    typeof value.arguments === "string" &&
-    isToolCallState(value.state)
+    part.type === "tool-call" &&
+    typeof part.id === "string" &&
+    typeof part.name === "string" &&
+    typeof part.arguments === "string" &&
+    isToolCallState(part.state)
   ) {
-    const approval = isRecord(value.approval)
-      ? {
-          ...(typeof value.approval.approved === "boolean"
-            ? { approved: value.approval.approved }
-            : {}),
-          id: typeof value.approval.id === "string" ? value.approval.id : "",
-          needsApproval: value.approval.needsApproval === true,
-        }
-      : undefined;
+    const approval = storedToolApprovalSchema.safeParse(part.approval);
     return {
-      arguments: value.arguments,
-      ...(approval !== undefined && approval.id !== "" ? { approval } : {}),
-      id: value.id,
-      ...(value.input === undefined ? {} : { input: value.input }),
-      name: value.name,
-      ...(value.output === undefined ? {} : { output: value.output }),
-      state: value.state,
+      arguments: part.arguments,
+      ...(approval.success ? { approval: approval.data } : {}),
+      id: part.id,
+      ...(part.input === undefined ? {} : { input: part.input }),
+      name: part.name,
+      ...(part.output === undefined ? {} : { output: part.output }),
+      state: part.state,
       type: "tool-call",
     };
   }
 
   if (
-    value.type === "tool-result" &&
-    typeof value.toolCallId === "string" &&
-    typeof value.content === "string" &&
-    isToolResultState(value.state)
+    part.type === "tool-result" &&
+    typeof part.toolCallId === "string" &&
+    typeof part.content === "string" &&
+    isToolResultState(part.state)
   ) {
     return {
-      content: value.content,
-      ...(typeof value.error === "string" ? { error: value.error } : {}),
-      state: value.state,
-      toolCallId: value.toolCallId,
+      content: part.content,
+      ...(typeof part.error === "string" ? { error: part.error } : {}),
+      state: part.state,
+      toolCallId: part.toolCallId,
       type: "tool-result",
     };
   }
