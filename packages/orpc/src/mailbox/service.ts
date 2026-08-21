@@ -1083,7 +1083,7 @@ export const completeGmailOAuth = async (input: {
 }) => {
   // Only this browser callback reads a session. Importing the session helper at module
   // scope pulls better-auth and its Kysely adapter into every handler that touches a
-  // mailbox, including the chat generation worker, which authenticates with a token.
+  // mailbox, including background workers that authenticate without a browser session.
   const { getSessionWithOrganization } = await import("@quieter/auth/session");
   const session = await getSessionWithOrganization(input.headers);
   if (session?.user === undefined || session.session === undefined) {

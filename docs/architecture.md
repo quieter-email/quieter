@@ -121,13 +121,12 @@ Outbound:
 
 Chats are mailbox-scoped.
 
-1. `chat.sendMessage` persists the user message, a run record, and a draft assistant row.
-2. The server starts generation in-process or through the SST queue/workflow.
-3. The browser opens the observation-only run SSE endpoint, which combines same-process events with database-backed rejoin polling.
-4. Server-side generation streams draft events and atomically persists debounced drafts, independent of browser connection lifetime.
-5. Cancellation immediately terminalizes the persisted run and draft, aborts a local controller when present, and remains visible to remote workers through the persisted cancel state.
+1. TanStack AI `useChat` sends one authenticated AG-UI request to `POST /api/chat`.
+2. The server authorizes the mailbox-scoped thread, persists the user message, and loads canonical history from PostgreSQL.
+3. TanStack AI runs the model with read-only Gmail tools and streams its native SSE protocol directly to the browser.
+4. Successful completion persists one assistant message. Cancelling the browser request aborts the model request and does not create a successful assistant row.
 
-Historical chat state is loaded once through `chat.get`; the browser does not poll for generated tokens or own generation lifetime.
+Historical chat state is loaded through `chat.get`. The application does not maintain a second run protocol, stream hub, replay worker, or client-side stream processor. A streaming assistant message reserves the active turn and is finalized as complete, failed, or cancelled; transcript queries refresh only while such a message is active.
 
 ## Consent and Observability
 
@@ -158,7 +157,7 @@ The root [`sst.config.ts`](../sst.config.ts) owns only app-wide SST settings and
 - `secrets.ts` declares stage-aware `sst.Secret` resources and Cloudflare secret bindings.
 - `database.ts` owns the Cloudflare Hyperdrive binding.
 - `web.ts` owns the TanStack Start Worker and its common bindings.
-- `chat.ts` and `actions.ts` own chat generation and mailbox-action resources.
+- `actions.ts` owns mailbox-action resources; chat generation runs in the web request through TanStack AI.
 - `mail.ts` owns SES receipt storage, processing, ingress, and send permissions.
 - `gmail.ts` owns Gmail live-sync and Pub/Sub resources across AWS and Cloudflare.
 - `app.ts` is the small stage-aware composition entry point; `types.ts` contains shared infra boundary types.

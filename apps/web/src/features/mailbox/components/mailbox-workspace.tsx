@@ -437,7 +437,7 @@ const useMailboxWorkspaceActions = ({
   setMailboxSearch: SetMailboxSearch;
   view: MailboxWorkspaceView;
 }) => {
-  const [draftChatVersion, setDraftChatVersion] = useState(0);
+  const [draftChatKey, setDraftChatKey] = useState(() => crypto.randomUUID());
   const chatViewLeftAtRef = useRef<number | null>(null);
   const [gmailReconnectError, setGmailReconnectError] = useState<string | null>(
     null
@@ -484,7 +484,7 @@ const useMailboxWorkspaceActions = ({
         leftAt !== null && performance.now() - leftAt > 5 * 60 * 1000;
       const nextChatId = isStale ? null : (chatId ?? chats[0]?.id);
       if (isStale) {
-        setDraftChatVersion((version) => version + 1);
+        setDraftChatKey(crypto.randomUUID());
       }
       void setMailboxSearch({
         chatId: nextChatId ?? null,
@@ -548,7 +548,7 @@ const useMailboxWorkspaceActions = ({
   };
 
   const createChat = () => {
-    setDraftChatVersion((version) => version + 1);
+    setDraftChatKey(crypto.randomUUID());
     void setMailboxSearch({
       chatId: null,
       mailboxId: selectedMailboxId,
@@ -579,6 +579,9 @@ const useMailboxWorkspaceActions = ({
     const nextMailboxProvider = mailboxes.find(
       (availableMailbox) => availableMailbox.id === nextMailboxId
     )?.provider;
+    if (view === "chat") {
+      setDraftChatKey(crypto.randomUUID());
+    }
     void setMailboxSearch({
       chatId:
         view === "chat" || nextMailboxProvider === "api" ? null : undefined,
@@ -611,7 +614,7 @@ const useMailboxWorkspaceActions = ({
     connectGmail,
     createChat,
     createComposeDraft,
-    draftChatVersion,
+    draftChatKey,
     gmailReconnectError,
     isStartingGmailConnection,
     manageTemplates,
@@ -745,7 +748,7 @@ type MailboxWorkspaceBodyProps = Omit<
   | "signature"
 > & {
   activeMailbox: MailboxCategory;
-  draftChatVersion: number;
+  draftChatKey: string;
   isTemplateMailbox: boolean;
   messageId: string | undefined;
   query: string;
@@ -759,7 +762,7 @@ type MailboxWorkspaceBodyProps = Omit<
 
 const MailboxWorkspaceBody = ({
   activeMailbox,
-  draftChatVersion,
+  draftChatKey,
   isComposeMailbox,
   isManagedDemoMode,
   isTemplateMailbox,
@@ -791,7 +794,7 @@ const MailboxWorkspaceBody = ({
             }
           : undefined
       }
-      draftChatKey={`new-chat-${draftChatVersion}`}
+      draftChatKey={draftChatKey}
       isComposeMailbox={isComposeMailbox}
       isManagedDemoMode={isManagedDemoMode}
       persistComposeDrafts={
@@ -931,7 +934,7 @@ export const MailboxWorkspace = ({ user: _user }: MailboxWorkspaceProps) => {
     connectGmail,
     createChat,
     createComposeDraft,
-    draftChatVersion,
+    draftChatKey,
     gmailReconnectError,
     isStartingGmailConnection,
     manageTemplates,
@@ -961,7 +964,7 @@ export const MailboxWorkspace = ({ user: _user }: MailboxWorkspaceProps) => {
       isDemoMode={isDemoMode}
       isManagedDemoMode={isManagedDemoMode}
       chats={chats}
-      draftChatVersion={draftChatVersion}
+      draftChatKey={draftChatKey}
       isTemplateMailbox={isTemplateMailbox}
       layoutState={{ isMobileSidebarOpen }}
       mailboxGroups={mailboxGroups}

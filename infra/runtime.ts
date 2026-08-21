@@ -114,16 +114,4 @@ export const createDeploymentContext = (secretResources: SecretResources) => {
   };
 };
 
-export const requireWorkerUrl = (
-  url: $util.Output<string | undefined>,
-  resourceName: string
-) =>
-  url.apply((value) => {
-    if (value === undefined || value === "") {
-      throw new Error(`${resourceName} did not expose a URL`);
-    }
-
-    return value;
-  });
-
 export type DeploymentContext = ReturnType<typeof createDeploymentContext>;

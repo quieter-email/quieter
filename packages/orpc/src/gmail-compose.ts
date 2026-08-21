@@ -21,6 +21,32 @@ import { hasText } from "./text";
 type ComposeDraftInput = z.infer<typeof composeDraftInputSchema>;
 type ComposeMessageInput = z.infer<typeof composeMessageInputSchema>;
 
+export type ChatComposeMessage = {
+  bcc: string;
+  bodyText: string;
+  cc: string;
+  subject: string;
+  to: string;
+};
+
+export const toChatComposeInput = (
+  message: ChatComposeMessage
+): ComposeMessageInput => ({
+  attachments: [],
+  bodyHtml: "",
+  bodyText: message.bodyText,
+  inlineImages: [],
+  localId: crypto.randomUUID(),
+  recipients: {
+    bcc: message.bcc,
+    cc: message.cc,
+    to: message.to,
+  },
+  saveStatus: "saved",
+  subject: message.subject,
+  updatedAt: Date.now(),
+});
+
 export const saveGmailDraft = async (
   accessToken: string,
   draft: ComposeDraftInput,

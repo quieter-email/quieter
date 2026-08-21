@@ -66,7 +66,7 @@ bun run dev
 
 On PowerShell, use `Copy-Item .env.example .env.local`.
 
-`bun run dev` starts the local Worker as one native foreground Vite process. Chat generation, automation, and mailbox actions run in that process, so Ctrl+C stops the complete local runtime. Database migrations are an explicit schema operation rather than a side effect of starting the server. Developers use loopback PostgreSQL or an exactly allowlisted disposable Neon branch, CI uses a temporary PostgreSQL service, and production credentials remain in protected deployment secrets. See [Development](docs/development.md) for provider setup, process isolation, and the explicit remote-infrastructure commands.
+`bun run dev` starts the local Worker as one native foreground Vite process. Chat requests, automation, and mailbox actions run in that process, so Ctrl+C stops the complete local runtime. Database migrations are an explicit schema operation rather than a side effect of starting the server. Developers use loopback PostgreSQL or an exactly allowlisted disposable Neon branch, CI uses a temporary PostgreSQL service, and production credentials remain in protected deployment secrets. See [Development](docs/development.md) for provider setup, process isolation, and the explicit remote-infrastructure commands.
 
 ## Common Commands
 

@@ -1,0 +1,1 @@
+ALTER TABLE "chatMessage" ADD COLUMN "resume" jsonb;

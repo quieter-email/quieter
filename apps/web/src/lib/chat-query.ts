@@ -25,12 +25,6 @@ export const chatsQueryOptions = (mailboxId: string | null) =>
     queryKey: hasText(mailboxId)
       ? getChatsQueryKey(mailboxId)
       : disabledChatsQueryKey,
-    // Sidebar generating dots only; live tokens come from the run SSE, not list polling.
-    refetchInterval: (query) =>
-      query.state.data?.some((chat) => chat.isGenerating) === true
-        ? 10_000
-        : false,
-    refetchIntervalInBackground: false,
   });
 
 export const chatQueryOptions = (mailboxId: string, chatId: string | null) =>
@@ -44,4 +38,6 @@ export const chatQueryOptions = (mailboxId: string, chatId: string | null) =>
       return await rpc.chat.get({ chatId, mailboxId }, { signal });
     },
     queryKey: getChatQueryKey(mailboxId, chatId),
+    refetchInterval: (query) =>
+      query.state.data?.messages.at(-1)?.status === "streaming" ? 1000 : false,
   });

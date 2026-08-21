@@ -258,14 +258,6 @@ export default defineConfig({
         },
       },
       {
-        // This promise is an abortable browser timer used to pace reconnects;
-        // wrapping the timer is the behavior under test, not a new data flow.
-        files: ["apps/web/src/features/chat/hooks/use-chat-run-stream.ts"],
-        rules: {
-          "promise/avoid-new": "off",
-        },
-      },
-      {
         // React.Children.toArray intentionally normalizes opaque children for
         // the slot signature before the transition state is reconciled.
         files: ["apps/web/src/components/vertical-slot.tsx"],

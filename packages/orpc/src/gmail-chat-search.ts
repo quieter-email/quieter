@@ -67,7 +67,7 @@ type GmailChatRequest = {
   userId: string;
 };
 
-const runAuthorizedGmailChatRequest = async <T>(
+export const runAuthorizedGmailChatRequest = async <T>(
   input: GmailChatRequest,
   request: (accessToken: string) => Promise<T>
 ) => {

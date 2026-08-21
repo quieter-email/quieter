@@ -256,6 +256,10 @@ export const mailboxOverviewResultSchema = z.discriminatedUnion("status", [
 export type MailboxOverviewResult = z.infer<typeof mailboxOverviewResultSchema>;
 
 export const composeEmailInputSchema = z.object({
+  action: z.enum(["send", "save_draft"]).default("send").meta({
+    description:
+      "Delivery action selected by the user in the approval composer. Propose send by default.",
+  }),
   bcc: z.string().default("").meta({
     description: "Bcc recipients as a comma-separated email address list.",
   }),
@@ -493,6 +497,7 @@ export const modifyMailToolDef = toolDefinition({
     }),
   }),
   name: "modify_mail",
+  needsApproval: true,
   outputSchema: modifyMailResultSchema,
 });
 
@@ -566,18 +571,14 @@ export const googleCalendarCreateEventToolDef = toolDefinition({
   description: "Create an event on the user's connected Google Calendar.",
   inputSchema: googleCalendarCreateEventInputSchema,
   name: "create_google_calendar_event",
+  needsApproval: true,
   outputSchema: googleCalendarCreateEventResultSchema,
 });
 
-export type GmailToolsContext = {
+export type GmailReadOnlyToolsContext = {
   category: MailboxCategory;
   getMailboxOverview: () => Promise<MailboxOverviewResult>;
   listGmailLabels: () => Promise<GmailLabelListResult>;
-  modifyMail: (input: {
-    action: (typeof modifyMailActions)[number];
-    id: string;
-    target: "message" | "thread";
-  }) => Promise<ModifyMailResult>;
   readGmailAttachment: (input: {
     attachmentId: string;
     messageId: string;
@@ -596,10 +597,22 @@ export type GmailToolsContext = {
   }) => Promise<GmailSearchResult>;
 };
 
+export type GmailToolsContext = GmailReadOnlyToolsContext & {
+  modifyMail: (input: {
+    action: (typeof modifyMailActions)[number];
+    id: string;
+    target: "message" | "thread";
+  }) => Promise<ModifyMailResult>;
+};
+
 export type GoogleCalendarToolsContext = {
   createGoogleCalendarEvent: (
     input: GoogleCalendarCreateEventInput
   ) => Promise<GoogleCalendarCreateEventResult>;
+};
+
+export type ComposeEmailToolsContext = {
+  composeEmail: (input: ComposeEmailInput) => Promise<ComposeEmailResult>;
 };
 
 export type AiMemoryResult = {
@@ -625,6 +638,7 @@ export const aiMemoryToolDef = toolDefinition({
     }),
   }),
   name: "memory",
+  needsApproval: true,
   outputSchema: aiMemoryResultSchema,
 });
 
@@ -671,7 +685,7 @@ const getMailboxToolErrorMessage = (
 };
 
 export const createGmailSearchServerTool = (
-  context: GmailToolsContext
+  context: GmailReadOnlyToolsContext
 ): AnyTool =>
   gmailSearchToolDef.server(async ({ query, maxResults, pageToken }) => {
     try {
@@ -698,7 +712,7 @@ export const createGmailSearchServerTool = (
   });
 
 export const createGmailMessagesServerTool = (
-  context: GmailToolsContext
+  context: GmailReadOnlyToolsContext
 ): AnyTool =>
   gmailMessagesToolDef.server(async ({ messageIds }) => {
     try {
@@ -716,7 +730,7 @@ export const createGmailMessagesServerTool = (
   });
 
 export const createGmailAttachmentServerTool = (
-  context: GmailToolsContext
+  context: GmailReadOnlyToolsContext
 ): AnyTool =>
   gmailAttachmentToolDef.server(async ({ attachmentId, messageId }) => {
     try {
@@ -736,7 +750,7 @@ export const createGmailAttachmentServerTool = (
   });
 
 export const createGmailThreadServerTool = (
-  context: GmailToolsContext
+  context: GmailReadOnlyToolsContext
 ): AnyTool =>
   gmailThreadToolDef.server(async ({ threadId }) => {
     try {
@@ -756,7 +770,7 @@ export const createGmailThreadServerTool = (
   });
 
 export const createMailboxOverviewServerTool = (
-  context: GmailToolsContext
+  context: GmailReadOnlyToolsContext
 ): AnyTool =>
   mailboxOverviewToolDef.server(async () => {
     try {
@@ -775,7 +789,7 @@ export const createMailboxOverviewServerTool = (
   });
 
 export const createGmailMessageServerTool = (
-  context: GmailToolsContext
+  context: GmailReadOnlyToolsContext
 ): AnyTool =>
   gmailMessageToolDef.server(async ({ messageId }) => {
     try {
@@ -795,7 +809,7 @@ export const createGmailMessageServerTool = (
   });
 
 export const createGmailLabelListServerTool = (
-  context: GmailToolsContext
+  context: GmailReadOnlyToolsContext
 ): AnyTool =>
   gmailLabelListToolDef.server(async () => {
     try {
@@ -834,6 +848,14 @@ export const createModifyMailServerTool = (
       };
     }
   });
+
+export const createComposeEmailServerTool = (
+  context: ComposeEmailToolsContext
+): AnyTool =>
+  composeEmailToolDef.server(
+    async (input) =>
+      await context.composeEmail(composeEmailInputSchema.parse(input))
+  );
 
 export const createGoogleCalendarEventServerTool = (
   context: GoogleCalendarToolsContext

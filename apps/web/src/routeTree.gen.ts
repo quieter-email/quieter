@@ -20,6 +20,7 @@ import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SitePasswordRouteImport } from './routes/site-password'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as ApiOpenapiRouteImport } from './routes/api/openapi'
 import { Route as ApiPreviewPersonaRouteImport } from './routes/api/preview-persona'
 import { Route as ApiSitePasswordRouteImport } from './routes/api/site-password'
@@ -34,7 +35,6 @@ import { Route as ApiV1SuppressionsRouteImport } from './routes/api/v1/suppressi
 import { Route as ApiDomainConnectTemplatesServiceIdRouteImport } from './routes/api/domain-connect.templates.$serviceId'
 import { Route as ApiInternalGmailCredentialsRotateRouteImport } from './routes/api.internal.gmail-credentials.rotate'
 import { Route as ApiV1MessagesMessageIdRouteImport } from './routes/api/v1/messages.$messageId'
-import { Route as ApiChatRunsRunIdStreamRouteImport } from './routes/api/chat.runs.$runId.stream'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -89,6 +89,11 @@ const SitePasswordRoute = SitePasswordRouteImport.update({
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiChatRoute = ApiChatRouteImport.update({
+  id: '/api/chat',
+  path: '/api/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiOpenapiRoute = ApiOpenapiRouteImport.update({
@@ -164,11 +169,6 @@ const ApiV1MessagesMessageIdRoute = ApiV1MessagesMessageIdRouteImport.update({
   path: '/api/v1/messages/$messageId',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiChatRunsRunIdStreamRoute = ApiChatRunsRunIdStreamRouteImport.update({
-  id: '/api/chat/runs/$runId/stream',
-  path: '/api/chat/runs/$runId/stream',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -182,6 +182,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/site-password': typeof SitePasswordRoute
   '/terms': typeof TermsRoute
+  '/api/chat': typeof ApiChatRoute
   '/api/openapi': typeof ApiOpenapiRoute
   '/api/preview-persona': typeof ApiPreviewPersonaRoute
   '/api/site-password': typeof ApiSitePasswordRoute
@@ -196,7 +197,6 @@ export interface FileRoutesByFullPath {
   '/api/domain-connect/templates/$serviceId': typeof ApiDomainConnectTemplatesServiceIdRoute
   '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
   '/api/v1/messages/$messageId': typeof ApiV1MessagesMessageIdRoute
-  '/api/chat/runs/$runId/stream': typeof ApiChatRunsRunIdStreamRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -210,6 +210,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/site-password': typeof SitePasswordRoute
   '/terms': typeof TermsRoute
+  '/api/chat': typeof ApiChatRoute
   '/api/openapi': typeof ApiOpenapiRoute
   '/api/preview-persona': typeof ApiPreviewPersonaRoute
   '/api/site-password': typeof ApiSitePasswordRoute
@@ -224,7 +225,6 @@ export interface FileRoutesByTo {
   '/api/domain-connect/templates/$serviceId': typeof ApiDomainConnectTemplatesServiceIdRoute
   '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
   '/api/v1/messages/$messageId': typeof ApiV1MessagesMessageIdRoute
-  '/api/chat/runs/$runId/stream': typeof ApiChatRunsRunIdStreamRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -239,6 +239,7 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/site-password': typeof SitePasswordRoute
   '/terms': typeof TermsRoute
+  '/api/chat': typeof ApiChatRoute
   '/api/openapi': typeof ApiOpenapiRoute
   '/api/preview-persona': typeof ApiPreviewPersonaRoute
   '/api/site-password': typeof ApiSitePasswordRoute
@@ -253,7 +254,6 @@ export interface FileRoutesById {
   '/api/domain-connect/templates/$serviceId': typeof ApiDomainConnectTemplatesServiceIdRoute
   '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
   '/api/v1/messages/$messageId': typeof ApiV1MessagesMessageIdRoute
-  '/api/chat/runs/$runId/stream': typeof ApiChatRunsRunIdStreamRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -269,6 +269,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/site-password'
     | '/terms'
+    | '/api/chat'
     | '/api/openapi'
     | '/api/preview-persona'
     | '/api/site-password'
@@ -283,7 +284,6 @@ export interface FileRouteTypes {
     | '/api/domain-connect/templates/$serviceId'
     | '/api/internal/gmail-credentials/rotate'
     | '/api/v1/messages/$messageId'
-    | '/api/chat/runs/$runId/stream'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -297,6 +297,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/site-password'
     | '/terms'
+    | '/api/chat'
     | '/api/openapi'
     | '/api/preview-persona'
     | '/api/site-password'
@@ -311,7 +312,6 @@ export interface FileRouteTypes {
     | '/api/domain-connect/templates/$serviceId'
     | '/api/internal/gmail-credentials/rotate'
     | '/api/v1/messages/$messageId'
-    | '/api/chat/runs/$runId/stream'
   id:
     | '__root__'
     | '/'
@@ -325,6 +325,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/site-password'
     | '/terms'
+    | '/api/chat'
     | '/api/openapi'
     | '/api/preview-persona'
     | '/api/site-password'
@@ -339,7 +340,6 @@ export interface FileRouteTypes {
     | '/api/domain-connect/templates/$serviceId'
     | '/api/internal/gmail-credentials/rotate'
     | '/api/v1/messages/$messageId'
-    | '/api/chat/runs/$runId/stream'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -354,6 +354,7 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   SitePasswordRoute: typeof SitePasswordRoute
   TermsRoute: typeof TermsRoute
+  ApiChatRoute: typeof ApiChatRoute
   ApiOpenapiRoute: typeof ApiOpenapiRoute
   ApiPreviewPersonaRoute: typeof ApiPreviewPersonaRoute
   ApiSitePasswordRoute: typeof ApiSitePasswordRoute
@@ -368,7 +369,6 @@ export interface RootRouteChildren {
   ApiDomainConnectTemplatesServiceIdRoute: typeof ApiDomainConnectTemplatesServiceIdRoute
   ApiInternalGmailCredentialsRotateRoute: typeof ApiInternalGmailCredentialsRotateRoute
   ApiV1MessagesMessageIdRoute: typeof ApiV1MessagesMessageIdRoute
-  ApiChatRunsRunIdStreamRoute: typeof ApiChatRunsRunIdStreamRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -448,6 +448,13 @@ declare module '@tanstack/react-router' {
       path: '/terms'
       fullPath: '/terms'
       preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/chat': {
+      id: '/api/chat'
+      path: '/api/chat'
+      fullPath: '/api/chat'
+      preLoaderRoute: typeof ApiChatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/openapi': {
@@ -548,13 +555,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1MessagesMessageIdRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/chat/runs/$runId/stream': {
-      id: '/api/chat/runs/$runId/stream'
-      path: '/api/chat/runs/$runId/stream'
-      fullPath: '/api/chat/runs/$runId/stream'
-      preLoaderRoute: typeof ApiChatRunsRunIdStreamRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
@@ -570,6 +570,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   SitePasswordRoute: SitePasswordRoute,
   TermsRoute: TermsRoute,
+  ApiChatRoute: ApiChatRoute,
   ApiOpenapiRoute: ApiOpenapiRoute,
   ApiPreviewPersonaRoute: ApiPreviewPersonaRoute,
   ApiSitePasswordRoute: ApiSitePasswordRoute,
@@ -586,7 +587,6 @@ const rootRouteChildren: RootRouteChildren = {
   ApiInternalGmailCredentialsRotateRoute:
     ApiInternalGmailCredentialsRotateRoute,
   ApiV1MessagesMessageIdRoute: ApiV1MessagesMessageIdRoute,
-  ApiChatRunsRunIdStreamRoute: ApiChatRunsRunIdStreamRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -1,10 +1,9 @@
 import { createMailboxActionResources } from "./actions";
-import { createChatResources } from "./chat";
 import { createAppDatabase } from "./database";
 import { createGmailResources } from "./gmail";
 import { createMailResources, mailReceiptRuleSetName } from "./mail";
-import { createDeploymentContext, requireWorkerUrl } from "./runtime";
-import { requireSecretResource, selectSecretBindings } from "./secrets";
+import { createDeploymentContext } from "./runtime";
+import { requireSecretResource } from "./secrets";
 import type { SecretBindings, SecretResources } from "./types";
 import { createWeb } from "./web";
 
@@ -19,25 +18,6 @@ export const createInfrastructure = async (input: {
   const webSecretBindings = Object.values(secretBindings);
 
   const context = createDeploymentContext(secretResources);
-  const chat = createChatResources(
-    context,
-    secretResources,
-    selectSecretBindings(secretBindings, [
-      "CONNECTOR_TOKEN_ENCRYPTION_KEY",
-      "GMAIL_TOKEN_ENCRYPTION_KEY",
-      "GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT",
-      "GOOGLE_CALENDAR_CLIENT_ID",
-      "GOOGLE_CALENDAR_CLIENT_SECRET",
-      "GOOGLE_GMAIL_CLIENT_ID",
-      "GOOGLE_GMAIL_CLIENT_SECRET",
-      "LINEAR_CLIENT_ID",
-      "LINEAR_CLIENT_SECRET",
-      "OPENROUTER_API_KEY",
-      "POLAR_ACCESS_TOKEN",
-      "SENTRY_DSN",
-    ]),
-    appDatabase
-  );
   const actions = createMailboxActionResources(context);
   const gmail = createGmailResources(context, secretResources);
   const mail = await createMailResources(context, secretResources);
@@ -45,10 +25,6 @@ export const createInfrastructure = async (input: {
     appDatabase,
     webSecretBindings,
     {
-      CHAT_GENERATION_START_URL: requireWorkerUrl(
-        chat.chatGenerationWorker.url,
-        "ChatGenerationWorker"
-      ),
       GMAIL_LIVE_SYNC_URL: gmail.gmailLiveSyncUrl,
       MAILBOX_ACTION_QUEUE_URL: actions.mailboxActionQueue.url,
       MAIL_BUCKET: mail.mailBucket.name,
@@ -70,11 +46,6 @@ export const createInfrastructure = async (input: {
   );
 
   return {
-    chatGenerationStartTokenSecretName: requireSecretResource(
-      secretResources,
-      "CHAT_GENERATION_START_TOKEN"
-    ).name,
-    chatGenerationWorkerUrl: chat.chatGenerationWorker.url,
     gmailLiveSyncTokenSecretName: requireSecretResource(
       secretResources,
       "GMAIL_LIVE_SYNC_TOKEN_SECRET"

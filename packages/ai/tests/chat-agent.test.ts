@@ -4,12 +4,12 @@ import {
   createGmailSearchServerTool,
   gmailSearchToolDef,
 } from "../src/chat-agent";
-import type { GmailToolsContext } from "../src/chat-agent";
+import type { GmailReadOnlyToolsContext } from "../src/chat-agent";
 import { OPENROUTER_TRANSCRIPTION_MODEL } from "../src/transcription-format";
 
 describe("chat tools", () => {
   test("accepts and drops an empty first-page search token", async () => {
-    const searchGmail = vi.fn<GmailToolsContext["searchGmail"]>(
+    const searchGmail = vi.fn<GmailReadOnlyToolsContext["searchGmail"]>(
       async () =>
         await Promise.resolve({
           category: "inbox",
@@ -32,13 +32,15 @@ describe("chat tools", () => {
 
     const tool = createGmailSearchServerTool({
       category: "inbox",
-      getMailboxOverview: vi.fn<GmailToolsContext["getMailboxOverview"]>(),
-      listGmailLabels: vi.fn<GmailToolsContext["listGmailLabels"]>(),
-      modifyMail: vi.fn<GmailToolsContext["modifyMail"]>(),
-      readGmailAttachment: vi.fn<GmailToolsContext["readGmailAttachment"]>(),
-      readGmailMessage: vi.fn<GmailToolsContext["readGmailMessage"]>(),
-      readGmailMessages: vi.fn<GmailToolsContext["readGmailMessages"]>(),
-      readGmailThread: vi.fn<GmailToolsContext["readGmailThread"]>(),
+      getMailboxOverview:
+        vi.fn<GmailReadOnlyToolsContext["getMailboxOverview"]>(),
+      listGmailLabels: vi.fn<GmailReadOnlyToolsContext["listGmailLabels"]>(),
+      readGmailAttachment:
+        vi.fn<GmailReadOnlyToolsContext["readGmailAttachment"]>(),
+      readGmailMessage: vi.fn<GmailReadOnlyToolsContext["readGmailMessage"]>(),
+      readGmailMessages:
+        vi.fn<GmailReadOnlyToolsContext["readGmailMessages"]>(),
+      readGmailThread: vi.fn<GmailReadOnlyToolsContext["readGmailThread"]>(),
       searchGmail,
     });
 
