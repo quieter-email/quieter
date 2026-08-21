@@ -16,6 +16,11 @@ const contextSchema = z
   .strict();
 
 const CHAT_TITLE_LENGTH = 60;
+const LINEAR_MENTION_PATTERN =
+  /(?:^|[^\p{L}\p{N}_])@linear(?:$|[^\p{L}\p{N}_])/iu;
+
+export const hasLinearConnectorMention = (text: string) =>
+  LINEAR_MENTION_PATTERN.test(text);
 
 export const createChatTitle = (prompt: string) => {
   const normalized = prompt.trim().replaceAll(/\s+/gu, " ");

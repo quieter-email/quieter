@@ -2,14 +2,14 @@ import type { RouterClient } from "@orpc/server";
 import { createTanstackQueryUtils } from "@orpc/tanstack-query";
 import type { AppRouter } from "@quieter/orpc";
 import { createOrpcClient } from "@quieter/orpc";
-import { createOrpcServerClient } from "@quieter/orpc/server-client";
 import { createIsomorphicFn } from "@tanstack/react-start";
-import { getRequestHeaders } from "@tanstack/react-start/server";
+import { getRequest, getRequestHeaders } from "@tanstack/react-start/server";
 
 const getOrpcClient = createIsomorphicFn()
   .server(() =>
-    createOrpcServerClient({
-      headers: () => getRequestHeaders(),
+    createOrpcClient({
+      headers: () => Object.fromEntries(getRequestHeaders()),
+      url: () => new URL("/api/orpc", getRequest().url),
     })
   )
   .client((): RouterClient<AppRouter> =>

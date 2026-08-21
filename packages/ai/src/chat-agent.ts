@@ -131,11 +131,42 @@ Use create_google_calendar_event only when the user clearly asks to create or sc
 
 The tool creates events on the user's primary Google Calendar. Do not claim an event was created unless the tool returns success.`;
 
-export const linearToolsPrompt = `Linear is connected for this user, and its tools are whatever that workspace exposes.
+export const linearToolsPrompt = `Linear is an optional connector. Never call a Linear tool unless the user's latest request explicitly includes @Linear.
 
-Look up teams, labels, workflow states and projects before creating or changing anything, so ids come from the workspace rather than from a guess.
+When @Linear is requested, call linear_list_tools first. It discovers the tools available in that workspace and connects only when that tool is executed. Then use linear_read for tools whose names start with get_, list_, or search_, and linear_write for every other tool. linear_write requires user approval.
 
-Changing the workspace needs the user's approval, so make the intent of a change clear before asking for it, and only when the user asked for that outcome. Do not claim anything was created or changed unless the tool reported success.`;
+Look up teams, labels, workflow states and projects before creating or changing anything, so ids come from the workspace rather than from a guess. Do not claim anything was created or changed unless the tool reported success.`;
+
+const linearToolCallInputSchema = z.object({
+  arguments: z.record(z.string(), z.unknown()).default({}).meta({
+    description: "Arguments for the discovered Linear tool.",
+  }),
+  toolName: z.string().trim().min(1).max(256).meta({
+    description: "The exact tool name returned by linear_list_tools.",
+  }),
+});
+
+export const linearListToolsToolDef = toolDefinition({
+  description:
+    "Discover the tools available in the connected Linear workspace. Use only after the user explicitly mentions @Linear, and use this before any other Linear tool.",
+  inputSchema: z.object({}),
+  name: "linear_list_tools",
+});
+
+export const linearReadToolDef = toolDefinition({
+  description:
+    "Call a read-only Linear tool returned by linear_list_tools. Use this only for tool names beginning with get_, list_, or search_.",
+  inputSchema: linearToolCallInputSchema,
+  name: "linear_read",
+});
+
+export const linearWriteToolDef = toolDefinition({
+  description:
+    "Call a mutating Linear tool returned by linear_list_tools. Use this for tool names that do not begin with get_, list_, or search_. The user must approve the change.",
+  inputSchema: linearToolCallInputSchema,
+  name: "linear_write",
+  needsApproval: true,
+});
 
 const toolErrorSchema = z.object({
   error: z.string(),

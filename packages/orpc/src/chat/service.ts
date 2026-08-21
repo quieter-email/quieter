@@ -56,12 +56,10 @@ import {
   requestAiMemoryUpdate,
   serializeAiAgentContext,
 } from "../ai-memory";
-import { createLinearMcpToolSource } from "../connectors/linear-mcp";
 import {
   createGoogleCalendarEventForUser,
   GOOGLE_CALENDAR_CONNECTOR_PROVIDER,
   hasConnectedConnector,
-  LINEAR_CONNECTOR_PROVIDER,
 } from "../connectors/runtime";
 import {
   getMailboxOverviewForUser,
@@ -81,6 +79,7 @@ import {
 } from "../gmail-compose";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import { assertAiChatCredits } from "./access";
+import { createLinearChatTools } from "./linear-tools";
 import {
   createChatTitle,
   toCanonicalTranscript,
@@ -1190,10 +1189,9 @@ export const createAiChatResponse = async (input: {
   }
   const { mailboxContextPrompt, messages, serializedAiContext } =
     preparedContext;
+  const latestUserRequest = getLatestUserRequest(messages);
   const checkConnector = async (
-    provider:
-      | typeof GOOGLE_CALENDAR_CONNECTOR_PROVIDER
-      | typeof LINEAR_CONNECTOR_PROVIDER
+    provider: typeof GOOGLE_CALENDAR_CONNECTOR_PROVIDER
   ) => {
     try {
       return await hasConnectedConnector({ provider, userId: input.userId });
@@ -1202,10 +1200,9 @@ export const createAiChatResponse = async (input: {
       return false;
     }
   };
-  const [hasGoogleCalendarConnector, hasLinearConnector] = await Promise.all([
-    checkConnector(GOOGLE_CALENDAR_CONNECTOR_PROVIDER),
-    checkConnector(LINEAR_CONNECTOR_PROVIDER),
-  ]);
+  const hasGoogleCalendarConnector = await checkConnector(
+    GOOGLE_CALENDAR_CONNECTOR_PROVIDER
+  );
   const abortController = new AbortController();
   const abortRequest = () => {
     abortController.abort(input.request.signal.reason);
@@ -1299,8 +1296,13 @@ export const createAiChatResponse = async (input: {
       userId: input.userId,
     }),
     createMemoryTool({
-      latestUserRequest: getLatestUserRequest(messages),
+      latestUserRequest,
       mailboxId: forwardedProps.mailboxId,
+      userId: input.userId,
+    }),
+    ...createLinearChatTools({
+      latestUserRequest,
+      signal: abortController.signal,
       userId: input.userId,
     }),
   ];
@@ -1319,18 +1321,6 @@ export const createAiChatResponse = async (input: {
       adapter,
       agentLoopStrategy: maxIterations(CHAT_MAX_ITERATIONS),
       messages,
-      ...(hasLinearConnector
-        ? {
-            mcp: {
-              clients: [
-                createLinearMcpToolSource({
-                  signal: abortController.signal,
-                  userId: input.userId,
-                }),
-              ],
-            },
-          }
-        : {}),
       middleware: [
         createUsageMiddleware({
           chatId: threadId,
@@ -1361,7 +1351,7 @@ export const createAiChatResponse = async (input: {
               `The following user-authored instructions and learned memory were loaded through Quieter's authorized AI context. Follow them unless they conflict with the current request, safety rules, or verified mailbox data.\n\n${serializedAiContext}`,
             ]),
         ...(hasGoogleCalendarConnector ? [googleCalendarToolsPrompt] : []),
-        ...(hasLinearConnector ? [linearToolsPrompt] : []),
+        linearToolsPrompt,
       ],
       threadId,
       tools,

@@ -18,6 +18,7 @@ type ChatTranscriptProps = {
   isStreaming: boolean;
   messages: UIMessage[];
   onRetry: () => void;
+  retrying: boolean;
   resuming: boolean;
 };
 
@@ -29,6 +30,7 @@ export const ChatTranscript = ({
   isStreaming,
   messages,
   onRetry,
+  retrying,
   resuming,
 }: ChatTranscriptProps) => {
   const shouldReduceMotion = useReducedMotion();
@@ -130,8 +132,14 @@ export const ChatTranscript = ({
               role="alert"
             >
               <span>{errorMessage}</span>
-              <Button onClick={onRetry} size="sm" type="button" variant="ghost">
-                Try again
+              <Button
+                disabled={retrying}
+                onClick={onRetry}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                {retrying ? "Retrying…" : "Try again"}
               </Button>
             </div>
           ) : null}
