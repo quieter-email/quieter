@@ -1,5 +1,6 @@
 "use client";
 
+import { cn } from "@quieter/ui/cn";
 import type { ComponentPropsWithoutRef } from "react";
 import { Remark } from "react-remark";
 
@@ -23,9 +24,9 @@ export const MarkdownContent = ({
   markdown,
 }: MarkdownContentProps) => (
   <div
-    className={`typeset typeset-docs max-w-none ${
-      isStreaming === true ? "streaming-cursor" : ""
-    }`}
+    className={cn("typeset typeset-docs max-w-[37em]", {
+      "streaming-cursor": isStreaming,
+    })}
   >
     <Remark rehypeReactOptions={{ components: { a: markdownLink } }}>
       {markdown}

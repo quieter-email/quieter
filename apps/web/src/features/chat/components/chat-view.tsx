@@ -365,6 +365,17 @@ const ChatSession = ({
     appliedChatRevisionRef.current = revision;
   }, [chatData, isStreaming, setMessages]);
 
+  // Another tab or device may be generating into this chat. This observer adds
+  // polling only while a persisted stream exists and this client is idle; it
+  // shares the cache entry above, so no duplicate requests are created.
+  useQuery({
+    ...chatQueryOptions(mailboxId, chatId),
+    refetchInterval: (query) =>
+      isStreaming || query.state.data?.messages.at(-1)?.status !== "streaming"
+        ? false
+        : 1000,
+  });
+
   const synchronizeChat = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: USER_BILLING_QUERY_KEY }),

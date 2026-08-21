@@ -38,6 +38,4 @@ export const chatQueryOptions = (mailboxId: string, chatId: string | null) =>
       return await rpc.chat.get({ chatId, mailboxId }, { signal });
     },
     queryKey: getChatQueryKey(mailboxId, chatId),
-    refetchInterval: (query) =>
-      query.state.data?.messages.at(-1)?.status === "streaming" ? 1000 : false,
   });

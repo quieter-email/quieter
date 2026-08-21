@@ -21,11 +21,9 @@ import type {
   GmailToolsContext,
   GoogleCalendarToolsContext,
 } from "@quieter/ai/chat-agent";
+import { CHAT_TITLE_MODEL } from "@quieter/ai/chat-models";
 import { createOpenRouterAdapter } from "@quieter/ai/openrouter";
 import { reportAiUsage } from "@quieter/billing";
-import { getBillingCreditUsage } from "@quieter/billing/credits";
-import { hasUserBillingFeature } from "@quieter/billing/entitlements";
-import { BILLING_FEATURES } from "@quieter/billing/plans";
 import { db } from "@quieter/database/client";
 import { chat as chatTable, chatMessage } from "@quieter/database/schema";
 import type {
@@ -82,6 +80,7 @@ import {
   toChatComposeInput,
 } from "../gmail-compose";
 import { assertAccessibleMailbox } from "../mailbox/service";
+import { assertAiChatCredits } from "./access";
 import {
   createChatTitle,
   toCanonicalTranscript,
@@ -144,26 +143,16 @@ const assertCanUseAiCredits = async (input: {
   organizationId: string;
   userId: string;
 }) => {
-  const entitlement = await hasUserBillingFeature({
-    feature: "aiChat",
-    organizationId: input.organizationId,
-    userId: input.userId,
-  });
-  if (!entitlement.hasAccess) {
-    throw new ChatRequestError(
-      403,
-      `AI chat requires ${BILLING_FEATURES.aiChat.requirementLabel}.`
-    );
-  }
-  if (entitlement.hasUnlimitedAccess || !entitlement.account) {
-    return;
-  }
-  const usage = await getBillingCreditUsage(entitlement.account);
-  if (usage.costMicroCents >= usage.creditAmountMicroCents) {
-    throw new ChatRequestError(
-      403,
-      "AI chat requires available usage balance."
-    );
+  try {
+    await assertAiChatCredits({
+      organizationId: input.organizationId,
+      userId: input.userId,
+    });
+  } catch (error) {
+    if (error instanceof ORPCError && error.status < 500) {
+      throw new ChatRequestError(error.status, error.message, { cause: error });
+    }
+    throw error;
   }
 };
 
@@ -613,7 +602,11 @@ const startChatTurn = async (input: {
               .update(chatTable)
               .set({ updatedAt: now })
               .where(eq(chatTable.id, input.chatId));
-            return { assistantMessageId: assistantMessage.id, generationId };
+            return {
+              assistantMessageId: assistantMessage.id,
+              createdChat: false,
+              generationId,
+            };
           }
           if (assistantMessage?.status === "streaming") {
             throw new ChatRequestError(
@@ -692,9 +685,72 @@ const startChatTurn = async (input: {
             eq(chatTable.userId, input.userId)
           )
         );
-      return { assistantMessageId, generationId };
+      return {
+        assistantMessageId,
+        createdChat: existingChat === undefined,
+        generationId,
+      };
     })
     .catch(toConflict);
+
+// The model title replaces the truncated fallback only while the user has not
+// renamed the chat, and runs in the background so it never delays streaming.
+const generateChatTitleInBackground = (input: {
+  chatId: string;
+  fallbackTitle: string;
+  mailboxId: string;
+  prompt: string;
+  userId: string;
+}) => {
+  void (async () => {
+    try {
+      const { generateChatTitle } =
+        await import("@quieter/ai/generate-chat-title");
+      const title = await generateChatTitle({
+        middleware: [
+          {
+            name: "polar-ai-chat-title-usage",
+            onUsage: (usageContext, usage) => {
+              usageContext.defer(
+                reportAiUsage({
+                  chatId: input.chatId,
+                  completionTokens: usage.completionTokens,
+                  costUsd: usage.cost,
+                  externalId: `chat-title:${input.chatId}`,
+                  mailboxId: input.mailboxId,
+                  model: CHAT_TITLE_MODEL,
+                  promptTokens: usage.promptTokens,
+                  promptTokensDetails: usage.promptTokensDetails,
+                  usageKind: "aiChat",
+                  userId: input.userId,
+                }).catch((error: unknown) => {
+                  reportError(error, { operation: "chat:report-title-usage" });
+                })
+              );
+            },
+          },
+        ],
+        prompt: input.prompt,
+      });
+      if (title === "") {
+        return;
+      }
+      // Only replace the fallback while the user has not renamed the chat.
+      await db
+        .update(chatTable)
+        .set({ title })
+        .where(
+          and(
+            eq(chatTable.id, input.chatId),
+            eq(chatTable.title, input.fallbackTitle),
+            eq(chatTable.userId, input.userId)
+          )
+        );
+    } catch (error: unknown) {
+      reportError(error, { operation: "chat:generate-title" });
+    }
+  })();
+};
 
 const resumeChatTurn = async (input: {
   chatId: string;
@@ -801,6 +857,7 @@ const beginChatTurn = async (input: {
   });
   return {
     assistantMessageId: resumed.assistantMessageId,
+    createdChat: false,
     generationId: resumed.generationId,
     previousResume: resumed.resume,
     resumedAssistant: resumed.resumedAssistant,
@@ -1089,8 +1146,22 @@ export const createAiChatResponse = async (input: {
     userId: input.userId,
   });
   const adapter = createOpenRouterAdapter(forwardedProps.model);
-  const { assistantMessageId, generationId, previousResume, resumedAssistant } =
-    await beginChatTurn({ request: validated, userId: input.userId });
+  const {
+    assistantMessageId,
+    createdChat,
+    generationId,
+    previousResume,
+    resumedAssistant,
+  } = await beginChatTurn({ request: validated, userId: input.userId });
+  if (validated.kind === "message" && createdChat) {
+    generateChatTitleInBackground({
+      chatId: threadId,
+      fallbackTitle: createChatTitle(validated.userMessage.text),
+      mailboxId: forwardedProps.mailboxId,
+      prompt: validated.userMessage.text,
+      userId: input.userId,
+    });
+  }
   let currentParts = resumedAssistant?.parts ?? [];
   let preparedContext: Awaited<ReturnType<typeof prepareChatContext>>;
   try {

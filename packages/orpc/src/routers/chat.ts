@@ -4,9 +4,6 @@ import {
   openRouterAudioFormatSchema,
 } from "@quieter/ai/transcription-format";
 import { reportAiUsage } from "@quieter/billing";
-import { getBillingCreditUsage } from "@quieter/billing/credits";
-import { hasUserBillingFeature } from "@quieter/billing/entitlements";
-import { BILLING_FEATURES } from "@quieter/billing/plans";
 import { db } from "@quieter/database/client";
 import { chat, chatMessage } from "@quieter/database/schema";
 import { reportError } from "@quieter/observability";
@@ -14,6 +11,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { loadAiAgentContext, serializeAiAgentContext } from "../ai-memory";
+import { assertAiChatCredits } from "../chat/access";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import { mailboxIdSchema, protectedProcedure } from "./base";
 
@@ -60,25 +58,6 @@ const getAuthorizedChat = async (
     findAuthorizedChat(chatId, mailboxId, userId),
   ]);
   return authorizedChat;
-};
-
-const assertCanUseAiCredits = async (
-  entitlement: Awaited<ReturnType<typeof hasUserBillingFeature>>
-) => {
-  if (!entitlement.hasAccess) {
-    throw new ORPCError("FORBIDDEN", {
-      message: `AI chat requires ${BILLING_FEATURES.aiChat.requirementLabel}.`,
-    });
-  }
-  if (entitlement.hasUnlimitedAccess || !entitlement.account) {
-    return;
-  }
-  const usage = await getBillingCreditUsage(entitlement.account);
-  if (usage.costMicroCents >= usage.creditAmountMicroCents) {
-    throw new ORPCError("FORBIDDEN", {
-      message: "AI chat requires available usage balance.",
-    });
-  }
 };
 
 export const chatRouter = {
@@ -196,12 +175,10 @@ export const chatRouter = {
         mailboxId: input.mailboxId,
         userId: context.userId,
       });
-      const entitlement = await hasUserBillingFeature({
-        feature: "aiChat",
+      await assertAiChatCredits({
         organizationId: accessibleMailbox.organizationId ?? undefined,
         userId: context.userId,
       });
-      await assertCanUseAiCredits(entitlement);
       if (input.chatId !== undefined) {
         await findAuthorizedChat(input.chatId, input.mailboxId, context.userId);
       }

@@ -466,8 +466,9 @@ const getToolLabel = (input: {
   awaitingApproval: boolean;
   name: string;
   pending: boolean;
+  staleApproval: boolean;
 }) => {
-  if (input.awaitingApproval) {
+  if (input.awaitingApproval || input.staleApproval) {
     return `Approve ${humanizeToolName(input.name).toLowerCase()}`;
   }
   const labels = toolLabels[input.name];
@@ -495,6 +496,12 @@ export const ToolActivity = ({
   const data = parseToolResult(result?.content);
   const error = getResultError(result, data);
   const awaitingApproval = approval !== undefined && result === undefined;
+  // A persisted approval that lost its live interrupt (for example an unload
+  // before the resume snapshot was saved) can no longer be resolved here.
+  const staleApproval =
+    approval === undefined &&
+    result === undefined &&
+    call.state === "approval-requested";
   const pending = result === undefined && !awaitingApproval && isStreaming;
   const shouldExpand = awaitingApproval || pending || error !== "";
   const [manuallyOpen, setManuallyOpen] = useState(false);
@@ -503,6 +510,7 @@ export const ToolActivity = ({
     awaitingApproval,
     name: call.name,
     pending,
+    staleApproval,
   });
   const detail = getToolDetail(call.name, args);
   const actionsDisabled =
@@ -536,6 +544,8 @@ export const ToolActivity = ({
         disabled={actionsDisabled}
       />
     );
+  } else if (staleApproval) {
+    content = <RawJson value={args} />;
   } else {
     content = (
       <ToolResultContent
