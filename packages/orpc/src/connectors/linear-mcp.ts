@@ -255,6 +255,31 @@ export const runLinearMcpToolCallsForCredential = async (input: {
   return await runLinearMcpToolCalls({ ...input, accessToken });
 };
 
+export const listLinearMcpToolsForUser = async (input: {
+  signal?: AbortSignal;
+  userId: string;
+}): Promise<LinearMcpToolDescriptor[]> => {
+  const accessToken = await getLinearAccessTokenForUser(input);
+  return await withLinearMcpClient(
+    { accessToken, signal: input.signal },
+    async (client) => {
+      const tools = await client.tools();
+      return tools.map(toDescriptor);
+    }
+  );
+};
+
+export const runLinearMcpToolCallsForUser = async (input: {
+  calls: LinearMcpToolCallInput[];
+  maxCalls?: number;
+  maxOutputBytes?: number;
+  signal?: AbortSignal;
+  userId: string;
+}): Promise<LinearMcpToolCallResult[]> => {
+  const accessToken = await getLinearAccessTokenForUser(input);
+  return await runLinearMcpToolCalls({ ...input, accessToken });
+};
+
 /**
  * Expose the user's Linear workspace to chat as a tool source.
  *
