@@ -74,7 +74,6 @@ export const ChatMessage = ({
       textOrdinal += 1;
       renderedParts.push(
         <MarkdownContent
-          isStreaming={isStreaming}
           key={`${message.id}:text:${textOrdinal}`}
           markdown={part.content}
         />
