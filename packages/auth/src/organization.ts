@@ -167,9 +167,6 @@ const createManagedMailObjectClient = async (input: {
   provider: RawMailObjectProvider;
 }) => {
   const region = serverEnv.AWS_REGION ?? serverEnv.AWS_DEFAULT_REGION;
-  if (input.provider === "s3" && !hasText(region)) {
-    throw new Error("Managed mail cleanup is temporarily unavailable.");
-  }
 
   const { DeleteObjectCommand, S3Client } = await import("@aws-sdk/client-s3");
   let endpoint = serverEnv.R2_ENDPOINT;
@@ -198,9 +195,13 @@ const createManagedMailObjectClient = async (input: {
     };
   }
 
+  if (!hasText(region)) {
+    throw new Error("Managed mail cleanup is temporarily unavailable.");
+  }
+
   return {
     DeleteObjectCommand,
-    client: new S3Client({ region: region ?? "us-east-1" }),
+    client: new S3Client({ region }),
   };
 };
 
