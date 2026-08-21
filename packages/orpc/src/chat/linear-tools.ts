@@ -9,10 +9,15 @@ import {
   listLinearMcpToolsForUser,
   runLinearMcpToolCallsForUser,
 } from "../connectors/linear-mcp";
-import { hasLinearConnectorMention } from "./request";
 
 const LINEAR_REQUEST_REQUIRED_ERROR =
   "Linear tools require an explicit @Linear request.";
+
+const LINEAR_MENTION_PATTERN =
+  /(?:^|[^\p{L}\p{N}_])@linear(?:$|[^\p{L}\p{N}_])/iu;
+
+export const hasLinearConnectorMention = (text: string) =>
+  LINEAR_MENTION_PATTERN.test(text);
 
 const linearListToolsResultSchema = z.union([
   z.object({ error: z.string(), status: z.literal("error") }),

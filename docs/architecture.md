@@ -119,16 +119,15 @@ Outbound:
 
 ## Chat
 
-Chats are mailbox-scoped.
+Chats are mailbox-scoped. There is no cross-request resumability: each POST carries one turn, and a turn that is aborted or fails leaves no assistant row behind.
 
 1. The AI SDK `useChat` hook posts to `POST /api/chat`, sending the mailbox context, selected model, and only the newest client message.
 2. The server authorizes the mailbox-scoped thread, persists the user message, and rebuilds the canonical transcript from PostgreSQL; client-sent history is never trusted.
 3. The AI SDK runs the model with Gmail, memory, Linear, calendar, and compose tools and streams its UI message protocol directly to the browser.
-4. Tools that change state (`modify_mail`, `memory`, `linear_write`, `create_google_calendar_event`) require explicit user approval through the AI SDK's tool approval flow; pending approvals live in the persisted assistant message parts, so they survive reloads without a separate resume protocol.
+4. Tools that change state (`modify_mail`, `memory`, `linear_write`, `create_google_calendar_event`) require explicit user approval through the AI SDK's tool approval flow; a turn that ends on an approval prompt is persisted with its pending parts, so the decision can be validated server-side against what is actually pending.
 5. `compose_email` is resolved entirely in the browser: the model proposes a draft, the user edits it in an inline composer, and the chosen Send/Save-draft/Decline outcome flows back as a client tool result.
-6. Successful completion persists one assistant message inside the stream's end callback. Cancelling the browser request aborts the model call while server-side consumption still settles the turn as cancelled.
-
-Historical chat state is loaded through `chat.get`. The application does not maintain a second run protocol, stream hub, replay worker, or client-side stream processor. A streaming assistant message reserves the active turn and is finalized as complete, failed, or cancelled; transcript queries refresh only while such a message is active.
+6. When the stream finishes normally, the server persists one assistant row (inserting it for new turns, updating the paused row when continuing). Aborted or failed turns persist nothing; reloading mid-answer shows the transcript without that answer.
+7. Successful completion also refreshes billing usage and the chat title in the background. There is no streaming status column, generation lock, or cross-device polling: the composer disables itself locally while a request is in flight.
 
 ## Consent and Observability
 

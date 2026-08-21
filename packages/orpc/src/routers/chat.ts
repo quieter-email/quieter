@@ -93,12 +93,10 @@ export const chatRouter = {
       const messages = await db
         .select({
           createdAt: chatMessage.createdAt,
-          error: chatMessage.error,
           id: chatMessage.id,
           parts: chatMessage.parts,
           position: chatMessage.position,
           role: chatMessage.role,
-          status: chatMessage.status,
         })
         .from(chatMessage)
         .where(eq(chatMessage.chatId, authorizedChat.id))

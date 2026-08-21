@@ -190,11 +190,6 @@ export type MailboxActionGraph = {
 export type MailboxActionJsonObject = Record<string, unknown>;
 
 export type ChatMessageRole = "system" | "user" | "assistant";
-export type ChatMessageStatus =
-  | "streaming"
-  | "complete"
-  | "failed"
-  | "cancelled";
 /**
  * One UI message part as streamed by the AI runtime. The shape is owned by the
  * chat feature; storage treats it as opaque JSON.
@@ -2548,16 +2543,10 @@ export const chatMessage = pgTable(
   {
     chatId: text("chatId").notNull(),
     createdAt: timestamp("createdAt").notNull(),
-    error: text("error"),
-    generationId: text("generationId"),
     id: text("id").primaryKey(),
     parts: jsonb("parts").$type<ChatMessagePart[]>().notNull(),
     position: integer("position").notNull(),
     role: text("role").$type<ChatMessageRole>().notNull(),
-    status: text("status")
-      .$type<ChatMessageStatus>()
-      .notNull()
-      .default("complete"),
     userId: text("userId").notNull(),
   },
   (table) => [
@@ -2571,9 +2560,6 @@ export const chatMessage = pgTable(
       table.chatId,
       table.position
     ),
-    uniqueIndex("chat_message_one_streaming_per_chat")
-      .on(table.chatId)
-      .where(sql`${table.status} = 'streaming'`),
   ]
 );
 

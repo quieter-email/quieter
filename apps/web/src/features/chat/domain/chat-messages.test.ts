@@ -10,19 +10,16 @@ import {
 
 type StoredMessage = {
   createdAt: Date;
-  error: string | null;
   id: string;
   parts: ChatMessagePart[];
   position: number;
   role: "assistant" | "system" | "user";
-  status: "cancelled" | "complete" | "failed" | "streaming";
 };
 
 describe("chat message conversion", () => {
   test("projects persisted rows onto UI messages and skips system rows", () => {
     const storedMessage: StoredMessage = {
       createdAt: new Date("2026-08-20T10:00:00.000Z"),
-      error: null,
       id: "message-1",
       parts: [
         { text: "Hello", type: "text" },
@@ -37,7 +34,6 @@ describe("chat message conversion", () => {
       ],
       position: 0,
       role: "assistant",
-      status: "complete",
     };
 
     expect(toInitialMessages([storedMessage])).toStrictEqual([

@@ -1,5 +1,6 @@
 import { ORPCError } from "@orpc/server";
 import {
+  composeEmailResultSchema,
   createAiMemoryChatTool,
   createComposeEmailChatTool,
   createGmailChatTools,
@@ -12,17 +13,15 @@ import type {
   AiMemoryToolsContext,
   GmailToolsContext,
 } from "@quieter/ai/chat-agent";
-import { CHAT_TITLE_MODEL } from "@quieter/ai/chat-models";
+import { CHAT_TITLE_MODEL, chatModelSchema } from "@quieter/ai/chat-models";
 import { summarizeAiUsage } from "@quieter/ai/chat-usage";
 import { createChatModel } from "@quieter/ai/openrouter";
 import { reportAiUsage } from "@quieter/billing";
 import { db } from "@quieter/database/client";
 import { chat as chatTable, chatMessage } from "@quieter/database/schema";
-import type {
-  ChatMessagePart,
-  ChatMessageStatus,
-} from "@quieter/database/schema";
+import type { ChatMessagePart } from "@quieter/database/schema";
 import type { MailboxCategory } from "@quieter/gmail";
+import { mailCategorySchema } from "@quieter/mail/data-plane";
 import { reportError } from "@quieter/observability";
 import {
   convertToModelMessages,
@@ -32,8 +31,8 @@ import {
   toUIMessageStream,
 } from "ai";
 import type { UIMessage } from "ai";
-import { and, desc, eq, isNull } from "drizzle-orm";
-import { ZodError } from "zod";
+import { and, desc, eq, inArray } from "drizzle-orm";
+import { z } from "zod";
 
 import {
   loadAiAgentContext,
@@ -58,18 +57,11 @@ import {
 import { assertAccessibleMailbox } from "../mailbox/service";
 import { assertAiChatCredits } from "./access";
 import { createLinearChatTools } from "./linear-tools";
-import {
-  createChatTitle,
-  toCanonicalTranscript,
-  validateChatRequest,
-} from "./request";
-import type { ValidatedChatRequest } from "./request";
 
 const CHAT_HISTORY_WINDOW_MESSAGES = 30;
 const CHAT_MAX_STEPS = 6;
 const CHAT_MAX_COMPLETION_TOKENS = 2048;
 const MAIL_TOOL_TIMEOUT_MS = 25_000;
-const STALE_CHAT_TURN_MS = 10 * 60 * 1000;
 
 export class ChatRequestError extends Error {
   readonly status: number;
@@ -81,40 +73,251 @@ export class ChatRequestError extends Error {
   }
 }
 
-const getPostgresErrorField = (
-  error: unknown,
-  field: "code" | "constraint"
-): string | undefined => {
-  if (typeof error !== "object" || error === null) {
-    return undefined;
+// ---------------------------------------------------------------------------
+// Request validation
+// ---------------------------------------------------------------------------
+
+const identifierSchema = z.string().trim().min(1).max(128);
+const promptSchema = z.string().trim().min(1).max(10_000);
+const contextSchema = z
+  .object({
+    messageId: z.string().trim().min(1).max(256).optional(),
+    query: z.string().trim().min(1).max(500).optional(),
+    threadId: z.string().trim().min(1).max(256).optional(),
+  })
+  .strict();
+
+const CHAT_TITLE_LENGTH = 60;
+
+export const createChatTitle = (prompt: string) => {
+  const normalized = prompt.trim().replaceAll(/\s+/gu, " ");
+  if (normalized.length <= CHAT_TITLE_LENGTH) {
+    return normalized;
   }
-  const value: unknown = Reflect.get(error, field);
-  if (typeof value === "string") {
-    return value;
-  }
-  return getPostgresErrorField(Reflect.get(error, "cause"), field);
+  return `${normalized.slice(0, CHAT_TITLE_LENGTH).trimEnd()}...`;
 };
 
-const isUniqueConflict = (error: unknown) =>
-  getPostgresErrorField(error, "code") === "23505";
+const clientUserMessageSchema = z.object({
+  id: identifierSchema,
+  parts: z
+    .array(
+      z.looseObject({
+        text: promptSchema,
+        type: z.literal("text"),
+      })
+    )
+    .min(1),
+  role: z.literal("user"),
+});
 
-const toConflict = (error: unknown): never => {
-  if (isUniqueConflict(error)) {
-    const constraint = getPostgresErrorField(error, "constraint");
-    let message =
-      "The chat changed while this message was being saved. Retry the request.";
-    if (constraint === "chat_message_one_streaming_per_chat") {
-      message = "An answer is already in progress for this chat.";
-    } else if (
-      constraint === "chat_message_id_chat_id_unique" ||
-      constraint === "chatMessage_pkey"
-    ) {
-      message = "This chat message has already been submitted.";
+const clientAssistantMessageSchema = z.object({
+  id: identifierSchema,
+  parts: z.array(
+    z.looseObject({
+      state: z.string(),
+      toolCallId: z.string().min(1),
+      type: z.string().startsWith("tool-"),
+    })
+  ),
+  role: z.literal("assistant"),
+});
+
+type ValidatedChatRequestBase = {
+  category: MailboxCategory;
+  context?: z.infer<typeof contextSchema>;
+  mailboxId: string;
+  model: z.infer<typeof chatModelSchema>;
+  threadId: string;
+  trigger: "submit-message" | "regenerate-message";
+};
+
+type ValidatedChatRequest = ValidatedChatRequestBase &
+  (
+    | {
+        kind: "message";
+        userMessage: { id: string; text: string };
+      }
+    | {
+        assistantMessageId: string;
+        kind: "continue";
+        toolDecisions: Map<string, boolean>;
+        toolOutputs: Map<string, unknown>;
+      }
+    | {
+        kind: "regenerate";
+      }
+  );
+
+const chatRequestBodySchema = z
+  .object({
+    category: mailCategorySchema,
+    context: contextSchema.optional(),
+    mailboxId: identifierSchema,
+    message: z.unknown(),
+    model: chatModelSchema,
+    threadId: z.uuid(),
+    trigger: z.enum(["submit-message", "regenerate-message"]),
+  })
+  .strict();
+
+export const validateChatRequest = (body: unknown): ValidatedChatRequest => {
+  const parsedBody = chatRequestBodySchema.parse(body);
+  const { threadId } = parsedBody;
+
+  if (parsedBody.trigger === "regenerate-message") {
+    return {
+      category: parsedBody.category,
+      ...(parsedBody.context === undefined
+        ? {}
+        : { context: parsedBody.context }),
+      kind: "regenerate",
+      mailboxId: parsedBody.mailboxId,
+      model: parsedBody.model,
+      threadId,
+      trigger: parsedBody.trigger,
+    };
+  }
+
+  const messageRole = z
+    .looseObject({ role: z.string() })
+    .parse(parsedBody.message).role;
+
+  if (messageRole === "user") {
+    const userMessage = clientUserMessageSchema.parse(parsedBody.message);
+    if (userMessage.parts.length !== 1) {
+      throw new z.ZodError([
+        {
+          code: "custom",
+          message: "The chat message must contain exactly one text part.",
+          path: ["message", "parts"],
+        },
+      ]);
     }
-    throw new ChatRequestError(409, message, { cause: error });
+    return {
+      category: parsedBody.category,
+      ...(parsedBody.context === undefined
+        ? {}
+        : { context: parsedBody.context }),
+      kind: "message",
+      mailboxId: parsedBody.mailboxId,
+      model: parsedBody.model,
+      threadId,
+      trigger: parsedBody.trigger,
+      userMessage: {
+        id: userMessage.id,
+        text: userMessage.parts[0]?.text ?? "",
+      },
+    };
   }
-  throw error;
+
+  const assistantMessage = clientAssistantMessageSchema.parse(
+    parsedBody.message
+  );
+  const toolDecisions = new Map<string, boolean>();
+  const toolOutputs = new Map<string, unknown>();
+  for (const part of assistantMessage.parts) {
+    if (part.state === "approval-responded") {
+      const approval = z
+        .looseObject({ approved: z.boolean(), id: z.string().min(1) })
+        .parse(part.approval);
+      toolDecisions.set(part.toolCallId, approval.approved);
+    } else if (part.state === "output-available") {
+      // Compose proposals are the only client-resolved tools; anything else
+      // claiming a client-side result is untrusted input.
+      if (part.type !== "tool-compose_email") {
+        throw new z.ZodError([
+          {
+            code: "custom",
+            message: "This tool result cannot be supplied by the client.",
+            path: ["message", "parts"],
+          },
+        ]);
+      }
+      toolOutputs.set(
+        part.toolCallId,
+        composeEmailResultSchema.parse(part.output)
+      );
+    }
+  }
+  if (toolDecisions.size === 0 && toolOutputs.size === 0) {
+    throw new z.ZodError([
+      {
+        code: "custom",
+        message: "The assistant message carries no client resolutions.",
+        path: ["message"],
+      },
+    ]);
+  }
+
+  return {
+    assistantMessageId: assistantMessage.id,
+    category: parsedBody.category,
+    ...(parsedBody.context === undefined
+      ? {}
+      : { context: parsedBody.context }),
+    kind: "continue",
+    mailboxId: parsedBody.mailboxId,
+    model: parsedBody.model,
+    threadId,
+    toolDecisions,
+    toolOutputs,
+    trigger: parsedBody.trigger,
+  };
 };
+
+// ---------------------------------------------------------------------------
+// Stored parts → UI messages
+// ---------------------------------------------------------------------------
+
+type UIMessagePart = UIMessage["parts"][number];
+
+const isRenderablePart = (part: ChatMessagePart): boolean => {
+  if (part.type === "text") {
+    return typeof part.text === "string";
+  }
+  if (part.type === "") {
+    return false;
+  }
+  if (part.type === "step-start") {
+    return true;
+  }
+  return part.type.startsWith("tool-") && typeof part.toolCallId === "string";
+};
+
+/**
+ * Maps persisted message rows onto AI SDK UI messages. Parts are stored in
+ * their native UI message shape, so this only drops malformed entries.
+ */
+export const toCanonicalTranscript = (
+  messages: readonly {
+    id: string;
+    parts: ChatMessagePart[];
+    role: "assistant" | "system" | "user";
+  }[]
+): UIMessage[] =>
+  messages.flatMap((message) => {
+    if (message.role !== "assistant" && message.role !== "user") {
+      return [];
+    }
+    const parts = message.parts.filter(isRenderablePart);
+    if (parts.length === 0) {
+      return [];
+    }
+    return [
+      {
+        id: message.id,
+        // Parts round-trip as opaque JSON; convertToModelMessages validates
+        // the shapes it consumes.
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+        parts: parts as UIMessagePart[],
+        role: message.role,
+      } satisfies UIMessage,
+    ];
+  });
+
+// ---------------------------------------------------------------------------
+// Tool plumbing
+// ---------------------------------------------------------------------------
 
 const assertCanUseAiCredits = async (input: {
   organizationId: string;
@@ -351,6 +554,112 @@ const createMemoryToolContext = (input: {
   },
 });
 
+// ---------------------------------------------------------------------------
+// Approvals and client resolutions
+// ---------------------------------------------------------------------------
+
+const isPendingToolPart = (part: unknown): boolean => {
+  if (typeof part !== "object" || part === null) {
+    return false;
+  }
+  const type: unknown = Reflect.get(part, "type");
+  if (typeof type !== "string" || !type.startsWith("tool-")) {
+    return false;
+  }
+  const toolCallId: unknown = Reflect.get(part, "toolCallId");
+  if (typeof toolCallId !== "string") {
+    return false;
+  }
+  const state: unknown = Reflect.get(part, "state");
+  return state === "approval-requested" || state === "input-available";
+};
+
+const readStoredApprovalId = (part: object): string | null => {
+  const approval: unknown = Reflect.get(part, "approval");
+  if (typeof approval !== "object" || approval === null) {
+    return null;
+  }
+  const id: unknown = Reflect.get(approval, "id");
+  return typeof id === "string" && id !== "" ? id : null;
+};
+
+/**
+ * Applies the client's approval decisions and compose outcomes onto the
+ * stored assistant message. The database stays the source of truth; the
+ * client only contributes which pending item resolved and how.
+ */
+const applyClientResolutions = (
+  message: UIMessage,
+  resolutions: {
+    toolDecisions: Map<string, boolean>;
+    toolOutputs: Map<string, unknown>;
+  }
+) => ({
+  ...message,
+  parts: message.parts.map((part): UIMessagePart => {
+    const type: unknown = Reflect.get(part, "type");
+    if (typeof type !== "string" || !type.startsWith("tool-")) {
+      return part;
+    }
+    const toolCallId: unknown = Reflect.get(part, "toolCallId");
+    if (typeof toolCallId !== "string") {
+      return part;
+    }
+    const state: unknown = Reflect.get(part, "state");
+    const decision = resolutions.toolDecisions.get(toolCallId);
+    if (decision !== undefined && state === "approval-requested") {
+      const approvalId = readStoredApprovalId(part);
+      if (approvalId === null) {
+        // Pending ids are validated before the turn continues; this guard
+        // only satisfies the type.
+        return part;
+      }
+      // Part unions make this override awkward to express directly.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+      return {
+        ...part,
+        approval: {
+          approved: decision,
+          id: approvalId,
+        },
+        state: "approval-responded",
+      } as unknown as UIMessagePart;
+    }
+    if (
+      resolutions.toolOutputs.has(toolCallId) &&
+      state === "input-available"
+    ) {
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+      return {
+        ...part,
+        output: resolutions.toolOutputs.get(toolCallId),
+        state: "output-available",
+      } as unknown as UIMessagePart;
+    }
+    return part;
+  }),
+});
+
+// ---------------------------------------------------------------------------
+// Persistence helpers
+// ---------------------------------------------------------------------------
+
+const loadRecentRows = async (chatId: string) => {
+  const rows = await db
+    .select({
+      createdAt: chatMessage.createdAt,
+      id: chatMessage.id,
+      parts: chatMessage.parts,
+      position: chatMessage.position,
+      role: chatMessage.role,
+    })
+    .from(chatMessage)
+    .where(eq(chatMessage.chatId, chatId))
+    .orderBy(desc(chatMessage.position))
+    .limit(CHAT_HISTORY_WINDOW_MESSAGES);
+  return rows.toReversed();
+};
+
 const getStoredMessageText = (parts: ChatMessagePart[]) =>
   parts
     .flatMap((part) =>
@@ -358,219 +667,6 @@ const getStoredMessageText = (parts: ChatMessagePart[]) =>
     )
     .join("");
 
-const isMatchingUserMessage = (
-  message: {
-    chatId: string;
-    parts: ChatMessagePart[];
-    role: "assistant" | "system" | "user";
-    userId: string;
-  },
-  input: { chatId: string; text: string; userId: string }
-) =>
-  message.chatId === input.chatId &&
-  message.userId === input.userId &&
-  message.role === "user" &&
-  getStoredMessageText(message.parts) === input.text;
-
-const isStaleStreamingMessage = (
-  message: { createdAt: Date; status: ChatMessageStatus },
-  now: Date
-) =>
-  message.status === "streaming" &&
-  now.getTime() - message.createdAt.getTime() >= STALE_CHAT_TURN_MS;
-
-const startChatTurn = async (input: {
-  chatId: string;
-  mailboxId: string;
-  messageId: string;
-  text: string;
-  userId: string;
-}) =>
-  await db
-    .transaction(async (tx) => {
-      const generationId = crypto.randomUUID();
-      const [existingChat] = await tx
-        .select({
-          id: chatTable.id,
-          mailboxId: chatTable.mailboxId,
-          title: chatTable.title,
-          userId: chatTable.userId,
-        })
-        .from(chatTable)
-        .where(eq(chatTable.id, input.chatId))
-        .limit(1)
-        .for("update");
-      const now = new Date();
-      if (existingChat === undefined) {
-        await tx.insert(chatTable).values({
-          createdAt: now,
-          id: input.chatId,
-          mailboxId: input.mailboxId,
-          title: createChatTitle(input.text),
-          updatedAt: now,
-          userId: input.userId,
-        });
-      } else if (
-        existingChat.mailboxId !== input.mailboxId ||
-        existingChat.userId !== input.userId
-      ) {
-        throw new ChatRequestError(404, "Chat not found.");
-      }
-      const [lastMessage] = await tx
-        .select({
-          createdAt: chatMessage.createdAt,
-          id: chatMessage.id,
-          position: chatMessage.position,
-          role: chatMessage.role,
-          status: chatMessage.status,
-        })
-        .from(chatMessage)
-        .where(eq(chatMessage.chatId, input.chatId))
-        .orderBy(desc(chatMessage.position))
-        .limit(1);
-      const [persistedMessage] = await tx
-        .select({
-          chatId: chatMessage.chatId,
-          parts: chatMessage.parts,
-          position: chatMessage.position,
-          role: chatMessage.role,
-          userId: chatMessage.userId,
-        })
-        .from(chatMessage)
-        .where(eq(chatMessage.id, input.messageId))
-        .limit(1);
-      if (persistedMessage !== undefined) {
-        if (isMatchingUserMessage(persistedMessage, input)) {
-          const [assistantMessage] = await tx
-            .select({
-              createdAt: chatMessage.createdAt,
-              id: chatMessage.id,
-              status: chatMessage.status,
-            })
-            .from(chatMessage)
-            .where(
-              and(
-                eq(chatMessage.chatId, input.chatId),
-                eq(chatMessage.position, persistedMessage.position + 1),
-                eq(chatMessage.role, "assistant")
-              )
-            )
-            .limit(1);
-          if (
-            assistantMessage !== undefined &&
-            lastMessage?.id === assistantMessage.id &&
-            (assistantMessage.status === "cancelled" ||
-              assistantMessage.status === "failed" ||
-              (assistantMessage.status === "streaming" &&
-                now.getTime() - assistantMessage.createdAt.getTime() >=
-                  STALE_CHAT_TURN_MS))
-          ) {
-            await tx
-              .update(chatMessage)
-              .set({
-                createdAt: now,
-                error: null,
-                generationId,
-                parts: [],
-                status: "streaming",
-              })
-              .where(eq(chatMessage.id, assistantMessage.id));
-            await tx
-              .update(chatTable)
-              .set({ updatedAt: now })
-              .where(eq(chatTable.id, input.chatId));
-            return {
-              assistantMessageId: assistantMessage.id,
-              createdChat: false,
-              generationId,
-            };
-          }
-          if (assistantMessage?.status === "streaming") {
-            throw new ChatRequestError(
-              409,
-              "An answer is already in progress for this chat."
-            );
-          }
-          throw new ChatRequestError(
-            409,
-            "This chat message already has an answer."
-          );
-        }
-        throw new ChatRequestError(
-          409,
-          "This chat message id has already been used."
-        );
-      }
-      if (lastMessage?.status === "streaming") {
-        if (!isStaleStreamingMessage(lastMessage, now)) {
-          throw new ChatRequestError(
-            409,
-            "An answer is already in progress for this chat."
-          );
-        }
-        await tx
-          .update(chatMessage)
-          .set({
-            error: "The answer was interrupted.",
-            generationId: null,
-            status: "failed",
-          })
-          .where(eq(chatMessage.id, lastMessage.id));
-      }
-      if (lastMessage?.role === "user") {
-        throw new ChatRequestError(
-          409,
-          "The previous chat turn is incomplete. Retry it before sending another message."
-        );
-      }
-      const assistantMessageId = crypto.randomUUID();
-      const userPosition = (lastMessage?.position ?? -1) + 1;
-      await tx.insert(chatMessage).values({
-        chatId: input.chatId,
-        createdAt: now,
-        error: null,
-        id: input.messageId,
-        parts: [{ text: input.text, type: "text" }],
-        position: userPosition,
-        role: "user",
-        status: "complete",
-        userId: input.userId,
-      });
-      await tx.insert(chatMessage).values({
-        chatId: input.chatId,
-        createdAt: now,
-        error: null,
-        generationId,
-        id: assistantMessageId,
-        parts: [],
-        position: userPosition + 1,
-        role: "assistant",
-        status: "streaming",
-        userId: input.userId,
-      });
-      await tx
-        .update(chatTable)
-        .set({
-          title: existingChat?.title ?? createChatTitle(input.text),
-          updatedAt: now,
-        })
-        .where(
-          and(
-            eq(chatTable.id, input.chatId),
-            eq(chatTable.mailboxId, input.mailboxId),
-            eq(chatTable.userId, input.userId)
-          )
-        );
-      return {
-        assistantMessageId,
-        createdChat: existingChat === undefined,
-        generationId,
-      };
-    })
-    .catch(toConflict);
-
-// The model title replaces the truncated fallback only while the user has not
-// renamed the chat, and runs in the background so it never delays streaming.
 const generateChatTitleInBackground = (input: {
   chatId: string;
   fallbackTitle: string;
@@ -624,379 +720,16 @@ const generateChatTitleInBackground = (input: {
   })();
 };
 
-const isPendingToolPart = (part: unknown): boolean => {
-  if (typeof part !== "object" || part === null) {
-    return false;
-  }
-  const type: unknown = Reflect.get(part, "type");
-  if (typeof type !== "string" || !type.startsWith("tool-")) {
-    return false;
-  }
-  const toolCallId: unknown = Reflect.get(part, "toolCallId");
-  if (typeof toolCallId !== "string") {
-    return false;
-  }
-  const state: unknown = Reflect.get(part, "state");
-  return state === "approval-requested" || state === "input-available";
-};
-
-const readStoredApprovalId = (part: object): string | null => {
-  const approval: unknown = Reflect.get(part, "approval");
-  if (typeof approval !== "object" || approval === null) {
-    return null;
-  }
-  const id: unknown = Reflect.get(approval, "id");
-  return typeof id === "string" && id !== "" ? id : null;
-};
-
-/**
- * Applies the client's approval decisions and compose outcomes onto the
- * canonical copy of the paused assistant message. The database stays the
- * source of truth; the client only contributes which pending item resolved
- * and how.
- */
-const applyClientResolutions = (
-  message: UIMessage,
-  resolutions: {
-    toolDecisions: Map<string, boolean>;
-    toolOutputs: Map<string, unknown>;
-  }
-) => ({
-  ...message,
-  parts: message.parts.map((part): UIMessage["parts"][number] => {
-    const type: unknown = Reflect.get(part, "type");
-    if (typeof type !== "string" || !type.startsWith("tool-")) {
-      return part;
-    }
-    const toolCallId: unknown = Reflect.get(part, "toolCallId");
-    if (typeof toolCallId !== "string") {
-      return part;
-    }
-    const state: unknown = Reflect.get(part, "state");
-    const decision = resolutions.toolDecisions.get(toolCallId);
-    if (decision !== undefined && state === "approval-requested") {
-      const approvalId = readStoredApprovalId(part);
-      if (approvalId === null) {
-        // continueChatTurn rejects corrupted approvals before the turn is
-        // reopened; this guard only satisfies the type.
-        return part;
-      }
-      // Part unions make this override awkward to express directly.
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-      return {
-        ...part,
-        approval: {
-          approved: decision,
-          id: approvalId,
-        },
-        state: "approval-responded",
-      } as unknown as UIMessage["parts"][number];
-    }
-    if (
-      resolutions.toolOutputs.has(toolCallId) &&
-      state === "input-available"
-    ) {
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-      return {
-        ...part,
-        output: resolutions.toolOutputs.get(toolCallId),
-        state: "output-available",
-      } as unknown as UIMessage["parts"][number];
-    }
-    return part;
-  }),
-});
-
-/**
- * Reopens a settled assistant message that ended waiting on the user. The
- * stored parts stay untouched until the continuation persists its outcome, so
- * an interrupted continuation simply returns to the paused state.
- */
-const continueChatTurn = async (input: {
-  assistantMessageId: string;
-  chatId: string;
-  mailboxId: string;
-  toolDecisions: Map<string, boolean>;
-  toolOutputs: Map<string, unknown>;
-  userId: string;
-}) => {
-  const pendingParts = await db
-    .select({ parts: chatMessage.parts, status: chatMessage.status })
-    .from(chatMessage)
-    .where(
-      and(
-        eq(chatMessage.id, input.assistantMessageId),
-        eq(chatMessage.chatId, input.chatId)
-      )
-    )
-    .limit(1);
-  const [stored] = pendingParts;
-  if (stored?.status !== "complete") {
-    throw new ChatRequestError(
-      409,
-      "This approval is no longer waiting for a response."
-    );
-  }
-  const pendingToolParts = stored.parts.filter(isPendingToolPart);
-  for (const part of pendingToolParts) {
-    if (
-      Reflect.get(part, "state") === "approval-requested" &&
-      readStoredApprovalId(part) === null
-    ) {
-      // Validate before reopening the turn so a corrupted row cannot strand
-      // the message in the streaming state.
-      reportError(new Error("Stored approval part has no id."), {
-        operation: "chat:continue-malformed-approval",
-      });
-      throw new ChatRequestError(
-        409,
-        "This approval is no longer waiting for a response."
-      );
-    }
-  }
-  const pendingIds = new Set(
-    pendingToolParts.map((part) => String(Reflect.get(part, "toolCallId")))
-  );
-  const resolvesSomething =
-    [...input.toolDecisions.keys()].some((toolCallId) =>
-      pendingIds.has(toolCallId)
-    ) ||
-    [...input.toolOutputs.keys()].some((toolCallId) =>
-      pendingIds.has(toolCallId)
-    );
-  if (!resolvesSomething) {
-    throw new ChatRequestError(
-      409,
-      "This approval is no longer waiting for a response."
-    );
-  }
-
-  const generationId = crypto.randomUUID();
-  await db
-    .transaction(async (tx) => {
-      const [authorizedChat] = await tx
-        .select({ id: chatTable.id })
-        .from(chatTable)
-        .where(
-          and(
-            eq(chatTable.id, input.chatId),
-            eq(chatTable.mailboxId, input.mailboxId),
-            eq(chatTable.userId, input.userId)
-          )
-        )
-        .limit(1)
-        .for("update");
-      if (authorizedChat === undefined) {
-        throw new ChatRequestError(404, "Chat not found.");
-      }
-      const [updated] = await tx
-        .update(chatMessage)
-        .set({
-          error: null,
-          generationId,
-          status: "streaming",
-        })
-        .where(
-          and(
-            eq(chatMessage.id, input.assistantMessageId),
-            eq(chatMessage.chatId, input.chatId),
-            isNull(chatMessage.generationId),
-            eq(chatMessage.status, "complete"),
-            eq(chatMessage.userId, input.userId)
-          )
-        )
-        .returning({ id: chatMessage.id });
-      if (updated === undefined) {
-        throw new ChatRequestError(409, "The active chat answer changed.");
-      }
-    })
-    .catch(toConflict);
-  return { assistantMessageId: input.assistantMessageId, generationId };
-};
-
-/**
- * Restarts a failed, cancelled, or stale answer. A completed answer is never
- * regenerated here; the client refetches instead of asking again.
- */
-const regenerateChatTurn = async (input: {
-  chatId: string;
-  mailboxId: string;
-  userId: string;
-}) =>
-  await db
-    .transaction(async (tx) => {
-      const [authorizedChat] = await tx
-        .select({ id: chatTable.id })
-        .from(chatTable)
-        .where(
-          and(
-            eq(chatTable.id, input.chatId),
-            eq(chatTable.mailboxId, input.mailboxId),
-            eq(chatTable.userId, input.userId)
-          )
-        )
-        .limit(1)
-        .for("update");
-      if (authorizedChat === undefined) {
-        throw new ChatRequestError(404, "Chat not found.");
-      }
-      const now = new Date();
-      const [lastMessage] = await tx
-        .select({
-          createdAt: chatMessage.createdAt,
-          id: chatMessage.id,
-          position: chatMessage.position,
-          role: chatMessage.role,
-          status: chatMessage.status,
-        })
-        .from(chatMessage)
-        .where(eq(chatMessage.chatId, input.chatId))
-        .orderBy(desc(chatMessage.position))
-        .limit(1);
-      if (lastMessage === undefined) {
-        throw new ChatRequestError(409, "There is no answer to retry yet.");
-      }
-      const generationId = crypto.randomUUID();
-      if (lastMessage.role === "user") {
-        const assistantMessageId = crypto.randomUUID();
-        await tx.insert(chatMessage).values({
-          chatId: input.chatId,
-          createdAt: now,
-          error: null,
-          generationId,
-          id: assistantMessageId,
-          parts: [],
-          position: lastMessage.position + 1,
-          role: "assistant",
-          status: "streaming",
-          userId: input.userId,
-        });
-        return { assistantMessageId, generationId, removedAssistantId: null };
-      }
-      const retryable =
-        lastMessage.status === "cancelled" ||
-        lastMessage.status === "failed" ||
-        isStaleStreamingMessage(lastMessage, now);
-      if (!retryable) {
-        throw new ChatRequestError(
-          409,
-          "This answer cannot be retried right now."
-        );
-      }
-      await tx
-        .update(chatMessage)
-        .set({
-          createdAt: now,
-          error: null,
-          generationId,
-          parts: [],
-          status: "streaming",
-        })
-        .where(eq(chatMessage.id, lastMessage.id));
-      return {
-        assistantMessageId: lastMessage.id,
-        generationId,
-        removedAssistantId: lastMessage.id,
-      };
-    })
-    .catch(toConflict);
-
-const settleAssistantMessage = async (input: {
-  assistantMessageId: string;
-  chatId: string;
-  error: string | null;
-  generationId: string;
-  mailboxId: string;
-  parts: ChatMessagePart[];
-  status: "cancelled" | "complete" | "failed";
-  userId: string;
-}) => {
-  await db
-    .transaction(async (tx) => {
-      const [authorizedChat] = await tx
-        .select({ id: chatTable.id })
-        .from(chatTable)
-        .where(
-          and(
-            eq(chatTable.id, input.chatId),
-            eq(chatTable.mailboxId, input.mailboxId),
-            eq(chatTable.userId, input.userId)
-          )
-        )
-        .limit(1)
-        .for("update");
-      if (authorizedChat === undefined) {
-        throw new ChatRequestError(404, "Chat not found.");
-      }
-      const now = new Date();
-      const [updatedMessage] = await tx
-        .update(chatMessage)
-        .set({
-          error: input.error,
-          generationId: null,
-          parts: input.parts,
-          status: input.status,
-        })
-        .where(
-          and(
-            eq(chatMessage.id, input.assistantMessageId),
-            eq(chatMessage.chatId, input.chatId),
-            eq(chatMessage.generationId, input.generationId),
-            eq(chatMessage.userId, input.userId),
-            eq(chatMessage.role, "assistant"),
-            eq(chatMessage.status, "streaming")
-          )
-        )
-        .returning({ id: chatMessage.id });
-      if (updatedMessage === undefined) {
-        throw new ChatRequestError(409, "The active chat answer changed.");
-      }
-      await tx
-        .update(chatTable)
-        .set({ updatedAt: now })
-        .where(eq(chatTable.id, input.chatId));
-    })
-    .catch(toConflict);
-};
-
-const loadCanonicalTranscript = async (chatId: string) => {
-  const messages = await db
-    .select({
-      createdAt: chatMessage.createdAt,
-      id: chatMessage.id,
-      parts: chatMessage.parts,
-      role: chatMessage.role,
-    })
-    .from(chatMessage)
-    .where(
-      and(eq(chatMessage.chatId, chatId), eq(chatMessage.status, "complete"))
-    )
-    .orderBy(desc(chatMessage.position))
-    .limit(CHAT_HISTORY_WINDOW_MESSAGES);
-  return toCanonicalTranscript(messages.toReversed());
-};
-
 const prepareChatContext = async (input: {
   context: { messageId?: string; query?: string; threadId?: string };
   mailboxId: string;
-  threadId: string;
-  transcript: readonly UIMessage[];
   userId: string;
+  memoryQuery: string;
 }) => {
-  const memoryQuery = input.transcript
-    .filter((message) => message.role === "user")
-    .slice(-3)
-    .flatMap((message) =>
-      message.parts.flatMap((part) =>
-        part.type === "text" && typeof part.text === "string" ? [part.text] : []
-      )
-    )
-    .join(" ")
-    .slice(0, 4000);
   const aiContext = await loadAiAgentContext({
     agent: "chat",
     mailboxId: input.mailboxId,
-    query: memoryQuery,
+    query: input.memoryQuery,
     userId: input.userId,
   });
   return {
@@ -1005,7 +738,8 @@ const prepareChatContext = async (input: {
   };
 };
 
-// The request coordinates authorization, persistence, tool availability, and streaming in one boundary.
+// The request coordinates authorization, persistence, tool availability, and
+// streaming in one boundary.
 export const createAiChatResponse = async (input: {
   body: unknown;
   request: Request;
@@ -1015,18 +749,18 @@ export const createAiChatResponse = async (input: {
   try {
     validated = validateChatRequest(input.body);
   } catch (error) {
-    if (error instanceof ZodError) {
+    if (error instanceof z.ZodError) {
       throw new ChatRequestError(400, "Invalid chat request.", {
         cause: error,
       });
     }
     throw error;
   }
-  const { forwardedProps, threadId } = validated;
+  const { mailboxId, threadId } = validated;
   let accessibleMailbox: Awaited<ReturnType<typeof assertAccessibleMailbox>>;
   try {
     accessibleMailbox = await assertAccessibleMailbox({
-      mailboxId: forwardedProps.mailboxId,
+      mailboxId,
       userId: input.userId,
     });
   } catch (error) {
@@ -1043,95 +777,204 @@ export const createAiChatResponse = async (input: {
     userId: input.userId,
   });
 
-  const storedTranscript = await loadCanonicalTranscript(threadId);
+  const rows = await loadRecentRows(threadId);
+  const lastRow = rows.at(-1);
   let transcript: UIMessage[];
   let assistantMessageId: string;
+  let assistantPosition: number;
+  let continuingRowId: string | null = null;
   let createdChat = false;
-  let generationId: string;
 
   if (validated.kind === "message") {
-    const started = await startChatTurn({
-      chatId: threadId,
-      mailboxId: forwardedProps.mailboxId,
-      messageId: validated.userMessage.id,
-      text: validated.userMessage.text,
-      userId: input.userId,
-    });
-    ({ assistantMessageId, createdChat, generationId } = started);
-    transcript = [
-      ...storedTranscript,
-      {
-        id: validated.userMessage.id,
-        parts: [{ text: validated.userMessage.text, type: "text" }],
-        role: "user",
-      } satisfies UIMessage,
+    const [existingChat] = await db
+      .select({
+        id: chatTable.id,
+        mailboxId: chatTable.mailboxId,
+        title: chatTable.title,
+        userId: chatTable.userId,
+      })
+      .from(chatTable)
+      .where(eq(chatTable.id, threadId))
+      .limit(1);
+    if (
+      existingChat !== undefined &&
+      (existingChat.mailboxId !== mailboxId ||
+        existingChat.userId !== input.userId)
+    ) {
+      throw new ChatRequestError(404, "Chat not found.");
+    }
+
+    const userParts: ChatMessagePart[] = [
+      { text: validated.userMessage.text, type: "text" },
     ];
+    if (
+      lastRow?.role === "user" &&
+      lastRow.id === validated.userMessage.id &&
+      getStoredMessageText(lastRow.parts) === validated.userMessage.text
+    ) {
+      // The previous attempt was aborted before its answer was persisted;
+      // reuse the stored user message instead of duplicating it.
+      transcript = toCanonicalTranscript(rows);
+      assistantPosition = lastRow.position + 1;
+    } else {
+      if (lastRow?.role === "user") {
+        throw new ChatRequestError(
+          409,
+          "The previous chat turn is incomplete. Retry it before sending another message."
+        );
+      }
+      const [duplicate] = await db
+        .select({ id: chatMessage.id })
+        .from(chatMessage)
+        .where(eq(chatMessage.id, validated.userMessage.id))
+        .limit(1);
+      if (duplicate !== undefined) {
+        throw new ChatRequestError(
+          409,
+          "This chat message has already been submitted."
+        );
+      }
+      const now = new Date();
+      if (existingChat === undefined) {
+        createdChat = true;
+        await db.insert(chatTable).values({
+          createdAt: now,
+          id: threadId,
+          mailboxId,
+          title: createChatTitle(validated.userMessage.text),
+          updatedAt: now,
+          userId: input.userId,
+        });
+      }
+      const userPosition = (lastRow?.position ?? -1) + 1;
+      await db.insert(chatMessage).values({
+        chatId: threadId,
+        createdAt: now,
+        id: validated.userMessage.id,
+        parts: userParts,
+        position: userPosition,
+        role: "user",
+        userId: input.userId,
+      });
+      transcript = [
+        ...toCanonicalTranscript(rows),
+        {
+          id: validated.userMessage.id,
+          parts: [{ text: validated.userMessage.text, type: "text" }],
+          role: "user",
+        } satisfies UIMessage,
+      ];
+      assistantPosition = userPosition + 1;
+    }
+    assistantMessageId = crypto.randomUUID();
     if (createdChat) {
       generateChatTitleInBackground({
         chatId: threadId,
         fallbackTitle: createChatTitle(validated.userMessage.text),
-        mailboxId: forwardedProps.mailboxId,
+        mailboxId,
         prompt: validated.userMessage.text,
         userId: input.userId,
       });
     }
   } else if (validated.kind === "continue") {
-    const continued = await continueChatTurn({
-      assistantMessageId: validated.assistantMessageId,
-      chatId: threadId,
-      mailboxId: forwardedProps.mailboxId,
-      toolDecisions: validated.toolDecisions,
-      toolOutputs: validated.toolOutputs,
-      userId: input.userId,
-    });
-    ({ assistantMessageId, generationId } = continued);
-    transcript = storedTranscript.map((message, index) =>
-      index === storedTranscript.length - 1 &&
-      message.role === "assistant" &&
-      message.id === validated.assistantMessageId
-        ? applyClientResolutions(message, validated)
-        : message
+    if (lastRow === undefined || lastRow.role !== "assistant") {
+      throw new ChatRequestError(
+        409,
+        "This answer is no longer waiting for a response."
+      );
+    }
+    for (const part of lastRow.parts) {
+      if (
+        Reflect.get(part, "state") === "approval-requested" &&
+        readStoredApprovalId(part) === null
+      ) {
+        throw new ChatRequestError(
+          409,
+          "This answer is no longer waiting for a response."
+        );
+      }
+    }
+    const pendingIds = new Set(
+      lastRow.parts
+        .filter(isPendingToolPart)
+        .map((part) => String(Reflect.get(part, "toolCallId")))
     );
+    const resolvesSomething =
+      [...validated.toolDecisions.keys()].some((toolCallId) =>
+        pendingIds.has(toolCallId)
+      ) ||
+      [...validated.toolOutputs.keys()].some((toolCallId) =>
+        pendingIds.has(toolCallId)
+      );
+    if (!resolvesSomething) {
+      throw new ChatRequestError(
+        409,
+        "This answer is no longer waiting for a response."
+      );
+    }
+    const storedMessage: UIMessage = {
+      id: lastRow.id,
+      // Parts round-trip as opaque JSON; the resolutions above re-validate
+      // everything the model consumes.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+      parts: lastRow.parts as UIMessagePart[],
+      role: "assistant",
+    };
+    transcript = [
+      ...toCanonicalTranscript(rows.slice(0, -1)),
+      applyClientResolutions(storedMessage, validated),
+    ];
+    assistantMessageId = lastRow.id;
+    assistantPosition = lastRow.position;
+    continuingRowId = lastRow.id;
   } else {
-    const regenerated = await regenerateChatTurn({
-      chatId: threadId,
-      mailboxId: forwardedProps.mailboxId,
-      userId: input.userId,
-    });
-    ({ assistantMessageId, generationId } = regenerated);
-    transcript =
-      regenerated.removedAssistantId === null
-        ? storedTranscript
-        : storedTranscript.filter(
-            (message) => message.id !== regenerated.removedAssistantId
-          );
+    if (lastRow === undefined) {
+      throw new ChatRequestError(409, "There is no answer to retry yet.");
+    }
+    const trailingAssistantIds: string[] = [];
+    for (let index = rows.length - 1; index >= 0; index -= 1) {
+      const row = rows[index];
+      if (row?.role !== "assistant") {
+        break;
+      }
+      if (row.id !== undefined) {
+        trailingAssistantIds.push(row.id);
+      }
+    }
+    if (trailingAssistantIds.length > 0) {
+      await db
+        .delete(chatMessage)
+        .where(inArray(chatMessage.id, trailingAssistantIds));
+      rows.splice(rows.length - trailingAssistantIds.length);
+    }
+    const lastRemaining = rows.at(-1);
+    if (lastRemaining?.role !== "user") {
+      throw new ChatRequestError(409, "There is no answer to retry yet.");
+    }
+    transcript = toCanonicalTranscript(rows);
+    assistantPosition = lastRemaining.position + 1;
+    assistantMessageId = crypto.randomUUID();
   }
-
-  let preparedContext: Awaited<ReturnType<typeof prepareChatContext>>;
-  try {
-    preparedContext = await prepareChatContext({
-      context: forwardedProps.context ?? {},
-      mailboxId: forwardedProps.mailboxId,
-      threadId,
-      transcript,
-      userId: input.userId,
-    });
-  } catch (error) {
-    await settleAssistantMessage({
-      assistantMessageId,
-      chatId: threadId,
-      error: "The answer could not be started.",
-      generationId,
-      mailboxId: forwardedProps.mailboxId,
-      parts: [],
-      status: "failed",
-      userId: input.userId,
-    });
-    throw error;
-  }
-  const { mailboxContextPrompt, serializedAiContext } = preparedContext;
 
   const latestUserRequest = getLatestUserRequest(transcript);
+  const preparedContext = await prepareChatContext({
+    context: validated.context ?? {},
+    mailboxId,
+    memoryQuery: transcript
+      .filter((message) => message.role === "user")
+      .slice(-3)
+      .flatMap((message) =>
+        message.parts.flatMap((part) =>
+          part.type === "text" && typeof part.text === "string"
+            ? [part.text]
+            : []
+        )
+      )
+      .join(" ")
+      .slice(0, 4000),
+    userId: input.userId,
+  });
+
   const checkConnector = async (
     provider: typeof GOOGLE_CALENDAR_CONNECTOR_PROVIDER
   ) => {
@@ -1146,18 +989,19 @@ export const createAiChatResponse = async (input: {
     GOOGLE_CALENDAR_CONNECTOR_PROVIDER
   );
 
-  const gmailContext = createGmailToolsContext({
-    category: forwardedProps.category,
-    mailboxId: forwardedProps.mailboxId,
-    userId: input.userId,
-  });
   const tools = {
-    ...createGmailChatTools(gmailContext),
+    ...createGmailChatTools(
+      createGmailToolsContext({
+        category: validated.category,
+        mailboxId,
+        userId: input.userId,
+      })
+    ),
     ...createComposeEmailChatTool(),
     ...createAiMemoryChatTool(
       createMemoryToolContext({
         latestUserRequest,
-        mailboxId: forwardedProps.mailboxId,
+        mailboxId,
         userId: input.userId,
       })
     ),
@@ -1179,11 +1023,13 @@ export const createAiChatResponse = async (input: {
 
   const systemPrompt = [
     gmailToolsPrompt,
-    ...(mailboxContextPrompt === null ? [] : [mailboxContextPrompt]),
-    ...(serializedAiContext === null
+    ...(preparedContext.mailboxContextPrompt === null
+      ? []
+      : [preparedContext.mailboxContextPrompt]),
+    ...(preparedContext.serializedAiContext === null
       ? []
       : [
-          `The following user-authored instructions and learned memory were loaded through Quieter's authorized AI context. Follow them unless they conflict with the current request, safety rules, or verified mailbox data.\n\n${serializedAiContext}`,
+          `The following user-authored instructions and learned memory were loaded through Quieter's authorized AI context. Follow them unless they conflict with the current request, safety rules, or verified mailbox data.\n\n${preparedContext.serializedAiContext}`,
         ]),
     ...(hasGoogleCalendarConnector ? [googleCalendarToolsPrompt] : []),
     linearToolsPrompt,
@@ -1191,134 +1037,103 @@ export const createAiChatResponse = async (input: {
 
   const usageId = crypto.randomUUID();
   let generationFailed = false;
-  // The UI message pipeline can be cancelled by a client disconnect before the
-  // abort chunk arrives, so settlement waits for this barrier: the detached
-  // consumer below resolves it only after the generation reached its terminal
-  // state and all failure/abort flags are final.
-  let resolveGenerationTerminal!: () => void;
-  // oxlint-disable-next-line promise/avoid-new -- shared terminal barrier
-  const generationTerminal = new Promise<void>((resolve) => {
-    resolveGenerationTerminal = resolve;
-  });
   const modelMessages = await convertToModelMessages(transcript);
-  const startGeneration = () =>
-    streamText({
-      abortSignal: input.request.signal,
-      instructions: systemPrompt,
-      maxOutputTokens: CHAT_MAX_COMPLETION_TOKENS,
-      messages: modelMessages,
-      model: createChatModel(forwardedProps.model),
-      onEnd: ({ steps }) => {
-        const usage = summarizeAiUsage({ steps });
-        void (async () => {
-          try {
-            await reportAiUsage({
-              chatId: threadId,
-              completionTokens: usage.completionTokens,
-              costUsd: usage.costUsd,
-              externalId: `${usageId}:${assistantMessageId}`,
-              mailboxId: forwardedProps.mailboxId,
-              model: forwardedProps.model,
-              promptTokens: usage.promptTokens,
-              promptTokensDetails: {
-                cacheWriteTokens: usage.cacheWriteTokens,
-                cachedTokens: usage.cachedTokens,
-              },
-              usageKind: "aiChat",
-              userId: input.userId,
-            });
-          } catch (error: unknown) {
-            reportError(error, { operation: "chat:report-ai-usage" });
-          }
-        })();
-      },
-      onError: ({ error }) => {
-        generationFailed = true;
-        reportError(error, { operation: "chat:generation" });
-      },
-      providerOptions: {
-        openrouter: {
-          reasoning: {
-            effort: "medium",
-          },
+  const result = streamText({
+    abortSignal: input.request.signal,
+    instructions: systemPrompt,
+    maxOutputTokens: CHAT_MAX_COMPLETION_TOKENS,
+    messages: modelMessages,
+    model: createChatModel(validated.model),
+    onEnd: ({ steps }) => {
+      const usage = summarizeAiUsage({ steps });
+      void (async () => {
+        try {
+          await reportAiUsage({
+            chatId: threadId,
+            completionTokens: usage.completionTokens,
+            costUsd: usage.costUsd,
+            externalId: `${usageId}:${assistantMessageId}`,
+            mailboxId,
+            model: validated.model,
+            promptTokens: usage.promptTokens,
+            promptTokensDetails: {
+              cacheWriteTokens: usage.cacheWriteTokens,
+              cachedTokens: usage.cachedTokens,
+            },
+            usageKind: "aiChat",
+            userId: input.userId,
+          });
+        } catch (error: unknown) {
+          reportError(error, { operation: "chat:report-ai-usage" });
+        }
+      })();
+    },
+    onError: ({ error }) => {
+      generationFailed = true;
+      reportError(error, { operation: "chat:generation" });
+    },
+    providerOptions: {
+      openrouter: {
+        reasoning: {
+          effort: "medium",
         },
       },
-      stopWhen: isStepCount(CHAT_MAX_STEPS),
-      toolApproval: {
-        ...(hasGoogleCalendarConnector
-          ? { create_google_calendar_event: "user-approval" as const }
-          : {}),
-        linear_write: "user-approval" as const,
-        memory: "user-approval" as const,
-        modify_mail: "user-approval" as const,
-      },
-      tools,
-    });
-  let result: ReturnType<typeof startGeneration>;
-  try {
-    result = startGeneration();
-  } catch (error) {
-    // The turn is already persisted as streaming; a synchronous setup failure
-    // must terminalize it or the chat stays locked behind the
-    // one-streaming-per-chat constraint.
-    await settleAssistantMessage({
-      assistantMessageId,
-      chatId: threadId,
-      error: "The answer could not be started.",
-      generationId,
-      mailboxId: forwardedProps.mailboxId,
-      parts: [],
-      status: "failed",
-      userId: input.userId,
-    });
-    throw error;
-  }
-
-  // Keep consuming after a client disconnect so the turn still settles in the
-  // database and other devices see a consistent transcript.
-  void (async () => {
-    try {
-      await result.consumeStream({
-        onError: (error) => {
-          reportError(error, { operation: "chat:consume-stream" });
-        },
-      });
-    } finally {
-      resolveGenerationTerminal();
-    }
-  })();
+    },
+    stopWhen: isStepCount(CHAT_MAX_STEPS),
+    toolApproval: {
+      ...(hasGoogleCalendarConnector
+        ? { create_google_calendar_event: "user-approval" as const }
+        : {}),
+      linear_write: "user-approval" as const,
+      memory: "user-approval" as const,
+      modify_mail: "user-approval" as const,
+    },
+    tools,
+  });
 
   return createUIMessageStreamResponse({
     stream: toUIMessageStream({
       generateMessageId: () => assistantMessageId,
       onEnd: async ({ messages }) => {
-        await generationTerminal;
+        // A disconnected or failed turn leaves nothing behind; the next
+        // request rebuilds from what is actually stored.
+        if (input.request.signal.aborted || generationFailed) {
+          return;
+        }
         const responseMessage = messages.at(-1);
         if (responseMessage?.role !== "assistant") {
           return;
         }
-        let status: "cancelled" | "complete" | "failed" = "complete";
-        if (input.request.signal.aborted) {
-          status = "cancelled";
-        } else if (generationFailed) {
-          status = "failed";
-        }
         try {
-          await settleAssistantMessage({
-            assistantMessageId,
-            chatId: threadId,
-            error:
-              status === "failed" ? "The answer could not be completed." : null,
-            generationId,
-            mailboxId: forwardedProps.mailboxId,
-            parts: responseMessage.parts,
-            status,
-            userId: input.userId,
-          });
-        } catch (error) {
-          if (!(error instanceof ChatRequestError)) {
-            reportError(error, { operation: "chat:settle-assistant-message" });
+          const now = new Date();
+          const parts = responseMessage.parts as ChatMessagePart[];
+          if (continuingRowId === null) {
+            await db.insert(chatMessage).values({
+              chatId: threadId,
+              createdAt: now,
+              id: assistantMessageId,
+              parts,
+              position: assistantPosition,
+              role: "assistant",
+              userId: input.userId,
+            });
+          } else {
+            await db
+              .update(chatMessage)
+              .set({ parts })
+              .where(
+                and(
+                  eq(chatMessage.id, continuingRowId),
+                  eq(chatMessage.chatId, threadId)
+                )
+              );
           }
+          await db
+            .update(chatTable)
+            .set({ updatedAt: now })
+            .where(eq(chatTable.id, threadId));
+        } catch (error) {
+          reportError(error, { operation: "chat:persist-assistant-turn" });
         }
       },
       onError: () => "The answer could not be completed.",

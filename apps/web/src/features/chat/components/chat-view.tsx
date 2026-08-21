@@ -9,7 +9,6 @@ import { Button } from "@quieter/ui/button";
 import { toast } from "@quieter/ui/toast";
 import * as Sentry from "@sentry/tanstackstart-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { QueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
   DefaultChatTransport,
@@ -56,8 +55,6 @@ import { ChatTranscript } from "./chat-transcript";
 const CHAT_API_ENDPOINT = "/api/chat";
 const MAX_TRANSCRIPTION_AUDIO_DURATION_MS = 60_000;
 const MAX_TRANSCRIPTION_AUDIO_BASE64_LENGTH = 14_000_000;
-const CHAT_SETTLEMENT_DELAY_MS = 150;
-const CHAT_SETTLEMENT_ATTEMPTS = 10;
 
 type ChatData = RouterOutputs["chat"]["get"];
 
@@ -85,34 +82,6 @@ const fetchChat = Object.assign(
   },
   { preconnect: fetch.preconnect }
 );
-
-const fetchSettledChat = async (
-  queryClient: QueryClient,
-  mailboxId: string,
-  chatId: string,
-  attemptsRemaining = CHAT_SETTLEMENT_ATTEMPTS
-): Promise<ChatData> => {
-  const persistedChat = await queryClient.fetchQuery(
-    chatQueryOptions(mailboxId, chatId)
-  );
-  if (
-    persistedChat.messages.at(-1)?.status !== "streaming" ||
-    attemptsRemaining <= 1
-  ) {
-    return persistedChat;
-  }
-  // Let the aborted request persist its terminal state before refetching.
-  // eslint-disable-next-line promise/avoid-new
-  await new Promise<void>((resolve) => {
-    setTimeout(resolve, CHAT_SETTLEMENT_DELAY_MS);
-  });
-  return await fetchSettledChat(
-    queryClient,
-    mailboxId,
-    chatId,
-    attemptsRemaining - 1
-  );
-};
 
 const PlanRequired = ({
   organizationId,
@@ -167,7 +136,6 @@ const ChatSession = ({
 }) => {
   const queryClient = useQueryClient();
   const isCurrentSessionRef = useRef(true);
-  const appliedChatRevisionRef = useRef<string | null>(null);
   const defaultModel = useDefaultChatModel();
   const threadId = chatId ?? draftChatKey;
   const [input, setInput] = useState("");
@@ -213,18 +181,16 @@ const ChatSession = ({
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: USER_BILLING_QUERY_KEY }),
       queryClient.invalidateQueries({ queryKey: getChatsQueryKey(mailboxId) }),
+      queryClient.invalidateQueries({
+        queryKey: getChatQueryKey(mailboxId, threadId),
+      }),
     ]);
     let shouldSelectDraft = false;
     try {
-      await fetchSettledChat(queryClient, mailboxId, threadId);
+      await queryClient.fetchQuery(chatQueryOptions(mailboxId, threadId));
       shouldSelectDraft = true;
     } catch (fetchError) {
       shouldSelectDraft = shouldRetryOrpcError(0, fetchError);
-      if (chatId !== null) {
-        await queryClient.invalidateQueries({
-          queryKey: getChatQueryKey(mailboxId, threadId),
-        });
-      }
     }
     if (chatId === null && shouldSelectDraft && isCurrentSessionRef.current) {
       onChatIdChange(threadId);
@@ -252,11 +218,8 @@ const ChatSession = ({
     transport,
   });
 
-  const persistedLastMessage = chatData?.messages.at(-1);
   const isStreaming = status === "streaming" || status === "submitted";
   const isTranscribing = isPreparingTranscription || transcribeAudio.isPending;
-  const hasPersistedStream =
-    persistedLastMessage?.status === "streaming" && !isStreaming;
 
   const approvals: ChatToolApproval[] = messages.flatMap((message) =>
     message.role === "assistant"
@@ -295,7 +258,6 @@ const ChatSession = ({
 
   const disabled =
     !canUseAiChat ||
-    hasPersistedStream ||
     approvals.length > 0 ||
     isRetrying ||
     isResolvingCompose ||
@@ -305,15 +267,6 @@ const ChatSession = ({
   const errorMessage = (() => {
     if (isStreaming) {
       return "";
-    }
-    if (persistedLastMessage?.status === "failed") {
-      return persistedLastMessage.error ?? "The answer could not be completed.";
-    }
-    if (persistedLastMessage?.status === "cancelled") {
-      return "Answer stopped.";
-    }
-    if (persistedLastMessage?.status === "streaming") {
-      return "This answer is still running. Retry if it was interrupted.";
     }
     if (error !== undefined && error.message !== "") {
       return error.message;
@@ -328,29 +281,14 @@ const ChatSession = ({
     };
   }, []);
 
+  // Reconcile with the server copy whenever a fresh one arrives while this
+  // session is idle (after sends, retries, or external chat changes).
   useEffect(() => {
-    const revision = chatData?.updatedAt.toString() ?? null;
-    if (
-      isStreaming ||
-      chatData === undefined ||
-      revision === appliedChatRevisionRef.current
-    ) {
+    if (isStreaming || chatData === undefined) {
       return;
     }
     setMessages(toInitialMessages(chatData.messages));
-    appliedChatRevisionRef.current = revision;
   }, [chatData, isStreaming, setMessages]);
-
-  // Another tab or device may be generating into this chat. This observer adds
-  // polling only while a persisted stream exists and this client is idle; it
-  // shares the cache entry above, so no duplicate requests are created.
-  useQuery({
-    ...chatQueryOptions(mailboxId, chatId),
-    refetchInterval: (query) =>
-      isStreaming || query.state.data?.messages.at(-1)?.status !== "streaming"
-        ? false
-        : 1000,
-  });
 
   const resolveCompose = async (
     toolCallId: string,
@@ -452,34 +390,8 @@ const ChatSession = ({
     }
     setIsRetrying(true);
     try {
-      try {
-        const persistedChat = await rpc.chat.get({
-          chatId: threadId,
-          mailboxId,
-        });
-        const lastMessage = persistedChat.messages.at(-1);
-        if (
-          lastMessage?.role === "assistant" &&
-          lastMessage.status === "complete"
-        ) {
-          queryClient.setQueryData(
-            getChatQueryKey(mailboxId, threadId),
-            persistedChat
-          );
-          if (chatId === null && isCurrentSessionRef.current) {
-            onChatIdChange(threadId);
-          }
-          clearError();
-          return;
-        }
-        clearError();
-        await regenerate();
-      } catch {
-        // Nothing was persisted for this turn yet; resending the transcript
-        // lets the server create the missing rows.
-        clearError();
-        await sendMessage();
-      }
+      clearError();
+      await regenerate();
       await synchronizeChat();
     } finally {
       setIsRetrying(false);

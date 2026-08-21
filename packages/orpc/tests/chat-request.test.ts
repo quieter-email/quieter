@@ -1,11 +1,11 @@
 import { describe, expect, test } from "vite-plus/test";
 
+import { hasLinearConnectorMention } from "../src/chat/linear-tools";
 import {
   createChatTitle,
-  hasLinearConnectorMention,
   toCanonicalTranscript,
   validateChatRequest,
-} from "../src/chat/request";
+} from "../src/chat/service";
 
 const validBody = (): Record<string, unknown> => ({
   category: "inbox",
@@ -39,13 +39,11 @@ describe("chat request validation", () => {
     const body = validBody();
 
     expect(validateChatRequest(body)).toStrictEqual({
-      forwardedProps: {
-        category: body.category,
-        context: body.context,
-        mailboxId: body.mailboxId,
-        model: body.model,
-      },
+      category: body.category,
+      context: body.context,
       kind: "message",
+      mailboxId: body.mailboxId,
+      model: body.model,
       threadId: body.threadId,
       trigger: "submit-message",
       userMessage: {
@@ -207,19 +205,16 @@ describe("canonical transcript conversion", () => {
     expect(
       toCanonicalTranscript([
         {
-          createdAt: new Date("2026-08-20T00:00:00.000Z"),
           id: "system-1",
           parts: [{ text: "hidden", type: "text" }],
           role: "system",
         },
         {
-          createdAt: new Date("2026-08-20T00:00:00.000Z"),
           id: "user-1",
           parts: [{ text: "Question", type: "text" }],
           role: "user",
         },
         {
-          createdAt: new Date("2026-08-20T00:00:00.000Z"),
           id: "assistant-1",
           parts: [
             { text: "Answer", type: "text" },
@@ -265,7 +260,6 @@ describe("canonical transcript conversion", () => {
     expect(
       toCanonicalTranscript([
         {
-          createdAt: new Date("2026-08-20T00:00:00.000Z"),
           id: "assistant-empty",
           parts: [{ type: "unknown-shape" }, { mystery: true, type: "odd" }],
           role: "assistant",
