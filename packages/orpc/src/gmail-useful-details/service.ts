@@ -916,7 +916,9 @@ const upsertGmailUsefulDetail = async ({
         processedAt: now,
         promptTokens: usage.promptTokens,
         updatedAt: now,
-        usageReportedAt: hasText(model) ? null : now,
+        // Cost-less AI extractions are terminal; only retryable reporting
+        // failures keep usageReportedAt unset.
+        usageReportedAt: !hasText(model) || usage.costUsd === null ? now : null,
       })
       .where(eq(gmailUsefulDetailEvent.id, event.id));
   });
@@ -929,7 +931,8 @@ const upsertGmailUsefulDetail = async ({
     model,
     processedAt: now,
     promptTokens: usage.promptTokens,
-    usageReportedAt: hasText(model) ? event.usageReportedAt : now,
+    usageReportedAt:
+      !hasText(model) || usage.costUsd === null ? now : event.usageReportedAt,
   };
 };
 

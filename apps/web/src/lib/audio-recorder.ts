@@ -108,7 +108,18 @@ export const useAudioRecorder = (options: UseAudioRecorderOptions) => {
       recorder.start();
       setIsRecording(true);
     } catch (error) {
-      if (stream !== null && activeStreamRef.current !== stream) {
+      // A failed attempt releases everything it claimed, even when the stream
+      // was already registered as active before setup threw.
+      if (stream !== null) {
+        if (activeStreamRef.current === stream) {
+          activeStreamRef.current = null;
+        }
+        if (
+          recorderRef.current !== null &&
+          recorderRef.current.stream === stream
+        ) {
+          recorderRef.current = null;
+        }
         stopStreamTracks(stream);
       }
       throw error;

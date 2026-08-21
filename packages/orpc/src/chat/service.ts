@@ -111,13 +111,9 @@ const clientUserMessageSchema = z.object({
 
 const clientAssistantMessageSchema = z.object({
   id: identifierSchema,
-  parts: z.array(
-    z.looseObject({
-      state: z.string(),
-      toolCallId: z.string().min(1),
-      type: z.string().startsWith("tool-"),
-    })
-  ),
+  // Assistant messages stream as mixed content (step-start, text, tool
+  // parts); only the tool parts carry client-resolvable decisions.
+  parts: z.array(z.record(z.string(), z.unknown())),
   role: z.literal("assistant"),
 });
 
@@ -215,15 +211,23 @@ export const validateChatRequest = (body: unknown): ValidatedChatRequest => {
   const toolDecisions = new Map<string, boolean>();
   const toolOutputs = new Map<string, unknown>();
   for (const part of assistantMessage.parts) {
-    if (part.state === "approval-responded") {
+    const type: unknown = part.type;
+    if (typeof type !== "string" || !type.startsWith("tool-")) {
+      // Text, step-start, and other streamed parts ride along untouched.
+      continue;
+    }
+    const toolPart = z
+      .looseObject({ state: z.string(), toolCallId: z.string().min(1) })
+      .parse(part);
+    if (toolPart.state === "approval-responded") {
       const approval = z
         .looseObject({ approved: z.boolean(), id: z.string().min(1) })
         .parse(part.approval);
-      toolDecisions.set(part.toolCallId, approval.approved);
-    } else if (part.state === "output-available") {
+      toolDecisions.set(toolPart.toolCallId, approval.approved);
+    } else if (toolPart.state === "output-available") {
       // Compose proposals are the only client-resolved tools; anything else
       // claiming a client-side result is untrusted input.
-      if (part.type !== "tool-compose_email") {
+      if (type !== "tool-compose_email") {
         throw new z.ZodError([
           {
             code: "custom",
@@ -233,7 +237,7 @@ export const validateChatRequest = (body: unknown): ValidatedChatRequest => {
         ]);
       }
       toolOutputs.set(
-        part.toolCallId,
+        toolPart.toolCallId,
         composeEmailResultSchema.parse(part.output)
       );
     }

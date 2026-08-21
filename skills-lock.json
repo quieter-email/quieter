@@ -415,6 +415,12 @@
       "skillPath": ".agents/skills/unsafe-checker/SKILL.md",
       "computedHash": "46dfc90e16c7d0350ccdfda224ddb8c5dea8bf83589729ecd6c0e122a5659b8a"
     },
+    "unslop": {
+      "source": "cursor/plugins",
+      "sourceType": "github",
+      "skillPath": "pstack/skills/unslop/SKILL.md",
+      "computedHash": "d8593c3deff559acd5933ebb3023dab22c939b9adcac5deda75beeb0277342a0"
+    },
     "vercel-composition-patterns": {
       "source": "vercel-labs/agent-skills",
       "sourceType": "github",

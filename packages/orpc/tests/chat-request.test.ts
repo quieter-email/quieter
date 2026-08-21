@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
+import { z } from "zod";
 
 import { hasLinearConnectorMention } from "../src/chat/linear-tools";
 import {
@@ -125,6 +126,30 @@ describe("chat request validation", () => {
     expect(continued?.toolDecisions.get("tool-1")).toBeFalsy();
   });
 
+  test("accepts streamed assistant messages with mixed part types", () => {
+    const body = validBody();
+    body.message = {
+      id: "assistant-1",
+      parts: [
+        { type: "step-start" },
+        { text: "Let me move that message for you.", type: "text" },
+        {
+          approval: { approved: true, id: "approval-1" },
+          state: "approval-responded",
+          toolCallId: "tool-1",
+          type: "tool-modify_mail",
+        },
+      ],
+      role: "assistant",
+    };
+
+    const validated = validateChatRequest(body);
+    expect(validated.kind).toBe("continue");
+    const continued = validated.kind === "continue" ? validated : undefined;
+    expect(continued?.toolDecisions.get("tool-1")).toBeTruthy();
+    expect(continued?.assistantMessageId).toBe("assistant-1");
+  });
+
   test("accepts a compose outcome as the only client-resolvable tool output", () => {
     const body = validBody();
     body.message = {
@@ -185,7 +210,14 @@ describe("chat request validation", () => {
       role: "assistant",
     };
 
-    expect(() => validateChatRequest(body)).toThrow(/invalid_type/iu);
+    let thrown: unknown;
+    try {
+      validateChatRequest(body);
+    } catch (error) {
+      thrown = error;
+    }
+    const issues = thrown instanceof z.ZodError ? thrown.issues : [];
+    expect(issues.some(({ code }) => code === "invalid_type")).toBeTruthy();
   });
 
   test("rejects an assistant message without client resolutions", () => {
