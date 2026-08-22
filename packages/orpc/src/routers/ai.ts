@@ -7,11 +7,20 @@ import {
   defaultAutoLabelModel,
   defaultUsefulDetailModel,
 } from "@quieter/ai/chat-models";
+import type { ParsedMailSearch } from "@quieter/ai/parse-mail-search";
+import { MAIL_SEARCH_QUERY_MAX_LENGTH } from "@quieter/ai/parse-mail-search";
+import { reportAiUsage } from "@quieter/billing";
 import { db } from "@quieter/database/client";
 import { user, userAiContext } from "@quieter/database/schema";
+import {
+  isMailSearchFilterSupported,
+  normalizeStructuredMailSearch,
+} from "@quieter/mail/search";
+import { reportError } from "@quieter/observability";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
+import { assertCanUseAi } from "../ai-access";
 import {
   AI_MEMORY_LEARNING_PROMPT_MAX_LENGTH,
   exportMailboxAiMemory,
@@ -27,7 +36,7 @@ import {
   updateAiMemoryScopeConfig,
 } from "../ai-memory";
 import { assertAccessibleMailbox } from "../mailbox/service";
-import { protectedProcedure } from "./base";
+import { mailboxIdSchema, protectedProcedure } from "./base";
 
 const memoryTargetSchema = z
   .object({
@@ -204,6 +213,72 @@ export const aiRouter = {
       } catch (error) {
         throw toUserMemoryError(error);
       }
+    }),
+
+  interpretSearchQuery: protectedProcedure
+    .input(
+      z.object({
+        availableLabels: z
+          .array(z.string().trim().min(1).max(120))
+          .max(100)
+          .optional(),
+        mailboxId: mailboxIdSchema,
+        query: z.string().trim().min(1).max(MAIL_SEARCH_QUERY_MAX_LENGTH),
+      })
+    )
+    .handler(async ({ context, input }) => {
+      const mailbox = await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      await assertCanUseAi({
+        organizationId: mailbox.organizationId,
+        userId: context.userId,
+      });
+
+      const requestId = randomUUID();
+      let parsed: ParsedMailSearch;
+      try {
+        const { parseMailSearchWithAi, MAIL_SEARCH_INTERPRET_MODEL } =
+          await import("@quieter/ai/parse-mail-search");
+        parsed = await parseMailSearchWithAi({
+          availableLabels: input.availableLabels ?? [],
+          onUsage: (usage) => {
+            void reportAiUsage({
+              chatId: null,
+              completionTokens: usage.completionTokens,
+              costUsd: usage.costUsd,
+              externalId: `search-interpret:${requestId}`,
+              mailboxId: mailbox.id,
+              model: MAIL_SEARCH_INTERPRET_MODEL,
+              promptTokens: usage.promptTokens,
+              promptTokensDetails: {
+                cacheWriteTokens: usage.cacheWriteTokens,
+                cachedTokens: usage.cachedTokens,
+              },
+              usageKind: "aiChat",
+              userId: context.userId,
+            }).catch((error: unknown) => {
+              reportError(error, {
+                operation: "ai:interpret-search-query:report-usage",
+              });
+            });
+          },
+          query: input.query,
+        });
+      } catch (error) {
+        reportError(error, { operation: "ai:interpret-search-query" });
+        throw new ORPCError("INTERNAL_SERVER_ERROR", {
+          message: "Could not interpret that search right now.",
+        });
+      }
+
+      return normalizeStructuredMailSearch({
+        filters: parsed.filters.filter((filter) =>
+          isMailSearchFilterSupported(mailbox.provider, filter)
+        ),
+        text: parsed.freeText,
+      });
     }),
 
   resetPersonalization: protectedProcedure.handler(async ({ context }) => {

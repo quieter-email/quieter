@@ -9,6 +9,7 @@
     "./compose/schema": "./src/compose/schema.ts",
     "./message-content": "./src/message-content.ts",
     "./mailbox-organization": "./src/mailbox-organization.ts",
+    "./natural-language-search": "./src/natural-language-search.ts",
     "./raw-message": "./src/raw-message.ts",
     "./search": "./src/search.ts",
     "./send": "./src/send.ts",

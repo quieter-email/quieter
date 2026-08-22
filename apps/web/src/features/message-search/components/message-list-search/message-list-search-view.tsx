@@ -2,8 +2,10 @@
 
 import {
   Cancel01Icon,
+  Loading03Icon,
   Refresh01Icon,
   Search01Icon,
+  SparklesIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
@@ -79,7 +81,9 @@ export const MessageListSearchView = ({
     handleTextInputKeyDown,
     handleTokenKeyDown,
     highlightedDropdownItemKey,
+    interpretNaturalLanguage,
     isDropdownOpen,
+    isInterpretingSearch,
     isLoadingLabels,
     isRefreshing,
     labelsErrorMessage,
@@ -415,6 +419,46 @@ export const MessageListSearchView = ({
             </div>
 
             <LazyMotion features={domAnimation}>
+              <AnimatePresence>
+                {currentState.text.trim().length > 0 && (
+                  <IconButtonTooltip
+                    key="interpret-search"
+                    label="Convert to filters"
+                  >
+                    <Button
+                      aria-label="Convert to filters"
+                      className="size-6 shrink-0 rounded-lg text-muted-fg hover:bg-control-hover hover:text-fg"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        interpretNaturalLanguage();
+                      }}
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                      }}
+                      size="icon-xs"
+                      type="button"
+                      variant="ghost"
+                      render={
+                        <m.button
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.9 }}
+                          transition={{ duration: 0.15 }}
+                        />
+                      }
+                    >
+                      <HugeiconsIcon
+                        className={cn("size-4", {
+                          "animate-spin": isInterpretingSearch,
+                        })}
+                        icon={
+                          isInterpretingSearch ? Loading03Icon : SparklesIcon
+                        }
+                      />
+                    </Button>
+                  </IconButtonTooltip>
+                )}
+              </AnimatePresence>
               <AnimatePresence>
                 {(currentState.text.length > 0 ||
                   currentState.filters.length > 0) && (

@@ -79,6 +79,7 @@ export type ChatModel = (typeof chatModels)[number]["value"];
 export const defaultChatModel: ChatModel = "openai/gpt-5.6-luna";
 export const CHAT_TITLE_MODEL = defaultChatModel;
 export const defaultAutoLabelModel = defaultChatModel;
+export const MAIL_SEARCH_INTERPRET_MODEL = defaultChatModel;
 export const defaultUsefulDetailModel = defaultChatModel;
 export const AI_MEMORY_MODEL = defaultChatModel;
 export const TRANSCRIBED_EMAIL_FORMAT_MODEL = defaultChatModel;

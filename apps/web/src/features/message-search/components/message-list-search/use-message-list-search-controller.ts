@@ -1,11 +1,13 @@
 "use client";
 
+import { parseNaturalLanguageMailSearch } from "@quieter/mail/natural-language-search";
 import {
   getSupportedMailSearchFilterTypes,
   isMailSearchFilterSupported,
 } from "@quieter/mail/search";
+import { toast } from "@quieter/ui/toast";
 import { useHotkey } from "@tanstack/react-hotkeys";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   useCallback,
   useEffect,
@@ -32,7 +34,9 @@ import type {
   SearchFilterChip,
   StructuredSearchState,
 } from "#/features/message-search/state/message-list-search-state";
+import { USER_BILLING_QUERY_KEY } from "#/features/settings/domain/billing";
 import { labelsQueryOptions } from "#/lib/gmail/labels-query";
+import { orpc } from "#/lib/orpc";
 
 import { searchFilterOptions } from "../message-list-search-filter-options";
 import type {
@@ -765,6 +769,12 @@ export const useMessageListSearchController = ({
       return;
     }
 
+    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      interpretNaturalLanguage();
+      return;
+    }
+
     if (event.key === "Enter") {
       event.preventDefault();
       commitOrActivateHighlightedDropdownItem();
@@ -873,6 +883,66 @@ export const useMessageListSearchController = ({
 
   const runSearch = () => {
     commitState(currentState, true, { refreshIfUnchanged: true });
+  };
+
+  const queryClient = useQueryClient();
+  const interpretMutation = useMutation(
+    orpc.ai.interpretSearchQuery.mutationOptions()
+  );
+
+  const applyInterpretedState = (search: StructuredSearchState) => {
+    let mergedFilters = currentState.filters;
+    for (const filter of search.filters) {
+      ({ filters: mergedFilters } = upsertFilter(mergedFilters, filter));
+    }
+    commitState(
+      { filters: mergedFilters, text: normalizeSearchText(search.text) },
+      true
+    );
+    focusTextInput({ toEnd: true });
+  };
+
+  const interpretNaturalLanguage = () => {
+    const query = currentState.text.trim();
+    if (query.length === 0 || interpretMutation.isPending) {
+      return;
+    }
+
+    const labelNames = userLabels.map((label) => label.name);
+    const localResult = parseNaturalLanguageMailSearch({
+      labels: labelNames,
+      text: query,
+    });
+    if (localResult.filters.length > 0) {
+      applyInterpretedState(localResult);
+      return;
+    }
+
+    interpretMutation.mutate(
+      {
+        availableLabels: labelNames,
+        mailboxId,
+        query,
+      },
+      {
+        onError: (error) => {
+          toast.error(error.message || "Could not read that search.");
+        },
+        onSuccess: (result) => {
+          void queryClient.invalidateQueries({
+            queryKey: USER_BILLING_QUERY_KEY,
+          });
+          if (
+            result.filters.length === 0 &&
+            normalizeSearchText(result.text).length === 0
+          ) {
+            toast.message("Could not turn that into filters.");
+            return;
+          }
+          applyInterpretedState(result);
+        },
+      }
+    );
   };
 
   const selectDateFilterValue = (date: Date) => {
@@ -1004,7 +1074,9 @@ export const useMessageListSearchController = ({
     handleTextInputKeyDown,
     handleTokenKeyDown,
     highlightedDropdownItemKey,
+    interpretNaturalLanguage,
     isDropdownOpen,
+    isInterpretingSearch: interpretMutation.isPending,
     isLoadingLabels: isLabelsPending,
     isRefreshing,
     labelsErrorMessage: isLabelsPending ? null : (labelsError?.message ?? null),
