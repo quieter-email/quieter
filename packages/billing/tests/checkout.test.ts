@@ -2,7 +2,14 @@ import type { Checkout } from "@polar-sh/sdk/models/components/checkout.js";
 import type { Customer } from "@polar-sh/sdk/models/components/customer.js";
 import type * as DatabaseClientModule from "@quieter/database/client";
 import type * as ServerEnvModule from "@quieter/env/server";
-import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
+import {
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  test,
+  vi,
+} from "vite-plus/test";
 import { z } from "zod";
 
 import { createBillingCheckout } from "../src";
@@ -115,6 +122,12 @@ vi.mock(import("../src/subscription-sync"), async (importOriginal) => {
 });
 
 describe("Polar checkout creation", () => {
+  beforeAll(async () => {
+    // The Polar SDK ships thousands of generated modules; the first lazy load
+    // inside a test can exceed the default timeout under load, so warm it here.
+    await import("@polar-sh/sdk");
+  }, 30_000);
+
   beforeEach(() => {
     vi.clearAllMocks();
     checkoutMocks.where.mockReturnValue({

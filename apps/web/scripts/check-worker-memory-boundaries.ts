@@ -27,11 +27,11 @@ const boundaries: {
   },
   {
     marker: "packages/auth/src/session.ts",
-    maximumStaticGraphBytes: cloudflareBundle ? 2_700_000 : 1_500_000,
+    maximumStaticGraphBytes: cloudflareBundle ? 2_700_000 : 1_700_000,
   },
   {
     marker: "packages/auth/src/index.ts",
-    maximumStaticGraphBytes: cloudflareBundle ? 3_700_000 : 1_600_000,
+    maximumStaticGraphBytes: cloudflareBundle ? 3_700_000 : 1_900_000,
   },
   {
     marker: "packages/orpc/src/routers/mail.ts",

@@ -10,12 +10,10 @@ import {
 } from "@quieter/ui/select";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { TextFieldInput } from "@quieter/ui/text-field";
-import { toast } from "@quieter/ui/toast";
 
 import { MailboxAccessPill } from "#/features/mailbox/components/mailbox-access-pill";
 import type { MailboxGrantRole } from "#/features/mailbox/components/mailbox-access-pill";
 import {
-  getMutationErrorMessage,
   mailboxGrantRoleOptions,
   mailboxGrantSelectItems,
   parseMailboxGrantRole,
@@ -430,8 +428,3 @@ export const ManagedMailboxDetailSettings = ({
     </>
   );
 };
-
-export const showManagedMailboxMutationError =
-  (fallback: string) => (error: unknown) => {
-    toast.error(getMutationErrorMessage(error, fallback));
-  };

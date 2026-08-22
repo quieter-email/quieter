@@ -7,7 +7,6 @@ import { BILLING_FEATURES } from "@quieter/billing/plans";
 import type { RouterOutputs } from "@quieter/orpc";
 import { Button } from "@quieter/ui/button";
 import { toast } from "@quieter/ui/toast";
-import * as Sentry from "@sentry/tanstackstart-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -38,8 +37,8 @@ import {
   getChatQueryKey,
   getChatsQueryKey,
 } from "#/lib/chat-query";
-import { isExpectedClientError } from "#/lib/client-error-reporting";
 import { connectorsQueryOptions } from "#/lib/connectors-query";
+import { toastError } from "#/lib/error-toast";
 import { orpc, rpc } from "#/lib/orpc";
 import { shouldRetryOrpcError } from "#/lib/orpc-errors";
 
@@ -336,26 +335,14 @@ const ChatSession = ({
         }
       }
     } catch (composeError) {
-      // Authorization and user-state failures are expected; anything else is a
-      // defect worth reporting.
-      if (!isExpectedClientError(composeError)) {
-        const errorStatus =
-          typeof composeError === "object" &&
-          composeError !== null &&
-          "status" in composeError
-            ? composeError.status
-            : undefined;
-        if (!(typeof errorStatus === "number" && errorStatus < 500)) {
-          Sentry.captureException(composeError, {
-            tags: { boundary: "chat-compose" },
-          });
-        }
-      }
       const errorText =
         action === "save_draft"
           ? "The draft could not be saved."
           : "The email could not be sent.";
-      toast.error(errorText);
+      toastError(composeError, {
+        boundary: "chat-compose",
+        fallback: errorText,
+      });
       addToolOutput({
         errorText,
         state: "output-error",

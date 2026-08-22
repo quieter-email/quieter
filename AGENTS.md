@@ -23,6 +23,7 @@
 - Include `mailboxId` in every mailbox-scoped query key, cache write, chat, compose session, and mutation.
 - Keep consent browser-only. Load analytics only after measurement consent.
 - Never send message content, search text, mailbox/user identifiers, email addresses, or private URL parameters to analytics; you can log numbers but not personally identifiable information.
+- Surface action failures to the user with `toastError` from `#/lib/error-toast`: user-driven errors (validation, authorization, credits) toast the server-provided message verbatim, everything else toasts a generic retry message.
 - Report unexpected failures to Sentry; filter expected user and authorization states.
 - Load AI context through `loadAiAgentContext`; never query `aiMemory` directly.
 - Do not expose infrastructure, provider, or model names in user-facing copy unless the user must configure or interoperate with that name. User-friendly names, not technical terms and names.

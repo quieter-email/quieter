@@ -7,12 +7,12 @@ import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import { cn } from "@quieter/ui/cn";
 import { Field, FieldLabel } from "@quieter/ui/field";
 import { Input } from "@quieter/ui/input";
-import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { GoogleLogo } from "#/components/google-logo";
+import { toastError } from "#/lib/error-toast";
 import { openGoogleAccountLink } from "#/lib/google-account-link";
 import { orpc } from "#/lib/orpc";
 
@@ -59,8 +59,11 @@ export const OnboardingScreen = () => {
   const { data: state } = useQuery(orpc.onboarding.getState.queryOptions());
   const completeMutation = useMutation({
     ...orpc.onboarding.complete.mutationOptions(),
-    onError: () => {
-      toast.error("Could not finish setting up your account.");
+    onError: (error) => {
+      toastError(error, {
+        boundary: "onboarding",
+        fallback: "Could not finish setting up your account.",
+      });
     },
     onSuccess: async () => {
       queryClient.clear();
@@ -84,9 +87,12 @@ export const OnboardingScreen = () => {
         queryClient,
         returnTo: "/onboarding?gmailLink=complete",
       });
-    } catch {
+    } catch (error) {
       setIsConnectingGmail(false);
-      toast.error("Could not start the Gmail connection.");
+      toastError(error, {
+        boundary: "gmail-connect",
+        fallback: "Could not start the Gmail connection.",
+      });
     }
   };
 

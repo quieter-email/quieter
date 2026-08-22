@@ -16,6 +16,7 @@
     "./memory-embeddings": "./src/memory-embeddings.ts",
     "./openrouter": "./src/openrouter.ts",
     "./openrouter-transcription": "./src/openrouter-transcription.ts",
+    "./parse-mail-search": "./src/parse-mail-search.ts",
     "./suggest-template-placeholder": "./src/suggest-template-placeholder.ts",
     "./transcription-format": "./src/transcription-format.ts"
   },

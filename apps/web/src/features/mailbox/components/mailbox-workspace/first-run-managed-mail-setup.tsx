@@ -45,6 +45,7 @@ import {
   userBillingQueryOptions,
 } from "#/features/settings/domain/billing";
 import { authClient } from "#/lib/auth";
+import { toastError } from "#/lib/error-toast";
 import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
 import { orpc } from "#/lib/orpc";
 
@@ -60,9 +61,6 @@ const setupSteps = [
   { icon: Mail01Icon, id: "mailbox", label: "Mailbox" },
   { icon: Key02Icon, id: "api-key", label: "API key" },
 ] as const;
-
-const getErrorMessage = (error: unknown, fallback: string) =>
-  error instanceof Error ? error.message : fallback;
 
 const getOrganizationName = (
   organizations: FirstRunOrganization[],
@@ -609,8 +607,12 @@ export const FirstRunManagedMailSetup = ({
   };
   const checkoutMutation = useMutation({
     ...orpc.billing.createCheckout.mutationOptions(),
-    onError: (error) =>
-      toast.error(error.message || "Could not start checkout."),
+    onError: (error) => {
+      toastError(error, {
+        boundary: "billing",
+        fallback: "Could not start checkout.",
+      });
+    },
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: USER_BILLING_QUERY_KEY });
       window.location.assign(result.checkoutUrl);
@@ -646,8 +648,12 @@ export const FirstRunManagedMailSetup = ({
       return { key: response.data.key, organizationId: requestOrgId };
     },
     mutationKey: ["first-run", "organization-api-key", organizationId],
-    onError: (error) =>
-      toast.error(getErrorMessage(error, "Could not create API key.")),
+    onError: (error) => {
+      toastError(error, {
+        boundary: "onboarding",
+        fallback: "Could not create API key.",
+      });
+    },
     onSuccess: async (result) => {
       // Only apply the response if it matches the currently selected organization
       if (result.organizationId === organizationId) {
@@ -727,12 +733,10 @@ export const FirstRunManagedMailSetup = ({
                 },
                 {
                   onError: (error) => {
-                    toast.error(
-                      getErrorMessage(
-                        error,
-                        "Could not create managed mailbox."
-                      )
-                    );
+                    toastError(error, {
+                      boundary: "onboarding",
+                      fallback: "Could not create managed mailbox.",
+                    });
                   },
                 }
               );

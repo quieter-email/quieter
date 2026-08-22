@@ -53,7 +53,7 @@ import { z } from "zod";
 
 import { runDetached } from "#/features/settings/components/mailboxes-settings-shared";
 import { authClient } from "#/lib/auth";
-import { getErrorMessage } from "#/lib/orpc-errors";
+import { toastError } from "#/lib/error-toast";
 
 import {
   SettingsBackButton,
@@ -530,7 +530,10 @@ const ResetApiKeyDialog = ({
       } catch {
         /* cache refresh failures are non-fatal */
       }
-      toast.error(getMutationErrorMessage(error, "Could not reset API key."));
+      toastError(error, {
+        boundary: "organization-api-keys",
+        fallback: "Could not reset API key.",
+      });
     },
     onSuccess: (data) => {
       setCreatedKey(data.key);
@@ -701,7 +704,10 @@ const DeleteApiKeyDialog = ({
     },
     mutationKey: ["organization-api-keys", organizationId, apiKey.id, "delete"],
     onError: (error) => {
-      toast.error(getErrorMessage(error, "Could not remove API key."));
+      toastError(error, {
+        boundary: "organization-api-keys",
+        fallback: "Could not remove API key.",
+      });
     },
     onSuccess: async () => {
       setOpen(false);

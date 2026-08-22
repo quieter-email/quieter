@@ -36,6 +36,7 @@ import {
   WorkspaceSection,
   workspaceSectionVariants,
 } from "#/components/workspace-section";
+import { toastError } from "#/lib/error-toast";
 import { orpc } from "#/lib/orpc";
 
 import { normalizeComposeBodyHtml } from "../domain/draft";
@@ -101,7 +102,10 @@ export const TemplateWorkspace = ({
   const createMutation = useMutation({
     ...orpc.mailTemplates.create.mutationOptions(),
     onError: (error) => {
-      toast.error(error.message || "Could not save the template.");
+      toastError(error, {
+        boundary: "mail-templates",
+        fallback: "Could not save the template.",
+      });
     },
     onSuccess: async (template) => {
       await refreshTemplates();
@@ -112,7 +116,10 @@ export const TemplateWorkspace = ({
   const updateMutation = useMutation({
     ...orpc.mailTemplates.update.mutationOptions(),
     onError: (error) => {
-      toast.error(error.message || "Could not update the template.");
+      toastError(error, {
+        boundary: "mail-templates",
+        fallback: "Could not update the template.",
+      });
     },
     onSuccess: async () => {
       await refreshTemplates();
@@ -160,7 +167,10 @@ export const TemplateWorkspace = ({
   const deleteMutation = useMutation({
     ...orpc.mailTemplates.delete.mutationOptions(),
     onError: (error) => {
-      toast.error(error.message || "Could not delete the template.");
+      toastError(error, {
+        boundary: "mail-templates",
+        fallback: "Could not delete the template.",
+      });
     },
     onSuccess: async () => {
       await refreshTemplates();
