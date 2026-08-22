@@ -59,6 +59,7 @@ import { useRef, useState } from "react";
 
 import { MailboxColorPicker } from "#/features/message-labels/components/mailbox-color-picker";
 import { mailboxLabelDotClassNameByColor } from "#/features/message-labels/domain/mailbox-label-presentation";
+import { toastError } from "#/lib/error-toast";
 import { labelsQueryOptions } from "#/lib/gmail/labels-query";
 import {
   getManagedRulesQueryKey,
@@ -501,7 +502,7 @@ const useManagedMailboxViewActions = ({
       await runRowAction(kind, id, action, operation);
       await invalidateViews();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : fallback);
+      toastError(error, { boundary: "mailbox-organizer", fallback });
     }
   };
 
@@ -515,7 +516,7 @@ const useManagedMailboxViewActions = ({
       await runReorder(scope, rowId, operation);
       await invalidateViews();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : fallback);
+      toastError(error, { boundary: "mailbox-organizer", fallback });
     }
   };
 
@@ -540,9 +541,10 @@ const useManagedMailboxViewActions = ({
       setViewName("");
       await invalidateViews();
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Could not save view."
-      );
+      toastError(error, {
+        boundary: "mailbox-organizer",
+        fallback: "Could not save view.",
+      });
     }
   };
 
@@ -571,9 +573,10 @@ const useManagedMailboxViewActions = ({
       setEditingView(null);
       await invalidateViews();
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Could not update view."
-      );
+      toastError(error, {
+        boundary: "mailbox-organizer",
+        fallback: "Could not update view.",
+      });
     }
   };
 
@@ -730,7 +733,7 @@ const useManagedMailboxRuleActions = ({
       await invalidateRules();
       onSuccess?.(result);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : fallback);
+      toastError(error, { boundary: "mailbox-organizer", fallback });
     }
   };
 
@@ -762,9 +765,10 @@ const useManagedMailboxRuleActions = ({
       await operation();
     } catch (error) {
       queryClient.setQueryData(rulesKey, previous);
-      toast.error(
-        error instanceof Error ? error.message : "Could not update rule."
-      );
+      toastError(error, {
+        boundary: "mailbox-organizer",
+        fallback: "Could not update rule.",
+      });
       return;
     }
     await invalidateRules();
@@ -779,7 +783,7 @@ const useManagedMailboxRuleActions = ({
       await runReorder("rules", rowId, operation);
       await invalidateRules();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : fallback);
+      toastError(error, { boundary: "mailbox-organizer", fallback });
     }
   };
 
@@ -809,9 +813,10 @@ const useManagedMailboxRuleActions = ({
       });
       setPreview(result);
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Could not preview rule."
-      );
+      toastError(error, {
+        boundary: "mailbox-organizer",
+        fallback: "Could not preview rule.",
+      });
     }
   };
 
@@ -866,9 +871,10 @@ const useManagedMailboxRuleActions = ({
       setPreview(null);
       await invalidateRules();
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Could not save rule."
-      );
+      toastError(error, {
+        boundary: "mailbox-organizer",
+        fallback: "Could not save rule.",
+      });
     }
   };
 
@@ -876,11 +882,10 @@ const useManagedMailboxRuleActions = ({
     try {
       await cancelBackfillMutation.mutateAsync({ backfillId, mailboxId });
     } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Could not cancel the historical rule run."
-      );
+      toastError(error, {
+        boundary: "mailbox-organizer",
+        fallback: "Could not cancel the historical rule run.",
+      });
     }
   };
 

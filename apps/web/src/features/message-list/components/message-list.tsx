@@ -21,6 +21,7 @@ import {
 } from "#/features/hotkeys/domain/hotkey-guards";
 import { MessageListSearch } from "#/features/message-search/components/message-list-search";
 import { appEaseOut, appMotionDuration } from "#/features/motion/app-motion";
+import { toastError } from "#/lib/error-toast";
 import type { MailboxCategory, MessageListItem } from "#/lib/gmail/gmail";
 import { labelsQueryOptions } from "#/lib/gmail/labels-query";
 import { buildThreadListEntries } from "#/lib/gmail/thread-list";
@@ -456,11 +457,10 @@ const useMessageListInteractions = ({
       toast.success(successMessage(threads));
       selection.clearSelection();
     } catch (error) {
-      toast.error(
-        error instanceof Error && error.message
-          ? error.message
-          : "Could not update messages."
-      );
+      toastError(error, {
+        boundary: "bulk-actions",
+        fallback: "Could not update messages.",
+      });
     }
   };
   const openBulkLabels = () => {

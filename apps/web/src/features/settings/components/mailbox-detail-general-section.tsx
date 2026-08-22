@@ -19,15 +19,13 @@ import {
 
 import { MailboxAccessPill } from "#/features/mailbox/components/mailbox-access-pill";
 import type { MailboxGrantRole } from "#/features/mailbox/components/mailbox-access-pill";
-import {
-  showMutationError,
-  runDetached,
-} from "#/features/settings/components/mailboxes-settings-shared";
+import { runDetached } from "#/features/settings/components/mailboxes-settings-shared";
 import {
   SettingsRow,
   SettingsRows,
   SettingsSection,
 } from "#/features/settings/components/settings-layout";
+import { toastError } from "#/lib/error-toast";
 
 const getGrantRoleDescription = (grantRole: MailboxGrantRole) => {
   if (grantRole === "manager") {
@@ -127,7 +125,12 @@ export const MailboxDetailGeneralSection = ({
                   moveGmailMailboxMutation.mutate(
                     { mailboxId: mailbox.id, organizationId: value },
                     {
-                      onError: showMutationError("Could not move mailbox."),
+                      onError: (error) => {
+                        toastError(error, {
+                          boundary: "mailbox-settings",
+                          fallback: "Could not move mailbox.",
+                        });
+                      },
                     }
                   );
                 }}

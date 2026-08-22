@@ -54,6 +54,7 @@ import { MessageDeliverySection } from "#/features/message-delivery/components/m
 import { MessageDeliveryStatus } from "#/features/message-delivery/components/message-delivery-status";
 import { supportsMessageDelivery } from "#/features/message-delivery/domain/message-delivery-support";
 import { MessageLabels } from "#/features/message-labels/components/message-labels";
+import { toastError } from "#/lib/error-toast";
 import {
   hasRenderableMessageBody,
   isMessageUnread,
@@ -189,11 +190,10 @@ const runHotkeyThreadAction = async (
     await action();
     toast.success(successMessage);
   } catch (error) {
-    toast.error(
-      error instanceof Error && error.message
-        ? error.message
-        : "Could not update message."
-    );
+    toastError(error, {
+      boundary: "message-actions",
+      fallback: "Could not update message.",
+    });
   }
 };
 
@@ -1116,7 +1116,10 @@ const useMessageViewData = ({
   const createApiMailboxMutation = useMutation({
     ...orpc.mail.createManagedMailboxForApiMessage.mutationOptions(),
     onError: (error) => {
-      toast.error(error.message ?? "Could not create mailbox.");
+      toastError(error, {
+        boundary: "api-mailbox",
+        fallback: "Could not create mailbox.",
+      });
     },
     onSuccess: async () => {
       await Promise.all([

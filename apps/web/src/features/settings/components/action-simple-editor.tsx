@@ -43,6 +43,7 @@ import {
   CONNECTORS_QUERY_KEY,
   openConnectorLink,
 } from "#/lib/connectors-query";
+import { toastError } from "#/lib/error-toast";
 import {
   mailboxActionQueryKey,
   mailboxActionsListQueryKey,
@@ -417,9 +418,6 @@ const ActionRuleFields = ({
 const hasEditorValue = (value: string | null | undefined): value is string =>
   value !== undefined && value !== "";
 
-const getActionErrorMessage = (error: unknown, fallback: string) =>
-  error instanceof Error ? error.message : fallback;
-
 const getActionFormDirty = ({
   action,
   credentialId,
@@ -574,7 +572,10 @@ const useActionEditorMutations = ({
   const saveDraftMutation = useMutation({
     ...orpc.mailboxActions.saveDraft.mutationOptions(),
     onError: (error) => {
-      toast.error(getActionErrorMessage(error, "Could not save action."));
+      toastError(error, {
+        boundary: "mailbox-actions",
+        fallback: "Could not save action.",
+      });
     },
     onSuccess: async (result) => {
       await invalidateActionQueries();
@@ -584,7 +585,10 @@ const useActionEditorMutations = ({
   const publishMutation = useMutation({
     ...orpc.mailboxActions.publish.mutationOptions(),
     onError: (error) => {
-      toast.error(getActionErrorMessage(error, "Could not publish action."));
+      toastError(error, {
+        boundary: "mailbox-actions",
+        fallback: "Could not publish action.",
+      });
     },
     onSuccess: async () => {
       await invalidateActionQueries();
@@ -603,7 +607,10 @@ const useActionEditorMutations = ({
         mailboxActionQueryKey(activeMailboxId, input.actionId),
         context?.previous
       );
-      toast.error(getActionErrorMessage(error, "Could not update action."));
+      toastError(error, {
+        boundary: "mailbox-actions",
+        fallback: "Could not update action.",
+      });
     },
     onMutate: async (input: { actionId: string; enabled: boolean }) => {
       const actionKey = mailboxActionQueryKey(activeMailboxId, input.actionId);
@@ -629,7 +636,10 @@ const useActionEditorMutations = ({
   const deleteActionMutation = useMutation({
     ...orpc.mailboxActions.delete.mutationOptions(),
     onError: (error) => {
-      toast.error(getActionErrorMessage(error, "Could not delete action."));
+      toastError(error, {
+        boundary: "mailbox-actions",
+        fallback: "Could not delete action.",
+      });
     },
     onSuccess: async () => {
       setSelectedActionId(undefined);
@@ -715,7 +725,10 @@ const useActionEditorController = ({
       });
     } catch (error) {
       form.setStartingConnection(false);
-      toast.error(getActionErrorMessage(error, "Could not start setup."));
+      toastError(error, {
+        boundary: "mailbox-actions",
+        fallback: "Could not start setup.",
+      });
     }
   };
 

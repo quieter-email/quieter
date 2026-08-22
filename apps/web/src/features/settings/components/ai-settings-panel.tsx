@@ -31,6 +31,7 @@ import {
   setDefaultChatModel,
   useDefaultChatModel,
 } from "#/features/ai/domain/default-chat-model-setting";
+import { toastError } from "#/lib/error-toast";
 import { orpc } from "#/lib/orpc";
 import { persistQueryByKey } from "#/lib/query-persister";
 
@@ -39,11 +40,6 @@ import { SettingsRow, SettingsRows, SettingsSection } from "./settings-layout";
 type AiSettings = RouterOutputs["ai"]["settings"];
 type CloudModelSettings = AiSettings["models"];
 type UpdateSettings = (updater: (current: AiSettings) => AiSettings) => void;
-
-const showMutationError = (error: unknown, fallback: string) => {
-  const message = error instanceof Error ? error.message.trim() : "";
-  toast.error(message.length > 0 ? message : fallback);
-};
 
 const ModelCostInfo = () => (
   <Tooltip>
@@ -97,7 +93,10 @@ const useAiModels = ({
     mutation.mutate(next, {
       onError(error) {
         setDraft(null);
-        showMutationError(error, "Could not update AI models.");
+        toastError(error, {
+          boundary: "ai-settings",
+          fallback: "Could not update AI models.",
+        });
       },
       onSuccess(savedModels) {
         updateSettings((current) => ({ ...current, models: savedModels }));
@@ -237,7 +236,10 @@ const AiPersonalizationSection = ({
             ...current,
             memory: { ...current.memory, enabled },
           }));
-          showMutationError(error, "Could not update personalization.");
+          toastError(error, {
+            boundary: "ai-settings",
+            fallback: "Could not update personalization.",
+          });
         },
         onSuccess(memory) {
           updateSettings((current) => ({ ...current, memory }));
@@ -249,7 +251,10 @@ const AiPersonalizationSection = ({
   const reset = () => {
     resetMutation.mutate(undefined, {
       onError(error) {
-        showMutationError(error, "Could not reset personalization.");
+        toastError(error, {
+          boundary: "ai-settings",
+          fallback: "Could not reset personalization.",
+        });
       },
       onSuccess() {
         toast.success("Personalization has been reset.");
