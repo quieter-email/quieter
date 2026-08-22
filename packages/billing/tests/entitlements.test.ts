@@ -1,7 +1,14 @@
 import type { Subscription } from "@polar-sh/sdk/models/components/subscription.js";
 import type * as DatabaseClientModule from "@quieter/database/client";
 import type * as ServerEnvModule from "@quieter/env/server";
-import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
+import {
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  test,
+  vi,
+} from "vite-plus/test";
 import { z } from "zod";
 
 import {
@@ -217,6 +224,12 @@ describe("expired billing subscription reconciliation", () => {
 });
 
 describe("organization subscription reconciliation", () => {
+  beforeAll(async () => {
+    // The Polar SDK ships thousands of generated modules; the first lazy load
+    // inside a test can exceed the default timeout under load, so warm it here.
+    await import("@polar-sh/sdk");
+  }, 30_000);
+
   const staleRow = {
     currentPeriodEnd: new Date("2026-07-23T00:00:00.000Z"),
     currentPeriodStart: new Date("2026-06-23T00:00:00.000Z"),
