@@ -11,32 +11,32 @@ import { serverEnv } from "@quieter/env/server";
 import { reportError } from "@quieter/observability";
 import { and, desc, eq, inArray } from "drizzle-orm";
 
-import { getAiUsageCostMicroCents } from "./ai-pricing";
-import { getBillingCreditUsage, recordBillingCreditUsage } from "./credits";
-import type { BillingUsageKind } from "./credits";
+import { getAiUsageCostMicroCents } from "./ai-pricing.ts";
+import { getBillingCreditUsage, recordBillingCreditUsage } from "./credits.ts";
+import type { BillingUsageKind } from "./credits.ts";
 import {
   getOrganizationBillingEntitlement,
   hasUserBillingFeature,
   isActiveBillingSubscription,
   isLocalDevelopmentBillingEntitlementEnabled,
   subscriptionBelongsToOrganization,
-} from "./entitlements";
-import type { BillingProductId } from "./plans";
-import { getPolarApiOrganizationId, getPolarClient } from "./polar";
+} from "./entitlements.ts";
+import type { BillingProductId } from "./plans.ts";
+import { getPolarApiOrganizationId, getPolarClient } from "./polar.ts";
 import {
   BILLING_METADATA_ORGANIZATION_ID,
   BILLING_METADATA_PRODUCT,
   BILLING_METADATA_USER_ID,
   syncBillingSubscription,
-} from "./subscription-sync";
+} from "./subscription-sync.ts";
 
 export {
   AI_COST_RECOVERY_BASIS_POINTS,
   applyAiCostRecoveryFee,
   getAiUsageCostMicroCents,
-} from "./ai-pricing";
+} from "./ai-pricing.ts";
 
-export { syncBillingSubscription } from "./subscription-sync";
+export { syncBillingSubscription } from "./subscription-sync.ts";
 
 export const createBillingCheckoutMetadata = (input: {
   organizationId: string;

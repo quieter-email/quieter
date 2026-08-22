@@ -58,6 +58,13 @@ const MAX_TRANSCRIPTION_AUDIO_BASE64_LENGTH = 14_000_000;
 
 type ChatData = RouterOutputs["chat"]["get"];
 
+// Workers extend fetch with preconnect for subrequest connection warming; the
+// Node runtime leaves it unset, so it stays optional here.
+type PreconnectableFetch = typeof fetch & {
+  preconnect?: (url: string | URL) => void;
+};
+const workersFetch: PreconnectableFetch = fetch;
+
 // The transport reports error bodies through statusText so the composer can
 // show the server's reason (for example a 409 for a busy chat).
 const fetchChat = Object.assign(
@@ -80,7 +87,7 @@ const fetchChat = Object.assign(
       statusText: message,
     });
   },
-  { preconnect: fetch.preconnect }
+  { preconnect: workersFetch.preconnect }
 );
 
 const PlanRequired = ({

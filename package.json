@@ -18,7 +18,6 @@
       "@aws-sdk/client-sesv2": "^3.1106.0",
       "@aws-sdk/client-sqs": "^3.1106.0",
       "@aws-sdk/lib-dynamodb": "3.1063.0",
-      "@types/bun": "^1.3.14",
       "@types/node": "^26.2.0",
       "@types/react": "^19.2.18",
       "@types/react-dom": "^19.2.4",
@@ -61,6 +60,7 @@
       "motion": "^13.0.0",
       "react": "^19.2.8",
       "react-dom": "^19.2.8",
+      "rolldown": "1.0.0-rc.17",
       "tailwindcss": "^4.3.3",
       "typescript": "^7.0.2",
       "vaul": "^1.1.2",
@@ -71,6 +71,7 @@
       "wrangler": "4.118.0"
     }
   },
+  "type": "module",
   "scripts": {
     "billing:sync-credit-usage-polar": "vp run @quieter/billing#credit-usage:sync",
     "billing:sync-polar": "vp run @quieter/billing#catalog:sync",
@@ -88,13 +89,14 @@
     "dev:cloud": "vp run @quieter/env#doctor && vp run --parallel --filter=@quieter/web --filter=@quieter/aws dev",
     "dev:mail": "vp run @quieter/env#doctor && vp run @quieter/aws#dev",
     "env:doctor": "vp run @quieter/env#doctor",
-    "generate:assets": "bun scripts/generate-web-assets.ts",
+    "generate:assets": "node scripts/generate-web-assets.ts",
     "prepare": "vp config --no-agent",
-    "sst": "bun --env-file=.env.local --env-file=.env.sst.local run vp exec sst"
+    "sst": "node --env-file-if-exists=.env.local --env-file-if-exists=.env.sst.local scripts/run-sst.ts"
   },
   "devDependencies": {
     "@quieter/cloudflare": "workspace:*",
     "@quieter/env": "workspace:*",
+    "@resvg/resvg-js-cli": "2.6.2-beta.1",
     "eslint-plugin-sonarjs": "4.2.0",
     "fast-xml-parser": "catalog:",
     "oxlint-plugin-react-doctor": "0.7.1",
@@ -128,9 +130,6 @@
     "vite": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:"
-  },
-  "engines": {
-    "bun": ">=1.3.9"
   },
   "packageManager": "bun@1.3.14"
 }

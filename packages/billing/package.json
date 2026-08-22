@@ -13,10 +13,6 @@
     "./subscription-sync": "./src/subscription-sync.ts",
     "./organization-mail-usage": "./src/organization-mail-usage.ts"
   },
-  "scripts": {
-    "catalog:sync": "bun --env-file=../../.env.local scripts/sync-polar-catalog.ts",
-    "credit-usage:sync": "bun --env-file=../../.env.local scripts/sync-polar-credit-usage.ts"
-  },
   "dependencies": {
     "@orpc/server": "catalog:",
     "@polar-sh/sdk": "^0.49.0",

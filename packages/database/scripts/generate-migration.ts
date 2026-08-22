@@ -1,4 +1,4 @@
-import { exitOnKitError, generate, kitOptions } from "./drizzle-kit";
+import { exitOnKitError, generate, kitOptions } from "./drizzle-kit.ts";
 
 const response = await generate(kitOptions);
 exitOnKitError(response);
