@@ -10,6 +10,7 @@ import { GmailMailboxDetailSections } from "#/features/settings/components/gmail
 import { GmailMailboxNameSettings } from "#/features/settings/components/gmail-mailbox-name-settings";
 import { MailboxDetailGeneralSection } from "#/features/settings/components/mailbox-detail-general-section";
 import type {
+  ManagedMailboxAccessModeInput,
   ManagedMailboxDivisionGrantInput,
   ManagedMailboxGrantInput,
   ManagedMailboxToggleInput,
@@ -40,6 +41,7 @@ type ManagedMailboxQuery = {
 };
 
 export const MailboxDetailSettingsContent = ({
+  canMakePrivate,
   defaultMailboxId,
   detailGroupName,
   detailManagedDivisions,
@@ -59,10 +61,12 @@ export const MailboxDetailSettingsContent = ({
   setDefaultMailboxMutation,
   setGmailAutoLabelingMutation,
   setGmailUsefulDetailsMutation,
+  setManagedMailboxAccessModeMutation,
   setManagedMailboxDivisionGrantMutation,
   setManagedMailboxGrantMutation,
   updateManagedMailboxMutation,
 }: {
+  canMakePrivate: boolean;
   defaultMailboxId: string | null;
   detailGroupName: string | undefined;
   detailManagedDivisions: { id: string; name: string }[];
@@ -98,6 +102,7 @@ export const MailboxDetailSettingsContent = ({
   setDefaultMailboxMutation: SettingsMutation<{ mailboxId: string | null }>;
   setGmailAutoLabelingMutation: SettingsMutation<ManagedMailboxToggleInput>;
   setGmailUsefulDetailsMutation: SettingsMutation<ManagedMailboxToggleInput>;
+  setManagedMailboxAccessModeMutation: SettingsMutation<ManagedMailboxAccessModeInput>;
   setManagedMailboxDivisionGrantMutation: SettingsMutation<ManagedMailboxDivisionGrantInput>;
   setManagedMailboxGrantMutation: SettingsMutation<ManagedMailboxGrantInput>;
   updateManagedMailboxMutation: SettingsMutation<ManagedMailboxUpdateInput>;
@@ -184,9 +189,9 @@ export const MailboxDetailSettingsContent = ({
           <SettingsCard className="p-6">
             <p className="text-body text-fg">Manager access required</p>
             <p className="mt-1 max-w-2xl text-body/6 text-muted-fg">
-              A mailbox manager can change shared-inbox features, routing, and
-              member access. Your current role still lets you use every mail
-              action included with that role.
+              A mailbox manager can change inbox features, routing, and member
+              access. Your current role still lets you use every mail action
+              included with that role.
             </p>
           </SettingsCard>
         </SettingsSection>
@@ -194,6 +199,7 @@ export const MailboxDetailSettingsContent = ({
 
       {isManagedManager && (
         <ManagedMailboxManagerSettingsSection
+          canMakePrivate={canMakePrivate}
           detailManagedDivisions={detailManagedDivisions}
           detailManagedMembers={detailManagedMembers}
           emailAddress={mailbox.emailAddress}
@@ -207,6 +213,9 @@ export const MailboxDetailSettingsContent = ({
           removeManagedMailboxGrantMutation={removeManagedMailboxGrantMutation}
           setGmailAutoLabelingMutation={setGmailAutoLabelingMutation}
           setGmailUsefulDetailsMutation={setGmailUsefulDetailsMutation}
+          setManagedMailboxAccessModeMutation={
+            setManagedMailboxAccessModeMutation
+          }
           setManagedMailboxDivisionGrantMutation={
             setManagedMailboxDivisionGrantMutation
           }

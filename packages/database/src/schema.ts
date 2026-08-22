@@ -31,6 +31,7 @@ export type ConnectorConnectionStatus = "connected" | "needs_reconnect";
 export type ConnectorProvider = "google_calendar" | "linear";
 export type MailboxConnectionStatus = "connected" | "needs_reconnect";
 export type MailboxGrantRole = "manager" | "reader" | "responder";
+export type MailboxAccessMode = "private" | "shared";
 export type PersistedMailboxProvider = "gmail" | "managed";
 export type MailTemplateScope = "personal" | "team";
 export type MailboxAccessSource = "direct" | "division";
@@ -479,6 +480,10 @@ export const organizationDivisionMember = pgTable(
 export const mailbox = pgTable(
   "mailbox",
   {
+    accessMode: text("accessMode")
+      .$type<MailboxAccessMode>()
+      .notNull()
+      .default("shared"),
     contentRevision: bigint("contentRevision", { mode: "number" })
       .notNull()
       .default(0),
@@ -515,8 +520,18 @@ export const mailbox = pgTable(
       sql`(
         (${table.provider} = 'gmail' and ${table.ownerUserId} is not null)
         or
-        (${table.provider} = 'managed' and ${table.ownerUserId} is null and ${table.organizationId} is not null)
+        (${table.provider} = 'managed' and ${table.accessMode} = 'private' and ${table.ownerUserId} is not null and ${table.organizationId} is not null)
+        or
+        (${table.provider} = 'managed' and ${table.accessMode} = 'shared' and ${table.ownerUserId} is null and ${table.organizationId} is not null)
       )`
+    ),
+    check(
+      "mailbox_access_mode_check",
+      sql`${table.accessMode} in ('private', 'shared')`
+    ),
+    check(
+      "mailbox_private_division_check",
+      sql`(${table.accessMode} = 'shared' or ${table.divisionId} is null)`
     ),
     check(
       "mailbox_provider_check",

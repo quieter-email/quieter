@@ -182,6 +182,17 @@ export const useMailboxDetailMutations = (
     mutationKey: ["mail", "remove-managed-mailbox-division-grant"],
     onSuccess: invalidateSelectedManagedMailbox,
   });
+  const setManagedMailboxAccessModeMutation = useMutation({
+    ...orpc.mail.setManagedMailboxAccessMode.mutationOptions(),
+    mutationKey: ["mail", "set-managed-mailbox-access-mode"],
+    onError: showMutationError("Could not change mailbox access."),
+    onSettled: async () => {
+      await Promise.all([
+        invalidateMailboxes(),
+        invalidateSelectedManagedMailbox(),
+      ]);
+    },
+  });
   const setGmailAutoLabelingMutation = useMutation({
     ...orpc.mail.setGmailAutoLabeling.mutationOptions(),
     ...optimisticMailboxPatch(
@@ -260,6 +271,7 @@ export const useMailboxDetailMutations = (
     setDefaultMailboxMutation,
     setGmailAutoLabelingMutation,
     setGmailUsefulDetailsMutation,
+    setManagedMailboxAccessModeMutation,
     setManagedMailboxDivisionGrantMutation,
     setManagedMailboxGrantMutation,
     startGmailConnection,

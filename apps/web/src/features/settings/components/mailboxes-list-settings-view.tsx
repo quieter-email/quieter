@@ -19,6 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
+import { Radio, RadioGroup, RadioIndicator } from "@quieter/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -88,12 +89,15 @@ const getMailboxRowDescription = (
   displayName: string | null | undefined,
   emailAddress: string,
   provider: string,
-  grantRole: string | null | undefined
+  grantRole: string | null | undefined,
+  accessMode: string | null | undefined
 ) => {
   const parts: (string | null)[] = [
     hasTrimmedDisplayName(displayName) ? emailAddress : null,
-    getProviderLabel(provider),
-    provider === "managed" && (grantRole ?? "") !== ""
+    getProviderLabel(provider, accessMode),
+    provider === "managed" &&
+    accessMode !== "private" &&
+    (grantRole ?? "") !== ""
       ? `${grantRole} access`
       : null,
   ];
@@ -134,7 +138,8 @@ const MailboxesListContent = ({
                   mailbox.displayName,
                   mailbox.emailAddress,
                   mailbox.provider,
-                  mailbox.grantRole
+                  mailbox.grantRole,
+                  mailbox.accessMode
                 )}
                 key={mailbox.id}
                 meta={getMailboxRowMeta(
@@ -172,16 +177,21 @@ const AddMailboxDialog = ({
   isAddMailboxOpen,
   isCreateManagedOrganizationPending,
   isStartingGmail,
+  managedAccessMode,
   managedDisplayName,
   managedDivisionId,
   managedDivisionsData,
   managedLocalPart,
+  managedMemberItems,
+  managedOwnerUserId,
   onGmailOrganizationChange,
+  onManagedAccessModeChange,
   onManagedDisplayNameChange,
   onManagedDivisionChange,
   onManagedDomainChange,
   onManagedLocalPartChange,
   onManagedOrganizationChange,
+  onManagedOwnerChange,
   onOpenChange,
   onStartGmailConnection,
   organizations,
@@ -201,10 +211,12 @@ const AddMailboxDialog = ({
     isPending: boolean;
     mutate: (
       variables: {
+        accessMode?: "private" | "shared";
         displayName: string;
         divisionId: string | null;
         emailAddress: string;
         organizationId: string;
+        ownerUserId?: string;
       },
       options?: { onError?: (error: unknown) => void }
     ) => void;
@@ -213,18 +225,23 @@ const AddMailboxDialog = ({
   isAddMailboxOpen: boolean;
   isCreateManagedOrganizationPending: boolean;
   isStartingGmail: boolean;
+  managedAccessMode: "private" | "shared";
   managedDisplayName: string;
   managedDivisionId: string | null;
   managedDivisionsData:
     | { divisions: { id: string; name: string }[] }
     | undefined;
   managedLocalPart: string;
+  managedMemberItems: { label: string; value: string }[];
+  managedOwnerUserId: string;
   onGmailOrganizationChange: (value: string) => void;
+  onManagedAccessModeChange: (value: "private" | "shared") => void;
   onManagedDisplayNameChange: (value: string) => void;
   onManagedDivisionChange: (value: string | null) => void;
   onManagedDomainChange: (value: string | undefined) => void;
   onManagedLocalPartChange: (value: string) => void;
   onManagedOrganizationChange: (value: string) => void;
+  onManagedOwnerChange: (value: string) => void;
   onOpenChange: (open: boolean) => void;
   onStartGmailConnection: () => Promise<void>;
   organizations: { id: string; name: string }[];
@@ -235,6 +252,7 @@ const AddMailboxDialog = ({
   trimmedLocalPart: string;
   verifiedDomains: { domain: string; id: string }[];
 }) => {
+  const isPrivateMode = managedAccessMode === "private";
   const renderManagedInboxForm = () => {
     if (isCreateManagedOrganizationPending) {
       return (
@@ -247,19 +265,78 @@ const AddMailboxDialog = ({
     if (!canCreateManagedMailbox) {
       return (
         <p className="squircle rounded-md border border-border bg-muted/15 px-3 py-2 text-caption/5 text-muted-fg">
-          Only a team owner or admin can create a shared inbox for this team.
+          Only a team owner or admin can create an inbox for this team.
         </p>
       );
     }
 
     return (
       <>
+        <RadioGroup
+          className="gap-2"
+          onValueChange={(value) => {
+            if (value === "private" || value === "shared") {
+              onManagedAccessModeChange(value);
+            }
+          }}
+          value={managedAccessMode}
+        >
+          <label
+            className={cn(
+              "flex cursor-pointer gap-3 rounded-md border p-3 transition-colors",
+              {
+                "border-border": isPrivateMode,
+                "border-primary/60 bg-primary/5": !isPrivateMode,
+              }
+            )}
+            htmlFor="add-mailbox-mode-shared"
+          >
+            <Radio id="add-mailbox-mode-shared" value="shared">
+              <RadioIndicator />
+            </Radio>
+            <span className="min-w-0">
+              <span className="block text-body text-fg">Shared inbox</span>
+              <span className="mt-0.5 block text-caption/5 text-muted-fg">
+                Team members you grant access read and reply together.
+              </span>
+            </span>
+          </label>
+          <label
+            className={cn(
+              "flex cursor-pointer gap-3 rounded-md border p-3 transition-colors",
+              {
+                "border-border": !isPrivateMode,
+                "border-primary/60 bg-primary/5": isPrivateMode,
+              }
+            )}
+            htmlFor="add-mailbox-mode-private"
+          >
+            <Radio id="add-mailbox-mode-private" value="private">
+              <RadioIndicator />
+            </Radio>
+            <span className="min-w-0">
+              <span className="block text-body text-fg">Private mailbox</span>
+              <span className="mt-0.5 block text-caption/5 text-muted-fg">
+                Belongs to one person. Only they can use it until you grant
+                someone access.
+              </span>
+            </span>
+          </label>
+        </RadioGroup>
         <TextFieldInput
-          aria-label="Shared inbox display name"
+          aria-label={
+            isPrivateMode
+              ? "Private mailbox display name"
+              : "Shared inbox display name"
+          }
           onChange={(event) => {
             onManagedDisplayNameChange(event.currentTarget.value);
           }}
-          placeholder="Display name, such as Support"
+          placeholder={
+            isPrivateMode
+              ? "Display name, such as Leander"
+              : "Display name, such as Support"
+          }
           value={managedDisplayName}
         />
         <div className="squircle flex h-9 min-w-0 items-center rounded-md border border-border bg-bg-elevated shadow-sm transition-colors">
@@ -311,66 +388,100 @@ const AddMailboxDialog = ({
             </span>
           )}
         </div>
-        <Select
-          items={[
-            { label: "No primary division", value: "none" },
-            ...(managedDivisionsData?.divisions ?? []).map((division) => ({
-              label: division.name,
-              value: division.id,
-            })),
-          ]}
-          onValueChange={(value) => {
-            onManagedDivisionChange(value === "none" ? null : (value ?? null));
-          }}
-          value={managedDivisionId ?? "none"}
-        >
-          <SelectTrigger aria-label="Primary division">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent align="start">
-            <SelectItem value="none">No primary division</SelectItem>
-            {(managedDivisionsData?.divisions ?? []).map((division) => (
-              <SelectItem key={division.id} value={division.id}>
-                {division.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {isPrivateMode ? (
+          <Select
+            items={managedMemberItems}
+            onValueChange={(value) => {
+              if (value !== null && value !== undefined && value !== "") {
+                onManagedOwnerChange(value);
+              }
+            }}
+            value={managedOwnerUserId || managedMemberItems[0]?.value}
+          >
+            <SelectTrigger aria-label="Mailbox owner">
+              <SelectValue placeholder="Select owner" />
+            </SelectTrigger>
+            <SelectContent align="start">
+              {managedMemberItems.map((memberItem) => (
+                <SelectItem key={memberItem.value} value={memberItem.value}>
+                  {memberItem.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <Select
+            items={[
+              { label: "No primary division", value: "none" },
+              ...(managedDivisionsData?.divisions ?? []).map((division) => ({
+                label: division.name,
+                value: division.id,
+              })),
+            ]}
+            onValueChange={(value) => {
+              onManagedDivisionChange(
+                value === "none" ? null : (value ?? null)
+              );
+            }}
+            value={managedDivisionId ?? "none"}
+          >
+            <SelectTrigger aria-label="Primary division">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent align="start">
+              <SelectItem value="none">No primary division</SelectItem>
+              {(managedDivisionsData?.divisions ?? []).map((division) => (
+                <SelectItem key={division.id} value={division.id}>
+                  {division.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         {verifiedDomains.length === 0 && !areManagedDomainsLoading && (
           <p className="text-caption/5 text-muted-fg">
             Add and verify a send-and-receive domain in{" "}
             {selectedManagedOrganization?.name ?? "team"} settings before
-            creating a shared inbox.
+            creating an inbox.
           </p>
         )}
         {createManagedMailboxMutation.isError && (
           <p className="text-body text-destructive">
             {createManagedMailboxMutation.error?.message ??
-              "Could not create shared inbox."}
+              "Could not create inbox."}
           </p>
         )}
         <Button
           disabled={
             trimmedLocalPart === "" ||
             selectedDomain === "" ||
+            (isPrivateMode && managedOwnerUserId === "") ||
             createManagedMailboxMutation.isPending
           }
           onClick={() => {
             createManagedMailboxMutation.mutate(
               {
+                accessMode: managedAccessMode,
                 displayName: managedDisplayName,
-                divisionId: managedDivisionId,
+                divisionId: isPrivateMode ? null : managedDivisionId,
                 emailAddress: `${trimmedLocalPart}@${selectedDomain}`,
                 organizationId: selectedManagedOrganizationId,
+                ...(isPrivateMode && managedOwnerUserId !== ""
+                  ? { ownerUserId: managedOwnerUserId }
+                  : {}),
               },
               {
-                onError: showMutationError("Could not create shared inbox."),
+                onError: showMutationError(
+                  isPrivateMode
+                    ? "Could not create private mailbox."
+                    : "Could not create shared inbox."
+                ),
               }
             );
           }}
           type="button"
         >
-          Create shared inbox
+          {isPrivateMode ? "Create private mailbox" : "Create shared inbox"}
         </Button>
       </>
     );
@@ -382,7 +493,7 @@ const AddMailboxDialog = ({
         <DialogHeader>
           <DialogTitle>Add mailbox</DialogTitle>
           <DialogDescription>
-            Connect Gmail for yourself or create a shared inbox for a team.
+            Connect Gmail for yourself or create an inbox for a team.
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="space-y-6">
@@ -438,10 +549,10 @@ const AddMailboxDialog = ({
 
           <div className="space-y-3 border-t border-border pt-5">
             <div>
-              <p className="text-body text-fg">Shared inbox</p>
+              <p className="text-body text-fg">Team inbox</p>
               <p className="mt-1 text-caption/5 text-muted-fg">
-                Team owners and admins can create an address on a verified
-                domain with incoming mail enabled.
+                Team owners and admins can create a shared or private address on
+                a verified domain with incoming mail enabled.
               </p>
             </div>
             <Select
@@ -481,11 +592,15 @@ export const MailboxesListSettingsView = () => {
   const [isAddMailboxOpen, setIsAddMailboxOpen] = useState(false);
   const [gmailOrganizationId, setGmailOrganizationId] = useState("");
   const [managedOrganizationId, setManagedOrganizationId] = useState("");
+  const [managedAccessMode, setManagedAccessMode] = useState<
+    "private" | "shared"
+  >("shared");
   const [managedDisplayName, setManagedDisplayName] = useState("");
   const [managedDivisionId, setManagedDivisionId] = useState<string | null>(
     null
   );
   const [managedLocalPart, setManagedLocalPart] = useState("");
+  const [managedOwnerUserId, setManagedOwnerUserId] = useState("");
   const [managedDomain, setManagedDomain] = useState<string>();
   const [isStartingGmail, setIsStartingGmail] = useState(false);
   const {
@@ -535,6 +650,20 @@ export const MailboxesListSettingsView = () => {
     createManagedMember !== undefined &&
     (hasOrganizationRole(createManagedMember.role, "owner") ||
       hasOrganizationRole(createManagedMember.role, "admin"));
+  const managedMemberItems = (createManagedOrganization?.members ?? []).map(
+    (member) => {
+      const trimmedName = member.user.name?.trim() ?? "";
+      return {
+        label: trimmedName === "" ? member.user.email : trimmedName,
+        value: member.userId,
+      };
+    }
+  );
+  const effectiveManagedOwnerUserId = managedMemberItems.some(
+    (memberItem) => memberItem.value === managedOwnerUserId
+  )
+    ? managedOwnerUserId
+    : (managedMemberItems[0]?.value ?? "");
 
   const navigateToMailbox = async (nextMailboxId: string) => {
     await navigate({
@@ -558,7 +687,7 @@ export const MailboxesListSettingsView = () => {
       setManagedDivisionId(null);
       setIsAddMailboxOpen(false);
       await invalidateMailboxes();
-      toast.success("Shared inbox created.");
+      toast.success("Inbox created.");
       await navigateToMailbox(createdMailboxId);
     },
   });
@@ -641,11 +770,20 @@ export const MailboxesListSettingsView = () => {
         isAddMailboxOpen={isAddMailboxOpen}
         isCreateManagedOrganizationPending={isCreateManagedOrganizationPending}
         isStartingGmail={isStartingGmail}
+        managedAccessMode={managedAccessMode}
         managedDisplayName={managedDisplayName}
         managedDivisionId={managedDivisionId}
         managedDivisionsData={managedDivisionsData}
         managedLocalPart={managedLocalPart}
+        managedMemberItems={managedMemberItems}
+        managedOwnerUserId={effectiveManagedOwnerUserId}
         onGmailOrganizationChange={setGmailOrganizationId}
+        onManagedAccessModeChange={(value) => {
+          setManagedAccessMode(value);
+          if (value === "private") {
+            setManagedDivisionId(null);
+          }
+        }}
         onManagedDisplayNameChange={setManagedDisplayName}
         onManagedDivisionChange={setManagedDivisionId}
         onManagedDomainChange={setManagedDomain}
@@ -654,7 +792,9 @@ export const MailboxesListSettingsView = () => {
           setManagedOrganizationId(value);
           setManagedDomain(undefined);
           setManagedDivisionId(null);
+          setManagedOwnerUserId("");
         }}
+        onManagedOwnerChange={setManagedOwnerUserId}
         onOpenChange={setIsAddMailboxOpen}
         onStartGmailConnection={startGmailConnection}
         organizations={organizations}
