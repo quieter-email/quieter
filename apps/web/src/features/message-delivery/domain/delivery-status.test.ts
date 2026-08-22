@@ -63,6 +63,48 @@ describe(getAggregateDeliveryStatus, () => {
     ).toBe("bounced");
   });
 
+  it("treats an unsubscribe as worse than a delivery but not as a failure", () => {
+    expect(
+      getAggregateDeliveryStatus([
+        createRecipient("first@example.com", "delivered"),
+        createRecipient("second@example.com", "unsubscribed"),
+      ])
+    ).toBe("unsubscribed");
+    expect(
+      getAggregateDeliveryStatus([
+        createRecipient("first@example.com", "delayed"),
+        createRecipient("second@example.com", "unsubscribed"),
+      ])
+    ).toBe("unsubscribed");
+    expect(
+      getAggregateDeliveryStatus([
+        createRecipient("first@example.com", "bounced"),
+        createRecipient("second@example.com", "unsubscribed"),
+      ])
+    ).toBe("bounced");
+  });
+
+  it("keeps queued and opened below delivered", () => {
+    expect(
+      getAggregateDeliveryStatus([
+        createRecipient("first@example.com", "queued"),
+        createRecipient("second@example.com", "sent"),
+      ])
+    ).toBe("sent");
+    expect(
+      getAggregateDeliveryStatus([
+        createRecipient("first@example.com", "opened"),
+        createRecipient("second@example.com", "queued"),
+      ])
+    ).toBe("opened");
+    expect(
+      getAggregateDeliveryStatus([
+        createRecipient("first@example.com", "opened"),
+        createRecipient("second@example.com", "delivered"),
+      ])
+    ).toBe("delivered");
+  });
+
   it("prefers a delay over a delivery and a delivery over a send", () => {
     expect(
       getAggregateDeliveryStatus([
@@ -97,21 +139,28 @@ describe(getDeliveryStatusTone, () => {
   it("keeps unresolved states neutral", () => {
     expect(getDeliveryStatusTone(null)).toBe("neutral");
     expect(getDeliveryStatusTone("sent")).toBe("neutral");
+    expect(getDeliveryStatusTone("queued")).toBe("neutral");
   });
 
   it("separates a delivery from a delay and a failure", () => {
     expect(getDeliveryStatusTone("delivered")).toBe("positive");
+    expect(getDeliveryStatusTone("opened")).toBe("positive");
     expect(getDeliveryStatusTone("delayed")).toBe("warning");
+  });
+
+  it("marks every terminal failure as danger", () => {
     expect(getDeliveryStatusTone("bounced")).toBe("danger");
     expect(getDeliveryStatusTone("complained")).toBe("danger");
     expect(getDeliveryStatusTone("rejected")).toBe("danger");
+    expect(getDeliveryStatusTone("unsubscribed")).toBe("danger");
   });
 });
 
 describe(isDeliveryStatusUnsettled, () => {
-  it("only treats missing events and sends as still moving", () => {
+  it("only treats missing events, sends, and queue entries as still moving", () => {
     expect(isDeliveryStatusUnsettled(null)).toBeTruthy();
     expect(isDeliveryStatusUnsettled("sent")).toBeTruthy();
+    expect(isDeliveryStatusUnsettled("queued")).toBeTruthy();
     expect(isDeliveryStatusUnsettled("delayed")).toBeFalsy();
     expect(isDeliveryStatusUnsettled("delivered")).toBeFalsy();
   });

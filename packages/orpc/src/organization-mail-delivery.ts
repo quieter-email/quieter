@@ -8,13 +8,16 @@ import {
   organizationMailDeliveryEvent,
   organizationMailDeliveryRecipient,
   organizationMailRecipientSuppression,
+  organizationMailSuppressionAudit,
 } from "@quieter/database/schema";
 import type {
   OrganizationMailDeliveryEventType,
+  OrganizationMailDeliveryStatus,
+  OrganizationMailSuppressionAction,
   OrganizationMailSuppressionReason,
 } from "@quieter/database/schema";
 import { extractMailAddress } from "@quieter/mail/compose/schema";
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 
 import { OrganizationMailSendError } from "./organization-mail-policy";
 
@@ -48,6 +51,52 @@ const normalizeRecipient = (recipient: string) =>
 const normalizeRecipients = (recipients: string[]) => [
   ...new Set(recipients.map(normalizeRecipient).filter(Boolean)),
 ];
+
+/**
+ * Terminal outcomes are ordered by severity: observing a more severe outcome
+ * escalates the status, but nothing regresses an existing terminal one.
+ * Non-terminal statuses follow the most recently observed event time.
+ */
+const TERMINAL_DELIVERY_STATUS_RANK: Partial<
+  Record<OrganizationMailDeliveryStatus, number>
+> = {
+  bounced: 2,
+  complained: 3,
+  rejected: 1,
+  unsubscribed: 0,
+};
+
+export const isTerminalDeliveryStatus = (
+  status: OrganizationMailDeliveryStatus
+) => TERMINAL_DELIVERY_STATUS_RANK[status] !== undefined;
+
+export type DeliveryStatePoint = {
+  occurredAt: Date;
+  status: OrganizationMailDeliveryStatus;
+};
+
+export const mergeDeliveryStatus = (
+  current: DeliveryStatePoint | null,
+  incoming: DeliveryStatePoint
+): DeliveryStatePoint => {
+  if (current === null) {
+    return incoming;
+  }
+  const currentRank = TERMINAL_DELIVERY_STATUS_RANK[current.status];
+  const incomingRank = TERMINAL_DELIVERY_STATUS_RANK[incoming.status];
+  if (currentRank !== undefined && incomingRank !== undefined) {
+    return incomingRank > currentRank ? incoming : current;
+  }
+  if (currentRank !== undefined || incomingRank !== undefined) {
+    return currentRank === undefined ? incoming : current;
+  }
+  return incoming.occurredAt.getTime() >= current.occurredAt.getTime()
+    ? incoming
+    : current;
+};
+
+const suppressionSeveritySql = (column: unknown) =>
+  sql`case ${column} when 'complaint' then 3 when 'bounce' then 2 when 'unsubscribe' then 1 else 0 end`;
 
 const resolveOrganizationId = async (providerMessageId: string) => {
   const [apiMessage] = await db
@@ -94,11 +143,14 @@ const createDedupeKey = (input: {
     )
     .digest("hex");
 
-const getSuppressionReason = (
-  feedback: OrganizationMailFeedback
+export const getSuppressionReason = (
+  feedback: Pick<OrganizationMailFeedback, "eventType" | "permanentFailure">
 ): OrganizationMailSuppressionReason | null => {
   if (feedback.eventType === "complained") {
     return "complaint";
+  }
+  if (feedback.eventType === "unsubscribed") {
+    return "unsubscribe";
   }
   if (feedback.eventType === "bounced" && feedback.permanentFailure === true) {
     return "bounce";
@@ -136,6 +188,122 @@ export const assertOrganizationMailRecipientsNotSuppressed = async (input: {
       422
     );
   }
+};
+
+type DatabaseTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+const recordSuppressionAudit = async (
+  transaction: DatabaseTransaction,
+  input: {
+    action: OrganizationMailSuppressionAction;
+    actorUserId: string | null;
+    createdAt: Date;
+    organizationId: string;
+    reason: OrganizationMailSuppressionReason;
+    recipient: string;
+    sourceProviderMessageId: string | null;
+  }
+) => {
+  await transaction.insert(organizationMailSuppressionAudit).values({
+    action: input.action,
+    actorUserId: input.actorUserId,
+    createdAt: input.createdAt,
+    id: randomUUID(),
+    organizationId: input.organizationId,
+    reason: input.reason,
+    recipient: input.recipient,
+    sourceProviderMessageId: input.sourceProviderMessageId,
+  });
+};
+
+const applySuppressionChange = async (
+  transaction: DatabaseTransaction,
+  input: {
+    actorUserId: string | null;
+    createdAt: Date;
+    organizationId: string;
+    recipient: string;
+    sourceProviderMessageId: string | null;
+    suppressionReason: OrganizationMailSuppressionReason;
+  }
+) => {
+  const inserted = await transaction
+    .insert(organizationMailRecipientSuppression)
+    .values({
+      createdAt: input.createdAt,
+      organizationId: input.organizationId,
+      reason: input.suppressionReason,
+      recipient: input.recipient,
+      revokedAt: null,
+      sourceProviderMessageId: input.sourceProviderMessageId,
+      updatedAt: input.createdAt,
+    })
+    .onConflictDoNothing({
+      target: [
+        organizationMailRecipientSuppression.organizationId,
+        organizationMailRecipientSuppression.recipient,
+      ],
+    })
+    .returning({ recipient: organizationMailRecipientSuppression.recipient });
+
+  if (inserted.length > 0) {
+    await recordSuppressionAudit(transaction, {
+      action: "suppressed",
+      actorUserId: input.actorUserId,
+      createdAt: input.createdAt,
+      organizationId: input.organizationId,
+      reason: input.suppressionReason,
+      recipient: input.recipient,
+      sourceProviderMessageId: input.sourceProviderMessageId,
+    });
+    return true;
+  }
+
+  const updated = await transaction
+    .update(organizationMailRecipientSuppression)
+    .set({
+      reason: sql`case
+        when ${suppressionSeveritySql(organizationMailRecipientSuppression.reason)} >= ${suppressionSeveritySql(input.suppressionReason)}
+          then ${organizationMailRecipientSuppression.reason}
+        else ${input.suppressionReason}
+      end`,
+      revokedAt: null,
+      updatedAt: input.createdAt,
+      ...(input.sourceProviderMessageId === null
+        ? {}
+        : { sourceProviderMessageId: input.sourceProviderMessageId }),
+    })
+    .where(
+      and(
+        eq(
+          organizationMailRecipientSuppression.organizationId,
+          input.organizationId
+        ),
+        eq(organizationMailRecipientSuppression.recipient, input.recipient),
+        sql`(
+          ${organizationMailRecipientSuppression.revokedAt} is not null
+          or ${suppressionSeveritySql(organizationMailRecipientSuppression.reason)} < ${suppressionSeveritySql(input.suppressionReason)}
+        )`
+      )
+    )
+    .returning({
+      reason: organizationMailRecipientSuppression.reason,
+    });
+
+  if (updated.length === 0) {
+    return false;
+  }
+
+  await recordSuppressionAudit(transaction, {
+    action: "suppressed",
+    actorUserId: input.actorUserId,
+    createdAt: input.createdAt,
+    organizationId: input.organizationId,
+    reason: updated[0].reason,
+    recipient: input.recipient,
+    sourceProviderMessageId: input.sourceProviderMessageId,
+  });
+  return true;
 };
 
 export const recordOrganizationMailFeedback = async (
@@ -211,8 +379,12 @@ export const recordOrganizationMailFeedback = async (
               status: sql`case
                 when ${organizationMailDeliveryRecipient.status} = 'complained' then ${organizationMailDeliveryRecipient.status}
                 when excluded."status" = 'complained' then excluded."status"
-                when ${organizationMailDeliveryRecipient.status} in ('bounced', 'rejected') then ${organizationMailDeliveryRecipient.status}
-                when excluded."status" in ('bounced', 'rejected') then excluded."status"
+                when ${organizationMailDeliveryRecipient.status} = 'bounced' then ${organizationMailDeliveryRecipient.status}
+                when excluded."status" = 'bounced' then excluded."status"
+                when ${organizationMailDeliveryRecipient.status} = 'rejected' then ${organizationMailDeliveryRecipient.status}
+                when excluded."status" = 'rejected' then excluded."status"
+                when ${organizationMailDeliveryRecipient.status} = 'unsubscribed' then ${organizationMailDeliveryRecipient.status}
+                when excluded."status" = 'unsubscribed' then excluded."status"
                 when excluded."lastEventAt" >= ${organizationMailDeliveryRecipient.lastEventAt} then excluded."status"
                 else ${organizationMailDeliveryRecipient.status}
               end`,
@@ -226,35 +398,85 @@ export const recordOrganizationMailFeedback = async (
           });
 
         if (suppressionReason !== null) {
-          await transaction
-            .insert(organizationMailRecipientSuppression)
-            .values({
-              createdAt: now,
-              organizationId,
-              reason: suppressionReason,
-              recipient: recipient.emailAddress,
-              revokedAt: null,
-              sourceProviderMessageId: feedback.providerMessageId,
-              updatedAt: now,
-            })
-            .onConflictDoUpdate({
-              set: {
-                reason: sql`case
-                  when ${organizationMailRecipientSuppression.reason} = 'complaint' then ${organizationMailRecipientSuppression.reason}
-                  else excluded."reason"
-                end`,
-                revokedAt: null,
-                sourceProviderMessageId: feedback.providerMessageId,
-                updatedAt: now,
-              },
-              target: [
-                organizationMailRecipientSuppression.organizationId,
-                organizationMailRecipientSuppression.recipient,
-              ],
-            });
+          await applySuppressionChange(transaction, {
+            actorUserId: null,
+            createdAt: now,
+            organizationId,
+            recipient: recipient.emailAddress,
+            sourceProviderMessageId: feedback.providerMessageId,
+            suppressionReason,
+          });
         }
       })
     );
+  });
+};
+
+export const suppressOrganizationMailRecipient = async (input: {
+  actorUserId: string;
+  organizationId: string;
+  recipient: string;
+}) => {
+  const recipient = normalizeRecipient(input.recipient);
+  if (recipient === "") {
+    throw new OrganizationMailSendError("A valid address is required.", 422);
+  }
+  const changed = await db.transaction(
+    async (transaction) =>
+      await applySuppressionChange(transaction, {
+        actorUserId: input.actorUserId,
+        createdAt: new Date(),
+        organizationId: input.organizationId,
+        recipient,
+        sourceProviderMessageId: null,
+        suppressionReason: "manual",
+      })
+  );
+  return { changed };
+};
+
+export const unsuppressOrganizationMailRecipient = async (input: {
+  actorUserId: string;
+  organizationId: string;
+  recipient: string;
+}) => {
+  const recipient = normalizeRecipient(input.recipient);
+  if (recipient === "") {
+    throw new OrganizationMailSendError("A valid address is required.", 422);
+  }
+  const now = new Date();
+  return await db.transaction(async (transaction) => {
+    const revoked = await transaction
+      .update(organizationMailRecipientSuppression)
+      .set({ revokedAt: now, updatedAt: now })
+      .where(
+        and(
+          eq(
+            organizationMailRecipientSuppression.organizationId,
+            input.organizationId
+          ),
+          eq(organizationMailRecipientSuppression.recipient, recipient),
+          isNull(organizationMailRecipientSuppression.revokedAt)
+        )
+      )
+      .returning({
+        reason: organizationMailRecipientSuppression.reason,
+      });
+
+    if (revoked.length === 0) {
+      return { changed: false };
+    }
+
+    await recordSuppressionAudit(transaction, {
+      action: "unsuppressed",
+      actorUserId: input.actorUserId,
+      createdAt: now,
+      organizationId: input.organizationId,
+      reason: revoked[0].reason,
+      recipient,
+      sourceProviderMessageId: null,
+    });
+    return { changed: true };
   });
 };
 
@@ -343,3 +565,142 @@ export const listOrganizationMailRecipientSuppressions = async (input: {
     )
     .orderBy(desc(organizationMailRecipientSuppression.createdAt))
     .limit(Math.min(Math.max(input.limit ?? 100, 1), 500));
+
+export const listOrganizationMailSuppressionAudit = async (input: {
+  organizationId: string;
+  limit?: number;
+  recipient?: string;
+}) => {
+  const conditions = [
+    eq(organizationMailSuppressionAudit.organizationId, input.organizationId),
+  ];
+  if (input.recipient !== undefined && input.recipient.trim() !== "") {
+    conditions.push(
+      eq(
+        organizationMailSuppressionAudit.recipient,
+        normalizeRecipient(input.recipient)
+      )
+    );
+  }
+
+  return await db
+    .select({
+      action: organizationMailSuppressionAudit.action,
+      actorUserId: organizationMailSuppressionAudit.actorUserId,
+      createdAt: organizationMailSuppressionAudit.createdAt,
+      id: organizationMailSuppressionAudit.id,
+      reason: organizationMailSuppressionAudit.reason,
+      recipient: organizationMailSuppressionAudit.recipient,
+      sourceProviderMessageId:
+        organizationMailSuppressionAudit.sourceProviderMessageId,
+    })
+    .from(organizationMailSuppressionAudit)
+    .where(and(...conditions))
+    .orderBy(desc(organizationMailSuppressionAudit.createdAt))
+    .limit(Math.min(Math.max(input.limit ?? 100, 1), 500));
+};
+
+/**
+ * Recomputes recipient projections from the immutable event log without
+ * touching events. Repairs projection drift; missed notifications are repaired
+ * by replaying them through the normal idempotent ingestion path.
+ */
+export const reconcileOrganizationMailDeliveryRecipients = async (input: {
+  organizationId: string;
+  providerMessageId: string;
+}) => {
+  const events = await db
+    .select({
+      occurredAt: organizationMailDeliveryEvent.occurredAt,
+      recipient: organizationMailDeliveryEvent.recipient,
+      status: organizationMailDeliveryEvent.eventType,
+    })
+    .from(organizationMailDeliveryEvent)
+    .where(
+      and(
+        eq(organizationMailDeliveryEvent.organizationId, input.organizationId),
+        eq(
+          organizationMailDeliveryEvent.providerMessageId,
+          input.providerMessageId
+        )
+      )
+    )
+    .orderBy(
+      organizationMailDeliveryEvent.occurredAt,
+      organizationMailDeliveryEvent.createdAt
+    );
+
+  const projections = new Map<string, DeliveryStatePoint>();
+  for (const event of events) {
+    const merged = mergeDeliveryStatus(
+      projections.get(event.recipient) ?? null,
+      {
+        occurredAt: event.occurredAt,
+        status: event.status,
+      }
+    );
+    projections.set(event.recipient, merged);
+  }
+
+  const now = new Date();
+  await Promise.all(
+    [...projections.entries()].map(([recipient, state]) =>
+      db
+        .insert(organizationMailDeliveryRecipient)
+        .values({
+          createdAt: now,
+          lastEventAt: state.occurredAt,
+          organizationId: input.organizationId,
+          providerMessageId: input.providerMessageId,
+          recipient,
+          status: state.status,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          set: {
+            lastEventAt: state.occurredAt,
+            status: state.status,
+            updatedAt: now,
+          },
+          target: [
+            organizationMailDeliveryRecipient.organizationId,
+            organizationMailDeliveryRecipient.providerMessageId,
+            organizationMailDeliveryRecipient.recipient,
+          ],
+        })
+    )
+  );
+  return { reconciled: projections.size };
+};
+
+export const summarizeOrganizationMailDeliveryEvents = async (input: {
+  from?: Date;
+  organizationId: string;
+  to?: Date;
+}) => {
+  const conditions = [
+    eq(organizationMailDeliveryEvent.organizationId, input.organizationId),
+  ];
+  if (input.from !== undefined) {
+    conditions.push(gte(organizationMailDeliveryEvent.occurredAt, input.from));
+  }
+  if (input.to !== undefined) {
+    conditions.push(lte(organizationMailDeliveryEvent.occurredAt, input.to));
+  }
+
+  const rows = await db
+    .select({
+      count: sql<number>`count(*)::int`,
+      eventType: organizationMailDeliveryEvent.eventType,
+    })
+    .from(organizationMailDeliveryEvent)
+    .where(and(...conditions))
+    .groupBy(organizationMailDeliveryEvent.eventType);
+
+  const summary: Partial<Record<OrganizationMailDeliveryEventType, number>> =
+    {};
+  for (const row of rows) {
+    summary[row.eventType] = row.count;
+  }
+  return summary;
+};

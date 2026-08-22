@@ -16,9 +16,12 @@ const DELIVERY_STATUS_SEVERITY: MessageDeliveryStatus[] = [
   "complained",
   "bounced",
   "rejected",
+  "unsubscribed",
   "delayed",
   "delivered",
+  "opened",
   "sent",
+  "queued",
 ];
 
 const DELIVERY_STATUS_LABELS: Record<MessageDeliveryStatus, string> = {
@@ -26,8 +29,11 @@ const DELIVERY_STATUS_LABELS: Record<MessageDeliveryStatus, string> = {
   complained: "Reported as spam",
   delayed: "Delayed",
   delivered: "Delivered",
+  opened: "Opened",
+  queued: "Queued",
   rejected: "Rejected",
   sent: "Sending",
+  unsubscribed: "Unsubscribed",
 };
 
 const DELIVERY_STATUS_DESCRIPTIONS: Record<MessageDeliveryStatus, string> = {
@@ -35,8 +41,12 @@ const DELIVERY_STATUS_DESCRIPTIONS: Record<MessageDeliveryStatus, string> = {
   complained: "The recipient marked this message as spam.",
   delayed: "Delivery is taking longer than usual. We keep retrying.",
   delivered: "The receiving mail server accepted this message.",
+  opened:
+    "The recipient's mail program reported opening this message. Opens are approximate and can be missed or faked by automatic tools.",
+  queued: "The message is waiting to be handed to the mail system.",
   rejected: "This message was rejected before it left our system.",
   sent: "Handed to the receiving mail server.",
+  unsubscribed: "The recipient asked to stop getting mail from this team.",
 };
 
 export const ACCEPTED_DELIVERY_LABEL = "Accepted";
@@ -82,10 +92,10 @@ export type DeliveryStatusTone = "neutral" | "positive" | "warning" | "danger";
 export const getDeliveryStatusTone = (
   status: MessageDeliveryStatus | null
 ): DeliveryStatusTone => {
-  if (status === null || status === "sent") {
+  if (status === null || status === "sent" || status === "queued") {
     return "neutral";
   }
-  if (status === "delivered") {
+  if (status === "delivered" || status === "opened") {
     return "positive";
   }
   if (status === "delayed") {
@@ -96,7 +106,7 @@ export const getDeliveryStatusTone = (
 
 export const isDeliveryStatusUnsettled = (
   status: MessageDeliveryStatus | null
-) => status === null || status === "sent";
+) => status === null || status === "sent" || status === "queued";
 
 /**
  * Delivery events only describe what the receiving mail server did, so the

@@ -1,7 +1,13 @@
 import { z } from "zod";
 
 import { assertUserCanManageOrganizationSettings } from "../mail-domain/service";
-import { listOrganizationMailRecipientSuppressions } from "../organization-mail-delivery";
+import {
+  listOrganizationMailRecipientSuppressions,
+  listOrganizationMailSuppressionAudit,
+  reconcileOrganizationMailDeliveryRecipients,
+  suppressOrganizationMailRecipient,
+  unsuppressOrganizationMailRecipient,
+} from "../organization-mail-delivery";
 import {
   createOrganizationDivision,
   deleteOrganizationDivision,
@@ -10,6 +16,9 @@ import {
   updateOrganizationDivision,
 } from "../organization/divisions";
 import { protectedProcedure } from "./base";
+
+const recipientSchema = z.string().trim().min(3).max(320);
+const organizationIdSchema = z.string().trim().min(1);
 
 export const organizationRouter = {
   createDivision: protectedProcedure
@@ -42,7 +51,7 @@ export const organizationRouter = {
     .input(
       z.object({
         limit: z.number().int().min(1).max(500).optional(),
-        organizationId: z.string().trim().min(1),
+        organizationId: organizationIdSchema,
       })
     )
     .handler(async ({ context, input }) => {
@@ -51,6 +60,35 @@ export const organizationRouter = {
         userId: context.userId,
       });
       return await listOrganizationMailRecipientSuppressions(input);
+    }),
+  listMailSuppressionAudit: protectedProcedure
+    .route({ method: "GET" })
+    .input(
+      z.object({
+        limit: z.number().int().min(1).max(500).optional(),
+        organizationId: organizationIdSchema,
+      })
+    )
+    .handler(async ({ context, input }) => {
+      await assertUserCanManageOrganizationSettings({
+        organizationId: input.organizationId,
+        userId: context.userId,
+      });
+      return await listOrganizationMailSuppressionAudit(input);
+    }),
+  reconcileMailMessageDelivery: protectedProcedure
+    .input(
+      z.object({
+        organizationId: organizationIdSchema,
+        providerMessageId: z.string().trim().min(1),
+      })
+    )
+    .handler(async ({ context, input }) => {
+      await assertUserCanManageOrganizationSettings({
+        organizationId: input.organizationId,
+        userId: context.userId,
+      });
+      return await reconcileOrganizationMailDeliveryRecipients(input);
     }),
   setDivisionMembers: protectedProcedure
     .input(
@@ -66,6 +104,40 @@ export const organizationRouter = {
           userId: context.userId,
         })
     ),
+  suppressMailRecipient: protectedProcedure
+    .input(
+      z.object({
+        organizationId: organizationIdSchema,
+        recipient: recipientSchema,
+      })
+    )
+    .handler(async ({ context, input }) => {
+      await assertUserCanManageOrganizationSettings({
+        organizationId: input.organizationId,
+        userId: context.userId,
+      });
+      return await suppressOrganizationMailRecipient({
+        actorUserId: context.userId,
+        ...input,
+      });
+    }),
+  unsuppressMailRecipient: protectedProcedure
+    .input(
+      z.object({
+        organizationId: organizationIdSchema,
+        recipient: recipientSchema,
+      })
+    )
+    .handler(async ({ context, input }) => {
+      await assertUserCanManageOrganizationSettings({
+        organizationId: input.organizationId,
+        userId: context.userId,
+      });
+      return await unsuppressOrganizationMailRecipient({
+        actorUserId: context.userId,
+        ...input,
+      });
+    }),
   updateDivision: protectedProcedure
     .input(
       z.object({
