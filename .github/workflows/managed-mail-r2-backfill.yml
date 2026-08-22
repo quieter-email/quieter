@@ -32,6 +32,11 @@ jobs:
       AWS_DEFAULT_REGION: ${{ vars.AWS_REGION || 'eu-central-1' }}
       AWS_REGION: ${{ vars.AWS_REGION || 'eu-central-1' }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
       - name: Setup repository
         uses: ./.github/actions/setup
 

@@ -1,5 +1,5 @@
 name: Setup repository
-description: Shared checkout and Vite+ toolchain setup for all CI jobs.
+description: Shared Vite+ toolchain setup for all CI jobs. Requires a prior actions/checkout.
 
 inputs:
   vp-version:
@@ -14,11 +14,6 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Checkout
-      uses: actions/checkout@v7
-      with:
-        persist-credentials: false
-
     - name: Setup Vite+
       uses: voidzero-dev/setup-vp@v1
       with:
