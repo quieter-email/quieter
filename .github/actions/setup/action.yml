@@ -1,0 +1,39 @@
+name: Setup repository
+description: Shared checkout and Vite+ toolchain setup for all CI jobs.
+
+inputs:
+  vp-version:
+    description: Pinned Vite+ version; must match the vite-plus catalog entry in package.json.
+    required: false
+    default: 0.2.9
+  node-version:
+    description: Node.js version provisioned through Vite+.
+    required: false
+    default: 24.18.0
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+      with:
+        persist-credentials: false
+
+    - name: Setup Vite+
+      uses: voidzero-dev/setup-vp@v1
+      with:
+        # Pinned to the `vite-plus` catalog entry in package.json. Without it the
+        # action installs the latest vp, whose formatter drifts from the local one
+        # and fails commits that were previously green.
+        version: ${{ inputs.vp-version }}
+        cache: true
+        node-version: ${{ inputs.node-version }}
+
+    - name: Install dependencies
+      # vp detects the Bun lockfile and provisions Bun itself; no setup-bun step needed.
+      shell: bash
+      run: vp install --frozen-lockfile
+
+    - name: Build environment package
+      shell: bash
+      run: vp run @quieter/env#build
