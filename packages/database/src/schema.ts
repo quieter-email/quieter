@@ -2181,6 +2181,9 @@ export const managedMailRuleBackfill = pgTable(
 export const mailDomain = pgTable(
   "mailDomain",
   {
+    catchAllMailboxId: text("catchAllMailboxId").references(() => mailbox.id, {
+      onDelete: "cascade",
+    }),
     createdAt: timestamp("createdAt").notNull(),
     domain: text("domain").notNull(),
     id: text("id").primaryKey(),
@@ -2210,6 +2213,8 @@ export const mailDomain = pgTable(
       sql`${table.mode} in ('send_only', 'send_and_receive')`
     ),
     index("mail_domain_organization_id_idx").on(table.organizationId),
+    index("mail_domain_catch_all_mailbox_idx").on(table.catchAllMailboxId),
+    unique("mail_domain_catch_all_mailbox_unique").on(table.catchAllMailboxId),
     unique("mail_domain_domain_unique").on(table.domain),
   ]
 );

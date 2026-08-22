@@ -8,6 +8,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { RouterOutputs } from "@quieter/orpc";
 import { Button } from "@quieter/ui/button";
+import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import { cn } from "@quieter/ui/cn";
 import {
   Dialog,
@@ -183,9 +184,11 @@ const AddMailboxDialog = ({
   onManagedLocalPartChange,
   onManagedOrganizationChange,
   onOpenChange,
+  onReceiveWholeDomainChange,
   onStartGmailConnection,
   organizations,
   placementItems,
+  receiveWholeDomain,
   selectedDomain,
   selectedManagedOrganization,
   selectedManagedOrganizationId,
@@ -205,6 +208,7 @@ const AddMailboxDialog = ({
         divisionId: string | null;
         emailAddress: string;
         organizationId: string;
+        receiveWholeDomain: boolean;
       },
       options?: { onError?: (error: unknown) => void }
     ) => void;
@@ -226,9 +230,11 @@ const AddMailboxDialog = ({
   onManagedLocalPartChange: (value: string) => void;
   onManagedOrganizationChange: (value: string) => void;
   onOpenChange: (open: boolean) => void;
+  onReceiveWholeDomainChange: (value: boolean) => void;
   onStartGmailConnection: () => Promise<void>;
   organizations: { id: string; name: string }[];
   placementItems: { label: string; value: string }[];
+  receiveWholeDomain: boolean;
   selectedDomain: string;
   selectedManagedOrganization: { name: string } | undefined;
   selectedManagedOrganizationId: string;
@@ -311,6 +317,38 @@ const AddMailboxDialog = ({
             </span>
           )}
         </div>
+        {selectedDomain !== "" && (
+          <label
+            className={cn(
+              "squircle flex cursor-pointer items-start gap-2.5 rounded-md border border-border bg-bg-elevated px-3 py-2.5 transition-colors",
+              "hover:bg-muted/15"
+            )}
+            htmlFor="managed-mailbox-whole-domain"
+          >
+            <Checkbox
+              checked={receiveWholeDomain}
+              className="mt-0.5"
+              id="managed-mailbox-whole-domain"
+              onCheckedChange={(nextChecked) => {
+                if (typeof nextChecked === "boolean") {
+                  onReceiveWholeDomainChange(nextChecked);
+                }
+              }}
+            >
+              <CheckboxIndicator />
+            </Checkbox>
+            <span className="min-w-0">
+              <span className="block text-body text-fg">
+                Receive mail for any address at {selectedDomain}
+              </span>
+              <span className="mt-0.5 block text-caption/5 text-muted-fg">
+                Exact shared inboxes keep priority, and every other recipient
+                lands here. Replies still send from this inbox&rsquo;s own
+                address.
+              </span>
+            </span>
+          </label>
+        )}
         <Select
           items={[
             { label: "No primary division", value: "none" },
@@ -362,6 +400,7 @@ const AddMailboxDialog = ({
                 divisionId: managedDivisionId,
                 emailAddress: `${trimmedLocalPart}@${selectedDomain}`,
                 organizationId: selectedManagedOrganizationId,
+                receiveWholeDomain,
               },
               {
                 onError: showMutationError("Could not create shared inbox."),
@@ -487,6 +526,7 @@ export const MailboxesListSettingsView = () => {
   );
   const [managedLocalPart, setManagedLocalPart] = useState("");
   const [managedDomain, setManagedDomain] = useState<string>();
+  const [receiveWholeDomain, setReceiveWholeDomain] = useState(false);
   const [isStartingGmail, setIsStartingGmail] = useState(false);
   const {
     data: mailboxesData,
@@ -556,9 +596,14 @@ export const MailboxesListSettingsView = () => {
       setManagedLocalPart("");
       setManagedDisplayName("");
       setManagedDivisionId(null);
+      setReceiveWholeDomain(false);
       setIsAddMailboxOpen(false);
       await invalidateMailboxes();
-      toast.success("Shared inbox created.");
+      toast.success(
+        receiveWholeDomain
+          ? "Whole-domain shared inbox created."
+          : "Shared inbox created."
+      );
       await navigateToMailbox(createdMailboxId);
     },
   });
@@ -654,11 +699,14 @@ export const MailboxesListSettingsView = () => {
           setManagedOrganizationId(value);
           setManagedDomain(undefined);
           setManagedDivisionId(null);
+          setReceiveWholeDomain(false);
         }}
         onOpenChange={setIsAddMailboxOpen}
+        onReceiveWholeDomainChange={setReceiveWholeDomain}
         onStartGmailConnection={startGmailConnection}
         organizations={organizations}
         placementItems={placementItems}
+        receiveWholeDomain={receiveWholeDomain}
         selectedDomain={selectedDomain}
         selectedManagedOrganization={selectedManagedOrganization}
         selectedManagedOrganizationId={selectedManagedOrganizationId}
