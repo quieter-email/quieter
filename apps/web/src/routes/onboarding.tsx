@@ -38,7 +38,9 @@ export const Route = createFileRoute("/onboarding")({
   ssr: "data-only",
   validateSearch: zodValidator(
     z.object({
-      gmailLink: z.literal("complete").optional(),
+      gmailLink: z
+        .union([z.literal("complete"), z.literal("start")])
+        .optional(),
       returnTo: z
         .string()
         .optional()
