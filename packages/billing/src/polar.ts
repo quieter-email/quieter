@@ -2,13 +2,13 @@ import { ORPCError } from "@orpc/server";
 import type { Polar } from "@polar-sh/sdk";
 import { serverEnv } from "@quieter/env/server";
 
-import { getPolarServer } from "./polar-config";
+import { getPolarServer } from "./polar-config.ts";
 
 export {
   getPolarApiOrganizationId,
   getPolarServer,
   resolvePolarServer,
-} from "./polar-config";
+} from "./polar-config.ts";
 
 let polarClient: Polar | null = null;
 

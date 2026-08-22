@@ -27,7 +27,6 @@
     "@better-auth/core": "catalog:",
     "@better-auth/passkey": "catalog:",
     "@quieter/config": "workspace:*",
-    "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "better-auth": "catalog:",
     "drizzle-orm": "catalog:",

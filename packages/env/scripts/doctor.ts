@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { assertLocalEnvFile } from "../src/local-doctor";
+import { assertLocalEnvFile } from "../src/local-doctor.ts";
 
 const localEnvPath = path.join(import.meta.dirname, "../../../.env.local");
 assertLocalEnvFile(localEnvPath);

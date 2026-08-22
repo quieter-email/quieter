@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -6,6 +7,14 @@ import { inflateSync } from "node:zlib";
 const projectRoot = path.resolve(import.meta.dirname, "..");
 const webPublicDir = path.resolve(projectRoot, "apps/web/public");
 const tempDir = path.resolve(webPublicDir, ".asset-tmp");
+const resvgCliPath = path.join(
+  projectRoot,
+  "node_modules",
+  "@resvg",
+  "resvg-js-cli",
+  "bin",
+  "resvg-js-cli.mjs"
+);
 
 const brand = {
   dark: "#1a1a1a",
@@ -558,11 +567,10 @@ const renderSvg = (
   width: number,
   height: number
 ) => {
-  const result = Bun.spawnSync({
-    cmd: [
-      "bunx",
-      "--bun",
-      "@resvg/resvg-js-cli",
+  const result = spawnSync(
+    process.execPath,
+    [
+      resvgCliPath,
       "--fit-width",
       String(width),
       "--fit-height",
@@ -570,14 +578,16 @@ const renderSvg = (
       inputPath,
       outputPath,
     ],
-    stderr: "pipe",
-    stdout: "pipe",
-  });
+    { encoding: "buffer", stdio: ["ignore", "pipe", "pipe"] }
+  );
 
-  if (!result.success) {
-    throw new Error(
-      `Failed to render ${outputPath}: ${result.stderr.toString()}`
-    );
+  if (result.error !== undefined || result.status !== 0) {
+    const stderrText = result.stderr.toString().trim();
+    const reason =
+      stderrText === ""
+        ? (result.error?.message ?? `exit code ${result.status}`)
+        : stderrText;
+    throw new Error(`Failed to render ${outputPath}: ${reason}`);
   }
 };
 
@@ -615,11 +625,11 @@ const buildIco = (pngs: Buffer[], sizes: number[]) => {
 };
 
 const main = async () => {
-  const args = Bun.argv.slice(2);
+  const args = process.argv.slice(2);
   const inputArg = args.find((arg) => !arg.startsWith("--"));
   if (!isPresentString(inputArg)) {
     process.stderr.write(
-      "Usage: bun scripts/generate-web-assets.ts <path-to-logo.svg|logo.ai>\n"
+      "Usage: node scripts/generate-web-assets.ts <path-to-logo.svg|logo.ai>\n"
     );
     throw new Error("A logo input path is required.");
   }
