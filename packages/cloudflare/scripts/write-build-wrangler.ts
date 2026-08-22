@@ -1,7 +1,8 @@
-/// <reference types="bun-types" />
-import { COMPATIBILITY_DATE } from "../src/compatibility-date";
+import { writeFile } from "node:fs/promises";
 
-const args = Bun.argv.slice(2);
+import { COMPATIBILITY_DATE } from "../src/compatibility-date.ts";
+
+const args = process.argv.slice(2);
 const get = (flag: string) => {
   const index = args.indexOf(flag);
   const value = args[index + 1];
@@ -22,7 +23,7 @@ const config = {
   name,
 };
 
-await Bun.write(out, `${JSON.stringify(config, null, 2)}\n`);
+await writeFile(out, `${JSON.stringify(config, null, 2)}\n`);
 process.stdout.write(
   `Wrote ${out} with compatibility_date ${COMPATIBILITY_DATE}\n`
 );

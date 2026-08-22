@@ -23,7 +23,7 @@ export default defineConfig({
     tasks: {
       "check:bundles": {
         cache: false,
-        command: "bun scripts/check-handler-bundles.ts",
+        command: "node scripts/check-handler-bundles.ts",
         dependsOn: dependencyBuild,
       },
     },

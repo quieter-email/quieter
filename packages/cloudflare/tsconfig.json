@@ -2,7 +2,7 @@
   "extends": "@quieter/config/tsconfig/base.json",
   "compilerOptions": {
     "lib": ["ESNext"],
-    "types": ["@cloudflare/vitest-pool-workers/types", "bun", "node"]
+    "types": ["@cloudflare/vitest-pool-workers/types", "node"]
   },
   "include": [
     "src/**/*.ts",

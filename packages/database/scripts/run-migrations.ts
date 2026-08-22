@@ -4,9 +4,9 @@ import { fileURLToPath } from "node:url";
 import {
   assertMigrationExecutionAllowed,
   getMigrationDatabaseUrl,
-} from "./database-url";
-import { assertMigrationFilesAreDeploySafe } from "./migration-safety";
-import { runForwardMigrations } from "./run-forward-migrations";
+} from "./database-url.ts";
+import { assertMigrationFilesAreDeploySafe } from "./migration-safety.ts";
+import { runForwardMigrations } from "./run-forward-migrations.ts";
 
 const packageDirectory = fileURLToPath(new URL("..", import.meta.url));
 const databaseUrl = getMigrationDatabaseUrl();

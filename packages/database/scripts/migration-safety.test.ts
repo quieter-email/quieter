@@ -4,8 +4,8 @@ import {
   assertLocalDatabaseUrl,
   assertLocalDevelopmentDatabaseUrls,
   assertMigrationExecutionAllowed,
-} from "./database-url";
-import { assertMigrationSqlIsDeploySafe } from "./migration-safety";
+} from "./database-url.ts";
+import { assertMigrationSqlIsDeploySafe } from "./migration-safety.ts";
 
 describe("destructive database target guard", () => {
   test("accepts the dedicated local migration test database", () => {

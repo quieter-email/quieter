@@ -1,7 +1,7 @@
-/// <reference types="bun-types" />
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { COMPATIBILITY_DATE } from "../src/compatibility-date";
+import { COMPATIBILITY_DATE } from "../src/compatibility-date.ts";
 
 const root = path.join(import.meta.dirname, "../../..");
 const check = process.argv.includes("--check");
@@ -17,7 +17,7 @@ const syncCompatibilityDate = async (
   relativePath: (typeof targets)[number]
 ) => {
   const filePath = path.join(root, relativePath);
-  const source = await Bun.file(filePath).text();
+  const source = await readFile(filePath, "utf-8");
   const match = datePattern.exec(source);
   if (match === null) {
     return `${relativePath}: missing compatibility_date`;
@@ -37,7 +37,7 @@ const syncCompatibilityDate = async (
     datePattern,
     `$<prefix>${COMPATIBILITY_DATE}$<suffix>`
   );
-  await Bun.write(filePath, updated);
+  await writeFile(filePath, updated);
   process.stdout.write(`Updated ${relativePath} → ${COMPATIBILITY_DATE}\n`);
   return null;
 };
