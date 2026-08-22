@@ -40,9 +40,9 @@ import type {
 
 import { WorkspaceDitherBackground } from "#/components/workspace-dither-background";
 import type { MailboxWorkspaceView } from "#/features/mailbox/domain/mailbox-workspace-view";
+import { MailboxOrganizer } from "#/features/navigation/components/mailbox-organizer";
 import { MailboxSwitcherDropdown } from "#/features/navigation/components/mailbox-switcher";
 import type { MailboxSwitcherOrder } from "#/features/navigation/components/mailbox-switcher";
-import { ManagedMailboxOrganizer } from "#/features/navigation/components/managed-mailbox-organizer";
 import { SidebarLabelNav } from "#/features/navigation/components/sidebar-label-nav";
 import { SidebarMailboxNav } from "#/features/navigation/components/sidebar-mailbox-nav";
 import { SidebarNavItem } from "#/features/navigation/components/sidebar-nav-item";
@@ -419,10 +419,16 @@ const SidebarInboxSection = ({
           onSelectMailbox={handleSelectMailbox}
           selectedMailbox={selectedMailbox}
         />
-        {selectedMailboxProvider === "managed" && hasText(selectedMailboxId) ? (
-          <ManagedMailboxOrganizer
-            canManage={selectedMailboxGrantRole === "manager"}
+        {selectedMailboxProvider !== null &&
+        selectedMailboxProvider !== "api" &&
+        hasText(selectedMailboxId) ? (
+          <MailboxOrganizer
+            canManage={
+              selectedMailboxProvider === "gmail" ||
+              selectedMailboxGrantRole === "manager"
+            }
             mailboxId={selectedMailboxId}
+            mailboxProvider={selectedMailboxProvider}
             onSearch={(query) => {
               onSearch(query);
               onRequestClose?.();

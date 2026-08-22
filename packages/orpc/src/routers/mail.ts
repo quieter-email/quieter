@@ -93,6 +93,7 @@ import {
 } from "./base";
 import { mailboxProcedures } from "./mail/mailboxes";
 import { managedOrganizationMailRouter } from "./mail/managed-organization";
+import { mailboxSavedViewRouter } from "./mail/saved-views";
 
 type MailActionMemoryInput = Parameters<typeof LearnAiMemoryFromMailAction>[0];
 type SentMessageMemoryInput = Parameters<
@@ -239,6 +240,7 @@ const recordGmailLabelFeedback = async (input: {
 
 export const mailRouter = {
   ...mailboxProcedures,
+  ...mailboxSavedViewRouter,
   ...managedOrganizationMailRouter,
   applyChanges: protectedProcedure
     .input(
