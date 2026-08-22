@@ -51,7 +51,6 @@
     "@orpc/client": "catalog:",
     "@orpc/server": "catalog:",
     "@quieter/config": "workspace:*",
-    "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "drizzle-orm": "catalog:",
     "typescript": "catalog:",

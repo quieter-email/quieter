@@ -1,4 +1,4 @@
-import { check, exitOnKitError, kitOptions } from "./drizzle-kit";
+import { check, exitOnKitError, kitOptions } from "./drizzle-kit.ts";
 
 const response = await check(kitOptions);
 exitOnKitError(response);

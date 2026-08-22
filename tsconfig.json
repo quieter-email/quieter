@@ -2,7 +2,7 @@
   "extends": "./packages/config/tsconfig/base.json",
   "compilerOptions": {
     "lib": ["ESNext"],
-    "types": ["bun", "node"]
+    "types": ["node"]
   },
   "include": ["scripts/**/*.ts", "vite.config.ts"]
 }

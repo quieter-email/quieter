@@ -1,3 +1,5 @@
+import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -46,21 +48,30 @@ export const exitOnKitError = (response: {
   throw new Error("drizzle-kit failed.");
 };
 
-export const runKitMigrate = async (
+export const runKitMigrate = (
   configPath = path.join(packageDirectory, "drizzle.config.ts")
 ) => {
-  const migrationProcess = Bun.spawn(
-    ["bunx", "drizzle-kit", "migrate", `--config=${configPath}`],
+  const kitBinPath = path.join(
+    packageDirectory,
+    "node_modules",
+    "drizzle-kit",
+    "bin.cjs"
+  );
+  if (!existsSync(kitBinPath)) {
+    throw new Error("drizzle-kit is not installed in packages/database.");
+  }
+
+  const migrationResult = spawnSync(
+    process.execPath,
+    [kitBinPath, "migrate", `--config=${configPath}`],
     {
       cwd: packageDirectory,
-      env: globalThis.process.env,
-      stderr: "inherit",
-      stdout: "inherit",
+      env: process.env,
+      stdio: "inherit",
     }
   );
 
-  const exitCode = await migrationProcess.exited;
-  if (exitCode !== 0) {
+  if (migrationResult.status !== 0 || migrationResult.error !== undefined) {
     throw new Error("Drizzle migration command failed");
   }
 };
