@@ -4,7 +4,7 @@
 
 Quieter is an experimental email client for Gmail accounts and organization-managed mailboxes. It combines a focused mail workspace, compose and search tools, mailbox-scoped AI assistance, managed mail delivery, and privacy controls in one application. Every account starts with a normal team; there is no separate personal workspace.
 
-> [!WARNING] Quieter is deep-alpha software. It is not ready for production users, important mail, or self-hosting without substantial operational work.
+> Quieter is still under development. It is not ready for production users, important mail, or self-hosting without substantial operational work.
 
 ## Repository Policy
 
