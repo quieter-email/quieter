@@ -1,4 +1,5 @@
 import type {
+  MailboxAccessMode,
   MailboxGrantRole,
   PersistedMailboxProvider,
 } from "@quieter/database/schema";
@@ -17,6 +18,7 @@ export type MailboxDivisionGrantSummary = {
 };
 
 export type MailboxListItem = MailboxGroupMetadata & {
+  accessMode: MailboxAccessMode | null;
   capabilities: MailboxCapabilities;
   connectionStatus: "connected" | "needs_reconnect";
   directGrantRole: MailboxGrantRole | null;

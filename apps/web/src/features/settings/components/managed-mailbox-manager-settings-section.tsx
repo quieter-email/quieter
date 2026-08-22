@@ -4,6 +4,7 @@ import type { RouterOutputs } from "@quieter/orpc";
 import type { UseQueryResult } from "@tanstack/react-query";
 
 import type {
+  ManagedMailboxAccessModeInput,
   ManagedMailboxDivisionGrantInput,
   ManagedMailboxGrantInput,
   ManagedMailboxToggleInput,
@@ -20,6 +21,7 @@ import {
 type ManagedMailboxDetails = RouterOutputs["mail"]["getManagedMailboxDetails"];
 
 export const ManagedMailboxManagerSettingsSection = ({
+  canMakePrivate,
   detailManagedDivisions,
   detailManagedMembers,
   emailAddress,
@@ -31,10 +33,12 @@ export const ManagedMailboxManagerSettingsSection = ({
   removeManagedMailboxGrantMutation,
   setGmailAutoLabelingMutation,
   setGmailUsefulDetailsMutation,
+  setManagedMailboxAccessModeMutation,
   setManagedMailboxDivisionGrantMutation,
   setManagedMailboxGrantMutation,
   updateManagedMailboxMutation,
 }: {
+  canMakePrivate: boolean;
   detailManagedDivisions: { id: string; name: string }[];
   detailManagedMembers: {
     id: string;
@@ -59,6 +63,7 @@ export const ManagedMailboxManagerSettingsSection = ({
   }>;
   setGmailAutoLabelingMutation: SettingsMutation<ManagedMailboxToggleInput>;
   setGmailUsefulDetailsMutation: SettingsMutation<ManagedMailboxToggleInput>;
+  setManagedMailboxAccessModeMutation: SettingsMutation<ManagedMailboxAccessModeInput>;
   setManagedMailboxDivisionGrantMutation: SettingsMutation<ManagedMailboxDivisionGrantInput>;
   setManagedMailboxGrantMutation: SettingsMutation<ManagedMailboxGrantInput>;
   updateManagedMailboxMutation: SettingsMutation<ManagedMailboxUpdateInput>;
@@ -67,7 +72,7 @@ export const ManagedMailboxManagerSettingsSection = ({
     return (
       <SettingsLoadingState
         className="min-h-48"
-        label="Loading shared inbox settings"
+        label="Loading inbox settings"
       />
     );
   }
@@ -75,22 +80,29 @@ export const ManagedMailboxManagerSettingsSection = ({
   if (managedMailboxQuery.data === undefined) {
     return (
       <SettingsCard className="p-6 text-body text-destructive">
-        {managedMailboxQuery.error?.message ??
-          "Could not load shared inbox settings."}
+        {managedMailboxQuery.error?.message ?? "Could not load inbox settings."}
       </SettingsCard>
     );
   }
 
   return (
     <ManagedMailboxDetailSettings
+      canMakePrivate={canMakePrivate}
       detailManagedDivisions={detailManagedDivisions}
       detailManagedMembers={detailManagedMembers}
       details={managedMailboxQuery.data}
       emailAddress={emailAddress}
       hasAutomationAccess={hasAutomationAccess}
       includeApiMessagesSwitchId={includeApiMessagesSwitchId}
+      isAccessModePending={setManagedMailboxAccessModeMutation.isPending}
       isUpdatePending={updateManagedMailboxMutation.isPending}
       mailboxId={mailboxId}
+      onAccessModeChange={(input) => {
+        setManagedMailboxAccessModeMutation.mutate({
+          ...input,
+          mailboxId,
+        });
+      }}
       onAutoLabelChange={(enabled) => {
         // Optimistic; the mutation owns rollback and the failure toast.
         setGmailAutoLabelingMutation.mutate({ enabled, mailboxId });

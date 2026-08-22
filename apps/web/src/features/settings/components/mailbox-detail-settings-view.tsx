@@ -21,6 +21,7 @@ export const MailboxDetailSettingsView = ({
   const navigate = useNavigate({ from: "/settings" });
   const {
     areMailboxesPending,
+    canMakeMailboxPrivate,
     defaultMailboxId,
     detailGroup,
     detailManagedDivisions,
@@ -69,6 +70,7 @@ export const MailboxDetailSettingsView = ({
 
   return (
     <MailboxDetailSettingsContent
+      canMakePrivate={canMakeMailboxPrivate}
       defaultMailboxId={defaultMailboxId}
       detailGroupName={detailGroup?.name}
       detailManagedDivisions={detailManagedDivisions}
@@ -105,6 +107,9 @@ export const MailboxDetailSettingsView = ({
       )}
       setGmailUsefulDetailsMutation={asSettingsMutation(
         mutations.setGmailUsefulDetailsMutation
+      )}
+      setManagedMailboxAccessModeMutation={asSettingsMutation(
+        mutations.setManagedMailboxAccessModeMutation
       )}
       setManagedMailboxDivisionGrantMutation={asSettingsMutation(
         mutations.setManagedMailboxDivisionGrantMutation
