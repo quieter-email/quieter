@@ -6,7 +6,7 @@ import { serverEnv } from "@quieter/env/server";
 import { reportError } from "@quieter/observability";
 import { gt, or, sql } from "drizzle-orm";
 
-import { BILLING_PRODUCTS, billingProductIdSchema } from "./plans";
+import { BILLING_PRODUCTS, billingProductIdSchema } from "./plans.ts";
 
 export const BILLING_METADATA_PRODUCT = "quieterProduct";
 export const BILLING_METADATA_USER_ID = "quieterUserId";

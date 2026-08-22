@@ -1,6 +1,6 @@
 import { serverEnv } from "@quieter/env/server";
 
-import { syncUnreportedBillingCreditUsage } from "../src/credits";
+import { syncUnreportedBillingCreditUsage } from "../src/credits.ts";
 
 const limit = Number(serverEnv.POLAR_CREDIT_USAGE_SYNC_LIMIT ?? 100);
 

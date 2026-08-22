@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Vite+ (`vp`), which manages the pinned Node runtime and Bun package manager
+- Vite+ (`vp`), which manages the pinned Node runtime and dependency installs
 - Git
 - PostgreSQL 16 or newer locally, or the isolated PlanetScale `quieter_dev` logical database
 - Non-production AWS credentials only when running the SST mail and background-processing stack
@@ -91,7 +91,7 @@ Local development requires only the values needed by the paths you exercise. Imp
 Run the normal local web session:
 
 ```bash
-bun run dev
+vp run dev
 ```
 
 This directly starts the Cloudflare/Vite production-shaped Worker runtime on `http://localhost:3000` as the only foreground process. Vite validates that the database is loopback-only or the explicitly allowlisted PlanetScale `quieter_dev` database before serving. Chat generation, AI automation, and mailbox actions use their in-process fallbacks, so stopping this command stops all local background work without a custom orchestrator. Apply migrations explicitly with `vp run db:migrate` after pulling or generating schema changes.
@@ -99,10 +99,10 @@ This directly starts the Cloudflare/Vite production-shaped Worker runtime on `ht
 Run the optional remote mail and background-processing infrastructure only for explicit provider integration tests:
 
 ```bash
-bun run dev:mail
+vp run dev:mail
 ```
 
-`bun run dev` is the single safe local runtime. Use `bun run dev:cloud` when you explicitly need the web app and SST together. The package commands invoke SST directly with the `mail-dev` stage and load `.env.local` plus optional `.env.sst.local`. Keep AWS credentials out of `.env.local`; put non-production SST credentials in `.env.sst.local`. Remote queues and schedules can outlive the terminal, so remove the stage after infrastructure testing rather than relying on Ctrl+C.
+`vp run dev` is the single safe local runtime. Use `vp run dev:cloud` when you explicitly need the web app and SST together. The package commands invoke SST directly with the `mail-dev` stage and load `.env.local` plus optional `.env.sst.local`. Keep AWS credentials out of `.env.local`; put non-production SST credentials in `.env.sst.local`. Remote queues and schedules can outlive the terminal, so remove the stage after infrastructure testing rather than relying on Ctrl+C.
 
 ## Where Changes Belong
 

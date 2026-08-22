@@ -1,7 +1,7 @@
 import { serverEnv } from "@quieter/env/server";
 
-import { assertLocalDatabaseUrl } from "./database-url";
-import { exitOnKitError, kitPushOptions, push } from "./drizzle-kit";
+import { assertLocalDatabaseUrl } from "./database-url.ts";
+import { exitOnKitError, kitPushOptions, push } from "./drizzle-kit.ts";
 
 const databaseUrl = serverEnv.DATABASE_URL;
 if (databaseUrl === undefined || databaseUrl === "") {

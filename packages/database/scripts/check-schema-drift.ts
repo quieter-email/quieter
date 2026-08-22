@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { exitOnKitError, generate } from "./drizzle-kit";
+import { exitOnKitError, generate } from "./drizzle-kit.ts";
 
 const packageDirectory = fileURLToPath(new URL("..", import.meta.url));
 const migrationsDirectory = path.join(packageDirectory, "drizzle");
