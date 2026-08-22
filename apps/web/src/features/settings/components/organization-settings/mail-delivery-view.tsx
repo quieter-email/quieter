@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { useState } from "react";
 
+import { mailboxesQueryOptions } from "#/lib/mailboxes-query";
 import { orpc } from "#/lib/orpc";
 
 import {
@@ -58,6 +59,31 @@ const MetricRow = ({
   </div>
 );
 
+const ToggleButton = ({
+  active,
+  label,
+  onSelect,
+}: {
+  active: boolean;
+  label: string;
+  onSelect: () => void;
+}) => (
+  <button
+    aria-pressed={active}
+    className={cn(
+      "max-w-40 truncate rounded-md px-2.5 py-1 text-caption font-medium transition-colors",
+      {
+        "bg-bg text-fg shadow-xs": active,
+        "text-muted-fg hover:text-fg": !active,
+      }
+    )}
+    onClick={onSelect}
+    type="button"
+  >
+    {label}
+  </button>
+);
+
 const RangeToggle = ({
   range,
   setRange,
@@ -67,23 +93,14 @@ const RangeToggle = ({
 }) => (
   <div className="flex shrink-0 gap-1 rounded-lg border border-border p-0.5">
     {(["7d", "30d"] as const).map((candidate) => (
-      <button
-        aria-pressed={range === candidate}
-        className={cn(
-          "rounded-md px-2.5 py-1 text-caption font-medium transition-colors",
-          {
-            "bg-bg text-fg shadow-xs": range === candidate,
-            "text-muted-fg hover:text-fg": range !== candidate,
-          }
-        )}
+      <ToggleButton
+        active={range === candidate}
         key={candidate}
-        onClick={() => {
+        label={candidate === "7d" ? "7 days" : "30 days"}
+        onSelect={() => {
           setRange(candidate);
         }}
-        type="button"
-      >
-        {candidate === "7d" ? "7 days" : "30 days"}
-      </button>
+      />
     ))}
   </div>
 );
@@ -99,6 +116,15 @@ export const MailDeliveryView = ({
 }) => {
   const queryClient = useQueryClient();
   const [range, setRange] = useState<MailDeliveryMetricsRange>("7d");
+  const [mailboxId, setMailboxId] = useState<string>("");
+
+  const { data: mailboxes } = useQuery({
+    ...mailboxesQueryOptions(),
+    enabled: canManage,
+  });
+  const managedMailboxes = (mailboxes?.groups ?? [])
+    .flatMap((group) => group.mailboxes)
+    .filter((mailbox) => mailbox.provider === "managed");
 
   const {
     data: trackingSettings,
@@ -115,7 +141,7 @@ export const MailDeliveryView = ({
     isPending: isMetricsPending,
     isError: isMetricsError,
   } = useQuery({
-    ...mailDeliveryMetricsQueryOptions(organization.id, range),
+    ...mailDeliveryMetricsQueryOptions(organization.id, range, mailboxId),
     enabled: canManage,
   });
 
@@ -315,6 +341,41 @@ export const MailDeliveryView = ({
           <h2 className="text-body font-semibold text-fg">Recent activity</h2>
           <RangeToggle range={range} setRange={setRange} />
         </div>
+
+        {managedMailboxes.length > 0 && (
+          <div className="mb-3 flex flex-wrap gap-1.5">
+            {[
+              { id: "", label: "All team mail" },
+              ...managedMailboxes.map((mailbox) => ({
+                id: mailbox.id,
+                label:
+                  mailbox.displayName ?? mailbox.emailAddress ?? mailbox.id,
+              })),
+            ].map((scope) => {
+              const active =
+                scope.id === "" ? mailboxId === "" : scope.id === mailboxId;
+              return (
+                <button
+                  aria-pressed={active}
+                  className={cn(
+                    "max-w-48 truncate rounded-full border px-3 py-1 text-caption font-medium transition-colors",
+                    {
+                      "border-border text-muted-fg hover:text-fg": !active,
+                      "border-q-blue/40 bg-q-blue/10 text-q-blue": active,
+                    }
+                  )}
+                  key={scope.id || "all"}
+                  onClick={() => {
+                    setMailboxId(scope.id);
+                  }}
+                  type="button"
+                >
+                  {scope.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {metricsSection}
 
