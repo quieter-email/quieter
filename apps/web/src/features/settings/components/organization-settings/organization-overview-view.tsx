@@ -7,6 +7,7 @@ import {
   Key02Icon,
   LeftToRightListBulletIcon,
   MailRemove01Icon,
+  DeliverySent01Icon,
   UserGroupIcon,
   Wallet02Icon,
 } from "@hugeicons/core-free-icons";
@@ -198,6 +199,7 @@ export const OrganizationOverviewView = ({
   onOpenApiKeys,
   onOpenBilling,
   onOpenDanger,
+  onOpenDelivery,
   onOpenDivisions,
   onOpenDomains,
   onOpenMembers,
@@ -220,6 +222,7 @@ export const OrganizationOverviewView = ({
   onOpenDomains: () => void;
   onOpenMembers: () => void;
   onOpenSuppressions: () => void;
+  onOpenDelivery: () => void;
   organization: OrganizationSummary;
   pendingInvitationsCount: number;
   fullOrganization: FullOrganization;
@@ -364,6 +367,14 @@ export const OrganizationOverviewView = ({
             icon={<HugeiconsIcon aria-hidden icon={MailRemove01Icon} />}
             onClick={onOpenSuppressions}
             title="Blocked recipients"
+          />
+        ) : null}
+        {canUpdateOrganization ? (
+          <SettingsNavigationRow
+            description="Tracking settings and delivery metrics"
+            icon={<HugeiconsIcon aria-hidden icon={DeliverySent01Icon} />}
+            onClick={onOpenDelivery}
+            title="Delivery"
           />
         ) : null}
         <SettingsNavigationRow

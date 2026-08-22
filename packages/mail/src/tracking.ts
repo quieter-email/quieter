@@ -41,18 +41,10 @@ export const verifyOpenTrackingToken = (
   if (encodedPayload === "" || signature === "") {
     return null;
   }
-  const expectedSignature = Buffer.from(
-    signTokenPayload(encodedPayload, secret)
-  );
-  let actualSignature: Buffer;
-  try {
-    actualSignature = Buffer.from(signature, "base64url");
-  } catch {
-    return null;
-  }
+  const expectedSignature = signTokenPayload(encodedPayload, secret);
   if (
-    expectedSignature.length !== actualSignature.length ||
-    !timingSafeEqual(expectedSignature, actualSignature)
+    expectedSignature.length !== signature.length ||
+    !timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(signature))
   ) {
     return null;
   }

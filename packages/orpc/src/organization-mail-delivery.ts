@@ -807,19 +807,27 @@ export const setOrganizationMailTrackingSettings = async (input: {
  * Precedence: tracking stays off unless the organization enables it. A
  * per-send value is honored only when the organization allows overrides.
  */
-export const resolveOrganizationMailOpenTracking = async (input: {
-  openTracking?: boolean;
-  organizationId: string;
-}) => {
-  const settings = await getOrganizationMailTrackingSettings(input);
+export const resolveEffectiveOpenTracking = (
+  settings: { allowPerSendOverride: boolean; openTrackingEnabled: boolean },
+  openTracking?: boolean
+) => {
   if (!settings.openTrackingEnabled) {
     return false;
   }
-  if (input.openTracking === undefined) {
+  if (openTracking === undefined) {
     return true;
   }
-  return settings.allowPerSendOverride ? input.openTracking : true;
+  return settings.allowPerSendOverride ? openTracking : true;
 };
+
+export const resolveOrganizationMailOpenTracking = async (input: {
+  openTracking?: boolean;
+  organizationId: string;
+}) =>
+  resolveEffectiveOpenTracking(
+    await getOrganizationMailTrackingSettings(input),
+    input.openTracking
+  );
 
 /**
  * Builds the html transform that appends the signed open marker when tracking
