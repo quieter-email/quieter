@@ -1,4 +1,13 @@
 import type { RouterOutputs } from "@quieter/orpc";
+import type { PillTone } from "@quieter/ui/pill";
+
+/** Maps each delivery tone to Quieter's pill palette for status chips. */
+export const DELIVERY_PILL_TONES: Record<DeliveryStatusTone, PillTone> = {
+  danger: "red",
+  neutral: "gray",
+  positive: "green",
+  warning: "orange",
+};
 
 export type MessageDeliveryResult = NonNullable<
   RouterOutputs["mail"]["getMessageDelivery"]
@@ -102,16 +111,23 @@ export const getDeliveryActionGuidance = (
 /**
  * `null` means no recipient events have arrived yet, which reads as "Accepted".
  */
-export const getAggregateDeliveryStatus = (
-  recipients: readonly MessageDeliveryRecipient[]
+export const getAggregateDeliveryStatusFromStatuses = (
+  statuses: readonly MessageDeliveryStatus[]
 ): MessageDeliveryStatus | null => {
   for (const status of DELIVERY_STATUS_SEVERITY) {
-    if (recipients.some((recipient) => recipient.status === status)) {
+    if (statuses.includes(status)) {
       return status;
     }
   }
   return null;
 };
+
+export const getAggregateDeliveryStatus = (
+  recipients: readonly MessageDeliveryRecipient[]
+): MessageDeliveryStatus | null =>
+  getAggregateDeliveryStatusFromStatuses(
+    recipients.map((recipient) => recipient.status)
+  );
 
 export const getAggregateDeliveryLabel = (
   recipients: readonly MessageDeliveryRecipient[]

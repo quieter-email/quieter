@@ -143,6 +143,26 @@ const createDedupeKey = (input: {
     )
     .digest("hex");
 
+export type MessageDeliveryStatusRow = {
+  messageId: string;
+  status: OrganizationMailDeliveryStatus;
+};
+
+export const groupDeliveryStatusesByMessage = (
+  rows: readonly MessageDeliveryStatusRow[]
+) => {
+  const statuses: Record<string, OrganizationMailDeliveryStatus[]> = {};
+  for (const row of rows) {
+    const existing = statuses[row.messageId];
+    if (existing === undefined) {
+      statuses[row.messageId] = [row.status];
+    } else {
+      existing.push(row.status);
+    }
+  }
+  return statuses;
+};
+
 export const getSuppressionReason = (
   feedback: Pick<OrganizationMailFeedback, "eventType" | "permanentFailure">
 ): OrganizationMailSuppressionReason | null => {
