@@ -5,6 +5,7 @@ import { AI_MEMORY_REQUEST_MAX_LENGTH } from "@quieter/ai/ai-memory";
 import {
   chatModelSchema,
   defaultAutoLabelModel,
+  defaultSearchFilterModel,
   defaultUsefulDetailModel,
 } from "@quieter/ai/chat-models";
 import type { ParsedMailSearch } from "@quieter/ai/parse-mail-search";
@@ -62,6 +63,9 @@ const serializeModels = (
   record: typeof userAiContext.$inferSelect | undefined
 ) => {
   const autoLabelModel = chatModelSchema.safeParse(record?.autoLabelModel);
+  const searchFilterModel = chatModelSchema.safeParse(
+    record?.searchFilterModel
+  );
   const usefulDetailModel = chatModelSchema.safeParse(
     record?.usefulDetailModel
   );
@@ -69,6 +73,9 @@ const serializeModels = (
     autoLabel: autoLabelModel.success
       ? autoLabelModel.data
       : defaultAutoLabelModel,
+    searchFilter: searchFilterModel.success
+      ? searchFilterModel.data
+      : defaultSearchFilterModel,
     usefulDetail: usefulDetailModel.success
       ? usefulDetailModel.data
       : defaultUsefulDetailModel,
@@ -237,12 +244,25 @@ export const aiRouter = {
       });
 
       const requestId = randomUUID();
+      const [modelRecord] = await db
+        .select({ searchFilterModel: userAiContext.searchFilterModel })
+        .from(userAiContext)
+        .where(eq(userAiContext.userId, context.userId))
+        .limit(1);
+      const modelPreference = chatModelSchema.safeParse(
+        modelRecord?.searchFilterModel
+      );
+      const searchModel = modelPreference.success
+        ? modelPreference.data
+        : defaultSearchFilterModel;
+
       let parsed: ParsedMailSearch;
       try {
-        const { parseMailSearchWithAi, MAIL_SEARCH_INTERPRET_MODEL } =
+        const { parseMailSearchWithAi } =
           await import("@quieter/ai/parse-mail-search");
         parsed = await parseMailSearchWithAi({
           availableLabels: input.availableLabels ?? [],
+          model: searchModel,
           onUsage: (usage) => {
             void reportAiUsage({
               chatId: null,
@@ -250,7 +270,7 @@ export const aiRouter = {
               costUsd: usage.costUsd,
               externalId: `search-interpret:${requestId}`,
               mailboxId: mailbox.id,
-              model: MAIL_SEARCH_INTERPRET_MODEL,
+              model: searchModel,
               promptTokens: usage.promptTokens,
               promptTokensDetails: {
                 cacheWriteTokens: usage.cacheWriteTokens,
@@ -338,6 +358,7 @@ export const aiRouter = {
     .input(
       z.object({
         autoLabel: chatModelSchema,
+        searchFilter: chatModelSchema,
         usefulDetail: chatModelSchema,
       })
     )
@@ -351,6 +372,7 @@ export const aiRouter = {
           id: randomUUID(),
           lastEditedAt: now,
           markdown: "",
+          searchFilterModel: input.searchFilter,
           updatedAt: now,
           usefulDetailModel: input.usefulDetail,
           userId: context.userId,
@@ -358,6 +380,7 @@ export const aiRouter = {
         .onConflictDoUpdate({
           set: {
             autoLabelModel: input.autoLabel,
+            searchFilterModel: input.searchFilter,
             updatedAt: now,
             usefulDetailModel: input.usefulDetail,
           },

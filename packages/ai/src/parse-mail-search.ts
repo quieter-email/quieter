@@ -1,11 +1,11 @@
 import { z } from "zod";
 
-import { MAIL_SEARCH_INTERPRET_MODEL } from "./chat-models";
 import type { ChatModel } from "./chat-models";
+import { defaultSearchFilterModel } from "./chat-models";
 import type { AiUsageReport } from "./chat-usage";
 import { runStructuredGeneration } from "./generation";
 
-export { MAIL_SEARCH_INTERPRET_MODEL } from "./chat-models";
+export { defaultSearchFilterModel } from "./chat-models";
 
 export const MAIL_SEARCH_QUERY_MAX_LENGTH = 300;
 
@@ -63,7 +63,7 @@ Rules:
 
 export const parseMailSearchWithAi = async ({
   availableLabels,
-  model = MAIL_SEARCH_INTERPRET_MODEL,
+  model = defaultSearchFilterModel,
   onUsage,
   query,
 }: {

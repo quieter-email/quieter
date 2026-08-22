@@ -4,6 +4,7 @@ import { InformationCircleIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   defaultAutoLabelModel,
+  defaultSearchFilterModel,
   defaultUsefulDetailModel,
 } from "@quieter/ai/chat-models";
 import type { ChatModel } from "@quieter/ai/chat-models";
@@ -87,6 +88,7 @@ const useAiModels = ({
   const models = draft ??
     settings?.models ?? {
       autoLabel: defaultAutoLabelModel,
+      searchFilter: defaultSearchFilterModel,
       usefulDetail: defaultUsefulDetailModel,
     };
   const updateModel = (key: keyof CloudModelSettings, model: ChatModel) => {
@@ -182,6 +184,25 @@ const AiModelsSection = ({
       >
         Used to find time-sensitive details such as deliveries, reservations,
         and verification codes. This choice is saved to your account.
+      </SettingsRow>
+      <SettingsRow
+        action={
+          <AiModelSelect
+            align="end"
+            ariaLabel="Search filters model"
+            className="w-44 sm:w-56"
+            disabled={disabled}
+            onValueChange={(model) => {
+              updateModel("searchFilter", model);
+            }}
+            size="sm"
+            value={models.searchFilter}
+          />
+        }
+        title="Search filters"
+      >
+        Used to turn a typed sentence like “unread from the last 30 days” into
+        filters. This choice is saved to your account.
       </SettingsRow>
     </SettingsRows>
   </SettingsSection>
