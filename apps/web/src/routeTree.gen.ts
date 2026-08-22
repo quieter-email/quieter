@@ -35,6 +35,7 @@ import { Route as ApiV1SuppressionsRouteImport } from './routes/api/v1/suppressi
 import { Route as ApiDomainConnectTemplatesServiceIdRouteImport } from './routes/api/domain-connect.templates.$serviceId'
 import { Route as ApiInternalGmailCredentialsRotateRouteImport } from './routes/api.internal.gmail-credentials.rotate'
 import { Route as ApiV1MessagesMessageIdRouteImport } from './routes/api/v1/messages.$messageId'
+import { Route as ApiV1OTokenRouteImport } from './routes/api/v1/o.$token'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -169,6 +170,11 @@ const ApiV1MessagesMessageIdRoute = ApiV1MessagesMessageIdRouteImport.update({
   path: '/api/v1/messages/$messageId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1OTokenRoute = ApiV1OTokenRouteImport.update({
+  id: '/api/v1/o/$token',
+  path: '/api/v1/o/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -197,6 +203,7 @@ export interface FileRoutesByFullPath {
   '/api/domain-connect/templates/$serviceId': typeof ApiDomainConnectTemplatesServiceIdRoute
   '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
   '/api/v1/messages/$messageId': typeof ApiV1MessagesMessageIdRoute
+  '/api/v1/o/$token': typeof ApiV1OTokenRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -225,6 +232,7 @@ export interface FileRoutesByTo {
   '/api/domain-connect/templates/$serviceId': typeof ApiDomainConnectTemplatesServiceIdRoute
   '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
   '/api/v1/messages/$messageId': typeof ApiV1MessagesMessageIdRoute
+  '/api/v1/o/$token': typeof ApiV1OTokenRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -254,6 +262,7 @@ export interface FileRoutesById {
   '/api/domain-connect/templates/$serviceId': typeof ApiDomainConnectTemplatesServiceIdRoute
   '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
   '/api/v1/messages/$messageId': typeof ApiV1MessagesMessageIdRoute
+  '/api/v1/o/$token': typeof ApiV1OTokenRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -284,6 +293,7 @@ export interface FileRouteTypes {
     | '/api/domain-connect/templates/$serviceId'
     | '/api/internal/gmail-credentials/rotate'
     | '/api/v1/messages/$messageId'
+    | '/api/v1/o/$token'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -312,6 +322,7 @@ export interface FileRouteTypes {
     | '/api/domain-connect/templates/$serviceId'
     | '/api/internal/gmail-credentials/rotate'
     | '/api/v1/messages/$messageId'
+    | '/api/v1/o/$token'
   id:
     | '__root__'
     | '/'
@@ -340,6 +351,7 @@ export interface FileRouteTypes {
     | '/api/domain-connect/templates/$serviceId'
     | '/api/internal/gmail-credentials/rotate'
     | '/api/v1/messages/$messageId'
+    | '/api/v1/o/$token'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -369,6 +381,7 @@ export interface RootRouteChildren {
   ApiDomainConnectTemplatesServiceIdRoute: typeof ApiDomainConnectTemplatesServiceIdRoute
   ApiInternalGmailCredentialsRotateRoute: typeof ApiInternalGmailCredentialsRotateRoute
   ApiV1MessagesMessageIdRoute: typeof ApiV1MessagesMessageIdRoute
+  ApiV1OTokenRoute: typeof ApiV1OTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -555,6 +568,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1MessagesMessageIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/o/$token': {
+      id: '/api/v1/o/$token'
+      path: '/api/v1/o/$token'
+      fullPath: '/api/v1/o/$token'
+      preLoaderRoute: typeof ApiV1OTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -587,6 +607,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiInternalGmailCredentialsRotateRoute:
     ApiInternalGmailCredentialsRotateRoute,
   ApiV1MessagesMessageIdRoute: ApiV1MessagesMessageIdRoute,
+  ApiV1OTokenRoute: ApiV1OTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

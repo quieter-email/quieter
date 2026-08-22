@@ -2,9 +2,12 @@ import { z } from "zod";
 
 import { assertUserCanManageOrganizationSettings } from "../mail-domain/service";
 import {
+  getOrganizationMailDeliveryMetrics,
+  getOrganizationMailTrackingSettings,
   listOrganizationMailRecipientSuppressions,
   listOrganizationMailSuppressionAudit,
   reconcileOrganizationMailDeliveryRecipients,
+  setOrganizationMailTrackingSettings,
   suppressOrganizationMailRecipient,
   unsuppressOrganizationMailRecipient,
 } from "../organization-mail-delivery";
@@ -39,6 +42,33 @@ export const organizationRouter = {
       async ({ context, input }) =>
         await deleteOrganizationDivision({ ...input, userId: context.userId })
     ),
+  getMailDeliveryMetrics: protectedProcedure
+    .route({ method: "GET" })
+    .input(
+      z.object({
+        from: z.coerce.date().optional(),
+        mailboxId: z.string().trim().min(1).optional(),
+        organizationId: organizationIdSchema,
+        to: z.coerce.date().optional(),
+      })
+    )
+    .handler(async ({ context, input }) => {
+      await assertUserCanManageOrganizationSettings({
+        organizationId: input.organizationId,
+        userId: context.userId,
+      });
+      return await getOrganizationMailDeliveryMetrics(input);
+    }),
+  getMailTrackingSettings: protectedProcedure
+    .route({ method: "GET" })
+    .input(z.object({ organizationId: organizationIdSchema }))
+    .handler(async ({ context, input }) => {
+      await assertUserCanManageOrganizationSettings({
+        organizationId: input.organizationId,
+        userId: context.userId,
+      });
+      return await getOrganizationMailTrackingSettings(input);
+    }),
   listDivisions: protectedProcedure
     .route({ method: "GET" })
     .input(z.object({ organizationId: z.string().trim().min(1) }))
@@ -104,6 +134,24 @@ export const organizationRouter = {
           userId: context.userId,
         })
     ),
+  setMailTrackingSettings: protectedProcedure
+    .input(
+      z.object({
+        allowPerSendOverride: z.boolean().optional(),
+        openTrackingEnabled: z.boolean().optional(),
+        organizationId: organizationIdSchema,
+      })
+    )
+    .handler(async ({ context, input }) => {
+      await assertUserCanManageOrganizationSettings({
+        organizationId: input.organizationId,
+        userId: context.userId,
+      });
+      return await setOrganizationMailTrackingSettings({
+        actorUserId: context.userId,
+        ...input,
+      });
+    }),
   suppressMailRecipient: protectedProcedure
     .input(
       z.object({

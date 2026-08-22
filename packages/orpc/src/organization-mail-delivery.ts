@@ -7,8 +7,10 @@ import {
   organizationApiMailMessage,
   organizationMailDeliveryEvent,
   organizationMailDeliveryRecipient,
+  organizationMailOpenEvent,
   organizationMailRecipientSuppression,
   organizationMailSuppressionAudit,
+  organizationMailTrackingSettings,
 } from "@quieter/database/schema";
 import type {
   OrganizationMailDeliveryEventType,
@@ -16,10 +18,20 @@ import type {
   OrganizationMailSuppressionAction,
   OrganizationMailSuppressionReason,
 } from "@quieter/database/schema";
-import { extractMailAddress } from "@quieter/mail/compose/schema";
+import { serverEnv } from "@quieter/env/server";
+import {
+  extractMailAddress,
+  splitMailAddressList,
+} from "@quieter/mail/compose/schema";
+import {
+  appendOpenTrackingPixel,
+  buildOpenTrackingToken,
+} from "@quieter/mail/tracking";
+import { reportError } from "@quieter/observability";
 import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 
 import { OrganizationMailSendError } from "./organization-mail-policy";
+import { hasText } from "./text";
 
 export type OrganizationMailFeedbackRecipient = {
   diagnosticCode?: string;
@@ -97,6 +109,23 @@ export const mergeDeliveryStatus = (
 
 const suppressionSeveritySql = (column: unknown) =>
   sql`case ${column} when 'complaint' then 3 when 'bounce' then 2 when 'unsubscribe' then 1 else 0 end`;
+
+/**
+ * Mirrors mergeDeliveryStatus for conflict updates: severity-ladder terminals
+ * never regress, everything else follows the latest event time.
+ */
+const mergeDeliveryStatusSql = (statusColumn: unknown) => sql`case
+  when ${statusColumn} = 'complained' then ${statusColumn}
+  when excluded."status" = 'complained' then excluded."status"
+  when ${statusColumn} = 'bounced' then ${statusColumn}
+  when excluded."status" = 'bounced' then excluded."status"
+  when ${statusColumn} = 'rejected' then ${statusColumn}
+  when excluded."status" = 'rejected' then excluded."status"
+  when ${statusColumn} = 'unsubscribed' then ${statusColumn}
+  when excluded."status" = 'unsubscribed' then excluded."status"
+  when excluded."lastEventAt" >= ${organizationMailDeliveryRecipient.lastEventAt} then excluded."status"
+  else ${statusColumn}
+end`;
 
 const resolveOrganizationId = async (providerMessageId: string) => {
   const [apiMessage] = await db
@@ -396,18 +425,9 @@ export const recordOrganizationMailFeedback = async (
           .onConflictDoUpdate({
             set: {
               lastEventAt: sql`greatest(${organizationMailDeliveryRecipient.lastEventAt}, excluded."lastEventAt")`,
-              status: sql`case
-                when ${organizationMailDeliveryRecipient.status} = 'complained' then ${organizationMailDeliveryRecipient.status}
-                when excluded."status" = 'complained' then excluded."status"
-                when ${organizationMailDeliveryRecipient.status} = 'bounced' then ${organizationMailDeliveryRecipient.status}
-                when excluded."status" = 'bounced' then excluded."status"
-                when ${organizationMailDeliveryRecipient.status} = 'rejected' then ${organizationMailDeliveryRecipient.status}
-                when excluded."status" = 'rejected' then excluded."status"
-                when ${organizationMailDeliveryRecipient.status} = 'unsubscribed' then ${organizationMailDeliveryRecipient.status}
-                when excluded."status" = 'unsubscribed' then excluded."status"
-                when excluded."lastEventAt" >= ${organizationMailDeliveryRecipient.lastEventAt} then excluded."status"
-                else ${organizationMailDeliveryRecipient.status}
-              end`,
+              status: mergeDeliveryStatusSql(
+                organizationMailDeliveryRecipient.status
+              ),
               updatedAt: now,
             },
             target: [
@@ -723,4 +743,373 @@ export const summarizeOrganizationMailDeliveryEvents = async (input: {
     summary[row.eventType] = row.count;
   }
   return summary;
+};
+
+export type OrganizationMailTrackingSettings = {
+  allowPerSendOverride: boolean;
+  openTrackingEnabled: boolean;
+};
+
+export const getOrganizationMailTrackingSettings = async (input: {
+  organizationId: string;
+}): Promise<OrganizationMailTrackingSettings> => {
+  const [settings] = await db
+    .select({
+      allowPerSendOverride:
+        organizationMailTrackingSettings.allowPerSendOverride,
+      openTrackingEnabled: organizationMailTrackingSettings.openTrackingEnabled,
+    })
+    .from(organizationMailTrackingSettings)
+    .where(
+      eq(organizationMailTrackingSettings.organizationId, input.organizationId)
+    )
+    .limit(1);
+
+  return (
+    settings ?? {
+      allowPerSendOverride: false,
+      openTrackingEnabled: false,
+    }
+  );
+};
+
+export const setOrganizationMailTrackingSettings = async (input: {
+  actorUserId: string;
+  allowPerSendOverride?: boolean;
+  openTrackingEnabled?: boolean;
+  organizationId: string;
+}) => {
+  const now = new Date();
+  const current = await getOrganizationMailTrackingSettings(input);
+  const next = {
+    allowPerSendOverride:
+      input.allowPerSendOverride ?? current.allowPerSendOverride,
+    openTrackingEnabled:
+      input.openTrackingEnabled ?? current.openTrackingEnabled,
+  };
+
+  await db
+    .insert(organizationMailTrackingSettings)
+    .values({
+      ...next,
+      createdAt: now,
+      organizationId: input.organizationId,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      set: { ...next, updatedAt: now },
+      target: organizationMailTrackingSettings.organizationId,
+    });
+  return next;
+};
+
+/**
+ * Precedence: tracking stays off unless the organization enables it. A
+ * per-send value is honored only when the organization allows overrides.
+ */
+export const resolveOrganizationMailOpenTracking = async (input: {
+  openTracking?: boolean;
+  organizationId: string;
+}) => {
+  const settings = await getOrganizationMailTrackingSettings(input);
+  if (!settings.openTrackingEnabled) {
+    return false;
+  }
+  if (input.openTracking === undefined) {
+    return true;
+  }
+  return settings.allowPerSendOverride ? input.openTracking : true;
+};
+
+/**
+ * Builds the html transform that appends the signed open marker when tracking
+ * is active for a send. Missing signing configuration disables the marker for
+ * that send and is reported rather than failing delivery.
+ */
+export const buildOpenTrackingHtmlTransform = (input: {
+  messageHeaderId: string;
+  openTrackingEnabled: boolean;
+}): { htmlTransform?: (html: string) => string } => {
+  if (!input.openTrackingEnabled) {
+    return {};
+  }
+  const secret = serverEnv.BETTER_AUTH_SECRET;
+  const baseUrl = serverEnv.BETTER_AUTH_URL;
+  if (!hasText(secret) || !hasText(baseUrl)) {
+    reportError(
+      new Error("Open tracking is enabled but signing config is missing."),
+      { operation: "organization-mail:open-tracking-config" }
+    );
+    return {};
+  }
+  const token = buildOpenTrackingToken({
+    messageHeaderId: input.messageHeaderId,
+    secret,
+  });
+  return {
+    htmlTransform: (html: string) =>
+      appendOpenTrackingPixel(html, `${baseUrl}/api/v1/o/${token}`),
+  };
+};
+
+const resolveOpenEventTarget = async (providerMessageId: string) => {
+  const [apiMessage] = await db
+    .select({
+      bcc: organizationApiMailMessage.bcc,
+      cc: organizationApiMailMessage.cc,
+      organizationId: organizationApiMailMessage.organizationId,
+      to: organizationApiMailMessage.to,
+    })
+    .from(organizationApiMailMessage)
+    .where(eq(organizationApiMailMessage.providerMessageId, providerMessageId))
+    .limit(1);
+
+  if (apiMessage !== undefined) {
+    return apiMessage;
+  }
+
+  const [managedMessage] = await db
+    .select({
+      bcc: managedMailMessage.bcc,
+      cc: managedMailMessage.cc,
+      organizationId: mailbox.organizationId,
+      to: managedMailMessage.to,
+    })
+    .from(managedMailMessage)
+    .innerJoin(mailbox, eq(mailbox.id, managedMailMessage.mailboxId))
+    .where(
+      and(
+        eq(managedMailMessage.providerMessageId, providerMessageId),
+        eq(managedMailMessage.direction, "outbound")
+      )
+    )
+    .limit(1);
+
+  return managedMessage ?? null;
+};
+
+const MAX_REPORTED_OPENS = 10_000;
+
+/**
+ * Records an open marker load. Opens are approximate: mail clients, privacy
+ * proxies, and caches can fetch or block the marker arbitrarily. The signal is
+ * bounded to one row per message with a capped counter; duplicate loads never
+ * inflate history. Only unambiguous single-recipient sends are attributed to a
+ * recipient.
+ */
+export const recordOrganizationMailOpenEvent = async (input: {
+  occurredAt: Date;
+  providerMessageId: string;
+}) => {
+  const target = await resolveOpenEventTarget(input.providerMessageId);
+  if (target === null) {
+    throw new OrganizationMailFeedbackMessageNotFoundError(
+      input.providerMessageId
+    );
+  }
+  const recipients = normalizeRecipients([
+    ...splitMailAddressList(target.to ?? undefined),
+    ...splitMailAddressList(target.cc ?? undefined),
+    ...splitMailAddressList(target.bcc ?? undefined),
+  ]);
+  const attributedRecipient = recipients.length === 1 ? recipients[0] : null;
+  const now = input.occurredAt;
+
+  return await db.transaction(async (transaction) => {
+    if (attributedRecipient !== null) {
+      const insertedEvents = await transaction
+        .insert(organizationMailDeliveryEvent)
+        .values({
+          createdAt: now,
+          dedupeKey: createDedupeKey({
+            eventType: "opened",
+            provider: "quieter",
+            providerMessageId: input.providerMessageId,
+            recipient: attributedRecipient,
+            sourceEventId: "open-marker",
+          }),
+          eventType: "opened",
+          id: randomUUID(),
+          occurredAt: now,
+          organizationId: target.organizationId,
+          provider: "quieter",
+          providerMessageId: input.providerMessageId,
+          recipient: attributedRecipient,
+        })
+        .onConflictDoNothing({
+          target: organizationMailDeliveryEvent.dedupeKey,
+        })
+        .returning({ id: organizationMailDeliveryEvent.id });
+
+      if (insertedEvents.length > 0) {
+        await transaction
+          .insert(organizationMailDeliveryRecipient)
+          .values({
+            createdAt: now,
+            lastEventAt: now,
+            organizationId: target.organizationId,
+            providerMessageId: input.providerMessageId,
+            recipient: attributedRecipient,
+            status: "opened",
+            updatedAt: now,
+          })
+          .onConflictDoUpdate({
+            set: {
+              lastEventAt: sql`greatest(${organizationMailDeliveryRecipient.lastEventAt}, excluded."lastEventAt")`,
+              status: mergeDeliveryStatusSql(
+                organizationMailDeliveryRecipient.status
+              ),
+              updatedAt: now,
+            },
+            target: [
+              organizationMailDeliveryRecipient.organizationId,
+              organizationMailDeliveryRecipient.providerMessageId,
+              organizationMailDeliveryRecipient.recipient,
+            ],
+          });
+      }
+    }
+
+    const [openRow] = await transaction
+      .insert(organizationMailOpenEvent)
+      .values({
+        createdAt: now,
+        firstOpenedAt: now,
+        id: randomUUID(),
+        lastOpenedAt: now,
+        organizationId: target.organizationId,
+        providerMessageId: input.providerMessageId,
+        recipient: attributedRecipient,
+        reportedOpenCount: 1,
+      })
+      .onConflictDoUpdate({
+        set: {
+          lastOpenedAt: now,
+          reportedOpenCount: sql`least(${organizationMailOpenEvent.reportedOpenCount} + 1, ${MAX_REPORTED_OPENS})`,
+        },
+        target: [
+          organizationMailOpenEvent.organizationId,
+          organizationMailOpenEvent.providerMessageId,
+        ],
+      })
+      .returning({
+        firstOpen: sql<boolean>`(${organizationMailOpenEvent.firstOpenedAt} = ${now})`,
+      });
+
+    return { attributedRecipient, firstOpen: openRow?.firstOpen };
+  });
+};
+
+/**
+ * Records an open-marker load addressed by the Quieter Message-ID header.
+ * Tokens never carry database ids, so this resolves the header to the stored
+ * outbound message first.
+ */
+export const recordOrganizationMailMarkerLoad = async (input: {
+  messageHeaderId: string;
+  occurredAt: Date;
+}) => {
+  const [apiRow] = await db
+    .select({
+      providerMessageId: organizationApiMailMessage.providerMessageId,
+    })
+    .from(organizationApiMailMessage)
+    .where(
+      eq(organizationApiMailMessage.messageHeaderId, input.messageHeaderId)
+    )
+    .limit(1);
+
+  let providerMessageId = apiRow?.providerMessageId;
+  if (providerMessageId === undefined) {
+    const [managedRow] = await db
+      .select({
+        providerMessageId: managedMailMessage.providerMessageId,
+      })
+      .from(managedMailMessage)
+      .where(
+        and(
+          eq(managedMailMessage.messageHeaderId, input.messageHeaderId),
+          eq(managedMailMessage.direction, "outbound")
+        )
+      )
+      .limit(1);
+    providerMessageId = managedRow?.providerMessageId;
+  }
+
+  if (providerMessageId === undefined || providerMessageId === "") {
+    throw new OrganizationMailFeedbackMessageNotFoundError(
+      input.messageHeaderId
+    );
+  }
+
+  return await recordOrganizationMailOpenEvent({
+    occurredAt: input.occurredAt,
+    providerMessageId,
+  });
+};
+
+export type OrganizationMailDeliveryMetrics = {
+  eventsByType: Partial<Record<OrganizationMailDeliveryEventType, number>>;
+  openedMessages: number;
+};
+
+export const getOrganizationMailDeliveryMetrics = async (input: {
+  from?: Date;
+  mailboxId?: string;
+  organizationId: string;
+  to?: Date;
+}): Promise<OrganizationMailDeliveryMetrics> => {
+  const conditions = [
+    eq(organizationMailDeliveryEvent.organizationId, input.organizationId),
+  ];
+  if (input.from !== undefined) {
+    conditions.push(gte(organizationMailDeliveryEvent.occurredAt, input.from));
+  }
+  if (input.to !== undefined) {
+    conditions.push(lte(organizationMailDeliveryEvent.occurredAt, input.to));
+  }
+  if (input.mailboxId !== undefined && input.mailboxId !== "") {
+    conditions.push(
+      sql`exists (
+        select 1 from ${managedMailMessage}
+        where ${managedMailMessage.providerMessageId} = ${organizationMailDeliveryEvent.providerMessageId}
+          and ${managedMailMessage.mailboxId} = ${input.mailboxId}
+          and ${managedMailMessage.direction} = 'outbound'
+      )`
+    );
+  }
+
+  const [eventRows, [openRow]] = await Promise.all([
+    db
+      .select({
+        count: sql<number>`count(*)::int`,
+        eventType: organizationMailDeliveryEvent.eventType,
+      })
+      .from(organizationMailDeliveryEvent)
+      .where(and(...conditions))
+      .groupBy(organizationMailDeliveryEvent.eventType),
+    db
+      .select({
+        openedMessages: sql<number>`count(*)::int`,
+      })
+      .from(organizationMailOpenEvent)
+      .where(
+        and(
+          eq(organizationMailOpenEvent.organizationId, input.organizationId),
+          ...(input.from === undefined
+            ? []
+            : [gte(organizationMailOpenEvent.firstOpenedAt, input.from)]),
+          ...(input.to === undefined
+            ? []
+            : [lte(organizationMailOpenEvent.firstOpenedAt, input.to)])
+        )
+      ),
+  ]);
+
+  return {
+    eventsByType: Object.fromEntries(
+      eventRows.map((row) => [row.eventType, row.count])
+    ),
+    openedMessages: openRow?.openedMessages ?? 0,
+  } satisfies OrganizationMailDeliveryMetrics;
 };

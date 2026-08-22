@@ -62,8 +62,10 @@ import type { z } from "zod";
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
 import {
   assertOrganizationMailRecipientsNotSuppressed,
+  buildOpenTrackingHtmlTransform,
   getOrganizationMailDelivery,
   groupDeliveryStatusesByMessage,
+  resolveOrganizationMailOpenTracking,
 } from "../../organization-mail-delivery";
 import {
   assertOrganizationOwnsVerifiedSenderDomain,
@@ -1679,11 +1681,18 @@ export const sendManagedMailboxMessage = async (input: {
     });
   }
   const messageHeaderId = `<${randomUUID()}@${domain}>`;
+  const openTrackingEnabled = await resolveOrganizationMailOpenTracking({
+    organizationId,
+  });
   const rawMessage = await buildMimeMessage(input.message, {
     from: selectedMailbox.emailAddress,
     messageId: messageHeaderId,
     omitBccHeader: true,
     sentAt,
+    ...buildOpenTrackingHtmlTransform({
+      messageHeaderId,
+      openTrackingEnabled,
+    }),
   });
   const { SendEmailCommand } = await import("@aws-sdk/client-sesv2");
   const client = await getSesv2Client();
