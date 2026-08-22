@@ -7,43 +7,37 @@
     "./client": {
       "types": "./src/client.ts",
       "development": "./src/client.ts",
-      "bun": "./src/client.ts",
       "default": "./dist/client.js"
     },
     "./local-doctor": {
       "types": "./src/local-doctor.ts",
       "development": "./src/local-doctor.ts",
-      "bun": "./src/local-doctor.ts",
       "default": "./dist/local-doctor.js"
     },
     "./public": {
       "types": "./src/public.ts",
       "development": "./src/public.ts",
-      "bun": "./src/public.ts",
       "default": "./dist/public.js"
     },
     "./server": {
       "types": "./src/server.ts",
       "development": "./src/server.ts",
-      "bun": "./src/server.ts",
       "default": "./dist/server.js"
     },
     "./sst": {
       "types": "./src/sst.ts",
       "development": "./src/sst.ts",
-      "bun": "./src/sst.ts",
       "default": "./dist/sst.js"
     },
     "./sst-secrets": {
       "types": "./src/sst-secrets.ts",
       "development": "./src/sst-secrets.ts",
-      "bun": "./src/sst-secrets.ts",
       "default": "./dist/sst-secrets.js"
     }
   },
   "scripts": {
     "build": "vp pack",
-    "doctor": "bun scripts/doctor.ts"
+    "doctor": "node scripts/doctor.ts"
   },
   "dependencies": {
     "@t3-oss/env-core": "catalog:",
@@ -51,7 +45,6 @@
   },
   "devDependencies": {
     "@quieter/config": "workspace:*",
-    "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",

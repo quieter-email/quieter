@@ -313,13 +313,10 @@ describe("Cloudflare worker runtime", () => {
       ]);
 
     test("awaits the downstream response before acknowledging", async () => {
-      const gate = Promise.withResolvers<undefined>();
+      const gate = Promise.withResolvers<Response>();
       vi.stubGlobal(
         "fetch",
-        vi.fn(async () => {
-          await gate.promise;
-          return new Response(null, { status: 204 });
-        })
+        vi.fn(async () => await gate.promise)
       );
       const messages = batch();
       const context = createExecutionContext();
@@ -329,7 +326,7 @@ describe("Cloudflare worker runtime", () => {
       });
       await Promise.resolve();
       expect(settled).toBeFalsy();
-      gate.resolve();
+      gate.resolve(new Response(null, { status: 204 }));
       await processing;
       await expect(getQueueResult(messages, context)).resolves.toMatchObject({
         ackAll: false,

@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   readdirSync,
   rmSync,
   writeFileSync,
@@ -12,7 +13,7 @@ import path from "node:path";
 
 import postgres from "postgres";
 
-import { runKitMigrate } from "./drizzle-kit";
+import { runKitMigrate } from "./drizzle-kit.ts";
 
 const NON_TRANSACTIONAL_MARKER = "-- quieter:no-transaction";
 const STATEMENT_BREAKPOINT = "--> statement-breakpoint";
@@ -85,7 +86,7 @@ const applyNonTransactionalMigration = async ({
       temporaryConfigPath,
       `export default { out: ${JSON.stringify(prefixDirectory)}, dialect: "postgresql", dbCredentials: { url: ${JSON.stringify(input.databaseUrl)} } };\n`
     );
-    await runKitMigrate(temporaryConfigPath);
+    runKitMigrate(temporaryConfigPath);
   } finally {
     rmSync(temporaryDirectory, { force: true, recursive: true });
   }
@@ -131,18 +132,16 @@ export const runForwardMigrations = async (input: {
     }))
     .filter((migration) => existsSync(migration.path))
     .toSorted((left, right) => left.name.localeCompare(right.name));
-  const migrationSources = await Promise.all(
-    migrations.map(async (migration) => ({
-      ...migration,
-      sql: await Bun.file(migration.path).text(),
-    }))
-  );
+  const migrationSources = migrations.map((migration) => ({
+    ...migration,
+    sql: readFileSync(migration.path, "utf-8"),
+  }));
   const nonTransactionalMigrations = migrationSources.filter((migration) =>
     migration.sql.includes(NON_TRANSACTIONAL_MARKER)
   );
 
   if (nonTransactionalMigrations.length === 0) {
-    await runKitMigrate();
+    runKitMigrate();
     return;
   }
 
@@ -169,7 +168,7 @@ export const runForwardMigrations = async (input: {
     );
 
     if (pendingNonTransactionalMigrations.length === 0) {
-      await runKitMigrate();
+      runKitMigrate();
       return;
     }
 
@@ -189,7 +188,7 @@ export const runForwardMigrations = async (input: {
     };
     await applyMigrationAt(0);
 
-    await runKitMigrate();
+    runKitMigrate();
   } finally {
     try {
       await sql`select pg_advisory_unlock(hashtext('quieter-forward-migrations'))`;

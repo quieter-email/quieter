@@ -4,7 +4,7 @@
 
 Quieter is an experimental email client for Gmail accounts and organization-managed mailboxes. It combines a focused mail workspace, compose and search tools, mailbox-scoped AI assistance, managed mail delivery, and privacy controls in one application. Every account starts with a normal team; there is no separate personal workspace.
 
-> [!WARNING] Quieter is deep-alpha software. It is not ready for production users, important mail, or self-hosting without substantial operational work.
+> Quieter is still under development. It is not ready for production users, important mail, or self-hosting without substantial operational work.
 
 ## Repository Policy
 
@@ -28,7 +28,7 @@ Security reports are the exception. Report vulnerabilities privately through [Gi
 
 | Area                  | Stack                                               |
 | --------------------- | --------------------------------------------------- |
-| Runtime and workspace | Bun, Vite+                                          |
+| Runtime and workspace | Node, Vite+                                         |
 | Web                   | TanStack Start, TanStack Router, React, Vite, Nitro |
 | API and data          | oRPC, TanStack Query, Drizzle, PostgreSQL           |
 | Authentication        | Better Auth                                         |
@@ -52,7 +52,7 @@ Security reports are the exception. Report vulnerabilities privately through [Gi
 
 Prerequisites:
 
-- [Vite+](https://viteplus.dev/) (`vp`; it provisions the pinned Node runtime and Bun package manager)
+- [Vite+](https://viteplus.dev/) (`vp`; it provisions the pinned Node runtime and manages dependency installs)
 - PostgreSQL 16 or newer running locally
 - Provider credentials only for the integrations you intend to exercise
 - Non-production AWS credentials in `.env.sst.local` only when running the SST development stack
@@ -61,19 +61,19 @@ Prerequisites:
 vp install --frozen-lockfile
 cp .env.example .env.local
 createdb quieter
-bun run dev
+vp run dev
 ```
 
 On PowerShell, use `Copy-Item .env.example .env.local`.
 
-`bun run dev` starts the local Worker as one native foreground Vite process. Chat requests, automation, and mailbox actions run in that process, so Ctrl+C stops the complete local runtime. Database migrations are an explicit schema operation rather than a side effect of starting the server. Developers use loopback PostgreSQL or an exactly allowlisted disposable Neon branch, CI uses a temporary PostgreSQL service, and production credentials remain in protected deployment secrets. See [Development](docs/development.md) for provider setup, process isolation, and the explicit remote-infrastructure commands.
+`vp run dev` starts the local Worker as one native foreground Vite process. Chat requests, automation, and mailbox actions run in that process, so Ctrl+C stops the complete local runtime. Database migrations are an explicit schema operation rather than a side effect of starting the server. Developers use loopback PostgreSQL or an exactly allowlisted disposable Neon branch, CI uses a temporary PostgreSQL service, and production credentials remain in protected deployment secrets. See [Development](docs/development.md) for provider setup, process isolation, and the explicit remote-infrastructure commands.
 
 ## Common Commands
 
 ```bash
-bun run dev              # complete local app; async work shares one foreground process
-bun run dev:mail         # explicit remote SST mail/background infrastructure
-bun run dev:cloud        # web app plus explicit remote SST infrastructure
+vp run dev              # complete local app; async work shares one foreground process
+vp run dev:mail         # explicit remote SST mail/background infrastructure
+vp run dev:cloud        # web app plus explicit remote SST infrastructure
 vp run env:doctor        # verify local database and background-work isolation
 vp check                 # format, lint, and type-check
 vp test                  # all tests

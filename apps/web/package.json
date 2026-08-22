@@ -11,7 +11,7 @@
     ]
   },
   "scripts": {
-    "build": "vp build && bun scripts/check-worker-memory-boundaries.ts",
+    "build": "vp build && node scripts/check-worker-memory-boundaries.ts",
     "dev": "vp dev --port 3000 --configLoader native",
     "preview": "vp preview"
   },
@@ -84,7 +84,6 @@
     "@rolldown/plugin-babel": "^0.2.3",
     "@tailwindcss/vite": "catalog:",
     "@types/babel__core": "^7.20.5",
-    "@types/bun": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
