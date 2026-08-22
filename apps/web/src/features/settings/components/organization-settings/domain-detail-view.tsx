@@ -885,6 +885,7 @@ const DomainCatchAllPickerBody = ({
   domainId,
   domainName,
   isAdminPending,
+  onPicked,
   organizationId,
   setCatchAllMutation,
 }: {
@@ -892,6 +893,7 @@ const DomainCatchAllPickerBody = ({
   domainId: string;
   domainName: string;
   isAdminPending: boolean;
+  onPicked: () => void;
   organizationId: string;
   setCatchAllMutation: UseMutationResult<
     RouterOutputs["mailDomains"]["setCatchAll"],
@@ -917,13 +919,18 @@ const DomainCatchAllPickerBody = ({
           className={cn(
             "squircle flex w-full items-center justify-between gap-3 rounded-md border border-border bg-bg-elevated px-3 py-2 text-left transition-colors",
             "hover:bg-muted/25",
-            "active:scale-[0.99] motion-reduce:transition-none motion-reduce:active:scale-100"
+            "active:scale-[0.99] motion-reduce:transition-none motion-reduce:active:scale-100",
+            { "cursor-not-allowed opacity-50": setCatchAllMutation.isPending }
           )}
+          disabled={setCatchAllMutation.isPending}
           key={mailbox.id}
           onClick={() => {
             setCatchAllMutation.mutate(
               { domainId, mailboxId: mailbox.id, organizationId },
-              { onError: showCatchAllMutationError }
+              {
+                onError: showCatchAllMutationError,
+                onSuccess: onPicked,
+              }
             );
           }}
           type="button"
@@ -1028,6 +1035,9 @@ const DomainCatchAllSection = ({
               domainId={domainId}
               domainName={domainName}
               isAdminPending={isAdminPending}
+              onPicked={() => {
+                setPickerOpen(false);
+              }}
               organizationId={organizationId}
               setCatchAllMutation={setCatchAllMutation}
             />
@@ -1281,6 +1291,11 @@ export const DomainDetailView = ({
     ...orpc.mailDomains.setCatchAll.mutationOptions(),
     mutationKey: ["mail-domains", organization.id, domainId, "catch-all"],
     onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: orpc.mail.listManagedMailboxAdministration.queryOptions({
+          input: { organizationId: organization.id },
+        }).queryKey,
+      });
       await invalidateDomain();
       toast.success("Whole-domain inbox updated.");
     },
@@ -1470,10 +1485,7 @@ export const DomainDetailView = ({
         catchAll={data.catchAll}
         domainId={domainId}
         domainName={domain.domain}
-        incomingReady={
-          domain.mode === "send_and_receive" &&
-          (dnsComplete || resolveMailDomainVerified(domain))
-        }
+        incomingReady={domain.mode === "send_and_receive" && isVerified}
         manageReason={manageReason}
         organizationId={organization.id}
         setCatchAllMutation={setCatchAllMutation}

@@ -2182,7 +2182,7 @@ export const mailDomain = pgTable(
   "mailDomain",
   {
     catchAllMailboxId: text("catchAllMailboxId").references(() => mailbox.id, {
-      onDelete: "cascade",
+      onDelete: "set null",
     }),
     createdAt: timestamp("createdAt").notNull(),
     domain: text("domain").notNull(),

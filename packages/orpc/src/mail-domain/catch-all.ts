@@ -20,6 +20,8 @@ export const setMailDomainCatchAll = async (input: {
     .select({
       domain: mailDomain.domain,
       id: mailDomain.id,
+      mode: mailDomain.mode,
+      status: mailDomain.status,
     })
     .from(mailDomain)
     .where(
@@ -44,36 +46,35 @@ export const setMailDomainCatchAll = async (input: {
     return { catchAll: null };
   }
 
-  const [eligibility] = await db
+  const [targetMailbox] = await db
     .select({
-      mode: mailDomain.mode,
-      status: mailDomain.status,
-      targetEmailAddress: mailbox.emailAddress,
-      targetOrganizationId: mailbox.organizationId,
-      targetProvider: mailbox.provider,
+      emailAddress: mailbox.emailAddress,
+      id: mailbox.id,
+      organizationId: mailbox.organizationId,
+      provider: mailbox.provider,
     })
-    .from(mailDomain)
-    .innerJoin(mailbox, eq(mailbox.id, input.mailboxId))
-    .where(eq(mailDomain.id, storedDomain.id))
+    .from(mailbox)
+    .where(eq(mailbox.id, input.mailboxId))
     .limit(1);
   if (
-    eligibility?.targetOrganizationId !== input.organizationId ||
-    eligibility.targetProvider !== MAILBOX_PROVIDER_MANAGED
+    targetMailbox === undefined ||
+    targetMailbox.organizationId !== input.organizationId ||
+    targetMailbox.provider !== MAILBOX_PROVIDER_MANAGED
   ) {
     throw new ORPCError("BAD_REQUEST", {
       message: "Shared inbox was not found in the active team.",
     });
   }
   if (
-    eligibility.mode !== "send_and_receive" ||
-    eligibility.status !== "verified"
+    storedDomain.mode !== "send_and_receive" ||
+    storedDomain.status !== "verified"
   ) {
     throw new ORPCError("BAD_REQUEST", {
       message:
         "Whole-domain inboxes require a verified domain with incoming mail enabled.",
     });
   }
-  const targetDomain = eligibility.targetEmailAddress
+  const targetDomain = targetMailbox.emailAddress
     .split("@")[1]
     ?.trim()
     .toLowerCase();
@@ -104,7 +105,7 @@ export const setMailDomainCatchAll = async (input: {
 
   return {
     catchAll: {
-      emailAddress: eligibility.targetEmailAddress,
+      emailAddress: targetMailbox.emailAddress,
       mailboxId: input.mailboxId,
       pattern: `*@${storedDomain.domain}`,
     },

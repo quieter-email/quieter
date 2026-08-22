@@ -1,5 +1,5 @@
 import type * as databaseClient from "@quieter/database/client";
-import { mailDomain } from "@quieter/database/schema";
+import { mailbox, mailDomain } from "@quieter/database/schema";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
 import { setMailDomainCatchAll } from "../src/mail-domain/catch-all";
@@ -12,12 +12,19 @@ vi.mock(import("@quieter/database/client"), async () => {
   return createFakeDatabaseModule() as unknown as typeof databaseClient;
 });
 
-const eligibilityRow = (overrides: Record<string, unknown> = {}) => ({
+const storedDomainRow = (overrides: Record<string, unknown> = {}) => ({
+  domain: "example.com",
+  id: "dom-1",
   mode: "send_and_receive",
   status: "verified",
-  targetEmailAddress: "hello@example.com",
-  targetOrganizationId: "org-1",
-  targetProvider: "managed",
+  ...overrides,
+});
+
+const targetMailboxRow = (overrides: Record<string, unknown> = {}) => ({
+  emailAddress: "hello@example.com",
+  id: "mbx-1",
+  organizationId: "org-1",
+  provider: "managed",
   ...overrides,
 });
 
@@ -39,7 +46,7 @@ describe(setMailDomainCatchAll, () => {
   });
 
   test("clears the whole-domain inbox without eligibility checks", async () => {
-    queueRows(mailDomain, [{ domain: "example.com", id: "dom-1" }]);
+    queueRows(mailDomain, [storedDomainRow()]);
     queueRows(mailDomain, [{ id: "dom-1" }]);
 
     const result = await setMailDomainCatchAll({
@@ -52,8 +59,8 @@ describe(setMailDomainCatchAll, () => {
   });
 
   test("claims an eligible shared inbox and returns the domain pattern", async () => {
-    queueRows(mailDomain, [{ domain: "example.com", id: "dom-1" }]);
-    queueRows(mailDomain, [eligibilityRow()]);
+    queueRows(mailDomain, [storedDomainRow()]);
+    queueRows(mailbox, [targetMailboxRow()]);
     queueRows(mailDomain, [{ id: "dom-1" }]);
 
     const result = await setMailDomainCatchAll({
@@ -72,8 +79,8 @@ describe(setMailDomainCatchAll, () => {
   });
 
   test("keeps the current holder when another inbox already claims the domain", async () => {
-    queueRows(mailDomain, [{ domain: "example.com", id: "dom-1" }]);
-    queueRows(mailDomain, [eligibilityRow()]);
+    queueRows(mailDomain, [storedDomainRow()]);
+    queueRows(mailbox, [targetMailboxRow({ id: "mbx-2" })]);
     queueRows(mailDomain, []);
 
     await expect(
@@ -88,12 +95,9 @@ describe(setMailDomainCatchAll, () => {
   });
 
   test("rejects inboxes that are not managed mailboxes of the team", async () => {
-    queueRows(mailDomain, [{ domain: "example.com", id: "dom-1" }]);
-    queueRows(mailDomain, [
-      eligibilityRow({
-        targetOrganizationId: "org-other",
-        targetProvider: "gmail",
-      }),
+    queueRows(mailDomain, [storedDomainRow()]);
+    queueRows(mailbox, [
+      targetMailboxRow({ organizationId: "org-other", provider: "gmail" }),
     ]);
 
     await expect(
@@ -106,10 +110,10 @@ describe(setMailDomainCatchAll, () => {
   });
 
   test("requires a verified receive-enabled domain to claim an inbox", async () => {
-    queueRows(mailDomain, [{ domain: "example.com", id: "dom-1" }]);
     queueRows(mailDomain, [
-      eligibilityRow({ mode: "send_only", status: "verified" }),
+      storedDomainRow({ mode: "send_only", status: "verified" }),
     ]);
+    queueRows(mailbox, [targetMailboxRow()]);
 
     await expect(
       setMailDomainCatchAll({
@@ -123,10 +127,8 @@ describe(setMailDomainCatchAll, () => {
   });
 
   test("rejects inboxes hosted on another domain", async () => {
-    queueRows(mailDomain, [{ domain: "example.com", id: "dom-1" }]);
-    queueRows(mailDomain, [
-      eligibilityRow({ targetEmailAddress: "hello@other.com" }),
-    ]);
+    queueRows(mailDomain, [storedDomainRow()]);
+    queueRows(mailbox, [targetMailboxRow({ emailAddress: "hello@other.com" })]);
 
     await expect(
       setMailDomainCatchAll({
