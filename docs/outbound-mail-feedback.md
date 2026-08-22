@@ -30,6 +30,15 @@ Recipient projections can be recomputed from the immutable event log without tou
 - Processor exceptions are reported to Sentry. The CloudWatch queue-age alarm indicates a processing backlog, and the dead-letter alarm indicates an event exhausted its retries.
 - Before replaying a dead-letter message, confirm the database and configuration set are available.
 
-The public API exposes recipient delivery history at `GET /api/v1/messages/{messageId}` and active suppressions at `GET /api/v1/suppressions`. The TypeScript SDK wraps these as `getMessage` and `listSuppressions`.
+## Open tracking
 
-Open tracking is part of the event contract but not yet enabled end to end; see QUIETER-167.
+Open tracking is disabled until an organization admin enables it in team settings, optionally letting authorized senders opt out per send; without that allowance the team setting applies to every message. When active, html messages sent through the organization API or managed compose include a signed marker carrying only the Quieter message header id.
+
+Marker loads are verified by signature, resolved back to the outbound message, and recorded as bounded engagement signals:
+
+- One row per message with a capped counter, so duplicate loads, retries, and caches never inflate history.
+- Only unambiguous single-recipient sends also record a recipient-level `opened` event on the normalized timeline; batched sends record the open for the message because one copy goes to every recipient.
+- Opens are approximate. Privacy proxies pre-fetch images, caches can serve or swallow markers, some clients block images entirely, and automatic tools can trigger loads. An open never proves a person read a message.
+- Disabling tracking stops markers on future sends and leaves historical reporting untouched.
+
+The public API exposes recipient delivery history at `GET /api/v1/messages/{messageId}` and active suppressions at `GET /api/v1/suppressions`. The TypeScript SDK wraps these as `getMessage` and `listSuppressions`.
