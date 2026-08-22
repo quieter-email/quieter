@@ -122,6 +122,11 @@ jobs:
       - name: Setup repository
         uses: ./.github/actions/setup
 
+      # The drizzle check action invokes its detected package manager directly,
+      # so pnpm has to be on PATH ahead of it.
+      - name: Enable Corepack
+        run: corepack enable
+
       - name: Check migration conflicts
         uses: drizzle-team/drizzle-orm/actions/check@6adfcd1031726aaf59106ceb36707d85db5e6617
         with:

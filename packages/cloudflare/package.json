@@ -10,7 +10,7 @@
     "cf-typegen": "wrangler types worker-configuration.d.ts --config wrangler.types.jsonc --strict-vars false",
     "check:compatibility-date": "node scripts/sync-compatibility-date.ts --check",
     "sync:compatibility-date": "node scripts/sync-compatibility-date.ts",
-    "test:workers": "vp test run --config vite.config.ts",
+    "test:workers": "vitest run --config vite.config.ts",
     "write:build-wrangler": "node scripts/write-build-wrangler.ts"
   },
   "dependencies": {
