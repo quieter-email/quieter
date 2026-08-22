@@ -19,6 +19,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ACCEPTED_DELIVERY_LABEL,
   getAggregateDeliveryStatus,
+  getDeliveryActionGuidance,
   getDeliveryStatusDescription,
   getDeliveryStatusLabel,
   getDeliveryStatusTone,
@@ -126,6 +127,11 @@ const DeliveryRecipientItem = ({
       </AccordionHeader>
 
       <AccordionPanel>
+        {getDeliveryActionGuidance(recipient.status) !== null && (
+          <p className="mb-2 text-caption text-fg">
+            {getDeliveryActionGuidance(recipient.status)}
+          </p>
+        )}
         {recipientEvents.length > 0 ? (
           <ul className="space-y-2">
             {recipientEvents.map((event) => (

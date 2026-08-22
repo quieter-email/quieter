@@ -4,6 +4,7 @@ import {
   ACCEPTED_DELIVERY_LABEL,
   getAggregateDeliveryLabel,
   getAggregateDeliveryStatus,
+  getDeliveryActionGuidance,
   getDeliveryStatusTone,
   getRecipientDeliveryEvents,
   hasDeliveryDiagnostics,
@@ -212,6 +213,33 @@ describe(hasDeliveryDiagnostics, () => {
         })
       )
     ).toBeTruthy();
+  });
+});
+
+describe(getDeliveryActionGuidance, () => {
+  it("tells the sender to correct a refused or bounced address", () => {
+    expect(getDeliveryActionGuidance("rejected")).toMatch(/check/iu);
+    expect(getDeliveryActionGuidance("bounced")).toMatch(/blocked/iu);
+  });
+
+  it("keeps complaints and unsubscribes distinct from folder placement", () => {
+    const complained = getDeliveryActionGuidance("complained") ?? "";
+    expect(complained).toMatch(/reported/iu);
+    expect(complained).not.toMatch(/spam folder|junk folder/iu);
+    const unsubscribed = getDeliveryActionGuidance("unsubscribed") ?? "";
+    expect(unsubscribed).toMatch(/opted out/iu);
+  });
+
+  it("gives no instruction for healthy or in-flight states", () => {
+    for (const status of [
+      "delayed",
+      "delivered",
+      "opened",
+      "queued",
+      "sent",
+    ] as const) {
+      expect(getDeliveryActionGuidance(status)).toBeNull();
+    }
   });
 });
 

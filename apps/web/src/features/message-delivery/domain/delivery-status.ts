@@ -65,6 +65,41 @@ export const getDeliveryStatusDescription = (
     : DELIVERY_STATUS_DESCRIPTIONS[status];
 
 /**
+ * The next step a sender should take, or `null` when nothing is required.
+ * Suppression claims are factual: hard bounces, complaints, and unsubscribes
+ * all block future sends by policy. Nothing here infers spam-folder placement;
+ * a complaint says the recipient reported spam, not where mail lands.
+ */
+export const getDeliveryActionGuidance = (
+  status: MessageDeliveryStatus
+): string | null => {
+  switch (status) {
+    case "bounced": {
+      return "This address no longer accepts our mail and is blocked from future sends. Correct it before sending again.";
+    }
+    case "complained": {
+      return "This recipient reported our message as spam, so they are blocked from future sends. Their report does not tell us which folder other messages land in.";
+    }
+    case "rejected": {
+      return "The address was refused before sending started. Check it for typos, then try again.";
+    }
+    case "unsubscribed": {
+      return "This recipient opted out of mail from this team and is blocked from future sends.";
+    }
+    case "delayed":
+    case "delivered":
+    case "opened":
+    case "queued":
+    case "sent": {
+      return null;
+    }
+    default: {
+      return null;
+    }
+  }
+};
+
+/**
  * `null` means no recipient events have arrived yet, which reads as "Accepted".
  */
 export const getAggregateDeliveryStatus = (
