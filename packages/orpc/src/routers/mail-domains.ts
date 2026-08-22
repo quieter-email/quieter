@@ -5,6 +5,7 @@ import { mailbox, mailDomain } from "@quieter/database/schema";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 
+import { setMailDomainCatchAll } from "../mail-domain/catch-all";
 import {
   getDomainConnectAvailability,
   startDomainConnect,
@@ -59,6 +60,21 @@ const countManagedMailboxesForDomain = async (input: {
       )
     );
   return result?.count ?? 0;
+};
+
+const buildMailDomainCatchAll = (row: {
+  catchAllMailboxAddress: string | null;
+  catchAllMailboxId: string | null;
+  domain: string;
+}) => {
+  if (row.catchAllMailboxId === null || row.catchAllMailboxAddress === null) {
+    return null;
+  }
+  return {
+    emailAddress: row.catchAllMailboxAddress,
+    mailboxId: row.catchAllMailboxId,
+    pattern: `*@${row.domain}`,
+  };
 };
 
 const updateExistingMailDomainSetup = async (input: {
@@ -258,6 +274,8 @@ export const mailDomainsRouter = {
       });
       const [domain] = await db
         .select({
+          catchAllMailboxAddress: mailbox.emailAddress,
+          catchAllMailboxId: mailDomain.catchAllMailboxId,
           createdAt: mailDomain.createdAt,
           domain: mailDomain.domain,
           id: mailDomain.id,
@@ -271,6 +289,7 @@ export const mailDomainsRouter = {
           verifiedAt: mailDomain.verifiedAt,
         })
         .from(mailDomain)
+        .leftJoin(mailbox, eq(mailbox.id, mailDomain.catchAllMailboxId))
         .where(
           and(
             eq(mailDomain.id, input.domainId),
@@ -288,9 +307,16 @@ export const mailDomainsRouter = {
         domain: domain.domain,
         organizationId: input.organizationId,
       });
+      const { catchAllMailboxAddress, catchAllMailboxId, ...domainDetail } =
+        domain;
       return {
+        catchAll: buildMailDomainCatchAll({
+          catchAllMailboxAddress,
+          catchAllMailboxId,
+          domain: domainDetail.domain,
+        }),
         domain: {
-          ...domain,
+          ...domainDetail,
           requiredDnsRecords: normalizeMailDomainDnsRecords(
             domain.requiredDnsRecords
           ),
@@ -331,6 +357,8 @@ export const mailDomainsRouter = {
 
       const domains = await db
         .select({
+          catchAllMailboxAddress: mailbox.emailAddress,
+          catchAllMailboxId: mailDomain.catchAllMailboxId,
           createdAt: mailDomain.createdAt,
           domain: mailDomain.domain,
           id: mailDomain.id,
@@ -343,16 +371,24 @@ export const mailDomainsRouter = {
           verifiedAt: mailDomain.verifiedAt,
         })
         .from(mailDomain)
+        .leftJoin(mailbox, eq(mailbox.id, mailDomain.catchAllMailboxId))
         .where(eq(mailDomain.organizationId, input.organizationId))
         .orderBy(desc(mailDomain.createdAt));
 
       return {
-        domains: domains.map((domain) => ({
-          ...domain,
-          requiredDnsRecords: normalizeMailDomainDnsRecords(
-            domain.requiredDnsRecords
-          ),
-        })),
+        domains: domains.map(
+          ({ catchAllMailboxAddress, catchAllMailboxId, ...domain }) => ({
+            catchAll: buildMailDomainCatchAll({
+              catchAllMailboxAddress,
+              catchAllMailboxId,
+              domain: domain.domain,
+            }),
+            ...domain,
+            requiredDnsRecords: normalizeMailDomainDnsRecords(
+              domain.requiredDnsRecords
+            ),
+          })
+        ),
       };
     }),
 
@@ -414,6 +450,23 @@ export const mailDomainsRouter = {
         domainId: storedDomain.id,
         removed: true,
       };
+    }),
+
+  setCatchAll: protectedProcedure
+    .input(
+      z.object({
+        domainId: z.string().trim().min(1),
+        mailboxId: z.string().trim().min(1).nullable(),
+        organizationId: z.string().trim().min(1),
+      })
+    )
+    .handler(async ({ context, input }) => {
+      await assertUserCanManageMailDomains({
+        organizationId: input.organizationId,
+        userId: context.userId,
+      });
+      await assertDomainBillingAccess(input.organizationId);
+      return await setMailDomainCatchAll(input);
     }),
 
   startDomainConnect: protectedProcedure

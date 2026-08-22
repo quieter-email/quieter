@@ -336,6 +336,19 @@ const showMutedMailModeSwitch = (
   blockedReason: string | null
 ) => manageReason !== null || (blockedReason ?? "") !== "";
 
+const getCatchAllActionReason = (
+  incomingReady: boolean,
+  manageReason: string | null
+) => {
+  if (manageReason !== null) {
+    return manageReason;
+  }
+  if (!incomingReady) {
+    return "Verify the domain with incoming mail enabled first.";
+  }
+  return null;
+};
+
 const showRemoveDomainMutedAction = (
   manageReason: string | null,
   managedMailboxCount: number
@@ -406,6 +419,7 @@ const MailModeOptionAction = ({
 };
 
 type DomainDetail = RouterOutputs["mailDomains"]["get"]["domain"];
+type DomainCatchAll = RouterOutputs["mailDomains"]["get"]["catchAll"];
 type DomainDnsCheck = NonNullable<
   DomainDetail["lastCheckResult"]
 >["checks"][number];
@@ -779,6 +793,264 @@ const DomainMailModeSection = ({
   </SettingsSection>
 );
 
+const getCatchAllDescription = (catchAll: DomainCatchAll) => {
+  if (catchAll === null) {
+    return "No whole-domain inbox yet, so mail to unknown recipients at this domain is not delivered.";
+  }
+  return `Every unmatched recipient arrives in ${catchAll.emailAddress}. Exact shared inboxes keep priority, and replies send from that inbox's own address.`;
+};
+
+const showCatchAllMutationError = (mutationError: unknown) => {
+  toast.error(
+    mutationError instanceof Error
+      ? mutationError.message
+      : "Could not update the whole-domain inbox."
+  );
+};
+
+const DomainCatchAllAction = ({
+  actionReason,
+  catchAll,
+  domainId,
+  manageReason,
+  onChooseInbox,
+  organizationId,
+  setCatchAllMutation,
+}: {
+  actionReason: string | null;
+  catchAll: DomainCatchAll;
+  domainId: string;
+  manageReason: string | null;
+  onChooseInbox: () => void;
+  organizationId: string;
+  setCatchAllMutation: UseMutationResult<
+    RouterOutputs["mailDomains"]["setCatchAll"],
+    unknown,
+    RouterInputs["mailDomains"]["setCatchAll"]
+  >;
+}) => {
+  if (catchAll !== null) {
+    if (manageReason !== null) {
+      return (
+        <MutedActionButton
+          icon={
+            <HugeiconsIcon aria-hidden className="size-4" icon={Globe02Icon} />
+          }
+          label="Remove"
+          reason={manageReason}
+        />
+      );
+    }
+    return (
+      <Button
+        disabled={setCatchAllMutation.isPending}
+        onClick={() => {
+          setCatchAllMutation.mutate(
+            { domainId, mailboxId: null, organizationId },
+            { onError: showCatchAllMutationError }
+          );
+        }}
+        size="sm"
+        variant="outline"
+      >
+        Remove
+      </Button>
+    );
+  }
+
+  const globeIcon = (
+    <HugeiconsIcon aria-hidden className="size-4" icon={Globe02Icon} />
+  );
+  if (actionReason !== null) {
+    return (
+      <MutedActionButton
+        icon={globeIcon}
+        label="Choose inbox"
+        reason={actionReason}
+      />
+    );
+  }
+  return (
+    <Button onClick={onChooseInbox} size="sm" variant="outline">
+      Choose inbox
+    </Button>
+  );
+};
+
+type CatchAllCandidate =
+  RouterOutputs["mail"]["listManagedMailboxAdministration"]["mailboxes"][number];
+
+const DomainCatchAllPickerBody = ({
+  candidates,
+  domainId,
+  domainName,
+  isAdminPending,
+  onPicked,
+  organizationId,
+  setCatchAllMutation,
+}: {
+  candidates: CatchAllCandidate[];
+  domainId: string;
+  domainName: string;
+  isAdminPending: boolean;
+  onPicked: () => void;
+  organizationId: string;
+  setCatchAllMutation: UseMutationResult<
+    RouterOutputs["mailDomains"]["setCatchAll"],
+    unknown,
+    RouterInputs["mailDomains"]["setCatchAll"]
+  >;
+}) => {
+  if (isAdminPending) {
+    return <SettingsLoadingState label="Loading shared inboxes" />;
+  }
+  if (candidates.length === 0) {
+    return (
+      <p className="squircle rounded-md border border-border bg-muted/15 px-3 py-2 text-caption/5 text-muted-fg">
+        Create a shared inbox on {domainName} first, then return here.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      {candidates.map((mailbox) => (
+        <button
+          className={cn(
+            "squircle flex w-full items-center justify-between gap-3 rounded-md border border-border bg-bg-elevated px-3 py-2 text-left transition-colors",
+            "hover:bg-muted/25",
+            "active:scale-[0.99] motion-reduce:transition-none motion-reduce:active:scale-100",
+            { "cursor-not-allowed opacity-50": setCatchAllMutation.isPending }
+          )}
+          disabled={setCatchAllMutation.isPending}
+          key={mailbox.id}
+          onClick={() => {
+            setCatchAllMutation.mutate(
+              { domainId, mailboxId: mailbox.id, organizationId },
+              {
+                onError: showCatchAllMutationError,
+                onSuccess: onPicked,
+              }
+            );
+          }}
+          type="button"
+        >
+          <span className="min-w-0 truncate text-body text-fg">
+            {mailbox.emailAddress}
+          </span>
+          {mailbox.catchAllDomain === null ? null : (
+            <span className="shrink-0 text-caption text-muted-fg">current</span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+};
+
+const DomainCatchAllSection = ({
+  catchAll,
+  domainId,
+  domainName,
+  incomingReady,
+  manageReason,
+  organizationId,
+  setCatchAllMutation,
+}: {
+  catchAll: DomainCatchAll;
+  domainId: string;
+  domainName: string;
+  incomingReady: boolean;
+  manageReason: string | null;
+  organizationId: string;
+  setCatchAllMutation: UseMutationResult<
+    RouterOutputs["mailDomains"]["setCatchAll"],
+    unknown,
+    RouterInputs["mailDomains"]["setCatchAll"]
+  >;
+}) => {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const { data: adminData, isPending: isAdminPending } = useQuery({
+    ...orpc.mail.listManagedMailboxAdministration.queryOptions({
+      input: { organizationId },
+    }),
+    enabled: pickerOpen,
+  });
+  const candidates = (adminData?.mailboxes ?? []).filter((mailbox) =>
+    mailbox.emailAddress.toLowerCase().endsWith(`@${domainName}`)
+  );
+  const actionReason = getCatchAllActionReason(incomingReady, manageReason);
+
+  return (
+    <SettingsSection
+      description="Optionally deliver mail addressed to any address at this domain into one shared inbox."
+      title="Whole-domain inbox"
+    >
+      <SettingsCard>
+        <SettingsInsetRows>
+          <div
+            className={cn(
+              "flex flex-col gap-3 @md:flex-row @md:items-center @md:justify-between",
+              settingsSurfaceVariants({ variant: "padding" })
+            )}
+          >
+            <div className="min-w-0">
+              <p className="text-body font-medium text-fg">
+                {catchAll === null ? `*@${domainName}` : catchAll.pattern}
+              </p>
+              <p className="mt-1 text-caption/5 text-muted-fg">
+                {getCatchAllDescription(catchAll)}
+              </p>
+            </div>
+            <DomainCatchAllAction
+              actionReason={actionReason}
+              catchAll={catchAll}
+              domainId={domainId}
+              manageReason={manageReason}
+              onChooseInbox={() => {
+                setPickerOpen(true);
+              }}
+              organizationId={organizationId}
+              setCatchAllMutation={setCatchAllMutation}
+            />
+          </div>
+        </SettingsInsetRows>
+      </SettingsCard>
+
+      <Dialog onOpenChange={setPickerOpen} open={pickerOpen}>
+        <DialogContent className="w-[min(92vw,28rem)]">
+          <DialogHeader>
+            <DialogTitle>Whole-domain inbox for {domainName}</DialogTitle>
+            <DialogDescription>
+              Pick the shared inbox that receives mail addressed to any other
+              recipient at {domainName}.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogBody className="space-y-3">
+            <p className="text-caption/5 text-muted-fg">
+              Exact shared inboxes always keep priority, and replies send from
+              the chosen inbox&rsquo;s own address.
+            </p>
+            <DomainCatchAllPickerBody
+              candidates={candidates}
+              domainId={domainId}
+              domainName={domainName}
+              isAdminPending={isAdminPending}
+              onPicked={() => {
+                setPickerOpen(false);
+              }}
+              organizationId={organizationId}
+              setCatchAllMutation={setCatchAllMutation}
+            />
+          </DialogBody>
+          <DialogFooter>
+            <DialogCloseButton>Cancel</DialogCloseButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </SettingsSection>
+  );
+};
+
 const DomainDeliverySection = ({
   dnsChecks,
 }: {
@@ -1015,6 +1287,19 @@ export const DomainDetailView = ({
       toast.success("Mail mode updated.");
     },
   });
+  const setCatchAllMutation = useMutation({
+    ...orpc.mailDomains.setCatchAll.mutationOptions(),
+    mutationKey: ["mail-domains", organization.id, domainId, "catch-all"],
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: orpc.mail.listManagedMailboxAdministration.queryOptions({
+          input: { organizationId: organization.id },
+        }).queryKey,
+      });
+      await invalidateDomain();
+      toast.success("Whole-domain inbox updated.");
+    },
+  });
   const startDomainConnectMutation = useMutation({
     ...orpc.mailDomains.startDomainConnect.mutationOptions(),
     mutationKey: getOrganizationDomainConnectQueryKey(
@@ -1195,6 +1480,15 @@ export const DomainDetailView = ({
         manageReason={manageReason}
         organizationId={organization.id}
         updateModeMutation={updateModeMutation}
+      />
+      <DomainCatchAllSection
+        catchAll={data.catchAll}
+        domainId={domainId}
+        domainName={domain.domain}
+        incomingReady={domain.mode === "send_and_receive" && isVerified}
+        manageReason={manageReason}
+        organizationId={organization.id}
+        setCatchAllMutation={setCatchAllMutation}
       />
       <DomainDeliverySection dnsChecks={dnsChecks} />
       <DomainDangerSection
