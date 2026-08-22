@@ -890,15 +890,26 @@ export const useMessageListSearchController = ({
     orpc.ai.interpretSearchQuery.mutationOptions()
   );
 
-  const applyInterpretedState = (search: StructuredSearchState) => {
-    let mergedFilters = currentState.filters;
+  const currentStateRef = useRef(currentState);
+  useEffect(() => {
+    currentStateRef.current = currentState;
+  }, [currentState]);
+
+  const applyInterpretedState = (
+    search: StructuredSearchState,
+    submittedQuery?: string
+  ) => {
+    const baseState = currentStateRef.current;
+    let mergedFilters = baseState.filters;
     for (const filter of search.filters) {
       ({ filters: mergedFilters } = upsertFilter(mergedFilters, filter));
     }
-    commitState(
-      { filters: mergedFilters, text: normalizeSearchText(search.text) },
-      true
-    );
+    const nextText =
+      submittedQuery !== undefined &&
+      normalizeSearchText(baseState.text) !== submittedQuery
+        ? baseState.text
+        : normalizeSearchText(search.text);
+    commitState({ filters: mergedFilters, text: nextText }, true);
     focusTextInput({ toEnd: true });
   };
 
@@ -939,7 +950,7 @@ export const useMessageListSearchController = ({
             toast.message("Could not turn that into filters.");
             return;
           }
-          applyInterpretedState(result);
+          applyInterpretedState(result, query);
         },
       }
     );

@@ -69,6 +69,21 @@ describe("natural language mail search", () => {
     expect(parse("past three months").filters).toStrictEqual([
       { type: "newer_than", value: "3m" },
     ]);
+    expect(parse("last day").filters).toStrictEqual([
+      { type: "newer_than", value: "1d" },
+    ]);
+    expect(parse("past day").filters).toStrictEqual([
+      { type: "newer_than", value: "1d" },
+    ]);
+  });
+
+  test("negates labels mentioned after a negator", () => {
+    const result = parse("without receipts", ["Receipts"]);
+
+    expect(result.filters).toStrictEqual([
+      { negated: true, type: "label", value: "Receipts" },
+    ]);
+    expect(result.text).toBe("");
   });
 
   test("parses today and yesterday as absolute bounds", () => {

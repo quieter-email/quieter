@@ -2,7 +2,6 @@
 
 import {
   Cancel01Icon,
-  Loading03Icon,
   Refresh01Icon,
   Search01Icon,
   SparklesIcon,
@@ -435,6 +434,7 @@ export const MessageListSearchView = ({
                       onMouseDown={(event) => {
                         event.preventDefault();
                       }}
+                      pending={isInterpretingSearch}
                       size="icon-xs"
                       type="button"
                       variant="ghost"
@@ -447,14 +447,7 @@ export const MessageListSearchView = ({
                         />
                       }
                     >
-                      <HugeiconsIcon
-                        className={cn("size-4", {
-                          "animate-spin": isInterpretingSearch,
-                        })}
-                        icon={
-                          isInterpretingSearch ? Loading03Icon : SparklesIcon
-                        }
-                      />
+                      <HugeiconsIcon className="size-4" icon={SparklesIcon} />
                     </Button>
                   </IconButtonTooltip>
                 )}

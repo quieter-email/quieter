@@ -261,6 +261,10 @@ export const aiRouter = {
         const { parseMailSearchWithAi } =
           await import("@quieter/ai/parse-mail-search");
         parsed = await parseMailSearchWithAi({
+          allowedIsValues:
+            mailbox.provider === "managed"
+              ? undefined
+              : ["archived", "read", "unread"],
           availableLabels: input.availableLabels ?? [],
           model: searchModel,
           onUsage: (usage) => {

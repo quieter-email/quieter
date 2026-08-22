@@ -327,7 +327,9 @@ const tryParseDateExpressionAt = (
   const matches = (offset: number, ...candidates: string[]) =>
     candidates.includes(wordAt(offset) ?? "");
 
-  const newerThanSpan = (): DateExpressionMatch | null => {
+  const relativeThanSpan = (
+    filterType: "newer_than" | "older_than"
+  ): DateExpressionMatch | null => {
     if (!matches(1, "than")) {
       return null;
     }
@@ -338,7 +340,7 @@ const tryParseDateExpressionAt = (
     return {
       filters: [
         {
-          type: "newer_than",
+          type: filterType,
           value: serializeRelativeAmount(span.value.amount, span.value.unit),
         },
       ],
@@ -347,26 +349,11 @@ const tryParseDateExpressionAt = (
   };
 
   if (matches(0, "newer")) {
-    return newerThanSpan();
+    return relativeThanSpan("newer_than");
   }
 
   if (matches(0, "older")) {
-    if (!matches(1, "than")) {
-      return null;
-    }
-    const span = tryParseAmountUnitAt(tokens, start + 2);
-    if (span === null) {
-      return null;
-    }
-    return {
-      filters: [
-        {
-          type: "older_than",
-          value: serializeRelativeAmount(span.value.amount, span.value.unit),
-        },
-      ],
-      length: 2 + span.length,
-    };
+    return relativeThanSpan("older_than");
   }
 
   if (matches(0, "since", "before", "until", "after")) {
@@ -401,7 +388,9 @@ const tryParseDateExpressionAt = (
     const presetDays = RELATIVE_UNITS.get(presetUnit ?? "");
     if (presetDays) {
       let presetValue = "365d";
-      if (presetUnit?.startsWith("week")) {
+      if (presetUnit?.startsWith("day")) {
+        presetValue = "1d";
+      } else if (presetUnit?.startsWith("week")) {
         presetValue = "7d";
       } else if (presetUnit?.startsWith("month")) {
         presetValue = "30d";
@@ -504,9 +493,34 @@ const matchFixedPhraseWithFillers = (
   return null;
 };
 
+const matchLabelWindowAt = (
+  tokens: Token[],
+  start: number,
+  labels: ReadonlyMap<string, string>,
+  maxLabelWords: number
+): { length: number; name: string } | null => {
+  for (
+    let windowLength = Math.min(maxLabelWords, tokens.length - start);
+    windowLength >= 1;
+    windowLength -= 1
+  ) {
+    const candidate = tokens
+      .slice(start, start + windowLength)
+      .map((windowToken) => windowToken.word)
+      .join(" ");
+    const labelName = labels.get(candidate);
+    if (labelName !== undefined) {
+      return { length: windowLength, name: labelName };
+    }
+  }
+  return null;
+};
+
 const findConstructAfterNegator = (
   tokens: Token[],
-  start: number
+  start: number,
+  labels: ReadonlyMap<string, string>,
+  maxLabelWords: number
 ): number | null => {
   for (
     let index = start;
@@ -521,6 +535,9 @@ const findConstructAfterNegator = (
       return index;
     }
     if (matchFixedPhraseWithFillers(tokens, index) !== null) {
+      return index;
+    }
+    if (matchLabelWindowAt(tokens, index, labels, maxLabelWords) !== null) {
       return index;
     }
     if (!FILLER_WORDS.has(token.word)) {
@@ -576,15 +593,16 @@ export const parseNaturalLanguageMailSearch = ({
   now?: Date;
   text: string;
 }): NaturalLanguageMailSearchResult => {
-  const normalizedLabels = [...labels]
-    .map((label) => ({
-      key: label.trim().toLocaleLowerCase().replaceAll(/\s+/gu, " "),
-      name: label.trim(),
-    }))
-    .filter((label) => label.key.length > 0)
-    .toSorted(
-      (left, right) => right.key.split(" ").length - left.key.split(" ").length
-    );
+  const normalizedLabels = new Map<string, string>();
+  let maxLabelWords = 1;
+  for (const label of labels) {
+    const key = label.trim().toLocaleLowerCase().replaceAll(/\s+/gu, " ");
+    if (key.length === 0) {
+      continue;
+    }
+    normalizedLabels.set(key, label.trim());
+    maxLabelWords = Math.max(maxLabelWords, key.split(" ").length);
+  }
 
   const tokens: Token[] = normalizeSearchText(text)
     .toLocaleLowerCase()
@@ -632,7 +650,12 @@ export const parseNaturalLanguageMailSearch = ({
     }
 
     if (NEGATOR_WORDS.has(token.word)) {
-      const targetIndex = findConstructAfterNegator(tokens, cursor + 1);
+      const targetIndex = findConstructAfterNegator(
+        tokens,
+        cursor + 1,
+        normalizedLabels,
+        maxLabelWords
+      );
       if (targetIndex !== null) {
         consumeRange(cursor, targetIndex);
         pendingNegation = true;
@@ -657,27 +680,21 @@ export const parseNaturalLanguageMailSearch = ({
       continue;
     }
 
-    let labelConsumed = false;
-    for (
-      let windowLength = Math.min(6, tokens.length - cursor);
-      windowLength >= 1;
-      windowLength -= 1
-    ) {
-      const candidate = tokens
-        .slice(cursor, cursor + windowLength)
-        .map((windowToken) => windowToken.word)
-        .join(" ");
-      const label = normalizedLabels.find((entry) => entry.key === candidate);
-      if (label) {
-        filters.push({ type: "label", value: label.name });
-        consumeRange(cursor, cursor + windowLength);
-        pendingNegation = false;
-        cursor += windowLength;
-        labelConsumed = true;
-        break;
-      }
-    }
-    if (labelConsumed) {
+    const labelMatch = matchLabelWindowAt(
+      tokens,
+      cursor,
+      normalizedLabels,
+      maxLabelWords
+    );
+    if (labelMatch) {
+      filters.push({
+        ...(pendingNegation ? { negated: true } : {}),
+        type: "label",
+        value: labelMatch.name,
+      });
+      consumeRange(cursor, cursor + labelMatch.length);
+      pendingNegation = false;
+      cursor += labelMatch.length;
       continue;
     }
 
