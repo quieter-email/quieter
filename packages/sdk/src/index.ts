@@ -71,8 +71,11 @@ export type QuieterDeliveryStatus =
   | "complained"
   | "delayed"
   | "delivered"
+  | "opened"
+  | "queued"
   | "rejected"
-  | "sent";
+  | "sent"
+  | "unsubscribed";
 
 export type QuieterDeliveryEvent = {
   diagnosticCode: string | null;
@@ -95,9 +98,9 @@ export type QuieterMessageDelivery = {
 
 export type QuieterRecipientSuppression = {
   createdAt: string;
-  reason: "bounce" | "complaint";
+  reason: "bounce" | "complaint" | "manual" | "unsubscribe";
   recipient: string;
-  sourceProviderMessageId: string;
+  sourceProviderMessageId: string | null;
 };
 
 export type QuieterRequestOptions = {

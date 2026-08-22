@@ -65,6 +65,7 @@ import {
   getManagedMessageDelivery,
   getManagedMessageInspector,
   getManagedThread,
+  listManagedMessageDeliveryStatuses,
   listManagedMessages,
   saveManagedDraft,
   sendManagedMailboxMessage,
@@ -79,6 +80,7 @@ import {
   getOrganizationApiMailDelivery,
   getOrganizationApiMailThread,
   isOrganizationApiMailboxId,
+  listOrganizationApiMailDeliveryStatuses,
   listOrganizationApiMailMessages,
   parseOrganizationApiMailboxId,
 } from "../organization-api-mail";
@@ -689,6 +691,34 @@ export const mailRouter = {
           }));
         }
       );
+    }),
+  listMessageDeliveryStatuses: protectedProcedure
+    .route({ method: "GET" })
+    .input(
+      z.object({
+        mailboxId: mailboxIdSchema,
+        messageIds: z.array(z.string().trim().min(1)).max(100),
+      })
+    )
+    .handler(async ({ context, input }) => {
+      if (isOrganizationApiMailboxId(input.mailboxId)) {
+        return await listOrganizationApiMailDeliveryStatuses({
+          ...input,
+          userId: context.userId,
+        });
+      }
+
+      const selectedMailbox = await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      if (selectedMailbox.provider !== "managed") {
+        return {};
+      }
+      return await listManagedMessageDeliveryStatuses({
+        ...input,
+        userId: context.userId,
+      });
     }),
   listThreads: protectedProcedure
     .route({ method: "GET" })

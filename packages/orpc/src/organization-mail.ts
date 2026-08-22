@@ -21,7 +21,11 @@ import { and, eq, lt } from "drizzle-orm";
 
 import { recordOutboundManagedMessageForSender } from "./managed-mail/messages/service";
 import { recordOrganizationApiMailMessage } from "./organization-api-mail";
-import { assertOrganizationMailRecipientsNotSuppressed } from "./organization-mail-delivery";
+import {
+  assertOrganizationMailRecipientsNotSuppressed,
+  buildOpenTrackingHtmlTransform,
+  resolveOrganizationMailOpenTracking,
+} from "./organization-mail-delivery";
 import {
   assertOrganizationOwnsVerifiedSenderDomain,
   OrganizationMailSendError,
@@ -256,7 +260,21 @@ export const sendOrganizationMailMessage = async (input: {
     }
 
     const sentAt = new Date();
-    const builtMessage = buildSendMimeMessage(input.message, { sentAt });
+    const openTrackingEnabled = await resolveOrganizationMailOpenTracking({
+      openTracking: input.message.openTracking,
+      organizationId: input.organizationId,
+    });
+    const openTrackingTransform =
+      input.message.html === undefined
+        ? {}
+        : buildOpenTrackingHtmlTransform({
+            messageHeaderId: `<${randomUUID()}@${getSendEnvelopeAddress(input.message.from).split("@").at(1) ?? "quieter.email"}>`,
+            openTrackingEnabled,
+          });
+    const builtMessage = buildSendMimeMessage(input.message, {
+      sentAt,
+      ...openTrackingTransform,
+    });
     const usageEstimate = estimateOutboundOrganizationMailUsage({
       attachmentSizeBytes: builtMessage.attachmentSizeBytes,
       bcc: builtMessage.bcc,
