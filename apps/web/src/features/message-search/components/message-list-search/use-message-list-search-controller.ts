@@ -35,6 +35,7 @@ import type {
   StructuredSearchState,
 } from "#/features/message-search/state/message-list-search-state";
 import { USER_BILLING_QUERY_KEY } from "#/features/settings/domain/billing";
+import { toastError } from "#/lib/error-toast";
 import { labelsQueryOptions } from "#/lib/gmail/labels-query";
 import { orpc } from "#/lib/orpc";
 
@@ -937,7 +938,10 @@ export const useMessageListSearchController = ({
       },
       {
         onError: (error) => {
-          toast.error(error.message || "Could not read that search.");
+          toastError(error, {
+            boundary: "search-interpretation",
+            fallback: "Could not read that search.",
+          });
         },
         onSuccess: (result) => {
           void queryClient.invalidateQueries({
