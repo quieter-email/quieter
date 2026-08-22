@@ -25,7 +25,6 @@ runs:
         node-version: ${{ inputs.node-version }}
 
     - name: Install dependencies
-      # vp detects the Bun lockfile and provisions Bun itself; no setup-bun step needed.
       shell: bash
       run: vp install --frozen-lockfile
 

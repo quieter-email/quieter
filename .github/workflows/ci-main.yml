@@ -119,13 +119,6 @@ jobs:
         with:
           persist-credentials: false
 
-      # The drizzle check action hardcodes `bun x` as the package-manager exec for
-      # workspaces with a bun.lock and offers no override, so Bun is required here.
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.3.14
-
       - name: Setup repository
         uses: ./.github/actions/setup
 
