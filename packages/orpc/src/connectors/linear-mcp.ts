@@ -13,6 +13,13 @@ const MCP_REQUEST_TIMEOUT_MS = 20_000;
 const DEFAULT_MAX_CALLS = 4;
 const DEFAULT_MAX_OUTPUT_BYTES = 8000;
 
+// Workers extend fetch with preconnect for subrequest connection warming; the
+// Node runtime leaves it unset, so it stays optional here.
+type PreconnectableFetch = typeof fetch & {
+  preconnect?: (url: string | URL) => void;
+};
+const workersFetch: PreconnectableFetch = fetch;
+
 const normalizeLinearMcpToolName = (name: string) =>
   name
     .trim()
@@ -51,9 +58,8 @@ const createBoundedFetch = (signal?: AbortSignal): typeof fetch =>
 
       return await fetch(input, { ...init, signal: AbortSignal.any(signals) });
     },
-    { preconnect: fetch.preconnect }
+    { preconnect: workersFetch.preconnect }
   );
-
 /**
  * Connect to a Linear workspace over MCP. The AI SDK MCP client wraps tool
  * schemas without compiling them, so no evaluator has to run in Workers.

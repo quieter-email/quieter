@@ -20,8 +20,8 @@ import {
   billingProductIdSchema,
   productHasAi,
   productHasManagedMail,
-} from "./plans";
-import type { BillingFeature, BillingProductId } from "./plans";
+} from "./plans.ts";
+import type { BillingFeature, BillingProductId } from "./plans.ts";
 
 const ACTIVE_BILLING_STATUSES = new Set<BillingSubscriptionStatus>([
   "active",
@@ -268,7 +268,10 @@ export const getOrganizationSubscription = async (organizationId: string) => {
     const { providerSubscriptionId } = row;
     try {
       const [{ getPolarClient }, { syncBillingSubscription }] =
-        await Promise.all([import("./polar"), import("./subscription-sync")]);
+        await Promise.all([
+          import("./polar.ts"),
+          import("./subscription-sync.ts"),
+        ]);
       const polar = await getPolarClient();
       const subscription = await polar.subscriptions.get(
         { id: providerSubscriptionId },
