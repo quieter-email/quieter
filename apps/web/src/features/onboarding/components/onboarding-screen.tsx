@@ -2,6 +2,7 @@
 
 import {
   ArrowLeft01Icon,
+  ArrowRight01Icon,
   CheckmarkCircle02Icon,
   Globe02Icon,
   Key02Icon,
@@ -16,6 +17,11 @@ import { cn } from "@quieter/ui/cn";
 import { Field, FieldLabel } from "@quieter/ui/field";
 import { Input } from "@quieter/ui/input";
 import {
+  Progress,
+  ProgressIndicator,
+  ProgressTrack,
+} from "@quieter/ui/progress";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -29,6 +35,7 @@ import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { GoogleLogo } from "#/components/google-logo";
+import { GuidedFlow } from "#/features/guided-flow/components/guided-flow";
 import {
   loadStoredOnboardingIntents,
   ONBOARDING_INTENT_OPTIONS,
@@ -398,6 +405,7 @@ export const OnboardingScreen = () => {
   const [isConnectingGmail, setIsConnectingGmail] = useState(false);
   const [hasEditedName, setHasEditedName] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
+  const [direction, setDirection] = useState<"back" | "forward">("forward");
   const [selectedIntents, setSelectedIntents] = useState<OnboardingIntentId[]>(
     []
   );
@@ -478,8 +486,6 @@ export const OnboardingScreen = () => {
     }
   }, [googleEmail, queryClient]);
 
-  // Signup opt-in handoff: users who asked for Gmail during signup arrive here
-  // and go straight into the dedicated Gmail consent flow.
   useEffect(() => {
     if (
       gmailLink !== "start" ||
@@ -564,209 +570,245 @@ export const OnboardingScreen = () => {
       );
     });
 
+  const activeStep = step === 1 ? "onboarding-intents" : "onboarding-playbooks";
+  const steps = ["About you", "Setup"] as const;
+
   return (
-    <main className="min-h-dvh bg-bg text-fg">
-      <div className="mx-auto w-full max-w-xl px-6 py-12 md:py-16">
-        <nav aria-label="Setup progress">
-          <p className="text-micro font-medium tracking-wide text-muted-fg">
-            Step {step} of 2
-          </p>
-        </nav>
-        <header className="mt-2">
-          <h1 className="text-title-md font-medium tracking-tight text-fg">
-            Welcome to Quieter
-          </h1>
-          <p className="mt-2 text-body-sm text-muted-fg">
-            A few details, then your mail. You can change any of this later in
-            Settings.
-          </p>
-        </header>
+    <GuidedFlow
+      activeStep={activeStep}
+      ariaLabel="Onboarding"
+      direction={direction}
+      headerCenter={
+        <span className="text-body-sm font-medium text-fg">
+          Welcome to Quieter
+        </span>
+      }
+      headerEnd={
+        <div className="flex items-center gap-3">
+          <span className="text-caption text-muted-fg">
+            <span className="hidden sm:inline">Step </span>
+            {step} / {steps.length}
+          </span>
+          <Progress
+            aria-label="Onboarding progress"
+            className="hidden w-16 gap-0 sm:grid"
+            max={steps.length}
+            value={step}
+          >
+            <ProgressTrack className="h-1 bg-control-hover">
+              <ProgressIndicator className="bg-fg" />
+            </ProgressTrack>
+          </Progress>
+        </div>
+      }
+      headerStart={null}
+      previous={
+        step === 2 ? (
+          <Button
+            className="text-muted-fg hover:text-fg"
+            onClick={() => {
+              setDirection("back");
+              setStep(1);
+            }}
+            size="sm"
+            variant="ghost"
+          >
+            <HugeiconsIcon aria-hidden icon={ArrowLeft01Icon} />
+            Back
+          </Button>
+        ) : null
+      }
+    >
+      {step === 1 ? (
+        <div className="mx-auto max-w-xl">
+          <header className="text-center">
+            <h1 className="text-title-md font-medium tracking-tight text-fg">
+              Welcome to Quieter
+            </h1>
+            <p className="mt-3 text-body/6 text-muted-fg">
+              A few details, then your mail. You can change any of this later in
+              Settings.
+            </p>
+          </header>
 
-        {step === 1 ? (
-          <div className="mt-10 space-y-8">
-            <section className="space-y-4">
-              <Field>
-                <FieldLabel htmlFor="onboarding-name">Name</FieldLabel>
-                <Input
-                  autoComplete="name"
-                  id="onboarding-name"
-                  onChange={(event) => {
-                    setHasEditedName(true);
-                    setName(event.target.value);
-                  }}
-                  placeholder="Ada Lovelace"
-                  value={resolvedName}
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="onboarding-team">Team</FieldLabel>
-                <Input
-                  id="onboarding-team"
-                  onChange={(event) => {
-                    setTeamName(event.target.value);
-                  }}
-                  placeholder={
-                    resolvedName.trim()
-                      ? `${resolvedName.trim()}'s team`
-                      : "My team"
-                  }
-                  value={teamName}
-                />
-                <p className="text-micro text-muted-fg">
-                  Optional. Teams hold your mailboxes and billing.
-                </p>
-              </Field>
-            </section>
-
-            <fieldset className="border-t border-border pt-6">
-              <legend className="text-body-lg font-medium tracking-tight text-fg">
-                What are you planning to do with Quieter?
-              </legend>
-              <p className="mt-1 text-body-sm text-muted-fg">
-                Pick everything that applies. You can skip and decide later.
+          <div className="mt-8 space-y-4">
+            <Field>
+              <FieldLabel htmlFor="onboarding-name">Name</FieldLabel>
+              <Input
+                autoComplete="name"
+                id="onboarding-name"
+                onChange={(event) => {
+                  setHasEditedName(true);
+                  setName(event.target.value);
+                }}
+                placeholder="Ada Lovelace"
+                value={resolvedName}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="onboarding-team">Team</FieldLabel>
+              <Input
+                id="onboarding-team"
+                onChange={(event) => {
+                  setTeamName(event.target.value);
+                }}
+                placeholder={
+                  resolvedName.trim()
+                    ? `${resolvedName.trim()}'s team`
+                    : "My team"
+                }
+                value={teamName}
+              />
+              <p className="text-micro text-muted-fg">
+                Optional. Teams hold your mailboxes and billing.
               </p>
-              <div className="mt-4 space-y-2">
-                {ONBOARDING_INTENT_OPTIONS.map((option) => {
-                  const checked = selectedIntents.includes(option.id);
-                  const inputId = `onboarding-intent-${option.id}`;
-                  return (
-                    <label
-                      className={cn(
-                        "squircle flex cursor-pointer gap-3 rounded-lg border p-4 transition-colors",
-                        {
-                          "border-border hover:bg-muted/60": !checked,
-                          "border-fg/30 bg-muted/40": checked,
-                        }
-                      )}
-                      htmlFor={inputId}
-                      key={option.id}
-                    >
-                      <Checkbox
-                        checked={checked}
-                        className="mt-0.5"
-                        id={inputId}
-                        onCheckedChange={() => {
-                          toggleIntent(option.id);
-                        }}
-                      >
-                        <CheckboxIndicator />
-                      </Checkbox>
-                      <span>
-                        <span className="block text-body font-medium text-fg">
-                          {option.title}
-                        </span>
-                        <span className="mt-1 block text-body-sm text-muted-fg">
-                          {option.description}
-                        </span>
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            </fieldset>
+            </Field>
+          </div>
 
+          <fieldset className="mt-8 border-t border-border/70 pt-8">
+            <legend className="text-body font-medium text-fg">
+              What are you planning to do with Quieter?
+            </legend>
+            <p className="mt-1 text-body/6 text-muted-fg">
+              Pick everything that applies. You can skip and decide later.
+            </p>
+            <div className="mt-5 space-y-2">
+              {ONBOARDING_INTENT_OPTIONS.map((option) => {
+                const checked = selectedIntents.includes(option.id);
+                const inputId = `onboarding-intent-${option.id}`;
+                return (
+                  <label
+                    className={cn(
+                      "squircle flex cursor-pointer gap-3 rounded-lg border p-4 transition-colors",
+                      {
+                        "border-border hover:bg-muted/60": !checked,
+                        "border-fg/30 bg-muted/40": checked,
+                      }
+                    )}
+                    htmlFor={inputId}
+                    key={option.id}
+                  >
+                    <Checkbox
+                      checked={checked}
+                      className="mt-0.5"
+                      id={inputId}
+                      onCheckedChange={() => {
+                        toggleIntent(option.id);
+                      }}
+                    >
+                      <CheckboxIndicator />
+                    </Checkbox>
+                    <span>
+                      <span className="block text-body font-medium text-fg">
+                        {option.title}
+                      </span>
+                      <span className="mt-1 block text-body-sm text-muted-fg">
+                        {option.description}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
+
+          <div className="mt-9 flex justify-end border-t border-border/70 pt-5">
             <Button
-              className="w-full justify-center"
               disabled={!canContinue}
               onClick={() => {
+                setDirection("forward");
                 setStep(2);
               }}
-              type="button"
             >
               Continue
+              <HugeiconsIcon aria-hidden icon={ArrowRight01Icon} />
             </Button>
           </div>
-        ) : (
-          <div className="mt-10 space-y-8">
+        </div>
+      ) : (
+        <div className="mx-auto max-w-xl">
+          <header>
+            <p className="text-caption text-muted-fg">Setup</p>
+            <h1 className="mt-2 text-title-md font-medium tracking-tight text-fg">
+              Set up what you need
+            </h1>
+            <p className="mt-3 text-body/6 text-muted-fg">
+              Complete what you picked, or finish now and continue in Settings.
+            </p>
+          </header>
+
+          <div className="mt-8 space-y-4">
             {selectedIntents.length > 0 ? (
-              <div className="space-y-4">
-                <h2 className="sr-only">Your setup steps</h2>
-                {renderIntentPlaybooks()}
-              </div>
+              <>{renderIntentPlaybooks()}</>
             ) : (
               <p className="rounded-lg border border-border p-4 text-body-sm text-muted-fg">
                 Nothing selected yet. Finish now, or go back and pick what you
                 came for.
               </p>
             )}
-
-            <section className="border-t border-border pt-6">
-              {state?.hasAcceptedTerms === false ? (
-                <label
-                  className="flex items-start gap-3 text-body-sm text-muted-fg"
-                  htmlFor="onboarding-terms"
-                >
-                  <Checkbox
-                    checked={termsAccepted}
-                    className="mt-0.5"
-                    id="onboarding-terms"
-                    onCheckedChange={setTermsAccepted}
-                  >
-                    <CheckboxIndicator />
-                  </Checkbox>
-                  <span>
-                    I agree to the{" "}
-                    <Link
-                      className="text-fg underline"
-                      target="_blank"
-                      to="/terms"
-                    >
-                      Terms of Service
-                    </Link>{" "}
-                    and{" "}
-                    <Link
-                      className="text-fg underline"
-                      target="_blank"
-                      to="/privacy"
-                    >
-                      Privacy Policy
-                    </Link>
-                    .
-                  </span>
-                </label>
-              ) : null}
-
-              {hasAnySetup ? null : (
-                <p className="mt-3 text-center text-micro text-muted-fg">
-                  You can set up mail anytime in Settings.
-                </p>
-              )}
-
-              <div className="mt-6 flex gap-2">
-                <Button
-                  onClick={() => {
-                    setStep(1);
-                  }}
-                  size="icon"
-                  type="button"
-                  variant="outline"
-                >
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4 rotate-180"
-                    icon={ArrowLeft01Icon}
-                  />
-                  <span className="sr-only">Back</span>
-                </Button>
-                <Button
-                  className="flex-1 justify-center"
-                  disabled={!canFinish}
-                  onClick={() => {
-                    completeMutation.mutate({
-                      acceptedTerms: true,
-                      name: resolvedName.trim(),
-                      teamName: teamName.trim() || undefined,
-                    });
-                  }}
-                  type="button"
-                >
-                  {completeMutation.isPending ? "Setting up…" : "Finish setup"}
-                </Button>
-              </div>
-            </section>
           </div>
-        )}
-      </div>
-    </main>
+
+          <div className="mt-8 space-y-4 border-t border-border/70 pt-5">
+            {state?.hasAcceptedTerms === false ? (
+              <label
+                className="flex items-start gap-3 text-body-sm text-muted-fg"
+                htmlFor="onboarding-terms"
+              >
+                <Checkbox
+                  checked={termsAccepted}
+                  className="mt-0.5"
+                  id="onboarding-terms"
+                  onCheckedChange={setTermsAccepted}
+                >
+                  <CheckboxIndicator />
+                </Checkbox>
+                <span>
+                  I agree to the{" "}
+                  <Link
+                    className="text-fg underline"
+                    target="_blank"
+                    to="/terms"
+                  >
+                    Terms of Service
+                  </Link>{" "}
+                  and{" "}
+                  <Link
+                    className="text-fg underline"
+                    target="_blank"
+                    to="/privacy"
+                  >
+                    Privacy Policy
+                  </Link>
+                  .
+                </span>
+              </label>
+            ) : null}
+
+            {hasAnySetup ? null : (
+              <p className="text-center text-micro text-muted-fg">
+                You can set up mail anytime in Settings.
+              </p>
+            )}
+
+            <div className="flex justify-end">
+              <Button
+                disabled={!canFinish}
+                onClick={() => {
+                  completeMutation.mutate({
+                    acceptedTerms: true,
+                    name: resolvedName.trim(),
+                    teamName: teamName.trim() || undefined,
+                  });
+                }}
+                pending={completeMutation.isPending}
+                pendingLabel="Setting up…"
+              >
+                Finish setup
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </GuidedFlow>
   );
 };
