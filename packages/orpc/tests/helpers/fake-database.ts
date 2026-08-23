@@ -1,6 +1,7 @@
 type FakeChainStep = () => FakeBuilder;
 
 type FakeBuilder = {
+  for: (strength: "update") => FakeBuilder;
   innerJoin: FakeChainStep;
   leftJoin: FakeChainStep;
   limit: FakeChainStep;
@@ -14,6 +15,14 @@ type FakeBuilder = {
     onFulfilled?: (value: unknown[]) => unknown,
     onRejected?: (reason: unknown) => unknown
   ) => PromiseLike<unknown>;
+};
+
+type FakeDatabase = {
+  select: () => { from: (table: unknown) => FakeBuilder };
+  transaction: <Result>(
+    callback: (transaction: FakeDatabase) => Promise<Result>
+  ) => Promise<Result>;
+  update: (table: unknown) => FakeBuilder;
 };
 
 /**
@@ -38,6 +47,7 @@ const createBuilder = (table: unknown): FakeBuilder => {
     return evaluatedRows;
   };
   const builder: FakeBuilder = {
+    for: () => builder,
     innerJoin: () => builder,
     leftJoin: () => builder,
     limit: () => builder,
@@ -63,12 +73,18 @@ const createBuilder = (table: unknown): FakeBuilder => {
   return builder;
 };
 
-export const createFakeDatabaseModule = () => ({
-  db: {
+export const createFakeDatabaseModule = () => {
+  const fakeDatabase: FakeDatabase = {
     select: () => ({ from: (table: unknown) => createBuilder(table) }),
+    // oxlint-disable promise/prefer-await-to-callbacks -- Mirrors Drizzle's transaction callback API.
+    transaction: async <Result>(
+      callback: (transaction: FakeDatabase) => Promise<Result>
+    ) => await callback(fakeDatabase),
+    // oxlint-enable promise/prefer-await-to-callbacks
     update: (table: unknown) => createBuilder(table),
-  },
-});
+  };
+  return { db: fakeDatabase };
+};
 
 export const queueRows = (table: unknown, rows: unknown[]) => {
   const queue = selectQueues.get(table) ?? [];

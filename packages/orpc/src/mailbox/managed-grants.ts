@@ -101,28 +101,29 @@ export const createManagedMailbox = async (input: {
   );
   const emailAddress = normalizeEmailAddress(input.emailAddress);
   const domain = emailAddress.split("@")[1] ?? "";
-  const [receivingDomain] = await db
-    .select({ id: mailDomain.id })
-    .from(mailDomain)
-    .where(
-      and(
-        eq(mailDomain.domain, domain),
-        eq(mailDomain.organizationId, input.organizationId),
-        eq(mailDomain.status, "verified"),
-        eq(mailDomain.mode, "send_and_receive")
-      )
-    )
-    .limit(1);
-  if (receivingDomain === undefined) {
-    throw new ORPCError("BAD_REQUEST", {
-      message:
-        "Shared inboxes require a verified domain with incoming mail enabled.",
-    });
-  }
-
   const mailboxId = randomUUID();
   const now = new Date();
   await db.transaction(async (tx) => {
+    const [receivingDomain] = await tx
+      .select({ id: mailDomain.id })
+      .from(mailDomain)
+      .where(
+        and(
+          eq(mailDomain.domain, domain),
+          eq(mailDomain.organizationId, input.organizationId),
+          eq(mailDomain.status, "verified"),
+          eq(mailDomain.mode, "send_and_receive")
+        )
+      )
+      .limit(1)
+      .for("update");
+    if (receivingDomain === undefined) {
+      throw new ORPCError("BAD_REQUEST", {
+        message:
+          "Shared inboxes require a verified domain with incoming mail enabled.",
+      });
+    }
+
     await tx.insert(mailbox).values({
       createdAt: now,
       displayName: hasText(input.displayName) ? input.displayName.trim() : null,
@@ -151,6 +152,9 @@ export const createManagedMailbox = async (input: {
         .where(
           and(
             eq(mailDomain.id, receivingDomain.id),
+            eq(mailDomain.organizationId, input.organizationId),
+            eq(mailDomain.mode, "send_and_receive"),
+            eq(mailDomain.status, "verified"),
             isNull(mailDomain.catchAllMailboxId)
           )
         )
@@ -158,7 +162,7 @@ export const createManagedMailbox = async (input: {
       if (claimedDomain === undefined) {
         throw new ORPCError("CONFLICT", {
           message:
-            "Another shared inbox already receives every address on this domain. Remove that whole-domain inbox first.",
+            "Incoming mail is no longer available for this domain, or another shared inbox already receives every address. Refresh and try again.",
         });
       }
     }

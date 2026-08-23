@@ -90,7 +90,7 @@ describe(setMailDomainCatchAll, () => {
         organizationId: "org-1",
       })
     ).rejects.toThrow(
-      "Another shared inbox already receives every address on example.com."
+      "Incoming mail is no longer available for example.com, or another shared inbox already receives every address."
     );
   });
 

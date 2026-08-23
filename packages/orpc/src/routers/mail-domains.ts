@@ -1,6 +1,7 @@
 import { ORPCError } from "@orpc/server";
 import { getOrganizationBillingEntitlement } from "@quieter/billing/entitlements";
 import { db } from "@quieter/database/client";
+import type { DatabaseClient } from "@quieter/database/client";
 import { mailbox, mailDomain } from "@quieter/database/schema";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -33,6 +34,10 @@ import { protectedProcedure } from "./base";
 
 const mailDomainModeSchema = z.enum(["send_only", "send_and_receive"]);
 
+type MailDomainDatabase =
+  | DatabaseClient
+  | Parameters<Parameters<DatabaseClient["transaction"]>[0]>[0];
+
 const assertDomainBillingAccess = async (organizationId: string) => {
   const entitlement = await getOrganizationBillingEntitlement({
     feature: "organizationDomains",
@@ -46,10 +51,11 @@ const assertDomainBillingAccess = async (organizationId: string) => {
 };
 
 const countManagedMailboxesForDomain = async (input: {
+  database?: MailDomainDatabase;
   domain: string;
   organizationId: string;
 }) => {
-  const [result] = await db
+  const [result] = await (input.database ?? db)
     .select({ count: sql<number>`count(*)::int` })
     .from(mailbox)
     .where(
@@ -520,23 +526,6 @@ export const mailDomainsRouter = {
         return await verifyMailDomainSetup(input);
       }
 
-      if (input.mode === "send_only") {
-        const managedMailboxCount = await countManagedMailboxesForDomain({
-          domain: storedDomain.domain,
-          organizationId: input.organizationId,
-        });
-        if (managedMailboxCount > 0) {
-          throw new ORPCError("CONFLICT", {
-            message: `${managedMailboxCount} shared ${managedMailboxCount === 1 ? "inbox uses" : "inboxes use"} incoming mail on this domain. Remove or migrate them before switching to send only.`,
-          });
-        }
-        if (!(await deleteMailDomainReceiptRule(storedDomain.domain))) {
-          throw new ORPCError("INTERNAL_SERVER_ERROR", {
-            message: "Incoming mail could not be disabled. Try again.",
-          });
-        }
-      }
-
       const identity = await getEmailIdentity(storedDomain.domain);
       const records = createMailDomainDnsRecords({
         dkimTokens: getDkimTokens(identity),
@@ -548,19 +537,61 @@ export const mailDomainsRouter = {
         region: getAwsRegion(),
       });
       const now = new Date();
-      await db
-        .update(mailDomain)
-        .set({
-          lastCheckResult: null,
-          mode: input.mode,
-          modeUpdatedAt: now,
-          modeUpdatedByUserId: context.userId,
-          requiredDnsRecords: records,
-          status: "pending_dns",
-          updatedAt: now,
-          verifiedAt: null,
-        })
-        .where(eq(mailDomain.id, storedDomain.id));
+      const updateValues = {
+        lastCheckResult: null,
+        mode: input.mode,
+        modeUpdatedAt: now,
+        modeUpdatedByUserId: context.userId,
+        requiredDnsRecords: records,
+        status: "pending_dns" as const,
+        updatedAt: now,
+        verifiedAt: null,
+      };
+      if (input.mode === "send_only") {
+        await db.transaction(async (tx) => {
+          const [lockedDomain] = await tx
+            .select({ id: mailDomain.id })
+            .from(mailDomain)
+            .where(
+              and(
+                eq(mailDomain.id, storedDomain.id),
+                eq(mailDomain.organizationId, input.organizationId)
+              )
+            )
+            .limit(1)
+            .for("update");
+          if (lockedDomain === undefined) {
+            throw new ORPCError("NOT_FOUND", {
+              message: "Mail domain was not found in the active team.",
+            });
+          }
+
+          const managedMailboxCount = await countManagedMailboxesForDomain({
+            database: tx,
+            domain: storedDomain.domain,
+            organizationId: input.organizationId,
+          });
+          if (managedMailboxCount > 0) {
+            throw new ORPCError("CONFLICT", {
+              message: `${managedMailboxCount} shared ${managedMailboxCount === 1 ? "inbox uses" : "inboxes use"} incoming mail on this domain. Remove or migrate them before switching to send only.`,
+            });
+          }
+          if (!(await deleteMailDomainReceiptRule(storedDomain.domain))) {
+            throw new ORPCError("INTERNAL_SERVER_ERROR", {
+              message: "Incoming mail could not be disabled. Try again.",
+            });
+          }
+          await tx
+            .update(mailDomain)
+            .set(updateValues)
+            .where(eq(mailDomain.id, lockedDomain.id));
+        });
+      } else {
+        await db
+          .update(mailDomain)
+          .set(updateValues)
+          .where(eq(mailDomain.id, storedDomain.id));
+      }
 
       return await verifyMailDomainSetup(input);
     }),

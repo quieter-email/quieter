@@ -800,14 +800,6 @@ const getCatchAllDescription = (catchAll: DomainCatchAll) => {
   return `Every unmatched recipient arrives in ${catchAll.emailAddress}. Exact shared inboxes keep priority, and replies send from that inbox's own address.`;
 };
 
-const showCatchAllMutationError = (mutationError: unknown) => {
-  toast.error(
-    mutationError instanceof Error
-      ? mutationError.message
-      : "Could not update the whole-domain inbox."
-  );
-};
-
 const DomainCatchAllAction = ({
   actionReason,
   catchAll,
@@ -847,7 +839,14 @@ const DomainCatchAllAction = ({
         onClick={() => {
           setCatchAllMutation.mutate(
             { domainId, mailboxId: null, organizationId },
-            { onError: showCatchAllMutationError }
+            {
+              onError: (mutationError) => {
+                toastError(mutationError, {
+                  boundary: "domain-settings",
+                  fallback: "Could not update the whole-domain inbox.",
+                });
+              },
+            }
           );
         }}
         size="sm"
@@ -928,7 +927,12 @@ const DomainCatchAllPickerBody = ({
             setCatchAllMutation.mutate(
               { domainId, mailboxId: mailbox.id, organizationId },
               {
-                onError: showCatchAllMutationError,
+                onError: (mutationError) => {
+                  toastError(mutationError, {
+                    boundary: "domain-settings",
+                    fallback: "Could not update the whole-domain inbox.",
+                  });
+                },
                 onSuccess: onPicked,
               }
             );
@@ -1296,6 +1300,9 @@ export const DomainDetailView = ({
           input: { organizationId: organization.id },
         }).queryKey,
       });
+      await queryClient.invalidateQueries({
+        queryKey: ["mail", "managed-mailbox-details"],
+      });
       await invalidateDomain();
       toast.success("Whole-domain inbox updated.");
     },
@@ -1482,7 +1489,9 @@ export const DomainDetailView = ({
         catchAll={data.catchAll}
         domainId={domainId}
         domainName={domain.domain}
-        incomingReady={domain.mode === "send_and_receive" && isVerified}
+        incomingReady={
+          domain.mode === "send_and_receive" && domain.status === "verified"
+        }
         manageReason={manageReason}
         organizationId={organization.id}
         setCatchAllMutation={setCatchAllMutation}
