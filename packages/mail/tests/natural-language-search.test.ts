@@ -108,6 +108,13 @@ describe("natural language mail search", () => {
     ]);
   });
 
+  test("rejects calendar-invalid absolute dates", () => {
+    const result = parse("since 2026-02-31");
+
+    expect(result.filters).toStrictEqual([]);
+    expect(result.text).toBe("since 2026-02-31");
+  });
+
   test("moves future month-day dates into the past year", () => {
     const result = parse("since september 1");
 

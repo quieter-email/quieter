@@ -48,6 +48,7 @@ import { authClient } from "#/lib/auth";
 import { toastError } from "#/lib/error-toast";
 import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
 import { orpc } from "#/lib/orpc";
+import { rethrowClassified } from "#/lib/orpc-errors";
 
 type FirstRunOrganization = {
   id: string;
@@ -638,14 +639,15 @@ export const FirstRunManagedMailSetup = ({
       });
 
       if (response.error) {
-        throw new Error(response.error.message ?? "Could not create API key.");
+        rethrowClassified(response.error, "Could not create API key.");
       }
 
-      if (!response.data?.key) {
+      const createdKey = response.data?.key;
+      if (createdKey === undefined || createdKey === "") {
         throw new Error("Could not read the created API key.");
       }
 
-      return { key: response.data.key, organizationId: requestOrgId };
+      return { key: createdKey, organizationId: requestOrgId };
     },
     mutationKey: ["first-run", "organization-api-key", organizationId],
     onError: (error) => {

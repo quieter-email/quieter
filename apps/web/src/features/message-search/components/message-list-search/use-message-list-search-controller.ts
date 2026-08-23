@@ -57,6 +57,7 @@ import {
   isCaretAtStart,
   isDateFilter,
   isFixedValueFilter,
+  mergeInterpretedFilters,
   serializeStructuredSearchState,
   shouldFocusFilterValueEnd,
   subscribeToCalendarFallbackMonth,
@@ -901,10 +902,10 @@ export const useMessageListSearchController = ({
     submittedQuery?: string
   ) => {
     const baseState = currentStateRef.current;
-    let mergedFilters = baseState.filters;
-    for (const filter of search.filters) {
-      ({ filters: mergedFilters } = upsertFilter(mergedFilters, filter));
-    }
+    const mergedFilters = mergeInterpretedFilters(
+      baseState.filters,
+      search.filters
+    );
     const nextText =
       submittedQuery !== undefined &&
       normalizeSearchText(baseState.text) !== submittedQuery

@@ -137,3 +137,24 @@ export const upsertFilter = (
   nextFilters[existingIndex] = nextFilter;
   return { filters: nextFilters, index: existingIndex };
 };
+
+export const mergeInterpretedFilters = (
+  base: readonly SearchFilterChip[],
+  incoming: readonly SearchFilterChip[]
+): SearchFilterChip[] => {
+  let merged: readonly SearchFilterChip[] = base;
+  for (const filter of incoming) {
+    if (filter.type === "label") {
+      const labelKey = normalizeLabelSelectionKey(filter.value);
+      merged = merged.filter(
+        (existing) =>
+          !(
+            existing.type === "label" &&
+            normalizeLabelSelectionKey(existing.value) === labelKey
+          )
+      );
+    }
+    ({ filters: merged } = upsertFilter(merged, filter));
+  }
+  return [...merged];
+};

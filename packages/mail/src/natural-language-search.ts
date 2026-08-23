@@ -242,12 +242,15 @@ const tryParseAbsoluteDateAt = (
       tokens[start].word
     );
   if (isoMatch?.groups) {
-    const date = new Date(
-      Number(isoMatch.groups.year),
-      Number(isoMatch.groups.month) - 1,
-      Number(isoMatch.groups.day)
-    );
-    return date.getTime() > 0 ? { length: 1, value: date } : null;
+    const year = Number(isoMatch.groups.year);
+    const month = Number(isoMatch.groups.month);
+    const day = Number(isoMatch.groups.day);
+    const date = new Date(year, month - 1, day);
+    return date.getFullYear() === year &&
+      date.getMonth() === month - 1 &&
+      date.getDate() === day
+      ? { length: 1, value: date }
+      : null;
   }
 
   const resolveDate = (

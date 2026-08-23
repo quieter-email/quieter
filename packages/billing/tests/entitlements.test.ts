@@ -243,8 +243,8 @@ describe("organization subscription reconciliation", () => {
   };
   const refreshedRow = {
     ...staleRow,
-    currentPeriodEnd: new Date("2026-08-23T00:00:00.000Z"),
-    currentPeriodStart: new Date("2026-07-23T00:00:00.000Z"),
+    currentPeriodEnd: new Date("2027-01-23T00:00:00.000Z"),
+    currentPeriodStart: new Date("2026-12-23T00:00:00.000Z"),
     updatedAt: new Date("2026-08-02T00:00:00.000Z"),
   };
 
