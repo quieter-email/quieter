@@ -323,7 +323,7 @@ const CustomInboxPlaybook = ({
           {managedMailboxes.length > 0 ? (
             <ConnectedAddressList mailboxes={managedMailboxes} />
           ) : null}
-          <div className="squircle flex h-9 w-full max-w-md items-center rounded-md border border-border bg-bg-elevated shadow-sm transition-colors">
+          <div className="squircle flex h-9 w-full max-w-md items-center rounded-md border border-border bg-bg shadow-sm transition-colors">
             <TextFieldInput
               aria-label="Mailbox address"
               chrome="ghost"
@@ -605,273 +605,264 @@ export const OnboardingScreen = () => {
   const steps = ["About you", "Setup"] as const;
 
   return (
-    <>
-      <Suspense fallback={null}>
-        <AtmosphericBackground
-          className="fixed -z-10"
-          fadeBottom="elevated"
-          fadeTop="elevated"
-          grain={0.4}
-          intensity={0.5}
-        />
-      </Suspense>
-      <GuidedFlow
-        activeStep={activeStep}
-        ariaLabel="Onboarding"
-        direction={direction}
-        headerEnd={
-          <div className="flex items-center gap-3">
-            <span className="text-caption text-muted-fg">
-              <span className="hidden sm:inline">Step </span>
-              {step} / {steps.length}
-            </span>
-            <Progress
-              aria-label="Onboarding progress"
-              className="hidden w-16 gap-0 sm:grid"
-              max={steps.length}
-              value={step}
-            >
-              <ProgressTrack className="h-1 bg-control-hover">
-                <ProgressIndicator className="bg-fg" />
-              </ProgressTrack>
-            </Progress>
-          </div>
-        }
-        headerStart={
+    <GuidedFlow
+      backdrop={
+        <Suspense fallback={null}>
+          <AtmosphericBackground
+            className="-z-10"
+            fadeBottom="canvas"
+            fadeTop="canvas"
+            grain={0.4}
+            intensity={0.5}
+          />
+        </Suspense>
+      }
+      activeStep={activeStep}
+      ariaLabel="Onboarding"
+      direction={direction}
+      headerEnd={
+        <div className="flex items-center gap-3">
+          <span className="text-caption text-muted-fg">
+            <span className="hidden sm:inline">Step </span>
+            {step} / {steps.length}
+          </span>
+          <Progress
+            aria-label="Onboarding progress"
+            className="hidden w-16 gap-0 sm:grid"
+            max={steps.length}
+            value={step}
+          >
+            <ProgressTrack className="h-1 bg-control-hover">
+              <ProgressIndicator className="bg-fg" />
+            </ProgressTrack>
+          </Progress>
+        </div>
+      }
+      headerStart={
+        <Button
+          className="-ml-2 text-muted-fg hover:text-fg"
+          disabled={signOutMutation.isPending}
+          onClick={() => {
+            signOutMutation.mutate(undefined, {
+              onError: (error) => {
+                toastError(error, {
+                  boundary: "onboarding-sign-out",
+                  fallback: "Could not sign out.",
+                });
+              },
+            });
+          }}
+          size="sm"
+          variant="ghost"
+        >
+          <HugeiconsIcon aria-hidden icon={ArrowLeft01Icon} />
+          Sign out
+        </Button>
+      }
+      previous={
+        step === 2 ? (
           <Button
-            className="-ml-2 text-muted-fg hover:text-fg"
-            disabled={signOutMutation.isPending}
+            className="text-muted-fg hover:text-fg"
             onClick={() => {
-              signOutMutation.mutate(undefined, {
-                onError: (error) => {
-                  toastError(error, {
-                    boundary: "onboarding-sign-out",
-                    fallback: "Could not sign out.",
-                  });
-                },
-              });
+              setDirection("back");
+              setStep(1);
             }}
             size="sm"
             variant="ghost"
           >
             <HugeiconsIcon aria-hidden icon={ArrowLeft01Icon} />
-            Sign out
+            {steps[0]}
           </Button>
-        }
-        previous={
-          step === 2 ? (
-            <Button
-              className="text-muted-fg hover:text-fg"
-              onClick={() => {
-                setDirection("back");
-                setStep(1);
-              }}
-              size="sm"
-              variant="ghost"
-            >
-              <HugeiconsIcon aria-hidden icon={ArrowLeft01Icon} />
-              {steps[0]}
-            </Button>
-          ) : null
-        }
-      >
-        {step === 1 ? (
-          <div className="relative mx-auto max-w-xl">
-            <m.header
-              className="relative text-center"
-              {...getAppFlyInMotion({ animate: true, index: 0, reducedMotion })}
-            >
-              <h1 className="font-serif text-title-lg leading-[1.32] font-normal tracking-[-0.014em] text-balance text-fg">
-                Welcome to Quieter
-              </h1>
-            </m.header>
+        ) : null
+      }
+    >
+      {step === 1 ? (
+        <div className="relative mx-auto max-w-xl">
+          <m.header
+            className="relative text-center"
+            {...getAppFlyInMotion({ animate: true, index: 0, reducedMotion })}
+          >
+            <h1 className="font-serif text-title-lg leading-[1.32] font-normal tracking-[-0.014em] text-balance text-fg">
+              Welcome to Quieter
+            </h1>
+          </m.header>
 
-            <m.div
-              className="mt-8 space-y-4"
-              {...getAppFlyInMotion({ animate: true, index: 1, reducedMotion })}
-            >
-              <Field>
-                <FieldLabel htmlFor="onboarding-name">Name</FieldLabel>
-                <Input
-                  autoComplete="name"
-                  id="onboarding-name"
-                  onChange={(event) => {
-                    setName(event.target.value);
-                  }}
-                  placeholder="Your name"
-                  value={name}
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="onboarding-team">Team</FieldLabel>
-                <Input
-                  id="onboarding-team"
-                  onChange={(event) => {
-                    setTeamName(event.target.value);
-                  }}
-                  placeholder={
-                    name.trim() ? `${name.trim()}'s team` : "Your team"
-                  }
-                  value={teamName}
-                />
-                <p className="text-micro text-muted-fg">
-                  Optional. Teams hold your mailboxes and billing.
-                </p>
-              </Field>
-            </m.div>
-
-            <m.fieldset
-              className="mt-10"
-              {...getAppFlyInMotion({ animate: true, index: 2, reducedMotion })}
-            >
-              <legend className="text-body font-medium text-fg">
-                What are you planning to do with Quieter?
-              </legend>
-              <p className="mt-1 text-body/6 text-muted-fg">
-                Pick everything that applies. You can skip and decide later.
-              </p>
-              <div className="mt-5 space-y-2">
-                {ONBOARDING_INTENT_OPTIONS.map((option) => {
-                  const checked = selectedIntents.includes(option.id);
-                  const inputId = `onboarding-intent-${option.id}`;
-                  return (
-                    <label
-                      className={cn(
-                        "squircle flex cursor-pointer gap-3 rounded-lg border p-4 transition-colors",
-                        {
-                          "border-border hover:bg-muted/60": !checked,
-                          "border-fg/30 bg-muted/40": checked,
-                        }
-                      )}
-                      htmlFor={inputId}
-                      key={option.id}
-                    >
-                      <Checkbox
-                        checked={checked}
-                        className="mt-0.5"
-                        id={inputId}
-                        onCheckedChange={() => {
-                          toggleIntent(option.id);
-                        }}
-                      >
-                        <CheckboxIndicator />
-                      </Checkbox>
-                      <span>
-                        <span className="block text-body font-medium text-fg">
-                          {option.title}
-                        </span>
-                        <span className="mt-1 block text-body-sm text-muted-fg">
-                          {option.description}
-                        </span>
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            </m.fieldset>
-
-            <m.div
-              className="mt-10 flex justify-end"
-              {...getAppFlyInMotion({ animate: true, index: 3, reducedMotion })}
-            >
-              <Button
-                disabled={!canContinue}
-                onClick={() => {
-                  setDirection("forward");
-                  setStep(2);
+          <m.div
+            className="mt-8 space-y-4"
+            {...getAppFlyInMotion({ animate: true, index: 1, reducedMotion })}
+          >
+            <Field>
+              <FieldLabel htmlFor="onboarding-name">Name</FieldLabel>
+              <Input
+                autoComplete="name"
+                id="onboarding-name"
+                onChange={(event) => {
+                  setName(event.target.value);
                 }}
-              >
-                Continue
-                <HugeiconsIcon aria-hidden icon={ArrowRight01Icon} />
-              </Button>
-            </m.div>
-          </div>
-        ) : (
-          <div className="mx-auto max-w-xl">
-            <header>
-              <p className="text-caption text-muted-fg">Setup</p>
-              <h1 className="mt-2 font-serif text-title-md leading-[1.32] font-normal tracking-[-0.014em] text-balance text-fg">
-                Set up what you need
-              </h1>
-              <p className="mt-3 text-body/6 text-muted-fg">
-                Complete what you picked, or finish now and continue in
-                Settings.
+                placeholder="Your name"
+                value={name}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="onboarding-team">Team</FieldLabel>
+              <Input
+                id="onboarding-team"
+                onChange={(event) => {
+                  setTeamName(event.target.value);
+                }}
+                placeholder={
+                  name.trim() ? `${name.trim()}'s team` : "Your team"
+                }
+                value={teamName}
+              />
+              <p className="text-micro text-muted-fg">
+                Optional. Teams hold your mailboxes and billing.
               </p>
-            </header>
+            </Field>
+          </m.div>
 
-            <div className="mt-8 space-y-4">
-              {selectedIntents.length > 0 ? (
-                <>{renderIntentPlaybooks()}</>
-              ) : (
-                <p className="rounded-lg border border-border p-4 text-body-sm text-muted-fg">
-                  Nothing selected yet. Finish now, or go back and pick what you
-                  came for.
-                </p>
-              )}
-            </div>
-
-            <div className="mt-8 space-y-4 border-t border-border/70 pt-5">
-              {state?.hasAcceptedTerms === false ? (
-                <label
-                  className="flex items-start gap-3 text-body-sm text-muted-fg"
-                  htmlFor="onboarding-terms"
-                >
-                  <Checkbox
-                    checked={termsAccepted}
-                    className="mt-0.5"
-                    id="onboarding-terms"
-                    onCheckedChange={setTermsAccepted}
+          <m.fieldset
+            className="mt-10"
+            {...getAppFlyInMotion({ animate: true, index: 2, reducedMotion })}
+          >
+            <legend className="text-body font-medium text-fg">
+              What are you planning to do with Quieter?
+            </legend>
+            <p className="mt-1 text-body/6 text-muted-fg">
+              Pick everything that applies. You can skip and decide later.
+            </p>
+            <div className="mt-4 space-y-1">
+              {ONBOARDING_INTENT_OPTIONS.map((option) => {
+                const checked = selectedIntents.includes(option.id);
+                const inputId = `onboarding-intent-${option.id}`;
+                return (
+                  <label
+                    className={cn(
+                      "flex cursor-pointer items-center gap-3 py-1.5 text-body transition-colors",
+                      {
+                        "text-fg": checked,
+                        "text-muted-fg hover:text-fg": !checked,
+                      }
+                    )}
+                    htmlFor={inputId}
+                    key={option.id}
                   >
-                    <CheckboxIndicator />
-                  </Checkbox>
-                  <span>
-                    I agree to the{" "}
-                    <Link
-                      className="text-fg underline"
-                      target="_blank"
-                      to="/terms"
+                    <Checkbox
+                      checked={checked}
+                      id={inputId}
+                      onCheckedChange={() => {
+                        toggleIntent(option.id);
+                      }}
                     >
-                      Terms of Service
-                    </Link>{" "}
-                    and{" "}
-                    <Link
-                      className="text-fg underline"
-                      target="_blank"
-                      to="/privacy"
-                    >
-                      Privacy Policy
-                    </Link>
-                    .
-                  </span>
-                </label>
-              ) : null}
+                      <CheckboxIndicator />
+                    </Checkbox>
+                    {option.title}
+                  </label>
+                );
+              })}
+            </div>
+          </m.fieldset>
 
-              {hasAnySetup ? null : (
-                <p className="text-center text-micro text-muted-fg">
-                  You can set up mail anytime in Settings.
-                </p>
-              )}
+          <m.div
+            className="mt-10 flex justify-end"
+            {...getAppFlyInMotion({ animate: true, index: 3, reducedMotion })}
+          >
+            <Button
+              disabled={!canContinue}
+              onClick={() => {
+                setDirection("forward");
+                setStep(2);
+              }}
+            >
+              Continue
+              <HugeiconsIcon aria-hidden icon={ArrowRight01Icon} />
+            </Button>
+          </m.div>
+        </div>
+      ) : (
+        <div className="mx-auto max-w-xl">
+          <header>
+            <p className="text-caption text-muted-fg">Setup</p>
+            <h1 className="mt-2 font-serif text-title-md leading-[1.32] font-normal tracking-[-0.014em] text-balance text-fg">
+              Set up what you need
+            </h1>
+            <p className="mt-3 text-body/6 text-muted-fg">
+              Complete what you picked, or finish now and continue in Settings.
+            </p>
+          </header>
 
-              <div className="flex justify-end">
-                <Button
-                  disabled={!canFinish}
-                  onClick={() => {
-                    completeMutation.mutate({
-                      acceptedTerms: true,
-                      name: name.trim(),
-                      teamName: teamName.trim() || undefined,
-                    });
-                  }}
-                  pending={completeMutation.isPending}
-                  pendingLabel="Setting up…"
+          <div className="mt-8 space-y-4">
+            {selectedIntents.length > 0 ? (
+              <>{renderIntentPlaybooks()}</>
+            ) : (
+              <p className="rounded-lg border border-border p-4 text-body-sm text-muted-fg">
+                Nothing selected yet. Finish now, or go back and pick what you
+                came for.
+              </p>
+            )}
+          </div>
+
+          <div className="mt-8 space-y-4 border-t border-border/70 pt-5">
+            {state?.hasAcceptedTerms === false ? (
+              <label
+                className="flex items-start gap-3 text-body-sm text-muted-fg"
+                htmlFor="onboarding-terms"
+              >
+                <Checkbox
+                  checked={termsAccepted}
+                  className="mt-0.5"
+                  id="onboarding-terms"
+                  onCheckedChange={setTermsAccepted}
                 >
-                  Finish setup
-                </Button>
-              </div>
+                  <CheckboxIndicator />
+                </Checkbox>
+                <span>
+                  I agree to the{" "}
+                  <Link
+                    className="text-fg underline"
+                    target="_blank"
+                    to="/terms"
+                  >
+                    Terms of Service
+                  </Link>{" "}
+                  and{" "}
+                  <Link
+                    className="text-fg underline"
+                    target="_blank"
+                    to="/privacy"
+                  >
+                    Privacy Policy
+                  </Link>
+                  .
+                </span>
+              </label>
+            ) : null}
+
+            {hasAnySetup ? null : (
+              <p className="text-center text-micro text-muted-fg">
+                You can set up mail anytime in Settings.
+              </p>
+            )}
+
+            <div className="flex justify-end">
+              <Button
+                disabled={!canFinish}
+                onClick={() => {
+                  completeMutation.mutate({
+                    acceptedTerms: true,
+                    name: name.trim(),
+                    teamName: teamName.trim() || undefined,
+                  });
+                }}
+                pending={completeMutation.isPending}
+                pendingLabel="Setting up…"
+              >
+                Finish setup
+              </Button>
             </div>
           </div>
-        )}
-      </GuidedFlow>
-    </>
+        </div>
+      )}
+    </GuidedFlow>
   );
 };

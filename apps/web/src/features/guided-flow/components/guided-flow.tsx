@@ -20,6 +20,8 @@ import {
 type GuidedFlowProps = {
   activeStep: string;
   ariaLabel: string;
+  /** Sits behind the middle row only, so the header and closing band stay flat. */
+  backdrop?: ReactNode;
   children: ReactNode;
   className?: string;
   direction: "back" | "forward";
@@ -31,6 +33,7 @@ type GuidedFlowProps = {
 export const GuidedFlow = ({
   activeStep,
   ariaLabel,
+  backdrop,
   children,
   className,
   direction,
@@ -57,7 +60,7 @@ export const GuidedFlow = ({
       aria-label={ariaLabel}
       className={cn("flex min-h-full flex-col", className)}
     >
-      <header className="sticky top-0 z-20 grid min-h-16 grid-cols-[1fr_auto_1fr] border-b border-border/70 bg-bg-elevated lg:grid-cols-[minmax(11rem,1fr)_minmax(0,42rem)_minmax(11rem,1fr)]">
+      <header className="sticky top-0 z-20 grid min-h-16 grid-cols-[1fr_auto_1fr] border-b border-border/70 bg-bg lg:grid-cols-[minmax(11rem,1fr)_minmax(0,42rem)_minmax(11rem,1fr)]">
         <div className="flex min-w-0 items-center px-3 sm:px-5 lg:border-r lg:border-border/60 lg:px-6">
           {headerStart}
         </div>
@@ -66,12 +69,13 @@ export const GuidedFlow = ({
         </div>
       </header>
 
-      <div className="grid flex-1 lg:grid-cols-[minmax(11rem,1fr)_minmax(0,42rem)_minmax(11rem,1fr)]">
+      <div className="relative isolate grid flex-1 lg:grid-cols-[minmax(11rem,1fr)_minmax(0,42rem)_minmax(11rem,1fr)]">
+        {backdrop}
         <aside className="hidden items-center justify-end border-r border-border/60 px-6 lg:flex">
           {previous}
         </aside>
 
-        <div className="relative flex min-h-[calc(100dvh-8rem)] min-w-0 items-center justify-center overflow-hidden bg-bg-elevated px-5 py-10 sm:px-8 sm:py-12 lg:px-12">
+        <div className="relative flex min-h-[calc(100dvh-8rem)] min-w-0 items-center justify-center overflow-hidden bg-bg px-5 py-10 sm:px-8 sm:py-12 lg:px-12">
           {previous === undefined || previous === null ? null : (
             <div className="absolute top-4 left-3 sm:left-5 lg:hidden">
               {previous}
@@ -109,7 +113,7 @@ export const GuidedFlow = ({
         />
       </div>
 
-      <div className="grid min-h-16 border-t border-border/70 bg-bg-elevated lg:grid-cols-[minmax(11rem,1fr)_minmax(0,42rem)_minmax(11rem,1fr)]">
+      <div className="grid min-h-16 border-t border-border/70 bg-bg lg:grid-cols-[minmax(11rem,1fr)_minmax(0,42rem)_minmax(11rem,1fr)]">
         <div
           aria-hidden
           className="hidden border-r border-border/60 lg:block"
