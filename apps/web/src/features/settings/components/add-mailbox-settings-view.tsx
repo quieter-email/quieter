@@ -258,7 +258,7 @@ export const AddMailboxSettingsView = () => {
           </header>
           <div className="mt-9 grid gap-3 sm:grid-cols-2">
             <Button
-              className="group h-auto min-h-32 w-full flex-col items-start justify-start rounded-lg border-border bg-bg p-5 text-left whitespace-normal hover:border-border-strong hover:bg-control-hover"
+              className="group h-auto min-h-32 w-full flex-col items-start justify-start rounded-lg border-border bg-bg-raised p-5 text-left whitespace-normal hover:border-border-strong hover:bg-control-hover"
               onClick={() => {
                 workflowStore.setState((state) => ({
                   ...state,
@@ -284,7 +284,7 @@ export const AddMailboxSettingsView = () => {
             </Button>
 
             <Button
-              className="group h-auto min-h-32 w-full flex-col items-start justify-start rounded-lg border-border bg-bg p-5 text-left whitespace-normal hover:border-border-strong hover:bg-control-hover"
+              className="group h-auto min-h-32 w-full flex-col items-start justify-start rounded-lg border-border bg-bg-raised p-5 text-left whitespace-normal hover:border-border-strong hover:bg-control-hover"
               onClick={() => {
                 workflowStore.setState((state) => ({
                   ...state,

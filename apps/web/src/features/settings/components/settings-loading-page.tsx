@@ -68,7 +68,7 @@ const SettingsPendingOverview = () => {
           <h2 className="text-body font-normal text-fg">
             {SETTINGS_SECTION_LABELS[section]}
           </h2>
-          <div className="squircle @container overflow-hidden rounded-lg border border-border bg-bg/58">
+          <div className="squircle @container overflow-hidden rounded-lg border border-border bg-bg-raised/58">
             {navItems.map(
               ({ description, section: itemSection, tab, title }) => {
                 if (itemSection !== section) {

@@ -466,7 +466,7 @@ export const ComposeEditorToolbar = ({
       className={cn(
         "w-full min-w-0 shrink-0 rounded-md border-border bg-control",
         {
-          "gap-1.5 rounded-none border-0 border-t border-border bg-bg-elevated px-2 py-1.5 shadow-none":
+          "gap-1.5 rounded-none border-0 border-t border-border bg-bg px-2 py-1.5 shadow-none":
             chrome === "footer",
         },
         className

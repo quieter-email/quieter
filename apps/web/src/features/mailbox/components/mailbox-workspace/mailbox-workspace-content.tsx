@@ -229,7 +229,7 @@ const NoMailboxWorkspace = ({
             </p>
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
               <button
-                className="rounded-lg border border-border bg-bg/80 p-4 text-left shadow-sm transition-colors hover:bg-muted/60"
+                className="rounded-lg border border-border bg-bg-raised/80 p-4 text-left shadow-sm transition-colors hover:bg-muted/60"
                 disabled={isConnectingGmail}
                 onClick={onConnectGmail}
                 type="button"
@@ -249,7 +249,7 @@ const NoMailboxWorkspace = ({
                 </span>
               </button>
               <button
-                className="rounded-lg border border-border bg-bg/80 p-4 text-left shadow-sm transition-colors hover:bg-muted/60"
+                className="rounded-lg border border-border bg-bg-raised/80 p-4 text-left shadow-sm transition-colors hover:bg-muted/60"
                 onClick={() => {
                   setSetupMode("managed");
                 }}

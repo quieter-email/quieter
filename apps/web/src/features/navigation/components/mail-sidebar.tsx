@@ -833,7 +833,7 @@ export const MailSidebar = ({
             <>
               <m.button
                 aria-label="Close sidebar"
-                className="fixed inset-0 z-40 bg-bg-elevated/50 backdrop-blur-[2px] lg:hidden"
+                className="fixed inset-0 z-40 bg-bg/50 backdrop-blur-[2px] lg:hidden"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
@@ -844,7 +844,7 @@ export const MailSidebar = ({
               />
               <m.aside
                 aria-label="Mail sidebar"
-                className="fixed inset-y-0 left-0 isolate z-50 flex w-[min(20rem,calc(100vw-2.5rem))] flex-col overflow-hidden bg-bg-elevated pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-fg shadow-2xl lg:hidden"
+                className="fixed inset-y-0 left-0 isolate z-50 flex w-[min(20rem,calc(100vw-2.5rem))] flex-col overflow-hidden bg-bg pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-fg shadow-2xl lg:hidden"
                 initial={
                   reducedMotion === true
                     ? { opacity: 0, transform: "translate3d(0, 0, 0)" }

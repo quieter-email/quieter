@@ -23,7 +23,7 @@ export const SitePasswordRouteComponent = ({
         <input
           aria-label="Site password"
           autoComplete="current-password"
-          className="h-10 rounded-md border border-border bg-bg-elevated px-3 text-body text-fg shadow-sm placeholder:text-muted-fg"
+          className="h-10 rounded-md border border-border bg-bg px-3 text-body text-fg shadow-sm placeholder:text-muted-fg"
           name="password"
           placeholder="Password"
           required

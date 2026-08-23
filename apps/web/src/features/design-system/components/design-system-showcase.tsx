@@ -40,9 +40,9 @@ const showcaseTokens: TokenFieldToken[] = [
 
 // Literal classes: Tailwind cannot extract an interpolated `bg-${name}`.
 const surfaceTokens = [
-  { cls: "bg-bg", name: "bg", note: "canvas" },
+  { cls: "bg-bg-raised", name: "bg", note: "canvas" },
   { cls: "bg-bg-surface", name: "bg-surface", note: "raised" },
-  { cls: "bg-bg-elevated", name: "bg-elevated", note: "sunken" },
+  { cls: "bg-bg", name: "bg", note: "sunken" },
   { cls: "bg-card", name: "card", note: "raised, both themes" },
   { cls: "bg-muted", name: "muted", note: "alias of control-hover" },
   { cls: "bg-secondary", name: "secondary", note: "alias of control" },
@@ -131,7 +131,7 @@ export const DesignSystemShowcase = () => {
         </header>
 
         <Section
-          description="A card reads as raised in both themes. bg-elevated sits below the canvas."
+          description="A card reads as raised in both themes. bg sits below the canvas."
           title="Surfaces"
         >
           <div className="grid grid-cols-2 gap-3 @md:grid-cols-3">

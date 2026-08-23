@@ -341,7 +341,7 @@ const FirstRunMailboxStep = ({
       </p>
     ) : (
       <div className="flex flex-wrap items-center gap-3">
-        <div className="squircle flex h-9 w-full max-w-md items-center rounded-md border border-border bg-bg-elevated shadow-sm transition-colors">
+        <div className="squircle flex h-9 w-full max-w-md items-center rounded-md border border-border bg-bg shadow-sm transition-colors">
           <TextFieldInput
             aria-label="Managed mailbox local part"
             chrome="ghost"
@@ -678,7 +678,7 @@ export const FirstRunManagedMailSetup = ({
   } satisfies Record<(typeof setupSteps)[number]["id"], boolean>;
 
   return (
-    <div className="@container mx-auto flex max-h-[calc(100dvh-4rem)] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-border bg-bg/88 text-left shadow-2xl backdrop-blur-xl">
+    <div className="@container mx-auto flex max-h-[calc(100dvh-4rem)] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-border bg-bg-raised/88 text-left shadow-2xl backdrop-blur-xl">
       <FirstRunSetupHeader
         onBack={onBack}
         onOrganizationChange={(nextOrganizationId) => {

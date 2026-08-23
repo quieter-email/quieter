@@ -22,15 +22,15 @@
   --font-geist: "Geist Variable", sans-serif;
   --font-lora: "Lora Variable", serif;
   --font-geist-mono: "Geist Mono Variable", monospace;
-  --bg: oklch(0.945 0.002 264);
+  --bg: oklch(0.91 0.002 264);
+  --bg-raised: oklch(0.945 0.002 264);
   --bg-surface: oklch(0.975 0.002 264);
-  --bg-elevated: oklch(0.91 0.002 264);
   --fg: oklch(0.15 0.002 264);
   /* Light tells surfaces apart with borders and shadows, so a control shares
      the canvas colour instead of being tinted off it, and interaction steps
      *darker* to stay legible against every surface. Dark has no borders to
      speak of, so it inverts both halves: shades apart, interaction lighter. */
-  --control: var(--bg);
+  --control: var(--bg-raised);
   --control-hover: oklch(0.85 0.002 264);
   --control-active: oklch(0.8 0.002 264);
   --card: var(--bg-surface);
@@ -102,14 +102,14 @@
 .dark,
 :root[data-theme="dark"],
 :root[data-kb-theme="dark"] {
-  --bg: oklch(0.218 0.003 264);
-  --bg-surface: oklch(0.255 0.003 264);
-  --bg-elevated: oklch(0.145 0 264);
+  --bg: oklch(0.125 0 264);
+  --bg-raised: oklch(0.198 0.003 264);
+  --bg-surface: oklch(0.235 0.003 264);
   --fg: oklch(1 0.002 264);
-  --control: oklch(0.21 0.003 264);
-  --control-hover: oklch(0.26 0.003 264);
-  --control-active: oklch(0.31 0.003 264);
-  /* Raised, like light mode. `--bg-elevated` sits below the canvas in dark. */
+  --control: oklch(0.19 0.003 264);
+  --control-hover: oklch(0.24 0.003 264);
+  --control-active: oklch(0.29 0.003 264);
+  /* Raised, like light mode. `--bg-raised` sits above the canvas in dark. */
   --card: var(--bg-surface);
   --card-fg: var(--fg);
   --popover: var(--control);
@@ -141,12 +141,12 @@
      delineates them and has to be worth the same in each. At 0.25/0.6 this
      read 0.035 against the workspace panel where light's reads 0.092, and a
      shadow cannot make up the difference on a near-black ground. */
-  --border: oklch(0.3 0.004 264 / 0.7);
-  --border-strong: oklch(0.42 0.004 264 / 0.9);
+  --border: oklch(0.28 0.004 264 / 0.7);
+  --border-strong: oklch(0.4 0.004 264 / 0.9);
   --input: var(--control);
-  --ring: oklch(0.44 0.004 264);
+  --ring: oklch(0.42 0.004 264);
   /* Needs more contrast than the control ladder gives; kept independent. */
-  --scrollbar-thumb: oklch(0.38 0.004 264);
+  --scrollbar-thumb: oklch(0.36 0.004 264);
   --chart-1: oklch(0.42 0.003 264);
   --chart-2: oklch(0.52 0.003 264);
   --chart-3: oklch(0.62 0.003 264);
@@ -171,8 +171,8 @@
 @theme inline {
   --color-bg: var(--bg);
   --color-fg: var(--fg);
+  --color-bg-raised: var(--bg-raised);
   --color-bg-surface: var(--bg-surface);
-  --color-bg-elevated: var(--bg-elevated);
   --color-card: var(--card);
   --color-card-fg: var(--card-fg);
   --color-popover: var(--popover);
@@ -295,7 +295,7 @@
   }
 
   body {
-    @apply bg-bg-elevated font-sans text-fg antialiased;
+    @apply bg-bg font-sans text-fg antialiased;
     font-optical-sizing: auto;
   }
 }

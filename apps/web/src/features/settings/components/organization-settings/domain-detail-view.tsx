@@ -242,7 +242,7 @@ const getStatusSectionClass = (tone: DomainStatusTone) => {
   if (tone === "error") {
     return "border-destructive/25 bg-destructive/6";
   }
-  return "border-border bg-bg/58";
+  return "border-border bg-bg-raised/58";
 };
 
 const getStatusIconClass = (tone: DomainStatusTone) => {
@@ -614,7 +614,7 @@ const DomainDnsRecordsTable = ({
   dnsChecks: DomainDnsCheck[];
   records: DomainDnsRecord[];
 }) => (
-  <div className="squircle overflow-x-auto rounded-lg border border-border bg-bg/58">
+  <div className="squircle overflow-x-auto rounded-lg border border-border bg-bg-raised/58">
     <table
       aria-label="DNS records"
       className="w-full min-w-160 border-collapse p-2"
@@ -916,7 +916,7 @@ const DomainCatchAllPickerBody = ({
       {candidates.map((mailbox) => (
         <button
           className={cn(
-            "squircle flex w-full items-center justify-between gap-3 rounded-md border border-border bg-bg-elevated px-3 py-2 text-left transition-colors",
+            "squircle flex w-full items-center justify-between gap-3 rounded-md border border-border bg-bg px-3 py-2 text-left transition-colors",
             "hover:bg-muted/25",
             "active:scale-[0.99] motion-reduce:transition-none motion-reduce:active:scale-100",
             { "cursor-not-allowed opacity-50": setCatchAllMutation.isPending }

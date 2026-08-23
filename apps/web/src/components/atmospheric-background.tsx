@@ -229,12 +229,12 @@ void main() {
 }
 `;
 
-/** Matches dark `--bg-elevated` (oklch 0.145). */
-// sRGB channels for the app surface; its token is oklch(0.145) => #0a0a0a.
-const ELEVATED_RGB = [0.0392, 0.0392, 0.0392] as const;
+/** Matches dark `--bg` (oklch 0.145). */
+// sRGB channels for the app canvas; --bg is oklch(0.125) => #060606.
+const CANVAS_RGB = [0.0252, 0.0252, 0.0252] as const;
 const BLACK_RGB = [0, 0, 0] as const;
 
-type FadeTarget = "black" | "elevated";
+type FadeTarget = "black" | "canvas";
 
 type AtmosphericBackgroundProps = {
   className?: string;
@@ -253,7 +253,7 @@ type AtmosphericBackgroundProps = {
 };
 
 const fadeTargetRgb = (target: FadeTarget | undefined) =>
-  target === "elevated" ? ELEVATED_RGB : BLACK_RGB;
+  target === "canvas" ? CANVAS_RGB : BLACK_RGB;
 
 const f32 = Math.fround;
 
@@ -482,7 +482,7 @@ export const AtmosphericBackground = ({
 }: AtmosphericBackgroundProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [ready, setReady] = useState(false);
-  const underlay = fadeBottom === "elevated" ? "bg-bg-elevated" : "bg-black";
+  const underlay = fadeBottom === "canvas" ? "bg-bg" : "bg-black";
   const [session] = useReducer(
     (current: AtmosphericSession) => current,
     undefined,

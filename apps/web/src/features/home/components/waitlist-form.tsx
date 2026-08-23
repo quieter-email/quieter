@@ -106,7 +106,7 @@ export const WaitlistForm = ({
             autoCapitalize="none"
             autoComplete="email"
             autoCorrect="off"
-            className="bg-bg-elevated pr-11"
+            className="bg-bg pr-11"
             disabled={iconState === "loading"}
             id={fieldId}
             inputMode="email"
