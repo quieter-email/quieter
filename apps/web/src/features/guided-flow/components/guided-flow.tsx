@@ -10,7 +10,11 @@ import {
 } from "motion/react";
 import type { ReactNode } from "react";
 
-import { appEaseOut, appMotionDuration } from "#/features/motion/app-motion";
+import {
+  appEaseInOut,
+  appEaseOut,
+  appMotionDuration,
+} from "#/features/motion/app-motion";
 
 type GuidedFlowProps = {
   activeStep: string;
@@ -37,9 +41,12 @@ export const GuidedFlow = ({
 }: GuidedFlowProps) => {
   const reducedMotion = useReducedMotion();
   const isReduced = reducedMotion === true;
-  const stepOffset = direction === "forward" ? 48 : -48;
-  const enterX = isReduced ? 0 : stepOffset;
-  const exitX = isReduced ? 0 : -stepOffset;
+  const enterX = direction === "forward" ? "110%" : "-110%";
+  const exitX = direction === "forward" ? "-110%" : "110%";
+  const stepInitial = isReduced
+    ? { opacity: 0, x: 0 }
+    : { opacity: 1, x: enterX };
+  const stepExit = isReduced ? { opacity: 0, x: 0 } : { opacity: 1, x: exitX };
 
   return (
     <section
@@ -59,7 +66,7 @@ export const GuidedFlow = ({
           {previous}
         </aside>
 
-        <div className="relative flex min-h-[calc(100dvh-4rem)] min-w-0 items-center justify-center px-5 py-10 sm:px-8 sm:py-12 lg:px-12">
+        <div className="relative flex min-h-[calc(100dvh-4rem)] min-w-0 items-center justify-center overflow-hidden px-5 py-10 sm:px-8 sm:py-12 lg:px-12">
           {previous === undefined || previous === null ? null : (
             <div className="absolute top-4 left-3 sm:left-5 lg:hidden">
               {previous}
@@ -70,21 +77,14 @@ export const GuidedFlow = ({
               <m.div
                 animate={{ opacity: 1, x: 0 }}
                 className="w-full max-w-2xl"
-                exit={{
-                  opacity: 0,
-                  transition: {
-                    duration: appMotionDuration.feedback,
-                    ease: appEaseOut,
-                  },
-                  x: exitX,
-                }}
-                initial={{ opacity: 0, x: enterX }}
+                exit={stepExit}
+                initial={stepInitial}
                 key={activeStep}
                 transition={{
                   duration: isReduced
                     ? appMotionDuration.feedback
-                    : appMotionDuration.enter,
-                  ease: appEaseOut,
+                    : appMotionDuration.layout,
+                  ease: isReduced ? appEaseOut : appEaseInOut,
                 }}
               >
                 {children}
