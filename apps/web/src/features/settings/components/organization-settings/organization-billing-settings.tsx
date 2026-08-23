@@ -4,7 +4,6 @@ import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
-import { toast } from "@quieter/ui/toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import {
@@ -20,6 +19,7 @@ import {
   USER_BILLING_QUERY_KEY,
 } from "#/features/settings/domain/billing";
 import type { UserBillingOverview } from "#/features/settings/domain/billing";
+import { toastError } from "#/lib/error-toast";
 import { orpc } from "#/lib/orpc";
 
 export const OrganizationBillingSettings = ({
@@ -37,7 +37,10 @@ export const OrganizationBillingSettings = ({
   const checkoutMutation = useMutation({
     ...orpc.billing.createCheckout.mutationOptions(),
     onError: (error) => {
-      toast.error(error.message || "Could not start checkout.");
+      toastError(error, {
+        boundary: "billing",
+        fallback: "Could not start checkout.",
+      });
     },
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: USER_BILLING_QUERY_KEY });
@@ -47,7 +50,10 @@ export const OrganizationBillingSettings = ({
   const portalMutation = useMutation({
     ...orpc.billing.createPortal.mutationOptions(),
     onError: (error) => {
-      toast.error(error.message || "Could not open billing.");
+      toastError(error, {
+        boundary: "billing",
+        fallback: "Could not open billing.",
+      });
     },
     onSuccess: (result) => {
       window.location.assign(result.portalUrl);

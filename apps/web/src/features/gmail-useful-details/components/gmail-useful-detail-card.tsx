@@ -14,6 +14,7 @@ import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
+import { toastError } from "#/lib/error-toast";
 import { getGmailUsefulDetailsQueryKey } from "#/lib/gmail/useful-details-query";
 import { orpc } from "#/lib/orpc";
 
@@ -105,8 +106,11 @@ export const GmailUsefulDetailCard = ({
   const queryClient = useQueryClient();
   const feedbackMutation = useMutation({
     ...orpc.mail.setGmailUsefulDetailFeedback.mutationOptions(),
-    onError: () => {
-      toast.error("Could not save your preference.");
+    onError: (error) => {
+      toastError(error, {
+        boundary: "useful-details",
+        fallback: "Could not save your preference.",
+      });
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({

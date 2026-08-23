@@ -11,6 +11,25 @@ export const getErrorMessage = (error: unknown, fallback: string) =>
     ? error.message
     : fallback;
 
+/**
+ * Rethrows a client API failure so its HTTP status survives for toastError;
+ * plain Error conversions would otherwise downgrade every server message to
+ * the generic fallback.
+ */
+export const rethrowClassified = (
+  error: { message?: unknown; status?: unknown },
+  fallback: string
+): never => {
+  const message =
+    typeof error.message === "string" && error.message.trim() !== ""
+      ? error.message
+      : fallback;
+  throw Object.assign(
+    new Error(message),
+    typeof error.status === "number" ? { status: error.status } : {}
+  );
+};
+
 export const isMailboxScopeRepairRequiredError = (
   error: unknown
 ): error is Error & { data: MailboxScopeRepairRequiredErrorData } => {

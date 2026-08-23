@@ -40,7 +40,6 @@ import {
   getSettingsReturnTo,
   hasTrimmedDisplayName,
   runDetached,
-  showMutationError,
 } from "#/features/settings/components/mailboxes-settings-shared";
 import { organizationDivisionsQueryOptions } from "#/features/settings/components/organization-settings/divisions-query";
 import {
@@ -62,6 +61,7 @@ import {
 } from "#/features/settings/components/settings-layout";
 import { prefetchMailboxSettingsDetail } from "#/features/settings/components/settings-prefetch";
 import { authClient } from "#/lib/auth";
+import { toastError } from "#/lib/error-toast";
 import { openGoogleAccountLink } from "#/lib/google-account-link";
 import {
   getMailboxesQueryKey,
@@ -403,7 +403,12 @@ const AddMailboxDialog = ({
                 receiveWholeDomain,
               },
               {
-                onError: showMutationError("Could not create shared inbox."),
+                onError: (error) => {
+                  toastError(error, {
+                    boundary: "mailbox-settings",
+                    fallback: "Could not create shared inbox.",
+                  });
+                },
               }
             );
           }}
@@ -618,11 +623,10 @@ export const MailboxesListSettingsView = () => {
       });
     } catch (error) {
       setIsStartingGmail(false);
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Could not start Gmail connection."
-      );
+      toastError(error, {
+        boundary: "gmail-connect",
+        fallback: "Could not start Gmail connection.",
+      });
     }
   };
 

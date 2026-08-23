@@ -1,13 +1,10 @@
 import type { RouterOutputs } from "@quieter/orpc";
-import { toast } from "@quieter/ui/toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 
-import {
-  getSettingsReturnTo,
-  showMutationError,
-} from "#/features/settings/components/mailboxes-settings-shared";
+import { getSettingsReturnTo } from "#/features/settings/components/mailboxes-settings-shared";
+import { toastError } from "#/lib/error-toast";
 import { openGoogleAccountLink } from "#/lib/google-account-link";
 import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
 import { orpc } from "#/lib/orpc";
@@ -69,7 +66,7 @@ export const useMailboxDetailMutations = (
     failureMessage: string
   ) => ({
     onError: (
-      _error: unknown,
+      error: unknown,
       input: TInput,
       context:
         | {
@@ -83,7 +80,10 @@ export const useMailboxDetailMutations = (
         getManagedDetailsQueryKey(input.mailboxId),
         context?.previousDetails
       );
-      toast.error(failureMessage);
+      toastError(error, {
+        boundary: "mailbox-settings",
+        fallback: failureMessage,
+      });
     },
     onMutate: async (input: TInput) => {
       const detailsKey = getManagedDetailsQueryKey(input.mailboxId);
@@ -231,11 +231,10 @@ export const useMailboxDetailMutations = (
       });
     } catch (error) {
       setIsStartingGmail(false);
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Could not start Gmail connection."
-      );
+      toastError(error, {
+        boundary: "gmail-connect",
+        fallback: "Could not start Gmail connection.",
+      });
     }
   };
 
@@ -246,7 +245,14 @@ export const useMailboxDetailMutations = (
     const isDefault = nextMailboxId === defaultMailboxId;
     setDefaultMailboxMutation.mutate(
       { mailboxId: isDefault ? null : nextMailboxId },
-      { onError: showMutationError("Could not update default mailbox.") }
+      {
+        onError: (error) => {
+          toastError(error, {
+            boundary: "mailbox-settings",
+            fallback: "Could not update default mailbox.",
+          });
+        },
+      }
     );
   };
 

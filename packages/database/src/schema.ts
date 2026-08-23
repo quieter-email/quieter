@@ -275,6 +275,9 @@ export const userAiContext = pgTable(
     lastEditedAt: timestamp("lastEditedAt").notNull(),
     markdown: text("markdown").notNull(),
     revision: integer("revision").notNull().default(1),
+    searchFilterModel: text("searchFilterModel")
+      .notNull()
+      .default("google/gemini-3.5-flash-lite"),
     updatedAt: timestamp("updatedAt").notNull(),
     usefulDetailModel: text("usefulDetailModel")
       .notNull()

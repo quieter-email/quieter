@@ -6,11 +6,11 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { textToComposeBodyHtml } from "#/features/compose/domain/draft";
-import { showMutationError } from "#/features/settings/components/mailboxes-settings-shared";
 import {
   SettingsCard,
   SettingsSection,
 } from "#/features/settings/components/settings-layout";
+import { toastError } from "#/lib/error-toast";
 import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
 import { orpc } from "#/lib/orpc";
 
@@ -65,7 +65,12 @@ export const MailboxSignatureSettings = ({
                     signatureText: signatureText.trim() || null,
                   },
                   {
-                    onError: showMutationError("Could not save signature."),
+                    onError: (error) => {
+                      toastError(error, {
+                        boundary: "mailbox-settings",
+                        fallback: "Could not save signature.",
+                      });
+                    },
                   }
                 );
               }}
