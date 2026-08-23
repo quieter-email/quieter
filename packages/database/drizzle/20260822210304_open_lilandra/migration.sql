@@ -1,0 +1,1 @@
+ALTER TABLE "mailDomain" DROP CONSTRAINT "mailDomain_catchAllMailboxId_mailbox_id_fkey", ADD CONSTRAINT "mailDomain_catchAllMailboxId_mailbox_id_fkey" FOREIGN KEY ("catchAllMailboxId") REFERENCES "mailbox"("id") ON DELETE SET NULL;

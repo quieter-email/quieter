@@ -16,6 +16,7 @@ import {
   openConnectorLink,
 } from "#/lib/connectors-query";
 import type { ConnectorProvider } from "#/lib/connectors-query";
+import { toastError } from "#/lib/error-toast";
 import { orpc } from "#/lib/orpc";
 
 import {
@@ -97,11 +98,10 @@ export const ConnectorsSettingsPanel = () => {
       });
     } catch (connectionError) {
       setStartingProvider(null);
-      toast.error(
-        connectionError instanceof Error
-          ? connectionError.message
-          : "Could not start connector setup."
-      );
+      toastError(connectionError, {
+        boundary: "connectors",
+        fallback: "Could not start connector setup.",
+      });
     }
   };
 

@@ -10,7 +10,6 @@ import {
   DropdownMenuSubmenuContent,
   DropdownMenuSubmenuTrigger,
 } from "@quieter/ui/dropdown-menu";
-import { toast } from "@quieter/ui/toast";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import type { ReactNode } from "react";
@@ -24,6 +23,7 @@ import {
   getMessageLabelUpdates,
 } from "#/features/message-labels/domain/message-label-updates";
 import { getUserLabels } from "#/features/message-search/state/message-list-search-state";
+import { toastError } from "#/lib/error-toast";
 import { labelsQueryOptions } from "#/lib/gmail/labels-query";
 
 type MessageLabelsMenuItemsProps = {
@@ -57,11 +57,10 @@ const MessageLabelsMenuItems = ({
     try {
       await onApply(updates);
     } catch (error) {
-      toast.error(
-        error instanceof Error && error.message
-          ? error.message
-          : "Could not update labels."
-      );
+      toastError(error, {
+        boundary: "label-actions",
+        fallback: "Could not update labels.",
+      });
     }
   };
 

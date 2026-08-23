@@ -9,7 +9,14 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
+import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import { cn } from "@quieter/ui/cn";
+import {
+  Progress,
+  ProgressIndicator,
+  ProgressLabel,
+  ProgressTrack,
+} from "@quieter/ui/progress";
 import {
   Select,
   SelectContent,
@@ -26,7 +33,6 @@ import { useState } from "react";
 import {
   getSettingsReturnTo,
   runDetached,
-  showMutationError,
 } from "#/features/settings/components/mailboxes-settings-shared";
 import { organizationDivisionsQueryOptions } from "#/features/settings/components/organization-settings/divisions-query";
 import {
@@ -42,117 +48,12 @@ import {
   SettingsPageHeader,
 } from "#/features/settings/components/settings-layout";
 import { authClient } from "#/lib/auth";
+import { toastError } from "#/lib/error-toast";
 import { openGoogleAccountLink } from "#/lib/google-account-link";
 import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
 import { orpc } from "#/lib/orpc";
 
 type MailboxType = "gmail" | "shared";
-
-const SetupProgress = ({
-  currentStep,
-  steps,
-}: {
-  currentStep: number;
-  steps: readonly string[];
-}) => (
-  <ol aria-label="Mailbox setup progress" className="flex items-center gap-2">
-    {steps.map((step, index) => {
-      const stepNumber = index + 1;
-      const isCurrent = stepNumber === currentStep;
-      const isComplete = stepNumber < currentStep;
-
-      return (
-        <li
-          aria-current={isCurrent ? "step" : undefined}
-          className="flex min-w-0 flex-1 items-center gap-2"
-          key={step}
-        >
-          <span
-            className={cn(
-              "flex size-6 shrink-0 items-center justify-center rounded-full border text-micro tabular-nums",
-              {
-                "border-border bg-bg text-muted-fg": !isCurrent && !isComplete,
-                "border-border-strong bg-control-hover text-fg": isComplete,
-                "border-fg bg-fg text-bg": isCurrent,
-              }
-            )}
-          >
-            {stepNumber}
-          </span>
-          <span
-            className={cn("truncate text-caption", {
-              "text-fg": isCurrent,
-              "text-muted-fg": !isCurrent,
-            })}
-          >
-            {step}
-          </span>
-          {stepNumber < steps.length ? (
-            <span aria-hidden className="h-px min-w-3 flex-1 bg-border" />
-          ) : null}
-        </li>
-      );
-    })}
-  </ol>
-);
-
-const MailboxTypeChoice = ({
-  onSelect,
-}: {
-  onSelect: (type: MailboxType) => void;
-}) => (
-  <SettingsCard className="bg-bg p-3">
-    <div className="grid gap-3 @md:grid-cols-2">
-      <button
-        className="squircle group flex min-h-40 flex-col items-start rounded-lg border border-border bg-bg p-5 text-left transition-colors hover:border-border-strong hover:bg-control-hover focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none"
-        onClick={() => {
-          onSelect("gmail");
-        }}
-        type="button"
-      >
-        <span className="squircle flex size-10 items-center justify-center rounded-md border border-border bg-bg text-fg">
-          <HugeiconsIcon aria-hidden className="size-5" icon={Mail01Icon} />
-        </span>
-        <span className="mt-5 text-body-sm text-fg">My Gmail account</span>
-        <span className="mt-1 text-caption/5 text-muted-fg">
-          Connect your own inbox. Only you can read and send mail from it.
-        </span>
-        <span className="mt-auto flex items-center gap-1.5 pt-5 text-caption text-fg">
-          Choose Gmail
-          <HugeiconsIcon
-            aria-hidden
-            className="size-3.5 transition-transform group-hover:translate-x-0.5"
-            icon={ArrowRight01Icon}
-          />
-        </span>
-      </button>
-
-      <button
-        className="squircle group flex min-h-40 flex-col items-start rounded-lg border border-border bg-bg p-5 text-left transition-colors hover:border-border-strong hover:bg-control-hover focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none"
-        onClick={() => {
-          onSelect("shared");
-        }}
-        type="button"
-      >
-        <span className="squircle flex size-10 items-center justify-center rounded-md border border-border bg-bg text-fg">
-          <HugeiconsIcon aria-hidden className="size-5" icon={UserGroupIcon} />
-        </span>
-        <span className="mt-5 text-body-sm text-fg">Shared team inbox</span>
-        <span className="mt-1 text-caption/5 text-muted-fg">
-          Create an address such as support@ that teammates can work from.
-        </span>
-        <span className="mt-auto flex items-center gap-1.5 pt-5 text-caption text-fg">
-          Choose shared inbox
-          <HugeiconsIcon
-            aria-hidden
-            className="size-3.5 transition-transform group-hover:translate-x-0.5"
-            icon={ArrowRight01Icon}
-          />
-        </span>
-      </button>
-    </div>
-  </SettingsCard>
-);
 
 export const AddMailboxSettingsView = () => {
   const navigate = useNavigate({ from: "/settings" });
@@ -169,6 +70,7 @@ export const AddMailboxSettingsView = () => {
   );
   const [managedLocalPart, setManagedLocalPart] = useState("");
   const [managedDomain, setManagedDomain] = useState<string>();
+  const [receiveWholeDomain, setReceiveWholeDomain] = useState(false);
   const [isStartingGmail, setIsStartingGmail] = useState(false);
   const selectedManagedOrganizationId =
     managedOrganizationId || organizations[0]?.id || "";
@@ -228,7 +130,11 @@ export const AddMailboxSettingsView = () => {
       await queryClient.invalidateQueries({
         queryKey: getMailboxesQueryKey(),
       });
-      toast.success("Shared inbox created.");
+      toast.success(
+        receiveWholeDomain
+          ? "Whole-domain shared inbox created."
+          : "Shared inbox created."
+      );
       await navigateToMailbox(mailboxId);
     },
   });
@@ -243,24 +149,20 @@ export const AddMailboxSettingsView = () => {
       });
     } catch (error) {
       setIsStartingGmail(false);
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Could not start Gmail connection."
-      );
+      toastError(error, {
+        boundary: "gmail-connect",
+        fallback: "Could not start Gmail connection.",
+      });
     }
   };
 
-  const selectMailboxType = (type: MailboxType) => {
-    setMailboxType(type);
-    setIsSharedDetailsVisible(false);
-  };
   const resetMailboxType = () => {
     setMailboxType(undefined);
     setIsSharedDetailsVisible(false);
   };
   const sharedSteps = ["Mailbox type", "Team", "Address"] as const;
   const gmailSteps = ["Mailbox type", "Connect"] as const;
+  const steps = isSharedFlow ? sharedSteps : gmailSteps;
   let currentStep = 1;
   if (mailboxType !== undefined) {
     currentStep = isSharedDetailsVisible ? 3 : 2;
@@ -273,13 +175,84 @@ export const AddMailboxSettingsView = () => {
         needs.
       </SettingsPageHeader>
 
-      <SetupProgress
-        currentStep={currentStep}
-        steps={isSharedFlow ? sharedSteps : gmailSteps}
-      />
+      <Progress max={steps.length} value={currentStep}>
+        <div className="flex items-center justify-between gap-4">
+          <ProgressLabel className="text-caption font-normal text-muted-fg">
+            Step {currentStep} of {steps.length}
+          </ProgressLabel>
+          <span className="text-caption text-fg">{steps[currentStep - 1]}</span>
+        </div>
+        <ProgressTrack className="h-1.5 bg-control-hover">
+          <ProgressIndicator className="bg-fg" />
+        </ProgressTrack>
+      </Progress>
 
       {mailboxType === undefined ? (
-        <MailboxTypeChoice onSelect={selectMailboxType} />
+        <SettingsCard className="bg-bg p-3">
+          <div className="grid gap-3 @md:grid-cols-2">
+            <Button
+              className="group h-auto min-h-40 w-full flex-col items-start justify-start rounded-lg bg-bg p-5 text-left whitespace-normal hover:border-border-strong hover:bg-control-hover"
+              onClick={() => {
+                setMailboxType("gmail");
+                setIsSharedDetailsVisible(false);
+              }}
+              variant="outline"
+            >
+              <span className="squircle flex size-10 items-center justify-center rounded-md border border-border bg-bg text-fg">
+                <HugeiconsIcon
+                  aria-hidden
+                  className="size-5"
+                  icon={Mail01Icon}
+                />
+              </span>
+              <span className="mt-5 text-body-sm text-fg">
+                My Gmail account
+              </span>
+              <span className="mt-1 text-caption/5 text-muted-fg">
+                Connect your own inbox. Only you can read and send mail from it.
+              </span>
+              <span className="mt-auto flex items-center gap-1.5 pt-5 text-caption text-fg">
+                Choose Gmail
+                <HugeiconsIcon
+                  aria-hidden
+                  className="size-3.5 transition-transform group-hover:translate-x-0.5"
+                  icon={ArrowRight01Icon}
+                />
+              </span>
+            </Button>
+
+            <Button
+              className="group h-auto min-h-40 w-full flex-col items-start justify-start rounded-lg bg-bg p-5 text-left whitespace-normal hover:border-border-strong hover:bg-control-hover"
+              onClick={() => {
+                setMailboxType("shared");
+                setIsSharedDetailsVisible(false);
+              }}
+              variant="outline"
+            >
+              <span className="squircle flex size-10 items-center justify-center rounded-md border border-border bg-bg text-fg">
+                <HugeiconsIcon
+                  aria-hidden
+                  className="size-5"
+                  icon={UserGroupIcon}
+                />
+              </span>
+              <span className="mt-5 text-body-sm text-fg">
+                Shared team inbox
+              </span>
+              <span className="mt-1 text-caption/5 text-muted-fg">
+                Create an address such as support@ that teammates can work from.
+              </span>
+              <span className="mt-auto flex items-center gap-1.5 pt-5 text-caption text-fg">
+                Choose shared inbox
+                <HugeiconsIcon
+                  aria-hidden
+                  className="size-3.5 transition-transform group-hover:translate-x-0.5"
+                  icon={ArrowRight01Icon}
+                />
+              </span>
+            </Button>
+          </div>
+        </SettingsCard>
       ) : null}
 
       {mailboxType === "gmail" ? (
@@ -316,11 +289,7 @@ export const AddMailboxSettingsView = () => {
                 }}
                 value={gmailOrganizationId || organizations[0]?.id}
               >
-                <SelectTrigger
-                  aria-label="Gmail mailbox team"
-                  className="bg-bg"
-                  id="gmail-team"
-                >
+                <SelectTrigger aria-label="Gmail mailbox team" id="gmail-team">
                   <SelectValue placeholder="Select team" />
                 </SelectTrigger>
                 <SelectContent align="start">
@@ -394,14 +363,11 @@ export const AddMailboxSettingsView = () => {
                   setManagedOrganizationId(value ?? "");
                   setManagedDomain(undefined);
                   setManagedDivisionId(null);
+                  setReceiveWholeDomain(false);
                 }}
                 value={selectedManagedOrganizationId || null}
               >
-                <SelectTrigger
-                  aria-label="Shared inbox team"
-                  className="bg-bg"
-                  id="shared-team"
-                >
+                <SelectTrigger aria-label="Shared inbox team" id="shared-team">
                   <SelectValue placeholder="Select team" />
                 </SelectTrigger>
                 <SelectContent align="start">
@@ -579,7 +545,7 @@ export const AddMailboxSettingsView = () => {
                   }}
                   value={managedDivisionId ?? "none"}
                 >
-                  <SelectTrigger className="bg-bg" id="division">
+                  <SelectTrigger id="division">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent align="start">
@@ -595,6 +561,36 @@ export const AddMailboxSettingsView = () => {
                   Optional. A division helps organize access for larger teams.
                 </p>
               </div>
+
+              {selectedDomain === "" ? null : (
+                <label
+                  className="squircle flex cursor-pointer items-start gap-2.5 rounded-md border border-border bg-bg px-3 py-2.5 transition-colors hover:bg-control-hover"
+                  htmlFor="managed-mailbox-whole-domain"
+                >
+                  <Checkbox
+                    checked={receiveWholeDomain}
+                    className="mt-0.5"
+                    id="managed-mailbox-whole-domain"
+                    onCheckedChange={(checked) => {
+                      if (typeof checked === "boolean") {
+                        setReceiveWholeDomain(checked);
+                      }
+                    }}
+                  >
+                    <CheckboxIndicator />
+                  </Checkbox>
+                  <span className="min-w-0">
+                    <span className="block text-body text-fg">
+                      Receive mail for any address at {selectedDomain}
+                    </span>
+                    <span className="mt-0.5 block text-caption/5 text-muted-fg">
+                      Exact shared inboxes keep priority. Mail for every other
+                      recipient lands here, while replies still send from this
+                      inbox address.
+                    </span>
+                  </span>
+                </label>
+              )}
 
               {createManagedMailboxMutation.isError ? (
                 <p className="text-body text-destructive">
@@ -614,11 +610,15 @@ export const AddMailboxSettingsView = () => {
                       divisionId: managedDivisionId,
                       emailAddress: `${trimmedLocalPart}@${selectedDomain}`,
                       organizationId: selectedManagedOrganizationId,
+                      receiveWholeDomain,
                     },
                     {
-                      onError: showMutationError(
-                        "Could not create shared inbox."
-                      ),
+                      onError: (error) => {
+                        toastError(error, {
+                          boundary: "mailbox-settings",
+                          fallback: "Could not create shared inbox.",
+                        });
+                      },
                     }
                   );
                 }}
