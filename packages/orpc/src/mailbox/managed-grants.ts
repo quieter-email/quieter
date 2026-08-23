@@ -13,7 +13,7 @@ import {
   organizationDivision,
   user,
 } from "@quieter/database/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 import { assertOrganizationManager } from "../organization/divisions";
 import { hasText } from "../text";
@@ -88,6 +88,7 @@ export const createManagedMailbox = async (input: {
   emailAddress: string;
   includeApiSentMessages?: boolean;
   organizationId: string;
+  receiveWholeDomain?: boolean;
   userId: string;
 }) => {
   await assertOrganizationManager({
@@ -100,28 +101,29 @@ export const createManagedMailbox = async (input: {
   );
   const emailAddress = normalizeEmailAddress(input.emailAddress);
   const domain = emailAddress.split("@")[1] ?? "";
-  const [receivingDomain] = await db
-    .select({ id: mailDomain.id })
-    .from(mailDomain)
-    .where(
-      and(
-        eq(mailDomain.domain, domain),
-        eq(mailDomain.organizationId, input.organizationId),
-        eq(mailDomain.status, "verified"),
-        eq(mailDomain.mode, "send_and_receive")
-      )
-    )
-    .limit(1);
-  if (receivingDomain === undefined) {
-    throw new ORPCError("BAD_REQUEST", {
-      message:
-        "Shared inboxes require a verified domain with incoming mail enabled.",
-    });
-  }
-
   const mailboxId = randomUUID();
   const now = new Date();
   await db.transaction(async (tx) => {
+    const [receivingDomain] = await tx
+      .select({ id: mailDomain.id })
+      .from(mailDomain)
+      .where(
+        and(
+          eq(mailDomain.domain, domain),
+          eq(mailDomain.organizationId, input.organizationId),
+          eq(mailDomain.status, "verified"),
+          eq(mailDomain.mode, "send_and_receive")
+        )
+      )
+      .limit(1)
+      .for("update");
+    if (receivingDomain === undefined) {
+      throw new ORPCError("BAD_REQUEST", {
+        message:
+          "Shared inboxes require a verified domain with incoming mail enabled.",
+      });
+    }
+
     await tx.insert(mailbox).values({
       createdAt: now,
       displayName: hasText(input.displayName) ? input.displayName.trim() : null,
@@ -143,6 +145,27 @@ export const createManagedMailbox = async (input: {
       updatedAt: now,
       userId: input.userId,
     });
+    if (input.receiveWholeDomain === true) {
+      const [claimedDomain] = await tx
+        .update(mailDomain)
+        .set({ catchAllMailboxId: mailboxId, updatedAt: now })
+        .where(
+          and(
+            eq(mailDomain.id, receivingDomain.id),
+            eq(mailDomain.organizationId, input.organizationId),
+            eq(mailDomain.mode, "send_and_receive"),
+            eq(mailDomain.status, "verified"),
+            isNull(mailDomain.catchAllMailboxId)
+          )
+        )
+        .returning({ id: mailDomain.id });
+      if (claimedDomain === undefined) {
+        throw new ORPCError("CONFLICT", {
+          message:
+            "Incoming mail is no longer available for this domain, or another shared inbox already receives every address. Refresh and try again.",
+        });
+      }
+    }
   });
   return { mailboxId };
 };
@@ -180,6 +203,7 @@ export const listManagedMailboxAdministration = async (input: {
   await assertOrganizationManager(input);
   const rows = await db
     .select({
+      catchAllDomain: mailDomain.domain,
       directRole: mailboxGrant.role,
       directUserId: mailboxGrant.userId,
       displayName: mailbox.displayName,
@@ -202,6 +226,7 @@ export const listManagedMailboxAdministration = async (input: {
       mailboxDivisionGrant,
       eq(mailboxDivisionGrant.mailboxId, mailbox.id)
     )
+    .leftJoin(mailDomain, eq(mailDomain.catchAllMailboxId, mailbox.id))
     .where(
       and(
         eq(mailbox.organizationId, input.organizationId),
@@ -212,6 +237,7 @@ export const listManagedMailboxAdministration = async (input: {
   const mailboxes = new Map<
     string,
     {
+      catchAllDomain: string | null;
       directGrantCount: number;
       directGrantIds: Set<string>;
       displayName: string | null;
@@ -229,6 +255,7 @@ export const listManagedMailboxAdministration = async (input: {
 
   for (const row of rows) {
     const record = mailboxes.get(row.id) ?? {
+      catchAllDomain: row.catchAllDomain ?? null,
       directGrantCount: 0,
       directGrantIds: new Set<string>(),
       displayName: row.displayName,
@@ -291,40 +318,46 @@ export const getManagedMailboxDetails = async (input: {
     input.mailboxId,
     input.userId
   );
-  const [directGrants, divisionGrants, selectedDivision] = await Promise.all([
-    db
-      .select({
-        email: user.email,
-        name: user.name,
-        role: mailboxGrant.role,
-        userId: user.id,
-      })
-      .from(mailboxGrant)
-      .innerJoin(user, eq(user.id, mailboxGrant.userId))
-      .where(eq(mailboxGrant.mailboxId, input.mailboxId)),
-    db
-      .select({
-        divisionId: organizationDivision.id,
-        divisionName: organizationDivision.name,
-        role: mailboxDivisionGrant.role,
-      })
-      .from(mailboxDivisionGrant)
-      .innerJoin(
-        organizationDivision,
-        eq(organizationDivision.id, mailboxDivisionGrant.divisionId)
-      )
-      .where(eq(mailboxDivisionGrant.mailboxId, input.mailboxId)),
-    selectedMailbox.divisionId === null
-      ? Promise.resolve([])
-      : db
-          .select({
-            id: organizationDivision.id,
-            name: organizationDivision.name,
-          })
-          .from(organizationDivision)
-          .where(eq(organizationDivision.id, selectedMailbox.divisionId))
-          .limit(1),
-  ]);
+  const [directGrants, divisionGrants, selectedDivision, catchAllDomain] =
+    await Promise.all([
+      db
+        .select({
+          email: user.email,
+          name: user.name,
+          role: mailboxGrant.role,
+          userId: user.id,
+        })
+        .from(mailboxGrant)
+        .innerJoin(user, eq(user.id, mailboxGrant.userId))
+        .where(eq(mailboxGrant.mailboxId, input.mailboxId)),
+      db
+        .select({
+          divisionId: organizationDivision.id,
+          divisionName: organizationDivision.name,
+          role: mailboxDivisionGrant.role,
+        })
+        .from(mailboxDivisionGrant)
+        .innerJoin(
+          organizationDivision,
+          eq(organizationDivision.id, mailboxDivisionGrant.divisionId)
+        )
+        .where(eq(mailboxDivisionGrant.mailboxId, input.mailboxId)),
+      selectedMailbox.divisionId === null
+        ? Promise.resolve([])
+        : db
+            .select({
+              id: organizationDivision.id,
+              name: organizationDivision.name,
+            })
+            .from(organizationDivision)
+            .where(eq(organizationDivision.id, selectedMailbox.divisionId))
+            .limit(1),
+      db
+        .select({ domain: mailDomain.domain })
+        .from(mailDomain)
+        .where(eq(mailDomain.catchAllMailboxId, input.mailboxId))
+        .limit(1),
+    ]);
 
   return {
     directGrants,
@@ -332,6 +365,7 @@ export const getManagedMailboxDetails = async (input: {
     mailbox: {
       ...selectedMailbox,
       autoLabelEnabled: selectedMailbox.autoLabelEnabled ?? false,
+      catchAllDomain: catchAllDomain[0]?.domain ?? null,
       divisionName: selectedDivision[0]?.name ?? null,
       includeApiSentMessages: selectedMailbox.includeApiSentMessages,
       usefulDetailsEnabled: selectedMailbox.usefulDetailsEnabled ?? false,

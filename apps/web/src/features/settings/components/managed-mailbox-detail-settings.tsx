@@ -30,6 +30,7 @@ type ManagedMailboxDetails = {
   divisionGrants: { divisionId: string; role: MailboxGrantRole }[];
   mailbox: {
     autoLabelEnabled: boolean;
+    catchAllDomain: string | null;
     displayName: string | null;
     divisionId: string | null;
     includeApiSentMessages: boolean;
@@ -240,6 +241,28 @@ export const ManagedMailboxDetailSettings = ({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div
+              className={cn(
+                settingsSurfaceVariants({ variant: "insetRow" }),
+                "gap-4"
+              )}
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block text-body text-fg">
+                  Whole-domain delivery
+                </span>
+                <span className="mt-0.5 block text-caption/5 text-muted-fg">
+                  {details.mailbox.catchAllDomain === null
+                    ? "Receives mail addressed to this inbox only."
+                    : `Also receives mail addressed to any address at ${details.mailbox.catchAllDomain}. Exact shared inboxes keep priority.`}
+                </span>
+              </span>
+              <span className="shrink-0 text-caption text-muted-fg">
+                {details.mailbox.catchAllDomain === null
+                  ? "Off"
+                  : `*@${details.mailbox.catchAllDomain}`}
+              </span>
             </div>
             <label
               className={cn(

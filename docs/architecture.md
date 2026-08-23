@@ -108,7 +108,7 @@ Inbound:
 
 1. SES stores the raw message in S3.
 2. SNS invokes the receipt processor.
-3. The processor parses the MIME message and writes one row per exact managed recipient.
+3. The processor parses the MIME message and writes one row per exact managed recipient. Recipients that match no exact inbox fall through to the domain's whole-domain (catch-all) inbox when one is configured; one delivered message never produces duplicate rows for the same mailbox.
 4. Untracked S3 objects are deleted.
 
 Outbound:
