@@ -129,6 +129,39 @@ const PlaybookCard = ({
   </section>
 );
 
+const TermsConsent = ({
+  accepted,
+  onAcceptedChange,
+}: {
+  accepted: boolean;
+  onAcceptedChange: (next: boolean) => void;
+}) => (
+  <label
+    className="flex items-start gap-3 text-body-sm text-muted-fg"
+    htmlFor="onboarding-terms"
+  >
+    <Checkbox
+      checked={accepted}
+      className="mt-0.5"
+      id="onboarding-terms"
+      onCheckedChange={onAcceptedChange}
+    >
+      <CheckboxIndicator />
+    </Checkbox>
+    <span>
+      I agree to the{" "}
+      <Link className="text-fg underline" target="_blank" to="/terms">
+        Terms of Service
+      </Link>{" "}
+      and{" "}
+      <Link className="text-fg underline" target="_blank" to="/privacy">
+        Privacy Policy
+      </Link>
+      .
+    </span>
+  </label>
+);
+
 const DomainStatusNote = ({ count }: { count: number }) => (
   <p className="flex items-center gap-2 text-body-sm text-muted-fg">
     <HugeiconsIcon
@@ -606,7 +639,10 @@ export const OnboardingScreen = () => {
     });
 
   const activeStep = step === 1 ? "onboarding-intents" : "onboarding-playbooks";
-  const steps = ["About you", "Setup"] as const;
+  const isSingleStep = selectedIntents.length === 0;
+  const steps = isSingleStep
+    ? (["About you"] as const)
+    : (["About you", "Setup"] as const);
 
   return (
     <GuidedFlow
@@ -708,7 +744,12 @@ export const OnboardingScreen = () => {
               />
             </Field>
             <Field>
-              <FieldLabel htmlFor="onboarding-team">Team</FieldLabel>
+              <FieldLabel htmlFor="onboarding-team">
+                Team{" "}
+                <span className="text-micro font-normal text-muted-fg">
+                  Optional
+                </span>
+              </FieldLabel>
               <Input
                 id="onboarding-team"
                 onChange={(event) => {
@@ -719,9 +760,6 @@ export const OnboardingScreen = () => {
                 }
                 value={teamName}
               />
-              <p className="text-micro text-muted-fg">
-                Optional. Teams hold your mailboxes and billing.
-              </p>
             </Field>
           </m.div>
 
@@ -768,19 +806,44 @@ export const OnboardingScreen = () => {
           </m.fieldset>
 
           <m.div
-            className="mt-10 flex justify-end"
+            className="mt-10 space-y-4"
             {...getAppFlyInMotion({ animate: true, index: 3, reducedMotion })}
           >
-            <Button
-              disabled={!canContinue}
-              onClick={() => {
-                setDirection("forward");
-                setStep(2);
-              }}
-            >
-              Continue
-              <HugeiconsIcon aria-hidden icon={ArrowRight01Icon} />
-            </Button>
+            {isSingleStep && state?.hasAcceptedTerms === false ? (
+              <TermsConsent
+                accepted={termsAccepted}
+                onAcceptedChange={setTermsAccepted}
+              />
+            ) : null}
+            <div className="flex justify-end">
+              {isSingleStep ? (
+                <Button
+                  disabled={!canFinish}
+                  onClick={() => {
+                    completeMutation.mutate({
+                      acceptedTerms: true,
+                      name: name.trim(),
+                      teamName: teamName.trim() || undefined,
+                    });
+                  }}
+                  pending={completeMutation.isPending}
+                  pendingLabel="Setting up…"
+                >
+                  Finish
+                </Button>
+              ) : (
+                <Button
+                  disabled={!canContinue}
+                  onClick={() => {
+                    setDirection("forward");
+                    setStep(2);
+                  }}
+                >
+                  Continue
+                  <HugeiconsIcon aria-hidden icon={ArrowRight01Icon} />
+                </Button>
+              )}
+            </div>
           </m.div>
         </div>
       ) : (
@@ -804,38 +867,10 @@ export const OnboardingScreen = () => {
 
           <div className="mt-10 space-y-4">
             {state?.hasAcceptedTerms === false ? (
-              <label
-                className="flex items-start gap-3 text-body-sm text-muted-fg"
-                htmlFor="onboarding-terms"
-              >
-                <Checkbox
-                  checked={termsAccepted}
-                  className="mt-0.5"
-                  id="onboarding-terms"
-                  onCheckedChange={setTermsAccepted}
-                >
-                  <CheckboxIndicator />
-                </Checkbox>
-                <span>
-                  I agree to the{" "}
-                  <Link
-                    className="text-fg underline"
-                    target="_blank"
-                    to="/terms"
-                  >
-                    Terms of Service
-                  </Link>{" "}
-                  and{" "}
-                  <Link
-                    className="text-fg underline"
-                    target="_blank"
-                    to="/privacy"
-                  >
-                    Privacy Policy
-                  </Link>
-                  .
-                </span>
-              </label>
+              <TermsConsent
+                accepted={termsAccepted}
+                onAcceptedChange={setTermsAccepted}
+              />
             ) : null}
 
             {hasAnySetup ? null : (
