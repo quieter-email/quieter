@@ -4,7 +4,6 @@ import {
   ArrowLeft01Icon,
   ArrowRight01Icon,
   Mail01Icon,
-  UserGroupIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
@@ -257,18 +256,13 @@ export const AddMailboxSettingsView = () => {
       {mailboxType === undefined ? (
         <div>
           <header className="mx-auto max-w-xl text-center">
-            <p className="text-caption text-muted-fg">Mailbox type</p>
-            <h1 className="mt-2 text-title-md font-medium tracking-tight text-fg">
-              What would you like to add?
+            <h1 className="text-title-md font-medium tracking-tight text-fg">
+              Add a mailbox
             </h1>
-            <p className="mx-auto mt-3 max-w-md text-body/6 text-muted-fg">
-              Choose a personal Gmail account or create an inbox your team can
-              share.
-            </p>
           </header>
           <div className="mt-9 grid gap-3 sm:grid-cols-2">
             <Button
-              className="group h-auto min-h-44 w-full flex-col items-start justify-start rounded-xl bg-bg-surface p-6 text-left whitespace-normal hover:border-border-strong hover:bg-control-hover"
+              className="group h-auto min-h-32 w-full flex-col items-start justify-start rounded-xl bg-bg-surface p-6 text-left whitespace-normal hover:border-border-strong hover:bg-control-hover"
               onClick={() => {
                 workflowStore.setState((state) => ({
                   ...state,
@@ -279,21 +273,11 @@ export const AddMailboxSettingsView = () => {
               }}
               variant="outline"
             >
-              <span className="squircle flex size-10 items-center justify-center rounded-md border border-border bg-bg text-fg">
-                <HugeiconsIcon
-                  aria-hidden
-                  className="size-5"
-                  icon={Mail01Icon}
-                />
+              <span className="text-body-sm font-medium text-fg">Gmail</span>
+              <span className="mt-1 text-caption text-muted-fg">
+                Private to you
               </span>
-              <span className="mt-5 text-body-sm text-fg">
-                My Gmail account
-              </span>
-              <span className="mt-1 text-caption/5 text-muted-fg">
-                Connect your own inbox. Only you can read and send mail from it.
-              </span>
-              <span className="mt-auto flex items-center gap-1.5 pt-5 text-caption text-fg">
-                Choose Gmail
+              <span className="mt-auto flex pt-6 text-fg">
                 <HugeiconsIcon
                   aria-hidden
                   className="size-3.5 transition-transform group-hover:translate-x-0.5"
@@ -303,7 +287,7 @@ export const AddMailboxSettingsView = () => {
             </Button>
 
             <Button
-              className="group h-auto min-h-44 w-full flex-col items-start justify-start rounded-xl bg-bg-surface p-6 text-left whitespace-normal hover:border-border-strong hover:bg-control-hover"
+              className="group h-auto min-h-32 w-full flex-col items-start justify-start rounded-xl bg-bg-surface p-6 text-left whitespace-normal hover:border-border-strong hover:bg-control-hover"
               onClick={() => {
                 workflowStore.setState((state) => ({
                   ...state,
@@ -314,21 +298,13 @@ export const AddMailboxSettingsView = () => {
               }}
               variant="outline"
             >
-              <span className="squircle flex size-10 items-center justify-center rounded-md border border-border bg-bg text-fg">
-                <HugeiconsIcon
-                  aria-hidden
-                  className="size-5"
-                  icon={UserGroupIcon}
-                />
+              <span className="text-body-sm font-medium text-fg">
+                Shared inbox
               </span>
-              <span className="mt-5 text-body-sm text-fg">
-                Shared team inbox
+              <span className="mt-1 text-caption text-muted-fg">
+                Team address like support@
               </span>
-              <span className="mt-1 text-caption/5 text-muted-fg">
-                Create an address such as support@ that teammates can work from.
-              </span>
-              <span className="mt-auto flex items-center gap-1.5 pt-5 text-caption text-fg">
-                Choose shared inbox
+              <span className="mt-auto flex pt-6 text-fg">
                 <HugeiconsIcon
                   aria-hidden
                   className="size-3.5 transition-transform group-hover:translate-x-0.5"
