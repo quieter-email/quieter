@@ -39,6 +39,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -47,6 +48,7 @@ import { GoogleLogo } from "#/components/google-logo";
 import { GuidedFlow } from "#/features/guided-flow/components/guided-flow";
 import { getAppFlyInMotion } from "#/features/motion/app-motion";
 import {
+  isOnboardingIntentId,
   loadStoredOnboardingIntents,
   ONBOARDING_INTENT_OPTIONS,
   storeOnboardingIntents,
@@ -519,8 +521,14 @@ const CustomInboxPlaybook = ({
 };
 
 export const OnboardingScreen = () => {
-  const { gmailLink, returnTo } = onboardingRouteApi.useSearch();
+  const {
+    gmailLink,
+    intents: intentsParam,
+    returnTo,
+    step: stepParam,
+  } = onboardingRouteApi.useSearch();
   const navigate = useNavigate();
+  const routeNavigate = onboardingRouteApi.useNavigate();
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [teamName, setTeamName] = useState("");
@@ -541,12 +549,40 @@ export const OnboardingScreen = () => {
   });
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [isConnectingGmail, setIsConnectingGmail] = useState(false);
-  const [step, setStep] = useState<1 | 2>(1);
   const [direction, setDirection] = useState<"back" | "forward">("forward");
-  const [selectedIntents, setSelectedIntents] = useState<OnboardingIntentId[]>(
-    []
+  const step: 1 | 2 = stepParam === 2 ? 2 : 1;
+  const selectedIntents = useMemo(
+    () =>
+      (intentsParam ?? "")
+        .split(",")
+        .filter((value): value is OnboardingIntentId =>
+          isOnboardingIntentId(value)
+        ),
+    [intentsParam]
   );
+  const setSelectedIntents = useCallback(
+    (next: OnboardingIntentId[]) => {
+      void routeNavigate({
+        replace: true,
+        search: (previous) => ({
+          ...previous,
+          intents: next.length > 0 ? next.join(",") : undefined,
+        }),
+        to: ".",
+      });
+    },
+    [routeNavigate]
+  );
+  const setStep = (next: 1 | 2) => {
+    void routeNavigate({
+      replace: true,
+      search: (previous) => ({ ...previous, step: next }),
+      to: ".",
+    });
+  };
   const hydratedEmailRef = useRef<string | null>(null);
+  // Captured once so the ugly encoded value can leave the address bar.
+  const returnToRef = useRef<string | null>(null);
   const autoStartedGmailRef = useRef(false);
 
   const { data: state } = useQuery(orpc.onboarding.getState.queryOptions());
@@ -560,7 +596,7 @@ export const OnboardingScreen = () => {
     },
     onSuccess: async () => {
       queryClient.clear();
-      await navigate({ to: returnTo ?? "/" });
+      await navigate({ to: returnToRef.current ?? "/" });
     },
   });
   const createMailboxMutation = useMutation({
@@ -588,10 +624,26 @@ export const OnboardingScreen = () => {
       return;
     }
     hydratedEmailRef.current = email;
-    setSelectedIntents(
-      loadStoredOnboardingIntents(globalThis.localStorage, email)
-    );
-  }, [email]);
+    if (intentsParam !== undefined) {
+      return;
+    }
+    const stored = loadStoredOnboardingIntents(globalThis.localStorage, email);
+    if (stored.length > 0) {
+      setSelectedIntents(stored);
+    }
+  }, [email, intentsParam, setSelectedIntents]);
+
+  useEffect(() => {
+    if (returnTo === undefined) {
+      return;
+    }
+    returnToRef.current = returnTo;
+    void routeNavigate({
+      replace: true,
+      search: (previous) => ({ ...previous, returnTo: undefined }),
+      to: ".",
+    });
+  }, [returnTo, routeNavigate]);
 
   useEffect(() => {
     if (email === undefined || hydratedEmailRef.current !== email) {
@@ -667,10 +719,10 @@ export const OnboardingScreen = () => {
   }, [connectGmail, gmailLink, isGmailConnected, navigate, organizationId]);
 
   const toggleIntent = (intent: OnboardingIntentId) => {
-    setSelectedIntents((previous) =>
-      previous.includes(intent)
-        ? previous.filter((value) => value !== intent)
-        : [...previous, intent]
+    setSelectedIntents(
+      selectedIntents.includes(intent)
+        ? selectedIntents.filter((value) => value !== intent)
+        : [...selectedIntents, intent]
     );
   };
 

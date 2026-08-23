@@ -41,10 +41,14 @@ export const Route = createFileRoute("/onboarding")({
       gmailLink: z
         .union([z.literal("complete"), z.literal("start")])
         .optional(),
+      // Flow state lives in the URL so a round trip through Google or a
+      // reload resumes where the person left off.
+      intents: z.string().optional(),
       returnTo: z
         .string()
         .optional()
         .transform((returnTo) => getSafeAuthReturnTo(returnTo)),
+      step: z.coerce.number().int().min(1).max(2).optional(),
     })
   ),
 });
