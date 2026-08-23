@@ -245,6 +245,92 @@ const ingestManagedMessageForMailbox = async (input: {
   return null;
 };
 
+const isValidInboundRecipient = (recipient: string) => {
+  const separatorIndex = recipient.indexOf("@");
+  return (
+    separatorIndex > 0 &&
+    separatorIndex < recipient.length - 1 &&
+    !recipient.slice(separatorIndex + 1).includes("@") &&
+    !/\s/u.test(recipient)
+  );
+};
+
+export const resolveInboundManagedTargetMailboxIds = async (
+  recipients: string[]
+): Promise<string[]> => {
+  const exactTargets = await db
+    .select({ emailAddress: mailbox.emailAddress, id: mailbox.id })
+    .from(mailbox)
+    .innerJoin(
+      mailDomain,
+      and(
+        eq(mailDomain.organizationId, mailbox.organizationId),
+        eq(mailDomain.mode, "send_and_receive"),
+        eq(mailDomain.status, "verified"),
+        sql`lower(split_part(${mailbox.emailAddress}, '@', 2)) = ${mailDomain.domain}`
+      )
+    )
+    .where(
+      and(
+        eq(mailbox.provider, "managed"),
+        inArray(mailbox.emailAddress, recipients)
+      )
+    );
+
+  const targetMailboxIds = new Set(exactTargets.map((target) => target.id));
+  const exactlyMatchedRecipients = new Set(
+    exactTargets.map((target) => normalizeEmailAddress(target.emailAddress))
+  );
+  const catchAllDomains = [
+    ...new Set(
+      recipients
+        .filter(
+          (recipient) =>
+            !exactlyMatchedRecipients.has(recipient) &&
+            isValidInboundRecipient(recipient)
+        )
+        .map((recipient) => recipient.split("@")[1])
+    ),
+  ];
+  if (catchAllDomains.length === 0) {
+    return [...targetMailboxIds];
+  }
+
+  const catchAllTargets = await db
+    .select({ domain: mailDomain.domain, id: mailbox.id })
+    .from(mailDomain)
+    .innerJoin(mailbox, eq(mailbox.id, mailDomain.catchAllMailboxId))
+    .where(
+      and(
+        eq(mailDomain.mode, "send_and_receive"),
+        eq(mailDomain.status, "verified"),
+        eq(mailbox.provider, "managed"),
+        eq(mailbox.organizationId, mailDomain.organizationId),
+        inArray(mailDomain.domain, catchAllDomains)
+      )
+    );
+  if (catchAllTargets.length === 0) {
+    return [...targetMailboxIds];
+  }
+
+  const catchAllMailboxIdByDomain = new Map(
+    catchAllTargets.map((target) => [target.domain, target.id])
+  );
+  for (const recipient of recipients) {
+    if (exactlyMatchedRecipients.has(recipient)) {
+      continue;
+    }
+    const catchAllMailboxId = catchAllMailboxIdByDomain.get(
+      recipient.split("@")[1] ?? ""
+    );
+    if (catchAllMailboxId !== undefined) {
+      targetMailboxIds.add(catchAllMailboxId);
+    }
+  }
+
+  return [...targetMailboxIds];
+};
+
 export const recordInboundManagedMessage = async (input: {
   providerMessageId: string;
   rawMessage: Buffer | Uint8Array;
@@ -268,25 +354,9 @@ export const recordInboundManagedMessage = async (input: {
     return [];
   }
 
-  const targetMailboxes = await db
-    .select({ id: mailbox.id })
-    .from(mailbox)
-    .innerJoin(
-      mailDomain,
-      and(
-        eq(mailDomain.organizationId, mailbox.organizationId),
-        eq(mailDomain.mode, "send_and_receive"),
-        eq(mailDomain.status, "verified"),
-        sql`lower(split_part(${mailbox.emailAddress}, '@', 2)) = ${mailDomain.domain}`
-      )
-    )
-    .where(
-      and(
-        eq(mailbox.provider, "managed"),
-        inArray(mailbox.emailAddress, recipients)
-      )
-    );
-  if (targetMailboxes.length === 0) {
+  const targetMailboxIds =
+    await resolveInboundManagedTargetMailboxIds(recipients);
+  if (targetMailboxIds.length === 0) {
     return [];
   }
 
@@ -301,8 +371,8 @@ export const recordInboundManagedMessage = async (input: {
   }
 
   const ingestResults = await Promise.all(
-    targetMailboxes.map(
-      async (targetMailbox) =>
+    targetMailboxIds.map(
+      async (targetMailboxId) =>
         await ingestManagedMessageForMailbox({
           parsed,
           providerMessageId: input.providerMessageId,
@@ -314,7 +384,7 @@ export const recordInboundManagedMessage = async (input: {
           recipients,
           s3Bucket: input.s3Bucket,
           s3Key: input.s3Key,
-          targetMailboxId: targetMailbox.id,
+          targetMailboxId,
         })
     )
   );

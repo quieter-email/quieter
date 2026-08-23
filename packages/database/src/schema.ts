@@ -275,6 +275,9 @@ export const userAiContext = pgTable(
     lastEditedAt: timestamp("lastEditedAt").notNull(),
     markdown: text("markdown").notNull(),
     revision: integer("revision").notNull().default(1),
+    searchFilterModel: text("searchFilterModel")
+      .notNull()
+      .default("google/gemini-3.5-flash-lite"),
     updatedAt: timestamp("updatedAt").notNull(),
     usefulDetailModel: text("usefulDetailModel")
       .notNull()
@@ -2181,6 +2184,9 @@ export const managedMailRuleBackfill = pgTable(
 export const mailDomain = pgTable(
   "mailDomain",
   {
+    catchAllMailboxId: text("catchAllMailboxId").references(() => mailbox.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("createdAt").notNull(),
     domain: text("domain").notNull(),
     id: text("id").primaryKey(),
@@ -2210,6 +2216,8 @@ export const mailDomain = pgTable(
       sql`${table.mode} in ('send_only', 'send_and_receive')`
     ),
     index("mail_domain_organization_id_idx").on(table.organizationId),
+    index("mail_domain_catch_all_mailbox_idx").on(table.catchAllMailboxId),
+    unique("mail_domain_catch_all_mailbox_unique").on(table.catchAllMailboxId),
     unique("mail_domain_domain_unique").on(table.domain),
   ]
 );
