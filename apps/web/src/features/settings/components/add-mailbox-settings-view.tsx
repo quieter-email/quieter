@@ -232,8 +232,7 @@ export const AddMailboxSettingsView = () => {
           variant="ghost"
         >
           <HugeiconsIcon aria-hidden icon={ArrowLeft01Icon} />
-          <span className="hidden sm:inline">Back to mailboxes</span>
-          <span className="sm:hidden">Back</span>
+          Back to mailboxes
         </Button>
       }
       previous={
