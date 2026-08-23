@@ -595,8 +595,9 @@ export const OnboardingScreen = () => {
         <AtmosphericBackground
           className="fixed -z-10"
           fadeBottom="elevated"
-          grain={0.6}
-          intensity={0.7}
+          fadeTop="elevated"
+          grain={0.4}
+          intensity={0.5}
         />
       </Suspense>
       <GuidedFlow
@@ -641,10 +642,6 @@ export const OnboardingScreen = () => {
       >
         {step === 1 ? (
           <div className="relative mx-auto max-w-xl">
-            <div
-              aria-hidden
-              className="pointer-events-none absolute -top-48 left-1/2 h-72 w-[52rem] -translate-x-1/2 rounded-full blur-3xl dark:bg-primary/10"
-            />
             <m.header
               className="relative text-center"
               {...getAppFlyInMotion({ animate: true, index: 0, reducedMotion })}
@@ -652,10 +649,6 @@ export const OnboardingScreen = () => {
               <h1 className="font-serif text-title-lg leading-[1.32] font-normal tracking-[-0.014em] text-balance text-fg">
                 Welcome to Quieter
               </h1>
-              <p className="mt-3 text-body/6 text-muted-fg">
-                A few details, then your mail. You can change any of this later
-                in Settings.
-              </p>
             </m.header>
 
             <m.div
@@ -693,7 +686,7 @@ export const OnboardingScreen = () => {
             </m.div>
 
             <m.fieldset
-              className="mt-16"
+              className="mt-10"
               {...getAppFlyInMotion({ animate: true, index: 2, reducedMotion })}
             >
               <legend className="text-body font-medium text-fg">
@@ -743,7 +736,7 @@ export const OnboardingScreen = () => {
             </m.fieldset>
 
             <m.div
-              className="mt-14 flex justify-end"
+              className="mt-10 flex justify-end"
               {...getAppFlyInMotion({ animate: true, index: 3, reducedMotion })}
             >
               <Button
