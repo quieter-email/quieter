@@ -5,7 +5,7 @@ export const SitePasswordRouteComponent = ({
   hasSitePasswordError: boolean;
   returnTo: string;
 }) => (
-  <main className="grid min-h-dvh place-items-center bg-bg px-6 py-10">
+  <main className="grid min-h-dvh place-items-center px-6 py-10">
     <div className="w-full max-w-sm">
       <h1 className="text-title-md font-medium tracking-normal text-fg">
         quieter

@@ -117,7 +117,7 @@ export const DesignSystemShowcase = () => {
   const [boxChecked, setBoxChecked] = useState(true);
 
   return (
-    <main className="@container min-h-dvh bg-bg text-fg">
+    <main className="@container min-h-dvh text-fg">
       <div className="mx-auto w-full max-w-4xl space-y-8 px-6 py-10">
         <header>
           <h1 className="text-title-lg tracking-tight text-fg">

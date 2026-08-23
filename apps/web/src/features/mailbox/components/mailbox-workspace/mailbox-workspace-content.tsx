@@ -13,7 +13,6 @@ import { lazy, Suspense, useState } from "react";
 import type { ComponentProps, ReactNode } from "react";
 
 import { MobileHeader } from "#/components/mobile-header";
-import { WorkspaceDitherBackground } from "#/components/workspace-dither-background";
 import {
   WorkspaceSection,
   workspaceSectionVariants,
@@ -463,8 +462,7 @@ export const MailboxWorkspaceContent = ({
 
   return (
     <LazyMotion features={domAnimation}>
-      <main className="relative isolate flex h-dvh min-h-0 flex-col overflow-hidden bg-bg-elevated pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-fg lg:p-0">
-        <WorkspaceDitherBackground />
+      <main className="relative isolate flex h-dvh min-h-0 flex-col overflow-hidden pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-fg lg:p-0">
         <div className="relative z-10 flex min-h-0 flex-1 overflow-hidden">
           {hasText(selectedMailboxId) ? (
             <MailSidebar

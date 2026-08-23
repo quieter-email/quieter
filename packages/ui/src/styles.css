@@ -295,7 +295,7 @@
   }
 
   body {
-    @apply bg-bg font-sans text-fg antialiased;
+    @apply bg-bg-elevated font-sans text-fg antialiased;
     font-optical-sizing: auto;
   }
 }

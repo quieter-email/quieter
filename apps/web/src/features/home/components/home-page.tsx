@@ -58,7 +58,7 @@ export const HomePage = () => {
   return (
     <LazyMotion features={domAnimation}>
       <HomeSmoothScroll>
-        <div className="min-h-dvh bg-bg-elevated text-fg">
+        <div className="min-h-dvh text-fg">
           <LinkButton
             className="fixed top-4 right-4 z-20 h-8 border-border bg-card/60 px-3 text-caption text-muted-fg shadow-none backdrop-blur-sm hover:bg-muted hover:text-fg"
             search={{ returnTo: "/auth" }}

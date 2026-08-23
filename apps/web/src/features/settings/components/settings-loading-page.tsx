@@ -127,7 +127,7 @@ export const SettingsLoadingPage = ({
 }: {
   tab?: SettingsTab;
 }) => (
-  <main className="min-h-dvh overflow-hidden bg-bg-elevated text-fg">
+  <main className="min-h-dvh overflow-hidden text-fg">
     <div className="mx-auto w-full max-w-205 px-5 py-8 md:px-8 md:py-14">
       {tab === "overview" ? (
         <SettingsPendingOverview />
