@@ -10,6 +10,7 @@ import {
   Mail01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { BILLING_FEATURES } from "@quieter/billing/plans";
 import type { RouterOutputs } from "@quieter/orpc";
 import { Button } from "@quieter/ui/button";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
@@ -54,6 +55,11 @@ import type { OnboardingIntentId } from "#/features/onboarding/domain/onboarding
 import { partitionMailDomains } from "#/features/onboarding/domain/onboarding-playbooks";
 import type { OnboardingMailDomain } from "#/features/onboarding/domain/onboarding-playbooks";
 import { RegisterDomainDialog } from "#/features/settings/components/organization-settings/register-domain-dialog";
+import {
+  getTeamBilling,
+  USER_BILLING_QUERY_KEY,
+  userBillingQueryOptions,
+} from "#/features/settings/domain/billing";
 import { authClient } from "#/lib/auth";
 import { toastError } from "#/lib/error-toast";
 import { openGoogleAccountLink } from "#/lib/google-account-link";
@@ -100,11 +106,13 @@ const ConnectedAddressList = ({
 const PlaybookCard = ({
   children,
   icon,
+  requirement,
   state,
   title,
 }: {
   children: React.ReactNode;
   icon: React.ComponentProps<typeof HugeiconsIcon>["icon"];
+  requirement?: string;
   state: "done" | "todo";
   title: string;
 }) => (
@@ -124,6 +132,11 @@ const PlaybookCard = ({
         icon={state === "done" ? CheckmarkCircle02Icon : icon}
       />
       <h3 className="text-body font-medium tracking-tight text-fg">{title}</h3>
+      {requirement === undefined ? null : (
+        <span className="rounded-full border border-border px-2 py-0.5 text-micro text-muted-fg">
+          {requirement}
+        </span>
+      )}
     </div>
     <div className="mt-3">{children}</div>
   </section>
@@ -161,6 +174,51 @@ const TermsConsent = ({
     </span>
   </label>
 );
+
+const PlaybookBillingAction = ({
+  fixedMode,
+  hasManagedBilling,
+  isUpgrading,
+  onUpgrade,
+  organizationId,
+}: {
+  fixedMode: "send_and_receive" | "send_only";
+  hasManagedBilling: boolean;
+  isUpgrading: boolean;
+  onUpgrade: () => void;
+  organizationId: string | null;
+}) => {
+  if (organizationId === null) {
+    return (
+      <p className="text-micro text-muted-fg">
+        Finish setup first, then add a domain from Settings.
+      </p>
+    );
+  }
+
+  if (!hasManagedBilling) {
+    return (
+      <Button
+        disabled={isUpgrading}
+        onClick={onUpgrade}
+        pending={isUpgrading}
+        pendingLabel="Opening checkout…"
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        Upgrade to {BILLING_FEATURES.organizationDomains.requirementLabel}
+      </Button>
+    );
+  }
+
+  return (
+    <RegisterDomainDialog fixedMode={fixedMode} organizationId={organizationId}>
+      <HugeiconsIcon aria-hidden className="size-4" icon={Globe02Icon} />
+      Add a domain
+    </RegisterDomainDialog>
+  );
+};
 
 const DomainStatusNote = ({ count }: { count: number }) => (
   <p className="flex items-center gap-2 text-body-sm text-muted-fg">
@@ -250,9 +308,15 @@ const GmailPlaybook = ({
 
 const SendingPlaybook = ({
   domains,
+  hasManagedBilling,
+  isUpgrading,
+  onUpgrade,
   organizationId,
 }: {
   domains: OnboardingMailDomain[];
+  hasManagedBilling: boolean;
+  isUpgrading: boolean;
+  onUpgrade: () => void;
   organizationId: string | null;
 }) => {
   const { pendingSending, verifiedSending } = partitionMailDomains(domains);
@@ -309,15 +373,13 @@ const SendingPlaybook = ({
         <p className="text-body-sm text-muted-fg">
           Verify a domain to authorize sending from it.
         </p>
-        {organizationId === null ? null : (
-          <RegisterDomainDialog
-            fixedMode="send_only"
-            organizationId={organizationId}
-          >
-            <HugeiconsIcon aria-hidden className="size-4" icon={Globe02Icon} />
-            Add a domain
-          </RegisterDomainDialog>
-        )}
+        <PlaybookBillingAction
+          fixedMode="send_only"
+          hasManagedBilling={hasManagedBilling}
+          isUpgrading={isUpgrading}
+          onUpgrade={onUpgrade}
+          organizationId={organizationId}
+        />
       </div>
     );
   };
@@ -325,6 +387,7 @@ const SendingPlaybook = ({
   return (
     <PlaybookCard
       icon={Key02Icon}
+      requirement={BILLING_FEATURES.organizationDomains.requirementLabel}
       state={isDone ? "done" : "todo"}
       title="API and MCP sending"
     >
@@ -335,14 +398,20 @@ const SendingPlaybook = ({
 
 const CustomInboxPlaybook = ({
   domains,
+  hasManagedBilling,
+  isUpgrading,
   managedMailboxes,
   onCreateMailbox,
+  onUpgrade,
   organizationId,
   isCreating,
 }: {
   domains: OnboardingMailDomain[];
+  hasManagedBilling: boolean;
+  isUpgrading: boolean;
   managedMailboxes: OnboardingState["managedMailboxes"];
   onCreateMailbox: (emailAddress: string) => void;
+  onUpgrade: () => void;
   organizationId: string | null;
   isCreating: boolean;
 }) => {
@@ -426,15 +495,13 @@ const CustomInboxPlaybook = ({
         <p className="text-body-sm text-muted-fg">
           Verify a domain that can receive mail, then add shared inboxes on it.
         </p>
-        {organizationId === null ? null : (
-          <RegisterDomainDialog
-            fixedMode="send_and_receive"
-            organizationId={organizationId}
-          >
-            <HugeiconsIcon aria-hidden className="size-4" icon={Globe02Icon} />
-            Add a domain
-          </RegisterDomainDialog>
-        )}
+        <PlaybookBillingAction
+          fixedMode="send_and_receive"
+          hasManagedBilling={hasManagedBilling}
+          isUpgrading={isUpgrading}
+          onUpgrade={onUpgrade}
+          organizationId={organizationId}
+        />
       </div>
     );
   };
@@ -442,6 +509,7 @@ const CustomInboxPlaybook = ({
   return (
     <PlaybookCard
       icon={Globe02Icon}
+      requirement={BILLING_FEATURES.organizationDomains.requirementLabel}
       state={isDone ? "done" : "todo"}
       title="Custom inboxes"
     >
@@ -534,6 +602,29 @@ export const OnboardingScreen = () => {
 
   const googleEmail = state?.googleEmail ?? null;
   const organizationId = state?.organizationId ?? null;
+  const { data: billingOverview } = useQuery(userBillingQueryOptions());
+  const hasManagedBilling =
+    organizationId !== null &&
+    getTeamBilling(billingOverview, organizationId)?.hasAccess === true;
+  const checkoutMutation = useMutation({
+    ...orpc.billing.createCheckout.mutationOptions(),
+    onError: (error) => {
+      toastError(error, {
+        boundary: "billing",
+        fallback: "Could not start checkout.",
+      });
+    },
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: USER_BILLING_QUERY_KEY });
+      window.location.assign(result.checkoutUrl);
+    },
+  });
+  const startManagedUpgrade = () => {
+    if (organizationId === null) {
+      return;
+    }
+    checkoutMutation.mutate({ organizationId, product: "managed" });
+  };
   const isGmailConnected =
     (state?.gmailMailboxes.length ?? 0) > 0 || gmailLink === "complete";
 
@@ -617,7 +708,10 @@ export const OnboardingScreen = () => {
         return (
           <SendingPlaybook
             domains={state?.domains ?? []}
+            hasManagedBilling={hasManagedBilling}
+            isUpgrading={checkoutMutation.isPending}
             key={option.id}
+            onUpgrade={startManagedUpgrade}
             organizationId={organizationId}
           />
         );
@@ -625,7 +719,9 @@ export const OnboardingScreen = () => {
       return (
         <CustomInboxPlaybook
           domains={state?.domains ?? []}
+          hasManagedBilling={hasManagedBilling}
           isCreating={createMailboxMutation.isPending}
+          isUpgrading={checkoutMutation.isPending}
           key={option.id}
           managedMailboxes={state?.managedMailboxes ?? []}
           onCreateMailbox={(emailAddress) => {
@@ -633,6 +729,7 @@ export const OnboardingScreen = () => {
               createMailboxMutation.mutate({ emailAddress, organizationId });
             }
           }}
+          onUpgrade={startManagedUpgrade}
           organizationId={organizationId}
         />
       );
@@ -799,6 +896,11 @@ export const OnboardingScreen = () => {
                       <CheckboxIndicator />
                     </Checkbox>
                     {option.title}
+                    {"requiresManagedBilling" in option ? (
+                      <span className="text-micro text-muted-fg">
+                        {BILLING_FEATURES.organizationDomains.requirementLabel}
+                      </span>
+                    ) : null}
                   </label>
                 );
               })}

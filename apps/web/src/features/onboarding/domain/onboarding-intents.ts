@@ -7,11 +7,13 @@ export const ONBOARDING_INTENT_OPTIONS = [
   {
     description: "Send transactional mail from a verified domain.",
     id: "api",
+    requiresManagedBilling: true,
     title: "Send mail through the API or MCP",
   },
   {
     description: "Shared addresses like support@yourdomain.com.",
     id: "custom",
+    requiresManagedBilling: true,
     title: "Create custom inboxes on my domain",
   },
 ] as const;
