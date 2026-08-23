@@ -149,7 +149,7 @@ const MessageRowMetaBadge = ({
   title: string;
 }) => (
   <span
-    className="squircle inline-flex h-4.5 shrink-0 items-center gap-1 rounded-md border border-border bg-bg/75 px-1 text-micro font-medium text-muted-fg tabular-nums shadow-xs"
+    className="squircle inline-flex h-4.5 shrink-0 items-center gap-1 rounded-md border border-border bg-bg-raised/75 px-1 text-micro font-medium text-muted-fg tabular-nums shadow-xs"
     title={title}
   >
     <HugeiconsIcon aria-hidden className="size-3" icon={icon} />
@@ -248,7 +248,7 @@ const MessageRowSelectionButton = ({
         >
           <span
             className={cn(
-              "flex size-4.5 items-center justify-center rounded-[5px] border bg-bg text-transparent shadow-xs transition-[background-color,border-color,color] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out)",
+              "flex size-4.5 items-center justify-center rounded-[5px] border bg-bg-raised text-transparent shadow-xs transition-[background-color,border-color,color] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out)",
               {
                 "border-border": !isSelected,
                 "border-primary bg-primary text-primary-fg": isSelected,

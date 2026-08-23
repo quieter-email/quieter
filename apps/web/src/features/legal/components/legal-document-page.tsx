@@ -10,7 +10,7 @@ export const LegalDocumentPage = ({
   description: string;
   title: string;
 }) => (
-  <div className="min-h-dvh bg-bg text-fg">
+  <div className="min-h-dvh text-fg">
     <div className="mx-auto max-w-3xl px-6 py-12">
       <header className="space-y-3 border-b border-border pb-8">
         <p className="text-body text-muted-fg">

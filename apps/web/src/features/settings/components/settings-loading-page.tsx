@@ -68,7 +68,7 @@ const SettingsPendingOverview = () => {
           <h2 className="text-body font-normal text-fg">
             {SETTINGS_SECTION_LABELS[section]}
           </h2>
-          <div className="squircle @container overflow-hidden rounded-lg border border-border bg-bg/58">
+          <div className="squircle @container overflow-hidden rounded-lg border border-border bg-bg-raised/58">
             {navItems.map(
               ({ description, section: itemSection, tab, title }) => {
                 if (itemSection !== section) {
@@ -127,7 +127,7 @@ export const SettingsLoadingPage = ({
 }: {
   tab?: SettingsTab;
 }) => (
-  <main className="min-h-dvh overflow-hidden bg-bg-elevated text-fg">
+  <main className="min-h-dvh overflow-hidden text-fg">
     <div className="mx-auto w-full max-w-205 px-5 py-8 md:px-8 md:py-14">
       {tab === "overview" ? (
         <SettingsPendingOverview />

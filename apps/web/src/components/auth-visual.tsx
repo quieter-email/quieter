@@ -1602,7 +1602,7 @@ export const AuthVisual = () => {
   return (
     <canvas
       aria-hidden="true"
-      className="block size-full bg-bg"
+      className="block size-full bg-bg-raised"
       ref={canvasRef}
       tabIndex={-1}
     />

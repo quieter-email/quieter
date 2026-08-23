@@ -795,7 +795,7 @@ export const SidebarLabelNav = ({
               >
                 <Input
                   aria-label={`New ${labelNoun} name`}
-                  className="min-w-48 flex-1 border-0 bg-bg/70 shadow-none"
+                  className="min-w-48 flex-1 border-0 bg-bg-raised/70 shadow-none"
                   disabled={createLabelMutation.isPending}
                   onChange={(event) => {
                     setNewLabelName(event.currentTarget.value);
@@ -1162,7 +1162,7 @@ export const SidebarLabelNav = ({
               <Field>
                 <FieldLabel>Name</FieldLabel>
                 <Input
-                  className="border-0 bg-bg/70 shadow-none"
+                  className="border-0 bg-bg-raised/70 shadow-none"
                   disabled={updateLabelMutation.isPending}
                   onChange={(event) => {
                     const name = event.currentTarget.value;

@@ -1007,7 +1007,7 @@ const ManagedMailboxSavedViewsPanel = (
         <div className="flex gap-2">
           <Input
             aria-label="Saved view name"
-            className="border-0 bg-bg/70 shadow-none"
+            className="border-0 bg-bg-raised/70 shadow-none"
             onChange={(event) => {
               setViewName(event.target.value);
             }}
@@ -2005,7 +2005,7 @@ const ManagedMailboxSavedViewEditDialog = (
             <Field>
               <FieldLabel>Name</FieldLabel>
               <Input
-                className="border-0 bg-bg/70 shadow-none"
+                className="border-0 bg-bg-raised/70 shadow-none"
                 disabled={editingViewUpdatePending}
                 onChange={(event) => {
                   const name = event.currentTarget.value;

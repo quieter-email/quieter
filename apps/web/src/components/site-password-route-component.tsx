@@ -5,7 +5,7 @@ export const SitePasswordRouteComponent = ({
   hasSitePasswordError: boolean;
   returnTo: string;
 }) => (
-  <main className="grid min-h-dvh place-items-center bg-bg px-6 py-10">
+  <main className="grid min-h-dvh place-items-center px-6 py-10">
     <div className="w-full max-w-sm">
       <h1 className="text-title-md font-medium tracking-normal text-fg">
         quieter
@@ -23,7 +23,7 @@ export const SitePasswordRouteComponent = ({
         <input
           aria-label="Site password"
           autoComplete="current-password"
-          className="h-10 rounded-md border border-border bg-bg-elevated px-3 text-body text-fg shadow-sm placeholder:text-muted-fg"
+          className="h-10 rounded-md border border-border bg-bg px-3 text-body text-fg shadow-sm placeholder:text-muted-fg"
           name="password"
           placeholder="Password"
           required

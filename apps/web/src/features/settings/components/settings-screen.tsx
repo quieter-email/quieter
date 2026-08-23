@@ -5,7 +5,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { lazy, Suspense } from "react";
 
-import { WorkspaceDitherBackground } from "#/components/workspace-dither-background";
 import { isDemoModeAvailable } from "#/features/settings/domain/demo-mode-setting";
 import { SETTINGS_DETAIL_TITLES } from "#/features/settings/domain/settings-navigation";
 import type { SettingsTab } from "#/features/settings/domain/settings-tab";
@@ -246,11 +245,10 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
   const isGuidedMailboxSetup = tab === "mailboxes" && mailboxView === "add";
 
   return (
-    <main className="relative isolate flex h-dvh min-h-0 flex-col overflow-hidden bg-bg-elevated text-fg">
+    <main className="relative isolate flex h-dvh min-h-0 flex-col overflow-hidden text-fg">
       <SettingsDataPrefetch tab={tab} />
       <BillingCheckoutResult />
       <ConnectorConnectionResult />
-      <WorkspaceDitherBackground />
       {isGuidedMailboxSetup ? null : (
         <>
           <SettingsBackNavigation

@@ -163,7 +163,7 @@ export const ChatTranscript = ({
             <button
               aria-label="Scroll to latest message"
               className={cn(
-                "pointer-events-auto flex size-8 items-center justify-center rounded-full border border-border bg-bg/95 text-muted-fg shadow-sm backdrop-blur-sm",
+                "pointer-events-auto flex size-8 items-center justify-center rounded-full border border-border bg-bg-raised/95 text-muted-fg shadow-sm backdrop-blur-sm",
                 "transition-colors hover:bg-muted hover:text-fg"
               )}
               onClick={() => {
