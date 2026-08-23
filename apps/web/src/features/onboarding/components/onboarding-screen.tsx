@@ -25,7 +25,6 @@ import {
 import { TextFieldInput } from "@quieter/ui/text-field";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toastError } from "#/lib/error-toast";
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -39,6 +38,7 @@ import type { OnboardingIntentId } from "#/features/onboarding/domain/onboarding
 import { partitionMailDomains } from "#/features/onboarding/domain/onboarding-playbooks";
 import type { OnboardingMailDomain } from "#/features/onboarding/domain/onboarding-playbooks";
 import { RegisterDomainDialog } from "#/features/settings/components/organization-settings/register-domain-dialog";
+import { toastError } from "#/lib/error-toast";
 import { openGoogleAccountLink } from "#/lib/google-account-link";
 import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
 import { orpc } from "#/lib/orpc";
