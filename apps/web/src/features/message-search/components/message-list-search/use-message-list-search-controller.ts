@@ -9,8 +9,8 @@ import { toast } from "@quieter/ui/toast";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  useCallback,
   useEffect,
+  useEffectEvent,
   useLayoutEffect,
   useRef,
   useState,
@@ -322,30 +322,26 @@ export const useMessageListSearchController = ({
     }
   };
 
-  const focusTextInput = useCallback(
-    ({
-      index = currentState.filters.length,
-      toEnd = false,
-    }: { index?: number; toEnd?: boolean } = {}) => {
-      setTextInputIndex(
-        Math.max(0, Math.min(index, currentState.filters.length))
-      );
-      requestAnimationFrame(() => {
-        const input = textInputRef.current;
-        if (!input) {
-          return;
-        }
+  const focusTextInput = ({
+    index = currentState.filters.length,
+    toEnd = false,
+  }: { index?: number; toEnd?: boolean } = {}) => {
+    setTextInputIndex(Math.max(0, index));
+    requestAnimationFrame(() => {
+      const input = textInputRef.current;
+      if (!input) {
+        return;
+      }
 
-        input.focus();
-        if (toEnd) {
-          const position = input.value.length;
-          input.setSelectionRange(position, position);
-        }
-        input.scrollIntoView({ block: "nearest", inline: "nearest" });
-      });
-    },
-    [currentState.filters.length]
-  );
+      input.focus();
+      if (toEnd) {
+        const position = input.value.length;
+        input.setSelectionRange(position, position);
+      }
+      input.scrollIntoView({ block: "nearest", inline: "nearest" });
+    });
+  };
+  const focusPendingTextInput = useEffectEvent(focusTextInput);
 
   const blurSearchField = () => {
     const { activeElement } = document;
@@ -912,7 +908,7 @@ export const useMessageListSearchController = ({
         ? baseState.text
         : normalizeSearchText(search.text);
     commitState({ filters: mergedFilters, text: nextText }, true);
-    focusTextInput({ toEnd: true });
+    focusTextInput({ index: mergedFilters.length, toEnd: true });
   };
 
   const interpretNaturalLanguage = () => {
@@ -1043,7 +1039,7 @@ export const useMessageListSearchController = ({
     const target = pendingFocusRef.current;
     pendingFocusRef.current = null;
     if (target.kind === "text") {
-      focusTextInput({ index: target.index, toEnd: target.toEnd });
+      focusPendingTextInput({ index: target.index, toEnd: target.toEnd });
       return;
     }
 
@@ -1051,7 +1047,7 @@ export const useMessageListSearchController = ({
       selectAll: target.selectAll,
       toEnd: target.toEnd,
     });
-  }, [currentState, focusTextInput]);
+  }, [currentState]);
 
   useLayoutEffect(() => {
     if (activeDateFilterIndex === null) {

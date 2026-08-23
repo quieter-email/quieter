@@ -42,7 +42,7 @@ export const parsedMailSearchSchema = z.object({
           "subject",
           "to",
         ]),
-        value: z.string().trim().max(300),
+        value: z.string().trim().min(1).max(300),
       })
     )
     .max(12),
@@ -74,6 +74,7 @@ Supported filters:
 
 Rules:
 - Include only what the request clearly asks for; prefer fewer precise filters.
+- Every filter must have a non-empty value.
 - Use negated only for explicit exclusions like "without" or "not".
 - Words that describe what to look for but fit no filter belong in freeText.
 - Return no filters and put the whole request in freeText when nothing maps.`;

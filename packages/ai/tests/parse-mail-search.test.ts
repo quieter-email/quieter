@@ -86,4 +86,13 @@ describe("parsed mail search schema", () => {
 
     expect(result.success).toBeFalsy();
   });
+
+  test.each(["", "   "])("rejects an empty filter value", (value) => {
+    const result = parsedMailSearchSchema.safeParse({
+      filters: [{ type: "from", value }],
+      freeText: "",
+    });
+
+    expect(result.success).toBeFalsy();
+  });
 });
