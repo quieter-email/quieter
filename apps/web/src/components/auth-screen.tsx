@@ -3,12 +3,11 @@
 import { Key02Icon, Mail01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
-import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import { FieldLabel } from "@quieter/ui/field";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link, getRouteApi } from "@tanstack/react-router";
+import { getRouteApi } from "@tanstack/react-router";
 import { domAnimation, LazyMotion, m } from "motion/react";
 import { useState } from "react";
 import type { ReactNode } from "react";
@@ -25,7 +24,6 @@ import {
 } from "#/lib/preview-personas";
 import type { PreviewPersona } from "#/lib/preview-personas";
 import { queryPersister } from "#/lib/query-persister";
-import { setTermsAcceptanceCookie } from "#/lib/terms-acceptance";
 
 const authRouteApi = getRouteApi("/auth");
 const AUTHENTICATION_ERROR_MESSAGE =
@@ -98,8 +96,6 @@ const AuthCredentials = ({
     passkey?: string;
     terms?: string;
   }>({});
-  const [termsAccepted, setTermsAccepted] = useState(false);
-  const [gmailOptIn, setGmailOptIn] = useState(false);
 
   const callbackUrl = normalizeAuthReturnTo(returnTo);
   const clearCachedAccountData = async () => {
@@ -108,11 +104,9 @@ const AuthCredentials = ({
   };
 
   /**
-   * One flow, so any attempt may be the one that creates the account. When the
-   * acceptance box is ticked, a short-lived cookie carries that consent through
-   * the OAuth redirect and the server stamps `termsAcceptedAt` at creation.
-   * Unticked sign-ups still work: the account lands on the onboarding gate,
-   * which records an explicit acceptance before any product use.
+   * One flow, so any attempt may be the one that creates the account. The
+   * server blocks user creation without the acceptance cookie, so the box is
+   * required up front rather than behind a separate Sign up screen.
    */
   const errorCallbackParams = new URLSearchParams();
   if (callbackUrl !== "/") {
@@ -126,12 +120,8 @@ const AuthCredentials = ({
 
   const googleMutation = useMutation({
     mutationFn: async () => {
-      if (termsAccepted) {
-        setTermsAcceptanceCookie();
-      }
-
       const response = await authClient.signIn.social({
-        callbackURL: gmailOptIn ? "/onboarding?gmailLink=start" : callbackUrl,
+        callbackURL: callbackUrl,
         errorCallbackURL: getErrorCallbackHref(),
         fetchOptions: { timeout: 15_000 },
         provider: "google",
@@ -216,10 +206,6 @@ const AuthCredentials = ({
         const normalizedEmail = value.email.trim().toLowerCase();
 
         try {
-          if (termsAccepted) {
-            setTermsAcceptanceCookie();
-          }
-
           const response = await authClient.signIn.magicLink({
             callbackURL: callbackUrl,
             email: normalizedEmail,
@@ -381,50 +367,6 @@ const AuthCredentials = ({
         <HugeiconsIcon className="size-4 shrink-0" icon={Key02Icon} />
         Continue with passkey
       </Button>
-
-      <div className="mt-5 space-y-3 border-t border-border pt-4">
-        <label
-          className="flex items-start gap-3 text-body-sm text-muted-fg"
-          htmlFor="auth-terms"
-        >
-          <Checkbox
-            checked={termsAccepted}
-            className="mt-0.5"
-            id="auth-terms"
-            onCheckedChange={setTermsAccepted}
-          >
-            <CheckboxIndicator />
-          </Checkbox>
-          <span>
-            I agree to the{" "}
-            <Link className="text-fg underline" target="_blank" to="/terms">
-              Terms of Service
-            </Link>{" "}
-            and{" "}
-            <Link className="text-fg underline" target="_blank" to="/privacy">
-              Privacy Policy
-            </Link>
-            . New accounts need this; you can also accept during setup.
-          </span>
-        </label>
-        <label
-          className="flex items-start gap-3 text-body-sm text-muted-fg"
-          htmlFor="auth-gmail-opt-in"
-        >
-          <Checkbox
-            checked={gmailOptIn}
-            className="mt-0.5"
-            id="auth-gmail-opt-in"
-            onCheckedChange={setGmailOptIn}
-          >
-            <CheckboxIndicator />
-          </Checkbox>
-          <span>
-            Also add my Google account as a Gmail inbox. Google asks for
-            permission separately after sign-in.
-          </span>
-        </label>
-      </div>
 
       {hasText(errors.google) ? (
         <output
