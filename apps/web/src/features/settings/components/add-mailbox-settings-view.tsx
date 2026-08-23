@@ -262,7 +262,7 @@ export const AddMailboxSettingsView = () => {
           </header>
           <div className="mt-9 grid gap-3 sm:grid-cols-2">
             <Button
-              className="group h-auto min-h-32 w-full flex-col items-start justify-start rounded-xl bg-bg-surface p-6 text-left whitespace-normal hover:border-border-strong hover:bg-control-hover"
+              className="group h-auto min-h-32 w-full flex-col items-start justify-start rounded-lg border-border bg-bg p-5 text-left whitespace-normal hover:border-border-strong hover:bg-control-hover"
               onClick={() => {
                 workflowStore.setState((state) => ({
                   ...state,
@@ -275,9 +275,10 @@ export const AddMailboxSettingsView = () => {
             >
               <span className="text-body-sm font-medium text-fg">Gmail</span>
               <span className="mt-1 text-caption text-muted-fg">
-                Private to you
+                Connect your Google Gmail inbox to Quieter
               </span>
-              <span className="mt-auto flex pt-6 text-fg">
+              <span className="mt-auto flex items-center gap-1.5 pt-6 text-caption font-medium text-fg">
+                Continue
                 <HugeiconsIcon
                   aria-hidden
                   className="size-3.5 transition-transform group-hover:translate-x-0.5"
@@ -287,7 +288,7 @@ export const AddMailboxSettingsView = () => {
             </Button>
 
             <Button
-              className="group h-auto min-h-32 w-full flex-col items-start justify-start rounded-xl bg-bg-surface p-6 text-left whitespace-normal hover:border-border-strong hover:bg-control-hover"
+              className="group h-auto min-h-32 w-full flex-col items-start justify-start rounded-lg border-border bg-bg p-5 text-left whitespace-normal hover:border-border-strong hover:bg-control-hover"
               onClick={() => {
                 workflowStore.setState((state) => ({
                   ...state,
@@ -299,12 +300,13 @@ export const AddMailboxSettingsView = () => {
               variant="outline"
             >
               <span className="text-body-sm font-medium text-fg">
-                Shared inbox
+                Quieter managed mailbox
               </span>
               <span className="mt-1 text-caption text-muted-fg">
-                Team address like support@
+                Your custom mailbox with your own domain
               </span>
-              <span className="mt-auto flex pt-6 text-fg">
+              <span className="mt-auto flex items-center gap-1.5 pt-6 text-caption font-medium text-fg">
+                Continue
                 <HugeiconsIcon
                   aria-hidden
                   className="size-3.5 transition-transform group-hover:translate-x-0.5"
