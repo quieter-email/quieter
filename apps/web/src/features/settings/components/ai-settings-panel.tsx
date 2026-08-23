@@ -4,6 +4,7 @@ import { InformationCircleIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   defaultAutoLabelModel,
+  defaultSearchFilterModel,
   defaultUsefulDetailModel,
 } from "@quieter/ai/chat-models";
 import type { ChatModel } from "@quieter/ai/chat-models";
@@ -30,6 +31,7 @@ import {
   setDefaultChatModel,
   useDefaultChatModel,
 } from "#/features/ai/domain/default-chat-model-setting";
+import { toastError } from "#/lib/error-toast";
 import { orpc } from "#/lib/orpc";
 import { persistQueryByKey } from "#/lib/query-persister";
 
@@ -38,11 +40,6 @@ import { SettingsRow, SettingsRows, SettingsSection } from "./settings-layout";
 type AiSettings = RouterOutputs["ai"]["settings"];
 type CloudModelSettings = AiSettings["models"];
 type UpdateSettings = (updater: (current: AiSettings) => AiSettings) => void;
-
-const showMutationError = (error: unknown, fallback: string) => {
-  const message = error instanceof Error ? error.message.trim() : "";
-  toast.error(message.length > 0 ? message : fallback);
-};
 
 const ModelCostInfo = () => (
   <Tooltip>
@@ -87,6 +84,7 @@ const useAiModels = ({
   const models = draft ??
     settings?.models ?? {
       autoLabel: defaultAutoLabelModel,
+      searchFilter: defaultSearchFilterModel,
       usefulDetail: defaultUsefulDetailModel,
     };
   const updateModel = (key: keyof CloudModelSettings, model: ChatModel) => {
@@ -95,7 +93,10 @@ const useAiModels = ({
     mutation.mutate(next, {
       onError(error) {
         setDraft(null);
-        showMutationError(error, "Could not update AI models.");
+        toastError(error, {
+          boundary: "ai-settings",
+          fallback: "Could not update AI models.",
+        });
       },
       onSuccess(savedModels) {
         updateSettings((current) => ({ ...current, models: savedModels }));
@@ -183,6 +184,25 @@ const AiModelsSection = ({
         Used to find time-sensitive details such as deliveries, reservations,
         and verification codes. This choice is saved to your account.
       </SettingsRow>
+      <SettingsRow
+        action={
+          <AiModelSelect
+            align="end"
+            ariaLabel="Search filters model"
+            className="w-44 sm:w-56"
+            disabled={disabled}
+            onValueChange={(model) => {
+              updateModel("searchFilter", model);
+            }}
+            size="sm"
+            value={models.searchFilter}
+          />
+        }
+        title="Search filters"
+      >
+        Used to turn a typed sentence like “unread from the last 30 days” into
+        filters. This choice is saved to your account.
+      </SettingsRow>
     </SettingsRows>
   </SettingsSection>
 );
@@ -216,7 +236,10 @@ const AiPersonalizationSection = ({
             ...current,
             memory: { ...current.memory, enabled },
           }));
-          showMutationError(error, "Could not update personalization.");
+          toastError(error, {
+            boundary: "ai-settings",
+            fallback: "Could not update personalization.",
+          });
         },
         onSuccess(memory) {
           updateSettings((current) => ({ ...current, memory }));
@@ -228,7 +251,10 @@ const AiPersonalizationSection = ({
   const reset = () => {
     resetMutation.mutate(undefined, {
       onError(error) {
-        showMutationError(error, "Could not reset personalization.");
+        toastError(error, {
+          boundary: "ai-settings",
+          fallback: "Could not reset personalization.",
+        });
       },
       onSuccess() {
         toast.success("Personalization has been reset.");

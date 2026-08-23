@@ -10,6 +10,4 @@ export default defineConfig({
   ...(databaseUrl !== null && databaseUrl !== undefined && databaseUrl !== ""
     ? { dbCredentials: { url: databaseUrl } }
     : {}),
-  strict: true,
-  verbose: true,
 });

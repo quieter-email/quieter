@@ -10,12 +10,12 @@ import type {
   ManagedMailboxUpdateInput,
   SettingsMutation,
 } from "#/features/settings/components/mailbox-detail-mutation-types";
-import { showMutationError } from "#/features/settings/components/mailboxes-settings-shared";
 import { ManagedMailboxDetailSettings } from "#/features/settings/components/managed-mailbox-detail-settings";
 import {
   SettingsCard,
   SettingsLoadingState,
 } from "#/features/settings/components/settings-layout";
+import { toastError } from "#/lib/error-toast";
 
 type ManagedMailboxDetails = RouterOutputs["mail"]["getManagedMailboxDetails"];
 
@@ -99,26 +99,54 @@ export const ManagedMailboxManagerSettingsSection = ({
         if (role === null) {
           removeManagedMailboxDivisionGrantMutation.mutate(
             { divisionId, mailboxId },
-            { onError: showMutationError("Could not remove access.") }
+            {
+              onError: (error) => {
+                toastError(error, {
+                  boundary: "mailbox-settings",
+                  fallback: "Could not remove access.",
+                });
+              },
+            }
           );
           return;
         }
         setManagedMailboxDivisionGrantMutation.mutate(
           { divisionId, mailboxId, role },
-          { onError: showMutationError("Could not update access.") }
+          {
+            onError: (error) => {
+              toastError(error, {
+                boundary: "mailbox-settings",
+                fallback: "Could not update access.",
+              });
+            },
+          }
         );
       }}
       onMemberGrantChange={(userId, role) => {
         if (role === null) {
           removeManagedMailboxGrantMutation.mutate(
             { mailboxId, userId },
-            { onError: showMutationError("Could not remove access.") }
+            {
+              onError: (error) => {
+                toastError(error, {
+                  boundary: "mailbox-settings",
+                  fallback: "Could not remove access.",
+                });
+              },
+            }
           );
           return;
         }
         setManagedMailboxGrantMutation.mutate(
           { mailboxId, role, userId },
-          { onError: showMutationError("Could not update access.") }
+          {
+            onError: (error) => {
+              toastError(error, {
+                boundary: "mailbox-settings",
+                fallback: "Could not update access.",
+              });
+            },
+          }
         );
       }}
       onUpdateMailbox={(input) => {

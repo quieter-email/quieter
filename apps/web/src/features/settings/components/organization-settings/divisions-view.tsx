@@ -39,6 +39,7 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 import { z } from "zod";
 
+import { toastError } from "#/lib/error-toast";
 import { orpc } from "#/lib/orpc";
 
 import {
@@ -406,7 +407,10 @@ const DeleteDivisionDialog = ({
   const deleteMutation = useMutation({
     ...orpc.organization.deleteDivision.mutationOptions(),
     onError: (error) => {
-      toast.error(getMutationErrorMessage(error, "Could not delete division."));
+      toastError(error, {
+        boundary: "organization-divisions",
+        fallback: "Could not delete division.",
+      });
     },
     onSuccess: async () => {
       setOpen(false);
@@ -591,12 +595,10 @@ const DivisionDetailView = ({
                           },
                           {
                             onError: (error) => {
-                              toast.error(
-                                getMutationErrorMessage(
-                                  error,
-                                  "Could not update members."
-                                )
-                              );
+                              toastError(error, {
+                                boundary: "organization-divisions",
+                                fallback: "Could not update members.",
+                              });
                             },
                           }
                         );

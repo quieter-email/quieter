@@ -35,9 +35,9 @@ import {
   SettingsRowText,
   settingsSurfaceVariants,
 } from "#/features/settings/components/settings-layout";
+import { toastError } from "#/lib/error-toast";
 import type { rpc } from "#/lib/orpc";
 import { orpc } from "#/lib/orpc";
-import { getErrorMessage } from "#/lib/orpc-errors";
 
 import {
   getOrganizationMailUsageQueryKey,
@@ -611,7 +611,10 @@ const ManagedUsageSettingsForm = ({
       });
       toast.success("Usage balance settings saved.");
     } catch (error) {
-      toast.error(getErrorMessage(error, "Could not update usage settings."));
+      toastError(error, {
+        boundary: "mail-usage",
+        fallback: "Could not update usage settings.",
+      });
     }
   };
 

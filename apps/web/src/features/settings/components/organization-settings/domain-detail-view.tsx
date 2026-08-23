@@ -29,6 +29,7 @@ import type { UseMutationResult } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 
+import { toastError } from "#/lib/error-toast";
 import { orpc } from "#/lib/orpc";
 import { settingsRouteApi } from "#/lib/route-apis";
 
@@ -388,11 +389,10 @@ const MailModeOptionAction = ({
           },
           {
             onError: (mutationError) => {
-              toast.error(
-                mutationError instanceof Error
-                  ? mutationError.message
-                  : "Could not update mail mode."
-              );
+              toastError(mutationError, {
+                boundary: "domain-settings",
+                fallback: "Could not update mail mode.",
+              });
             },
           }
         );
@@ -1104,11 +1104,10 @@ export const DomainDetailView = ({
       { domainId, organizationId: organization.id },
       {
         onError: (mutationError) => {
-          toast.error(
-            mutationError instanceof Error
-              ? mutationError.message
-              : "Could not verify domain."
-          );
+          toastError(mutationError, {
+            boundary: "domain-settings",
+            fallback: "Could not verify domain.",
+          });
         },
       }
     );
@@ -1119,11 +1118,10 @@ export const DomainDetailView = ({
       { domainId, organizationId: organization.id },
       {
         onError: (mutationError) => {
-          toast.error(
-            mutationError instanceof Error
-              ? mutationError.message
-              : "Could not start one-click setup."
-          );
+          toastError(mutationError, {
+            boundary: "domain-settings",
+            fallback: "Could not start one-click setup.",
+          });
         },
       }
     );
@@ -1149,11 +1147,10 @@ export const DomainDetailView = ({
       { domainId, organizationId: organization.id },
       {
         onError: (mutationError) => {
-          toast.error(
-            mutationError instanceof Error
-              ? mutationError.message
-              : "Could not remove domain."
-          );
+          toastError(mutationError, {
+            boundary: "domain-settings",
+            fallback: "Could not remove domain.",
+          });
         },
       }
     );

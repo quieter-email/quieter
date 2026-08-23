@@ -23,6 +23,7 @@ import { useState } from "react";
 import type { ReactNode, RefObject } from "react";
 
 import { USER_BILLING_QUERY_KEY } from "#/features/settings/domain/billing";
+import { toastError } from "#/lib/error-toast";
 import { orpc } from "#/lib/orpc";
 
 import { TEMPLATE_PLACEHOLDER_PATTERN } from "../domain/template-placeholders";
@@ -240,7 +241,10 @@ export const TemplatePlaceholderSuggestion = ({
       },
       {
         onError: (error) => {
-          toast.error(error.message || "Could not suggest a value.");
+          toastError(error, {
+            boundary: "template-placeholder",
+            fallback: "Could not suggest a value.",
+          });
         },
         onSuccess: ({ value }) => {
           void queryClient.invalidateQueries({

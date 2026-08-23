@@ -73,6 +73,7 @@ import {
 import { SidebarNavItem } from "#/features/navigation/components/sidebar-nav-item";
 import { SidebarEntrance } from "#/features/navigation/components/sidebar-surfaces";
 import { useSidebarNavHover } from "#/features/navigation/hooks/use-sidebar-nav-hover";
+import { toastError } from "#/lib/error-toast";
 import {
   getLabelsQueryKey,
   labelsQueryOptions,
@@ -443,11 +444,10 @@ export const SidebarLabelNav = ({
       setNewLabelName("");
       await invalidateLabels();
     } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : `Could not create ${labelNoun}.`
-      );
+      toastError(error, {
+        boundary: "label-nav",
+        fallback: `Could not create ${labelNoun}.`,
+      });
     }
   };
 
@@ -480,11 +480,10 @@ export const SidebarLabelNav = ({
         );
       }
     } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : `Could not update ${labelNoun}.`
-      );
+      toastError(error, {
+        boundary: "label-nav",
+        fallback: `Could not update ${labelNoun}.`,
+      });
     }
   };
 
@@ -506,11 +505,10 @@ export const SidebarLabelNav = ({
       onSearch(updateLabelFilter(searchQuery, label.name, false));
       setDeletingLabel(null);
     } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : `Could not delete ${labelNoun}.`
-      );
+      toastError(error, {
+        boundary: "label-nav",
+        fallback: `Could not delete ${labelNoun}.`,
+      });
     }
   };
 
@@ -536,11 +534,10 @@ export const SidebarLabelNav = ({
       await invalidateLabels();
       toast.success(`${labelTitleSingular} explanation saved.`);
     } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : `Could not save ${labelNoun} explanation.`
-      );
+      toastError(error, {
+        boundary: "label-nav",
+        fallback: `Could not save ${labelNoun} explanation.`,
+      });
     }
   };
 
@@ -562,11 +559,10 @@ export const SidebarLabelNav = ({
         });
         await invalidateLabels();
       } catch (error) {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : `Could not update ${labelNoun}.`
-        );
+        toastError(error, {
+          boundary: "label-nav",
+          fallback: `Could not update ${labelNoun}.`,
+        });
       }
       return;
     }
@@ -596,11 +592,10 @@ export const SidebarLabelNav = ({
       await reorderLabelsMutation.mutateAsync({ labelIds, mailboxId });
       await invalidateLabels();
     } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : `Could not reorder ${labelNoun}.`
-      );
+      toastError(error, {
+        boundary: "label-nav",
+        fallback: `Could not reorder ${labelNoun}.`,
+      });
     }
   };
 
