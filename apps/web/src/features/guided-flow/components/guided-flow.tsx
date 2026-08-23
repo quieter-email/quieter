@@ -57,7 +57,7 @@ export const GuidedFlow = ({
       aria-label={ariaLabel}
       className={cn("flex min-h-full flex-col", className)}
     >
-      <header className="sticky top-0 z-20 grid min-h-16 grid-cols-[1fr_auto_1fr] items-center border-b border-border/70 bg-bg/90 px-3 backdrop-blur-xl sm:px-5 lg:px-6">
+      <header className="sticky top-0 z-20 grid min-h-16 grid-cols-[1fr_auto_1fr] items-center border-b border-border/70 bg-bg-elevated/80 px-3 backdrop-blur-xl sm:px-5 lg:px-6">
         <div className="min-w-0 justify-self-start">{headerStart}</div>
         <div className="min-w-0 justify-self-center text-center">
           {headerCenter}

@@ -246,15 +246,7 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
   const isGuidedMailboxSetup = tab === "mailboxes" && mailboxView === "add";
 
   return (
-    <main
-      className={cn(
-        "relative isolate flex h-dvh min-h-0 flex-col overflow-hidden text-fg",
-        {
-          "bg-bg": mailboxView === "add",
-          "bg-bg-elevated": mailboxView !== "add",
-        }
-      )}
-    >
+    <main className="relative isolate flex h-dvh min-h-0 flex-col overflow-hidden bg-bg-elevated text-fg">
       <SettingsDataPrefetch tab={tab} />
       <BillingCheckoutResult />
       <ConnectorConnectionResult />
