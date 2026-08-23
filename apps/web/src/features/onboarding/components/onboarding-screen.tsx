@@ -54,6 +54,7 @@ import type { OnboardingIntentId } from "#/features/onboarding/domain/onboarding
 import { partitionMailDomains } from "#/features/onboarding/domain/onboarding-playbooks";
 import type { OnboardingMailDomain } from "#/features/onboarding/domain/onboarding-playbooks";
 import { RegisterDomainDialog } from "#/features/settings/components/organization-settings/register-domain-dialog";
+import { authClient } from "#/lib/auth";
 import { toastError } from "#/lib/error-toast";
 import { openGoogleAccountLink } from "#/lib/google-account-link";
 import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
@@ -419,6 +420,20 @@ export const OnboardingScreen = () => {
   const [name, setName] = useState("");
   const [teamName, setTeamName] = useState("");
   const reducedMotion = useReducedMotion();
+  const signOutMutation = useMutation({
+    mutationFn: async () => {
+      const response = await authClient.signOut();
+      if (response.error) {
+        throw new Error(response.error.message ?? "Could not sign out.");
+      }
+      return response;
+    },
+    mutationKey: ["auth", "sign-out"],
+    onSuccess: async () => {
+      queryClient.clear();
+      await navigate({ to: "/home" });
+    },
+  });
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [isConnectingGmail, setIsConnectingGmail] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
@@ -622,7 +637,27 @@ export const OnboardingScreen = () => {
             </Progress>
           </div>
         }
-        headerStart={null}
+        headerStart={
+          <Button
+            className="-ml-2 text-muted-fg hover:text-fg"
+            disabled={signOutMutation.isPending}
+            onClick={() => {
+              signOutMutation.mutate(undefined, {
+                onError: (error) => {
+                  toastError(error, {
+                    boundary: "onboarding-sign-out",
+                    fallback: "Could not sign out.",
+                  });
+                },
+              });
+            }}
+            size="sm"
+            variant="ghost"
+          >
+            <HugeiconsIcon aria-hidden icon={ArrowLeft01Icon} />
+            Sign out
+          </Button>
+        }
         previous={
           step === 2 ? (
             <Button

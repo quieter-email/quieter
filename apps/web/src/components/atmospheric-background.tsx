@@ -230,7 +230,8 @@ void main() {
 `;
 
 /** Matches dark `--bg-elevated` (oklch 0.145). */
-const ELEVATED_RGB = [0.145, 0.145, 0.145] as const;
+// sRGB channels for the app surface; its token is oklch(0.145) => #0a0a0a.
+const ELEVATED_RGB = [0.0392, 0.0392, 0.0392] as const;
 const BLACK_RGB = [0, 0, 0] as const;
 
 type FadeTarget = "black" | "elevated";
