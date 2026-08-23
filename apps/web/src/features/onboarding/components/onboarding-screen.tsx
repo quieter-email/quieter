@@ -181,11 +181,15 @@ const GmailPlaybook = ({
 
     return (
       <div className="space-y-2">
+        <p className="text-body-sm text-muted-fg">
+          Connect a Gmail account to read and send from it.
+        </p>
         <Button
-          className="w-full justify-center gap-3"
           disabled={isConnecting}
           onClick={onConnect}
+          size="sm"
           type="button"
+          variant="outline"
         >
           <GoogleLogo className="size-4" />
           {hasText(googleEmail) ? `Add ${googleEmail}` : "Add a Gmail mailbox"}
@@ -782,13 +786,9 @@ export const OnboardingScreen = () => {
       ) : (
         <div className="mx-auto max-w-xl">
           <header>
-            <p className="text-caption text-muted-fg">Setup</p>
-            <h1 className="mt-2 font-serif text-title-md leading-[1.32] font-normal tracking-[-0.014em] text-balance text-fg">
+            <h1 className="font-serif text-title-md leading-[1.32] font-normal tracking-[-0.014em] text-balance text-fg">
               Set up what you need
             </h1>
-            <p className="mt-3 text-body/6 text-muted-fg">
-              Complete what you picked, or finish now and continue in Settings.
-            </p>
           </header>
 
           <div className="mt-8 space-y-4">
@@ -802,7 +802,7 @@ export const OnboardingScreen = () => {
             )}
           </div>
 
-          <div className="mt-8 space-y-4 border-t border-border/70 pt-5">
+          <div className="mt-10 space-y-4">
             {state?.hasAcceptedTerms === false ? (
               <label
                 className="flex items-start gap-3 text-body-sm text-muted-fg"
@@ -840,7 +840,7 @@ export const OnboardingScreen = () => {
 
             {hasAnySetup ? null : (
               <p className="text-center text-micro text-muted-fg">
-                You can set up mail anytime in Settings.
+                You can set up as many mailboxes as you want later on.
               </p>
             )}
 
