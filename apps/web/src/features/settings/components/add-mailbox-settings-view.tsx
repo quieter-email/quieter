@@ -206,9 +206,6 @@ export const AddMailboxSettingsView = () => {
       activeStep={activeStep}
       ariaLabel="Add a mailbox"
       direction={direction}
-      headerCenter={
-        <span className="text-body-sm font-medium text-fg">Add mailbox</span>
-      }
       headerEnd={
         <div className="flex items-center gap-3">
           <span className="text-caption text-muted-fg">
@@ -321,16 +318,11 @@ export const AddMailboxSettingsView = () => {
       {mailboxType === "gmail" ? (
         <div className="mx-auto max-w-md">
           <header>
-            <p className="text-caption text-muted-fg">Connect</p>
-            <h1 className="mt-2 text-title-md font-medium tracking-tight text-fg">
-              Connect your Gmail account
+            <h1 className="text-title-sm font-medium tracking-tight text-fg">
+              Team
             </h1>
-            <p className="mt-3 text-body/6 text-muted-fg">
-              Pick where the mailbox should appear. Google will open next so you
-              can choose the account and approve access.
-            </p>
           </header>
-          <div className="mt-8">
+          <div className="mt-6">
             <Field>
               <FieldLabel htmlFor="gmail-team">Team</FieldLabel>
               <Select
@@ -354,13 +346,9 @@ export const AddMailboxSettingsView = () => {
                   ))}
                 </SelectContent>
               </Select>
-              <FieldDescription>
-                The mailbox stays private to you, even when it appears inside a
-                team.
-              </FieldDescription>
             </Field>
           </div>
-          <div className="mt-9 flex justify-end border-t border-border/70 pt-5">
+          <div className="mt-8 flex justify-end">
             <Button
               disabled={isStartingGmail || organizations.length === 0}
               onClick={() => {
@@ -379,16 +367,11 @@ export const AddMailboxSettingsView = () => {
       {mailboxType === "shared" && !isSharedDetailsVisible ? (
         <div className="mx-auto max-w-md">
           <header>
-            <p className="text-caption text-muted-fg">Team</p>
-            <h1 className="mt-2 text-title-md font-medium tracking-tight text-fg">
-              Choose the team
+            <h1 className="text-title-sm font-medium tracking-tight text-fg">
+              Team
             </h1>
-            <p className="mt-3 text-body/6 text-muted-fg">
-              The team owns this inbox. Its owners and admins can manage access
-              after you create it.
-            </p>
           </header>
-          <div className="mt-8">
+          <div className="mt-6">
             <Field>
               <FieldLabel htmlFor="shared-team">Team</FieldLabel>
               <Select
@@ -415,19 +398,9 @@ export const AddMailboxSettingsView = () => {
                   ))}
                 </SelectContent>
               </Select>
-              {isCreateManagedOrganizationPending ? (
-                <FieldDescription>Checking your access…</FieldDescription>
-              ) : null}
-              {!isCreateManagedOrganizationPending &&
-              !canCreateManagedMailbox ? (
-                <FieldDescription>
-                  Only a team owner or admin can create a shared inbox for this
-                  team.
-                </FieldDescription>
-              ) : null}
             </Field>
           </div>
-          <div className="mt-9 flex justify-end border-t border-border/70 pt-5">
+          <div className="mt-8 flex justify-end">
             <Button
               disabled={
                 selectedManagedOrganizationId === "" ||
@@ -452,15 +425,11 @@ export const AddMailboxSettingsView = () => {
       {mailboxType === "shared" && isSharedDetailsVisible ? (
         <div className="mx-auto max-w-md">
           <header>
-            <p className="text-caption text-muted-fg">Address</p>
-            <h1 className="mt-2 text-title-md font-medium tracking-tight text-fg">
-              Create the address
+            <h1 className="text-title-sm font-medium tracking-tight text-fg">
+              Address
             </h1>
-            <p className="mt-3 text-body/6 text-muted-fg">
-              Set the name people will see and the address they will write to.
-            </p>
           </header>
-          <div className="mt-8 space-y-5">
+          <div className="mt-6 space-y-5">
             <Field>
               <FieldLabel htmlFor="display-name">Display name</FieldLabel>
               <TextFieldInput
@@ -550,10 +519,10 @@ export const AddMailboxSettingsView = () => {
             </Field>
 
             <Field>
-              <FieldLabel htmlFor="division">Primary division</FieldLabel>
+              <FieldLabel htmlFor="division">Division</FieldLabel>
               <Select
                 items={[
-                  { label: "No primary division", value: "none" },
+                  { label: "No division", value: "none" },
                   ...(managedDivisionsData?.divisions ?? []).map(
                     (division) => ({
                       label: division.name,
@@ -574,7 +543,7 @@ export const AddMailboxSettingsView = () => {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent align="start">
-                  <SelectItem value="none">No primary division</SelectItem>
+                  <SelectItem value="none">No division</SelectItem>
                   {(managedDivisionsData?.divisions ?? []).map((division) => (
                     <SelectItem key={division.id} value={division.id}>
                       {division.name}
@@ -582,19 +551,15 @@ export const AddMailboxSettingsView = () => {
                   ))}
                 </SelectContent>
               </Select>
-              <FieldDescription>
-                Optional. A division helps organize access for larger teams.
-              </FieldDescription>
             </Field>
 
             {selectedDomain === "" ? null : (
               <label
-                className="squircle flex cursor-pointer items-start gap-2.5 rounded-md border border-border bg-bg-surface px-3 py-2.5 transition-colors hover:bg-control-hover"
+                className="flex cursor-pointer items-center gap-2.5 py-1"
                 htmlFor="managed-mailbox-whole-domain"
               >
                 <Checkbox
                   checked={receiveWholeDomain}
-                  className="mt-0.5"
                   id="managed-mailbox-whole-domain"
                   onCheckedChange={(checked) => {
                     if (typeof checked === "boolean") {
@@ -607,15 +572,8 @@ export const AddMailboxSettingsView = () => {
                 >
                   <CheckboxIndicator />
                 </Checkbox>
-                <span className="min-w-0">
-                  <span className="block text-body text-fg">
-                    Receive mail for any address at {selectedDomain}
-                  </span>
-                  <span className="mt-0.5 block text-caption/5 text-muted-fg">
-                    Exact shared inboxes keep priority. Mail for every other
-                    recipient lands here, while replies still send from this
-                    inbox address.
-                  </span>
+                <span className="text-body-sm text-fg">
+                  Catch all mail for {selectedDomain}
                 </span>
               </label>
             )}
@@ -627,7 +585,7 @@ export const AddMailboxSettingsView = () => {
               </p>
             ) : null}
           </div>
-          <div className="mt-9 flex justify-end border-t border-border/70 pt-5">
+          <div className="mt-8 flex justify-end">
             <Button
               disabled={trimmedLocalPart === "" || selectedDomain === ""}
               onClick={() => {

@@ -23,7 +23,6 @@ type GuidedFlowProps = {
   children: ReactNode;
   className?: string;
   direction: "back" | "forward";
-  headerCenter?: ReactNode;
   headerEnd?: ReactNode;
   headerStart?: ReactNode;
   previous?: ReactNode;
@@ -35,7 +34,6 @@ export const GuidedFlow = ({
   children,
   className,
   direction,
-  headerCenter,
   headerEnd,
   headerStart,
   previous,
@@ -63,10 +61,7 @@ export const GuidedFlow = ({
         <div className="flex min-w-0 items-center px-3 sm:px-5 lg:border-r lg:border-border/60 lg:px-6">
           {headerStart}
         </div>
-        <div className="flex min-w-0 items-center justify-center px-2 text-center">
-          {headerCenter}
-        </div>
-        <div className="flex min-w-0 items-center justify-end px-3 sm:px-5 lg:border-l lg:border-border/60 lg:px-6">
+        <div className="col-start-3 flex min-w-0 items-center justify-end px-3 sm:px-5 lg:border-l lg:border-border/60 lg:px-6">
           {headerEnd}
         </div>
       </header>
