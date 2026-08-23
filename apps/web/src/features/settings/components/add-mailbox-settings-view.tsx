@@ -28,7 +28,7 @@ import { TextFieldInput } from "@quieter/ui/text-field";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useSelector } from "@tanstack/react-store";
 
 import {
   getSettingsReturnTo,
@@ -53,25 +53,26 @@ import { openGoogleAccountLink } from "#/lib/google-account-link";
 import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
 import { orpc } from "#/lib/orpc";
 
-type MailboxType = "gmail" | "shared";
+import { useAddMailboxSettingsStore } from "./add-mailbox-settings-store";
 
 export const AddMailboxSettingsView = () => {
   const navigate = useNavigate({ from: "/settings" });
   const queryClient = useQueryClient();
   const session = authClient.useSession().data;
   const organizations = authClient.useListOrganizations().data ?? [];
-  const [mailboxType, setMailboxType] = useState<MailboxType>();
-  const [isSharedDetailsVisible, setIsSharedDetailsVisible] = useState(false);
-  const [gmailOrganizationId, setGmailOrganizationId] = useState("");
-  const [managedOrganizationId, setManagedOrganizationId] = useState("");
-  const [managedDisplayName, setManagedDisplayName] = useState("");
-  const [managedDivisionId, setManagedDivisionId] = useState<string | null>(
-    null
-  );
-  const [managedLocalPart, setManagedLocalPart] = useState("");
-  const [managedDomain, setManagedDomain] = useState<string>();
-  const [receiveWholeDomain, setReceiveWholeDomain] = useState(false);
-  const [isStartingGmail, setIsStartingGmail] = useState(false);
+  const workflowStore = useAddMailboxSettingsStore();
+  const {
+    gmailOrganizationId,
+    isSharedDetailsVisible,
+    isStartingGmail,
+    mailboxType,
+    managedDisplayName,
+    managedDivisionId,
+    managedDomain,
+    managedLocalPart,
+    managedOrganizationId,
+    receiveWholeDomain,
+  } = useSelector(workflowStore, (state) => state);
   const selectedManagedOrganizationId =
     managedOrganizationId || organizations[0]?.id || "";
   const selectedManagedOrganization = organizations.find(
@@ -140,7 +141,10 @@ export const AddMailboxSettingsView = () => {
   });
 
   const startGmailConnection = async () => {
-    setIsStartingGmail(true);
+    workflowStore.setState((state) => ({
+      ...state,
+      isStartingGmail: true,
+    }));
     try {
       await openGoogleAccountLink({
         organizationId: gmailOrganizationId || organizations[0]?.id,
@@ -148,7 +152,10 @@ export const AddMailboxSettingsView = () => {
         returnTo: getSettingsReturnTo(),
       });
     } catch (error) {
-      setIsStartingGmail(false);
+      workflowStore.setState((state) => ({
+        ...state,
+        isStartingGmail: false,
+      }));
       toastError(error, {
         boundary: "gmail-connect",
         fallback: "Could not start Gmail connection.",
@@ -157,8 +164,11 @@ export const AddMailboxSettingsView = () => {
   };
 
   const resetMailboxType = () => {
-    setMailboxType(undefined);
-    setIsSharedDetailsVisible(false);
+    workflowStore.setState((state) => ({
+      ...state,
+      isSharedDetailsVisible: false,
+      mailboxType: undefined,
+    }));
   };
   const sharedSteps = ["Mailbox type", "Team", "Address"] as const;
   const gmailSteps = ["Mailbox type", "Connect"] as const;
@@ -193,8 +203,11 @@ export const AddMailboxSettingsView = () => {
             <Button
               className="group h-auto min-h-40 w-full flex-col items-start justify-start rounded-lg bg-bg p-5 text-left whitespace-normal hover:border-border-strong hover:bg-control-hover"
               onClick={() => {
-                setMailboxType("gmail");
-                setIsSharedDetailsVisible(false);
+                workflowStore.setState((state) => ({
+                  ...state,
+                  isSharedDetailsVisible: false,
+                  mailboxType: "gmail",
+                }));
               }}
               variant="outline"
             >
@@ -224,8 +237,11 @@ export const AddMailboxSettingsView = () => {
             <Button
               className="group h-auto min-h-40 w-full flex-col items-start justify-start rounded-lg bg-bg p-5 text-left whitespace-normal hover:border-border-strong hover:bg-control-hover"
               onClick={() => {
-                setMailboxType("shared");
-                setIsSharedDetailsVisible(false);
+                workflowStore.setState((state) => ({
+                  ...state,
+                  isSharedDetailsVisible: false,
+                  mailboxType: "shared",
+                }));
               }}
               variant="outline"
             >
@@ -285,7 +301,10 @@ export const AddMailboxSettingsView = () => {
               <Select
                 items={placementItems}
                 onValueChange={(value) => {
-                  setGmailOrganizationId(value ?? "");
+                  workflowStore.setState((state) => ({
+                    ...state,
+                    gmailOrganizationId: value ?? "",
+                  }));
                 }}
                 value={gmailOrganizationId || organizations[0]?.id}
               >
@@ -360,10 +379,13 @@ export const AddMailboxSettingsView = () => {
               <Select
                 items={placementItems}
                 onValueChange={(value) => {
-                  setManagedOrganizationId(value ?? "");
-                  setManagedDomain(undefined);
-                  setManagedDivisionId(null);
-                  setReceiveWholeDomain(false);
+                  workflowStore.setState((state) => ({
+                    ...state,
+                    managedDivisionId: null,
+                    managedDomain: undefined,
+                    managedOrganizationId: value ?? "",
+                    receiveWholeDomain: false,
+                  }));
                 }}
                 value={selectedManagedOrganizationId || null}
               >
@@ -400,7 +422,10 @@ export const AddMailboxSettingsView = () => {
                   !canCreateManagedMailbox
                 }
                 onClick={() => {
-                  setIsSharedDetailsVisible(true);
+                  workflowStore.setState((state) => ({
+                    ...state,
+                    isSharedDetailsVisible: true,
+                  }));
                 }}
                 variant="outline"
               >
@@ -421,7 +446,10 @@ export const AddMailboxSettingsView = () => {
           <Button
             className="mb-6 -ml-2"
             onClick={() => {
-              setIsSharedDetailsVisible(false);
+              workflowStore.setState((state) => ({
+                ...state,
+                isSharedDetailsVisible: false,
+              }));
             }}
             size="sm"
             variant="ghost"
@@ -449,7 +477,10 @@ export const AddMailboxSettingsView = () => {
                   className="bg-bg"
                   id="display-name"
                   onChange={(event) => {
-                    setManagedDisplayName(event.currentTarget.value);
+                    workflowStore.setState((state) => ({
+                      ...state,
+                      managedDisplayName: event.currentTarget.value,
+                    }));
                   }}
                   placeholder="Support"
                   value={managedDisplayName}
@@ -467,9 +498,13 @@ export const AddMailboxSettingsView = () => {
                     className="h-full min-w-0 flex-1 pr-1"
                     id="local-part"
                     onChange={(event) => {
-                      setManagedLocalPart(
-                        event.currentTarget.value.replaceAll(/[@\s]/gu, "")
-                      );
+                      workflowStore.setState((state) => ({
+                        ...state,
+                        managedLocalPart: event.currentTarget.value.replaceAll(
+                          /[@\s]/gu,
+                          ""
+                        ),
+                      }));
                     }}
                     placeholder="support"
                     value={managedLocalPart}
@@ -487,7 +522,10 @@ export const AddMailboxSettingsView = () => {
                         value: domain.domain,
                       }))}
                       onValueChange={(value) => {
-                        setManagedDomain(value ?? undefined);
+                        workflowStore.setState((state) => ({
+                          ...state,
+                          managedDomain: value ?? undefined,
+                        }));
                       }}
                       value={selectedDomain}
                     >
@@ -539,9 +577,11 @@ export const AddMailboxSettingsView = () => {
                     ),
                   ]}
                   onValueChange={(value) => {
-                    setManagedDivisionId(
-                      value === "none" ? null : (value ?? null)
-                    );
+                    workflowStore.setState((state) => ({
+                      ...state,
+                      managedDivisionId:
+                        value === "none" ? null : (value ?? null),
+                    }));
                   }}
                   value={managedDivisionId ?? "none"}
                 >
@@ -573,7 +613,10 @@ export const AddMailboxSettingsView = () => {
                     id="managed-mailbox-whole-domain"
                     onCheckedChange={(checked) => {
                       if (typeof checked === "boolean") {
-                        setReceiveWholeDomain(checked);
+                        workflowStore.setState((state) => ({
+                          ...state,
+                          receiveWholeDomain: checked,
+                        }));
                       }
                     }}
                   >
