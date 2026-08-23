@@ -36,21 +36,10 @@ export const GuidedFlow = ({
   previous,
 }: GuidedFlowProps) => {
   const reducedMotion = useReducedMotion();
-  const offset = direction === "forward" ? 18 : -18;
-  const initial =
-    reducedMotion === true
-      ? { opacity: 0 }
-      : {
-          opacity: 0,
-          transform: `translate3d(${offset}px, 0, 0)`,
-        };
-  const exit =
-    reducedMotion === true
-      ? { opacity: 0 }
-      : {
-          opacity: 0,
-          transform: `translate3d(${-offset}px, 0, 0)`,
-        };
+  const isReduced = reducedMotion === true;
+  const stepOffset = direction === "forward" ? 48 : -48;
+  const enterX = isReduced ? 0 : stepOffset;
+  const exitX = isReduced ? 0 : -stepOffset;
 
   return (
     <section
@@ -79,19 +68,22 @@ export const GuidedFlow = ({
           <LazyMotion features={domAnimation}>
             <AnimatePresence initial={false} mode="popLayout">
               <m.div
-                animate={{
-                  opacity: 1,
-                  transform: "translate3d(0, 0, 0)",
-                }}
+                animate={{ opacity: 1, x: 0 }}
                 className="w-full max-w-2xl"
-                exit={exit}
-                initial={initial}
+                exit={{
+                  opacity: 0,
+                  transition: {
+                    duration: appMotionDuration.feedback,
+                    ease: appEaseOut,
+                  },
+                  x: exitX,
+                }}
+                initial={{ opacity: 0, x: enterX }}
                 key={activeStep}
                 transition={{
-                  duration:
-                    reducedMotion === true
-                      ? appMotionDuration.feedback
-                      : appMotionDuration.enter,
+                  duration: isReduced
+                    ? appMotionDuration.feedback
+                    : appMotionDuration.enter,
                   ease: appEaseOut,
                 }}
               >
