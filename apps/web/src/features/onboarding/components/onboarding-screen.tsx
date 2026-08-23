@@ -32,10 +32,12 @@ import { TextFieldInput } from "@quieter/ui/text-field";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
+import { m, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { GoogleLogo } from "#/components/google-logo";
 import { GuidedFlow } from "#/features/guided-flow/components/guided-flow";
+import { getAppFlyInMotion } from "#/features/motion/app-motion";
 import {
   loadStoredOnboardingIntents,
   ONBOARDING_INTENT_OPTIONS,
@@ -401,6 +403,7 @@ export const OnboardingScreen = () => {
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [teamName, setTeamName] = useState("");
+  const reducedMotion = useReducedMotion();
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [isConnectingGmail, setIsConnectingGmail] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
@@ -618,7 +621,10 @@ export const OnboardingScreen = () => {
             aria-hidden
             className="pointer-events-none absolute -top-48 left-1/2 h-72 w-[52rem] -translate-x-1/2 rounded-full blur-3xl dark:bg-primary/10"
           />
-          <header className="relative text-center">
+          <m.header
+            className="relative text-center"
+            {...getAppFlyInMotion({ animate: true, index: 0, reducedMotion })}
+          >
             <h1 className="text-title-lg font-medium tracking-tight text-fg">
               Welcome to Quieter
             </h1>
@@ -626,9 +632,12 @@ export const OnboardingScreen = () => {
               A few details, then your mail. You can change any of this later in
               Settings.
             </p>
-          </header>
+          </m.header>
 
-          <div className="mt-8 space-y-4">
+          <m.div
+            className="mt-8 space-y-4"
+            {...getAppFlyInMotion({ animate: true, index: 1, reducedMotion })}
+          >
             <Field>
               <FieldLabel htmlFor="onboarding-name">Name</FieldLabel>
               <Input
@@ -657,9 +666,12 @@ export const OnboardingScreen = () => {
                 Optional. Teams hold your mailboxes and billing.
               </p>
             </Field>
-          </div>
+          </m.div>
 
-          <fieldset className="mt-16">
+          <m.fieldset
+            className="mt-16"
+            {...getAppFlyInMotion({ animate: true, index: 2, reducedMotion })}
+          >
             <legend className="text-body font-medium text-fg">
               What are you planning to do with Quieter?
             </legend>
@@ -704,9 +716,12 @@ export const OnboardingScreen = () => {
                 );
               })}
             </div>
-          </fieldset>
+          </m.fieldset>
 
-          <div className="mt-14 flex justify-end">
+          <m.div
+            className="mt-14 flex justify-end"
+            {...getAppFlyInMotion({ animate: true, index: 3, reducedMotion })}
+          >
             <Button
               disabled={!canContinue}
               onClick={() => {
@@ -717,7 +732,7 @@ export const OnboardingScreen = () => {
               Continue
               <HugeiconsIcon aria-hidden icon={ArrowRight01Icon} />
             </Button>
-          </div>
+          </m.div>
         </div>
       ) : (
         <div className="mx-auto max-w-xl">
