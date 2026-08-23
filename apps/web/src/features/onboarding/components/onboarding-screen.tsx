@@ -403,7 +403,6 @@ export const OnboardingScreen = () => {
   const [teamName, setTeamName] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [isConnectingGmail, setIsConnectingGmail] = useState(false);
-  const [hasEditedName, setHasEditedName] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
   const [direction, setDirection] = useState<"back" | "forward">("forward");
   const [selectedIntents, setSelectedIntents] = useState<OnboardingIntentId[]>(
@@ -463,7 +462,6 @@ export const OnboardingScreen = () => {
     storeOnboardingIntents(globalThis.localStorage, email, selectedIntents);
   }, [email, selectedIntents]);
 
-  const resolvedName = hasEditedName ? name : name || (state?.name ?? "");
   const googleEmail = state?.googleEmail ?? null;
   const organizationId = state?.organizationId ?? null;
   const isGmailConnected =
@@ -515,7 +513,7 @@ export const OnboardingScreen = () => {
     );
   };
 
-  const canContinue = resolvedName.trim().length > 0;
+  const canContinue = name.trim().length > 0;
   const canFinish =
     state !== null &&
     state !== undefined &&
@@ -578,11 +576,6 @@ export const OnboardingScreen = () => {
       activeStep={activeStep}
       ariaLabel="Onboarding"
       direction={direction}
-      headerCenter={
-        <span className="text-body-sm font-medium text-fg">
-          Welcome to Quieter
-        </span>
-      }
       headerEnd={
         <div className="flex items-center gap-3">
           <span className="text-caption text-muted-fg">
@@ -614,15 +607,19 @@ export const OnboardingScreen = () => {
             variant="ghost"
           >
             <HugeiconsIcon aria-hidden icon={ArrowLeft01Icon} />
-            Back
+            {steps[0]}
           </Button>
         ) : null
       }
     >
       {step === 1 ? (
-        <div className="mx-auto max-w-xl">
-          <header className="text-center">
-            <h1 className="text-title-md font-medium tracking-tight text-fg">
+        <div className="relative mx-auto max-w-xl">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -top-48 left-1/2 h-72 w-[52rem] -translate-x-1/2 rounded-full blur-3xl dark:bg-primary/10"
+          />
+          <header className="relative text-center">
+            <h1 className="text-title-lg font-medium tracking-tight text-fg">
               Welcome to Quieter
             </h1>
             <p className="mt-3 text-body/6 text-muted-fg">
@@ -638,11 +635,10 @@ export const OnboardingScreen = () => {
                 autoComplete="name"
                 id="onboarding-name"
                 onChange={(event) => {
-                  setHasEditedName(true);
                   setName(event.target.value);
                 }}
-                placeholder="Ada Lovelace"
-                value={resolvedName}
+                placeholder="Your name"
+                value={name}
               />
             </Field>
             <Field>
@@ -653,9 +649,7 @@ export const OnboardingScreen = () => {
                   setTeamName(event.target.value);
                 }}
                 placeholder={
-                  resolvedName.trim()
-                    ? `${resolvedName.trim()}'s team`
-                    : "My team"
+                  name.trim() ? `${name.trim()}'s team` : "Your team"
                 }
                 value={teamName}
               />
@@ -665,7 +659,7 @@ export const OnboardingScreen = () => {
             </Field>
           </div>
 
-          <fieldset className="mt-8 border-t border-border/70 pt-8">
+          <fieldset className="mt-16">
             <legend className="text-body font-medium text-fg">
               What are you planning to do with Quieter?
             </legend>
@@ -712,7 +706,7 @@ export const OnboardingScreen = () => {
             </div>
           </fieldset>
 
-          <div className="mt-9 flex justify-end border-t border-border/70 pt-5">
+          <div className="mt-14 flex justify-end">
             <Button
               disabled={!canContinue}
               onClick={() => {
@@ -796,7 +790,7 @@ export const OnboardingScreen = () => {
                 onClick={() => {
                   completeMutation.mutate({
                     acceptedTerms: true,
-                    name: resolvedName.trim(),
+                    name: name.trim(),
                     teamName: teamName.trim() || undefined,
                   });
                 }}
