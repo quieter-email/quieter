@@ -1,5 +1,6 @@
 "use client";
 
+import { cn } from "@quieter/ui/cn";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { lazy, Suspense } from "react";
@@ -163,6 +164,7 @@ type SettingsUser = {
 const SettingsBackNavigation = ({
   domainId,
   mailboxId,
+  mailboxView,
   onBackToApp,
   onBackToMailboxes,
   onBackToOverview,
@@ -171,6 +173,7 @@ const SettingsBackNavigation = ({
 }: {
   domainId: string;
   mailboxId: string;
+  mailboxView: "add" | "list";
   onBackToApp: () => void;
   onBackToMailboxes: () => void;
   onBackToOverview: () => void;
@@ -181,7 +184,7 @@ const SettingsBackNavigation = ({
     return <SettingsBackButton onClick={onBackToApp}>Back</SettingsBackButton>;
   }
 
-  if (tab === "mailboxes" && mailboxId !== "") {
+  if (tab === "mailboxes" && (mailboxId !== "" || mailboxView === "add")) {
     return (
       <SettingsBackButton onClick={onBackToMailboxes}>
         Mailboxes
@@ -207,7 +210,7 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
   const navigate = useNavigate({
     from: "/settings",
   });
-  const { domainId, from, mailboxId, organizationId, tab } =
+  const { domainId, from, mailboxId, mailboxView, organizationId, tab } =
     settingsRouteApi.useSearch();
 
   const setTab = (nextTab: SettingsTab) => {
@@ -216,6 +219,7 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
         ...previous,
         domainId: "",
         mailboxId: "",
+        mailboxView: "list",
         organizationId: "",
         organizationView: "overview",
         tab: nextTab,
@@ -233,6 +237,7 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
       search: (previous) => ({
         ...previous,
         mailboxId: "",
+        mailboxView: "list",
       }),
       to: ".",
     });
@@ -240,7 +245,15 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
   const detail = tab === "overview" ? null : SETTINGS_DETAIL_TITLES[tab];
 
   return (
-    <main className="relative isolate flex h-dvh min-h-0 flex-col overflow-hidden bg-bg-elevated text-fg">
+    <main
+      className={cn(
+        "relative isolate flex h-dvh min-h-0 flex-col overflow-hidden text-fg",
+        {
+          "bg-bg": mailboxView === "add",
+          "bg-bg-elevated": mailboxView !== "add",
+        }
+      )}
+    >
       <SettingsDataPrefetch tab={tab} />
       <BillingCheckoutResult />
       <ConnectorConnectionResult />
@@ -248,6 +261,7 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
       <SettingsBackNavigation
         domainId={domainId}
         mailboxId={mailboxId}
+        mailboxView={mailboxView}
         onBackToApp={goBackToApp}
         onBackToMailboxes={goBackToMailboxes}
         onBackToOverview={() => {

@@ -57,6 +57,7 @@ export const Route = createFileRoute("/settings")({
         .default("/"),
       gmail: z.enum(["connected", "error"]).optional(),
       mailboxId: z.string().trim().catch("").default(""),
+      mailboxView: z.enum(["add", "list"]).catch("list").default("list"),
       organizationId: z.string().trim().catch("").default(""),
       organizationView: z
         .string()
