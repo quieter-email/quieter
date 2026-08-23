@@ -3,18 +3,16 @@
 import {
   ArrowLeft01Icon,
   ArrowRight01Icon,
-  Loading03Icon,
   Mail01Icon,
   UserGroupIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
-import { cn } from "@quieter/ui/cn";
+import { Field, FieldDescription, FieldLabel } from "@quieter/ui/field";
 import {
   Progress,
   ProgressIndicator,
-  ProgressLabel,
   ProgressTrack,
 } from "@quieter/ui/progress";
 import {
@@ -30,6 +28,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useSelector } from "@tanstack/react-store";
 
+import { GuidedFlow } from "#/features/guided-flow/components/guided-flow";
 import {
   getSettingsReturnTo,
   runDetached,
@@ -43,10 +42,6 @@ import {
   organizationMailDomainsQueryOptions,
   resolveMailDomainVerified,
 } from "#/features/settings/components/organization-settings/mail-domains";
-import {
-  SettingsCard,
-  SettingsPageHeader,
-} from "#/features/settings/components/settings-layout";
 import { authClient } from "#/lib/auth";
 import { toastError } from "#/lib/error-toast";
 import { openGoogleAccountLink } from "#/lib/google-account-link";
@@ -62,6 +57,7 @@ export const AddMailboxSettingsView = () => {
   const organizations = authClient.useListOrganizations().data ?? [];
   const workflowStore = useAddMailboxSettingsStore();
   const {
+    direction,
     gmailOrganizationId,
     isSharedDetailsVisible,
     isStartingGmail,
@@ -166,6 +162,7 @@ export const AddMailboxSettingsView = () => {
   const resetMailboxType = () => {
     workflowStore.setState((state) => ({
       ...state,
+      direction: "back",
       isSharedDetailsVisible: false,
       mailboxType: undefined,
     }));
@@ -177,34 +174,105 @@ export const AddMailboxSettingsView = () => {
   if (mailboxType !== undefined) {
     currentStep = isSharedDetailsVisible ? 3 : 2;
   }
+  let activeStep = "mailbox-type";
+  if (mailboxType === "gmail") {
+    activeStep = "gmail";
+  } else if (mailboxType === "shared") {
+    activeStep = isSharedDetailsVisible ? "shared-address" : "shared-team";
+  }
+  const previousLabel = isSharedDetailsVisible ? "Team" : "Mailbox type";
+  const goBack = isSharedDetailsVisible
+    ? () => {
+        workflowStore.setState((state) => ({
+          ...state,
+          direction: "back",
+          isSharedDetailsVisible: false,
+        }));
+      }
+    : resetMailboxType;
+  const exitFlow = () => {
+    void navigate({
+      search: (previous) => ({
+        ...previous,
+        mailboxId: "",
+        mailboxView: "list",
+        tab: "mailboxes",
+      }),
+      to: ".",
+    });
+  };
 
   return (
-    <div className="space-y-8">
-      <SettingsPageHeader title="Add a mailbox">
-        Choose what you are adding. We will only ask for the details that it
-        needs.
-      </SettingsPageHeader>
-
-      <Progress max={steps.length} value={currentStep}>
-        <div className="flex items-center justify-between gap-4">
-          <ProgressLabel className="text-caption font-normal text-muted-fg">
-            Step {currentStep} of {steps.length}
-          </ProgressLabel>
-          <span className="text-caption text-fg">{steps[currentStep - 1]}</span>
+    <GuidedFlow
+      activeStep={activeStep}
+      ariaLabel="Add a mailbox"
+      direction={direction}
+      headerCenter={
+        <span className="text-body-sm font-medium text-fg">Add mailbox</span>
+      }
+      headerEnd={
+        <div className="flex items-center gap-3">
+          <span className="text-caption text-muted-fg">
+            <span className="hidden sm:inline">Step </span>
+            {currentStep} / {steps.length}
+          </span>
+          <Progress
+            aria-label="Mailbox setup progress"
+            className="hidden w-16 gap-0 sm:grid"
+            max={steps.length}
+            value={currentStep}
+          >
+            <ProgressTrack className="h-1 bg-control-hover">
+              <ProgressIndicator className="bg-fg" />
+            </ProgressTrack>
+          </Progress>
         </div>
-        <ProgressTrack className="h-1.5 bg-control-hover">
-          <ProgressIndicator className="bg-fg" />
-        </ProgressTrack>
-      </Progress>
-
+      }
+      headerStart={
+        <Button
+          className="-ml-2 text-muted-fg hover:text-fg"
+          onClick={exitFlow}
+          size="sm"
+          variant="ghost"
+        >
+          <HugeiconsIcon aria-hidden icon={ArrowLeft01Icon} />
+          <span className="hidden sm:inline">Back to mailboxes</span>
+          <span className="sm:hidden">Back</span>
+        </Button>
+      }
+      previous={
+        mailboxType === undefined ? null : (
+          <Button
+            className="text-muted-fg hover:text-fg"
+            onClick={goBack}
+            size="sm"
+            variant="ghost"
+          >
+            <HugeiconsIcon aria-hidden icon={ArrowLeft01Icon} />
+            {previousLabel}
+          </Button>
+        )
+      }
+    >
       {mailboxType === undefined ? (
-        <SettingsCard className="bg-bg p-3">
-          <div className="grid gap-3 @md:grid-cols-2">
+        <div>
+          <header className="mx-auto max-w-xl text-center">
+            <p className="text-caption text-muted-fg">Mailbox type</p>
+            <h1 className="mt-2 text-title-md font-medium tracking-tight text-fg">
+              What would you like to add?
+            </h1>
+            <p className="mx-auto mt-3 max-w-md text-body/6 text-muted-fg">
+              Choose a personal Gmail account or create an inbox your team can
+              share.
+            </p>
+          </header>
+          <div className="mt-9 grid gap-3 sm:grid-cols-2">
             <Button
-              className="group h-auto min-h-40 w-full flex-col items-start justify-start rounded-lg bg-bg p-5 text-left whitespace-normal hover:border-border-strong hover:bg-control-hover"
+              className="group h-auto min-h-44 w-full flex-col items-start justify-start rounded-xl bg-bg-surface p-6 text-left whitespace-normal hover:border-border-strong hover:bg-control-hover"
               onClick={() => {
                 workflowStore.setState((state) => ({
                   ...state,
+                  direction: "forward",
                   isSharedDetailsVisible: false,
                   mailboxType: "gmail",
                 }));
@@ -235,10 +303,11 @@ export const AddMailboxSettingsView = () => {
             </Button>
 
             <Button
-              className="group h-auto min-h-40 w-full flex-col items-start justify-start rounded-lg bg-bg p-5 text-left whitespace-normal hover:border-border-strong hover:bg-control-hover"
+              className="group h-auto min-h-44 w-full flex-col items-start justify-start rounded-xl bg-bg-surface p-6 text-left whitespace-normal hover:border-border-strong hover:bg-control-hover"
               onClick={() => {
                 workflowStore.setState((state) => ({
                   ...state,
+                  direction: "forward",
                   isSharedDetailsVisible: false,
                   mailboxType: "shared",
                 }));
@@ -268,36 +337,24 @@ export const AddMailboxSettingsView = () => {
               </span>
             </Button>
           </div>
-        </SettingsCard>
+        </div>
       ) : null}
 
       {mailboxType === "gmail" ? (
-        <SettingsCard className="bg-bg p-5 @md:p-7">
-          <Button
-            className="mb-6 -ml-2"
-            onClick={resetMailboxType}
-            size="sm"
-            variant="ghost"
-          >
-            <HugeiconsIcon
-              aria-hidden
-              className="size-3.5"
-              icon={ArrowLeft01Icon}
-            />
-            Change mailbox type
-          </Button>
-          <div className="max-w-xl">
-            <h2 className="text-title-sm font-normal tracking-tight text-fg">
+        <div className="mx-auto max-w-md">
+          <header>
+            <p className="text-caption text-muted-fg">Connect</p>
+            <h1 className="mt-2 text-title-md font-medium tracking-tight text-fg">
               Connect your Gmail account
-            </h2>
-            <p className="mt-2 text-body/6 text-muted-fg">
+            </h1>
+            <p className="mt-3 text-body/6 text-muted-fg">
               Pick where the mailbox should appear. Google will open next so you
               can choose the account and approve access.
             </p>
-            <div className="mt-7 space-y-2">
-              <label className="text-caption text-fg" htmlFor="gmail-team">
-                Team
-              </label>
+          </header>
+          <div className="mt-8">
+            <Field>
+              <FieldLabel htmlFor="gmail-team">Team</FieldLabel>
               <Select
                 items={placementItems}
                 onValueChange={(value) => {
@@ -319,63 +376,43 @@ export const AddMailboxSettingsView = () => {
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-caption/5 text-muted-fg">
+              <FieldDescription>
                 The mailbox stays private to you, even when it appears inside a
                 team.
-              </p>
-            </div>
-            <div className="mt-8 flex justify-end border-t border-border pt-5">
-              <Button
-                className="bg-bg hover:bg-control-hover"
-                disabled={isStartingGmail || organizations.length === 0}
-                onClick={() => {
-                  runDetached(startGmailConnection);
-                }}
-                pending={isStartingGmail}
-                pendingLabel="Opening Google"
-                variant="outline"
-              >
-                <HugeiconsIcon
-                  aria-hidden
-                  className={cn("size-4", {
-                    "animate-spin": isStartingGmail,
-                  })}
-                  icon={isStartingGmail ? Loading03Icon : Mail01Icon}
-                />
-                Continue with Google
-              </Button>
-            </div>
+              </FieldDescription>
+            </Field>
           </div>
-        </SettingsCard>
+          <div className="mt-9 flex justify-end border-t border-border/70 pt-5">
+            <Button
+              disabled={isStartingGmail || organizations.length === 0}
+              onClick={() => {
+                runDetached(startGmailConnection);
+              }}
+              pending={isStartingGmail}
+              pendingLabel="Opening Google"
+            >
+              <HugeiconsIcon aria-hidden icon={Mail01Icon} />
+              Continue with Google
+            </Button>
+          </div>
+        </div>
       ) : null}
 
       {mailboxType === "shared" && !isSharedDetailsVisible ? (
-        <SettingsCard className="bg-bg p-5 @md:p-7">
-          <Button
-            className="mb-6 -ml-2"
-            onClick={resetMailboxType}
-            size="sm"
-            variant="ghost"
-          >
-            <HugeiconsIcon
-              aria-hidden
-              className="size-3.5"
-              icon={ArrowLeft01Icon}
-            />
-            Change mailbox type
-          </Button>
-          <div className="max-w-xl">
-            <h2 className="text-title-sm font-normal tracking-tight text-fg">
+        <div className="mx-auto max-w-md">
+          <header>
+            <p className="text-caption text-muted-fg">Team</p>
+            <h1 className="mt-2 text-title-md font-medium tracking-tight text-fg">
               Choose the team
-            </h2>
-            <p className="mt-2 text-body/6 text-muted-fg">
+            </h1>
+            <p className="mt-3 text-body/6 text-muted-fg">
               The team owns this inbox. Its owners and admins can manage access
               after you create it.
             </p>
-            <div className="mt-7 space-y-2">
-              <label className="text-caption text-fg" htmlFor="shared-team">
-                Team
-              </label>
+          </header>
+          <div className="mt-8">
+            <Field>
+              <FieldLabel htmlFor="shared-team">Team</FieldLabel>
               <Select
                 items={placementItems}
                 onValueChange={(value) => {
@@ -401,280 +438,247 @@ export const AddMailboxSettingsView = () => {
                 </SelectContent>
               </Select>
               {isCreateManagedOrganizationPending ? (
-                <p className="text-caption/5 text-muted-fg">
-                  Checking your access…
-                </p>
+                <FieldDescription>Checking your access…</FieldDescription>
               ) : null}
               {!isCreateManagedOrganizationPending &&
               !canCreateManagedMailbox ? (
-                <p className="text-caption/5 text-muted-fg">
+                <FieldDescription>
                   Only a team owner or admin can create a shared inbox for this
                   team.
-                </p>
+                </FieldDescription>
               ) : null}
-            </div>
-            <div className="mt-8 flex justify-end border-t border-border pt-5">
-              <Button
-                className="bg-bg hover:bg-control-hover"
-                disabled={
-                  selectedManagedOrganizationId === "" ||
-                  isCreateManagedOrganizationPending ||
-                  !canCreateManagedMailbox
-                }
-                onClick={() => {
-                  workflowStore.setState((state) => ({
-                    ...state,
-                    isSharedDetailsVisible: true,
-                  }));
-                }}
-                variant="outline"
-              >
-                Continue
-                <HugeiconsIcon
-                  aria-hidden
-                  className="size-4"
-                  icon={ArrowRight01Icon}
-                />
-              </Button>
-            </div>
+            </Field>
           </div>
-        </SettingsCard>
+          <div className="mt-9 flex justify-end border-t border-border/70 pt-5">
+            <Button
+              disabled={
+                selectedManagedOrganizationId === "" ||
+                isCreateManagedOrganizationPending ||
+                !canCreateManagedMailbox
+              }
+              onClick={() => {
+                workflowStore.setState((state) => ({
+                  ...state,
+                  direction: "forward",
+                  isSharedDetailsVisible: true,
+                }));
+              }}
+            >
+              Continue
+              <HugeiconsIcon aria-hidden icon={ArrowRight01Icon} />
+            </Button>
+          </div>
+        </div>
       ) : null}
 
       {mailboxType === "shared" && isSharedDetailsVisible ? (
-        <SettingsCard className="bg-bg p-5 @md:p-7">
-          <Button
-            className="mb-6 -ml-2"
-            onClick={() => {
-              workflowStore.setState((state) => ({
-                ...state,
-                isSharedDetailsVisible: false,
-              }));
-            }}
-            size="sm"
-            variant="ghost"
-          >
-            <HugeiconsIcon
-              aria-hidden
-              className="size-3.5"
-              icon={ArrowLeft01Icon}
-            />
-            Back to team
-          </Button>
-          <div className="max-w-xl">
-            <h2 className="text-title-sm font-normal tracking-tight text-fg">
+        <div className="mx-auto max-w-md">
+          <header>
+            <p className="text-caption text-muted-fg">Address</p>
+            <h1 className="mt-2 text-title-md font-medium tracking-tight text-fg">
               Create the address
-            </h2>
-            <p className="mt-2 text-body/6 text-muted-fg">
+            </h1>
+            <p className="mt-3 text-body/6 text-muted-fg">
               Set the name people will see and the address they will write to.
             </p>
-            <div className="mt-7 space-y-5">
-              <div className="space-y-2">
-                <label className="text-caption text-fg" htmlFor="display-name">
-                  Display name
-                </label>
+          </header>
+          <div className="mt-8 space-y-5">
+            <Field>
+              <FieldLabel htmlFor="display-name">Display name</FieldLabel>
+              <TextFieldInput
+                id="display-name"
+                onChange={(event) => {
+                  workflowStore.setState((state) => ({
+                    ...state,
+                    managedDisplayName: event.currentTarget.value,
+                  }));
+                }}
+                placeholder="Support"
+                value={managedDisplayName}
+              />
+            </Field>
+
+            <Field>
+              <FieldLabel htmlFor="local-part">Email address</FieldLabel>
+              <div className="squircle flex h-9 min-w-0 items-center rounded-md border border-border bg-input shadow-sm transition-colors focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/45">
                 <TextFieldInput
-                  className="bg-bg"
-                  id="display-name"
+                  aria-label="Mailbox address"
+                  chrome="ghost"
+                  className="h-full min-w-0 flex-1 pr-1"
+                  id="local-part"
                   onChange={(event) => {
                     workflowStore.setState((state) => ({
                       ...state,
-                      managedDisplayName: event.currentTarget.value,
+                      managedLocalPart: event.currentTarget.value.replaceAll(
+                        /[@\s]/gu,
+                        ""
+                      ),
                     }));
                   }}
-                  placeholder="Support"
-                  value={managedDisplayName}
+                  placeholder="support"
+                  value={managedLocalPart}
                 />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-caption text-fg" htmlFor="local-part">
-                  Email address
-                </label>
-                <div className="squircle flex h-9 min-w-0 items-center rounded-md border border-border bg-bg shadow-sm transition-colors">
-                  <TextFieldInput
-                    aria-label="Mailbox address"
-                    chrome="ghost"
-                    className="h-full min-w-0 flex-1 pr-1"
-                    id="local-part"
-                    onChange={(event) => {
+                <span
+                  aria-hidden
+                  className="text-body text-muted-fg select-none"
+                >
+                  @
+                </span>
+                {verifiedDomains.length > 0 ? (
+                  <Select
+                    items={verifiedDomains.map((domain) => ({
+                      label: domain.domain,
+                      value: domain.domain,
+                    }))}
+                    onValueChange={(value) => {
                       workflowStore.setState((state) => ({
                         ...state,
-                        managedLocalPart: event.currentTarget.value.replaceAll(
-                          /[@\s]/gu,
-                          ""
-                        ),
+                        managedDomain: value ?? undefined,
                       }));
                     }}
-                    placeholder="support"
-                    value={managedLocalPart}
-                  />
-                  <span
-                    aria-hidden
-                    className="text-body text-muted-fg select-none"
+                    value={selectedDomain}
                   >
-                    @
-                  </span>
-                  {verifiedDomains.length > 0 ? (
-                    <Select
-                      items={verifiedDomains.map((domain) => ({
-                        label: domain.domain,
-                        value: domain.domain,
-                      }))}
-                      onValueChange={(value) => {
-                        workflowStore.setState((state) => ({
-                          ...state,
-                          managedDomain: value ?? undefined,
-                        }));
-                      }}
-                      value={selectedDomain}
+                    <SelectTrigger
+                      aria-label="Mailbox domain"
+                      className="h-full rounded-l-none pr-2.5 pl-1.5 shadow-none active:scale-100"
+                      size="sm"
+                      variant="ghost"
                     >
-                      <SelectTrigger
-                        aria-label="Mailbox domain"
-                        className="h-full rounded-l-none pr-2.5 pl-1.5 shadow-none active:scale-100"
-                        size="sm"
-                        variant="ghost"
-                      >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent align="end">
-                        {verifiedDomains.map((domain) => (
-                          <SelectItem key={domain.id} value={domain.domain}>
-                            {domain.domain}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <span className="px-2.5 text-body text-muted-fg">
-                      {areManagedDomainsLoading
-                        ? "loading…"
-                        : "no receiving domain"}
-                    </span>
-                  )}
-                </div>
-                {verifiedDomains.length === 0 && !areManagedDomainsLoading ? (
-                  <p className="text-caption/5 text-muted-fg">
-                    Add and verify a send-and-receive domain in{" "}
-                    {selectedManagedOrganization?.name ?? "team"} settings
-                    before creating a shared inbox.
-                  </p>
-                ) : null}
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-caption text-fg" htmlFor="division">
-                  Primary division
-                </label>
-                <Select
-                  items={[
-                    { label: "No primary division", value: "none" },
-                    ...(managedDivisionsData?.divisions ?? []).map(
-                      (division) => ({
-                        label: division.name,
-                        value: division.id,
-                      })
-                    ),
-                  ]}
-                  onValueChange={(value) => {
-                    workflowStore.setState((state) => ({
-                      ...state,
-                      managedDivisionId:
-                        value === "none" ? null : (value ?? null),
-                    }));
-                  }}
-                  value={managedDivisionId ?? "none"}
-                >
-                  <SelectTrigger id="division">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent align="start">
-                    <SelectItem value="none">No primary division</SelectItem>
-                    {(managedDivisionsData?.divisions ?? []).map((division) => (
-                      <SelectItem key={division.id} value={division.id}>
-                        {division.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-caption/5 text-muted-fg">
-                  Optional. A division helps organize access for larger teams.
-                </p>
-              </div>
-
-              {selectedDomain === "" ? null : (
-                <label
-                  className="squircle flex cursor-pointer items-start gap-2.5 rounded-md border border-border bg-bg px-3 py-2.5 transition-colors hover:bg-control-hover"
-                  htmlFor="managed-mailbox-whole-domain"
-                >
-                  <Checkbox
-                    checked={receiveWholeDomain}
-                    className="mt-0.5"
-                    id="managed-mailbox-whole-domain"
-                    onCheckedChange={(checked) => {
-                      if (typeof checked === "boolean") {
-                        workflowStore.setState((state) => ({
-                          ...state,
-                          receiveWholeDomain: checked,
-                        }));
-                      }
-                    }}
-                  >
-                    <CheckboxIndicator />
-                  </Checkbox>
-                  <span className="min-w-0">
-                    <span className="block text-body text-fg">
-                      Receive mail for any address at {selectedDomain}
-                    </span>
-                    <span className="mt-0.5 block text-caption/5 text-muted-fg">
-                      Exact shared inboxes keep priority. Mail for every other
-                      recipient lands here, while replies still send from this
-                      inbox address.
-                    </span>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent align="end">
+                      {verifiedDomains.map((domain) => (
+                        <SelectItem key={domain.id} value={domain.domain}>
+                          {domain.domain}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <span className="px-2.5 text-body text-muted-fg">
+                    {areManagedDomainsLoading
+                      ? "loading…"
+                      : "no receiving domain"}
                   </span>
-                </label>
-              )}
-
-              {createManagedMailboxMutation.isError ? (
-                <p className="text-body text-destructive">
-                  {createManagedMailboxMutation.error?.message ??
-                    "Could not create shared inbox."}
-                </p>
+                )}
+              </div>
+              {verifiedDomains.length === 0 && !areManagedDomainsLoading ? (
+                <FieldDescription>
+                  Add and verify a send-and-receive domain in{" "}
+                  {selectedManagedOrganization?.name ?? "team"} settings before
+                  creating a shared inbox.
+                </FieldDescription>
               ) : null}
-            </div>
-            <div className="mt-8 flex justify-end border-t border-border pt-5">
-              <Button
-                className="bg-bg hover:bg-control-hover"
-                disabled={trimmedLocalPart === "" || selectedDomain === ""}
-                onClick={() => {
-                  createManagedMailboxMutation.mutate(
-                    {
-                      displayName: managedDisplayName,
-                      divisionId: managedDivisionId,
-                      emailAddress: `${trimmedLocalPart}@${selectedDomain}`,
-                      organizationId: selectedManagedOrganizationId,
-                      receiveWholeDomain,
-                    },
-                    {
-                      onError: (error) => {
-                        toastError(error, {
-                          boundary: "mailbox-settings",
-                          fallback: "Could not create shared inbox.",
-                        });
-                      },
-                    }
-                  );
+            </Field>
+
+            <Field>
+              <FieldLabel htmlFor="division">Primary division</FieldLabel>
+              <Select
+                items={[
+                  { label: "No primary division", value: "none" },
+                  ...(managedDivisionsData?.divisions ?? []).map(
+                    (division) => ({
+                      label: division.name,
+                      value: division.id,
+                    })
+                  ),
+                ]}
+                onValueChange={(value) => {
+                  workflowStore.setState((state) => ({
+                    ...state,
+                    managedDivisionId:
+                      value === "none" ? null : (value ?? null),
+                  }));
                 }}
-                pending={createManagedMailboxMutation.isPending}
-                pendingLabel="Creating inbox"
-                variant="outline"
+                value={managedDivisionId ?? "none"}
               >
-                Create shared inbox
-              </Button>
-            </div>
+                <SelectTrigger id="division">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent align="start">
+                  <SelectItem value="none">No primary division</SelectItem>
+                  {(managedDivisionsData?.divisions ?? []).map((division) => (
+                    <SelectItem key={division.id} value={division.id}>
+                      {division.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FieldDescription>
+                Optional. A division helps organize access for larger teams.
+              </FieldDescription>
+            </Field>
+
+            {selectedDomain === "" ? null : (
+              <label
+                className="squircle flex cursor-pointer items-start gap-2.5 rounded-md border border-border bg-bg-surface px-3 py-2.5 transition-colors hover:bg-control-hover"
+                htmlFor="managed-mailbox-whole-domain"
+              >
+                <Checkbox
+                  checked={receiveWholeDomain}
+                  className="mt-0.5"
+                  id="managed-mailbox-whole-domain"
+                  onCheckedChange={(checked) => {
+                    if (typeof checked === "boolean") {
+                      workflowStore.setState((state) => ({
+                        ...state,
+                        receiveWholeDomain: checked,
+                      }));
+                    }
+                  }}
+                >
+                  <CheckboxIndicator />
+                </Checkbox>
+                <span className="min-w-0">
+                  <span className="block text-body text-fg">
+                    Receive mail for any address at {selectedDomain}
+                  </span>
+                  <span className="mt-0.5 block text-caption/5 text-muted-fg">
+                    Exact shared inboxes keep priority. Mail for every other
+                    recipient lands here, while replies still send from this
+                    inbox address.
+                  </span>
+                </span>
+              </label>
+            )}
+
+            {createManagedMailboxMutation.isError ? (
+              <p className="text-body text-destructive">
+                {createManagedMailboxMutation.error?.message ??
+                  "Could not create shared inbox."}
+              </p>
+            ) : null}
           </div>
-        </SettingsCard>
+          <div className="mt-9 flex justify-end border-t border-border/70 pt-5">
+            <Button
+              disabled={trimmedLocalPart === "" || selectedDomain === ""}
+              onClick={() => {
+                createManagedMailboxMutation.mutate(
+                  {
+                    displayName: managedDisplayName,
+                    divisionId: managedDivisionId,
+                    emailAddress: `${trimmedLocalPart}@${selectedDomain}`,
+                    organizationId: selectedManagedOrganizationId,
+                    receiveWholeDomain,
+                  },
+                  {
+                    onError: (error) => {
+                      toastError(error, {
+                        boundary: "mailbox-settings",
+                        fallback: "Could not create shared inbox.",
+                      });
+                    },
+                  }
+                );
+              }}
+              pending={createManagedMailboxMutation.isPending}
+              pendingLabel="Creating inbox"
+            >
+              Create shared inbox
+            </Button>
+          </div>
+        </div>
       ) : null}
-    </div>
+    </GuidedFlow>
   );
 };

@@ -1,6 +1,7 @@
 import { useCreateStore } from "@tanstack/react-store";
 
 type AddMailboxSettingsState = {
+  direction: "back" | "forward";
   gmailOrganizationId: string;
   isSharedDetailsVisible: boolean;
   isStartingGmail: boolean;
@@ -14,6 +15,7 @@ type AddMailboxSettingsState = {
 };
 
 const initialAddMailboxSettingsState: AddMailboxSettingsState = {
+  direction: "forward",
   gmailOrganizationId: "",
   isSharedDetailsVisible: false,
   isStartingGmail: false,

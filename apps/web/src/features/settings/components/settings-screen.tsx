@@ -243,6 +243,7 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
     });
   };
   const detail = tab === "overview" ? null : SETTINGS_DETAIL_TITLES[tab];
+  const isGuidedMailboxSetup = tab === "mailboxes" && mailboxView === "add";
 
   return (
     <main
@@ -258,27 +259,37 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
       <BillingCheckoutResult />
       <ConnectorConnectionResult />
       <WorkspaceDitherBackground />
-      <SettingsBackNavigation
-        domainId={domainId}
-        mailboxId={mailboxId}
-        mailboxView={mailboxView}
-        onBackToApp={goBackToApp}
-        onBackToMailboxes={goBackToMailboxes}
-        onBackToOverview={() => {
-          setTab("overview");
-        }}
-        organizationId={organizationId}
-        tab={tab}
-      />
-      <SettingsSearch
-        onPrefetchTab={(nextTab) => {
-          void prefetchSettingsTab(queryClient, nextTab);
-          void preloadSettingsPanel(nextTab);
-        }}
-        onSelectTab={setTab}
-      />
+      {isGuidedMailboxSetup ? null : (
+        <>
+          <SettingsBackNavigation
+            domainId={domainId}
+            mailboxId={mailboxId}
+            mailboxView={mailboxView}
+            onBackToApp={goBackToApp}
+            onBackToMailboxes={goBackToMailboxes}
+            onBackToOverview={() => {
+              setTab("overview");
+            }}
+            organizationId={organizationId}
+            tab={tab}
+          />
+          <SettingsSearch
+            onPrefetchTab={(nextTab) => {
+              void prefetchSettingsTab(queryClient, nextTab);
+              void preloadSettingsPanel(nextTab);
+            }}
+            onSelectTab={setTab}
+          />
+        </>
+      )}
       <div className="relative z-10 min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-205 px-5 py-8 md:px-8 md:py-14">
+        <div
+          className={cn("w-full", {
+            "min-h-full": isGuidedMailboxSetup,
+            "mx-auto max-w-205 px-5 py-8 md:px-8 md:py-14":
+              !isGuidedMailboxSetup,
+          })}
+        >
           {tab === "overview" ? (
             <SettingsOverviewPanel
               initialUser={initialUser}
@@ -289,7 +300,12 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
               onSelectTab={setTab}
             />
           ) : (
-            <div className="space-y-8">
+            <div
+              className={cn({
+                "min-h-full": isGuidedMailboxSetup,
+                "space-y-8": !isGuidedMailboxSetup,
+              })}
+            >
               {detail && tab !== "actions" && tab !== "mailboxes" && (
                 <header>
                   <h1 className="text-title-sm font-normal tracking-tight text-fg">
