@@ -5,6 +5,7 @@ import { RootErrorComponent } from "./components/root/root-error-component";
 import { RootNotFoundComponent } from "./components/root/root-not-found-component";
 import { clientEnv } from "./env";
 import { shouldDiscardClientError } from "./lib/client-error-reporting";
+import { installStaleDeploymentRecovery } from "./lib/stale-deployment";
 import { routeTree } from "./routeTree.gen";
 
 const isSentryEnabled =
@@ -22,6 +23,10 @@ export const getRouter = () => {
     routeTree,
     scrollRestoration: true,
   });
+
+  if (!router.isServer) {
+    installStaleDeploymentRecovery();
+  }
 
   if (!router.isServer && isSentryEnabled) {
     Sentry.init({
