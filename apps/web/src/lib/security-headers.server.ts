@@ -11,7 +11,9 @@ export const withSecurityHeaders = (response: Response) => {
       "frame-ancestors 'none'",
       "img-src 'self' data: blob: https:",
       "object-src 'none'",
-      "script-src 'self' 'unsafe-inline'",
+      // PostHog serves its browser bundle (and its lazily loaded add-ons) from
+      // the regional assets host, so 'self' alone silently blocks analytics.
+      "script-src 'self' 'unsafe-inline' https://eu-assets.i.posthog.com https://us-assets.i.posthog.com",
       "style-src 'self' 'unsafe-inline' https:",
     ].join("; ")
   );
