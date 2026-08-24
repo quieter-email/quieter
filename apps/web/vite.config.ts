@@ -53,6 +53,31 @@ const preferNodeAwsSdkResolution = (): Plugin => {
   };
 };
 
+/**
+ * Identifies one build across the client bundle and the file the deployment
+ * serves, so a stale tab can tell "the release moved on" apart from "this
+ * chunk is genuinely broken". Read at module scope so every environment in a
+ * build agrees on the value.
+ */
+const buildId =
+  process.env.QUIETER_BUILD_ID ??
+  process.env.GITHUB_SHA ??
+  Date.now().toString(36);
+
+/** Served from `/assets/` because that prefix bypasses the site password gate. */
+const emitBuildId = (): Plugin => ({
+  applyToEnvironment: (environment: Environment) =>
+    environment.name === "client",
+  generateBundle() {
+    this.emitFile({
+      fileName: "assets/build-id.txt",
+      source: buildId,
+      type: "asset",
+    });
+  },
+  name: "emit-build-id",
+});
+
 const validateLocalDevelopment = (): Plugin => ({
   config() {
     assertLocalDevelopmentDatabaseUrls();
@@ -86,6 +111,9 @@ export default defineConfig(({ command }) => {
       chunkSizeWarningLimit: 1200,
       sourcemap: isSentryEnabled,
     },
+    define: {
+      __QUIETER_BUILD_ID__: JSON.stringify(buildId),
+    },
     envDir: workspaceRoot,
     optimizeDeps: {
       include: [
@@ -115,6 +143,7 @@ export default defineConfig(({ command }) => {
         presets: [reactCompilerPreset()],
       }),
       tailwindcss(),
+      emitBuildId(),
       ...sentryPlugins,
     ]),
     resolve: {

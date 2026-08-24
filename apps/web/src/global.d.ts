@@ -1,3 +1,5 @@
+declare const __QUIETER_BUILD_ID__: string;
+
 declare module "*.css";
 declare module "*.css?url";
 declare module "@barkleapp/css-sanitizer" {
