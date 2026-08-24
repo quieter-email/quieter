@@ -70,5 +70,5 @@
 
 - Any of these guidelines may be overridden by the user, but the user must be aware of the consequences and understand the trade-offs.
 - Whilst implementing any code changes, think of security implications, best practices in the industry, and other related code changes that may be required. Keep your changes relatively scoped to the user's request but always consider the bigger picture and long-term implications, and notify the user in the handoff of any skipped steps, areas of concern, or any other relevant information.
-- Regularly commit your work and when you are completely done with a feature or change, push it to remote. When on main, first create a feature branch and then push it to remote.
+- Regularly commit your work and when you are completely done with a feature or change, push it to remote. When on main, first create a feature branch and then push it to remote. After pushing, open a pull request unless one already exists for that branch; check first with `gh pr list --head <branch>`.
 - Extremely destructive actions or changes have to be specifically approved by the user. In this case, stop your current turn temporarily and ask the user for approval.
