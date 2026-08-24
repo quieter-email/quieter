@@ -24,24 +24,14 @@ import type { MailboxSwitcherOrder } from "#/features/navigation/components/mail
 import type { MailboxCategory } from "#/lib/gmail/gmail";
 
 import { MailboxMessagesPanel } from "./mailbox-messages-panel";
+import {
+  loadChatView,
+  loadComposeWorkspace,
+} from "./workspace-component-loaders";
 
-const ChatView = lazy(
-  async () =>
-    await import("#/features/chat/components/chat-view").then(
-      ({ ChatView: Component }) => ({
-        default: Component,
-      })
-    )
-);
+const ChatView = lazy(loadChatView);
 
-const ComposeWorkspace = lazy(
-  async () =>
-    await import("#/features/compose/components/compose-workspace").then(
-      ({ ComposeWorkspace: Component }) => ({
-        default: Component,
-      })
-    )
-);
+const ComposeWorkspace = lazy(loadComposeWorkspace);
 
 const TemplateWorkspace = lazy(
   async () =>

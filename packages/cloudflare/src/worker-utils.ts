@@ -1,28 +1,15 @@
-import {
-  configureErrorReporter,
-  reportError as reportRuntimeError,
-} from "@quieter/observability";
 import { createRemoteJWKSet, errors as joseErrors, jwtVerify } from "jose";
 import { z } from "zod";
 
 import { timingSafeEqual } from "./crypto-utils";
 import { RequestError } from "./request-error";
-
-export { reportError as reportWorkerError } from "@quieter/observability";
+import { readLinkedSecret, reportWorkerError } from "./worker-runtime";
 
 const GOOGLE_JWKS = createRemoteJWKSet(
   new URL("https://www.googleapis.com/oauth2/v3/certs")
 );
 const PUBSUB_BODY_LIMIT = 64 * 1024;
 const textEncoder = new TextEncoder();
-const runtimeReportError = globalThis as typeof globalThis & {
-  reportError?: (error: unknown) => void;
-};
-
-configureErrorReporter((error) => {
-  runtimeReportError.reportError?.(error);
-});
-
 const pubSubEnvelopeSchema = z.object({
   message: z.object({
     data: z.string().min(1),
@@ -137,9 +124,6 @@ export const verifyLiveSyncToken = async (token: string, secret: string) => {
   }
   return payload.data;
 };
-
-export const readLinkedSecret = (value: string) =>
-  z.object({ value: z.string().min(1) }).parse(JSON.parse(value)).value;
 
 export const readBoundedJson = async (request: Request, limit: number) => {
   const declaredLength = Number(request.headers.get("content-length"));
@@ -298,7 +282,7 @@ export const requestErrorResponse = (error: unknown, route: string) => {
   const category =
     error instanceof RequestError ? error.category : "internal_error";
   if (status >= 500) {
-    reportRuntimeError(error, { category, route, status });
+    reportWorkerError(error, { category, route, status });
   }
   return Response.json({ error: "Request failed" }, { status });
 };

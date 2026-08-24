@@ -19,6 +19,7 @@ import {
   vi,
 } from "vite-plus/test";
 
+import queueWorker from "../src/queue-worker";
 import worker, { signaturesMatch } from "../src/worker";
 
 const serviceAccount = "gmail-push@example.invalid";
@@ -321,7 +322,7 @@ describe("Cloudflare worker runtime", () => {
       const messages = batch();
       const context = createExecutionContext();
       let settled = false;
-      const processing = worker.queue(messages, env, context).then(() => {
+      const processing = queueWorker.queue(messages, env, context).then(() => {
         settled = true;
       });
       await Promise.resolve();
@@ -340,7 +341,7 @@ describe("Cloudflare worker runtime", () => {
       );
       const messages = batch();
       const context = createExecutionContext();
-      await expect(worker.queue(messages, env, context)).rejects.toThrow(
+      await expect(queueWorker.queue(messages, env, context)).rejects.toThrow(
         "returned 503"
       );
       await expect(getQueueResult(messages, context)).resolves.toMatchObject({

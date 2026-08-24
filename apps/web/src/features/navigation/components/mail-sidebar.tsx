@@ -39,6 +39,7 @@ import type {
 } from "react";
 
 import { WorkspaceDitherBackground } from "#/components/workspace-dither-background";
+import { loadComposeWorkspace } from "#/features/mailbox/components/mailbox-workspace/workspace-component-loaders";
 import type { MailboxWorkspaceView } from "#/features/mailbox/domain/mailbox-workspace-view";
 import { MailboxOrganizer } from "#/features/navigation/components/mailbox-organizer";
 import { MailboxSwitcherDropdown } from "#/features/navigation/components/mailbox-switcher";
@@ -401,6 +402,9 @@ const SidebarInboxSection = ({
             selectedMailboxProvider === "api"
           }
           onClick={handleComposeNewMail}
+          onFocus={() => void loadComposeWorkspace()}
+          onMouseEnter={() => void loadComposeWorkspace()}
+          onPointerDown={() => void loadComposeWorkspace()}
           type="button"
         >
           <HugeiconsIcon

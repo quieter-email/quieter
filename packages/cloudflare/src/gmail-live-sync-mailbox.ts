@@ -2,12 +2,8 @@ import { DurableObject } from "cloudflare:workers";
 import { z } from "zod";
 
 import { RequestError } from "./request-error";
-import {
-  readBoundedJson,
-  readLinkedSecret,
-  reportWorkerError,
-  verifyLiveSyncToken,
-} from "./worker-utils";
+import { readLinkedSecret, reportWorkerError } from "./worker-runtime";
+import { readBoundedJson, verifyLiveSyncToken } from "./worker-utils";
 
 const INTERNAL_EVENT_BODY_LIMIT = 1024;
 

@@ -61,7 +61,7 @@ for (const {
   const entry = [...sources].find(([, source]) => source.includes(marker))?.[0];
   if (entry === undefined) {
     throw new Error(
-      `Could not find the Worker memory boundary entry for ${marker}.`
+      `Could not find the Worker static boundary entry for ${marker}.`
     );
   }
 

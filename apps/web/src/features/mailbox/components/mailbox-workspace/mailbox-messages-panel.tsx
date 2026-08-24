@@ -2,13 +2,14 @@
 
 import { cn } from "@quieter/ui/cn";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useLayoutEffect, useState } from "react";
+import { lazy, Suspense, useLayoutEffect, useState } from "react";
 
 import { WorkspaceSection } from "#/components/workspace-section";
 import { buildComposeDraftFromSavedDraftMessage } from "#/features/compose/domain/compose-actions";
 import type { ComposeDraftState } from "#/features/compose/domain/draft";
 import { MessageList } from "#/features/message-list/components/message-list";
-import { MessageDetail } from "#/features/message-thread/components/message-detail";
+import { loadMessageDetail } from "#/features/message-thread/components/message-detail-loader";
+import { MessageDetailLoadingSkeleton } from "#/features/message-thread/components/message-detail-loading";
 import { createDemoMailboxActions } from "#/lib/gmail/demo-mail";
 import type { MailboxCategory, MessageListItem } from "#/lib/gmail/gmail";
 import { createManagedDemoMailboxActions } from "#/lib/managed-mail/demo-managed-mail";
@@ -23,6 +24,8 @@ import {
   useMailboxSearchActions,
   useMailboxThreadId,
 } from "./use-mailbox-route-search";
+
+const MessageDetail = lazy(loadMessageDetail);
 
 type MailboxMessagesPanelProps = {
   activeMailbox: MailboxCategory;
@@ -334,22 +337,26 @@ export const MailboxMessagesPanel = ({
         })}
         layout="cell"
       >
-        <MessageDetail
-          activeMailbox={activeMailbox}
-          currentUserEmail={currentUserEmail}
-          focusOnOpen={shouldFocusMessageView}
-          mailboxId={mailboxId}
-          mailboxProvider={mailboxProvider}
-          mailboxActions={mailboxActions}
-          onComposeDraftRequested={onComposeDraftRequested}
-          pendingActions={pendingActions}
-          isPending={isMessageRouteOpen && isLoadingEmptyMessages}
-          onBackToList={backToList}
-          onAutoFocusComplete={() => {
-            setShouldFocusMessageView(false);
-          }}
-          selectedMessage={selectedMessage}
-        />
+        {isMessageRouteOpen ? (
+          <Suspense fallback={<MessageDetailLoadingSkeleton />}>
+            <MessageDetail
+              activeMailbox={activeMailbox}
+              currentUserEmail={currentUserEmail}
+              focusOnOpen={shouldFocusMessageView}
+              mailboxId={mailboxId}
+              mailboxProvider={mailboxProvider}
+              mailboxActions={mailboxActions}
+              onComposeDraftRequested={onComposeDraftRequested}
+              pendingActions={pendingActions}
+              isPending={isLoadingEmptyMessages}
+              onBackToList={backToList}
+              onAutoFocusComplete={() => {
+                setShouldFocusMessageView(false);
+              }}
+              selectedMessage={selectedMessage}
+            />
+          </Suspense>
+        ) : null}
       </WorkspaceSection>
     </>
   );

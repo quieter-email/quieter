@@ -5,7 +5,10 @@ import { rolldown } from "rolldown";
 
 const packageRoot = path.resolve(import.meta.dirname, "..");
 const outputDirectory = path.join(packageRoot, ".bundle-check");
-const entrypoints = [path.join(packageRoot, "src", "worker.ts")];
+const entrypoints = [
+  path.join(packageRoot, "src", "queue-worker.ts"),
+  path.join(packageRoot, "src", "worker.ts"),
+];
 
 await rm(outputDirectory, { force: true, recursive: true });
 try {

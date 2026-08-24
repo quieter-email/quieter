@@ -15,6 +15,7 @@ import type {
 } from "@quieter/ai/chat-agent";
 import { CHAT_TITLE_MODEL, chatModelSchema } from "@quieter/ai/chat-models";
 import { summarizeAiUsage } from "@quieter/ai/chat-usage";
+import { generateChatTitle } from "@quieter/ai/generate-chat-title";
 import { createChatModel } from "@quieter/ai/openrouter";
 import { reportAiUsage } from "@quieter/billing";
 import { db } from "@quieter/database/client";
@@ -679,8 +680,6 @@ const generateChatTitleInBackground = (input: {
 }) => {
   void (async () => {
     try {
-      const { generateChatTitle } =
-        await import("@quieter/ai/generate-chat-title");
       const title = await generateChatTitle({
         onUsage: (usage) => {
           void reportAiUsage({

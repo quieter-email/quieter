@@ -5,8 +5,9 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useCallback, useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 
+import { loadMessageDetail } from "#/features/message-thread/components/message-detail-loader";
 import type { ThreadListEntry } from "#/lib/gmail/thread-list";
 import {
   getThreadQueryKey,
@@ -93,32 +94,30 @@ const useThreadIntentPrefetch = (
 ) => {
   const intentTimerRef = useRef<number | null>(null);
   const intentThreadIdRef = useRef<string | null>(null);
-  const handleThreadIntent = useCallback(
-    (threadId: string | null) => {
-      if (intentTimerRef.current !== null) {
-        window.clearTimeout(intentTimerRef.current);
-        intentTimerRef.current = null;
-      }
-      intentThreadIdRef.current = threadId;
-      if (threadId === null || threadId === "") {
+  const handleThreadIntent = (threadId: string | null) => {
+    if (intentTimerRef.current !== null) {
+      window.clearTimeout(intentTimerRef.current);
+      intentTimerRef.current = null;
+    }
+    intentThreadIdRef.current = threadId;
+    if (threadId === null || threadId === "") {
+      return;
+    }
+    intentTimerRef.current = window.setTimeout(() => {
+      intentTimerRef.current = null;
+      if (intentThreadIdRef.current !== threadId) {
         return;
       }
-      intentTimerRef.current = window.setTimeout(() => {
-        intentTimerRef.current = null;
-        if (intentThreadIdRef.current !== threadId) {
-          return;
-        }
-        const queryKey = getThreadQueryKey(mailboxId, threadId);
-        if (queryClient.isFetching({ exact: true, queryKey }) > 0) {
-          return;
-        }
-        void queryClient.prefetchQuery(
-          getThreadWithDetailsOptions(mailboxId, threadId)
-        );
-      }, 200);
-    },
-    [mailboxId, queryClient]
-  );
+      void loadMessageDetail();
+      const queryKey = getThreadQueryKey(mailboxId, threadId);
+      if (queryClient.isFetching({ exact: true, queryKey }) > 0) {
+        return;
+      }
+      void queryClient.prefetchQuery(
+        getThreadWithDetailsOptions(mailboxId, threadId)
+      );
+    }, 200);
+  };
 
   useLayoutEffect(
     () => () => {
