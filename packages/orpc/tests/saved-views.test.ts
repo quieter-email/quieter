@@ -1,13 +1,24 @@
 import { ORPCError } from "@orpc/server";
+import type * as databaseClient from "@quieter/database/client";
+import { mailbox } from "@quieter/database/schema";
 import type { MailboxSavedViewDefinition } from "@quieter/mail/mailbox-organization";
-import { describe, expect, test } from "vite-plus/test";
+import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
 import {
   assertSavedViewDefinitionSupported,
   assertSavedViewRowAccess,
+  listSavedViews,
   resolveSavedViewOwnerUserId,
 } from "../src/saved-views/service";
 import type { SavedViewMailboxContext } from "../src/saved-views/service";
+import { queueRows, resetQueues } from "./helpers/fake-database";
+
+vi.mock(import("@quieter/database/client"), async () => {
+  const { createFakeDatabaseModule } = await import("./helpers/fake-database");
+  // The fake implements only the query surface the tested code uses.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+  return createFakeDatabaseModule() as unknown as typeof databaseClient;
+});
 
 const gmailContext = (): SavedViewMailboxContext => ({
   provider: "gmail",
@@ -31,6 +42,18 @@ const createDefinitionWithFilters = (
 });
 
 describe("saved view ownership policy", () => {
+  beforeEach(() => {
+    resetQueues();
+  });
+
+  test("hides another user's Gmail mailbox when listing views", async () => {
+    queueRows(mailbox, [{ ownerUserId: "user-2", provider: "gmail" }]);
+
+    await expect(
+      listSavedViews({ mailboxId: "mailbox-1", userId: "user-1" })
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
   test("keeps Gmail views private and rejects sharing", () => {
     expect(
       resolveSavedViewOwnerUserId({

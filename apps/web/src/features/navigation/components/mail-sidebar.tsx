@@ -428,12 +428,13 @@ const SidebarInboxSection = ({
               selectedMailboxGrantRole === "manager"
             }
             mailboxId={selectedMailboxId}
-            mailboxProvider={selectedMailboxProvider}
             onSearch={(query) => {
               onSearch(query);
               onRequestClose?.();
             }}
             searchQuery={searchQuery}
+            supportsRules={selectedMailboxProvider === "managed"}
+            supportsSharedViews={selectedMailboxProvider === "managed"}
           />
         ) : null}
         {selectedMailboxProvider !== "api" && (

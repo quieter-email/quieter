@@ -268,7 +268,7 @@ export const reorderSavedViews = async (input: {
             )
           )
       : [];
-  if (views.length !== new Set(input.viewIds).size) {
+  if (views.length !== input.viewIds.length) {
     throw new ORPCError("BAD_REQUEST", {
       message: "One or more saved views are unavailable.",
     });

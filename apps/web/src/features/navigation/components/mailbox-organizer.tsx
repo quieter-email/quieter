@@ -76,9 +76,10 @@ import { SidebarNavItem } from "./sidebar-nav-item";
 type MailboxOrganizerProps = {
   canManage: boolean;
   mailboxId: string;
-  mailboxProvider: "gmail" | "managed";
   onSearch: (query: string) => void;
   searchQuery: string;
+  supportsRules: boolean;
+  supportsSharedViews: boolean;
 };
 
 type MailboxSavedView = RouterOutputs["mail"]["listSavedViews"][number];
@@ -233,8 +234,8 @@ const hasValidRuleInput = ({
 const useMailboxOrganizerState = ({
   canManage,
   mailboxId,
-  mailboxProvider,
   searchQuery,
+  supportsRules,
 }: MailboxOrganizerProps) => {
   const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
@@ -277,13 +278,10 @@ const useMailboxOrganizerState = ({
   >({});
   const { data: viewsData } = useQuery(savedViewsQueryOptions(mailboxId));
   const { data: rulesData } = useQuery(
-    managedRulesQueryOptions(
-      mailboxId,
-      isOpen && canManage && mailboxProvider === "managed"
-    )
+    managedRulesQueryOptions(mailboxId, isOpen && canManage && supportsRules)
   );
   const { data: labelsData } = useQuery(
-    labelsQueryOptions(mailboxId, isOpen && mailboxProvider === "managed")
+    labelsQueryOptions(mailboxId, isOpen && supportsRules)
   );
   const { data: backfillData } = useQuery({
     enabled: activeBackfillId !== null && activeBackfillId !== "",
@@ -929,20 +927,21 @@ type MailboxOrganizerContentProps = MailboxOrganizerProps &
 const MailboxOrganizerSidebar = (props: MailboxOrganizerContentProps) => {
   const {
     currentSearch,
-    mailboxProvider,
     onSearch,
     personalViews,
     searchQuery,
     setIsOpen,
     setRuleQueryDraft,
     sharedViews,
+    supportsRules,
+    supportsSharedViews,
     views,
   } = props;
 
   return (
     <div className="flex items-center justify-between">
       <div className="min-w-0 flex-1">
-        {mailboxProvider === "managed" ? (
+        {supportsSharedViews ? (
           <>
             <SavedViewsSection
               currentSearch={currentSearch}
@@ -970,18 +969,10 @@ const MailboxOrganizerSidebar = (props: MailboxOrganizerContentProps) => {
         )}
       </div>
       <IconButtonTooltip
-        label={
-          mailboxProvider === "managed"
-            ? "Manage views and rules"
-            : "Manage views"
-        }
+        label={supportsRules ? "Manage views and rules" : "Manage views"}
       >
         <Button
-          aria-label={
-            mailboxProvider === "managed"
-              ? "Manage views and rules"
-              : "Manage views"
-          }
+          aria-label={supportsRules ? "Manage views and rules" : "Manage views"}
           className="mt-4 size-6 self-start text-muted-fg hover:text-fg"
           onClick={() => {
             setRuleQueryDraft(searchQuery);
@@ -1006,7 +997,6 @@ const MailboxSavedViewsPanel = (props: MailboxOrganizerContentProps) => {
     deleteViewMutation,
     isRowActionPending,
     mailboxId,
-    mailboxProvider,
     newViewColor,
     pendingReorders,
     reorderViewsMutation,
@@ -1016,6 +1006,7 @@ const MailboxSavedViewsPanel = (props: MailboxOrganizerContentProps) => {
     setEditingView,
     setNewViewColor,
     setViewName,
+    supportsSharedViews,
     updateViewMutation,
     viewName,
     views,
@@ -1049,7 +1040,7 @@ const MailboxSavedViewsPanel = (props: MailboxOrganizerContentProps) => {
           >
             Save mine
           </Button>
-          {canManage && mailboxProvider === "managed" ? (
+          {canManage && supportsSharedViews ? (
             <Button
               disabled={!viewName.trim() || createViewMutation.isPending}
               onClick={() => void saveView(true)}
@@ -1099,7 +1090,7 @@ const MailboxSavedViewsPanel = (props: MailboxOrganizerContentProps) => {
               <span className="min-w-0 flex-1 truncate text-body">
                 {view.name}
               </span>
-              {mailboxProvider === "managed" ? (
+              {supportsSharedViews ? (
                 <span className="text-caption text-muted-fg">
                   {view.ownerUserId === null ? "Shared" : "Personal"}
                 </span>
@@ -1964,7 +1955,7 @@ const ManagedMailboxRulesPanel = (props: MailboxOrganizerContentProps) => {
 const MailboxOrganizerFullPageDialog = (
   props: MailboxOrganizerContentProps
 ) => {
-  const { isOpen, mailboxProvider, setIsOpen } = props;
+  const { isOpen, setIsOpen, supportsRules } = props;
 
   return (
     <FullPageDialog onOpenChange={setIsOpen} open={isOpen}>
@@ -1980,13 +1971,11 @@ const MailboxOrganizerFullPageDialog = (
         <FullPageDialogBody>
           <div
             className={cn("mx-auto grid w-full max-w-4xl gap-10 px-5 py-8", {
-              "md:grid-cols-2": mailboxProvider === "managed",
+              "md:grid-cols-2": supportsRules,
             })}
           >
             <MailboxSavedViewsPanel {...props} />
-            {mailboxProvider === "managed" ? (
-              <ManagedMailboxRulesPanel {...props} />
-            ) : null}
+            {supportsRules ? <ManagedMailboxRulesPanel {...props} /> : null}
           </div>
         </FullPageDialogBody>
       </FullPageDialogContent>
