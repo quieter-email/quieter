@@ -5,11 +5,11 @@ import { TextFieldInput } from "@quieter/ui/text-field";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { showMutationError } from "#/features/settings/components/mailboxes-settings-shared";
 import {
   SettingsCard,
   SettingsSection,
 } from "#/features/settings/components/settings-layout";
+import { toastError } from "#/lib/error-toast";
 import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
 import { orpc } from "#/lib/orpc";
 
@@ -58,7 +58,12 @@ export const GmailMailboxNameSettings = ({
                 mailboxId: mailbox.id,
               },
               {
-                onError: showMutationError("Could not save mailbox name."),
+                onError: (error) => {
+                  toastError(error, {
+                    boundary: "mailbox-settings",
+                    fallback: "Could not save mailbox name.",
+                  });
+                },
               }
             );
           }}

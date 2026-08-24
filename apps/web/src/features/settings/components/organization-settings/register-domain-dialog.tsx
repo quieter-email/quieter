@@ -53,10 +53,16 @@ const modeOptions = [
 
 export const RegisterDomainDialog = ({
   children,
+  fixedMode,
   onCreated,
   organizationId,
 }: {
   children?: ReactNode;
+  /**
+   * Locks the dialog to one mail mode and hides the choice, for flows such as
+   * onboarding where the intent already determines the mode.
+   */
+  fixedMode?: MailDomainMode;
   onCreated?: (domainId: string) => void;
   organizationId: string;
 }) => {
@@ -70,7 +76,7 @@ export const RegisterDomainDialog = ({
   const form = useForm({
     defaultValues: {
       domain: "",
-      mode: "send_only" as MailDomainMode,
+      mode: fixedMode ?? "send_only",
     },
     onSubmit: async ({ value }) => {
       setSubmitError(null);
@@ -173,51 +179,53 @@ export const RegisterDomainDialog = ({
                 )}
               </form.Field>
 
-              <form.Field name="mode">
-                {(field) => (
-                  <fieldset className="space-y-2">
-                    <legend className="mb-2 text-body font-medium text-fg">
-                      Mail mode
-                    </legend>
-                    {modeOptions.map((option) => {
-                      const selected = field.state.value === option.value;
-                      return (
-                        <div
-                          className={cn(
-                            "squircle flex cursor-pointer gap-3 rounded-lg border p-4 transition-colors",
-                            selected
-                              ? "border-fg/30 bg-muted/40"
-                              : "border-border hover:bg-muted/60",
-                            ""
-                          )}
-                          key={option.value}
-                        >
-                          <input
-                            aria-label={option.label}
-                            checked={selected}
-                            className="mt-1 size-4 accent-fg"
-                            id={`domain-mode-${option.value}`}
-                            name={field.name}
-                            onChange={() => {
-                              field.handleChange(option.value);
-                            }}
-                            type="radio"
-                            value={option.value}
-                          />
-                          <span>
-                            <span className="block text-body font-medium text-fg">
-                              {option.label}
+              {fixedMode === undefined ? (
+                <form.Field name="mode">
+                  {(field) => (
+                    <fieldset className="space-y-2">
+                      <legend className="mb-2 text-body font-medium text-fg">
+                        Mail mode
+                      </legend>
+                      {modeOptions.map((option) => {
+                        const selected = field.state.value === option.value;
+                        return (
+                          <div
+                            className={cn(
+                              "squircle flex cursor-pointer gap-3 rounded-lg border p-4 transition-colors",
+                              selected
+                                ? "border-fg/30 bg-muted/40"
+                                : "border-border hover:bg-muted/60",
+                              ""
+                            )}
+                            key={option.value}
+                          >
+                            <input
+                              aria-label={option.label}
+                              checked={selected}
+                              className="mt-1 size-4 accent-fg"
+                              id={`domain-mode-${option.value}`}
+                              name={field.name}
+                              onChange={() => {
+                                field.handleChange(option.value);
+                              }}
+                              type="radio"
+                              value={option.value}
+                            />
+                            <span>
+                              <span className="block text-body font-medium text-fg">
+                                {option.label}
+                              </span>
+                              <span className="mt-1 block text-caption/5 text-muted-fg">
+                                {option.description}
+                              </span>
                             </span>
-                            <span className="mt-1 block text-caption/5 text-muted-fg">
-                              {option.description}
-                            </span>
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </fieldset>
-                )}
-              </form.Field>
+                          </div>
+                        );
+                      })}
+                    </fieldset>
+                  )}
+                </form.Field>
+              ) : null}
 
               {submitError !== null &&
               submitError !== undefined &&

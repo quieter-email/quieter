@@ -3,7 +3,7 @@
   "configurations": [
     {
       "name": "web",
-      "runtimeExecutable": "node_modules/.bin/vp",
+      "runtimeExecutable": "vp",
       "runtimeArgs": [
         "dev",
         "apps/web",

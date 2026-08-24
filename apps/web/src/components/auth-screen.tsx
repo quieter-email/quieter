@@ -76,7 +76,7 @@ const AuthLastUsedHint = () => (
         }}
         transition={{ duration: 5, ease: "linear", repeat: Infinity }}
       />
-      <span className="squircle relative block rounded-[inherit] bg-bg px-2 py-1 text-micro font-medium tracking-wide text-muted-fg">
+      <span className="squircle relative block rounded-[inherit] bg-bg-raised px-2 py-1 text-micro font-medium tracking-wide text-muted-fg">
         Last used
       </span>
     </span>
@@ -469,7 +469,7 @@ export const AuthScreen = () => {
   const authError = hasText(error) ? AUTHENTICATION_ERROR_MESSAGE : null;
 
   return (
-    <div className="grid h-dvh max-h-dvh w-full overflow-hidden bg-bg md:grid-cols-2">
+    <div className="grid h-dvh max-h-dvh w-full overflow-hidden md:grid-cols-2">
       {/* Form first, in DOM and on screen: it is the task, the atmosphere is
           not. The visual sits second and is ordered right on wide viewports. */}
       <div className="flex size-full min-h-0 items-center justify-center px-6">

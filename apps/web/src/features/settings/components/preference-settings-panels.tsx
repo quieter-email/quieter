@@ -153,7 +153,7 @@ export const PrivacySettingsPanel = () => (
     <SettingsRows>
       <SettingsRow
         action={
-          <ConsentPreferencesLink className="squircle inline-flex h-8 items-center justify-center rounded-md border border-border bg-bg px-3 text-body font-medium text-fg transition-colors hover:bg-muted/60" />
+          <ConsentPreferencesLink className="squircle inline-flex h-8 items-center justify-center rounded-md border border-border bg-bg-raised px-3 text-body font-medium text-fg transition-colors hover:bg-muted/60" />
         }
         title="Cookie and analytics preferences"
       >

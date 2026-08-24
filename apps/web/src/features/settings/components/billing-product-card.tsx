@@ -40,7 +40,7 @@ export const BillingProductCard = ({
 
   return (
     <article
-      className={cn("squircle rounded-xl border bg-bg p-5", {
+      className={cn("squircle rounded-xl border bg-bg-raised p-5", {
         "border-border": !isCurrent,
         "border-primary/50 bg-primary/4": isCurrent,
       })}

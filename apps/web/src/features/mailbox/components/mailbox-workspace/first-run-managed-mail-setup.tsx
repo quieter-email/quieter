@@ -45,8 +45,10 @@ import {
   userBillingQueryOptions,
 } from "#/features/settings/domain/billing";
 import { authClient } from "#/lib/auth";
+import { toastError } from "#/lib/error-toast";
 import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
 import { orpc } from "#/lib/orpc";
+import { rethrowClassified } from "#/lib/orpc-errors";
 
 type FirstRunOrganization = {
   id: string;
@@ -60,9 +62,6 @@ const setupSteps = [
   { icon: Mail01Icon, id: "mailbox", label: "Mailbox" },
   { icon: Key02Icon, id: "api-key", label: "API key" },
 ] as const;
-
-const getErrorMessage = (error: unknown, fallback: string) =>
-  error instanceof Error ? error.message : fallback;
 
 const getOrganizationName = (
   organizations: FirstRunOrganization[],
@@ -342,7 +341,7 @@ const FirstRunMailboxStep = ({
       </p>
     ) : (
       <div className="flex flex-wrap items-center gap-3">
-        <div className="squircle flex h-9 w-full max-w-md items-center rounded-md border border-border bg-bg-elevated shadow-sm transition-colors">
+        <div className="squircle flex h-9 w-full max-w-md items-center rounded-md border border-border bg-bg shadow-sm transition-colors">
           <TextFieldInput
             aria-label="Managed mailbox local part"
             chrome="ghost"
@@ -609,8 +608,12 @@ export const FirstRunManagedMailSetup = ({
   };
   const checkoutMutation = useMutation({
     ...orpc.billing.createCheckout.mutationOptions(),
-    onError: (error) =>
-      toast.error(error.message || "Could not start checkout."),
+    onError: (error) => {
+      toastError(error, {
+        boundary: "billing",
+        fallback: "Could not start checkout.",
+      });
+    },
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: USER_BILLING_QUERY_KEY });
       window.location.assign(result.checkoutUrl);
@@ -636,18 +639,23 @@ export const FirstRunManagedMailSetup = ({
       });
 
       if (response.error) {
-        throw new Error(response.error.message ?? "Could not create API key.");
+        rethrowClassified(response.error, "Could not create API key.");
       }
 
-      if (!response.data?.key) {
+      const createdKey = response.data?.key;
+      if (createdKey === undefined || createdKey === "") {
         throw new Error("Could not read the created API key.");
       }
 
-      return { key: response.data.key, organizationId: requestOrgId };
+      return { key: createdKey, organizationId: requestOrgId };
     },
     mutationKey: ["first-run", "organization-api-key", organizationId],
-    onError: (error) =>
-      toast.error(getErrorMessage(error, "Could not create API key.")),
+    onError: (error) => {
+      toastError(error, {
+        boundary: "onboarding",
+        fallback: "Could not create API key.",
+      });
+    },
     onSuccess: async (result) => {
       // Only apply the response if it matches the currently selected organization
       if (result.organizationId === organizationId) {
@@ -670,7 +678,7 @@ export const FirstRunManagedMailSetup = ({
   } satisfies Record<(typeof setupSteps)[number]["id"], boolean>;
 
   return (
-    <div className="@container mx-auto flex max-h-[calc(100dvh-4rem)] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-border bg-bg/88 text-left shadow-2xl backdrop-blur-xl">
+    <div className="@container mx-auto flex max-h-[calc(100dvh-4rem)] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-border bg-bg-raised/88 text-left shadow-2xl backdrop-blur-xl">
       <FirstRunSetupHeader
         onBack={onBack}
         onOrganizationChange={(nextOrganizationId) => {
@@ -727,12 +735,10 @@ export const FirstRunManagedMailSetup = ({
                 },
                 {
                   onError: (error) => {
-                    toast.error(
-                      getErrorMessage(
-                        error,
-                        "Could not create managed mailbox."
-                      )
-                    );
+                    toastError(error, {
+                      boundary: "onboarding",
+                      fallback: "Could not create managed mailbox.",
+                    });
                   },
                 }
               );

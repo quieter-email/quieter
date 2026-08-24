@@ -21,7 +21,6 @@ import {
   getMailboxDisplayTitle,
   hasTrimmedDisplayName,
   runDetached,
-  showMutationError,
 } from "#/features/settings/components/mailboxes-settings-shared";
 import { ManagedMailboxManagerSettingsSection } from "#/features/settings/components/managed-mailbox-manager-settings-section";
 import {
@@ -29,6 +28,7 @@ import {
   SettingsPageHeader,
   SettingsSection,
 } from "#/features/settings/components/settings-layout";
+import { toastError } from "#/lib/error-toast";
 
 type Mailbox =
   RouterOutputs["mail"]["listMailboxes"]["groups"][number]["mailboxes"][number];
@@ -165,7 +165,14 @@ export const MailboxDetailSettingsContent = ({
           onDisconnect={() => {
             disconnectMailboxMutation.mutate(
               { mailboxId: mailbox.id },
-              { onError: showMutationError("Could not remove mailbox.") }
+              {
+                onError: (error) => {
+                  toastError(error, {
+                    boundary: "mailbox-settings",
+                    fallback: "Could not remove mailbox.",
+                  });
+                },
+              }
             );
           }}
           onUsefulDetailsChange={(enabled) => {

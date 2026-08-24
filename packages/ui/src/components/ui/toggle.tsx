@@ -12,7 +12,7 @@ export const ToggleGroup = ({
 }: ComponentPropsWithoutRef<typeof ToggleGroupPrimitive>) => (
   <ToggleGroupPrimitive
     className={cn(
-      "squircle inline-flex items-center gap-1 rounded-lg border border-border bg-bg-elevated p-1 shadow-sm",
+      "squircle inline-flex items-center gap-1 rounded-lg border border-border bg-bg p-1 shadow-sm",
       className
     )}
     {...props}

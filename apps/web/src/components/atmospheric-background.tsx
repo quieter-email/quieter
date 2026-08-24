@@ -106,7 +106,7 @@ float ridge(vec2 p, float phase, float thickness, float hard, vec2 cs, float fre
       + 0.05 * sin(r.x * (4.2 * freq) - phase * 0.65)
     );
   float soft = exp(-(fold * fold) / max(thickness * thickness, 0.0001));
-  float sharp = mix(0.55, 16.0, clamp(hard, 0.0, 1.0));
+  float sharp = mix(0.45, 7.0, clamp(hard, 0.0, 1.0));
   return pow(soft, sharp);
 }
 
@@ -175,7 +175,7 @@ void main() {
     softGlow(q, vec2(-0.02 + drift2, 0.1), vec2(0.36, 0.17)) * 0.4;
 
   float ridgeLayer = layerLight(
-    ridgeMain * 1.2,
+    ridgeMain * 0.75,
     layerLight(ridgeB * uRidgeAmp.x, ridgeC * uRidgeAmp.y)
   );
   float highlight = layerLight(ridgeLayer, bloom * 0.55);
@@ -229,11 +229,12 @@ void main() {
 }
 `;
 
-/** Matches dark `--bg-elevated` (oklch 0.145). */
-const ELEVATED_RGB = [0.145, 0.145, 0.145] as const;
+/** Matches dark `--bg` (oklch 0.145). */
+// sRGB channels for the app canvas; --bg is oklch(0.125) => #060606.
+const CANVAS_RGB = [0.0252, 0.0252, 0.0252] as const;
 const BLACK_RGB = [0, 0, 0] as const;
 
-type FadeTarget = "black" | "elevated";
+type FadeTarget = "black" | "canvas";
 
 type AtmosphericBackgroundProps = {
   className?: string;
@@ -252,7 +253,7 @@ type AtmosphericBackgroundProps = {
 };
 
 const fadeTargetRgb = (target: FadeTarget | undefined) =>
-  target === "elevated" ? ELEVATED_RGB : BLACK_RGB;
+  target === "canvas" ? CANVAS_RGB : BLACK_RGB;
 
 const f32 = Math.fround;
 
@@ -334,11 +335,11 @@ const computeFrameGlobals = (
   const mood = valueNoise3(f32(t * 0.22), sy, f32(t * 0.16));
   const detail = valueNoise3(f32(sz + 1.2), f32(t * 0.2), f32(t * 0.18));
   const hardnessNoise = valueNoise3(f32(t * 0.07 + sx), 2.1, sy);
-  const hardness = mix(0.06, 0.98, smoothstep(0.42, 0.58, hardnessNoise));
+  const hardness = mix(0.05, 0.55, smoothstep(0.42, 0.58, hardnessNoise));
   const drift = f32(f32(valueNoise3(f32(t * 0.4), sy, 1) - 0.5) * 0.18);
   const drift2 = f32(f32(valueNoise3(sz, f32(t * 0.38), 2) - 0.5) * 0.15);
   const thickNoise = valueNoise3(f32(t * 0.08 + sz), 3.7, sy);
-  const thick = f32(mix(0.16, 0.26, thickNoise) * mix(1, 0.9, hardness));
+  const thick = f32(mix(0.2, 0.3, thickNoise) * mix(1, 0.9, hardness));
 
   return {
     detail,
@@ -352,8 +353,8 @@ const computeFrameGlobals = (
     phaseA: f32(f32(sx * 6.28318) + f32(t * 1.42)),
     phaseB: f32(f32(sy * 6.28318) + f32(t * 0.58) + 2.4),
     phaseC: f32(f32(sz * 6.28318) - f32(t * 1.95) - 1.1),
-    ridgeAmpB: mix(0.2, 0.7, detail),
-    ridgeAmpC: mix(0.05, 0.55, detail),
+    ridgeAmpB: mix(0.12, 0.42, detail),
+    ridgeAmpC: mix(0.03, 0.32, detail),
     thick,
   };
 };
@@ -481,7 +482,7 @@ export const AtmosphericBackground = ({
 }: AtmosphericBackgroundProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [ready, setReady] = useState(false);
-  const underlay = fadeBottom === "elevated" ? "bg-bg-elevated" : "bg-black";
+  const underlay = fadeBottom === "canvas" ? "bg-bg" : "bg-black";
   const [session] = useReducer(
     (current: AtmosphericSession) => current,
     undefined,
