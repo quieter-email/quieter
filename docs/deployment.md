@@ -12,9 +12,20 @@ The release workflow:
 4. loads application secrets directly from SST's encrypted secret store;
 5. runs `sst deploy` without application runtime secrets in the deploy process, deploying the AWS mail/background stack and the Cloudflare web Worker from SST-managed values;
 6. wires SST resource outputs directly into the Worker and attaches `quieter.email`;
-7. invokes the authenticated Gmail credential rotation endpoint.
+7. archives the client assets this release built so earlier tabs keep loading;
+8. invokes the authenticated Gmail credential rotation endpoint.
 
 There is no separate hosting-provider build, deploy hook, or dashboard environment configuration. Cloudflare receives runtime variables and encrypted bindings from SST for each release. Generated resource URLs and names remain deployment outputs and are never copied into a second configuration store.
+
+### Client asset retention
+
+A deploy replaces the Worker asset manifest wholesale, so the previous release's hashed chunks stop resolving. A tab opened before the deploy then fails on its next lazy import, and because a missing asset falls through to the Worker it receives the HTML shell rather than JavaScript.
+
+Each release therefore uploads `apps/web/dist/client/assets` to the `WebAssetArchive` R2 bucket via `pnpm run archive:web-assets`, reading the bucket name from the stack outputs written by `sst deploy`. When the live manifest misses, the Worker serves the chunk from that archive, so tabs opened before a release keep working untouched and pick up the new build on their next navigation.
+
+Never delete objects from this bucket as part of a deploy: older tabs are reading from it. Prune it only through a retention policy chosen to outlive the longest realistic session, and only for objects no longer referenced by any recent release.
+
+Asset retention covers loading, not protocol. An old client calling a server function whose shape has changed is a separate compatibility boundary, handled by expand/contract like any other. The client also compares its build id against `/assets/build-id.txt` and reloads when a chunk fails and the ids differ, which is the backstop for anything retention does not cover.
 
 ### Worker rollback and Durable Object versions
 

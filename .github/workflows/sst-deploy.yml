@@ -110,6 +110,14 @@ jobs:
           VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN }}
         run: vp exec sst deploy --config sst.config.ts --stage "$SST_STAGE"
 
+      # Keeps this release's chunks reachable after the next deploy replaces
+      # the Worker asset manifest, so tabs opened before it keep loading.
+      - name: Archive web assets
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: pnpm run archive:web-assets
+
       - name: Rotate legacy Gmail credentials
         if: ${{ env.SST_STAGE == 'production' }}
         env:
