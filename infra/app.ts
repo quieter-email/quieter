@@ -18,6 +18,13 @@ export const createInfrastructure = async (input: {
   const webSecretBindings = Object.values(secretBindings);
 
   const context = createDeploymentContext(secretResources);
+  /**
+   * A deploy replaces the Worker asset manifest wholesale, so hashed chunks
+   * from the previous release stop resolving and tabs opened before it break
+   * on their next lazy import. Every build's assets are archived here and the
+   * Worker falls back to them, which keeps those tabs loading untouched.
+   */
+  const webAssetArchive = new sst.cloudflare.Bucket("WebAssetArchive");
   const actions = createMailboxActionResources(context);
   const gmail = createGmailResources(context, secretResources);
   const mail = await createMailResources(context, secretResources);
@@ -42,7 +49,7 @@ export const createInfrastructure = async (input: {
       SES_CONFIGURATION_SET_NAME:
         mail.mailOutboundConfigurationSet.configurationSetName,
     },
-    [mail.mailBucket, mail.webAwsPermissions]
+    [mail.mailBucket, mail.webAwsPermissions, webAssetArchive]
   );
 
   return {
@@ -70,6 +77,7 @@ export const createInfrastructure = async (input: {
     mailReceiptTopicArn: mail.mailReceiptTopic.arn,
     mailboxActionQueueUrl: actions.mailboxActionQueue.url,
     stage: $app.stage,
+    webAssetArchiveBucket: webAssetArchive.name,
     webUrl: web.url,
   };
 };

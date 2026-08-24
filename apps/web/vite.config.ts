@@ -109,6 +109,10 @@ export default defineConfig(({ command }) => {
   return {
     build: {
       chunkSizeWarningLimit: 1200,
+      rolldownOptions: {
+        // Supplied by the Workers runtime itself, so no bundler can resolve it.
+        external: ["cloudflare:workers"],
+      },
       sourcemap: isSentryEnabled,
     },
     define: {

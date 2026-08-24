@@ -159,6 +159,29 @@ const securityHeadersMiddleware = createMiddleware().server(
   }
 );
 
+/**
+ * Serves chunks from previous releases that the current asset manifest has
+ * dropped, so tabs opened before a deploy keep loading instead of failing on
+ * their next lazy import. Runs before the site password gate because
+ * `/assets/` is already public.
+ */
+const assetArchiveMiddleware = createMiddleware().server(
+  async ({ next, request }) => {
+    const requestUrl = new URL(request.url);
+    if (
+      request.method !== "GET" ||
+      !requestUrl.pathname.startsWith("/assets/")
+    ) {
+      return await next();
+    }
+
+    const { readArchivedAsset } = await import("#/lib/asset-archive.server");
+    const archived = await readArchivedAsset(requestUrl.pathname);
+
+    return archived ?? (await next());
+  }
+);
+
 const sitePasswordMiddleware = createMiddleware().server(
   async ({ next, request }) => {
     if (!isSitePasswordGateEnabled() || !hasSitePasswordConfigured()) {
@@ -203,6 +226,7 @@ export const startInstance = createStart(() => ({
   requestMiddleware: [
     ...(isSentryEnabled ? [sentryGlobalRequestMiddleware] : []),
     securityHeadersMiddleware,
+    assetArchiveMiddleware,
     sitePasswordMiddleware,
     databaseMiddleware,
     abuseProtectionMiddleware,
