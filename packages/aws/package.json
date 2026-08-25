@@ -5,7 +5,6 @@
   "exports": {
     "./inbound": "./src/inbound.ts",
     "./outbound-feedback": "./src/outbound-feedback.ts",
-    "./outbound": "./src/outbound.ts",
     "./receipt": "./src/receipt.ts"
   },
   "scripts": {
