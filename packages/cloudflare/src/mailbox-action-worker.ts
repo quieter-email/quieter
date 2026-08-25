@@ -8,12 +8,21 @@ const mailboxActionMessageSchema = z.object({
   runId: z.string().trim().min(1),
 });
 
+// infra/actions.ts configures a retry limit of 5 on MailboxActionQueue, so the
+// sixth failed delivery is the last one before the message reaches the DLQ.
+const FINAL_QUEUE_ATTEMPT = 6;
+
 export const processMailboxActionMessage = async (
   body: unknown,
-  executeRun: typeof executeMailboxActionRun = executeMailboxActionRun
+  options: {
+    attempt?: number;
+    executeRun?: typeof executeMailboxActionRun;
+  } = {}
 ) => {
   const { runId } = mailboxActionMessageSchema.parse(body);
-  return await executeRun(runId);
+  return await (options.executeRun ?? executeMailboxActionRun)(runId, {
+    finalAttempt: (options.attempt ?? 1) >= FINAL_QUEUE_ATTEMPT,
+  });
 };
 
 export default withSentryReporting({
@@ -22,7 +31,9 @@ export default withSentryReporting({
       await Promise.all(
         batch.messages.map(async (message) => {
           try {
-            await processMailboxActionMessage(message.body);
+            await processMailboxActionMessage(message.body, {
+              attempt: message.attempts,
+            });
             message.ack();
           } catch (error) {
             reportWorkerError(error, {

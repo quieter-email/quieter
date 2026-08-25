@@ -162,7 +162,7 @@ The root [`sst.config.ts`](../sst.config.ts) owns only app-wide SST settings and
 - `secrets.ts` declares stage-aware `sst.Secret` resources and Cloudflare secret bindings.
 - `database.ts` owns the Cloudflare Hyperdrive binding.
 - `web.ts` owns the TanStack Start Worker and its common bindings.
-- Mailbox actions execute asynchronously from their persisted runs: Gmail sync and maintenance dispatch new runs straight onto Cloudflare Queues, while SES-ingested runs are picked up by a per-minute fallback cron that also recovers crashed or lost work.
+- Mailbox actions execute asynchronously from their persisted runs: Gmail sync and maintenance dispatch new runs straight onto Cloudflare Queues, while a per-minute fallback cron atomically claims SES-ingested, lost, or crashed runs before dispatching them. Transient execution failures stay retryable until the queue's final delivery settles the run as failed.
 - `mail.ts` owns SES receipt storage, processing, ingress, and send permissions.
 - `gmail.ts` owns Gmail live-sync and Pub/Sub resources on Cloudflare.
 - `app.ts` is the small stage-aware composition entry point; `types.ts` contains shared infra boundary types.

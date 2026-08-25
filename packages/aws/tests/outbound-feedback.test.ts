@@ -1,6 +1,31 @@
-import { describe, expect, test } from "vite-plus/test";
+import type { OrganizationMailFeedback } from "@quieter/orpc/organization-mail-delivery";
+import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
-import { parseSesFeedbackNotification } from "../src/outbound-feedback";
+import {
+  handler,
+  parseSesFeedbackNotification,
+} from "../src/outbound-feedback";
+
+// The lazy database client only parses this string; persistence itself is mocked.
+vi.hoisted(() => {
+  process.env.DATABASE_URL ??= "postgres://localhost:5432/quieter_test";
+});
+
+const mocks = vi.hoisted(() => ({
+  recordOrganizationMailFeedback:
+    vi.fn<(feedback: OrganizationMailFeedback) => Promise<void>>(),
+  reportAwsError: vi.fn<(error: unknown, operation: string) => Promise<void>>(),
+}));
+
+vi.mock(import("@quieter/orpc/organization-mail-delivery"), () => ({
+  recordOrganizationMailFeedback: mocks.recordOrganizationMailFeedback,
+}));
+vi.mock(import("../src/sentry"), () => ({
+  reportAwsError: mocks.reportAwsError,
+}));
+
+mocks.recordOrganizationMailFeedback.mockResolvedValue();
+mocks.reportAwsError.mockResolvedValue();
 
 const topicArn = "arn:aws:sns:eu-central-1:123456789012:feedback";
 
@@ -188,5 +213,42 @@ describe(parseSesFeedbackNotification, () => {
         topicArn
       )
     ).toBeNull();
+  });
+});
+
+describe(handler, () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.recordOrganizationMailFeedback.mockResolvedValue();
+    mocks.reportAwsError.mockResolvedValue();
+  });
+
+  const snsEvent = () => ({
+    Records: [{ Sns: createEnvelope({ eventType: "SEND", mail }) }],
+  });
+
+  test("persists a valid SNS delivery", async () => {
+    await expect(handler(snsEvent())).resolves.toBeUndefined();
+
+    expect(mocks.recordOrganizationMailFeedback).toHaveBeenCalledOnce();
+    expect(
+      mocks.recordOrganizationMailFeedback.mock.calls[0]?.[0]
+    ).toMatchObject({
+      eventType: "sent",
+      providerMessageId: "ses-message-1",
+    });
+  });
+
+  test("reports persistence failures to Sentry and rethrows unchanged", async () => {
+    const failure = new Error("database unavailable");
+    mocks.recordOrganizationMailFeedback.mockRejectedValue(failure);
+
+    await expect(handler(snsEvent())).rejects.toThrow(failure);
+
+    expect(mocks.reportAwsError).toHaveBeenCalledOnce();
+    expect(mocks.reportAwsError.mock.calls[0]?.[0]).toBe(failure);
+    expect(mocks.reportAwsError.mock.calls[0]?.[1]).toBe(
+      "MailOutboundFeedbackProcessor"
+    );
   });
 });

@@ -3,6 +3,7 @@ import {
   maintainGmailPubSubMailbox,
   processGmailPubSubNotification,
 } from "@quieter/orpc/gmail-pubsub";
+import { markMailboxActionRunsDispatched } from "@quieter/orpc/mailbox-actions";
 import { z } from "zod";
 
 import { reportWorkerError, withSentryReporting } from "./worker-runtime";
@@ -65,6 +66,15 @@ const dispatchMailboxActionRuns = async (env: Env, runIds: string[]) => {
             contentType: "json" as const,
           }))
         );
+        try {
+          await markMailboxActionRunsDispatched(batch);
+        } catch (error) {
+          // Worst case the fallback dispatcher re-dispatches after its lease.
+          reportWorkerError(error, {
+            category: "mailbox_action_dispatch_stamp_error",
+            route: "queue",
+          });
+        }
       })
     );
   } catch (error) {

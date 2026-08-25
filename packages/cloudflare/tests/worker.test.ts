@@ -19,6 +19,8 @@ import {
 } from "vite-plus/test";
 
 import { enqueueGmailMaintenanceJobs } from "../src/gmail-maintenance-worker";
+import { dispatchPendingMailboxActionRuns } from "../src/mailbox-action-dispatch-worker";
+import { processMailboxActionMessage } from "../src/mailbox-action-worker";
 import { processGmailQueueMessage } from "../src/queue-worker";
 import worker, { signaturesMatch } from "../src/worker";
 
@@ -35,6 +37,22 @@ const encodeJson = (value: unknown) =>
     .replaceAll("+", "-")
     .replaceAll("/", "_")
     .replaceAll("=", "");
+
+const createClaimRuns = (runs: { runId: string }[]) =>
+  vi.fn<() => Promise<{ runId: string }[]>>().mockResolvedValue(runs);
+
+const createReleaseClaims = () =>
+  vi.fn<(runIds: string[]) => Promise<void>>().mockResolvedValue();
+
+const createExecuteRun = () =>
+  vi
+    .fn<
+      (
+        runId: string,
+        options?: { finalAttempt?: boolean }
+      ) => Promise<{ status: "succeeded" }>
+    >()
+    .mockResolvedValue({ status: "succeeded" });
 
 const liveSyncToken = async (
   overrides: Partial<{ expiresAt: number; issuedAt: number }> = {}
@@ -385,5 +403,92 @@ describe("Cloudflare worker runtime", () => {
     expect(sendBatch).toHaveBeenCalledTimes(2);
     expect([...(sendBatch.mock.calls[0]?.[0] ?? [])]).toHaveLength(100);
     expect([...(sendBatch.mock.calls[1]?.[0] ?? [])]).toHaveLength(1);
+  });
+
+  describe("Mailbox action dispatch", () => {
+    const sendBatchResult = {
+      metadata: { metrics: { backlogBytes: 0, backlogCount: 0 } },
+    };
+
+    test("dispatches claimed runs and keeps claims on success", async () => {
+      const claimRuns = createClaimRuns([
+        { runId: "run-1" },
+        { runId: "run-2" },
+      ]);
+      const releaseClaims = createReleaseClaims();
+      const sendBatch = vi
+        .spyOn(env.MailboxActionQueue, "sendBatch")
+        .mockResolvedValue(sendBatchResult);
+
+      await expect(
+        dispatchPendingMailboxActionRuns(env, { claimRuns, releaseClaims })
+      ).resolves.toStrictEqual({ dispatched: 2 });
+
+      expect(sendBatch).toHaveBeenCalledOnce();
+      expect([...(sendBatch.mock.calls[0]?.[0] ?? [])]).toStrictEqual([
+        { body: { runId: "run-1" }, contentType: "json" },
+        { body: { runId: "run-2" }, contentType: "json" },
+      ]);
+      expect(releaseClaims).not.toHaveBeenCalled();
+    });
+
+    test("releases the dispatch claim when a batch send fails", async () => {
+      const firstBatch = Array.from({ length: 100 }, (_, index) => ({
+        runId: `run-${index}`,
+      }));
+      const secondBatch = [{ runId: "run-final" }];
+      const claimRuns = createClaimRuns([...firstBatch, ...secondBatch]);
+      const releaseClaims = createReleaseClaims();
+      const sendBatch = vi
+        .spyOn(env.MailboxActionQueue, "sendBatch")
+        .mockRejectedValueOnce(new Error("queue unavailable"))
+        .mockResolvedValueOnce(sendBatchResult);
+
+      await expect(
+        dispatchPendingMailboxActionRuns(env, { claimRuns, releaseClaims })
+      ).resolves.toStrictEqual({ dispatched: 1 });
+
+      expect(sendBatch).toHaveBeenCalledTimes(2);
+      expect(releaseClaims).toHaveBeenCalledOnce();
+      expect(releaseClaims.mock.calls[0]?.[0]).toStrictEqual(
+        firstBatch.map(({ runId }) => runId)
+      );
+    });
+  });
+
+  describe("Mailbox action messages", () => {
+    test("marks intermediate delivery attempts as retryable", async () => {
+      const executeRun = createExecuteRun();
+
+      await processMailboxActionMessage(
+        { runId: mailboxId },
+        { attempt: 1, executeRun }
+      );
+
+      expect(executeRun.mock.calls[0]).toStrictEqual([
+        mailboxId,
+        { finalAttempt: false },
+      ]);
+    });
+
+    test("flags the final queue delivery so failures settle the run", async () => {
+      const executeRun = createExecuteRun();
+
+      await processMailboxActionMessage(
+        { runId: mailboxId },
+        { attempt: 6, executeRun }
+      );
+
+      expect(executeRun.mock.calls[0]).toStrictEqual([
+        mailboxId,
+        { finalAttempt: true },
+      ]);
+    });
+
+    test("rejects invalid messages before claiming a run", async () => {
+      await expect(
+        processMailboxActionMessage({}, { attempt: 1 })
+      ).rejects.toThrow("Invalid input");
+    });
   });
 });

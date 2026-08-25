@@ -508,7 +508,50 @@ const claimRun = async (runId: string) => {
   return run ?? null;
 };
 
-export const executeMailboxActionRun = async (runId: string) => {
+export type MailboxActionFailureUpdate = {
+  completedAt: Date | null;
+  lastError: string;
+  leasedUntil: null;
+  status: "failed" | "queued";
+  updatedAt: Date;
+};
+
+/**
+ * Transient failures return the run to `queued` so the redelivered queue
+ * message can claim it again; only the final queue delivery settles the run
+ * as `failed`. Finality mirrors the Cloudflare Queues retry limit configured
+ * in infra/actions.ts (retry: 5, so the sixth failed delivery goes to the DLQ).
+ */
+export const mailboxActionFailureUpdate = (
+  error: unknown,
+  options: { finalAttempt: boolean }
+): MailboxActionFailureUpdate => {
+  const at = new Date();
+  const lastError =
+    error instanceof Error ? error.message : "Mailbox action failed.";
+  if (options.finalAttempt) {
+    return {
+      completedAt: at,
+      lastError,
+      leasedUntil: null,
+      status: "failed",
+      updatedAt: at,
+    };
+  }
+
+  return {
+    completedAt: null,
+    lastError,
+    leasedUntil: null,
+    status: "queued",
+    updatedAt: at,
+  };
+};
+
+export const executeMailboxActionRun = async (
+  runId: string,
+  options?: { finalAttempt?: boolean }
+) => {
   const run = await claimRun(runId);
   if (run === null) {
     return { status: "not_claimed" as const };
@@ -733,17 +776,13 @@ export const executeMailboxActionRun = async (runId: string) => {
       .where(eq(mailboxActionRun.id, run.id));
     return { status: "succeeded" as const };
   } catch (error) {
-    const failedAt = new Date();
     await db
       .update(mailboxActionRun)
-      .set({
-        completedAt: failedAt,
-        lastError:
-          error instanceof Error ? error.message : "Mailbox action failed.",
-        leasedUntil: null,
-        status: "failed",
-        updatedAt: failedAt,
-      })
+      .set(
+        mailboxActionFailureUpdate(error, {
+          finalAttempt: options?.finalAttempt === true,
+        })
+      )
       .where(eq(mailboxActionRun.id, run.id));
     throw error;
   }

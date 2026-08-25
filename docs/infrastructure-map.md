@@ -66,7 +66,7 @@ flowchart TB
         POLAR["Polar<br/>products, checkout, webhooks, usage"]
         LINEAR["Linear<br/>OAuth + MCP"]
         GCAL["Google Calendar<br/>OAuth + events"]
-        SENTRY["Sentry<br/>web + AWS Lambda"]
+        SENTRY["Sentry<br/>web, background workers, AWS Lambda"]
         PH["PostHog EU + c15t consent<br/>browser, consent-gated"]
     end
 
@@ -116,6 +116,9 @@ flowchart TB
     WEB --> GCAL
     MAW --> GCAL
     WEB --> SENTRY
+    GWORKER --> SENTRY
+    PSW --> SENTRY
+    MAW --> SENTRY
     RECEIPT --> SENTRY
     FEED --> SENTRY
     BROWSER -->|after consent| PH
@@ -136,8 +139,8 @@ flowchart TB
 | `queue-worker.ts` consumer | Worker (queue subscription) | `packages/cloudflare/src/queue-worker.ts` | `GmailPsQueue` messages | Hyperdrive, Gmail API, OpenRouter, Polar, DO | Handles `notification` and `maintenance` messages; 5-minute CPU limit; per-message `retry` with exponential backoff, throws on busy mailbox lease. |
 | `GmailPubSubMaintenance` | `sst.cloudflare.Cron` | `packages/cloudflare/src/gmail-maintenance-worker.ts` | `*/15 * * * *` | Hyperdrive, `GmailPsQueue` | Due-driven selection (≤500/tick, ordered by soonest expiry): watch state missing, expiry within 72 h, renewal heartbeat overdue (36 h + hash jitter), stale reconciliation (2 h + jitter) for mailboxes with enabled automations, or recent error backoff (1 h). Mailboxes receiving pushes stay fresh via `lastReconciledAt` and are never selected. |
 | `MailboxActionQueue` / `MailboxActionDeadLetterQueue` | `sst.cloudflare.Queue` | — | Producer: dispatch cron | Consumer `mailbox-action-worker.ts` | DLQ after 5 retries, 30 s delay, max concurrency 5, batch size 1. |
-| `mailbox-action-worker.ts` consumer | Worker (queue subscription) | `packages/cloudflare/src/mailbox-action-worker.ts` | `MailboxActionQueue` messages | Hyperdrive, Gmail API, OpenRouter, Polar, Linear, Google Calendar | Executes `mailboxActionRun` by id; 5-minute CPU limit. |
-| `MailboxActionDispatch` | `sst.cloudflare.Cron` | `packages/cloudflare/src/mailbox-action-dispatch-worker.ts` | every minute | Hyperdrive, `MailboxActionQueue` | Fallback dispatcher: Gmail-synced runs are enqueued directly by the sync consumer, so the cron only covers SES-ingested runs, lost messages, and hard-crash recovery (runs `running` with an expired 10-min lease). Failed runs are marked `failed` and never re-dispatched. |
+| `mailbox-action-worker.ts` consumer | Worker (queue subscription) | `packages/cloudflare/src/mailbox-action-worker.ts` | `MailboxActionQueue` messages | Hyperdrive, Gmail API, OpenRouter, Polar, Linear, Google Calendar | Executes `mailboxActionRun` by id; 5-minute CPU limit. Transient failures return the run to `queued` for the next delivery; the sixth failed delivery (queue retry limit 5) settles it as `failed` and DLQs the message. |
+| `MailboxActionDispatch` | `sst.cloudflare.Cron` | `packages/cloudflare/src/mailbox-action-dispatch-worker.ts` | every minute | Hyperdrive, `MailboxActionQueue` | Fallback dispatcher: Gmail-synced runs are enqueued directly by the sync consumer, so the cron only covers SES-ingested runs, lost messages, and crash recovery. It atomically claims runs before sending (conditional `UPDATE ... RETURNING` stamps `dispatchedAt`, valid 15 min) and releases claims when a send fails. Runs failing on queue attempt 6 are settled as `failed`. |
 | `AppDatabaseV2` | `sst.cloudflare.Hyperdrive` | — | Worker DB access | PostgreSQL origin from `DatabaseUrl` secret | Caching disabled; production uses fixed Hyperdrive id. Workers use `withRequestDatabaseClient` per invocation. |
 | R2 bucket (external) | configured via `R2_*` env + access-key secrets, not an SST resource | — | Receipt processor, mail ingress | — | Canonical `.eml` storage under `mail/inbound/yyyy/mm/dd/uuid.eml`, read back by the web worker via S3-compatible API. |
 
@@ -291,20 +294,25 @@ sequenceDiagram
     participant AI as OpenRouter
     participant EX as Linear / Google Calendar / Gmail
 
-    GS->>DB: insert mailboxActionRun rows
-    GS->>Q: sendBatch runIds immediately (instant)
-    IN->>DB: insert mailboxActionRun rows (no queue access)
+    GS->>DB: insert runs, stamp dispatchedAt, push runIds (instant)
+    IN->>DB: insert runs only (no queue access)
     participant CR as Dispatch cron (1 min, fallback)
-    Note over Q: dispatch cron covers SES-ingested runs and crash recovery
-    CR->>DB: list queued + lease-expired runs
-    CR->>Q: sendBatch runIds
-    Q->>W: deliver runId
-    W->>DB: claim run (10-min lease)
+    Note over DB,Q: cron claims atomically: queued with expired<br/>dispatch lease, or running with expired execution lease
+    CR->>DB: claim batch (conditional UPDATE sets dispatchedAt)
+    CR->>Q: sendBatch claimed runIds
+    CR->>DB: release claims for failed sends
+    Q->>W: deliver runId (attempt N of 6)
+    W->>DB: claim run (10-min execution lease)
     W->>DB: load graph, message content, AI memory
     W->>AI: condition / router / agent steps
     W->>EX: connector + Gmail effects (idempotency keys)
-    W->>DB: persist frames, step runs, effects; mark failed with lastError on failure
-    W-->>Q: ack / retry with backoff / DLQ after 5
+    W->>DB: persist frames, step runs, effects
+    alt transient failure before attempt 6
+        W->>DB: return run to queued (lastError recorded)
+        W->>Q: retry with exponential backoff
+    else failure on attempt 6
+        W->>DB: mark failed with lastError; message goes to DLQ
+    end
 ```
 
 ### 6. Chat with tools

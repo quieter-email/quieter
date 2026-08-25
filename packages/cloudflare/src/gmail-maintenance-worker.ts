@@ -14,7 +14,7 @@ export const enqueueGmailMaintenanceJobs = async (
   const batches = Array.from(
     { length: Math.ceil(jobs.length / QUEUE_BATCH_SIZE) },
     (_, index) =>
-      jobs.slice(index * QUEUE_BATCH_SIZE, index * QUEUE_BATCH_SIZE + 100)
+      jobs.slice(index * QUEUE_BATCH_SIZE, (index + 1) * QUEUE_BATCH_SIZE)
   );
 
   await Promise.all(
