@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as CookiesRouteImport } from './routes/cookies'
 import { Route as DesignSystemRouteImport } from './routes/design-system'
+import { Route as DesktopAuthRouteImport } from './routes/desktop-auth'
 import { Route as HomeRouteImport } from './routes/home'
 import { Route as ImprintRouteImport } from './routes/imprint'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
@@ -54,6 +55,11 @@ const CookiesRoute = CookiesRouteImport.update({
 const DesignSystemRoute = DesignSystemRouteImport.update({
   id: '/design-system',
   path: '/design-system',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DesktopAuthRoute = DesktopAuthRouteImport.update({
+  id: '/desktop-auth',
+  path: '/desktop-auth',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HomeRoute = HomeRouteImport.update({
@@ -175,6 +181,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/cookies': typeof CookiesRoute
   '/design-system': typeof DesignSystemRoute
+  '/desktop-auth': typeof DesktopAuthRoute
   '/home': typeof HomeRoute
   '/imprint': typeof ImprintRoute
   '/onboarding': typeof OnboardingRoute
@@ -203,6 +210,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/cookies': typeof CookiesRoute
   '/design-system': typeof DesignSystemRoute
+  '/desktop-auth': typeof DesktopAuthRoute
   '/home': typeof HomeRoute
   '/imprint': typeof ImprintRoute
   '/onboarding': typeof OnboardingRoute
@@ -232,6 +240,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/cookies': typeof CookiesRoute
   '/design-system': typeof DesignSystemRoute
+  '/desktop-auth': typeof DesktopAuthRoute
   '/home': typeof HomeRoute
   '/imprint': typeof ImprintRoute
   '/onboarding': typeof OnboardingRoute
@@ -262,6 +271,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/cookies'
     | '/design-system'
+    | '/desktop-auth'
     | '/home'
     | '/imprint'
     | '/onboarding'
@@ -290,6 +300,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/cookies'
     | '/design-system'
+    | '/desktop-auth'
     | '/home'
     | '/imprint'
     | '/onboarding'
@@ -318,6 +329,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/cookies'
     | '/design-system'
+    | '/desktop-auth'
     | '/home'
     | '/imprint'
     | '/onboarding'
@@ -347,6 +359,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   CookiesRoute: typeof CookiesRoute
   DesignSystemRoute: typeof DesignSystemRoute
+  DesktopAuthRoute: typeof DesktopAuthRoute
   HomeRoute: typeof HomeRoute
   ImprintRoute: typeof ImprintRoute
   OnboardingRoute: typeof OnboardingRoute
@@ -399,6 +412,13 @@ declare module '@tanstack/react-router' {
       path: '/design-system'
       fullPath: '/design-system'
       preLoaderRoute: typeof DesignSystemRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/desktop-auth': {
+      id: '/desktop-auth'
+      path: '/desktop-auth'
+      fullPath: '/desktop-auth'
+      preLoaderRoute: typeof DesktopAuthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/home': {
@@ -563,6 +583,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   CookiesRoute: CookiesRoute,
   DesignSystemRoute: DesignSystemRoute,
+  DesktopAuthRoute: DesktopAuthRoute,
   HomeRoute: HomeRoute,
   ImprintRoute: ImprintRoute,
   OnboardingRoute: OnboardingRoute,

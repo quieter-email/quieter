@@ -18,6 +18,7 @@ import {
   organization,
   lastLoginMethod,
 } from "better-auth/plugins";
+import { bearer } from "better-auth/plugins/bearer";
 import {
   adminAc,
   defaultStatements,
@@ -230,6 +231,7 @@ export const auth = betterAuth({
     }),
   },
   plugins: [
+    bearer(),
     passkey(),
     organization({
       ac: organizationAccessControl,

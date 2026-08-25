@@ -149,12 +149,12 @@ const consumeFallbackRateLimit = (input: {
 };
 
 const securityHeadersMiddleware = createMiddleware().server(
-  async ({ next }) => {
+  async ({ next, request }) => {
     const result = await next();
 
     return {
       ...result,
-      response: withSecurityHeaders(result.response),
+      response: withSecurityHeaders(result.response, request),
     };
   }
 );

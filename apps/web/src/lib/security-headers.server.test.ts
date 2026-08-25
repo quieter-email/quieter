@@ -24,4 +24,36 @@ describe("security headers", () => {
     expect(policy).toContain("https://us-assets.i.posthog.com");
     expect(policy).not.toContain("'unsafe-eval'");
   });
+
+  test("allows only the validated desktop loopback callback", () => {
+    const callbackOrigin = "http://127.0.0.1:61234";
+    const callback = `${callbackOrigin}/callback`;
+    const response = withSecurityHeaders(
+      new Response(null, { status: 200 }),
+      new Request(
+        `http://localhost:3000/desktop-auth?callback=${encodeURIComponent(callback)}`
+      )
+    );
+    const policy = response.headers.get("content-security-policy") ?? "";
+
+    expect(policy).toContain(
+      `connect-src 'self' https: wss: ${callbackOrigin}`
+    );
+    expect(policy).toContain(`form-action 'self' ${callbackOrigin}`);
+  });
+
+  test("does not widen the policy for an invalid desktop callback", () => {
+    const callbackOrigin = "https://example.com";
+    const response = withSecurityHeaders(
+      new Response(null, { status: 200 }),
+      new Request(
+        `http://localhost:3000/desktop-auth?callback=${encodeURIComponent(`${callbackOrigin}/callback`)}`
+      )
+    );
+    const policy = response.headers.get("content-security-policy") ?? "";
+
+    expect(policy).toContain("connect-src 'self' https: wss:");
+    expect(policy).toContain("form-action 'self'");
+    expect(policy).not.toContain(callbackOrigin);
+  });
 });

@@ -3,6 +3,7 @@ import { tables } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { bearer } from "better-auth/plugins/bearer";
 
 import { ensureUserOrganizationState } from "./organization";
 
@@ -17,6 +18,7 @@ const sessionAuth = betterAuth({
     provider: "pg",
     schema: tables,
   }),
+  plugins: [bearer()],
   user: {
     additionalFields: {
       onboardingCompletedAt: {
