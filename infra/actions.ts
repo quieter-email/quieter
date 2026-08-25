@@ -82,4 +82,6 @@ export const createMailboxActionResources = (
     },
   });
   void dispatch;
+
+  return { mailboxActionQueue: queue };
 };

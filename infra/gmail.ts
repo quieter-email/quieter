@@ -19,7 +19,8 @@ export const createGmailResources = (
   context: DeploymentContext,
   secretBindings: SecretBindings,
   secretResources: SecretResources,
-  appDatabase: ReturnType<typeof createAppDatabase>
+  appDatabase: ReturnType<typeof createAppDatabase>,
+  mailboxActionQueue: sst.cloudflare.Queue
 ) => {
   const gmailLiveSyncTokenSecret = requireSecretResource(
     secretResources,
@@ -97,7 +98,12 @@ export const createGmailResources = (
           SENTRY_ENVIRONMENT: context.sentryEnvironment.SENTRY_ENVIRONMENT,
         },
         handler: "packages/cloudflare/src/queue-worker.ts",
-        link: [appDatabase, gmailLiveSyncMailbox, ...processingSecretBindings],
+        link: [
+          appDatabase,
+          mailboxActionQueue,
+          gmailLiveSyncMailbox,
+          ...processingSecretBindings,
+        ],
         transform: {
           worker(args) {
             args.limits = { cpuMs: 300_000 };

@@ -18,12 +18,17 @@ export const createInfrastructure = async (input: {
   const webSecretBindings = Object.values(secretBindings);
 
   const context = createDeploymentContext(secretResources);
-  createMailboxActionResources(context, secretBindings, appDatabase);
+  const actions = createMailboxActionResources(
+    context,
+    secretBindings,
+    appDatabase
+  );
   const gmail = createGmailResources(
     context,
     secretBindings,
     secretResources,
-    appDatabase
+    appDatabase,
+    actions.mailboxActionQueue
   );
   const mail = await createMailResources(context, secretResources);
   const web = createWeb(

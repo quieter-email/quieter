@@ -346,10 +346,13 @@ describe("Cloudflare worker runtime", () => {
         { maintainMailbox }
       );
 
-      expect(maintainMailbox).toHaveBeenCalledWith({
+      expect(maintainMailbox.mock.calls[0]?.[0]).toStrictEqual({
         mailboxId,
         topicName: "projects/example/topics/gmail",
       });
+      expect(maintainMailbox.mock.calls[0]?.[1]?.onRunsEnqueued).toBeTypeOf(
+        "function"
+      );
     });
 
     test("rejects invalid queue messages", async () => {

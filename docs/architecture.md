@@ -99,7 +99,7 @@ For Pro mailboxes:
 2. The ingress validates the Google identity, notifies the mailbox Durable Object, and enqueues a mailbox job in Cloudflare Queues.
 3. A Cloudflare queue consumer reconciles Gmail history through Hyperdrive and updates persisted state.
 4. Focused browser tabs receive mailbox-dirty signals from the mailbox Durable Object and refresh immediately.
-5. Cloudflare scheduled maintenance renews watches and reconciles missed notifications through the same queue.
+5. Scheduled maintenance on Cloudflare selects only mailboxes with due work: watch renewal (heartbeat plus expiry lookahead), first-time setup, or stale reconciliation for mailboxes with enabled automations.
 
 The notification is a wake-up signal, not the source of truth.
 
@@ -161,7 +161,7 @@ The root [`sst.config.ts`](../sst.config.ts) owns only app-wide SST settings and
 - `secrets.ts` declares stage-aware `sst.Secret` resources and Cloudflare secret bindings.
 - `database.ts` owns the Cloudflare Hyperdrive binding.
 - `web.ts` owns the TanStack Start Worker and its common bindings.
-- Mailbox actions execute from their persisted runs in the mail-ingestion or Gmail queue consumer request; chat generation runs in the web request through the AI SDK.
+- Mailbox actions execute asynchronously from their persisted runs: Gmail sync and maintenance dispatch new runs straight onto Cloudflare Queues, while SES-ingested runs are picked up by a per-minute fallback cron that also recovers crashed or lost work.
 - `mail.ts` owns SES receipt storage, processing, ingress, and send permissions.
 - `gmail.ts` owns Gmail live-sync and Pub/Sub resources on Cloudflare.
 - `app.ts` is the small stage-aware composition entry point; `types.ts` contains shared infra boundary types.
