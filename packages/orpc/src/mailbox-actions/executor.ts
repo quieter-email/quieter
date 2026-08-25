@@ -48,7 +48,7 @@ import type {
   ConnectorAgentTool,
   ConnectorAgentToolCall,
 } from "../connectors/agent-tools";
-import { getConnectorDisplayName } from "../connectors/service";
+import { getConnectorDisplayName } from "../connectors/contracts";
 import { runAuthorizedGmailMailbox } from "../gmail-mailbox-access";
 import { MAILBOX_PROVIDER_GMAIL } from "../mailbox/access";
 import { hasText } from "../text";

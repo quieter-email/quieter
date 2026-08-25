@@ -162,39 +162,6 @@ export const createMailResources = async (
       },
     }
   );
-  const mailOutboundFeedbackQueue = new sst.aws.Queue(
-    "MailOutboundFeedbackQueue",
-    {
-      dlq: {
-        queue: mailOutboundFeedbackDeadLetterQueue.arn,
-        retry: 5,
-      },
-      transform: {
-        queue: {
-          messageRetentionSeconds: 60 * 60 * 24 * 14,
-        },
-      },
-      visibilityTimeout: "2 minutes",
-    }
-  );
-  const mailOutboundFeedbackQueueAgeAlarm = new aws.cloudwatch.MetricAlarm(
-    "MailOutboundFeedbackQueueAgeAlarm",
-    {
-      alarmDescription:
-        "Outbound mail feedback has not been processed for five minutes.",
-      comparisonOperator: "GreaterThanThreshold",
-      dimensions: {
-        QueueName: mailOutboundFeedbackQueue.nodes.queue.name,
-      },
-      evaluationPeriods: 1,
-      metricName: "ApproximateAgeOfOldestMessage",
-      namespace: "AWS/SQS",
-      period: 300,
-      statistic: "Maximum",
-      threshold: 300,
-      treatMissingData: "notBreaching",
-    }
-  );
   const mailOutboundFeedbackDeadLetterAlarm = new aws.cloudwatch.MetricAlarm(
     "MailOutboundFeedbackDeadLetterAlarm",
     {
@@ -212,10 +179,6 @@ export const createMailResources = async (
       threshold: 0,
       treatMissingData: "notBreaching",
     }
-  );
-  mailOutboundFeedbackTopic.subscribeQueue(
-    "MailOutboundFeedbackQueueSubscriber",
-    mailOutboundFeedbackQueue.arn
   );
   const mailOutboundFeedbackEventDestination =
     new aws.sesv2.ConfigurationSetEventDestination(
@@ -240,27 +203,29 @@ export const createMailResources = async (
       },
       { dependsOn: [mailOutboundFeedbackTopicPolicy] }
     );
-  mailOutboundFeedbackQueue.subscribe(
-    {
-      environment: {
-        DATABASE_URL: context.databaseUrl,
-        SES_FEEDBACK_TOPIC_ARN: mailOutboundFeedbackTopic.arn,
-        ...context.sentryEnvironment,
-      },
-      handler: "packages/aws/src/outbound-feedback.handler",
-      timeout: "60 seconds",
+  mailOutboundFeedbackTopic.subscribe("MailOutboundFeedbackProcessor", {
+    environment: {
+      DATABASE_URL: context.databaseUrl,
+      SES_FEEDBACK_TOPIC_ARN: mailOutboundFeedbackTopic.arn,
+      ...context.sentryEnvironment,
     },
-    {
-      batch: {
-        partialResponses: true,
-        size: 10,
+    handler: "packages/aws/src/outbound-feedback.handler",
+    link: [mailOutboundFeedbackDeadLetterQueue],
+    retries: 2,
+    timeout: "60 seconds",
+    transform: {
+      eventInvokeConfig(args) {
+        args.destinationConfig = {
+          onFailure: {
+            destination: mailOutboundFeedbackDeadLetterQueue.arn,
+          },
+        };
       },
-    }
-  );
+    },
+  });
 
   void mailOutboundFeedbackEventDestination;
   void mailOutboundFeedbackDeadLetterAlarm;
-  void mailOutboundFeedbackQueueAgeAlarm;
 
   mailReceiptTopic.subscribe("MailReceiptProcessor", {
     environment: {
@@ -310,7 +275,6 @@ export const createMailResources = async (
     mailIngressToken,
     mailOutboundConfigurationSet,
     mailOutboundFeedbackDeadLetterQueue,
-    mailOutboundFeedbackQueue,
     mailOutboundFeedbackTopic,
     mailReceiptRole,
     mailReceiptTopic,

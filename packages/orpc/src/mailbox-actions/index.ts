@@ -1,2 +1,5 @@
-export { enqueueMailboxActionsForMessage } from "./enqueue";
+export {
+  enqueueMailboxActionsForMessage,
+  listPendingMailboxActionRunIds,
+} from "./enqueue";
 export { executeMailboxActionRun } from "./executor";

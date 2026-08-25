@@ -1,12 +1,11 @@
 import { once } from "node:events";
 import { setTimeout as sleep } from "node:timers/promises";
 
-import {
-  createExecutionContext,
-  createMessageBatch,
-  evictDurableObject,
-  getQueueResult,
-} from "cloudflare:test";
+import type {
+  maintainGmailPubSubMailbox,
+  processGmailPubSubNotification,
+} from "@quieter/orpc/gmail-pubsub";
+import { evictDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
 import type { JWK } from "jose";
@@ -19,7 +18,8 @@ import {
   vi,
 } from "vite-plus/test";
 
-import queueWorker from "../src/queue-worker";
+import { enqueueGmailMaintenanceJobs } from "../src/gmail-maintenance-worker";
+import { processGmailQueueMessage } from "../src/queue-worker";
 import worker, { signaturesMatch } from "../src/worker";
 
 const serviceAccount = "gmail-push@example.invalid";
@@ -308,45 +308,78 @@ describe("Cloudflare worker runtime", () => {
       type: "notification" as const,
     };
 
-    const batch = () =>
-      createMessageBatch<typeof body>("gmail-pubsub-types", [
-        { attempts: 1, body, id: "message-1", timestamp: new Date() },
-      ]);
-
-    test("awaits the downstream response before acknowledging", async () => {
-      const gate = Promise.withResolvers<Response>();
-      vi.stubGlobal(
-        "fetch",
-        vi.fn(async () => await gate.promise)
+    test("processes notifications and broadcasts completed details", async () => {
+      const processNotification = vi.fn<typeof processGmailPubSubNotification>(
+        async (_message, options) => {
+          await options?.onProcessed?.({ mailboxId });
+          return {
+            busy: false,
+            ignored: false,
+            mailboxId,
+            pubSubMessageId: body.pubSubMessageId,
+          };
+        }
       );
-      const messages = batch();
-      const context = createExecutionContext();
-      let settled = false;
-      const processing = queueWorker.queue(messages, env, context).then(() => {
-        settled = true;
-      });
-      await Promise.resolve();
-      expect(settled).toBeFalsy();
-      gate.resolve(new Response(null, { status: 204 }));
-      await processing;
-      await expect(getQueueResult(messages, context)).resolves.toMatchObject({
-        ackAll: false,
+
+      await processGmailQueueMessage(body, env, { processNotification });
+
+      expect(processNotification).toHaveBeenCalledOnce();
+      expect(processNotification.mock.calls[0]?.[0]).toStrictEqual(body);
+      expect(processNotification.mock.calls[0]?.[1]?.onProcessed).toBeTypeOf(
+        "function"
+      );
+    });
+
+    test("processes maintenance jobs with the configured topic", async () => {
+      const maintainMailbox = vi.fn<typeof maintainGmailPubSubMailbox>(
+        // oxlint-disable-next-line eslint/require-await -- The production dependency has an async contract.
+        async () => ({ status: "maintained" as const })
+      );
+
+      await processGmailQueueMessage(
+        {
+          emailAddress,
+          mailboxId,
+          type: "maintenance",
+        },
+        env,
+        { maintainMailbox }
+      );
+
+      expect(maintainMailbox).toHaveBeenCalledWith({
+        mailboxId,
+        topicName: "projects/example/topics/gmail",
       });
     });
 
-    test("throws on downstream non-2xx responses so the batch retries", async () => {
-      vi.stubGlobal(
-        "fetch",
-        vi.fn(() => new Response(null, { status: 503 }))
-      );
-      const messages = batch();
-      const context = createExecutionContext();
-      await expect(queueWorker.queue(messages, env, context)).rejects.toThrow(
-        "returned 503"
-      );
-      await expect(getQueueResult(messages, context)).resolves.toMatchObject({
-        ackAll: false,
-      });
+    test("rejects invalid queue messages", async () => {
+      await expect(
+        processGmailQueueMessage({ type: "notification" }, env)
+      ).rejects.toThrow("Invalid input");
     });
+  });
+
+  test("batches scheduled Gmail maintenance jobs", async () => {
+    const sendBatch = vi
+      .spyOn(env.GmailPsQueue, "sendBatch")
+      .mockResolvedValue({
+        metadata: {
+          metrics: { backlogBytes: 0, backlogCount: 0 },
+        },
+      });
+    const jobs = Array.from({ length: 101 }, (_, index) => ({
+      emailAddress: `mailbox-${index}@example.com`,
+      mailboxId: `mailbox-${index}`,
+    }));
+    // oxlint-disable-next-line eslint/require-await -- The production dependency has an async contract.
+    const listJobs = async () => jobs;
+
+    await expect(
+      enqueueGmailMaintenanceJobs(env, listJobs)
+    ).resolves.toStrictEqual({ enqueued: 101 });
+
+    expect(sendBatch).toHaveBeenCalledTimes(2);
+    expect([...(sendBatch.mock.calls[0]?.[0] ?? [])]).toHaveLength(100);
+    expect([...(sendBatch.mock.calls[1]?.[0] ?? [])]).toHaveLength(1);
   });
 });

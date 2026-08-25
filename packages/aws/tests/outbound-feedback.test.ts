@@ -1,16 +1,15 @@
 import { describe, expect, test } from "vite-plus/test";
 
-import { parseSesFeedbackQueueMessage } from "../src/outbound-feedback";
+import { parseSesFeedbackNotification } from "../src/outbound-feedback";
 
 const topicArn = "arn:aws:sns:eu-central-1:123456789012:feedback";
 
-const createEnvelope = (message: Record<string, unknown>) =>
-  JSON.stringify({
-    Message: JSON.stringify(message),
-    MessageId: "sns-event-1",
-    TopicArn: topicArn,
-    Type: "Notification",
-  });
+const createEnvelope = (message: Record<string, unknown>) => ({
+  Message: JSON.stringify(message),
+  MessageId: "sns-event-1",
+  TopicArn: topicArn,
+  Type: "Notification",
+});
 
 const mail = {
   destination: ["to@example.com", "cc@example.com"],
@@ -18,10 +17,10 @@ const mail = {
   timestamp: "2026-08-14T10:00:00.000Z",
 };
 
-describe(parseSesFeedbackQueueMessage, () => {
+describe(parseSesFeedbackNotification, () => {
   test("parses send events for all envelope recipients", () => {
     expect(
-      parseSesFeedbackQueueMessage(
+      parseSesFeedbackNotification(
         createEnvelope({ eventType: "SEND", mail }),
         topicArn
       )
@@ -39,7 +38,7 @@ describe(parseSesFeedbackQueueMessage, () => {
 
   test("parses permanent bounces with recipient diagnostics", () => {
     expect(
-      parseSesFeedbackQueueMessage(
+      parseSesFeedbackNotification(
         createEnvelope({
           bounce: {
             bounceType: "Permanent",
@@ -76,7 +75,7 @@ describe(parseSesFeedbackQueueMessage, () => {
 
   test("parses complaint feedback identifiers", () => {
     expect(
-      parseSesFeedbackQueueMessage(
+      parseSesFeedbackNotification(
         createEnvelope({
           complaint: {
             complainedRecipients: [{ emailAddress: "to@example.com" }],
@@ -97,7 +96,7 @@ describe(parseSesFeedbackQueueMessage, () => {
 
   test("treats transient bounces as delays without a permanent failure", () => {
     expect(
-      parseSesFeedbackQueueMessage(
+      parseSesFeedbackNotification(
         createEnvelope({
           bounce: {
             bounceType: "Transient",
@@ -124,7 +123,7 @@ describe(parseSesFeedbackQueueMessage, () => {
 
   test("parses delivery recipient strings", () => {
     expect(
-      parseSesFeedbackQueueMessage(
+      parseSesFeedbackNotification(
         createEnvelope({
           delivery: {
             recipients: ["to@example.com"],
@@ -143,7 +142,7 @@ describe(parseSesFeedbackQueueMessage, () => {
 
   test("parses delivery delay event names from SES", () => {
     expect(
-      parseSesFeedbackQueueMessage(
+      parseSesFeedbackNotification(
         createEnvelope({
           deliveryDelay: {
             delayedRecipients: [
@@ -175,7 +174,7 @@ describe(parseSesFeedbackQueueMessage, () => {
 
   test("rejects messages from unexpected topics", () => {
     expect(() =>
-      parseSesFeedbackQueueMessage(
+      parseSesFeedbackNotification(
         createEnvelope({ eventType: "SEND", mail }),
         "arn:aws:sns:eu-central-1:123456789012:other"
       )
@@ -184,7 +183,7 @@ describe(parseSesFeedbackQueueMessage, () => {
 
   test("ignores event types that were not requested", () => {
     expect(
-      parseSesFeedbackQueueMessage(
+      parseSesFeedbackNotification(
         createEnvelope({ eventType: "OPEN", mail }),
         topicArn
       )

@@ -1,57 +1,85 @@
+import { COMPATIBILITY_DATE } from "@quieter/cloudflare/compatibility-date";
+
+import type { createAppDatabase } from "./database";
+import { cloudflareWorkerObservability } from "./runtime";
 import type { DeploymentContext } from "./runtime";
+import { requireSecretBinding } from "./secrets";
+import type { SecretBindings } from "./types";
 
-export const createMailboxActionResources = (context: DeploymentContext) => {
-  const mailboxActionDeadLetterQueue = new sst.aws.Queue(
-    "MailboxActionDeadLetterQueue",
-    {
-      transform: {
-        queue: {
-          messageRetentionSeconds: 60 * 60 * 24 * 14,
-        },
-      },
-    }
+const actionSecretNames = [
+  "CONNECTOR_TOKEN_ENCRYPTION_KEY",
+  "GMAIL_TOKEN_ENCRYPTION_KEY",
+  "GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT",
+  "GOOGLE_CALENDAR_CLIENT_ID",
+  "GOOGLE_CALENDAR_CLIENT_SECRET",
+  "GOOGLE_GMAIL_CLIENT_ID",
+  "GOOGLE_GMAIL_CLIENT_SECRET",
+  "LINEAR_CLIENT_ID",
+  "LINEAR_CLIENT_SECRET",
+  "OPENROUTER_API_KEY",
+  "POLAR_ACCESS_TOKEN",
+] as const;
+
+export const createMailboxActionResources = (
+  context: DeploymentContext,
+  secretBindings: SecretBindings,
+  appDatabase: ReturnType<typeof createAppDatabase>
+) => {
+  const deadLetterQueue = new sst.cloudflare.Queue(
+    "MailboxActionDeadLetterQueue"
   );
-  const mailboxActionQueue = new sst.aws.Queue("MailboxActionQueue", {
+  const queue = new sst.cloudflare.Queue("MailboxActionQueue", {
     dlq: {
-      queue: mailboxActionDeadLetterQueue.arn,
+      queue: deadLetterQueue.nodes.queue.queueName,
       retry: 5,
+      retryDelay: "30 seconds",
     },
-    transform: {
-      queue: {
-        messageRetentionSeconds: 60 * 60 * 24 * 14,
-      },
-    },
-    visibilityTimeout: "20 minutes",
+    maxConcurrency: 5,
   });
+  const actionSecretBindings = actionSecretNames.map((name) =>
+    requireSecretBinding(secretBindings, name)
+  );
 
-  mailboxActionQueue.subscribe(
+  queue.subscribe(
     {
+      compatibility: {
+        date: COMPATIBILITY_DATE,
+        flags: ["nodejs_compat"],
+      },
       environment: {
-        CONNECTOR_TOKEN_ENCRYPTION_KEY: context.connectorTokenEncryptionKey,
-        DATABASE_URL: context.databaseUrl,
-        GMAIL_TOKEN_ENCRYPTION_KEY: context.gmailTokenEncryptionKey,
-        GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT:
-          context.gmailTokenEncryptionKeyCurrent,
-        GOOGLE_GMAIL_CLIENT_ID: context.googleGmailClientId,
-        GOOGLE_GMAIL_CLIENT_SECRET: context.googleGmailClientSecret,
-        LINEAR_CLIENT_ID: context.linearClientId,
-        LINEAR_CLIENT_SECRET: context.linearClientSecret,
-        OPENROUTER_API_KEY: context.openRouterApiKey,
-        POLAR_ACCESS_TOKEN: context.polarAccessToken,
         POLAR_ORGANIZATION_ID: context.polarOrganizationId,
         POLAR_SANDBOX: context.polarSandbox,
-        ...context.sentryEnvironment,
+        SENTRY_ENVIRONMENT: context.sentryEnvironment.SENTRY_ENVIRONMENT,
       },
-      handler: "packages/aws/src/mailbox-action-consumer.handler",
-      timeout: "15 minutes",
+      handler: "packages/cloudflare/src/mailbox-action-worker.ts",
+      link: [appDatabase, ...actionSecretBindings],
+      transform: {
+        worker(args) {
+          args.limits = { cpuMs: 300_000 };
+          args.observability = cloudflareWorkerObservability;
+        },
+      },
     },
     {
-      batch: {
-        partialResponses: true,
-        size: 1,
-      },
+      batch: { size: 1, window: "0 seconds" },
     }
   );
 
-  return { mailboxActionDeadLetterQueue, mailboxActionQueue };
+  const dispatch = new sst.cloudflare.Cron("MailboxActionDispatch", {
+    schedules: ["* * * * *"],
+    worker: {
+      compatibility: {
+        date: COMPATIBILITY_DATE,
+        flags: ["nodejs_compat"],
+      },
+      handler: "packages/cloudflare/src/mailbox-action-dispatch-worker.ts",
+      link: [appDatabase, queue],
+      transform: {
+        worker(args) {
+          args.observability = cloudflareWorkerObservability;
+        },
+      },
+    },
+  });
+  void dispatch;
 };

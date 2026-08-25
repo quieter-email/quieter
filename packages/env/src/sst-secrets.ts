@@ -7,7 +7,6 @@ export const sstSecretNames = {
   DATABASE_URL: "DatabaseUrl",
   GMAIL_CREDENTIAL_ROTATION_TOKEN: "GmailCredentialRotationToken",
   GMAIL_LIVE_SYNC_TOKEN_SECRET: "GmailLiveSyncTokenSecret",
-  GMAIL_PUBSUB_PROCESS_TOKEN: "GmailPubSubProcessToken",
   GMAIL_TOKEN_ENCRYPTION_KEY: "GmailTokenEncryptionKey",
   GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT: "GmailTokenEncryptionKeyCurrent",
   GOOGLE_AUTH_CLIENT_ID: "GoogleAuthClientId",

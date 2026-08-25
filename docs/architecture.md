@@ -11,9 +11,11 @@ flowchart LR
   ORPC --> Mail["packages/mail"]
   ORPC --> Billing["packages/billing / Polar"]
   ORPC --> AI["packages/ai / OpenRouter"]
+  Cloudflare["Cloudflare Workers, Queues, Durable Objects"] --> ORPC
   AWS["packages/aws / SST"] --> ORPC
+  Cloudflare --> DB
   AWS --> DB
-  AWS --> MailInfra["SES, S3, SNS, SQS, WebSocket"]
+  AWS --> MailInfra["SES, S3, SNS, Lambda"]
 ```
 
 Behavior-producing AI agents share the scoped dynamic knowledge boundary in [`docs/ai-memory.md`](./ai-memory.md). Personal knowledge follows one user, mailbox knowledge follows the mailbox and is more specific, and all retrieval and mutation goes through `packages/orpc/src/ai-memory.ts`.
@@ -63,7 +65,8 @@ Owns the Drizzle schema, client, migrations, schema-drift checks, and migration 
 - `packages/auth`: Better Auth setup, identity scopes, organizations, API keys, passkeys, and auth mail
 - `packages/ui`: reusable Base UI-backed components
 - `packages/ai`: model selection, prompts, classification, titles, and streamed generation
-- `packages/aws`: SST handlers, mail ingestion, queues, workflows, and live synchronization
+- `packages/aws`: SES mail ingestion, delivery feedback, and AWS-specific handlers
+- `packages/cloudflare`: Gmail notification ingress, queued synchronization, scheduled maintenance, and mailbox live synchronization
 - `packages/billing`: plans, Polar checkout/webhooks, entitlements, and usage pricing
 - `packages/env`: typed environment schemas and normalization
 - `packages/deployment`: deployment helper scripts
@@ -92,11 +95,11 @@ Unfiltered mailbox views can apply Gmail history updates. Filtered search and Dr
 
 For Pro mailboxes:
 
-1. Gmail sends an authenticated notification to the stable SST ingress.
-2. The ingress validates the Google identity and enqueues a mailbox job.
-3. The worker reconciles Gmail history and updates persisted state.
-4. Focused browser tabs receive a mailbox-dirty WebSocket signal and refresh immediately.
-5. Scheduled maintenance renews watches and reconciles missed notifications.
+1. Gmail sends an authenticated notification to the Cloudflare ingress.
+2. The ingress validates the Google identity, notifies the mailbox Durable Object, and enqueues a mailbox job in Cloudflare Queues.
+3. A Cloudflare queue consumer reconciles Gmail history through Hyperdrive and updates persisted state.
+4. Focused browser tabs receive mailbox-dirty signals from the mailbox Durable Object and refresh immediately.
+5. Cloudflare scheduled maintenance renews watches and reconciles missed notifications through the same queue.
 
 The notification is a wake-up signal, not the source of truth.
 
@@ -145,7 +148,7 @@ PayKit and Polar handle product synchronization, checkout, subscription events, 
 
 ## Infrastructure Ownership
 
-SST provisions the mail bucket, receipt topic and role, queues, workflows, function URLs, Gmail notification ingress, live-sync WebSocket, and maintenance schedules.
+SST provisions both providers. AWS owns the SES receipt bucket, receipt topic and role, and mail-processing functions. Cloudflare owns Gmail notification ingress, queueing, scheduled maintenance, and live-sync Durable Objects.
 
 Cloudflare Workers hosts the web application. SST builds and publishes production and binds deployment outputs directly.
 
@@ -158,9 +161,9 @@ The root [`sst.config.ts`](../sst.config.ts) owns only app-wide SST settings and
 - `secrets.ts` declares stage-aware `sst.Secret` resources and Cloudflare secret bindings.
 - `database.ts` owns the Cloudflare Hyperdrive binding.
 - `web.ts` owns the TanStack Start Worker and its common bindings.
-- `actions.ts` owns mailbox-action resources; chat generation runs in the web request through the AI SDK.
+- Mailbox actions execute from their persisted runs in the mail-ingestion or Gmail queue consumer request; chat generation runs in the web request through the AI SDK.
 - `mail.ts` owns SES receipt storage, processing, ingress, and send permissions.
-- `gmail.ts` owns Gmail live-sync and Pub/Sub resources across AWS and Cloudflare.
+- `gmail.ts` owns Gmail live-sync and Pub/Sub resources on Cloudflare.
 - `app.ts` is the small stage-aware composition entry point; `types.ts` contains shared infra boundary types.
 
 SST is the runtime source of truth for application credentials and tokens; their canonical names live in `packages/env/src/sst-secrets.ts`. Cloudflare receives them as secret-text bindings, while AWS functions receive values derived from SST secret outputs. Deployment environment variables are reserved for non-secret configuration such as feature switches, resource identifiers, domains, and provider deployment credentials.

@@ -1,34 +1,14 @@
 import { randomUUID } from "node:crypto";
 
-import { SendMessageCommand, SQSClient } from "@aws-sdk/client-sqs";
 import { db } from "@quieter/database/client";
 import {
   mailboxAction,
   mailboxActionRevision,
   mailboxActionRun,
 } from "@quieter/database/schema";
-import { serverEnv } from "@quieter/env/server";
-import { reportError } from "@quieter/observability";
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, lt, or } from "drizzle-orm";
 
 import { hasText } from "../text";
-import { executeMailboxActionRun } from "./executor";
-
-const sqsClient = new SQSClient({});
-
-const sendRunToQueue = async (runId: string) => {
-  if (!hasText(serverEnv.MAILBOX_ACTION_QUEUE_URL)) {
-    await executeMailboxActionRun(runId);
-    return;
-  }
-
-  await sqsClient.send(
-    new SendMessageCommand({
-      MessageBody: JSON.stringify({ runId }),
-      QueueUrl: serverEnv.MAILBOX_ACTION_QUEUE_URL,
-    })
-  );
-};
 
 const enqueueActionTriggers = async (input: {
   action: {
@@ -134,15 +114,24 @@ export const enqueueMailboxActionsForMessage = async (input: {
   );
   const runIds = runIdGroups.flat();
 
-  await Promise.all(
-    runIds.map(async (runId) => {
-      try {
-        await sendRunToQueue(runId);
-      } catch (error) {
-        reportError(error, { operation: "mailbox-actions:enqueue-run" });
-      }
-    })
-  );
-
   return { enqueuedRunIds: runIds };
 };
+
+export const listPendingMailboxActionRunIds = async (limit = 1000) =>
+  await db
+    .select({ runId: mailboxActionRun.id })
+    .from(mailboxActionRun)
+    .where(
+      or(
+        eq(mailboxActionRun.status, "queued"),
+        and(
+          eq(mailboxActionRun.status, "running"),
+          or(
+            isNull(mailboxActionRun.leasedUntil),
+            lt(mailboxActionRun.leasedUntil, new Date())
+          )
+        )
+      )
+    )
+    .orderBy(asc(mailboxActionRun.createdAt))
+    .limit(limit);

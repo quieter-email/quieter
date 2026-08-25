@@ -1,197 +1,43 @@
 import { COMPATIBILITY_DATE } from "@quieter/cloudflare/compatibility-date";
 
+import type { createAppDatabase } from "./database";
 import { cloudflareWorkerObservability } from "./runtime";
 import type { DeploymentContext } from "./runtime";
-import { requireSecretResource } from "./secrets";
-import type { SecretResources } from "./types";
+import { requireSecretBinding, requireSecretResource } from "./secrets";
+import type { SecretBindings, SecretResources } from "./types";
+
+const processingSecretNames = [
+  "GMAIL_TOKEN_ENCRYPTION_KEY",
+  "GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT",
+  "GOOGLE_GMAIL_CLIENT_ID",
+  "GOOGLE_GMAIL_CLIENT_SECRET",
+  "OPENROUTER_API_KEY",
+  "POLAR_ACCESS_TOKEN",
+] as const;
 
 export const createGmailResources = (
   context: DeploymentContext,
-  secretResources: SecretResources
+  secretBindings: SecretBindings,
+  secretResources: SecretResources,
+  appDatabase: ReturnType<typeof createAppDatabase>
 ) => {
   const gmailLiveSyncTokenSecret = requireSecretResource(
     secretResources,
     "GMAIL_LIVE_SYNC_TOKEN_SECRET"
   );
-  const gmailLiveSyncConnections = new sst.aws.Dynamo(
-    "GmailLiveSyncConnections",
-    {
-      fields: {
-        connectionId: "string",
-        mailboxId: "string",
-      },
-      globalIndexes: {
-        mailboxId: { hashKey: "mailboxId", projection: "keys-only" },
-      },
-      primaryIndex: { hashKey: "connectionId" },
-      ttl: "expiresAt",
-    }
-  );
-  const gmailLiveSyncApi = new sst.aws.ApiGatewayWebSocket("GmailLiveSyncApi");
-  const gmailLiveSyncHandler = new sst.aws.Function(
-    "GmailLiveSyncWebSocketHandler",
-    {
-      environment: {
-        DATABASE_URL: context.databaseUrl,
-        POLAR_ACCESS_TOKEN: context.polarAccessToken,
-        POLAR_ORGANIZATION_ID: context.polarOrganizationId,
-        POLAR_SANDBOX: context.polarSandbox,
-        ...context.sentryEnvironment,
-      },
-      handler: "packages/aws/src/gmail-live-sync-websocket.handler",
-      link: [gmailLiveSyncConnections, gmailLiveSyncTokenSecret],
-      timeout: "30 seconds",
-    }
-  );
-  gmailLiveSyncApi.route("$connect", gmailLiveSyncHandler.arn);
-  gmailLiveSyncApi.route("$disconnect", gmailLiveSyncHandler.arn);
-  gmailLiveSyncApi.route("ping", gmailLiveSyncHandler.arn);
-
-  let gmailLiveSyncUrl: $util.Output<string> = gmailLiveSyncApi.url;
+  let gmailLiveSyncUrl: $util.Input<string> = "";
   let gmailPubSubIngressUrl: $util.Output<string> | null = null;
-  let gmailPubSubProcessUrl: $util.Output<string> | null = null;
-  let gmailPubSubProcessTokenSecretName: $util.Input<string> | null = null;
 
   if (context.gmailPubSubEnabled) {
-    const gmailPubSubProcessToken = requireSecretResource(
-      secretResources,
-      "GMAIL_PUBSUB_PROCESS_TOKEN"
-    );
-    gmailPubSubProcessTokenSecretName = gmailPubSubProcessToken.name;
-    const gmailPubSubDeadLetterQueue = new sst.aws.Queue(
-      "GmailPubSubDeadLetterQueue",
-      {
-        fifo: true,
-        transform: {
-          queue: {
-            messageRetentionSeconds: 60 * 60 * 24 * 14,
-          },
-        },
-      }
-    );
-    const gmailPubSubQueue = new sst.aws.Queue("GmailPubSubQueue", {
+    const gmailPubSubDeadLetterQueue = new sst.cloudflare.Queue("GmailPsDlq");
+    const gmailPubSubQueue = new sst.cloudflare.Queue("GmailPsQueue", {
       dlq: {
-        queue: gmailPubSubDeadLetterQueue.arn,
+        queue: gmailPubSubDeadLetterQueue.nodes.queue.queueName,
         retry: 10,
+        retryDelay: "30 seconds",
       },
-      fifo: true,
-      transform: {
-        queue: {
-          messageRetentionSeconds: 60 * 60 * 24 * 14,
-        },
-      },
-      visibilityTimeout: "15 minutes",
+      maxConcurrency: 20,
     });
-    gmailPubSubQueue.subscribe(
-      {
-        environment: {
-          DATABASE_URL: context.databaseUrl,
-          GMAIL_PUBSUB_TOPIC: context.gmailPubSubEnvironment.GMAIL_PUBSUB_TOPIC,
-          GMAIL_TOKEN_ENCRYPTION_KEY: context.gmailTokenEncryptionKey,
-          GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT:
-            context.gmailTokenEncryptionKeyCurrent,
-          GOOGLE_GMAIL_CLIENT_ID: context.googleGmailClientId,
-          GOOGLE_GMAIL_CLIENT_SECRET: context.googleGmailClientSecret,
-          OPENROUTER_API_KEY: context.openRouterApiKey,
-          POLAR_ACCESS_TOKEN: context.polarAccessToken,
-          POLAR_ORGANIZATION_ID: context.polarOrganizationId,
-          POLAR_SANDBOX: context.polarSandbox,
-          QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
-          ...context.sentryEnvironment,
-        },
-        handler: "packages/aws/src/gmail-pubsub-consumer.handler",
-        link: [gmailLiveSyncApi, gmailLiveSyncConnections],
-        timeout: "15 minutes",
-      },
-      {
-        batch: {
-          partialResponses: true,
-          size: 1,
-        },
-      }
-    );
-
-    const gmailPubSubIngress = new sst.aws.ApiGatewayV2("GmailPubSubIngress", {
-      cors: false,
-      domain:
-        $app.stage === "production"
-          ? {
-              dns: sst.cloudflare.dns(),
-              name: "gmail-events.quieter.email",
-            }
-          : undefined,
-    });
-    gmailPubSubIngress.route("POST /", {
-      environment: {
-        DATABASE_URL: context.databaseUrl,
-        ...context.gmailPubSubEnvironment,
-        GMAIL_PUBSUB_QUEUE_URL: gmailPubSubQueue.url,
-        ...context.sentryEnvironment,
-      },
-      handler: "packages/aws/src/gmail-pubsub-ingress.handler",
-      link: [gmailPubSubQueue, gmailLiveSyncApi, gmailLiveSyncConnections],
-      timeout: "30 seconds",
-    });
-    gmailPubSubIngressUrl = gmailPubSubIngress.url;
-
-    const gmailPubSubMaintenance = new sst.aws.CronV2(
-      "GmailPubSubMaintenance",
-      {
-        function: {
-          environment: {
-            DATABASE_URL: context.databaseUrl,
-            GMAIL_PUBSUB_QUEUE_URL: gmailPubSubQueue.url,
-            ...context.sentryEnvironment,
-          },
-          handler: "packages/aws/src/gmail-pubsub-maintenance.handler",
-          link: [gmailPubSubQueue],
-          timeout: "5 minutes",
-        },
-        schedule: "rate(15 minutes)",
-      }
-    );
-    void gmailPubSubMaintenance;
-
-    const gmailPubSubProcess = new sst.aws.Function("GmailPubSubProcess", {
-      environment: {
-        DATABASE_URL: context.databaseUrl,
-        GMAIL_PUBSUB_PROCESS_TOKEN: gmailPubSubProcessToken.value,
-        GMAIL_TOKEN_ENCRYPTION_KEY: context.gmailTokenEncryptionKey,
-        GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT:
-          context.gmailTokenEncryptionKeyCurrent,
-        GOOGLE_GMAIL_CLIENT_ID: context.googleGmailClientId,
-        GOOGLE_GMAIL_CLIENT_SECRET: context.googleGmailClientSecret,
-        OPENROUTER_API_KEY: context.openRouterApiKey,
-        POLAR_ACCESS_TOKEN: context.polarAccessToken,
-        POLAR_ORGANIZATION_ID: context.polarOrganizationId,
-        POLAR_SANDBOX: context.polarSandbox,
-        QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
-        ...context.sentryEnvironment,
-      },
-      handler: "packages/aws/src/gmail-pubsub-process.handler",
-      link: [
-        gmailLiveSyncApi,
-        gmailLiveSyncConnections,
-        gmailPubSubProcessToken,
-      ],
-      timeout: "15 minutes",
-      url: true,
-    });
-    gmailPubSubProcessUrl = gmailPubSubProcess.url;
-
-    const gmailPubSubCloudflareDeadLetterQueue = new sst.cloudflare.Queue(
-      "GmailPsDlq"
-    );
-    const gmailPubSubCloudflareQueue = new sst.cloudflare.Queue(
-      "GmailPsQueue",
-      {
-        dlq: {
-          queue: gmailPubSubCloudflareDeadLetterQueue.nodes.queue.queueName,
-          retry: 10,
-        },
-        maxConcurrency: 20,
-      }
-    );
     const gmailLiveSyncMailbox = new sst.cloudflare.DurableObject(
       "GmailLiveSyncMailbox",
       {
@@ -206,7 +52,6 @@ export const createGmailResources = (
           flags: ["nodejs_compat"],
         },
         environment: {
-          GMAIL_PUBSUB_PROCESS_URL: gmailPubSubProcess.url,
           GMAIL_PUBSUB_PUSH_AUDIENCE:
             context.gmailPubSubEnvironment.GMAIL_PUBSUB_PUSH_AUDIENCE,
           GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT:
@@ -218,8 +63,7 @@ export const createGmailResources = (
         link: [
           gmailLiveSyncMailbox,
           gmailLiveSyncTokenSecret,
-          gmailPubSubCloudflareQueue,
-          gmailPubSubProcessToken,
+          gmailPubSubQueue,
         ],
         migrations: [
           {
@@ -235,15 +79,28 @@ export const createGmailResources = (
         url: true,
       }
     );
-    gmailPubSubCloudflareQueue.subscribe(
+
+    const processingSecretBindings = processingSecretNames.map((name) =>
+      requireSecretBinding(secretBindings, name)
+    );
+    gmailPubSubQueue.subscribe(
       {
+        compatibility: {
+          date: COMPATIBILITY_DATE,
+          flags: ["nodejs_compat"],
+        },
         environment: {
-          GMAIL_PUBSUB_PROCESS_URL: gmailPubSubProcess.url,
+          GMAIL_PUBSUB_TOPIC: context.gmailPubSubEnvironment.GMAIL_PUBSUB_TOPIC,
+          POLAR_ORGANIZATION_ID: context.polarOrganizationId,
+          POLAR_SANDBOX: context.polarSandbox,
+          QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
+          SENTRY_ENVIRONMENT: context.sentryEnvironment.SENTRY_ENVIRONMENT,
         },
         handler: "packages/cloudflare/src/queue-worker.ts",
-        link: [gmailPubSubProcessToken],
+        link: [appDatabase, gmailLiveSyncMailbox, ...processingSecretBindings],
         transform: {
           worker(args) {
+            args.limits = { cpuMs: 300_000 };
             args.observability = cloudflareWorkerObservability;
           },
         },
@@ -255,6 +112,28 @@ export const createGmailResources = (
         },
       }
     );
+
+    const gmailPubSubMaintenance = new sst.cloudflare.Cron(
+      "GmailPubSubMaintenance",
+      {
+        schedules: ["*/15 * * * *"],
+        worker: {
+          compatibility: {
+            date: COMPATIBILITY_DATE,
+            flags: ["nodejs_compat"],
+          },
+          handler: "packages/cloudflare/src/gmail-maintenance-worker.ts",
+          link: [appDatabase, gmailPubSubQueue],
+          transform: {
+            worker(args) {
+              args.observability = cloudflareWorkerObservability;
+            },
+          },
+        },
+      }
+    );
+    void gmailPubSubMaintenance;
+
     gmailLiveSyncUrl = gmailRealtimeWorker.url.apply((url) => {
       if (url === undefined || url === "") {
         throw new Error("GmailRealtimeWorker did not expose a URL");
@@ -272,10 +151,7 @@ export const createGmailResources = (
   }
 
   return {
-    gmailLiveSyncConnections,
     gmailLiveSyncUrl,
     gmailPubSubIngressUrl,
-    gmailPubSubProcessTokenSecretName,
-    gmailPubSubProcessUrl,
   };
 };

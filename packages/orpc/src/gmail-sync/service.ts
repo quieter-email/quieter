@@ -1002,7 +1002,7 @@ export const listGmailPubSubMaintenanceJobs = async () =>
       mailboxId: mailbox.id,
     })
     .from(mailbox)
-    .where(eq(mailbox.provider, "gmail"));
+    .where(and(eq(mailbox.provider, "gmail"), eq(mailbox.status, "connected")));
 
 export const maintainGmailPubSubMailbox = async (input: {
   mailboxId: string;
