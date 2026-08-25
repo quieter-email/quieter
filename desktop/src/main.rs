@@ -1,11 +1,13 @@
 mod api;
 mod auth;
+mod demo;
 
 use api::{
     ApiClient, ApiError, MailCommand, Mailbox, MailboxGroup, MessageListItem, SessionUser,
     ThreadMessagesResult,
 };
 use auth::PendingAuth;
+use demo::DemoStore;
 use gpui::{
     AnyElement, App, Application, Bounds, ClickEvent, Context, FocusHandle, Focusable, Hsla,
     KeyDownEvent, Render, SharedString, Window, WindowBounds, WindowOptions, div, prelude::*, px,
@@ -116,6 +118,7 @@ struct Palette {
     primary: Hsla,
     primary_fg: Hsla,
     blue: Hsla,
+    purple: Hsla,
     green: Hsla,
     yellow: Hsla,
     red: Hsla,
@@ -137,27 +140,29 @@ fn palette(theme: Theme) -> Palette {
             primary: rgb(0x25282c).into(),
             primary_fg: rgb(0xf9f9fa).into(),
             blue: rgb(0x487bb7).into(),
+            purple: rgb(0x8c70c8).into(),
             green: rgb(0x4c8f71).into(),
             yellow: rgb(0xb18835).into(),
             red: rgb(0xb65d5d).into(),
         },
         Theme::Dark => Palette {
-            bg: rgb(0x202124).into(),
-            bg_raised: rgb(0x303236).into(),
-            surface: rgb(0x3a3d42).into(),
-            control: rgb(0x303236).into(),
-            control_hover: rgb(0x3b3f44).into(),
-            control_active: rgb(0x484c52).into(),
-            fg: rgb(0xf3f4f5).into(),
-            muted: rgb(0xb7bac0).into(),
-            faint: rgb(0x8f949b).into(),
-            border: rgb(0x4a4e54).into(),
-            primary: rgb(0xf3f4f5).into(),
-            primary_fg: rgb(0x202124).into(),
-            blue: rgb(0x83b7f0).into(),
-            green: rgb(0x7fc7a5).into(),
-            yellow: rgb(0xe3bd69).into(),
-            red: rgb(0xe39090).into(),
+            bg: rgb(0x0d0d0d).into(),
+            bg_raised: rgb(0x141414).into(),
+            surface: rgb(0x202020).into(),
+            control: rgb(0x1c1c1c).into(),
+            control_hover: rgb(0x292929).into(),
+            control_active: rgb(0x353535).into(),
+            fg: rgb(0xf5f5f5).into(),
+            muted: rgb(0xb7b7b7).into(),
+            faint: rgb(0x818181).into(),
+            border: rgb(0x303030).into(),
+            primary: rgb(0xf2f2f2).into(),
+            primary_fg: rgb(0x111111).into(),
+            blue: rgb(0x3ec4e8).into(),
+            purple: rgb(0xa276ed).into(),
+            green: rgb(0x55c982).into(),
+            yellow: rgb(0xe7bd4f).into(),
+            red: rgb(0xe97b86).into(),
         },
     }
 }
@@ -176,6 +181,7 @@ struct QuieterDesktop {
     search_text: String,
     mailbox_groups: Vec<MailboxGroup>,
     selected_mailbox_id: Option<String>,
+    demo: DemoStore,
     messages: Vec<MessageListItem>,
     selected_thread_id: Option<String>,
     thread: Option<ThreadMessagesResult>,
@@ -200,13 +206,14 @@ impl QuieterDesktop {
             status: Status::SignedOut,
             error_message: None,
             notification: None,
-            theme: Theme::Light,
+            theme: Theme::Dark,
             focus_handle: cx.focus_handle(),
             focused_field: None,
             category: Category::Inbox,
             search_text: String::new(),
             mailbox_groups: Vec::new(),
             selected_mailbox_id: None,
+            demo: DemoStore::new(),
             messages: Vec::new(),
             selected_thread_id: None,
             thread: None,
@@ -377,6 +384,16 @@ impl QuieterDesktop {
     }
 
     fn refresh_messages_for(&mut self, mailbox_id: String, cx: &mut Context<Self>) {
+        if mailbox_id == demo::DEMO_MAILBOX_ID {
+            let messages = self.demo.list(self.category.as_str(), &self.search_text);
+            self.messages = unique_threads(messages);
+            self.thread = None;
+            self.status = Status::Ready;
+            self.error_message = None;
+            self.notification = None;
+            cx.notify();
+            return;
+        }
         if self.selected_mailbox_needs_reconnect() {
             self.messages.clear();
             self.thread = None;
@@ -449,6 +466,20 @@ impl QuieterDesktop {
         let Some(mailbox_id) = self.selected_mailbox_id.clone() else {
             return;
         };
+        if mailbox_id == demo::DEMO_MAILBOX_ID {
+            self.demo.mark_read(&thread_id, true);
+            if let Some(thread) = self.demo.thread(&thread_id) {
+                for message in &mut self.messages {
+                    if message.thread_id == thread.thread_id {
+                        message.is_unread = false;
+                    }
+                }
+                self.thread = Some(thread);
+                self.status = Status::Ready;
+                cx.notify();
+            }
+            return;
+        }
         let requested_mailbox_id = mailbox_id.clone();
         let requested_thread_id = thread_id.clone();
         let api = self.api.clone();
@@ -513,6 +544,25 @@ impl QuieterDesktop {
             .iter()
             .map(|message| message.id.clone())
             .collect::<Vec<_>>();
+        if mailbox_id == demo::DEMO_MAILBOX_ID {
+            match command {
+                MailCommand::Archive => self.demo.move_thread(&thread_id, "archive"),
+                MailCommand::Trash => self.demo.move_thread(&thread_id, "trash"),
+                MailCommand::MarkRead => self.demo.mark_read(&thread_id, true),
+                MailCommand::MarkUnread => self.demo.mark_read(&thread_id, false),
+            }
+            self.notification = Some(match command {
+                MailCommand::Archive => "Conversation archived".to_string(),
+                MailCommand::Trash => "Conversation moved to Trash".to_string(),
+                MailCommand::MarkRead => "Marked as read".to_string(),
+                MailCommand::MarkUnread => "Marked as unread".to_string(),
+            });
+            self.selected_thread_id = None;
+            self.thread = None;
+            self.status = Status::Ready;
+            self.refresh_messages(cx);
+            return;
+        }
         let api = self.api.clone();
         self.status = Status::Sending;
         cx.spawn(async move |this, cx| {
@@ -575,6 +625,31 @@ impl QuieterDesktop {
         let Some(mailbox_id) = self.selected_mailbox_id.clone() else {
             return;
         };
+        if mailbox_id == demo::DEMO_MAILBOX_ID {
+            let from = self
+                .user
+                .as_ref()
+                .and_then(|user| user.email.as_deref())
+                .unwrap_or("you@quieter.email")
+                .to_string();
+            self.demo.send(
+                &from,
+                &self.compose_to,
+                &self.compose_subject,
+                &self.compose_body,
+            );
+            self.compose_open = false;
+            self.compose_to.clear();
+            self.compose_cc.clear();
+            self.compose_bcc.clear();
+            self.compose_subject.clear();
+            self.compose_body.clear();
+            self.focused_field = None;
+            self.notification = Some("Message sent in preview".to_string());
+            self.status = Status::Ready;
+            self.refresh_messages(cx);
+            return;
+        }
         let api = self.api.clone();
         let to = self.compose_to.clone();
         let cc = self.compose_cc.clone();
@@ -608,6 +683,14 @@ impl QuieterDesktop {
     }
 
     fn open_gmail_connect(&mut self, _: &ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
+        if self.selected_mailbox_is_demo() {
+            self.notification = Some(
+                "The preview mailbox is available offline. Connect a live mailbox in the browser."
+                    .to_string(),
+            );
+            cx.notify();
+            return;
+        }
         let api = self.api.clone();
         let mailbox_id = self.selected_mailbox_id.clone();
         cx.spawn(async move |this, cx| {
@@ -744,10 +827,16 @@ impl QuieterDesktop {
             .is_some_and(|provider| provider.eq_ignore_ascii_case("api"))
     }
 
+    fn selected_mailbox_is_demo(&self) -> bool {
+        self.selected_mailbox_id.as_deref() == Some(demo::DEMO_MAILBOX_ID)
+    }
+
     fn selected_mailbox_needs_reconnect(&self) -> bool {
-        self.selected_mailbox()
-            .and_then(|mailbox| mailbox.connection_status.as_deref())
-            .is_some_and(|status| status == "needs_reconnect")
+        !self.selected_mailbox_is_demo()
+            && self
+                .selected_mailbox()
+                .and_then(|mailbox| mailbox.connection_status.as_deref())
+                .is_some_and(|status| status == "needs_reconnect")
     }
 
     fn selected_mailbox(&self) -> Option<&Mailbox> {
@@ -923,19 +1012,20 @@ impl QuieterDesktop {
                     .or_else(|| mailbox.email_address.clone())
             })
             .unwrap_or_else(|| "No mailbox connected".to_string());
-        let selected_email = self
-            .selected_mailbox()
-            .and_then(|mailbox| mailbox.email_address.clone())
-            .unwrap_or_else(|| "Connect a mailbox to begin".to_string());
-        let selected_status = self
-            .selected_mailbox()
-            .and_then(|mailbox| mailbox.connection_status.as_deref())
-            .unwrap_or("not connected")
-            .replace('_', " ");
-        let selected_unread = self
-            .selected_mailbox()
-            .and_then(|mailbox| mailbox.unread_non_spam_count)
-            .unwrap_or_default();
+        let selected_email = if self.selected_mailbox_is_demo() {
+            "inbox@quieter.com / Demo".to_string()
+        } else {
+            self.selected_mailbox()
+                .and_then(|mailbox| mailbox.email_address.clone())
+                .unwrap_or_else(|| "Connect a mailbox to begin".to_string())
+        };
+        let selected_unread = if self.selected_mailbox_is_demo() {
+            self.demo.unread_count()
+        } else {
+            self.selected_mailbox()
+                .and_then(|mailbox| mailbox.unread_non_spam_count)
+                .unwrap_or_default()
+        };
         let mailbox_rows = self
             .mailbox_groups
             .iter()
@@ -1003,7 +1093,7 @@ impl QuieterDesktop {
             .collect::<Vec<_>>();
 
         div()
-            .w(px(244.0))
+            .w(px(272.0))
             .flex_none()
             .h_full()
             .flex()
@@ -1011,33 +1101,52 @@ impl QuieterDesktop {
             .bg(p.bg_raised)
             .border_r_1()
             .border_color(p.border)
-            .p_3()
+            .p_4()
             .child(
                 div()
-                    .h(px(46.0))
-                    .flex()
-                    .items_center()
-                    .gap_3()
-                    .px_2()
+                    .px_1()
                     .child(
                         div()
-                            .size(px(30.0))
-                            .rounded_md()
-                            .bg(p.primary)
-                            .text_color(p.primary_fg)
-                            .font_family("Lora")
-                            .text_size(px(19.0))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .child("q"),
+                            .text_size(px(13.0))
+                            .text_color(p.fg)
+                            .child(selected_label),
                     )
                     .child(
                         div()
-                            .font_family("Lora")
-                            .text_size(px(18.0))
+                            .mt_1()
+                            .text_size(px(11.0))
+                            .text_color(p.muted)
+                            .child(selected_email),
+                    ),
+            )
+            .child(
+                div()
+                    .mt_4()
+                    .h(px(34.0))
+                    .flex()
+                    .gap_1()
+                    .child(
+                        div()
+                            .flex_1()
+                            .rounded_md()
+                            .bg(p.surface)
                             .text_color(p.fg)
-                            .child("quieter"),
+                            .text_size(px(12.0))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .child("▣  Mail"),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .rounded_md()
+                            .text_color(p.muted)
+                            .text_size(px(12.0))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .child("☷  Chat"),
                     ),
             )
             .when(mailbox_count > 1, |this| {
@@ -1053,9 +1162,9 @@ impl QuieterDesktop {
             })
             .child(
                 div()
-                    .mt_3()
+                    .mt_4()
                     .w_full()
-                    .h(px(44.0))
+                    .h(px(42.0))
                     .rounded_md()
                     .bg(p.primary)
                     .text_color(p.primary_fg)
@@ -1068,50 +1177,11 @@ impl QuieterDesktop {
                     .on_click(cx.listener(Self::open_compose))
                     .child("Compose"),
             )
-            .child(
-                div()
-                    .mt_4()
-                    .p_3()
-                    .rounded_md()
-                    .bg(p.control)
-                    .border_1()
-                    .border_color(p.border)
-                    .child(
-                        div()
-                            .text_size(px(13.0))
-                            .text_color(p.fg)
-                            .child(selected_label),
-                    )
-                    .child(
-                        div()
-                            .mt_1()
-                            .text_size(px(11.0))
-                            .text_color(p.muted)
-                            .child(selected_email),
-                    )
-                    .child(
-                        div()
-                            .mt_2()
-                            .flex()
-                            .justify_between()
-                            .text_size(px(10.0))
-                            .text_color(p.faint)
-                            .child(selected_status)
-                            .child(format!("{selected_unread} unread")),
-                    ),
-            )
-            .child(
-                div()
-                    .mt_5()
-                    .px_2()
-                    .text_size(px(10.0))
-                    .text_color(p.faint)
-                    .child("MAILBOX"),
-            )
+            .child(div().mt_4().h(px(1.0)))
             .children(category_buttons)
             .child(
                 div()
-                    .mt_5()
+                    .mt_4()
                     .px_2()
                     .text_size(px(10.0))
                     .text_color(p.faint)
@@ -1128,19 +1198,7 @@ impl QuieterDesktop {
                     .text_color(p.muted)
                     .text_size(px(13.0))
                     .child(div().w(px(18.0)).text_color(p.blue).child("●"))
-                    .child("Updates"),
-            )
-            .child(
-                div()
-                    .h(px(34.0))
-                    .px_3()
-                    .flex()
-                    .items_center()
-                    .gap_3()
-                    .text_color(p.muted)
-                    .text_size(px(13.0))
-                    .child(div().w(px(18.0)).text_color(p.yellow).child("●"))
-                    .child("Receipts"),
+                    .child("Clients"),
             )
             .child(
                 div()
@@ -1152,21 +1210,30 @@ impl QuieterDesktop {
                     .text_color(p.muted)
                     .text_size(px(13.0))
                     .child(div().w(px(18.0)).text_color(p.green).child("●"))
-                    .child("People"),
+                    .child("Finance"),
+            )
+            .child(
+                div()
+                    .h(px(34.0))
+                    .px_3()
+                    .flex()
+                    .items_center()
+                    .gap_3()
+                    .text_color(p.muted)
+                    .text_size(px(13.0))
+                    .child(div().w(px(18.0)).text_color(p.blue).child("●"))
+                    .child("Product"),
             )
             .child(div().flex_1())
             .child(
                 div()
                     .p_3()
                     .rounded_md()
-                    .bg(p.control)
+                    .border_1()
+                    .border_color(p.border)
                     .text_size(px(11.0))
                     .text_color(p.muted)
-                    .child(if self.api.base_url().contains("localhost") {
-                        "Local server"
-                    } else {
-                        "Connected to quieter.email"
-                    }),
+                    .child(format!("{} unread", selected_unread)),
             )
             .child(
                 div()
@@ -1178,7 +1245,7 @@ impl QuieterDesktop {
                     .justify_between()
                     .text_size(px(12.0))
                     .text_color(p.muted)
-                    .child("Account")
+                    .child("Settings")
                     .child(
                         div()
                             .px_2()
@@ -1194,6 +1261,7 @@ impl QuieterDesktop {
             .into_any_element()
     }
 
+    #[allow(dead_code)]
     fn render_topbar(&self, cx: &mut Context<Self>, p: Palette) -> AnyElement {
         let user_label = self
             .user
@@ -1303,49 +1371,82 @@ impl QuieterDesktop {
     }
 
     fn render_content(&self, cx: &mut Context<Self>, p: Palette) -> AnyElement {
+        let search_active = self.focused_field == Some(InputField::Search);
+        let search_value = if self.search_text.is_empty() {
+            "Search"
+        } else {
+            self.search_text.as_str()
+        };
         let list_header = div()
-            .h(px(62.0))
+            .h(px(64.0))
             .flex_none()
             .flex()
             .items_center()
-            .justify_between()
-            .px_5()
-            .border_b_1()
-            .border_color(p.border)
+            .gap_2()
+            .px_3()
+            .pt_3()
+            .pb_2()
             .child(
                 div()
+                    .size(px(36.0))
+                    .rounded_md()
+                    .border_1()
+                    .border_color(p.border)
+                    .text_color(p.muted)
+                    .cursor_pointer()
+                    .hover(|style| style.bg(p.control_hover))
                     .flex()
                     .items_center()
-                    .gap_3()
-                    .child(
-                        div()
-                            .text_size(px(16.0))
-                            .text_color(p.fg)
-                            .child(self.category.label()),
-                    )
-                    .child(
-                        div()
-                            .px_2()
-                            .py_1()
-                            .rounded_md()
-                            .bg(p.control)
-                            .text_size(px(11.0))
-                            .text_color(p.muted)
-                            .child(format!("{}", self.messages.len())),
-                    ),
+                    .justify_center()
+                    .id("refresh-list")
+                    .on_click(cx.listener(|app, _, _, cx| app.refresh_messages(cx)))
+                    .child("↻"),
             )
             .child(
                 div()
+                    .flex_1()
+                    .h(px(36.0))
                     .px_3()
-                    .py_2()
                     .rounded_md()
+                    .border_1()
+                    .border_color(if search_active { p.fg } else { p.border })
+                    .bg(p.control)
+                    .text_size(px(13.0))
+                    .text_color(if self.search_text.is_empty() {
+                        p.muted
+                    } else {
+                        p.fg
+                    })
+                    .cursor_pointer()
+                    .id("search")
+                    .on_click(cx.listener(move |app, _, window, cx| {
+                        app.focus_field(InputField::Search, window, cx)
+                    }))
+                    .flex()
+                    .items_center()
+                    .child(div().mr_2().text_color(p.muted).child("⌕"))
+                    .child(search_value.to_string()),
+            )
+            .child(
+                div()
+                    .size(px(36.0))
+                    .rounded_md()
+                    .border_1()
+                    .border_color(p.border)
                     .text_size(px(12.0))
                     .text_color(p.muted)
                     .cursor_pointer()
                     .hover(|style| style.bg(p.control_hover))
-                    .id("refresh-list")
-                    .on_click(cx.listener(|app, _, _, cx| app.refresh_messages(cx)))
-                    .child("Refresh"),
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .id("toggle-theme-list")
+                    .on_click(cx.listener(Self::toggle_theme))
+                    .child(if self.theme == Theme::Light {
+                        "◐"
+                    } else {
+                        "☼"
+                    }),
             );
 
         if self.mailbox_groups.is_empty() {
@@ -1373,7 +1474,9 @@ impl QuieterDesktop {
         }
 
         let list = div()
-            .flex_1()
+            .w(px(452.0))
+            .flex_none()
+            .h_full()
             .min_w_0()
             .flex()
             .flex_col()
@@ -1386,23 +1489,42 @@ impl QuieterDesktop {
             self.render_thread(thread, cx, p)
         } else {
             div()
-                .w(px(420.0))
-                .flex_none()
-                .border_l_1()
+                .flex_1()
+                .min_w_0()
                 .border_color(p.border)
-                .bg(p.bg_raised)
+                .bg(p.bg)
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_size(px(13.0))
-                .text_color(p.faint)
-                .child("Select a conversation to read it")
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .items_center()
+                        .gap_3()
+                        .text_color(p.muted)
+                        .child(div().text_size(px(24.0)).text_color(p.faint).child("⠿"))
+                        .child(
+                            div()
+                                .text_size(px(15.0))
+                                .text_color(p.fg)
+                                .child("No conversation open"),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(13.0))
+                                .text_color(p.muted)
+                                .child("Choose a conversation to begin."),
+                        ),
+                )
                 .into_any_element()
         };
         div()
             .flex_1()
             .min_h_0()
+            .min_w_0()
             .flex()
+            .bg(p.bg)
             .child(list)
             .child(detail)
             .into_any_element()
@@ -1528,7 +1650,7 @@ impl QuieterDesktop {
 
     fn render_message_row(
         &self,
-        index: usize,
+        _index: usize,
         message: &MessageListItem,
         cx: &mut Context<Self>,
         p: Palette,
@@ -1541,29 +1663,26 @@ impl QuieterDesktop {
             .filter(|subject| !subject.trim().is_empty())
             .unwrap_or("(No subject)")
             .to_string();
-        let preview = message
-            .snippet
-            .as_deref()
-            .unwrap_or("No preview available")
-            .to_string();
         let date = format_date(message.date.as_deref().or(message.internal_date.as_deref()));
         let attachment_count = message.attachments.len();
         let thread_id = message.thread_id.clone();
-        let avatar_colors = [p.blue, p.green, p.yellow, p.red];
+        let badge = sender_badge(&sender);
+        let badge_color = sender_badge_color(&sender, p);
+        let sender_email = sender_email(message.from.as_deref());
+        let message_tag = message_tag(&sender);
         div()
             .id(SharedString::from(format!("thread-row-{thread_id}")))
-            .h(px(78.0))
+            .h(px(72.0))
             .w_full()
             .flex_none()
             .flex()
             .items_center()
             .gap_3()
-            .px_4()
+            .px_3()
             .border_b_1()
             .border_color(p.border)
             .cursor_pointer()
             .when(selected, |this| this.bg(p.control_active))
-            .when(message.is_unread && !selected, |this| this.bg(p.surface))
             .hover(|style| style.bg(p.control_hover))
             .on_click(cx.listener(move |app, event, window, cx| {
                 app.select_thread(thread_id.clone(), event, window, cx)
@@ -1572,21 +1691,14 @@ impl QuieterDesktop {
                 div()
                     .size(px(34.0))
                     .flex_none()
-                    .rounded_md()
-                    .bg(avatar_colors[index % avatar_colors.len()])
+                    .rounded_lg()
+                    .bg(badge_color)
                     .text_color(p.primary_fg)
                     .text_size(px(14.0))
                     .flex()
                     .items_center()
                     .justify_center()
-                    .child(
-                        sender
-                            .chars()
-                            .next()
-                            .unwrap_or('?')
-                            .to_ascii_uppercase()
-                            .to_string(),
-                    ),
+                    .child(badge),
             )
             .child(
                 div()
@@ -1602,9 +1714,18 @@ impl QuieterDesktop {
                             .gap_3()
                             .child(
                                 div()
+                                    .flex()
+                                    .items_center()
+                                    .gap_2()
                                     .text_size(px(13.0))
                                     .text_color(if message.is_unread { p.fg } else { p.muted })
-                                    .child(sender),
+                                    .child(sender)
+                                    .child(
+                                        div()
+                                            .text_size(px(10.0))
+                                            .text_color(p.faint)
+                                            .child(sender_email),
+                                    ),
                             )
                             .child(div().text_size(px(11.0)).text_color(p.faint).child(date)),
                     )
@@ -1613,7 +1734,14 @@ impl QuieterDesktop {
                             .flex()
                             .items_center()
                             .gap_2()
-                            .child(div().text_size(px(13.0)).text_color(p.fg).child(subject))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .text_size(px(13.0))
+                                    .text_color(if message.is_unread { p.fg } else { p.muted })
+                                    .child(subject),
+                            )
                             .when(
                                 message.thread_message_count.unwrap_or_default() > 1,
                                 |this| {
@@ -1644,9 +1772,26 @@ impl QuieterDesktop {
                                             if attachment_count == 1 { "" } else { "s" }
                                         )),
                                 )
+                            })
+                            .when(!message_tag.is_empty(), |this| {
+                                this.child(
+                                    div()
+                                        .px_2()
+                                        .py_1()
+                                        .rounded_md()
+                                        .bg(if message_tag == "Finance" {
+                                            p.green
+                                        } else if message_tag == "Clients" {
+                                            p.blue
+                                        } else {
+                                            p.purple
+                                        })
+                                        .text_size(px(10.0))
+                                        .text_color(p.primary_fg)
+                                        .child(message_tag),
+                                )
                             }),
-                    )
-                    .child(div().text_size(px(11.0)).text_color(p.faint).child(preview)),
+                    ),
             )
             .into_any_element()
     }
@@ -1724,14 +1869,14 @@ impl QuieterDesktop {
             })
             .collect::<Vec<_>>();
         div()
-            .w(px(440.0))
-            .flex_none()
+            .flex_1()
+            .min_w_0()
             .h_full()
             .flex()
             .flex_col()
             .border_l_1()
             .border_color(p.border)
-            .bg(p.bg_raised)
+            .bg(p.bg)
             .child(
                 div()
                     .h(px(62.0))
@@ -1848,14 +1993,14 @@ impl QuieterDesktop {
 
     fn render_compose(&self, cx: &mut Context<Self>, p: Palette) -> AnyElement {
         div()
-            .w(px(440.0))
-            .flex_none()
+            .flex_1()
+            .min_w_0()
             .h_full()
             .flex()
             .flex_col()
             .border_l_1()
             .border_color(p.border)
-            .bg(p.bg_raised)
+            .bg(p.bg)
             .child(
                 div()
                     .h(px(62.0))
@@ -1990,6 +2135,7 @@ impl Render for QuieterDesktop {
             .flex_col()
             .bg(p.bg)
             .text_color(p.fg)
+            .font_family("Geist")
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(Self::on_key_down));
         if self.auth_token.is_none() {
@@ -2007,8 +2153,6 @@ impl Render for QuieterDesktop {
                             .min_w_0()
                             .h_full()
                             .flex()
-                            .flex_col()
-                            .child(self.render_topbar(cx, p))
                             .child(self.render_content(cx, p)),
                     ),
             )
@@ -2046,6 +2190,95 @@ fn unique_threads(messages: Vec<MessageListItem>) -> Vec<MessageListItem> {
         .collect()
 }
 
+fn sender_email(raw: Option<&str>) -> String {
+    raw.and_then(|value| value.split_once('<'))
+        .and_then(|(_, value)| value.split_once('>'))
+        .map(|(value, _)| value.trim().to_string())
+        .unwrap_or_default()
+}
+
+fn sender_badge(sender: &str) -> String {
+    let sender = sender.to_ascii_lowercase();
+    if sender.contains("stripe") {
+        "S".to_string()
+    } else if sender.contains("github") {
+        "◌".to_string()
+    } else if sender.contains("linear") {
+        "L".to_string()
+    } else if sender.contains("figma") || sender.contains("theo") {
+        "F".to_string()
+    } else if sender.contains("vercel") {
+        "▲".to_string()
+    } else if sender.contains("slack") {
+        "✣".to_string()
+    } else if sender.contains("openai") {
+        "◎".to_string()
+    } else if sender.contains("shopify") {
+        "S".to_string()
+    } else if sender.contains("airtable") {
+        "A".to_string()
+    } else if sender.contains("dropbox") {
+        "◆".to_string()
+    } else if sender.contains("zoom") {
+        "▰".to_string()
+    } else if sender.contains("anthropic") {
+        "A".to_string()
+    } else {
+        sender
+            .chars()
+            .next()
+            .unwrap_or('?')
+            .to_ascii_uppercase()
+            .to_string()
+    }
+}
+
+fn sender_badge_color(sender: &str, p: Palette) -> Hsla {
+    let sender = sender.to_ascii_lowercase();
+    if sender.contains("stripe") {
+        p.purple
+    } else if sender.contains("github") {
+        p.control_active
+    } else if sender.contains("linear") {
+        p.faint
+    } else if sender.contains("figma") || sender.contains("theo") {
+        p.red
+    } else if sender.contains("vercel") {
+        p.fg
+    } else if sender.contains("slack") {
+        p.yellow
+    } else if sender.contains("openai") {
+        p.fg
+    } else if sender.contains("shopify") {
+        p.green
+    } else if sender.contains("airtable") {
+        p.blue
+    } else if sender.contains("dropbox") || sender.contains("zoom") {
+        p.blue
+    } else {
+        p.control_active
+    }
+}
+
+fn message_tag(sender: &str) -> &'static str {
+    let sender = sender.to_ascii_lowercase();
+    if sender.contains("stripe") || sender.contains("openai") {
+        "Finance"
+    } else if sender.contains("airtable") || sender.contains("dropbox") || sender.contains("zoom") {
+        "Clients"
+    } else if sender.contains("github")
+        || sender.contains("linear")
+        || sender.contains("figma")
+        || sender.contains("theo")
+        || sender.contains("vercel")
+        || sender.contains("slack")
+    {
+        "Product"
+    } else {
+        ""
+    }
+}
+
 fn sender_label(raw: Option<&str>) -> String {
     let raw = raw.unwrap_or("Unknown sender").trim();
     let display = raw
@@ -2071,9 +2304,20 @@ fn format_date(raw: Option<&str>) -> String {
             .duration_since(UNIX_EPOCH)
             .map(|duration| duration.as_millis() as i64)
             .unwrap_or(milliseconds);
-        let days = now.saturating_sub(milliseconds) / 86_400_000;
+        let age = now.saturating_sub(milliseconds);
+        let days = age / 86_400_000;
         return match days {
-            0 => "Today".to_string(),
+            0 => {
+                let seconds_since_midnight = milliseconds.div_euclid(1_000).rem_euclid(86_400);
+                let hour = seconds_since_midnight / 3_600;
+                let minute = (seconds_since_midnight % 3_600) / 60;
+                let suffix = if hour < 12 { "AM" } else { "PM" };
+                let display_hour = match hour % 12 {
+                    0 => 12,
+                    hour => hour,
+                };
+                format!("{display_hour}:{minute:02} {suffix}")
+            }
             1 => "Yesterday".to_string(),
             days if days < 7 => format!("{days}d ago"),
             _ => "Earlier".to_string(),

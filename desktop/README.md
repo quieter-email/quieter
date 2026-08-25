@@ -30,5 +30,6 @@ The optional `QUIETER_DESKTOP_TOKEN` environment variable is useful for local AP
 - Gmail connection handoff to the web app when no mailbox is connected.
 - Native compose and send for mailboxes that can send.
 - Light/dark palette matching the web app's neutral surfaces and typography.
+- A fully interactive local preview mailbox with independent Rust fixtures, so the desktop app is useful before a real Gmail mailbox has been connected.
 
-The browser remains the home for onboarding, Google identity, Gmail authorization, settings, billing, and other flows that are not yet native. The web app's bearer-session support is deliberately narrow and lets the desktop client reuse the same protected ORPC procedures without adding database access to the client.
+The browser remains the home for onboarding, Google identity, Gmail authorization, settings, billing, and other flows that are not yet native. The local preview uses the same `demo:mailbox` experience as the web app but owns its data in Rust; live mailboxes use the protected ORPC procedures directly without sharing application code or accessing the database from the desktop client.
