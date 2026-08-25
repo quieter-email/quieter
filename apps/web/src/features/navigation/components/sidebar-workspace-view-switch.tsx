@@ -6,6 +6,7 @@ import type { IconSvgElement } from "@hugeicons/react";
 import { cn } from "@quieter/ui/cn";
 import { LayoutGroup } from "motion/react";
 
+import { loadChatView } from "#/features/mailbox/components/mailbox-workspace/workspace-component-loaders";
 import type { MailboxWorkspaceView } from "#/features/mailbox/domain/mailbox-workspace-view";
 import { SidebarNavItem } from "#/features/navigation/components/sidebar-nav-item";
 import { SidebarEntrance } from "#/features/navigation/components/sidebar-surfaces";
@@ -83,6 +84,9 @@ export const SidebarWorkspaceViewSwitch = ({
                     if (!isActive) {
                       setHover(id);
                     }
+                    if (id === "chat") {
+                      void loadChatView();
+                    }
                   }}
                   onHoverExitComplete={onHoverExitComplete}
                   onMouseEnter={() => {
@@ -91,6 +95,14 @@ export const SidebarWorkspaceViewSwitch = ({
                       return;
                     }
                     setHover(id);
+                    if (id === "chat") {
+                      void loadChatView();
+                    }
+                  }}
+                  onPointerDown={() => {
+                    if (id === "chat") {
+                      void loadChatView();
+                    }
                   }}
                   size="sm"
                   type="button"
