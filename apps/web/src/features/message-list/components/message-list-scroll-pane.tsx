@@ -7,7 +7,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useLayoutEffect, useRef } from "react";
 
-import { loadMessageDetail } from "#/features/message-thread/components/message-detail-loader";
 import type { ThreadListEntry } from "#/lib/gmail/thread-list";
 import {
   getThreadQueryKey,
@@ -108,7 +107,6 @@ const useThreadIntentPrefetch = (
       if (intentThreadIdRef.current !== threadId) {
         return;
       }
-      void loadMessageDetail();
       const queryKey = getThreadQueryKey(mailboxId, threadId);
       if (queryClient.isFetching({ exact: true, queryKey }) > 0) {
         return;

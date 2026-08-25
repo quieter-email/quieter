@@ -1,19 +1,12 @@
 "use client";
 
 import { useHotkey } from "@tanstack/react-hotkeys";
-import { createContext, lazy, Suspense, use, useMemo, useState } from "react";
+import { createContext, use, useMemo, useState } from "react";
 import type { PropsWithChildren } from "react";
 
 import { shouldIgnoreAppShortcut } from "#/features/hotkeys/domain/hotkey-guards";
 
-const KeyboardShortcutsDialog = lazy(
-  async () =>
-    await import("./keyboard-shortcuts-dialog").then(
-      ({ KeyboardShortcutsDialog: Component }) => ({
-        default: Component,
-      })
-    )
-);
+import { KeyboardShortcutsDialog } from "./keyboard-shortcuts-dialog";
 
 type KeyboardShortcutsContextValue = {
   closeKeyboardShortcuts: () => void;
@@ -57,12 +50,10 @@ export const KeyboardShortcutsProvider = ({ children }: PropsWithChildren) => {
     <KeyboardShortcutsContext.Provider value={value}>
       {children}
       {isKeyboardShortcutsOpen ? (
-        <Suspense fallback={null}>
-          <KeyboardShortcutsDialog
-            onOpenChange={setIsKeyboardShortcutsOpen}
-            open={isKeyboardShortcutsOpen}
-          />
-        </Suspense>
+        <KeyboardShortcutsDialog
+          onOpenChange={setIsKeyboardShortcutsOpen}
+          open={isKeyboardShortcutsOpen}
+        />
       ) : null}
     </KeyboardShortcutsContext.Provider>
   );

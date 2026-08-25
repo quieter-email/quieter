@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
@@ -7,6 +8,7 @@ const serverFiles = await readdir(serverDirectory);
 const assetFiles = await readdir(assetDirectory);
 const cloudflareBundle = serverFiles.includes("wrangler.json");
 const maximumChunkBytes = cloudflareBundle ? 1_800_000 : 800_000;
+const maximumCompressedWorkerBytes = 10_000_000;
 const boundaries: {
   forbiddenMarkers?: string[];
   marker: string;
@@ -143,5 +145,47 @@ for (const {
     `${marker}: ${(totalBytes / 1_000_000).toFixed(2)} MB static graph, ${(
       largest.bytes / 1_000_000
     ).toFixed(2)} MB largest chunk\n`
+  );
+}
+
+if (cloudflareBundle) {
+  const wranglerBin = path.resolve(
+    import.meta.dirname,
+    "../node_modules/wrangler/bin/wrangler.js"
+  );
+  const output = execFileSync(
+    process.execPath,
+    [wranglerBin, "deploy", "--dry-run", "--config", "wrangler.json"],
+    {
+      cwd: serverDirectory,
+      encoding: "utf-8",
+      maxBuffer: 10 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "pipe"],
+    }
+  );
+  const uploadMatch =
+    /Total Upload:\s*[\d.]+\s*(?:KiB|MiB)\s*\/\s*gzip:\s*(?<size>[\d.]+)\s*(?<unit>KiB|MiB)/u.exec(
+      output
+    );
+  const compressedSize = Number(uploadMatch?.groups?.size);
+  const compressedUnit = uploadMatch?.groups?.unit;
+  if (
+    !Number.isFinite(compressedSize) ||
+    (compressedUnit !== "KiB" && compressedUnit !== "MiB")
+  ) {
+    throw new Error("Could not read the compressed Worker size from Wrangler.");
+  }
+  const compressedBytes =
+    compressedSize * (compressedUnit === "MiB" ? 1024 * 1024 : 1024);
+  if (compressedBytes >= maximumCompressedWorkerBytes) {
+    throw new Error(
+      `The compressed Worker upload is ${(compressedBytes / 1_000_000).toFixed(2)} MB; the limit is ${(maximumCompressedWorkerBytes / 1_000_000).toFixed(0)} MB.`
+    );
+  }
+  process.stdout.write(
+    `Worker upload: ${(compressedBytes / 1_000_000).toFixed(2)} MB compressed (${(
+      (compressedBytes / maximumCompressedWorkerBytes) *
+      100
+    ).toFixed(1)}% of limit)\n`
   );
 }

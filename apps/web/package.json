@@ -11,7 +11,7 @@
     ]
   },
   "scripts": {
-    "build": "vp build && node scripts/check-worker-static-boundaries.ts",
+    "build": "vp build && node scripts/check-worker-deployment-boundaries.ts",
     "dev": "vp dev --port 3000 --configLoader native",
     "preview": "vp preview"
   },
