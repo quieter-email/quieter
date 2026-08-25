@@ -1,7 +1,7 @@
 import { withRequestDatabaseClient } from "@quieter/database/client";
 import { listPendingMailboxActionRunIds } from "@quieter/orpc/mailbox-actions";
 
-import { reportWorkerError } from "./worker-runtime";
+import { reportWorkerError, withSentryReporting } from "./worker-runtime";
 
 const QUEUE_BATCH_SIZE = 100;
 
@@ -30,7 +30,7 @@ export const dispatchPendingMailboxActionRuns = async (
   return { dispatched: runs.length };
 };
 
-export default {
+export default withSentryReporting({
   async scheduled(_event, env, _ctx) {
     try {
       await withRequestDatabaseClient(async () => {
@@ -44,4 +44,4 @@ export default {
       throw error;
     }
   },
-} satisfies ExportedHandler<Env>;
+} satisfies ExportedHandler<Env>);

@@ -36,6 +36,7 @@ catalog:
   "@orpc/server": "^1.15.0"
   "@orpc/tanstack-query": "^1.15.0"
   "@sentry/node": "^10.70.0"
+  "@sentry/cloudflare": "^10.70.0"
   "better-auth": "1.5.0"
   "@tailwindcss/postcss": "^4.3.3"
   "@better-auth/core": "1.5.0"

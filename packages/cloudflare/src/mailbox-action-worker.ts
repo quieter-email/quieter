@@ -2,7 +2,7 @@ import { withRequestDatabaseClient } from "@quieter/database/client";
 import { executeMailboxActionRun } from "@quieter/orpc/mailbox-actions";
 import { z } from "zod";
 
-import { reportWorkerError } from "./worker-runtime";
+import { reportWorkerError, withSentryReporting } from "./worker-runtime";
 
 const mailboxActionMessageSchema = z.object({
   runId: z.string().trim().min(1),
@@ -16,7 +16,7 @@ export const processMailboxActionMessage = async (
   return await executeRun(runId);
 };
 
-export default {
+export default withSentryReporting({
   async queue(batch, _env, _ctx) {
     await withRequestDatabaseClient(async () => {
       await Promise.all(
@@ -38,4 +38,4 @@ export default {
       );
     });
   },
-} satisfies ExportedHandler<Env>;
+} satisfies ExportedHandler<Env>);

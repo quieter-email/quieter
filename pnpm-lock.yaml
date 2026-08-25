@@ -63,6 +63,9 @@ catalogs:
     '@orpc/tanstack-query':
       specifier: ^1.15.0
       version: 1.15.0
+    '@sentry/cloudflare':
+      specifier: ^10.70.0
+      version: 10.71.0
     '@sentry/node':
       specifier: ^10.70.0
       version: 10.70.0
@@ -656,6 +659,9 @@ importers:
       '@quieter/orpc':
         specifier: workspace:*
         version: link:../orpc
+      '@sentry/cloudflare':
+        specifier: 'catalog:'
+        version: 10.71.0(@cloudflare/workers-types@5.20260804.1)(supports-color@10.2.2)(wrangler@4.118.0(@cloudflare/workers-types@5.20260804.1))
       drizzle-orm:
         specifier: 'catalog:'
         version: 1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9)(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3)
@@ -3398,12 +3404,28 @@ packages:
     engines: {node: '>= 10'}
     hasBin: true
 
+  '@sentry/cloudflare@10.71.0':
+    resolution: {integrity: sha512-bwqO9nKBPyvfon8DXKbv+ONg9Dcei47ppymbDkkVziG60LxF7mmYqMIz6j3m5oqldZAO4mvNoC+Jfc/qKaI/4A==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@cloudflare/workers-types': ^4.x || ^5.x
+      wrangler: ^4.x
+    peerDependenciesMeta:
+      '@cloudflare/workers-types':
+        optional: true
+      wrangler:
+        optional: true
+
   '@sentry/conventions@0.16.0':
     resolution: {integrity: sha512-fO9PLmHdVURcSPUpWCItWAtgKiMwGdJHbovoSEyLplX5sxs2ugvI4CBPTrkkgqhObnZOD0CnWBKDzSVQYBKEyQ==}
     engines: {node: '>=14'}
 
   '@sentry/core@10.70.0':
     resolution: {integrity: sha512-ozhCTDqg89oB4XmWfAwuHshABpvT7AkRpaPnogopPfMAaI61G1t8EKCJ4W7aum8JSBonlfyjPCyW5oYZFm0KvA==}
+    engines: {node: '>=18'}
+
+  '@sentry/core@10.71.0':
+    resolution: {integrity: sha512-OIjT7rzcWJjUC6r3eBT3Td1j0afDBMkbbx9jTocSD+ZSfc25eEU7hoIPS0WvfeIOTIN3y8bfQnXavwMReaNVHQ==}
     engines: {node: '>=18'}
 
   '@sentry/feedback@10.70.0':
@@ -3468,6 +3490,10 @@ packages:
 
   '@sentry/server-utils@10.70.0':
     resolution: {integrity: sha512-rzegZjMFFgCp3o+N8+XU13rfSvz4B+f8rU0ijBGrQcHdMNyfsFDTu1UTm262JofmrV2u+s+D0u0vFTnqtOGkbA==}
+    engines: {node: '>=18'}
+
+  '@sentry/server-utils@10.71.0':
+    resolution: {integrity: sha512-zdyShKNsghzPGVWVRzc7oybYTsRZdKgdPtq+dsksImo1b6n7ILlD7eYx1Q0eAOZoWkDqDmm+Ml6MQb76IT1eTA==}
     engines: {node: '>=18'}
 
   '@sentry/tanstackstart-react@10.70.0':
@@ -9572,9 +9598,25 @@ snapshots:
       - encoding
       - supports-color
 
+  '@sentry/cloudflare@10.71.0(@cloudflare/workers-types@5.20260804.1)(supports-color@10.2.2)(wrangler@4.118.0(@cloudflare/workers-types@5.20260804.1))':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@sentry/core': 10.71.0
+      '@sentry/server-utils': 10.71.0(supports-color@10.2.2)
+      magic-string: 0.30.21
+    optionalDependencies:
+      '@cloudflare/workers-types': 5.20260804.1
+      wrangler: 4.118.0(@cloudflare/workers-types@5.20260804.1)
+    transitivePeerDependencies:
+      - supports-color
+
   '@sentry/conventions@0.16.0': {}
 
   '@sentry/core@10.70.0':
+    dependencies:
+      '@sentry/conventions': 0.16.0
+
+  '@sentry/core@10.71.0':
     dependencies:
       '@sentry/conventions': 0.16.0
 
@@ -9649,6 +9691,16 @@ snapshots:
       '@apm-js-collab/tracing-hooks': 0.13.0(supports-color@10.2.2)
       '@sentry/conventions': 0.16.0
       '@sentry/core': 10.70.0
+      meriyah: 6.1.4
+    transitivePeerDependencies:
+      - supports-color
+
+  '@sentry/server-utils@10.71.0(supports-color@10.2.2)':
+    dependencies:
+      '@apm-js-collab/code-transformer-bundler-plugins': 0.7.4
+      '@apm-js-collab/tracing-hooks': 0.13.0(supports-color@10.2.2)
+      '@sentry/conventions': 0.16.0
+      '@sentry/core': 10.71.0
       meriyah: 6.1.4
     transitivePeerDependencies:
       - supports-color

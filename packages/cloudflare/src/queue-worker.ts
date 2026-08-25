@@ -5,7 +5,7 @@ import {
 } from "@quieter/orpc/gmail-pubsub";
 import { z } from "zod";
 
-import { reportWorkerError } from "./worker-runtime";
+import { reportWorkerError, withSentryReporting } from "./worker-runtime";
 
 const gmailPubSubQueueMessageSchema = z.discriminatedUnion("type", [
   z.object({
@@ -94,8 +94,9 @@ export const processGmailQueueMessage = async (
         topicName: env.GMAIL_PUBSUB_TOPIC,
       },
       {
-        onRunsEnqueued: async (runIds) =>
-          dispatchMailboxActionRuns(env, runIds),
+        onRunsEnqueued: async (runIds) => {
+          await dispatchMailboxActionRuns(env, runIds);
+        },
       }
     );
     if (result.status === "busy") {
@@ -113,14 +114,16 @@ export const processGmailQueueMessage = async (
     onProcessed: async () => {
       await broadcastMailboxDetails(env, message.emailAddress);
     },
-    onRunsEnqueued: async (runIds) => dispatchMailboxActionRuns(env, runIds),
+    onRunsEnqueued: async (runIds) => {
+      await dispatchMailboxActionRuns(env, runIds);
+    },
   });
   if (!result.ignored && result.busy === true) {
     throw new Error("Gmail mailbox is already being processed.");
   }
 };
 
-export default {
+export default withSentryReporting({
   async queue(batch, env, _ctx) {
     await withRequestDatabaseClient(async () => {
       await Promise.all(
@@ -142,4 +145,4 @@ export default {
       );
     });
   },
-} satisfies ExportedHandler<Env>;
+} satisfies ExportedHandler<Env>);

@@ -39,6 +39,7 @@ export const createMailboxActionResources = (
   const actionSecretBindings = actionSecretNames.map((name) =>
     requireSecretBinding(secretBindings, name)
   );
+  const sentryDsnBinding = requireSecretBinding(secretBindings, "SENTRY_DSN");
 
   queue.subscribe(
     {
@@ -52,7 +53,7 @@ export const createMailboxActionResources = (
         SENTRY_ENVIRONMENT: context.sentryEnvironment.SENTRY_ENVIRONMENT,
       },
       handler: "packages/cloudflare/src/mailbox-action-worker.ts",
-      link: [appDatabase, ...actionSecretBindings],
+      link: [appDatabase, sentryDsnBinding, ...actionSecretBindings],
       transform: {
         worker(args) {
           args.limits = { cpuMs: 300_000 };
@@ -73,7 +74,7 @@ export const createMailboxActionResources = (
         flags: ["nodejs_compat"],
       },
       handler: "packages/cloudflare/src/mailbox-action-dispatch-worker.ts",
-      link: [appDatabase, queue],
+      link: [appDatabase, queue, sentryDsnBinding],
       transform: {
         worker(args) {
           args.observability = cloudflareWorkerObservability;

@@ -138,6 +138,7 @@ c15t runs in offline mode. Consent preferences stay in the browser and do not re
 
 - PostHog and Speed Insights load only after `measurement` consent.
 - Client Sentry remains enabled in production and is disclosed in the privacy policy.
+- Server-side unexpected failures from the web worker, all Cloudflare background workers, and AWS functions are reported to Sentry; expected user and authorization states are filtered before capture.
 - Signup acceptance of Terms and Privacy is separate from analytics consent.
 
 ## Billing

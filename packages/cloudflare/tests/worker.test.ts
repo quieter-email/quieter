@@ -238,7 +238,8 @@ describe("Cloudflare worker runtime", () => {
       });
       const response = await worker.fetch(await pubSubRequest(envelope()), env);
       expect(response.status).toBe(204);
-      expect(send).toHaveBeenCalledWith({
+      expect(send).toHaveBeenCalledOnce();
+      expect(send.mock.calls[0]?.[0]).toStrictEqual({
         emailAddress,
         historyId: "123",
         pubSubMessageId: "message-1",

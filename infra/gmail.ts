@@ -30,6 +30,7 @@ export const createGmailResources = (
   let gmailPubSubIngressUrl: $util.Output<string> | null = null;
 
   if (context.gmailPubSubEnabled) {
+    const sentryDsnBinding = requireSecretBinding(secretBindings, "SENTRY_DSN");
     const gmailPubSubDeadLetterQueue = new sst.cloudflare.Queue("GmailPsDlq");
     const gmailPubSubQueue = new sst.cloudflare.Queue("GmailPsQueue", {
       dlq: {
@@ -59,12 +60,14 @@ export const createGmailResources = (
             context.gmailPubSubEnvironment.GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT,
           GMAIL_PUBSUB_SUBSCRIPTION:
             context.gmailPubSubEnvironment.GMAIL_PUBSUB_SUBSCRIPTION,
+          SENTRY_ENVIRONMENT: context.sentryEnvironment.SENTRY_ENVIRONMENT,
         },
         handler: "packages/cloudflare/src/worker.ts",
         link: [
           gmailLiveSyncMailbox,
           gmailLiveSyncTokenSecret,
           gmailPubSubQueue,
+          sentryDsnBinding,
         ],
         migrations: [
           {
@@ -102,6 +105,7 @@ export const createGmailResources = (
           appDatabase,
           mailboxActionQueue,
           gmailLiveSyncMailbox,
+          sentryDsnBinding,
           ...processingSecretBindings,
         ],
         transform: {
@@ -129,7 +133,7 @@ export const createGmailResources = (
             flags: ["nodejs_compat"],
           },
           handler: "packages/cloudflare/src/gmail-maintenance-worker.ts",
-          link: [appDatabase, gmailPubSubQueue],
+          link: [appDatabase, gmailPubSubQueue, sentryDsnBinding],
           transform: {
             worker(args) {
               args.observability = cloudflareWorkerObservability;

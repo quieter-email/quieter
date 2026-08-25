@@ -26,6 +26,7 @@
     "QUIETER_GMAIL_AI_AUTOMATION_ENABLED": "true",
     "SENTRY_ENVIRONMENT": "test",
     "SST_RESOURCE_GmailLiveSyncTokenSecret": "{\"value\":\"live-sync-secret\"}",
+    "SST_RESOURCE_SentryDsn": "{\"value\":\"https://examplePublicKey@o0.ingest.sentry.io/0\"}",
   },
   "hyperdrive": [
     {
