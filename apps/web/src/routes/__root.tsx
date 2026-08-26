@@ -32,6 +32,8 @@ const organizationJsonLd = {
       url: "https://quieter.email/home",
     },
   ],
+  description:
+    "Quieter is an email client that combines your Gmail, shared team mailboxes on your own domain, and transactional sending over an API, with optional AI drafts.",
   logo: "https://quieter.email/icon.svg",
   name: "Quieter",
   sameAs: ["https://x.com/leanderriefel", "https://github.com/leanderriefel"],
