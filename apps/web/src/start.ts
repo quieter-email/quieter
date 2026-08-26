@@ -84,11 +84,27 @@ const getRateLimitPolicy = (pathname: string) => {
 
 const abuseProtectionMiddleware = createMiddleware().server(
   async ({ next, request }) => {
+    const requestUrl = new URL(request.url);
+    const policy = getRateLimitPolicy(requestUrl.pathname);
+
+    // Read-only requests are not quota tracked, but API responses still
+    // advertise the policy so agents can self-throttle writes.
     if (["GET", "HEAD", "OPTIONS"].includes(request.method.toUpperCase())) {
-      return await next();
+      const downstream = await next();
+
+      if (!requestUrl.pathname.startsWith("/api/")) {
+        return downstream;
+      }
+
+      return {
+        ...downstream,
+        response: withApiRateLimitHeaders(downstream.response, policy, {
+          remaining: policy.limit,
+          resetAt: new Date(Date.now() + policy.windowMs),
+        }),
+      };
     }
 
-    const requestUrl = new URL(request.url);
     const clientAddress =
       [
         request.headers.get("cf-connecting-ip")?.trim(),
@@ -97,7 +113,6 @@ const abuseProtectionMiddleware = createMiddleware().server(
           ? request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
           : undefined,
       ].find((value) => value !== undefined && value !== "") ?? "unknown";
-    const policy = getRateLimitPolicy(requestUrl.pathname);
     const key = `${policy.group}:${clientAddress}`;
     const result = await consumeRateLimit({
       key,
@@ -374,9 +389,9 @@ export const startInstance = createStart(() => ({
     securityHeadersMiddleware,
     wellKnownAgentSurfaceMiddleware,
     markdownNegotiationMiddleware,
+    abuseProtectionMiddleware,
     sitePasswordMiddleware,
     databaseMiddleware,
-    abuseProtectionMiddleware,
     csrfMiddleware,
   ],
 }));
