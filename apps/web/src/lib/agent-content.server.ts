@@ -70,6 +70,37 @@ Social: https://x.com/leanderriefel, https://github.com/leanderriefel
 const markdownByPath = new Map([
   ["/", homeMarkdown],
   ["/home", homeMarkdown],
+  [
+    "/about",
+    `# About
+
+Quieter is an email client built around one idea: email can do more without
+asking more from you. It connects to Gmail with two-way sync, gives teams
+shared mailboxes on their own domain with roles, sends transactional product
+email from verified domains over a REST API with delivery tracking, and offers
+optional per-person AI drafts inside one mailbox. Quieter treats mailboxes as
+private to their owner unless sharing is explicit, and avoids
+attention-grabbing patterns.
+
+Quieter is developed by Leander Timon Riefel in Berlin, Germany and is in
+private preview. Waitlist: ${siteUrl}/home
+
+More: ${siteUrl}/about - ${siteUrl}/contact
+`,
+  ],
+  [
+    "/contact",
+    `# Contact
+
+Support and product questions: support@quieter.email
+Legal, privacy, and data protection: legal@quieter.email
+
+Postal address: Leander Timon Riefel, Cosimaplatz 5, Berlin, Germany.
+Social: https://x.com/leanderriefel, https://github.com/leanderriefel
+
+More: ${siteUrl}/contact - ${siteUrl}/imprint
+`,
+  ],
   ["/cookies", cookiesMarkdown],
   ["/imprint", imprintMarkdown],
   ["/privacy", privacyMarkdown],
@@ -109,6 +140,13 @@ mail; suppressed recipients and domain verification are enforced.
 - Developer documentation: coming soon; will be linked here once released.
 - Sitemap of public pages: ${siteUrl}/sitemap.xml
 
+## API versioning and deprecation policy
+
+The REST API is versioned by URL path prefix (/api/v1). Breaking changes ship
+under a new version prefix instead of altering v1. When an endpoint or field
+is deprecated, responses will include Sunset and Deprecation headers with the
+retirement date for at least 90 days before removal.
+
 The web application itself requires an account during private preview;
 public pages and the machine surfaces above stay available regardless.
 
@@ -120,6 +158,7 @@ public pages and the machine surfaces above stay available regardless.
 ## Contact
 
 Support: support@quieter.email - Legal: legal@quieter.email
+About: ${siteUrl}/about - Contact page: ${siteUrl}/contact
 
 ## Legal
 
@@ -130,7 +169,15 @@ Support: support@quieter.email - Legal: legal@quieter.email
 `;
 
 export const buildSitemapXml = () => {
-  const publicPaths = ["/home", "/privacy", "/terms", "/cookies", "/imprint"];
+  const publicPaths = [
+    "/home",
+    "/about",
+    "/contact",
+    "/privacy",
+    "/terms",
+    "/cookies",
+    "/imprint",
+  ];
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">

@@ -319,22 +319,38 @@ const sitePasswordMiddleware = createMiddleware().server(
     // Unauthenticated agents never see the password wall for documents. The
     // landing page is public, so the root path forwards there; other gated
     // document paths get a real 404 with machine-readable pointers instead of
-    // a bare 401.
+    // a bare 401, and gated API paths get JSON errors matching the OpenAPI
+    // ErrorResponse schema instead of plain text.
     const requestMethod = request.method.toUpperCase();
+    const normalizedPath = normalizePathname(requestUrl.pathname);
 
     if (requestMethod === "GET" || requestMethod === "HEAD") {
-      if (normalizePathname(requestUrl.pathname) === "/") {
+      if (normalizedPath === "/") {
         return Response.redirect(getHomePageUrl(request), 302);
       }
 
       if (isAiCrawlerRequest(request)) {
         return new Response(agentNotFoundMarkdown, {
           headers: {
-            "content-type": "text/plain; charset=utf-8",
+            "content-type": "text/markdown; charset=utf-8",
           },
           status: 404,
         });
       }
+    }
+
+    if (requestUrl.pathname.startsWith("/api/")) {
+      const notFound = requestMethod === "GET" || requestMethod === "HEAD";
+
+      return Response.json(
+        { error: notFound ? "Not found." : "Password required." },
+        {
+          headers: {
+            vary: "Accept",
+          },
+          status: notFound ? 404 : 401,
+        }
+      );
     }
 
     if (sitePasswordCookie) {

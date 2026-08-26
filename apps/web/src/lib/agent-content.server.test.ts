@@ -12,6 +12,8 @@ describe("agent markdown content", () => {
     for (const path of [
       "/",
       "/home",
+      "/about",
+      "/contact",
       "/privacy",
       "/terms",
       "/cookies",
@@ -41,7 +43,9 @@ describe("llms.txt", () => {
     expect(llmsTxt).toContain("support@quieter.email");
   });
 
-  test("announces coming surfaces without inventing URLs", () => {
+  test("documents the deprecation policy without inventing URLs", () => {
+    expect(llmsTxt).toContain("/api/v1");
+    expect(llmsTxt).toContain("Deprecation headers");
     expect(llmsTxt.match(/MCP server: coming soon/gu)).toHaveLength(1);
     expect(llmsTxt).not.toContain("/mcp");
   });
@@ -53,6 +57,8 @@ describe("sitemap.xml", () => {
   test("lists public pages with lastmod dates only", () => {
     expect(sitemap).toContain('<?xml version="1.0" encoding="UTF-8"?>');
     expect(sitemap).toContain("<loc>https://quieter.email/home</loc>");
+    expect(sitemap).toContain("<loc>https://quieter.email/about</loc>");
+    expect(sitemap).toContain("<loc>https://quieter.email/contact</loc>");
     expect(sitemap).toContain("<lastmod>");
   });
 
