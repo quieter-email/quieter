@@ -123,6 +123,10 @@ export const Route = createRootRoute({
         property: "og:title",
       },
       {
+        content: "Quieter",
+        property: "og:site_name",
+      },
+      {
         content: "Email, without the noise.",
         property: "og:description",
       },
@@ -137,6 +141,10 @@ export const Route = createRootRoute({
       {
         content: "summary_large_image",
         name: "twitter:card",
+      },
+      {
+        content: "Email, without the noise.",
+        name: "twitter:description",
       },
       {
         content: "https://quieter.email/og-image.png",
