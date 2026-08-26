@@ -5,7 +5,19 @@ import { LegalDocumentPage } from "#/features/legal/components/legal-document-pa
 export const Route = createFileRoute("/imprint")({
   component: ImprintPage,
   head: () => ({
-    meta: [{ title: "Imprint | Quieter" }],
+    links: [
+      {
+        href: "https://quieter.email/imprint",
+        rel: "canonical",
+      },
+    ],
+    meta: [
+      { title: "Imprint | Quieter" },
+      {
+        content: "https://quieter.email/imprint",
+        property: "og:url",
+      },
+    ],
   }),
 });
 
