@@ -39,6 +39,8 @@ const sitePasswordPaths = new Set([
   "/api/waitlist",
 ]);
 const publicLegalPaths = new Set([
+  "/about",
+  "/contact",
   "/cookies",
   "/imprint",
   "/privacy",
