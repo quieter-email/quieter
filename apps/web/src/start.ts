@@ -19,6 +19,7 @@ import {
   getAgentMarkdown,
 } from "#/lib/agent-content.server";
 import { openApiDocument } from "#/lib/openapi-document.server";
+import { withApiRateLimitHeaders } from "#/lib/rate-limit-headers.server";
 import { withSecurityHeaders } from "#/lib/security-headers.server";
 import { reportServerError } from "#/lib/server-error-reporting";
 import {
@@ -124,7 +125,16 @@ const abuseProtectionMiddleware = createMiddleware().server(
       });
     }
 
-    return await next();
+    const downstream = await next();
+
+    if (requestUrl.pathname.startsWith("/api/")) {
+      return {
+        ...downstream,
+        response: withApiRateLimitHeaders(downstream.response, policy, result),
+      };
+    }
+
+    return downstream;
   }
 );
 
