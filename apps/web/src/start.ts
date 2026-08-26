@@ -11,6 +11,14 @@ import {
   createStart,
 } from "@tanstack/react-start";
 
+import { isAiCrawlerRequest, prefersMarkdown } from "#/lib/agent-access.server";
+import {
+  agentNotFoundMarkdown,
+  buildLlmsTxt,
+  buildSitemapXml,
+  getAgentMarkdown,
+} from "#/lib/agent-content.server";
+import { openApiDocument } from "#/lib/openapi-document.server";
 import { withSecurityHeaders } from "#/lib/security-headers.server";
 import { reportServerError } from "#/lib/server-error-reporting";
 import {
@@ -159,6 +167,117 @@ const securityHeadersMiddleware = createMiddleware().server(
   }
 );
 
+const agentDocumentPaths = new Set([
+  "/",
+  "/home",
+  "/cookies",
+  "/imprint",
+  "/privacy",
+  "/terms",
+]);
+
+const agentTextResponse = (
+  request: Request,
+  body: string,
+  contentType: string,
+  maxAgeSeconds: number,
+  status = 200
+) => {
+  const headers = new Headers({
+    "cache-control":
+      maxAgeSeconds > 0 ? `public, max-age=${maxAgeSeconds}` : "no-store",
+    "content-type": contentType,
+    vary: "Accept, Accept-Encoding",
+  });
+
+  return new Response(request.method.toUpperCase() === "HEAD" ? null : body, {
+    headers,
+    status,
+  });
+};
+
+// Public machine-readable surfaces stay reachable even while the site
+// password gate hides the application itself.
+const wellKnownAgentSurfaceMiddleware = createMiddleware().server(
+  async ({ next, request }) => {
+    if (!["GET", "HEAD"].includes(request.method.toUpperCase())) {
+      return await next();
+    }
+
+    const normalizedPath = normalizePathname(new URL(request.url).pathname);
+
+    switch (normalizedPath) {
+      case "/llms.txt": {
+        return agentTextResponse(
+          request,
+          buildLlmsTxt(),
+          "text/plain; charset=utf-8",
+          300
+        );
+      }
+      case "/openapi.json": {
+        return Response.json(openApiDocument, {
+          headers: {
+            "cache-control": "public, max-age=3600",
+            vary: "Accept-Encoding",
+          },
+        });
+      }
+      case "/sitemap.xml": {
+        return agentTextResponse(
+          request,
+          buildSitemapXml(),
+          "application/xml; charset=utf-8",
+          3600
+        );
+      }
+      default: {
+        return await next();
+      }
+    }
+  }
+);
+
+// Document paths negotiate markdown for agents and always declare Vary so
+// cached HTML variants are never served to a markdown request (or vice versa).
+const markdownNegotiationMiddleware = createMiddleware().server(
+  async ({ next, request }) => {
+    if (!["GET", "HEAD"].includes(request.method.toUpperCase())) {
+      return await next();
+    }
+
+    const normalizedPath = normalizePathname(new URL(request.url).pathname);
+
+    if (!agentDocumentPaths.has(normalizedPath)) {
+      return await next();
+    }
+
+    const markdown = getAgentMarkdown(normalizedPath);
+
+    if (prefersMarkdown(request) && markdown !== undefined) {
+      return agentTextResponse(
+        request,
+        markdown,
+        "text/markdown; charset=utf-8",
+        300
+      );
+    }
+
+    const result = await next();
+    const headers = new Headers(result.response.headers);
+    headers.append("vary", "Accept");
+
+    return {
+      ...result,
+      response: new Response(result.response.body, {
+        headers,
+        status: result.response.status,
+        statusText: result.response.statusText,
+      }),
+    };
+  }
+);
+
 const sitePasswordMiddleware = createMiddleware().server(
   async ({ next, request }) => {
     if (!isSitePasswordGateEnabled() || !hasSitePasswordConfigured()) {
@@ -186,6 +305,27 @@ const sitePasswordMiddleware = createMiddleware().server(
       return await next();
     }
 
+    // Unauthenticated agents never see the password wall for documents. The
+    // landing page is public, so the root path forwards there; other gated
+    // document paths get a real 404 with machine-readable pointers instead of
+    // a bare 401.
+    const requestMethod = request.method.toUpperCase();
+
+    if (requestMethod === "GET" || requestMethod === "HEAD") {
+      if (normalizePathname(requestUrl.pathname) === "/") {
+        return Response.redirect(getHomePageUrl(request), 302);
+      }
+
+      if (isAiCrawlerRequest(request)) {
+        return new Response(agentNotFoundMarkdown, {
+          headers: {
+            "content-type": "text/plain; charset=utf-8",
+          },
+          status: 404,
+        });
+      }
+    }
+
     if (sitePasswordCookie) {
       return redirectWithExpiredSitePasswordCookie(request);
     }
@@ -203,6 +343,8 @@ export const startInstance = createStart(() => ({
   requestMiddleware: [
     ...(isSentryEnabled ? [sentryGlobalRequestMiddleware] : []),
     securityHeadersMiddleware,
+    wellKnownAgentSurfaceMiddleware,
+    markdownNegotiationMiddleware,
     sitePasswordMiddleware,
     databaseMiddleware,
     abuseProtectionMiddleware,

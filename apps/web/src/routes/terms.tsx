@@ -5,7 +5,19 @@ import { LegalDocumentPage } from "#/features/legal/components/legal-document-pa
 export const Route = createFileRoute("/terms")({
   component: TermsPage,
   head: () => ({
-    meta: [{ title: "Terms of Service | Quieter" }],
+    links: [
+      {
+        href: "https://quieter.email/terms",
+        rel: "canonical",
+      },
+    ],
+    meta: [
+      { title: "Terms of Service | Quieter" },
+      {
+        content: "https://quieter.email/terms",
+        property: "og:url",
+      },
+    ],
   }),
 });
 
