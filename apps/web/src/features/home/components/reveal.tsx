@@ -1,6 +1,7 @@
 "use client";
 
 import { m, useReducedMotion } from "motion/react";
+import type { HTMLMotionProps } from "motion/react";
 import type { ComponentPropsWithoutRef, ElementType, ReactNode } from "react";
 
 const EASE = [0.23, 1, 0.32, 1] as const;
@@ -59,18 +60,21 @@ export const Reveal = <T extends ElementType = "div">({
   );
 };
 
-export const RevealChild = <T extends ElementType = "div">({
-  as,
+type RevealChildProps = {
+  children: ReactNode;
+  delay?: number;
+} & Omit<HTMLMotionProps<"div">, "children">;
+
+export const RevealChild = ({
   children,
   delay = 0,
   ...props
-}: RevealProps<T>) => {
+}: RevealChildProps) => {
   const reduced = useReducedMotion();
   const variants = useEntrance(reduced);
-  const Component = m.create(as ?? "div");
 
   return (
-    <Component
+    <m.div
       {...props}
       transition={{
         delay,
@@ -80,7 +84,7 @@ export const RevealChild = <T extends ElementType = "div">({
       variants={variants}
     >
       {children}
-    </Component>
+    </m.div>
   );
 };
 

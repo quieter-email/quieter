@@ -40,13 +40,13 @@ const VerbSwitcher = () => {
   return (
     <span
       aria-hidden
-      className="relative inline-block w-[180px] overflow-hidden text-center align-baseline"
+      className="relative inline-block overflow-hidden text-left align-baseline"
     >
-      <span className="invisible">receive</span>
+      <span className="invisible">receive?</span>
       <AnimatePresence initial={false} mode="wait">
         <m.span
           animate={{ opacity: 1, transform: "translateY(0px)" }}
-          className="absolute inset-x-0 top-0 text-center"
+          className="absolute inset-x-0 top-0 text-left"
           exit={
             reduced === true
               ? { opacity: 0 }
@@ -60,7 +60,7 @@ const VerbSwitcher = () => {
           key={verb}
           transition={{ duration: reduced === true ? 0.18 : 0.48, ease: EASE }}
         >
-          {verb}
+          {verb}?
         </m.span>
       </AnimatePresence>
     </span>
@@ -152,10 +152,12 @@ export const ConnectSection = () => {
   return (
     <>
       <Reveal className="relative h-[181px] w-[839px] overflow-hidden">
-        <h2 className="absolute top-[62px] left-[65px] flex items-baseline font-serif text-[48px] whitespace-nowrap text-fg italic">
-          How do you want to
-          <span className="sr-only"> send or receive </span>
-          <VerbSwitcher />?
+        <h2 className="absolute top-[62px] left-[65px] font-serif text-[48px] whitespace-nowrap text-fg italic">
+          <span className="sr-only">How do you want to send or receive?</span>
+          <span aria-hidden className="flex items-baseline">
+            How do you want to&nbsp;
+            <VerbSwitcher />
+          </span>
         </h2>
       </Reveal>
 
