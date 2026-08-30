@@ -13,7 +13,6 @@ import type {
   LambdaFunctionUrlEvent,
   LambdaFunctionUrlResponse,
 } from "./function-url";
-import { notifyGmailLiveSyncConnections } from "./gmail-live-sync";
 import { reportAwsError } from "./sentry";
 
 const notificationSchema = z.object({
@@ -41,18 +40,7 @@ export const handler = async (
   }
   try {
     await processGmailPubSubNotification(
-      message.data satisfies GmailPubSubNotificationMessage,
-      {
-        onAccepted: async ({ mailboxId }) => {
-          await notifyGmailLiveSyncConnections(mailboxId);
-        },
-        onProcessed: async ({ mailboxId }) => {
-          await notifyGmailLiveSyncConnections(
-            mailboxId,
-            "mailbox-details-dirty"
-          );
-        },
-      }
+      message.data satisfies GmailPubSubNotificationMessage
     );
 
     return { body: "", statusCode: 204 };

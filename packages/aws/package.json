@@ -6,7 +6,6 @@
     "./gmail-live-sync": "./src/gmail-live-sync.ts",
     "./gmail-live-sync-websocket": "./src/gmail-live-sync-websocket.ts",
     "./gmail-pubsub-consumer": "./src/gmail-pubsub-consumer.ts",
-    "./gmail-pubsub-ingress": "./src/gmail-pubsub-ingress.ts",
     "./gmail-pubsub-maintenance": "./src/gmail-pubsub-maintenance.ts",
     "./gmail-pubsub-process": "./src/gmail-pubsub-process.ts",
     "./inbound": "./src/inbound.ts",
@@ -33,7 +32,6 @@
     "@quieter/orpc": "workspace:*",
     "@sentry/node": "catalog:",
     "drizzle-orm": "catalog:",
-    "jose": "5.10.0",
     "zod": "catalog:"
   },
   "devDependencies": {

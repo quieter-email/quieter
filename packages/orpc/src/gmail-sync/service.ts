@@ -71,7 +71,21 @@ type AutoLabelContext = {
   labels: MailAutoLabelCandidate[];
   memoryCandidates: AiAgentMemoryCandidates;
   model: ChatModel;
-  organizationId: string | null;
+};
+type MailAutomationBudgetStatus = Awaited<
+  ReturnType<typeof getMailAutomationAiBudgetStatus>
+>;
+type MailAutomationContext = {
+  configuration: Awaited<ReturnType<typeof loadAiConfiguration>>;
+  memoryCandidates: AiAgentMemoryCandidates;
+};
+type MailAutomationRuntime = {
+  getAutoLabelContext: () => Promise<AutoLabelContext>;
+  getBudgetStatus: () => Promise<MailAutomationBudgetStatus>;
+  getUsefulDetailAutomationContext: () => Promise<{
+    memoryCandidates: AiAgentMemoryCandidates;
+    model: ChatModel;
+  }>;
 };
 
 const getErrorMessage = (error: unknown) =>
@@ -324,14 +338,16 @@ const isAutoLabelCandidate = (labelIds: string[] | undefined) =>
 
 const processAutoLabelMessage = async ({
   accessToken,
-  autoLabelContext,
+  autoLabelContextPromise,
+  getBudgetStatus,
   gmailMessageId,
   loadMessage,
   mailboxId,
   userId,
 }: {
   accessToken: string;
-  autoLabelContext: AutoLabelContext;
+  autoLabelContextPromise: Promise<AutoLabelContext>;
+  getBudgetStatus: () => Promise<MailAutomationBudgetStatus>;
   gmailMessageId: string;
   loadMessage: () => Promise<Awaited<
     ReturnType<typeof getMessageWithDetails>
@@ -347,6 +363,7 @@ const processAutoLabelMessage = async ({
   }
 
   try {
+    const autoLabelContext = await autoLabelContextPromise;
     if (event.labelIds === null || event.labelIds === undefined) {
       if (autoLabelContext.labels.length === 0) {
         const now = new Date();
@@ -404,10 +421,7 @@ const processAutoLabelMessage = async ({
         costUsd: undefined,
         promptTokens: 0,
       };
-      const budgetStatus = await getMailAutomationAiBudgetStatus({
-        organizationId: autoLabelContext.organizationId,
-        userId,
-      });
+      const budgetStatus = await getBudgetStatus();
       if (!budgetStatus.allowed) {
         await deferAutoLabelAutomation(event.id, budgetStatus.message);
         return;
@@ -502,8 +516,8 @@ const processAutoLabelMessage = async ({
 
 const processMessageIds = async ({
   accessToken,
+  automationRuntime,
   autoLabelEnabled,
-  getAutoLabelContext,
   mailboxId,
   messageIds,
   organizationId,
@@ -511,8 +525,8 @@ const processMessageIds = async ({
   userId,
 }: {
   accessToken: string;
+  automationRuntime: MailAutomationRuntime;
   autoLabelEnabled: boolean;
-  getAutoLabelContext: () => Promise<AutoLabelContext>;
   mailboxId: string;
   messageIds: string[];
   organizationId: string | null;
@@ -523,8 +537,8 @@ const processMessageIds = async ({
     return;
   }
 
-  const autoLabelContext = autoLabelEnabled
-    ? await getAutoLabelContext()
+  const autoLabelContextPromise = autoLabelEnabled
+    ? automationRuntime.getAutoLabelContext()
     : null;
 
   for (const messageId of messageIds) {
@@ -542,10 +556,11 @@ const processMessageIds = async ({
     };
 
     await Promise.all([
-      autoLabelContext
+      autoLabelContextPromise
         ? processAutoLabelMessage({
             accessToken,
-            autoLabelContext,
+            autoLabelContextPromise,
+            getBudgetStatus: automationRuntime.getBudgetStatus,
             gmailMessageId: messageId,
             loadMessage,
             mailboxId,
@@ -554,6 +569,9 @@ const processMessageIds = async ({
         : Promise.resolve(),
       usefulDetailsEnabled
         ? processGmailUsefulDetailMessage({
+            getAutomationContext:
+              automationRuntime.getUsefulDetailAutomationContext,
+            getBudgetStatus: automationRuntime.getBudgetStatus,
             gmailMessageId: messageId,
             loadMessage,
             mailboxId,
@@ -567,16 +585,16 @@ const processMessageIds = async ({
 
 const retryPendingAutomationMessages = async ({
   accessToken,
+  automationRuntime,
   autoLabelEnabled,
-  getAutoLabelContext,
   mailboxId,
   organizationId,
   usefulDetailsEnabled,
   userId,
 }: {
   accessToken: string;
+  automationRuntime: MailAutomationRuntime;
   autoLabelEnabled: boolean;
-  getAutoLabelContext: () => Promise<AutoLabelContext>;
   mailboxId: string;
   organizationId: string | null;
   usefulDetailsEnabled: boolean;
@@ -612,7 +630,7 @@ const retryPendingAutomationMessages = async ({
   await processMessageIds({
     accessToken,
     autoLabelEnabled,
-    getAutoLabelContext,
+    automationRuntime,
     mailboxId,
     messageIds: [
       ...new Set([
@@ -657,16 +675,16 @@ const beginHistoryRecovery = async (
 
 const processHistoryRecoveryPage = async ({
   accessToken,
+  automationRuntime,
   autoLabelEnabled,
-  getAutoLabelContext,
   mailboxId,
   organizationId,
   usefulDetailsEnabled,
   userId,
 }: {
   accessToken: string;
+  automationRuntime: MailAutomationRuntime;
   autoLabelEnabled: boolean;
-  getAutoLabelContext: () => Promise<AutoLabelContext>;
   mailboxId: string;
   organizationId: string | null;
   usefulDetailsEnabled: boolean;
@@ -703,7 +721,7 @@ const processHistoryRecoveryPage = async ({
   await processMessageIds({
     accessToken,
     autoLabelEnabled,
-    getAutoLabelContext,
+    automationRuntime,
     mailboxId,
     messageIds: page.messageIds,
     organizationId,
@@ -765,39 +783,67 @@ const processMailboxHistory = async ({
           automationSettings?.usefulDetailsEnabled ??
           usefulDetailsSettings?.enabled ??
           false;
+        let mailAutomationContextPromise: Promise<MailAutomationContext> | null =
+          null;
+        const getMailAutomationContext = async () => {
+          mailAutomationContextPromise ??= Promise.all([
+            loadAiConfiguration({ userId }),
+            loadAiAgentMemoryCandidates({
+              includeUserScope: false,
+              mailboxId,
+              userId,
+            }),
+          ]).then(([configuration, memoryCandidates]) => ({
+            configuration,
+            memoryCandidates,
+          }));
+          return await mailAutomationContextPromise;
+        };
         let autoLabelContextPromise: Promise<AutoLabelContext> | null = null;
         const getAutoLabelContext = async () => {
-          autoLabelContextPromise ??= listLabels(accessToken)
-            .then(async (labels) => await syncGmailLabels(mailboxId, labels))
-            .then(async (gmailLabels) => {
-              const labels = gmailLabels
-                .filter((label) => label.type === "user")
-                .map((label) => ({
-                  description: label.description,
-                  id: label.id,
-                  inclusionCriteria: label.inclusionCriteria,
-                  name: label.name,
-                }));
-
-              const [aiConfiguration, memoryCandidates] = await Promise.all([
-                loadAiConfiguration({ userId }),
-                loadAiAgentMemoryCandidates({
-                  includeUserScope: false,
-                  mailboxId,
-                  userId,
-                }),
-              ]);
-
-              return {
-                availableLabelIds: new Set(labels.map((label) => label.id)),
-                labels,
-                memoryCandidates,
-                model: aiConfiguration.autoLabelModel,
-                organizationId,
-              };
-            });
+          autoLabelContextPromise ??= Promise.all([
+            listLabels(accessToken).then(
+              async (labels) => await syncGmailLabels(mailboxId, labels)
+            ),
+            getMailAutomationContext(),
+          ]).then(([gmailLabels, automationContext]) => {
+            const labels = gmailLabels
+              .filter((label) => label.type === "user")
+              .map((label) => ({
+                description: label.description,
+                id: label.id,
+                inclusionCriteria: label.inclusionCriteria,
+                name: label.name,
+              }));
+            return {
+              availableLabelIds: new Set(labels.map((label) => label.id)),
+              labels,
+              memoryCandidates: automationContext.memoryCandidates,
+              model: automationContext.configuration.autoLabelModel,
+            };
+          });
 
           return await autoLabelContextPromise;
+        };
+        let budgetStatusPromise: Promise<MailAutomationBudgetStatus> | null =
+          null;
+        const getBudgetStatus = async () => {
+          budgetStatusPromise ??= getMailAutomationAiBudgetStatus({
+            organizationId,
+            userId,
+          });
+          return await budgetStatusPromise;
+        };
+        const automationRuntime: MailAutomationRuntime = {
+          getAutoLabelContext,
+          getBudgetStatus,
+          getUsefulDetailAutomationContext: async () => {
+            const automationContext = await getMailAutomationContext();
+            return {
+              memoryCandidates: automationContext.memoryCandidates,
+              model: automationContext.configuration.usefulDetailModel,
+            };
+          },
         };
 
         for (let pageIndex = 0; pageIndex < maxHistoryPages; pageIndex += 1) {
@@ -835,7 +881,7 @@ const processMailboxHistory = async ({
           await processMessageIds({
             accessToken,
             autoLabelEnabled,
-            getAutoLabelContext,
+            automationRuntime,
             mailboxId,
             messageIds: page.messageIds,
             organizationId,
@@ -870,7 +916,7 @@ const processMailboxHistory = async ({
         await processHistoryRecoveryPage({
           accessToken,
           autoLabelEnabled,
-          getAutoLabelContext,
+          automationRuntime,
           mailboxId,
           organizationId,
           usefulDetailsEnabled,
@@ -879,7 +925,7 @@ const processMailboxHistory = async ({
         await retryPendingAutomationMessages({
           accessToken,
           autoLabelEnabled,
-          getAutoLabelContext,
+          automationRuntime,
           mailboxId,
           organizationId,
           usefulDetailsEnabled,
@@ -1058,45 +1104,6 @@ export const maintainGmailPubSubMailbox = async (input: {
   }
 };
 
-export const acceptGmailPubSubNotification = async (input: {
-  emailAddress: string;
-}) => {
-  const [gmailMailbox] = await db
-    .select({
-      id: mailbox.id,
-      status: mailbox.status,
-    })
-    .from(mailbox)
-    .where(
-      and(
-        eq(mailbox.emailAddress, input.emailAddress.trim().toLowerCase()),
-        eq(mailbox.provider, "gmail")
-      )
-    )
-    .limit(1);
-
-  if (gmailMailbox === undefined || gmailMailbox.status !== "connected") {
-    return {
-      accepted: false as const,
-      reason: "mailbox_not_connected" as const,
-    };
-  }
-
-  await ensureWatchState(gmailMailbox.id);
-  await db
-    .update(gmailWatchState)
-    .set({
-      lastNotificationAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(gmailWatchState.mailboxId, gmailMailbox.id));
-
-  return {
-    accepted: true as const,
-    mailboxId: gmailMailbox.id,
-  };
-};
-
 export type GmailPubSubNotificationMessage = {
   emailAddress: string;
   historyId: string;
@@ -1104,11 +1111,7 @@ export type GmailPubSubNotificationMessage = {
 };
 
 export const processGmailPubSubNotification = async (
-  input: GmailPubSubNotificationMessage,
-  options?: {
-    onAccepted?: (input: { mailboxId: string }) => Promise<void>;
-    onProcessed?: (input: { mailboxId: string }) => Promise<void>;
-  }
+  input: GmailPubSubNotificationMessage
 ) => {
   const [gmailMailbox] = await db
     .select({
@@ -1151,18 +1154,12 @@ export const processGmailPubSubNotification = async (
     return { ignored: true, reason: "plan_ineligible" as const };
   }
 
-  await options?.onAccepted?.({ mailboxId: gmailMailbox.id });
-
   const result = await processMailboxHistory({
     mailboxId: gmailMailbox.id,
     maxHistoryPages: 5,
     organizationId: gmailMailbox.organizationId,
     userId: gmailMailbox.ownerUserId,
   });
-  if (!result.busy) {
-    await options?.onProcessed?.({ mailboxId: gmailMailbox.id });
-  }
-
   return {
     busy: result.busy,
     ignored: false,

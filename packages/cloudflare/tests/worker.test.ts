@@ -1,12 +1,7 @@
 import { once } from "node:events";
 import { setTimeout as sleep } from "node:timers/promises";
 
-import {
-  createExecutionContext,
-  createMessageBatch,
-  evictDurableObject,
-  getQueueResult,
-} from "cloudflare:test";
+import { evictDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
 import type { JWK } from "jose";
@@ -19,7 +14,6 @@ import {
   vi,
 } from "vite-plus/test";
 
-import queueWorker from "../src/queue-worker";
 import worker, { signaturesMatch } from "../src/worker";
 
 const serviceAccount = "gmail-push@example.invalid";
@@ -123,6 +117,20 @@ const messageFrom = async (socket: WebSocket) => {
   return event;
 };
 
+const messagesFrom = async (socket: WebSocket, count: number) => {
+  const result = Promise.withResolvers<unknown[]>();
+  const messages: unknown[] = [];
+  const handleMessage = (event: MessageEvent) => {
+    messages.push(JSON.parse(String(event.data)) as unknown);
+    if (messages.length === count) {
+      socket.removeEventListener("message", handleMessage);
+      result.resolve(messages);
+    }
+  };
+  socket.addEventListener("message", handleMessage);
+  return await result.promise;
+};
+
 const within = async <T>(promise: Promise<T>, label: string) =>
   await Promise.race([
     promise,
@@ -186,20 +194,22 @@ describe("Cloudflare worker runtime", () => {
   });
 
   describe("Pub/Sub ingress", () => {
-    const installFetchMock = (processorStatus = 204) =>
-      vi.stubGlobal(
-        "fetch",
-        vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-          const request = toRequest(input, init);
-          if (new URL(request.url).hostname === "www.googleapis.com") {
-            return Response.json(jwks);
-          }
-          if (request.url === "https://processor.invalid/process") {
-            return new Response(null, { status: processorStatus });
-          }
-          return await originalFetch(input, init);
-        })
-      );
+    const installFetchMock = (processorStatus = 204) => {
+      const fetchMock = vi.fn<
+        (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+      >(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = toRequest(input, init);
+        if (new URL(request.url).hostname === "www.googleapis.com") {
+          return Response.json(jwks);
+        }
+        if (request.url === "https://processor.invalid/process") {
+          return new Response(null, { status: processorStatus });
+        }
+        return await originalFetch(input, init);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      return fetchMock;
+    };
 
     test("requires authentication", async () => {
       const response = await worker.fetch(
@@ -231,28 +241,58 @@ describe("Cloudflare worker runtime", () => {
       expect(response.status).toBe(403);
     });
 
-    test("broadcasts and enqueues an authenticated notification", async () => {
-      installFetchMock();
-      const send = vi.spyOn(env.GmailPsQueue, "send").mockResolvedValue({
-        metadata: { metrics: { backlogBytes: 0, backlogCount: 1 } },
-      });
+    test("starts processing directly and broadcasts committed enrichment", async () => {
+      const fetchMock = installFetchMock();
+      const token = await liveSyncToken();
+      const stub = env.GmailLiveSyncMailbox.get(
+        env.GmailLiveSyncMailbox.idFromName(emailAddress.trim().toLowerCase())
+      );
+      const socketResponse = await stub.fetch(
+        new Request(`https://worker.invalid/gmail/live?token=${token}`, {
+          headers: { upgrade: "websocket" },
+        })
+      );
+      const socket = socketResponse.webSocket;
+      if (socket === null) {
+        throw new Error("Expected WebSocket upgrade.");
+      }
+      socket.accept();
+      const broadcasts = messagesFrom(socket, 3);
+
       const response = await worker.fetch(await pubSubRequest(envelope()), env);
+
       expect(response.status).toBe(204);
-      expect(send).toHaveBeenCalledWith({
-        emailAddress,
-        historyId: "123",
-        pubSubMessageId: "message-1",
-        type: "notification",
-      });
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://processor.invalid/process",
+        expect.objectContaining({
+          body: JSON.stringify({
+            emailAddress,
+            historyId: "123",
+            pubSubMessageId: "message-1",
+            type: "notification",
+          }),
+          headers: {
+            authorization: "Bearer processor-secret",
+            "content-type": "application/json",
+          },
+          method: "POST",
+        })
+      );
+      const events = await within(broadcasts, "enrichment broadcasts");
+      expect(events[0]).toMatchObject({ mailboxId, type: "mailbox-dirty" });
+      expect(events.slice(1)).toStrictEqual(
+        expect.arrayContaining([
+          { mailboxId, type: "mailbox-dirty" },
+          { mailboxId, type: "mailbox-details-dirty" },
+        ])
+      );
+      socket.close(1000, "done");
     });
 
-    test("returns 5xx when enqueueing transiently fails", async () => {
-      installFetchMock();
-      vi.spyOn(env.GmailPsQueue, "send").mockRejectedValueOnce(
-        new Error("temporary")
-      );
+    test("asks Pub/Sub to retry when direct processing fails", async () => {
+      installFetchMock(503);
       const response = await worker.fetch(await pubSubRequest(envelope()), env);
-      expect(response.status).toBe(500);
+      expect(response.status).toBe(503);
     });
   });
 
@@ -297,56 +337,6 @@ describe("Cloudflare worker runtime", () => {
 
       socket.close(1000, "done");
       expect(socket.readyState).not.toBe(WebSocket.OPEN);
-    });
-  });
-
-  describe("Queue consumer", () => {
-    const body = {
-      emailAddress,
-      historyId: "123",
-      pubSubMessageId: "message-1",
-      type: "notification" as const,
-    };
-
-    const batch = () =>
-      createMessageBatch<typeof body>("gmail-pubsub-types", [
-        { attempts: 1, body, id: "message-1", timestamp: new Date() },
-      ]);
-
-    test("awaits the downstream response before acknowledging", async () => {
-      const gate = Promise.withResolvers<Response>();
-      vi.stubGlobal(
-        "fetch",
-        vi.fn(async () => await gate.promise)
-      );
-      const messages = batch();
-      const context = createExecutionContext();
-      let settled = false;
-      const processing = queueWorker.queue(messages, env, context).then(() => {
-        settled = true;
-      });
-      await Promise.resolve();
-      expect(settled).toBeFalsy();
-      gate.resolve(new Response(null, { status: 204 }));
-      await processing;
-      await expect(getQueueResult(messages, context)).resolves.toMatchObject({
-        ackAll: false,
-      });
-    });
-
-    test("throws on downstream non-2xx responses so the batch retries", async () => {
-      vi.stubGlobal(
-        "fetch",
-        vi.fn(() => new Response(null, { status: 503 }))
-      );
-      const messages = batch();
-      const context = createExecutionContext();
-      await expect(queueWorker.queue(messages, env, context)).rejects.toThrow(
-        "returned 503"
-      );
-      await expect(getQueueResult(messages, context)).resolves.toMatchObject({
-        ackAll: false,
-      });
     });
   });
 });

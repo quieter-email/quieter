@@ -229,6 +229,23 @@ export const mailboxObject = (env: Env, emailAddress: string) => {
   return env.GmailLiveSyncMailbox.get(id);
 };
 
+const broadcastMailboxEvent = async (
+  env: Env,
+  emailAddress: string,
+  type: "mailbox-details-dirty" | "mailbox-dirty"
+) => {
+  const response = await mailboxObject(env, emailAddress).fetch(
+    "https://internal.quieter/broadcast",
+    {
+      body: JSON.stringify({ type }),
+      method: "POST",
+    }
+  );
+  if (!response.ok) {
+    throw new RequestError(503, "broadcast_response_error");
+  }
+};
+
 export const handleLiveMailboxRequest = async (request: Request, env: Env) => {
   const token = new URL(request.url).searchParams.get("token");
   if (token === null || token === "") {
@@ -256,24 +273,39 @@ export const handlePubSub = async (request: Request, env: Env) => {
 
   const notification = parseGmailNotification(envelope.data.message.data);
   const emailAddress = notification.emailAddress.trim().toLowerCase();
-  const broadcastResponse = await mailboxObject(env, emailAddress).fetch(
-    "https://internal.quieter/broadcast",
-    {
-      body: JSON.stringify({ type: "mailbox-dirty" }),
-      method: "POST",
-    }
-  );
-  if (!broadcastResponse.ok) {
-    throw new Error("Durable Object broadcast failed.");
-  }
-
-  const queueMessage = {
+  const processorMessage = {
     emailAddress,
     historyId: notification.historyId,
     pubSubMessageId: envelope.data.message.messageId,
     type: "notification" as const,
   };
-  await env.GmailPsQueue.send(queueMessage);
+  const [processorResult, initialBroadcastResult] = await Promise.allSettled([
+    fetch(env.GMAIL_PUBSUB_PROCESS_URL, {
+      body: JSON.stringify(processorMessage),
+      headers: {
+        authorization: `Bearer ${readLinkedSecret(env.SST_RESOURCE_GmailPubSubProcessToken)}`,
+        "content-type": "application/json",
+      },
+      method: "POST",
+    }).then((response) => {
+      if (!response.ok) {
+        throw new RequestError(503, "processor_response_error");
+      }
+    }),
+    broadcastMailboxEvent(env, emailAddress, "mailbox-dirty"),
+  ]);
+
+  if (processorResult.status === "rejected") {
+    throw processorResult.reason;
+  }
+  if (initialBroadcastResult.status === "rejected") {
+    throw initialBroadcastResult.reason;
+  }
+
+  await Promise.all([
+    broadcastMailboxEvent(env, emailAddress, "mailbox-dirty"),
+    broadcastMailboxEvent(env, emailAddress, "mailbox-details-dirty"),
+  ]);
   return new Response(null, { status: 204 });
 };
 
