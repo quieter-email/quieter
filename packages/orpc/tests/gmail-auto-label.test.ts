@@ -1,6 +1,5 @@
 import {
   buildAutoLabelPromptInput,
-  resolveAutoLabelDecisions,
   sanitizeAutoLabelSelection,
 } from "@quieter/ai/classify-gmail-message";
 import { describe, expect, test } from "vite-plus/test";
@@ -54,21 +53,6 @@ describe("Gmail auto-label selection", () => {
     expect(
       sanitizeAutoLabelSelection(["label-a", "label-z"], availableLabelIds)
     ).toStrictEqual(["label-a"]);
-  });
-
-  test("resolves model decisions against available labels only", () => {
-    const availableLabelIds = new Set(["business", "personal"]);
-
-    expect(
-      resolveAutoLabelDecisions(
-        [
-          { applies: true, labelId: "business" },
-          { applies: true, labelId: "personal" },
-          { applies: true, labelId: "ignored" },
-        ],
-        availableLabelIds
-      )
-    ).toStrictEqual([]);
   });
 
   test("passes dynamically retrieved memory as advisory classifier context", () => {

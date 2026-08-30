@@ -111,29 +111,6 @@ export const createGmailResources = (
       }
     );
 
-    const gmailPubSubIngress = new sst.aws.ApiGatewayV2("GmailPubSubIngress", {
-      cors: false,
-      domain:
-        $app.stage === "production"
-          ? {
-              dns: sst.cloudflare.dns(),
-              name: "gmail-events.quieter.email",
-            }
-          : undefined,
-    });
-    gmailPubSubIngress.route("POST /", {
-      environment: {
-        DATABASE_URL: context.databaseUrl,
-        ...context.gmailPubSubEnvironment,
-        GMAIL_PUBSUB_QUEUE_URL: gmailPubSubQueue.url,
-        ...context.sentryEnvironment,
-      },
-      handler: "packages/aws/src/gmail-pubsub-ingress.handler",
-      link: [gmailPubSubQueue, gmailLiveSyncApi, gmailLiveSyncConnections],
-      timeout: "30 seconds",
-    });
-    gmailPubSubIngressUrl = gmailPubSubIngress.url;
-
     const gmailPubSubMaintenance = new sst.aws.CronV2(
       "GmailPubSubMaintenance",
       {
@@ -179,19 +156,6 @@ export const createGmailResources = (
     });
     gmailPubSubProcessUrl = gmailPubSubProcess.url;
 
-    const gmailPubSubCloudflareDeadLetterQueue = new sst.cloudflare.Queue(
-      "GmailPsDlq"
-    );
-    const gmailPubSubCloudflareQueue = new sst.cloudflare.Queue(
-      "GmailPsQueue",
-      {
-        dlq: {
-          queue: gmailPubSubCloudflareDeadLetterQueue.nodes.queue.queueName,
-          retry: 10,
-        },
-        maxConcurrency: 20,
-      }
-    );
     const gmailLiveSyncMailbox = new sst.cloudflare.DurableObject(
       "GmailLiveSyncMailbox",
       {
@@ -218,7 +182,6 @@ export const createGmailResources = (
         link: [
           gmailLiveSyncMailbox,
           gmailLiveSyncTokenSecret,
-          gmailPubSubCloudflareQueue,
           gmailPubSubProcessToken,
         ],
         migrations: [
@@ -233,26 +196,6 @@ export const createGmailResources = (
           },
         },
         url: true,
-      }
-    );
-    gmailPubSubCloudflareQueue.subscribe(
-      {
-        environment: {
-          GMAIL_PUBSUB_PROCESS_URL: gmailPubSubProcess.url,
-        },
-        handler: "packages/cloudflare/src/queue-worker.ts",
-        link: [gmailPubSubProcessToken],
-        transform: {
-          worker(args) {
-            args.observability = cloudflareWorkerObservability;
-          },
-        },
-      },
-      {
-        batch: {
-          size: 1,
-          window: "0 seconds",
-        },
       }
     );
     gmailLiveSyncUrl = gmailRealtimeWorker.url.apply((url) => {

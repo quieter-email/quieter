@@ -8,7 +8,6 @@ const outputDirectory = path.join(packageRoot, ".bundle-check");
 const entrypoints = [
   "gmail-live-sync-websocket.ts",
   "gmail-pubsub-consumer.ts",
-  "gmail-pubsub-ingress.ts",
   "gmail-pubsub-maintenance.ts",
   "gmail-pubsub-process.ts",
   "inbound.ts",

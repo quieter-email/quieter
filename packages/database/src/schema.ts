@@ -269,7 +269,7 @@ export const userAiContext = pgTable(
   {
     autoLabelModel: text("autoLabelModel")
       .notNull()
-      .default("openai/gpt-5.6-luna"),
+      .default("google/gemini-3.5-flash-lite"),
     createdAt: timestamp("createdAt").notNull(),
     id: text("id").primaryKey(),
     lastEditedAt: timestamp("lastEditedAt").notNull(),
@@ -281,7 +281,7 @@ export const userAiContext = pgTable(
     updatedAt: timestamp("updatedAt").notNull(),
     usefulDetailModel: text("usefulDetailModel")
       .notNull()
-      .default("openai/gpt-5.6-luna"),
+      .default("google/gemini-3.5-flash-lite"),
     userId: text("userId")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
