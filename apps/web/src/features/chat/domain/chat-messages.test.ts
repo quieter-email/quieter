@@ -4,6 +4,7 @@ import { describe, expect, test } from "vite-plus/test";
 
 import {
   getAssistantProgress,
+  getChatRetryAction,
   getMessageText,
   toInitialMessages,
 } from "./chat-messages";
@@ -84,5 +85,44 @@ describe("chat message conversion", () => {
         true
       )
     ).toBeNull();
+  });
+
+  test("recovers each retry state without duplicating a persisted user turn", () => {
+    const userMessage: UIMessage = {
+      id: "user-1",
+      parts: [{ text: "Try this", type: "text" }],
+      role: "user",
+    };
+    const oldAssistant: UIMessage = {
+      id: "assistant-old",
+      parts: [{ text: "Old answer", type: "text" }],
+      role: "assistant",
+    };
+    const newAssistant: UIMessage = {
+      id: "assistant-new",
+      parts: [{ text: "New answer", type: "text" }],
+      role: "assistant",
+    };
+
+    expect(getChatRetryAction([userMessage], [])).toStrictEqual({
+      messageId: "user-1",
+      text: "Try this",
+      type: "resubmit-user",
+    });
+    expect(getChatRetryAction([userMessage], [userMessage])).toStrictEqual({
+      type: "regenerate",
+    });
+    expect(
+      getChatRetryAction(
+        [userMessage, newAssistant],
+        [userMessage, newAssistant]
+      )
+    ).toStrictEqual({ type: "hydrate" });
+    expect(
+      getChatRetryAction(
+        [userMessage, newAssistant],
+        [userMessage, oldAssistant]
+      )
+    ).toStrictEqual({ type: "regenerate" });
   });
 });

@@ -42,7 +42,7 @@ import { toastError } from "#/lib/error-toast";
 import { orpc, rpc } from "#/lib/orpc";
 import { shouldRetryOrpcError } from "#/lib/orpc-errors";
 
-import { toInitialMessages } from "../domain/chat-messages";
+import { getChatRetryAction, toInitialMessages } from "../domain/chat-messages";
 import type { ChatToolApproval } from "../domain/chat-tools";
 import { getToolName, isChatToolPart } from "../domain/chat-tools";
 import { toChatComposeMessageInput } from "../domain/compose-proposal";
@@ -56,38 +56,6 @@ const MAX_TRANSCRIPTION_AUDIO_DURATION_MS = 60_000;
 const MAX_TRANSCRIPTION_AUDIO_BASE64_LENGTH = 14_000_000;
 
 type ChatData = RouterOutputs["chat"]["get"];
-
-// Workers extend fetch with preconnect for subrequest connection warming; the
-// Node runtime leaves it unset, so it stays optional here.
-type PreconnectableFetch = typeof fetch & {
-  preconnect?: (url: string | URL) => void;
-};
-const workersFetch: PreconnectableFetch = fetch;
-
-// The transport reports error bodies through statusText so the composer can
-// show the server's reason (for example a 409 for a busy chat).
-const fetchChat = Object.assign(
-  async (
-    input: Parameters<typeof fetch>[0],
-    init?: Parameters<typeof fetch>[1]
-  ) => {
-    const response = await fetch(input, init);
-    if (response.ok) {
-      return response;
-    }
-    const responseText = await response.clone().text();
-    const message = responseText.trim();
-    if (message === "") {
-      return response;
-    }
-    return new Response(response.body, {
-      headers: response.headers,
-      status: response.status,
-      statusText: message,
-    });
-  },
-  { preconnect: workersFetch.preconnect }
-);
 
 const PlanRequired = ({
   organizationId,
@@ -142,6 +110,9 @@ const ChatSession = ({
 }) => {
   const queryClient = useQueryClient();
   const isCurrentSessionRef = useRef(true);
+  const composeResolutionRef = useRef(false);
+  const retryPendingRef = useRef(false);
+  const submitPendingRef = useRef(false);
   const defaultModel = useDefaultChatModel();
   const threadId = chatId ?? draftChatKey;
   const [input, setInput] = useState("");
@@ -167,7 +138,6 @@ const ChatSession = ({
     () =>
       new DefaultChatTransport({
         api: CHAT_API_ENDPOINT,
-        fetch: fetchChat,
         prepareSendMessagesRequest: ({ messages, trigger }) => ({
           body: {
             category: activeMailbox,
@@ -184,20 +154,18 @@ const ChatSession = ({
   );
 
   const synchronizeChat = async () => {
-    await Promise.all([
+    const [chatResult] = await Promise.allSettled([
+      queryClient.fetchQuery({
+        ...chatQueryOptions(mailboxId, threadId),
+        staleTime: 0,
+      }),
       queryClient.invalidateQueries({ queryKey: USER_BILLING_QUERY_KEY }),
       queryClient.invalidateQueries({ queryKey: getChatsQueryKey(mailboxId) }),
-      queryClient.invalidateQueries({
-        queryKey: getChatQueryKey(mailboxId, threadId),
-      }),
     ]);
-    let shouldSelectDraft = false;
-    try {
-      await queryClient.fetchQuery(chatQueryOptions(mailboxId, threadId));
-      shouldSelectDraft = true;
-    } catch (fetchError) {
-      shouldSelectDraft = shouldRetryOrpcError(0, fetchError);
-    }
+    const shouldSelectDraft =
+      chatResult?.status === "fulfilled" ||
+      (chatResult?.status === "rejected" &&
+        shouldRetryOrpcError(0, chatResult.reason));
     if (chatId === null && shouldSelectDraft && isCurrentSessionRef.current) {
       onChatIdChange(threadId);
     }
@@ -221,6 +189,7 @@ const ChatSession = ({
       void synchronizeChat();
     },
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
+    throttle: 50,
     transport,
   });
 
@@ -290,17 +259,21 @@ const ChatSession = ({
   // Reconcile with the server copy whenever a fresh one arrives while this
   // session is idle (after sends, retries, or external chat changes).
   useEffect(() => {
-    if (isStreaming || chatData === undefined) {
+    if (status !== "ready" || chatData === undefined) {
       return;
     }
     setMessages(toInitialMessages(chatData.messages));
-  }, [chatData, isStreaming, setMessages]);
+  }, [chatData, setMessages, status]);
 
   const resolveCompose = async (
     toolCallId: string,
     action: "decline" | "save_draft" | "send",
     values?: ComposeValues
   ) => {
+    if (composeResolutionRef.current) {
+      return;
+    }
+    composeResolutionRef.current = true;
     setIsResolvingCompose(true);
     let output: ComposeEmailResult;
     try {
@@ -349,47 +322,100 @@ const ChatSession = ({
         tool: "compose_email",
         toolCallId,
       });
-      setIsResolvingCompose(false);
       await sendMessage();
+      composeResolutionRef.current = false;
+      setIsResolvingCompose(false);
       return;
     }
     addToolOutput({ output, tool: "compose_email", toolCallId });
-    setIsResolvingCompose(false);
     await sendMessage();
+    composeResolutionRef.current = false;
+    setIsResolvingCompose(false);
   };
 
   const submitPrompt = async () => {
     const prompt = input.trim();
-    if (!prompt || disabled) {
+    if (!prompt || disabled || submitPendingRef.current) {
       return;
     }
 
+    submitPendingRef.current = true;
+    clearError();
     setInput("");
-    try {
-      await sendMessage({ text: prompt });
-    } catch (sendError) {
-      if (
-        isCurrentSessionRef.current &&
-        !(sendError instanceof Error && sendError.name === "AbortError")
-      ) {
-        setInput((current) => current || prompt);
-      }
-    }
-    await synchronizeChat();
+    await sendMessage({ text: prompt });
+    submitPendingRef.current = false;
   };
 
   const retryLastTurn = async () => {
-    if (isRetrying || isStreaming) {
+    if (isRetrying || isStreaming || retryPendingRef.current) {
       return;
     }
+    retryPendingRef.current = true;
     setIsRetrying(true);
+    let retryFailure: unknown;
     try {
-      clearError();
-      await regenerate();
-      await synchronizeChat();
-    } finally {
-      setIsRetrying(false);
+      const persistedChat = await rpc.chat.get({ chatId: threadId, mailboxId });
+      const persistedMessages = toInitialMessages(persistedChat.messages);
+      const retryAction = getChatRetryAction(messages, persistedMessages);
+      if (retryAction.type === "resubmit-user") {
+        clearError();
+        await sendMessage({
+          messageId: retryAction.messageId,
+          text: retryAction.text,
+        });
+      } else if (retryAction.type === "unavailable") {
+        toast.error(
+          "The answer could not be retried. Send your message again."
+        );
+      } else {
+        clearError();
+        queryClient.setQueryData(
+          getChatQueryKey(mailboxId, threadId),
+          persistedChat
+        );
+        setMessages(persistedMessages);
+        if (retryAction.type === "regenerate") {
+          await regenerate();
+        }
+      }
+    } catch (retryError) {
+      retryFailure = retryError;
     }
+    if (retryFailure !== undefined) {
+      const errorCode =
+        retryFailure !== null &&
+        typeof retryFailure === "object" &&
+        "code" in retryFailure
+          ? retryFailure.code
+          : undefined;
+      const errorStatus =
+        retryFailure !== null &&
+        typeof retryFailure === "object" &&
+        "status" in retryFailure
+          ? retryFailure.status
+          : undefined;
+      if (errorCode !== "NOT_FOUND" && errorStatus !== 404) {
+        toastError(retryFailure, {
+          boundary: "chat-retry",
+          fallback: "The answer could not be retried. Try again.",
+        });
+      } else {
+        const retryAction = getChatRetryAction(messages, []);
+        if (retryAction.type === "resubmit-user") {
+          clearError();
+          await sendMessage({
+            messageId: retryAction.messageId,
+            text: retryAction.text,
+          });
+        } else {
+          toast.error(
+            "The answer could not be retried. Send your message again."
+          );
+        }
+      }
+    }
+    retryPendingRef.current = false;
+    setIsRetrying(false);
   };
 
   const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
