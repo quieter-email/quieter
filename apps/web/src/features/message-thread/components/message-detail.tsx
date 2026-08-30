@@ -8,7 +8,6 @@ import type { ReactNode } from "react";
 
 import { EmptyMessageState } from "#/components/empty-message-state";
 import { MobileHeader } from "#/components/mobile-header";
-import type { ComposeDraftState } from "#/features/compose/domain/draft";
 import type {
   MailboxActions,
   MailboxPendingActions,
@@ -21,6 +20,10 @@ import { MessageView } from "./message-view";
 
 type MessageDetailProps = {
   activeMailbox: MailboxCategory;
+  composeDemoMode?: boolean;
+  composeManagedDemoMode?: boolean;
+  composePersistDrafts?: boolean;
+  composeSignature?: { html: string | null; text: string | null };
   focusOnOpen?: boolean;
   currentUserEmail?: string | null;
   isPending?: boolean;
@@ -29,20 +32,24 @@ type MessageDetailProps = {
   mailboxProvider: "api" | "gmail" | "managed";
   onBackToList?: () => void;
   onAutoFocusComplete?: () => void;
-  onComposeDraftRequested?: (draft: ComposeDraftState) => void;
+  onManageTemplates?: () => void;
   pendingActions: MailboxPendingActions;
   selectedMessage: MessageListItem | null;
 };
 
 export const MessageDetail = ({
   activeMailbox,
+  composeDemoMode,
+  composeManagedDemoMode,
+  composePersistDrafts,
+  composeSignature,
   focusOnOpen,
   currentUserEmail,
   isPending,
   mailboxActions,
   onBackToList,
   onAutoFocusComplete,
-  onComposeDraftRequested,
+  onManageTemplates,
   pendingActions,
   selectedMessage,
   mailboxId,
@@ -78,6 +85,10 @@ export const MessageDetail = ({
       >
         <MessageView
           activeMailbox={activeMailbox}
+          composeDemoMode={composeDemoMode}
+          composeManagedDemoMode={composeManagedDemoMode}
+          composePersistDrafts={composePersistDrafts}
+          composeSignature={composeSignature}
           focusOnOpen={focusOnOpen}
           currentUserEmail={currentUserEmail}
           mailboxActions={mailboxActions}
@@ -86,7 +97,7 @@ export const MessageDetail = ({
           message={selectedMessage}
           onBackToList={onBackToList}
           onAutoFocusComplete={onAutoFocusComplete}
-          onComposeDraftRequested={onComposeDraftRequested}
+          onManageTemplates={onManageTemplates}
           pendingActions={pendingActions}
         />
       </Suspense>
