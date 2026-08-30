@@ -3,133 +3,134 @@
 import { BILLING_PRODUCTS } from "@quieter/billing/plans";
 import { cn } from "@quieter/ui/cn";
 
-import {
-  HomeAtmosphericBackground,
-  HomeWorkspaceDitherBackground,
-} from "./lazy-webgl-backgrounds";
+import { AiSection } from "./ai-section";
+import { ConnectSection } from "./connect-section";
+import { DesignFrame } from "./design-frame";
+import { HomeAtmosphericBackground } from "./lazy-webgl-backgrounds";
 import { Reveal } from "./reveal";
+import { SoftGradientField } from "./soft-gradient-field";
 import { WaitlistForm } from "./waitlist-form";
 
-type Feature = {
-  body: string;
-  id: string;
-  image: string;
-  /** Alternates the composition so the page reads as a zigzag, not a stack. */
-  imageFirst: boolean;
-  title: string;
-};
-
-const features: Feature[] = [
+const experience = [
   {
-    body: "Two-way sync with the mailbox you already use.",
-    id: "gmail",
-    image: "/landing_sync.webp",
-    imageFirst: false,
-    title: "Connect Gmail",
+    body: "Save what you write, so you don't have to repeat it",
+    title: "Templates",
   },
   {
-    body: "support@, billing@ and press@ on your own domain, with roles.",
-    id: "team-mail",
-    image: "/landing_team_mail.webp",
-    imageFirst: true,
-    title: "Team mailboxes",
+    body: "Every page, dialog and feature, just one button-press away",
+    title: "Clean UI with intuitive shortcuts",
   },
   {
-    body: "Send from verified domains over the API, MCP or SDK.",
-    id: "sending",
-    image: "/landing_sending.webp",
-    imageFirst: false,
-    title: "Sending",
+    body: "One for work, one for personal things, one for support, and as many more as you need",
+    title: "As many inboxes as you want",
   },
   {
-    body: "Context and drafts inside one mailbox. Optional, and you send them.",
-    id: "ai",
-    image: "/landing_ai.webp",
-    imageFirst: true,
-    title: "AI",
+    body: "iOS, Android, Web, Desktop, we gotchu",
+    title: "On every platform",
   },
-];
+] as const;
 
-const ImagePlate = ({ src }: { src: string }) => (
-  <div className="aspect-5/3 w-full">
-    <img
-      alt=""
-      aria-hidden
-      className="size-full object-cover"
-      decoding="async"
-      height="972"
-      loading="lazy"
-      src={src}
-      style={{
-        WebkitMaskImage:
-          "radial-gradient(ellipse at center, black 58%, transparent 100%)",
-        maskImage:
-          "radial-gradient(ellipse at center, black 58%, transparent 100%)",
-      }}
-      width="1619"
-    />
-  </div>
-);
+const ExperienceSection = () => (
+  <>
+    <Reveal className="flex flex-col items-center justify-center overflow-hidden p-[40px]">
+      <h2 className="text-center font-serif text-[48px] whitespace-nowrap text-fg italic">
+        A better email experience
+      </h2>
+    </Reveal>
 
-const FeatureSection = ({ body, id, image, imageFirst, title }: Feature) => (
-  <section className="relative px-6 pt-24 md:pt-32" id={id}>
-    <div className="relative mx-auto grid w-full max-w-220 items-center gap-10 md:grid-cols-2 md:gap-14">
-      <Reveal
-        className={cn("flex flex-col gap-3", imageFirst && "md:order-2")}
-        delay={imageFirst ? 0.08 : 0}
-      >
-        <h2 className="font-serif text-title-md/snug font-normal tracking-[-0.012em] text-fg">
-          {title}
-        </h2>
-        <p className="max-w-[320px] text-body leading-[1.73] text-muted-fg">
-          {body}
-        </p>
-      </Reveal>
-
-      <Reveal
-        className={cn(imageFirst && "md:order-1")}
-        delay={imageFirst ? 0 : 0.08}
-      >
-        <ImagePlate src={image} />
-      </Reveal>
+    <div className="flex w-[1654px] flex-col items-start gap-[100px] overflow-hidden p-[100px] whitespace-nowrap italic">
+      {experience.map((item, index) => (
+        <Reveal
+          className={cn("flex w-full flex-col overflow-hidden px-[110px]", {
+            "items-end": index % 2 !== 0,
+            "items-start": index % 2 === 0,
+          })}
+          delay={0.06}
+          key={item.title}
+        >
+          <h3 className="shrink-0 font-serif text-[40px] text-fg">
+            {item.title}
+          </h3>
+          <p className="shrink-0 font-sans text-[24px] text-muted-fg">
+            {item.body}
+          </p>
+        </Reveal>
+      ))}
     </div>
-  </section>
+  </>
 );
+
+const tiers = [
+  {
+    credits: null,
+    name: "Free and always included",
+    price: "Included",
+    summary: "Infinite Gmail",
+  },
+  {
+    credits: `$${BILLING_PRODUCTS.managed.creditAmountCents / 100} in credits included.`,
+    name: BILLING_PRODUCTS.managed.name,
+    price: `$${BILLING_PRODUCTS.managed.monthlyPriceCents / 100}/month`,
+    summary: "Infinite managed mailboxes, infinite domains.",
+  },
+  {
+    credits: `$${BILLING_PRODUCTS.pro.creditAmountCents / 100} in credits included.`,
+    name: BILLING_PRODUCTS.pro.name,
+    price: `$${BILLING_PRODUCTS.pro.monthlyPriceCents / 100}/month`,
+    summary: "Infinite managed mailboxes, infinite domains, all AI features.",
+  },
+] as const;
 
 const Pricing = () => (
-  <section className="relative px-6 pt-28 md:pt-36" id="pricing">
-    <div className="mx-auto w-full max-w-220">
-      <Reveal
-        as="h2"
-        className="text-center font-serif text-title-md/snug font-normal tracking-[-0.012em] text-fg"
-      >
-        Pricing
-      </Reveal>
+  <>
+    <Reveal
+      className="flex flex-col items-center justify-center overflow-hidden p-[40px]"
+      id="pricing"
+    >
+      <h2 className="text-center font-serif text-[48px] whitespace-nowrap text-fg italic">
+        Intuitive pricing
+      </h2>
+    </Reveal>
 
-      <dl className="mt-12 md:mt-14">
-        {Object.values(BILLING_PRODUCTS).map((product, index) => (
-          <Reveal
-            className="flex flex-wrap items-baseline gap-x-6 gap-y-2 border-t border-border/60 px-1 py-7 last:border-b"
-            delay={index * 0.07}
-            key={product.name}
-          >
-            <dt className="w-37.5 shrink-0 text-body-lg text-fg">
-              {product.name}
-            </dt>
-            <dd className="min-w-60 flex-1 text-body leading-[1.73] text-muted-fg">
-              {product.description}
-            </dd>
-            <dd className="ml-auto text-body-lg text-fg tabular-nums">
-              ${product.monthlyPriceCents / 100}
-            </dd>
-            <dd className="w-16 text-right text-body text-muted-fg/70">
-              / month
-            </dd>
-          </Reveal>
-        ))}
-      </dl>
+    <div className="flex w-[1363px] flex-col items-center justify-center overflow-hidden p-[10px]">
+      <div className="h-px w-full shrink-0 bg-fg/40" />
+      {tiers.map((tier, index) => (
+        <Reveal className="w-full" delay={index * 0.07} key={tier.name}>
+          <div className="flex h-[159px] w-full items-start overflow-hidden">
+            <div className="flex h-full w-[332px] shrink-0 items-center justify-center overflow-hidden px-[166px] py-[46px]">
+              <p className="shrink-0 font-serif text-[24px] whitespace-nowrap text-fg italic">
+                {tier.name}
+              </p>
+            </div>
+            <div className="flex h-full min-w-px flex-1 items-center justify-center overflow-hidden px-[166px] py-[46px]">
+              <p className="shrink-0 text-center font-serif whitespace-nowrap text-fg italic">
+                <span className="text-[24px]">{tier.summary}</span>
+                {tier.credits === null ? null : (
+                  <>
+                    <br />
+                    <span className="text-[20px]">{tier.credits}</span>
+                  </>
+                )}
+              </p>
+            </div>
+            <div className="flex h-[159px] w-[332px] shrink-0 items-center justify-center overflow-hidden px-[166px] py-[46px]">
+              <p className="shrink-0 font-serif text-[24px] whitespace-nowrap text-fg italic">
+                {tier.price}
+              </p>
+            </div>
+          </div>
+          <div className="h-px w-full shrink-0 bg-fg/40" />
+        </Reveal>
+      ))}
+
+      <Reveal className="flex items-start overflow-hidden p-[10px]" delay={0.1}>
+        <p className="shrink-0 text-center font-serif text-[20px] whitespace-nowrap text-fg italic">
+          Managed mail starts at $0.20 per 1,000 messages. AI usage is billed at
+          model cost plus 15%.
+        </p>
+      </Reveal>
     </div>
-  </section>
+  </>
 );
 
 const Closing = () => (
@@ -155,22 +156,17 @@ const Closing = () => (
 
 export const HomeSections = () => (
   <>
-    <div className="dark relative overflow-hidden bg-black pt-24 pb-28 md:pt-32 md:pb-36">
-      <HomeWorkspaceDitherBackground
-        animate
-        className="opacity-30 dark:opacity-25"
-        dotRgb="210, 216, 230"
-        falloff={1}
-        pattern="dual-foci"
-        strength={1.5}
-      />
+    <div className="theme-light relative overflow-hidden bg-bg-surface">
+      <SoftGradientField />
 
-      <div className="relative z-10 text-fg">
-        {features.map((feature) => (
-          <FeatureSection key={feature.id} {...feature} />
-        ))}
-        <Pricing />
-      </div>
+      <DesignFrame>
+        <div className="relative z-10 flex w-full flex-col items-center gap-[112px] py-[200px]">
+          <ConnectSection />
+          <AiSection />
+          <ExperienceSection />
+          <Pricing />
+        </div>
+      </DesignFrame>
     </div>
     <Closing />
   </>

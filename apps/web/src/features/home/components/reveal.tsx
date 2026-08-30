@@ -59,6 +59,31 @@ export const Reveal = <T extends ElementType = "div">({
   );
 };
 
+export const RevealChild = <T extends ElementType = "div">({
+  as,
+  children,
+  delay = 0,
+  ...props
+}: RevealProps<T>) => {
+  const reduced = useReducedMotion();
+  const variants = useEntrance(reduced);
+  const Component = m.create(as ?? "div");
+
+  return (
+    <Component
+      {...props}
+      transition={{
+        delay,
+        duration: reduced === true ? 0.3 : 0.7,
+        ease: EASE,
+      }}
+      variants={variants}
+    >
+      {children}
+    </Component>
+  );
+};
+
 /** Same entrance, but on mount rather than on scroll. For above-the-fold content. */
 export const Entrance = <T extends ElementType = "div">({
   as,
