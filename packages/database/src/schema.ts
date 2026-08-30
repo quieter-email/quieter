@@ -362,6 +362,27 @@ export const verification = pgTable("verification", {
   value: text("value").notNull(),
 });
 
+export const deviceCode = pgTable(
+  "deviceCode",
+  {
+    clientId: text("clientId"),
+    deviceCode: text("deviceCode").notNull(),
+    expiresAt: timestamp("expiresAt").notNull(),
+    id: text("id").primaryKey(),
+    lastPolledAt: timestamp("lastPolledAt"),
+    pollingInterval: integer("pollingInterval"),
+    scope: text("scope"),
+    status: text("status").notNull(),
+    userCode: text("userCode").notNull(),
+    userId: text("userId").references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    unique("device_code_device_code_unique").on(table.deviceCode),
+    unique("device_code_user_code_unique").on(table.userCode),
+    index("device_code_user_id_idx").on(table.userId),
+  ]
+);
+
 export const passkey = pgTable(
   "passkey",
   {
@@ -2623,6 +2644,7 @@ export const tables = {
   chatMessage,
   connectorCredential,
   connectorOAuthState,
+  deviceCode,
   gmailAutoLabelEvent,
   gmailAutoLabelSettings,
   gmailCredential,
@@ -2788,6 +2810,13 @@ export const authRelations = defineRelations(tables, (r) => ({
     user: r.one.user({
       from: r.connectorOAuthState.userId,
       optional: false,
+      to: r.user.id,
+    }),
+  },
+  deviceCode: {
+    user: r.one.user({
+      from: r.deviceCode.userId,
+      optional: true,
       to: r.user.id,
     }),
   },
@@ -3586,6 +3615,10 @@ export const authRelations = defineRelations(tables, (r) => ({
     createdMailboxActions: r.many.mailboxAction({
       from: r.user.id,
       to: r.mailboxAction.createdByUserId,
+    }),
+    deviceCodes: r.many.deviceCode({
+      from: r.user.id,
+      to: r.deviceCode.userId,
     }),
     gmailOAuthStates: r.many.gmailOAuthState({
       from: r.user.id,

@@ -1,0 +1,38 @@
+[workspace]
+members = ["."]
+resolver = "2"
+
+[package]
+name = "quieter-desktop"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Experimental native Quieter mail client built with GPUI"
+
+[dependencies]
+anyhow = "1.0.100"
+chrono = { version = "0.4.42", default-features = false, features = ["clock", "serde"] }
+gpui = "0.2.2"
+gpui-component = { version = "0.5.1", default-features = false }
+keyring = "4.1.6"
+open = "5.4.2"
+reqwest = { version = "0.13.4", default-features = false, features = ["blocking", "json", "query", "rustls", "system-proxy"] }
+rust-embed = "8.12.0"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+thiserror = "2.0.17"
+url = "2.5.7"
+uuid = { version = "1.18.1", features = ["v4"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "warn"
+pedantic = "warn"
+
