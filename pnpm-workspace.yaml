@@ -121,6 +121,8 @@ minimumReleaseAgeExclude:
 allowBuilds:
   "@prisma/engines": true
   "@sentry/cli": true
+  "@vgpu/adapter-node": false
   esbuild: true
   prisma: true
+  webgpu: false
   workerd: true

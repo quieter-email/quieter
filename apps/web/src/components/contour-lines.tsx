@@ -1,371 +1,311 @@
 import { useEffect, useRef } from "react";
+import { effect, frame, init, surface } from "vgpu";
 
 const FRAME_INTERVAL_MS = 1000 / 30;
 
-const VERTEX_SHADER_SOURCE = `
-  attribute vec2 aPosition;
-
-  void main() {
-    gl_Position = vec4(aPosition, 0.0, 1.0);
-  }
-`;
-
 const FRAGMENT_SHADER_SOURCE = `
-  precision highp float;
+  struct Params {
+    resolution: vec2f,
+    time: f32,
+  }
 
-  uniform vec2 uResolution;
-  uniform float uTime;
+  @group(0) @binding(0) var<uniform> params: Params;
 
-  // Simplex 3D noise
+  fn mod289_4(x: vec4f) -> vec4f {
+    return x - floor(x * (1.0 / 289.0)) * 289.0;
+  }
 
-  vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
-  vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
-  vec4 permute(vec4 x) { return mod289(((x * 34.0) + 1.0) * x); }
-  vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+  fn mod289_3(x: vec3f) -> vec3f {
+    return x - floor(x * (1.0 / 289.0)) * 289.0;
+  }
 
-  float snoise(vec3 v) {
-    const vec2 c = vec2(1.0 / 6.0, 1.0 / 3.0);
-    const vec4 d = vec4(0.0, 0.5, 1.0, 2.0);
+  fn permute(x: vec4f) -> vec4f {
+    return mod289_4(((x * 34.0) + vec4f(1.0)) * x);
+  }
 
-    vec3 i = floor(v + dot(v, c.yyy));
-    vec3 x0 = v - i + dot(i, c.xxx);
-    vec3 g = step(x0.yzx, x0.xyz);
-    vec3 l = 1.0 - g;
-    vec3 i1 = min(g.xyz, l.zxy);
-    vec3 i2 = max(g.xyz, l.zxy);
-    vec3 x1 = x0 - i1 + c.xxx;
-    vec3 x2 = x0 - i2 + c.yyy;
-    vec3 x3 = x0 - d.yyy;
+  fn taylor_inv_sqrt(r: vec4f) -> vec4f {
+    return vec4f(1.79284291400159) - 0.85373472095314 * r;
+  }
 
-    i = mod289(i);
-    vec4 p = permute(
-      permute(permute(i.z + vec4(0.0, i1.z, i2.z, 1.0)) + i.y + vec4(0.0, i1.y, i2.y, 1.0)) +
-        i.x + vec4(0.0, i1.x, i2.x, 1.0)
+  fn snoise(v: vec3f) -> f32 {
+    let c = vec2f(1.0 / 6.0, 1.0 / 3.0);
+    let d = vec4f(0.0, 0.5, 1.0, 2.0);
+
+    var i = floor(v + dot(v, c.yyy));
+    let x0 = v - i + dot(i, c.xxx);
+    let g = step(x0.yzx, x0.xyz);
+    let l = vec3f(1.0) - g;
+    let i1 = min(g.xyz, l.zxy);
+    let i2 = max(g.xyz, l.zxy);
+    let x1 = x0 - i1 + c.xxx;
+    let x2 = x0 - i2 + c.yyy;
+    let x3 = x0 - d.yyy;
+
+    i = mod289_3(i);
+    let p = permute(
+      permute(
+        permute(vec4f(i.z) + vec4f(0.0, i1.z, i2.z, 1.0)) +
+          vec4f(i.y) + vec4f(0.0, i1.y, i2.y, 1.0)
+      ) + vec4f(i.x) + vec4f(0.0, i1.x, i2.x, 1.0)
     );
 
-    float n = 0.142857142857;
-    vec3 ns = n * d.wyz - d.xzx;
-    vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
-    vec4 x_ = floor(j * ns.z);
-    vec4 y_ = floor(j - 7.0 * x_);
-    vec4 xn = x_ * ns.x + ns.yyyy;
-    vec4 yn = y_ * ns.x + ns.yyyy;
-    vec4 h = 1.0 - abs(xn) - abs(yn);
-    vec4 b0 = vec4(xn.xy, yn.xy);
-    vec4 b1 = vec4(xn.zw, yn.zw);
-    vec4 s0 = floor(b0) * 2.0 + 1.0;
-    vec4 s1 = floor(b1) * 2.0 + 1.0;
-    vec4 sh = -step(h, vec4(0.0));
-    vec4 a0 = b0.xzyw + s0.xzyw * sh.xxyy;
-    vec4 a1 = b1.xzyw + s1.xzyw * sh.zzww;
-    vec3 p0 = vec3(a0.xy, h.x);
-    vec3 p1 = vec3(a0.zw, h.y);
-    vec3 p2 = vec3(a1.xy, h.z);
-    vec3 p3 = vec3(a1.zw, h.w);
-    vec4 norm = taylorInvSqrt(vec4(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3)));
+    let n = 0.142857142857;
+    let ns = n * d.wyz - d.xzx;
+    let j = p - 49.0 * floor(p * ns.z * ns.z);
+    let x_ = floor(j * ns.z);
+    let y_ = floor(j - 7.0 * x_);
+    let xn = x_ * ns.x + ns.yyyy;
+    let yn = y_ * ns.x + ns.yyyy;
+    let h = vec4f(1.0) - abs(xn) - abs(yn);
+    let b0 = vec4f(xn.xy, yn.xy);
+    let b1 = vec4f(xn.zw, yn.zw);
+    let s0 = floor(b0) * 2.0 + vec4f(1.0);
+    let s1 = floor(b1) * 2.0 + vec4f(1.0);
+    let sh = -step(h, vec4f(0.0));
+    let a0 = b0.xzyw + s0.xzyw * sh.xxyy;
+    let a1 = b1.xzyw + s1.xzyw * sh.zzww;
+    var p0 = vec3f(a0.xy, h.x);
+    var p1 = vec3f(a0.zw, h.y);
+    var p2 = vec3f(a1.xy, h.z);
+    var p3 = vec3f(a1.zw, h.w);
+    let norm = taylor_inv_sqrt(
+      vec4f(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3))
+    );
 
     p0 *= norm.x;
     p1 *= norm.y;
     p2 *= norm.z;
     p3 *= norm.w;
 
-    vec4 m = max(0.6 - vec4(dot(x0, x0), dot(x1, x1), dot(x2, x2), dot(x3, x3)), 0.0);
+    var m = max(
+      vec4f(0.6) - vec4f(dot(x0, x0), dot(x1, x1), dot(x2, x2), dot(x3, x3)),
+      vec4f(0.0)
+    );
     m *= m;
 
-    return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
+    return 42.0 * dot(
+      m * m,
+      vec4f(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3))
+    );
   }
 
-  // Per-cell hash
-
-  float hash21(vec2 p) {
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+  fn hash21(p: vec2f) -> f32 {
+    return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453);
   }
 
-  // HSV to RGB
+  fn hsv2rgb(h: f32, s: f32, v: f32) -> vec3f {
+    let hh = fract(h) * 6.0;
+    let f = fract(hh);
+    let p = v * (1.0 - s);
+    let q = v * (1.0 - s * f);
+    let t = v * (1.0 - s * (1.0 - f));
 
-  vec3 hsv2rgb(float h, float s, float v) {
-    float hh = fract(h) * 6.0;
-    float f = fract(hh);
-    float p = v * (1.0 - s);
-    float q = v * (1.0 - s * f);
-    float t = v * (1.0 - s * (1.0 - f));
-
-    if (hh < 1.0) return vec3(v, t, p);
-    if (hh < 2.0) return vec3(q, v, p);
-    if (hh < 3.0) return vec3(p, v, t);
-    if (hh < 4.0) return vec3(p, q, v);
-    if (hh < 5.0) return vec3(t, p, v);
-    return vec3(v, p, q);
+    if (hh < 1.0) {
+      return vec3f(v, t, p);
+    }
+    if (hh < 2.0) {
+      return vec3f(q, v, p);
+    }
+    if (hh < 3.0) {
+      return vec3f(p, v, t);
+    }
+    if (hh < 4.0) {
+      return vec3f(p, q, v);
+    }
+    if (hh < 5.0) {
+      return vec3f(t, p, v);
+    }
+    return vec3f(v, p, q);
   }
 
-  // Contour color from band and hue (outer = dark/saturated, inner = bright/desaturated)
+  fn contour_color(band: f32, hue: f32) -> vec3f {
+    if (band < 0.5) {
+      return vec3f(0.0);
+    }
 
-  vec3 contourColor(float band, float hue) {
-    if (band < 0.5) return vec3(0.0);
-    float t = band / 7.0;
-    float sat = 1.0 - pow(t, 0.7) * 0.88;
-    float val = pow(t, 1.5) * 0.95 + 0.04;
+    let t = band / 7.0;
+    let sat = 1.0 - pow(t, 0.7) * 0.88;
+    let val = pow(t, 1.5) * 0.95 + 0.04;
     return hsv2rgb(hue + t * 0.08, sat, val);
   }
 
-  void main() {
-    float time = uTime;
+  @fragment
+  fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
+    let frag_coord = vec2f(position.x, params.resolution.y - position.y);
+    let cell_size = 4.0;
+    let cell = floor(frag_coord / cell_size);
+    let cell_center = (cell + vec2f(0.5)) * cell_size;
+    let half_diag = cell_size * 0.707;
+    let dist = length(frag_coord - cell_center) / half_diag;
 
-    // Halftone cell grid
-    float cellSize = 4.0;
-    vec2 cell = floor(gl_FragCoord.xy / cellSize);
-    vec2 cellCenter = (cell + 0.5) * cellSize;
-    float halfDiag = cellSize * 0.707;
-    float dist = length(gl_FragCoord.xy - cellCenter) / halfDiag;
+    let max_dim = max(params.resolution.x, params.resolution.y);
+    let norm_pos = cell_center / max_dim;
 
-    float maxDim = max(uResolution.x, uResolution.y);
-    vec2 normPos = cellCenter / maxDim;
+    let wx = snoise(vec3f(norm_pos * 1.0 + vec2f(100.0), params.time * 0.008));
+    let wy = snoise(vec3f(norm_pos * 1.0 + vec2f(200.0), params.time * 0.006));
+    let warped = norm_pos + vec2f(wx, wy) * 0.18;
 
-    // Domain warping
-    float wx = snoise(vec3(normPos * 1.0 + 100.0, time * 0.008));
-    float wy = snoise(vec3(normPos * 1.0 + 200.0, time * 0.006));
-    vec2 warped = normPos + vec2(wx, wy) * 0.18;
+    let n1 = snoise(vec3f(warped * 1.1, params.time * 0.010));
+    let n2 = snoise(vec3f(norm_pos * 0.55 + vec2f(50.0), params.time * 0.007 + 10.0));
+    let noise_val = (n1 * 0.55 + n2 * 0.45) * 0.5 + 0.5;
 
-    // Noise field
-    float n1 = snoise(vec3(warped * 1.1, time * 0.010));
-    float n2 = snoise(vec3(normPos * 0.55 + 50.0, time * 0.007 + 10.0));
-    float noiseVal = (n1 * 0.55 + n2 * 0.45) * 0.5 + 0.5;
+    let hue_n1 = snoise(vec3f(norm_pos * 0.9 + vec2f(300.0), params.time * 0.005));
+    let hue_n2 = snoise(vec3f(norm_pos * 0.5 + vec2f(450.0), params.time * 0.004 + 30.0));
+    let hue_raw = (hue_n1 * 0.6 + hue_n2 * 0.4) * 0.5 + 0.5;
+    let hue = mix(0.75, 1.08, hue_raw);
 
-    // Hue field (orange to purple-blue, HSV 0.75 to 1.08)
-    float hueN1 = snoise(vec3(normPos * 0.9 + 300.0, time * 0.005));
-    float hueN2 = snoise(vec3(normPos * 0.5 + 450.0, time * 0.004 + 30.0));
-    float hueRaw = (hueN1 * 0.6 + hueN2 * 0.4) * 0.5 + 0.5;
-    float hue = mix(0.75, 1.08, hueRaw);
+    let scaled = noise_val * 5.0;
+    let edge_dist = min(fract(scaled), 1.0 - fract(scaled));
+    let edge_intensity = 1.0 - smoothstep(0.0, 0.26, edge_dist);
+    let band_pos = pow(edge_intensity, 0.7) * 7.0;
+    let lo = floor(band_pos);
+    let hi = min(lo + 1.0, 7.0);
+    let band_fraction = band_pos - lo;
+    let lo_color = contour_color(lo, hue);
+    let hi_color = contour_color(hi, hue);
+    let jitter = (hash21(cell) - 0.5) * 0.35;
+    let threshold = clamp(band_fraction + jitter, 0.0, 1.0);
+    let dot_radius = threshold * 1.42;
+    var out_color = lo_color;
+    if (dist < dot_radius) {
+      out_color = hi_color;
+    }
 
-    // Contour edges: color only near band boundaries, black elsewhere
-    float numContours = 5.0;
-    float scaled = noiseVal * numContours;
-    float edgeDist = min(fract(scaled), 1.0 - fract(scaled));
-
-    // Edge ribbon width (smaller = more black)
-    float edgeWidth = 0.26;
-    float edgeIntensity = 1.0 - smoothstep(0.0, edgeWidth, edgeDist);
-
-    // Map edge intensity to discrete color bands
-    float bandPos = pow(edgeIntensity, 0.7) * 7.0;
-    float lo = floor(bandPos);
-    float hi = min(lo + 1.0, 7.0);
-    float frac = bandPos - lo;
-
-    vec3 loCol = contourColor(lo, hue);
-    vec3 hiCol = contourColor(hi, hue);
-
-    // Per-cell jitter for organic edges
-    float jitter = (hash21(cell) - 0.5) * 0.35;
-    float threshold = clamp(frac + jitter, 0.0, 1.0);
-
-    // Halftone circle dithering between colors
-    float dotRadius = threshold * 1.42;
-    vec3 outColor = (dist < dotRadius) ? hiCol : loCol;
-
-    gl_FragColor = vec4(outColor, 1.0);
+    return vec4f(out_color, 1.0);
   }
 `;
-
-const createShader = (
-  gl: WebGLRenderingContext,
-  type: number,
-  source: string
-) => {
-  const shader = gl.createShader(type);
-
-  if (!shader) {
-    return null;
-  }
-
-  gl.shaderSource(shader, source);
-  gl.compileShader(shader);
-
-  if (gl.getShaderParameter(shader, gl.COMPILE_STATUS) !== true) {
-    gl.deleteShader(shader);
-    return null;
-  }
-
-  return shader;
-};
-
-const createProgram = (gl: WebGLRenderingContext) => {
-  const vertexShader = createShader(gl, gl.VERTEX_SHADER, VERTEX_SHADER_SOURCE);
-  const fragmentShader = createShader(
-    gl,
-    gl.FRAGMENT_SHADER,
-    FRAGMENT_SHADER_SOURCE
-  );
-
-  if (vertexShader === null || fragmentShader === null) {
-    if (vertexShader !== null) {
-      gl.deleteShader(vertexShader);
-    }
-
-    if (fragmentShader !== null) {
-      gl.deleteShader(fragmentShader);
-    }
-
-    return null;
-  }
-
-  const program = gl.createProgram();
-
-  if (program === null) {
-    gl.deleteShader(vertexShader);
-    gl.deleteShader(fragmentShader);
-    return null;
-  }
-
-  gl.attachShader(program, vertexShader);
-  gl.attachShader(program, fragmentShader);
-  gl.linkProgram(program);
-  gl.deleteShader(vertexShader);
-  gl.deleteShader(fragmentShader);
-
-  if (gl.getProgramParameter(program, gl.LINK_STATUS) !== true) {
-    gl.deleteProgram(program);
-    return null;
-  }
-
-  return program;
-};
 
 export const ContourLines = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  useEffect((): (() => void) | undefined => {
+  useEffect(() => {
     const canvas = canvasRef.current;
 
     if (!canvas) {
       return;
     }
 
-    const gl = canvas.getContext("webgl", {
-      alpha: false,
-      antialias: false,
-      depth: false,
-      premultipliedAlpha: false,
-      preserveDrawingBuffer: false,
-      stencil: false,
-    });
-
-    if (!gl) {
-      return;
-    }
-    const activateProgram = gl.useProgram.bind(gl);
-
-    const program = createProgram(gl);
-    const positionBuffer = gl.createBuffer();
-
-    if (program === null || positionBuffer === null) {
-      return;
-    }
-
-    const positionLocation = gl.getAttribLocation(program, "aPosition");
-    const resolutionLocation = gl.getUniformLocation(program, "uResolution");
-    const timeLocation = gl.getUniformLocation(program, "uTime");
-
-    if (positionLocation === -1 || !resolutionLocation || !timeLocation) {
-      gl.deleteBuffer(positionBuffer);
-      gl.deleteProgram(program);
-      return;
-    }
-
+    let disposed = false;
     let raf = 0;
-    let width = 1;
-    let height = 1;
-    let dpr = 1;
-    let lastRenderTime = -FRAME_INTERVAL_MS;
-    const startedAt = performance.now();
+    let gpu: Awaited<ReturnType<typeof init>> | undefined;
+    let canvasSurface: ReturnType<typeof surface> | undefined;
+    let removeResizeListener: (() => void) | undefined;
+    let removeVisibilityListener: (() => void) | undefined;
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-    gl.bufferData(
-      gl.ARRAY_BUFFER,
-      new Float32Array([-1, -1, 3, -1, -1, 3]),
-      gl.STATIC_DRAW
-    );
-    activateProgram(program);
-    gl.enableVertexAttribArray(positionLocation);
-    gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
-    gl.disable(gl.BLEND);
-    gl.clearColor(0, 0, 0, 1);
+    void (async () => {
+      try {
+        const initializedGpu = await init();
 
-    const prefersReducedMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)"
-    ).matches;
+        if (disposed) {
+          initializedGpu.dispose();
+          return;
+        }
 
-    const resize = () => {
-      const rect = canvas.getBoundingClientRect();
-      const nextDpr = window.devicePixelRatio || 1;
-      const nextWidth = Math.max(1, Math.ceil(rect.width * nextDpr));
-      const nextHeight = Math.max(1, Math.ceil(rect.height * nextDpr));
+        gpu = initializedGpu;
+        const activeSurface = surface(initializedGpu, canvas, { dpr: [1, 2] });
+        canvasSurface = activeSurface;
 
-      if (nextWidth === width && nextHeight === height && nextDpr === dpr) {
-        return;
+        const contourEffect = effect(initializedGpu, FRAGMENT_SHADER_SOURCE, {
+          label: "contour-lines",
+          set: {
+            params: {
+              resolution: activeSurface.size,
+              time: 0,
+            },
+          },
+        });
+
+        let compilation: ReturnType<typeof contourEffect.compile> | undefined;
+        frame(initializedGpu, () => {
+          compilation = contourEffect.compile(activeSurface);
+        });
+        if (!compilation) {
+          throw new Error("Failed to start contour pipeline compilation");
+        }
+        await compilation;
+
+        if (disposed) {
+          return;
+        }
+
+        const prefersReducedMotion = window.matchMedia(
+          "(prefers-reduced-motion: reduce)"
+        ).matches;
+        const startedAt = performance.now();
+        let lastRenderTime = -FRAME_INTERVAL_MS;
+
+        const renderFrame = (time: number) => {
+          contourEffect.set({
+            params: {
+              resolution: activeSurface.size,
+              time,
+            },
+          });
+          frame(initializedGpu, (currentFrame) => {
+            currentFrame.pass(activeSurface, contourEffect);
+          });
+        };
+
+        const render = (timeMs: number) => {
+          if (timeMs - lastRenderTime >= FRAME_INTERVAL_MS) {
+            lastRenderTime = timeMs;
+            renderFrame((timeMs - startedAt) * 0.001);
+          }
+
+          raf = requestAnimationFrame(render);
+        };
+
+        const handleVisibilityChange = () => {
+          if (document.hidden) {
+            cancelAnimationFrame(raf);
+            raf = 0;
+            return;
+          }
+
+          lastRenderTime = -FRAME_INTERVAL_MS;
+          raf = requestAnimationFrame(render);
+        };
+
+        removeResizeListener = activeSurface.onResize(() => {
+          lastRenderTime = -FRAME_INTERVAL_MS;
+
+          if (prefersReducedMotion) {
+            renderFrame(0);
+          }
+        });
+
+        if (prefersReducedMotion) {
+          renderFrame(0);
+          return;
+        }
+
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        removeVisibilityListener = () => {
+          document.removeEventListener(
+            "visibilitychange",
+            handleVisibilityChange
+          );
+        };
+
+        if (!document.hidden) {
+          raf = requestAnimationFrame(render);
+        }
+      } catch {
+        canvasSurface?.dispose();
+        gpu?.dispose();
+        canvasSurface = undefined;
+        gpu = undefined;
       }
+    })();
 
-      width = nextWidth;
-      height = nextHeight;
-      dpr = nextDpr;
-      canvas.width = width;
-      canvas.height = height;
-      gl.viewport(0, 0, width, height);
-      gl.uniform2f(resolutionLocation, width, height);
-      lastRenderTime = -FRAME_INTERVAL_MS;
-
-      if (prefersReducedMotion) {
-        gl.uniform1f(timeLocation, 0);
-        gl.drawArrays(gl.TRIANGLES, 0, 3);
-      }
-    };
-
-    const render = (timeMs: number) => {
-      resize();
-
-      if (timeMs - lastRenderTime >= FRAME_INTERVAL_MS) {
-        lastRenderTime = timeMs;
-        gl.uniform1f(timeLocation, (timeMs - startedAt) * 0.001);
-        gl.drawArrays(gl.TRIANGLES, 0, 3);
-      }
-
-      raf = requestAnimationFrame(render);
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        cancelAnimationFrame(raf);
-        return;
-      }
-
-      lastRenderTime = -FRAME_INTERVAL_MS;
-      raf = requestAnimationFrame(render);
-    };
-
-    const resizeObserver = new ResizeObserver(resize);
-
-    resize();
-    resizeObserver.observe(canvas);
-
-    const cleanup = () => {
+    return () => {
+      disposed = true;
       cancelAnimationFrame(raf);
-      resizeObserver.disconnect();
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      gl.deleteBuffer(positionBuffer);
-      gl.deleteProgram(program);
+      removeResizeListener?.();
+      removeVisibilityListener?.();
+      canvasSurface?.dispose();
+      gpu?.dispose();
     };
-
-    if (prefersReducedMotion) {
-      gl.uniform1f(timeLocation, 0);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-
-      return cleanup;
-    }
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    raf = requestAnimationFrame(render);
-
-    return cleanup;
   }, []);
 
   return <canvas ref={canvasRef} className="absolute inset-0 z-0 size-full" />;
