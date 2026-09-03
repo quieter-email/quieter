@@ -18,15 +18,24 @@ export const createInfrastructure = async (input: {
   const webSecretBindings = Object.values(secretBindings);
 
   const context = createDeploymentContext(secretResources);
-  const actions = createMailboxActionResources(context);
-  const gmail = createGmailResources(context, secretResources);
+  const actions = createMailboxActionResources(
+    context,
+    secretBindings,
+    appDatabase
+  );
+  const gmail = createGmailResources(
+    context,
+    secretBindings,
+    secretResources,
+    appDatabase,
+    actions.mailboxActionQueue
+  );
   const mail = await createMailResources(context, secretResources);
   const web = createWeb(
     appDatabase,
     webSecretBindings,
     {
       GMAIL_LIVE_SYNC_URL: gmail.gmailLiveSyncUrl,
-      MAILBOX_ACTION_QUEUE_URL: actions.mailboxActionQueue.url,
       MAIL_BUCKET: mail.mailBucket.name,
       MAIL_RECEIPT_ROLE_ARN: mail.mailReceiptRole.arn,
       MAIL_RECEIPT_RULE_SET_NAME: mailReceiptRuleSetName,
@@ -52,8 +61,6 @@ export const createInfrastructure = async (input: {
     ).name,
     gmailLiveSyncUrl: gmail.gmailLiveSyncUrl,
     gmailPubSubIngressUrl: gmail.gmailPubSubIngressUrl,
-    gmailPubSubProcessTokenSecretName: gmail.gmailPubSubProcessTokenSecretName,
-    gmailPubSubProcessUrl: gmail.gmailPubSubProcessUrl,
     gmailPubSubPushAudience:
       context.gmailPubSubEnvironment.GMAIL_PUBSUB_PUSH_AUDIENCE || null,
     mailBucket: mail.mailBucket.name,
@@ -63,12 +70,10 @@ export const createInfrastructure = async (input: {
       mail.mailOutboundConfigurationSet.configurationSetName,
     mailOutboundFeedbackDeadLetterQueueUrl:
       mail.mailOutboundFeedbackDeadLetterQueue.url,
-    mailOutboundFeedbackQueueUrl: mail.mailOutboundFeedbackQueue.url,
     mailOutboundFeedbackTopicArn: mail.mailOutboundFeedbackTopic.arn,
     mailReceiptRoleArn: mail.mailReceiptRole.arn,
     mailReceiptRuleSetName,
     mailReceiptTopicArn: mail.mailReceiptTopic.arn,
-    mailboxActionQueueUrl: actions.mailboxActionQueue.url,
     stage: $app.stage,
     webUrl: web.url,
   };

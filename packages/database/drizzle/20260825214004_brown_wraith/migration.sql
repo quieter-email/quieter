@@ -1,0 +1,1 @@
+ALTER TABLE "mailboxActionRun" ADD COLUMN "dispatchedAt" timestamp;

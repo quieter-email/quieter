@@ -4,6 +4,8 @@
 
 ## Boundaries
 
+- Use Vite+ (`vp`) for all dependency installs, package management, and project script execution. Do not invoke the underlying package manager directly.
+- Manage credentials, tokens, encryption keys, and other sensitive configuration through SST Secret resources and linked secret bindings whenever the platform supports it. Do not deploy them as ordinary environment variables or Wrangler configuration values; test-only type-generation fixtures are exempt.
 - Do not make `packages/*` depend on `apps/*`.
 - Do not access the database from `apps/*` or UI code. Use `@quieter/orpc`.
 - Put shared components in `packages/ui`; app code consumes `@quieter/ui`.
