@@ -8,8 +8,11 @@ import {
   defaultSearchFilterModel,
   defaultUsefulDetailModel,
 } from "@quieter/ai/chat-models";
+import {
+  MAIL_SEARCH_QUERY_MAX_LENGTH,
+  parseMailSearchWithAi,
+} from "@quieter/ai/parse-mail-search";
 import type { ParsedMailSearch } from "@quieter/ai/parse-mail-search";
-import { MAIL_SEARCH_QUERY_MAX_LENGTH } from "@quieter/ai/parse-mail-search";
 import { reportAiUsage } from "@quieter/billing";
 import { db } from "@quieter/database/client";
 import { user, userAiContext } from "@quieter/database/schema";
@@ -258,8 +261,6 @@ export const aiRouter = {
 
       let parsed: ParsedMailSearch;
       try {
-        const { parseMailSearchWithAi } =
-          await import("@quieter/ai/parse-mail-search");
         parsed = await parseMailSearchWithAi({
           allowedIsValues:
             mailbox.provider === "managed"

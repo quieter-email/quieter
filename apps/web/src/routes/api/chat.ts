@@ -31,11 +31,11 @@ export const Route = createFileRoute("/api/chat")({
           return new Response("Invalid chat request body.", { status: 400 });
         }
 
+        const { ChatRequestError, createAiChatResponse } =
+          await import("@quieter/orpc/chat");
         try {
-          const { createAiChatResponse } = await import("@quieter/orpc/chat");
           return await createAiChatResponse({ body, request, userId });
         } catch (error) {
-          const { ChatRequestError } = await import("@quieter/orpc/chat");
           if (error instanceof ChatRequestError) {
             return new Response(error.message, {
               status: error.status,

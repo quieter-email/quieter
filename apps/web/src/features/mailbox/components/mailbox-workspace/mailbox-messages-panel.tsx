@@ -334,22 +334,24 @@ export const MailboxMessagesPanel = ({
         })}
         layout="cell"
       >
-        <MessageDetail
-          activeMailbox={activeMailbox}
-          currentUserEmail={currentUserEmail}
-          focusOnOpen={shouldFocusMessageView}
-          mailboxId={mailboxId}
-          mailboxProvider={mailboxProvider}
-          mailboxActions={mailboxActions}
-          onComposeDraftRequested={onComposeDraftRequested}
-          pendingActions={pendingActions}
-          isPending={isMessageRouteOpen && isLoadingEmptyMessages}
-          onBackToList={backToList}
-          onAutoFocusComplete={() => {
-            setShouldFocusMessageView(false);
-          }}
-          selectedMessage={selectedMessage}
-        />
+        {isMessageRouteOpen ? (
+          <MessageDetail
+            activeMailbox={activeMailbox}
+            currentUserEmail={currentUserEmail}
+            focusOnOpen={shouldFocusMessageView}
+            mailboxId={mailboxId}
+            mailboxProvider={mailboxProvider}
+            mailboxActions={mailboxActions}
+            onComposeDraftRequested={onComposeDraftRequested}
+            pendingActions={pendingActions}
+            isPending={isLoadingEmptyMessages}
+            onBackToList={backToList}
+            onAutoFocusComplete={() => {
+              setShouldFocusMessageView(false);
+            }}
+            selectedMessage={selectedMessage}
+          />
+        ) : null}
       </WorkspaceSection>
     </>
   );

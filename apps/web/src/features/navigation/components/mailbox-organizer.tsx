@@ -63,33 +63,37 @@ import { toastError } from "#/lib/error-toast";
 import { labelsQueryOptions } from "#/lib/gmail/labels-query";
 import {
   getManagedRulesQueryKey,
-  getManagedSavedViewsQueryKey,
   managedRulesQueryOptions,
-  managedSavedViewsQueryOptions,
 } from "#/lib/managed-mailbox-organization-query";
 import { orpc, rpc } from "#/lib/orpc";
+import {
+  getSavedViewsQueryKey,
+  savedViewsQueryOptions,
+} from "#/lib/saved-views-query";
 
 import { SidebarNavItem } from "./sidebar-nav-item";
 
-type ManagedMailboxOrganizerProps = {
+type MailboxOrganizerProps = {
   canManage: boolean;
   mailboxId: string;
   onSearch: (query: string) => void;
   searchQuery: string;
+  supportsRules: boolean;
+  supportsSharedViews: boolean;
 };
 
-type ManagedSavedView = RouterOutputs["mail"]["listManagedSavedViews"][number];
+type MailboxSavedView = RouterOutputs["mail"]["listSavedViews"][number];
 type EditingView = {
   color: MailboxLabelColor;
   name: string;
-  view: ManagedSavedView;
+  view: MailboxSavedView;
 };
 type SavedViewsSectionProps = {
   currentSearch: ReturnType<typeof parseStructuredSearchQuery>;
   emptyMessage: string;
   onSearch: (query: string) => void;
   title: string;
-  views: ManagedSavedView[];
+  views: MailboxSavedView[];
 };
 
 const getSearchFromStoredValue = (value: unknown) =>
@@ -227,11 +231,12 @@ const hasValidRuleInput = ({
   return true;
 };
 
-const useManagedMailboxOrganizerState = ({
+const useMailboxOrganizerState = ({
   canManage,
   mailboxId,
   searchQuery,
-}: ManagedMailboxOrganizerProps) => {
+  supportsRules,
+}: MailboxOrganizerProps) => {
   const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
   const [newViewColor, setNewViewColor] = useState<MailboxLabelColor>("gray");
@@ -271,13 +276,13 @@ const useManagedMailboxOrganizerState = ({
   const [pendingReorders, setPendingReorders] = useState<
     Partial<Record<ReorderScope, string>>
   >({});
-  const { data: viewsData } = useQuery(
-    managedSavedViewsQueryOptions(mailboxId)
-  );
+  const { data: viewsData } = useQuery(savedViewsQueryOptions(mailboxId));
   const { data: rulesData } = useQuery(
-    managedRulesQueryOptions(mailboxId, isOpen && canManage)
+    managedRulesQueryOptions(mailboxId, isOpen && canManage && supportsRules)
   );
-  const { data: labelsData } = useQuery(labelsQueryOptions(mailboxId, isOpen));
+  const { data: labelsData } = useQuery(
+    labelsQueryOptions(mailboxId, isOpen && supportsRules)
+  );
   const { data: backfillData } = useQuery({
     enabled: activeBackfillId !== null && activeBackfillId !== "",
     queryFn: async ({ signal }) =>
@@ -298,7 +303,7 @@ const useManagedMailboxOrganizerState = ({
 
   const invalidateViews = async () => {
     await queryClient.invalidateQueries({
-      queryKey: getManagedSavedViewsQueryKey(mailboxId),
+      queryKey: getSavedViewsQueryKey(mailboxId),
     });
   };
   const invalidateRules = async () => {
@@ -307,16 +312,16 @@ const useManagedMailboxOrganizerState = ({
     });
   };
   const createViewMutation = useMutation(
-    orpc.mail.createManagedSavedView.mutationOptions()
+    orpc.mail.createSavedView.mutationOptions()
   );
   const deleteViewMutation = useMutation(
-    orpc.mail.deleteManagedSavedView.mutationOptions()
+    orpc.mail.deleteSavedView.mutationOptions()
   );
   const updateViewMutation = useMutation(
-    orpc.mail.updateManagedSavedView.mutationOptions()
+    orpc.mail.updateSavedView.mutationOptions()
   );
   const reorderViewsMutation = useMutation(
-    orpc.mail.reorderManagedSavedViews.mutationOptions()
+    orpc.mail.reorderSavedViews.mutationOptions()
   );
   const createRuleMutation = useMutation(
     orpc.mail.createManagedRule.mutationOptions()
@@ -464,18 +469,16 @@ const useManagedMailboxOrganizerState = ({
   };
 };
 
-type ManagedMailboxOrganizerState = ReturnType<
-  typeof useManagedMailboxOrganizerState
->;
+type MailboxOrganizerState = ReturnType<typeof useMailboxOrganizerState>;
 
-const useManagedMailboxViewActions = ({
+const useMailboxViewActions = ({
   currentSearch,
   mailboxId,
   state,
 }: {
   currentSearch: ReturnType<typeof parseStructuredSearchQuery>;
   mailboxId: string;
-  state: ManagedMailboxOrganizerState;
+  state: MailboxOrganizerState;
 }) => {
   const {
     createViewMutation,
@@ -681,7 +684,7 @@ const useManagedMailboxRuleActions = ({
   state,
 }: {
   mailboxId: string;
-  state: ManagedMailboxOrganizerState;
+  state: MailboxOrganizerState;
 }) => {
   const {
     cancelBackfillMutation,
@@ -900,11 +903,9 @@ const useManagedMailboxRuleActions = ({
   };
 };
 
-const useManagedMailboxOrganizerController = (
-  props: ManagedMailboxOrganizerProps
-) => {
-  const state = useManagedMailboxOrganizerState(props);
-  const viewActions = useManagedMailboxViewActions({
+const useMailboxOrganizerController = (props: MailboxOrganizerProps) => {
+  const state = useMailboxOrganizerState(props);
+  const viewActions = useMailboxViewActions({
     currentSearch: state.currentSearch,
     mailboxId: props.mailboxId,
     state,
@@ -917,15 +918,13 @@ const useManagedMailboxOrganizerController = (
   return { ...state, ...viewActions, ...ruleActions };
 };
 
-type ManagedMailboxOrganizerController = ReturnType<
-  typeof useManagedMailboxOrganizerController
+type MailboxOrganizerController = ReturnType<
+  typeof useMailboxOrganizerController
 >;
-type ManagedMailboxOrganizerContentProps = ManagedMailboxOrganizerProps &
-  ManagedMailboxOrganizerController;
+type MailboxOrganizerContentProps = MailboxOrganizerProps &
+  MailboxOrganizerController;
 
-const ManagedMailboxOrganizerSidebar = (
-  props: ManagedMailboxOrganizerContentProps
-) => {
+const MailboxOrganizerSidebar = (props: MailboxOrganizerContentProps) => {
   const {
     currentSearch,
     onSearch,
@@ -934,29 +933,46 @@ const ManagedMailboxOrganizerSidebar = (
     setIsOpen,
     setRuleQueryDraft,
     sharedViews,
+    supportsRules,
+    supportsSharedViews,
+    views,
   } = props;
 
   return (
     <div className="flex items-center justify-between">
       <div className="min-w-0 flex-1">
-        <SavedViewsSection
-          currentSearch={currentSearch}
-          emptyMessage="No shared views."
-          onSearch={onSearch}
-          title="Views"
-          views={sharedViews}
-        />
-        <SavedViewsSection
-          currentSearch={currentSearch}
-          emptyMessage="No personal views."
-          onSearch={onSearch}
-          title="My views"
-          views={personalViews}
-        />
+        {supportsSharedViews ? (
+          <>
+            <SavedViewsSection
+              currentSearch={currentSearch}
+              emptyMessage="No shared views."
+              onSearch={onSearch}
+              title="Views"
+              views={sharedViews}
+            />
+            <SavedViewsSection
+              currentSearch={currentSearch}
+              emptyMessage="No personal views."
+              onSearch={onSearch}
+              title="My views"
+              views={personalViews}
+            />
+          </>
+        ) : (
+          <SavedViewsSection
+            currentSearch={currentSearch}
+            emptyMessage="No saved views yet."
+            onSearch={onSearch}
+            title="Views"
+            views={views}
+          />
+        )}
       </div>
-      <IconButtonTooltip label="Manage views and rules">
+      <IconButtonTooltip
+        label={supportsRules ? "Manage views and rules" : "Manage views"}
+      >
         <Button
-          aria-label="Manage views and rules"
+          aria-label={supportsRules ? "Manage views and rules" : "Manage views"}
           className="mt-4 size-6 self-start text-muted-fg hover:text-fg"
           onClick={() => {
             setRuleQueryDraft(searchQuery);
@@ -973,9 +989,7 @@ const ManagedMailboxOrganizerSidebar = (
   );
 };
 
-const ManagedMailboxSavedViewsPanel = (
-  props: ManagedMailboxOrganizerContentProps
-) => {
+const MailboxSavedViewsPanel = (props: MailboxOrganizerContentProps) => {
   const {
     canManage,
     createViewMutation,
@@ -992,6 +1006,7 @@ const ManagedMailboxSavedViewsPanel = (
     setEditingView,
     setNewViewColor,
     setViewName,
+    supportsSharedViews,
     updateViewMutation,
     viewName,
     views,
@@ -1025,7 +1040,7 @@ const ManagedMailboxSavedViewsPanel = (
           >
             Save mine
           </Button>
-          {canManage ? (
+          {canManage && supportsSharedViews ? (
             <Button
               disabled={!viewName.trim() || createViewMutation.isPending}
               onClick={() => void saveView(true)}
@@ -1075,9 +1090,11 @@ const ManagedMailboxSavedViewsPanel = (
               <span className="min-w-0 flex-1 truncate text-body">
                 {view.name}
               </span>
-              <span className="text-caption text-muted-fg">
-                {view.ownerUserId === null ? "Shared" : "Personal"}
-              </span>
+              {supportsSharedViews ? (
+                <span className="text-caption text-muted-fg">
+                  {view.ownerUserId === null ? "Shared" : "Personal"}
+                </span>
+              ) : null}
               {(view.ownerUserId !== null || canManage) && (
                 <IconButtonTooltip label={`Edit ${view.name}`}>
                   <Button
@@ -1275,9 +1292,7 @@ const ManagedMailboxSavedViewsPanel = (
   );
 };
 
-const ManagedRuleActionEditor = (
-  props: ManagedMailboxOrganizerContentProps
-) => {
+const ManagedRuleActionEditor = (props: MailboxOrganizerContentProps) => {
   const {
     ruleActionKind,
     ruleForwardIncludesAttachments,
@@ -1412,9 +1427,7 @@ const ManagedRuleActionEditor = (
   );
 };
 
-const ManagedRuleLabelsEditor = (
-  props: ManagedMailboxOrganizerContentProps
-) => {
+const ManagedRuleLabelsEditor = (props: MailboxOrganizerContentProps) => {
   const {
     labelsData,
     ruleActionKind,
@@ -1460,9 +1473,7 @@ const ManagedRuleLabelsEditor = (
   ) : null;
 };
 
-const ManagedRulePreviewActions = (
-  props: ManagedMailboxOrganizerContentProps
-) => {
+const ManagedRulePreviewActions = (props: MailboxOrganizerContentProps) => {
   const {
     createRuleMutation,
     editingRuleId,
@@ -1530,7 +1541,7 @@ const ManagedRulePreviewActions = (
   );
 };
 
-const ManagedRuleBuilder = (props: ManagedMailboxOrganizerContentProps) => {
+const ManagedRuleBuilder = (props: MailboxOrganizerContentProps) => {
   const {
     ruleMatchMode,
     ruleName,
@@ -1586,7 +1597,7 @@ const ManagedRuleBuilder = (props: ManagedMailboxOrganizerContentProps) => {
   );
 };
 type ManagedRule = RouterOutputs["mail"]["listManagedRules"][number];
-type ManagedRuleRowProps = ManagedMailboxOrganizerContentProps & {
+type ManagedRuleRowProps = MailboxOrganizerContentProps & {
   index: number;
   rule: ManagedRule;
   rules: ManagedRule[];
@@ -1860,7 +1871,7 @@ const ManagedRuleRow = (props: ManagedRuleRowProps) => {
   );
 };
 
-const ManagedRulesList = (props: ManagedMailboxOrganizerContentProps) => {
+const ManagedRulesList = (props: MailboxOrganizerContentProps) => {
   const { rulesData } = props;
 
   return (
@@ -1878,7 +1889,7 @@ const ManagedRulesList = (props: ManagedMailboxOrganizerContentProps) => {
   );
 };
 
-const ManagedRuleBackfill = (props: ManagedMailboxOrganizerContentProps) => {
+const ManagedRuleBackfill = (props: MailboxOrganizerContentProps) => {
   const { backfillData, cancelBackfill, cancelBackfillMutation } = props;
 
   return backfillData ? (
@@ -1915,9 +1926,7 @@ const ManagedRuleBackfill = (props: ManagedMailboxOrganizerContentProps) => {
   ) : null;
 };
 
-const ManagedMailboxRulesPanel = (
-  props: ManagedMailboxOrganizerContentProps
-) => {
+const ManagedMailboxRulesPanel = (props: MailboxOrganizerContentProps) => {
   const { canManage } = props;
 
   return (
@@ -1943,10 +1952,10 @@ const ManagedMailboxRulesPanel = (
     </section>
   );
 };
-const ManagedMailboxOrganizerFullPageDialog = (
-  props: ManagedMailboxOrganizerContentProps
+const MailboxOrganizerFullPageDialog = (
+  props: MailboxOrganizerContentProps
 ) => {
-  const { isOpen, setIsOpen } = props;
+  const { isOpen, setIsOpen, supportsRules } = props;
 
   return (
     <FullPageDialog onOpenChange={setIsOpen} open={isOpen}>
@@ -1960,9 +1969,13 @@ const ManagedMailboxOrganizerFullPageDialog = (
           <FullPageDialogTitle>Organize mailbox</FullPageDialogTitle>
         </FullPageDialogHeader>
         <FullPageDialogBody>
-          <div className="mx-auto grid w-full max-w-4xl gap-10 px-5 py-8 md:grid-cols-2">
-            <ManagedMailboxSavedViewsPanel {...props} />
-            <ManagedMailboxRulesPanel {...props} />
+          <div
+            className={cn("mx-auto grid w-full max-w-4xl gap-10 px-5 py-8", {
+              "md:grid-cols-2": supportsRules,
+            })}
+          >
+            <MailboxSavedViewsPanel {...props} />
+            {supportsRules ? <ManagedMailboxRulesPanel {...props} /> : null}
           </div>
         </FullPageDialogBody>
       </FullPageDialogContent>
@@ -1970,9 +1983,7 @@ const ManagedMailboxOrganizerFullPageDialog = (
   );
 };
 
-const ManagedMailboxSavedViewEditDialog = (
-  props: ManagedMailboxOrganizerContentProps
-) => {
+const MailboxSavedViewEditDialog = (props: MailboxOrganizerContentProps) => {
   const {
     editingView,
     editingViewUpdatePending,
@@ -2051,19 +2062,15 @@ const ManagedMailboxSavedViewEditDialog = (
   );
 };
 
-const ManagedMailboxOrganizerContent = (
-  props: ManagedMailboxOrganizerContentProps
-) => (
+const MailboxOrganizerContent = (props: MailboxOrganizerContentProps) => (
   <>
-    <ManagedMailboxOrganizerSidebar {...props} />
-    <ManagedMailboxOrganizerFullPageDialog {...props} />
-    <ManagedMailboxSavedViewEditDialog {...props} />
+    <MailboxOrganizerSidebar {...props} />
+    <MailboxOrganizerFullPageDialog {...props} />
+    <MailboxSavedViewEditDialog {...props} />
   </>
 );
 
-export const ManagedMailboxOrganizer = (
-  props: ManagedMailboxOrganizerProps
-) => {
-  const controller = useManagedMailboxOrganizerController(props);
-  return <ManagedMailboxOrganizerContent {...props} {...controller} />;
+export const MailboxOrganizer = (props: MailboxOrganizerProps) => {
+  const controller = useMailboxOrganizerController(props);
+  return <MailboxOrganizerContent {...props} {...controller} />;
 };

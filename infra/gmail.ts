@@ -240,7 +240,7 @@ export const createGmailResources = (
         environment: {
           GMAIL_PUBSUB_PROCESS_URL: gmailPubSubProcess.url,
         },
-        handler: "packages/cloudflare/src/worker.ts",
+        handler: "packages/cloudflare/src/queue-worker.ts",
         link: [gmailPubSubProcessToken],
         transform: {
           worker(args) {
