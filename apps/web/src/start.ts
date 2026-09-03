@@ -314,18 +314,9 @@ const markdownNegotiationMiddleware = createMiddleware().server(
  */
 const assetArchiveMiddleware = createMiddleware().server(
   async ({ next, request }) => {
-    const requestUrl = new URL(request.url);
-    if (
-      request.method !== "GET" ||
-      !requestUrl.pathname.startsWith("/assets/")
-    ) {
-      return await next();
-    }
-
-    const { readArchivedAsset } = await import("#/lib/asset-archive.server");
-    const archived = await readArchivedAsset(requestUrl.pathname);
-
-    return archived ?? (await next());
+    const { serveArchivedAssetRequest } =
+      await import("#/lib/asset-archive.server");
+    return await serveArchivedAssetRequest(request, async () => await next());
   }
 );
 

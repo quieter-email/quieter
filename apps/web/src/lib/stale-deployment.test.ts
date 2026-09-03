@@ -1,25 +1,35 @@
 import { afterEach, describe, expect, test, vi } from "vite-plus/test";
 
-import { detectNewDeployment } from "./stale-deployment";
+import {
+  detectNewDeployment,
+  installStaleDeploymentRecovery,
+} from "./stale-deployment";
 
 const currentBuildId = "build-current";
 
 type StubbedResponse =
   | "network-error"
+  | Response
   | { body: string; contentType: string; ok?: boolean };
 
 const stubBuildIdResponse = (stub: StubbedResponse) => {
   vi.stubGlobal("__QUIETER_BUILD_ID__", currentBuildId);
+  let response: Promise<Response>;
+  if (stub === "network-error") {
+    response = Promise.reject(new Error("offline"));
+  } else if (stub instanceof Response) {
+    response = Promise.resolve(stub);
+  } else {
+    response = Promise.resolve(
+      new Response(stub.body, {
+        headers: { "content-type": stub.contentType },
+        status: stub.ok === false ? 404 : 200,
+      })
+    );
+  }
   vi.stubGlobal(
     "fetch",
-    stub === "network-error"
-      ? vi.fn<() => Promise<Response>>().mockRejectedValue(new Error("offline"))
-      : vi.fn<() => Promise<Response>>().mockResolvedValue(
-          new Response(stub.body, {
-            headers: { "content-type": stub.contentType },
-            status: stub.ok === false ? 404 : 200,
-          })
-        )
+    vi.fn<() => Promise<Response>>().mockReturnValue(response)
   );
 };
 
@@ -71,5 +81,101 @@ describe(detectNewDeployment, () => {
     stubBuildIdResponse("network-error");
 
     await expect(detectNewDeployment()).resolves.toBeNull();
+  });
+
+  test("treats a failed response body read as unknown", async () => {
+    stubBuildIdResponse(
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.error(new Error("stream interrupted"));
+          },
+        }),
+        { headers: { "content-type": "text/plain" } }
+      )
+    );
+
+    await expect(detectNewDeployment()).resolves.toBeNull();
+  });
+});
+
+describe(installStaleDeploymentRecovery, () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  test("reloads after an initially unknown preload failure proves stale", async () => {
+    stubBuildIdResponse({ body: currentBuildId, contentType: "text/plain" });
+    await detectNewDeployment();
+    stubBuildIdResponse({ body: "build-next", contentType: "text/plain" });
+    const documentTarget = Object.assign(new EventTarget(), {
+      visibilityState: "hidden",
+    });
+    const storedValues = new Map<string, string>();
+    const reload = vi.fn<() => void>();
+    const windowTarget = Object.assign(new EventTarget(), {
+      location: { reload },
+      sessionStorage: {
+        getItem: (key: string) => storedValues.get(key) ?? null,
+        setItem: (key: string, value: string) => {
+          storedValues.set(key, value);
+        },
+      },
+    });
+    vi.stubGlobal("document", documentTarget);
+    vi.stubGlobal("window", windowTarget);
+    vi.mocked(fetch).mockClear();
+
+    installStaleDeploymentRecovery();
+    windowTarget.dispatchEvent(new Event("vite:preloadError"));
+    windowTarget.dispatchEvent(new Event("vite:preloadError"));
+
+    await vi.waitFor(() => {
+      expect(reload).toHaveBeenCalledOnce();
+    });
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  test("detects on visibility and reloads only once for that deployment", async () => {
+    stubBuildIdResponse({ body: currentBuildId, contentType: "text/plain" });
+    await detectNewDeployment();
+    stubBuildIdResponse({ body: "build-next", contentType: "text/plain" });
+    const documentTarget = Object.assign(new EventTarget(), {
+      visibilityState: "visible",
+    });
+    const storedValues = new Map<string, string>();
+    const reload = vi.fn<() => void>();
+    const windowTarget = Object.assign(new EventTarget(), {
+      location: { reload },
+      sessionStorage: {
+        getItem: (key: string) => storedValues.get(key) ?? null,
+        setItem: (key: string, value: string) => {
+          storedValues.set(key, value);
+        },
+      },
+    });
+    vi.stubGlobal("document", documentTarget);
+    vi.stubGlobal("window", windowTarget);
+    vi.mocked(fetch).mockClear();
+
+    installStaleDeploymentRecovery();
+    documentTarget.dispatchEvent(new Event("visibilitychange"));
+
+    await vi.waitFor(() => {
+      expect(fetch).toHaveBeenCalledOnce();
+    });
+    expect(reload).not.toHaveBeenCalled();
+
+    await vi.waitFor(() => {
+      windowTarget.dispatchEvent(
+        new Event("vite:preloadError", { cancelable: true })
+      );
+      expect(reload).toHaveBeenCalledOnce();
+    });
+    windowTarget.dispatchEvent(
+      new Event("vite:preloadError", { cancelable: true })
+    );
+
+    expect(reload).toHaveBeenCalledOnce();
   });
 });

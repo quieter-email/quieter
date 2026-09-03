@@ -31,6 +31,7 @@ const wranglerEntry = path.join(
   "wrangler.js"
 );
 const outputsPath = path.join(projectRoot, ".sst", "outputs.json");
+const buildIdPath = path.join(assetsDirectory, "build-id.txt");
 
 /** Served straight back to the browser, which rejects a module without one. */
 const contentTypes: Record<string, string> = {
@@ -91,6 +92,22 @@ if (unknownTypes.length > 0) {
   );
 }
 
+const buildIdFile = await fs.readFile(buildIdPath, "utf-8");
+const buildId = buildIdFile.trim();
+if (!/^[\w.-]{1,128}$/u.test(buildId)) {
+  throw new Error(
+    "The web build id is empty or contains unsupported characters."
+  );
+}
+const releaseMarker = `${bucket}/assets/releases/${buildId}.txt`;
+
+// A same-build workflow rerun is the recovery path after a partial upload.
+// Remove any prior marker first so it cannot certify this attempt prematurely.
+await runWrangler(
+  ["r2", "object", "delete", releaseMarker, "--remote"],
+  `previous release marker ${buildId}`
+);
+
 const queue = [...uploads];
 const uploadNext = async () => {
   let upload = queue.pop();
@@ -121,6 +138,21 @@ await Promise.all(
       await uploadNext();
     }
   )
+);
+
+await runWrangler(
+  [
+    "r2",
+    "object",
+    "put",
+    releaseMarker,
+    "--file",
+    buildIdPath,
+    "--content-type",
+    "text/plain; charset=utf-8",
+    "--remote",
+  ],
+  `release marker ${buildId}`
 );
 
 process.stdout.write(`Archived ${uploads.length} web assets to ${bucket}.\n`);

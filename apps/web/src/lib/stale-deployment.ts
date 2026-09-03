@@ -44,7 +44,12 @@ export const detectNewDeployment = async () => {
     return null;
   }
 
-  const body = await response.text();
+  let body: string;
+  try {
+    body = await response.text();
+  } catch {
+    return null;
+  }
   const deployedBuildId = body.trim();
   staleBuildId =
     deployedBuildId !== "" && deployedBuildId !== __QUIETER_BUILD_ID__
