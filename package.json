@@ -4,6 +4,7 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
+    "archive:web-assets": "node scripts/archive-web-assets.ts",
     "billing:sync-credit-usage-polar": "vp run @quieter/billing#credit-usage:sync",
     "billing:sync-polar": "vp run @quieter/billing#catalog:sync",
     "build": "vp run -r build",
@@ -22,7 +23,8 @@
     "env:doctor": "vp run @quieter/env#doctor",
     "generate:assets": "node scripts/generate-web-assets.ts",
     "prepare": "vp config --no-agent",
-    "sst": "node --env-file-if-exists=.env.local --env-file-if-exists=.env.sst.local scripts/run-sst.ts"
+    "sst": "node --env-file-if-exists=.env.local --env-file-if-exists=.env.sst.local scripts/run-sst.ts",
+    "verify:web-asset-archive": "node scripts/verify-web-asset-archive.ts"
   },
   "devDependencies": {
     "@quieter/cloudflare": "workspace:*",

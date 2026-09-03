@@ -5,6 +5,12 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      bootstrap_web_asset_archive:
+        description: Allow the one-time deployment that creates the web asset archive
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -31,6 +37,7 @@ jobs:
       id-token: write
     timeout-minutes: 35
     env:
+      QUIETER_BUILD_ID: ${{ github.sha }}-${{ github.run_id }}
       SST_STAGE: production
     steps:
       - name: Checkout
@@ -51,6 +58,13 @@ jobs:
         run: |
           vp run @quieter/observability#build
           vp run @quieter/sdk#build
+
+      # Once archive-aware releases are live, never replace one until its
+      # release marker proves its R2 upload completed.
+      - name: Verify current web asset archive
+        env:
+          QUIETER_ALLOW_WEB_ASSET_ARCHIVE_BOOTSTRAP: ${{ github.event_name == 'workflow_dispatch' && inputs.bootstrap_web_asset_archive }}
+        run: vp run verify:web-asset-archive
 
       - name: Configure production runtime secrets
         env:
@@ -109,6 +123,19 @@ jobs:
           VITE_QUIETER_PREVIEW_PERSONAS_ENABLED: ${{ vars.VITE_QUIETER_PREVIEW_PERSONAS_ENABLED }}
           VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN }}
         run: vp exec sst deploy --config sst.config.ts --stage "$SST_STAGE"
+
+      # Keeps this release's chunks reachable after the next deploy replaces
+      # the Worker asset manifest, so tabs opened before it keep loading.
+      - name: Archive web assets
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: vp run archive:web-assets
+
+      - name: Verify deployed web asset archive
+        env:
+          QUIETER_WEB_ASSET_ARCHIVE_VERIFY_MODE: strict
+        run: vp run verify:web-asset-archive
 
       - name: Rotate legacy Gmail credentials
         if: ${{ env.SST_STAGE == 'production' }}

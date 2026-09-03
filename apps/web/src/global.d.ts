@@ -1,3 +1,22 @@
+declare const __QUIETER_BUILD_ID__: string;
+
+/**
+ * Only the asset archive binding is declared. Pulling in the full Cloudflare
+ * Worker types would collide with the DOM lib this app is built against, and
+ * this is the one object binding the web Worker reaches for.
+ */
+declare module "cloudflare:workers" {
+  export const env: {
+    WebAssetArchive?: {
+      get: (key: string) => Promise<{
+        body: ReadableStream;
+        httpEtag: string;
+        writeHttpMetadata: (headers: Headers) => void;
+      } | null>;
+    };
+  };
+}
+
 declare module "*.css";
 declare module "*.css?url";
 declare module "@barkleapp/css-sanitizer" {

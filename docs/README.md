@@ -6,6 +6,7 @@
 - [Database safety](database-safety.md)
 - [Outbound mail feedback](outbound-mail-feedback.md)
 - [Deployment and operations](deployment.md)
+- [Mail platform reliability plan](mail-platform-reliability-plan.md)
 
 Public repository policies live at the root:
 

@@ -306,6 +306,20 @@ const markdownNegotiationMiddleware = createMiddleware().server(
   }
 );
 
+/**
+ * Serves chunks from previous releases that the current asset manifest has
+ * dropped, so tabs opened before a deploy keep loading instead of failing on
+ * their next lazy import. Runs before the site password gate because
+ * `/assets/` is already public.
+ */
+const assetArchiveMiddleware = createMiddleware().server(
+  async ({ next, request }) => {
+    const { serveArchivedAssetRequest } =
+      await import("#/lib/asset-archive.server");
+    return await serveArchivedAssetRequest(request, async () => await next());
+  }
+);
+
 const sitePasswordMiddleware = createMiddleware().server(
   async ({ next, request }) => {
     if (!isSitePasswordGateEnabled() || !hasSitePasswordConfigured()) {
@@ -387,6 +401,7 @@ export const startInstance = createStart(() => ({
   requestMiddleware: [
     ...(isSentryEnabled ? [sentryGlobalRequestMiddleware] : []),
     securityHeadersMiddleware,
+    assetArchiveMiddleware,
     wellKnownAgentSurfaceMiddleware,
     markdownNegotiationMiddleware,
     abuseProtectionMiddleware,
