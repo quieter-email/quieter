@@ -37,6 +37,7 @@ export const createPolarCreditUsageEvent = (input: {
   billableCostMicroCents: number;
   category: BillingUsageCategory;
   costMicroCents: number;
+  createdAt: Date;
   eventId: string;
   metadata: Record<string, string | number | boolean>;
 }) => ({
@@ -52,6 +53,7 @@ export const createPolarCreditUsageEvent = (input: {
   },
   name: BILLING_CREDIT_USAGE_EVENT_NAME,
   organizationId: getPolarApiOrganizationId(),
+  timestamp: input.createdAt,
 });
 
 const getBillingCreditUsageWithClient = async (
@@ -136,6 +138,7 @@ export const recordBillingCreditUsage = async (input: {
         billableCostMicroCents: billingCreditUsageEvent.billableCostMicroCents,
         category: billingCreditUsageEvent.category,
         costMicroCents: billingCreditUsageEvent.costMicroCents,
+        createdAt: billingCreditUsageEvent.createdAt,
         id: billingCreditUsageEvent.id,
         metadata: billingCreditUsageEvent.metadata,
         polarEventReportedAt: billingCreditUsageEvent.polarEventReportedAt,
@@ -149,6 +152,7 @@ export const recordBillingCreditUsage = async (input: {
         billableCostMicroCents: existingEvent.billableCostMicroCents,
         category: existingEvent.category,
         costMicroCents: existingEvent.costMicroCents,
+        createdAt: existingEvent.createdAt,
         eventId: existingEvent.id,
         metadata: existingEvent.metadata ?? {},
         polarEventReportedAt: existingEvent.polarEventReportedAt,
@@ -168,13 +172,14 @@ export const recordBillingCreditUsage = async (input: {
       usage.costMicroCents + input.costMicroCents - usage.creditAmountMicroCents
     );
     const billableCostMicroCents = billableAfter - billableBefore;
+    const createdAt = new Date();
     const [event] = await transaction
       .insert(billingCreditUsageEvent)
       .values({
         billableCostMicroCents,
         category: input.category,
         costMicroCents: input.costMicroCents,
-        createdAt: new Date(),
+        createdAt,
         dedupeKey: input.dedupeKey,
         id: crypto.randomUUID(),
         metadata: input.metadata ?? {},
@@ -190,6 +195,7 @@ export const recordBillingCreditUsage = async (input: {
       billableCostMicroCents: event === undefined ? 0 : billableCostMicroCents,
       category: input.category,
       costMicroCents: input.costMicroCents,
+      createdAt,
       eventId: event?.id ?? null,
       metadata: input.metadata ?? {},
       polarEventReportedAt: null,
@@ -211,6 +217,7 @@ export const recordBillingCreditUsage = async (input: {
           billableCostMicroCents: result.billableCostMicroCents,
           category: result.category,
           costMicroCents: result.costMicroCents,
+          createdAt: result.createdAt,
           eventId: result.eventId,
           metadata: result.metadata,
         }),
@@ -258,10 +265,11 @@ export const syncUnreportedBillingCreditUsage = async (
 ) => {
   const limit = input.limit ?? 100;
   const rows = await db
-    .select({
+    .selectDistinct({
       billableCostMicroCents: billingCreditUsageEvent.billableCostMicroCents,
       category: billingCreditUsageEvent.category,
       costMicroCents: billingCreditUsageEvent.costMicroCents,
+      createdAt: billingCreditUsageEvent.createdAt,
       eventId: billingCreditUsageEvent.id,
       metadata: billingCreditUsageEvent.metadata,
       organizationId: billingCreditUsageEvent.organizationId,
@@ -271,7 +279,12 @@ export const syncUnreportedBillingCreditUsage = async (
       billingSubscription,
       currentActiveSubscriptionUnreportedUsageFilter
     )
-    .where(unreportedPositiveCreditUsageFilter)
+    .where(
+      and(
+        unreportedPositiveCreditUsageFilter,
+        gt(billingSubscription.currentPeriodEnd, new Date())
+      )
+    )
     .orderBy(asc(billingCreditUsageEvent.createdAt))
     .limit(limit);
 
@@ -294,6 +307,7 @@ export const syncUnreportedBillingCreditUsage = async (
         billableCostMicroCents: row.billableCostMicroCents,
         category: row.category,
         costMicroCents: row.costMicroCents,
+        createdAt: row.createdAt,
         eventId: row.eventId,
         metadata: row.metadata ?? {},
       })

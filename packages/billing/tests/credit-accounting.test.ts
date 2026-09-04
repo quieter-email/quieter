@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 import {
   getBillingCreditUsage,
   recordBillingCreditUsage,
+  syncUnreportedBillingCreditUsage,
 } from "../src/credits";
 
 const mocks = vi.hoisted(() => ({
@@ -21,6 +22,7 @@ vi.mock(import("@quieter/database/client"), async (importOriginal) => {
     ...actual,
     db: Object.assign(actual.db, {
       select: database.select.bind(database),
+      selectDistinct: database.selectDistinct.bind(database),
       transaction: async <Result>(
         run: (transaction: typeof database) => Promise<Result>
       ) => await run(database),
@@ -111,5 +113,26 @@ describe("credit accounting with PostgreSQL numeric aggregates", () => {
         "2026-11-01T00:00:00.000Z",
       ]);
     }
+  });
+
+  test("retries persisted events with their original time and identity", async () => {
+    const createdAt = new Date("2026-09-01T12:00:00.000Z");
+    mocks.query.mockResolvedValueOnce({
+      rows: [["0", "ai", "50000", createdAt, "retry-a", {}, "team-a"]],
+    });
+    await syncUnreportedBillingCreditUsage();
+    expect(mocks.ingest.mock.calls).toMatchObject([
+      [
+        [
+          {
+            externalId: "credit-usage:retry-a",
+            timestamp: new Date(createdAt),
+          },
+        ],
+      ],
+    ]);
+    const query = mocks.query.mock.calls[0]?.[0];
+    expect(query).toContain("select distinct");
+    expect(query).toContain('"currentPeriodEnd" >');
   });
 });
