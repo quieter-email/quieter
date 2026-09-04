@@ -58,6 +58,7 @@ jobs:
           CLOUDFLARE_AI_API_TOKEN: ${{ secrets.CLOUDFLARE_AI_API_TOKEN }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          POLAR_WEBHOOK_SECRET: ${{ secrets.POLAR_WEBHOOK_SECRET }}
         run: |
           node -e '
             const databaseName = decodeURIComponent(new URL(process.env.DATABASE_URL).pathname.replace(/^\//u, ""));
@@ -68,6 +69,8 @@ jobs:
           vp exec sst secret set CloudflareAccountId "$CLOUDFLARE_ACCOUNT_ID" --stage "$SST_STAGE"
           vp exec sst secret set CloudflareAiApiToken "$CLOUDFLARE_AI_API_TOKEN" --stage "$SST_STAGE"
           vp exec sst secret set DatabaseUrl "$DATABASE_URL" --stage "$SST_STAGE"
+          test -n "$POLAR_WEBHOOK_SECRET"
+          vp exec sst secret set PolarWebhookSecret "$POLAR_WEBHOOK_SECRET" --stage "$SST_STAGE"
 
       - name: Apply production database migrations
         if: ${{ env.SST_STAGE == 'production' }}

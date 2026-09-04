@@ -2269,6 +2269,7 @@ export const mailDomainConnectAttempt = pgTable(
 export const billingSubscription = pgTable(
   "billingSubscription",
   {
+    cancelAtPeriodEnd: boolean("cancelAtPeriodEnd").notNull().default(false),
     createdAt: timestamp("createdAt").notNull(),
     currentPeriodEnd: timestamp("currentPeriodEnd").notNull(),
     currentPeriodStart: timestamp("currentPeriodStart").notNull(),
