@@ -1292,6 +1292,7 @@ export const mailboxActionRun = pgTable(
     completedAt: timestamp("completedAt"),
     createdAt: timestamp("createdAt").notNull(),
     dedupeKey: text("dedupeKey").notNull(),
+    dispatchedAt: timestamp("dispatchedAt"),
     id: text("id").primaryKey(),
     lastError: text("lastError"),
     leasedUntil: timestamp("leasedUntil"),

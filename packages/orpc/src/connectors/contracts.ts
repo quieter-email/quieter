@@ -11,3 +11,9 @@ export const CONNECTOR_PROVIDERS = [
 export const connectorProviderSchema = z.enum(CONNECTOR_PROVIDERS);
 
 export type ConnectorProvider = z.infer<typeof connectorProviderSchema>;
+
+export const getConnectorDisplayName = (provider: ConnectorProvider) =>
+  ({
+    [GOOGLE_CALENDAR_CONNECTOR_PROVIDER]: "Google Calendar",
+    [LINEAR_CONNECTOR_PROVIDER]: "Linear",
+  })[provider];
