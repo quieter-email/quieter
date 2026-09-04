@@ -4,6 +4,7 @@ import type * as ServerEnvModule from "@quieter/env/server";
 import {
   beforeAll,
   beforeEach,
+  afterEach,
   describe,
   expect,
   test,
@@ -13,10 +14,11 @@ import { z } from "zod";
 
 import {
   getOrganizationSubscription,
+  getOrganizationSubscriptionRecord,
   isActiveBillingSubscription,
   isActiveBillingStatus,
   isLocalDevelopmentBillingEntitlementEnabled,
-  shouldReconcileExpiredBillingSubscription,
+  shouldReconcileBillingSubscription,
   subscriptionBelongsToOrganization,
 } from "../src/entitlements";
 import {
@@ -170,12 +172,12 @@ describe("billing entitlement statuses", () => {
   });
 });
 
-describe("expired billing subscription reconciliation", () => {
+describe("billing subscription reconciliation", () => {
   const now = new Date("2026-08-02T00:00:00.000Z");
 
   test("reconciles an expired period after the retry window", () => {
     expect(
-      shouldReconcileExpiredBillingSubscription(
+      shouldReconcileBillingSubscription(
         {
           currentPeriodEnd: new Date("2026-07-23T00:00:00.000Z"),
           lastReconciliationFailureAt: null,
@@ -186,9 +188,9 @@ describe("expired billing subscription reconciliation", () => {
     ).toBeTruthy();
   });
 
-  test("does not reconcile a current or recently refreshed period", () => {
+  test("reconciles stale current periods but respects recent refreshes", () => {
     expect(
-      shouldReconcileExpiredBillingSubscription(
+      shouldReconcileBillingSubscription(
         {
           currentPeriodEnd: new Date("2026-08-03T00:00:00.000Z"),
           lastReconciliationFailureAt: null,
@@ -196,9 +198,9 @@ describe("expired billing subscription reconciliation", () => {
         },
         now
       )
-    ).toBeFalsy();
+    ).toBeTruthy();
     expect(
-      shouldReconcileExpiredBillingSubscription(
+      shouldReconcileBillingSubscription(
         {
           currentPeriodEnd: new Date("2026-07-23T00:00:00.000Z"),
           lastReconciliationFailureAt: null,
@@ -211,7 +213,7 @@ describe("expired billing subscription reconciliation", () => {
 
   test("uses a recent reconciliation failure for the retry window", () => {
     expect(
-      shouldReconcileExpiredBillingSubscription(
+      shouldReconcileBillingSubscription(
         {
           currentPeriodEnd: new Date("2026-07-23T00:00:00.000Z"),
           lastReconciliationFailureAt: new Date("2026-08-01T23:58:00.000Z"),
@@ -220,6 +222,19 @@ describe("expired billing subscription reconciliation", () => {
         now
       )
     ).toBeFalsy();
+  });
+
+  test("checks a newly ended period even if a webhook arrived just before renewal", () => {
+    expect(
+      shouldReconcileBillingSubscription(
+        {
+          currentPeriodEnd: now,
+          lastReconciliationFailureAt: null,
+          updatedAt: new Date(now.getTime() - 60_000),
+        },
+        now
+      )
+    ).toBeTruthy();
   });
 });
 
@@ -231,6 +246,7 @@ describe("organization subscription reconciliation", () => {
   }, 30_000);
 
   const staleRow = {
+    cancelAtPeriodEnd: false,
     currentPeriodEnd: new Date("2026-07-23T00:00:00.000Z"),
     currentPeriodStart: new Date("2026-06-23T00:00:00.000Z"),
     lastReconciliationFailureAt: null,
@@ -250,6 +266,7 @@ describe("organization subscription reconciliation", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.setSystemTime(new Date("2026-08-02T00:00:00.000Z"));
     billingMocks.where.mockReturnValue({
       limit: billingMocks.limit,
       orderBy: billingMocks.loadRows,
@@ -279,6 +296,10 @@ describe("organization subscription reconciliation", () => {
     });
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   test("force-syncs an expired Polar subscription and reloads the row", async () => {
     const providerSubscription = polarSubscription("polar-subscription-1");
     billingMocks.loadRows
@@ -297,10 +318,7 @@ describe("organization subscription reconciliation", () => {
     const polarOptions = polarCall?.[1];
     expect(polarOptions?.signal).toBeInstanceOf(AbortSignal);
     expect(billingMocks.syncBillingSubscription).toHaveBeenCalledWith(
-      providerSubscription,
-      {
-        force: true,
-      }
+      providerSubscription
     );
     expect(billingMocks.loadRows).toHaveBeenCalledTimes(2);
   });
@@ -325,7 +343,7 @@ describe("organization subscription reconciliation", () => {
 
     await expect(
       getOrganizationSubscription("organization-a")
-    ).resolves.toBeNull();
+    ).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
     expect(billingMocks.getPolarSubscription).not.toHaveBeenCalled();
   });
 
@@ -338,7 +356,7 @@ describe("organization subscription reconciliation", () => {
 
     await expect(
       getOrganizationSubscription("organization-a")
-    ).resolves.toBeNull();
+    ).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
     expect(billingMocks.updateSet).toHaveBeenCalledOnce();
     const reconciliationUpdate = billingMocks.updateSet.mock.calls[0]?.[0];
     expect(reconciliationUpdate?.lastReconciliationFailureAt).toBeInstanceOf(
@@ -354,12 +372,84 @@ describe("organization subscription reconciliation", () => {
 
     await expect(
       getOrganizationSubscription("organization-a")
-    ).resolves.toBeNull();
+    ).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
     expect(billingMocks.updateSet).toHaveBeenCalledOnce();
     const reconciliationUpdate = billingMocks.updateSet.mock.calls[0]?.[0];
     expect(reconciliationUpdate?.lastReconciliationFailureAt).toBeInstanceOf(
       Date
     );
+  });
+
+  test("recovers a past-due subscription when the recovery webhook was missed", async () => {
+    billingMocks.loadRows
+      .mockResolvedValueOnce([{ ...staleRow, status: "past_due" }])
+      .mockResolvedValueOnce([refreshedRow]);
+    billingMocks.getPolarSubscription.mockResolvedValue(
+      polarSubscription("polar-subscription-1")
+    );
+    billingMocks.syncBillingSubscription.mockResolvedValue({ synced: true });
+    await expect(
+      getOrganizationSubscription("organization-a")
+    ).resolves.toMatchObject({ product: "pro" });
+  });
+
+  test("revokes a current period when a cancellation webhook was missed", async () => {
+    billingMocks.loadRows
+      .mockResolvedValueOnce([
+        { ...refreshedRow, updatedAt: staleRow.updatedAt },
+      ])
+      .mockResolvedValueOnce([{ ...refreshedRow, status: "canceled" }]);
+    billingMocks.getPolarSubscription.mockResolvedValue(
+      polarSubscription("polar-subscription-1")
+    );
+    billingMocks.syncBillingSubscription.mockResolvedValue({ synced: true });
+    await expect(
+      getOrganizationSubscription("organization-a")
+    ).resolves.toBeNull();
+    expect(billingMocks.getPolarSubscription).toHaveBeenCalledOnce();
+  });
+
+  test("keeps access until a scheduled cancellation reaches the period end", async () => {
+    billingMocks.loadRows.mockResolvedValue([
+      { ...refreshedRow, cancelAtPeriodEnd: true },
+    ]);
+    await expect(
+      getOrganizationSubscription("organization-a")
+    ).resolves.toMatchObject({ product: "pro" });
+    expect(billingMocks.getPolarSubscription).not.toHaveBeenCalled();
+  });
+
+  test("retains canceled subscription details for billing recovery", async () => {
+    billingMocks.loadRows.mockResolvedValue([
+      { ...refreshedRow, status: "canceled" },
+    ]);
+    await expect(
+      getOrganizationSubscriptionRecord("organization-a")
+    ).resolves.toMatchObject({ status: "canceled" });
+    await expect(
+      getOrganizationSubscription("organization-a")
+    ).resolves.toBeNull();
+  });
+
+  test("selects a current subscription ahead of a stale active subscription", async () => {
+    billingMocks.loadRows.mockResolvedValue([
+      { ...staleRow, updatedAt: new Date() },
+      refreshedRow,
+    ]);
+    await expect(
+      getOrganizationSubscription("organization-a")
+    ).resolves.toMatchObject({
+      currentPeriodEnd: refreshedRow.currentPeriodEnd,
+    });
+    expect(billingMocks.getPolarSubscription).not.toHaveBeenCalled();
+  });
+
+  test("ignores subscriptions belonging to another organization", async () => {
+    billingMocks.loadRows.mockResolvedValue([staleRow]);
+    await expect(
+      getOrganizationSubscription("organization-b")
+    ).resolves.toBeNull();
+    expect(billingMocks.getPolarSubscription).not.toHaveBeenCalled();
   });
 });
 

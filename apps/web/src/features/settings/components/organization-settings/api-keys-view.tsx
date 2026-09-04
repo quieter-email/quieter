@@ -67,6 +67,7 @@ import {
   getOrganizationApiKeysQueryKey,
   organizationApiKeysQueryOptions,
 } from "./api-keys";
+import { BillingAccessNotice } from "./billing-access-notice";
 import { formatCount } from "./domain";
 import type { FullOrganization } from "./domain";
 import { MutedActionButton } from "./settings-row";
@@ -798,6 +799,7 @@ const DeleteApiKeyDialog = ({
 const ApiKeysListSection = ({
   apiKeys,
   canManageApiKeys,
+  billingAccess,
   errorMessage,
   isError,
   isPending,
@@ -805,6 +807,7 @@ const ApiKeysListSection = ({
 }: {
   apiKeys: OrganizationApiKey[];
   canManageApiKeys: boolean;
+  billingAccess: "active" | "paused" | "unknown";
   errorMessage: string | undefined;
   isError: boolean;
   isPending: boolean;
@@ -844,10 +847,12 @@ const ApiKeysListSection = ({
           action={
             canManageApiKeys ? (
               <div className="flex items-center gap-1">
-                <ResetApiKeyDialog
-                  apiKey={apiKey}
-                  organizationId={organizationId}
-                />
+                {billingAccess === "active" && (
+                  <ResetApiKeyDialog
+                    apiKey={apiKey}
+                    organizationId={organizationId}
+                  />
+                )}
                 <DeleteApiKeyDialog
                   apiKey={apiKey}
                   organizationId={organizationId}
@@ -860,7 +865,7 @@ const ApiKeysListSection = ({
           title={apiKey.name ?? "API key"}
         >
           <span className="font-mono">{formatApiKeyPreview(apiKey)}</span>
-          {`. ${formatApiKeyMeta(apiKey)}`}
+          {`. ${billingAccess === "paused" ? "Paused, subscription required" : formatApiKeyMeta(apiKey)}`}
         </SettingsRow>
       ))}
     </SettingsRows>
@@ -896,6 +901,11 @@ export const ApiKeysView = ({
     canUseOrganizationApiKeys,
   });
 
+  let billingAccess: "active" | "paused" | "unknown" = "unknown";
+  if (!billingPending && !billingAccessUnknown) {
+    billingAccess = canUseOrganizationApiKeys ? "active" : "paused";
+  }
+
   return (
     <div className="@container space-y-6">
       <SettingsBackButton onClick={onBack}>
@@ -923,7 +933,14 @@ export const ApiKeysView = ({
         )}
       </div>
 
+      {!billingPending &&
+        !billingAccessUnknown &&
+        !canUseOrganizationApiKeys &&
+        apiKeys.length > 0 && (
+          <BillingAccessNotice organizationId={organization.id} />
+        )}
       <ApiKeysListSection
+        billingAccess={billingAccess}
         apiKeys={apiKeys}
         canManageApiKeys={canManageApiKeys}
         errorMessage={apiKeysError?.message}
