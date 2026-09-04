@@ -1,11 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "15aba9fe-9c30-4ca1-a855-de6cadeecaee",
-  "prevIds": [
-    "3cd749d0-7567-4179-a254-cdc279bc450a",
-    "9f07944d-9122-48f2-9c12-f245dfe0f395"
-  ],
+  "id": "56f66712-d9bd-4ef1-871d-6e258669280d",
+  "prevIds": ["3be5ed39-7fc6-4417-b3b7-cef126b6e560"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -5585,6 +5582,19 @@
       "generated": null,
       "identity": null,
       "name": "dedupeKey",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "mailboxActionRun"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "dispatchedAt",
       "entityType": "columns",
       "schema": "public",
       "table": "mailboxActionRun"

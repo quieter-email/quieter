@@ -12,19 +12,15 @@ const mocks = vi.hoisted(() => ({
   >(),
 }));
 
-vi.mock(import("@quieter/auth"), async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    ...actual,
-    organizationApiKeyApi: Object.assign(actual.organizationApiKeyApi, {
-      verifyApiKey: mocks.verifyApiKey,
-    }),
-  };
-});
-vi.mock(import("@quieter/orpc/organization-mail"), async (importOriginal) => {
-  const actual = await importOriginal();
-  return { ...actual, organizationHasBillingFeature: mocks.hasBillingAccess };
-});
+// oxlint-disable-next-line vitest/prefer-import-in-mock -- Partial mock avoids initializing server dependencies.
+vi.mock("@quieter/auth", () => ({
+  organizationApiKeyApi: { verifyApiKey: mocks.verifyApiKey },
+}));
+// oxlint-disable-next-line vitest/prefer-import-in-mock -- Only the API authorization contract is needed here.
+vi.mock("@quieter/orpc/organization-mail", () => ({
+  ORGANIZATION_API_KEY_CONFIG_ID: "organization",
+  organizationHasBillingFeature: mocks.hasBillingAccess,
+}));
 
 describe("organization API access", () => {
   beforeEach(() => {
