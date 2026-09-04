@@ -6,7 +6,12 @@ export default $config({
     return {
       home: "aws",
       name: "quieter",
-      providers: { cloudflare: "6.15.0" },
+      providers: {
+        ...(input.stage === "production"
+          ? { aws: { region: "eu-central-1" } }
+          : {}),
+        cloudflare: "6.15.0",
+      },
       protect: input.stage === "production",
       removal: input.stage === "production" ? "retain" : "remove",
       state: {

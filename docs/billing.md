@@ -4,6 +4,8 @@
 
 Production configuration, secrets, migrations, and deployments require explicit authorization. Use the protected production workflow, and never copy production credentials into `.env.local`.
 
+Production SST state and secrets are in AWS `eu-central-1`. The production provider is pinned to that region in `sst.config.ts`; local development can still use a different region. A successful secret read from another region does not verify production configuration. For older worktrees on this workstation, use `quieter-sst -Stage production` from the shared PowerShell tooling to select the correct region.
+
 In the production Polar organization, inspect the existing endpoint before creating another one. Wait for the endpoint list to finish loading; its initial empty state is not evidence that no endpoint exists. Configure the endpoint for `https://quieter.email/api/auth/polar/webhooks`. Subscribe to:
 
 - `subscription.created`
@@ -29,13 +31,30 @@ The private site-password gate already exempts this exact endpoint. It must rema
 
 Check the provider's subscription detail page, attached discount, order history, and merchant review status before creating another checkout. A 100% discount can be valid forever while the subscription's billing cycle remains stalled.
 
-Polar's [organization capabilities](https://github.com/polarsource/polar/blob/main/server/polar/models/organization.py) disable subscription renewals in the initial `CREATED` state. Its [subscription cycle](https://github.com/polarsource/polar/blob/main/server/polar/subscription/service.py) then skips the renewal without advancing the period or marking the subscription canceled. An unfinished merchant review can therefore produce an active subscription with a renewal date in the past, even for a zero-total order. Confirm the account's actual status with Polar before attributing other stalled renewals to this restriction.
+Polar's [organization capabilities](https://github.com/polarsource/polar/blob/main/server/polar/models/organization.py) disable subscription renewals in the initial `CREATED` state. Its [order service](https://github.com/polarsource/polar/blob/main/server/polar/order/service.py) checks that capability for renewal payments. An unfinished merchant review can leave monthly billing blocked while a subscription still appears active, including the zero-total subscriptions observed here. Confirm the account's actual capability through the organization API before attributing other stalled renewals to this restriction.
 
 Complete the merchant setup or ask Polar support to enable the appropriate account capabilities. For private beta access independent of billing, use explicitly authorized, time-limited entitlement grants through a protected database workflow. Do not disable production billing enforcement, manufacture renewal dates, or repeatedly create subscriptions. Existing entitlement overrides belong to a billing owner and can affect more than one team owned by that user; review that scope before granting one.
 
 For temporary recovery of an existing 100%-discount test subscription, Polar's **Update Subscription > Billing Period** control can grant free time by extending the period end. Confirm the discount before applying this change. This does not fix automatic renewal capability, advance the period start, or reset usage credits.
 
 After Polar corrects the period, the webhook or the next billing reconciliation restores access automatically. An active subscription whose period is still overdue is shown as an unconfirmed renewal, and checkout cannot create a duplicate. Failed reconciliation remains distinguishable from an ended subscription. Scheduled cancellation keeps access until the period ends; immediate revocation and exhausted payment retries remove access.
+
+## Usage accounting and recovery
+
+Usage is summed from the local credit ledger for the team's provider period, including the start and excluding the end. A real renewal advances the start and excludes earlier usage. Extending only the end retains that usage. Settings show the actual date range rather than promising a reset on the extended end date.
+
+PostgreSQL returns `sum(bigint)` as a numeric string. Aggregate expressions must use a runtime number decoder before arithmetic. A TypeScript `sql<number>` annotation alone does not convert the value. Without decoding, adding a new charge concatenates the previous sum and the charge, creating invalid overage amounts and potentially rejecting mail below the included balance.
+
+The September 5, 2026 production investigation confirmed:
+
+- Polar's organization is `created`, with `subscription_renewals: false`. Its four orders are all zero-total subscription creations; there are no renewal orders. The two current Pro subscriptions end at October 4, 00:00 Europe/Berlin, while their starts remain unchanged.
+- The endpoint secret differs from the actual Frankfurt SST secret. A signed invalid payload using the Frankfurt secret passes the deployed signature check and reaches payload validation. The same probe using the endpoint secret fails signature verification. An unrelated `us-east-1` SST secret namespace matches the endpoint and caused the earlier false-positive comparison. The endpoint remains disabled.
+- The local ledger contains events with stored overage exceeding their entire actual cost. Some were marked reported to Polar, but the metered `credits` property uses actual cost; the inflated value is separate metadata. No paid renewal order was found. Customer-specific counts and amounts are recorded in the private verification handoff.
+- There is an unreported usage backlog. The actual production token can read subscriptions and accepts an empty event ingestion batch. That scope check does not explain the historical backlog; do not assume all outstanding events have reached Polar.
+
+The code fix prevents new invalid amounts after release; it does not rewrite existing ledger records. Before repairing production, use the protected workflow to preserve a snapshot of affected rows and recompute overage from actual costs and the applicable subscription periods and allowances. Do not subtract the displayed inflated total from a customer's balance or change actual cost, event identity, or event timestamps. Recheck rows after stopping the faulty writer, since counts can continue increasing before release.
+
+After that repair, reconcile the local ledger against Polar events by external ID. Review already-reported events separately because replaying an existing external ID may not update their metadata. Check original event timestamps and period attribution before replaying the unreported backlog. Verify both billing views show the same actual usage and valid overage. Production ledger repair, event replay, webhook secret alignment, endpoint re-enablement, deployment, and merchant onboarding were not performed during this investigation.
 
 ## Domains and mail after access ends
 

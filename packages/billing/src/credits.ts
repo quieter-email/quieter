@@ -80,15 +80,24 @@ const getBillingCreditUsageWithClient = async (
   const [[usage], breakdown] = await Promise.all([
     client
       .select({
-        billableCostMicroCents: sql<number>`coalesce(sum(${billingCreditUsageEvent.billableCostMicroCents}), 0)`,
-        costMicroCents: sql<number>`coalesce(sum(${billingCreditUsageEvent.costMicroCents}), 0)`,
+        billableCostMicroCents:
+          sql`coalesce(sum(${billingCreditUsageEvent.billableCostMicroCents}), 0)`.mapWith(
+            Number
+          ),
+        costMicroCents:
+          sql`coalesce(sum(${billingCreditUsageEvent.costMicroCents}), 0)`.mapWith(
+            Number
+          ),
       })
       .from(billingCreditUsageEvent)
       .where(periodFilter)
       .limit(1),
     client
       .select({
-        costMicroCents: sql<number>`coalesce(sum(${billingCreditUsageEvent.costMicroCents}), 0)`,
+        costMicroCents:
+          sql`coalesce(sum(${billingCreditUsageEvent.costMicroCents}), 0)`.mapWith(
+            Number
+          ),
         kind: usageKind,
       })
       .from(billingCreditUsageEvent)
