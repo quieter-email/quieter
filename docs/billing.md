@@ -4,7 +4,7 @@
 
 Production configuration, secrets, migrations, and deployments require explicit authorization. Use the protected production workflow, and never copy production credentials into `.env.local`.
 
-In the production Polar organization, add an endpoint for `https://quieter.email/api/auth/polar/webhooks`. Subscribe to:
+In the production Polar organization, inspect the existing endpoint before creating another one. Wait for the endpoint list to finish loading; its initial empty state is not evidence that no endpoint exists. Configure the endpoint for `https://quieter.email/api/auth/polar/webhooks`. Subscribe to:
 
 - `subscription.created`
 - `subscription.updated`
@@ -14,6 +14,8 @@ In the production Polar organization, add an endpoint for `https://quieter.email
 - `subscription.past_due`
 - `subscription.revoked`
 - `subscription.paused` and `subscription.resumed`, when available
+
+If an endpoint is disabled, inspect its delivery responses before re-enabling it. A signature mismatch requires matching the existing endpoint secret to the deployed receiver; resetting only one side will not fix delivery. Subscribe only to events supported by the deployed receiver.
 
 Store the endpoint's signing secret in the production SST secret `PolarWebhookSecret`. The runtime reads it as `POLAR_WEBHOOK_SECRET` through `@quieter/env`. `PolarAccessToken` is separately required for checkout, the customer portal, and reconciliation. Receiving signed webhooks does not require an API token.
 
