@@ -33,6 +33,8 @@ Polar's [organization capabilities](https://github.com/polarsource/polar/blob/ma
 
 Complete the merchant setup or ask Polar support to enable the appropriate account capabilities. For private beta access independent of billing, use explicitly authorized, time-limited entitlement grants through a protected database workflow. Do not disable production billing enforcement, manufacture renewal dates, or repeatedly create subscriptions. Existing entitlement overrides belong to a billing owner and can affect more than one team owned by that user; review that scope before granting one.
 
+For temporary recovery of an existing 100%-discount test subscription, Polar's **Update Subscription > Billing Period** control can grant free time by extending the period end. Confirm the discount before applying this change. This does not fix automatic renewal capability, advance the period start, or reset usage credits.
+
 After Polar corrects the period, the webhook or the next billing reconciliation restores access automatically. An active subscription whose period is still overdue is shown as an unconfirmed renewal, and checkout cannot create a duplicate. Failed reconciliation remains distinguishable from an ended subscription. Scheduled cancellation keeps access until the period ends; immediate revocation and exhausted payment retries remove access.
 
 ## Domains and mail after access ends
