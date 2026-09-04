@@ -110,6 +110,15 @@ export const createGmailResources = (
         ],
         transform: {
           worker(args) {
+            args.bindings = $util
+              .all([args.bindings, gmailRealtimeWorker.nodes.worker.scriptName])
+              .apply(([bindings, scriptName]) =>
+                (bindings ?? []).map((binding) =>
+                  binding.name === "GmailLiveSyncMailbox"
+                    ? { ...binding, scriptName }
+                    : binding
+                )
+              );
             args.limits = { cpuMs: 300_000 };
             args.observability = cloudflareWorkerObservability;
           },
