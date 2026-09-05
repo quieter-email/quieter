@@ -4,11 +4,13 @@
 
 - Vite+ (`vp`), which manages the pinned Node runtime and dependency installs
 - Git
-- PostgreSQL 16 or newer locally, or the isolated PlanetScale `quieter_dev` logical database
+- Access to the allowlisted PlanetScale `quieter_dev` logical database
 - Non-production AWS credentials only when running the SST mail and background-processing stack
 - OAuth and provider credentials for integrations you want to test
 
-Local PostgreSQL remains supported. The shared PlanetScale cluster's isolated `quieter_dev` logical database is also supported when its exact hostname is pinned with `QUIETER_LOCAL_PLANETSCALE_HOST`; arbitrary hosted databases and the production `quieter` logical database remain rejected.
+Normal development uses `quieter_dev` on the existing PlanetScale cluster, with its exact hostname pinned by `QUIETER_LOCAL_PLANETSCALE_HOST`. It has separate data and database roles but shares compute, storage capacity, and availability with production. Do not provision another paid branch/cluster for development. Loopback PostgreSQL remains supported for optional disposable tests; it is not a daily prerequisite. Arbitrary hosted databases and the production `quieter` logical database remain rejected.
+
+See [Development integration plan](development-integrations.md) for the accepted provider setup, shared-Gmail ownership rules, secret handling, and work still needed for complete local feature coverage.
 
 ## Install
 
@@ -27,23 +29,9 @@ Copy-Item .env.example .env.local
 
 Do not copy production database credentials or persistent queue endpoints into `.env.local`. Run `vp run env:doctor` after editing `.env.local`; it rejects unknown remote databases, production-shaped background infrastructure, and non-sandbox Polar credentials.
 
-## Local Database
+## Development database
 
-Create an empty local database:
-
-```bash
-createdb quieter
-```
-
-The default example URL is:
-
-```text
-postgresql://postgres:postgres@localhost:5432/quieter
-```
-
-Adjust the username, password, or port for your local PostgreSQL installation. Keep the hostname loopback-only.
-
-For PlanetScale, use the dev application role through PgBouncer for `DATABASE_URL`, the dev migrator role through the direct endpoint for `DATABASE_MIGRATION_URL`, and pin their shared hostname:
+Use the dev application role through PgBouncer for `DATABASE_URL`, the dev migrator role through the direct endpoint for `DATABASE_MIGRATION_URL`, and pin their shared hostname:
 
 ```text
 DATABASE_URL=postgresql://app:password@your-host.pg.psdb.cloud:6432/quieter_dev?sslmode=verify-full
@@ -54,7 +42,7 @@ QUIETER_LOCAL_PLANETSCALE_HOST=your-host.pg.psdb.cloud
 
 The local guards accept only that exact host, the `quieter_dev` database, TLS verification, port 6432 for application traffic, and port 5432 for migrations. The production `quieter` database is always rejected locally.
 
-Apply the committed application migrations:
+Apply committed application migrations after checking the target database and reconciling any existing migration-history mismatch:
 
 ```bash
 vp run db:migrate
@@ -94,7 +82,9 @@ Run the normal local web session:
 vp run dev
 ```
 
-This directly starts the Cloudflare/Vite production-shaped Worker runtime on `http://localhost:3000` as the only foreground process. Vite validates that the database is loopback-only or the explicitly allowlisted PlanetScale `quieter_dev` database before serving. Chat generation, AI automation, and mailbox actions use their in-process fallbacks, so stopping this command stops all local background work without a custom orchestrator. Apply migrations explicitly with `vp run db:migrate` after pulling or generating schema changes.
+This starts the web app in Cloudflare's local Worker runtime on `http://localhost:3000`. Vite validates the development database destination before serving. The current local configuration does not start the background queue consumers, maintenance jobs, or realtime Durable Object. Interactive chat can run in the web request, but that does not establish background automation coverage. Native Cloudflare auxiliary Workers and their bindings still need wiring; see the integration plan.
+
+Cloudflare Local Explorer is available at `http://localhost:3000/cdn-cgi/local/explorer` for inspecting local resources and requests. It discovers configured bindings automatically. An empty resource list does not mean the application's background services are running.
 
 Run the optional remote mail and background-processing infrastructure only for explicit provider integration tests:
 
@@ -102,7 +92,9 @@ Run the optional remote mail and background-processing infrastructure only for e
 vp run dev:mail
 ```
 
-`vp run dev` is the single safe local runtime. Use `vp run dev:cloud` when you explicitly need the web app and SST together. The package commands invoke SST directly with the `mail-dev` stage and load `.env.local` plus optional `.env.sst.local`. Keep AWS credentials out of `.env.local`; put non-production SST credentials in `.env.sst.local`. Remote queues and schedules can outlive the terminal, so remove the stage after infrastructure testing rather than relying on Ctrl+C.
+The package command invokes SST with the `mail-dev` stage and loads `.env.local` plus optional `.env.sst.local`. Despite its name, `dev:mail` evaluates the full infrastructure app. It requires a reviewed development-stage configuration and must not be used as an offline emulator. Prefer an AWS SSO profile over persistent credentials in environment files.
+
+The current `dev:cloud` script also starts a separate web process. SST's TanStack Start component manages its own frontend process and linked environment, so startup ownership and the explicit Vite+ dev command need correction before treating this as the complete development entrypoint. Remote resources can outlive the terminal; manage their lifecycle through the intended SST stage.
 
 ## Where Changes Belong
 
