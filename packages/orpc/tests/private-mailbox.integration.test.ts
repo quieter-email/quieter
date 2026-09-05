@@ -336,7 +336,7 @@ describe.skipIf(databaseUrl === undefined)(
     test("concurrent owner changes leave only the final owner's grant", async () => {
       const mailboxId = await create("shared");
       await Promise.all(
-        [owner, other].map(
+        [owner, other, owner, other, owner, other].map(
           async (ownerUserId) =>
             await setManagedMailboxAccessMode({
               accessMode: "private",
@@ -399,7 +399,9 @@ describe.skipIf(databaseUrl === undefined)(
       const mailboxId = await create();
       await expect(
         db.delete(user).where(eq(user.id, owner))
-      ).rejects.toMatchObject({ cause: { code: "23001" } });
+      ).rejects.toMatchObject({
+        cause: { constraint_name: "mailbox_managedOwnerUserId_user_id_fkey" },
+      });
       await expect(
         db
           .select({ id: mailbox.id })
