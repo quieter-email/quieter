@@ -1,7 +1,8 @@
 import * as Sentry from "@sentry/tanstackstart-react";
 
 const isSentryEnabled =
-  process.env.NODE_ENV !== "development" &&
+  (process.env.NODE_ENV !== "development" ||
+    process.env.VITE_QUIETER_LOCAL_TELEMETRY === "true") &&
   (process.env.SENTRY_DSN ?? "") !== "";
 const gmailReauthorizationMessage =
   "Google access needs to be reconnected for this mailbox.";

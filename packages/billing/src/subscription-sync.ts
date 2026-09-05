@@ -81,6 +81,13 @@ export const normalizeSubscriptionStatus = (
 };
 
 export const syncBillingSubscription = async (subscription: Subscription) => {
+  const environment = subscription.metadata.quieterEnvironment;
+  if (
+    (serverEnv.QUIETER_DEPLOYMENT_ENV === "local" && environment !== "local") ||
+    (serverEnv.QUIETER_DEPLOYMENT_ENV !== "local" && environment === "local")
+  ) {
+    return { ignored: true, synced: true };
+  }
   const metadataUserId = subscription.metadata[BILLING_METADATA_USER_ID];
   const userId =
     typeof metadataUserId === "string" ? metadataUserId.trim() : "";

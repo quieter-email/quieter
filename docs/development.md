@@ -2,13 +2,17 @@
 
 ## Prerequisites
 
+Agent debugging access has separate requirements from the application runtime. Run `vp run agent:doctor` and complete the read probes in [Agent tooling](agent-tooling.md). Local Sentry/PostHog capture stays off by default; their inspection tools should still be available to agents.
+
 - Vite+ (`vp`), which manages the pinned Node runtime and dependency installs
 - Git
-- PostgreSQL 16 or newer locally, or the isolated PlanetScale `quieter_dev` logical database
+- Access to the allowlisted PlanetScale `quieter_dev` logical database
 - Non-production AWS credentials only when running the SST mail and background-processing stack
 - OAuth and provider credentials for integrations you want to test
 
-Local PostgreSQL remains supported. The shared PlanetScale cluster's isolated `quieter_dev` logical database is also supported when its exact hostname is pinned with `QUIETER_LOCAL_PLANETSCALE_HOST`; arbitrary hosted databases and the production `quieter` logical database remain rejected.
+Normal development uses `quieter_dev` on the existing PlanetScale cluster, with its exact hostname pinned by `QUIETER_LOCAL_PLANETSCALE_HOST`. It has separate data and database roles but shares compute, storage capacity, and availability with production. Do not provision another paid branch/cluster for development. Loopback PostgreSQL remains supported for optional disposable tests; it is not a daily prerequisite. Arbitrary hosted databases and the production `quieter` logical database remain rejected.
+
+See [Development integration plan](development-integrations.md) for the accepted provider setup, shared-Gmail ownership rules, secret handling, and work still needed for complete local feature coverage.
 
 ## Install
 
@@ -27,23 +31,9 @@ Copy-Item .env.example .env.local
 
 Do not copy production database credentials or persistent queue endpoints into `.env.local`. Run `vp run env:doctor` after editing `.env.local`; it rejects unknown remote databases, production-shaped background infrastructure, and non-sandbox Polar credentials.
 
-## Local Database
+## Development database
 
-Create an empty local database:
-
-```bash
-createdb quieter
-```
-
-The default example URL is:
-
-```text
-postgresql://postgres:postgres@localhost:5432/quieter
-```
-
-Adjust the username, password, or port for your local PostgreSQL installation. Keep the hostname loopback-only.
-
-For PlanetScale, use the dev application role through PgBouncer for `DATABASE_URL`, the dev migrator role through the direct endpoint for `DATABASE_MIGRATION_URL`, and pin their shared hostname:
+Use the dev application role through PgBouncer for `DATABASE_URL`, the dev migrator role through the direct endpoint for `DATABASE_MIGRATION_URL`, and pin their shared hostname:
 
 ```text
 DATABASE_URL=postgresql://app:password@your-host.pg.psdb.cloud:6432/quieter_dev?sslmode=verify-full
@@ -54,7 +44,7 @@ QUIETER_LOCAL_PLANETSCALE_HOST=your-host.pg.psdb.cloud
 
 The local guards accept only that exact host, the `quieter_dev` database, TLS verification, port 6432 for application traffic, and port 5432 for migrations. The production `quieter` database is always rejected locally.
 
-Apply the committed application migrations:
+Apply committed application migrations after checking the target database and reconciling any existing migration-history mismatch:
 
 ```bash
 vp run db:migrate
@@ -88,13 +78,76 @@ Local development requires only the values needed by the paths you exercise. Imp
 
 ## Running
 
-Run the normal local web session:
+For the SST-managed local session, sign in to the development AWS profile and run:
+
+```bash
+vp run dev:sst --stage local-leander
+```
+
+Use your own `local-<name>` stage on another machine. `sst.local.config.ts` registers only development Secret links and a DevCommand, then starts both local runtimes through Vite+. It rejects production stage names and ordinary deployment. It creates no managed-mail resources, cloud Workers or paid database branches. The linked-secret bootstrap refreshes the ignored local cache before startup. `dev:cloud` is an alias for this command. Stop any separately running web/background sessions first.
+
+To start only the web app using the existing local secret cache:
 
 ```bash
 vp run dev
 ```
 
-This directly starts the Cloudflare/Vite production-shaped Worker runtime on `http://localhost:3000` as the only foreground process. Vite validates that the database is loopback-only or the explicitly allowlisted PlanetScale `quieter_dev` database before serving. Chat generation, AI automation, and mailbox actions use their in-process fallbacks, so stopping this command stops all local background work without a custom orchestrator. Apply migrations explicitly with `vp run db:migrate` after pulling or generating schema changes.
+This starts the web app in Cloudflare's local Worker runtime on `http://localhost:3000`. Vite validates the development database destination before serving. Use `vp run dev:full` for the web app plus the background Worker on port 8787. Use `vp run dev:workers` to start only the background runtime alongside an already-running web app.
+
+`dev:prepare` generates ignored `.dev.vars` from the validated local settings. It excludes migration credentials and supplies the linked live-sync signing secret. Restart both runtimes after changing secrets or Worker bindings. A Vite hot reload alone does not refresh a separate Wrangler process.
+
+```bash
+vp run dev:setup
+vp run dev:full
+# In another terminal, for real Gmail notifications:
+vp run dev:pubsub
+# Explicit scheduled-handler invocations:
+vp run dev:trigger health
+vp run dev:trigger maintenance
+vp run dev:trigger actions
+```
+
+The local Worker delegates to the real Gmail queue consumer, action consumer, maintenance handler, dispatcher and realtime Durable Object. Queues, retries and Durable Object storage run in native workerd. Development combines these handlers in one process; production still deploys separate Workers. Maintenance and dispatch are manual triggers, not an automatically running cron. The Pub/Sub bridge uses `gcloud auth print-access-token`, pulls one message at a time from its own subscription, and acknowledges only after the local queue accepts the message.
+
+Shared Gmail accounts default to `QUIETER_LOCAL_PROVIDER_MODE=observe` and `QUIETER_LOCAL_GMAIL_WATCH_OWNER=production`. Mail reads and AI results stored in `quieter_dev` work in this mode. Gmail, Calendar and Linear writes are rejected server-side. Auto-label classification is saved without applying labels. Write tests require a dedicated mailbox or a verified ownership handoff, plus the explicit Gmail account allowlist. Never start a competing consumer on the production subscription.
+
+Write controls are independent. Gmail verifies the access token's actual mailbox against `QUIETER_LOCAL_GMAIL_WRITE_ACCOUNTS`. Calendar verifies the primary calendar against `QUIETER_LOCAL_CALENDAR_WRITE_ACCOUNTS`. Linear additionally requires `QUIETER_LOCAL_LINEAR_WRITES=true`. All require `QUIETER_LOCAL_PROVIDER_MODE=write`. Enabling Gmail tests alone leaves Calendar and Linear writes blocked.
+
+### Reusing accounts across environments
+
+The same Google account can connect to local, staging and production with separate OAuth clients, credentials, databases and Pub/Sub subscriptions. Each environment keeps its own sync cursor, AI results, app preferences and jobs. Google mail, labels, drafts, sent messages and calendars remain shared external data. Sending a message or marking it read locally changes the real mailbox visible in production.
+
+Keep production as the watch owner while local and staging observe the same topic through their own subscriptions. Pub/Sub consumers on different subscriptions each receive a copy; consumers on the same subscription compete. Watch ownership and permission to modify mail are separate decisions. If a test account has no active production watch, explicitly hand watch renewal to local for that account before testing notifications.
+
+For a temporary write handoff, first verify the other environment has stopped authorizing that account and its running jobs have drained. Then allow only the selected test address locally. Do not use the current Remove mailbox action as a pause: it deletes the mailbox row and cascades through saved app data. A mailbox already requiring reconnection can stay in production as a preserved record; do not reconnect it there during local write tests. Return local to observation mode before reconnecting production.
+
+These controls do not implement a distributed ownership lock. Future staging needs the same default observation policy and an explicit shared ownership mechanism before automatic switching is safe. Merely setting a local flag does not pause production. Calendar ownership must be checked separately from Gmail because its credentials and automation are independent.
+
+Google documents the [Gmail watch lifecycle](https://developers.google.com/workspace/gmail/api/guides/push) and [Pub/Sub subscription delivery](https://docs.cloud.google.com/pubsub/docs/subscription-overview).
+
+## Development secrets
+
+Keep AWS SSO selection in ignored `.env.sst.local`. The established stage is `local-leander`; use your own `local-<name>` stage for a different credential set.
+
+```bash
+vp run secrets:dev pull local-leander
+vp run env:doctor
+vp run dev:prepare
+# After adding or rotating development credentials locally:
+vp run secrets:dev push local-leander
+```
+
+The helper rejects production/fallback stages, verifies both database URLs, and suppresses secret values. SST is the persistent secret store; ignored `.env.local` and `.dev.vars` are runtime caches. The application and Worker caches never receive the migration URL from `dev:prepare`. The web bootstrap still reads `.env.local` to validate the migration destination, but application database access uses only `DATABASE_URL`.
+
+## Polar and telemetry tests
+
+Polar uses its existing sandbox catalog. Set `QUIETER_LOCAL_BILLING_BYPASS=false` to exercise checkout, credits and entitlements. Local customer/member external identifiers are prefixed with `local:`. New subscription metadata identifies the environment; local webhook processing ignores subscriptions without local metadata.
+
+On this Windows machine, `vp run dev:polar` starts a WSL loopback relay on port 4300 and the official Polar CLI. Select Sandbox and the development organization. The relay forwards only `/api/auth/polar/webhooks` to Windows port 3000, preserving the signed bytes and signature headers. The distinct ports prevent WSL's automatic localhost forwarding from taking over the app's IPv4 port. It does not expose Vite, Local Explorer or other app routes. Install the [official Polar CLI](https://polar.sh/docs/integrate/webhooks/locally) in WSL first. Store its displayed signing secret as `PolarWebhookSecret` in your development SST stage, pull it, regenerate bindings and restart the app. On macOS/Linux, use `polar listen http://localhost:3000/api/auth/polar/webhooks` directly.
+
+Sentry and PostHog default off. To test them, set `VITE_QUIETER_LOCAL_TELEMETRY=true` with development-project credentials, and `SENTRY_ENVIRONMENT=development` for server Sentry. PostHog still requires measurement consent and retains the privacy restrictions in code. No source-map upload token is needed locally. c15t remains in offline mode and supports consent accept/reject/revoke tests without a cloud service.
+
+Cloudflare Local Explorer is available at `http://localhost:3000/cdn-cgi/local/explorer` for inspecting local resources and requests. It discovers configured bindings automatically. An empty resource list does not mean the application's background services are running.
 
 Run the optional remote mail and background-processing infrastructure only for explicit provider integration tests:
 
@@ -102,7 +155,9 @@ Run the optional remote mail and background-processing infrastructure only for e
 vp run dev:mail
 ```
 
-`vp run dev` is the single safe local runtime. Use `vp run dev:cloud` when you explicitly need the web app and SST together. The package commands invoke SST directly with the `mail-dev` stage and load `.env.local` plus optional `.env.sst.local`. Keep AWS credentials out of `.env.local`; put non-production SST credentials in `.env.sst.local`. Remote queues and schedules can outlive the terminal, so remove the stage after infrastructure testing rather than relying on Ctrl+C.
+The package command invokes SST with the `mail-dev` stage and loads `.env.local` plus optional `.env.sst.local`. Despite its name, `dev:mail` evaluates the full infrastructure app. It requires a reviewed development-stage configuration and must not be used as an offline emulator. Prefer an AWS SSO profile over persistent credentials in environment files.
+
+`dev:cloud` now uses the isolated local SST configuration described above. The production infrastructure's frontend also has an explicit Vite+ command. Remote managed-mail resources can outlive the terminal; manage their lifecycle through the intended SST stage.
 
 ## Where Changes Belong
 

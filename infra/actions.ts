@@ -4,6 +4,7 @@ import type { createAppDatabase } from "./database";
 import { cloudflareWorkerObservability } from "./runtime";
 import type { DeploymentContext } from "./runtime";
 import { requireSecretBinding } from "./secrets";
+import { deploymentEnvironment } from "./stage";
 import type { SecretBindings } from "./types";
 
 const actionSecretNames = [
@@ -50,6 +51,7 @@ export const createMailboxActionResources = (
       environment: {
         POLAR_ORGANIZATION_ID: context.polarOrganizationId,
         POLAR_SANDBOX: context.polarSandbox,
+        QUIETER_DEPLOYMENT_ENV: deploymentEnvironment,
         SENTRY_ENVIRONMENT: context.sentryEnvironment.SENTRY_ENVIRONMENT,
       },
       handler: "packages/cloudflare/src/mailbox-action-worker.ts",
@@ -73,6 +75,7 @@ export const createMailboxActionResources = (
         date: COMPATIBILITY_DATE,
         flags: ["nodejs_compat"],
       },
+      environment: { QUIETER_DEPLOYMENT_ENV: deploymentEnvironment },
       handler: "packages/cloudflare/src/mailbox-action-dispatch-worker.ts",
       link: [appDatabase, queue, sentryDsnBinding],
       transform: {

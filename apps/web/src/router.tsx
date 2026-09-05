@@ -9,7 +9,7 @@ import { installStaleDeploymentRecovery } from "./lib/stale-deployment";
 import { routeTree } from "./routeTree.gen";
 
 const isSentryEnabled =
-  !import.meta.env.DEV &&
+  (!import.meta.env.DEV || clientEnv.VITE_QUIETER_LOCAL_TELEMETRY === "true") &&
   clientEnv.VITE_SENTRY_DSN !== undefined &&
   clientEnv.VITE_SENTRY_DSN !== "";
 

@@ -57,7 +57,7 @@ const createDatabaseClient = (
   const sql = postgres(databaseUrl, {
     connect_timeout: 10,
     fetch_types: false,
-    max: 5,
+    max: serverEnv.QUIETER_DEPLOYMENT_ENV === "local" ? 1 : 5,
     prepare: hyperdrive,
   });
   return drizzlePostgres({

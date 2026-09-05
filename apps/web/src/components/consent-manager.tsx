@@ -15,7 +15,11 @@ import { markPosthogReady } from "#/lib/posthog";
 
 const posthogToken = clientEnv.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN;
 const posthogId =
-  typeof posthogToken === "string" && posthogToken !== "" ? posthogToken : null;
+  (!import.meta.env.DEV || clientEnv.VITE_QUIETER_LOCAL_TELEMETRY === "true") &&
+  typeof posthogToken === "string" &&
+  posthogToken !== ""
+    ? posthogToken
+    : null;
 const configuredPosthogHost = clientEnv.VITE_PUBLIC_POSTHOG_HOST;
 const posthogHost =
   typeof configuredPosthogHost === "string" && configuredPosthogHost !== ""

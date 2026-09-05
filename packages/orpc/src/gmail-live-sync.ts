@@ -29,7 +29,11 @@ const getLiveSyncConfiguration = () => {
   }
 
   const parsedUrl = new URL(url);
-  if (parsedUrl.protocol !== "wss:") {
+  const localWebSocket =
+    serverEnv.QUIETER_DEPLOYMENT_ENV === "local" &&
+    parsedUrl.protocol === "ws:" &&
+    ["localhost", "127.0.0.1", "[::1]"].includes(parsedUrl.hostname);
+  if (parsedUrl.protocol !== "wss:" && !localWebSocket) {
     throw new Error("GMAIL_LIVE_SYNC_URL must use wss.");
   }
 

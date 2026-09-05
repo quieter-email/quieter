@@ -1,5 +1,6 @@
 import type { DeploymentContext } from "./runtime";
 import { requireSecretResource } from "./secrets";
+import { deploymentEnvironment } from "./stage";
 import type { SecretResources } from "./types";
 
 const mailObjectKeyPrefix = "mail/inbound/";
@@ -206,6 +207,7 @@ export const createMailResources = async (
   mailOutboundFeedbackTopic.subscribe("MailOutboundFeedbackProcessor", {
     environment: {
       DATABASE_URL: context.databaseUrl,
+      QUIETER_DEPLOYMENT_ENV: deploymentEnvironment,
       SES_FEEDBACK_TOPIC_ARN: mailOutboundFeedbackTopic.arn,
       ...context.sentryEnvironment,
     },
@@ -233,6 +235,7 @@ export const createMailResources = async (
       POLAR_ACCESS_TOKEN: context.polarAccessToken,
       POLAR_ORGANIZATION_ID: context.polarOrganizationId,
       POLAR_SANDBOX: context.polarSandbox,
+      QUIETER_DEPLOYMENT_ENV: deploymentEnvironment,
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
       ...context.r2Environment,
       ...context.sentryEnvironment,
@@ -249,6 +252,7 @@ export const createMailResources = async (
   const mailIngress = new sst.aws.Function("MailIngress", {
     environment: {
       DATABASE_URL: context.databaseUrl,
+      QUIETER_DEPLOYMENT_ENV: deploymentEnvironment,
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
       ...context.r2Environment,
       ...context.sentryEnvironment,

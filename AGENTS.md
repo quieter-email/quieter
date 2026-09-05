@@ -40,6 +40,17 @@
 - Run `vp run env:doctor` after local environment changes.
 - Production database writes, role/credential changes, backups, and deploys require explicit authorization and protected workflows; see the PlanetScale MCP and LLM docs for more details.
 
+## Local development and debugging
+
+- Keep a runnable, debuggable development experience whenever adding a service or changing application behavior, background processing, configuration, or infrastructure. Include the required startup, bindings, secrets, test data, failure reporting, and verification in the change; do not leave a feature dependent on an undocumented manual setup.
+- Research and prefer each provider's supported local tools, development stages, sandboxes, and inspection tools. Verify the installed versions and actual runtime behavior before adding custom replacements or declaring a feature locally testable.
+- Use the allowlisted PlanetScale `quieter_dev` logical database on the existing cluster for normal development. Do not provision a paid branch/cluster or require a persistent local PostgreSQL installation. Keep connection/concurrency limits modest because development shares cluster resources with production. Use disposable databases only for tests that require them; never run destructive test resets against the shared development or production database.
+- Shared Gmail accounts are shared external state even when application databases and OAuth clients differ. Before enabling local background processing, define watch ownership, use a separate development Pub/Sub subscription, and prevent competing provider mutations. Database-local leases do not coordinate separate environments. Full write tests require a dedicated test mailbox or an explicit handoff of processing ownership.
+- Use separate, budget-limited development AI credentials for real model testing. Keep Sentry and PostHog disabled locally by default with explicit opt-in testing; preserve useful local logs and c15t consent tests. Real logo.dev requests are acceptable for normal development. Do not make inactive integrations such as Domain Connect prerequisites.
+- Prefer development-stage SST Secrets and linked bindings for sensitive configuration, including local execution. Ignored local environment files are acceptable when needed; read application configuration through `@quieter/env` and preserve database/provider isolation checks. Never silently fall back to production secrets.
+- Agents may inspect and transfer secrets as needed between approved local configuration and the intended service within the current task. Keep values out of tracked files, logs, screenshots, reports, and messages. Do not treat permission to handle secrets as authorization to broaden access or change production resources.
+- Complete authorized setup and debugging autonomously. When a required login, consent, account decision, or other user action blocks progress, explain the exact action needed and pause dependent work while continuing independent work. Verify connector/CLI access rather than assuming a configured MCP is connected.
+
 ## Code style
 
 - Keep types strict. Avoid `any`, unnecessary casts, effects, abstractions used once, placeholders, dead fallbacks, and obsolete compatibility branches.

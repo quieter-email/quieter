@@ -6,6 +6,6 @@ const localEnvPath = path.join(import.meta.dirname, "../../../.env.local");
 assertLocalEnvFile(localEnvPath);
 
 process.stdout.write(
-  "Local environment uses bounded in-process background work and no persistent cloud queues." +
+  "Local configuration is isolated. Run dev:workers for native local queues and Durable Objects; dev:pubsub consumes only the separate development subscription." +
     "\n"
 );

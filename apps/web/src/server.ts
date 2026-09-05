@@ -10,7 +10,9 @@ const serverEntry = {
 };
 
 export default createServerEntry(
-  serverEnv.NODE_ENV !== "development" && (serverEnv.SENTRY_DSN ?? "") !== ""
+  (serverEnv.NODE_ENV !== "development" ||
+    serverEnv.VITE_QUIETER_LOCAL_TELEMETRY === true) &&
+    (serverEnv.SENTRY_DSN ?? "") !== ""
     ? wrapFetchWithSentry(serverEntry)
     : serverEntry
 );

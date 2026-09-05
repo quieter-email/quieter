@@ -2,7 +2,7 @@ import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import { connectorCredential } from "@quieter/database/schema";
 import type { ConnectorProvider } from "@quieter/database/schema";
-import { requireServerEnv } from "@quieter/env/server";
+import { requireServerEnv, serverEnv } from "@quieter/env/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
@@ -533,6 +533,45 @@ const postGoogleCalendarEvent = async (input: {
   event: GoogleCalendarEventDraft;
   signal?: AbortSignal;
 }) => {
+  if (
+    serverEnv.QUIETER_DEPLOYMENT_ENV === "local" &&
+    serverEnv.QUIETER_LOCAL_PROVIDER_MODE !== "write"
+  ) {
+    throw new ORPCError("FORBIDDEN", {
+      message:
+        "This development environment can read connected accounts, but cannot change them.",
+    });
+  }
+  if (serverEnv.QUIETER_DEPLOYMENT_ENV === "local") {
+    const allowedAccounts =
+      serverEnv.QUIETER_LOCAL_CALENDAR_WRITE_ACCOUNTS?.split(",").map(
+        (account) => account.trim().toLowerCase()
+      ) ?? [];
+    if (allowedAccounts.length === 0) {
+      throw new ORPCError("FORBIDDEN", {
+        message: "Calendar write tests require an explicitly allowed account.",
+      });
+    }
+    const calendarResponse = await fetch(
+      `${GOOGLE_CALENDAR_API_URL}/calendars/primary`,
+      {
+        headers: { authorization: `Bearer ${input.accessToken}` },
+        signal: input.signal,
+      }
+    );
+    if (!calendarResponse.ok) {
+      throw await createGoogleApiError(calendarResponse);
+    }
+    const calendar = z
+      .object({ id: z.string() })
+      .parse(await calendarResponse.json());
+    if (!allowedAccounts.includes(calendar.id.toLowerCase())) {
+      throw new ORPCError("FORBIDDEN", {
+        message:
+          "This calendar account is not allowed for development write tests.",
+      });
+    }
+  }
   const response = await fetch(
     `${GOOGLE_CALENDAR_API_URL}/calendars/primary/events`,
     {
