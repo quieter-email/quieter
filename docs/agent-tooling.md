@@ -27,6 +27,8 @@ PlanetScale's MCP creates temporary read-only credentials for SQL execution. The
 
 A fresh Codex app-server connection subsequently completed tool discovery for Sentry, PlanetScale, Cloudflare bindings, builds and observability. Sentry returned 9 tools and PlanetScale 25. Trying to attach that separate connection was rejected because this task already has an active writer. No task or model turn was created. Cloudflare operational tools later became callable in the active task and passed the reads above. Sentry and PlanetScale still require the desktop MCP connections to reload before this task can make resource reads. Polar sandbox still exposes no tools because its OAuth fails.
 
+Calling the standalone client's read-only MCP interface without attaching the task also failed with `thread not found`. The user wants to keep this conversation. Do not create a replacement task or force ownership of this one to work around tool discovery. Continue through the existing browser and CLI access, and leave active-task MCP read verification marked incomplete until those tools become available.
+
 ## Bootstrap and verification
 
 Use the [official Sentry MCP](https://mcp.sentry.dev/), [PlanetScale MCP](https://planetscale.com/docs/mcp-server), and [Polar MCP](https://polar.sh/docs/integrate/mcp). First inspect existing entries; do not overwrite another agent's in-progress OAuth setup or start duplicate login flows.

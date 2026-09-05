@@ -17,7 +17,7 @@ Agent connector readiness is tracked separately in [Agent tooling](agent-tooling
 | Workers AI | Separate AI-only token; real 1024-dimension embedding | Application memory write/search/delete lifecycle |
 | Polar | Non-expiring sandbox token, existing Managed/Pro products, official CLI 1.3.9 in WSL; six real customer/member events returned HTTP 200 | Checkout/portal/renewal/cancellation/credits with bypass off |
 | Telemetry | Explicit opt-in implemented; off by default; consent still required for PostHog | Development-project ingestion and browser privacy assertions |
-| Managed mail | Private fixture mailbox opens in the browser with its body and attachment; native R2 read/delete tests; fixture reseed preserves one message; domain changes and external sending blocked locally | SES/MX delivery requires a deployment and is excluded from this local setup |
+| Managed mail | Private fixture mailbox opens in the browser with its body and attachment; archive and restore-to-inbox actions pass; native R2 read/delete tests; fixture reseed preserves one message; domain changes and external sending blocked locally | SES/MX delivery requires a deployment and is excluded from this local setup |
 | Calendar/Linear | Independent server-side write controls; Calendar verifies the actual primary calendar account; OAuth configuration present | Real connector authorization and dedicated resources for writes |
 | logo.dev/c15t | Real publishable logo configuration; consent uses offline mode | Focused UI/network acceptance |
 | Domain Connect | Inactive | Deferred until activated |
