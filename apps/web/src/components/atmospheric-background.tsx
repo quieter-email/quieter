@@ -163,9 +163,10 @@ fn layerLight(a: f32, b: f32) -> f32 {
     1.4
   );
 
+  let lightDrift = vec2f(sin(t * 0.38 + params.seed.y * 6.28), cos(t * 0.29 + params.seed.z * 6.28));
   let bloom =
-    softGlow(q, vec2f(-0.34 + drift, -0.1 + drift2), vec2f(0.85, 0.5)) * 0.6 +
-    softGlow(q, vec2f(-0.02 + drift2, 0.1), vec2f(0.7, 0.4)) * 0.4;
+    softGlow(q, vec2f(-0.34, -0.1) + lightDrift * vec2f(0.38, 0.25), vec2f(0.85, 0.5)) * 0.8 +
+    softGlow(q, vec2f(0.3, 0.18) - lightDrift * vec2f(0.32, 0.22), vec2f(0.7, 0.4)) * 0.55;
 
   let ridgeLayer = layerLight(
     ridgeMain * 0.4,
@@ -199,8 +200,15 @@ fn layerLight(a: f32, b: f32) -> f32 {
     dustyBlue,
     clamp(blueField * 0.28 * blueAmt * mix(0.5, 1.2, 1.0 - blueTone), 0.0, 1.0)
   );
-  color = mix(color, steel, smoothstep(0.12, 0.5, highlight) * 0.55);
-  color = mix(color, offWhite, pow(smoothstep(0.32, 0.92, highlight), mix(1.5, 2.3, hardness)));
+  color = mix(color, steel, smoothstep(0.12, 0.58, highlight) * 0.8);
+  color = mix(color, offWhite, pow(smoothstep(0.25, 0.9, highlight), mix(1.2, 1.6, hardness)));
+
+  let shadowCenter = vec2f(
+    sin(t * 0.43 + params.seed.z * 6.28) * 0.7,
+    cos(t * 0.34 + params.seed.y * 6.28) * 0.35,
+  );
+  let shadow = softGlow(q, shadowCenter, vec2f(0.65, 0.42));
+  color *= 1.0 - shadow * 0.96;
 
   let side = min(uv.x, 1.0 - uv.x);
   let fromTop = 1.0 - uv.y;
