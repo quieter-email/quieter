@@ -3,60 +3,47 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
-const DESIGN_WIDTH = 1654;
-
-export const DesignFrame = ({ children }: { children: ReactNode }) => {
+export const DesignFrame = ({
+  children,
+  height,
+  width,
+}: {
+  children: ReactNode;
+  height: number;
+  width: number;
+}) => {
   const outer = useRef<HTMLDivElement | null>(null);
-  const inner = useRef<HTMLDivElement | null>(null);
-  const [dimensions, setDimensions] = useState({
-    height: 0,
-    offset: 0,
-    scale: 1,
-  });
+  const [scale, setScale] = useState(1);
 
   useEffect(() => {
-    const outerElement = outer.current;
-    const innerElement = inner.current;
+    const element = outer.current;
     let observer: ResizeObserver | null = null;
-
-    if (outerElement !== null && innerElement !== null) {
+    if (element !== null) {
       const measure = () => {
-        const availableWidth = outerElement.clientWidth;
-        const scale = Math.min(availableWidth / DESIGN_WIDTH, 1);
-
-        setDimensions({
-          height: innerElement.offsetHeight * scale,
-          offset: Math.max((availableWidth - DESIGN_WIDTH * scale) / 2, 0),
-          scale,
-        });
+        setScale(Math.min(element.clientWidth / width, 1));
       };
-
       observer = new ResizeObserver(measure);
-      observer.observe(outerElement);
-      observer.observe(innerElement);
+      observer.observe(element);
       measure();
     }
-
     return () => {
       observer?.disconnect();
     };
-  }, []);
+  }, [width]);
 
   return (
     <div
-      className="w-full overflow-hidden"
+      className="relative mx-auto w-full overflow-hidden"
       ref={outer}
-      style={
-        dimensions.height === 0 ? undefined : { height: dimensions.height }
-      }
+      style={{ aspectRatio: width / height, maxWidth: width }}
     >
       <div
-        ref={inner}
+        className="absolute top-0 left-0"
         style={{
-          marginLeft: dimensions.offset,
-          transform: `scale(${dimensions.scale})`,
+          height,
+          transform: `scale(${scale})`,
           transformOrigin: "top left",
-          width: DESIGN_WIDTH,
+          width,
         }}
       >
         {children}

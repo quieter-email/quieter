@@ -4,10 +4,11 @@ import { cn } from "@quieter/ui/cn";
 import type { ReactNode } from "react";
 
 import { BranchArt } from "./branch-art";
+import { DesignFrame } from "./design-frame";
 import { Reveal, RevealChild } from "./reveal";
 
 const CARD_CLASS =
-  "relative size-full overflow-hidden rounded-[12px] border border-black/10 bg-bg-raised shadow-elevation-sm";
+  "relative size-full overflow-hidden rounded-[12px] border border-fg/10 bg-bg-raised shadow-elevation-sm";
 
 const Card = ({ children }: { children: ReactNode }) => (
   <div className={CARD_CLASS}>{children}</div>
@@ -192,7 +193,7 @@ const BriefCard = () => (
           </div>
           <div className="flex items-center gap-[10px] overflow-hidden px-[8px]">
             <DarkButton>Remind me to apply next year again</DarkButton>
-            <div className="flex shrink-0 items-center justify-center overflow-hidden rounded-[5px] border border-black/20 px-[16px] py-[5px]">
+            <div className="flex shrink-0 items-center justify-center overflow-hidden rounded-[5px] border border-fg/20 px-[16px] py-[5px]">
               <p className="font-sans text-[12px] whitespace-nowrap text-fg">
                 Draft a rage tweet
               </p>
@@ -258,7 +259,7 @@ const ChatCard = () => (
     </RevealChild>
 
     <RevealChild
-      className="absolute top-[206.5px] left-[50.5px] flex items-center justify-center overflow-hidden rounded-tl-[10px] rounded-tr-[35px] rounded-br-[35px] rounded-bl-[10px] border border-black/10 bg-bg-raised px-[30px] py-[20px] shadow-elevation-sm"
+      className="absolute top-[206.5px] left-[50.5px] flex items-center justify-center overflow-hidden rounded-tl-[10px] rounded-tr-[35px] rounded-br-[35px] rounded-bl-[10px] border border-fg/10 bg-bg-raised px-[30px] py-[20px] shadow-elevation-sm"
       delay={0.22}
     >
       <p className="shrink-0 text-center font-serif text-[16px] whitespace-nowrap text-fg italic">
@@ -267,7 +268,7 @@ const ChatCard = () => (
     </RevealChild>
 
     <RevealChild
-      className="absolute top-[280.5px] left-[50.5px] flex h-[141px] flex-col items-start justify-center gap-[20px] overflow-hidden rounded-tl-[10px] rounded-tr-[35px] rounded-br-[35px] rounded-bl-[35px] border border-black/10 bg-bg-raised px-[30px] py-[20px] shadow-elevation-sm"
+      className="absolute top-[280.5px] left-[50.5px] flex h-[141px] flex-col items-start justify-center gap-[20px] overflow-hidden rounded-tl-[10px] rounded-tr-[35px] rounded-br-[35px] rounded-bl-[35px] border border-fg/10 bg-bg-raised px-[30px] py-[20px] shadow-elevation-sm"
       delay={0.32}
     >
       <p className="shrink-0 text-center font-serif text-[16px] whitespace-nowrap text-fg italic">
@@ -282,31 +283,56 @@ const ChatCard = () => (
   </Card>
 );
 
+const FeaturePreview = ({
+  children,
+  title,
+}: {
+  children: ReactNode;
+  title: string;
+}) => (
+  <>
+    <h3 className="mb-4 text-center font-serif text-xl text-fg italic lg:sr-only">
+      {title}
+    </h3>
+    <DesignFrame height={494} width={592}>
+      <div aria-hidden className="h-[494px]">
+        {children}
+      </div>
+    </DesignFrame>
+  </>
+);
+
 export const AiSection = () => (
   <>
-    <Reveal className="flex flex-col items-center justify-center overflow-hidden p-[40px]">
+    <Reveal className="px-6">
       <div className="text-center font-serif text-fg italic">
-        <h2 className="text-[48px] whitespace-pre">
+        <h2 className="text-3xl text-balance md:text-5xl">
           AI that does the annoying things
         </h2>
-        <p className="mt-[20px] text-[20px] whitespace-pre">
-          completely optional.
-        </p>
+        <p className="mt-5 text-lg md:text-xl">completely optional.</p>
       </div>
     </Reveal>
 
-    <div className="grid h-[1188px] w-[1435px] grid-cols-2 grid-rows-2 gap-[50px] p-[100px]">
-      <Reveal className="col-start-1 row-start-1">
-        <LabellingCard />
+    <div className="grid w-full max-w-7xl grid-cols-1 gap-10 px-6 lg:grid-cols-2 lg:gap-12">
+      <Reveal className="min-w-0">
+        <FeaturePreview title="Labels based on your preferences">
+          <LabellingCard />
+        </FeaturePreview>
       </Reveal>
-      <Reveal className="col-start-2 row-start-1" delay={0.08}>
-        <VoiceCard />
+      <Reveal className="min-w-0" delay={0.08}>
+        <FeaturePreview title="Drafts in your voice">
+          <VoiceCard />
+        </FeaturePreview>
       </Reveal>
-      <Reveal className="col-start-1 row-start-2" delay={0.16}>
-        <BriefCard />
+      <Reveal className="min-w-0" delay={0.16}>
+        <FeaturePreview title="Your daily brief">
+          <BriefCard />
+        </FeaturePreview>
       </Reveal>
-      <Reveal className="col-start-2 row-start-2" delay={0.24}>
-        <ChatCard />
+      <Reveal className="min-w-0" delay={0.24}>
+        <FeaturePreview title="Chat with your mailbox">
+          <ChatCard />
+        </FeaturePreview>
       </Reveal>
     </div>
   </>

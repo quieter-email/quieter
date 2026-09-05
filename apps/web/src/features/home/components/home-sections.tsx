@@ -2,10 +2,10 @@
 
 import { BILLING_PRODUCTS } from "@quieter/billing/plans";
 import { cn } from "@quieter/ui/cn";
+import { useState } from "react";
 
 import { AiSection } from "./ai-section";
 import { ConnectSection } from "./connect-section";
-import { DesignFrame } from "./design-frame";
 import { HomeAtmosphericBackground } from "./lazy-webgl-backgrounds";
 import { Reveal } from "./reveal";
 import { SoftGradientField } from "./soft-gradient-field";
@@ -25,33 +25,33 @@ const experience = [
     title: "As many inboxes as you want",
   },
   {
-    body: "iOS, Android, Web, Desktop, we gotchu",
-    title: "On every platform",
+    body: "Use Quieter in your browser, on your phone or computer",
+    title: "Mail wherever you work",
   },
 ] as const;
 
 const ExperienceSection = () => (
   <>
-    <Reveal className="flex flex-col items-center justify-center overflow-hidden p-[40px]">
-      <h2 className="text-center font-serif text-[48px] whitespace-nowrap text-fg italic">
+    <Reveal className="px-6">
+      <h2 className="text-center font-serif text-3xl text-balance text-fg italic md:text-5xl">
         A better email experience
       </h2>
     </Reveal>
 
-    <div className="flex w-[1654px] flex-col items-start gap-[100px] overflow-hidden p-[100px] whitespace-nowrap italic">
+    <div className="flex w-full max-w-7xl flex-col gap-12 px-6 italic md:gap-24 md:px-12">
       {experience.map((item, index) => (
         <Reveal
-          className={cn("flex w-full flex-col overflow-hidden px-[110px]", {
-            "items-end": index % 2 !== 0,
+          className={cn("flex w-full flex-col gap-3", {
             "items-start": index % 2 === 0,
+            "md:items-end md:text-right": index % 2 !== 0,
           })}
           delay={0.06}
           key={item.title}
         >
-          <h3 className="shrink-0 font-serif text-[40px] text-fg">
+          <h3 className="font-serif text-2xl text-balance text-fg md:text-4xl">
             {item.title}
           </h3>
-          <p className="shrink-0 font-sans text-[24px] text-muted-fg">
+          <p className="max-w-3xl font-sans text-base text-pretty text-muted-fg md:text-2xl">
             {item.body}
           </p>
         </Reveal>
@@ -65,56 +65,53 @@ const tiers = [
     credits: null,
     name: "Free and always included",
     price: "Included",
-    summary: "Infinite Gmail",
+    summary: "Connect your Gmail accounts",
   },
   {
     credits: `$${BILLING_PRODUCTS.managed.creditAmountCents / 100} in credits included.`,
     name: BILLING_PRODUCTS.managed.name,
     price: `$${BILLING_PRODUCTS.managed.monthlyPriceCents / 100}/month`,
-    summary: "Infinite managed mailboxes, infinite domains.",
+    summary: BILLING_PRODUCTS.managed.description,
   },
   {
     credits: `$${BILLING_PRODUCTS.pro.creditAmountCents / 100} in credits included.`,
     name: BILLING_PRODUCTS.pro.name,
     price: `$${BILLING_PRODUCTS.pro.monthlyPriceCents / 100}/month`,
-    summary: "Infinite managed mailboxes, infinite domains, all AI features.",
+    summary: BILLING_PRODUCTS.pro.description,
   },
 ] as const;
 
 const Pricing = () => (
   <>
-    <Reveal
-      className="flex flex-col items-center justify-center overflow-hidden p-[40px]"
-      id="pricing"
-    >
-      <h2 className="text-center font-serif text-[48px] whitespace-nowrap text-fg italic">
+    <Reveal className="scroll-mt-24 px-6" id="pricing">
+      <h2 className="text-center font-serif text-3xl text-balance text-fg italic md:text-5xl">
         Intuitive pricing
       </h2>
     </Reveal>
 
-    <div className="flex w-[1363px] flex-col items-center justify-center overflow-hidden p-[10px]">
+    <div className="flex w-full max-w-7xl flex-col px-6">
       <div className="h-px w-full shrink-0 bg-fg/40" />
       {tiers.map((tier, index) => (
         <Reveal className="w-full" delay={index * 0.07} key={tier.name}>
-          <div className="flex h-[159px] w-full items-start overflow-hidden">
-            <div className="flex h-full w-[332px] shrink-0 items-center justify-center overflow-hidden px-[166px] py-[46px]">
-              <p className="shrink-0 font-serif text-[24px] whitespace-nowrap text-fg italic">
+          <div className="grid w-full gap-4 py-8 md:grid-cols-[1fr_2fr_1fr] md:items-center md:gap-8 md:py-12">
+            <div>
+              <h3 className="font-serif text-xl text-fg italic md:text-2xl">
                 {tier.name}
-              </p>
+              </h3>
             </div>
-            <div className="flex h-full min-w-px flex-1 items-center justify-center overflow-hidden px-[166px] py-[46px]">
-              <p className="shrink-0 text-center font-serif whitespace-nowrap text-fg italic">
-                <span className="text-[24px]">{tier.summary}</span>
+            <div className="min-w-0">
+              <p className="font-serif text-fg italic md:text-center">
+                <span className="text-lg md:text-2xl">{tier.summary}</span>
                 {tier.credits === null ? null : (
                   <>
                     <br />
-                    <span className="text-[20px]">{tier.credits}</span>
+                    <span className="text-base md:text-xl">{tier.credits}</span>
                   </>
                 )}
               </p>
             </div>
-            <div className="flex h-[159px] w-[332px] shrink-0 items-center justify-center overflow-hidden px-[166px] py-[46px]">
-              <p className="shrink-0 font-serif text-[24px] whitespace-nowrap text-fg italic">
+            <div>
+              <p className="font-serif text-xl text-fg italic tabular-nums md:text-right md:text-2xl">
                 {tier.price}
               </p>
             </div>
@@ -123,8 +120,8 @@ const Pricing = () => (
         </Reveal>
       ))}
 
-      <Reveal className="flex items-start overflow-hidden p-[10px]" delay={0.1}>
-        <p className="shrink-0 text-center font-serif text-[20px] whitespace-nowrap text-fg italic">
+      <Reveal className="py-6" delay={0.1}>
+        <p className="text-center font-serif text-base text-pretty text-fg italic md:text-xl">
           Managed mail starts at $0.20 per 1,000 messages. AI usage is billed at
           model cost plus 15%.
         </p>
@@ -154,20 +151,24 @@ const Closing = () => (
   </section>
 );
 
-export const HomeSections = () => (
-  <>
-    <div className="theme-light relative overflow-hidden bg-bg-surface">
-      <SoftGradientField />
+export const HomeSections = () => {
+  const [paused, setPaused] = useState(false);
+  return (
+    <>
+      <div
+        className="theme-light relative overflow-hidden bg-bg-surface"
+        data-home-paused={paused}
+      >
+        <SoftGradientField />
 
-      <DesignFrame>
-        <div className="relative z-10 flex w-full flex-col items-center gap-[112px] py-[200px]">
-          <ConnectSection />
+        <div className="relative z-10 flex w-full flex-col items-center gap-16 py-20 md:gap-28 md:py-40">
+          <ConnectSection paused={paused} onPausedChange={setPaused} />
           <AiSection />
           <ExperienceSection />
           <Pricing />
         </div>
-      </DesignFrame>
-    </div>
-    <Closing />
-  </>
-);
+      </div>
+      <Closing />
+    </>
+  );
+};

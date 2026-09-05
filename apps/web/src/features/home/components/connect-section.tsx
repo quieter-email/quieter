@@ -1,17 +1,18 @@
 "use client";
 
+import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { AnimatePresence, m, useReducedMotion } from "motion/react";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
+import { DesignFrame } from "./design-frame";
 import { Reveal } from "./reveal";
 
 const VERB_MS = 5000;
 const CHANNEL_MS = 10_000;
 const VERBS = ["send", "receive"] as const;
 const EASE = [0.23, 1, 0.32, 1] as const;
-const TAB_LEFTS = [32, 491, 941] as const;
 
 const channels = [
   { id: "gmail", index: "01", label: "Gmail" },
@@ -21,19 +22,22 @@ const channels = [
 
 type ChannelId = (typeof channels)[number]["id"];
 
-const VerbSwitcher = () => {
+const VerbSwitcher = ({ paused }: { paused: boolean }) => {
   const reduced = useReducedMotion();
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setIndex((current) => (current + 1) % VERBS.length);
-    }, VERB_MS);
+    let timer: number | undefined;
+    if (!paused && reduced !== true) {
+      timer = window.setTimeout(() => {
+        setIndex((current) => (current + 1) % VERBS.length);
+      }, VERB_MS);
+    }
 
     return () => {
       window.clearTimeout(timer);
     };
-  }, [index]);
+  }, [index, paused, reduced]);
 
   const verb = VERBS[index];
 
@@ -131,56 +135,81 @@ const TileCluster = ({ channel }: { channel: ChannelId }) => (
   </>
 );
 
-export const ConnectSection = () => {
+export const ConnectSection = ({
+  paused,
+  onPausedChange,
+}: {
+  paused: boolean;
+  onPausedChange: (paused: boolean) => void;
+}) => {
   const reduced = useReducedMotion();
   const [active, setActive] = useState(0);
   const [cycle, setCycle] = useState(0);
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const interacting = hovered || focused;
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setActive((current) => (current + 1) % channels.length);
-      setCycle((current) => current + 1);
-    }, CHANNEL_MS);
+    let timer: number | undefined;
+    if (!paused && !interacting && reduced !== true) {
+      timer = window.setTimeout(() => {
+        setActive((current) => (current + 1) % channels.length);
+        setCycle((current) => current + 1);
+      }, CHANNEL_MS);
+    }
 
     return () => {
       window.clearTimeout(timer);
     };
-  }, [active, cycle]);
+  }, [active, cycle, interacting, paused, reduced]);
 
   const channel = channels[active];
 
   return (
     <>
-      <Reveal className="relative h-[181px] w-[839px] overflow-hidden">
-        <h2 className="absolute top-[62px] left-[65px] font-serif text-[48px] whitespace-nowrap text-fg italic">
+      <Reveal className="px-6">
+        <h2 className="text-center font-serif text-3xl text-balance text-fg italic md:text-5xl">
           <span className="sr-only">How do you want to send or receive?</span>
-          <span aria-hidden className="flex items-baseline">
+          <span aria-hidden>
             How do you want to&nbsp;
-            <VerbSwitcher />
+            <VerbSwitcher paused={paused || interacting} />
           </span>
         </h2>
       </Reveal>
 
-      <div className="relative flex w-full flex-col items-center gap-[51px] overflow-hidden p-[100px]">
+      <div className="relative flex w-full max-w-7xl flex-col items-center gap-8 px-6">
         <Reveal
           aria-label="Mail connection options"
-          className="relative h-[106px] w-[1342px]"
+          className="grid w-full grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-8"
           delay={0.06}
-          role="tablist"
+          as="fieldset"
+          onMouseEnter={() => {
+            setHovered(true);
+          }}
+          onMouseLeave={() => {
+            setHovered(false);
+          }}
+          onFocus={() => {
+            setFocused(true);
+          }}
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) {
+              setFocused(false);
+            }
+          }}
         >
           {channels.map((entry, index) => (
-            <button
+            <Button
               aria-controls="landing-channel-panel"
-              aria-selected={index === active}
-              className="absolute top-[42px] h-[42px] w-[369px] text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4"
+              aria-pressed={index === active}
+              className="relative h-auto min-h-12 justify-start rounded-none px-1 py-3 text-left"
               id={`landing-channel-${entry.id}`}
               key={entry.id}
               onClick={() => {
                 setActive(index);
                 setCycle((current) => current + 1);
               }}
-              role="tab"
-              style={{ left: TAB_LEFTS[index] }}
+              variant="ghost"
               type="button"
             >
               <span className="absolute inset-x-0 top-0 h-px bg-fg/15" />
@@ -188,17 +217,25 @@ export const ConnectSection = () => {
                 <m.span
                   animate={{ transform: "scaleX(1)" }}
                   className="absolute inset-x-0 top-0 h-px origin-left bg-fg/70"
-                  initial={{ transform: "scaleX(0)" }}
+                  initial={{
+                    transform:
+                      paused || interacting || reduced === true
+                        ? "scaleX(1)"
+                        : "scaleX(0)",
+                  }}
                   key={`${entry.id}-${cycle}`}
                   transition={{
-                    duration: reduced === true ? 0 : CHANNEL_MS / 1000,
+                    duration:
+                      paused || interacting || reduced === true
+                        ? 0
+                        : CHANNEL_MS / 1000,
                     ease: "linear",
                   }}
                 />
               ) : null}
               <span
                 className={cn(
-                  "absolute top-[12px] left-[5px] text-[20px] whitespace-nowrap transition-colors duration-500",
+                  "text-base transition-colors duration-500 md:text-xl",
                   {
                     "text-fg": index === active,
                     "text-muted-fg": index !== active,
@@ -208,57 +245,74 @@ export const ConnectSection = () => {
                 <span className="font-serif">{entry.index}</span>
                 <span className="font-sans">{` ${entry.label}`}</span>
               </span>
-            </button>
+            </Button>
           ))}
         </Reveal>
 
-        <Reveal
-          aria-labelledby={`landing-channel-${channel.id}`}
-          className="relative h-[355px] w-[1278px] overflow-hidden rounded-[12px] border border-black/10 bg-bg-raised shadow-elevation-sm"
-          delay={0.12}
+        <section
+          className="w-full"
           id="landing-channel-panel"
-          role="tabpanel"
+          aria-label={`${channel.label} connection illustration`}
         >
-          <AnimatePresence initial={false} mode="wait">
-            <m.div
-              animate={{ filter: "blur(0px)", opacity: 1 }}
-              className="absolute inset-0"
-              exit={
-                reduced === true
-                  ? { opacity: 0 }
-                  : { filter: "blur(12px)", opacity: 0 }
-              }
-              initial={
-                reduced === true
-                  ? { opacity: 0 }
-                  : { filter: "blur(12px)", opacity: 0 }
-              }
-              key={channel.id}
-              transition={{
-                duration: reduced === true ? 0.18 : 0.46,
-                ease: EASE,
-              }}
+          <DesignFrame height={355} width={1278}>
+            <Reveal
+              className="relative h-[355px] w-[1278px] overflow-hidden rounded-[12px] border border-fg/10 bg-bg-raised shadow-elevation-sm"
+              delay={0.12}
             >
-              <TileCluster channel={channel.id} />
+              <AnimatePresence initial={false} mode="wait">
+                <m.div
+                  animate={{ filter: "blur(0px)", opacity: 1 }}
+                  className="absolute inset-0"
+                  exit={
+                    reduced === true
+                      ? { opacity: 0 }
+                      : { filter: "blur(12px)", opacity: 0 }
+                  }
+                  initial={
+                    reduced === true
+                      ? { opacity: 0 }
+                      : { filter: "blur(12px)", opacity: 0 }
+                  }
+                  key={channel.id}
+                  transition={{
+                    duration: reduced === true ? 0.18 : 0.46,
+                    ease: EASE,
+                  }}
+                >
+                  <TileCluster channel={channel.id} />
 
-              <img
-                alt=""
-                className="absolute top-[104.5px] left-[348.5px] h-[139.562px] w-[589px]"
-                src="/landing/flow-curve.svg"
-              />
-
-              <div className="absolute top-[81.5px] left-[1024.5px] flex size-[179.288px] items-center justify-center">
-                <div className="flex-none rotate-[8.24deg]">
                   <img
                     alt=""
-                    className="size-[158.247px] object-cover"
-                    src="/landing/quieter-mark.png"
+                    className="absolute top-[104.5px] left-[348.5px] h-[139.562px] w-[589px]"
+                    src="/landing/flow-curve.svg"
                   />
-                </div>
-              </div>
-            </m.div>
-          </AnimatePresence>
-        </Reveal>
+
+                  <div className="absolute top-[81.5px] left-[1024.5px] flex size-[179.288px] items-center justify-center">
+                    <div className="flex-none rotate-[8.24deg]">
+                      <img
+                        alt=""
+                        className="size-[158.247px] object-cover"
+                        src="/landing/quieter-mark.png"
+                      />
+                    </div>
+                  </div>
+                </m.div>
+              </AnimatePresence>
+            </Reveal>
+          </DesignFrame>
+        </section>
+        {reduced === true ? null : (
+          <Button
+            aria-pressed={paused}
+            onClick={() => {
+              onPausedChange(!paused);
+            }}
+            variant="ghost"
+            type="button"
+          >
+            {paused ? "Resume animations" : "Pause animations"}
+          </Button>
+        )}
       </div>
     </>
   );
