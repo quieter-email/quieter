@@ -1,3 +1,5 @@
+import { isDeploymentAssetError } from "./deployment-errors";
+
 const GMAIL_REAUTHORIZATION_MESSAGE =
   "Google access needs to be reconnected for this mailbox.";
 const MAILBOX_SCOPE_REPAIR_REQUIRED = "MAILBOX_SCOPE_REPAIR_REQUIRED";
@@ -44,7 +46,11 @@ export const shouldDiscardClientError = (
   originalException: unknown
 ) =>
   isExpectedClientError(originalException) ||
+  isDeploymentAssetError(originalException) ||
+  isDeploymentAssetError({ message: event.message }) ||
   event.message === GMAIL_REAUTHORIZATION_MESSAGE ||
   event.exception?.values?.some(
-    ({ value }) => value === GMAIL_REAUTHORIZATION_MESSAGE
+    ({ value }) =>
+      value === GMAIL_REAUTHORIZATION_MESSAGE ||
+      isDeploymentAssetError({ message: value })
   ) === true;

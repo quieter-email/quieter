@@ -8,7 +8,10 @@ import { reportError } from "@quieter/observability";
 import { and, asc, eq, gt, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 
 import type { BillingAccount } from "./entitlements.ts";
-import { getPolarApiOrganizationId } from "./polar-config.ts";
+import {
+  getBillingExternalIdentity,
+  getPolarApiOrganizationId,
+} from "./polar-config.ts";
 
 const BILLING_CREDIT_USAGE_EVENT_NAME = "credit-usage";
 const MICROCENTS_PER_CENT = 1_000_000;
@@ -37,6 +40,7 @@ export const createPolarCreditUsageEvent = (input: {
   billableCostMicroCents: number;
   category: BillingUsageCategory;
   costMicroCents: number;
+  createdAt: Date;
   eventId: string;
   metadata: Record<string, string | number | boolean>;
 }) => ({
@@ -52,6 +56,7 @@ export const createPolarCreditUsageEvent = (input: {
   },
   name: BILLING_CREDIT_USAGE_EVENT_NAME,
   organizationId: getPolarApiOrganizationId(),
+  timestamp: input.createdAt,
 });
 
 const getBillingCreditUsageWithClient = async (
@@ -80,15 +85,24 @@ const getBillingCreditUsageWithClient = async (
   const [[usage], breakdown] = await Promise.all([
     client
       .select({
-        billableCostMicroCents: sql<number>`coalesce(sum(${billingCreditUsageEvent.billableCostMicroCents}), 0)`,
-        costMicroCents: sql<number>`coalesce(sum(${billingCreditUsageEvent.costMicroCents}), 0)`,
+        billableCostMicroCents:
+          sql`coalesce(sum(${billingCreditUsageEvent.billableCostMicroCents}), 0)`.mapWith(
+            Number
+          ),
+        costMicroCents:
+          sql`coalesce(sum(${billingCreditUsageEvent.costMicroCents}), 0)`.mapWith(
+            Number
+          ),
       })
       .from(billingCreditUsageEvent)
       .where(periodFilter)
       .limit(1),
     client
       .select({
-        costMicroCents: sql<number>`coalesce(sum(${billingCreditUsageEvent.costMicroCents}), 0)`,
+        costMicroCents:
+          sql`coalesce(sum(${billingCreditUsageEvent.costMicroCents}), 0)`.mapWith(
+            Number
+          ),
         kind: usageKind,
       })
       .from(billingCreditUsageEvent)
@@ -127,6 +141,7 @@ export const recordBillingCreditUsage = async (input: {
         billableCostMicroCents: billingCreditUsageEvent.billableCostMicroCents,
         category: billingCreditUsageEvent.category,
         costMicroCents: billingCreditUsageEvent.costMicroCents,
+        createdAt: billingCreditUsageEvent.createdAt,
         id: billingCreditUsageEvent.id,
         metadata: billingCreditUsageEvent.metadata,
         polarEventReportedAt: billingCreditUsageEvent.polarEventReportedAt,
@@ -140,6 +155,7 @@ export const recordBillingCreditUsage = async (input: {
         billableCostMicroCents: existingEvent.billableCostMicroCents,
         category: existingEvent.category,
         costMicroCents: existingEvent.costMicroCents,
+        createdAt: existingEvent.createdAt,
         eventId: existingEvent.id,
         metadata: existingEvent.metadata ?? {},
         polarEventReportedAt: existingEvent.polarEventReportedAt,
@@ -159,13 +175,14 @@ export const recordBillingCreditUsage = async (input: {
       usage.costMicroCents + input.costMicroCents - usage.creditAmountMicroCents
     );
     const billableCostMicroCents = billableAfter - billableBefore;
+    const createdAt = new Date();
     const [event] = await transaction
       .insert(billingCreditUsageEvent)
       .values({
         billableCostMicroCents,
         category: input.category,
         costMicroCents: input.costMicroCents,
-        createdAt: new Date(),
+        createdAt,
         dedupeKey: input.dedupeKey,
         id: crypto.randomUUID(),
         metadata: input.metadata ?? {},
@@ -181,6 +198,7 @@ export const recordBillingCreditUsage = async (input: {
       billableCostMicroCents: event === undefined ? 0 : billableCostMicroCents,
       category: input.category,
       costMicroCents: input.costMicroCents,
+      createdAt,
       eventId: event?.id ?? null,
       metadata: input.metadata ?? {},
       polarEventReportedAt: null,
@@ -202,6 +220,7 @@ export const recordBillingCreditUsage = async (input: {
           billableCostMicroCents: result.billableCostMicroCents,
           category: result.category,
           costMicroCents: result.costMicroCents,
+          createdAt: result.createdAt,
           eventId: result.eventId,
           metadata: result.metadata,
         }),
@@ -249,10 +268,11 @@ export const syncUnreportedBillingCreditUsage = async (
 ) => {
   const limit = input.limit ?? 100;
   const rows = await db
-    .select({
+    .selectDistinct({
       billableCostMicroCents: billingCreditUsageEvent.billableCostMicroCents,
       category: billingCreditUsageEvent.category,
       costMicroCents: billingCreditUsageEvent.costMicroCents,
+      createdAt: billingCreditUsageEvent.createdAt,
       eventId: billingCreditUsageEvent.id,
       metadata: billingCreditUsageEvent.metadata,
       organizationId: billingCreditUsageEvent.organizationId,
@@ -262,7 +282,12 @@ export const syncUnreportedBillingCreditUsage = async (
       billingSubscription,
       currentActiveSubscriptionUnreportedUsageFilter
     )
-    .where(unreportedPositiveCreditUsageFilter)
+    .where(
+      and(
+        unreportedPositiveCreditUsageFilter,
+        gt(billingSubscription.currentPeriodEnd, new Date())
+      )
+    )
     .orderBy(asc(billingCreditUsageEvent.createdAt))
     .limit(limit);
 
@@ -280,11 +305,15 @@ export const syncUnreportedBillingCreditUsage = async (
     rows.map((row) =>
       createPolarCreditUsageEvent({
         account: {
-          externalCustomerId: `organization:${row.organizationId}`,
+          externalCustomerId: getBillingExternalIdentity(
+            "organization",
+            row.organizationId
+          ),
         },
         billableCostMicroCents: row.billableCostMicroCents,
         category: row.category,
         costMicroCents: row.costMicroCents,
+        createdAt: row.createdAt,
         eventId: row.eventId,
         metadata: row.metadata ?? {},
       })

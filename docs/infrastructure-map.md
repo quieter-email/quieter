@@ -1,6 +1,6 @@
 # Infrastructure Map
 
-Complete map of Quieter's infrastructure as defined by `sst.config.ts` and `infra/`. It reflects the Cloudflare-first background-job architecture on `feat/cloudflare-background-jobs`; production still runs the previous AWS topology until that branch is deployed and the orphaned queues noted at the bottom are cleaned up.
+Complete map of Quieter's infrastructure as defined by `sst.config.ts` and `infra/`. It reflects the Cloudflare background-job architecture and direct Gmail notification processing.
 
 Two providers, one rule: **Cloudflare runs the application and background jobs; AWS runs managed-email transport (SES) plus the temporary receipt bucket. PostgreSQL is the single source of truth.**
 
@@ -74,7 +74,8 @@ flowchart TB
     BROWSER <-.->|wss /gmail/live?token| GWORKER
     GPUB -->|OIDC JWT push| GWORKER
     GWORKER -->|mailbox-dirty| LSDO
-    GWORKER -->|enqueue notification| PSQ
+    GWORKER -->|process notification directly| HD
+    GWORKER -->|enqueue automation runs| MAQ
     LSDO -.->|refresh signal| BROWSER
     PSQ --> PSW
     PSW -->|process + maintain| HD
@@ -133,10 +134,10 @@ flowchart TB
 | Resource | SST type | Entry point | Triggered by | Talks to | Notes |
 | --- | --- | --- | --- | --- | --- |
 | `Web` | `sst.cloudflare.TanStackStart` | `apps/web` | Browser HTTPS | Hyperdrive, SESv2, Gmail API, OpenRouter, Polar, Sentry, R2 | Production domain `quieter.email` (+ `www` redirect), logs + traces on, linked scoped AWS credentials via `WebAwsPermissions` for `ses:SendEmail`/`SendRawEmail`. |
-| `GmailRealtimeWorker` | `sst.cloudflare.Worker` | `packages/cloudflare/src/worker.ts` | Google Pub/Sub push (POST `/gmail/pubsub`), browser WebSocket (`/gmail/live`) | `GmailLiveSyncMailbox`, `GmailPsQueue` | Verifies Google OIDC JWT against JWKS, checks subscription name, body limit 64 KiB. One DO per normalized email address. |
+| `GmailRealtimeWorker` | `sst.cloudflare.Worker` | `packages/cloudflare/src/worker.ts` | Google Pub/Sub push (POST `/gmail/pubsub`), browser WebSocket (`/gmail/live`) | Hyperdrive, processing secrets, `MailboxActionQueue`, `GmailLiveSyncMailbox` | Processes authenticated notifications before acknowledging. Verifies Google OIDC JWT against JWKS, checks subscription name, body limit 64 KiB. One DO per normalized email address. |
 | `GmailLiveSyncMailbox` | `sst.cloudflare.DurableObject` (SQLite, migration `v1`) | `packages/cloudflare/src/gmail-live-sync-mailbox.ts` | Worker fetch / WS upgrade | Browser sockets, workers via `/broadcast` | Hibernatable WebSockets, auto ping/pong, broadcasts `mailbox-dirty` and `mailbox-details-dirty`. |
-| `GmailPsQueue` / `GmailPsDlq` | `sst.cloudflare.Queue` | — | Producer: realtime worker, maintenance cron | Consumer `queue-worker.ts` | DLQ after 10 retries, 30 s retry delay, max concurrency 20, batch size 1. |
-| `queue-worker.ts` consumer | Worker (queue subscription) | `packages/cloudflare/src/queue-worker.ts` | `GmailPsQueue` messages | Hyperdrive, Gmail API, OpenRouter, Polar, DO | Handles `notification` and `maintenance` messages; 5-minute CPU limit; per-message `retry` with exponential backoff, throws on busy mailbox lease. |
+| `GmailPsQueue` / `GmailPsDlq` | `sst.cloudflare.Queue` | — | Producer: maintenance cron | Consumer `queue-worker.ts` | DLQ after 10 retries, 30 s retry delay, max concurrency 20, batch size 1. |
+| `queue-worker.ts` consumer | Worker (queue subscription) | `packages/cloudflare/src/queue-worker.ts` | `GmailPsQueue` messages | Hyperdrive, Gmail API, OpenRouter, Polar, DO | Handles maintenance and drains previously queued notifications; 5-minute CPU limit; per-message `retry` with exponential backoff, throws on busy mailbox lease. |
 | `GmailPubSubMaintenance` | `sst.cloudflare.Cron` | `packages/cloudflare/src/gmail-maintenance-worker.ts` | `*/15 * * * *` | Hyperdrive, `GmailPsQueue` | Due-driven selection (≤500/tick, ordered by soonest expiry): watch state missing, expiry within 72 h, renewal heartbeat overdue (36 h + hash jitter), stale reconciliation (2 h + jitter) for mailboxes with enabled automations, or recent error backoff (1 h). Mailboxes receiving pushes stay fresh via `lastReconciledAt` and are never selected. |
 | `MailboxActionQueue` / `MailboxActionDeadLetterQueue` | `sst.cloudflare.Queue` | — | Producer: dispatch cron | Consumer `mailbox-action-worker.ts` | DLQ after 5 retries, 30 s delay, max concurrency 5, batch size 1. |
 | `mailbox-action-worker.ts` consumer | Worker (queue subscription) | `packages/cloudflare/src/mailbox-action-worker.ts` | `MailboxActionQueue` messages | Hyperdrive, Gmail API, OpenRouter, Polar, Linear, Google Calendar | Executes `mailboxActionRun` by id; 5-minute CPU limit. Transient failures return the run to `queued` for the next delivery; the sixth failed delivery (queue retry limit 5) settles it as `failed` and DLQs the message. |
@@ -179,8 +180,6 @@ sequenceDiagram
     participant P as Google Pub/Sub
     participant W as GmailRealtimeWorker
     participant D as GmailLiveSyncMailbox DO
-    participant Q as GmailPsQueue
-    participant C as queue-worker consumer
     participant DB as PostgreSQL
     participant A as Gmail API
     participant B as Browser
@@ -190,17 +189,16 @@ sequenceDiagram
     W->>W: verify JWT vs Google JWKS, subscription, parse payload
     W->>D: broadcast mailbox-dirty
     D-->>B: invalidate message/unread queries
-    W->>Q: send notification message
-    W-->>P: 204
-    Q->>C: deliver (batch size 1)
-    C->>DB: claim 14-min processing lease, update lastNotificationAt
-    C->>DB: billing entitlement check
-    C->>A: history.list / messages.get / labels (up to 5 pages)
-    C->>DB: persist messages, auto-label/useful-detail results
-    C->>DB: insert mailboxActionRun rows for triggers
-    C->>D: broadcast mailbox-details-dirty
+    W->>DB: claim 14-min processing lease, update lastNotificationAt
+    W->>DB: billing entitlement check
+    W->>A: history.list / messages.get / labels (up to 5 pages)
+    W->>DB: persist messages, auto-label/useful-detail results
+    W->>DB: insert mailboxActionRun rows for triggers
+    W->>D: broadcast mailbox-details-dirty
     D-->>B: refresh useful details
-    C-->>Q: ack (or retry with backoff, DLQ after 10)
+    W->>D: broadcast mailbox-dirty
+    D-->>B: refresh message labels
+    W-->>P: 204 after processing, 5xx on failure or busy lease
 ```
 
 ### 2. Gmail scheduled maintenance (every 15 minutes)

@@ -359,6 +359,7 @@ export const sendMessageInputSchema = z
     html: z.string().min(1).optional(),
     idempotencyKey: z.string().trim().min(1).max(255).optional(),
     metadata: z.record(z.string(), jsonMetadataValueSchema).optional(),
+    openTracking: z.boolean().optional(),
     replyTo: addressListSchema.optional(),
     subject: z.string().trim().min(1),
     tags: z.array(sendTagSchema).default([]),
@@ -467,6 +468,7 @@ export const getSendEnvelopeAddressList = (
 export const buildSendMimeMessage = (
   message: SendMessageInput,
   options?: {
+    htmlTransform?: (html: string) => string;
     messageId?: string;
     sentAt?: Date;
   }
@@ -532,7 +534,10 @@ export const buildSendMimeMessage = (
     (attachment) => !attachment.inline
   );
   const body = buildBodyParts({
-    html: message.html,
+    html:
+      options?.htmlTransform !== undefined && message.html !== undefined
+        ? options.htmlTransform(message.html)
+        : message.html,
     inlineAttachments,
     regularAttachments,
     text: message.text,

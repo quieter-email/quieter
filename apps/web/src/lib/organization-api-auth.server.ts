@@ -15,11 +15,13 @@ export const getOrganizationApiKeyOrganizationId = async (
     return null;
   }
 
-  const [{ organizationApiKeyApi }, { ORGANIZATION_API_KEY_CONFIG_ID }] =
-    await Promise.all([
-      import("@quieter/auth"),
-      import("@quieter/orpc/organization-mail"),
-    ]);
+  const [
+    { organizationApiKeyApi },
+    { ORGANIZATION_API_KEY_CONFIG_ID, organizationHasBillingFeature },
+  ] = await Promise.all([
+    import("@quieter/auth"),
+    import("@quieter/orpc/organization-mail"),
+  ]);
   const verifiedApiKey = await organizationApiKeyApi.verifyApiKey({
     body: {
       configId: ORGANIZATION_API_KEY_CONFIG_ID,
@@ -33,6 +35,14 @@ export const getOrganizationApiKeyOrganizationId = async (
     verifiedApiKey.key === undefined ||
     verifiedApiKey.key.configId !== ORGANIZATION_API_KEY_CONFIG_ID
   ) {
+    return null;
+  }
+
+  const hasAccess = await organizationHasBillingFeature({
+    feature: "organizationApiKeys",
+    organizationId: verifiedApiKey.key.referenceId,
+  });
+  if (!hasAccess) {
     return null;
   }
 

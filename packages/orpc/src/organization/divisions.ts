@@ -48,11 +48,14 @@ const assertDivisionNameAvailable = async (input: {
   }
 };
 
-const assertOrganizationMember = async (input: {
-  organizationId: string;
-  userId: string;
-}) => {
-  const [membership] = await db
+const assertOrganizationMember = async (
+  input: {
+    organizationId: string;
+    userId: string;
+  },
+  database: Pick<typeof db, "select"> = db
+) => {
+  const [membership] = await database
     .select({ id: member.id, role: member.role })
     .from(member)
     .where(
@@ -72,11 +75,14 @@ const assertOrganizationMember = async (input: {
   return membership;
 };
 
-export const assertOrganizationManager = async (input: {
-  organizationId: string;
-  userId: string;
-}) => {
-  const membership = await assertOrganizationMember(input);
+export const assertOrganizationManager = async (
+  input: {
+    organizationId: string;
+    userId: string;
+  },
+  database: Pick<typeof db, "select"> = db
+) => {
+  const membership = await assertOrganizationMember(input, database);
 
   if (!["admin", "owner"].includes(membership.role)) {
     throw new ORPCError("FORBIDDEN", {
@@ -87,11 +93,14 @@ export const assertOrganizationManager = async (input: {
   return membership;
 };
 
-const getDivisionWithManagerAccess = async (input: {
-  divisionId: string;
-  userId: string;
-}) => {
-  const [division] = await db
+const getDivisionWithManagerAccess = async (
+  input: {
+    divisionId: string;
+    userId: string;
+  },
+  database: Pick<typeof db, "select"> = db
+) => {
+  const [division] = await database
     .select({
       id: organizationDivision.id,
       organizationId: organizationDivision.organizationId,

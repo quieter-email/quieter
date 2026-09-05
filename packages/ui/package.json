@@ -11,6 +11,8 @@
     "./avatar": "./src/components/ui/avatar.tsx",
     "./avatar-fallback": "./src/components/ui/avatar-fallback.tsx",
     "./avatar-image": "./src/components/ui/avatar-image.tsx",
+    "./brand": "./src/components/ui/brand.tsx",
+    "./brand-geometry": "./src/lib/brand-geometry.ts",
     "./button": "./src/components/ui/button.tsx",
     "./calendar": "./src/components/ui/calendar.tsx",
     "./checkbox": "./src/components/ui/checkbox.tsx",

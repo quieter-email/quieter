@@ -154,8 +154,31 @@ export const getUserById = async (userId: string) => {
 };
 
 export const cleanupOrganizationsForDeletedUser = async (userId: string) => {
-  await db.delete(invitation).where(eq(invitation.inviterId, userId));
-  await db.delete(member).where(eq(member.userId, userId));
+  await db.transaction(async (tx) => {
+    await tx
+      .select({ id: user.id })
+      .from(user)
+      .where(eq(user.id, userId))
+      .for("update");
+    const [ownedMailbox] = await tx
+      .select({ id: mailbox.id })
+      .from(mailbox)
+      .where(
+        and(
+          eq(mailbox.managedOwnerUserId, userId),
+          eq(mailbox.provider, "managed")
+        )
+      )
+      .limit(1);
+    if (ownedMailbox !== undefined) {
+      throw new APIError("FORBIDDEN", {
+        message:
+          "Ask a team admin to transfer your private mailboxes before deleting your account.",
+      });
+    }
+    await tx.delete(invitation).where(eq(invitation.inviterId, userId));
+    await tx.delete(member).where(eq(member.userId, userId));
+  });
 };
 
 type RawMailObjectProvider = "r2" | "s3";

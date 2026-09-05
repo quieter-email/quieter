@@ -4,6 +4,7 @@ import { describe, expect, test } from "vite-plus/test";
 
 import {
   getAssistantProgress,
+  getChatRetryAction,
   getMessageText,
   toInitialMessages,
 } from "./chat-messages";
@@ -17,6 +18,19 @@ type StoredMessage = {
 };
 
 describe("chat message conversion", () => {
+  test("does not regenerate an empty or assistant-only conversation", () => {
+    expect(getChatRetryAction([], [])).toStrictEqual({ type: "unavailable" });
+    expect(
+      getChatRetryAction(
+        [],
+        [{ id: "assistant", parts: [], role: "assistant" }]
+      )
+    ).toStrictEqual({ type: "unavailable" });
+    expect(
+      getChatRetryAction([{ id: "user", parts: [], role: "user" }], [])
+    ).toStrictEqual({ type: "unavailable" });
+  });
+
   test("projects persisted rows onto UI messages and skips system rows", () => {
     const storedMessage: StoredMessage = {
       createdAt: new Date("2026-08-20T10:00:00.000Z"),
@@ -84,5 +98,44 @@ describe("chat message conversion", () => {
         true
       )
     ).toBeNull();
+  });
+
+  test("recovers each retry state without duplicating a persisted user turn", () => {
+    const userMessage: UIMessage = {
+      id: "user-1",
+      parts: [{ text: "Try this", type: "text" }],
+      role: "user",
+    };
+    const oldAssistant: UIMessage = {
+      id: "assistant-old",
+      parts: [{ text: "Old answer", type: "text" }],
+      role: "assistant",
+    };
+    const newAssistant: UIMessage = {
+      id: "assistant-new",
+      parts: [{ text: "New answer", type: "text" }],
+      role: "assistant",
+    };
+
+    expect(getChatRetryAction([userMessage], [])).toStrictEqual({
+      messageId: "user-1",
+      text: "Try this",
+      type: "resubmit-user",
+    });
+    expect(getChatRetryAction([userMessage], [userMessage])).toStrictEqual({
+      type: "regenerate",
+    });
+    expect(
+      getChatRetryAction(
+        [userMessage, newAssistant],
+        [userMessage, newAssistant]
+      )
+    ).toStrictEqual({ type: "hydrate" });
+    expect(
+      getChatRetryAction(
+        [userMessage, newAssistant],
+        [userMessage, oldAssistant]
+      )
+    ).toStrictEqual({ type: "regenerate" });
   });
 });

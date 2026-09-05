@@ -23,6 +23,7 @@ export const createWeb = (
   links: SstLinkable[] = []
 ) =>
   new sst.cloudflare.TanStackStart("Web", {
+    dev: { command: "vp run dev" },
     domain: webDomain,
     environment: {
       AWS_DEFAULT_REGION: getEnvironmentValue("AWS_REGION", "eu-central-1"),

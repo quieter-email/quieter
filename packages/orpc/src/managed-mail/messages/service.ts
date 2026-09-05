@@ -14,6 +14,7 @@ import {
   managedMailLabel,
   managedMailMessage,
   managedMailMessageLabel,
+  organizationMailDeliveryRecipient,
 } from "@quieter/database/schema";
 import type {
   ManagedMailHeader,
@@ -46,7 +47,6 @@ import { reportError } from "@quieter/observability";
 import {
   and,
   asc,
-  count,
   countDistinct,
   desc,
   eq,
@@ -58,10 +58,14 @@ import {
 } from "drizzle-orm";
 import type { z } from "zod";
 
+import { assertLocalMailSend } from "../../local-managed-mail";
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
 import {
   assertOrganizationMailRecipientsNotSuppressed,
+  buildOpenTrackingHtmlTransform,
   getOrganizationMailDelivery,
+  groupDeliveryStatusesByMessage,
+  resolveOrganizationMailOpenTracking,
 } from "../../organization-mail-delivery";
 import {
   assertOrganizationOwnsVerifiedSenderDomain,
@@ -223,12 +227,14 @@ const getSesv2Client = async (): Promise<SESv2Client> => {
 const toMessageListItem = async (
   record: ManagedMessagePresentationRecord,
   options: {
+    attachments?: MessageListItem["attachments"];
     attachmentCount?: number;
     labelIds?: string[];
     threadLabelIds?: string[];
     threadMessageCount?: number;
   } = {}
 ): Promise<MessageListItem> => ({
+  attachments: options.attachments,
   bcc: record.bcc ?? undefined,
   bodyHtml: record.bodyHtml ?? undefined,
   bodyText: record.bodyText ?? undefined,
@@ -524,7 +530,7 @@ export const getManagedThread = async (input: {
     throw new ORPCError("NOT_FOUND", { message: "Message thread not found." });
   }
 
-  const [assignments, attachmentCounts] = await Promise.all([
+  const [assignments, attachments] = await Promise.all([
     db
       .select({
         labelId: managedMailMessageLabel.labelId,
@@ -541,15 +547,17 @@ export const getManagedThread = async (input: {
         )
       ),
     db
-      .select({ count: count(), messageId: managedMailAttachment.messageId })
+      .select()
       .from(managedMailAttachment)
       .where(
-        inArray(
-          managedMailAttachment.messageId,
-          records.map((record) => record.id)
+        and(
+          eq(managedMailAttachment.mailboxId, input.mailboxId),
+          inArray(
+            managedMailAttachment.messageId,
+            records.map((record) => record.id)
+          )
         )
-      )
-      .groupBy(managedMailAttachment.messageId),
+      ),
   ]);
   const labelIdsByMessageId = new Map<string, string[]>();
   for (const assignment of assignments) {
@@ -557,14 +565,27 @@ export const getManagedThread = async (input: {
     labelIds.push(assignment.labelId);
     labelIdsByMessageId.set(assignment.messageId, labelIds);
   }
-  const attachmentCountByMessageId = new Map(
-    attachmentCounts.map((record) => [record.messageId, record.count])
-  );
+  const attachmentsByMessageId = new Map<
+    string,
+    NonNullable<MessageListItem["attachments"]>
+  >();
+  for (const attachment of attachments) {
+    const messageAttachments =
+      attachmentsByMessageId.get(attachment.messageId) ?? [];
+    messageAttachments.push({
+      attachmentId: attachment.id,
+      fileName: attachment.fileName,
+      mimeType: attachment.mimeType,
+      size: attachment.size,
+    });
+    attachmentsByMessageId.set(attachment.messageId, messageAttachments);
+  }
   const messages = await Promise.all(
     records.map(
       async (record) =>
         await toMessageListItem(record, {
-          attachmentCount: attachmentCountByMessageId.get(record.id) ?? 0,
+          attachmentCount: attachmentsByMessageId.get(record.id)?.length ?? 0,
+          attachments: attachmentsByMessageId.get(record.id) ?? [],
           labelIds: labelIdsByMessageId.get(record.id) ?? [],
           threadMessageCount: records.length,
         })
@@ -1557,6 +1578,55 @@ export const getManagedMessageDelivery = async (input: {
   });
 };
 
+export const listManagedMessageDeliveryStatuses = async (input: {
+  mailboxId: string;
+  messageIds: string[];
+  userId: string;
+}) => {
+  if (input.messageIds.length === 0) {
+    return {};
+  }
+  const selectedMailbox = await getAuthorizedManagedMailbox({
+    mailboxId: input.mailboxId,
+    requiredRoles: ["reader", "responder", "manager"],
+    userId: input.userId,
+  });
+  if (!selectedMailbox.organizationId) {
+    throw new ORPCError("INTERNAL_SERVER_ERROR", {
+      message: "Managed mailbox team is missing.",
+    });
+  }
+
+  const rows = await db
+    .select({
+      messageId: managedMailMessage.id,
+      status: organizationMailDeliveryRecipient.status,
+    })
+    .from(managedMailMessage)
+    .innerJoin(
+      organizationMailDeliveryRecipient,
+      and(
+        eq(
+          organizationMailDeliveryRecipient.providerMessageId,
+          managedMailMessage.providerMessageId
+        ),
+        eq(
+          organizationMailDeliveryRecipient.organizationId,
+          selectedMailbox.organizationId
+        )
+      )
+    )
+    .where(
+      and(
+        eq(managedMailMessage.mailboxId, input.mailboxId),
+        eq(managedMailMessage.direction, "outbound"),
+        inArray(managedMailMessage.id, input.messageIds)
+      )
+    );
+
+  return groupDeliveryStatusesByMessage(rows);
+};
+
 export const sendManagedMailboxMessage = async (input: {
   mailboxId: string;
   message: ComposeMessageInput;
@@ -1606,6 +1676,7 @@ export const sendManagedMailboxMessage = async (input: {
       organizationId,
       sender: selectedMailbox.emailAddress,
     });
+    assertLocalMailSend();
     await assertOrganizationMailRecipientsNotSuppressed({
       organizationId,
       recipients: [...to, ...cc, ...bcc],
@@ -1628,11 +1699,18 @@ export const sendManagedMailboxMessage = async (input: {
     });
   }
   const messageHeaderId = `<${randomUUID()}@${domain}>`;
+  const openTrackingEnabled = await resolveOrganizationMailOpenTracking({
+    organizationId,
+  });
   const rawMessage = await buildMimeMessage(input.message, {
     from: selectedMailbox.emailAddress,
     messageId: messageHeaderId,
     omitBccHeader: true,
     sentAt,
+    ...buildOpenTrackingHtmlTransform({
+      messageHeaderId,
+      openTrackingEnabled,
+    }),
   });
   const { SendEmailCommand } = await import("@aws-sdk/client-sesv2");
   const client = await getSesv2Client();

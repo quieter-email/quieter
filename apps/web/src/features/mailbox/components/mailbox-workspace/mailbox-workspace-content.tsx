@@ -443,9 +443,12 @@ export const MailboxWorkspaceContent = ({
           mailboxId={selectedMailboxId}
           mailboxProvider={selectedMailboxProvider ?? "gmail"}
           onComposeDraftRequested={onComposeDraftRequested}
+          onManageTemplates={onManageTemplates}
           onOpenSidebar={onOpenSidebar}
           onSearchQueryChange={onSearch}
+          persistComposeDrafts={persistComposeDrafts}
           searchQuery={searchQuery}
+          signature={signature}
         />
       </div>
     );

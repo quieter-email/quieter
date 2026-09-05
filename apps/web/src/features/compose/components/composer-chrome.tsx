@@ -4,11 +4,7 @@ import { cn } from "@quieter/ui/cn";
 import { Field, FieldError, FieldLabel } from "@quieter/ui/field";
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
 
-/**
- * Chrome shared by the mail and template composers: one writing measure, a capped
- * height so the sheet never stretches edge to edge, a single grouped header instead
- * of a stack of standalone fields, and a footer toolbar that reads as its own band.
- */
+/** Chrome shared by the mail and template composers. */
 export const ComposerFrame = ({
   children,
   className,
@@ -16,7 +12,7 @@ export const ComposerFrame = ({
 }: ComponentPropsWithoutRef<"div">) => (
   <div
     className={cn(
-      "mx-auto my-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col gap-3 md:max-h-[42rem]",
+      "mx-auto my-auto flex min-h-0 w-full max-w-4xl flex-1 flex-col gap-2 md:max-h-[28rem]",
       className
     )}
     {...props}
@@ -33,7 +29,7 @@ export const ComposerFieldGroup = ({
 }: ComponentPropsWithoutRef<"div">) => (
   <div
     className={cn(
-      "squircle w-full shrink-0 overflow-hidden rounded-xl border border-border bg-control shadow-sm",
+      "squircle w-full shrink-0 overflow-hidden rounded-lg border border-border bg-control",
       className
     )}
     {...props}
@@ -47,10 +43,10 @@ export const ComposerFieldGroup = ({
  * the group reading as one surface while still marking where the caret is.
  */
 export const composerFieldControlClassName =
-  "h-11 min-w-0 flex-1 rounded-none border-0 bg-transparent px-0 text-body shadow-none read-only:bg-transparent focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-none";
+  "h-10 min-w-0 flex-1 rounded-none border-0 bg-transparent px-0 text-body shadow-none read-only:bg-transparent focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-none";
 
 const composerFieldRowClassName =
-  "flex items-center gap-3 px-4 transition-colors duration-150 ease-out focus-within:bg-bg-surface";
+  "flex items-center gap-2.5 px-3.5 transition-colors duration-150 ease-out focus-within:bg-bg-surface";
 
 export const ComposerFieldRow = ({
   children,
@@ -71,19 +67,21 @@ export const ComposerFieldRow = ({
     className={cn("gap-0", { "border-b border-border": divided }, className)}
   >
     <div className={composerFieldRowClassName}>
-      <FieldLabel className="w-16 shrink-0 text-body font-normal text-muted-fg">
+      <FieldLabel className="w-14 shrink-0 text-body font-normal text-muted-fg">
         {label}
       </FieldLabel>
       {children}
       {trailing}
     </div>
     {error === undefined ? null : (
-      <FieldError className="px-4 pb-2 pl-20 text-caption">{error}</FieldError>
+      <FieldError className="px-3.5 pb-2 pl-[4.75rem] text-caption">
+        {error}
+      </FieldError>
     )}
   </Field>
 );
 
-/** Body and toolbar share one card so the toolbar reads as the sheet's own footer. */
+/** Body, headers, and toolbar share one quiet writing surface. */
 export const ComposerEditorFrame = ({
   children,
   className,
@@ -91,7 +89,7 @@ export const ComposerEditorFrame = ({
 }: ComponentPropsWithoutRef<"div">) => (
   <div
     className={cn(
-      "squircle flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-control shadow-sm",
+      "squircle flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-control shadow-sm transition-shadow duration-150 focus-within:shadow-md",
       className
     )}
     {...props}

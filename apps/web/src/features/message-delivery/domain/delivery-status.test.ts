@@ -4,6 +4,7 @@ import {
   ACCEPTED_DELIVERY_LABEL,
   getAggregateDeliveryLabel,
   getAggregateDeliveryStatus,
+  getDeliveryActionGuidance,
   getDeliveryStatusTone,
   getRecipientDeliveryEvents,
   hasDeliveryDiagnostics,
@@ -63,7 +64,16 @@ describe(getAggregateDeliveryStatus, () => {
     ).toBe("bounced");
   });
 
-  it("prefers a delay over a delivery and a delivery over a send", () => {
+  it("does not label partial delivery as fully delivered", () => {
+    expect(
+      getAggregateDeliveryStatus([
+        createRecipient("first@example.com", "delivered"),
+        createRecipient("second@example.com", "queued"),
+      ])
+    ).toBe("queued");
+  });
+
+  it("prefers unresolved recipients over successful recipients", () => {
     expect(
       getAggregateDeliveryStatus([
         createRecipient("first@example.com", "sent"),
@@ -76,7 +86,7 @@ describe(getAggregateDeliveryStatus, () => {
         createRecipient("first@example.com", "sent"),
         createRecipient("second@example.com", "delivered"),
       ])
-    ).toBe("delivered");
+    ).toBe("sent");
   });
 
   it("labels a delivery without calling it read", () => {
@@ -97,11 +107,15 @@ describe(getDeliveryStatusTone, () => {
   it("keeps unresolved states neutral", () => {
     expect(getDeliveryStatusTone(null)).toBe("neutral");
     expect(getDeliveryStatusTone("sent")).toBe("neutral");
+    expect(getDeliveryStatusTone("queued")).toBe("neutral");
   });
 
   it("separates a delivery from a delay and a failure", () => {
     expect(getDeliveryStatusTone("delivered")).toBe("positive");
     expect(getDeliveryStatusTone("delayed")).toBe("warning");
+  });
+
+  it("marks every terminal failure as danger", () => {
     expect(getDeliveryStatusTone("bounced")).toBe("danger");
     expect(getDeliveryStatusTone("complained")).toBe("danger");
     expect(getDeliveryStatusTone("rejected")).toBe("danger");
@@ -109,10 +123,11 @@ describe(getDeliveryStatusTone, () => {
 });
 
 describe(isDeliveryStatusUnsettled, () => {
-  it("only treats missing events and sends as still moving", () => {
+  it("treats missing events, sends, queues, and delays as still moving", () => {
     expect(isDeliveryStatusUnsettled(null)).toBeTruthy();
     expect(isDeliveryStatusUnsettled("sent")).toBeTruthy();
-    expect(isDeliveryStatusUnsettled("delayed")).toBeFalsy();
+    expect(isDeliveryStatusUnsettled("queued")).toBeTruthy();
+    expect(isDeliveryStatusUnsettled("delayed")).toBeTruthy();
     expect(isDeliveryStatusUnsettled("delivered")).toBeFalsy();
   });
 });
@@ -163,6 +178,25 @@ describe(hasDeliveryDiagnostics, () => {
         })
       )
     ).toBeTruthy();
+  });
+});
+
+describe(getDeliveryActionGuidance, () => {
+  it("tells the sender to correct a refused or bounced address", () => {
+    expect(getDeliveryActionGuidance("rejected")).toMatch(/review/iu);
+    expect(getDeliveryActionGuidance("bounced")).toMatch(/blocked/iu);
+  });
+
+  it("keeps complaints and unsubscribes distinct from folder placement", () => {
+    const complained = getDeliveryActionGuidance("complained") ?? "";
+    expect(complained).toMatch(/reported/iu);
+    expect(complained).not.toMatch(/spam folder|junk folder/iu);
+  });
+
+  it("gives no instruction for healthy or in-flight states", () => {
+    for (const status of ["delayed", "delivered", "queued", "sent"] as const) {
+      expect(getDeliveryActionGuidance(status)).toBeNull();
+    }
   });
 });
 

@@ -65,12 +65,7 @@ export const buildAutoLabelPromptInput = ({
 });
 
 const gmailAutoLabelSchema = z.object({
-  decisions: z.array(
-    z.object({
-      applies: z.boolean(),
-      labelId: z.string(),
-    })
-  ),
+  selectedLabelIds: z.array(z.string()),
 });
 
 export const sanitizeAutoLabelSelection = (
@@ -96,19 +91,6 @@ export const sanitizeAutoLabelSelection = (
   return selected;
 };
 
-export const resolveAutoLabelDecisions = (
-  decisions: { applies: boolean; labelId: string }[],
-  eligibleLabelIds: ReadonlySet<string>
-) => {
-  const selectedLabelIds = decisions
-    .filter(
-      (decision) => decision.applies && eligibleLabelIds.has(decision.labelId)
-    )
-    .map((decision) => decision.labelId);
-
-  return sanitizeAutoLabelSelection(selectedLabelIds, eligibleLabelIds);
-};
-
 export const classifyMailMessage = async ({
   labels,
   memoryContext,
@@ -129,9 +111,10 @@ export const classifyMailMessage = async ({
   }
 
   const result = await runStructuredGeneration({
-    maxOutputTokens: Math.min(4000, 200 + labels.length * 30),
+    maxOutputTokens: Math.min(800, 100 + labels.length * 12),
     model,
     ...(onUsage === undefined ? {} : { onUsage }),
+    prioritizeLatency: true,
     prompt: JSON.stringify(
       buildAutoLabelPromptInput({
         labels,
@@ -151,29 +134,30 @@ learned preference to avoid or prefer a label is a strong tie-breaker for simila
 evidence that the current email matches a label by itself.
 Consider every label in availableLabels, including labels without a description or inclusionCriteria.
 
-Return one decision per label in availableLabels with its exact labelId and applies true/false.
+Return selectedLabelIds containing only the exact labelId of each clearly applicable label. Return an
+empty array when none apply.
 
 Strict rules:
-- Start with applies false for every label.
-- When inclusionCriteria is present, treat it as the authoritative rule and set applies true only when
+- Start with no selected labels.
+- When inclusionCriteria is present, treat it as the authoritative rule and select the label only when
   the email directly satisfies it with clear evidence in the sender, subject, or body.
 - When inclusionCriteria is absent, infer the label's meaning conservatively from its name and optional
-  description. Set applies true when the email is a clear semantic match.
+  description. Select it when the email is a clear semantic match.
 - Interpret common concise label names naturally. For example, a label named "Dev" can apply to
   software development messages such as repository activity, pull requests, issues, builds, or
   developer tooling.
 - Use the label's exact labelId value. Do not use the label name.
 - Apply every clearly satisfied label, including multiple labels, when their criteria are independently met.
 - Speculation, weak association, and "could be related" are forbidden.
-- If you are unsure, keep applies false.
+- If you are unsure, do not select the label.
 - Many routine emails should receive zero labels.
 - Marketing, newsletters, promotions, ads, and unrelated receipts must stay unlabeled unless a label's
   criteria or clearly inferred meaning covers them.
-- Never set applies true for every label.
-- Never set applies true for more than half of the available labels.`,
+- Never select every label.
+- Never select more than half of the available labels.`,
   });
 
-  return resolveAutoLabelDecisions(result.decisions, availableLabelIds);
+  return sanitizeAutoLabelSelection(result.selectedLabelIds, availableLabelIds);
 };
 
 export const classifyGmailMessage = classifyMailMessage;

@@ -23,6 +23,7 @@ const boundaries: {
       "src/features/settings/components/settings-layout.tsx",
       "src/features/settings/components/settings-overview-panel.tsx",
       "src/components/workspace-dither-background.tsx",
+      "src/lib/mail-open-marker.server.ts",
     ],
     marker: "src/router.tsx",
     maximumStaticGraphBytes: cloudflareBundle ? 3_000_000 : 1_200_000,

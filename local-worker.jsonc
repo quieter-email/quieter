@@ -4,4 +4,11 @@
   "main": "@tanstack/react-start/server-entry",
   "compatibility_date": "2026-08-04",
   "compatibility_flags": ["nodejs_compat"],
+  "r2_buckets": [
+    {
+      "binding": "LocalMailStorage",
+      "bucket_name": "quieter-local-mail",
+      "remote": false,
+    },
+  ],
 }

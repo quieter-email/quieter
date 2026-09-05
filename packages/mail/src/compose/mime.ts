@@ -306,6 +306,7 @@ export const buildMimeMessage = async (
   draft: ComposeDraftInput,
   options?: {
     from?: string;
+    htmlTransform?: (html: string) => string;
     includeQuieterDraftHeaders?: boolean;
     messageId?: string;
     omitBccHeader?: boolean;
@@ -343,7 +344,10 @@ export const buildMimeMessage = async (
     (part): part is string => part !== null
   );
 
-  const htmlBody = draft.bodyHtml || "<p></p>";
+  const htmlBody =
+    options?.htmlTransform !== undefined && draft.bodyHtml !== ""
+      ? options.htmlTransform(draft.bodyHtml || "<p></p>")
+      : draft.bodyHtml || "<p></p>";
   const htmlPart = buildHtmlAlternativePart(
     htmlBody,
     inlineImageParts,

@@ -405,6 +405,9 @@ importers:
       tailwindcss:
         specifier: 'catalog:'
         version: 4.3.3
+      vgpu:
+        specifier: 0.3.1
+        version: 0.3.1(supports-color@10.2.2)
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -497,9 +500,6 @@ importers:
       '@aws-sdk/client-s3':
         specifier: 'catalog:'
         version: 3.1116.0
-      '@polar-sh/better-auth':
-        specifier: ^1.8.4
-        version: 1.8.4(@polar-sh/sdk@0.49.0)(@stripe/react-stripe-js@4.0.2(@stripe/stripe-js@7.9.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@stripe/stripe-js@7.9.0)(better-auth@1.5.0(@cloudflare/workers-types@5.20260804.1)(@prisma/client@7.4.2(prisma@7.4.2(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2))(typescript@7.0.2))(@tanstack/react-start@1.168.48(@voidzero-dev/vite-plus-core@0.2.9(@types/node@26.2.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@10.2.2))(drizzle-orm@1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9)(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3))(mongodb@7.1.0)(mysql2@3.15.3)(prisma@7.4.2(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.10))(react@19.2.8)(zod@4.4.3)
       '@polar-sh/sdk':
         specifier: ^0.49.0
         version: 0.49.0
@@ -512,12 +512,21 @@ importers:
       '@quieter/env':
         specifier: workspace:*
         version: link:../env
+      '@quieter/observability':
+        specifier: workspace:*
+        version: link:../observability
       '@react-email/render':
         specifier: ^2.1.0
         version: 2.1.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       react:
         specifier: 'catalog:'
         version: 19.2.8
+      standardwebhooks:
+        specifier: 1.0.0
+        version: 1.0.0
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@better-auth/api-key':
         specifier: 1.5.0
@@ -653,6 +662,9 @@ importers:
       '@quieter/database':
         specifier: workspace:*
         version: link:../database
+      '@quieter/env':
+        specifier: workspace:*
+        version: link:../env
       '@quieter/observability':
         specifier: workspace:*
         version: link:../observability
@@ -773,6 +785,9 @@ importers:
 
   packages/gmail:
     dependencies:
+      '@quieter/env':
+        specifier: workspace:*
+        version: link:../env
       '@quieter/mail':
         specifier: workspace:*
         version: link:../mail
@@ -2257,6 +2272,10 @@ packages:
     resolution: {integrity: sha512-LyQz4XJIdCdY/+temIhD/Ed0x/p4GAOUycpFSEK2Ads1CPKZy6b7V/2ROEtQiLLQ8soIs0xe/QAoR6kwpyW/yw==}
     engines: {node: '>=12'}
 
+  '@modelcontextprotocol/core@2.0.0':
+    resolution: {integrity: sha512-pJCEwGG7Lfr/+PQp9ZTwKXNeO5wzbfKL7H3MYpCorM4oFBoQrdjnBgEoqG+RjhsvS1FKrDbKux+M1HhlnGWqcA==}
+    engines: {node: '>=20'}
+
   '@modelcontextprotocol/sdk@1.30.0':
     resolution: {integrity: sha512-xKd8OIzlqNzcqcNumGAa6g+PW2kjD5vrpcKOnfldAUPP3j7lnqMPwlTXQm8gF+UwH72z0lqaRbjr9hqGz0eITA==}
     engines: {node: '>=18'}
@@ -2266,6 +2285,10 @@ packages:
     peerDependenciesMeta:
       '@cfworker/json-schema':
         optional: true
+
+  '@modelcontextprotocol/server@2.0.0':
+    resolution: {integrity: sha512-YhHWdHfpFMQfd0prsEnxKeS3Qz3ytIGmsS0sth4KDjnacIT7hxk6hXHkJ9KysxlkvTM+WZAtQbbcUhdoP4Hvtw==}
+    engines: {node: '>=20'}
 
   '@mongodb-js/saslprep@1.4.6':
     resolution: {integrity: sha512-y+x3H1xBZd38n10NZF/rEBlvDOOMQ6LKUTHqr8R9VkJ+mmQOYtJFxIlkkK8fZrtOiL6VixbOBWMbZGBdal3Z1g==}
@@ -2867,21 +2890,6 @@ packages:
   '@peculiar/x509@1.14.3':
     resolution: {integrity: sha512-C2Xj8FZ0uHWeCXXqX5B4/gVFQmtSkiuOolzAgutjTfseNOHT3pUjljDZsTSxXFGgio54bCzVFqmEOUrIVk8RDA==}
     engines: {node: '>=20.0.0'}
-
-  '@polar-sh/better-auth@1.8.4':
-    resolution: {integrity: sha512-BgWCcBQDRYwQn2NEYYzGSEfnrmBJHaDTvYBXGE2V3mmGPKspUDS8+p1LzbNY0Sw681LT8HB5w5Q81Ysc46CVSQ==}
-    engines: {node: '>=16'}
-    peerDependencies:
-      '@polar-sh/sdk': ^0.47.0
-      better-auth: 1.5.0
-      zod: ^4.4.3
-
-  '@polar-sh/checkout@0.2.1':
-    resolution: {integrity: sha512-AEKKw3o4ykApECA4bU6a2YC0+aQKTFUasca4ZgCDIjG8AHlu3SjW3Taxh2nfeYAczhah0m0axVF9AV8VfdYzfw==}
-    peerDependencies:
-      '@stripe/react-stripe-js': ^3.6.0 || ^4.0.2
-      '@stripe/stripe-js': ^7.1.0
-      react: ^18 || ^19
 
   '@polar-sh/sdk@0.49.0':
     resolution: {integrity: sha512-9UYb70iKjJCtWYlu0OF5HLYBLmkxHwqr2RlXwuxXQgRGqq56IQWlVG+NO7e1YJ7I5GW0CBHhGIjRbQ9hYM6ycQ==}
@@ -3724,17 +3732,6 @@ packages:
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
-  '@stripe/react-stripe-js@4.0.2':
-    resolution: {integrity: sha512-l2wau+8/LOlHl+Sz8wQ1oDuLJvyw51nQCsu6/ljT6smqzTszcMHifjAJoXlnMfcou3+jK/kQyVe04u/ufyTXgg==}
-    peerDependencies:
-      '@stripe/stripe-js': '>=1.44.1 <8.0.0'
-      react: '>=16.8.0 <20.0.0'
-      react-dom: '>=16.8.0 <20.0.0'
-
-  '@stripe/stripe-js@7.9.0':
-    resolution: {integrity: sha512-ggs5k+/0FUJcIgNY08aZTqpBTtbExkJMYMLSMwyucrhtWexVOEY1KJmhBsxf+E/Q15f5rbwBpj+t0t2AW2oCsQ==}
-    engines: {node: '>=12.16'}
-
   '@t3-oss/env-core@0.13.11':
     resolution: {integrity: sha512-sM7GYY+KL7H/Hl0BE0inWfk3nRHZOLhmVn7sHGxaZt9FAR6KqREXAE+6TqKfiavfXmpRxO/OZ2QgKRd+oiBYRQ==}
     peerDependencies:
@@ -4433,6 +4430,26 @@ packages:
     resolution: {integrity: sha512-UycprH3T6n3jH0k44NHMa7pnFHGu/N05MjojYr+Mc6I7obkoLIJujSWwin1pCvdy/eOxrI/l3uDLQsmcrOb4ug==}
     engines: {node: '>= 20'}
 
+  '@vgpu/adapter-mock@0.3.1':
+    resolution: {integrity: sha512-uZxTFPHLYd1nOxGxluvni50tsjnUTQ2eOhjJ/YwWynO7k906AD0byJxN0V6BbYb1MK/xM/EF+/cA8tKCrvY0yA==}
+
+  '@vgpu/adapter-node@0.3.1':
+    resolution: {integrity: sha512-DtGxI8q3bAh3aN1JdT2EJhUEEbiuVC3U5nd3JLCbn+8zQlxmzs/+lsLo3TzD0gXr7fWHHdOiYYv0xIvAC/1UnQ==}
+
+  '@vgpu/core@0.3.1':
+    resolution: {integrity: sha512-HO0J2LplV+UiJNv1gp8k3Vog6hD/E84HEi5xHj0GxxJ8ZQT7a3kGlyMxGTrNuALXKNPziZzzZl8XHdiX1YNp8w==}
+
+  '@vgpu/wgsl-std@0.3.1':
+    resolution: {integrity: sha512-9MuJ9/YfJLkCjusjPU81sHfnHZs2k4Yv66TKJEqYNXma5Z+GDPEq8GNksMeKxb9WiXfTjp1TjOR/8GhyEOeuFA==}
+
+  '@vgpu/wgsl@0.3.1':
+    resolution: {integrity: sha512-/D3l/+0Kw/Hnr79AvxsLUjp21/ZeTcbBmvltXkftyHBXqs0YZf+0AVOeMpMyWjV24lGPrPgIqDsGpmKS38y7Ow==}
+    peerDependencies:
+      '@vgpu/adapter-node': '>=0.1.6 <1.0.0'
+    peerDependenciesMeta:
+      '@vgpu/adapter-node':
+        optional: true
+
   '@vitejs/plugin-react@6.1.0':
     resolution: {integrity: sha512-qd2BzUBehkov86WFhg0JkEFEYyCLG9uPCe6qWTY/kRlss9OvJrOF2UbIWT7p+8IzZHkEu0DNGHc4HSv+JdDLsw==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -4596,6 +4613,9 @@ packages:
     engines: {node: '>=20.0.0'}
     cpu: [x64]
     os: [win32]
+
+  '@webgpu/types@0.1.72':
+    resolution: {integrity: sha512-0cF7RFM2edNoiIS1ODJp0/Gzv4/xSXhwoR0YCza+OWpJWtn4wmo9DvK91aLlH9+uUnwIriP7ZiC3WitmyhuzBw==}
 
   '@workflow/serde@4.1.0':
     resolution: {integrity: sha512-pav4F2BoirECWR7Nf1TKt+2eETcBj7jj4cBefQ8VXQCA6NPkaKeLfj/zMgi+3zYV5ZIBT4GuUiphsj0/b9hPQQ==}
@@ -5993,10 +6013,6 @@ packages:
   long@5.3.2:
     resolution: {integrity: sha512-mNAgZ1GmyNhD7AuqnTG3/VQ26o760+ZYBPKjPvugO8+nLbYfX6TVpJPseBvopbdY+qpZ/lKUnmEc1LeZYS3QAA==}
 
-  loose-envify@1.4.0:
-    resolution: {integrity: sha512-lyuxPGr/Wfhrlem2CL/UcnUc1zcqKAImBDzukY7Y5F/yQiNdko6+fRLevlw1HgMySw7f611UIY408EtxRSoK3Q==}
-    hasBin: true
-
   lru-cache@11.3.6:
     resolution: {integrity: sha512-Gf/KoL3C/MlI7Bt0PGI9I+TeTC/I6r/csU58N4BSNc4lppLBeKsOdFYkK+dX0ABDUMJNfCHTyPpzwwO21Awd3A==}
     engines: {node: 20 || >=22}
@@ -6315,6 +6331,10 @@ packages:
     resolution: {integrity: sha512-QP88BAKvMam/3NxH6vj2o21R6MjxZUAd6nlwAS/pnGvN9IVLocLHxGYIzFhg6fUQ+5th6P4dv4eW9jX3DSIj7A==}
     engines: {node: '>=12'}
 
+  pixelmatch@7.2.0:
+    resolution: {integrity: sha512-xhcb4yHu9sM/G7foGzoLtXYcC0zHEaOXXjRKhGup0fw78Nf2Tkiapv4EQyMzrbcmQPsllAI7DbFY2UT7PlI9Pg==}
+    hasBin: true
+
   pkce-challenge@5.0.1:
     resolution: {integrity: sha512-wQ0b/W4Fr01qtpHlqSqspcj3EhBvimsdh0KlHhH8HRZnMsEa0ea2fTULOXOS9ccQr3om+GcGRk4e+isrZWV8qQ==}
     engines: {node: '>=16.20.0'}
@@ -6374,9 +6394,6 @@ packages:
   progress@2.0.3:
     resolution: {integrity: sha512-7PiHtLll5LdnKIMw100I+8xJXR5gW2QwWYkT6iJva0bXitZKa/XMrSbdmg3r2Xnaidz9Qumd0VPaMrZlF9V9sA==}
     engines: {node: '>=0.4.0'}
-
-  prop-types@15.8.1:
-    resolution: {integrity: sha512-oj87CgZICdulUohogVAR7AjlC0327U4el4L6eAvOqCeudMDVU0NThNaV+b9Df4dXgSP1gXMTnPdhfe/2qDH5cg==}
 
   proper-lockfile@4.1.2:
     resolution: {integrity: sha512-TjNPblN4BwAWMXU8s9AEz4JmQxnD1NNL7bNOY/AKUzyamc379FWASUhc/K1pL2noVb+XmZKLL68cjzLsiOAMaA==}
@@ -6477,9 +6494,6 @@ packages:
     resolution: {integrity: sha512-rVprimfGBG3DR+Tq0IQG2DT5PxKth1WIGDmj5yPmlzr4YBe7uyE+Du4oVqTDXZSHGGGXRtTJEGSSePyQCMBglQ==}
     peerDependencies:
       react: ^19.2.8
-
-  react-is@16.13.1:
-    resolution: {integrity: sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ==}
 
   react-is@17.0.2:
     resolution: {integrity: sha512-w2GsyukL62IJnlaff/nRegPQR94C/XXamvMWmSHRJ4y7Ts/4ocGRmTHvOs8PSE6pB3dWOrD/nueuU5sduBsQ4w==}
@@ -7024,6 +7038,10 @@ packages:
   vfile@4.2.1:
     resolution: {integrity: sha512-O6AE4OskCG5S1emQ/4gl8zK586RqA3srz3nfK/Viy0UPToBc5Trp9BVFb1u0CjsKrAWwnpr4ifM/KBXPWwJbCA==}
 
+  vgpu@0.3.1:
+    resolution: {integrity: sha512-NeEETis2aCr0I9/8dy42lueNGNs3GZxL+0OmjLI82wlgPD/4WpW/XNX4xduc+ChxFqOJtjEYsz297VS9GmIuyA==}
+    hasBin: true
+
   vite-plus@0.2.9:
     resolution: {integrity: sha512-8uRNqAxh9no3AU4Lep8BEYhkim07+3NO+mhuxTWiN0k30syGT/2+ue/DtWYhtzQ7yi2f2WKpjOhoI4/QkWWbUg==}
     engines: {node: ^20.19.0 || ^22.18.0 || >=24.11.0}
@@ -7092,6 +7110,9 @@ packages:
   web-namespaces@1.1.4:
     resolution: {integrity: sha512-wYxSGajtmoP4WxfejAPIr4l0fVh+jeMXZb08wNc0tMg6xsfZXj3cECqIK0G7ZAqUq0PP8WlMDtaOGVBTAWztNw==}
 
+  webgpu@0.4.0:
+    resolution: {integrity: sha512-F5pimn3Aoi0zWjuRdiVs5TnrUwSzD2lESBohsIUsqyitWkGRQlXU2fhV6ycXlQTa1bvAf3sjqiUpBEpmSQ5ptA==}
+
   webidl-conversions@3.0.1:
     resolution: {integrity: sha512-2JAn3z8AR6rjK8Sm8orRC0h/bcl/DqL7tRPdGZ4I1CjdF+EaMLmYxBHyXuKL849eucPFhvBoxMsflfOb8kxaeQ==}
 
@@ -7101,6 +7122,9 @@ packages:
 
   webpack-virtual-modules@0.6.2:
     resolution: {integrity: sha512-66/V2i5hQanC51vBQKPH4aI8NMAcBW59FVBs+rC7eGHupMyfn34q7rZIE+ETlJ+XTevqfUhVVBgSUNSW2flEUQ==}
+
+  wgpu-matrix@3.4.2:
+    resolution: {integrity: sha512-IfZFbG7olEYBD76VCZy2TzqM57GKy3LT++AZh37tMHPPByO6R2h61zXGBZFNPi2IzxNivNi8y5dvze5PjaczjA==}
 
   whatwg-url@14.2.0:
     resolution: {integrity: sha512-De72GdQZzNTUBBChsXueQUnPKDkg/5A5zp7pFDuQAj5UFoENpiACU0wlCvzpAGnTkj++ihpKwKyYewn/XNUbKw==}
@@ -8625,6 +8649,10 @@ snapshots:
     dependencies:
       unist-util-visit: 1.4.1
 
+  '@modelcontextprotocol/core@2.0.0':
+    dependencies:
+      zod: 4.4.3
+
   '@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3)':
     dependencies:
       '@hono/node-server': 1.19.9(hono@4.11.4)
@@ -8648,6 +8676,11 @@ snapshots:
       '@cfworker/json-schema': 4.1.1
     transitivePeerDependencies:
       - supports-color
+
+  '@modelcontextprotocol/server@2.0.0':
+    dependencies:
+      '@modelcontextprotocol/core': 2.0.0
+      zod: 4.4.3
 
   '@mongodb-js/saslprep@1.4.6':
     dependencies:
@@ -9136,24 +9169,6 @@ snapshots:
       reflect-metadata: 0.2.2
       tslib: 2.8.1
       tsyringe: 4.10.0
-
-  '@polar-sh/better-auth@1.8.4(@polar-sh/sdk@0.49.0)(@stripe/react-stripe-js@4.0.2(@stripe/stripe-js@7.9.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@stripe/stripe-js@7.9.0)(better-auth@1.5.0(@cloudflare/workers-types@5.20260804.1)(@prisma/client@7.4.2(prisma@7.4.2(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2))(typescript@7.0.2))(@tanstack/react-start@1.168.48(@voidzero-dev/vite-plus-core@0.2.9(@types/node@26.2.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@10.2.2))(drizzle-orm@1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9)(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3))(mongodb@7.1.0)(mysql2@3.15.3)(prisma@7.4.2(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.10))(react@19.2.8)(zod@4.4.3)':
-    dependencies:
-      '@polar-sh/checkout': 0.2.1(@stripe/react-stripe-js@4.0.2(@stripe/stripe-js@7.9.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@stripe/stripe-js@7.9.0)(react@19.2.8)
-      '@polar-sh/sdk': 0.49.0
-      better-auth: 1.5.0(@cloudflare/workers-types@5.20260804.1)(@prisma/client@7.4.2(prisma@7.4.2(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2))(typescript@7.0.2))(@tanstack/react-start@1.168.48(@voidzero-dev/vite-plus-core@0.2.9(@types/node@26.2.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@10.2.2))(drizzle-orm@1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9)(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3))(mongodb@7.1.0)(mysql2@3.15.3)(prisma@7.4.2(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.10)
-      zod: 4.4.3
-    transitivePeerDependencies:
-      - '@stripe/react-stripe-js'
-      - '@stripe/stripe-js'
-      - react
-
-  '@polar-sh/checkout@0.2.1(@stripe/react-stripe-js@4.0.2(@stripe/stripe-js@7.9.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@stripe/stripe-js@7.9.0)(react@19.2.8)':
-    dependencies:
-      '@stripe/react-stripe-js': 4.0.2(@stripe/stripe-js@7.9.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      '@stripe/stripe-js': 7.9.0
-      date-fns: 4.4.0
-      react: 19.2.8
 
   '@polar-sh/sdk@0.49.0':
     dependencies:
@@ -10050,15 +10065,6 @@ snapshots:
 
   '@standard-schema/spec@1.1.0': {}
 
-  '@stripe/react-stripe-js@4.0.2(@stripe/stripe-js@7.9.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
-    dependencies:
-      '@stripe/stripe-js': 7.9.0
-      prop-types: 15.8.1
-      react: 19.2.8
-      react-dom: 19.2.8(react@19.2.8)
-
-  '@stripe/stripe-js@7.9.0': {}
-
   '@t3-oss/env-core@0.13.11(typescript@7.0.2)(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3)':
     optionalDependencies:
       typescript: 7.0.2
@@ -10737,6 +10743,33 @@ snapshots:
 
   '@vercel/oidc@3.2.0': {}
 
+  '@vgpu/adapter-mock@0.3.1(@vgpu/adapter-node@0.3.1(supports-color@10.2.2))':
+    dependencies:
+      '@vgpu/core': 0.3.1(@vgpu/adapter-node@0.3.1(supports-color@10.2.2))
+    transitivePeerDependencies:
+      - '@vgpu/adapter-node'
+
+  '@vgpu/adapter-node@0.3.1(supports-color@10.2.2)':
+    dependencies:
+      '@vgpu/core': 0.3.1(@vgpu/adapter-node@0.3.1(supports-color@10.2.2))
+      webgpu: 0.4.0(supports-color@10.2.2)
+    transitivePeerDependencies:
+      - supports-color
+
+  '@vgpu/core@0.3.1(@vgpu/adapter-node@0.3.1(supports-color@10.2.2))':
+    dependencies:
+      '@vgpu/wgsl': 0.3.1(@vgpu/adapter-node@0.3.1(supports-color@10.2.2))
+    transitivePeerDependencies:
+      - '@vgpu/adapter-node'
+
+  '@vgpu/wgsl-std@0.3.1': {}
+
+  '@vgpu/wgsl@0.3.1(@vgpu/adapter-node@0.3.1(supports-color@10.2.2))':
+    dependencies:
+      '@vgpu/wgsl-std': 0.3.1
+    optionalDependencies:
+      '@vgpu/adapter-node': 0.3.1(supports-color@10.2.2)
+
   '@vitejs/plugin-react@6.1.0(@rolldown/plugin-babel@0.2.3(@babel/core@8.0.1)(@babel/runtime@7.29.2)(@voidzero-dev/vite-plus-core@0.2.9(@types/node@26.2.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(rolldown@1.0.0-rc.17))(@voidzero-dev/vite-plus-core@0.2.9(@types/node@26.2.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(babel-plugin-react-compiler@1.0.0)':
     dependencies:
       '@rolldown/pluginutils': 1.0.1
@@ -10862,6 +10895,8 @@ snapshots:
 
   '@voidzero-dev/vite-plus-win32-x64-msvc@0.2.9':
     optional: true
+
+  '@webgpu/types@0.1.72': {}
 
   '@workflow/serde@4.1.0': {}
 
@@ -11998,10 +12033,6 @@ snapshots:
 
   long@5.3.2: {}
 
-  loose-envify@1.4.0:
-    dependencies:
-      js-tokens: 4.0.0
-
   lru-cache@11.3.6: {}
 
   lru-cache@5.1.1:
@@ -12338,6 +12369,10 @@ snapshots:
 
   picomatch@4.0.4: {}
 
+  pixelmatch@7.2.0:
+    dependencies:
+      pngjs: 7.0.0
+
   pkce-challenge@5.0.1: {}
 
   pkg-types@2.3.0:
@@ -12392,12 +12427,6 @@ snapshots:
       - react-dom
 
   progress@2.0.3: {}
-
-  prop-types@15.8.1:
-    dependencies:
-      loose-envify: 1.4.0
-      object-assign: 4.1.1
-      react-is: 16.13.1
 
   proper-lockfile@4.1.2:
     dependencies:
@@ -12533,8 +12562,6 @@ snapshots:
     dependencies:
       react: 19.2.8
       scheduler: 0.27.0
-
-  react-is@16.13.1: {}
 
   react-is@17.0.2: {}
 
@@ -13111,6 +13138,22 @@ snapshots:
       unist-util-stringify-position: 2.0.3
       vfile-message: 2.0.4
 
+  vgpu@0.3.1(supports-color@10.2.2):
+    dependencies:
+      '@modelcontextprotocol/server': 2.0.0
+      '@vgpu/adapter-mock': 0.3.1(@vgpu/adapter-node@0.3.1(supports-color@10.2.2))
+      '@vgpu/adapter-node': 0.3.1(supports-color@10.2.2)
+      '@vgpu/core': 0.3.1(@vgpu/adapter-node@0.3.1(supports-color@10.2.2))
+      '@vgpu/wgsl': 0.3.1(@vgpu/adapter-node@0.3.1(supports-color@10.2.2))
+      '@vgpu/wgsl-std': 0.3.1
+      '@webgpu/types': 0.1.72
+      pixelmatch: 7.2.0
+      pngjs: 7.0.0
+      wgpu-matrix: 3.4.2
+      zod: 4.4.3
+    transitivePeerDependencies:
+      - supports-color
+
   vite-plus@0.2.9(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(@voidzero-dev/vite-plus-core@0.2.9(@types/node@26.2.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(esbuild@0.28.1)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0):
     dependencies:
       '@oxc-project/types': 0.143.0
@@ -13206,11 +13249,20 @@ snapshots:
 
   web-namespaces@1.1.4: {}
 
+  webgpu@0.4.0(supports-color@10.2.2):
+    dependencies:
+      '@webgpu/types': 0.1.72
+      debug: 4.4.3(supports-color@10.2.2)
+    transitivePeerDependencies:
+      - supports-color
+
   webidl-conversions@3.0.1: {}
 
   webidl-conversions@7.0.0: {}
 
   webpack-virtual-modules@0.6.2: {}
+
+  wgpu-matrix@3.4.2: {}
 
   whatwg-url@14.2.0:
     dependencies:

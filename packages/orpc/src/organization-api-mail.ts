@@ -6,6 +6,7 @@ import {
   mailbox,
   organizationApiMailAttachment,
   organizationApiMailMessage,
+  organizationMailDeliveryRecipient,
 } from "@quieter/database/schema";
 import { MAILBOX_LABELS } from "@quieter/gmail";
 import type {
@@ -29,7 +30,10 @@ import {
   createManagedMessageSearchText,
   normalizeManagedSearchValue,
 } from "./managed-mail/search/normalization";
-import { getOrganizationMailDelivery } from "./organization-mail-delivery";
+import {
+  getOrganizationMailDelivery,
+  groupDeliveryStatusesByMessage,
+} from "./organization-mail-delivery";
 import { hasText } from "./text";
 
 const API_MAILBOX_ID_PREFIX = "api:";
@@ -586,6 +590,49 @@ export const getOrganizationApiMailDelivery = async (input: {
     organizationId,
     providerMessageId: record.providerMessageId,
   });
+};
+
+export const listOrganizationApiMailDeliveryStatuses = async (input: {
+  mailboxId: string;
+  messageIds: string[];
+  userId: string;
+}) => {
+  if (input.messageIds.length === 0) {
+    return {};
+  }
+  const organizationId = parseOrganizationApiMailboxId(input.mailboxId);
+  if (organizationId === null) {
+    throw new ORPCError("NOT_FOUND", { message: "API mailbox not found." });
+  }
+  await assertUserOrganizationMember({
+    organizationId,
+    userId: input.userId,
+  });
+
+  const rows = await db
+    .select({
+      messageId: organizationApiMailMessage.id,
+      status: organizationMailDeliveryRecipient.status,
+    })
+    .from(organizationApiMailMessage)
+    .innerJoin(
+      organizationMailDeliveryRecipient,
+      and(
+        eq(
+          organizationMailDeliveryRecipient.providerMessageId,
+          organizationApiMailMessage.providerMessageId
+        ),
+        eq(organizationMailDeliveryRecipient.organizationId, organizationId)
+      )
+    )
+    .where(
+      and(
+        eq(organizationApiMailMessage.organizationId, organizationId),
+        inArray(organizationApiMailMessage.id, input.messageIds)
+      )
+    );
+
+  return groupDeliveryStatusesByMessage(rows);
 };
 
 export const backfillApiMessagesForManagedMailbox = async (input: {

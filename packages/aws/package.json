@@ -8,8 +8,7 @@
     "./receipt": "./src/receipt.ts"
   },
   "scripts": {
-    "backfill:managed-mail-r2": "node --env-file-if-exists=../../.env.local scripts/backfill-managed-mail-r2.ts",
-    "dev": "node --env-file-if-exists=../../.env.local --env-file-if-exists=../../.env.sst.local ../../scripts/run-sst.ts dev --config sst.config.ts --stage mail-dev"
+    "backfill:managed-mail-r2": "node --env-file-if-exists=../../.env.local scripts/backfill-managed-mail-r2.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "catalog:",

@@ -26,6 +26,8 @@ import {
 import { prefetchMailboxSettingsDetail } from "#/features/settings/components/settings-prefetch";
 import { mailboxesQueryOptions } from "#/lib/mailboxes-query";
 
+import { ManagedMailboxAdministrationSettings } from "./managed-mailbox-administration-settings";
+
 type MailboxGroup = RouterOutputs["mail"]["listMailboxes"]["groups"][number];
 
 const getMailboxRowMeta = (
@@ -46,11 +48,12 @@ const getMailboxRowDescription = (
   displayName: string | null | undefined,
   emailAddress: string,
   provider: string,
-  grantRole: string | null | undefined
+  grantRole: string | null | undefined,
+  accessMode: string | null
 ) => {
   const parts: (string | null)[] = [
     hasTrimmedDisplayName(displayName) ? emailAddress : null,
-    getProviderLabel(provider),
+    getProviderLabel(provider, accessMode),
     provider === "managed" && (grantRole ?? "") !== ""
       ? `${grantRole} access`
       : null,
@@ -74,7 +77,7 @@ const MailboxesListContent = ({
       <SettingsCard className="p-6">
         <p className="text-body text-fg">No mailboxes yet</p>
         <p className="mt-1 text-body/6 text-muted-fg">
-          Connect Gmail or create a shared inbox to start using Quieter.
+          Connect Gmail or create a mailbox to start using Quieter.
         </p>
       </SettingsCard>
     );
@@ -92,7 +95,8 @@ const MailboxesListContent = ({
                   mailbox.displayName,
                   mailbox.emailAddress,
                   mailbox.provider,
-                  mailbox.grantRole
+                  mailbox.grantRole,
+                  mailbox.accessMode
                 )}
                 key={mailbox.id}
                 meta={getMailboxRowMeta(
@@ -201,12 +205,13 @@ export const MailboxesListSettingsView = () => {
         }
         title="Mailboxes"
       >
-        Connect personal mail and manage the shared inboxes you can access.
+        Connect personal mail and manage the mailboxes you can access.
       </SettingsPageHeader>
 
       <SettingsSection title="Your mailboxes">
         {renderMailboxSection()}
       </SettingsSection>
+      <ManagedMailboxAdministrationSettings />
     </div>
   );
 };

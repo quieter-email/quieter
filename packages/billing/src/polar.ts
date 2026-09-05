@@ -32,6 +32,12 @@ export const getPolarSandboxMode = () => getPolarServer() === "sandbox";
  * report usage or read a plan.
  */
 export const getPolarClient = async () => {
+  if (
+    serverEnv.QUIETER_DEPLOYMENT_ENV === "local" &&
+    getPolarServer() !== "sandbox"
+  ) {
+    throw new Error("Local billing requires the Polar sandbox.");
+  }
   if (polarClient !== null) {
     return polarClient;
   }
@@ -53,6 +59,7 @@ export const ingestPolarEvents = async (
     metadata?: Record<string, boolean | number | string>;
     name: string;
     organizationId?: string;
+    timestamp?: Date;
   }[]
 ) => {
   const polar = await getPolarClient();

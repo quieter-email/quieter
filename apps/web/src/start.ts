@@ -49,9 +49,12 @@ const publicLegalPaths = new Set([
 const sitePasswordPagePath = "/site-password";
 const homePagePath = "/home";
 const publicPathPrefixes = ["/_build/", "/assets/"];
+/** Open-tracking markers are fetched by mail clients without cookies. */
+const openTrackingPrefix = "/api/v1/o/";
 const isSentryEnabled =
   import.meta.env.SSR &&
-  serverEnv.NODE_ENV !== "development" &&
+  (serverEnv.NODE_ENV !== "development" ||
+    serverEnv.VITE_QUIETER_LOCAL_TELEMETRY === true) &&
   serverEnv.SENTRY_DSN !== undefined;
 const fallbackRateLimitBuckets = new Map<
   string,
@@ -404,9 +407,9 @@ export const startInstance = createStart(() => ({
     assetArchiveMiddleware,
     wellKnownAgentSurfaceMiddleware,
     markdownNegotiationMiddleware,
+    databaseMiddleware,
     abuseProtectionMiddleware,
     sitePasswordMiddleware,
-    databaseMiddleware,
     csrfMiddleware,
   ],
 }));
@@ -442,6 +445,10 @@ const shouldGatePath = (pathname: string) => {
   }
 
   if (publicLegalPaths.has(normalizedPath)) {
+    return false;
+  }
+
+  if (normalizedPath.startsWith(openTrackingPrefix)) {
     return false;
   }
 

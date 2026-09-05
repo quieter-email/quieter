@@ -81,7 +81,11 @@ Google sign-in and Gmail authorization are separate:
 Every connected Gmail account and managed address is a persisted mailbox with a stable generated ID.
 
 - Gmail mailboxes remain private to their owner, even when placed in an organization.
-- Managed mailboxes are organization-owned and visible only through explicit mailbox grants.
+- Shared managed mailboxes are organization-owned and visible only through explicit mailbox grants.
+- Private managed mailboxes stay organization-owned for billing and domains but belong to one person: only the owner plus explicit member grants can access them, and division grants never apply.
+- Private managed owners must remain team members. Offboarding revokes content and grant-management access; team admins can transfer ownership without reading mail.
+- Creating a private mailbox, converting to private, or transferring its owner gives only the selected owner access. Conversion and transfer clear existing direct and division grants. Returning to shared preserves explicit member grants and never restores division access automatically. Configuration writes serialize with mode changes on the mailbox row.
+- Account deletion requires transferring private managed mailboxes first. A separate restrictive `managedOwnerUserId` foreign key protects organization-owned mail; Gmail retains its existing account-deletion behavior.
 - Personal is always available but is not a Better Auth organization.
 - `user.defaultMailboxId` is the global fallback across Personal and organizations.
 
@@ -143,9 +147,15 @@ c15t runs in offline mode. Consent preferences stay in the browser and do not re
 
 ## Billing
 
-Billing subscriptions are user-scoped. Paid plans are `managed` and `pro`; Gmail and bring-your-own key access do not require checkout.
+Billing subscriptions belong to teams. Paid plans are `managed` and `pro`. A subscription grants access only while active or trialing and before its current period ends.
 
-PayKit and Polar handle product synchronization, checkout, subscription events, and usage events. Organization mail usage is measured separately and billed according to plan-specific markup.
+Polar handles checkout, renewals, and subscription events. Signed webhooks synchronize subscription status, period dates, and scheduled cancellation. Billing reads reconcile stale records after five minutes, including active and past-due subscriptions, to recover from missed events. Equal provider timestamps can refresh the reconciliation time; older timestamps cannot overwrite newer subscription state. A failed reconciliation returns an unavailable state and retries after five minutes. Checkout refreshes the existing subscription before deciding whether a new checkout is allowed, preventing duplicate subscriptions after a missed renewal.
+
+Canceling at period end preserves access until the period ends. Immediate cancellation, expiry, or past-due status pauses sending, API access, and paid configuration changes. Domains, keys, inboxes, and existing messages are retained. Billing management and authorized deletion remain available. Incoming mail continues for configured inboxes; cancellation does not delete receipt rules or silently discard accepted messages. Full inbound suspension, sender rejection, and a retention deadline are not implemented. Receiving and storage can therefore still incur costs after cancellation.
+
+The additive `cancelAtPeriodEnd` migration must run through the protected migration workflow before deploying code that reads the column. It defaults to false for existing records and is refreshed from Polar on the next reconciliation. No production migration is run from a local checkout.
+
+For private production testing, a 100% subscription discount must cover every intended billing cycle. Check its duration and the discount attached to the affected subscription in Polar. Merchant verification and subscription status are separate; do not bypass production billing checks based on an unverified merchant account. An active subscription with a past period end stays paused until the provider advances the period. Extending access against the old period would also omit new usage from its credit window. See [billing operations](./billing.md) for production setup and renewal troubleshooting. Organization mail usage is measured separately and billed according to plan-specific markup.
 
 ## Infrastructure Ownership
 

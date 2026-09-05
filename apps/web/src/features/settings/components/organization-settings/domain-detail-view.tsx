@@ -42,6 +42,7 @@ import {
   SettingsSection,
   settingsSurfaceVariants,
 } from "../settings-layout";
+import { BillingAccessNotice } from "./billing-access-notice";
 import type { FullOrganization } from "./domain";
 import {
   getOrganizationDomainConnectQueryKey,
@@ -1451,6 +1452,11 @@ export const DomainDetailView = ({
   return (
     <div className="@container space-y-8">
       <SettingsBackButton onClick={onBack}>Domains</SettingsBackButton>
+      {!billingPending &&
+        !billingAccessUnknown &&
+        !canUseOrganizationDomains && (
+          <BillingAccessNotice organizationId={organization.id} />
+        )}
       <DomainHeader
         domain={domain}
         domainConnect={domainConnect}
@@ -1500,7 +1506,11 @@ export const DomainDetailView = ({
       <DomainDangerSection
         data={data}
         domain={domain}
-        manageReason={manageReason}
+        manageReason={
+          canManageDomains
+            ? null
+            : "Only admins and owners can remove team domains."
+        }
         onRemove={handleRemoveDomain}
         removeMutation={removeMutation}
         removeOpen={removeOpen}

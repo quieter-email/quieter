@@ -3,10 +3,13 @@
 import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
 
+import { getAggregateDeliveryStatusFromStatuses } from "#/features/message-delivery/domain/delivery-status";
+import { getMessageListDeliveryOptions } from "#/features/message-delivery/domain/message-delivery-query";
+import { supportsMessageDelivery } from "#/features/message-delivery/domain/message-delivery-support";
 import type { ThreadListEntry } from "#/lib/gmail/thread-list";
 import {
   getThreadQueryKey,
@@ -167,6 +170,42 @@ export const MessageListScrollPane = ({
     list.mailboxId,
     queryClient
   );
+
+  const deliveryMessageIds = useMemo(
+    () =>
+      threadedMessages
+        .filter((thread) =>
+          supportsMessageDelivery({
+            mailboxId: list.mailboxId,
+            mailboxProvider: list.mailboxProvider,
+            message: thread.anchorMessage,
+          })
+        )
+        .map((thread) => thread.anchorMessage.id),
+    [threadedMessages, list.mailboxId, list.mailboxProvider]
+  );
+  const { data: deliveryStatusMap } = useQuery(
+    getMessageListDeliveryOptions({
+      enabled: deliveryMessageIds.length > 0,
+      mailboxId: list.mailboxId,
+      messageIds: deliveryMessageIds,
+    })
+  );
+  const deliveryStatusByMessageId = useMemo(() => {
+    const statuses = new Map<
+      string,
+      ReturnType<typeof getAggregateDeliveryStatusFromStatuses>
+    >();
+    for (const [messageId, messageStatuses] of Object.entries(
+      deliveryStatusMap ?? {}
+    )) {
+      statuses.set(
+        messageId,
+        getAggregateDeliveryStatusFromStatuses(messageStatuses)
+      );
+    }
+    return statuses;
+  }, [deliveryStatusMap]);
 
   // Track when we first see each thread ID to identify new messages
   const seenTimestampsRef = useRef<Map<string, number> | null>(null);
@@ -333,6 +372,11 @@ export const MessageListScrollPane = ({
                 activeMailbox={list.activeMailbox}
                 className="absolute top-0 left-0 w-full"
                 dataIndex={virtualItem.index}
+                deliveryStatus={
+                  thread.anchorMessage.id === undefined
+                    ? undefined
+                    : deliveryStatusByMessageId.get(thread.anchorMessage.id)
+                }
                 gmailLabels={gmailLabels}
                 isNew={isNew}
                 key={thread.threadId}

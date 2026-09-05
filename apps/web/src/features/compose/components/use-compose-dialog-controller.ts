@@ -6,9 +6,10 @@ import {
 } from "@quieter/mail/compose/schema";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import { scheduleFireAndForget } from "#/lib/delay";
+import { toastError } from "#/lib/error-toast";
 import {
   deleteDemoDraft,
   saveDemoDraft,
@@ -106,6 +107,7 @@ export const useComposeDialogController = ({
   onClose,
   onRecipientProblem,
   persistDrafts = true,
+  saveOnUnmount = false,
   signature,
 }: {
   demoMode?: boolean;
@@ -115,6 +117,7 @@ export const useComposeDialogController = ({
   onClose?: () => void;
   onRecipientProblem?: () => void;
   persistDrafts?: boolean;
+  saveOnUnmount?: boolean;
   signature?: { html: string | null; text: string | null };
 }) => {
   const queryClient = useQueryClient();
@@ -137,6 +140,7 @@ export const useComposeDialogController = ({
     };
   });
   const activeDraftRef = useRef(state.draft);
+  const draftClosedRef = useRef(false);
   const onCloseRef = useRef(onClose);
   const openIdRef = useRef(0);
   // react-doctor-disable-next-line react-doctor/rerender-lazy-ref-init -- The queue promise is a stable mutable workflow primitive.
@@ -173,6 +177,7 @@ export const useComposeDialogController = ({
   };
 
   const closeDialog = (afterClose?: () => void) => {
+    draftClosedRef.current = true;
     setState((current) => ({ ...current, open: false }));
     const closeHandler = afterClose ?? onCloseRef.current;
     if (closeHandler !== undefined) {
@@ -281,6 +286,7 @@ export const useComposeDialogController = ({
   });
 
   const openDraftInDialog = (draft: ComposeDraftState) => {
+    draftClosedRef.current = false;
     activeDraftRef.current = draft;
 
     writeComposeFormValues(form, draftToComposeFormValues(draft));
@@ -425,16 +431,10 @@ export const useComposeDialogController = ({
     openDraftInDialog(withSignature);
   };
 
-  const closeComposeDialog = (afterClose?: () => void) => {
-    if (activeDraftRef.current.saveStatus === "sending") {
-      return;
-    }
-
-    openIdRef.current += 1;
+  const saveDraftOnExit = () => {
     const { values } = form.state;
     const draft = buildDraftFromForm(values);
     const saveOnClose = shouldSaveDraft(draft, values);
-    closeDialog(afterClose);
 
     if (!saveOnClose) {
       clearComposeDraftRuntimeFiles(draft);
@@ -443,8 +443,11 @@ export const useComposeDialogController = ({
 
     const finishClose = async () => {
       await saveDraft(draft, { refreshAfterSave: true })
-        .catch(() => {
-          ignoreBackgroundFailure();
+        .catch((error: unknown) => {
+          toastError(error, {
+            boundary: "compose-save-on-exit",
+            fallback: "Your draft could not be saved. Please try again.",
+          });
         })
         .finally(() => {
           savedDraftByLocalIdRef.current.delete(draft.localId);
@@ -452,6 +455,15 @@ export const useComposeDialogController = ({
         });
     };
     scheduleFireAndForget(finishClose);
+  };
+
+  const closeComposeDialog = (afterClose?: () => void) => {
+    if (activeDraftRef.current.saveStatus === "sending") {
+      return;
+    }
+    openIdRef.current += 1;
+    closeDialog(afterClose);
+    saveDraftOnExit();
   };
 
   const handleDialogOpenChange = (open: boolean) => {
@@ -568,10 +580,23 @@ export const useComposeDialogController = ({
     }
   };
 
-  // react-doctor-disable-next-line react-doctor/exhaustive-deps
+  const disposeDraft = useEffectEvent(() => {
+    if (
+      draftClosedRef.current ||
+      activeDraftRef.current.saveStatus === "sending"
+    ) {
+      return;
+    }
+    if (saveOnUnmount) {
+      saveDraftOnExit();
+    } else {
+      clearComposeDraftRuntimeFiles(activeDraftRef.current);
+    }
+  });
+
   useEffect(
     () => () => {
-      clearComposeDraftRuntimeFiles(activeDraftRef.current);
+      disposeDraft();
     },
     []
   );
