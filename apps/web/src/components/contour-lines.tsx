@@ -265,7 +265,8 @@ export const ContourLines = () => {
           raf = requestAnimationFrame(render);
         };
 
-        removeResizeListener = activeSurface.onResize(() => {
+        removeResizeListener = activeSurface.onResize(({ width, height }) => {
+          contourEffect.set({ params: { resolution: [width, height] } });
           lastRenderTime = -FRAME_INTERVAL_MS;
         });
 
