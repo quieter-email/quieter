@@ -32,6 +32,7 @@ import {
   setManagedMailboxDivisionGrant,
   removeManagedMailboxGrant,
 } from "../src/mailbox/managed-grants";
+import { getOnboardingState } from "../src/onboarding/service";
 
 const { databaseUrl } = vi.hoisted(() => ({
   databaseUrl: process.env.MIGRATION_TEST_DATABASE_URL,
@@ -393,6 +394,28 @@ describe.skipIf(databaseUrl === undefined)(
       await expect(
         getAuthorizedManagedMailbox({ mailboxId, userId: other })
       ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    });
+
+    test("onboarding shows private mailboxes only to owners and explicitly granted members", async () => {
+      const mailboxId = await create();
+      const before = await getOnboardingState(other);
+      expect(
+        before?.managedMailboxes.some((item) => item.id === mailboxId)
+      ).toBeFalsy();
+      const ownerState = await getOnboardingState(owner);
+      expect(
+        ownerState?.managedMailboxes.some((item) => item.id === mailboxId)
+      ).toBeTruthy();
+      await setManagedMailboxGrant({
+        mailboxId,
+        role: "reader",
+        targetUserId: other,
+        userId: owner,
+      });
+      const after = await getOnboardingState(other);
+      expect(
+        after?.managedMailboxes.some((item) => item.id === mailboxId)
+      ).toBeTruthy();
     });
 
     test("database prevents owner-account deletion from cascading into team mail", async () => {
