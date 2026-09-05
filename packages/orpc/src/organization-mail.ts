@@ -29,6 +29,7 @@ import {
 import { hasText } from "./text";
 
 export { ORGANIZATION_API_KEY_CONFIG_ID } from "@quieter/auth/organization-api-key";
+export { organizationHasBillingFeature } from "@quieter/billing/entitlements";
 export {
   assertOrganizationOwnsVerifiedSenderDomain,
   OrganizationMailSendError,

@@ -1,34 +1,14 @@
 import { randomUUID } from "node:crypto";
 
-import { SendMessageCommand, SQSClient } from "@aws-sdk/client-sqs";
 import { db } from "@quieter/database/client";
 import {
   mailboxAction,
   mailboxActionRevision,
   mailboxActionRun,
 } from "@quieter/database/schema";
-import { serverEnv } from "@quieter/env/server";
-import { reportError } from "@quieter/observability";
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, lt, lte, or } from "drizzle-orm";
 
 import { hasText } from "../text";
-import { executeMailboxActionRun } from "./executor";
-
-const sqsClient = new SQSClient({});
-
-const sendRunToQueue = async (runId: string) => {
-  if (!hasText(serverEnv.MAILBOX_ACTION_QUEUE_URL)) {
-    await executeMailboxActionRun(runId);
-    return;
-  }
-
-  await sqsClient.send(
-    new SendMessageCommand({
-      MessageBody: JSON.stringify({ runId }),
-      QueueUrl: serverEnv.MAILBOX_ACTION_QUEUE_URL,
-    })
-  );
-};
 
 const enqueueActionTriggers = async (input: {
   action: {
@@ -134,15 +114,74 @@ export const enqueueMailboxActionsForMessage = async (input: {
   );
   const runIds = runIdGroups.flat();
 
-  await Promise.all(
-    runIds.map(async (runId) => {
-      try {
-        await sendRunToQueue(runId);
-      } catch (error) {
-        reportError(error, { operation: "mailbox-actions:enqueue-run" });
-      }
-    })
-  );
-
   return { enqueuedRunIds: runIds };
+};
+
+/** How long a dispatched message chain (initial delivery plus queue retries
+ * with backoff) is assumed to own a run before the fallback dispatcher may
+ * consider it lost and re-dispatch it.
+ */
+const DISPATCH_LEASE_MS = 15 * 60 * 1000;
+
+/**
+ * Atomically claims runs that need a dispatch message: never-dispatched or
+ * stale-dispatched queued rows, plus lease-expired running rows for crash
+ * recovery. The conditional UPDATE makes overlapping dispatcher invocations
+ * safe; each run is claimed by at most one invocation.
+ */
+export const claimPendingMailboxActionRuns = async () => {
+  const now = new Date();
+  const dispatchLeaseExpiry = new Date(now.getTime() - DISPATCH_LEASE_MS);
+  return await db
+    .update(mailboxActionRun)
+    .set({ dispatchedAt: now, updatedAt: now })
+    .where(
+      or(
+        and(
+          eq(mailboxActionRun.status, "queued"),
+          or(
+            isNull(mailboxActionRun.dispatchedAt),
+            lte(mailboxActionRun.dispatchedAt, dispatchLeaseExpiry)
+          )
+        ),
+        and(
+          eq(mailboxActionRun.status, "running"),
+          or(
+            isNull(mailboxActionRun.leasedUntil),
+            lt(mailboxActionRun.leasedUntil, now)
+          )
+        )
+      )
+    )
+    .returning({ runId: mailboxActionRun.id });
+};
+
+/** Records successful dispatches so the fallback dispatcher leaves them alone. */
+export const markMailboxActionRunsDispatched = async (runIds: string[]) => {
+  if (runIds.length === 0) {
+    return;
+  }
+
+  const now = new Date();
+  await db
+    .update(mailboxActionRun)
+    .set({ dispatchedAt: now })
+    .where(inArray(mailboxActionRun.id, runIds));
+};
+
+/**
+ * Releases dispatch claims after a failed send so the affected runs are
+ * re-dispatched on the next tick instead of waiting out the dispatch lease.
+ */
+export const releaseMailboxActionRunDispatchClaims = async (
+  runIds: string[]
+) => {
+  if (runIds.length === 0) {
+    return;
+  }
+
+  await db
+    .update(mailboxActionRun)
+    .set({ dispatchedAt: null })
+    .where(inArray(mailboxActionRun.id, runIds));
 };
