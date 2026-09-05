@@ -20,6 +20,7 @@
 
 :root {
   --brand-bg: rgb(238 238 240);
+  --auth-particle-tint: rgb(75 99 128);
   --font-geist: "Geist Variable", sans-serif;
   --font-lora: "Lora Variable", serif;
   --font-geist-mono: "Geist Mono Variable", monospace;
@@ -104,6 +105,7 @@
 :root[data-theme="dark"],
 :root[data-kb-theme="dark"] {
   --brand-bg: rgb(14 15 16);
+  --auth-particle-tint: rgb(152 184 220);
   --bg: oklch(0.125 0 264);
   --bg-raised: oklch(0.198 0.003 264);
   --bg-surface: oklch(0.235 0.003 264);

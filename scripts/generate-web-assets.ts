@@ -408,11 +408,16 @@ writeFileSync(
   `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Quieter brand assets</title><style>body{margin:0;background:#0e0f10;color:#eeeef0;font:15px system-ui}main{max-width:1440px;margin:auto;padding:48px 32px}h1{font-size:32px;font-weight:500}p{color:#929599;line-height:1.7}h2{font-size:19px;font-weight:450;margin-top:56px}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px}a{color:inherit;text-decoration:none}img{display:block;width:100%;aspect-ratio:1.9;object-fit:contain;background:#17181a}span{display:flex;justify-content:space-between;padding-top:12px}small{color:#8e9399}@media(max-width:750px){.grid{grid-template-columns:1fr}main{padding:24px}}</style><main><h1>Quieter</h1><p>Original 004. Custom Geist wordmark.<br>108 images, 12 treatments. Select an image to save the full-size PNG.<br>SVG and transparent PNG masters are in the core folder. Dark and light in core filenames describe the ink color.</p>${sections}</main></html>`
 );
 
-const icon = (ground: string, ink: string, coverage: number) =>
+const icon = (
+  ground: string,
+  ink: string,
+  coverage: number,
+  cornerRadius = 0
+) =>
   svg(
     1000,
     1000,
-    `<rect width="1000" height="1000" fill="${ground}"/><path fill="${ink}" d="${brand.mark.path}" transform="translate(${500 * (1 - coverage)} ${500 * (1 - coverage)}) scale(${coverage})"/>`
+    `<rect width="1000" height="1000" rx="${cornerRadius}" fill="${ground}"/><path fill="${ink}" d="${brand.mark.path}" transform="translate(${500 * (1 - coverage)} ${500 * (1 - coverage)}) scale(${coverage})"/>`
   );
 for (const [filename, size] of [
   ["apple-touch-icon.png", 180],
@@ -431,7 +436,7 @@ for (const [suffix, ground, ink] of [
   ["", brand.dark, brand.light],
   ["-dev", "#34231a", "#f2d6bd"],
 ] as const) {
-  const source = icon(ground, ink, 1.05);
+  const source = icon(ground, ink, 1.05, 230);
   writeFileSync(path.join(publicDir, `icon${suffix}.svg`), source);
   const sizes = [16, 32, 48, 64];
   const images = sizes.map((size) => {

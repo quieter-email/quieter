@@ -1,6 +1,5 @@
 "use client";
 
-import { Brand } from "@quieter/ui/brand";
 import { brand } from "@quieter/ui/brand-geometry";
 import { useEffect, useRef } from "react";
 import {
@@ -13,6 +12,8 @@ import {
   surface,
 } from "vgpu";
 import type { Surface } from "vgpu";
+
+import { AtmosphericBackground } from "#/components/atmospheric-background";
 
 const dotGap = 4;
 const maxCanvasPixelCount = 2_200_000;
@@ -61,8 +62,8 @@ type Impulse = Point & {
 };
 
 type Colors = {
-  background: Rgb;
   primary: Rgb;
+  tint: Rgb;
 };
 
 const updateShaderSource = `
@@ -285,6 +286,7 @@ struct RenderParams {
   resolution: vec2f,
   color: vec3f,
   time: f32,
+  tint: vec3f,
 }
 
 struct VertexOutput {
@@ -316,9 +318,11 @@ fn vs_main(
   let radius = particle.radius + energy * 0.12 + shimmer;
   let halfSize = radius + 0.72;
   let localPosition = corners[vertexIndex] * halfSize;
+  let phase = particle.base / params.resolution * 6.28318;
+  let swell = vec2f(sin(phase.y * 1.6 + params.time * 0.2), cos(phase.x * 1.4 + params.time * 0.17)) * min(params.resolution.x, params.resolution.y) * 0.0012;
   let center = vec2f(
-    state.position.x / params.resolution.x * 2.0 - 1.0,
-    1.0 - state.position.y / params.resolution.y * 2.0
+    (state.position.x + swell.x) / params.resolution.x * 2.0 - 1.0,
+    1.0 - (state.position.y + swell.y) / params.resolution.y * 2.0
   );
   let clipOffset = vec2f(
     localPosition.x / params.resolution.x * 2.0,
@@ -341,7 +345,8 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   let shimmerSeed = smoothstep(0.68, 1.0, input.vibrance);
   let shimmer = (sin(params.time * mix(1.2, 2.8, input.vibrance) + input.vibrance * 41.0) * 0.5 + 0.5) * shimmerSeed;
   let alpha = min(core * input.opacity * (0.94 + shimmer * 0.1 + input.energy * 0.08), 1.0);
-  return vec4f(params.color, alpha);
+  let tintAmount = 0.12 + 0.14 * (sin(input.position.x / params.resolution.x * 5.0 + input.position.y / params.resolution.y * 3.0) * 0.5 + 0.5);
+  return vec4f(mix(params.color, params.tint, tintAmount), alpha);
 }
 `;
 
@@ -355,6 +360,11 @@ const mix = (start: number, end: number, amount: number) =>
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), max);
+
+const smoothstep = (edge0: number, edge1: number, value: number) => {
+  const t = clamp((value - edge0) / (edge1 - edge0), 0, 1);
+  return t * t * (3 - 2 * t);
+};
 
 const oklchGrayToSrgb = (lightness: number) => {
   const linear = lightness ** 3;
@@ -408,49 +418,102 @@ const getCssColor = (
 };
 
 const readColors = (canvas: HTMLCanvasElement): Colors => ({
-  background: getCssColor(canvas, "--brand-bg", [14 / 255, 15 / 255, 16 / 255]),
   primary: getCssColor(canvas, "--primary", [0.25, 0.25, 0.25]),
+  tint: getCssColor(canvas, "--auth-particle-tint", [0.6, 0.72, 0.86]),
 });
 
-const buildDots = (width: number, height: number, gap: number) => {
-  const mask = document.createElement("canvas");
-  mask.width = width;
-  mask.height = height;
-  const context = mask.getContext("2d", { willReadFrequently: true });
-  if (!context) {
-    return [];
+const boundaryRadii: number[] = [];
+
+const squircleRadius = (
+  point: Point,
+  scale: number,
+  width: number,
+  height: number
+) => {
+  const unit = (Math.min(width, height) * 0.65) / 1000;
+  const x = (point.x - width * 0.5) / (unit * scale);
+  const y = (point.y - height * 0.5) / (unit * scale);
+  const angle = (Math.atan2(y, x) + Math.PI * 2) % (Math.PI * 2);
+  const radius =
+    boundaryRadii[Math.round((angle / (Math.PI * 2)) * 720) % 720] ?? 380;
+  return Math.hypot(x, y) / radius;
+};
+
+const appendNoiseDot = (
+  dots: Dot[],
+  cellX: number,
+  cellY: number,
+  gap: number,
+  width: number,
+  height: number
+) => {
+  const jitterX = hash(cellX + 53, cellY + 53) - 0.5;
+  const jitterY = hash(cellX + 193, cellY + 193) - 0.5;
+  const radiusScale = clamp((gap / dotGap) ** 0.42, 1, 1.42);
+  const center = {
+    x: (cellX + 0.5) * gap + jitterX * gap,
+    y: (cellY + 0.5) * gap + jitterY * gap,
+  };
+  const outerRadius = squircleRadius(center, 1, width, height);
+  const insideOuter = 1 - smoothstep(0.93, 1.1, outerRadius);
+  const texture =
+    0.92 +
+    Math.sin((center.x / width) * 29) *
+      Math.cos((center.y / height) * 23) *
+      0.08;
+  const density = 0.018 + insideOuter * 0.8 * texture;
+  if (density < hash(cellX + 719, cellY + 719)) {
+    return;
   }
-  const scale = (Math.min(width, height) * 0.65) / brand.mark.width;
-  context.translate(width / 2 - 500 * scale, height / 2 - 500 * scale);
-  context.scale(scale, scale);
-  const outline = new Path2D(brand.mark.path);
-  // oxlint-disable-next-line unicorn/no-array-fill-with-reference-type -- CanvasRenderingContext2D.fill takes a Path2D, not an array value.
-  context.fill(outline);
-  const pixels = context.getImageData(0, 0, width, height).data;
+  const radiusSeed = hash(cellX + 389, cellY + 389);
+  dots.push({
+    ...center,
+    opacity: 0.85 + radiusSeed * 0.15,
+    radius:
+      mix(0.35 + radiusSeed * 0.45, 0.65 + radiusSeed * 0.55, insideOuter) *
+      radiusScale,
+    vibrance: hash(cellX + 941, cellY + 941),
+  });
+};
+
+const buildDots = (width: number, height: number, gap: number) => {
+  if (boundaryRadii.length === 0) {
+    const context = document.createElement("canvas").getContext("2d");
+    if (!context) {
+      return [];
+    }
+    const outline = new Path2D(brand.mark.path);
+    for (let index = 0; index < 720; index += 1) {
+      const angle = (index / 720) * Math.PI * 2;
+      let inside = 0;
+      let outside = 600;
+      for (let step = 0; step < 12; step += 1) {
+        const radius = (inside + outside) / 2;
+        if (
+          context.isPointInPath(
+            outline,
+            500 + Math.cos(angle) * radius,
+            500 + Math.sin(angle) * radius
+          )
+        ) {
+          inside = radius;
+        } else {
+          outside = radius;
+        }
+      }
+      boundaryRadii.push((inside + outside) / 2);
+    }
+  }
+  const unit = Math.min(width, height) / 10;
+  const margin = Math.ceil((Math.max(15, unit * 0.13 + 2) + gap) / gap);
+  const minCellX = -margin;
+  const maxCellX = Math.ceil(width / gap) + margin;
+  const minCellY = -margin;
+  const maxCellY = Math.ceil(height / gap) + margin;
   const dots: Dot[] = [];
-  const columns = Math.ceil(width / gap);
-  const rows = Math.ceil(height / gap);
-  for (let cellY = 0; cellY < rows; cellY += 1) {
-    for (let cellX = 0; cellX < columns; cellX += 1) {
-      const x = (cellX + 0.5 + (hash(cellX, cellY) - 0.5) * 0.3) * gap;
-      const y = (cellY + 0.5 + (hash(cellY, cellX + 19) - 0.5) * 0.3) * gap;
-      if (x >= width || y >= height) {
-        continue;
-      }
-      const coverage =
-        (pixels[(Math.floor(y) * width + Math.floor(x)) * 4 + 3] ?? 0) / 255;
-      const seed = hash(cellX + 389, cellY + 389);
-      if (coverage < 0.1 && seed > 0.22) {
-        continue;
-      }
-      dots.push({
-        opacity: coverage > 0.1 ? (0.6 + seed * 0.4) * coverage : 0.12,
-        radius:
-          gap * (coverage > 0.1 ? 0.29 + seed * 0.08 : 0.09 + seed * 0.04),
-        vibrance: hash(cellX + 941, cellY + 941),
-        x,
-        y,
-      });
+  for (let cellY = minCellY; cellY <= maxCellY; cellY += 1) {
+    for (let cellX = minCellX; cellX <= maxCellX; cellX += 1) {
+      appendNoiseDot(dots, cellX, cellY, gap, width, height);
     }
   }
   return dots.slice(0, maxParticleCount);
@@ -466,7 +529,6 @@ export const AuthVisual = () => {
     }
 
     let cancelled = false;
-    canvas.style.visibility = "visible";
     let dispose: (() => void) | undefined;
 
     const initialize = async () => {
@@ -581,6 +643,7 @@ export const AuthVisual = () => {
         if (canvasSurface) {
           canvasSurface.dispose();
           canvasSurface = surface(gpu, canvas, {
+            alphaMode: "premultiplied",
             autoResize: false,
             size: [pixelWidth, pixelHeight],
           });
@@ -591,6 +654,7 @@ export const AuthVisual = () => {
 
       resize();
       canvasSurface = surface(gpu, canvas, {
+        alphaMode: "premultiplied",
         autoResize: false,
         size: [bufferWidth, bufferHeight],
       });
@@ -813,6 +877,13 @@ export const AuthVisual = () => {
       };
 
       const render = () => {
+        if (
+          document.hidden ||
+          canvas.clientWidth === 0 ||
+          canvas.clientHeight === 0
+        ) {
+          return false;
+        }
         const renderSurface = canvasSurface;
         if (!renderSurface) {
           return false;
@@ -823,7 +894,8 @@ export const AuthVisual = () => {
           params: {
             color: colors.primary,
             resolution: [bufferWidth, bufferHeight],
-            time: now / 1000,
+            time: canAnimateParticles ? now / 1000 : 0,
+            tint: colors.tint,
           },
           particleStates: particleStates.read,
           particleStatics,
@@ -831,7 +903,7 @@ export const AuthVisual = () => {
         frame(gpu, (currentFrame) => {
           currentFrame.pass(
             {
-              clear: [...colors.background, 1],
+              clear: [0, 0, 0, 0],
               target: renderSurface,
             },
             (pass) => {
@@ -840,7 +912,7 @@ export const AuthVisual = () => {
           );
         });
         lastRenderTime = now;
-        return isActive;
+        return isActive || canAnimateParticles;
       };
 
       const animate = () => {
@@ -951,7 +1023,16 @@ export const AuthVisual = () => {
         queueRender();
       };
 
+      const handleVisibilityChange = () => {
+        if (!document.hidden) {
+          queueRender();
+        }
+      };
       render();
+      if (canAnimateParticles) {
+        queueRender();
+      }
+      document.addEventListener("visibilitychange", handleVisibilityChange);
       const resizeObserver = new ResizeObserver(handleLayoutChange);
       resizeObserver.observe(canvas);
       const mutationObserver = new MutationObserver(() => {
@@ -959,7 +1040,7 @@ export const AuthVisual = () => {
         queueRender();
       });
       mutationObserver.observe(document.documentElement, {
-        attributeFilter: ["class", "style", "data-theme", "data-kb-theme"],
+        attributeFilter: ["class", "style"],
         attributes: true,
       });
       if (canTrackCursor) {
@@ -984,6 +1065,10 @@ export const AuthVisual = () => {
         if (animationFrame) {
           globalThis.cancelAnimationFrame(animationFrame);
         }
+        document.removeEventListener(
+          "visibilitychange",
+          handleVisibilityChange
+        );
         resizeObserver.disconnect();
         mutationObserver.disconnect();
         if (canTrackCursor) {
@@ -1012,10 +1097,7 @@ export const AuthVisual = () => {
       } catch {
         dispose?.();
         dispose = undefined;
-        if (!cancelled) {
-          canvas.style.visibility = "hidden";
-        }
-        // The SVG underneath remains visible when WebGPU is unavailable.
+        // The themed background remains when WebGPU is unavailable.
       }
     };
 
@@ -1027,15 +1109,10 @@ export const AuthVisual = () => {
   }, []);
 
   return (
-    <div
-      aria-hidden="true"
-      className="relative size-full overflow-hidden bg-brand-bg text-primary"
-    >
-      <div className="absolute inset-0 flex items-center justify-center">
-        <Brand style={{ height: "65%", width: "65%" }} />
-      </div>
+    <div aria-hidden="true" className="relative size-full overflow-hidden">
+      <AtmosphericBackground grain={1.1} intensity={0.85} interactive />
       <canvas
-        className="absolute inset-0 block size-full"
+        className="relative block size-full"
         ref={canvasRef}
         tabIndex={-1}
       />
