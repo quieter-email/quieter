@@ -132,9 +132,7 @@ export const MessageDetail = ({
                   transform: "translate3d(8px, 0, 0)",
                 }
           }
-          key={
-            selectedMessage?.id ?? (isPending === true ? "loading" : "empty")
-          }
+          key={`${mailboxId}:${selectedMessage?.id ?? (isPending === true ? "loading" : "empty")}`}
           transition={{
             duration:
               reducedMotion === true

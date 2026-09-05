@@ -34,6 +34,35 @@ const sourceMessage = {
 } satisfies MessageListItem;
 
 describe(buildComposeDraftFromMessageAction, () => {
+  test("preserves reply metadata when saving edited inline form values on navigation", () => {
+    const draft = buildComposeDraftFromMessageAction({
+      action: "reply",
+      currentUserEmail: "me@example.com",
+      message: sourceMessage,
+    });
+    const values = {
+      ...draftToComposeFormValues(draft),
+      bodyHtml: `<p>I will review this today.</p>${draft.bodyHtml}`,
+      bodyText: `I will review this today.\n\n${draft.bodyText}`,
+    };
+    const savedDraft = composeFormValuesToDraft(values, draft);
+
+    expect(
+      shouldPersistComposeDraft({
+        currentDraft: draft,
+        nextDraft: savedDraft,
+        values,
+      })
+    ).toBeTruthy();
+    expect(savedDraft).toMatchObject({
+      draftAnchor: draft.draftAnchor,
+      recipients: draft.recipients,
+      replyContext: draft.replyContext,
+    });
+    expect(savedDraft.bodyHtml).toContain("I will review this today.");
+    expect(draft.bodyHtml).not.toContain("I will review this today.");
+  });
+
   test("builds a reply draft that can populate the compose form", () => {
     const draft = buildComposeDraftFromMessageAction({
       action: "reply",

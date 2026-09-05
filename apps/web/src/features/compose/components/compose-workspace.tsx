@@ -174,6 +174,7 @@ export const ComposeSurface = ({
     onClose,
     onRecipientProblem: focusComposeRecipientField,
     persistDrafts,
+    saveOnUnmount: variant === "inline",
     signature,
   });
   const {
@@ -490,7 +491,7 @@ export const ComposeSurface = ({
                   <ComposeEditorBody
                     chrome="seamless"
                     className={cn("min-h-0 flex-1", {
-                      "[&_.ProseMirror>blockquote]:hidden [&_.ProseMirror>p:has(+blockquote)]:hidden":
+                      "[&_.ProseMirror>blockquote]:hidden":
                         hasQuotedContent && !showQuotedContent,
                     })}
                     invalid={field.state.meta.errors.length > 0}
