@@ -1,6 +1,6 @@
 # Development integration plan
 
-This document records the accepted development setup and remaining implementation work. It does not claim that these profiles or ownership controls already exist. Current commands and their limitations are in [Development](development.md).
+This document records the development architecture and ownership rules. Startup commands are in [Development](development.md); provider research, verified setup and remaining acceptance work are in [Service audit](development-services.md).
 
 ## Service choices
 
@@ -47,7 +47,7 @@ A separate subscription provides development its own delivery and acknowledgment
 
 Prefer a development pull subscription for everyday local work. It requires outbound connectivity and subscriber credentials, without a public tunnel. A small local bridge should feed the same validated business-processing entrypoint used by the Worker. It must not manufacture Google OIDC tokens or weaken the public push endpoint's verification. Keep the authenticated push path for a separate integration test using a development push subscription and HTTPS tunnel.
 
-Required controls before enabling this mode:
+Controls required for this mode:
 
 - Production remains the watch owner. Development does not call Gmail watch/stop, including from maintenance, disconnect, billing changes, or error recovery.
 - The local subscriber only processes mailboxes explicitly connected and allowlisted in development. Unrelated notifications must not trigger message retrieval or AI calls.
@@ -87,13 +87,14 @@ Use Cloudflare Local Explorer and the runtime inspector for local state, request
 
 Correct SST frontend startup ownership and set its dev command to Vite+. Verify generated links reach the actual web process. Keep separate development storage and managed-mail resource configuration for the SES path. The shared PlanetScale choice does not authorize shared production mail mutations or cloud deployment changes.
 
-## Next implementation work
+## Implementation status, September 5, 2026
 
-1. Reconcile `quieter_dev` migration history and bring its schema current through the guarded migration workflow.
-2. Add explicit development profiles and checks for effective secret bindings, provider mode, database destination, and telemetry defaults.
-3. Implement shared-Gmail observation controls before starting local sync/automation consumers against existing accounts.
-4. Wire native Cloudflare background development, then create the separate development Pub/Sub subscription and local listener with bounded processing.
-5. Connect the development AI key and Workers AI credentials, existing Polar sandbox, real logo.dev, and required development mail storage.
-6. Add full write acceptance tests with a dedicated mailbox or verified ownership handoff, and document any remaining provider-specific gaps.
+The database has all 59 committed migrations and pgvector 0.8.5. It was backed up before applying forward migrations; two historical checksum differences were preserved rather than rewritten. No paid branch or cluster was created.
+
+Native background queues, Durable Objects, signed realtime connections, manual scheduler triggers and the separate Pub/Sub pull bridge are implemented. The bridge uses `quieter-gmail-local-leander`; production retains its existing watch and subscription. Gmail/Calendar/Linear provider writes default to blocked. Gmail writes additionally require resolving the access token's mailbox against the explicit account allowlist.
+
+The `local-leander` SST store contains development secrets for the app, database, OAuth, encryption, AI and Polar. Real OpenRouter generation, Workers AI embeddings and native Polar CLI webhook delivery have passed connected smoke tests. Polar uses a non-expiring sandbox token. Telemetry has an explicit local opt-in and remains disabled by default.
+
+Managed mail still needs dedicated development R2/AWS resources, an isolated test domain and a reviewed SES receipt routing arrangement. The legacy `dev:mail` command evaluates the full infrastructure and is not the normal local entrypoint. Deployed concurrency, IAM, real incoming MX routing and full provider mutation acceptance remain separate checks.
 
 Sentry/PostHog opt-in checks, c15t coverage, and disposable migration tests remain part of targeted verification. Domain Connect is deferred until used. A change is complete only when the affected local feature can be started, exercised, and debugged, or an exact external blocker is recorded with the required user action.

@@ -22,6 +22,7 @@ import {
   productHasManagedMail,
 } from "./plans.ts";
 import type { BillingFeature, BillingProductId } from "./plans.ts";
+import { getBillingExternalIdentity } from "./polar-config.ts";
 
 const ACTIVE_BILLING_STATUSES = new Set<BillingSubscriptionStatus>([
   "active",
@@ -160,7 +161,10 @@ const toBillingAccount = (
     creditAmountCents: BILLING_PRODUCTS[parsedProduct.data].creditAmountCents,
     currentPeriodEnd: row.currentPeriodEnd,
     currentPeriodStart: row.currentPeriodStart,
-    externalCustomerId: `organization:${organizationId}`,
+    externalCustomerId: getBillingExternalIdentity(
+      "organization",
+      organizationId
+    ),
     organizationId,
     product: parsedProduct.data,
   };

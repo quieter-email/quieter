@@ -53,7 +53,8 @@ const publicPathPrefixes = ["/_build/", "/assets/"];
 const openTrackingPrefix = "/api/v1/o/";
 const isSentryEnabled =
   import.meta.env.SSR &&
-  serverEnv.NODE_ENV !== "development" &&
+  (serverEnv.NODE_ENV !== "development" ||
+    serverEnv.VITE_QUIETER_LOCAL_TELEMETRY === true) &&
   serverEnv.SENTRY_DSN !== undefined;
 const fallbackRateLimitBuckets = new Map<
   string,

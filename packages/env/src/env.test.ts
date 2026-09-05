@@ -136,6 +136,24 @@ describe("SST environment", () => {
 });
 
 describe("local environment doctor", () => {
+  test("requires explicit telemetry opt-in and a development Sentry environment", async () => {
+    const { diagnoseLocalEnv } = await import("./local-doctor");
+    const values = new Map([
+      ["QUIETER_DEPLOYMENT_ENV", "local"],
+      ["QUIETER_AUTH_MAIL_MODE", "console"],
+      ["SENTRY_DSN", "https://public@o0.ingest.sentry.io/0"],
+    ]);
+    expect(diagnoseLocalEnv(values)).toStrictEqual(
+      expect.arrayContaining([
+        expect.stringContaining("VITE_QUIETER_LOCAL_TELEMETRY=true"),
+        expect.stringContaining("SENTRY_ENVIRONMENT=development"),
+      ])
+    );
+    values.set("VITE_QUIETER_LOCAL_TELEMETRY", "true");
+    values.set("SENTRY_ENVIRONMENT", "development");
+    expect(diagnoseLocalEnv(values)).toStrictEqual([]);
+  });
+
   test("accepts an isolated local env", async () => {
     const { diagnoseLocalEnv } = await import("./local-doctor");
     const errors = diagnoseLocalEnv(

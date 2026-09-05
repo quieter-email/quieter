@@ -6,6 +6,7 @@
     "./compatibility-date": "./src/compatibility-date.ts"
   },
   "scripts": {
+    "dev": "wrangler dev --config ../../local-background-worker.jsonc --local",
     "cf-typecheck": "wrangler types worker-configuration.d.ts --config wrangler.types.jsonc --strict-vars false --check",
     "cf-typegen": "wrangler types worker-configuration.d.ts --config wrangler.types.jsonc --strict-vars false",
     "check:compatibility-date": "node scripts/sync-compatibility-date.ts --check",
@@ -15,6 +16,7 @@
   },
   "dependencies": {
     "@quieter/database": "workspace:*",
+    "@quieter/env": "workspace:*",
     "@quieter/observability": "workspace:*",
     "@quieter/orpc": "workspace:*",
     "@sentry/cloudflare": "catalog:",

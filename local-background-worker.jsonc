@@ -1,0 +1,38 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "quieter-local-background",
+  "main": "packages/cloudflare/src/local-worker.ts",
+  "compatibility_date": "2026-08-04",
+  "compatibility_flags": ["nodejs_compat"],
+  "dev": { "ip": "127.0.0.1", "port": 8787 },
+  "durable_objects": {
+    "bindings": [
+      { "name": "GmailLiveSyncMailbox", "class_name": "GmailLiveSyncMailbox" },
+    ],
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["GmailLiveSyncMailbox"] },
+  ],
+  "queues": {
+    "producers": [
+      { "binding": "GmailPsQueue", "queue": "quieter-local-gmail" },
+      { "binding": "MailboxActionQueue", "queue": "quieter-local-actions" },
+    ],
+    "consumers": [
+      {
+        "queue": "quieter-local-gmail",
+        "max_batch_size": 1,
+        "max_batch_timeout": 0,
+        "max_retries": 5,
+        "dead_letter_queue": "quieter-local-gmail-failed",
+      },
+      {
+        "queue": "quieter-local-actions",
+        "max_batch_size": 1,
+        "max_batch_timeout": 0,
+        "max_retries": 5,
+        "dead_letter_queue": "quieter-local-actions-failed",
+      },
+    ],
+  },
+}

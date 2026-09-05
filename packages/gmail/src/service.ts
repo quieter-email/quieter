@@ -1,3 +1,4 @@
+import { serverEnv } from "@quieter/env/server";
 import { parseDraftAnchorFromHeaderReader } from "@quieter/mail/compose/draft-anchor";
 import type { ComposeDraftAnchor } from "@quieter/mail/compose/schema";
 import type { MailCategory as MailboxCategory } from "@quieter/mail/data-plane";
@@ -887,6 +888,42 @@ const requestGmail = async <T>(
     signal?: AbortSignal;
   }
 ): Promise<T> => {
+  if (
+    serverEnv.QUIETER_DEPLOYMENT_ENV === "local" &&
+    options?.method !== undefined &&
+    options.method !== "GET"
+  ) {
+    if (serverEnv.QUIETER_LOCAL_PROVIDER_MODE !== "write") {
+      throw createServiceError(
+        "This development environment can read your mailbox, but cannot change it.",
+        403
+      );
+    }
+    if (
+      (path.endsWith("/watch") || path.endsWith("/stop")) &&
+      serverEnv.QUIETER_LOCAL_GMAIL_WATCH_OWNER !== "local"
+    ) {
+      throw createServiceError(
+        "Mailbox notifications are managed by the other environment.",
+        403
+      );
+    }
+    const profile = await requestGmail(
+      accessToken,
+      "/gmail/v1/users/me/profile",
+      z.object({ emailAddress: z.email() })
+    );
+    const accounts =
+      serverEnv.QUIETER_LOCAL_GMAIL_WRITE_ACCOUNTS?.split(",").map((account) =>
+        account.trim().toLowerCase()
+      ) ?? [];
+    if (!accounts.includes(profile.emailAddress.toLowerCase())) {
+      throw createServiceError(
+        "This mailbox is not enabled for development write tests.",
+        403
+      );
+    }
+  }
   const url = new URL(`https://gmail.googleapis.com${path}`);
   appendQueryParameters(url.searchParams, options?.query);
 
