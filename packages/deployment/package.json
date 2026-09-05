@@ -1,0 +1,24 @@
+{
+  "name": "@quieter/deployment",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./controller": "./src/controller.ts",
+    "./schema": "./src/schema.ts"
+  },
+  "scripts": {
+    "verify:proof": "node --conditions=development src/verify-live-proof.ts",
+    "release": "node --conditions=development src/cli.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "catalog:",
+    "@quieter/env": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@quieter/config": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}

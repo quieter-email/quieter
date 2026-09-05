@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-Revised for review on 2026-09-06. This is a proposed design, not implementation approval or a statement that these guarantees already exist. Implementation begins after the user's audit.
+Revised and approved for implementation on 2026-09-06. Implementation is in progress, beginning with milestone A. The guarantees below are acceptance criteria, not claims about the current production deployment.
 
 The review covers PR #269 at `8dc34e281097d8866f1e84e0e247257eca94cede`, its existing local plan edits, and `origin/main` at `d01467d84594ed819a17b04a2f18afaa6c789577`. Production account settings and provider failure behavior have not been verified by this document review. Repository definitions show intended configuration, not necessarily deployed state.
 

@@ -137,4 +137,3 @@ jobs:
         env:
           QUIETER_WEB_ASSET_ARCHIVE_VERIFY_MODE: strict
         run: vp run verify:web-asset-archive
-

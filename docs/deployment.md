@@ -13,7 +13,7 @@ The release workflow:
 5. runs `sst deploy` without application runtime secrets in the deploy process, deploying the AWS mail/background stack and the Cloudflare web Worker from SST-managed values;
 6. wires SST resource outputs directly into the Worker and attaches `quieter.email`;
 7. archives the client assets this release built so earlier tabs keep loading;
-8. invokes the authenticated Gmail credential rotation endpoint.
+8. verifies the deployed web asset archive.
 
 There is no separate hosting-provider build, deploy hook, or dashboard environment configuration. Cloudflare receives runtime variables and encrypted bindings from SST for each release. Generated resource URLs and names remain deployment outputs and are never copied into a second configuration store.
 
@@ -27,7 +27,7 @@ The first archive-aware release requires a manual `workflow_dispatch` run with `
 
 Never delete objects from this bucket as part of a deploy: older tabs are reading from it. Prune it only through a retention policy chosen to outlive the longest realistic session, and only for objects no longer referenced by any recent release.
 
-Asset retention covers loading, not protocol. An old client calling a server function whose shape has changed is a separate compatibility boundary, handled by expand/contract like any other. The client also compares its build id against `/assets/build-id.txt` and reloads when a chunk fails and the ids differ, which is the backstop for anything retention does not cover.
+Asset retention covers loading, not protocol. An old client calling a server function whose shape has changed is a separate compatibility boundary, handled by expand/contract like any other. The client also compares its build id against `/assets/build-id.txt` and offers an explicit reload dialog when a chunk fails and the ids differ, which is the backstop for anything retention does not cover.
 
 ### Worker rollback and Durable Object versions
 
@@ -63,5 +63,5 @@ The `vector` extension must be enabled on a database before the memory-embedding
 ## Failure behavior
 
 - Verification or migration failure prevents deployment.
-- A failed production deployment leaves the previous Worker release serving traffic.
-- Gmail credential rotation runs only after SST reports a successful production deployment.
+- A failed SST deployment can already have changed live Workers or other resources. Inspect actual provider state before retrying or repairing; the stack is not a transaction.
+- The release controller under development records pointer intent and supports separate-process recovery. It is currently restricted to isolated proof stages; production still uses the legacy workflow. See [release development](release-development.md).
