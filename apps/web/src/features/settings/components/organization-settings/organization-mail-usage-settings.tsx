@@ -35,9 +35,9 @@ import {
   SettingsRowText,
   settingsSurfaceVariants,
 } from "#/features/settings/components/settings-layout";
+import { toastError } from "#/lib/error-toast";
 import type { rpc } from "#/lib/orpc";
 import { orpc } from "#/lib/orpc";
-import { getErrorMessage } from "#/lib/orpc-errors";
 
 import {
   getOrganizationMailUsageQueryKey,
@@ -75,7 +75,7 @@ const periodFormatter = new Intl.DateTimeFormat("en-US", {
 const formatMoney = (cents: number | null) =>
   cents === null ? "Unlimited" : moneyFormatter.format(cents / centsPerDollar);
 
-const formatPeriodEnd = (value: string) => {
+const formatPeriodDate = (value: string) => {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : periodFormatter.format(date);
 };
@@ -560,7 +560,8 @@ const ManagedUsageSettingsForm = ({
       : 0;
   const limitCents =
     limitDollars === null ? null : Math.round(limitDollars * centsPerDollar);
-  const periodEnd = formatPeriodEnd(overview.period.end);
+  const periodStart = formatPeriodDate(overview.period.start);
+  const periodEnd = formatPeriodDate(overview.period.end);
   const savedMilestonePercents = overview.settings.alertMilestonePercents;
   const hasUnsavedChanges =
     overageEnabled !== overview.settings.overageEnabled ||
@@ -611,7 +612,10 @@ const ManagedUsageSettingsForm = ({
       });
       toast.success("Usage balance settings saved.");
     } catch (error) {
-      toast.error(getErrorMessage(error, "Could not update usage settings."));
+      toastError(error, {
+        boundary: "mail-usage",
+        fallback: "Could not update usage settings.",
+      });
     }
   };
 
@@ -634,10 +638,10 @@ const ManagedUsageSettingsForm = ({
         <SettingsRowText title="Usage balance">
           <div className="flex flex-wrap gap-x-3 gap-y-1">
             <span>Managed mail rates</span>
-            {periodEnd !== null &&
-            periodEnd !== undefined &&
-            periodEnd !== "" ? (
-              <span>Resets {periodEnd}</span>
+            {periodStart !== null && periodEnd !== null ? (
+              <span>
+                Usage period {periodStart} to {periodEnd}
+              </span>
             ) : null}
           </div>
         </SettingsRowText>

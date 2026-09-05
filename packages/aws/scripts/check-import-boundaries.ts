@@ -1,13 +1,8 @@
-/// <reference types="bun-types" />
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
 const sourceRoot = path.join(import.meta.dirname, "..", "src");
 const allowedOrpcImports = new Set([
-  "@quieter/orpc/gmail-live-sync",
-  "@quieter/orpc/gmail-live-sync-token",
-  "@quieter/orpc/gmail-pubsub",
-  "@quieter/orpc/mailbox-actions",
   "@quieter/orpc/managed-mail/ingestion",
   "@quieter/orpc/organization-mail-delivery",
 ]);

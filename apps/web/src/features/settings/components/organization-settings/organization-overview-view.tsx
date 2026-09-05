@@ -18,6 +18,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { runDetached } from "#/features/settings/components/mailboxes-settings-shared";
 import {
   formatBillingProduct,
+  getBillingStatusMessage,
   normalizeBillingProduct,
 } from "#/features/settings/domain/billing";
 import type { UserBillingOverview } from "#/features/settings/domain/billing";
@@ -163,6 +164,10 @@ const getBillingSummary = ({
   }
 
   const billingProduct = normalizeBillingProduct(billing.product);
+  const statusMessage = getBillingStatusMessage(billing);
+  if (statusMessage !== null) {
+    return statusMessage;
+  }
   const parts = [formatBillingProduct(billingProduct)];
   if (
     billing.creditAmountCents !== null &&

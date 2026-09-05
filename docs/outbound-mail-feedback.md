@@ -1,6 +1,6 @@
 # Outbound mail feedback
 
-Quieter publishes outbound delivery events from the configured mail provider to an SNS topic, forwards them to a durable SQS queue, and processes them with an AWS function. The queue retries failed processing five times before moving the message to a 14-day dead-letter queue.
+Quieter publishes outbound delivery events from the configured mail provider to an SNS topic and processes them with an AWS function. Lambda retries failed processing twice before moving the failed asynchronous invocation to a 14-day SQS dead-letter queue. The dead-letter queue has no active consumer and therefore creates no idle polling traffic.
 
 The processor stores an immutable, idempotent event for each recipient and a current recipient-level delivery projection. Hard bounces, complaints, and unsubscribes also create an organization-scoped suppression. Both application-managed mail and organization API sends check that suppression before contacting the mail provider.
 
@@ -27,8 +27,8 @@ Recipient projections can be recomputed from the immutable event log without tou
 
 ## Operational response
 
-- Processor exceptions are reported to Sentry. The CloudWatch queue-age alarm indicates a processing backlog, and the dead-letter alarm indicates an event exhausted its retries.
-- Before replaying a dead-letter message, confirm the database and configuration set are available.
+- Processor exceptions are reported to Sentry. The dead-letter alarm indicates an event exhausted its retries.
+- Before replaying a dead-letter invocation, confirm the database and configuration set are available.
 
 ## Open tracking
 

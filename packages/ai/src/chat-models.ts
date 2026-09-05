@@ -78,8 +78,11 @@ export type ChatModel = (typeof chatModels)[number]["value"];
 
 export const defaultChatModel: ChatModel = "openai/gpt-5.6-luna";
 export const CHAT_TITLE_MODEL = defaultChatModel;
-export const defaultAutoLabelModel = defaultChatModel;
-export const defaultUsefulDetailModel = defaultChatModel;
+export const defaultAutoLabelModel: ChatModel = "google/gemini-3.5-flash-lite";
+export const defaultSearchFilterModel: ChatModel =
+  "google/gemini-3.5-flash-lite";
+export const defaultUsefulDetailModel: ChatModel =
+  "google/gemini-3.5-flash-lite";
 export const AI_MEMORY_MODEL = defaultChatModel;
 export const TRANSCRIBED_EMAIL_FORMAT_MODEL = defaultChatModel;
 export const TEMPLATE_PLACEHOLDER_SUGGESTION_MODEL = defaultChatModel;

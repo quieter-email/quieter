@@ -1,12 +1,18 @@
 import { db } from "@quieter/database/client";
 import {
   account,
-  member,
   mailbox,
+  mailDomain,
+  member,
   organization,
   user,
 } from "@quieter/database/schema";
 import { and, asc, eq } from "drizzle-orm";
+
+import {
+  MAILBOX_PROVIDER_GMAIL,
+  MAILBOX_PROVIDER_MANAGED,
+} from "../mailbox/access";
 
 const GOOGLE_IDENTITY_PROVIDER_ID = "google";
 
@@ -17,6 +23,68 @@ const listUserOrganizations = async (userId: string) =>
     .innerJoin(organization, eq(organization.id, member.organizationId))
     .where(eq(member.userId, userId))
     .orderBy(asc(organization.name));
+
+/**
+ * Setup state for the onboarding playbooks. Gmail mailboxes are the user's own
+ * connections; domains and managed mailboxes live on their first team, which
+ * provisioning guarantees to exist.
+ */
+const getSetupState = async (organizationId: string | null, userId: string) => {
+  if (organizationId === null) {
+    return {
+      domains: [],
+      gmailMailboxes: await db
+        .select({
+          emailAddress: mailbox.emailAddress,
+          id: mailbox.id,
+        })
+        .from(mailbox)
+        .where(
+          and(
+            eq(mailbox.ownerUserId, userId),
+            eq(mailbox.provider, MAILBOX_PROVIDER_GMAIL)
+          )
+        )
+        .orderBy(asc(mailbox.createdAt)),
+      managedMailboxes: [],
+    };
+  }
+
+  const [gmailMailboxes, managedMailboxes, domains] = await Promise.all([
+    db
+      .select({ emailAddress: mailbox.emailAddress, id: mailbox.id })
+      .from(mailbox)
+      .where(
+        and(
+          eq(mailbox.ownerUserId, userId),
+          eq(mailbox.provider, MAILBOX_PROVIDER_GMAIL)
+        )
+      )
+      .orderBy(asc(mailbox.createdAt)),
+    db
+      .select({ emailAddress: mailbox.emailAddress, id: mailbox.id })
+      .from(mailbox)
+      .where(
+        and(
+          eq(mailbox.organizationId, organizationId),
+          eq(mailbox.provider, MAILBOX_PROVIDER_MANAGED)
+        )
+      )
+      .orderBy(asc(mailbox.createdAt)),
+    db
+      .select({
+        domain: mailDomain.domain,
+        id: mailDomain.id,
+        mode: mailDomain.mode,
+        status: mailDomain.status,
+      })
+      .from(mailDomain)
+      .where(eq(mailDomain.organizationId, organizationId))
+      .orderBy(asc(mailDomain.createdAt)),
+  ]);
+
+  return { domains, gmailMailboxes, managedMailboxes };
+};
 
 const hasText = (value: string | null | undefined): value is string =>
   value !== null && value !== undefined && value.trim() !== "";
@@ -70,23 +138,28 @@ export const getOnboardingState = async (userId: string) => {
     return null;
   }
 
-  const [organizations, googleEmail, [existingMailbox]] = await Promise.all([
+  const [organizations, googleEmail] = await Promise.all([
     listUserOrganizations(userId),
     getGoogleIdentityEmail(userId),
-    db
-      .select({ id: mailbox.id })
-      .from(mailbox)
-      .where(eq(mailbox.ownerUserId, userId))
-      .limit(1),
   ]);
 
+  const { domains, gmailMailboxes, managedMailboxes } = await getSetupState(
+    organizations[0]?.id ?? null,
+    userId
+  );
+
   return {
+    domains,
     email: currentUser.email,
+    gmailMailboxes,
     googleEmail,
-    hasMailbox: existingMailbox !== undefined,
+    hasAcceptedTerms:
+      currentUser.termsAcceptedAt !== null &&
+      currentUser.termsAcceptedAt !== undefined,
     isComplete:
       currentUser.onboardingCompletedAt !== null &&
       currentUser.termsAcceptedAt !== null,
+    managedMailboxes,
     name: currentUser.name,
     organizationId: organizations[0]?.id ?? null,
     teamName: organizations[0]?.name ?? "",
@@ -102,14 +175,20 @@ export const completeOnboarding = async (input: {
   const trimmedName = input.name.trim();
   const trimmedTeamName = input.teamName?.trim();
 
+  const [currentUser] = await db
+    .select({ termsAcceptedAt: user.termsAcceptedAt })
+    .from(user)
+    .where(eq(user.id, input.userId))
+    .limit(1);
+
   await db
     .update(user)
     .set({
       name: trimmedName,
       onboardingCompletedAt: now,
-      // Recorded here rather than at account creation: this is the moment the
-      // user actually accepts, and it survives independently of any cookie.
-      termsAcceptedAt: now,
+      // Keep the earliest acceptance so the audit trail reflects the moment
+      // the user first agreed, including accounts stamped at creation time.
+      termsAcceptedAt: currentUser?.termsAcceptedAt ?? now,
       updatedAt: now,
     })
     .where(eq(user.id, input.userId));

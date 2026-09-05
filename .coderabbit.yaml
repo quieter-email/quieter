@@ -7,7 +7,7 @@ reviews:
   path_filters:
     - "!**/sst-env.d.ts"
     - "!apps/web/src/routeTree.gen.ts"
-    - "!bun.lock"
+    - "!pnpm-lock.yaml"
     - "!packages/cloudflare/worker-configuration.d.ts"
     - "!packages/database/drizzle/**/snapshot.json"
     - "!packages/database/drizzle/**/migration.sql"

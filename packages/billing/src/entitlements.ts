@@ -20,8 +20,8 @@ import {
   billingProductIdSchema,
   productHasAi,
   productHasManagedMail,
-} from "./plans";
-import type { BillingFeature, BillingProductId } from "./plans";
+} from "./plans.ts";
+import type { BillingFeature, BillingProductId } from "./plans.ts";
 
 const ACTIVE_BILLING_STATUSES = new Set<BillingSubscriptionStatus>([
   "active",
@@ -91,6 +91,7 @@ const localDevelopmentBillingEntitlement = (): BillingEntitlement => ({
 });
 
 type SubscriptionRow = {
+  cancelAtPeriodEnd: boolean;
   currentPeriodEnd: Date;
   currentPeriodStart: Date;
   lastReconciliationFailureAt: Date | null;
@@ -105,7 +106,7 @@ type SubscriptionRow = {
 const BILLING_RECONCILIATION_INTERVAL_MS = 5 * 60 * 1000;
 const BILLING_RECONCILIATION_TIMEOUT_MS = 5000;
 
-export const shouldReconcileExpiredBillingSubscription = (
+export const shouldReconcileBillingSubscription = (
   row: Pick<
     SubscriptionRow,
     "currentPeriodEnd" | "lastReconciliationFailureAt" | "updatedAt"
@@ -115,7 +116,7 @@ export const shouldReconcileExpiredBillingSubscription = (
   const lastAttemptAt = row.lastReconciliationFailureAt ?? row.updatedAt;
 
   return (
-    row.currentPeriodEnd <= now &&
+    (row.currentPeriodEnd <= now && lastAttemptAt < row.currentPeriodEnd) ||
     now.getTime() - lastAttemptAt.getTime() >=
       BILLING_RECONCILIATION_INTERVAL_MS
   );
@@ -225,10 +226,14 @@ const recordReconciliationFailure = async ({
   }
 };
 
-export const getOrganizationSubscription = async (organizationId: string) => {
+export const getOrganizationSubscriptionRecord = async (
+  organizationId: string,
+  options: { forceReconcile?: boolean } = {}
+) => {
   const loadRows = () =>
     db
       .select({
+        cancelAtPeriodEnd: billingSubscription.cancelAtPeriodEnd,
         currentPeriodEnd: billingSubscription.currentPeriodEnd,
         currentPeriodStart: billingSubscription.currentPeriodStart,
         lastReconciliationFailureAt:
@@ -249,55 +254,72 @@ export const getOrganizationSubscription = async (organizationId: string) => {
       )
       .orderBy(desc(billingSubscription.updatedAt));
 
-  const findActiveRow = (rows: Awaited<ReturnType<typeof loadRows>>) =>
-    rows.find(
-      (candidate) =>
-        isActiveBillingStatus(candidate.status) &&
-        subscriptionBelongsToOrganization(candidate.metadata, organizationId)
+  const findSubscription = (rows: Awaited<ReturnType<typeof loadRows>>) => {
+    const ownedRows = rows.filter((candidate) =>
+      subscriptionBelongsToOrganization(candidate.metadata, organizationId)
     );
+    return (
+      ownedRows.find((candidate) => isActiveBillingSubscription(candidate)) ??
+      ownedRows.find((candidate) => isActiveBillingStatus(candidate.status)) ??
+      ownedRows[0]
+    );
+  };
 
-  let row = findActiveRow(await loadRows());
-  if (!row) {
+  let row = findSubscription(await loadRows());
+  if (row === undefined) {
     return null;
   }
 
   if (
     row.provider === "polar" &&
-    shouldReconcileExpiredBillingSubscription(row)
+    (options.forceReconcile === true || shouldReconcileBillingSubscription(row))
   ) {
     const { providerSubscriptionId } = row;
     try {
       const [{ getPolarClient }, { syncBillingSubscription }] =
-        await Promise.all([import("./polar"), import("./subscription-sync")]);
+        await Promise.all([
+          import("./polar.ts"),
+          import("./subscription-sync.ts"),
+        ]);
       const polar = await getPolarClient();
       const subscription = await polar.subscriptions.get(
         { id: providerSubscriptionId },
         { signal: AbortSignal.timeout(BILLING_RECONCILIATION_TIMEOUT_MS) }
       );
-      const syncResult = await syncBillingSubscription(subscription, {
-        force: true,
-      });
+      const syncResult = await syncBillingSubscription(subscription);
       if (!syncResult.synced) {
-        await recordReconciliationFailure({
-          organizationId,
-          providerSubscriptionId,
-        });
-        return null;
+        throw new Error("The subscription could not be reconciled.");
       }
-      row = findActiveRow(await loadRows());
+      row = findSubscription(await loadRows());
     } catch (error) {
       await recordReconciliationFailure({
         organizationId,
         providerSubscriptionId,
       });
       reportError(error, {
-        operation: "billing:reconcile-expired-subscription",
+        operation: "billing:reconcile-subscription",
       });
-      return null;
+      throw new ORPCError("SERVICE_UNAVAILABLE", {
+        message: "Could not check billing access. Please try again.",
+      });
     }
   }
 
-  return row && isActiveBillingSubscription(row)
+  if (
+    row?.lastReconciliationFailureAt !== null &&
+    row?.lastReconciliationFailureAt !== undefined
+  ) {
+    throw new ORPCError("SERVICE_UNAVAILABLE", {
+      message: "Could not check billing access. Please try again.",
+    });
+  }
+
+  return row ?? null;
+};
+
+export const getOrganizationSubscription = async (organizationId: string) => {
+  const row = await getOrganizationSubscriptionRecord(organizationId);
+  return row !== null && isActiveBillingSubscription(row)
     ? toBillingAccount(row, organizationId)
     : null;
 };
@@ -309,12 +331,21 @@ export const hasUnlimitedBillingAccess = async (userId: string) =>
 export const getOrganizationBillingEntitlement = async (input: {
   feature: BillingFeature;
   organizationId: string;
+  subscription?: SubscriptionRow | null;
 }): Promise<BillingEntitlement> => {
   if (isLocalDevelopmentBillingEntitlementEnabled()) {
     return localDevelopmentBillingEntitlement();
   }
 
-  const account = await getOrganizationSubscription(input.organizationId);
+  let account: BillingAccount | null = null;
+  if (input.subscription === undefined) {
+    account = await getOrganizationSubscription(input.organizationId);
+  } else if (
+    input.subscription !== null &&
+    isActiveBillingSubscription(input.subscription)
+  ) {
+    account = toBillingAccount(input.subscription, input.organizationId);
+  }
   const billingOwnerId = await getOrganizationBillingOwnerId(
     input.organizationId
   );

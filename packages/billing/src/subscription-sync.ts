@@ -4,9 +4,9 @@ import { billingSubscription } from "@quieter/database/schema";
 import type { BillingSubscriptionStatus } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { reportError } from "@quieter/observability";
-import { gt, or, sql } from "drizzle-orm";
+import { gte, or, sql } from "drizzle-orm";
 
-import { BILLING_PRODUCTS, billingProductIdSchema } from "./plans";
+import { BILLING_PRODUCTS, billingProductIdSchema } from "./plans.ts";
 
 export const BILLING_METADATA_PRODUCT = "quieterProduct";
 export const BILLING_METADATA_USER_ID = "quieterUserId";
@@ -69,7 +69,7 @@ export const normalizeSubscriptionStatus = (
       return "expired";
     }
     case "unpaid": {
-      return "past_due";
+      return "expired";
     }
     case "paused": {
       return "past_due";
@@ -80,10 +80,7 @@ export const normalizeSubscriptionStatus = (
   }
 };
 
-export const syncBillingSubscription = async (
-  subscription: Subscription,
-  options: { force?: boolean } = {}
-) => {
+export const syncBillingSubscription = async (subscription: Subscription) => {
   const metadataUserId = subscription.metadata[BILLING_METADATA_USER_ID];
   const userId =
     typeof metadataUserId === "string" ? metadataUserId.trim() : "";
@@ -114,12 +111,12 @@ export const syncBillingSubscription = async (
 
   const resolvedOrganizationId = organizationId;
   const now = new Date();
-  const providerModifiedAt =
-    subscription.modifiedAt === undefined || subscription.modifiedAt === null
-      ? null
-      : new Date(subscription.modifiedAt);
+  const providerModifiedAt = new Date(
+    subscription.modifiedAt ?? subscription.createdAt
+  );
 
   const values = {
+    cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
     currentPeriodEnd: subscription.currentPeriodEnd,
     currentPeriodStart: subscription.currentPeriodStart,
     lastReconciliationFailureAt: null,
@@ -150,17 +147,13 @@ export const syncBillingSubscription = async (
     })
     .onConflictDoUpdate({
       set: values,
-      setWhere:
-        options.force === true && providerModifiedAt === null
-          ? undefined
-          : or(
-              sql`${billingSubscription.providerModifiedAt} IS NULL`,
-              sql`excluded."providerModifiedAt" IS NULL`,
-              gt(
-                sql`excluded."providerModifiedAt"`,
-                billingSubscription.providerModifiedAt
-              )
-            ),
+      setWhere: or(
+        sql`${billingSubscription.providerModifiedAt} IS NULL`,
+        gte(
+          sql`excluded."providerModifiedAt"`,
+          billingSubscription.providerModifiedAt
+        )
+      ),
       target: [
         billingSubscription.provider,
         billingSubscription.providerSubscriptionId,

@@ -5,12 +5,12 @@ import {
   isExplicitLocalPlanetScaleUrl,
   isPresent,
   LOOPBACK_HOSTS,
-} from "./local-development";
+} from "./local-development.ts";
 
 export {
   assertLocalDatabaseUrl,
   assertLocalDevelopmentDatabaseUrls,
-} from "./local-development";
+} from "./local-development.ts";
 
 const LOCK_TIMEOUT = "5s";
 const STATEMENT_TIMEOUT = "5min";

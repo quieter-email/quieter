@@ -1,11 +1,11 @@
 "use client";
 
 import type { RouterInputs, RouterOutputs } from "@quieter/orpc";
-import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 import { GmailUsefulDetailCard } from "#/features/gmail-useful-details/components/gmail-useful-detail-card";
+import { toastError } from "#/lib/error-toast";
 import {
   getGmailUsefulDetailsQueryKey,
   gmailUsefulDetailsQueryOptions,
@@ -37,11 +37,14 @@ export const GmailUsefulDetails = ({
   >({
     mutationFn: dismissMutationOptions.mutationFn,
     mutationKey: dismissMutationOptions.mutationKey,
-    onError: (_error, _variables, context) => {
+    onError: (error, _variables, context) => {
       if (context !== null && context !== undefined) {
         queryClient.setQueryData(queryKey, context.previous);
       }
-      toast.error("Could not dismiss this update.");
+      toastError(error, {
+        boundary: "useful-details",
+        fallback: "Could not dismiss this update.",
+      });
     },
     onMutate: async ({ id }) => {
       await queryClient.cancelQueries({ queryKey });

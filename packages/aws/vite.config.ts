@@ -7,12 +7,12 @@ export default defineConfig({
     tasks: {
       "check:boundaries": {
         cache: false,
-        command: "bun scripts/check-import-boundaries.ts",
+        command: "node scripts/check-import-boundaries.ts",
         dependsOn: dependencyBuild,
       },
       "check:bundles": {
         cache: false,
-        command: "bun scripts/check-handler-bundles.ts",
+        command: "node scripts/check-handler-bundles.ts",
         dependsOn: dependencyBuild,
       },
     },

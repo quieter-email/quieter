@@ -15,4 +15,13 @@ describe("security headers", () => {
       "frame-ancestors 'none'"
     );
   });
+
+  test("allows the analytics bundle host", () => {
+    const response = withSecurityHeaders(new Response(null, { status: 200 }));
+    const policy = response.headers.get("content-security-policy") ?? "";
+
+    expect(policy).toContain("https://eu-assets.i.posthog.com");
+    expect(policy).toContain("https://us-assets.i.posthog.com");
+    expect(policy).not.toContain("'unsafe-eval'");
+  });
 });

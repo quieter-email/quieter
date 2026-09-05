@@ -9,6 +9,7 @@
     "./compose/schema": "./src/compose/schema.ts",
     "./message-content": "./src/message-content.ts",
     "./mailbox-organization": "./src/mailbox-organization.ts",
+    "./natural-language-search": "./src/natural-language-search.ts",
     "./raw-message": "./src/raw-message.ts",
     "./search": "./src/search.ts",
     "./send": "./src/send.ts",
@@ -18,12 +19,11 @@
   "dependencies": {
     "@quieter/env": "workspace:*",
     "fast-xml-parser": "catalog:",
-    "postal-mime": "^2.7.6",
+    "postal-mime": "^3.0.0",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@quieter/config": "workspace:*",
-    "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",

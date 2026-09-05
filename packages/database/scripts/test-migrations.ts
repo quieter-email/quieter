@@ -10,9 +10,10 @@ import { fileURLToPath } from "node:url";
 
 import postgres from "postgres";
 
-import { assertLocalDatabaseUrl } from "./database-url";
-import { runKitMigrate } from "./drizzle-kit";
-import { runForwardMigrations } from "./run-forward-migrations";
+import { assertLocalDatabaseUrl } from "./database-url.ts";
+import { runKitMigrate } from "./drizzle-kit.ts";
+import { runForwardMigrations } from "./run-forward-migrations.ts";
+import { testBillingCreditRepair } from "./test-billing-credit-repair.ts";
 
 const packageDirectory = fileURLToPath(new URL("..", import.meta.url));
 const migrationsDirectory = path.join(packageDirectory, "drizzle");
@@ -112,13 +113,14 @@ export default defineConfig({
 `
   );
 
-  await runKitMigrate(temporaryConfigPath);
+  runKitMigrate(temporaryConfigPath);
   await runForwardMigrations({
     databaseUrl,
     migrationsDirectory,
     packageDirectory,
   });
   await assertMigrationHistory();
+  await testBillingCreditRepair(sql);
 } finally {
   await sql.end();
   rmSync(temporaryDirectory, { force: true, recursive: true });

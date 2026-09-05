@@ -1,0 +1,1 @@
+ALTER TABLE "userAiContext" ADD COLUMN "searchFilterModel" text DEFAULT 'google/gemini-3.5-flash-lite' NOT NULL;

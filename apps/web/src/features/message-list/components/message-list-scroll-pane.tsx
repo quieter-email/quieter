@@ -5,7 +5,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
 
 import { getAggregateDeliveryStatusFromStatuses } from "#/features/message-delivery/domain/delivery-status";
 import { getMessageListDeliveryOptions } from "#/features/message-delivery/domain/message-delivery-query";
@@ -96,32 +96,29 @@ const useThreadIntentPrefetch = (
 ) => {
   const intentTimerRef = useRef<number | null>(null);
   const intentThreadIdRef = useRef<string | null>(null);
-  const handleThreadIntent = useCallback(
-    (threadId: string | null) => {
-      if (intentTimerRef.current !== null) {
-        window.clearTimeout(intentTimerRef.current);
-        intentTimerRef.current = null;
-      }
-      intentThreadIdRef.current = threadId;
-      if (threadId === null || threadId === "") {
+  const handleThreadIntent = (threadId: string | null) => {
+    if (intentTimerRef.current !== null) {
+      window.clearTimeout(intentTimerRef.current);
+      intentTimerRef.current = null;
+    }
+    intentThreadIdRef.current = threadId;
+    if (threadId === null || threadId === "") {
+      return;
+    }
+    intentTimerRef.current = window.setTimeout(() => {
+      intentTimerRef.current = null;
+      if (intentThreadIdRef.current !== threadId) {
         return;
       }
-      intentTimerRef.current = window.setTimeout(() => {
-        intentTimerRef.current = null;
-        if (intentThreadIdRef.current !== threadId) {
-          return;
-        }
-        const queryKey = getThreadQueryKey(mailboxId, threadId);
-        if (queryClient.isFetching({ exact: true, queryKey }) > 0) {
-          return;
-        }
-        void queryClient.prefetchQuery(
-          getThreadWithDetailsOptions(mailboxId, threadId)
-        );
-      }, 200);
-    },
-    [mailboxId, queryClient]
-  );
+      const queryKey = getThreadQueryKey(mailboxId, threadId);
+      if (queryClient.isFetching({ exact: true, queryKey }) > 0) {
+        return;
+      }
+      void queryClient.prefetchQuery(
+        getThreadWithDetailsOptions(mailboxId, threadId)
+      );
+    }, 200);
+  };
 
   useLayoutEffect(
     () => () => {

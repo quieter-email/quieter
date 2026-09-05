@@ -4,14 +4,7 @@ import type { RouterOutputs } from "@quieter/orpc";
 import { useHotkey, useHotkeySequence } from "@tanstack/react-hotkeys";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ComponentProps } from "react";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { LoadingPage } from "#/components/loading-page";
 import { setPendingComposeSession } from "#/features/compose/domain/compose-session";
@@ -37,6 +30,11 @@ import { MailboxWorkspaceContent } from "./mailbox-workspace/mailbox-workspace-c
 import { useMailboxRouteSearch } from "./mailbox-workspace/use-mailbox-route-search";
 import { useMailboxSelection } from "./mailbox-workspace/use-mailbox-selection";
 import { useWorkspaceUiState } from "./mailbox-workspace/use-workspace-ui-state";
+import {
+  loadChatView,
+  loadComposeWorkspace,
+  loadTemplateWorkspace,
+} from "./mailbox-workspace/workspace-component-loaders";
 
 type MailboxWorkspaceProps = {
   user: {
@@ -155,24 +153,22 @@ const useMailboxWorkspaceCompose = ({
   const composeReturnMailboxRef = useRef<MailboxCategory>("inbox");
   const launchedMailtoRef = useRef<string | null>(null);
 
-  const openComposeWorkspace = useCallback(
-    (draft: ComposeDraftState | null) => {
-      const returnMailbox =
-        isComposeMailbox || isTemplateMailbox
-          ? composeReturnMailboxRef.current
-          : activeMailbox;
-      composeReturnMailboxRef.current = returnMailbox;
-      setPendingComposeSession({ draft, returnMailbox });
-      setComposeSessionKey((key) => key + 1);
-      void setMailboxSearch({
-        mailbox: "compose",
-        messageId: null,
-        threadId: null,
-        view: "inbox",
-      });
-    },
-    [activeMailbox, isComposeMailbox, isTemplateMailbox, setMailboxSearch]
-  );
+  const openComposeWorkspace = (draft: ComposeDraftState | null) => {
+    void loadComposeWorkspace();
+    const returnMailbox =
+      isComposeMailbox || isTemplateMailbox
+        ? composeReturnMailboxRef.current
+        : activeMailbox;
+    composeReturnMailboxRef.current = returnMailbox;
+    setPendingComposeSession({ draft, returnMailbox });
+    setComposeSessionKey((key) => key + 1);
+    void setMailboxSearch({
+      mailbox: "compose",
+      messageId: null,
+      threadId: null,
+      view: "inbox",
+    });
+  };
 
   const closeComposeWorkspace = () => {
     void setMailboxSearch({
@@ -480,6 +476,7 @@ const useMailboxWorkspaceActions = ({
       return;
     }
     if (nextView === "chat") {
+      void loadChatView();
       const leftAt = chatViewLeftAtRef.current;
       const isStale =
         leftAt !== null && performance.now() - leftAt > 5 * 60 * 1000;
@@ -549,6 +546,7 @@ const useMailboxWorkspaceActions = ({
   };
 
   const createChat = () => {
+    void loadChatView();
     setDraftChatKey(crypto.randomUUID());
     void setMailboxSearch({
       chatId: null,
@@ -558,6 +556,7 @@ const useMailboxWorkspaceActions = ({
   };
 
   const selectChat = (nextChatId: string) => {
+    void loadChatView();
     void setMailboxSearch({
       chatId: nextChatId,
       mailboxId: selectedMailboxId,
@@ -601,6 +600,7 @@ const useMailboxWorkspaceActions = ({
   };
 
   const manageTemplates = () => {
+    void loadTemplateWorkspace();
     void setMailboxSearch({
       mailbox: "template",
       messageId: null,

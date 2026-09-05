@@ -1,10 +1,10 @@
 "use client";
 
+import { cn } from "@quieter/ui/cn";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { lazy, Suspense } from "react";
 
-import { WorkspaceDitherBackground } from "#/components/workspace-dither-background";
 import { isDemoModeAvailable } from "#/features/settings/domain/demo-mode-setting";
 import { SETTINGS_DETAIL_TITLES } from "#/features/settings/domain/settings-navigation";
 import type { SettingsTab } from "#/features/settings/domain/settings-tab";
@@ -163,6 +163,7 @@ type SettingsUser = {
 const SettingsBackNavigation = ({
   domainId,
   mailboxId,
+  mailboxView,
   onBackToApp,
   onBackToMailboxes,
   onBackToOverview,
@@ -171,6 +172,7 @@ const SettingsBackNavigation = ({
 }: {
   domainId: string;
   mailboxId: string;
+  mailboxView: "add" | "list";
   onBackToApp: () => void;
   onBackToMailboxes: () => void;
   onBackToOverview: () => void;
@@ -181,7 +183,7 @@ const SettingsBackNavigation = ({
     return <SettingsBackButton onClick={onBackToApp}>Back</SettingsBackButton>;
   }
 
-  if (tab === "mailboxes" && mailboxId !== "") {
+  if (tab === "mailboxes" && (mailboxId !== "" || mailboxView === "add")) {
     return (
       <SettingsBackButton onClick={onBackToMailboxes}>
         Mailboxes
@@ -207,7 +209,7 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
   const navigate = useNavigate({
     from: "/settings",
   });
-  const { domainId, from, mailboxId, organizationId, tab } =
+  const { domainId, from, mailboxId, mailboxView, organizationId, tab } =
     settingsRouteApi.useSearch();
 
   const setTab = (nextTab: SettingsTab) => {
@@ -216,6 +218,7 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
         ...previous,
         domainId: "",
         mailboxId: "",
+        mailboxView: "list",
         organizationId: "",
         organizationView: "overview",
         tab: nextTab,
@@ -233,38 +236,50 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
       search: (previous) => ({
         ...previous,
         mailboxId: "",
+        mailboxView: "list",
       }),
       to: ".",
     });
   };
   const detail = tab === "overview" ? null : SETTINGS_DETAIL_TITLES[tab];
+  const isGuidedMailboxSetup = tab === "mailboxes" && mailboxView === "add";
 
   return (
-    <main className="relative isolate flex h-dvh min-h-0 flex-col overflow-hidden bg-bg-elevated text-fg">
+    <main className="relative isolate flex h-dvh min-h-0 flex-col overflow-hidden text-fg">
       <SettingsDataPrefetch tab={tab} />
       <BillingCheckoutResult />
       <ConnectorConnectionResult />
-      <WorkspaceDitherBackground />
-      <SettingsBackNavigation
-        domainId={domainId}
-        mailboxId={mailboxId}
-        onBackToApp={goBackToApp}
-        onBackToMailboxes={goBackToMailboxes}
-        onBackToOverview={() => {
-          setTab("overview");
-        }}
-        organizationId={organizationId}
-        tab={tab}
-      />
-      <SettingsSearch
-        onPrefetchTab={(nextTab) => {
-          void prefetchSettingsTab(queryClient, nextTab);
-          void preloadSettingsPanel(nextTab);
-        }}
-        onSelectTab={setTab}
-      />
+      {isGuidedMailboxSetup ? null : (
+        <>
+          <SettingsBackNavigation
+            domainId={domainId}
+            mailboxId={mailboxId}
+            mailboxView={mailboxView}
+            onBackToApp={goBackToApp}
+            onBackToMailboxes={goBackToMailboxes}
+            onBackToOverview={() => {
+              setTab("overview");
+            }}
+            organizationId={organizationId}
+            tab={tab}
+          />
+          <SettingsSearch
+            onPrefetchTab={(nextTab) => {
+              void prefetchSettingsTab(queryClient, nextTab);
+              void preloadSettingsPanel(nextTab);
+            }}
+            onSelectTab={setTab}
+          />
+        </>
+      )}
       <div className="relative z-10 min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-205 px-5 py-8 md:px-8 md:py-14">
+        <div
+          className={cn("w-full", {
+            "min-h-full": isGuidedMailboxSetup,
+            "mx-auto max-w-205 px-5 py-8 md:px-8 md:py-14":
+              !isGuidedMailboxSetup,
+          })}
+        >
           {tab === "overview" ? (
             <SettingsOverviewPanel
               initialUser={initialUser}
@@ -275,7 +290,12 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
               onSelectTab={setTab}
             />
           ) : (
-            <div className="space-y-8">
+            <div
+              className={cn({
+                "min-h-full": isGuidedMailboxSetup,
+                "space-y-8": !isGuidedMailboxSetup,
+              })}
+            >
               {detail && tab !== "actions" && tab !== "mailboxes" && (
                 <header>
                   <h1 className="text-title-sm font-normal tracking-tight text-fg">

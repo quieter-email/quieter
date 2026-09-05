@@ -277,16 +277,19 @@ export const userAiContext = pgTable(
   {
     autoLabelModel: text("autoLabelModel")
       .notNull()
-      .default("openai/gpt-5.6-luna"),
+      .default("google/gemini-3.5-flash-lite"),
     createdAt: timestamp("createdAt").notNull(),
     id: text("id").primaryKey(),
     lastEditedAt: timestamp("lastEditedAt").notNull(),
     markdown: text("markdown").notNull(),
     revision: integer("revision").notNull().default(1),
+    searchFilterModel: text("searchFilterModel")
+      .notNull()
+      .default("google/gemini-3.5-flash-lite"),
     updatedAt: timestamp("updatedAt").notNull(),
     usefulDetailModel: text("usefulDetailModel")
       .notNull()
-      .default("openai/gpt-5.6-luna"),
+      .default("google/gemini-3.5-flash-lite"),
     userId: text("userId")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
@@ -1297,6 +1300,7 @@ export const mailboxActionRun = pgTable(
     completedAt: timestamp("completedAt"),
     createdAt: timestamp("createdAt").notNull(),
     dedupeKey: text("dedupeKey").notNull(),
+    dispatchedAt: timestamp("dispatchedAt"),
     id: text("id").primaryKey(),
     lastError: text("lastError"),
     leasedUntil: timestamp("leasedUntil"),
@@ -2221,6 +2225,9 @@ export const managedMailRuleBackfill = pgTable(
 export const mailDomain = pgTable(
   "mailDomain",
   {
+    catchAllMailboxId: text("catchAllMailboxId").references(() => mailbox.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("createdAt").notNull(),
     domain: text("domain").notNull(),
     id: text("id").primaryKey(),
@@ -2250,6 +2257,8 @@ export const mailDomain = pgTable(
       sql`${table.mode} in ('send_only', 'send_and_receive')`
     ),
     index("mail_domain_organization_id_idx").on(table.organizationId),
+    index("mail_domain_catch_all_mailbox_idx").on(table.catchAllMailboxId),
+    unique("mail_domain_catch_all_mailbox_unique").on(table.catchAllMailboxId),
     unique("mail_domain_domain_unique").on(table.domain),
   ]
 );
@@ -2300,6 +2309,7 @@ export const mailDomainConnectAttempt = pgTable(
 export const billingSubscription = pgTable(
   "billingSubscription",
   {
+    cancelAtPeriodEnd: boolean("cancelAtPeriodEnd").notNull().default(false),
     createdAt: timestamp("createdAt").notNull(),
     currentPeriodEnd: timestamp("currentPeriodEnd").notNull(),
     currentPeriodStart: timestamp("currentPeriodStart").notNull(),

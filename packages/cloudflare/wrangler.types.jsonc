@@ -6,17 +6,35 @@
   "compatibility_date": "2026-08-04",
   "compatibility_flags": ["nodejs_compat"],
   "vars": {
-    "GMAIL_PUBSUB_PROCESS_URL": "https://processor.invalid/process",
+    "CONNECTOR_TOKEN_ENCRYPTION_KEY": "connector-token-key",
+    "GMAIL_TOKEN_ENCRYPTION_KEY": "gmail-token-key",
+    "GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT": "gmail-token-key-current",
     "GMAIL_PUBSUB_PUSH_AUDIENCE": "https://audience.invalid/gmail/pubsub",
     "GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT": "gmail-push@example.invalid",
     "GMAIL_PUBSUB_SUBSCRIPTION": "projects/example/subscriptions/gmail",
+    "GMAIL_PUBSUB_TOPIC": "projects/example/topics/gmail",
+    "GOOGLE_CALENDAR_CLIENT_ID": "calendar-client-id",
+    "GOOGLE_CALENDAR_CLIENT_SECRET": "calendar-client-secret",
+    "GOOGLE_GMAIL_CLIENT_ID": "gmail-client-id",
+    "GOOGLE_GMAIL_CLIENT_SECRET": "gmail-client-secret",
+    "LINEAR_CLIENT_ID": "linear-client-id",
+    "LINEAR_CLIENT_SECRET": "linear-client-secret",
+    "OPENROUTER_API_KEY": "openrouter-key",
+    "POLAR_ACCESS_TOKEN": "polar-access-token",
+    "POLAR_ORGANIZATION_ID": "organization-id",
+    "POLAR_SANDBOX": "true",
+    "QUIETER_GMAIL_AI_AUTOMATION_ENABLED": "true",
+    "SENTRY_ENVIRONMENT": "test",
+    "SST_RESOURCE_GmailLiveSyncTokenSecret": "{\"value\":\"live-sync-secret\"}",
+    "SST_RESOURCE_SentryDsn": "{\"value\":\"https://examplePublicKey@o0.ingest.sentry.io/0\"}",
   },
-  "secrets": {
-    "required": [
-      "SST_RESOURCE_GmailLiveSyncTokenSecret",
-      "SST_RESOURCE_GmailPubSubProcessToken",
-    ],
-  },
+  "hyperdrive": [
+    {
+      "binding": "AppDatabaseV2",
+      "id": "00000000000000000000000000000000",
+      "localConnectionString": "postgres://test:test@localhost:5432/quieter_dev",
+    },
+  ],
   "durable_objects": {
     "bindings": [
       {
@@ -37,10 +55,19 @@
         "binding": "GmailPsQueue",
         "queue": "gmail-pubsub-types",
       },
+      {
+        "binding": "MailboxActionQueue",
+        "queue": "mailbox-action-types",
+      },
     ],
     "consumers": [
       {
         "queue": "gmail-pubsub-types",
+        "max_batch_size": 1,
+        "max_batch_timeout": 0,
+      },
+      {
+        "queue": "mailbox-action-types",
         "max_batch_size": 1,
         "max_batch_timeout": 0,
       },

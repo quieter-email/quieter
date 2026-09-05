@@ -1,5 +1,5 @@
-import { syncPolarCatalog } from "../src";
-import { getPolarSandboxMode } from "../src/polar";
+import { syncPolarCatalog } from "../src/index.ts";
+import { getPolarSandboxMode } from "../src/polar.ts";
 
 const products = syncPolarCatalog();
 

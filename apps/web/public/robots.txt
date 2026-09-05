@@ -1,0 +1,18 @@
+# Quieter (https://quieter.email)
+# Public marketing pages are open to all crawlers including AI agents.
+# The application surface requires an account and is off-limits.
+
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /auth
+Disallow: /onboarding
+Disallow: /settings
+Disallow: /site-password
+Disallow: /design-system
+
+# Machine-readable surfaces
+# llms.txt: https://quieter.email/llms.txt
+# OpenAPI specification: https://quieter.email/openapi.json
+
+Sitemap: https://quieter.email/sitemap.xml

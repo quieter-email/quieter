@@ -13,7 +13,6 @@ import { lazy, Suspense, useState } from "react";
 import type { ComponentProps, ReactNode } from "react";
 
 import { MobileHeader } from "#/components/mobile-header";
-import { WorkspaceDitherBackground } from "#/components/workspace-dither-background";
 import {
   WorkspaceSection,
   workspaceSectionVariants,
@@ -24,43 +23,19 @@ import { MailSidebar } from "#/features/navigation/components/mail-sidebar";
 import type { MailboxSwitcherOrder } from "#/features/navigation/components/mailbox-switcher";
 import type { MailboxCategory } from "#/lib/gmail/gmail";
 
+import { FirstRunManagedMailSetup } from "./first-run-managed-mail-setup";
 import { MailboxMessagesPanel } from "./mailbox-messages-panel";
+import {
+  loadChatView,
+  loadComposeWorkspace,
+  loadTemplateWorkspace,
+} from "./workspace-component-loaders";
 
-const ChatView = lazy(
-  async () =>
-    await import("#/features/chat/components/chat-view").then(
-      ({ ChatView: Component }) => ({
-        default: Component,
-      })
-    )
-);
+const ChatView = lazy(loadChatView);
 
-const ComposeWorkspace = lazy(
-  async () =>
-    await import("#/features/compose/components/compose-workspace").then(
-      ({ ComposeWorkspace: Component }) => ({
-        default: Component,
-      })
-    )
-);
+const ComposeWorkspace = lazy(loadComposeWorkspace);
 
-const TemplateWorkspace = lazy(
-  async () =>
-    await import("#/features/compose/components/template-workspace").then(
-      ({ TemplateWorkspace: Component }) => ({
-        default: Component,
-      })
-    )
-);
-
-const FirstRunManagedMailSetup = lazy(
-  async () =>
-    await import("./first-run-managed-mail-setup").then(
-      ({ FirstRunManagedMailSetup: Component }) => ({
-        default: Component,
-      })
-    )
-);
+const TemplateWorkspace = lazy(loadTemplateWorkspace);
 
 type MailboxSidebarGroups = ComponentProps<typeof MailSidebar>["groups"];
 type MailboxSidebarChats = ComponentProps<typeof MailSidebar>["chats"];
@@ -194,22 +169,20 @@ const NoMailboxWorkspace = ({
         </LinkButton>
         {setupMode === "managed" ? (
           <m.div className="w-full" {...workspaceContentMotion}>
-            <Suspense fallback={null}>
-              <FirstRunManagedMailSetup
-                onBack={() => {
-                  setSetupMode("choice");
-                }}
-                organizations={mailboxGroups.map((group) => ({
-                  id: group.id,
-                  mailboxes: group.mailboxes.flatMap((mailbox) =>
-                    mailbox.provider === "api"
-                      ? []
-                      : [{ provider: mailbox.provider }]
-                  ),
-                  name: group.name,
-                }))}
-              />
-            </Suspense>
+            <FirstRunManagedMailSetup
+              onBack={() => {
+                setSetupMode("choice");
+              }}
+              organizations={mailboxGroups.map((group) => ({
+                id: group.id,
+                mailboxes: group.mailboxes.flatMap((mailbox) =>
+                  mailbox.provider === "api"
+                    ? []
+                    : [{ provider: mailbox.provider }]
+                ),
+                name: group.name,
+              }))}
+            />
           </m.div>
         ) : (
           <m.div
@@ -230,7 +203,7 @@ const NoMailboxWorkspace = ({
             </p>
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
               <button
-                className="rounded-lg border border-border bg-bg/80 p-4 text-left shadow-sm transition-colors hover:bg-muted/60"
+                className="rounded-lg border border-border bg-bg-raised/80 p-4 text-left shadow-sm transition-colors hover:bg-muted/60"
                 disabled={isConnectingGmail}
                 onClick={onConnectGmail}
                 type="button"
@@ -250,7 +223,7 @@ const NoMailboxWorkspace = ({
                 </span>
               </button>
               <button
-                className="rounded-lg border border-border bg-bg/80 p-4 text-left shadow-sm transition-colors hover:bg-muted/60"
+                className="rounded-lg border border-border bg-bg-raised/80 p-4 text-left shadow-sm transition-colors hover:bg-muted/60"
                 onClick={() => {
                   setSetupMode("managed");
                 }}
@@ -360,7 +333,24 @@ export const MailboxWorkspaceContent = ({
   } else if (activeMailbox === null) {
     mailboxContent = (
       <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(20rem,34%)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
-        <Suspense fallback={null}>
+        <Suspense
+          fallback={
+            <WorkspaceSection centered className="lg:col-span-2">
+              <output
+                aria-label="Loading templates"
+                aria-live="polite"
+                className="flex items-center gap-3 text-body text-muted-fg"
+              >
+                <HugeiconsIcon
+                  aria-hidden
+                  className="size-5 animate-spin"
+                  icon={Loading03Icon}
+                />
+                Loading templates…
+              </output>
+            </WorkspaceSection>
+          }
+        >
           <TemplateWorkspace
             mailboxId={selectedMailboxId}
             onOpenSidebar={onOpenSidebar}
@@ -453,9 +443,12 @@ export const MailboxWorkspaceContent = ({
           mailboxId={selectedMailboxId}
           mailboxProvider={selectedMailboxProvider ?? "gmail"}
           onComposeDraftRequested={onComposeDraftRequested}
+          onManageTemplates={onManageTemplates}
           onOpenSidebar={onOpenSidebar}
           onSearchQueryChange={onSearch}
+          persistComposeDrafts={persistComposeDrafts}
           searchQuery={searchQuery}
+          signature={signature}
         />
       </div>
     );
@@ -463,8 +456,7 @@ export const MailboxWorkspaceContent = ({
 
   return (
     <LazyMotion features={domAnimation}>
-      <main className="relative isolate flex h-dvh min-h-0 flex-col overflow-hidden bg-bg-elevated pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-fg lg:p-0">
-        <WorkspaceDitherBackground />
+      <main className="relative isolate flex h-dvh min-h-0 flex-col overflow-hidden pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-fg lg:p-0">
         <div className="relative z-10 flex min-h-0 flex-1 overflow-hidden">
           {hasText(selectedMailboxId) ? (
             <MailSidebar

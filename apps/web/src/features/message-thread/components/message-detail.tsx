@@ -8,7 +8,6 @@ import type { ReactNode } from "react";
 
 import { EmptyMessageState } from "#/components/empty-message-state";
 import { MobileHeader } from "#/components/mobile-header";
-import type { ComposeDraftState } from "#/features/compose/domain/draft";
 import type {
   MailboxActions,
   MailboxPendingActions,
@@ -16,10 +15,15 @@ import type {
 import { appEaseOut, appMotionDuration } from "#/features/motion/app-motion";
 import type { MailboxCategory, MessageListItem } from "#/lib/gmail/gmail";
 
+import { MessageDetailLoadingSkeleton } from "./message-detail-loading";
 import { MessageView } from "./message-view";
 
 type MessageDetailProps = {
   activeMailbox: MailboxCategory;
+  composeDemoMode?: boolean;
+  composeManagedDemoMode?: boolean;
+  composePersistDrafts?: boolean;
+  composeSignature?: { html: string | null; text: string | null };
   focusOnOpen?: boolean;
   currentUserEmail?: string | null;
   isPending?: boolean;
@@ -28,50 +32,24 @@ type MessageDetailProps = {
   mailboxProvider: "api" | "gmail" | "managed";
   onBackToList?: () => void;
   onAutoFocusComplete?: () => void;
-  onComposeDraftRequested?: (draft: ComposeDraftState) => void;
+  onManageTemplates?: () => void;
   pendingActions: MailboxPendingActions;
   selectedMessage: MessageListItem | null;
 };
 
-const MessageDetailLoadingSkeleton = () => (
-  <div
-    aria-live="polite"
-    className="mx-auto block w-full max-w-3xl space-y-6 px-4 py-6"
-  >
-    <span className="sr-only">Loading message…</span>
-    <div aria-hidden="true" className="animate-pulse space-y-8">
-      <div className="space-y-2">
-        <div className="h-5 w-2/3 rounded-md bg-muted/80" />
-        <div className="h-3.5 w-44 rounded-md bg-muted/70" />
-      </div>
-
-      <div className="flex items-center gap-3 border-t pt-8">
-        <div className="size-10 rounded-lg bg-muted/80" />
-        <div className="min-w-0 flex-1 space-y-2">
-          <div className="h-3.5 w-40 rounded-md bg-muted/80" />
-          <div className="h-3 w-56 rounded-md bg-muted/70" />
-        </div>
-      </div>
-
-      <div className="space-y-3 pt-2">
-        <div className="h-3.5 w-full rounded-md bg-muted/70" />
-        <div className="h-3.5 w-11/12 rounded-md bg-muted/70" />
-        <div className="h-3.5 w-5/6 rounded-md bg-muted/70" />
-        <div className="h-3.5 w-2/3 rounded-md bg-muted/70" />
-      </div>
-    </div>
-  </div>
-);
-
 export const MessageDetail = ({
   activeMailbox,
+  composeDemoMode,
+  composeManagedDemoMode,
+  composePersistDrafts,
+  composeSignature,
   focusOnOpen,
   currentUserEmail,
   isPending,
   mailboxActions,
   onBackToList,
   onAutoFocusComplete,
-  onComposeDraftRequested,
+  onManageTemplates,
   pendingActions,
   selectedMessage,
   mailboxId,
@@ -107,6 +85,10 @@ export const MessageDetail = ({
       >
         <MessageView
           activeMailbox={activeMailbox}
+          composeDemoMode={composeDemoMode}
+          composeManagedDemoMode={composeManagedDemoMode}
+          composePersistDrafts={composePersistDrafts}
+          composeSignature={composeSignature}
           focusOnOpen={focusOnOpen}
           currentUserEmail={currentUserEmail}
           mailboxActions={mailboxActions}
@@ -115,7 +97,7 @@ export const MessageDetail = ({
           message={selectedMessage}
           onBackToList={onBackToList}
           onAutoFocusComplete={onAutoFocusComplete}
-          onComposeDraftRequested={onComposeDraftRequested}
+          onManageTemplates={onManageTemplates}
           pendingActions={pendingActions}
         />
       </Suspense>
@@ -150,9 +132,7 @@ export const MessageDetail = ({
                   transform: "translate3d(8px, 0, 0)",
                 }
           }
-          key={
-            selectedMessage?.id ?? (isPending === true ? "loading" : "empty")
-          }
+          key={`${mailboxId}:${selectedMessage?.id ?? (isPending === true ? "loading" : "empty")}`}
           transition={{
             duration:
               reducedMotion === true

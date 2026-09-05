@@ -35,21 +35,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
-
-      - name: Setup Vite+
-        uses: voidzero-dev/setup-vp@v1
         with:
-          # Pinned to the `vite-plus` catalog entry in package.json. Without it the
-          # action installs the latest vp, whose formatter drifts from the local one
-          # and fails commits that were previously green.
-          version: "0.2.9"
-          cache: true
-          node-version: "24.18.0"
+          persist-credentials: false
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.3.14
+      - name: Setup repository
+        uses: ./.github/actions/setup
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
@@ -57,12 +47,8 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ vars.AWS_REGION || 'eu-central-1' }}
 
-      - name: Install dependencies
-        run: vp install --frozen-lockfile
-
       - name: Build deployment configuration
         run: |
-          vp run @quieter/env#build
           vp run @quieter/observability#build
           vp run @quieter/sdk#build
 
@@ -72,9 +58,9 @@ jobs:
           CLOUDFLARE_AI_API_TOKEN: ${{ secrets.CLOUDFLARE_AI_API_TOKEN }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          GMAIL_CREDENTIAL_ROTATION_TOKEN: ${{ secrets.GMAIL_CREDENTIAL_ROTATION_TOKEN }}
+          POLAR_WEBHOOK_SECRET: ${{ secrets.POLAR_WEBHOOK_SECRET }}
         run: |
-          bun -e '
+          node -e '
             const databaseName = decodeURIComponent(new URL(process.env.DATABASE_URL).pathname.replace(/^\//u, ""));
             if (databaseName !== "quieter") {
               throw new Error(`Production DATABASE_URL must target the quieter database, received ${databaseName || "an empty database name"}.`);
@@ -83,7 +69,8 @@ jobs:
           vp exec sst secret set CloudflareAccountId "$CLOUDFLARE_ACCOUNT_ID" --stage "$SST_STAGE"
           vp exec sst secret set CloudflareAiApiToken "$CLOUDFLARE_AI_API_TOKEN" --stage "$SST_STAGE"
           vp exec sst secret set DatabaseUrl "$DATABASE_URL" --stage "$SST_STAGE"
-          vp exec sst secret set GmailCredentialRotationToken "$GMAIL_CREDENTIAL_ROTATION_TOKEN" --stage "$SST_STAGE"
+          test -n "$POLAR_WEBHOOK_SECRET"
+          vp exec sst secret set PolarWebhookSecret "$POLAR_WEBHOOK_SECRET" --stage "$SST_STAGE"
 
       - name: Apply production database migrations
         if: ${{ env.SST_STAGE == 'production' }}
@@ -122,26 +109,4 @@ jobs:
           VITE_PUBLIC_POSTHOG_PROJECT_TOKEN: ${{ vars.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN }}
           VITE_QUIETER_PREVIEW_PERSONAS_ENABLED: ${{ vars.VITE_QUIETER_PREVIEW_PERSONAS_ENABLED }}
           VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN }}
-        run: bunx sst deploy --config sst.config.ts --stage "$SST_STAGE"
-
-      - name: Rotate legacy Gmail credentials
-        if: ${{ env.SST_STAGE == 'production' }}
-        env:
-          GMAIL_CREDENTIAL_ROTATION_TOKEN: ${{ secrets.GMAIL_CREDENTIAL_ROTATION_TOKEN }}
-        run: |
-          bun run - <<'EOF'
-          const token = process.env.GMAIL_CREDENTIAL_ROTATION_TOKEN;
-          if (!token) throw new Error("GMAIL_CREDENTIAL_ROTATION_TOKEN is required.");
-
-          const response = await fetch("https://quieter.email/api/internal/gmail-credentials/rotate", {
-            headers: { Authorization: `Bearer ${token}` },
-            method: "POST",
-          });
-          const body = await response.text();
-          if (!response.ok) {
-            throw new Error(`Gmail credential rotation failed with ${response.status}: ${body}`);
-          }
-
-          const result = JSON.parse(body);
-          console.log(`Rotated ${result.rotated ?? 0} legacy Gmail credential records.`);
-          EOF
+        run: vp exec sst deploy --config sst.config.ts --stage "$SST_STAGE"

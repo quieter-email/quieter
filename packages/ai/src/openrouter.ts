@@ -42,11 +42,15 @@ export const readChatUsageCostUsd = (
  * Creates the language model for a chat model id with zero-data-retention
  * routing and OpenRouter usage accounting (token costs) always enabled.
  */
-export const createChatModel = (model: ChatModel) => {
+export const createChatModel = (
+  model: ChatModel,
+  options?: { prioritizeLatency?: boolean }
+) => {
   const parsedModel = chatModelSchema.parse(model);
   return getOpenRouterProvider().chat(parsedModel, {
     extraBody: {
       provider: {
+        ...(options?.prioritizeLatency === true ? { sort: "latency" } : {}),
         zdr: true,
       },
     },

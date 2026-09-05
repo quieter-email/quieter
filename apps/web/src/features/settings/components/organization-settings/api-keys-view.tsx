@@ -53,7 +53,8 @@ import { z } from "zod";
 
 import { runDetached } from "#/features/settings/components/mailboxes-settings-shared";
 import { authClient } from "#/lib/auth";
-import { getErrorMessage } from "#/lib/orpc-errors";
+import { toastError } from "#/lib/error-toast";
+import { rethrowClassified } from "#/lib/orpc-errors";
 
 import {
   SettingsBackButton,
@@ -66,6 +67,7 @@ import {
   getOrganizationApiKeysQueryKey,
   organizationApiKeysQueryOptions,
 } from "./api-keys";
+import { BillingAccessNotice } from "./billing-access-notice";
 import { formatCount } from "./domain";
 import type { FullOrganization } from "./domain";
 import { MutedActionButton } from "./settings-row";
@@ -243,10 +245,11 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
       });
 
       if (response.error) {
-        throw new Error(response.error.message ?? "Could not create API key.");
+        rethrowClassified(response.error, "Could not create API key.");
       }
 
-      if (!response.data?.key) {
+      const createdApiKey = response.data?.key;
+      if (createdApiKey === undefined || createdApiKey === "") {
         throw new Error("Could not read the created API key.");
       }
 
@@ -254,6 +257,9 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
     },
     mutationKey: ["organization-api-keys", organizationId, "create"],
     onSuccess: async (data) => {
+      if (data === null || data === undefined) {
+        return;
+      }
       setCreatedKey(data.key);
       await queryClient.invalidateQueries({
         queryKey: getOrganizationApiKeysQueryKey(organizationId),
@@ -501,13 +507,14 @@ const ResetApiKeyDialog = ({
       });
 
       if (createResponse.error) {
-        throw new Error(
-          createResponse.error.message ??
-            "Could not create the replacement key."
+        rethrowClassified(
+          createResponse.error,
+          "Could not create the replacement key."
         );
       }
 
-      if (!createResponse.data?.key) {
+      const replacementKey = createResponse.data?.key;
+      if (replacementKey === undefined || replacementKey === "") {
         throw new Error("Could not read the replacement API key.");
       }
 
@@ -518,7 +525,7 @@ const ResetApiKeyDialog = ({
 
       return {
         cleanupFailed: Boolean(deleteResponse.error),
-        key: createResponse.data.key,
+        key: replacementKey,
       };
     },
     mutationKey: ["organization-api-keys", organizationId, apiKey.id, "reset"],
@@ -530,7 +537,10 @@ const ResetApiKeyDialog = ({
       } catch {
         /* cache refresh failures are non-fatal */
       }
-      toast.error(getMutationErrorMessage(error, "Could not reset API key."));
+      toastError(error, {
+        boundary: "organization-api-keys",
+        fallback: "Could not reset API key.",
+      });
     },
     onSuccess: (data) => {
       setCreatedKey(data.key);
@@ -694,14 +704,17 @@ const DeleteApiKeyDialog = ({
       });
 
       if (response.error) {
-        throw new Error(response.error.message ?? "Could not remove API key.");
+        rethrowClassified(response.error, "Could not remove API key.");
       }
 
       return response.data;
     },
     mutationKey: ["organization-api-keys", organizationId, apiKey.id, "delete"],
     onError: (error) => {
-      toast.error(getErrorMessage(error, "Could not remove API key."));
+      toastError(error, {
+        boundary: "organization-api-keys",
+        fallback: "Could not remove API key.",
+      });
     },
     onSuccess: async () => {
       setOpen(false);
@@ -786,6 +799,7 @@ const DeleteApiKeyDialog = ({
 const ApiKeysListSection = ({
   apiKeys,
   canManageApiKeys,
+  billingAccess,
   errorMessage,
   isError,
   isPending,
@@ -793,6 +807,7 @@ const ApiKeysListSection = ({
 }: {
   apiKeys: OrganizationApiKey[];
   canManageApiKeys: boolean;
+  billingAccess: "active" | "paused" | "unknown";
   errorMessage: string | undefined;
   isError: boolean;
   isPending: boolean;
@@ -832,10 +847,12 @@ const ApiKeysListSection = ({
           action={
             canManageApiKeys ? (
               <div className="flex items-center gap-1">
-                <ResetApiKeyDialog
-                  apiKey={apiKey}
-                  organizationId={organizationId}
-                />
+                {billingAccess === "active" && (
+                  <ResetApiKeyDialog
+                    apiKey={apiKey}
+                    organizationId={organizationId}
+                  />
+                )}
                 <DeleteApiKeyDialog
                   apiKey={apiKey}
                   organizationId={organizationId}
@@ -848,7 +865,7 @@ const ApiKeysListSection = ({
           title={apiKey.name ?? "API key"}
         >
           <span className="font-mono">{formatApiKeyPreview(apiKey)}</span>
-          {`. ${formatApiKeyMeta(apiKey)}`}
+          {`. ${billingAccess === "paused" ? "Paused, subscription required" : formatApiKeyMeta(apiKey)}`}
         </SettingsRow>
       ))}
     </SettingsRows>
@@ -884,6 +901,11 @@ export const ApiKeysView = ({
     canUseOrganizationApiKeys,
   });
 
+  let billingAccess: "active" | "paused" | "unknown" = "unknown";
+  if (!billingPending && !billingAccessUnknown) {
+    billingAccess = canUseOrganizationApiKeys ? "active" : "paused";
+  }
+
   return (
     <div className="@container space-y-6">
       <SettingsBackButton onClick={onBack}>
@@ -911,7 +933,14 @@ export const ApiKeysView = ({
         )}
       </div>
 
+      {!billingPending &&
+        !billingAccessUnknown &&
+        !canUseOrganizationApiKeys &&
+        apiKeys.length > 0 && (
+          <BillingAccessNotice organizationId={organization.id} />
+        )}
       <ApiKeysListSection
+        billingAccess={billingAccess}
         apiKeys={apiKeys}
         canManageApiKeys={canManageApiKeys}
         errorMessage={apiKeysError?.message}

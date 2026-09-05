@@ -2,7 +2,7 @@ import { defineConfig } from "vite-plus";
 
 const dependencyBuild = [{ from: "dependencies" as const, task: "build" }];
 const migrationRunCommand =
-  "bun --env-file=../../.env.local scripts/run-migrations.ts";
+  "node --env-file-if-exists=../../.env.local scripts/run-migrations.ts";
 
 export default defineConfig({
   run: {
@@ -10,7 +10,7 @@ export default defineConfig({
       "db:check": {
         cache: false,
         command:
-          "bun scripts/check-migrations.ts && bun scripts/check-schema-drift.ts && bun scripts/migration-safety.ts",
+          "node scripts/check-migrations.ts && node scripts/check-schema-drift.ts && node scripts/migration-safety.ts",
         dependsOn: dependencyBuild,
       },
       "db:deploy": {
@@ -20,7 +20,7 @@ export default defineConfig({
       },
       "db:generate": {
         cache: false,
-        command: "bun scripts/generate-migration.ts",
+        command: "node scripts/generate-migration.ts",
         dependsOn: dependencyBuild,
       },
       "db:migrate": {
@@ -30,12 +30,13 @@ export default defineConfig({
       },
       "db:push": {
         cache: false,
-        command: "bun --env-file=../../.env.local scripts/push-schema.ts",
+        command:
+          "node --env-file-if-exists=../../.env.local scripts/push-schema.ts",
         dependsOn: dependencyBuild,
       },
       "db:test-migrations": {
         cache: false,
-        command: "bun scripts/test-migrations.ts",
+        command: "node scripts/test-migrations.ts",
         dependsOn: dependencyBuild,
       },
     },

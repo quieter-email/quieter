@@ -11,9 +11,11 @@ flowchart LR
   ORPC --> Mail["packages/mail"]
   ORPC --> Billing["packages/billing / Polar"]
   ORPC --> AI["packages/ai / OpenRouter"]
+  Cloudflare["Cloudflare Workers, Queues, Durable Objects"] --> ORPC
   AWS["packages/aws / SST"] --> ORPC
+  Cloudflare --> DB
   AWS --> DB
-  AWS --> MailInfra["SES, S3, SNS, SQS, WebSocket"]
+  AWS --> MailInfra["SES, S3, SNS, Lambda"]
 ```
 
 Behavior-producing AI agents share the scoped dynamic knowledge boundary in [`docs/ai-memory.md`](./ai-memory.md). Personal knowledge follows one user, mailbox knowledge follows the mailbox and is more specific, and all retrieval and mutation goes through `packages/orpc/src/ai-memory.ts`.
@@ -63,7 +65,8 @@ Owns the Drizzle schema, client, migrations, schema-drift checks, and migration 
 - `packages/auth`: Better Auth setup, identity scopes, organizations, API keys, passkeys, and auth mail
 - `packages/ui`: reusable Base UI-backed components
 - `packages/ai`: model selection, prompts, classification, titles, and streamed generation
-- `packages/aws`: SST handlers, mail ingestion, queues, workflows, and live synchronization
+- `packages/aws`: SES mail ingestion, delivery feedback, and AWS-specific handlers
+- `packages/cloudflare`: Gmail notification ingress, queued synchronization, scheduled maintenance, and mailbox live synchronization
 - `packages/billing`: plans, Polar checkout/webhooks, entitlements, and usage pricing
 - `packages/env`: typed environment schemas and normalization
 - `packages/deployment`: deployment helper scripts
@@ -92,11 +95,11 @@ Unfiltered mailbox views can apply Gmail history updates. Filtered search and Dr
 
 For Pro mailboxes:
 
-1. Gmail sends an authenticated notification to the stable SST ingress.
-2. The ingress validates the Google identity and enqueues a mailbox job.
-3. The worker reconciles Gmail history and updates persisted state.
-4. Focused browser tabs receive a mailbox-dirty WebSocket signal and refresh immediately.
-5. Scheduled maintenance renews watches and reconciles missed notifications.
+1. Gmail sends an authenticated notification to the Cloudflare ingress.
+2. The ingress validates the Google identity, notifies the mailbox Durable Object, and enqueues a mailbox job in Cloudflare Queues.
+3. A Cloudflare queue consumer reconciles Gmail history through Hyperdrive and updates persisted state.
+4. Focused browser tabs receive mailbox-dirty signals from the mailbox Durable Object and refresh immediately.
+5. Scheduled maintenance on Cloudflare selects only mailboxes with due work: watch renewal (heartbeat plus expiry lookahead), first-time setup, or stale reconciliation for mailboxes with enabled automations.
 
 The notification is a wake-up signal, not the source of truth.
 
@@ -108,7 +111,7 @@ Inbound:
 
 1. SES stores the raw message in S3.
 2. SNS invokes the receipt processor.
-3. The processor parses the MIME message and writes one row per exact managed recipient.
+3. The processor parses the MIME message and writes one row per exact managed recipient. Recipients that match no exact inbox fall through to the domain's whole-domain (catch-all) inbox when one is configured; one delivered message never produces duplicate rows for the same mailbox.
 4. Untracked S3 objects are deleted.
 
 Outbound:
@@ -135,17 +138,24 @@ c15t runs in offline mode. Consent preferences stay in the browser and do not re
 
 - PostHog and Speed Insights load only after `measurement` consent.
 - Client Sentry remains enabled in production and is disclosed in the privacy policy.
+- Server-side unexpected failures from the web worker, all Cloudflare background workers, and AWS functions are reported to Sentry; expected user and authorization states are filtered before capture.
 - Signup acceptance of Terms and Privacy is separate from analytics consent.
 
 ## Billing
 
-Billing subscriptions are user-scoped. Paid plans are `managed` and `pro`; Gmail and bring-your-own key access do not require checkout.
+Billing subscriptions belong to teams. Paid plans are `managed` and `pro`. A subscription grants access only while active or trialing and before its current period ends.
 
-PayKit and Polar handle product synchronization, checkout, subscription events, and usage events. Organization mail usage is measured separately and billed according to plan-specific markup.
+Polar handles checkout, renewals, and subscription events. Signed webhooks synchronize subscription status, period dates, and scheduled cancellation. Billing reads reconcile stale records after five minutes, including active and past-due subscriptions, to recover from missed events. Equal provider timestamps can refresh the reconciliation time; older timestamps cannot overwrite newer subscription state. A failed reconciliation returns an unavailable state and retries after five minutes. Checkout refreshes the existing subscription before deciding whether a new checkout is allowed, preventing duplicate subscriptions after a missed renewal.
+
+Canceling at period end preserves access until the period ends. Immediate cancellation, expiry, or past-due status pauses sending, API access, and paid configuration changes. Domains, keys, inboxes, and existing messages are retained. Billing management and authorized deletion remain available. Incoming mail continues for configured inboxes; cancellation does not delete receipt rules or silently discard accepted messages. Full inbound suspension, sender rejection, and a retention deadline are not implemented. Receiving and storage can therefore still incur costs after cancellation.
+
+The additive `cancelAtPeriodEnd` migration must run through the protected migration workflow before deploying code that reads the column. It defaults to false for existing records and is refreshed from Polar on the next reconciliation. No production migration is run from a local checkout.
+
+For private production testing, a 100% subscription discount must cover every intended billing cycle. Check its duration and the discount attached to the affected subscription in Polar. Merchant verification and subscription status are separate; do not bypass production billing checks based on an unverified merchant account. An active subscription with a past period end stays paused until the provider advances the period. Extending access against the old period would also omit new usage from its credit window. See [billing operations](./billing.md) for production setup and renewal troubleshooting. Organization mail usage is measured separately and billed according to plan-specific markup.
 
 ## Infrastructure Ownership
 
-SST provisions the mail bucket, receipt topic and role, queues, workflows, function URLs, Gmail notification ingress, live-sync WebSocket, and maintenance schedules.
+SST provisions both providers. AWS owns the SES receipt bucket, receipt topic and role, and mail-processing functions. Cloudflare owns Gmail notification ingress, queueing, scheduled maintenance, and live-sync Durable Objects.
 
 Cloudflare Workers hosts the web application. SST builds and publishes production and binds deployment outputs directly.
 
@@ -158,9 +168,9 @@ The root [`sst.config.ts`](../sst.config.ts) owns only app-wide SST settings and
 - `secrets.ts` declares stage-aware `sst.Secret` resources and Cloudflare secret bindings.
 - `database.ts` owns the Cloudflare Hyperdrive binding.
 - `web.ts` owns the TanStack Start Worker and its common bindings.
-- `actions.ts` owns mailbox-action resources; chat generation runs in the web request through the AI SDK.
+- Mailbox actions execute asynchronously from their persisted runs: Gmail sync and maintenance dispatch new runs straight onto Cloudflare Queues, while a per-minute fallback cron atomically claims SES-ingested, lost, or crashed runs before dispatching them. Transient execution failures stay retryable until the queue's final delivery settles the run as failed.
 - `mail.ts` owns SES receipt storage, processing, ingress, and send permissions.
-- `gmail.ts` owns Gmail live-sync and Pub/Sub resources across AWS and Cloudflare.
+- `gmail.ts` owns Gmail live-sync and Pub/Sub resources on Cloudflare.
 - `app.ts` is the small stage-aware composition entry point; `types.ts` contains shared infra boundary types.
 
 SST is the runtime source of truth for application credentials and tokens; their canonical names live in `packages/env/src/sst-secrets.ts`. Cloudflare receives them as secret-text bindings, while AWS functions receive values derived from SST secret outputs. Deployment environment variables are reserved for non-secret configuration such as feature switches, resource identifiers, domains, and provider deployment credentials.

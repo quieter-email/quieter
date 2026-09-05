@@ -40,7 +40,8 @@ export const MailboxColorPicker = ({
           "size-5 rounded-full transition-transform hover:scale-110 motion-reduce:transition-none motion-reduce:hover:scale-100",
           mailboxLabelDotClassNameByColor[color],
           {
-            "ring-2 ring-fg ring-offset-2 ring-offset-bg": value === color,
+            "ring-2 ring-fg ring-offset-2 ring-offset-bg-raised":
+              value === color,
           }
         )}
         key={color}

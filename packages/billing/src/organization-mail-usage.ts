@@ -12,8 +12,8 @@ import type {
 } from "@quieter/database/schema";
 import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
 
-import { getBillingCreditUsage, recordBillingCreditUsage } from "./credits";
-import { getOrganizationBillingEntitlement } from "./entitlements";
+import { getBillingCreditUsage, recordBillingCreditUsage } from "./credits.ts";
+import { getOrganizationBillingEntitlement } from "./entitlements.ts";
 import {
   applyManagedUsageMarkup,
   getManagedUsageRates,
@@ -22,7 +22,7 @@ import {
   SES_INBOUND_MESSAGE_MICROCENTS,
   SES_OUTBOUND_ATTACHMENT_DATA_MICROCENTS_PER_GB,
   SES_OUTBOUND_MESSAGE_MICROCENTS,
-} from "./ses-pricing";
+} from "./ses-pricing.ts";
 
 type OrganizationMailUsageEstimate = {
   attachmentSizeBytes: number;
@@ -249,8 +249,14 @@ const getPeriodUsageMicroCents = async (input: {
 }) => {
   const [usage] = await db
     .select({
-      billableCostMicroCents: sql<number>`coalesce(sum(${organizationMailUsageEvent.billableCostMicroCents}), 0)`,
-      sesCostMicroCents: sql<number>`coalesce(sum(${organizationMailUsageEvent.sesCostMicroCents}), 0)`,
+      billableCostMicroCents:
+        sql`coalesce(sum(${organizationMailUsageEvent.billableCostMicroCents}), 0)`.mapWith(
+          Number
+        ),
+      sesCostMicroCents:
+        sql`coalesce(sum(${organizationMailUsageEvent.sesCostMicroCents}), 0)`.mapWith(
+          Number
+        ),
     })
     .from(organizationMailUsageEvent)
     .where(

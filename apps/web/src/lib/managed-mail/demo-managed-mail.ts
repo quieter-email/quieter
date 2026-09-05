@@ -359,7 +359,7 @@ const invalidateManagedDemoMail = async (queryClient: QueryClient) => {
       queryKey: ["managed-label-counts", DEMO_MANAGED_MAILBOX_ID],
     }),
     queryClient.invalidateQueries({
-      queryKey: ["managed-saved-views", DEMO_MANAGED_MAILBOX_ID],
+      queryKey: ["saved-views", DEMO_MANAGED_MAILBOX_ID],
     }),
     queryClient.invalidateQueries({
       queryKey: ["gmail-labels", DEMO_MANAGED_MAILBOX_ID],

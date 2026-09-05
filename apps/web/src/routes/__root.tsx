@@ -15,6 +15,31 @@ if (import.meta.env.DEV) {
   faviconVariant = "-dev";
 }
 
+const organizationJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  address: {
+    "@type": "PostalAddress",
+    addressCountry: "DE",
+    addressLocality: "Berlin",
+    streetAddress: "Cosimaplatz 5",
+  },
+  contactPoint: [
+    {
+      "@type": "ContactPoint",
+      contactType: "customer support",
+      email: "support@quieter.email",
+      url: "https://quieter.email/home",
+    },
+  ],
+  description:
+    "Quieter is an email client that combines your Gmail, shared team mailboxes on your own domain, and transactional sending over an API, with optional AI drafts.",
+  logo: "https://quieter.email/icon.svg",
+  name: "Quieter",
+  sameAs: ["https://x.com/leanderriefel", "https://github.com/leanderriefel"],
+  url: "https://quieter.email/",
+};
+
 export const Route = createRootRoute({
   component: RootComponent,
   errorComponent: RootErrorComponent,
@@ -79,6 +104,11 @@ export const Route = createRootRoute({
         name: "color-scheme",
       },
       {
+        content:
+          "Your Gmail, your team's mailboxes and the mail your product sends, in one place.",
+        name: "description",
+      },
+      {
         content: "#f7f4ee",
         media: "(prefers-color-scheme: light)",
         name: "theme-color",
@@ -93,20 +123,38 @@ export const Route = createRootRoute({
         property: "og:title",
       },
       {
+        content: "Quieter",
+        property: "og:site_name",
+      },
+      {
         content: "Email, without the noise.",
         property: "og:description",
       },
       {
-        content: "/og-image.png",
+        content: "https://quieter.email/og-image.png",
         property: "og:image",
+      },
+      {
+        content: "website",
+        property: "og:type",
       },
       {
         content: "summary_large_image",
         name: "twitter:card",
       },
       {
-        content: "/og-image.png",
+        content: "Email, without the noise.",
+        name: "twitter:description",
+      },
+      {
+        content: "https://quieter.email/og-image.png",
         name: "twitter:image",
+      },
+    ],
+    scripts: [
+      {
+        children: JSON.stringify(organizationJsonLd),
+        type: "application/ld+json",
       },
     ],
   }),

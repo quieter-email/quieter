@@ -5,7 +5,6 @@ import type { SecretBindings, SecretResources } from "./types";
 
 const directOnlySecretNames = new Set<SstSecretName>([
   "DATABASE_URL",
-  "GMAIL_PUBSUB_PROCESS_TOKEN",
   "MAIL_INGEST_TOKEN",
 ]);
 
@@ -22,6 +21,18 @@ export const requireSecretResource = (
   }
 
   return secret;
+};
+
+export const requireSecretBinding = (
+  secretBindings: SecretBindings,
+  name: SstSecretName
+) => {
+  const binding = secretBindings[name];
+  if (binding === undefined) {
+    throw new Error(`Cloudflare secret binding ${name} is not declared`);
+  }
+
+  return binding;
 };
 
 export const createSecretInfrastructure = () => {
