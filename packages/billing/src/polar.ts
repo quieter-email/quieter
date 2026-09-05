@@ -53,6 +53,7 @@ export const ingestPolarEvents = async (
     metadata?: Record<string, boolean | number | string>;
     name: string;
     organizationId?: string;
+    timestamp?: Date;
   }[]
 ) => {
   const polar = await getPolarClient();
