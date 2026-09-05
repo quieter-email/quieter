@@ -84,6 +84,62 @@ describe("local background entrypoint", () => {
 
   test.each([
     ["{}", 400],
+    ['{"ownerEmail":"invalid"}', 400],
+    ["{", 400],
+    [" ".repeat(4097), 413],
+  ])(
+    "rejects invalid fixture input before database access",
+    async (body, status) => {
+      const response = await localWorker.fetch(
+        new Request("http://localhost/__dev/mail/seed", {
+          body,
+          headers: {
+            authorization: `Bearer ${settings.QUIETER_LOCAL_WORKER_TOKEN}`,
+          },
+          method: "POST",
+        }),
+        env
+      );
+      expect(response.status).toBe(status);
+    }
+  );
+
+  test.each([
+    ["local", "", undefined, 403],
+    [
+      "local",
+      `Bearer ${settings.QUIETER_LOCAL_WORKER_TOKEN}`,
+      "http://localhost:3000",
+      403,
+    ],
+    [
+      "production",
+      `Bearer ${settings.QUIETER_LOCAL_WORKER_TOKEN}`,
+      undefined,
+      404,
+    ],
+  ] as const)(
+    "protects fixture creation",
+    async (mode, authorization, origin, status) => {
+      settings.QUIETER_DEPLOYMENT_ENV = mode;
+      const headers = new Headers({ authorization });
+      if (origin !== undefined) {
+        headers.set("origin", origin);
+      }
+      const response = await localWorker.fetch(
+        new Request("http://localhost/__dev/mail/seed", {
+          body: JSON.stringify({ ownerEmail: "fixture@example.test" }),
+          headers,
+          method: "POST",
+        }),
+        env
+      );
+      expect(response.status).toBe(status);
+    }
+  );
+
+  test.each([
+    ["{}", 400],
     ["{", 400],
     [JSON.stringify({ ...delivery, subscription: "production" }), 403],
     [" ".repeat(65_537), 413],

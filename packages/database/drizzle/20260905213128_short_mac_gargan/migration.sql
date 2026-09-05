@@ -1,0 +1,1 @@
+ALTER TABLE "managedMailAttachment" ADD COLUMN "partIndex" integer;

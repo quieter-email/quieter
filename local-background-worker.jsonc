@@ -4,6 +4,13 @@
   "main": "packages/cloudflare/src/local-worker.ts",
   "compatibility_date": "2026-08-04",
   "compatibility_flags": ["nodejs_compat"],
+  "r2_buckets": [
+    {
+      "binding": "LocalMailStorage",
+      "bucket_name": "quieter-local-mail",
+      "remote": false,
+    },
+  ],
   "dev": { "ip": "127.0.0.1", "port": 8787 },
   "durable_objects": {
     "bindings": [

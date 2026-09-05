@@ -60,6 +60,7 @@ import {
   updateManagedThreadLabels,
   updateSingleManagedMessageLabels,
 } from "../managed-mail/labels/service";
+import { getManagedMessageAttachment } from "../managed-mail/messages/attachments";
 import {
   deleteManagedDraft,
   getManagedMessageDelivery,
@@ -527,39 +528,46 @@ export const mailRouter = {
         mimeType: z.string().min(1),
       })
     )
-    .handler(
-      async ({ context, input }) =>
-        await callGmail(
-          context,
-          input.mailboxId,
-          async (accessToken, signal) => {
-            const attachment = await getMessageAttachment(
-              accessToken,
-              input.messageId,
-              input.attachmentId,
-              signal
-            );
-            const attachmentData = attachment.data;
-            const bytes = hasText(attachmentData)
-              ? Uint8Array.from(
-                  atob(
-                    attachmentData.replaceAll("-", "+").replaceAll("_", "/")
-                  ),
-                  (char) => char.codePointAt(0) ?? 0
-                )
-              : new Uint8Array();
+    .handler(async ({ context, input }) => {
+      const selectedMailbox = await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      if (selectedMailbox.provider === "managed") {
+        return await getManagedMessageAttachment({
+          ...input,
+          userId: context.userId,
+        });
+      }
+      return await callGmail(
+        context,
+        input.mailboxId,
+        async (accessToken, signal) => {
+          const attachment = await getMessageAttachment(
+            accessToken,
+            input.messageId,
+            input.attachmentId,
+            signal
+          );
+          const attachmentData = attachment.data;
+          const bytes = hasText(attachmentData)
+            ? Uint8Array.from(
+                atob(attachmentData.replaceAll("-", "+").replaceAll("_", "/")),
+                (char) => char.codePointAt(0) ?? 0
+              )
+            : new Uint8Array();
 
-            return {
-              attachmentId: attachment.attachmentId ?? input.attachmentId,
-              file: new File([bytes], input.fileName, {
-                lastModified: Date.now(),
-                type: input.mimeType,
-              }),
-              size: attachment.size ?? bytes.byteLength,
-            };
-          }
-        )
-    ),
+          return {
+            attachmentId: attachment.attachmentId ?? input.attachmentId,
+            file: new File([bytes], input.fileName, {
+              lastModified: Date.now(),
+              type: input.mimeType,
+            }),
+            size: attachment.size ?? bytes.byteLength,
+          };
+        }
+      );
+    }),
   getMessageDelivery: protectedProcedure
     .route({ method: "GET" })
     .input(

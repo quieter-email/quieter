@@ -27,6 +27,7 @@
     "dev:pubsub": "node --env-file=.env.local scripts/local-pubsub.ts",
     "dev:polar": "wsl -e bash scripts/local-polar.sh",
     "dev:trigger": "node --env-file=.env.local scripts/local-worker-request.ts",
+    "dev:fixtures": "node --env-file=.env.local scripts/local-mail-fixtures.ts",
     "dev:cloud": "vp run dev:sst",
     "test:mail": "vp test packages/aws/tests packages/mail/tests packages/orpc/tests/managed-mail packages/orpc/tests/local-managed-mail packages/orpc/tests/mail-domain packages/orpc/tests/organization-mail",
     "env:doctor": "vp run @quieter/env#doctor",

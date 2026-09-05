@@ -155,6 +155,16 @@ Managed-mail fixture tests run on this machine:
 vp run test:mail
 ```
 
+For a mailbox in the running app, sign in locally, then run:
+
+```bash
+vp run dev:fixtures your-local-login@example.com
+```
+
+The command creates a private fixture mailbox in `quieter_dev` and prints its localhost URL. Its reserved `.test` address has no DNS records and cannot receive Internet mail. The background Worker writes the original MIME message to Wrangler's native R2 simulation. Both local runtimes share `.wrangler/state`, so attachments remain available after a restart. No remote bucket or R2 credential is required. Running the command again restores the raw fixture without duplicating the message. If you erase local storage, run it again.
+
+The fixture endpoint requires the local Worker bearer token and rejects browser origins. Raw-message reads and deletes locally accept only the fixture storage namespace and `fixtures/` keys; copied production object references cannot reach remote storage.
+
 The old `dev:mail` and AWS package `dev` commands were removed because they evaluated cloud infrastructure. Local development must not create mail domains, DNS records, SES identities, Lambda functions, SNS topics or remote mail buckets. Real managed-mail domain changes and external sending are blocked in the local application.
 
 SES has no native local delivery service. Fixtures cover MIME, routing, request validation and feedback processing. They do not prove real MX routing, IAM permissions, SES delivery or cloud retries. Those are deployment-only checks, outside this local setup. SST Lambda Live still uses cloud resources and is not a local-only substitute. `dev:cloud` is only an alias for the Secret-linked local session described above.

@@ -50,6 +50,25 @@ export default {
     if (request.method !== "POST") {
       return new Response(null, { status: 405 });
     }
+    if (url.pathname === "/__dev/mail/seed") {
+      try {
+        const input = z
+          .object({ ownerEmail: z.email() })
+          .safeParse(await readBoundedJson(request, 4096));
+        if (!input.success) {
+          return new Response(null, { status: 400 });
+        }
+        const { seedLocalManagedMail } =
+          await import("@quieter/orpc/managed-mail/local-fixtures");
+        return Response.json(
+          await withRequestDatabaseClient(
+            async () => await seedLocalManagedMail(input.data.ownerEmail)
+          )
+        );
+      } catch (error) {
+        return requestErrorResponse(error, "local-mail-fixtures");
+      }
+    }
     if (url.pathname === "/__dev/pubsub") {
       try {
         const delivery = deliverySchema.safeParse(

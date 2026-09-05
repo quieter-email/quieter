@@ -98,6 +98,8 @@ export default defineConfig(({ command }) => {
     },
     plugins: lazyPlugins(() => [
       cloudflare({
+        persistState: { path: `${workspaceRoot}/.wrangler/state` },
+        remoteBindings: false,
         configPath:
           process.env.SST_WRANGLER_PATH ??
           (isDev

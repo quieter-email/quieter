@@ -2,6 +2,7 @@ import type { S3Client } from "@aws-sdk/client-s3";
 import { serverEnv } from "@quieter/env/server";
 
 import { hasText } from "../../text";
+import { assertLocalMailObject, getLocalMailStorage } from "../local-storage";
 
 export type RawMailObjectProvider = "r2" | "s3";
 
@@ -87,6 +88,16 @@ export const readRawMailObject = async (record: RawMailObjectRecord) => {
   if (object === null) {
     throw new Error("The original message is unavailable.");
   }
+  if (serverEnv.QUIETER_DEPLOYMENT_ENV === "local") {
+    assertLocalMailObject(object);
+    const stored = await getLocalMailStorage().get(object.key);
+    if (stored === null) {
+      throw new Error(
+        "The local message fixture is missing. Run dev:fixtures again."
+      );
+    }
+    return new Uint8Array(await stored.arrayBuffer());
+  }
   const { GetObjectCommand } = await import("@aws-sdk/client-s3");
   const client = await getRawMailObjectClient(object.provider);
   const response = await client.send(
@@ -99,6 +110,11 @@ export const readRawMailObject = async (record: RawMailObjectRecord) => {
 };
 
 export const deleteRawMailObject = async (object: RawMailObjectReference) => {
+  if (serverEnv.QUIETER_DEPLOYMENT_ENV === "local") {
+    assertLocalMailObject(object);
+    await getLocalMailStorage().delete(object.key);
+    return;
+  }
   const { DeleteObjectCommand } = await import("@aws-sdk/client-s3");
   const client = await getRawMailObjectClient(object.provider);
   await client.send(

@@ -8,7 +8,7 @@ Agent connector readiness is tracked separately in [Agent tooling](agent-tooling
 
 | Area | Current evidence | Remaining proof |
 | --- | --- | --- |
-| Database | Existing shared-cluster quieter_dev, separate app/migrator roles, verified TLS, 59 migrations, pgvector 0.8.5, backup before migration | Destructive migration tests run in disposable CI, not against this database |
+| Database | Existing shared-cluster quieter_dev, separate app/migrator roles, verified TLS, 60 migrations, pgvector 0.8.5, backup before migration | Destructive migration tests run in disposable CI, not against this database |
 | Identity | Real localhost Google sign-in succeeds after adding its missing callback | Magic-link, passkey/device and full role lifecycle acceptance |
 | Gmail | Separate OAuth client and Pub/Sub pull subscription; observation guards; fresh consent; real inbox loads 18 conversations | Test-account passkey consent, provider writes and delivered-notification processing |
 | Cloudflare | Native web/Worker runtime; signed WebSocket smoke; native queue/DO tests; authenticated manual maintenance/dispatch | Deployed concurrency, hibernation, IAM and cloud pooling |
@@ -17,7 +17,7 @@ Agent connector readiness is tracked separately in [Agent tooling](agent-tooling
 | Workers AI | Separate AI-only token; real 1024-dimension embedding | Application memory write/search/delete lifecycle |
 | Polar | Non-expiring sandbox token, existing Managed/Pro products, official CLI 1.3.9 in WSL; six real customer/member events returned HTTP 200 | Checkout/portal/renewal/cancellation/credits with bypass off |
 | Telemetry | Explicit opt-in implemented; off by default; consent still required for PostHog | Development-project ingestion and browser privacy assertions |
-| Managed mail | Fixture tests through `vp run test:mail`; cloud domain changes and external sending blocked locally | SES/MX delivery requires a deployment and is excluded from this local setup |
+| Managed mail | Private fixture mailbox opens in the browser with its body and attachment; native R2 read/delete tests; fixture reseed preserves one message; domain changes and external sending blocked locally | SES/MX delivery requires a deployment and is excluded from this local setup |
 | Calendar/Linear | Independent server-side write controls; Calendar verifies the actual primary calendar account; OAuth configuration present | Real connector authorization and dedicated resources for writes |
 | logo.dev/c15t | Real publishable logo configuration; consent uses offline mode | Focused UI/network acceptance |
 | Domain Connect | Inactive | Deferred until activated |
@@ -60,7 +60,9 @@ The Vite plugin also has built-in tunnel support, including named tunnels. A sta
 
 R2 has native local simulation through Worker bindings, plus optional remote bindings to a real bucket. However, Quieter reads and writes raw mail using the S3 HTTP API. Those requests do not become local merely because a local R2 binding exists. See [R2 Worker API development](https://developers.cloudflare.com/r2/get-started/workers-api/).
 
-Use native local R2 bindings or storage fixtures for local tests. Do not create a remote development bucket for this setup. The current S3 HTTP adapter needs a local storage boundary before it can use native R2 simulation. Public `r2.dev` access is unsuitable for private mail.
+The local raw-message adapter now uses native R2 bindings, with shared persistence under `.wrangler/state`. `vp run dev:fixtures <local-login-email>` creates a private mailbox and MIME attachment fixture in the app. Both Worker configs disable remote R2 bindings, and the local adapter rejects remote object references. Do not create a remote development bucket for this setup. Public `r2.dev` access is unsuitable for private mail.
+
+The fixture exposed a managed-mail attachment gap. Thread responses now include attachment metadata, and downloads authorize the selected mailbox and resolve the original MIME part server-side. A nullable `partIndex` column identifies attachments with duplicate filenames on new inbound messages. Apply its additive migration before deploying the reader; it has only been applied to `quieter_dev` here. Existing attachments use an exact metadata match and refuse ambiguous matches. Messages whose original bytes were never retained, including current managed outbound records, still cannot supply those bytes for download.
 
 Workers AI executes models remotely even during local development. Quieter calls its REST API for the 1024-dimensional `@cf/qwen/qwen3-embedding-0.6b` model and stores embeddings in PostgreSQL. Local binding configuration alone will not intercept those REST calls. Supply a restricted development AI token for real embedding checks and deterministic embedding fixtures for offline tests. Vectorize is not required by the current implementation. See [Cloudflare local development](https://developers.cloudflare.com/workers/local-development/).
 

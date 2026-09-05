@@ -9,7 +9,7 @@ This document records the development architecture and ownership rules. Startup 
 | PlanetScale | Existing `quieter_dev` logical database on the current production cluster, with separate app and migrator roles | Disposable database only for destructive migration tests, preferably the existing CI job |
 | Cloudflare | Native Vite/workerd runtime for the web app and background Workers, with local queues and Durable Objects | Cloud-specific behavior is outside local acceptance |
 | SST | Development-stage Secrets, linked bindings, and native development process management | No cloud mail resources; Lambda Live is not local-only |
-| Managed mail | Local fixture tests for MIME, routing, API validation and feedback | Real SES/MX delivery requires a deployment and is excluded from this setup |
+| Managed mail | Private fixture mailbox, native on-disk R2 storage, MIME ingestion and attachment downloads; fixture tests for routing, API validation and feedback | Real SES/MX delivery requires a deployment and is excluded from this setup |
 | Gmail/Pub/Sub | Shared-account observation mode, own development subscription, one watch owner | Dedicated mailbox or exclusive ownership handoff for provider writes |
 | AI | Separate OpenRouter development key with a small spending cap; development Workers AI credentials for embeddings | Native AI SDK fixtures for repeatable failure/stream tests |
 | Polar | Existing sandbox, with sandbox credentials, products, and local webhook forwarding | Turn billing bypass off for entitlement and checkout acceptance tests |
