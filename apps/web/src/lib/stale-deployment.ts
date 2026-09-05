@@ -10,7 +10,7 @@ const lastReloadKey = "quieter:stale-deployment-reload";
 const reloadCooldownMs = 30_000;
 
 export const installStaleDeploymentRecovery = () => {
-  window.addEventListener("vite:preloadError", (event) => {
+  window.addEventListener("vite:preloadError", () => {
     const lastReloadAt = Number(
       window.sessionStorage.getItem(lastReloadKey) ?? "0"
     );
@@ -18,7 +18,7 @@ export const installStaleDeploymentRecovery = () => {
       return;
     }
 
-    event.preventDefault();
+    // Canceling this event makes Vite resolve the failed import as undefined.
     window.sessionStorage.setItem(lastReloadKey, String(Date.now()));
     window.location.reload();
   });

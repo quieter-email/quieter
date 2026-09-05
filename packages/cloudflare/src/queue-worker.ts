@@ -110,12 +110,12 @@ export const processGmailQueueMessage = async (
       }
     );
     if (result.status === "busy") {
-      throw new Error("Gmail mailbox is already being processed.");
+      return { retry: true };
     }
     if (result.status === "maintained") {
       await broadcastMailboxDetails(env, message.emailAddress);
     }
-    return;
+    return { retry: false };
   }
 
   const result = await (
@@ -129,8 +129,9 @@ export const processGmailQueueMessage = async (
     },
   });
   if (!result.ignored && result.busy === true) {
-    throw new Error("Gmail mailbox is already being processed.");
+    return { retry: true };
   }
+  return { retry: false };
 };
 
 export default withSentryReporting({
@@ -139,7 +140,13 @@ export default withSentryReporting({
       await Promise.all(
         batch.messages.map(async (message) => {
           try {
-            await processGmailQueueMessage(message.body, env);
+            const result = await processGmailQueueMessage(message.body, env);
+            if (result?.retry) {
+              message.retry({
+                delaySeconds: Math.min(15 * 60, 5 * 2 ** message.attempts),
+              });
+              return;
+            }
             message.ack();
           } catch (error) {
             reportWorkerError(error, {

@@ -48,8 +48,7 @@ export const createMailboxActionResources = (
         flags: ["nodejs_compat"],
       },
       environment: {
-        POLAR_ORGANIZATION_ID: context.polarOrganizationId,
-        POLAR_SANDBOX: context.polarSandbox,
+        ...context.billingEnvironment,
         SENTRY_ENVIRONMENT: context.sentryEnvironment.SENTRY_ENVIRONMENT,
       },
       handler: "packages/cloudflare/src/mailbox-action-worker.ts",

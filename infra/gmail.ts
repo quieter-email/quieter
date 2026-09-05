@@ -64,8 +64,7 @@ export const createGmailResources = (
           GMAIL_PUBSUB_SUBSCRIPTION:
             context.gmailPubSubEnvironment.GMAIL_PUBSUB_SUBSCRIPTION,
           GMAIL_PUBSUB_TOPIC: context.gmailPubSubEnvironment.GMAIL_PUBSUB_TOPIC,
-          POLAR_ORGANIZATION_ID: context.polarOrganizationId,
-          POLAR_SANDBOX: context.polarSandbox,
+          ...context.billingEnvironment,
           QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
           SENTRY_ENVIRONMENT: context.sentryEnvironment.SENTRY_ENVIRONMENT,
         },
@@ -102,8 +101,7 @@ export const createGmailResources = (
         },
         environment: {
           GMAIL_PUBSUB_TOPIC: context.gmailPubSubEnvironment.GMAIL_PUBSUB_TOPIC,
-          POLAR_ORGANIZATION_ID: context.polarOrganizationId,
-          POLAR_SANDBOX: context.polarSandbox,
+          ...context.billingEnvironment,
           QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
           SENTRY_ENVIRONMENT: context.sentryEnvironment.SENTRY_ENVIRONMENT,
         },
