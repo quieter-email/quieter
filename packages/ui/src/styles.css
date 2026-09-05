@@ -7,7 +7,7 @@
 @plugin "@tailwindcss/typography";
 @source "./**/*.{ts,tsx}";
 
-@custom-variant dark (&:where(.dark, .dark *, [data-theme="dark"], [data-theme="dark"] *));
+@custom-variant dark (&:where(.dark, .dark *, [data-theme="dark"], [data-theme="dark"] *):not(:where(.theme-light, .theme-light *)));
 
 .typeset-docs {
   --typeset-font-body: var(--font-geist);
@@ -18,7 +18,8 @@
   --typeset-flow: 1.25em;
 }
 
-:root {
+:root,
+.theme-light {
   --font-geist: "Geist Variable", sans-serif;
   --font-lora: "Lora Variable", serif;
   --font-geist-mono: "Geist Mono Variable", monospace;
@@ -97,6 +98,10 @@
   --shadow-elevation-sm: 0 4px 12px -4px oklch(0 0 0 / 0.06);
   --tracking-normal: 0em;
   --spacing: 0.25rem;
+}
+
+.theme-light {
+  color-scheme: light;
 }
 
 .dark,
