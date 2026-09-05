@@ -28,8 +28,11 @@ import {
 const normalizeEmailAddress = (emailAddress: string) =>
   emailAddress.trim().toLowerCase();
 
-const getManagedMailboxRecord = async (mailboxId: string) => {
-  const [record] = await db
+const getManagedMailboxRecord = async (
+  mailboxId: string,
+  database: Pick<typeof db, "select"> = db
+) => {
+  const [record] = await database
     .select({
       accessMode: mailbox.accessMode,
       autoLabelEnabled: mailboxAutomationSettings.autoLabelEnabled,
@@ -64,12 +67,13 @@ const getManagedMailboxRecord = async (mailboxId: string) => {
 
 const assertDivisionBelongsToOrganization = async (
   divisionId: string | null | undefined,
-  organizationId: string
+  organizationId: string,
+  database: Pick<typeof db, "select"> = db
 ) => {
   if (!hasText(divisionId)) {
     return;
   }
-  const [division] = await db
+  const [division] = await database
     .select({ id: organizationDivision.id })
     .from(organizationDivision)
     .where(
@@ -225,15 +229,19 @@ export const createManagedMailbox = async (input: {
 
 const assertManagedMailboxConfigurator = async (
   mailboxId: string,
-  userId: string
+  userId: string,
+  database: Pick<typeof db, "select"> = db
 ) => {
-  const selectedMailbox = await getManagedMailboxRecord(mailboxId);
+  const selectedMailbox = await getManagedMailboxRecord(mailboxId, database);
   try {
-    await getAuthorizedManagedMailbox({
-      mailboxId,
-      requiredRoles: ["manager"],
-      userId,
-    });
+    await getAuthorizedManagedMailbox(
+      {
+        mailboxId,
+        requiredRoles: ["manager"],
+        userId,
+      },
+      database
+    );
     return selectedMailbox;
   } catch (error) {
     if (!(error instanceof ORPCError)) {
@@ -241,10 +249,13 @@ const assertManagedMailboxConfigurator = async (
     }
   }
 
-  await assertOrganizationManager({
-    organizationId: selectedMailbox.organizationId,
-    userId,
-  });
+  await assertOrganizationManager(
+    {
+      organizationId: selectedMailbox.organizationId,
+      userId,
+    },
+    database
+  );
 
   return selectedMailbox;
 };
@@ -461,7 +472,8 @@ export const updateManagedMailbox = async (input: {
       .for("update");
     const selectedMailbox = await assertManagedMailboxConfigurator(
       input.mailboxId,
-      input.userId
+      input.userId,
+      tx
     );
     if (
       selectedMailbox.accessMode === "private" &&
@@ -473,7 +485,8 @@ export const updateManagedMailbox = async (input: {
     }
     await assertDivisionBelongsToOrganization(
       input.divisionId,
-      selectedMailbox.organizationId
+      selectedMailbox.organizationId,
+      tx
     );
     await tx
       .update(mailbox)
@@ -512,7 +525,8 @@ export const setManagedMailboxAccessMode = async (input: {
       .for("update");
     const selectedMailbox = await assertManagedMailboxConfigurator(
       input.mailboxId,
-      input.userId
+      input.userId,
+      tx
     );
     const ownerId =
       input.accessMode === "private"
@@ -538,10 +552,13 @@ export const setManagedMailboxAccessMode = async (input: {
       };
     }
     if (input.accessMode === "private") {
-      await assertOrganizationManager({
-        organizationId: selectedMailbox.organizationId,
-        userId: input.userId,
-      });
+      await assertOrganizationManager(
+        {
+          organizationId: selectedMailbox.organizationId,
+          userId: input.userId,
+        },
+        tx
+      );
       if (!hasText(ownerId)) {
         throw new ORPCError("BAD_REQUEST", {
           message: "Choose a team member who owns this private mailbox.",
@@ -621,7 +638,8 @@ export const setManagedMailboxGrant = async (input: {
       .for("update");
     const selectedMailbox = await assertManagedMailboxConfigurator(
       input.mailboxId,
-      input.userId
+      input.userId,
+      tx
     );
     if (
       selectedMailbox.accessMode === "private" &&
@@ -685,7 +703,8 @@ export const removeManagedMailboxGrant = async (input: {
       .for("update");
     const selectedMailbox = await assertManagedMailboxConfigurator(
       input.mailboxId,
-      input.userId
+      input.userId,
+      tx
     );
     if (
       selectedMailbox.accessMode === "private" &&
@@ -741,7 +760,8 @@ export const setManagedMailboxDivisionGrant = async (input: {
       .for("update");
     const selectedMailbox = await assertManagedMailboxConfigurator(
       input.mailboxId,
-      input.userId
+      input.userId,
+      tx
     );
     if (selectedMailbox.accessMode === "private") {
       throw new ORPCError("BAD_REQUEST", {
@@ -750,7 +770,8 @@ export const setManagedMailboxDivisionGrant = async (input: {
     }
     await assertDivisionBelongsToOrganization(
       input.divisionId,
-      selectedMailbox.organizationId
+      selectedMailbox.organizationId,
+      tx
     );
     const now = new Date();
     await tx
@@ -790,7 +811,8 @@ export const removeManagedMailboxDivisionGrant = async (input: {
       .for("update");
     const selectedMailbox = await assertManagedMailboxConfigurator(
       input.mailboxId,
-      input.userId
+      input.userId,
+      tx
     );
     if (selectedMailbox.accessMode === "private") {
       throw new ORPCError("BAD_REQUEST", {

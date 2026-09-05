@@ -100,12 +100,15 @@ export const assertOwnedGmailMailbox = async (input: {
   return gmailMailbox;
 };
 
-export const getAuthorizedManagedMailbox = async (input: {
-  mailboxId: string;
-  requiredRoles?: MailboxGrantRole[];
-  userId: string;
-}) => {
-  const directRows = await db
+export const getAuthorizedManagedMailbox = async (
+  input: {
+    mailboxId: string;
+    requiredRoles?: MailboxGrantRole[];
+    userId: string;
+  },
+  database: Pick<typeof db, "select"> = db
+) => {
+  const directRows = await database
     .select({
       contentRevision: mailbox.contentRevision,
       displayName: mailbox.displayName,
@@ -133,7 +136,7 @@ export const getAuthorizedManagedMailbox = async (input: {
       )
     );
 
-  const divisionRows = await db
+  const divisionRows = await database
     .select({
       contentRevision: mailbox.contentRevision,
       displayName: mailbox.displayName,
@@ -188,7 +191,7 @@ export const getAuthorizedManagedMailbox = async (input: {
 
   // The owner of a private managed mailbox keeps full access even without a
   // grant row, so ownership can never be accidentally revoked.
-  const [ownedPrivateMailbox] = await db
+  const [ownedPrivateMailbox] = await database
     .select({
       contentRevision: mailbox.contentRevision,
       displayName: mailbox.displayName,
