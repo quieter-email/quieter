@@ -2,6 +2,8 @@
 
 import { cn } from "@quieter/ui/cn";
 import { useEffect, useReducer, useRef, useState } from "react";
+import { effect, frame, init, surface } from "vgpu";
+import type { Effect, Gpu, Surface } from "vgpu";
 
 /**
  * Atmospheric background — soft light fields + curved highlight ridges with
@@ -9,223 +11,223 @@ import { useEffect, useReducer, useRef, useState } from "react";
  * vignette). QUIETER-176. Opt in on branded surfaces; `fadeTop` / `fadeBottom`
  * settle into black or elevated at hard section cuts.
  *
- * Perf: full visual fidelity (DPR ≤ 2). Per-frame globals run once on the CPU;
- * WebGL init + RAF only while near the viewport.
+ * Perf: full visual fidelity (DPR <= 2). Per-frame globals run once on the CPU;
+ * WebGPU init + RAF only while near the viewport.
  */
 
-const MAX_PIXEL_RATIO = 2;
 const REVEAL_MS = 3000;
 /** Start compiling slightly before scroll-in so below-fold sections are ready. */
 const VISIBLE_ROOT_MARGIN = "120px 0px";
-
-const VERTEX_SHADER_SOURCE = `
-attribute vec2 aPosition;
-void main() {
-  gl_Position = vec4(aPosition, 0.0, 1.0);
-}
-`;
 
 /**
  * Spatial field only — mood/drift/phases/angles arrive as uniforms so every
  * pixel does not recompute the same global noise and ridge rotations.
  */
-const FRAGMENT_SHADER_SOURCE = `
-precision highp float;
+const ATMOSPHERIC_SHADER_SOURCE = `
+struct Params {
+  resolution: vec2f,
+  time: f32,
+  intensity: f32,
+  grain: f32,
+  animate: f32,
+  seed: vec3f,
+  fadeTop: f32,
+  fadeBottom: f32,
+  fadeColorTop: vec3f,
+  fadeColorBottom: vec3f,
+  danger: f32,
+  mood: f32,
+  hardness: f32,
+  thick: f32,
+  drift: vec2f,
+  phase: vec3f,
+  layoutOffset: vec2f,
+  ridgeAmp: vec2f,
+  cosA: vec2f,
+  cosB: vec2f,
+  cosC: vec2f,
+  grainTick: f32,
+}
 
-uniform vec2 uResolution;
-uniform float uTime;
-uniform float uIntensity;
-uniform float uGrain;
-uniform float uAnimate;
-uniform vec3 uSeed;
-uniform float uFadeTop;
-uniform float uFadeBottom;
-uniform vec3 uFadeColorTop;
-uniform vec3 uFadeColorBottom;
-uniform float uDanger;
+@group(0) @binding(0) var<uniform> params: Params;
 
-// Per-frame globals (same for every pixel)
-uniform float uMood;
-uniform float uHardness;
-uniform float uThick;
-uniform vec2 uDrift;
-uniform vec3 uPhase;
-uniform vec2 uLayout;
-uniform vec2 uRidgeAmp;
-uniform vec2 uCosA;
-uniform vec2 uCosB;
-uniform vec2 uCosC;
-uniform float uGrainTick;
-
-float hash12(vec2 p) {
-  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+fn hash12(p: vec2f) -> f32 {
+  var p3 = fract(vec3f(p.x, p.y, p.x) * 0.1031);
   p3 += dot(p3, p3.yzx + 33.33);
   return fract((p3.x + p3.y) * p3.z);
 }
 
-float hash13(vec3 p) {
-  p = fract(p * 0.1031);
+fn hash13(input: vec3f) -> f32 {
+  var p = fract(input * 0.1031);
   p += dot(p, p.zyx + 31.32);
   return fract((p.x + p.y) * p.z);
 }
 
-float valueNoise3(vec3 p) {
-  vec3 i = floor(p);
-  vec3 f = fract(p);
+fn valueNoise3(p: vec3f) -> f32 {
+  let i = floor(p);
+  var f = fract(p);
   f = f * f * (3.0 - 2.0 * f);
-  float n000 = hash13(i);
-  float n100 = hash13(i + vec3(1.0, 0.0, 0.0));
-  float n010 = hash13(i + vec3(0.0, 1.0, 0.0));
-  float n110 = hash13(i + vec3(1.0, 1.0, 0.0));
-  float n001 = hash13(i + vec3(0.0, 0.0, 1.0));
-  float n101 = hash13(i + vec3(1.0, 0.0, 1.0));
-  float n011 = hash13(i + vec3(0.0, 1.0, 1.0));
-  float n111 = hash13(i + vec3(1.0, 1.0, 1.0));
-  float nx00 = mix(n000, n100, f.x);
-  float nx10 = mix(n010, n110, f.x);
-  float nx01 = mix(n001, n101, f.x);
-  float nx11 = mix(n011, n111, f.x);
+  let n000 = hash13(i);
+  let n100 = hash13(i + vec3f(1.0, 0.0, 0.0));
+  let n010 = hash13(i + vec3f(0.0, 1.0, 0.0));
+  let n110 = hash13(i + vec3f(1.0, 1.0, 0.0));
+  let n001 = hash13(i + vec3f(0.0, 0.0, 1.0));
+  let n101 = hash13(i + vec3f(1.0, 0.0, 1.0));
+  let n011 = hash13(i + vec3f(0.0, 1.0, 1.0));
+  let n111 = hash13(i + vec3f(1.0, 1.0, 1.0));
+  let nx00 = mix(n000, n100, f.x);
+  let nx10 = mix(n010, n110, f.x);
+  let nx01 = mix(n001, n101, f.x);
+  let nx11 = mix(n011, n111, f.x);
   return mix(mix(nx00, nx10, f.y), mix(nx01, nx11, f.y), f.z);
 }
 
-float softGlow(vec2 p, vec2 center, vec2 radius) {
-  vec2 d = (p - center) / radius;
+fn softGlow(p: vec2f, center: vec2f, radius: vec2f) -> f32 {
+  let d = (p - center) / radius;
   return exp(-dot(d, d));
 }
 
-float ridge(vec2 p, float phase, float thickness, float hard, vec2 cs, float freq) {
-  float ca = cs.x;
-  float sa = cs.y;
-  vec2 r = vec2(ca * p.x + sa * p.y, -sa * p.x + ca * p.y);
-  float fold =
+fn ridge(p: vec2f, phase: f32, thickness: f32, hard: f32, cs: vec2f, freq: f32) -> f32 {
+  let ca = cs.x;
+  let sa = cs.y;
+  let r = vec2f(ca * p.x + sa * p.y, -sa * p.x + ca * p.y);
+  let fold =
     r.y
     - (
       -0.1
-      + 0.3 * sin(r.x * (1.15 * freq) + phase)
-      + 0.12 * sin(r.x * (2.35 * freq) + phase * 1.7)
-      + 0.05 * sin(r.x * (4.2 * freq) - phase * 0.65)
+      + 0.18 * sin(r.x * (0.6 * freq) + phase)
+      + 0.04 * sin(r.x * (1.2 * freq) + phase * 1.7)
     );
-  float soft = exp(-(fold * fold) / max(thickness * thickness, 0.0001));
-  float sharp = mix(0.45, 7.0, clamp(hard, 0.0, 1.0));
+  let soft = exp(-(fold * fold) / max(thickness * thickness, 0.0001));
+  let sharp = mix(0.45, 1.1, clamp(hard, 0.0, 1.0));
   return pow(soft, sharp);
 }
 
-float layerLight(float a, float b) {
+fn layerLight(a: f32, b: f32) -> f32 {
   return a + b * (1.0 - a);
 }
 
-void main() {
-  vec2 uv = gl_FragCoord.xy / uResolution;
-  float aspect = uResolution.x / max(uResolution.y, 1.0);
-  vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
-  float t = uTime * uAnimate * 0.095 + uSeed.x * 40.0;
+@fragment fn fs_main(@location(0) inputUv: vec2f) -> @location(0) vec4f {
+  let uv = vec2f(inputUv.x, 1.0 - inputUv.y);
+  let aspect = params.resolution.x / max(params.resolution.y, 1.0);
+  let p = (uv - 0.5) * vec2f(aspect, 1.0);
+  let t = params.time * params.animate * 0.095 + params.seed.x * 40.0;
 
-  float mood = uMood;
-  float hardness = uHardness;
-  float drift = uDrift.x;
-  float drift2 = uDrift.y;
-  vec2 q = p - uLayout;
+  let mood = params.mood;
+  let hardness = params.hardness;
+  let drift = params.drift.x;
+  let drift2 = params.drift.y;
+  let q = p - params.layoutOffset;
 
-  float ambient =
-    softGlow(q, vec2(-0.25 + drift, -0.06 + drift2), vec2(1.2, 0.8)) * 0.4 +
-    softGlow(q, vec2(0.3 - drift2, 0.08 + drift), vec2(0.95, 0.65)) * 0.28;
+  var ambient =
+    softGlow(q, vec2f(-0.25 + drift, -0.06 + drift2), vec2f(1.2, 0.8)) * 0.4 +
+    softGlow(q, vec2f(0.3 - drift2, 0.08 + drift), vec2f(0.95, 0.65)) * 0.28;
 
-  float blueField =
-    softGlow(q, vec2(0.5 + drift2, 0.0 - drift), vec2(0.55, 0.4)) * 0.75 +
-    softGlow(q, vec2(0.18 - drift, -0.28), vec2(0.36, 0.28)) * 0.45 +
-    softGlow(q, vec2(-0.55 + drift, 0.22), vec2(0.34, 0.26)) * mix(0.2, 0.55, mood) +
-    softGlow(q, vec2(0.72 + drift * 0.4, 0.32), vec2(0.28, 0.22)) * 0.35 +
-    softGlow(q, vec2(-0.2 - drift2, -0.4), vec2(0.4, 0.2)) * 0.3;
-  float blueBreak =
-    valueNoise3(vec3(q * 2.4 + drift, t * 0.14 + uSeed.y)) * 0.55
-    + valueNoise3(vec3(q * 5.2 - drift2, t * 0.1 + uSeed.z + 2.0)) * 0.35;
-  float blueHole = softGlow(q, vec2(-0.05 + drift2, 0.08), vec2(0.55, 0.35)) * 0.4;
+  var blueField =
+    softGlow(q, vec2f(0.5 + drift2, 0.0 - drift), vec2f(0.55, 0.4)) * 0.75 +
+    softGlow(q, vec2f(0.18 - drift, -0.28), vec2f(0.36, 0.28)) * 0.45 +
+    softGlow(q, vec2f(-0.55 + drift, 0.22), vec2f(0.34, 0.26)) * mix(0.2, 0.55, mood) +
+    softGlow(q, vec2f(0.72 + drift * 0.4, 0.32), vec2f(0.28, 0.22)) * 0.35 +
+    softGlow(q, vec2f(-0.2 - drift2, -0.4), vec2f(0.4, 0.2)) * 0.3;
+  let blueBreak =
+    valueNoise3(vec3f(q * 2.4 + drift, t * 0.14 + params.seed.y)) * 0.55
+    + valueNoise3(vec3f(q * 5.2 - drift2, t * 0.1 + params.seed.z + 2.0)) * 0.35;
+  let blueHole = softGlow(q, vec2f(-0.05 + drift2, 0.08), vec2f(0.55, 0.35)) * 0.4;
   blueField *= mix(0.35, 1.15, blueBreak);
   blueField *= 1.0 - blueHole * mix(0.25, 0.55, 1.0 - mood);
   blueField = clamp(blueField, 0.0, 1.0);
 
-  float thick = uThick;
-  float ridgeMain = ridge(
-    q + vec2(drift * 0.5, drift2),
-    uPhase.x,
+  let thick = params.thick;
+  let ridgeMain = ridge(
+    q + vec2f(drift * 0.5, drift2),
+    params.phase.x,
     thick,
     hardness,
-    uCosA,
+    params.cosA,
     0.95
   );
-  float ridgeB = ridge(
-    q * vec2(1.08, 0.94) + vec2(0.32, -0.2),
-    uPhase.y,
+  let ridgeB = ridge(
+    q * vec2f(1.08, 0.94) + vec2f(0.32, -0.2),
+    params.phase.y,
     thick * 1.12,
     hardness,
-    uCosB,
+    params.cosB,
     0.68
   );
-  float ridgeC = ridge(
-    q * vec2(0.9, 1.14) + vec2(-0.36, 0.22),
-    uPhase.z,
+  let ridgeC = ridge(
+    q * vec2f(0.9, 1.14) + vec2f(-0.36, 0.22),
+    params.phase.z,
     thick * 0.88,
     hardness,
-    uCosC,
+    params.cosC,
     1.4
   );
 
-  float bloom =
-    softGlow(q, vec2(-0.34 + drift, -0.1 + drift2), vec2(0.58, 0.24)) * 0.6 +
-    softGlow(q, vec2(-0.02 + drift2, 0.1), vec2(0.36, 0.17)) * 0.4;
+  let lightDrift = vec2f(sin(t * 0.38 + params.seed.y * 6.28), cos(t * 0.29 + params.seed.z * 6.28));
+  let bloom =
+    softGlow(q, vec2f(-0.34, -0.1) + lightDrift * vec2f(0.38, 0.25), vec2f(0.85, 0.5)) * 0.8 +
+    softGlow(q, vec2f(0.3, 0.18) - lightDrift * vec2f(0.32, 0.22), vec2f(0.7, 0.4)) * 0.55;
 
-  float ridgeLayer = layerLight(
-    ridgeMain * 0.75,
-    layerLight(ridgeB * uRidgeAmp.x, ridgeC * uRidgeAmp.y)
+  let ridgeLayer = layerLight(
+    ridgeMain * 0.4,
+    layerLight(ridgeB * params.ridgeAmp.x, ridgeC * params.ridgeAmp.y)
   );
-  float highlight = layerLight(ridgeLayer, bloom * 0.55);
-  highlight = clamp(highlight * uIntensity, 0.0, 1.0);
+  var highlight = layerLight(ridgeLayer, bloom * 0.8);
+  highlight = clamp(highlight * params.intensity, 0.0, 1.0);
 
-  float valley =
-    softGlow(q, vec2(0.1 + drift, -0.02), vec2(0.4, 0.16)) * 0.65 +
-    softGlow(q, vec2(-0.42, 0.2), vec2(0.28, 0.12)) * 0.4;
+  let valley =
+    softGlow(q, vec2f(0.1 + drift, -0.02), vec2f(0.4, 0.16)) * 0.65 +
+    softGlow(q, vec2f(-0.42, 0.2), vec2f(0.28, 0.12)) * 0.4;
   highlight *= 1.0 - valley * mix(0.35, 0.55, mood);
 
-  float textSafe = softGlow(p, vec2(0.0, 0.02), vec2(0.7, 0.36));
+  let textSafe = softGlow(p, vec2f(0.0, 0.02), vec2f(0.7, 0.36));
   highlight *= mix(1.0, 0.3, textSafe * 0.9);
   ambient *= mix(1.0, 0.6, textSafe * 0.65);
 
-  vec3 black = vec3(0.0);
-  vec3 charcoal = mix(vec3(0.045, 0.05, 0.06), vec3(0.052, 0.032, 0.034), uDanger);
-  vec3 navy = mix(vec3(0.07, 0.09, 0.13), vec3(0.14, 0.04, 0.05), uDanger);
-  vec3 dustyBlue = mix(vec3(0.15, 0.19, 0.27), vec3(0.3, 0.08, 0.09), uDanger);
-  vec3 steel = mix(vec3(0.32, 0.36, 0.42), vec3(0.4, 0.26, 0.26), uDanger);
-  vec3 offWhite = mix(vec3(0.8, 0.82, 0.86), vec3(0.84, 0.78, 0.77), uDanger);
+  let black = vec3f(0.0);
+  let charcoal = mix(vec3f(0.045, 0.05, 0.06), vec3f(0.052, 0.032, 0.034), params.danger);
+  let navy = mix(vec3f(0.07, 0.09, 0.13), vec3f(0.14, 0.04, 0.05), params.danger);
+  let dustyBlue = mix(vec3f(0.15, 0.19, 0.27), vec3f(0.3, 0.08, 0.09), params.danger);
+  let steel = mix(vec3f(0.32, 0.36, 0.42), vec3f(0.4, 0.26, 0.26), params.danger);
+  let offWhite = mix(vec3f(0.8, 0.82, 0.86), vec3f(0.84, 0.78, 0.77), params.danger);
 
-  float blueAmt = mix(0.4, 0.85, mood) * mix(1.0, 1.12, uDanger);
-  float blueTone = valueNoise3(vec3(q * 1.6 + uSeed.xy, t * 0.12));
-  vec3 color = mix(black, charcoal, clamp(ambient + 0.3, 0.0, 1.0));
+  let blueAmt = mix(0.4, 0.85, mood) * mix(1.0, 1.12, params.danger);
+  let blueTone = valueNoise3(vec3f(q * 1.6 + params.seed.xy, t * 0.12));
+  var color = mix(black, charcoal, clamp(ambient + 0.3, 0.0, 1.0));
   color = mix(color, navy, clamp(blueField * 0.65 * blueAmt * mix(0.7, 1.15, blueTone), 0.0, 1.0));
   color = mix(
     color,
     dustyBlue,
     clamp(blueField * 0.28 * blueAmt * mix(0.5, 1.2, 1.0 - blueTone), 0.0, 1.0)
   );
-  color = mix(color, steel, smoothstep(0.12, 0.5, highlight) * 0.55);
-  color = mix(color, offWhite, pow(smoothstep(0.32, 0.92, highlight), mix(1.5, 2.3, hardness)));
+  color = mix(color, steel, smoothstep(0.12, 0.58, highlight) * 0.8);
+  color = mix(color, offWhite, pow(smoothstep(0.25, 0.9, highlight), mix(1.2, 1.6, hardness)));
 
-  float side = min(uv.x, 1.0 - uv.x);
-  float fromTop = 1.0 - uv.y;
-  float edgeMask = smoothstep(0.0, 0.1, side) * smoothstep(0.0, 0.14, fromTop);
+  let shadowCenter = vec2f(
+    sin(t * 0.43 + params.seed.z * 6.28) * 0.7,
+    cos(t * 0.34 + params.seed.y * 6.28) * 0.35,
+  );
+  let shadow = softGlow(q, shadowCenter, vec2f(0.65, 0.42));
+  color *= 1.0 - shadow * 0.96;
+
+  let side = min(uv.x, 1.0 - uv.x);
+  let fromTop = 1.0 - uv.y;
+  let edgeMask = smoothstep(0.0, 0.1, side) * smoothstep(0.0, 0.14, fromTop);
   color *= mix(0.88, 1.0, edgeMask);
 
-  if (uFadeBottom > 0.5) {
-    color = mix(uFadeColorBottom, color, smoothstep(0.0, 0.16, uv.y));
+  if (params.fadeBottom > 0.5) {
+    color = mix(params.fadeColorBottom, color, smoothstep(0.0, 0.16, uv.y));
   }
-  if (uFadeTop > 0.5) {
-    color = mix(uFadeColorTop, color, smoothstep(0.0, 0.16, 1.0 - uv.y));
+  if (params.fadeTop > 0.5) {
+    color = mix(params.fadeColorTop, color, smoothstep(0.0, 0.16, 1.0 - uv.y));
   }
 
-  float gn = hash12(gl_FragCoord.xy + uGrainTick * 17.0);
-  float luma = dot(color, vec3(0.299, 0.587, 0.114));
-  color += (gn - 0.5) * mix(0.02, 0.045, smoothstep(0.02, 0.3, luma)) * uGrain;
+  let fragCoord = uv * params.resolution;
+  let gn = hash12(fragCoord + params.grainTick * 17.0);
+  let luma = dot(color, vec3f(0.299, 0.587, 0.114));
+  color += (gn - 0.5) * mix(0.02, 0.045, smoothstep(0.02, 0.3, luma)) * params.grain;
 
-  gl_FragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
+  return vec4f(clamp(color, vec3f(0.0), vec3f(1.0)), 1.0);
 }
 `;
 
@@ -335,11 +337,11 @@ const computeFrameGlobals = (
   const mood = valueNoise3(f32(t * 0.22), sy, f32(t * 0.16));
   const detail = valueNoise3(f32(sz + 1.2), f32(t * 0.2), f32(t * 0.18));
   const hardnessNoise = valueNoise3(f32(t * 0.07 + sx), 2.1, sy);
-  const hardness = mix(0.05, 0.55, smoothstep(0.42, 0.58, hardnessNoise));
+  const hardness = mix(0.02, 0.12, smoothstep(0.42, 0.58, hardnessNoise));
   const drift = f32(f32(valueNoise3(f32(t * 0.4), sy, 1) - 0.5) * 0.18);
   const drift2 = f32(f32(valueNoise3(sz, f32(t * 0.38), 2) - 0.5) * 0.15);
   const thickNoise = valueNoise3(f32(t * 0.08 + sz), 3.7, sy);
-  const thick = f32(mix(0.2, 0.3, thickNoise) * mix(1, 0.9, hardness));
+  const thick = f32(mix(0.4, 0.65, thickNoise) * mix(1, 0.9, hardness));
 
   return {
     detail,
@@ -353,110 +355,35 @@ const computeFrameGlobals = (
     phaseA: f32(f32(sx * 6.28318) + f32(t * 1.42)),
     phaseB: f32(f32(sy * 6.28318) + f32(t * 0.58) + 2.4),
     phaseC: f32(f32(sz * 6.28318) - f32(t * 1.95) - 1.1),
-    ridgeAmpB: mix(0.12, 0.42, detail),
-    ridgeAmpC: mix(0.03, 0.32, detail),
+    ridgeAmpB: mix(0.02, 0.1, detail),
+    ridgeAmpC: mix(0, 0.04, detail),
     thick,
   };
 };
 
-const compileShader = (
-  gl: WebGLRenderingContext,
-  type: number,
-  source: string
-) => {
-  const shader = gl.createShader(type);
-  if (!shader) {
-    return null;
-  }
-
-  gl.shaderSource(shader, source);
-  gl.compileShader(shader);
-
-  if (gl.getShaderParameter(shader, gl.COMPILE_STATUS) !== true) {
-    gl.deleteShader(shader);
-    return null;
-  }
-
-  return shader;
-};
-
-const ATMOSPHERIC_UNIFORM_NAMES = [
-  "animate",
-  "cosA",
-  "cosB",
-  "cosC",
-  "danger",
-  "drift",
-  "fadeBottom",
-  "fadeColorBottom",
-  "fadeColorTop",
-  "fadeTop",
-  "grain",
-  "grainTick",
-  "hardness",
-  "intensity",
-  "layout",
-  "mood",
-  "phase",
-  "resolution",
-  "ridgeAmp",
-  "seed",
-  "thick",
-  "time",
-] as const;
-type AtmosphericUniformName = (typeof ATMOSPHERIC_UNIFORM_NAMES)[number];
-type AtmosphericGlLocations = {
-  position: number;
-} & Record<AtmosphericUniformName, WebGLUniformLocation | null>;
-type ReadyAtmosphericGlLocations = {
-  position: number;
-} & Record<AtmosphericUniformName, WebGLUniformLocation>;
-
-const getAtmosphericGlLocations = (
-  gl: WebGLRenderingContext,
-  program: WebGLProgram
-): AtmosphericGlLocations => ({
-  animate: gl.getUniformLocation(program, "uAnimate"),
-  cosA: gl.getUniformLocation(program, "uCosA"),
-  cosB: gl.getUniformLocation(program, "uCosB"),
-  cosC: gl.getUniformLocation(program, "uCosC"),
-  danger: gl.getUniformLocation(program, "uDanger"),
-  drift: gl.getUniformLocation(program, "uDrift"),
-  fadeBottom: gl.getUniformLocation(program, "uFadeBottom"),
-  fadeColorBottom: gl.getUniformLocation(program, "uFadeColorBottom"),
-  fadeColorTop: gl.getUniformLocation(program, "uFadeColorTop"),
-  fadeTop: gl.getUniformLocation(program, "uFadeTop"),
-  grain: gl.getUniformLocation(program, "uGrain"),
-  grainTick: gl.getUniformLocation(program, "uGrainTick"),
-  hardness: gl.getUniformLocation(program, "uHardness"),
-  intensity: gl.getUniformLocation(program, "uIntensity"),
-  layout: gl.getUniformLocation(program, "uLayout"),
-  mood: gl.getUniformLocation(program, "uMood"),
-  phase: gl.getUniformLocation(program, "uPhase"),
-  position: gl.getAttribLocation(program, "aPosition"),
-  resolution: gl.getUniformLocation(program, "uResolution"),
-  ridgeAmp: gl.getUniformLocation(program, "uRidgeAmp"),
-  seed: gl.getUniformLocation(program, "uSeed"),
-  thick: gl.getUniformLocation(program, "uThick"),
-  time: gl.getUniformLocation(program, "uTime"),
-});
-
-const hasAtmosphericGlLocations = (
-  locations: AtmosphericGlLocations
-): locations is ReadyAtmosphericGlLocations =>
-  locations.position !== -1 &&
-  ATMOSPHERIC_UNIFORM_NAMES.every((name) => locations[name] !== null);
-
-type UniformSet = {
-  resolution: WebGLUniformLocation;
-  time: WebGLUniformLocation;
-  mood: WebGLUniformLocation;
-  hardness: WebGLUniformLocation;
-  thick: WebGLUniformLocation;
-  drift: WebGLUniformLocation;
-  phase: WebGLUniformLocation;
-  ridgeAmp: WebGLUniformLocation;
-  grainTick: WebGLUniformLocation;
+type AtmosphericShaderParams = {
+  resolution: [number, number];
+  time: number;
+  intensity: number;
+  grain: number;
+  animate: number;
+  seed: [number, number, number];
+  fadeTop: number;
+  fadeBottom: number;
+  fadeColorTop: readonly [number, number, number];
+  fadeColorBottom: readonly [number, number, number];
+  danger: number;
+  mood: number;
+  hardness: number;
+  thick: number;
+  drift: [number, number];
+  phase: [number, number, number];
+  layoutOffset: [number, number];
+  ridgeAmp: [number, number];
+  cosA: [number, number];
+  cosB: [number, number];
+  cosC: [number, number];
+  grainTick: number;
 };
 
 type AtmosphericSession = {
@@ -499,14 +426,17 @@ export const AtmosphericBackground = ({
     let revealed = false;
     let visible = false;
     let raf = 0;
+    let initializing = false;
     let resizeObserver: ResizeObserver | null = null;
-    let gl: WebGLRenderingContext | null = null;
-    let program: WebGLProgram | null = null;
-    let positionBuffer: WebGLBuffer | null = null;
-    let width = 0;
-    let height = 0;
-    let uniforms: UniformSet | null = null;
-    let shouldAnimate = false;
+    let gpuContext: Gpu | null = null;
+    let canvasSurface: Surface | null = null;
+    let atmosphericEffect: Effect | null = null;
+    let shaderParams: AtmosphericShaderParams | null = null;
+    let unsubscribeResize: (() => void) | null = null;
+    const prefersReducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
+    const shouldAnimate = animate && !prefersReducedMotion;
     const [sx, sy, sz] = session.seed;
 
     const layoutX = f32(f32(sx - 0.5) * 0.55);
@@ -540,48 +470,25 @@ export const AtmosphericBackground = ({
     };
 
     const draw = (timeSeconds: number) => {
-      if (!gl || !uniforms) {
+      if (!(gpuContext && canvasSurface && atmosphericEffect && shaderParams)) {
         return;
       }
       const g = computeFrameGlobals(timeSeconds, shouldAnimate, session.seed);
-      gl.uniform1f(uniforms.time, timeSeconds);
-      gl.uniform1f(uniforms.mood, g.mood);
-      gl.uniform1f(uniforms.hardness, g.hardness);
-      gl.uniform1f(uniforms.thick, g.thick);
-      gl.uniform2f(uniforms.drift, g.drift, g.drift2);
-      gl.uniform3f(uniforms.phase, g.phaseA, g.phaseB, g.phaseC);
-      gl.uniform2f(uniforms.ridgeAmp, g.ridgeAmpB, g.ridgeAmpC);
-      gl.uniform1f(uniforms.grainTick, g.grainTick);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-    };
-
-    const resize = () => {
-      if (!gl || !uniforms || cancelled) {
-        return;
-      }
-      const rect = canvas.getBoundingClientRect();
-      const pixelRatio = Math.min(
-        window.devicePixelRatio || 1,
-        MAX_PIXEL_RATIO
-      );
-      const nextWidth = Math.max(1, Math.ceil(rect.width * pixelRatio));
-      const nextHeight = Math.max(1, Math.ceil(rect.height * pixelRatio));
-
-      if (nextWidth !== width || nextHeight !== height) {
-        width = nextWidth;
-        height = nextHeight;
-        canvas.width = width;
-        canvas.height = height;
-        gl.viewport(0, 0, width, height);
-        gl.uniform2f(uniforms.resolution, width, height);
-      }
-
-      draw(
-        shouldAnimate
-          ? (performance.now() - session.startedAt) * 0.001 + session.timeOffset
-          : session.timeOffset
-      );
-      reveal();
+      shaderParams.time = timeSeconds;
+      shaderParams.mood = g.mood;
+      shaderParams.hardness = g.hardness;
+      shaderParams.thick = g.thick;
+      shaderParams.drift = [g.drift, g.drift2];
+      shaderParams.phase = [g.phaseA, g.phaseB, g.phaseC];
+      shaderParams.ridgeAmp = [g.ridgeAmpB, g.ridgeAmpC];
+      shaderParams.grainTick = g.grainTick;
+      const currentGpu = gpuContext;
+      const currentSurface = canvasSurface;
+      const currentEffect = atmosphericEffect;
+      currentEffect.set({ params: shaderParams });
+      frame(currentGpu, (currentFrame) => {
+        currentFrame.pass(currentSurface, currentEffect);
+      });
     };
 
     const render = (now: number) => {
@@ -593,7 +500,14 @@ export const AtmosphericBackground = ({
     };
 
     const startLoop = () => {
-      if (!shouldAnimate || raf !== 0 || !visible || cancelled) {
+      if (
+        !shouldAnimate ||
+        raf !== 0 ||
+        !visible ||
+        document.hidden ||
+        cancelled ||
+        !atmosphericEffect
+      ) {
         return;
       }
       raf = requestAnimationFrame(render);
@@ -607,179 +521,126 @@ export const AtmosphericBackground = ({
       startLoop();
     };
 
-    const teardownGl = () => {
+    const teardownGpu = () => {
       stopLoop();
       resizeObserver?.disconnect();
       resizeObserver = null;
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      if (gl && positionBuffer) {
-        gl.deleteBuffer(positionBuffer);
-      }
-      if (gl && program) {
-        gl.deleteProgram(program);
-      }
-      positionBuffer = null;
-      program = null;
-      uniforms = null;
-      gl = null;
-      width = 0;
-      height = 0;
+      unsubscribeResize?.();
+      unsubscribeResize = null;
+      canvasSurface?.dispose();
+      gpuContext?.dispose();
+      atmosphericEffect = null;
+      canvasSurface = null;
+      shaderParams = null;
+      gpuContext = null;
     };
 
-    const initGl = () => {
-      if (cancelled || gl) {
+    const initGpu = async () => {
+      if (cancelled || gpuContext || initializing) {
         return;
       }
-
-      const context = canvas.getContext("webgl", {
-        alpha: false,
-        antialias: false,
-        depth: false,
-        desynchronized: true,
-        powerPreference: "high-performance",
-        premultipliedAlpha: false,
-        preserveDrawingBuffer: false,
-        stencil: false,
-      });
-      if (!context) {
-        return;
-      }
-      gl = context;
-
-      const vertexShader = compileShader(
-        gl,
-        gl.VERTEX_SHADER,
-        VERTEX_SHADER_SOURCE
-      );
-      const fragmentShader = compileShader(
-        gl,
-        gl.FRAGMENT_SHADER,
-        FRAGMENT_SHADER_SOURCE
-      );
-      if (vertexShader === null || fragmentShader === null) {
-        gl = null;
-        return;
-      }
-
-      const nextProgram = gl.createProgram();
-      if (nextProgram === null) {
-        gl.deleteShader(vertexShader);
-        gl.deleteShader(fragmentShader);
-        gl = null;
-        return;
-      }
-
-      gl.attachShader(nextProgram, vertexShader);
-      gl.attachShader(nextProgram, fragmentShader);
-      gl.linkProgram(nextProgram);
-      gl.deleteShader(vertexShader);
-      gl.deleteShader(fragmentShader);
-
-      if (gl.getProgramParameter(nextProgram, gl.LINK_STATUS) !== true) {
-        gl.deleteProgram(nextProgram);
-        gl = null;
-        return;
-      }
-
-      const nextBuffer = gl.createBuffer();
-      if (nextBuffer === null) {
-        gl.deleteProgram(nextProgram);
-        gl = null;
-        return;
-      }
-
-      program = nextProgram;
-      positionBuffer = nextBuffer;
-      // react-doctor-disable-next-line react-hooks-js/hooks -- WebGL's useProgram method is not a React hook.
-      gl.useProgram(program);
-      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-      gl.bufferData(
-        gl.ARRAY_BUFFER,
-        new Float32Array([-1, -1, 3, -1, -1, 3]),
-        gl.STATIC_DRAW
-      );
-
-      const locations = getAtmosphericGlLocations(gl, program);
-      if (!hasAtmosphericGlLocations(locations)) {
-        teardownGl();
-        return;
-      }
-
-      const {
-        animate: animateLocation,
-        cosA: cosALocation,
-        cosB: cosBLocation,
-        cosC: cosCLocation,
-        danger: dangerLocation,
-        drift: driftLocation,
-        fadeBottom: fadeBottomLocation,
-        fadeColorBottom: fadeColorBottomLocation,
-        fadeColorTop: fadeColorTopLocation,
-        fadeTop: fadeTopLocation,
-        grain: grainLocation,
-        grainTick: grainTickLocation,
-        hardness: hardnessLocation,
-        intensity: intensityLocation,
-        layout: layoutLocation,
-        mood: moodLocation,
-        phase: phaseLocation,
-        position: positionLocation,
-        resolution: resolutionLocation,
-        ridgeAmp: ridgeAmpLocation,
-        seed: seedLocation,
-        thick: thickLocation,
-        time: timeLocation,
-      } = locations;
-
-      uniforms = {
-        drift: driftLocation,
-        grainTick: grainTickLocation,
-        hardness: hardnessLocation,
-        mood: moodLocation,
-        phase: phaseLocation,
-        resolution: resolutionLocation,
-        ridgeAmp: ridgeAmpLocation,
-        thick: thickLocation,
-        time: timeLocation,
-      };
-
-      gl.enableVertexAttribArray(positionLocation);
-      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
-      gl.disable(gl.BLEND);
+      initializing = true;
       const [br, bg, bb] = fadeTargetRgb(fadeBottom);
       const [tr, tg, tb] = fadeTargetRgb(fadeTop);
-      gl.clearColor(br, bg, bb, 1);
-      gl.uniform1f(intensityLocation, intensity);
-      gl.uniform1f(grainLocation, grain);
-      gl.uniform3f(seedLocation, sx, sy, sz);
-      gl.uniform1f(fadeTopLocation, fadeTop ? 1 : 0);
-      gl.uniform1f(fadeBottomLocation, fadeBottom ? 1 : 0);
-      gl.uniform3f(fadeColorTopLocation, tr, tg, tb);
-      gl.uniform3f(fadeColorBottomLocation, br, bg, bb);
-      gl.uniform2f(layoutLocation, layoutX, layoutY);
-      gl.uniform2f(cosALocation, cosA[0], cosA[1]);
-      gl.uniform2f(cosBLocation, cosB[0], cosB[1]);
-      gl.uniform2f(cosCLocation, cosC[0], cosC[1]);
-      gl.uniform1f(dangerLocation, danger === true ? 1 : 0);
+      try {
+        const nextGpu = await init({ powerPreference: "high-performance" });
+        if (cancelled) {
+          nextGpu.dispose();
+          return;
+        }
 
-      const prefersReducedMotion = window.matchMedia(
-        "(prefers-reduced-motion: reduce)"
-      ).matches;
-      shouldAnimate = animate && !prefersReducedMotion;
-      gl.uniform1f(animateLocation, shouldAnimate ? 1 : 0);
+        gpuContext = nextGpu;
+        const nextSurface = surface(nextGpu, canvas, {
+          dpr: [1, 2],
+          label: "atmospheric-background",
+        });
+        canvasSurface = nextSurface;
+        const initialGlobals = computeFrameGlobals(
+          session.timeOffset,
+          shouldAnimate,
+          session.seed
+        );
+        shaderParams = {
+          animate: shouldAnimate ? 1 : 0,
+          cosA,
+          cosB,
+          cosC,
+          danger: danger === true ? 1 : 0,
+          drift: [initialGlobals.drift, initialGlobals.drift2],
+          fadeBottom: fadeBottom ? 1 : 0,
+          fadeColorBottom: [br, bg, bb],
+          fadeColorTop: [tr, tg, tb],
+          fadeTop: fadeTop ? 1 : 0,
+          grain,
+          grainTick: initialGlobals.grainTick,
+          hardness: initialGlobals.hardness,
+          intensity,
+          layoutOffset: [layoutX, layoutY],
+          mood: initialGlobals.mood,
+          phase: [
+            initialGlobals.phaseA,
+            initialGlobals.phaseB,
+            initialGlobals.phaseC,
+          ],
+          resolution: [nextSurface.size[0], nextSurface.size[1]],
+          ridgeAmp: [initialGlobals.ridgeAmpB, initialGlobals.ridgeAmpC],
+          seed: session.seed,
+          thick: initialGlobals.thick,
+          time: session.timeOffset,
+        };
+        atmosphericEffect = effect(nextGpu, ATMOSPHERIC_SHADER_SOURCE, {
+          label: "atmospheric-background",
+          set: { params: shaderParams },
+        });
+        let compilation: ReturnType<Effect["compile"]> | undefined;
+        frame(nextGpu, () => {
+          compilation = atmosphericEffect?.compile(nextSurface);
+        });
+        if (!compilation) {
+          throw new Error("Failed to start atmospheric pipeline compilation");
+        }
+        await compilation;
+        if (cancelled) {
+          return;
+        }
 
-      resizeObserver = new ResizeObserver(resize);
-      resizeObserver.observe(canvas);
-      document.addEventListener("visibilitychange", handleVisibilityChange);
-      resize();
-      startLoop();
+        unsubscribeResize = nextSurface.onResize(({ width, height }) => {
+          if (shaderParams) {
+            shaderParams.resolution = [width, height];
+          }
+        });
+        resizeObserver = new ResizeObserver(() => {
+          draw(
+            shouldAnimate
+              ? (performance.now() - session.startedAt) * 0.001 +
+                  session.timeOffset
+              : session.timeOffset
+          );
+          reveal();
+        });
+        resizeObserver.observe(canvas);
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        draw(
+          shouldAnimate
+            ? (performance.now() - session.startedAt) * 0.001 +
+                session.timeOffset
+            : session.timeOffset
+        );
+        reveal();
+        startLoop();
+      } catch {
+        teardownGpu();
+      } finally {
+        initializing = false;
+      }
     };
 
     const intersection = new IntersectionObserver(
       ([entry]) => {
         visible = entry?.isIntersecting ?? false;
         if (visible) {
-          initGl();
+          void initGpu();
           startLoop();
           return;
         }
@@ -792,7 +653,7 @@ export const AtmosphericBackground = ({
     return () => {
       cancelled = true;
       intersection.disconnect();
-      teardownGl();
+      teardownGpu();
     };
   }, [animate, danger, fadeBottom, fadeTop, grain, intensity, session]);
 

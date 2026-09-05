@@ -1,16 +1,26 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import {
+  compute,
+  draw,
+  frame,
+  init,
+  pingPongStorage,
+  storage,
+  surface,
+} from "vgpu";
+import type { Surface } from "vgpu";
 
 const dotGap = 4;
 const maxCanvasPixelCount = 2_200_000;
 const maxDevicePixelRatio = 1.5;
 const maxWaveCount = 24;
 const maxImpulseCount = maxWaveCount;
-const particleStaticStride = 5;
-const particleStaticStrideBytes =
-  particleStaticStride * Float32Array.BYTES_PER_ELEMENT;
+const maxParticleCount = 108_000;
+const particleStride = 6;
 const targetParticleGridCells = 54_000;
+const workgroupSize = 128;
 
 type Point = {
   x: number;
@@ -53,275 +63,283 @@ type Colors = {
   primary: Rgb;
 };
 
-type GpuBufferSet = {
-  active: WebGLBuffer;
-  energy: WebGLBuffer;
-  position: WebGLBuffer;
-  velocity: WebGLBuffer;
-};
+const updateShaderSource = `
+const MAX_WAVES = ${maxWaveCount}u;
+const MAX_IMPULSES = ${maxImpulseCount}u;
+const PI2 = 6.283185307179586;
 
-const renderVertexShaderSource = `#version 300 es
-in vec2 aPosition;
-in float aRadius;
-in float aOpacity;
-in float aVibrance;
-in float aEnergy;
-
-out float vOpacity;
-out float vPointSize;
-out float vRadius;
-out float vVibrance;
-out float vEnergy;
-
-uniform vec2 uResolution;
-
-void main() {
-  float energy = clamp(aEnergy, 0.0, 1.0);
-  float shimmer = smoothstep(0.72, 1.0, aVibrance) * 0.12;
-  float radius = aRadius + energy * 0.12 + shimmer;
-
-  vOpacity = aOpacity;
-  vVibrance = aVibrance;
-  vEnergy = energy;
-  vRadius = radius;
-  vPointSize = (radius + 0.72) * 2.0;
-
-  gl_PointSize = vPointSize;
-  gl_Position = vec4(aPosition.x / uResolution.x * 2.0 - 1.0, 1.0 - aPosition.y / uResolution.y * 2.0, 0.0, 1.0);
+struct ParticleStatic {
+  base: vec2f,
+  radius: f32,
+  opacity: f32,
+  vibrance: f32,
+  padding: f32,
 }
-`;
 
-const fragmentShaderSource = `#version 300 es
-precision highp float;
-
-in float vOpacity;
-in float vPointSize;
-in float vRadius;
-in float vVibrance;
-in float vEnergy;
-
-out vec4 outColor;
-
-uniform vec3 uColor;
-uniform float uTime;
-
-void main() {
-  float distanceValue = length((gl_PointCoord - 0.5) * vPointSize);
-  float core = 1.0 - smoothstep(max(vRadius - 0.72, 0.0), vRadius + 0.78, distanceValue);
-  float shimmerSeed = smoothstep(0.68, 1.0, vVibrance);
-  float shimmer = (sin(uTime * mix(1.2, 2.8, vVibrance) + vVibrance * 41.0) * 0.5 + 0.5) * shimmerSeed;
-  float alpha = min(core * vOpacity * (0.94 + shimmer * 0.1 + vEnergy * 0.08), 1.0);
-
-  outColor = vec4(uColor, alpha);
+struct ParticleState {
+  position: vec2f,
+  velocity: vec2f,
+  energy: f32,
+  activeFlag: f32,
 }
-`;
 
-const updateVertexShaderSource = `#version 300 es
-#define MAX_WAVES ${maxWaveCount}
-#define MAX_IMPULSES ${maxImpulseCount}
+struct Wave {
+  center: vec2f,
+  force: f32,
+  envelope: f32,
+  frontRadius: f32,
+  width: f32,
+  innerRadiusSquared: f32,
+  outerRadiusSquared: f32,
+  activationInnerRadiusSquared: f32,
+  activationOuterRadiusSquared: f32,
+}
 
-in vec2 aBase;
-in vec2 aPosition;
-in vec2 aVelocity;
-in float aVibrance;
-in float aEnergy;
-in float aActive;
+struct Impulse {
+  center: vec2f,
+  radius: f32,
+  force: f32,
+}
 
-out vec2 vNextPosition;
-out vec2 vNextVelocity;
-out float vNextEnergy;
-out float vNextActive;
+struct SimParams {
+  step: f32,
+  spring: f32,
+  damping: f32,
+  diagonal: f32,
+  cursor: vec2f,
+  cursorVelocity: vec2f,
+  cursorRadius: f32,
+  cursorRadiusSquared: f32,
+  cursorActivationRadiusSquared: f32,
+  cursorPush: f32,
+  cursorSweep: f32,
+  cursorStrength: f32,
+  particleCount: u32,
+  waveCount: u32,
+  impulseCount: u32,
+}
 
-uniform float uStep;
-uniform float uSpring;
-uniform float uDamping;
-uniform float uDiagonal;
+@group(0) @binding(0) var<storage, read> particleStatics: array<ParticleStatic>;
+@group(0) @binding(1) var<storage, read> sourceStates: array<ParticleState>;
+@group(0) @binding(2) var<storage, read_write> destinationStates: array<ParticleState>;
+@group(0) @binding(3) var<storage, read> waves: array<Wave>;
+@group(0) @binding(4) var<storage, read> impulses: array<Impulse>;
+@group(0) @binding(5) var<uniform> params: SimParams;
 
-uniform float uCursorActive;
-uniform vec2 uCursor;
-uniform vec2 uCursorVelocity;
-uniform float uCursorRadius;
-uniform float uCursorRadiusSquared;
-uniform float uCursorActivationRadiusSquared;
-uniform float uCursorPush;
-uniform float uCursorSweep;
-uniform float uCursorStrength;
-
-uniform int uWaveCount;
-uniform vec2 uWaveCenter[MAX_WAVES];
-uniform float uWaveForce[MAX_WAVES];
-uniform float uWaveEnvelope[MAX_WAVES];
-uniform float uWaveFrontRadius[MAX_WAVES];
-uniform float uWaveWidth[MAX_WAVES];
-uniform float uWaveInnerRadiusSquared[MAX_WAVES];
-uniform float uWaveOuterRadiusSquared[MAX_WAVES];
-uniform float uWaveActivationInnerRadiusSquared[MAX_WAVES];
-uniform float uWaveActivationOuterRadiusSquared[MAX_WAVES];
-
-uniform int uImpulseCount;
-uniform vec2 uImpulseCenter[MAX_IMPULSES];
-uniform float uImpulseRadius[MAX_IMPULSES];
-uniform float uImpulseRadiusSquared[MAX_IMPULSES];
-uniform float uImpulseForce[MAX_IMPULSES];
-
-const float pi2 = 6.283185307179586;
-
-vec2 directionFor(vec2 offset, float distanceValue, float vibrance) {
+fn directionFor(offset: vec2f, distanceValue: f32, vibrance: f32) -> vec2f {
   if (distanceValue > 0.001) {
     return offset / distanceValue;
   }
-
-  return vec2(cos(vibrance * pi2), sin(vibrance * pi2));
+  return vec2f(cos(vibrance * PI2), sin(vibrance * PI2));
 }
 
-void main() {
-  gl_Position = vec4(0.0);
-  gl_PointSize = 1.0;
+@compute @workgroup_size(${workgroupSize})
+fn cs_main(@builtin(global_invocation_id) id: vec3u) {
+  let index = id.x;
+  if (index >= params.particleCount) {
+    return;
+  }
 
-  vec2 position = aPosition;
-  vec2 velocity = aVelocity;
-  float energy = aEnergy;
-  float nextActive = aActive;
+  let particle = particleStatics[index];
+  let source = sourceStates[index];
+  var position = source.position;
+  var velocity = source.velocity;
+  var energy = source.energy;
+  var nextActive = source.activeFlag;
 
-  if (uCursorActive > 0.5) {
-    vec2 cursorActivationOffset = aBase - uCursor;
-    float cursorActivationDistanceSquared = dot(cursorActivationOffset, cursorActivationOffset);
-
-    if (cursorActivationDistanceSquared <= uCursorActivationRadiusSquared) {
+  if (params.cursorStrength > 0.002) {
+    let offset = particle.base - params.cursor;
+    if (dot(offset, offset) <= params.cursorActivationRadiusSquared) {
       nextActive = 1.0;
     }
   }
 
-  for (int index = 0; index < MAX_WAVES; index += 1) {
-    if (index >= uWaveCount) break;
-
-    vec2 waveActivationOffset = aBase - uWaveCenter[index];
-    float waveActivationDistanceSquared = dot(waveActivationOffset, waveActivationOffset);
-
+  for (var waveIndex = 0u; waveIndex < MAX_WAVES; waveIndex += 1u) {
+    if (waveIndex >= params.waveCount) {
+      break;
+    }
+    let wave = waves[waveIndex];
+    let offset = particle.base - wave.center;
+    let distanceSquared = dot(offset, offset);
     if (
-      waveActivationDistanceSquared >= uWaveActivationInnerRadiusSquared[index] &&
-      waveActivationDistanceSquared <= uWaveActivationOuterRadiusSquared[index]
+      distanceSquared >= wave.activationInnerRadiusSquared &&
+      distanceSquared <= wave.activationOuterRadiusSquared
     ) {
       nextActive = 1.0;
     }
   }
 
-  for (int index = 0; index < MAX_IMPULSES; index += 1) {
-    if (index >= uImpulseCount) break;
-
-    vec2 impulseOffset = aBase - uImpulseCenter[index];
-    float impulseDistanceSquared = dot(impulseOffset, impulseOffset);
-
-    if (impulseDistanceSquared > uImpulseRadiusSquared[index]) continue;
-
-    float impulseDistance = sqrt(impulseDistanceSquared);
-    vec2 impulseDirection = directionFor(impulseOffset, impulseDistance, aVibrance);
-    float normalizedDistance = impulseDistance / uImpulseRadius[index];
-    float falloff = exp(-(normalizedDistance * normalizedDistance) * 1.85);
-    float angularNoise = (aVibrance - 0.5) * uImpulseForce[index] * falloff * 0.32;
-    float impulse = uImpulseForce[index] * falloff;
-
+  for (var impulseIndex = 0u; impulseIndex < MAX_IMPULSES; impulseIndex += 1u) {
+    if (impulseIndex >= params.impulseCount) {
+      break;
+    }
+    let impulseData = impulses[impulseIndex];
+    let offset = particle.base - impulseData.center;
+    let distanceSquared = dot(offset, offset);
+    if (distanceSquared > impulseData.radius * impulseData.radius) {
+      continue;
+    }
+    let distanceValue = sqrt(distanceSquared);
+    let direction = directionFor(offset, distanceValue, particle.vibrance);
+    let normalizedDistance = distanceValue / impulseData.radius;
+    let falloff = exp(-(normalizedDistance * normalizedDistance) * 1.85);
+    let angularNoise = (particle.vibrance - 0.5) * impulseData.force * falloff * 0.32;
+    let impulseForce = impulseData.force * falloff;
     nextActive = 1.0;
-    velocity += vec2(
-      impulseDirection.x * impulse - impulseDirection.y * angularNoise,
-      impulseDirection.y * impulse + impulseDirection.x * angularNoise
+    velocity += vec2f(
+      direction.x * impulseForce - direction.y * angularNoise,
+      direction.y * impulseForce + direction.x * angularNoise
     );
-    position += impulseDirection * impulse * 0.34;
+    position += direction * impulseForce * 0.34;
     energy += falloff * 0.48;
   }
 
   if (nextActive < 0.5) {
-    vNextPosition = aBase;
-    vNextVelocity = vec2(0.0);
-    vNextEnergy = 0.0;
-    vNextActive = 0.0;
+    destinationStates[index] = ParticleState(particle.base, vec2f(0.0), 0.0, 0.0);
     return;
   }
 
-  vec2 restore = aBase - position;
-  vec2 acceleration = restore * uSpring;
-  float localEnergy = 0.0;
+  let restore = particle.base - position;
+  var acceleration = restore * params.spring;
+  var localEnergy = 0.0;
 
-  if (uCursorActive > 0.5) {
-    vec2 cursorOffset = position - uCursor;
-    float cursorDistanceSquared = dot(cursorOffset, cursorOffset);
-
-    if (cursorDistanceSquared <= uCursorRadiusSquared) {
-      float cursorDistance = sqrt(cursorDistanceSquared);
-      vec2 cursorDirection = directionFor(cursorOffset, cursorDistance, aVibrance);
-      float normalizedDistance = cursorDistance / uCursorRadius;
-      float pressure = exp(-normalizedDistance * normalizedDistance * 1.38) * uCursorStrength;
-      float cursorSpeed = length(uCursorVelocity);
-      float speedPressure = clamp(cursorSpeed / uCursorRadius, 0.0, 1.45);
-      float wake = exp(-normalizedDistance * normalizedDistance * 0.62) * uCursorStrength * speedPressure;
-      float swirl = (aVibrance - 0.5) * pressure * uCursorPush * (0.26 + speedPressure * 0.16);
-
-      acceleration += cursorDirection * pressure * uCursorPush * (1.0 + speedPressure * 0.34);
-      acceleration += vec2(
-        uCursorVelocity.x * wake * uCursorSweep - cursorDirection.y * swirl,
-        uCursorVelocity.y * wake * uCursorSweep + cursorDirection.x * swirl
+  if (params.cursorStrength > 0.002) {
+    let offset = position - params.cursor;
+    let distanceSquared = dot(offset, offset);
+    if (distanceSquared <= params.cursorRadiusSquared) {
+      let distanceValue = sqrt(distanceSquared);
+      let direction = directionFor(offset, distanceValue, particle.vibrance);
+      let normalizedDistance = distanceValue / params.cursorRadius;
+      let pressure = exp(-normalizedDistance * normalizedDistance * 1.38) * params.cursorStrength;
+      let cursorSpeed = length(params.cursorVelocity);
+      let speedPressure = clamp(cursorSpeed / params.cursorRadius, 0.0, 1.45);
+      let wake = exp(-normalizedDistance * normalizedDistance * 0.62) * params.cursorStrength * speedPressure;
+      let swirl = (particle.vibrance - 0.5) * pressure * params.cursorPush * (0.26 + speedPressure * 0.16);
+      acceleration += direction * pressure * params.cursorPush * (1.0 + speedPressure * 0.34);
+      acceleration += vec2f(
+        params.cursorVelocity.x * wake * params.cursorSweep - direction.y * swirl,
+        params.cursorVelocity.y * wake * params.cursorSweep + direction.x * swirl
       );
       localEnergy += pressure * (0.18 + speedPressure * 0.14);
     }
   }
 
-  for (int index = 0; index < MAX_WAVES; index += 1) {
-    if (index >= uWaveCount) break;
-
-    vec2 waveOffset = position - uWaveCenter[index];
-    float waveDistanceSquared = dot(waveOffset, waveOffset);
-
-    if (
-      waveDistanceSquared < uWaveInnerRadiusSquared[index] ||
-      waveDistanceSquared > uWaveOuterRadiusSquared[index]
-    ) {
+  for (var waveIndex = 0u; waveIndex < MAX_WAVES; waveIndex += 1u) {
+    if (waveIndex >= params.waveCount) {
+      break;
+    }
+    let wave = waves[waveIndex];
+    let offset = position - wave.center;
+    let distanceSquared = dot(offset, offset);
+    if (distanceSquared < wave.innerRadiusSquared || distanceSquared > wave.outerRadiusSquared) {
       continue;
     }
-
-    float waveDistance = sqrt(waveDistanceSquared);
-    vec2 waveDirection = directionFor(waveOffset, waveDistance, aVibrance);
-    float frontDistance = waveDistance - uWaveFrontRadius[index];
-    float band = exp(-pow(frontDistance / uWaveWidth[index], 2.0) * 0.38);
-    float pulse = band * uWaveEnvelope[index];
-    float aftershock = exp(-pow((frontDistance + uWaveWidth[index] * 2.15) / (uWaveWidth[index] * 2.05), 2.0) * 0.42) * uWaveEnvelope[index];
-
-    acceleration += waveDirection * (pulse * uWaveForce[index] - aftershock * uWaveForce[index] * 0.12);
+    let distanceValue = sqrt(distanceSquared);
+    let direction = directionFor(offset, distanceValue, particle.vibrance);
+    let frontDistance = distanceValue - wave.frontRadius;
+    let normalizedBand = frontDistance / wave.width;
+    let band = exp(-(normalizedBand * normalizedBand) * 0.38);
+    let pulse = band * wave.envelope;
+    let aftershockOffset = (frontDistance + wave.width * 2.15) / (wave.width * 2.05);
+    let aftershock = exp(-(aftershockOffset * aftershockOffset) * 0.42) * wave.envelope;
+    acceleration += direction * (pulse * wave.force - aftershock * wave.force * 0.12);
     localEnergy += pulse * 0.24 + aftershock * 0.08;
   }
 
-  velocity = (velocity + acceleration * uStep) * uDamping;
-
-  float speed = length(velocity);
-  position += velocity * uStep;
-
-  vec2 displacementVector = position - aBase;
-  float displacement = length(displacementVector);
-  float targetEnergy = max(localEnergy + speed * 0.032 + (displacement / uDiagonal) * 2.3, 0.0);
-  float energyFollow = 1.0 - pow(targetEnergy > energy ? 0.7 : 0.93, uStep);
-
+  velocity = (velocity + acceleration * params.step) * params.damping;
+  let speed = length(velocity);
+  position += velocity * params.step;
+  let displacement = length(position - particle.base);
+  let targetEnergy = max(localEnergy + speed * 0.032 + displacement / params.diagonal * 2.3, 0.0);
+  let followBase = select(0.93, 0.7, targetEnergy > energy);
+  let energyFollow = 1.0 - pow(followBase, params.step);
   energy = mix(energy, targetEnergy, energyFollow);
 
   if (speed + displacement * 0.04 + energy > 0.012 || localEnergy > 0.001) {
-    vNextPosition = position;
-    vNextVelocity = velocity;
-    vNextEnergy = energy;
-    vNextActive = 1.0;
+    destinationStates[index] = ParticleState(position, velocity, energy, 1.0);
   } else {
-    vNextPosition = aBase;
-    vNextVelocity = vec2(0.0);
-    vNextEnergy = 0.0;
-    vNextActive = 0.0;
+    destinationStates[index] = ParticleState(particle.base, vec2f(0.0), 0.0, 0.0);
   }
 }
 `;
 
-const passthroughFragmentShaderSource = `#version 300 es
-precision highp float;
+const renderShaderSource = `
+struct ParticleStatic {
+  base: vec2f,
+  radius: f32,
+  opacity: f32,
+  vibrance: f32,
+  padding: f32,
+}
 
-out vec4 outColor;
+struct ParticleState {
+  position: vec2f,
+  velocity: vec2f,
+  energy: f32,
+  activeFlag: f32,
+}
 
-void main() {
-  outColor = vec4(0.0);
+struct RenderParams {
+  resolution: vec2f,
+  color: vec3f,
+  time: f32,
+}
+
+struct VertexOutput {
+  @builtin(position) position: vec4f,
+  @location(0) localPosition: vec2f,
+  @location(1) opacity: f32,
+  @location(2) radius: f32,
+  @location(3) vibrance: f32,
+  @location(4) energy: f32,
+}
+
+@group(0) @binding(0) var<storage, read> particleStatics: array<ParticleStatic>;
+@group(0) @binding(1) var<storage, read> particleStates: array<ParticleState>;
+@group(0) @binding(2) var<uniform> params: RenderParams;
+
+@vertex
+fn vs_main(
+  @builtin(vertex_index) vertexIndex: u32,
+  @builtin(instance_index) instanceIndex: u32
+) -> VertexOutput {
+  let corners = array<vec2f, 6>(
+    vec2f(-1.0, -1.0), vec2f(1.0, -1.0), vec2f(-1.0, 1.0),
+    vec2f(-1.0, 1.0), vec2f(1.0, -1.0), vec2f(1.0, 1.0)
+  );
+  let particle = particleStatics[instanceIndex];
+  let state = particleStates[instanceIndex];
+  let energy = clamp(state.energy, 0.0, 1.0);
+  let shimmer = smoothstep(0.72, 1.0, particle.vibrance) * 0.12;
+  let radius = particle.radius + energy * 0.12 + shimmer;
+  let halfSize = radius + 0.72;
+  let localPosition = corners[vertexIndex] * halfSize;
+  let center = vec2f(
+    state.position.x / params.resolution.x * 2.0 - 1.0,
+    1.0 - state.position.y / params.resolution.y * 2.0
+  );
+  let clipOffset = vec2f(
+    localPosition.x / params.resolution.x * 2.0,
+    -localPosition.y / params.resolution.y * 2.0
+  );
+  var output: VertexOutput;
+  output.position = vec4f(center + clipOffset, 0.0, 1.0);
+  output.localPosition = localPosition;
+  output.opacity = particle.opacity;
+  output.radius = radius;
+  output.vibrance = particle.vibrance;
+  output.energy = energy;
+  return output;
+}
+
+@fragment
+fn fs_main(input: VertexOutput) -> @location(0) vec4f {
+  let distanceValue = length(input.localPosition);
+  let core = 1.0 - smoothstep(max(input.radius - 0.72, 0.0), input.radius + 0.78, distanceValue);
+  let shimmerSeed = smoothstep(0.68, 1.0, input.vibrance);
+  let shimmer = (sin(params.time * mix(1.2, 2.8, input.vibrance) + input.vibrance * 41.0) * 0.5 + 0.5) * shimmerSeed;
+  let alpha = min(core * input.opacity * (0.94 + shimmer * 0.1 + input.energy * 0.08), 1.0);
+  return vec4f(params.color, alpha);
 }
 `;
 
@@ -338,13 +356,11 @@ const clamp = (value: number, min: number, max: number) =>
 
 const smoothstep = (edge0: number, edge1: number, value: number) => {
   const t = clamp((value - edge0) / (edge1 - edge0), 0, 1);
-
   return t * t * (3 - 2 * t);
 };
 
 const oklchGrayToSrgb = (lightness: number) => {
   const linear = lightness ** 3;
-
   return linear <= 0.0031308
     ? linear * 12.92
     : 1.055 * linear ** (1 / 2.4) - 0.055;
@@ -359,14 +375,12 @@ const getCssColor = (
   const oklchMatch = /^oklch\(\s*(?<lightness>[\d.]+)(?<percent>%)?/u.exec(
     value
   );
-
   if (oklchMatch) {
     const percent = oklchMatch.groups?.percent;
     const lightness =
       Number(oklchMatch.groups?.lightness) /
       (percent === undefined || percent === "" ? 1 : 100);
     const channel = oklchGrayToSrgb(lightness);
-
     return [channel, channel, channel];
   }
 
@@ -374,7 +388,6 @@ const getCssColor = (
     /rgba?\(\s*(?<red>[\d.]+)[,\s]+(?<green>[\d.]+)[,\s]+(?<blue>[\d.]+)/u.exec(
       value
     );
-
   if (rgbMatch) {
     return [
       Number(rgbMatch.groups?.red) / 255,
@@ -387,7 +400,6 @@ const getCssColor = (
     /^color\(\s*srgb\s+(?<red>[\d.]+)\s+(?<green>[\d.]+)\s+(?<blue>[\d.]+)/u.exec(
       value
     );
-
   if (srgbMatch) {
     return [
       Number(srgbMatch.groups?.red),
@@ -395,23 +407,17 @@ const getCssColor = (
       Number(srgbMatch.groups?.blue),
     ];
   }
-
   return fallback;
 };
 
-const readColors = (canvas: HTMLCanvasElement): Colors => {
-  const background = getCssColor(
+const readColors = (canvas: HTMLCanvasElement): Colors => ({
+  background: getCssColor(
     canvas,
     "background-color",
     getCssColor(canvas, "--bg", [0.02, 0.02, 0.02])
-  );
-  const primary = getCssColor(canvas, "--primary", [0.25, 0.25, 0.25]);
-
-  return {
-    background,
-    primary,
-  };
-};
+  ),
+  primary: getCssColor(canvas, "--primary", [0.25, 0.25, 0.25]),
+});
 
 const squircleRadius = (
   point: Point,
@@ -427,7 +433,6 @@ const squircleRadius = (
   const radius = 2 ** 0.25 * unit * 2;
   const distanceValue =
     (Math.abs(localX) / radius) ** 3.25 + (Math.abs(localY) / radius) ** 3.25;
-
   return distanceValue ** (1 / 3.25);
 };
 
@@ -461,13 +466,10 @@ const appendNoiseDot = (
     (nearestRadius >= 1 ? 1 : 0) * (1 - smoothstep(0, 0.95, nearestRadius - 1));
   const logoScatter = Math.max(edgeScatter, innerScatter, outerScatter);
   const density = clamp(0.44 + logoScatter * 0.38, 0, 0.97);
-
   if (density < hash(cellX + 719, cellY + 719)) {
     return;
   }
-
   const radiusSeed = hash(cellX + 389, cellY + 389);
-
   dots.push({
     ...center,
     opacity: mix(1, 0.2, insideOuter),
@@ -529,20 +531,16 @@ const appendRingDot = (
   };
   const radiusValue = squircleRadius(center, scale, width, height);
   const distanceFromCenterLine = Math.abs(radiusValue - 1);
-
   if (distanceFromCenterLine > halfRingWidth) {
     return;
   }
-
   const distanceFromRingEdge = halfRingWidth - distanceFromCenterLine;
   const edgeAmount = clamp(1 - distanceFromRingEdge / halfRingWidth, 0, 1);
   const edgeStrength = edgeAmount ** 0.35;
   const density = edgeAmount > 0.62 ? 1 : 0.12 + edgeStrength * 0.58;
-
   if (density < hash(seedX + 29, seedY + 29)) {
     return;
   }
-
   dots.push({
     ...center,
     opacity: opacity * (0.12 + edgeStrength * 0.88),
@@ -559,1043 +557,580 @@ const buildDots = (width: number, height: number, gap: number) => {
   const minCellY = -margin;
   const maxCellY = Math.ceil(height / gap) + margin;
   const dots: Dot[] = [];
-
   for (let cellY = minCellY; cellY <= maxCellY; cellY += 1) {
     for (let cellX = minCellX; cellX <= maxCellX; cellX += 1) {
       appendNoiseDot(dots, cellX, cellY, gap, width, height);
-
       for (let layerIndex = 0; layerIndex < 4; layerIndex += 1) {
         appendRingDot(dots, cellX, cellY, layerIndex, gap, width, height);
       }
     }
   }
-
-  return dots;
-};
-
-const createShader = (
-  gl: WebGL2RenderingContext,
-  type: number,
-  source: string
-) => {
-  const shader = gl.createShader(type);
-  if (!shader) {
-    return null;
-  }
-
-  gl.shaderSource(shader, source);
-  gl.compileShader(shader);
-
-  if (gl.getShaderParameter(shader, gl.COMPILE_STATUS) === true) {
-    return shader;
-  }
-
-  gl.deleteShader(shader);
-  return null;
-};
-
-const createProgram = (
-  gl: WebGL2RenderingContext,
-  vertexSource: string,
-  fragmentSource: string,
-  transformFeedbackVaryings?: string[]
-) => {
-  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexSource);
-  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
-  if (!vertexShader || !fragmentShader) {
-    return null;
-  }
-
-  const program = gl.createProgram();
-  if (program === null) {
-    return null;
-  }
-
-  gl.attachShader(program, vertexShader);
-  gl.attachShader(program, fragmentShader);
-
-  if (transformFeedbackVaryings) {
-    gl.transformFeedbackVaryings(
-      program,
-      transformFeedbackVaryings,
-      gl.SEPARATE_ATTRIBS
-    );
-  }
-
-  gl.linkProgram(program);
-  gl.deleteShader(vertexShader);
-  gl.deleteShader(fragmentShader);
-
-  if (gl.getProgramParameter(program, gl.LINK_STATUS) === true) {
-    return program;
-  }
-
-  gl.deleteProgram(program);
-  return null;
-};
-
-const createGpuBufferSet = (
-  gl: WebGL2RenderingContext
-): GpuBufferSet | null => {
-  const position = gl.createBuffer();
-  const velocity = gl.createBuffer();
-  const energy = gl.createBuffer();
-  const active = gl.createBuffer();
-
-  if (
-    position === null ||
-    velocity === null ||
-    energy === null ||
-    active === null
-  ) {
-    return null;
-  }
-
-  return {
-    active,
-    energy,
-    position,
-    velocity,
-  };
+  return dots.slice(0, maxParticleCount);
 };
 
 export const AuthVisual = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    if (!canvasRef.current) {
-      return;
-    }
-
     const canvas = canvasRef.current;
-    // No `desynchronized` here, unlike the always-animating backgrounds. This
-    // canvas stops rendering once the particles settle, and a low-latency swap
-    // chain has no guaranteed buffer to re-present while idle, so the canvas
-    // flickers whenever something else triggers a recomposite.
-    const gl = canvas.getContext("webgl2", {
-      alpha: true,
-      antialias: false,
-      depth: false,
-      powerPreference: "high-performance",
-      stencil: false,
-    });
-    if (!gl) {
+    if (!canvas) {
       return;
     }
 
-    const renderProgram = createProgram(
-      gl,
-      renderVertexShaderSource,
-      fragmentShaderSource
-    );
-    const updateProgram = createProgram(
-      gl,
-      updateVertexShaderSource,
-      passthroughFragmentShaderSource,
-      ["vNextPosition", "vNextVelocity", "vNextEnergy", "vNextActive"]
-    );
-    if (!renderProgram || !updateProgram) {
-      return;
-    }
-    const activateProgram = gl.useProgram.bind(gl);
+    let cancelled = false;
+    let dispose: (() => void) | undefined;
 
-    const getAttribute = (program: WebGLProgram, name: string) => {
-      const attribute = gl.getAttribLocation(program, name);
-      if (attribute < 0) {
-        throw new Error(`Missing WebGL attribute: ${name}`);
+    const initialize = async () => {
+      const gpu = await init({ powerPreference: "high-performance" });
+      if (cancelled) {
+        gpu.dispose();
+        return;
       }
-
-      return attribute;
-    };
-    const getUniform = (program: WebGLProgram, name: string) => {
-      const uniform = gl.getUniformLocation(program, name);
-      if (!uniform) {
-        throw new Error(`Missing WebGL uniform: ${name}`);
-      }
-
-      return uniform;
-    };
-
-    const renderAttributes = {
-      energy: getAttribute(renderProgram, "aEnergy"),
-      opacity: getAttribute(renderProgram, "aOpacity"),
-      position: getAttribute(renderProgram, "aPosition"),
-      radius: getAttribute(renderProgram, "aRadius"),
-      vibrance: getAttribute(renderProgram, "aVibrance"),
-    };
-    const updateAttributes = {
-      active: getAttribute(updateProgram, "aActive"),
-      base: getAttribute(updateProgram, "aBase"),
-      energy: getAttribute(updateProgram, "aEnergy"),
-      position: getAttribute(updateProgram, "aPosition"),
-      velocity: getAttribute(updateProgram, "aVelocity"),
-      vibrance: getAttribute(updateProgram, "aVibrance"),
-    };
-    const renderUniforms = {
-      color: getUniform(renderProgram, "uColor"),
-      resolution: getUniform(renderProgram, "uResolution"),
-      time: getUniform(renderProgram, "uTime"),
-    };
-    const updateUniforms = {
-      cursor: getUniform(updateProgram, "uCursor"),
-      cursorActivationRadiusSquared: getUniform(
-        updateProgram,
-        "uCursorActivationRadiusSquared"
-      ),
-      cursorActive: getUniform(updateProgram, "uCursorActive"),
-      cursorPush: getUniform(updateProgram, "uCursorPush"),
-      cursorRadius: getUniform(updateProgram, "uCursorRadius"),
-      cursorRadiusSquared: getUniform(updateProgram, "uCursorRadiusSquared"),
-      cursorStrength: getUniform(updateProgram, "uCursorStrength"),
-      cursorSweep: getUniform(updateProgram, "uCursorSweep"),
-      cursorVelocity: getUniform(updateProgram, "uCursorVelocity"),
-      damping: getUniform(updateProgram, "uDamping"),
-      diagonal: getUniform(updateProgram, "uDiagonal"),
-      impulseCenter: getUniform(updateProgram, "uImpulseCenter[0]"),
-      impulseCount: getUniform(updateProgram, "uImpulseCount"),
-      impulseForce: getUniform(updateProgram, "uImpulseForce[0]"),
-      impulseRadius: getUniform(updateProgram, "uImpulseRadius[0]"),
-      impulseRadiusSquared: getUniform(
-        updateProgram,
-        "uImpulseRadiusSquared[0]"
-      ),
-      spring: getUniform(updateProgram, "uSpring"),
-      step: getUniform(updateProgram, "uStep"),
-      waveActivationInnerRadiusSquared: getUniform(
-        updateProgram,
-        "uWaveActivationInnerRadiusSquared[0]"
-      ),
-      waveActivationOuterRadiusSquared: getUniform(
-        updateProgram,
-        "uWaveActivationOuterRadiusSquared[0]"
-      ),
-      waveCenter: getUniform(updateProgram, "uWaveCenter[0]"),
-      waveCount: getUniform(updateProgram, "uWaveCount"),
-      waveEnvelope: getUniform(updateProgram, "uWaveEnvelope[0]"),
-      waveForce: getUniform(updateProgram, "uWaveForce[0]"),
-      waveFrontRadius: getUniform(updateProgram, "uWaveFrontRadius[0]"),
-      waveInnerRadiusSquared: getUniform(
-        updateProgram,
-        "uWaveInnerRadiusSquared[0]"
-      ),
-      waveOuterRadiusSquared: getUniform(
-        updateProgram,
-        "uWaveOuterRadiusSquared[0]"
-      ),
-      waveWidth: getUniform(updateProgram, "uWaveWidth[0]"),
-    };
-
-    const staticBuffer = gl.createBuffer();
-    const firstStateBuffers = createGpuBufferSet(gl);
-    const secondStateBuffers = createGpuBufferSet(gl);
-    const transformFeedback = gl.createTransformFeedback();
-    const firstRenderVertexArray = gl.createVertexArray();
-    const secondRenderVertexArray = gl.createVertexArray();
-    const firstUpdateVertexArray = gl.createVertexArray();
-    const secondUpdateVertexArray = gl.createVertexArray();
-
-    if (
-      staticBuffer === null ||
-      firstStateBuffers === null ||
-      secondStateBuffers === null ||
-      transformFeedback === null ||
-      firstRenderVertexArray === null ||
-      secondRenderVertexArray === null ||
-      firstUpdateVertexArray === null ||
-      secondUpdateVertexArray === null
-    ) {
-      return;
-    }
-
-    const stateBuffers = [firstStateBuffers, secondStateBuffers] as const;
-    const renderVertexArrays = [
-      firstRenderVertexArray,
-      secondRenderVertexArray,
-    ] as const;
-    const updateVertexArrays = [
-      firstUpdateVertexArray,
-      secondUpdateVertexArray,
-    ] as const;
-    let readBufferIndex: 0 | 1 = 0;
-
-    const bindFloatAttribute = (
-      attribute: number,
-      buffer: WebGLBuffer,
-      size: number,
-      stride: number,
-      offset: number,
-      divisor: number
-    ) => {
-      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-      gl.enableVertexAttribArray(attribute);
-      gl.vertexAttribPointer(attribute, size, gl.FLOAT, false, stride, offset);
-      gl.vertexAttribDivisor(attribute, divisor);
-    };
-
-    const configureVertexArrays = (index: 0 | 1) => {
-      gl.bindVertexArray(renderVertexArrays[index]);
-      bindFloatAttribute(
-        renderAttributes.position,
-        stateBuffers[index].position,
-        2,
-        0,
-        0,
-        1
-      );
-      bindFloatAttribute(
-        renderAttributes.energy,
-        stateBuffers[index].energy,
-        1,
-        0,
-        0,
-        1
-      );
-      bindFloatAttribute(
-        renderAttributes.radius,
-        staticBuffer,
-        1,
-        particleStaticStrideBytes,
-        2 * Float32Array.BYTES_PER_ELEMENT,
-        1
-      );
-      bindFloatAttribute(
-        renderAttributes.opacity,
-        staticBuffer,
-        1,
-        particleStaticStrideBytes,
-        3 * Float32Array.BYTES_PER_ELEMENT,
-        1
-      );
-      bindFloatAttribute(
-        renderAttributes.vibrance,
-        staticBuffer,
-        1,
-        particleStaticStrideBytes,
-        4 * Float32Array.BYTES_PER_ELEMENT,
-        1
-      );
-
-      gl.bindVertexArray(updateVertexArrays[index]);
-      bindFloatAttribute(
-        updateAttributes.base,
-        staticBuffer,
-        2,
-        particleStaticStrideBytes,
-        0,
-        0
-      );
-      bindFloatAttribute(
-        updateAttributes.vibrance,
-        staticBuffer,
-        1,
-        particleStaticStrideBytes,
-        4 * Float32Array.BYTES_PER_ELEMENT,
-        0
-      );
-      bindFloatAttribute(
-        updateAttributes.position,
-        stateBuffers[index].position,
-        2,
-        0,
-        0,
-        0
-      );
-      bindFloatAttribute(
-        updateAttributes.velocity,
-        stateBuffers[index].velocity,
-        2,
-        0,
-        0,
-        0
-      );
-      bindFloatAttribute(
-        updateAttributes.energy,
-        stateBuffers[index].energy,
-        1,
-        0,
-        0,
-        0
-      );
-      bindFloatAttribute(
-        updateAttributes.active,
-        stateBuffers[index].active,
-        1,
-        0,
-        0,
-        0
-      );
-    };
-
-    configureVertexArrays(0);
-    configureVertexArrays(1);
-
-    gl.bindVertexArray(null);
-    gl.enable(gl.BLEND);
-    gl.blendFuncSeparate(
-      gl.SRC_ALPHA,
-      gl.ONE_MINUS_SRC_ALPHA,
-      gl.ONE,
-      gl.ONE_MINUS_SRC_ALPHA
-    );
-
-    let animationFrame = 0;
-    let bufferWidth = 0;
-    let bufferHeight = 0;
-    let cssWidth = 1;
-    let cssHeight = 1;
-    let particleGap = dotGap;
-    let particleCount = 0;
-    let canvasRect = canvas.getBoundingClientRect();
-    let waves: Wave[] = [];
-    let pendingImpulses: Impulse[] = [];
-    let cursorTarget: Point | null = null;
-    let cursorPosition: Point | null = null;
-    let cursorVelocityX = 0;
-    let cursorVelocityY = 0;
-    let cursorStrength = 0;
-    let isPointerInside = false;
-    let lastRenderTime = 0;
-    let particlesSettled = true;
-    let settleUntil = 0;
-    const waveCenters = new Float32Array(maxWaveCount * 2);
-    const waveForces = new Float32Array(maxWaveCount);
-    const waveEnvelopes = new Float32Array(maxWaveCount);
-    const waveFrontRadii = new Float32Array(maxWaveCount);
-    const waveWidths = new Float32Array(maxWaveCount);
-    const waveInnerRadiiSquared = new Float32Array(maxWaveCount);
-    const waveOuterRadiiSquared = new Float32Array(maxWaveCount);
-    const waveActivationInnerRadiiSquared = new Float32Array(maxWaveCount);
-    const waveActivationOuterRadiiSquared = new Float32Array(maxWaveCount);
-    const impulseCenters = new Float32Array(maxImpulseCount * 2);
-    const impulseRadii = new Float32Array(maxImpulseCount);
-    const impulseRadiiSquared = new Float32Array(maxImpulseCount);
-    const impulseForces = new Float32Array(maxImpulseCount);
-    const canAnimateParticles = !globalThis.window.matchMedia(
-      "(prefers-reduced-motion: reduce)"
-    ).matches;
-    const canTrackCursor =
-      canAnimateParticles &&
-      globalThis.window.matchMedia("(hover: hover) and (pointer: fine)")
-        .matches;
-    let colors = readColors(canvas);
-
-    const refreshColors = () => {
-      colors = readColors(canvas);
-    };
-
-    const toCanvasPoint = (clientPoint: Point, requireInside: boolean) => {
-      const xCss = clientPoint.x - canvasRect.left;
-      const yCss = clientPoint.y - canvasRect.top;
-      const isInside =
-        xCss >= 0 && xCss <= cssWidth && yCss >= 0 && yCss <= cssHeight;
-
-      if (requireInside && !isInside) {
-        return null;
-      }
-
-      return {
-        x: (xCss * bufferWidth) / cssWidth,
-        y: (yCss * bufferHeight) / cssHeight,
+      dispose = () => {
+        gpu.dispose();
       };
-    };
 
-    const uploadStateData = (
-      positions: Float32Array,
-      velocities: Float32Array,
-      energies: Float32Array,
-      activeFlags: Float32Array
-    ) => {
-      for (const bufferSet of stateBuffers) {
-        gl.bindBuffer(gl.ARRAY_BUFFER, bufferSet.position);
-        gl.bufferData(gl.ARRAY_BUFFER, positions, gl.DYNAMIC_COPY);
-        gl.bindBuffer(gl.ARRAY_BUFFER, bufferSet.velocity);
-        gl.bufferData(gl.ARRAY_BUFFER, velocities, gl.DYNAMIC_COPY);
-        gl.bindBuffer(gl.ARRAY_BUFFER, bufferSet.energy);
-        gl.bufferData(gl.ARRAY_BUFFER, energies, gl.DYNAMIC_COPY);
-        gl.bindBuffer(gl.ARRAY_BUFFER, bufferSet.active);
-        gl.bufferData(gl.ARRAY_BUFFER, activeFlags, gl.DYNAMIC_COPY);
+      let animationFrame = 0;
+      let bufferWidth = 1;
+      let bufferHeight = 1;
+      let cssWidth = 1;
+      let cssHeight = 1;
+      let particleGap = dotGap;
+      let particleCount = 0;
+      let canvasRect = canvas.getBoundingClientRect();
+      let waves: Wave[] = [];
+      let pendingImpulses: Impulse[] = [];
+      let cursorTarget: Point | null = null;
+      let cursorPosition: Point | null = null;
+      let cursorVelocityX = 0;
+      let cursorVelocityY = 0;
+      let cursorStrength = 0;
+      let isPointerInside = false;
+      let lastRenderTime = 0;
+      let particlesSettled = true;
+      let settleUntil = 0;
+      let colors = readColors(canvas);
+      const canAnimateParticles = !globalThis.window.matchMedia(
+        "(prefers-reduced-motion: reduce)"
+      ).matches;
+      const canTrackCursor =
+        canAnimateParticles &&
+        globalThis.window.matchMedia("(hover: hover) and (pointer: fine)")
+          .matches;
+      const particleBytes =
+        maxParticleCount * particleStride * Float32Array.BYTES_PER_ELEMENT;
+      const particleStatics = storage(gpu, particleBytes, "read");
+      const particleStates = pingPongStorage(gpu, particleBytes);
+      const waveData = new Float32Array(maxWaveCount * 10);
+      const impulseData = new Float32Array(maxImpulseCount * 4);
+      const waveStorage = storage(gpu, waveData.byteLength, "read");
+      const impulseStorage = storage(gpu, impulseData.byteLength, "read");
+      let canvasSurface: Surface | undefined;
+
+      const syncDots = () => {
+        const dots = buildDots(bufferWidth, bufferHeight, particleGap);
+        const staticData = new Float32Array(dots.length * particleStride);
+        const stateData = new Float32Array(dots.length * particleStride);
+        particleCount = dots.length;
+        for (const [index, dot] of dots.entries()) {
+          const offset = index * particleStride;
+          staticData[offset] = dot.x;
+          staticData[offset + 1] = dot.y;
+          staticData[offset + 2] = dot.radius;
+          staticData[offset + 3] = dot.opacity;
+          staticData[offset + 4] = dot.vibrance;
+          stateData[offset] = dot.x;
+          stateData[offset + 1] = dot.y;
+        }
+        particleStatics.write(staticData);
+        particleStates.read.write(stateData);
+        particleStates.write.write(stateData);
+      };
+
+      const resize = () => {
+        canvasRect = canvas.getBoundingClientRect();
+        const nextCssWidth = Math.max(1, canvasRect.width);
+        const nextCssHeight = Math.max(1, canvasRect.height);
+        const dpr = Math.min(
+          globalThis.window.devicePixelRatio || 1,
+          maxDevicePixelRatio,
+          Math.max(
+            0.55,
+            Math.sqrt(maxCanvasPixelCount / (nextCssWidth * nextCssHeight))
+          )
+        );
+        const pixelWidth = Math.max(1, Math.round(nextCssWidth * dpr));
+        const pixelHeight = Math.max(1, Math.round(nextCssHeight * dpr));
+        const nextParticleGap = Math.max(
+          dotGap * dpr,
+          Math.sqrt((pixelWidth * pixelHeight) / targetParticleGridCells)
+        );
+        cssWidth = nextCssWidth;
+        cssHeight = nextCssHeight;
+        if (
+          bufferWidth === pixelWidth &&
+          bufferHeight === pixelHeight &&
+          Math.abs(particleGap - nextParticleGap) < 0.01
+        ) {
+          return false;
+        }
+        bufferWidth = pixelWidth;
+        bufferHeight = pixelHeight;
+        particleGap = nextParticleGap;
+        waves = [];
+        pendingImpulses = [];
+        cursorTarget = null;
+        cursorPosition = null;
+        cursorVelocityX = 0;
+        cursorVelocityY = 0;
+        cursorStrength = 0;
+        isPointerInside = false;
+        particlesSettled = true;
+        settleUntil = 0;
+        canvas.width = pixelWidth;
+        canvas.height = pixelHeight;
+        if (canvasSurface) {
+          canvasSurface.dispose();
+          canvasSurface = surface(gpu, canvas, {
+            autoResize: false,
+            size: [pixelWidth, pixelHeight],
+          });
+        }
+        syncDots();
+        return true;
+      };
+
+      resize();
+      canvasSurface = surface(gpu, canvas, {
+        autoResize: false,
+        size: [bufferWidth, bufferHeight],
+      });
+      const simulation = compute(gpu, updateShaderSource, {
+        label: "auth-visual-simulation",
+      });
+      const particles = draw(gpu, {
+        blend: {
+          alpha: { dst: "one-minus-src-alpha", src: "one" },
+          color: { dst: "one-minus-src-alpha", src: "src-alpha" },
+        },
+        instances: particleCount,
+        label: "auth-visual-particles",
+        shader: renderShaderSource,
+        vertices: 6,
+      });
+      let compilation: ReturnType<typeof particles.compile> | undefined;
+      frame(gpu, () => {
+        compilation = particles.compile(canvasSurface);
+      });
+      if (!compilation) {
+        throw new Error("Failed to start the auth visual pipeline compilation");
       }
-    };
-
-    const syncDots = () => {
-      const dots = buildDots(bufferWidth, bufferHeight, particleGap);
-      const staticData = new Float32Array(dots.length * particleStaticStride);
-      const positions = new Float32Array(dots.length * 2);
-      const velocities = new Float32Array(dots.length * 2);
-      const energies = new Float32Array(dots.length);
-      const activeFlags = new Float32Array(dots.length);
-
-      particleCount = dots.length;
-      readBufferIndex = 0;
-
-      for (const [index, dot] of dots.entries()) {
-        const staticOffset = index * particleStaticStride;
-        const positionOffset = index * 2;
-
-        staticData[staticOffset] = dot.x;
-        staticData[staticOffset + 1] = dot.y;
-        staticData[staticOffset + 2] = dot.radius;
-        staticData[staticOffset + 3] = dot.opacity;
-        staticData[staticOffset + 4] = dot.vibrance;
-        positions[positionOffset] = dot.x;
-        positions[positionOffset + 1] = dot.y;
-      }
-
-      gl.bindBuffer(gl.ARRAY_BUFFER, staticBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, staticData, gl.STATIC_DRAW);
-      uploadStateData(positions, velocities, energies, activeFlags);
-    };
-
-    const resize = () => {
-      canvasRect = canvas.getBoundingClientRect();
-      const nextCssWidth = Math.max(1, canvasRect.width);
-      const nextCssHeight = Math.max(1, canvasRect.height);
-      const dpr = Math.min(
-        globalThis.window.devicePixelRatio || 1,
-        maxDevicePixelRatio,
-        Math.max(
-          0.55,
-          Math.sqrt(maxCanvasPixelCount / (nextCssWidth * nextCssHeight))
-        )
-      );
-      const pixelWidth = Math.max(1, Math.round(nextCssWidth * dpr));
-      const pixelHeight = Math.max(1, Math.round(nextCssHeight * dpr));
-      const nextParticleGap = Math.max(
-        dotGap * dpr,
-        Math.sqrt((pixelWidth * pixelHeight) / targetParticleGridCells)
-      );
-
-      cssWidth = nextCssWidth;
-      cssHeight = nextCssHeight;
-
-      if (
-        bufferWidth === pixelWidth &&
-        bufferHeight === pixelHeight &&
-        Math.abs(particleGap - nextParticleGap) < 0.01
-      ) {
+      await compilation;
+      if (cancelled) {
+        gpu.dispose();
         return;
       }
 
-      bufferWidth = pixelWidth;
-      bufferHeight = pixelHeight;
-      particleGap = nextParticleGap;
-      waves = [];
-      pendingImpulses = [];
-      cursorTarget = null;
-      cursorPosition = null;
-      cursorVelocityX = 0;
-      cursorVelocityY = 0;
-      cursorStrength = 0;
-      isPointerInside = false;
-      particlesSettled = true;
-      settleUntil = 0;
-      canvas.width = pixelWidth;
-      canvas.height = pixelHeight;
-      gl.viewport(0, 0, pixelWidth, pixelHeight);
-      syncDots();
-    };
+      const toCanvasPoint = (clientPoint: Point, requireInside: boolean) => {
+        const xCss = clientPoint.x - canvasRect.left;
+        const yCss = clientPoint.y - canvasRect.top;
+        const isInside =
+          xCss >= 0 && xCss <= cssWidth && yCss >= 0 && yCss <= cssHeight;
+        if (requireInside && !isInside) {
+          return null;
+        }
+        return {
+          x: (xCss * bufferWidth) / cssWidth,
+          y: (yCss * bufferHeight) / cssHeight,
+        };
+      };
 
-    const syncCursor = (elapsedMs: number) => {
-      const targetStrength = isPointerInside && cursorTarget ? 1 : 0;
-      const strengthFollow =
-        1 - Math.exp((-elapsedMs / 1000) * (targetStrength ? 12 : 5.5));
-
-      cursorStrength = mix(cursorStrength, targetStrength, strengthFollow);
-
-      if (!cursorTarget) {
-        const decay = 0.82 ** (elapsedMs / 16.667);
-
-        cursorVelocityX *= decay;
-        cursorVelocityY *= decay;
+      const syncCursor = (elapsedMs: number) => {
+        const targetStrength = isPointerInside && cursorTarget ? 1 : 0;
+        const strengthFollow =
+          1 - Math.exp((-elapsedMs / 1000) * (targetStrength ? 12 : 5.5));
+        cursorStrength = mix(cursorStrength, targetStrength, strengthFollow);
+        if (!cursorTarget) {
+          const decay = 0.82 ** (elapsedMs / 16.667);
+          cursorVelocityX *= decay;
+          cursorVelocityY *= decay;
+          return (
+            cursorStrength > 0.002 ||
+            Math.hypot(cursorVelocityX, cursorVelocityY) > 0.02
+          );
+        }
+        if (!cursorPosition) {
+          cursorPosition = { ...cursorTarget };
+          cursorVelocityX = 0;
+          cursorVelocityY = 0;
+          return cursorStrength > 0.002;
+        }
+        const previousX = cursorPosition.x;
+        const previousY = cursorPosition.y;
+        const follow = 1 - Math.exp((-elapsedMs / 1000) * 17);
+        const nextX = mix(previousX, cursorTarget.x, follow);
+        const nextY = mix(previousY, cursorTarget.y, follow);
+        const velocityFollow = 1 - Math.exp((-elapsedMs / 1000) * 18);
+        cursorVelocityX = mix(
+          cursorVelocityX,
+          (nextX - previousX) / Math.max(elapsedMs, 1),
+          velocityFollow
+        );
+        cursorVelocityY = mix(
+          cursorVelocityY,
+          (nextY - previousY) / Math.max(elapsedMs, 1),
+          velocityFollow
+        );
+        cursorPosition = { x: nextX, y: nextY };
         return (
           cursorStrength > 0.002 ||
           Math.hypot(cursorVelocityX, cursorVelocityY) > 0.02
         );
-      }
-
-      if (!cursorPosition) {
-        cursorPosition = { ...cursorTarget };
-        cursorVelocityX = 0;
-        cursorVelocityY = 0;
-        return cursorStrength > 0.002;
-      }
-
-      const previousX = cursorPosition.x;
-      const previousY = cursorPosition.y;
-      const follow = 1 - Math.exp((-elapsedMs / 1000) * 17);
-      const nextX = mix(previousX, cursorTarget.x, follow);
-      const nextY = mix(previousY, cursorTarget.y, follow);
-      const velocityFollow = 1 - Math.exp((-elapsedMs / 1000) * 18);
-
-      cursorVelocityX = mix(
-        cursorVelocityX,
-        (nextX - previousX) / Math.max(elapsedMs, 1),
-        velocityFollow
-      );
-      cursorVelocityY = mix(
-        cursorVelocityY,
-        (nextY - previousY) / Math.max(elapsedMs, 1),
-        velocityFollow
-      );
-      cursorPosition = {
-        x: nextX,
-        y: nextY,
       };
 
-      return (
-        cursorStrength > 0.002 ||
-        Math.hypot(cursorVelocityX, cursorVelocityY) > 0.02
-      );
-    };
-
-    const syncWaveUniformData = (activeWaves: WaveFrame[]) => {
-      for (const [index, wave] of activeWaves.entries()) {
-        const centerOffset = index * 2;
-
-        waveCenters[centerOffset] = wave.x;
-        waveCenters[centerOffset + 1] = wave.y;
-        waveForces[index] = wave.force;
-        waveEnvelopes[index] = wave.envelope;
-        waveFrontRadii[index] = wave.frontRadius;
-        waveWidths[index] = wave.width;
-        waveInnerRadiiSquared[index] = wave.innerRadiusSquared;
-        waveOuterRadiiSquared[index] = wave.outerRadiusSquared;
-        waveActivationInnerRadiiSquared[index] =
-          wave.activationInnerRadiusSquared;
-        waveActivationOuterRadiiSquared[index] =
-          wave.activationOuterRadiusSquared;
-      }
-    };
-
-    const syncImpulseUniformData = (impulses: Impulse[]) => {
-      for (const [index, impulse] of impulses.entries()) {
-        const centerOffset = index * 2;
-
-        impulseCenters[centerOffset] = impulse.x;
-        impulseCenters[centerOffset + 1] = impulse.y;
-        impulseRadii[index] = impulse.radius;
-        impulseRadiiSquared[index] = impulse.radius * impulse.radius;
-        impulseForces[index] = impulse.force;
-      }
-    };
-
-    const runGpuSimulation = (
-      elapsedMs: number,
-      activeWaves: WaveFrame[],
-      impulses: Impulse[],
-      cursorActive: boolean
-    ) => {
-      const step = elapsedMs / 16.667;
-      const minSide = Math.min(bufferWidth, bufferHeight);
-      const diagonal = Math.hypot(bufferWidth, bufferHeight);
-      const cursorRadius = clamp(minSide * 0.066, 42, 96);
-      const cursorActivationRadius = cursorRadius * 2.35;
-      const cursorPush = clamp(minSide * 0.00125, 0.72, 1.9);
-      const cursorSweep = clamp(minSide * 0.00014, 0.07, 0.24);
-      const spring = 0.032;
-      const damping = 0.87 ** step;
-      const writeBufferIndex: 0 | 1 = readBufferIndex === 0 ? 1 : 0;
-
-      syncWaveUniformData(activeWaves);
-      syncImpulseUniformData(impulses);
-      activateProgram(updateProgram);
-      gl.bindVertexArray(updateVertexArrays[readBufferIndex]);
-      gl.uniform1f(updateUniforms.step, step);
-      gl.uniform1f(updateUniforms.spring, spring);
-      gl.uniform1f(updateUniforms.damping, damping);
-      gl.uniform1f(updateUniforms.diagonal, diagonal);
-      gl.uniform1f(updateUniforms.cursorActive, cursorActive ? 1 : 0);
-      gl.uniform2f(
-        updateUniforms.cursor,
-        cursorPosition?.x ?? 0,
-        cursorPosition?.y ?? 0
-      );
-      gl.uniform2f(
-        updateUniforms.cursorVelocity,
-        cursorVelocityX * 16.667,
-        cursorVelocityY * 16.667
-      );
-      gl.uniform1f(updateUniforms.cursorRadius, cursorRadius);
-      gl.uniform1f(
-        updateUniforms.cursorRadiusSquared,
-        cursorActivationRadius * cursorActivationRadius
-      );
-      gl.uniform1f(
-        updateUniforms.cursorActivationRadiusSquared,
-        cursorActivationRadius * cursorActivationRadius
-      );
-      gl.uniform1f(updateUniforms.cursorPush, cursorPush);
-      gl.uniform1f(updateUniforms.cursorSweep, cursorSweep);
-      gl.uniform1f(updateUniforms.cursorStrength, cursorStrength);
-      gl.uniform1i(updateUniforms.waveCount, activeWaves.length);
-      gl.uniform2fv(updateUniforms.waveCenter, waveCenters);
-      gl.uniform1fv(updateUniforms.waveForce, waveForces);
-      gl.uniform1fv(updateUniforms.waveEnvelope, waveEnvelopes);
-      gl.uniform1fv(updateUniforms.waveFrontRadius, waveFrontRadii);
-      gl.uniform1fv(updateUniforms.waveWidth, waveWidths);
-      gl.uniform1fv(
-        updateUniforms.waveInnerRadiusSquared,
-        waveInnerRadiiSquared
-      );
-      gl.uniform1fv(
-        updateUniforms.waveOuterRadiusSquared,
-        waveOuterRadiiSquared
-      );
-      gl.uniform1fv(
-        updateUniforms.waveActivationInnerRadiusSquared,
-        waveActivationInnerRadiiSquared
-      );
-      gl.uniform1fv(
-        updateUniforms.waveActivationOuterRadiusSquared,
-        waveActivationOuterRadiiSquared
-      );
-      gl.uniform1i(updateUniforms.impulseCount, impulses.length);
-      gl.uniform2fv(updateUniforms.impulseCenter, impulseCenters);
-      gl.uniform1fv(updateUniforms.impulseRadius, impulseRadii);
-      gl.uniform1fv(updateUniforms.impulseRadiusSquared, impulseRadiiSquared);
-      gl.uniform1fv(updateUniforms.impulseForce, impulseForces);
-      gl.enable(gl.RASTERIZER_DISCARD);
-      gl.bindBuffer(gl.ARRAY_BUFFER, null);
-      gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, transformFeedback);
-      gl.bindBufferBase(
-        gl.TRANSFORM_FEEDBACK_BUFFER,
-        0,
-        stateBuffers[writeBufferIndex].position
-      );
-      gl.bindBufferBase(
-        gl.TRANSFORM_FEEDBACK_BUFFER,
-        1,
-        stateBuffers[writeBufferIndex].velocity
-      );
-      gl.bindBufferBase(
-        gl.TRANSFORM_FEEDBACK_BUFFER,
-        2,
-        stateBuffers[writeBufferIndex].energy
-      );
-      gl.bindBufferBase(
-        gl.TRANSFORM_FEEDBACK_BUFFER,
-        3,
-        stateBuffers[writeBufferIndex].active
-      );
-      gl.beginTransformFeedback(gl.POINTS);
-      gl.drawArrays(gl.POINTS, 0, particleCount);
-      gl.endTransformFeedback();
-      gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, null);
-      gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 1, null);
-      gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 2, null);
-      gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 3, null);
-      gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, null);
-      gl.disable(gl.RASTERIZER_DISCARD);
-      gl.bindVertexArray(null);
-      readBufferIndex = writeBufferIndex;
-    };
-
-    const simulateParticles = (now: number) => {
-      if (!canAnimateParticles) {
-        return false;
-      }
-
-      const elapsedMs = lastRenderTime
-        ? clamp(now - lastRenderTime, 8, 34)
-        : 16.667;
-      const cursorMoving = syncCursor(elapsedMs);
-      const cursorActive = !!cursorPosition && cursorStrength > 0.002;
-      const settlingDuration = 2200;
-      const impulses = pendingImpulses.slice(-maxImpulseCount);
-      const activeWaves: WaveFrame[] = [];
-
-      waves = waves.filter((wave) => now - wave.startedAt <= wave.life);
-
-      for (const wave of waves) {
-        const age = now - wave.startedAt;
-        const frontRadius = age * wave.speed;
-        const outerRadius = frontRadius + wave.width * 3.8;
-        const innerRadius = Math.max(0, frontRadius - wave.width * 6.6);
-        const activationOuterRadius = frontRadius + wave.width * 2.7;
-        const activationInnerRadius = Math.max(
-          0,
-          wave.activatedRadius - wave.width * 5.6
-        );
-
-        if (activationOuterRadius > wave.activatedRadius) {
-          wave.activatedRadius = activationOuterRadius;
+      const runGpuSimulation = (
+        elapsedMs: number,
+        activeWaves: WaveFrame[],
+        impulses: Impulse[]
+      ) => {
+        waveData.fill(0);
+        for (const [index, wave] of activeWaves.entries()) {
+          const offset = index * 10;
+          waveData.set(
+            [
+              wave.x,
+              wave.y,
+              wave.force,
+              wave.envelope,
+              wave.frontRadius,
+              wave.width,
+              wave.innerRadiusSquared,
+              wave.outerRadiusSquared,
+              wave.activationInnerRadiusSquared,
+              wave.activationOuterRadiusSquared,
+            ],
+            offset
+          );
         }
+        impulseData.fill(0);
+        for (const [index, impulse] of impulses.entries()) {
+          impulseData.set(
+            [impulse.x, impulse.y, impulse.radius, impulse.force],
+            index * 4
+          );
+        }
+        waveStorage.write(waveData);
+        impulseStorage.write(impulseData);
+        const step = elapsedMs / 16.667;
+        const minSide = Math.min(bufferWidth, bufferHeight);
+        const cursorRadius = clamp(minSide * 0.066, 42, 96);
+        const cursorActivationRadius = cursorRadius * 2.35;
+        simulation.set({
+          destinationStates: particleStates.write,
+          impulses: impulseStorage,
+          params: {
+            cursor: [cursorPosition?.x ?? 0, cursorPosition?.y ?? 0],
+            cursorActivationRadiusSquared:
+              cursorActivationRadius * cursorActivationRadius,
+            cursorPush: clamp(minSide * 0.00125, 0.72, 1.9),
+            cursorRadius,
+            cursorRadiusSquared:
+              cursorActivationRadius * cursorActivationRadius,
+            cursorStrength,
+            cursorSweep: clamp(minSide * 0.00014, 0.07, 0.24),
+            cursorVelocity: [
+              cursorVelocityX * 16.667,
+              cursorVelocityY * 16.667,
+            ],
+            damping: 0.87 ** step,
+            diagonal: Math.hypot(bufferWidth, bufferHeight),
+            impulseCount: impulses.length,
+            particleCount,
+            spring: 0.032,
+            step,
+            waveCount: activeWaves.length,
+          },
+          particleStatics,
+          sourceStates: particleStates.read,
+          waves: waveStorage,
+        });
+        simulation.dispatch(Math.ceil(particleCount / workgroupSize));
+        particleStates.swap();
+      };
 
-        activeWaves.push({
-          ...wave,
-          activationInnerRadiusSquared:
-            activationInnerRadius * activationInnerRadius,
-          activationOuterRadiusSquared:
-            activationOuterRadius * activationOuterRadius,
-          envelope: (1 - age / wave.life) ** 1.12,
-          frontRadius,
-          innerRadiusSquared: innerRadius * innerRadius,
-          outerRadiusSquared: outerRadius * outerRadius,
+      const simulateParticles = (now: number) => {
+        if (!canAnimateParticles) {
+          return false;
+        }
+        const elapsedMs = lastRenderTime
+          ? clamp(now - lastRenderTime, 8, 34)
+          : 16.667;
+        const cursorMoving = syncCursor(elapsedMs);
+        const cursorActive = !!cursorPosition && cursorStrength > 0.002;
+        const impulses = pendingImpulses.slice(-maxImpulseCount);
+        const activeWaves: WaveFrame[] = [];
+        waves = waves.filter((wave) => now - wave.startedAt <= wave.life);
+        for (const wave of waves) {
+          const age = now - wave.startedAt;
+          const frontRadius = age * wave.speed;
+          const outerRadius = frontRadius + wave.width * 3.8;
+          const innerRadius = Math.max(0, frontRadius - wave.width * 6.6);
+          const activationOuterRadius = frontRadius + wave.width * 2.7;
+          const activationInnerRadius = Math.max(
+            0,
+            wave.activatedRadius - wave.width * 5.6
+          );
+          if (activationOuterRadius > wave.activatedRadius) {
+            wave.activatedRadius = activationOuterRadius;
+          }
+          activeWaves.push({
+            ...wave,
+            activationInnerRadiusSquared:
+              activationInnerRadius * activationInnerRadius,
+            activationOuterRadiusSquared:
+              activationOuterRadius * activationOuterRadius,
+            envelope: (1 - age / wave.life) ** 1.12,
+            frontRadius,
+            innerRadiusSquared: innerRadius * innerRadius,
+            outerRadiusSquared: outerRadius * outerRadius,
+          });
+        }
+        if (cursorActive || activeWaves.length > 0 || impulses.length > 0) {
+          settleUntil = Math.max(settleUntil, now + 2200);
+        }
+        if (
+          particlesSettled &&
+          !cursorActive &&
+          activeWaves.length === 0 &&
+          impulses.length === 0
+        ) {
+          return false;
+        }
+        if (
+          !cursorActive &&
+          activeWaves.length === 0 &&
+          impulses.length === 0 &&
+          now >= settleUntil
+        ) {
+          particlesSettled = true;
+          return false;
+        }
+        runGpuSimulation(elapsedMs, activeWaves, impulses);
+        pendingImpulses = [];
+        const shouldContinue =
+          cursorMoving || waves.length > 0 || now < settleUntil;
+        particlesSettled = !shouldContinue;
+        return shouldContinue;
+      };
+
+      const render = () => {
+        const renderSurface = canvasSurface;
+        if (!renderSurface) {
+          return false;
+        }
+        const now = globalThis.performance.now();
+        const isActive = simulateParticles(now);
+        particles.set({
+          params: {
+            color: colors.primary,
+            resolution: [bufferWidth, bufferHeight],
+            time: now / 1000,
+          },
+          particleStates: particleStates.read,
+          particleStatics,
+        });
+        frame(gpu, (currentFrame) => {
+          currentFrame.pass(
+            {
+              clear: [...colors.background, 1],
+              target: renderSurface,
+            },
+            (pass) => {
+              pass.draw(particles, { instances: particleCount, vertices: 6 });
+            }
+          );
+        });
+        lastRenderTime = now;
+        return isActive;
+      };
+
+      const animate = () => {
+        if (render()) {
+          animationFrame = globalThis.requestAnimationFrame(animate);
+        } else {
+          animationFrame = 0;
+        }
+      };
+      const queueRender = () => {
+        if (!animationFrame) {
+          animationFrame = globalThis.requestAnimationFrame(animate);
+        }
+      };
+      const handlePointerMove = (event: PointerEvent) => {
+        if (
+          !canTrackCursor ||
+          (event.pointerType !== "mouse" && event.pointerType !== "pen")
+        ) {
+          return;
+        }
+        let shouldRender = false;
+        const coalescedEvents = event.getCoalescedEvents();
+        for (const pointerEvent of coalescedEvents.length
+          ? coalescedEvents
+          : [event]) {
+          const clientPoint = {
+            x: pointerEvent.clientX,
+            y: pointerEvent.clientY,
+          };
+          const canvasPoint = toCanvasPoint(clientPoint, true);
+          if (canvasPoint) {
+            cursorTarget = canvasPoint;
+            isPointerInside = true;
+            shouldRender = true;
+          } else {
+            cursorTarget = toCanvasPoint(clientPoint, false);
+            shouldRender = isPointerInside || cursorStrength > 0.01;
+            isPointerInside = false;
+          }
+        }
+        if (shouldRender) {
+          queueRender();
+        }
+      };
+      const handlePointerRawUpdate = (event: Event) => {
+        if (event instanceof PointerEvent) {
+          handlePointerMove(event);
+        }
+      };
+      const handlePointerDown = (event: PointerEvent) => {
+        if (!canAnimateParticles || !event.isPrimary) {
+          return;
+        }
+        const canvasPoint = toCanvasPoint(
+          { x: event.clientX, y: event.clientY },
+          true
+        );
+        if (!canvasPoint) {
+          return;
+        }
+        const now = globalThis.performance.now();
+        const unit = Math.min(bufferWidth, bufferHeight) / 10;
+        const diagonal = Math.hypot(bufferWidth, bufferHeight);
+        const speed = clamp(unit * 0.008, 0.5, 1);
+        const width = clamp(unit * 0.58, 48, 120);
+        const force = clamp(unit * 0.044, 3.1, 8.2);
+        if (
+          canTrackCursor &&
+          (event.pointerType === "mouse" || event.pointerType === "pen")
+        ) {
+          cursorTarget = canvasPoint;
+          isPointerInside = true;
+        }
+        particlesSettled = false;
+        pendingImpulses = [
+          ...pendingImpulses,
+          {
+            ...canvasPoint,
+            force: clamp(force * 1.24, 4.4, 13.5),
+            radius: clamp(width * 1.28, 62, 190),
+          },
+        ].slice(-maxImpulseCount);
+        waves = [
+          ...waves.filter((wave) => now - wave.startedAt <= wave.life),
+          {
+            ...canvasPoint,
+            activatedRadius: 0,
+            force: clamp(unit * 0.037, 2.6, 7),
+            life: diagonal / speed + 780,
+            speed,
+            startedAt: now,
+            width,
+          },
+        ].slice(-maxWaveCount);
+        queueRender();
+      };
+      const handlePointerLeave = () => {
+        isPointerInside = false;
+        queueRender();
+      };
+      const handleWindowBlur = () => {
+        isPointerInside = false;
+        queueRender();
+      };
+      const handleLayoutChange = () => {
+        resize();
+        queueRender();
+      };
+
+      render();
+      const resizeObserver = new ResizeObserver(handleLayoutChange);
+      resizeObserver.observe(canvas);
+      const mutationObserver = new MutationObserver(() => {
+        colors = readColors(canvas);
+        queueRender();
+      });
+      mutationObserver.observe(document.documentElement, {
+        attributeFilter: ["class", "style"],
+        attributes: true,
+      });
+      if (canTrackCursor) {
+        globalThis.window.addEventListener("pointermove", handlePointerMove, {
+          passive: true,
+        });
+        canvas.addEventListener("pointerrawupdate", handlePointerRawUpdate, {
+          passive: true,
+        });
+        canvas.addEventListener("pointerleave", handlePointerLeave, {
+          passive: true,
+        });
+        globalThis.window.addEventListener("blur", handleWindowBlur);
+      }
+      if (canAnimateParticles) {
+        canvas.addEventListener("pointerdown", handlePointerDown, {
+          passive: true,
         });
       }
 
-      if (cursorActive || activeWaves.length > 0 || impulses.length > 0) {
-        settleUntil = Math.max(settleUntil, now + settlingDuration);
-      }
-
-      if (
-        particlesSettled &&
-        !cursorActive &&
-        activeWaves.length === 0 &&
-        impulses.length === 0
-      ) {
-        return false;
-      }
-
-      if (
-        !cursorActive &&
-        activeWaves.length === 0 &&
-        impulses.length === 0 &&
-        now >= settleUntil
-      ) {
-        particlesSettled = true;
-        return false;
-      }
-
-      runGpuSimulation(elapsedMs, activeWaves, impulses, cursorActive);
-      pendingImpulses = [];
-
-      const shouldContinue =
-        cursorMoving || waves.length > 0 || now < settleUntil;
-
-      particlesSettled = !shouldContinue;
-      return shouldContinue;
-    };
-
-    const render = () => {
-      const now = globalThis.performance.now();
-      const isActive = simulateParticles(now);
-      const color = colors.primary;
-      const { background } = colors;
-
-      gl.clearColor(background[0], background[1], background[2], 1);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      activateProgram(renderProgram);
-      gl.bindVertexArray(renderVertexArrays[readBufferIndex]);
-      gl.uniform2f(renderUniforms.resolution, bufferWidth, bufferHeight);
-      gl.uniform3f(renderUniforms.color, color[0], color[1], color[2]);
-      gl.uniform1f(renderUniforms.time, now / 1000);
-      gl.drawArraysInstanced(gl.POINTS, 0, 1, particleCount);
-      gl.bindVertexArray(null);
-      lastRenderTime = now;
-
-      return isActive;
-    };
-
-    const animate = () => {
-      if (render()) {
-        animationFrame = globalThis.requestAnimationFrame(animate);
-      } else {
-        animationFrame = 0;
-      }
-    };
-
-    const queueRender = () => {
-      if (animationFrame) {
-        return;
-      }
-
-      animationFrame = globalThis.requestAnimationFrame(animate);
-    };
-
-    const handlePointerMove = (event: PointerEvent) => {
-      if (
-        !canTrackCursor ||
-        (event.pointerType !== "mouse" && event.pointerType !== "pen")
-      ) {
-        return;
-      }
-
-      let shouldRender = false;
-      const pointerEvents = event.getCoalescedEvents();
-
-      for (const pointerEvent of pointerEvents.length
-        ? pointerEvents
-        : [event]) {
-        const clientPoint = {
-          x: pointerEvent.clientX,
-          y: pointerEvent.clientY,
-        };
-        const canvasPoint = toCanvasPoint(clientPoint, true);
-
-        if (canvasPoint) {
-          cursorTarget = canvasPoint;
-          isPointerInside = true;
-          shouldRender = true;
-        } else {
-          cursorTarget = toCanvasPoint(clientPoint, false);
-
-          if (isPointerInside || cursorStrength > 0.01) {
-            shouldRender = true;
-          }
-
-          isPointerInside = false;
+      dispose = () => {
+        if (animationFrame) {
+          globalThis.cancelAnimationFrame(animationFrame);
         }
-      }
+        resizeObserver.disconnect();
+        mutationObserver.disconnect();
+        if (canTrackCursor) {
+          globalThis.window.removeEventListener(
+            "pointermove",
+            handlePointerMove
+          );
+          canvas.removeEventListener(
+            "pointerrawupdate",
+            handlePointerRawUpdate
+          );
+          canvas.removeEventListener("pointerleave", handlePointerLeave);
+          globalThis.window.removeEventListener("blur", handleWindowBlur);
+        }
+        if (canAnimateParticles) {
+          canvas.removeEventListener("pointerdown", handlePointerDown);
+        }
+        canvasSurface?.dispose();
+        gpu.dispose();
+      };
+    };
 
-      if (shouldRender) {
-        queueRender();
+    const start = async () => {
+      try {
+        await initialize();
+      } catch {
+        dispose?.();
+        dispose = undefined;
+        // WebGPU is optional; the canvas keeps its themed background when unavailable.
       }
     };
 
-    const handlePointerRawUpdate = (event: Event) => {
-      if (event instanceof PointerEvent) {
-        handlePointerMove(event);
-      }
-    };
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!canAnimateParticles || !event.isPrimary) {
-        return;
-      }
-
-      const canvasPoint = toCanvasPoint(
-        {
-          x: event.clientX,
-          y: event.clientY,
-        },
-        true
-      );
-
-      if (!canvasPoint) {
-        return;
-      }
-
-      const now = globalThis.performance.now();
-      const unit = Math.min(bufferWidth, bufferHeight) / 10;
-      const diagonal = Math.hypot(bufferWidth, bufferHeight);
-      const speed = clamp(unit * 0.008, 0.5, 1);
-      const width = clamp(unit * 0.58, 48, 120);
-      const force = clamp(unit * 0.044, 3.1, 8.2);
-      const waveForce = clamp(unit * 0.037, 2.6, 7);
-      const impulseRadius = clamp(width * 1.28, 62, 190);
-      const impulseForce = clamp(force * 1.24, 4.4, 13.5);
-      const previousWaves = waves.filter(
-        (wave) => now - wave.startedAt <= wave.life
-      );
-
-      if (
-        canTrackCursor &&
-        (event.pointerType === "mouse" || event.pointerType === "pen")
-      ) {
-        cursorTarget = canvasPoint;
-        isPointerInside = true;
-      }
-
-      particlesSettled = false;
-      pendingImpulses = [
-        ...pendingImpulses,
-        {
-          ...canvasPoint,
-          force: impulseForce,
-          radius: impulseRadius,
-        },
-      ].slice(-maxImpulseCount);
-      waves = [
-        ...previousWaves,
-        {
-          ...canvasPoint,
-          activatedRadius: 0,
-          force: waveForce,
-          life: diagonal / speed + 780,
-          speed,
-          startedAt: now,
-          width,
-        },
-      ].slice(-maxWaveCount);
-      queueRender();
-    };
-
-    const handlePointerLeave = () => {
-      isPointerInside = false;
-      queueRender();
-    };
-
-    const handleWindowBlur = () => {
-      isPointerInside = false;
-      queueRender();
-    };
-
-    resize();
-    render();
-
-    const handleLayoutChange = () => {
-      resize();
-      queueRender();
-    };
-    const resizeObserver = new ResizeObserver(handleLayoutChange);
-    resizeObserver.observe(canvas);
-    const mutationObserver = new MutationObserver(() => {
-      refreshColors();
-      queueRender();
-    });
-    mutationObserver.observe(document.documentElement, {
-      attributeFilter: ["class", "style"],
-      attributes: true,
-    });
-
-    if (canTrackCursor) {
-      globalThis.window.addEventListener("pointermove", handlePointerMove, {
-        passive: true,
-      });
-      canvas.addEventListener("pointerrawupdate", handlePointerRawUpdate, {
-        passive: true,
-      });
-      canvas.addEventListener("pointerleave", handlePointerLeave, {
-        passive: true,
-      });
-      globalThis.window.addEventListener("blur", handleWindowBlur);
-    }
-
-    if (canAnimateParticles) {
-      canvas.addEventListener("pointerdown", handlePointerDown, {
-        passive: true,
-      });
-    }
-
+    void start();
     return () => {
-      if (animationFrame) {
-        globalThis.cancelAnimationFrame(animationFrame);
-      }
-      resizeObserver.disconnect();
-      mutationObserver.disconnect();
-
-      if (canTrackCursor) {
-        globalThis.window.removeEventListener("pointermove", handlePointerMove);
-        canvas.removeEventListener("pointerrawupdate", handlePointerRawUpdate);
-        canvas.removeEventListener("pointerleave", handlePointerLeave);
-        globalThis.window.removeEventListener("blur", handleWindowBlur);
-      }
-
-      if (canAnimateParticles) {
-        canvas.removeEventListener("pointerdown", handlePointerDown);
-      }
-
-      gl.deleteBuffer(staticBuffer);
-
-      for (const bufferSet of stateBuffers) {
-        gl.deleteBuffer(bufferSet.position);
-        gl.deleteBuffer(bufferSet.velocity);
-        gl.deleteBuffer(bufferSet.energy);
-        gl.deleteBuffer(bufferSet.active);
-      }
-
-      for (const vertexArray of renderVertexArrays) {
-        gl.deleteVertexArray(vertexArray);
-      }
-
-      for (const vertexArray of updateVertexArrays) {
-        gl.deleteVertexArray(vertexArray);
-      }
-
-      gl.deleteTransformFeedback(transformFeedback);
-      gl.deleteProgram(renderProgram);
-      gl.deleteProgram(updateProgram);
+      cancelled = true;
+      dispose?.();
     };
   }, []);
 
