@@ -2,6 +2,8 @@
 
 Researched and exercised on September 5, 2026. This is a coverage ledger, not a claim that every feature has passed end-to-end acceptance. Secrets and private mail are excluded. See [startup and debugging](development.md) and [ownership rules](development-integrations.md).
 
+Agent connector readiness is tracked separately in [Agent tooling](agent-tooling.md). The original runtime audit omitted verification of Sentry MCP and other agent access. Passing application tests or disabling local telemetry does not establish that debugging tools are ready.
+
 ## Verified setup
 
 | Area | Current evidence | Remaining proof |

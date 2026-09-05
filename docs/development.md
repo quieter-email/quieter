@@ -2,6 +2,8 @@
 
 ## Prerequisites
 
+Agent debugging access has separate requirements from the application runtime. Run `vp run agent:doctor` and complete the read probes in [Agent tooling](agent-tooling.md). Local Sentry/PostHog capture stays off by default; their inspection tools should still be available to agents.
+
 - Vite+ (`vp`), which manages the pinned Node runtime and dependency installs
 - Git
 - Access to the allowlisted PlanetScale `quieter_dev` logical database
