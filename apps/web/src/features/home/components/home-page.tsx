@@ -1,6 +1,8 @@
 "use client";
 
+import { Brand } from "@quieter/ui/brand";
 import { LinkButton } from "@quieter/ui/button";
+import { Link } from "@tanstack/react-router";
 import { domAnimation, LazyMotion } from "motion/react";
 import { useEffect } from "react";
 
@@ -59,6 +61,13 @@ export const HomePage = () => {
     <LazyMotion features={domAnimation}>
       <HomeSmoothScroll>
         <div className="min-h-dvh text-fg">
+          <Link
+            aria-label="Quieter home"
+            className="dark absolute top-5 left-6 z-20 text-fg"
+            to="/home"
+          >
+            <Brand className="h-7 w-28" variant="combination" />
+          </Link>
           <LinkButton
             className="fixed top-4 right-4 z-20 h-8 border-border bg-card/60 px-3 text-caption text-muted-fg shadow-none backdrop-blur-sm hover:bg-muted hover:text-fg"
             search={{ returnTo: "/auth" }}
