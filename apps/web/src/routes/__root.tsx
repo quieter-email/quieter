@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 
+import { brand } from "@quieter/ui/brand-geometry";
 import { createRootRoute } from "@tanstack/react-router";
 
 import { RootComponent } from "#/components/root/root-component";
@@ -79,7 +80,7 @@ export const Route = createRootRoute({
         rel: "manifest",
       },
       {
-        color: "#1a1a1a",
+        color: brand.dark,
         href: "/safari-pinned-tab.svg",
         rel: "mask-icon",
       },
@@ -109,12 +110,12 @@ export const Route = createRootRoute({
         name: "description",
       },
       {
-        content: "#f7f4ee",
+        content: brand.light,
         media: "(prefers-color-scheme: light)",
         name: "theme-color",
       },
       {
-        content: "#141414",
+        content: brand.dark,
         media: "(prefers-color-scheme: dark)",
         name: "theme-color",
       },
@@ -134,6 +135,12 @@ export const Route = createRootRoute({
         content: "https://quieter.email/og-image.png",
         property: "og:image",
       },
+      { content: "1200", property: "og:image:width" },
+      { content: "630", property: "og:image:height" },
+      {
+        content: "Quieter. Email, without the noise.",
+        property: "og:image:alt",
+      },
       {
         content: "website",
         property: "og:type",
@@ -149,6 +156,10 @@ export const Route = createRootRoute({
       {
         content: "https://quieter.email/og-image.png",
         name: "twitter:image",
+      },
+      {
+        content: "Quieter. Email, without the noise.",
+        name: "twitter:image:alt",
       },
     ],
     scripts: [

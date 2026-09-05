@@ -1,776 +1,493 @@
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { inflateSync } from "node:zlib";
+import { deflateSync } from "node:zlib";
 
-const projectRoot = path.resolve(import.meta.dirname, "..");
-const webPublicDir = path.resolve(projectRoot, "apps/web/public");
-const tempDir = path.resolve(webPublicDir, ".asset-tmp");
-const resvgCliPath = path.join(
-  projectRoot,
-  "node_modules",
-  "@resvg",
-  "resvg-js-cli",
-  "bin",
-  "resvg-js-cli.mjs"
+import { brand } from "../packages/ui/src/lib/brand-geometry.ts";
+
+const root = path.resolve(import.meta.dirname, "..");
+const output = path.join(root, "logo");
+const publicDir = path.join(root, "apps/web/public");
+const scratch = path.join(root, ".scratch/brand-render");
+const renderer = path.join(
+  root,
+  "node_modules/@resvg/resvg-js-cli/bin/resvg-js-cli.mjs"
 );
+for (const directory of [
+  output,
+  publicDir,
+  scratch,
+  path.join(output, "core"),
+]) {
+  mkdirSync(directory, { recursive: true });
+}
 
-const brand = {
-  dark: "#1a1a1a",
-  devDark: "#8f3b16",
-  devLight: "#ffe7b8",
-  light: "#f2f2f2",
-  page: "#f7f4ee",
-  themeDark: "#141414",
-  themeLight: "#f7f4ee",
+type Artwork = "mark" | "wordmark" | "combination";
+type Color = readonly [number, number, number];
+type Treatment = {
+  name: string;
+  label: string;
+  mode: "solid" | "fold" | "mist" | "metal" | "caustic" | "halo";
+  base: Color;
+  light: Color;
+  accent: Color;
+  ink: string;
+  phase: number;
 };
 
-type LogoSvg = {
-  content: string;
-  foreground: string;
-  viewBox: string;
-};
-
-type PdfShape =
-  | {
-      color: string;
-      height: number;
-      kind: "rect";
-      opacity: number;
-      width: number;
-      x: number;
-      y: number;
-    }
-  | {
-      color: string;
-      d: string;
-      kind: "path";
-      opacity: number;
-      transform: string;
-    };
-
-const trim = (value: number) => Number(value.toFixed(4)).toString();
-
-const indent = (value: string, spaces: number) => {
-  const prefix = " ".repeat(spaces);
-  return value
-    .split("\n")
-    .map((line) => (line ? `${prefix}${line}` : line))
-    .join("\n");
-};
-
-const channelToHex = (channel: number) =>
-  Math.round(channel * 255)
-    .toString(16)
-    .padStart(2, "0");
-
-const rgbToHex = (red: number, green: number, blue: number) =>
-  `#${channelToHex(red)}${channelToHex(green)}${channelToHex(blue)}`;
-
-const matrixToSvg = (matrix: number[]) =>
-  `matrix(${matrix.map(trim).join(" ")})`;
-
-const stripOuterSvg = (svg: string) => {
-  let output = svg;
-  output = output.replace(/<\?xml[^>]*>/u, "");
-  output = output.replace(/<!doctype[^>]*>/iu, "");
-  output = output.replace(/<svg\b[^>]*>/iu, "");
-  output = output.replace(/<\/svg>\s*$/iu, "");
-  return output.trim();
-};
-
-const viewBoxPattern = /\bviewBox=["'](?<viewBox>[^"']+)["']/iu;
-const pdfContentsPattern = /\/Contents\s+(?<objectId>\d+)\s+0\s+R/u;
-const pdfGraphicsStateAlphaPattern = /\/ca\s+(?<alpha>[0-9.]+)/u;
-const pdfGraphicsStateAlphaCapitalPattern = /\/CA\s+(?<alpha>[0-9.]+)/u;
-
-const isPresentString = (value: string | null | undefined): value is string =>
-  (value ?? "") !== "";
-
-const readViewBox = (svg: string) => viewBoxPattern.exec(svg)?.groups?.viewBox;
-
-const multiplyMatrix = (left: number[], right: number[]) => {
-  const [a1, b1, c1, d1, e1, f1] = left;
-  const [a2, b2, c2, d2, e2, f2] = right;
-
-  return [
-    a1 * a2 + c1 * b2,
-    b1 * a2 + d1 * b2,
-    a1 * c2 + c1 * d2,
-    b1 * c2 + d1 * d2,
-    a1 * e2 + c1 * f2 + e1,
-    b1 * e2 + d1 * f2 + f1,
-  ];
-};
-
-const shapeToSvg = (shape: PdfShape) => {
-  const opacity =
-    shape.opacity < 1 ? ` fill-opacity="${trim(shape.opacity)}"` : "";
-
-  if (shape.kind === "rect") {
-    return `<rect x="${trim(shape.x)}" y="${trim(shape.y)}" width="${trim(shape.width)}" height="${trim(shape.height)}" fill="${shape.color}"${opacity}/>`;
-  }
-
-  return `<path d="${shape.d}" fill="${shape.color}"${opacity} transform="${shape.transform}"/>`;
-};
-
-const findLightVariant = (filePath: string) => {
-  const parsed = path.parse(filePath);
-
-  if (parsed.name.endsWith("_light")) {
-    return existsSync(filePath) ? filePath : null;
-  }
-
-  const candidate = path.join(
-    path.dirname(filePath),
-    `${parsed.name}_light${parsed.ext}`
-  );
-  return existsSync(candidate) ? candidate : null;
-};
-
-const findCombinationVariant = (filePath: string) => {
-  const parsed = path.parse(filePath);
-  const name = parsed.name.endsWith("_light")
-    ? "combination_light"
-    : "combination";
-  const candidate = path.join(path.dirname(filePath), `${name}${parsed.ext}`);
-
-  return existsSync(candidate) ? candidate : null;
-};
-
-const decodePdfStream = (stream: Buffer) => {
-  try {
-    return inflateSync(stream).toString("latin1");
-  } catch {
-    return stream.toString("latin1");
-  }
-};
-
-const normalizePdfStreamBytes = (stream: Buffer) => {
-  let normalized = stream;
-
-  if (normalized[0] === 13 && normalized[1] === 10) {
-    normalized = normalized.subarray(2);
-  } else if (normalized[0] === 10 || normalized[0] === 13) {
-    normalized = normalized.subarray(1);
-  }
-
-  while (normalized.at(-1) === 10 || normalized.at(-1) === 13) {
-    normalized = normalized.subarray(0, -1);
-  }
-
-  return normalized;
-};
-
-const readPdfStream = (source: Buffer, latin: string, objectId: string) => {
-  const objectStart = latin.indexOf(`${objectId} 0 obj`);
-  const streamStart = latin.indexOf("stream", objectStart);
-  const streamEnd = latin.indexOf("endstream", streamStart);
-
-  if (objectStart === -1 || streamStart === -1 || streamEnd === -1) {
-    throw new Error(`Could not read PDF stream object ${objectId}.`);
-  }
-
-  const stream = source.subarray(streamStart + "stream".length, streamEnd);
-  return decodePdfStream(normalizePdfStreamBytes(stream));
-};
-
-const readGraphicsStateOpacity = (object: string) =>
-  pdfGraphicsStateAlphaPattern.exec(object)?.groups?.alpha ??
-  pdfGraphicsStateAlphaCapitalPattern.exec(object)?.groups?.alpha;
-
-const readPdfGraphicsStates = (latin: string) => {
-  const graphicsStates = new Map<string, number>();
-
-  for (const match of latin.matchAll(
-    /\/(?<name>GS\d+)\s+(?<id>\d+)\s+0\s+R/gu
-  )) {
-    const name = match.groups?.name;
-    const id = match.groups?.id;
-    if (!isPresentString(name) || !isPresentString(id)) {
-      continue;
-    }
-    const matchObjectStart = latin.indexOf(`${id} 0 obj`);
-    const objectEnd = latin.indexOf("endobj", matchObjectStart);
-    const object =
-      matchObjectStart !== -1 && objectEnd !== -1
-        ? latin.slice(matchObjectStart, objectEnd)
-        : "";
-    const opacity = readGraphicsStateOpacity(object);
-
-    if (opacity !== undefined && opacity !== "") {
-      graphicsStates.set(name, Number(opacity));
-    }
-  }
-
-  return graphicsStates;
-};
-
-const readPdfXObjects = (source: Buffer, latin: string) => {
-  const xobjects = new Map<string, string>();
-
-  for (const match of latin.matchAll(
-    /\/(?<name>Fm\d+)\s+(?<id>\d+)\s+0\s+R/gu
-  )) {
-    const name = match.groups?.name;
-    const id = match.groups?.id;
-    if (!isPresentString(name) || !isPresentString(id)) {
-      continue;
-    }
-    xobjects.set(name, readPdfStream(source, latin, id));
-  }
-
-  return xobjects;
-};
-
-const readPdfPageContent = (source: Buffer) => {
-  const latin = source.toString("latin1");
-  const contentsMatch = pdfContentsPattern.exec(latin);
-  const objectId = contentsMatch?.groups?.objectId;
-
-  if (!isPresentString(objectId)) {
-    throw new Error(
-      "Could not find the PDF page content stream in the Illustrator file."
-    );
-  }
-
-  const objectStart = latin.indexOf(`${objectId} 0 obj`);
-  const streamStart = latin.indexOf("stream", objectStart);
-  const streamEnd = latin.indexOf("endstream", streamStart);
-
-  if (objectStart === -1 || streamStart === -1 || streamEnd === -1) {
-    throw new Error(
-      "Could not read the PDF page content stream in the Illustrator file."
-    );
-  }
-
-  const stream = source.subarray(streamStart + "stream".length, streamEnd);
-
-  return {
-    content: decodePdfStream(normalizePdfStreamBytes(stream)),
-    graphicsStates: readPdfGraphicsStates(latin),
-    xobjects: readPdfXObjects(source, latin),
-  };
-};
-
-type PdfParseState = {
-  color: string;
-  lastName: string;
-  matrix: number[];
-  opacity: number;
-  shapes: PdfShape[];
-  stack: number[];
-  stateStack: { matrix: number[]; opacity: number }[];
-  svgPath: string;
-};
-
-const pushCurrentPdfPath = (state: PdfParseState) => {
-  if ((state.svgPath ?? "") === "") {
-    return;
-  }
-
-  state.shapes.push({
-    color: state.color,
-    d: state.svgPath,
-    kind: "path",
-    opacity: state.opacity,
-    transform: matrixToSvg(state.matrix),
-  });
-  state.svgPath = "";
-};
-
-const applyPdfToken = (
-  token: string,
-  state: PdfParseState,
-  resources: {
-    graphicsStates: Map<string, number>;
-    xobjects: Map<string, string>;
+const treatments: Treatment[] = [
+  {
+    accent: [14, 15, 16],
+    base: [14, 15, 16],
+    ink: brand.light,
+    label: "Obsidian",
+    light: [14, 15, 16],
+    mode: "solid",
+    name: "01-obsidian",
+    phase: 0,
   },
-  baseOpacity: number,
-  parseNestedShapes: (
-    nestedContent: string,
-    nestedMatrix: number[],
-    nestedOpacity: number
-  ) => PdfShape[]
-) => {
-  switch (token) {
-    case "q": {
-      state.stateStack.push({
-        matrix: [...state.matrix],
-        opacity: state.opacity,
-      });
-      break;
-    }
-    case "Q": {
-      const previousState = state.stateStack.pop();
-      if (previousState !== undefined) {
-        const { matrix, opacity } = previousState;
-        state.matrix = matrix;
-        state.opacity = opacity;
+  {
+    accent: [238, 238, 240],
+    base: [238, 238, 240],
+    ink: brand.dark,
+    label: "Paper",
+    light: [238, 238, 240],
+    mode: "solid",
+    name: "02-paper",
+    phase: 0,
+  },
+  {
+    accent: [29, 55, 97],
+    base: [9, 12, 17],
+    ink: brand.light,
+    label: "Atmosphere",
+    light: [128, 146, 164],
+    mode: "fold",
+    name: "03-atmosphere",
+    phase: 0.8,
+  },
+  {
+    accent: [154, 169, 186],
+    base: [230, 231, 233],
+    ink: brand.dark,
+    label: "Porcelain",
+    light: [254, 254, 252],
+    mode: "mist",
+    name: "04-porcelain",
+    phase: 1.2,
+  },
+  {
+    accent: [18, 53, 132],
+    base: [5, 13, 35],
+    ink: brand.light,
+    label: "Blue hour",
+    light: [85, 148, 218],
+    mode: "fold",
+    name: "05-blue-hour",
+    phase: 2.8,
+  },
+  {
+    accent: [26, 72, 107],
+    base: [5, 19, 22],
+    ink: brand.light,
+    label: "Aurora",
+    light: [108, 192, 167],
+    mode: "fold",
+    name: "06-aurora",
+    phase: 4.2,
+  },
+  {
+    accent: [97, 35, 31],
+    base: [22, 11, 12],
+    ink: brand.light,
+    label: "Ember",
+    light: [193, 130, 96],
+    mode: "fold",
+    name: "07-ember",
+    phase: 1.9,
+  },
+  {
+    accent: [160, 149, 187],
+    base: [224, 222, 233],
+    ink: brand.dark,
+    label: "Lilac haze",
+    light: [254, 246, 240],
+    mode: "mist",
+    name: "08-lilac",
+    phase: 3.6,
+  },
+  {
+    accent: [40, 49, 62],
+    base: [12, 15, 19],
+    ink: "url(#metal)",
+    label: "Silver",
+    light: [131, 141, 151],
+    mode: "metal",
+    name: "09-silver",
+    phase: 1.7,
+  },
+  {
+    accent: [177, 153, 130],
+    base: [229, 222, 210],
+    ink: "#28231f",
+    label: "Sand",
+    light: [253, 248, 236],
+    mode: "mist",
+    name: "10-sand",
+    phase: 5.1,
+  },
+  {
+    accent: [21, 54, 74],
+    base: [6, 18, 30],
+    ink: brand.light,
+    label: "Caustic",
+    light: [108, 182, 207],
+    mode: "caustic",
+    name: "11-caustic",
+    phase: 2.3,
+  },
+  {
+    accent: [40, 45, 68],
+    base: [10, 11, 14],
+    ink: brand.light,
+    label: "Eclipse",
+    light: [155, 164, 190],
+    mode: "halo",
+    name: "12-eclipse",
+    phase: 0,
+  },
+];
+const formats = [
+  { height: 1024, name: "profile", width: 1024 },
+  { height: 630, name: "og", width: 1200 },
+  { height: 800, name: "banner", width: 2400 },
+];
+const variants: Artwork[] = ["mark", "combination", "wordmark"];
+const crcTable = new Uint32Array(256);
+for (let index = 0; index < 256; index += 1) {
+  let value = index;
+  for (let bit = 0; bit < 8; bit += 1) {
+    // oxlint-disable-next-line eslint/no-bitwise -- PNG CRC32 operates on individual bits.
+    value = value & 1 ? 0xed_b8_83_20 ^ (value >>> 1) : value >>> 1;
+  }
+  crcTable[index] = value;
+}
+const pngChunk = (kind: string, data: Buffer) => {
+  const contents = Buffer.concat([Buffer.from(kind), data]);
+  let crc = 0xff_ff_ff_ff;
+  for (const byte of contents) {
+    // oxlint-disable-next-line eslint/no-bitwise -- PNG CRC32 operates on individual bits.
+    crc = (crcTable[(crc ^ byte) & 255] ?? 0) ^ (crc >>> 8);
+  }
+  const chunk = Buffer.alloc(data.length + 12);
+  chunk.writeUInt32BE(data.length, 0);
+  contents.copy(chunk, 4);
+  // oxlint-disable-next-line eslint/no-bitwise -- Final unsigned PNG CRC32 checksum.
+  chunk.writeUInt32BE((crc ^ 0xff_ff_ff_ff) >>> 0, chunk.length - 4);
+  return chunk;
+};
+
+// Still frames of curved light fields, with spatial grain and a quiet center for the artwork.
+const shader = (width: number, height: number, treatment: Treatment) => {
+  const scanlines = Buffer.alloc((width * 3 + 1) * height);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const u = (x / width - 0.5) * 2;
+      const v = (y / height - 0.5) * 2;
+      const { phase, mode } = treatment;
+      const curve = v + 0.24 * u - 0.38 * Math.sin(u * 2 + phase) - 0.18;
+      const fold = Math.exp(-(curve * curve) / 0.018);
+      const broad = Math.exp(-(curve * curve) / 0.2);
+      const glow = Math.exp(-((u + 0.75) ** 2 / 0.8 + (v - 0.5) ** 2 / 0.65));
+      const quiet = 1 - 0.76 * Math.exp(-((u * u) / 0.42 + (v * v) / 0.22));
+      let highlight = 0;
+      let tint = 0;
+      if (mode === "fold") {
+        highlight = (fold * 0.58 + broad * 0.18) * quiet;
+        tint = glow * 0.62;
+      } else if (mode === "mist") {
+        highlight = Math.exp(-((u - 0.3) ** 2 + (v + 0.55) ** 2) / 0.85) * 0.9;
+        tint = (broad * 0.36 + glow * 0.23) * quiet;
+      } else if (mode === "metal") {
+        const stripe = v + 0.54 * u + 0.17 * Math.sin(u * 3 + phase);
+        highlight = Math.exp(-((stripe - 0.47) ** 2) / 0.032) * 0.68 * quiet;
+        tint = broad * 0.3;
+      } else if (mode === "caustic") {
+        const second = v - 0.43 * Math.sin(u * 2.7 + phase) + 0.3;
+        highlight =
+          (Math.exp(-(curve * curve) / 0.003) +
+            Math.exp(-(second * second) / 0.005)) *
+          0.4 *
+          quiet;
+        tint = (broad + glow) * 0.24;
+      } else if (mode === "halo") {
+        const distance = Math.hypot(u * (width / height), v + 0.07);
+        highlight = Math.exp(-((distance - 0.7) ** 2) / 0.008) * 0.56;
+        tint = Math.exp(-((distance - 0.72) ** 2) / 0.065) * 0.65;
       }
-      break;
-    }
-    case "cm": {
-      const [a, b, c, d, e, f] = state.stack.splice(-6);
-      state.matrix = multiplyMatrix(state.matrix, [a, b, c, d, e, f]);
-      break;
-    }
-    case "scn": {
-      const [r, g, b] = state.stack.splice(-3);
-      state.color = rgbToHex(r, g, b);
-      break;
-    }
-    case "m": {
-      const [x, y] = state.stack.splice(-2);
-      state.svgPath += `M${trim(x)} ${trim(y)}`;
-      break;
-    }
-    case "l": {
-      const [x, y] = state.stack.splice(-2);
-      state.svgPath += `L${trim(x)} ${trim(y)}`;
-      break;
-    }
-    case "c": {
-      const [x1, y1, x2, y2, x, y] = state.stack.splice(-6);
-      state.svgPath += `C${trim(x1)} ${trim(y1)} ${trim(x2)} ${trim(y2)} ${trim(x)} ${trim(y)}`;
-      break;
-    }
-    case "h": {
-      state.svgPath += "Z";
-      break;
-    }
-    case "re": {
-      const [x, y, width, height] = state.stack.splice(-4);
-      pushCurrentPdfPath(state);
-      state.shapes.push({
-        color: state.color,
-        height,
-        kind: "rect",
-        opacity: state.opacity,
-        width,
-        x,
-        y,
-      });
-      break;
-    }
-    case "f":
-    case "F":
-    case "f*": {
-      pushCurrentPdfPath(state);
-      break;
-    }
-    case "gs": {
-      state.opacity =
-        baseOpacity * (resources.graphicsStates.get(state.lastName) ?? 1);
-      break;
-    }
-    case "Do": {
-      const xobject = resources.xobjects.get(state.lastName);
-      if (xobject !== undefined) {
-        state.shapes.push(
-          ...parseNestedShapes(xobject, state.matrix, state.opacity)
+      const random = Math.sin(x * 12.9898 + y * 78.233) * 43_758.5453;
+      const grain =
+        mode === "solid" ? 0 : (random - Math.floor(random) - 0.5) * 2.4;
+      const offset = y * (width * 3 + 1) + 1 + x * 3;
+      for (let channel = 0; channel < 3; channel += 1) {
+        const base = treatment.base[channel] ?? 0;
+        const color = base + ((treatment.accent[channel] ?? 0) - base) * tint;
+        scanlines[offset + channel] = Math.round(
+          Math.max(
+            0,
+            Math.min(
+              255,
+              color +
+                ((treatment.light[channel] ?? 0) - color) * highlight +
+                grain
+            )
+          )
         );
       }
-      break;
-    }
-    default: {
-      break;
     }
   }
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header[8] = 8;
+  header[9] = 2;
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    pngChunk("IHDR", header),
+    pngChunk("IDAT", deflateSync(scanlines)),
+    pngChunk("IEND", Buffer.alloc(0)),
+  ]);
 };
-
-const parsePdfShapes = (
-  content: string,
-  resources: {
-    graphicsStates: Map<string, number>;
-    xobjects: Map<string, string>;
-  },
-  baseMatrix = [1, 0, 0, 1, 0, 0],
-  baseOpacity = 1
+const artwork = (
+  variant: Artwork,
+  width: number,
+  height: number,
+  ink: string,
+  coverage = 0.7
 ) => {
-  const tokens = content.match(/\/?[A-Za-z][A-Za-z0-9]*|-?\d*\.?\d+/gu) ?? [];
-  const state: PdfParseState = {
-    color: brand.light,
-    lastName: "",
-    matrix: [...baseMatrix],
-    opacity: baseOpacity,
-    shapes: [],
-    stack: [],
-    stateStack: [],
-    svgPath: "",
-  };
-  const parseNestedShapes = (
-    nestedContent: string,
-    nestedMatrix: number[],
-    nestedOpacity: number
-  ) => parsePdfShapes(nestedContent, resources, nestedMatrix, nestedOpacity);
-
-  for (const token of tokens) {
-    const value = Number(token);
-
-    if (Number.isFinite(value)) {
-      state.stack.push(value);
-      continue;
-    }
-
-    if (token.startsWith("/")) {
-      state.lastName = token.slice(1);
-      continue;
-    }
-
-    applyPdfToken(token, state, resources, baseOpacity, parseNestedShapes);
-  }
-
-  return state.shapes.filter(
-    (shape) =>
-      !(shape.kind === "rect" && shape.width === 1000 && shape.height === -1000)
+  const geometry = brand[variant];
+  const scale = Math.min(
+    (width * coverage) / geometry.width,
+    (height * (variant === "mark" ? 0.8 : 0.52)) / geometry.height
   );
+  return `<path fill="${ink}" d="${geometry.path}" transform="translate(${(width - geometry.width * scale) / 2} ${(height - geometry.height * scale) / 2}) scale(${scale})"/>`;
 };
-
-const convertPdfCompatibleAiToSvg = (source: Buffer) => {
-  const { content, graphicsStates, xobjects } = readPdfPageContent(source);
-  const shapes = parsePdfShapes(content, { graphicsStates, xobjects });
-  const contentSvg = shapes.map(shapeToSvg).join("\n");
-  const foregroundSvg = shapes
-    .filter((shape) => shape.kind === "path")
-    .map((shape) => shapeToSvg({ ...shape, color: "currentColor" }))
-    .join("\n");
-
-  return {
-    content: `<g transform="matrix(1 0 0 -1 0 1000)">\n${contentSvg}\n</g>`,
-    foreground: `<g transform="matrix(1 0 0 -1 0 1000)">\n${foregroundSvg}\n</g>`,
-    viewBox: "0 0 1000 1000",
-  };
-};
-
-const loadLogoSvg = async (filePath: string, ext: string): Promise<LogoSvg> => {
-  if (ext === ".svg") {
-    const svg = await readFile(filePath, "utf-8");
-    return {
-      content: stripOuterSvg(svg),
-      foreground: stripOuterSvg(svg),
-      viewBox: readViewBox(svg) ?? "0 0 1000 1000",
-    };
-  }
-
-  if (ext === ".ai" || ext === ".pdf") {
-    const source = await readFile(filePath);
-    return convertPdfCompatibleAiToSvg(source);
-  }
-
-  throw new Error(
-    `Unsupported logo input: ${ext}. Use an .svg, PDF-compatible .ai, or .pdf file.`
-  );
-};
-
-const recolorLogo = (
-  logoAsset: LogoSvg,
-  dark: string,
-  light: string
-): LogoSvg => {
-  const recolor = (value: string) =>
-    value.replaceAll(brand.dark, dark).replaceAll(brand.light, light);
-
-  return {
-    content: recolor(logoAsset.content),
-    foreground: recolor(logoAsset.foreground),
-    viewBox: logoAsset.viewBox,
-  };
-};
-
-const buildSchemeIconSvg = (logoAsset: {
-  dark: { content: string; viewBox: string };
-  light: { content: string; viewBox: string };
-}) =>
-  `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="${logoAsset.dark.viewBox}">
-  <style>
-    .dark { display: none; }
-    @media (prefers-color-scheme: dark) {
-      .light { display: none; }
-      .dark { display: inline; }
-    }
-  </style>
-  <g class="light">
-${indent(logoAsset.light.content, 4)}
-  </g>
-  <g class="dark">
-${indent(logoAsset.dark.content, 4)}
-  </g>
-</svg>
-`;
-
-const buildStaticIconSvg = (
-  logoAsset: { content: string; viewBox: string },
-  size: number
-) =>
-  `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="${logoAsset.viewBox}">
-${indent(logoAsset.content, 2)}
-</svg>
-`;
-
-const buildMaskableIconSvg = (logoAsset: { foreground: string }) =>
-  `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 1000 1000">
-  <rect width="1000" height="1000" fill="${brand.dark}"/>
-  <g color="${brand.light}" transform="translate(90 90) scale(0.82)">
-${indent(logoAsset.foreground, 4)}
-  </g>
-</svg>
-`;
-
-const buildPinnedTabSvg = (logoAsset: { foreground: string }) =>
-  `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000">
-  <g color="#000000">
-${indent(logoAsset.foreground, 4)}
-  </g>
-</svg>
-`;
-
-const buildOgImageSvg = (logoAsset: { content: string }) =>
-  `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
-  <g transform="translate(0 -285) scale(1.2)">
-${indent(logoAsset.content, 4)}
-  </g>
-</svg>
-`;
-
-const buildManifest = () => ({
-  background_color: brand.themeLight,
-  display: "standalone",
-  icons: [
-    { sizes: "192x192", src: "/icon-192.png", type: "image/png" },
-    { sizes: "512x512", src: "/icon-512.png", type: "image/png" },
-    {
-      purpose: "maskable",
-      sizes: "512x512",
-      src: "/icon-maskable-512.png",
-      type: "image/png",
-    },
-  ],
-  name: "quieter",
-  protocol_handlers: [
-    { protocol: "mailto", url: "/?compose=mailto&mailto=%s" },
-  ],
-  short_name: "quieter",
-  start_url: "/",
-  theme_color: brand.themeLight,
-});
-
-const renderSvg = (
-  inputPath: string,
-  outputPath: string,
+const svg = (width: number, height: number, body: string) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><title>Quieter</title>${body}</svg>`;
+const render = (
+  source: string,
+  destination: string,
   width: number,
   height: number
 ) => {
+  const input = path.join(scratch, "render.svg");
+  writeFileSync(input, source);
   const result = spawnSync(
     process.execPath,
     [
-      resvgCliPath,
+      renderer,
+      ...(source.includes("<text") ? [] : ["--no-system-font"]),
       "--fit-width",
       String(width),
       "--fit-height",
       String(height),
-      inputPath,
-      outputPath,
+      input,
+      destination,
     ],
-    { encoding: "buffer", stdio: ["ignore", "pipe", "pipe"] }
+    { encoding: "utf-8" }
   );
-
-  if (result.error !== undefined || result.status !== 0) {
-    const stderrText = result.stderr.toString().trim();
-    const reason =
-      stderrText === ""
-        ? (result.error?.message ?? `exit code ${result.status}`)
-        : stderrText;
-    throw new Error(`Failed to render ${outputPath}: ${reason}`);
-  }
-};
-
-const buildIco = (pngs: Buffer[], sizes: number[]) => {
-  const headerSize = 6;
-  const entrySize = 16;
-  const directorySize = headerSize + pngs.length * entrySize;
-  let imageSize = 0;
-  for (const png of pngs) {
-    imageSize += png.length;
-  }
-  const ico = Buffer.alloc(directorySize + imageSize);
-
-  ico.writeUInt16LE(0, 0);
-  ico.writeUInt16LE(1, 2);
-  ico.writeUInt16LE(pngs.length, 4);
-
-  let imageOffset = directorySize;
-
-  for (const [index, png] of pngs.entries()) {
-    const entryOffset = headerSize + index * entrySize;
-    ico.writeUInt8(sizes[index], entryOffset);
-    ico.writeUInt8(sizes[index], entryOffset + 1);
-    ico.writeUInt8(0, entryOffset + 2);
-    ico.writeUInt8(0, entryOffset + 3);
-    ico.writeUInt16LE(1, entryOffset + 4);
-    ico.writeUInt16LE(32, entryOffset + 6);
-    ico.writeUInt32LE(png.length, entryOffset + 8);
-    ico.writeUInt32LE(imageOffset, entryOffset + 12);
-    png.copy(ico, imageOffset);
-    imageOffset += png.length;
-  }
-
-  return ico;
-};
-
-const main = async () => {
-  const args = process.argv.slice(2);
-  const inputArg = args.find((arg) => !arg.startsWith("--"));
-  if (!isPresentString(inputArg)) {
-    process.stderr.write(
-      "Usage: node scripts/generate-web-assets.ts <path-to-logo.svg|logo.ai>\n"
+  if (result.error || result.status !== 0) {
+    throw new Error(
+      `SVG export failed for ${destination}: ${result.error?.message ?? result.stderr}`
     );
-    throw new Error("A logo input path is required.");
   }
-
-  const sourcePath = path.isAbsolute(inputArg)
-    ? inputArg
-    : path.resolve(projectRoot, inputArg);
-  const sourceName = path.basename(sourcePath);
-  const sourceExt = path.extname(sourcePath).toLowerCase();
-  const lightPath = findLightVariant(sourcePath);
-  const combinationPath = findCombinationVariant(sourcePath);
-
-  await mkdir(webPublicDir, { recursive: true });
-  await mkdir(tempDir, { recursive: true });
-
-  const logo = await loadLogoSvg(sourcePath, sourceExt);
-  const lightLogo = isPresentString(lightPath)
-    ? await loadLogoSvg(lightPath, path.extname(lightPath).toLowerCase())
-    : undefined;
-  const ogLogo = isPresentString(combinationPath)
-    ? await loadLogoSvg(
-        combinationPath,
-        path.extname(combinationPath).toLowerCase()
-      )
-    : logo;
-
-  await writeFile(
-    path.resolve(webPublicDir, "icon.svg"),
-    lightLogo === undefined
-      ? buildStaticIconSvg(logo, 1000)
-      : buildSchemeIconSvg({ dark: logo, light: lightLogo })
-  );
-  const environmentIcons =
-    lightLogo === undefined
-      ? []
-      : [
-          {
-            file: "dev",
-            staticLogo: recolorLogo(logo, brand.devDark, brand.devLight),
-            svg: buildSchemeIconSvg({
-              dark: recolorLogo(logo, brand.devDark, brand.devLight),
-              light: recolorLogo(lightLogo, brand.devDark, brand.devLight),
-            }),
-          },
-        ];
-
-  await Promise.all(
-    environmentIcons.map(async (icon) => {
-      await writeFile(
-        path.resolve(webPublicDir, `icon-${icon.file}.svg`),
-        icon.svg
-      );
-    })
-  );
-  await writeFile(
-    path.resolve(webPublicDir, "safari-pinned-tab.svg"),
-    buildPinnedTabSvg(logo)
-  );
-  await writeFile(
-    path.resolve(webPublicDir, "site.webmanifest"),
-    `${JSON.stringify(buildManifest(), null, 2)}\n`
-  );
-
-  const renderJobs = [
-    {
-      file: "apple-touch-icon.png",
-      size: 180,
-      svg: buildStaticIconSvg(logo, 1000),
-    },
-    { file: "icon-192.png", size: 192, svg: buildStaticIconSvg(logo, 1000) },
-    { file: "icon-512.png", size: 512, svg: buildStaticIconSvg(logo, 1000) },
-    {
-      file: "icon-maskable-512.png",
-      size: 512,
-      svg: buildMaskableIconSvg(logo),
-    },
-    {
-      file: "og-image.png",
-      height: 630,
-      size: 1200,
-      svg: buildOgImageSvg(ogLogo),
-    },
-  ];
-
-  await Promise.all(
-    renderJobs.map(async (job) => {
-      const svgPath = path.resolve(tempDir, `${job.file}.svg`);
-      const outputPath = path.resolve(webPublicDir, job.file);
-      await writeFile(svgPath, job.svg);
-      renderSvg(svgPath, outputPath, job.size, job.height ?? job.size);
-    })
-  );
-
-  const favicons = [
-    { file: "favicon", svg: buildStaticIconSvg(logo, 1000) },
-    ...environmentIcons.map((icon) => ({
-      file: `favicon-${icon.file}`,
-      svg: buildStaticIconSvg(icon.staticLogo, 1000),
-    })),
-  ];
-
-  await Promise.all(
-    favicons.map(async (favicon) => {
-      const favicon16 = path.resolve(tempDir, `${favicon.file}-16.png`);
-      const favicon32 = path.resolve(tempDir, `${favicon.file}-32.png`);
-      const faviconSvg = path.resolve(tempDir, `${favicon.file}.svg`);
-      await writeFile(faviconSvg, favicon.svg);
-      renderSvg(faviconSvg, favicon16, 16, 16);
-      renderSvg(faviconSvg, favicon32, 32, 32);
-      await writeFile(
-        path.resolve(webPublicDir, `${favicon.file}.ico`),
-        buildIco(
-          [await readFile(favicon16), await readFile(favicon32)],
-          [16, 32]
-        )
-      );
-    })
-  );
-
-  await rm(tempDir, { force: true, recursive: true });
-
-  const generatedAssets = [
-    `Generated web assets from ${sourceName}:`,
-    `  source: ${sourcePath}`,
-    ...(isPresentString(lightPath) ? [`  light variant: ${lightPath}`] : []),
-    ...(isPresentString(combinationPath)
-      ? [`  og source: ${combinationPath}`]
-      : []),
-    "  apps/web/public/favicon.ico",
-    "  apps/web/public/favicon-dev.ico",
-    "  apps/web/public/icon.svg",
-    "  apps/web/public/icon-dev.svg",
-    "  apps/web/public/apple-touch-icon.png",
-    "  apps/web/public/icon-192.png",
-    "  apps/web/public/icon-512.png",
-    "  apps/web/public/icon-maskable-512.png",
-    "  apps/web/public/safari-pinned-tab.svg",
-    "  apps/web/public/og-image.png",
-    "  apps/web/public/site.webmanifest",
-  ];
-  process.stdout.write(`${generatedAssets.join("\n")}\n`);
 };
 
-await main();
+for (const variant of variants) {
+  for (const theme of ["dark", "light"] as const) {
+    for (const transparent of [true, false]) {
+      const width = variant === "mark" ? 2048 : 3000;
+      const height = variant === "mark" ? 2048 : 900;
+      const ink = theme === "dark" ? brand.dark : brand.light;
+      const ground = theme === "dark" ? brand.light : brand.dark;
+      const stem = `${variant}-${theme}${transparent ? "-transparent" : "-background"}`;
+      const body = `${transparent ? "" : `<rect width="100%" height="100%" fill="${ground}"/>`}${artwork(variant, width, height, ink, variant === "mark" ? 1 : 0.88)}`;
+      const source = svg(width, height, body);
+      writeFileSync(path.join(output, "core", `${stem}.svg`), source);
+      render(source, path.join(output, "core", `${stem}.png`), width, height);
+    }
+  }
+}
+for (const [name, source] of [
+  ["logo", "mark-dark-transparent"],
+  ["logo_light", "mark-light-transparent"],
+  ["wordmark", "wordmark-light-background"],
+  ["wordmark_light", "wordmark-dark-background"],
+  ["combination", "combination-light-background"],
+  ["combination_light", "combination-dark-background"],
+]) {
+  for (const extension of ["svg", "png"]) {
+    copyFileSync(
+      path.join(output, "core", `${source}.${extension}`),
+      path.join(output, `${name}.${extension}`)
+    );
+  }
+}
+
+const gallery: {
+  treatment: string;
+  label: string;
+  format: string;
+  variant: Artwork;
+  file: string;
+  width: number;
+  height: number;
+}[] = [];
+const thumbnails: string[] = [];
+for (const treatment of treatments) {
+  mkdirSync(path.join(output, treatment.name), { recursive: true });
+  for (const format of formats) {
+    const background = shader(format.width, format.height, treatment).toString(
+      "base64"
+    );
+    for (const variant of variants) {
+      const file = `${treatment.name}/${format.name}-${variant}.png`;
+      const shadow =
+        treatment.mode === "metal" || treatment.name === "04-porcelain";
+      const body = `<defs><filter id="shadow" x="-30%" y="-50%" width="160%" height="200%"><feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#0e0f10" flood-opacity=".18"/></filter><linearGradient id="metal" x1="0" y1="0" x2="0.7" y2="1"><stop stop-color="#fff"/><stop offset=".45" stop-color="#e0e3e7"/><stop offset=".55" stop-color="#9ca4b0"/><stop offset="1" stop-color="#eef1f4"/></linearGradient></defs><image width="${format.width}" height="${format.height}" href="data:image/png;base64,${background}"/><g${shadow ? ' filter="url(#shadow)"' : ""}>${artwork(variant, format.width, format.height, treatment.ink, variant === "mark" ? 0.66 : 0.71)}</g>`;
+      const source = svg(format.width, format.height, body);
+      render(source, path.join(output, file), format.width, format.height);
+      gallery.push({
+        file,
+        format: format.name,
+        height: format.height,
+        label: treatment.label,
+        treatment: treatment.name,
+        variant,
+        width: format.width,
+      });
+      if (format.name === "og" && variant === "combination") {
+        const thumb = path.join(scratch, `${treatment.name}.png`);
+        render(source, thumb, 600, 315);
+        thumbnails.push(readFileSync(thumb).toString("base64"));
+      }
+    }
+  }
+  process.stdout.write(`Rendered ${treatment.label}\n`);
+}
+let sheet = '<rect width="100%" height="100%" fill="#18191b"/>';
+for (const [index, treatment] of treatments.entries()) {
+  const x = 30 + (index % 3) * 620;
+  const y = 30 + Math.floor(index / 3) * 370;
+  sheet += `<image x="${x}" y="${y}" width="600" height="315" href="data:image/png;base64,${thumbnails[index]}"/><text x="${x + 4}" y="${y + 345}" fill="#eeeef0" font-family="Arial" font-size="20">${treatment.name.slice(0, 2)} / ${treatment.label}</text>`;
+}
+render(
+  svg(1890, 1500, sheet),
+  path.join(output, "contact-sheet.png"),
+  1890,
+  1500
+);
+writeFileSync(
+  path.join(output, "manifest.json"),
+  `${JSON.stringify({ assets: gallery, colors: { dark: brand.dark, light: brand.light } }, null, 2)}\n`
+);
+const sections = treatments
+  .map(
+    (treatment) =>
+      `<section><h2>${treatment.name.slice(0, 2)} / ${treatment.label}</h2><div class="grid">${gallery
+        .filter((item) => item.treatment === treatment.name)
+        .map(
+          (item) =>
+            `<a href="${item.file}" download><img loading="lazy" src="${item.file}" alt="${item.label}, ${item.variant}, ${item.format}"><span>${item.format} / ${item.variant}<small>${item.width} × ${item.height}</small></span></a>`
+        )
+        .join("")}</div></section>`
+  )
+  .join("");
+writeFileSync(
+  path.join(output, "index.html"),
+  `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Quieter brand assets</title><style>body{margin:0;background:#0e0f10;color:#eeeef0;font:15px system-ui}main{max-width:1440px;margin:auto;padding:48px 32px}h1{font-size:32px;font-weight:500}p{color:#929599;line-height:1.7}h2{font-size:19px;font-weight:450;margin-top:56px}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px}a{color:inherit;text-decoration:none}img{display:block;width:100%;aspect-ratio:1.9;object-fit:contain;background:#17181a}span{display:flex;justify-content:space-between;padding-top:12px}small{color:#8e9399}@media(max-width:750px){.grid{grid-template-columns:1fr}main{padding:24px}}</style><main><h1>Quieter</h1><p>Original 004. Custom Geist wordmark.<br>108 images, 12 treatments. Select an image to save the full-size PNG.<br>SVG and transparent PNG masters are in the core folder. Dark and light in core filenames describe the ink color.</p>${sections}</main></html>`
+);
+
+const icon = (ground: string, ink: string, coverage: number) =>
+  svg(
+    1000,
+    1000,
+    `<rect width="1000" height="1000" fill="${ground}"/><path fill="${ink}" d="${brand.mark.path}" transform="translate(${500 * (1 - coverage)} ${500 * (1 - coverage)}) scale(${coverage})"/>`
+  );
+for (const [filename, size] of [
+  ["apple-touch-icon.png", 180],
+  ["icon-192.png", 192],
+  ["icon-512.png", 512],
+  ["icon-maskable-512.png", 512],
+] as const) {
+  render(
+    icon(brand.dark, brand.light, 0.9),
+    path.join(publicDir, filename),
+    size,
+    size
+  );
+}
+for (const [suffix, ground, ink] of [
+  ["", brand.dark, brand.light],
+  ["-dev", "#34231a", "#f2d6bd"],
+] as const) {
+  const source = icon(ground, ink, 1.05);
+  writeFileSync(path.join(publicDir, `icon${suffix}.svg`), source);
+  const sizes = [16, 32, 48, 64];
+  const images = sizes.map((size) => {
+    const destination = path.join(scratch, `favicon-${size}.png`);
+    render(source, destination, size, size);
+    return readFileSync(destination);
+  });
+  const headerSize = 6 + sizes.length * 16;
+  const ico = Buffer.alloc(
+    headerSize + images.reduce((sum, image) => sum + image.length, 0)
+  );
+  ico.writeUInt16LE(1, 2);
+  ico.writeUInt16LE(images.length, 4);
+  let offset = headerSize;
+  for (const [index, image] of images.entries()) {
+    const entry = 6 + index * 16;
+    ico[entry] = sizes[index] ?? 0;
+    ico[entry + 1] = sizes[index] ?? 0;
+    ico.writeUInt16LE(1, entry + 4);
+    ico.writeUInt16LE(32, entry + 6);
+    ico.writeUInt32LE(image.length, entry + 8);
+    ico.writeUInt32LE(offset, entry + 12);
+    image.copy(ico, offset);
+    offset += image.length;
+  }
+  writeFileSync(path.join(publicDir, `favicon${suffix}.ico`), ico);
+}
+writeFileSync(
+  path.join(publicDir, "safari-pinned-tab.svg"),
+  svg(1000, 1000, artwork("mark", 1000, 1000, "#000", 1))
+);
+for (const [file, source] of [
+  ["logo.svg", "mark-dark-transparent"],
+  ["logo-light.svg", "mark-light-transparent"],
+  ["wordmark.svg", "wordmark-dark-transparent"],
+  ["wordmark-light.svg", "wordmark-light-transparent"],
+  ["combination.svg", "combination-dark-transparent"],
+  ["combination-light.svg", "combination-light-transparent"],
+]) {
+  copyFileSync(
+    path.join(output, "core", `${source}.svg`),
+    path.join(publicDir, file)
+  );
+}
+copyFileSync(
+  path.join(output, "03-atmosphere/og-combination.png"),
+  path.join(publicDir, "og-image.png")
+);
+const manifestPath = path.join(publicDir, "site.webmanifest");
+const manifestText = readFileSync(manifestPath, "utf-8")
+  .replace(
+    /"background_color":\s*"[^"]*"/u,
+    `"background_color": "${brand.dark}"`
+  )
+  .replace(/"theme_color":\s*"[^"]*"/u, `"theme_color": "${brand.dark}"`);
+writeFileSync(manifestPath, manifestText);
+process.stdout.write(
+  `Exported ${gallery.length} social images, vector masters, app icons, favicons and OG image.\n`
+);

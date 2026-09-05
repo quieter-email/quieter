@@ -19,6 +19,7 @@
 }
 
 :root {
+  --brand-bg: rgb(238 238 240);
   --font-geist: "Geist Variable", sans-serif;
   --font-lora: "Lora Variable", serif;
   --font-geist-mono: "Geist Mono Variable", monospace;
@@ -102,6 +103,7 @@
 .dark,
 :root[data-theme="dark"],
 :root[data-kb-theme="dark"] {
+  --brand-bg: rgb(14 15 16);
   --bg: oklch(0.125 0 264);
   --bg-raised: oklch(0.198 0.003 264);
   --bg-surface: oklch(0.235 0.003 264);
@@ -169,6 +171,7 @@
 }
 
 @theme inline {
+  --color-brand-bg: var(--brand-bg);
   --color-bg: var(--bg);
   --color-fg: var(--fg);
   --color-bg-raised: var(--bg-raised);

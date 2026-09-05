@@ -2,6 +2,7 @@
 
 import { Key02Icon, Mail01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { Brand } from "@quieter/ui/brand";
 import { Button } from "@quieter/ui/button";
 import { FieldLabel } from "@quieter/ui/field";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
@@ -474,6 +475,7 @@ export const AuthScreen = () => {
           not. The visual sits second and is ordered right on wide viewports. */}
       <div className="flex size-full min-h-0 items-center justify-center px-6">
         <div className="w-full max-w-md">
+          <Brand className="mb-8 h-8 w-32 text-fg" variant="combination" />
           <h1 className="text-title-md font-medium tracking-tight text-fg">
             Continue to Quieter
           </h1>

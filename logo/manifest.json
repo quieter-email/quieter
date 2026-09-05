@@ -1,0 +1,980 @@
+{
+  "assets": [
+    {
+      "file": "01-obsidian/profile-mark.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Obsidian",
+      "treatment": "01-obsidian",
+      "variant": "mark",
+      "width": 1024
+    },
+    {
+      "file": "01-obsidian/profile-combination.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Obsidian",
+      "treatment": "01-obsidian",
+      "variant": "combination",
+      "width": 1024
+    },
+    {
+      "file": "01-obsidian/profile-wordmark.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Obsidian",
+      "treatment": "01-obsidian",
+      "variant": "wordmark",
+      "width": 1024
+    },
+    {
+      "file": "01-obsidian/og-mark.png",
+      "format": "og",
+      "height": 630,
+      "label": "Obsidian",
+      "treatment": "01-obsidian",
+      "variant": "mark",
+      "width": 1200
+    },
+    {
+      "file": "01-obsidian/og-combination.png",
+      "format": "og",
+      "height": 630,
+      "label": "Obsidian",
+      "treatment": "01-obsidian",
+      "variant": "combination",
+      "width": 1200
+    },
+    {
+      "file": "01-obsidian/og-wordmark.png",
+      "format": "og",
+      "height": 630,
+      "label": "Obsidian",
+      "treatment": "01-obsidian",
+      "variant": "wordmark",
+      "width": 1200
+    },
+    {
+      "file": "01-obsidian/banner-mark.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Obsidian",
+      "treatment": "01-obsidian",
+      "variant": "mark",
+      "width": 2400
+    },
+    {
+      "file": "01-obsidian/banner-combination.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Obsidian",
+      "treatment": "01-obsidian",
+      "variant": "combination",
+      "width": 2400
+    },
+    {
+      "file": "01-obsidian/banner-wordmark.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Obsidian",
+      "treatment": "01-obsidian",
+      "variant": "wordmark",
+      "width": 2400
+    },
+    {
+      "file": "02-paper/profile-mark.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Paper",
+      "treatment": "02-paper",
+      "variant": "mark",
+      "width": 1024
+    },
+    {
+      "file": "02-paper/profile-combination.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Paper",
+      "treatment": "02-paper",
+      "variant": "combination",
+      "width": 1024
+    },
+    {
+      "file": "02-paper/profile-wordmark.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Paper",
+      "treatment": "02-paper",
+      "variant": "wordmark",
+      "width": 1024
+    },
+    {
+      "file": "02-paper/og-mark.png",
+      "format": "og",
+      "height": 630,
+      "label": "Paper",
+      "treatment": "02-paper",
+      "variant": "mark",
+      "width": 1200
+    },
+    {
+      "file": "02-paper/og-combination.png",
+      "format": "og",
+      "height": 630,
+      "label": "Paper",
+      "treatment": "02-paper",
+      "variant": "combination",
+      "width": 1200
+    },
+    {
+      "file": "02-paper/og-wordmark.png",
+      "format": "og",
+      "height": 630,
+      "label": "Paper",
+      "treatment": "02-paper",
+      "variant": "wordmark",
+      "width": 1200
+    },
+    {
+      "file": "02-paper/banner-mark.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Paper",
+      "treatment": "02-paper",
+      "variant": "mark",
+      "width": 2400
+    },
+    {
+      "file": "02-paper/banner-combination.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Paper",
+      "treatment": "02-paper",
+      "variant": "combination",
+      "width": 2400
+    },
+    {
+      "file": "02-paper/banner-wordmark.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Paper",
+      "treatment": "02-paper",
+      "variant": "wordmark",
+      "width": 2400
+    },
+    {
+      "file": "03-atmosphere/profile-mark.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Atmosphere",
+      "treatment": "03-atmosphere",
+      "variant": "mark",
+      "width": 1024
+    },
+    {
+      "file": "03-atmosphere/profile-combination.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Atmosphere",
+      "treatment": "03-atmosphere",
+      "variant": "combination",
+      "width": 1024
+    },
+    {
+      "file": "03-atmosphere/profile-wordmark.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Atmosphere",
+      "treatment": "03-atmosphere",
+      "variant": "wordmark",
+      "width": 1024
+    },
+    {
+      "file": "03-atmosphere/og-mark.png",
+      "format": "og",
+      "height": 630,
+      "label": "Atmosphere",
+      "treatment": "03-atmosphere",
+      "variant": "mark",
+      "width": 1200
+    },
+    {
+      "file": "03-atmosphere/og-combination.png",
+      "format": "og",
+      "height": 630,
+      "label": "Atmosphere",
+      "treatment": "03-atmosphere",
+      "variant": "combination",
+      "width": 1200
+    },
+    {
+      "file": "03-atmosphere/og-wordmark.png",
+      "format": "og",
+      "height": 630,
+      "label": "Atmosphere",
+      "treatment": "03-atmosphere",
+      "variant": "wordmark",
+      "width": 1200
+    },
+    {
+      "file": "03-atmosphere/banner-mark.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Atmosphere",
+      "treatment": "03-atmosphere",
+      "variant": "mark",
+      "width": 2400
+    },
+    {
+      "file": "03-atmosphere/banner-combination.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Atmosphere",
+      "treatment": "03-atmosphere",
+      "variant": "combination",
+      "width": 2400
+    },
+    {
+      "file": "03-atmosphere/banner-wordmark.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Atmosphere",
+      "treatment": "03-atmosphere",
+      "variant": "wordmark",
+      "width": 2400
+    },
+    {
+      "file": "04-porcelain/profile-mark.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Porcelain",
+      "treatment": "04-porcelain",
+      "variant": "mark",
+      "width": 1024
+    },
+    {
+      "file": "04-porcelain/profile-combination.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Porcelain",
+      "treatment": "04-porcelain",
+      "variant": "combination",
+      "width": 1024
+    },
+    {
+      "file": "04-porcelain/profile-wordmark.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Porcelain",
+      "treatment": "04-porcelain",
+      "variant": "wordmark",
+      "width": 1024
+    },
+    {
+      "file": "04-porcelain/og-mark.png",
+      "format": "og",
+      "height": 630,
+      "label": "Porcelain",
+      "treatment": "04-porcelain",
+      "variant": "mark",
+      "width": 1200
+    },
+    {
+      "file": "04-porcelain/og-combination.png",
+      "format": "og",
+      "height": 630,
+      "label": "Porcelain",
+      "treatment": "04-porcelain",
+      "variant": "combination",
+      "width": 1200
+    },
+    {
+      "file": "04-porcelain/og-wordmark.png",
+      "format": "og",
+      "height": 630,
+      "label": "Porcelain",
+      "treatment": "04-porcelain",
+      "variant": "wordmark",
+      "width": 1200
+    },
+    {
+      "file": "04-porcelain/banner-mark.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Porcelain",
+      "treatment": "04-porcelain",
+      "variant": "mark",
+      "width": 2400
+    },
+    {
+      "file": "04-porcelain/banner-combination.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Porcelain",
+      "treatment": "04-porcelain",
+      "variant": "combination",
+      "width": 2400
+    },
+    {
+      "file": "04-porcelain/banner-wordmark.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Porcelain",
+      "treatment": "04-porcelain",
+      "variant": "wordmark",
+      "width": 2400
+    },
+    {
+      "file": "05-blue-hour/profile-mark.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Blue hour",
+      "treatment": "05-blue-hour",
+      "variant": "mark",
+      "width": 1024
+    },
+    {
+      "file": "05-blue-hour/profile-combination.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Blue hour",
+      "treatment": "05-blue-hour",
+      "variant": "combination",
+      "width": 1024
+    },
+    {
+      "file": "05-blue-hour/profile-wordmark.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Blue hour",
+      "treatment": "05-blue-hour",
+      "variant": "wordmark",
+      "width": 1024
+    },
+    {
+      "file": "05-blue-hour/og-mark.png",
+      "format": "og",
+      "height": 630,
+      "label": "Blue hour",
+      "treatment": "05-blue-hour",
+      "variant": "mark",
+      "width": 1200
+    },
+    {
+      "file": "05-blue-hour/og-combination.png",
+      "format": "og",
+      "height": 630,
+      "label": "Blue hour",
+      "treatment": "05-blue-hour",
+      "variant": "combination",
+      "width": 1200
+    },
+    {
+      "file": "05-blue-hour/og-wordmark.png",
+      "format": "og",
+      "height": 630,
+      "label": "Blue hour",
+      "treatment": "05-blue-hour",
+      "variant": "wordmark",
+      "width": 1200
+    },
+    {
+      "file": "05-blue-hour/banner-mark.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Blue hour",
+      "treatment": "05-blue-hour",
+      "variant": "mark",
+      "width": 2400
+    },
+    {
+      "file": "05-blue-hour/banner-combination.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Blue hour",
+      "treatment": "05-blue-hour",
+      "variant": "combination",
+      "width": 2400
+    },
+    {
+      "file": "05-blue-hour/banner-wordmark.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Blue hour",
+      "treatment": "05-blue-hour",
+      "variant": "wordmark",
+      "width": 2400
+    },
+    {
+      "file": "06-aurora/profile-mark.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Aurora",
+      "treatment": "06-aurora",
+      "variant": "mark",
+      "width": 1024
+    },
+    {
+      "file": "06-aurora/profile-combination.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Aurora",
+      "treatment": "06-aurora",
+      "variant": "combination",
+      "width": 1024
+    },
+    {
+      "file": "06-aurora/profile-wordmark.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Aurora",
+      "treatment": "06-aurora",
+      "variant": "wordmark",
+      "width": 1024
+    },
+    {
+      "file": "06-aurora/og-mark.png",
+      "format": "og",
+      "height": 630,
+      "label": "Aurora",
+      "treatment": "06-aurora",
+      "variant": "mark",
+      "width": 1200
+    },
+    {
+      "file": "06-aurora/og-combination.png",
+      "format": "og",
+      "height": 630,
+      "label": "Aurora",
+      "treatment": "06-aurora",
+      "variant": "combination",
+      "width": 1200
+    },
+    {
+      "file": "06-aurora/og-wordmark.png",
+      "format": "og",
+      "height": 630,
+      "label": "Aurora",
+      "treatment": "06-aurora",
+      "variant": "wordmark",
+      "width": 1200
+    },
+    {
+      "file": "06-aurora/banner-mark.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Aurora",
+      "treatment": "06-aurora",
+      "variant": "mark",
+      "width": 2400
+    },
+    {
+      "file": "06-aurora/banner-combination.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Aurora",
+      "treatment": "06-aurora",
+      "variant": "combination",
+      "width": 2400
+    },
+    {
+      "file": "06-aurora/banner-wordmark.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Aurora",
+      "treatment": "06-aurora",
+      "variant": "wordmark",
+      "width": 2400
+    },
+    {
+      "file": "07-ember/profile-mark.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Ember",
+      "treatment": "07-ember",
+      "variant": "mark",
+      "width": 1024
+    },
+    {
+      "file": "07-ember/profile-combination.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Ember",
+      "treatment": "07-ember",
+      "variant": "combination",
+      "width": 1024
+    },
+    {
+      "file": "07-ember/profile-wordmark.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Ember",
+      "treatment": "07-ember",
+      "variant": "wordmark",
+      "width": 1024
+    },
+    {
+      "file": "07-ember/og-mark.png",
+      "format": "og",
+      "height": 630,
+      "label": "Ember",
+      "treatment": "07-ember",
+      "variant": "mark",
+      "width": 1200
+    },
+    {
+      "file": "07-ember/og-combination.png",
+      "format": "og",
+      "height": 630,
+      "label": "Ember",
+      "treatment": "07-ember",
+      "variant": "combination",
+      "width": 1200
+    },
+    {
+      "file": "07-ember/og-wordmark.png",
+      "format": "og",
+      "height": 630,
+      "label": "Ember",
+      "treatment": "07-ember",
+      "variant": "wordmark",
+      "width": 1200
+    },
+    {
+      "file": "07-ember/banner-mark.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Ember",
+      "treatment": "07-ember",
+      "variant": "mark",
+      "width": 2400
+    },
+    {
+      "file": "07-ember/banner-combination.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Ember",
+      "treatment": "07-ember",
+      "variant": "combination",
+      "width": 2400
+    },
+    {
+      "file": "07-ember/banner-wordmark.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Ember",
+      "treatment": "07-ember",
+      "variant": "wordmark",
+      "width": 2400
+    },
+    {
+      "file": "08-lilac/profile-mark.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Lilac haze",
+      "treatment": "08-lilac",
+      "variant": "mark",
+      "width": 1024
+    },
+    {
+      "file": "08-lilac/profile-combination.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Lilac haze",
+      "treatment": "08-lilac",
+      "variant": "combination",
+      "width": 1024
+    },
+    {
+      "file": "08-lilac/profile-wordmark.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Lilac haze",
+      "treatment": "08-lilac",
+      "variant": "wordmark",
+      "width": 1024
+    },
+    {
+      "file": "08-lilac/og-mark.png",
+      "format": "og",
+      "height": 630,
+      "label": "Lilac haze",
+      "treatment": "08-lilac",
+      "variant": "mark",
+      "width": 1200
+    },
+    {
+      "file": "08-lilac/og-combination.png",
+      "format": "og",
+      "height": 630,
+      "label": "Lilac haze",
+      "treatment": "08-lilac",
+      "variant": "combination",
+      "width": 1200
+    },
+    {
+      "file": "08-lilac/og-wordmark.png",
+      "format": "og",
+      "height": 630,
+      "label": "Lilac haze",
+      "treatment": "08-lilac",
+      "variant": "wordmark",
+      "width": 1200
+    },
+    {
+      "file": "08-lilac/banner-mark.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Lilac haze",
+      "treatment": "08-lilac",
+      "variant": "mark",
+      "width": 2400
+    },
+    {
+      "file": "08-lilac/banner-combination.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Lilac haze",
+      "treatment": "08-lilac",
+      "variant": "combination",
+      "width": 2400
+    },
+    {
+      "file": "08-lilac/banner-wordmark.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Lilac haze",
+      "treatment": "08-lilac",
+      "variant": "wordmark",
+      "width": 2400
+    },
+    {
+      "file": "09-silver/profile-mark.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Silver",
+      "treatment": "09-silver",
+      "variant": "mark",
+      "width": 1024
+    },
+    {
+      "file": "09-silver/profile-combination.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Silver",
+      "treatment": "09-silver",
+      "variant": "combination",
+      "width": 1024
+    },
+    {
+      "file": "09-silver/profile-wordmark.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Silver",
+      "treatment": "09-silver",
+      "variant": "wordmark",
+      "width": 1024
+    },
+    {
+      "file": "09-silver/og-mark.png",
+      "format": "og",
+      "height": 630,
+      "label": "Silver",
+      "treatment": "09-silver",
+      "variant": "mark",
+      "width": 1200
+    },
+    {
+      "file": "09-silver/og-combination.png",
+      "format": "og",
+      "height": 630,
+      "label": "Silver",
+      "treatment": "09-silver",
+      "variant": "combination",
+      "width": 1200
+    },
+    {
+      "file": "09-silver/og-wordmark.png",
+      "format": "og",
+      "height": 630,
+      "label": "Silver",
+      "treatment": "09-silver",
+      "variant": "wordmark",
+      "width": 1200
+    },
+    {
+      "file": "09-silver/banner-mark.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Silver",
+      "treatment": "09-silver",
+      "variant": "mark",
+      "width": 2400
+    },
+    {
+      "file": "09-silver/banner-combination.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Silver",
+      "treatment": "09-silver",
+      "variant": "combination",
+      "width": 2400
+    },
+    {
+      "file": "09-silver/banner-wordmark.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Silver",
+      "treatment": "09-silver",
+      "variant": "wordmark",
+      "width": 2400
+    },
+    {
+      "file": "10-sand/profile-mark.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Sand",
+      "treatment": "10-sand",
+      "variant": "mark",
+      "width": 1024
+    },
+    {
+      "file": "10-sand/profile-combination.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Sand",
+      "treatment": "10-sand",
+      "variant": "combination",
+      "width": 1024
+    },
+    {
+      "file": "10-sand/profile-wordmark.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Sand",
+      "treatment": "10-sand",
+      "variant": "wordmark",
+      "width": 1024
+    },
+    {
+      "file": "10-sand/og-mark.png",
+      "format": "og",
+      "height": 630,
+      "label": "Sand",
+      "treatment": "10-sand",
+      "variant": "mark",
+      "width": 1200
+    },
+    {
+      "file": "10-sand/og-combination.png",
+      "format": "og",
+      "height": 630,
+      "label": "Sand",
+      "treatment": "10-sand",
+      "variant": "combination",
+      "width": 1200
+    },
+    {
+      "file": "10-sand/og-wordmark.png",
+      "format": "og",
+      "height": 630,
+      "label": "Sand",
+      "treatment": "10-sand",
+      "variant": "wordmark",
+      "width": 1200
+    },
+    {
+      "file": "10-sand/banner-mark.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Sand",
+      "treatment": "10-sand",
+      "variant": "mark",
+      "width": 2400
+    },
+    {
+      "file": "10-sand/banner-combination.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Sand",
+      "treatment": "10-sand",
+      "variant": "combination",
+      "width": 2400
+    },
+    {
+      "file": "10-sand/banner-wordmark.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Sand",
+      "treatment": "10-sand",
+      "variant": "wordmark",
+      "width": 2400
+    },
+    {
+      "file": "11-caustic/profile-mark.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Caustic",
+      "treatment": "11-caustic",
+      "variant": "mark",
+      "width": 1024
+    },
+    {
+      "file": "11-caustic/profile-combination.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Caustic",
+      "treatment": "11-caustic",
+      "variant": "combination",
+      "width": 1024
+    },
+    {
+      "file": "11-caustic/profile-wordmark.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Caustic",
+      "treatment": "11-caustic",
+      "variant": "wordmark",
+      "width": 1024
+    },
+    {
+      "file": "11-caustic/og-mark.png",
+      "format": "og",
+      "height": 630,
+      "label": "Caustic",
+      "treatment": "11-caustic",
+      "variant": "mark",
+      "width": 1200
+    },
+    {
+      "file": "11-caustic/og-combination.png",
+      "format": "og",
+      "height": 630,
+      "label": "Caustic",
+      "treatment": "11-caustic",
+      "variant": "combination",
+      "width": 1200
+    },
+    {
+      "file": "11-caustic/og-wordmark.png",
+      "format": "og",
+      "height": 630,
+      "label": "Caustic",
+      "treatment": "11-caustic",
+      "variant": "wordmark",
+      "width": 1200
+    },
+    {
+      "file": "11-caustic/banner-mark.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Caustic",
+      "treatment": "11-caustic",
+      "variant": "mark",
+      "width": 2400
+    },
+    {
+      "file": "11-caustic/banner-combination.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Caustic",
+      "treatment": "11-caustic",
+      "variant": "combination",
+      "width": 2400
+    },
+    {
+      "file": "11-caustic/banner-wordmark.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Caustic",
+      "treatment": "11-caustic",
+      "variant": "wordmark",
+      "width": 2400
+    },
+    {
+      "file": "12-eclipse/profile-mark.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Eclipse",
+      "treatment": "12-eclipse",
+      "variant": "mark",
+      "width": 1024
+    },
+    {
+      "file": "12-eclipse/profile-combination.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Eclipse",
+      "treatment": "12-eclipse",
+      "variant": "combination",
+      "width": 1024
+    },
+    {
+      "file": "12-eclipse/profile-wordmark.png",
+      "format": "profile",
+      "height": 1024,
+      "label": "Eclipse",
+      "treatment": "12-eclipse",
+      "variant": "wordmark",
+      "width": 1024
+    },
+    {
+      "file": "12-eclipse/og-mark.png",
+      "format": "og",
+      "height": 630,
+      "label": "Eclipse",
+      "treatment": "12-eclipse",
+      "variant": "mark",
+      "width": 1200
+    },
+    {
+      "file": "12-eclipse/og-combination.png",
+      "format": "og",
+      "height": 630,
+      "label": "Eclipse",
+      "treatment": "12-eclipse",
+      "variant": "combination",
+      "width": 1200
+    },
+    {
+      "file": "12-eclipse/og-wordmark.png",
+      "format": "og",
+      "height": 630,
+      "label": "Eclipse",
+      "treatment": "12-eclipse",
+      "variant": "wordmark",
+      "width": 1200
+    },
+    {
+      "file": "12-eclipse/banner-mark.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Eclipse",
+      "treatment": "12-eclipse",
+      "variant": "mark",
+      "width": 2400
+    },
+    {
+      "file": "12-eclipse/banner-combination.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Eclipse",
+      "treatment": "12-eclipse",
+      "variant": "combination",
+      "width": 2400
+    },
+    {
+      "file": "12-eclipse/banner-wordmark.png",
+      "format": "banner",
+      "height": 800,
+      "label": "Eclipse",
+      "treatment": "12-eclipse",
+      "variant": "wordmark",
+      "width": 2400
+    }
+  ],
+  "colors": {
+    "dark": "#0e0f10",
+    "light": "#eeeef0"
+  }
+}

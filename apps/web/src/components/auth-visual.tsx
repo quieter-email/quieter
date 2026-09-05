@@ -1,5 +1,7 @@
 "use client";
 
+import { Brand } from "@quieter/ui/brand";
+import { brand } from "@quieter/ui/brand-geometry";
 import { useEffect, useRef } from "react";
 import {
   compute,
@@ -354,11 +356,6 @@ const mix = (start: number, end: number, amount: number) =>
 const clamp = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), max);
 
-const smoothstep = (edge0: number, edge1: number, value: number) => {
-  const t = clamp((value - edge0) / (edge1 - edge0), 0, 1);
-  return t * t * (3 - 2 * t);
-};
-
 const oklchGrayToSrgb = (lightness: number) => {
   const linear = lightness ** 3;
   return linear <= 0.0031308
@@ -411,158 +408,49 @@ const getCssColor = (
 };
 
 const readColors = (canvas: HTMLCanvasElement): Colors => ({
-  background: getCssColor(
-    canvas,
-    "background-color",
-    getCssColor(canvas, "--bg", [0.02, 0.02, 0.02])
-  ),
+  background: getCssColor(canvas, "--brand-bg", [14 / 255, 15 / 255, 16 / 255]),
   primary: getCssColor(canvas, "--primary", [0.25, 0.25, 0.25]),
 });
 
-const squircleRadius = (
-  point: Point,
-  scale: number,
-  width: number,
-  height: number
-) => {
-  const unit = Math.min(width, height) / 10;
-  const offsetX = point.x - width * 0.5;
-  const offsetY = point.y - height * 0.5;
-  const localX = (offsetX * Math.SQRT1_2 + offsetY * Math.SQRT1_2) / scale;
-  const localY = (-offsetX * Math.SQRT1_2 + offsetY * Math.SQRT1_2) / scale;
-  const radius = 2 ** 0.25 * unit * 2;
-  const distanceValue =
-    (Math.abs(localX) / radius) ** 3.25 + (Math.abs(localY) / radius) ** 3.25;
-  return distanceValue ** (1 / 3.25);
-};
-
-const appendNoiseDot = (
-  dots: Dot[],
-  cellX: number,
-  cellY: number,
-  gap: number,
-  width: number,
-  height: number
-) => {
-  const jitterX = hash(cellX + 53, cellY + 53) - 0.5;
-  const jitterY = hash(cellX + 193, cellY + 193) - 0.5;
-  const radiusScale = clamp((gap / dotGap) ** 0.42, 1, 1.42);
-  const center = {
-    x: (cellX + 0.5) * gap + jitterX * gap,
-    y: (cellY + 0.5) * gap + jitterY * gap,
-  };
-  const outerRadius = squircleRadius(center, 1, width, height);
-  const nearestRadius = Math.min(
-    outerRadius,
-    squircleRadius(center, 0.9, width, height),
-    squircleRadius(center, 0.8, width, height),
-    squircleRadius(center, 0.7, width, height)
-  );
-  const insideOuter = 1 - smoothstep(0.94, 1.08, outerRadius);
-  const edgeScatter = 1 - smoothstep(0, 0.7, Math.abs(nearestRadius - 1));
-  const innerScatter =
-    (nearestRadius < 1 ? 1 : 0) * (1 - smoothstep(0, 0.85, 1 - nearestRadius));
-  const outerScatter =
-    (nearestRadius >= 1 ? 1 : 0) * (1 - smoothstep(0, 0.95, nearestRadius - 1));
-  const logoScatter = Math.max(edgeScatter, innerScatter, outerScatter);
-  const density = clamp(0.44 + logoScatter * 0.38, 0, 0.97);
-  if (density < hash(cellX + 719, cellY + 719)) {
-    return;
-  }
-  const radiusSeed = hash(cellX + 389, cellY + 389);
-  dots.push({
-    ...center,
-    opacity: mix(1, 0.2, insideOuter),
-    radius:
-      mix(0.25 + radiusSeed * 0.65, 0.45 + radiusSeed * 1.35, logoScatter) *
-      radiusScale,
-    vibrance: hash(cellX + 941, cellY + 941),
-  });
-};
-
-const layerScale = (index: number) => {
-  if (index === 0) {
-    return 1;
-  }
-  if (index === 1) {
-    return 0.9;
-  }
-  if (index === 2) {
-    return 0.8;
-  }
-  return 0.7;
-};
-
-const layerOpacity = (index: number) => {
-  if (index === 0) {
-    return 1;
-  }
-  if (index === 1) {
-    return 0.8;
-  }
-  if (index === 2) {
-    return 0.6;
-  }
-  return 0.4;
-};
-
-const appendRingDot = (
-  dots: Dot[],
-  cellX: number,
-  cellY: number,
-  layerIndex: number,
-  gap: number,
-  width: number,
-  height: number
-) => {
-  const unit = Math.min(width, height) / 10;
-  const radius = 2 ** 0.25 * unit * 2;
-  const halfRingWidth = (unit * 0.22 * 2) / radius / 2;
-  const scale = layerScale(layerIndex);
-  const opacity = layerOpacity(layerIndex);
-  const seedX = cellX + layerIndex * 101;
-  const seedY = cellY + layerIndex * 211;
-  const jitterX = hash(seedX, seedY) - 0.5;
-  const jitterY = hash(seedY, seedX) - 0.5;
-  const radiusScale = clamp((gap / dotGap) ** 0.42, 1, 1.42);
-  const center = {
-    x: (cellX + 0.5) * gap + jitterX * gap * 0.38,
-    y: (cellY + 0.5) * gap + jitterY * gap * 0.38,
-  };
-  const radiusValue = squircleRadius(center, scale, width, height);
-  const distanceFromCenterLine = Math.abs(radiusValue - 1);
-  if (distanceFromCenterLine > halfRingWidth) {
-    return;
-  }
-  const distanceFromRingEdge = halfRingWidth - distanceFromCenterLine;
-  const edgeAmount = clamp(1 - distanceFromRingEdge / halfRingWidth, 0, 1);
-  const edgeStrength = edgeAmount ** 0.35;
-  const density = edgeAmount > 0.62 ? 1 : 0.12 + edgeStrength * 0.58;
-  if (density < hash(seedX + 29, seedY + 29)) {
-    return;
-  }
-  dots.push({
-    ...center,
-    opacity: opacity * (0.12 + edgeStrength * 0.88),
-    radius: (0.35 + edgeStrength * 1.55) * scale * radiusScale,
-    vibrance: hash(seedX + 463, seedY + 463),
-  });
-};
-
 const buildDots = (width: number, height: number, gap: number) => {
-  const unit = Math.min(width, height) / 10;
-  const margin = Math.ceil((Math.max(15, unit * 0.13 + 2) + gap) / gap);
-  const minCellX = -margin;
-  const maxCellX = Math.ceil(width / gap) + margin;
-  const minCellY = -margin;
-  const maxCellY = Math.ceil(height / gap) + margin;
+  const mask = document.createElement("canvas");
+  mask.width = width;
+  mask.height = height;
+  const context = mask.getContext("2d", { willReadFrequently: true });
+  if (!context) {
+    return [];
+  }
+  const scale = (Math.min(width, height) * 0.65) / brand.mark.width;
+  context.translate(width / 2 - 500 * scale, height / 2 - 500 * scale);
+  context.scale(scale, scale);
+  const outline = new Path2D(brand.mark.path);
+  // oxlint-disable-next-line unicorn/no-array-fill-with-reference-type -- CanvasRenderingContext2D.fill takes a Path2D, not an array value.
+  context.fill(outline);
+  const pixels = context.getImageData(0, 0, width, height).data;
   const dots: Dot[] = [];
-  for (let cellY = minCellY; cellY <= maxCellY; cellY += 1) {
-    for (let cellX = minCellX; cellX <= maxCellX; cellX += 1) {
-      appendNoiseDot(dots, cellX, cellY, gap, width, height);
-      for (let layerIndex = 0; layerIndex < 4; layerIndex += 1) {
-        appendRingDot(dots, cellX, cellY, layerIndex, gap, width, height);
+  const columns = Math.ceil(width / gap);
+  const rows = Math.ceil(height / gap);
+  for (let cellY = 0; cellY < rows; cellY += 1) {
+    for (let cellX = 0; cellX < columns; cellX += 1) {
+      const x = (cellX + 0.5 + (hash(cellX, cellY) - 0.5) * 0.3) * gap;
+      const y = (cellY + 0.5 + (hash(cellY, cellX + 19) - 0.5) * 0.3) * gap;
+      if (x >= width || y >= height) {
+        continue;
       }
+      const coverage =
+        (pixels[(Math.floor(y) * width + Math.floor(x)) * 4 + 3] ?? 0) / 255;
+      const seed = hash(cellX + 389, cellY + 389);
+      if (coverage < 0.1 && seed > 0.22) {
+        continue;
+      }
+      dots.push({
+        opacity: coverage > 0.1 ? (0.6 + seed * 0.4) * coverage : 0.12,
+        radius:
+          gap * (coverage > 0.1 ? 0.29 + seed * 0.08 : 0.09 + seed * 0.04),
+        vibrance: hash(cellX + 941, cellY + 941),
+        x,
+        y,
+      });
     }
   }
   return dots.slice(0, maxParticleCount);
@@ -578,6 +466,7 @@ export const AuthVisual = () => {
     }
 
     let cancelled = false;
+    canvas.style.visibility = "visible";
     let dispose: (() => void) | undefined;
 
     const initialize = async () => {
@@ -1070,7 +959,7 @@ export const AuthVisual = () => {
         queueRender();
       });
       mutationObserver.observe(document.documentElement, {
-        attributeFilter: ["class", "style"],
+        attributeFilter: ["class", "style", "data-theme", "data-kb-theme"],
         attributes: true,
       });
       if (canTrackCursor) {
@@ -1123,7 +1012,10 @@ export const AuthVisual = () => {
       } catch {
         dispose?.();
         dispose = undefined;
-        // WebGPU is optional; the canvas keeps its themed background when unavailable.
+        if (!cancelled) {
+          canvas.style.visibility = "hidden";
+        }
+        // The SVG underneath remains visible when WebGPU is unavailable.
       }
     };
 
@@ -1135,11 +1027,18 @@ export const AuthVisual = () => {
   }, []);
 
   return (
-    <canvas
+    <div
       aria-hidden="true"
-      className="block size-full bg-bg-raised"
-      ref={canvasRef}
-      tabIndex={-1}
-    />
+      className="relative size-full overflow-hidden bg-brand-bg text-primary"
+    >
+      <div className="absolute inset-0 flex items-center justify-center">
+        <Brand style={{ height: "65%", width: "65%" }} />
+      </div>
+      <canvas
+        className="absolute inset-0 block size-full"
+        ref={canvasRef}
+        tabIndex={-1}
+      />
+    </div>
   );
 };
