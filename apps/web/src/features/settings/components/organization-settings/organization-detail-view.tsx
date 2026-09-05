@@ -23,6 +23,7 @@ import {
 import type { OrganizationSummary } from "./domain";
 import { DomainDetailView } from "./domain-detail-view";
 import { DomainsView } from "./domains-view";
+import { MailDeliveryView } from "./mail-delivery-view";
 import { MailSuppressionsView } from "./mail-suppressions-view";
 import { MembersView } from "./members-view";
 import { OrganizationBillingView } from "./organization-billing-view";
@@ -36,6 +37,7 @@ export const OrganizationDetailView = ({
   onOpenApiKeys,
   onOpenBilling,
   onOpenDanger,
+  onOpenDelivery,
   onOpenDivisions,
   onOpenDomains,
   onOpenDomain,
@@ -51,6 +53,7 @@ export const OrganizationDetailView = ({
   onOpenApiKeys: () => void;
   onOpenBilling: () => void;
   onOpenDanger: () => void;
+  onOpenDelivery: () => void;
   onOpenDivisions: () => void;
   onOpenDomains: () => void;
   onOpenDomain: (domainId: string) => void;
@@ -213,6 +216,17 @@ export const OrganizationDetailView = ({
     );
   }
 
+  if (view === "delivery") {
+    return (
+      <MailDeliveryView
+        canManage={canUpdateOrganization}
+        key={fullOrganization.id}
+        onBack={onBackToOrganization}
+        organization={fullOrganization}
+      />
+    );
+  }
+
   if (view === "billing") {
     return (
       <OrganizationBillingView
@@ -253,6 +267,7 @@ export const OrganizationDetailView = ({
       onOpenApiKeys={onOpenApiKeys}
       onOpenBilling={onOpenBilling}
       onOpenDanger={onOpenDanger}
+      onOpenDelivery={onOpenDelivery}
       onOpenDivisions={onOpenDivisions}
       onOpenDomains={onOpenDomains}
       onOpenMembers={onOpenMembers}
