@@ -3,8 +3,6 @@ import { lazy, Suspense } from "react";
 
 import { Providers } from "#/components/providers";
 
-import { RootDocument } from "./root-document";
-
 // Deferred on purpose: the worker memory boundary forbids the router graph
 // from eagerly pulling in the WebGL background.
 const WorkspaceDitherBackground = lazy(
@@ -15,12 +13,10 @@ const WorkspaceDitherBackground = lazy(
 );
 
 export const RootComponent = () => (
-  <RootDocument>
-    <Providers>
-      <Suspense fallback={null}>
-        <WorkspaceDitherBackground className="fixed -z-10" />
-      </Suspense>
-      <Outlet />
-    </Providers>
-  </RootDocument>
+  <Providers>
+    <Suspense fallback={null}>
+      <WorkspaceDitherBackground className="fixed -z-10" />
+    </Suspense>
+    <Outlet />
+  </Providers>
 );

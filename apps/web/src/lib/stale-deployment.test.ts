@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, test, vi } from "vite-plus/test";
 
-import { installStaleDeploymentRecovery } from "./stale-deployment";
+import { handleDeploymentPreloadError } from "./stale-deployment";
 
-describe("stale deployment recovery", () => {
+describe("stale deployment notice", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  test("reloads once without converting a rejected import into undefined", () => {
+  test("preserves import rejections without automatic reloads or storage writes", () => {
     const target = new EventTarget();
     const stored = new Map<string, string>();
     const reload = vi.fn<() => void>();
@@ -19,18 +19,27 @@ describe("stale deployment recovery", () => {
         setItem: (key: string, value: string) => stored.set(key, value),
       },
     });
-    installStaleDeploymentRecovery();
+    target.addEventListener("vite:preloadError", handleDeploymentPreloadError);
 
-    const failure = new Event("vite:preloadError", { cancelable: true });
+    const failure = Object.assign(
+      new Event("vite:preloadError", { cancelable: true }),
+      {
+        payload: new TypeError(
+          "Failed to fetch dynamically imported module: /assets/old.js"
+        ),
+      }
+    );
     target.dispatchEvent(failure);
     expect(failure.defaultPrevented).toBeFalsy();
-    expect(reload).toHaveBeenCalledOnce();
+    expect(reload).not.toHaveBeenCalled();
 
-    const repeatedFailure = new Event("vite:preloadError", {
-      cancelable: true,
-    });
+    const repeatedFailure = Object.assign(
+      new Event("vite:preloadError", { cancelable: true }),
+      { payload: failure.payload }
+    );
     target.dispatchEvent(repeatedFailure);
     expect(repeatedFailure.defaultPrevented).toBeFalsy();
-    expect(reload).toHaveBeenCalledOnce();
+    expect(reload).not.toHaveBeenCalled();
+    expect(stored.size).toBe(0);
   });
 });

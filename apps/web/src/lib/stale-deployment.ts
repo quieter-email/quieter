@@ -1,25 +1,33 @@
-/**
- * Cloudflare replaces the whole asset manifest on deploy, so a tab that was
- * opened before a release keeps a route tree pointing at hashed chunks that no
- * longer exist. The Worker answers those requests with the SPA shell, the
- * browser refuses the `text/html` module, and the lazy import rejects into the
- * root error screen. Reloading picks up the current shell; the timestamp guard
- * keeps a genuinely broken chunk from looping.
- */
-const lastReloadKey = "quieter:stale-deployment-reload";
-const reloadCooldownMs = 30_000;
+import { useSyncExternalStore } from "react";
 
-export const installStaleDeploymentRecovery = () => {
-  window.addEventListener("vite:preloadError", () => {
-    const lastReloadAt = Number(
-      window.sessionStorage.getItem(lastReloadKey) ?? "0"
-    );
-    if (Date.now() - lastReloadAt < reloadCooldownMs) {
-      return;
-    }
+import { isDeploymentAssetError } from "./deployment-errors";
 
-    // Canceling this event makes Vite resolve the failed import as undefined.
-    window.sessionStorage.setItem(lastReloadKey, String(Date.now()));
-    window.location.reload();
-  });
+let updateRequired = false;
+const listeners = new Set<() => void>();
+
+export const handleDeploymentPreloadError = (event: Event) => {
+  if (!("payload" in event && isDeploymentAssetError(event.payload))) {
+    return;
+  }
+
+  // Let the original rejection reach the route boundary. Cancelling it makes
+  // Vite return undefined, causing misleading errors in lazy module loaders.
+  updateRequired = true;
+  for (const listener of listeners) {
+    listener();
+  }
 };
+
+const subscribe = (listener: () => void) => {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+};
+
+export const useDeploymentUpdateRequired = () =>
+  useSyncExternalStore(
+    subscribe,
+    () => updateRequired,
+    () => false
+  );
