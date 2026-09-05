@@ -31,6 +31,7 @@ export type ConnectorConnectionStatus = "connected" | "needs_reconnect";
 export type ConnectorProvider = "google_calendar" | "linear";
 export type MailboxConnectionStatus = "connected" | "needs_reconnect";
 export type MailboxGrantRole = "manager" | "reader" | "responder";
+export type MailboxAccessMode = "private" | "shared";
 export type PersistedMailboxProvider = "gmail" | "managed";
 export type MailTemplateScope = "personal" | "team";
 export type MailboxAccessSource = "direct" | "division";
@@ -493,6 +494,10 @@ export const organizationDivisionMember = pgTable(
 export const mailbox = pgTable(
   "mailbox",
   {
+    accessMode: text("accessMode")
+      .$type<MailboxAccessMode>()
+      .notNull()
+      .default("shared"),
     contentRevision: bigint("contentRevision", { mode: "number" })
       .notNull()
       .default(0),
@@ -506,6 +511,9 @@ export const mailbox = pgTable(
     includeApiSentMessages: boolean("includeApiSentMessages")
       .notNull()
       .default(false),
+    managedOwnerUserId: text("managedOwnerUserId").references(() => user.id, {
+      onDelete: "restrict",
+    }),
     organizationId: text("organizationId")
       .notNull()
       .references(() => organization.id, {
@@ -527,10 +535,20 @@ export const mailbox = pgTable(
     check(
       "mailbox_provider_ownership_check",
       sql`(
-        (${table.provider} = 'gmail' and ${table.ownerUserId} is not null)
+        (${table.provider} = 'gmail' and ${table.ownerUserId} is not null and ${table.managedOwnerUserId} is null)
         or
-        (${table.provider} = 'managed' and ${table.ownerUserId} is null and ${table.organizationId} is not null)
+        (${table.provider} = 'managed' and ${table.accessMode} = 'private' and ${table.ownerUserId} is null and ${table.managedOwnerUserId} is not null and ${table.organizationId} is not null)
+        or
+        (${table.provider} = 'managed' and ${table.accessMode} = 'shared' and ${table.ownerUserId} is null and ${table.managedOwnerUserId} is null and ${table.organizationId} is not null)
       )`
+    ),
+    check(
+      "mailbox_access_mode_check",
+      sql`${table.accessMode} in ('private', 'shared')`
+    ),
+    check(
+      "mailbox_private_division_check",
+      sql`(${table.accessMode} = 'shared' or ${table.divisionId} is null)`
     ),
     check(
       "mailbox_provider_check",
@@ -540,6 +558,7 @@ export const mailbox = pgTable(
       "mailbox_status_check",
       sql`${table.status} in ('connected', 'needs_reconnect')`
     ),
+    index("mailbox_managed_owner_user_id_idx").on(table.managedOwnerUserId),
     index("mailbox_owner_user_id_idx").on(table.ownerUserId),
     index("mailbox_organization_id_idx").on(table.organizationId),
     index("mailbox_division_id_idx").on(table.divisionId),

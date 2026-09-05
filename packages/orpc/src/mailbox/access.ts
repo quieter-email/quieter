@@ -9,7 +9,7 @@ import {
   organizationDivision,
   organizationDivisionMember,
 } from "@quieter/database/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 export const MAILBOX_PROVIDER_GMAIL = "gmail" as const;
 export const MAILBOX_PROVIDER_MANAGED = "managed" as const;
@@ -49,6 +49,36 @@ const roleSatisfies = (
     (requiredRole) => mailboxRoleRank[role] >= mailboxRoleRank[requiredRole]
   );
 
+/**
+ * The single decision point for managed mailbox access. Division roles only
+ * reach this function for shared mailboxes; the caller filters private ones.
+ * Owning a private managed mailbox implies manager-level access so ownership
+ * can never be accidentally revoked through grant changes.
+ */
+export const resolveManagedMailboxAccess = (input: {
+  divisionRoles: MailboxGrantRole[];
+  directRoles: MailboxGrantRole[];
+  hasCandidateRow: boolean;
+  isOwner: boolean;
+  requiredRoles?: MailboxGrantRole[];
+}): MailboxGrantRole | null => {
+  if (!input.hasCandidateRow && !input.isOwner) {
+    return null;
+  }
+  const effectiveRole = getStrongestMailboxGrantRole([
+    ...input.directRoles,
+    ...input.divisionRoles,
+    ...(input.isOwner ? (["manager"] as const) : []),
+  ]);
+  if (
+    effectiveRole === null ||
+    !roleSatisfies(effectiveRole, input.requiredRoles)
+  ) {
+    return null;
+  }
+  return effectiveRole;
+};
+
 export const assertOwnedGmailMailbox = async (input: {
   mailboxId: string;
   userId: string;
@@ -70,18 +100,22 @@ export const assertOwnedGmailMailbox = async (input: {
   return gmailMailbox;
 };
 
-export const getAuthorizedManagedMailbox = async (input: {
-  mailboxId: string;
-  requiredRoles?: MailboxGrantRole[];
-  userId: string;
-}) => {
-  const directRows = await db
+export const getAuthorizedManagedMailbox = async (
+  input: {
+    mailboxId: string;
+    requiredRoles?: MailboxGrantRole[];
+    userId: string;
+  },
+  database: Pick<typeof db, "select"> = db
+) => {
+  const directRows = await database
     .select({
       contentRevision: mailbox.contentRevision,
       displayName: mailbox.displayName,
       emailAddress: mailbox.emailAddress,
       id: mailbox.id,
       organizationId: mailbox.organizationId,
+      ownerUserId: mailbox.managedOwnerUserId,
       provider: mailbox.provider,
       role: mailboxGrant.role,
     })
@@ -102,13 +136,14 @@ export const getAuthorizedManagedMailbox = async (input: {
       )
     );
 
-  const divisionRows = await db
+  const divisionRows = await database
     .select({
       contentRevision: mailbox.contentRevision,
       displayName: mailbox.displayName,
       emailAddress: mailbox.emailAddress,
       id: mailbox.id,
       organizationId: mailbox.organizationId,
+      ownerUserId: mailbox.managedOwnerUserId,
       provider: mailbox.provider,
       role: mailboxDivisionGrant.role,
     })
@@ -134,23 +169,66 @@ export const getAuthorizedManagedMailbox = async (input: {
       and(
         eq(mailbox.id, input.mailboxId),
         eq(mailbox.provider, MAILBOX_PROVIDER_MANAGED),
+        // Private managed mailboxes never grant access through divisions;
+        // organization membership alone must never reveal the mailbox.
+        isNull(mailbox.managedOwnerUserId),
         eq(organizationDivision.organizationId, mailbox.organizationId)
       )
     );
 
   const selectedMailbox = directRows[0] ?? divisionRows[0] ?? null;
-  const effectiveRole = getStrongestMailboxGrantRole([
-    ...directRows.map((row) => row.role),
-    ...divisionRows.map((row) => row.role),
-  ]);
+  const effectiveRole = resolveManagedMailboxAccess({
+    directRoles: directRows.map((row) => row.role),
+    divisionRoles: divisionRows.map((row) => row.role),
+    hasCandidateRow: selectedMailbox !== null,
+    isOwner: selectedMailbox?.ownerUserId === input.userId,
+    requiredRoles: input.requiredRoles,
+  });
 
+  if (selectedMailbox !== null && effectiveRole !== null) {
+    return { ...selectedMailbox, role: effectiveRole };
+  }
+
+  // The owner of a private managed mailbox keeps full access even without a
+  // grant row, so ownership can never be accidentally revoked.
+  const [ownedPrivateMailbox] = await database
+    .select({
+      contentRevision: mailbox.contentRevision,
+      displayName: mailbox.displayName,
+      emailAddress: mailbox.emailAddress,
+      id: mailbox.id,
+      organizationId: mailbox.organizationId,
+      ownerUserId: mailbox.managedOwnerUserId,
+      provider: mailbox.provider,
+    })
+    .from(mailbox)
+    .innerJoin(
+      member,
+      and(
+        eq(member.userId, input.userId),
+        eq(member.organizationId, mailbox.organizationId)
+      )
+    )
+    .where(
+      and(
+        eq(mailbox.id, input.mailboxId),
+        eq(mailbox.managedOwnerUserId, input.userId),
+        eq(mailbox.provider, MAILBOX_PROVIDER_MANAGED)
+      )
+    )
+    .limit(1);
   if (
-    selectedMailbox === null ||
-    effectiveRole === null ||
-    !roleSatisfies(effectiveRole, input.requiredRoles)
+    ownedPrivateMailbox === undefined ||
+    resolveManagedMailboxAccess({
+      directRoles: [],
+      divisionRoles: [],
+      hasCandidateRow: true,
+      isOwner: true,
+      requiredRoles: input.requiredRoles,
+    }) === null
   ) {
     throw new ORPCError("NOT_FOUND", { message: "Managed mailbox not found." });
   }
 
-  return { ...selectedMailbox, role: effectiveRole };
+  return { ...ownedPrivateMailbox, role: "manager" as const };
 };

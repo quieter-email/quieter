@@ -166,4 +166,4 @@ jobs:
         run: vp run @quieter/database#db:test-migrations
 
       - name: Test delivery persistence against migrated PostgreSQL
-        run: vp test packages/orpc/tests/organization-mail-delivery.integration.test.ts
+        run: vp test packages/orpc/tests/organization-mail-delivery.integration.test.ts packages/orpc/tests/private-mailbox.integration.test.ts packages/auth/tests/private-mailbox-account.integration.test.ts

@@ -2,7 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 
 import { managedMailboxSettingsQueryOptions } from "#/features/settings/components/managed-mailbox-settings-query";
 import { organizationDivisionsQueryOptions } from "#/features/settings/components/organization-settings/divisions-query";
-import { fullOrganizationQueryOptions } from "#/features/settings/components/organization-settings/domain";
+import {
+  fullOrganizationQueryOptions,
+  hasOrganizationRole,
+} from "#/features/settings/components/organization-settings/domain";
 import { useMailboxDetailMutations } from "#/features/settings/components/use-mailbox-detail-mutations";
 import {
   hasOrganizationAiAccess,
@@ -22,7 +25,8 @@ const findMailboxGroup = (
 const useManagedMailboxManagerData = (
   organizationId: string,
   mailboxId: string,
-  enabled: boolean
+  enabled: boolean,
+  viewerUserId: string | undefined
 ) => {
   const { data: detailManagedOrganization } = useQuery({
     ...fullOrganizationQueryOptions(organizationId),
@@ -36,8 +40,16 @@ const useManagedMailboxManagerData = (
     ...managedMailboxSettingsQueryOptions(mailboxId),
     enabled,
   });
+  const viewerMember = detailManagedOrganization?.members.find(
+    (member) => member.userId === viewerUserId
+  );
+  const canMakeMailboxPrivate =
+    viewerMember !== undefined &&
+    (hasOrganizationRole(viewerMember.role, "owner") ||
+      hasOrganizationRole(viewerMember.role, "admin"));
 
   return {
+    canMakeMailboxPrivate,
     detailManagedDivisions: detailManagedDivisionsData?.divisions ?? [],
     detailManagedMembers: detailManagedOrganization?.members ?? [],
     managedMailboxQuery,
@@ -46,6 +58,7 @@ const useManagedMailboxManagerData = (
 
 export const useMailboxDetailViewState = (mailboxId: string) => {
   const organizations = authClient.useListOrganizations().data ?? [];
+  const session = authClient.useSession().data;
   const placementItems = organizations.map((organization) => ({
     label: organization.name,
     value: organization.id,
@@ -68,12 +81,17 @@ export const useMailboxDetailViewState = (mailboxId: string) => {
     selectedMailbox?.provider === "managed"
       ? selectedMailbox.organizationId
       : "";
-  const { detailManagedDivisions, detailManagedMembers, managedMailboxQuery } =
-    useManagedMailboxManagerData(
-      managedOrganizationId,
-      selectedMailbox?.id ?? "",
-      isManagedManager
-    );
+  const {
+    canMakeMailboxPrivate,
+    detailManagedDivisions,
+    detailManagedMembers,
+    managedMailboxQuery,
+  } = useManagedMailboxManagerData(
+    managedOrganizationId,
+    selectedMailbox?.id ?? "",
+    isManagedManager,
+    session?.user.id
+  );
   const mutations = useMailboxDetailMutations(selectedMailbox?.id);
   const detailGroup =
     selectedMailbox === null
@@ -82,6 +100,7 @@ export const useMailboxDetailViewState = (mailboxId: string) => {
 
   return {
     areMailboxesPending,
+    canMakeMailboxPrivate,
     defaultMailboxId,
     detailGroup,
     detailManagedDivisions,

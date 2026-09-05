@@ -3,6 +3,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import type {
+  MailboxAccessMode,
   MailboxConnectionStatus,
   MailboxGrantRole,
   PersistedMailboxProvider,
@@ -28,7 +29,7 @@ import {
   isGmailServiceError,
 } from "@quieter/gmail";
 import { getMailboxCapabilities } from "@quieter/mail/data-plane";
-import { and, asc, count, eq, inArray, lt } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNull, lt } from "drizzle-orm";
 import { z } from "zod";
 
 import {
@@ -147,6 +148,7 @@ const assertOrganizationMembership = async (
 
 const toMailboxListItem = (
   record: {
+    accessMode?: MailboxAccessMode | null;
     directGrantRole?: MailboxGrantRole | null;
     displayName: string | null;
     divisionGrantRoles?: {
@@ -173,6 +175,10 @@ const toMailboxListItem = (
   },
   group: MailboxGroupMetadata
 ): MailboxListItem => ({
+  accessMode:
+    record.provider === MAILBOX_PROVIDER_MANAGED
+      ? (record.accessMode ?? "shared")
+      : null,
   autoLabelEnabled: record.autoLabelEnabled ?? false,
   capabilities: getMailboxCapabilities({
     provider: record.provider,
@@ -253,6 +259,7 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
     gmailMailboxes,
     directManagedMailboxes,
     divisionManagedMailboxes,
+    ownedManagedMailboxes,
     apiMessageCounts,
   ] = await Promise.all([
     db
@@ -292,6 +299,7 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
       .orderBy(asc(mailbox.emailAddress)),
     db
       .select({
+        accessMode: mailbox.accessMode,
         autoLabelEnabled: mailboxAutomationSettings.autoLabelEnabled,
         directGrantRole: mailboxGrant.role,
         displayName: mailbox.displayName,
@@ -302,7 +310,7 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
         id: mailbox.id,
         includeApiSentMessages: mailbox.includeApiSentMessages,
         organizationId: mailbox.organizationId,
-        ownerUserId: mailbox.ownerUserId,
+        ownerUserId: mailbox.managedOwnerUserId,
         provider: mailbox.provider,
         signatureHtml: mailbox.signatureHtml,
         signatureText: mailbox.signatureText,
@@ -337,6 +345,7 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
       .select({
         accessDivisionId: organizationDivision.id,
         accessDivisionName: organizationDivision.name,
+        accessMode: mailbox.accessMode,
         autoLabelEnabled: mailboxAutomationSettings.autoLabelEnabled,
         directGrantRole: mailboxGrant.role,
         displayName: mailbox.displayName,
@@ -348,7 +357,7 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
         id: mailbox.id,
         includeApiSentMessages: mailbox.includeApiSentMessages,
         organizationId: mailbox.organizationId,
-        ownerUserId: mailbox.ownerUserId,
+        ownerUserId: mailbox.managedOwnerUserId,
         provider: mailbox.provider,
         signatureHtml: mailbox.signatureHtml,
         signatureText: mailbox.signatureText,
@@ -387,7 +396,50 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
       .where(
         and(
           eq(mailbox.provider, MAILBOX_PROVIDER_MANAGED),
+          // Private managed mailboxes are never reachable through divisions.
+          isNull(mailbox.managedOwnerUserId),
           eq(organizationDivision.organizationId, mailbox.organizationId)
+        )
+      )
+      .orderBy(asc(mailbox.emailAddress)),
+    db
+      .select({
+        accessMode: mailbox.accessMode,
+        autoLabelEnabled: mailboxAutomationSettings.autoLabelEnabled,
+        displayName: mailbox.displayName,
+        divisionId: mailbox.divisionId,
+        divisionName: organizationDivision.name,
+        emailAddress: mailbox.emailAddress,
+        id: mailbox.id,
+        includeApiSentMessages: mailbox.includeApiSentMessages,
+        organizationId: mailbox.organizationId,
+        ownerUserId: mailbox.managedOwnerUserId,
+        provider: mailbox.provider,
+        signatureHtml: mailbox.signatureHtml,
+        signatureText: mailbox.signatureText,
+        status: mailbox.status,
+        usefulDetailsEnabled: mailboxAutomationSettings.usefulDetailsEnabled,
+      })
+      .from(mailbox)
+      .innerJoin(
+        member,
+        and(
+          eq(member.userId, input.userId),
+          eq(member.organizationId, mailbox.organizationId)
+        )
+      )
+      .leftJoin(
+        mailboxAutomationSettings,
+        eq(mailboxAutomationSettings.mailboxId, mailbox.id)
+      )
+      .leftJoin(
+        organizationDivision,
+        eq(organizationDivision.id, mailbox.divisionId)
+      )
+      .where(
+        and(
+          eq(mailbox.managedOwnerUserId, input.userId),
+          eq(mailbox.provider, MAILBOX_PROVIDER_MANAGED)
         )
       )
       .orderBy(asc(mailbox.emailAddress)),
@@ -410,6 +462,7 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
   const managedUnreadCountsByMailboxId = await listManagedUnreadNonSpamCounts([
     ...directManagedMailboxes.map((record) => record.id),
     ...divisionManagedMailboxes.map((record) => record.id),
+    ...ownedManagedMailboxes.map((record) => record.id),
   ]);
   const apiMessageCountsByOrganizationId = new Map(
     apiMessageCounts.map((record) => [record.organizationId, record.count])
@@ -434,6 +487,7 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
   );
 
   type ManagedMailboxRecord = {
+    accessMode: MailboxAccessMode;
     directGrantRole: MailboxGrantRole | null;
     displayName: string | null;
     divisionGrantRoles: {
@@ -490,6 +544,23 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
           normalizedRecord.directGrantRole,
           normalizedRecord.divisionGrantRole,
         ]) ?? normalizedRecord.divisionGrantRole,
+    });
+  }
+
+  for (const record of ownedManagedMailboxes) {
+    const existing = managedMailboxRecords.get(record.id);
+    if (existing) {
+      // Owning a private managed mailbox implies manager-level access.
+      existing.grantRole =
+        getStrongestMailboxGrantRole([existing.grantRole, "manager"]) ??
+        "manager";
+      continue;
+    }
+    managedMailboxRecords.set(record.id, {
+      ...record,
+      directGrantRole: null,
+      divisionGrantRoles: [],
+      grantRole: "manager",
     });
   }
 

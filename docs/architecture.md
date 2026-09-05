@@ -81,7 +81,11 @@ Google sign-in and Gmail authorization are separate:
 Every connected Gmail account and managed address is a persisted mailbox with a stable generated ID.
 
 - Gmail mailboxes remain private to their owner, even when placed in an organization.
-- Managed mailboxes are organization-owned and visible only through explicit mailbox grants.
+- Shared managed mailboxes are organization-owned and visible only through explicit mailbox grants.
+- Private managed mailboxes stay organization-owned for billing and domains but belong to one person: only the owner plus explicit member grants can access them, and division grants never apply.
+- Private managed owners must remain team members. Offboarding revokes content and grant-management access; team admins can transfer ownership without reading mail.
+- Creating a private mailbox, converting to private, or transferring its owner gives only the selected owner access. Conversion and transfer clear existing direct and division grants. Returning to shared preserves explicit member grants and never restores division access automatically. Configuration writes serialize with mode changes on the mailbox row.
+- Account deletion requires transferring private managed mailboxes first. A separate restrictive `managedOwnerUserId` foreign key protects organization-owned mail; Gmail retains its existing account-deletion behavior.
 - Personal is always available but is not a Better Auth organization.
 - `user.defaultMailboxId` is the global fallback across Personal and organizations.
 

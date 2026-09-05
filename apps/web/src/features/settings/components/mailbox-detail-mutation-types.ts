@@ -29,6 +29,12 @@ export type ManagedMailboxDivisionGrantInput = {
   role: MailboxGrantRole;
 };
 
+export type ManagedMailboxAccessModeInput = {
+  accessMode: "private" | "shared";
+  mailboxId: string;
+  ownerUserId?: string;
+};
+
 export type ManagedMailboxToggleInput = {
   enabled: boolean;
   mailboxId: string;
