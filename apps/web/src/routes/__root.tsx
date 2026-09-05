@@ -4,6 +4,7 @@ import { brand } from "@quieter/ui/brand-geometry";
 import { createRootRoute } from "@tanstack/react-router";
 
 import { RootComponent } from "#/components/root/root-component";
+import { RootDocument } from "#/components/root/root-document";
 import { RootErrorComponent } from "#/components/root/root-error-component";
 import { RootNotFoundComponent } from "#/components/root/root-not-found-component";
 
@@ -170,4 +171,5 @@ export const Route = createRootRoute({
     ],
   }),
   notFoundComponent: RootNotFoundComponent,
+  shellComponent: RootDocument,
 });
