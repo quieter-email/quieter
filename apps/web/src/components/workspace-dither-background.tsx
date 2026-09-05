@@ -233,6 +233,7 @@ export const WorkspaceDitherBackground = ({
         !shouldAnimate ||
         raf !== 0 ||
         !visible ||
+        document.hidden ||
         cancelled ||
         !initialized
       ) {
@@ -422,6 +423,7 @@ export const WorkspaceDitherBackground = ({
 
   return (
     <canvas
+      aria-hidden
       className={cn(
         "pointer-events-none absolute inset-0 z-0 size-full overflow-hidden opacity-25 ease-out dark:opacity-100",
         className,

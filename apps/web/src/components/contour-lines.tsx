@@ -135,8 +135,6 @@ const FRAGMENT_SHADER_SOURCE = `
     let cell_size = 4.0;
     let cell = floor(frag_coord / cell_size);
     let cell_center = (cell + vec2f(0.5)) * cell_size;
-    let half_diag = cell_size * 0.707;
-    let dist = length(frag_coord - cell_center) / half_diag;
 
     let max_dim = max(params.resolution.x, params.resolution.y);
     let norm_pos = cell_center / max_dim;
@@ -165,11 +163,11 @@ const FRAGMENT_SHADER_SOURCE = `
     let hi_color = contour_color(hi, hue);
     let jitter = (hash21(cell) - 0.5) * 0.35;
     let threshold = clamp(band_fraction + jitter, 0.0, 1.0);
-    let dot_radius = threshold * 1.42;
-    var out_color = lo_color;
-    if (dist < dot_radius) {
-      out_color = hi_color;
-    }
+    let out_color = select(
+      lo_color,
+      hi_color,
+      hash21(cell + vec2f(19.0, 71.0)) < threshold,
+    );
 
     return vec4f(out_color, 1.0);
   }
@@ -190,6 +188,7 @@ export const ContourLines = () => {
     let gpu: Awaited<ReturnType<typeof init>> | undefined;
     let canvasSurface: ReturnType<typeof surface> | undefined;
     let removeResizeListener: (() => void) | undefined;
+    let resizeObserver: ResizeObserver | undefined;
     let removeVisibilityListener: (() => void) | undefined;
 
     void (async () => {
@@ -268,13 +267,17 @@ export const ContourLines = () => {
 
         removeResizeListener = activeSurface.onResize(() => {
           lastRenderTime = -FRAME_INTERVAL_MS;
-
-          if (prefersReducedMotion) {
-            renderFrame(0);
-          }
         });
 
         if (prefersReducedMotion) {
+          resizeObserver = new ResizeObserver(() => {
+            cancelAnimationFrame(raf);
+            raf = requestAnimationFrame(() => {
+              raf = 0;
+              renderFrame(0);
+            });
+          });
+          resizeObserver.observe(canvas);
           renderFrame(0);
           return;
         }
@@ -301,6 +304,7 @@ export const ContourLines = () => {
     return () => {
       disposed = true;
       cancelAnimationFrame(raf);
+      resizeObserver?.disconnect();
       removeResizeListener?.();
       removeVisibilityListener?.();
       canvasSurface?.dispose();
@@ -308,5 +312,11 @@ export const ContourLines = () => {
     };
   }, []);
 
-  return <canvas ref={canvasRef} className="absolute inset-0 z-0 size-full" />;
+  return (
+    <canvas
+      aria-hidden
+      ref={canvasRef}
+      className="pointer-events-none absolute inset-0 z-0 size-full"
+    />
+  );
 };

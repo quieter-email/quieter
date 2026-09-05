@@ -95,12 +95,11 @@ fn ridge(p: vec2f, phase: f32, thickness: f32, hard: f32, cs: vec2f, freq: f32) 
     r.y
     - (
       -0.1
-      + 0.3 * sin(r.x * (1.15 * freq) + phase)
-      + 0.12 * sin(r.x * (2.35 * freq) + phase * 1.7)
-      + 0.05 * sin(r.x * (4.2 * freq) - phase * 0.65)
+      + 0.18 * sin(r.x * (0.6 * freq) + phase)
+      + 0.04 * sin(r.x * (1.2 * freq) + phase * 1.7)
     );
   let soft = exp(-(fold * fold) / max(thickness * thickness, 0.0001));
-  let sharp = mix(0.45, 7.0, clamp(hard, 0.0, 1.0));
+  let sharp = mix(0.45, 1.1, clamp(hard, 0.0, 1.0));
   return pow(soft, sharp);
 }
 
@@ -165,14 +164,14 @@ fn layerLight(a: f32, b: f32) -> f32 {
   );
 
   let bloom =
-    softGlow(q, vec2f(-0.34 + drift, -0.1 + drift2), vec2f(0.58, 0.24)) * 0.6 +
-    softGlow(q, vec2f(-0.02 + drift2, 0.1), vec2f(0.36, 0.17)) * 0.4;
+    softGlow(q, vec2f(-0.34 + drift, -0.1 + drift2), vec2f(0.85, 0.5)) * 0.6 +
+    softGlow(q, vec2f(-0.02 + drift2, 0.1), vec2f(0.7, 0.4)) * 0.4;
 
   let ridgeLayer = layerLight(
-    ridgeMain * 0.75,
+    ridgeMain * 0.4,
     layerLight(ridgeB * params.ridgeAmp.x, ridgeC * params.ridgeAmp.y)
   );
-  var highlight = layerLight(ridgeLayer, bloom * 0.55);
+  var highlight = layerLight(ridgeLayer, bloom * 0.8);
   highlight = clamp(highlight * params.intensity, 0.0, 1.0);
 
   let valley =
@@ -330,11 +329,11 @@ const computeFrameGlobals = (
   const mood = valueNoise3(f32(t * 0.22), sy, f32(t * 0.16));
   const detail = valueNoise3(f32(sz + 1.2), f32(t * 0.2), f32(t * 0.18));
   const hardnessNoise = valueNoise3(f32(t * 0.07 + sx), 2.1, sy);
-  const hardness = mix(0.05, 0.55, smoothstep(0.42, 0.58, hardnessNoise));
+  const hardness = mix(0.02, 0.12, smoothstep(0.42, 0.58, hardnessNoise));
   const drift = f32(f32(valueNoise3(f32(t * 0.4), sy, 1) - 0.5) * 0.18);
   const drift2 = f32(f32(valueNoise3(sz, f32(t * 0.38), 2) - 0.5) * 0.15);
   const thickNoise = valueNoise3(f32(t * 0.08 + sz), 3.7, sy);
-  const thick = f32(mix(0.2, 0.3, thickNoise) * mix(1, 0.9, hardness));
+  const thick = f32(mix(0.4, 0.65, thickNoise) * mix(1, 0.9, hardness));
 
   return {
     detail,
@@ -348,8 +347,8 @@ const computeFrameGlobals = (
     phaseA: f32(f32(sx * 6.28318) + f32(t * 1.42)),
     phaseB: f32(f32(sy * 6.28318) + f32(t * 0.58) + 2.4),
     phaseC: f32(f32(sz * 6.28318) - f32(t * 1.95) - 1.1),
-    ridgeAmpB: mix(0.12, 0.42, detail),
-    ridgeAmpC: mix(0.03, 0.32, detail),
+    ridgeAmpB: mix(0.02, 0.1, detail),
+    ridgeAmpC: mix(0, 0.04, detail),
     thick,
   };
 };
