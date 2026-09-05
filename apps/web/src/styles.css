@@ -29,6 +29,10 @@
   stroke-dasharray: 1.25 98.75;
 }
 
+.auth-scene {
+  background: var(--bg);
+}
+
 @keyframes loading-spinner-segment {
   from {
     stroke-dashoffset: 0;

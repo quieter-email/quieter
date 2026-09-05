@@ -47,6 +47,8 @@ struct Params {
   cosB: vec2f,
   cosC: vec2f,
   grainTick: f32,
+  pointer: vec2f,
+  pointerStrength: f32,
 }
 
 @group(0) @binding(0) var<uniform> params: Params;
@@ -121,7 +123,9 @@ fn layerLight(a: f32, b: f32) -> f32 {
   let hardness = params.hardness;
   let drift = params.drift.x;
   let drift2 = params.drift.y;
-  let q = p - params.layoutOffset;
+  let pointerOffset = p - (params.pointer - 0.5) * vec2f(aspect, 1.0);
+  let pointerInfluence = exp(-dot(pointerOffset, pointerOffset) * 14.0) * params.pointerStrength;
+  let q = p - params.layoutOffset + vec2f(-pointerOffset.y, pointerOffset.x) * pointerInfluence * 0.16;
 
   var ambient =
     softGlow(q, vec2f(-0.25 + drift, -0.06 + drift2), vec2f(1.2, 0.8)) * 0.4 +
@@ -235,6 +239,7 @@ const BLACK_RGB = [0, 0, 0] as const;
 type FadeTarget = "black" | "canvas";
 
 type AtmosphericBackgroundProps = {
+  interactive?: boolean;
   className?: string;
   /** Film grain strength. Default 1. */
   grain?: number;
@@ -358,6 +363,8 @@ const computeFrameGlobals = (
 };
 
 type AtmosphericShaderParams = {
+  pointer: [number, number];
+  pointerStrength: number;
   resolution: [number, number];
   time: number;
   intensity: number;
@@ -401,6 +408,7 @@ export const AtmosphericBackground = ({
   fadeTop,
   grain = 1,
   intensity = 1,
+  interactive = false,
   danger,
 }: AtmosphericBackgroundProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -433,6 +441,28 @@ export const AtmosphericBackground = ({
       "(prefers-reduced-motion: reduce)"
     ).matches;
     const shouldAnimate = animate && !prefersReducedMotion;
+    let pointerX = 0.5;
+    let pointerY = 0.5;
+    let pointerStrength = 0;
+    const handlePointerMove = (event: PointerEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = (event.clientX - rect.left) / Math.max(rect.width, 1);
+      const y = (event.clientY - rect.top) / Math.max(rect.height, 1);
+      pointerStrength = x >= 0 && x <= 1 && y >= 0 && y <= 1 ? 1 : 0;
+      if (pointerStrength > 0) {
+        pointerX = x;
+        pointerY = y;
+      }
+    };
+    const handlePointerBlur = () => {
+      pointerStrength = 0;
+    };
+    if (interactive && shouldAnimate) {
+      window.addEventListener("pointermove", handlePointerMove, {
+        passive: true,
+      });
+      window.addEventListener("blur", handlePointerBlur);
+    }
     const [sx, sy, sz] = session.seed;
 
     const layoutX = f32(f32(sx - 0.5) * 0.55);
@@ -478,6 +508,10 @@ export const AtmosphericBackground = ({
       shaderParams.phase = [g.phaseA, g.phaseB, g.phaseC];
       shaderParams.ridgeAmp = [g.ridgeAmpB, g.ridgeAmpC];
       shaderParams.grainTick = g.grainTick;
+      shaderParams.pointer[0] += (pointerX - shaderParams.pointer[0]) * 0.06;
+      shaderParams.pointer[1] += (pointerY - shaderParams.pointer[1]) * 0.06;
+      shaderParams.pointerStrength +=
+        (pointerStrength - shaderParams.pointerStrength) * 0.05;
       const currentGpu = gpuContext;
       const currentSurface = canvasSurface;
       const currentEffect = atmosphericEffect;
@@ -579,6 +613,8 @@ export const AtmosphericBackground = ({
             initialGlobals.phaseB,
             initialGlobals.phaseC,
           ],
+          pointer: [0.5, 0.5],
+          pointerStrength: 0,
           resolution: [nextSurface.size[0], nextSurface.size[1]],
           ridgeAmp: [initialGlobals.ridgeAmpB, initialGlobals.ridgeAmpC],
           seed: session.seed,
@@ -649,9 +685,20 @@ export const AtmosphericBackground = ({
     return () => {
       cancelled = true;
       intersection.disconnect();
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("blur", handlePointerBlur);
       teardownGpu();
     };
-  }, [animate, danger, fadeBottom, fadeTop, grain, intensity, session]);
+  }, [
+    animate,
+    danger,
+    fadeBottom,
+    fadeTop,
+    grain,
+    intensity,
+    interactive,
+    session,
+  ]);
 
   return (
     <div
