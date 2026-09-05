@@ -23,6 +23,7 @@ import { dispatchPendingMailboxActionRuns } from "../src/mailbox-action-dispatch
 import { processMailboxActionMessage } from "../src/mailbox-action-worker";
 import { processGmailQueueMessage } from "../src/queue-worker";
 import worker, { signaturesMatch } from "../src/worker";
+import { handlePubSub, requestErrorResponse } from "../src/worker-utils";
 
 const serviceAccount = "gmail-push@example.invalid";
 const subscription = "projects/example/subscriptions/gmail";
@@ -249,29 +250,97 @@ describe("Cloudflare worker runtime", () => {
       expect(response.status).toBe(403);
     });
 
-    test("broadcasts and enqueues an authenticated notification", async () => {
+    test("processes authenticated notifications before acknowledging without queueing", async () => {
       installFetchMock();
-      const send = vi.spyOn(env.GmailPsQueue, "send").mockResolvedValue({
-        metadata: { metrics: { backlogBytes: 0, backlogCount: 1 } },
+      const token = await liveSyncToken();
+      const stub = env.GmailLiveSyncMailbox.get(
+        env.GmailLiveSyncMailbox.idFromName(emailAddress)
+      );
+      const socketResponse = await stub.fetch(
+        new Request(`https://worker.invalid/gmail/live?token=${token}`, {
+          headers: { upgrade: "websocket" },
+        })
+      );
+      const socket = socketResponse.webSocket;
+      if (socket === null) {
+        throw new Error("Expected WebSocket upgrade.");
+      }
+      socket.accept();
+      const events: unknown[] = [];
+      socket.addEventListener("message", (event) => {
+        events.push(JSON.parse(String(event.data)));
       });
-      const response = await worker.fetch(await pubSubRequest(envelope()), env);
+      const send = vi.spyOn(env.GmailPsQueue, "send");
+      const { promise: pending, resolve: finish } =
+        Promise.withResolvers<null>();
+      const processNotification = vi.fn<
+        (message: unknown, bindings: Env) => Promise<void>
+      >(async () => {
+        await pending;
+      });
+      let acknowledged = false;
+      const responsePromise = handlePubSub(
+        await pubSubRequest(envelope()),
+        env,
+        processNotification
+      ).then((response) => {
+        acknowledged = true;
+        return response;
+      });
+      await vi.waitFor(() => {
+        expect(processNotification).toHaveBeenCalledOnce();
+      });
+      expect(acknowledged).toBeFalsy();
+      expect(processNotification.mock.calls[0]).toStrictEqual([
+        {
+          emailAddress,
+          historyId: "123",
+          pubSubMessageId: "message-1",
+          type: "notification",
+        },
+        env,
+      ]);
+      finish(null);
+      const response = await responsePromise;
       expect(response.status).toBe(204);
-      expect(send).toHaveBeenCalledOnce();
-      expect(send.mock.calls[0]?.[0]).toStrictEqual({
-        emailAddress,
-        historyId: "123",
-        pubSubMessageId: "message-1",
-        type: "notification",
+      expect(send).not.toHaveBeenCalled();
+      await vi.waitFor(() => {
+        expect(events).toHaveLength(3);
       });
+      expect(events.slice(1)).toStrictEqual(
+        expect.arrayContaining([
+          { mailboxId, type: "mailbox-dirty" },
+          { mailboxId, type: "mailbox-details-dirty" },
+        ])
+      );
+      socket.close(1000, "done");
     });
 
-    test("returns 5xx when enqueueing transiently fails", async () => {
+    test("returns 5xx when direct processing transiently fails", async () => {
       installFetchMock();
-      vi.spyOn(env.GmailPsQueue, "send").mockRejectedValueOnce(
-        new Error("temporary")
-      );
-      const response = await worker.fetch(await pubSubRequest(envelope()), env);
+      const processNotification = vi
+        .fn<(message: unknown, bindings: Env) => Promise<void>>()
+        .mockRejectedValue(new Error("temporary"));
+      const response = await handlePubSub(
+        await pubSubRequest(envelope()),
+        env,
+        processNotification
+      ).catch((error: unknown) => requestErrorResponse(error, "/gmail/pubsub"));
       expect(response.status).toBe(500);
+    });
+
+    test("does not process a notification with an invalid subscription", async () => {
+      installFetchMock();
+      const processNotification =
+        vi.fn<(message: unknown, bindings: Env) => Promise<void>>();
+      await expect(
+        handlePubSub(
+          await pubSubRequest(envelope({ subscription: "other" })),
+          env,
+          processNotification
+        )
+      ).rejects.toThrow("subscription");
+      expect(processNotification).not.toHaveBeenCalled();
     });
   });
 
@@ -347,6 +416,20 @@ describe("Cloudflare worker runtime", () => {
       expect(processNotification.mock.calls[0]?.[1]?.onProcessed).toBeTypeOf(
         "function"
       );
+    });
+
+    test("retries a notification when the mailbox is busy", async () => {
+      const processNotification = vi
+        .fn<typeof processGmailPubSubNotification>()
+        .mockResolvedValue({
+          busy: true,
+          ignored: false,
+          mailboxId,
+          pubSubMessageId: body.pubSubMessageId,
+        });
+      await expect(
+        processGmailQueueMessage(body, env, { processNotification })
+      ).rejects.toThrow("already being processed");
     });
 
     test("processes maintenance jobs with the configured topic", async () => {

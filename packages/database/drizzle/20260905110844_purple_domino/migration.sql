@@ -1,0 +1,2 @@
+ALTER TABLE "userAiContext" ALTER COLUMN "autoLabelModel" SET DEFAULT 'google/gemini-3.5-flash-lite';--> statement-breakpoint
+ALTER TABLE "userAiContext" ALTER COLUMN "usefulDetailModel" SET DEFAULT 'google/gemini-3.5-flash-lite';
