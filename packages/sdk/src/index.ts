@@ -71,15 +71,13 @@ export type QuieterDeliveryStatus =
   | "complained"
   | "delayed"
   | "delivered"
-  | "opened"
   | "queued"
   | "rejected"
-  | "sent"
-  | "unsubscribed";
+  | "sent";
 
 export type QuieterDeliveryEvent = {
   diagnosticCode: string | null;
-  eventType: QuieterDeliveryStatus;
+  eventType: QuieterDeliveryStatus | "opened" | "unsubscribed";
   occurredAt: string;
   providerStatus: string | null;
   reason: string | null;

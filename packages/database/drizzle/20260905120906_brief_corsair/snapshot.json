@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "c9473c5d-1b67-4ea5-a7d8-7f4395438cc7",
-  "prevIds": ["29f166fa-4dc4-403b-b822-4a1e958750f1"],
+  "id": "916a2f62-b658-4446-91e6-3e872ea1a74f",
+  "prevIds": ["f28cf13a-b62f-48d8-aed1-00c557e5ada0"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -336,6 +336,12 @@
     },
     {
       "isRlsEnabled": false,
+      "name": "organizationMailOpenEvent",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
       "name": "organizationMailRecipientSuppression",
       "entityType": "tables",
       "schema": "public"
@@ -349,6 +355,12 @@
     {
       "isRlsEnabled": false,
       "name": "organizationMailSuppressionAudit",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "organizationMailTrackingSettings",
       "entityType": "tables",
       "schema": "public"
     },
@@ -1899,6 +1911,19 @@
       "entityType": "columns",
       "schema": "public",
       "table": "billingEntitlementOverride"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "cancelAtPeriodEnd",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "billingSubscription"
     },
     {
       "type": "timestamp",
@@ -4423,6 +4448,19 @@
       "table": "mailAutomationMemoryProfile"
     },
     {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "catchAllMailboxId",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "mailDomain"
+    },
+    {
       "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
@@ -5562,6 +5600,19 @@
       "generated": null,
       "identity": null,
       "name": "dedupeKey",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "mailboxActionRun"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "dispatchedAt",
       "entityType": "columns",
       "schema": "public",
       "table": "mailboxActionRun"
@@ -8814,6 +8865,110 @@
       "name": "createdAt",
       "entityType": "columns",
       "schema": "public",
+      "table": "organizationMailOpenEvent"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "firstOpenedAt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "organizationMailOpenEvent"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "organizationMailOpenEvent"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "lastOpenedAt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "organizationMailOpenEvent"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organizationId",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "organizationMailOpenEvent"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "providerMessageId",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "organizationMailOpenEvent"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "recipient",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "organizationMailOpenEvent"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "1",
+      "generated": null,
+      "identity": null,
+      "name": "reportedOpenCount",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "organizationMailOpenEvent"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "createdAt",
+      "entityType": "columns",
+      "schema": "public",
       "table": "organizationMailRecipientSuppression"
     },
     {
@@ -9101,6 +9256,71 @@
       "entityType": "columns",
       "schema": "public",
       "table": "organizationMailSuppressionAudit"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "allowPerSendOverride",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "organizationMailTrackingSettings"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "createdAt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "organizationMailTrackingSettings"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "openTrackingEnabled",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "organizationMailTrackingSettings"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organizationId",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "organizationMailTrackingSettings"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "updatedAt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "organizationMailTrackingSettings"
     },
     {
       "type": "timestamp",
@@ -9991,7 +10211,7 @@
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
-      "default": "'openai/gpt-5.6-luna'",
+      "default": "'google/gemini-3.5-flash-lite'",
       "generated": null,
       "identity": null,
       "name": "autoLabelModel",
@@ -10065,6 +10285,19 @@
       "table": "userAiContext"
     },
     {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'google/gemini-3.5-flash-lite'",
+      "generated": null,
+      "identity": null,
+      "name": "searchFilterModel",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "userAiContext"
+    },
+    {
       "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
@@ -10082,7 +10315,7 @@
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
-      "default": "'openai/gpt-5.6-luna'",
+      "default": "'google/gemini-3.5-flash-lite'",
       "generated": null,
       "identity": null,
       "name": "usefulDetailModel",
@@ -11490,6 +11723,27 @@
       "nameExplicit": true,
       "columns": [
         {
+          "value": "catchAllMailboxId",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "mail_domain_catch_all_mailbox_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "mailDomain"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
           "value": "domainId",
           "isExpression": false,
           "asc": true,
@@ -12393,6 +12647,48 @@
       "nameExplicit": true,
       "columns": [
         {
+          "value": "messageHeaderId",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": "\"direction\" = 'outbound'",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "managed_mail_message_outbound_header_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "managedMailMessage"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "providerMessageId",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": "\"direction\" = 'outbound'",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "managed_mail_message_outbound_provider_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "managedMailMessage"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
           "value": "rawObjectProvider",
           "isExpression": false,
           "asc": true,
@@ -12785,6 +13081,48 @@
       "nameExplicit": true,
       "columns": [
         {
+          "value": "messageHeaderId",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "organization_api_mail_message_header_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "organizationApiMailMessage"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "providerMessageId",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "organization_api_mail_message_provider_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "organizationApiMailMessage"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
           "value": "organizationId",
           "isExpression": false,
           "asc": true,
@@ -13046,6 +13384,34 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "organizationMailDeliveryRecipient"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organizationId",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "firstOpenedAt",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "organization_mail_open_event_organization_time_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "organizationMailOpenEvent"
     },
     {
       "nameExplicit": true,
@@ -13849,6 +14215,19 @@
       "entityType": "fks",
       "schema": "public",
       "table": "mailAutomationMemoryProfile"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["catchAllMailboxId"],
+      "schemaTo": "public",
+      "tableTo": "mailbox",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "mailDomain_catchAllMailboxId_mailbox_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "mailDomain"
     },
     {
       "nameExplicit": false,
@@ -14690,6 +15069,19 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
+      "name": "organizationMailOpenEvent_organizationId_organization_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "organizationMailOpenEvent"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["organizationId"],
+      "schemaTo": "public",
+      "tableTo": "organization",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
       "name": "organizationMailRecipientSuppression_9TW0BgKErC7X_fkey",
       "entityType": "fks",
       "schema": "public",
@@ -14720,6 +15112,19 @@
       "entityType": "fks",
       "schema": "public",
       "table": "organizationMailSuppressionAudit"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["organizationId"],
+      "schemaTo": "public",
+      "tableTo": "organization",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "organizationMailTrackingSettings_UJMgSNP7bdp5_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "organizationMailTrackingSettings"
     },
     {
       "nameExplicit": false,
@@ -15294,6 +15699,14 @@
     {
       "columns": ["id"],
       "nameExplicit": false,
+      "name": "organizationMailOpenEvent_pkey",
+      "schema": "public",
+      "table": "organizationMailOpenEvent",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
       "name": "organizationMailSendIdempotency_pkey",
       "schema": "public",
       "table": "organizationMailSendIdempotency",
@@ -15305,6 +15718,14 @@
       "name": "organizationMailSuppressionAudit_pkey",
       "schema": "public",
       "table": "organizationMailSuppressionAudit",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["organizationId"],
+      "nameExplicit": false,
+      "name": "organizationMailTrackingSettings_pkey",
+      "schema": "public",
+      "table": "organizationMailTrackingSettings",
       "entityType": "pks"
     },
     {
@@ -15577,6 +15998,15 @@
     },
     {
       "nameExplicit": true,
+      "columns": ["catchAllMailboxId"],
+      "nullsNotDistinct": false,
+      "name": "mail_domain_catch_all_mailbox_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "mailDomain"
+    },
+    {
+      "nameExplicit": true,
       "columns": ["domain"],
       "nullsNotDistinct": false,
       "name": "mail_domain_domain_unique",
@@ -15736,6 +16166,15 @@
       "entityType": "uniques",
       "schema": "public",
       "table": "organizationMailDeliveryEvent"
+    },
+    {
+      "nameExplicit": true,
+      "columns": ["organizationId", "providerMessageId"],
+      "nullsNotDistinct": false,
+      "name": "organization_mail_open_event_message_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "organizationMailOpenEvent"
     },
     {
       "nameExplicit": true,
@@ -16240,7 +16679,7 @@
       "table": "organizationMailDeliveryEvent"
     },
     {
-      "value": "\"status\" in ('bounced', 'complained', 'delayed', 'delivered', 'opened', 'queued', 'rejected', 'sent', 'unsubscribed')",
+      "value": "\"status\" in ('bounced', 'complained', 'delayed', 'delivered', 'queued', 'rejected', 'sent')",
       "name": "organization_mail_delivery_recipient_status_check",
       "entityType": "checks",
       "schema": "public",

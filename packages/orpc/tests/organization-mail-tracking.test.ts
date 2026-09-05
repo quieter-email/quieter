@@ -39,6 +39,10 @@ describe("open tracking tokens", () => {
   test("rejects malformed tokens", () => {
     expect(verifyOpenTrackingToken("not-a-token", SECRET)).toBeNull();
     expect(verifyOpenTrackingToken("", SECRET)).toBeNull();
+    expect(verifyOpenTrackingToken(`e30.${"é".repeat(43)}`, SECRET)).toBeNull();
+    expect(
+      verifyOpenTrackingToken(`${"a".repeat(2000)}.${"b".repeat(43)}`, SECRET)
+    ).toBeNull();
   });
 
   test("appends the marker before the closing body tag once", () => {

@@ -220,6 +220,7 @@ export const OrganizationDetailView = ({
     return (
       <MailDeliveryView
         canManage={canUpdateOrganization}
+        key={fullOrganization.id}
         onBack={onBackToOrganization}
         organization={fullOrganization}
       />

@@ -130,7 +130,10 @@ export type OrganizationMailDeliveryEventType =
   | "rejected"
   | "sent"
   | "unsubscribed";
-export type OrganizationMailDeliveryStatus = OrganizationMailDeliveryEventType;
+export type OrganizationMailDeliveryStatus = Exclude<
+  OrganizationMailDeliveryEventType,
+  "opened" | "unsubscribed"
+>;
 export type OrganizationMailSuppressionReason =
   | "bounce"
   | "complaint"
@@ -1735,6 +1738,12 @@ export const managedMailMessage = pgTable(
       table.sentAt,
       table.id
     ),
+    index("managed_mail_message_outbound_header_idx")
+      .on(table.messageHeaderId)
+      .where(sql`${table.direction} = 'outbound'`),
+    index("managed_mail_message_outbound_provider_idx")
+      .on(table.providerMessageId)
+      .where(sql`${table.direction} = 'outbound'`),
     index("managed_mail_message_raw_object_idx").on(
       table.rawObjectProvider,
       table.rawObjectBucket,
@@ -1785,6 +1794,10 @@ export const organizationApiMailMessage = pgTable(
     updatedAt: timestamp("updatedAt").notNull(),
   },
   (table) => [
+    index("organization_api_mail_message_header_idx").on(table.messageHeaderId),
+    index("organization_api_mail_message_provider_idx").on(
+      table.providerMessageId
+    ),
     index("organization_api_mail_message_org_sent_at_idx").on(
       table.organizationId,
       table.sentAt,
@@ -1885,7 +1898,7 @@ export const organizationMailDeliveryRecipient = pgTable(
   (table) => [
     check(
       "organization_mail_delivery_recipient_status_check",
-      sql`${table.status} in ('bounced', 'complained', 'delayed', 'delivered', 'opened', 'queued', 'rejected', 'sent', 'unsubscribed')`
+      sql`${table.status} in ('bounced', 'complained', 'delayed', 'delivered', 'queued', 'rejected', 'sent')`
     ),
     index("organization_mail_delivery_recipient_message_idx").on(
       table.organizationId,

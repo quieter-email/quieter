@@ -261,6 +261,7 @@ export const sendOrganizationMailMessage = async (input: {
     }
 
     const sentAt = new Date();
+    const messageHeaderId = `<${randomUUID()}@${getSendEnvelopeAddress(input.message.from).split("@").at(1) ?? "quieter.email"}>`;
     const openTrackingEnabled = await resolveOrganizationMailOpenTracking({
       openTracking: input.message.openTracking,
       organizationId: input.organizationId,
@@ -269,10 +270,11 @@ export const sendOrganizationMailMessage = async (input: {
       input.message.html === undefined
         ? {}
         : buildOpenTrackingHtmlTransform({
-            messageHeaderId: `<${randomUUID()}@${getSendEnvelopeAddress(input.message.from).split("@").at(1) ?? "quieter.email"}>`,
+            messageHeaderId,
             openTrackingEnabled,
           });
     const builtMessage = buildSendMimeMessage(input.message, {
+      messageId: messageHeaderId,
       sentAt,
       ...openTrackingTransform,
     });

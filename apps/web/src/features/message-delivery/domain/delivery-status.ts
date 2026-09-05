@@ -25,15 +25,16 @@ const DELIVERY_STATUS_SEVERITY: MessageDeliveryStatus[] = [
   "complained",
   "bounced",
   "rejected",
-  "unsubscribed",
   "delayed",
-  "delivered",
-  "opened",
   "sent",
   "queued",
+  "delivered",
 ];
 
-const DELIVERY_STATUS_LABELS: Record<MessageDeliveryStatus, string> = {
+const DELIVERY_STATUS_LABELS: Record<
+  MessageDeliveryEvent["eventType"],
+  string
+> = {
   bounced: "Couldn't deliver",
   complained: "Reported as spam",
   delayed: "Delayed",
@@ -45,7 +46,10 @@ const DELIVERY_STATUS_LABELS: Record<MessageDeliveryStatus, string> = {
   unsubscribed: "Unsubscribed",
 };
 
-const DELIVERY_STATUS_DESCRIPTIONS: Record<MessageDeliveryStatus, string> = {
+const DELIVERY_STATUS_DESCRIPTIONS: Record<
+  MessageDeliveryEvent["eventType"],
+  string
+> = {
   bounced: "The receiving mail server refused this message.",
   complained: "The recipient marked this message as spam.",
   delayed: "Delivery is taking longer than usual. We keep retrying.",
@@ -54,7 +58,7 @@ const DELIVERY_STATUS_DESCRIPTIONS: Record<MessageDeliveryStatus, string> = {
     "The recipient's mail program reported opening this message. Opens are approximate and can be missed or faked by automatic tools.",
   queued: "The message is waiting to be handed to the mail system.",
   rejected: "This message was rejected before it left our system.",
-  sent: "Handed to the receiving mail server.",
+  sent: "Accepted by the sending mail service; delivery is not yet confirmed.",
   unsubscribed: "The recipient asked to stop getting mail from this team.",
 };
 
@@ -63,8 +67,9 @@ export const ACCEPTED_DELIVERY_LABEL = "Accepted";
 const ACCEPTED_DELIVERY_DESCRIPTION =
   "The message was accepted for sending. Delivery updates appear here.";
 
-export const getDeliveryStatusLabel = (status: MessageDeliveryStatus) =>
-  DELIVERY_STATUS_LABELS[status];
+export const getDeliveryStatusLabel = (
+  status: MessageDeliveryEvent["eventType"]
+) => DELIVERY_STATUS_LABELS[status];
 
 export const getDeliveryStatusDescription = (
   status: MessageDeliveryStatus | null
@@ -84,20 +89,16 @@ export const getDeliveryActionGuidance = (
 ): string | null => {
   switch (status) {
     case "bounced": {
-      return "This address no longer accepts our mail and is blocked from future sends. Correct it before sending again.";
+      return "This address no longer accepts our mail and was blocked from future sends. Correct it before sending again.";
     }
     case "complained": {
-      return "This recipient reported our message as spam, so they are blocked from future sends. Their report does not tell us which folder other messages land in.";
+      return "This recipient reported our message as spam, so they were blocked from future sends. Their report does not tell us which folder other messages land in.";
     }
     case "rejected": {
-      return "The address was refused before sending started. Check it for typos, then try again.";
-    }
-    case "unsubscribed": {
-      return "This recipient opted out of mail from this team and is blocked from future sends.";
+      return "The sending service rejected this message. Review the details before trying again.";
     }
     case "delayed":
     case "delivered":
-    case "opened":
     case "queued":
     case "sent": {
       return null;
@@ -146,7 +147,7 @@ export const getDeliveryStatusTone = (
   if (status === null || status === "sent" || status === "queued") {
     return "neutral";
   }
-  if (status === "delivered" || status === "opened") {
+  if (status === "delivered") {
     return "positive";
   }
   if (status === "delayed") {
@@ -157,7 +158,11 @@ export const getDeliveryStatusTone = (
 
 export const isDeliveryStatusUnsettled = (
   status: MessageDeliveryStatus | null
-) => status === null || status === "sent" || status === "queued";
+) =>
+  status === null ||
+  status === "sent" ||
+  status === "queued" ||
+  status === "delayed";
 
 /**
  * Delivery events only describe what the receiving mail server did, so the

@@ -2,11 +2,11 @@
 
 import { cn } from "@quieter/ui/cn";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
-import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { useState } from "react";
 
+import { toastError } from "#/lib/error-toast";
 import { mailboxesQueryOptions } from "#/lib/mailboxes-query";
 import { orpc } from "#/lib/orpc";
 
@@ -23,14 +23,6 @@ import {
   mailTrackingSettingsQueryOptions,
 } from "./mail-delivery";
 import type { MailDeliveryMetricsRange } from "./mail-delivery";
-
-const percentFormatter = new Intl.NumberFormat("en", {
-  maximumFractionDigits: 1,
-  style: "percent",
-});
-
-const formatRate = (part: number, whole: number) =>
-  whole > 0 ? percentFormatter.format(part / whole) : "No data";
 
 const MetricRow = ({
   hint,
@@ -124,7 +116,11 @@ export const MailDeliveryView = ({
   });
   const managedMailboxes = (mailboxes?.groups ?? [])
     .flatMap((group) => group.mailboxes)
-    .filter((mailbox) => mailbox.provider === "managed");
+    .filter(
+      (mailbox) =>
+        mailbox.provider === "managed" &&
+        mailbox.organizationId === organization.id
+    );
 
   const {
     data: trackingSettings,
@@ -153,8 +149,8 @@ export const MailDeliveryView = ({
 
   const saveMutation = useMutation(
     orpc.organization.setMailTrackingSettings.mutationOptions({
-      onError: () => {
-        toast.error("Could not save tracking settings.");
+      onError: (error) => {
+        toastError(error);
       },
       onSuccess: async () => {
         await invalidate();
@@ -214,6 +210,7 @@ export const MailDeliveryView = ({
             </p>
           </div>
           <Switch
+            aria-label="Open tracking"
             checked={trackingSettings.openTrackingEnabled}
             className="mt-1 shrink-0"
             disabled={saveMutation.isPending}
@@ -232,20 +229,20 @@ export const MailDeliveryView = ({
         <div
           className={cn(
             settingsSurfaceVariants({ variant: "insetRow" }),
-            "items-start justify-between gap-4",
-            { "opacity-60": !trackingSettings.openTrackingEnabled }
+            "items-start justify-between gap-4"
           )}
         >
           <div className="max-w-xl">
             <p className="text-body font-medium text-fg">
-              Allow senders to choose per message
+              Allow API senders to choose per message
             </p>
             <p className="mt-1 text-body text-muted-fg">
-              Lets authorized senders turn tracking off for a single send.
+              Lets authorized API senders turn tracking off for a single send.
               Without this, the team setting applies to every message.
             </p>
           </div>
           <Switch
+            aria-label="Allow API senders to turn off tracking per message"
             checked={trackingSettings.allowPerSendOverride}
             className="mt-1 shrink-0"
             disabled={
@@ -287,17 +284,17 @@ export const MailDeliveryView = ({
     metricsSection = (
       <div className="space-y-3">
         <MetricRow
-          hint="Accepted by us for sending"
+          hint="Message-recipient pairs accepted for sending in this period"
           label="Sent"
           value={sent.toLocaleString()}
         />
         <MetricRow
-          hint={`${formatRate(delivered, sent)} of sent`}
+          hint="Recipients whose mail server accepted the message in this period"
           label="Delivered"
           value={delivered.toLocaleString()}
         />
         <MetricRow
-          hint={`${formatRate(bounced, sent)} of sent`}
+          hint="Recipients with permanent delivery failures in this period"
           label="Bounced"
           value={bounced.toLocaleString()}
         />
@@ -325,9 +322,10 @@ export const MailDeliveryView = ({
       <div>
         <h1 className="text-body-lg font-semibold text-fg">Delivery</h1>
         <p className="mt-1 max-w-2xl text-body text-muted-fg">
-          Understand what happened to messages this team sent. Counts come from
-          confirmed delivery events; open numbers are best-effort estimates and
-          never prove a person read anything.
+          Understand what happened to messages this team sent. Counts show
+          distinct message-recipient pairs for each event type observed in the
+          selected period; open numbers are best-effort estimates and never
+          prove a person read anything.
         </p>
       </div>
 
@@ -361,7 +359,7 @@ export const MailDeliveryView = ({
                     "max-w-48 truncate rounded-full border px-3 py-1 text-caption font-medium transition-colors",
                     {
                       "border-border text-muted-fg hover:text-fg": !active,
-                      "border-q-blue/40 bg-q-blue/10 text-q-blue": active,
+                      "border-primary bg-primary text-primary-fg": active,
                     }
                   )}
                   key={scope.id || "all"}

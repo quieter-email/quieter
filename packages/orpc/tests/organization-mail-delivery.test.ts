@@ -1,166 +1,81 @@
 import type { OrganizationMailDeliveryStatus } from "@quieter/database/schema";
 import { describe, expect, test } from "vite-plus/test";
 
-import type { DeliveryStatePoint } from "../src/organization-mail-delivery";
 import {
   getSuppressionReason,
   isTerminalDeliveryStatus,
   mergeDeliveryStatus,
 } from "../src/organization-mail-delivery";
+import type { DeliveryStatePoint } from "../src/organization-mail-delivery";
 
-const at = (minutes: number) => new Date(Date.UTC(2026, 7, 14, 10, minutes, 0));
-
-type TimelineEntry = {
-  minutes: number;
-  status: OrganizationMailDeliveryStatus;
-};
-
-const fold = (timeline: TimelineEntry[]) => {
-  let state: DeliveryStatePoint | null = null;
-  for (const entry of timeline) {
-    state = mergeDeliveryStatus(state, {
-      occurredAt: at(entry.minutes),
-      status: entry.status,
-    });
-  }
-  return state?.status ?? null;
-};
+const statuses: OrganizationMailDeliveryStatus[] = [
+  "queued",
+  "sent",
+  "delayed",
+  "delivered",
+  "rejected",
+  "bounced",
+  "complained",
+];
 
 describe(mergeDeliveryStatus, () => {
-  test("adopts the first observed event", () => {
-    expect(
-      mergeDeliveryStatus(null, { occurredAt: at(5), status: "queued" }).status
-    ).toBe("queued");
-  });
-
-  test("keeps terminal outcomes regardless of later event times", () => {
-    expect(
-      fold([
-        { minutes: 1, status: "complained" },
-        { minutes: 9, status: "delivered" },
-      ])
-    ).toBe("complained");
-    expect(
-      fold([
-        { minutes: 2, status: "bounced" },
-        { minutes: 9, status: "sent" },
-      ])
-    ).toBe("bounced");
-    expect(
-      fold([
-        { minutes: 3, status: "rejected" },
-        { minutes: 9, status: "delivered" },
-      ])
-    ).toBe("rejected");
-    expect(
-      fold([
-        { minutes: 4, status: "unsubscribed" },
-        { minutes: 9, status: "delivered" },
-      ])
-    ).toBe("unsubscribed");
-  });
-
-  test("a later complaint still overrides an earlier non-terminal state", () => {
-    expect(
-      fold([
-        { minutes: 1, status: "delivered" },
-        { minutes: 9, status: "complained" },
-      ])
-    ).toBe("complained");
-    expect(
-      fold([
-        { minutes: 1, status: "delayed" },
-        { minutes: 9, status: "bounced" },
-      ])
-    ).toBe("bounced");
-  });
-
-  test("follows the latest event time among non-terminal states", () => {
-    expect(
-      fold([
-        { minutes: 1, status: "queued" },
-        { minutes: 2, status: "sent" },
-        { minutes: 3, status: "delivered" },
-      ])
-    ).toBe("delivered");
-    expect(
-      fold([
-        { minutes: 1, status: "queued" },
-        { minutes: 2, status: "sent" },
-      ])
-    ).toBe("sent");
-  });
-
-  test("an earlier late arrival does not regress a newer non-terminal state", () => {
-    expect(
-      fold([
-        { minutes: 5, status: "opened" },
-        { minutes: 3, status: "delivered" },
-      ])
-    ).toBe("opened");
-    expect(
-      fold([
-        { minutes: 5, status: "delivered" },
-        { minutes: 3, status: "delayed" },
-      ])
-    ).toBe("delivered");
-  });
-
-  test("duplicate events are absorbed without changing the outcome", () => {
-    const timeline: TimelineEntry[] = [
-      { minutes: 1, status: "sent" },
-      { minutes: 2, status: "delivered" },
-    ];
-    const withDuplicates = [
-      timeline[0],
-      timeline[0],
-      timeline[1],
-      timeline[1],
-      timeline[0],
-    ];
-    expect(fold(timeline)).toBe(fold(withDuplicates));
-  });
-
-  test("every permutation of a timeline converges on one outcome", () => {
-    const timeline: TimelineEntry[] = [
-      { minutes: 1, status: "queued" },
-      { minutes: 2, status: "sent" },
-      { minutes: 3, status: "delivered" },
-      { minutes: 4, status: "bounced" },
-      { minutes: 5, status: "complained" },
-    ];
-    const permutations = [
-      [...timeline],
-      [timeline[4], timeline[3], timeline[2], timeline[1], timeline[0]],
-      [timeline[2], timeline[4], timeline[0], timeline[3], timeline[1]],
-      [timeline[3], timeline[1], timeline[4], timeline[0], timeline[2]],
-      [timeline[1], timeline[3], timeline[0], timeline[2], timeline[4]],
-    ];
-    const outcomes = permutations.map((permutation) => fold(permutation));
-    expect(new Set(outcomes).size).toBe(1);
-    expect(outcomes[0]).toBe("complained");
-  });
-});
-
-describe(isTerminalDeliveryStatus, () => {
-  test("marks failures and unsubscribes as terminal", () => {
-    for (const status of [
-      "bounced",
-      "complained",
-      "rejected",
-      "unsubscribed",
-    ] as const) {
-      expect(isTerminalDeliveryStatus(status)).toBeTruthy();
+  test("converges for every status pair, timestamp order and tie", () => {
+    for (const first of statuses) {
+      for (const second of statuses) {
+        for (const secondTime of [0, 1000, 2000]) {
+          const a = { occurredAt: new Date(1000), status: first };
+          const b = { occurredAt: new Date(secondTime), status: second };
+          expect(mergeDeliveryStatus(a, b)).toStrictEqual(
+            mergeDeliveryStatus(b, a)
+          );
+          expect(
+            mergeDeliveryStatus(mergeDeliveryStatus(a, b), a)
+          ).toStrictEqual(mergeDeliveryStatus(a, b));
+          expect(mergeDeliveryStatus(a, b).occurredAt.getTime()).toBe(
+            Math.max(1000, secondTime)
+          );
+        }
+      }
     }
-    for (const status of [
-      "delayed",
-      "delivered",
-      "opened",
-      "queued",
-      "sent",
-    ] as const) {
-      expect(isTerminalDeliveryStatus(status)).toBeFalsy();
+  });
+
+  test("is associative across all status triples", () => {
+    for (const first of statuses) {
+      for (const second of statuses) {
+        for (const third of statuses) {
+          const a = { occurredAt: new Date(3000), status: first };
+          const b = { occurredAt: new Date(1000), status: second };
+          const c = { occurredAt: new Date(2000), status: third };
+          expect(
+            mergeDeliveryStatus(mergeDeliveryStatus(a, b), c)
+          ).toStrictEqual(mergeDeliveryStatus(a, mergeDeliveryStatus(b, c)));
+        }
+      }
     }
+  });
+
+  test("delivery cannot regress to a later send or delay, but a bounce escalates it", () => {
+    let state: DeliveryStatePoint = {
+      occurredAt: new Date(1000),
+      status: "delivered",
+    };
+    state = mergeDeliveryStatus(state, {
+      occurredAt: new Date(2000),
+      status: "sent",
+    });
+    state = mergeDeliveryStatus(state, {
+      occurredAt: new Date(3000),
+      status: "delayed",
+    });
+    expect(state.status).toBe("delivered");
+    expect(
+      mergeDeliveryStatus(state, {
+        occurredAt: new Date(500),
+        status: "bounced",
+      }).status
+    ).toBe("bounced");
+    expect(isTerminalDeliveryStatus("delivered")).toBeTruthy();
+    expect(isTerminalDeliveryStatus("delayed")).toBeFalsy();
   });
 });
 

@@ -64,23 +64,19 @@ const normalizeRecipients = (recipients: string[]) => [
   ...new Set(recipients.map(normalizeRecipient).filter(Boolean)),
 ];
 
-/**
- * Terminal outcomes are ordered by severity: observing a more severe outcome
- * escalates the status, but nothing regresses an existing terminal one.
- * Non-terminal statuses follow the most recently observed event time.
- */
-const TERMINAL_DELIVERY_STATUS_RANK: Partial<
-  Record<OrganizationMailDeliveryStatus, number>
-> = {
-  bounced: 2,
-  complained: 3,
-  rejected: 1,
-  unsubscribed: 0,
+const DELIVERY_STATUS_RANK: Record<OrganizationMailDeliveryStatus, number> = {
+  bounced: 5,
+  complained: 6,
+  delayed: 2,
+  delivered: 3,
+  queued: 0,
+  rejected: 4,
+  sent: 1,
 };
 
 export const isTerminalDeliveryStatus = (
   status: OrganizationMailDeliveryStatus
-) => TERMINAL_DELIVERY_STATUS_RANK[status] !== undefined;
+) => DELIVERY_STATUS_RANK[status] >= DELIVERY_STATUS_RANK.delivered;
 
 export type DeliveryStatePoint = {
   occurredAt: Date;
@@ -90,41 +86,35 @@ export type DeliveryStatePoint = {
 export const mergeDeliveryStatus = (
   current: DeliveryStatePoint | null,
   incoming: DeliveryStatePoint
-): DeliveryStatePoint => {
-  if (current === null) {
-    return incoming;
-  }
-  const currentRank = TERMINAL_DELIVERY_STATUS_RANK[current.status];
-  const incomingRank = TERMINAL_DELIVERY_STATUS_RANK[incoming.status];
-  if (currentRank !== undefined && incomingRank !== undefined) {
-    return incomingRank > currentRank ? incoming : current;
-  }
-  if (currentRank !== undefined || incomingRank !== undefined) {
-    return currentRank === undefined ? incoming : current;
-  }
-  return incoming.occurredAt.getTime() >= current.occurredAt.getTime()
-    ? incoming
-    : current;
-};
+): DeliveryStatePoint => ({
+  occurredAt: new Date(
+    Math.max(
+      current?.occurredAt.getTime() ?? -Infinity,
+      incoming.occurredAt.getTime()
+    )
+  ),
+  status:
+    current !== null &&
+    DELIVERY_STATUS_RANK[current.status] > DELIVERY_STATUS_RANK[incoming.status]
+      ? current.status
+      : incoming.status,
+});
 
 const suppressionSeveritySql = (column: unknown) =>
   sql`case ${column} when 'complaint' then 3 when 'bounce' then 2 when 'unsubscribe' then 1 else 0 end`;
 
-/**
- * Mirrors mergeDeliveryStatus for conflict updates: severity-ladder terminals
- * never regress, everything else follows the latest event time.
- */
+const deliveryStatusRankSql = (column: unknown) => sql`case ${column}
+  ${sql.join(
+    Object.entries(DELIVERY_STATUS_RANK).map(
+      ([status, rank]) => sql`when ${status} then ${rank}`
+    ),
+    sql` `
+  )}
+  else -1 end`;
+
 const mergeDeliveryStatusSql = (statusColumn: unknown) => sql`case
-  when ${statusColumn} = 'complained' then ${statusColumn}
-  when excluded."status" = 'complained' then excluded."status"
-  when ${statusColumn} = 'bounced' then ${statusColumn}
-  when excluded."status" = 'bounced' then excluded."status"
-  when ${statusColumn} = 'rejected' then ${statusColumn}
-  when excluded."status" = 'rejected' then excluded."status"
-  when ${statusColumn} = 'unsubscribed' then ${statusColumn}
-  when excluded."status" = 'unsubscribed' then excluded."status"
-  when excluded."lastEventAt" >= ${organizationMailDeliveryRecipient.lastEventAt} then excluded."status"
-  else ${statusColumn}
+  when ${deliveryStatusRankSql(statusColumn)} > ${deliveryStatusRankSql(sql`excluded."status"`)} then ${statusColumn}
+  else excluded."status"
 end`;
 
 const resolveOrganizationId = async (providerMessageId: string) => {
@@ -270,6 +260,7 @@ const applySuppressionChange = async (
   input: {
     actorUserId: string | null;
     createdAt: Date;
+    occurredAt?: Date;
     organizationId: string;
     recipient: string;
     sourceProviderMessageId: string | null;
@@ -312,15 +303,14 @@ const applySuppressionChange = async (
     .update(organizationMailRecipientSuppression)
     .set({
       reason: sql`case
+        when ${organizationMailRecipientSuppression.revokedAt} is not null then ${input.suppressionReason}
         when ${suppressionSeveritySql(organizationMailRecipientSuppression.reason)} >= ${suppressionSeveritySql(input.suppressionReason)}
           then ${organizationMailRecipientSuppression.reason}
         else ${input.suppressionReason}
       end`,
       revokedAt: null,
+      sourceProviderMessageId: input.sourceProviderMessageId,
       updatedAt: input.createdAt,
-      ...(input.sourceProviderMessageId === null
-        ? {}
-        : { sourceProviderMessageId: input.sourceProviderMessageId }),
     })
     .where(
       and(
@@ -329,6 +319,11 @@ const applySuppressionChange = async (
           input.organizationId
         ),
         eq(organizationMailRecipientSuppression.recipient, input.recipient),
+        ...(input.occurredAt === undefined
+          ? []
+          : [
+              sql`(${organizationMailRecipientSuppression.revokedAt} is null or ${organizationMailRecipientSuppression.revokedAt} < ${input.occurredAt.toISOString()}::timestamp)`,
+            ]),
         sql`(
           ${organizationMailRecipientSuppression.revokedAt} is not null
           or ${suppressionSeveritySql(organizationMailRecipientSuppression.reason)} < ${suppressionSeveritySql(input.suppressionReason)}
@@ -377,40 +372,50 @@ export const recordOrganizationMailFeedback = async (
   const now = new Date();
 
   await db.transaction(async (transaction) => {
-    await Promise.all(
-      recipients.map(async (recipient) => {
-        const dedupeKey = createDedupeKey({
+    await transaction.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${JSON.stringify([organizationId, feedback.providerMessageId])}, 0))`
+    );
+    for (const recipient of recipients.toSorted((a, b) =>
+      a.emailAddress.localeCompare(b.emailAddress)
+    )) {
+      const dedupeKey = createDedupeKey({
+        eventType: feedback.eventType,
+        provider: feedback.provider,
+        providerMessageId: feedback.providerMessageId,
+        recipient: recipient.emailAddress,
+        sourceEventId: feedback.sourceEventId,
+      });
+      // oxlint-disable-next-line no-await-in-loop -- Consistent recipient lock order prevents cross-message deadlocks.
+      const insertedEvents = await transaction
+        .insert(organizationMailDeliveryEvent)
+        .values({
+          createdAt: now,
+          dedupeKey,
+          diagnosticCode: recipient.diagnosticCode,
           eventType: feedback.eventType,
+          id: randomUUID(),
+          occurredAt: feedback.occurredAt,
+          organizationId,
           provider: feedback.provider,
           providerMessageId: feedback.providerMessageId,
+          providerStatus: recipient.providerStatus,
+          reason: recipient.reason,
           recipient: recipient.emailAddress,
-          sourceEventId: feedback.sourceEventId,
-        });
-        const insertedEvents = await transaction
-          .insert(organizationMailDeliveryEvent)
-          .values({
-            createdAt: now,
-            dedupeKey,
-            diagnosticCode: recipient.diagnosticCode,
-            eventType: feedback.eventType,
-            id: randomUUID(),
-            occurredAt: feedback.occurredAt,
-            organizationId,
-            provider: feedback.provider,
-            providerMessageId: feedback.providerMessageId,
-            providerStatus: recipient.providerStatus,
-            reason: recipient.reason,
-            recipient: recipient.emailAddress,
-          })
-          .onConflictDoNothing({
-            target: organizationMailDeliveryEvent.dedupeKey,
-          })
-          .returning({ id: organizationMailDeliveryEvent.id });
+        })
+        .onConflictDoNothing({
+          target: organizationMailDeliveryEvent.dedupeKey,
+        })
+        .returning({ id: organizationMailDeliveryEvent.id });
 
-        if (insertedEvents.length === 0) {
-          return;
-        }
+      if (insertedEvents.length === 0) {
+        continue;
+      }
 
+      if (
+        feedback.eventType !== "opened" &&
+        feedback.eventType !== "unsubscribed"
+      ) {
+        // oxlint-disable-next-line no-await-in-loop -- Preserve recipient lock order within the transaction.
         await transaction
           .insert(organizationMailDeliveryRecipient)
           .values({
@@ -436,19 +441,20 @@ export const recordOrganizationMailFeedback = async (
               organizationMailDeliveryRecipient.recipient,
             ],
           });
-
-        if (suppressionReason !== null) {
-          await applySuppressionChange(transaction, {
-            actorUserId: null,
-            createdAt: now,
-            organizationId,
-            recipient: recipient.emailAddress,
-            sourceProviderMessageId: feedback.providerMessageId,
-            suppressionReason,
-          });
-        }
-      })
-    );
+      }
+      if (suppressionReason !== null) {
+        // oxlint-disable-next-line no-await-in-loop -- Preserve recipient lock order within the transaction.
+        await applySuppressionChange(transaction, {
+          actorUserId: null,
+          createdAt: now,
+          occurredAt: feedback.occurredAt,
+          organizationId,
+          recipient: recipient.emailAddress,
+          sourceProviderMessageId: feedback.providerMessageId,
+          suppressionReason,
+        });
+      }
+    }
   });
 };
 
@@ -648,70 +654,94 @@ export const listOrganizationMailSuppressionAudit = async (input: {
 export const reconcileOrganizationMailDeliveryRecipients = async (input: {
   organizationId: string;
   providerMessageId: string;
-}) => {
-  const events = await db
-    .select({
-      occurredAt: organizationMailDeliveryEvent.occurredAt,
-      recipient: organizationMailDeliveryEvent.recipient,
-      status: organizationMailDeliveryEvent.eventType,
-    })
-    .from(organizationMailDeliveryEvent)
-    .where(
-      and(
-        eq(organizationMailDeliveryEvent.organizationId, input.organizationId),
-        eq(
-          organizationMailDeliveryEvent.providerMessageId,
-          input.providerMessageId
+}) =>
+  await db.transaction(async (transaction) => {
+    await transaction.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${JSON.stringify([input.organizationId, input.providerMessageId])}, 0))`
+    );
+    const events = await transaction
+      .select({
+        occurredAt: organizationMailDeliveryEvent.occurredAt,
+        recipient: organizationMailDeliveryEvent.recipient,
+        status: organizationMailDeliveryEvent.eventType,
+      })
+      .from(organizationMailDeliveryEvent)
+      .where(
+        and(
+          eq(
+            organizationMailDeliveryEvent.organizationId,
+            input.organizationId
+          ),
+          eq(
+            organizationMailDeliveryEvent.providerMessageId,
+            input.providerMessageId
+          )
         )
       )
-    )
-    .orderBy(
-      organizationMailDeliveryEvent.occurredAt,
-      organizationMailDeliveryEvent.createdAt
-    );
+      .orderBy(
+        organizationMailDeliveryEvent.occurredAt,
+        organizationMailDeliveryEvent.createdAt
+      );
 
-  const projections = new Map<string, DeliveryStatePoint>();
-  for (const event of events) {
-    const merged = mergeDeliveryStatus(
-      projections.get(event.recipient) ?? null,
-      {
-        occurredAt: event.occurredAt,
-        status: event.status,
+    const projections = new Map<string, DeliveryStatePoint>();
+    for (const event of events) {
+      if (event.status === "opened" || event.status === "unsubscribed") {
+        continue;
       }
-    );
-    projections.set(event.recipient, merged);
-  }
+      const merged = mergeDeliveryStatus(
+        projections.get(event.recipient) ?? null,
+        {
+          occurredAt: event.occurredAt,
+          status: event.status,
+        }
+      );
+      projections.set(event.recipient, merged);
+    }
 
-  const now = new Date();
-  await Promise.all(
-    [...projections.entries()].map(([recipient, state]) =>
-      db
-        .insert(organizationMailDeliveryRecipient)
-        .values({
-          createdAt: now,
-          lastEventAt: state.occurredAt,
-          organizationId: input.organizationId,
-          providerMessageId: input.providerMessageId,
-          recipient,
-          status: state.status,
-          updatedAt: now,
-        })
-        .onConflictDoUpdate({
-          set: {
+    const now = new Date();
+    await transaction
+      .delete(organizationMailDeliveryRecipient)
+      .where(
+        and(
+          eq(
+            organizationMailDeliveryRecipient.organizationId,
+            input.organizationId
+          ),
+          eq(
+            organizationMailDeliveryRecipient.providerMessageId,
+            input.providerMessageId
+          )
+        )
+      );
+    await Promise.all(
+      [...projections.entries()].map(([recipient, state]) =>
+        transaction
+          .insert(organizationMailDeliveryRecipient)
+          .values({
+            createdAt: now,
             lastEventAt: state.occurredAt,
+            organizationId: input.organizationId,
+            providerMessageId: input.providerMessageId,
+            recipient,
             status: state.status,
             updatedAt: now,
-          },
-          target: [
-            organizationMailDeliveryRecipient.organizationId,
-            organizationMailDeliveryRecipient.providerMessageId,
-            organizationMailDeliveryRecipient.recipient,
-          ],
-        })
-    )
-  );
-  return { reconciled: projections.size };
-};
+          })
+          .onConflictDoUpdate({
+            set: {
+              lastEventAt: state.occurredAt,
+              status: state.status,
+              updatedAt: now,
+            },
+            target: [
+              organizationMailDeliveryRecipient.organizationId,
+              organizationMailDeliveryRecipient.providerMessageId,
+              organizationMailDeliveryRecipient.recipient,
+            ],
+          })
+      )
+    );
+    return { reconciled: projections.size };
+  });
 
 export const summarizeOrganizationMailDeliveryEvents = async (input: {
   from?: Date;
@@ -730,7 +760,7 @@ export const summarizeOrganizationMailDeliveryEvents = async (input: {
 
   const rows = await db
     .select({
-      count: sql<number>`count(*)::int`,
+      count: sql<number>`count(distinct (${organizationMailDeliveryEvent.providerMessageId}, ${organizationMailDeliveryEvent.recipient}))::int`,
       eventType: organizationMailDeliveryEvent.eventType,
     })
     .from(organizationMailDeliveryEvent)
@@ -780,15 +810,12 @@ export const setOrganizationMailTrackingSettings = async (input: {
   organizationId: string;
 }) => {
   const now = new Date();
-  const current = await getOrganizationMailTrackingSettings(input);
   const next = {
-    allowPerSendOverride:
-      input.allowPerSendOverride ?? current.allowPerSendOverride,
-    openTrackingEnabled:
-      input.openTrackingEnabled ?? current.openTrackingEnabled,
+    allowPerSendOverride: input.allowPerSendOverride ?? false,
+    openTrackingEnabled: input.openTrackingEnabled ?? false,
   };
 
-  await db
+  const [saved] = await db
     .insert(organizationMailTrackingSettings)
     .values({
       ...next,
@@ -797,10 +824,26 @@ export const setOrganizationMailTrackingSettings = async (input: {
       updatedAt: now,
     })
     .onConflictDoUpdate({
-      set: { ...next, updatedAt: now },
+      set: {
+        ...(input.openTrackingEnabled === undefined
+          ? {}
+          : { openTrackingEnabled: input.openTrackingEnabled }),
+        ...(input.allowPerSendOverride === undefined
+          ? {}
+          : { allowPerSendOverride: input.allowPerSendOverride }),
+        updatedAt: now,
+      },
       target: organizationMailTrackingSettings.organizationId,
+    })
+    .returning({
+      allowPerSendOverride:
+        organizationMailTrackingSettings.allowPerSendOverride,
+      openTrackingEnabled: organizationMailTrackingSettings.openTrackingEnabled,
     });
-  return next;
+  if (saved === undefined) {
+    throw new Error("Tracking settings were not saved.");
+  }
+  return saved;
 };
 
 /**
@@ -925,7 +968,7 @@ export const recordOrganizationMailOpenEvent = async (input: {
 
   return await db.transaction(async (transaction) => {
     if (attributedRecipient !== null) {
-      const insertedEvents = await transaction
+      await transaction
         .insert(organizationMailDeliveryEvent)
         .values({
           createdAt: now,
@@ -948,34 +991,6 @@ export const recordOrganizationMailOpenEvent = async (input: {
           target: organizationMailDeliveryEvent.dedupeKey,
         })
         .returning({ id: organizationMailDeliveryEvent.id });
-
-      if (insertedEvents.length > 0) {
-        await transaction
-          .insert(organizationMailDeliveryRecipient)
-          .values({
-            createdAt: now,
-            lastEventAt: now,
-            organizationId: target.organizationId,
-            providerMessageId: input.providerMessageId,
-            recipient: attributedRecipient,
-            status: "opened",
-            updatedAt: now,
-          })
-          .onConflictDoUpdate({
-            set: {
-              lastEventAt: sql`greatest(${organizationMailDeliveryRecipient.lastEventAt}, excluded."lastEventAt")`,
-              status: mergeDeliveryStatusSql(
-                organizationMailDeliveryRecipient.status
-              ),
-              updatedAt: now,
-            },
-            target: [
-              organizationMailDeliveryRecipient.organizationId,
-              organizationMailDeliveryRecipient.providerMessageId,
-              organizationMailDeliveryRecipient.recipient,
-            ],
-          });
-      }
     }
 
     const [openRow] = await transaction
@@ -992,7 +1007,8 @@ export const recordOrganizationMailOpenEvent = async (input: {
       })
       .onConflictDoUpdate({
         set: {
-          lastOpenedAt: now,
+          firstOpenedAt: sql`least(${organizationMailOpenEvent.firstOpenedAt}, excluded."firstOpenedAt")`,
+          lastOpenedAt: sql`greatest(${organizationMailOpenEvent.lastOpenedAt}, excluded."lastOpenedAt")`,
           reportedOpenCount: sql`least(${organizationMailOpenEvent.reportedOpenCount} + 1, ${MAX_REPORTED_OPENS})`,
         },
         target: [
@@ -1001,10 +1017,10 @@ export const recordOrganizationMailOpenEvent = async (input: {
         ],
       })
       .returning({
-        firstOpen: sql<boolean>`(${organizationMailOpenEvent.firstOpenedAt} = ${now})`,
+        reportedOpenCount: organizationMailOpenEvent.reportedOpenCount,
       });
 
-    return { attributedRecipient, firstOpen: openRow?.firstOpen };
+    return { attributedRecipient, firstOpen: openRow?.reportedOpenCount === 1 };
   });
 };
 
@@ -1090,7 +1106,7 @@ export const getOrganizationMailDeliveryMetrics = async (input: {
   const [eventRows, [openRow]] = await Promise.all([
     db
       .select({
-        count: sql<number>`count(*)::int`,
+        count: sql<number>`count(distinct (${organizationMailDeliveryEvent.providerMessageId}, ${organizationMailDeliveryEvent.recipient}))::int`,
         eventType: organizationMailDeliveryEvent.eventType,
       })
       .from(organizationMailDeliveryEvent)
@@ -1104,6 +1120,16 @@ export const getOrganizationMailDeliveryMetrics = async (input: {
       .where(
         and(
           eq(organizationMailOpenEvent.organizationId, input.organizationId),
+          ...(input.mailboxId === undefined
+            ? []
+            : [
+                sql`exists (
+            select 1 from ${managedMailMessage}
+            where ${managedMailMessage.providerMessageId} = ${organizationMailOpenEvent.providerMessageId}
+              and ${managedMailMessage.mailboxId} = ${input.mailboxId}
+              and ${managedMailMessage.direction} = 'outbound'
+          )`,
+              ]),
           ...(input.from === undefined
             ? []
             : [gte(organizationMailOpenEvent.firstOpenedAt, input.from)]),

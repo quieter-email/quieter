@@ -20,7 +20,7 @@ import {
 } from "../organization/divisions";
 import { protectedProcedure } from "./base";
 
-const recipientSchema = z.string().trim().min(3).max(320);
+const recipientSchema = z.string().trim().pipe(z.email().max(320));
 const organizationIdSchema = z.string().trim().min(1);
 
 export const organizationRouter = {

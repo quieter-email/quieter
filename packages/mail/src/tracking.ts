@@ -10,7 +10,9 @@ const trackingTokenPayloadSchema = z.object({
 });
 
 const signTokenPayload = (encodedPayload: string, secret: string) =>
-  createHmac("sha256", secret).update(encodedPayload).digest("base64url");
+  createHmac("sha256", secret)
+    .update(`quieter:open-tracking:v1:${encodedPayload}`)
+    .digest("base64url");
 
 /**
  * Open-tracking markers carry only the Quieter message header id, signed so
@@ -33,6 +35,12 @@ export const verifyOpenTrackingToken = (
   token: string,
   secret: string
 ): string | null => {
+  if (
+    token.length > 1024 ||
+    !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/u.test(token)
+  ) {
+    return null;
+  }
   const parts = token.split(".");
   if (parts.length !== 2) {
     return null;

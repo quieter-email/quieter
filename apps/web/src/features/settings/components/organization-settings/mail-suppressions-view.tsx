@@ -16,8 +16,8 @@ import type { ReactNode } from "react";
 import { useId, useState } from "react";
 import { z } from "zod";
 
+import { toastError } from "#/lib/error-toast";
 import { orpc } from "#/lib/orpc";
-import { getErrorMessage } from "#/lib/orpc-errors";
 
 import {
   SettingsBackButton,
@@ -84,7 +84,7 @@ export const MailSuppressionsView = ({
   const blockMutation = useMutation(
     orpc.organization.suppressMailRecipient.mutationOptions({
       onError: (error) => {
-        toast.error(getErrorMessage(error, "Could not block this address."));
+        toastError(error);
       },
       onSuccess: async () => {
         setAddress("");
@@ -95,7 +95,7 @@ export const MailSuppressionsView = ({
   const unblockMutation = useMutation(
     orpc.organization.unsuppressMailRecipient.mutationOptions({
       onError: (error) => {
-        toast.error(getErrorMessage(error, "Could not unblock this address."));
+        toastError(error);
       },
       onSuccess: async (_data, variables) => {
         toast.success(

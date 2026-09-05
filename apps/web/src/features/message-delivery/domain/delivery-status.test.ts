@@ -64,49 +64,16 @@ describe(getAggregateDeliveryStatus, () => {
     ).toBe("bounced");
   });
 
-  it("treats an unsubscribe as worse than a delivery but not as a failure", () => {
+  it("does not label partial delivery as fully delivered", () => {
     expect(
       getAggregateDeliveryStatus([
         createRecipient("first@example.com", "delivered"),
-        createRecipient("second@example.com", "unsubscribed"),
-      ])
-    ).toBe("unsubscribed");
-    expect(
-      getAggregateDeliveryStatus([
-        createRecipient("first@example.com", "delayed"),
-        createRecipient("second@example.com", "unsubscribed"),
-      ])
-    ).toBe("unsubscribed");
-    expect(
-      getAggregateDeliveryStatus([
-        createRecipient("first@example.com", "bounced"),
-        createRecipient("second@example.com", "unsubscribed"),
-      ])
-    ).toBe("bounced");
-  });
-
-  it("keeps queued and opened below delivered", () => {
-    expect(
-      getAggregateDeliveryStatus([
-        createRecipient("first@example.com", "queued"),
-        createRecipient("second@example.com", "sent"),
-      ])
-    ).toBe("sent");
-    expect(
-      getAggregateDeliveryStatus([
-        createRecipient("first@example.com", "opened"),
         createRecipient("second@example.com", "queued"),
       ])
-    ).toBe("opened");
-    expect(
-      getAggregateDeliveryStatus([
-        createRecipient("first@example.com", "opened"),
-        createRecipient("second@example.com", "delivered"),
-      ])
-    ).toBe("delivered");
+    ).toBe("queued");
   });
 
-  it("prefers a delay over a delivery and a delivery over a send", () => {
+  it("prefers unresolved recipients over successful recipients", () => {
     expect(
       getAggregateDeliveryStatus([
         createRecipient("first@example.com", "sent"),
@@ -119,7 +86,7 @@ describe(getAggregateDeliveryStatus, () => {
         createRecipient("first@example.com", "sent"),
         createRecipient("second@example.com", "delivered"),
       ])
-    ).toBe("delivered");
+    ).toBe("sent");
   });
 
   it("labels a delivery without calling it read", () => {
@@ -145,7 +112,6 @@ describe(getDeliveryStatusTone, () => {
 
   it("separates a delivery from a delay and a failure", () => {
     expect(getDeliveryStatusTone("delivered")).toBe("positive");
-    expect(getDeliveryStatusTone("opened")).toBe("positive");
     expect(getDeliveryStatusTone("delayed")).toBe("warning");
   });
 
@@ -153,16 +119,15 @@ describe(getDeliveryStatusTone, () => {
     expect(getDeliveryStatusTone("bounced")).toBe("danger");
     expect(getDeliveryStatusTone("complained")).toBe("danger");
     expect(getDeliveryStatusTone("rejected")).toBe("danger");
-    expect(getDeliveryStatusTone("unsubscribed")).toBe("danger");
   });
 });
 
 describe(isDeliveryStatusUnsettled, () => {
-  it("only treats missing events, sends, and queue entries as still moving", () => {
+  it("treats missing events, sends, queues, and delays as still moving", () => {
     expect(isDeliveryStatusUnsettled(null)).toBeTruthy();
     expect(isDeliveryStatusUnsettled("sent")).toBeTruthy();
     expect(isDeliveryStatusUnsettled("queued")).toBeTruthy();
-    expect(isDeliveryStatusUnsettled("delayed")).toBeFalsy();
+    expect(isDeliveryStatusUnsettled("delayed")).toBeTruthy();
     expect(isDeliveryStatusUnsettled("delivered")).toBeFalsy();
   });
 });
@@ -218,7 +183,7 @@ describe(hasDeliveryDiagnostics, () => {
 
 describe(getDeliveryActionGuidance, () => {
   it("tells the sender to correct a refused or bounced address", () => {
-    expect(getDeliveryActionGuidance("rejected")).toMatch(/check/iu);
+    expect(getDeliveryActionGuidance("rejected")).toMatch(/review/iu);
     expect(getDeliveryActionGuidance("bounced")).toMatch(/blocked/iu);
   });
 
@@ -226,18 +191,10 @@ describe(getDeliveryActionGuidance, () => {
     const complained = getDeliveryActionGuidance("complained") ?? "";
     expect(complained).toMatch(/reported/iu);
     expect(complained).not.toMatch(/spam folder|junk folder/iu);
-    const unsubscribed = getDeliveryActionGuidance("unsubscribed") ?? "";
-    expect(unsubscribed).toMatch(/opted out/iu);
   });
 
   it("gives no instruction for healthy or in-flight states", () => {
-    for (const status of [
-      "delayed",
-      "delivered",
-      "opened",
-      "queued",
-      "sent",
-    ] as const) {
+    for (const status of ["delayed", "delivered", "queued", "sent"] as const) {
       expect(getDeliveryActionGuidance(status)).toBeNull();
     }
   });

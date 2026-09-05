@@ -2,6 +2,7 @@ import { queryOptions } from "@tanstack/react-query";
 
 import { rpc } from "#/lib/orpc";
 
+import type { MessageDeliveryStatus } from "./delivery-status";
 import {
   getAggregateDeliveryStatus,
   isDeliveryStatusUnsettled,
@@ -75,22 +76,36 @@ export const getMessageListDeliveryOptions = ({
   mailboxId: string;
   messageIds: string[];
 }) => {
-  const idSignature = [...new Set(messageIds)].toSorted().join(",");
+  const ids = [...new Set(messageIds)].toSorted();
   return queryOptions({
-    enabled: enabled && mailboxId !== "" && idSignature !== "",
-    queryFn: async ({ signal }) =>
-      await rpc.mail.listMessageDeliveryStatuses(
-        { mailboxId, messageIds: [...new Set(messageIds)] },
-        { signal }
-      ),
-    queryKey: [...getMessageListDeliveryQueryKey(mailboxId), idSignature],
+    enabled: enabled && mailboxId !== "" && ids.length > 0,
+    queryFn: async ({ signal }) => {
+      const result: Record<string, MessageDeliveryStatus[]> = {};
+      for (let offset = 0; offset < ids.length; offset += 100) {
+        Object.assign(
+          result,
+          // oxlint-disable-next-line no-await-in-loop -- Bound concurrent requests when many pages are loaded.
+          await rpc.mail.listMessageDeliveryStatuses(
+            { mailboxId, messageIds: ids.slice(offset, offset + 100) },
+            { signal }
+          )
+        );
+      }
+      return result;
+    },
+    queryKey: [...getMessageListDeliveryQueryKey(mailboxId), ids],
     refetchInterval: (query) => {
       if (query.state.data === undefined) {
         return false;
       }
-      const hasUnsettled = Object.values(query.state.data).some((statuses) =>
-        statuses.some((status) => status === "queued" || status === "sent")
-      );
+      const hasUnsettled = ids.some((id) => {
+        const statuses = query.state.data?.[id];
+        return (
+          statuses === undefined ||
+          statuses.length === 0 ||
+          statuses.some(isDeliveryStatusUnsettled)
+        );
+      });
       if (!hasUnsettled) {
         return false;
       }

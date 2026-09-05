@@ -1,5 +1,8 @@
+import { createHash } from "node:crypto";
+
 import { serverEnv } from "@quieter/env/server";
 import { verifyOpenTrackingToken } from "@quieter/mail/tracking";
+import { consumeRateLimit } from "@quieter/orpc/abuse-protection";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { reportServerError } from "#/lib/server-error-reporting";
@@ -37,6 +40,14 @@ export const Route = createFileRoute("/api/v1/o/$token")({
         }
 
         try {
+          const rateLimit = await consumeRateLimit({
+            key: `open-marker:${createHash("sha256").update(params.token).digest("hex")}`,
+            limit: 60,
+            windowMs: 60_000,
+          });
+          if (!rateLimit.allowed) {
+            return gifResponse();
+          }
           const { recordOrganizationMailMarkerLoad } =
             await import("@quieter/orpc/organization-mail-delivery");
           await recordOrganizationMailMarkerLoad({
