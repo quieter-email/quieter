@@ -184,17 +184,19 @@ export const useMailboxDetailMutations = (
   });
   const setManagedMailboxAccessModeMutation = useMutation({
     ...orpc.mail.setManagedMailboxAccessMode.mutationOptions(),
-    mutationKey: ["mail", "set-managed-mailbox-access-mode"],
+    mutationKey: ["mail", "set-managed-mailbox-access-mode", selectedMailboxId],
     onError: (error) => {
       toastError(error, {
         boundary: "mailbox-settings",
         fallback: "Could not change mailbox access.",
       });
     },
-    onSettled: async () => {
+    onSettled: async (_data, _error, input) => {
       await Promise.all([
         invalidateMailboxes(),
-        invalidateSelectedManagedMailbox(),
+        queryClient.invalidateQueries({
+          queryKey: getManagedDetailsQueryKey(input.mailboxId),
+        }),
       ]);
     },
   });

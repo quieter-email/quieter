@@ -55,18 +55,22 @@ const TeamMailboxAdministration = ({
   });
   const changeAccess = useMutation({
     ...orpc.mail.setManagedMailboxAccessMode.mutationOptions(),
+    mutationKey: ["mail", "set-managed-mailbox-access-mode", mailboxId],
     onError: (error) => {
       toastError(error, {
         boundary: "mailbox-settings",
         fallback: "Could not change mailbox access.",
       });
     },
-    onSuccess: async () => {
+    onSuccess: async (_data, input) => {
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: administrationOptions.queryKey,
         }),
-        queryClient.invalidateQueries({ queryKey: detailsOptions.queryKey }),
+        queryClient.invalidateQueries({
+          queryKey: managedMailboxSettingsQueryOptions(input.mailboxId)
+            .queryKey,
+        }),
         queryClient.invalidateQueries({ queryKey: getMailboxesQueryKey() }),
       ]);
     },
