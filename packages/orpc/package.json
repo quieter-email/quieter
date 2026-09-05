@@ -34,7 +34,6 @@
     "@aws-sdk/client-s3": "catalog:",
     "@aws-sdk/client-ses": "catalog:",
     "@aws-sdk/client-sesv2": "catalog:",
-    "@aws-sdk/client-sqs": "catalog:",
     "@cfworker/json-schema": "catalog:",
     "@modelcontextprotocol/sdk": "1.30.0",
     "@quieter/ai": "workspace:*",

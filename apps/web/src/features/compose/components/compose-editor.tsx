@@ -6,6 +6,7 @@ import {
   ArrowTurnForwardIcon,
   LeftToRightListBulletIcon,
   LeftToRightListNumberIcon,
+  MoreHorizontalIcon,
   QuoteUpIcon,
   StopIcon,
   TextBoldIcon,
@@ -35,6 +36,7 @@ import {
   useEffect,
   useImperativeHandle,
   useMemo,
+  useState,
 } from "react";
 import type { ReactNode, Ref } from "react";
 
@@ -377,14 +379,19 @@ export const ComposeEditorBody = ({
 export const ComposeEditorToolbar = ({
   chrome = "default",
   className,
+  compact = false,
+  leading,
   trailing,
 }: {
   /** `footer` seats the toolbar as the composer sheet's own band, not a floating bar. */
   chrome?: "default" | "footer";
   className?: string;
+  compact?: boolean;
+  leading?: ReactNode;
   trailing?: ReactNode;
 }) => {
   const { disabled, editor } = useComposeEditor();
+  const [showFormatting, setShowFormatting] = useState(false);
   const toolbarState = useEditorState({
     editor,
     selector: ({ editor: currentEditor }) => ({
@@ -461,6 +468,77 @@ export const ComposeEditorToolbar = ({
     },
   ] as const;
 
+  const formattingControls = (
+    <ToolbarGroup>
+      {formatActions.map((action) => (
+        <IconButtonTooltip key={action.id} label={action.label}>
+          <ToolbarButton
+            aria-label={action.label}
+            aria-pressed={action.active}
+            className={cn("px-0", {
+              "bg-control-active text-fg shadow-sm": action.active,
+              "size-7": compact,
+              "size-8": !compact,
+            })}
+            disabled={disabled || action.disabled}
+            onClick={() => {
+              action.onClick();
+            }}
+            onMouseDown={(event) => {
+              event.preventDefault();
+            }}
+            type="button"
+          >
+            <HugeiconsIcon
+              className={cn({
+                "size-3.5": compact,
+                "size-4": !compact,
+              })}
+              icon={action.icon}
+            />
+          </ToolbarButton>
+        </IconButtonTooltip>
+      ))}
+    </ToolbarGroup>
+  );
+
+  const historyControls = (
+    <ToolbarGroup>
+      <IconButtonTooltip label="Undo">
+        <ToolbarButton
+          aria-label="Undo"
+          className="size-8 px-0"
+          disabled={disabled || toolbarState?.canUndo !== true}
+          onClick={() => {
+            editor?.chain().focus().undo().run();
+          }}
+          onMouseDown={(event) => {
+            event.preventDefault();
+          }}
+          type="button"
+        >
+          <HugeiconsIcon className="size-4" icon={ArrowTurnBackwardIcon} />
+        </ToolbarButton>
+      </IconButtonTooltip>
+      <IconButtonTooltip label="Redo">
+        <ToolbarButton
+          aria-label="Redo"
+          className="size-8 px-0"
+          disabled={disabled || toolbarState?.canRedo !== true}
+          onClick={() => {
+            editor?.chain().focus().redo().run();
+          }}
+          onMouseDown={(event) => {
+            event.preventDefault();
+          }}
+          type="button"
+        >
+          <HugeiconsIcon className="size-4" icon={ArrowTurnForwardIcon} />
+        </ToolbarButton>
+      </IconButtonTooltip>
+    </ToolbarGroup>
+  );
+
   return (
     <Toolbar
       className={cn(
@@ -468,72 +546,49 @@ export const ComposeEditorToolbar = ({
         {
           "gap-1.5 rounded-none border-0 border-t border-border bg-bg px-2 py-1.5 shadow-none":
             chrome === "footer",
+          "min-h-12 bg-control px-3 py-2": chrome === "footer" && compact,
         },
         className
       )}
     >
-      <ToolbarGroup>
-        {formatActions.map((action) => (
-          <IconButtonTooltip key={action.id} label={action.label}>
+      {leading === undefined ? null : (
+        <div className="flex shrink-0 items-center">{leading}</div>
+      )}
+      {compact ? (
+        <div className="ml-auto flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+          {showFormatting ? formattingControls : trailing}
+          <IconButtonTooltip
+            label={showFormatting ? "Hide formatting" : "Formatting"}
+          >
             <ToolbarButton
-              aria-label={action.label}
-              aria-pressed={action.active}
-              className={cn("size-8 px-0", {
-                "bg-control-active text-fg shadow-sm": action.active,
+              aria-label={
+                showFormatting ? "Hide formatting" : "Show formatting"
+              }
+              aria-pressed={showFormatting}
+              className={cn("size-7 shrink-0 px-0", {
+                "bg-control-active text-fg": showFormatting,
               })}
-              disabled={disabled || action.disabled}
+              disabled={disabled}
               onClick={() => {
-                action.onClick();
-              }}
-              onMouseDown={(event) => {
-                event.preventDefault();
+                setShowFormatting((current) => !current);
               }}
               type="button"
             >
-              <HugeiconsIcon className="size-4" icon={action.icon} />
+              <HugeiconsIcon className="size-4" icon={MoreHorizontalIcon} />
             </ToolbarButton>
           </IconButtonTooltip>
-        ))}
-      </ToolbarGroup>
-      <ToolbarSeparator />
-      <ToolbarGroup>
-        <IconButtonTooltip label="Undo">
-          <ToolbarButton
-            aria-label="Undo"
-            className="size-8 px-0"
-            disabled={disabled || toolbarState?.canUndo !== true}
-            onClick={() => {
-              editor?.chain().focus().undo().run();
-            }}
-            onMouseDown={(event) => {
-              event.preventDefault();
-            }}
-            type="button"
-          >
-            <HugeiconsIcon className="size-4" icon={ArrowTurnBackwardIcon} />
-          </ToolbarButton>
-        </IconButtonTooltip>
-        <IconButtonTooltip label="Redo">
-          <ToolbarButton
-            aria-label="Redo"
-            className="size-8 px-0"
-            disabled={disabled || toolbarState?.canRedo !== true}
-            onClick={() => {
-              editor?.chain().focus().redo().run();
-            }}
-            onMouseDown={(event) => {
-              event.preventDefault();
-            }}
-            type="button"
-          >
-            <HugeiconsIcon className="size-4" icon={ArrowTurnForwardIcon} />
-          </ToolbarButton>
-        </IconButtonTooltip>
-      </ToolbarGroup>
-      {trailing === undefined ? null : (
-        <div className="ml-auto flex min-w-0 items-center gap-1">
-          {trailing}
         </div>
+      ) : (
+        <>
+          {formattingControls}
+          <ToolbarSeparator />
+          {historyControls}
+          {trailing === undefined ? null : (
+            <div className="ml-auto flex min-w-0 items-center gap-1">
+              {trailing}
+            </div>
+          )}
+        </>
       )}
     </Toolbar>
   );

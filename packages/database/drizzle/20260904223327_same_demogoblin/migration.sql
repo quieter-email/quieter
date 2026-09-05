@@ -1,0 +1,1 @@
+ALTER TABLE "billingSubscription" ADD COLUMN "cancelAtPeriodEnd" boolean DEFAULT false NOT NULL;

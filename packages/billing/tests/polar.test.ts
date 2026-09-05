@@ -5,6 +5,15 @@ import {
   createBillingPortalSession,
 } from "../src";
 import { resolvePolarServer } from "../src/polar";
+import { normalizeSubscriptionStatus } from "../src/subscription-sync";
+
+describe("subscription payment recovery", () => {
+  test("distinguishes recoverable payment failure from exhausted retries", () => {
+    expect(normalizeSubscriptionStatus("past_due")).toBe("past_due");
+    expect(normalizeSubscriptionStatus("unpaid")).toBe("expired");
+    expect(normalizeSubscriptionStatus("canceled")).toBe("canceled");
+  });
+});
 
 describe("Polar server selection", () => {
   test("forces production for production deployments", () => {
