@@ -4,6 +4,7 @@ import { describe, expect, test } from "vite-plus/test";
 import {
   calculateAiMemorySalience,
   getAiMemoryRetirementReason,
+  loadAiAgentContext,
   rankAiMemoryCandidates,
 } from "../src/ai-memory";
 import { buildAiMemoryDocument } from "../src/ai-memory-embedding";
@@ -181,5 +182,46 @@ describe("AI memory embedding documents", () => {
         memory({ content: "Prefer concise replies", metadata: {} })
       )
     ).toBe("Concise replies\nPrefer concise replies");
+  });
+});
+
+describe("cached automation memory isolation", () => {
+  test("excludes candidates belonging to another mailbox or user", async () => {
+    const context = await loadAiAgentContext({
+      agent: "auto_label",
+      candidates: [
+        memory({
+          importance: 5,
+          kind: "instruction",
+          mailboxId: "other",
+          scope: "mailbox",
+          scopeKey: "mailbox:other",
+        }),
+        memory({
+          importance: 5,
+          kind: "instruction",
+          scopeKey: "user:other",
+          userId: "other",
+        }),
+      ],
+      mailboxId: "mailbox-1",
+      query: "Prefer concise replies",
+      semantic: false,
+      userId: "user-1",
+    });
+    expect(context).toStrictEqual({ instructions: null, memory: null });
+  });
+
+  test("excludes personal memory when automation uses mailbox scope only", async () => {
+    const context = await loadAiAgentContext({
+      agent: "useful_detail",
+      candidates: [memory({ importance: 5, kind: "instruction" })],
+      includeUserScope: false,
+      mailboxId: "mailbox-1",
+      query: "Prefer concise replies",
+      semantic: false,
+      userId: "user-1",
+    });
+    expect(context).toStrictEqual({ instructions: null, memory: null });
   });
 });

@@ -3,15 +3,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./gmail-live-sync": "./src/gmail-live-sync.ts",
-    "./gmail-live-sync-websocket": "./src/gmail-live-sync-websocket.ts",
-    "./gmail-pubsub-consumer": "./src/gmail-pubsub-consumer.ts",
-    "./gmail-pubsub-maintenance": "./src/gmail-pubsub-maintenance.ts",
-    "./gmail-pubsub-process": "./src/gmail-pubsub-process.ts",
     "./inbound": "./src/inbound.ts",
-    "./mailbox-action-consumer": "./src/mailbox-action-consumer.ts",
     "./outbound-feedback": "./src/outbound-feedback.ts",
-    "./outbound": "./src/outbound.ts",
     "./receipt": "./src/receipt.ts"
   },
   "scripts": {
@@ -19,12 +12,8 @@
     "dev": "node --env-file-if-exists=../../.env.local --env-file-if-exists=../../.env.sst.local ../../scripts/run-sst.ts dev --config sst.config.ts --stage mail-dev"
   },
   "dependencies": {
-    "@aws-sdk/client-apigatewaymanagementapi": "catalog:",
-    "@aws-sdk/client-dynamodb": "catalog:",
     "@aws-sdk/client-s3": "catalog:",
     "@aws-sdk/client-sesv2": "catalog:",
-    "@aws-sdk/client-sqs": "catalog:",
-    "@aws-sdk/lib-dynamodb": "catalog:",
     "@quieter/billing": "workspace:*",
     "@quieter/database": "workspace:*",
     "@quieter/env": "workspace:*",

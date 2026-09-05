@@ -1,7 +1,9 @@
+import { withRequestDatabaseClient } from "@quieter/database/client";
 import { createRemoteJWKSet, errors as joseErrors, jwtVerify } from "jose";
 import { z } from "zod";
 
 import { timingSafeEqual } from "./crypto-utils";
+import { processGmailQueueMessage } from "./queue-worker";
 import { RequestError } from "./request-error";
 import { readLinkedSecret, reportWorkerError } from "./worker-runtime";
 
@@ -259,7 +261,15 @@ export const handleLiveMailboxRequest = async (request: Request, env: Env) => {
   return await mailboxObject(env, payload.emailAddress).fetch(request);
 };
 
-export const handlePubSub = async (request: Request, env: Env) => {
+export const handlePubSub = async (
+  request: Request,
+  env: Env,
+  processNotification = async (message: unknown, bindings: Env) => {
+    await withRequestDatabaseClient(async () => {
+      await processGmailQueueMessage(message, bindings);
+    });
+  }
+) => {
   await verifyPubSubToken(request, env);
   const envelope = pubSubEnvelopeSchema.safeParse(
     await readBoundedJson(request, PUBSUB_BODY_LIMIT)
@@ -280,18 +290,7 @@ export const handlePubSub = async (request: Request, env: Env) => {
     type: "notification" as const,
   };
   const [processorResult, initialBroadcastResult] = await Promise.allSettled([
-    fetch(env.GMAIL_PUBSUB_PROCESS_URL, {
-      body: JSON.stringify(processorMessage),
-      headers: {
-        authorization: `Bearer ${readLinkedSecret(env.SST_RESOURCE_GmailPubSubProcessToken)}`,
-        "content-type": "application/json",
-      },
-      method: "POST",
-    }).then((response) => {
-      if (!response.ok) {
-        throw new RequestError(503, "processor_response_error");
-      }
-    }),
+    processNotification(processorMessage, env),
     broadcastMailboxEvent(env, emailAddress, "mailbox-dirty"),
   ]);
 

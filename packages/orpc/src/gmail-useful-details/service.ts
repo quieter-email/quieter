@@ -35,7 +35,7 @@ import {
   loadAiAgentMemoryCandidates,
   loadAiConfiguration,
   loadUsefulDetailFeedbackPolicies,
-  rankAiAgentMemoryCandidates,
+  loadAiAgentContext,
   recordAndRefreshAiMemory,
   serializeAiAgentContext,
 } from "../ai-memory";
@@ -1064,11 +1064,14 @@ const getGmailUsefulDetailPreferenceProfile = async ({
       model: aiConfiguration.usefulDetailModel,
     };
   }
-  const memoryContext = await rankAiAgentMemoryCandidates({
+  const memoryContext = await loadAiAgentContext({
     agent: "useful_detail",
     candidates: automationContext.memoryCandidates,
+    includeUserScope: false,
+    mailboxId,
     query: buildMailMemoryQuery(message),
     semantic: false,
+    userId,
   });
 
   return {

@@ -1331,25 +1331,36 @@ export const rankAiAgentMemoryCandidates = async ({
 
 export const loadAiAgentContext = async ({
   agent,
+  candidates,
   includeUserScope = true,
   mailboxId,
   query,
+  semantic = true,
   userId,
 }: {
   agent: string;
+  candidates?: AiAgentMemoryCandidates;
   includeUserScope?: boolean;
   mailboxId: string;
   query: string;
+  semantic?: boolean;
   userId: string;
 }): Promise<AiAgentMemoryContext> =>
   await rankAiAgentMemoryCandidates({
     agent,
-    candidates: await loadAiAgentMemoryCandidates({
-      includeUserScope,
-      mailboxId,
-      userId,
-    }),
+    candidates:
+      candidates?.filter(
+        (memory) =>
+          memory.scopeKey === `mailbox:${mailboxId}` ||
+          (includeUserScope && memory.scopeKey === `user:${userId}`)
+      ) ??
+      (await loadAiAgentMemoryCandidates({
+        includeUserScope,
+        mailboxId,
+        userId,
+      })),
     query,
+    semantic,
   });
 
 export const recordAndRefreshAiMemory = async (input: {

@@ -14,6 +14,7 @@ import {
   SettingsRows,
   settingsSurfaceVariants,
 } from "../settings-layout";
+import { BillingAccessNotice } from "./billing-access-notice";
 import { formatCount } from "./domain";
 import type { FullOrganization } from "./domain";
 import {
@@ -21,8 +22,71 @@ import {
   organizationMailDomainsQueryOptions,
   resolveMailDomainVerified,
 } from "./mail-domains";
+import type { OrganizationMailDomain } from "./mail-domains";
 import { RegisterDomainDialog } from "./register-domain-dialog";
 import { MutedActionButton } from "./settings-row";
+
+const getManageDomainsReason = ({
+  billingAccessUnknown,
+  billingPending,
+  canManageDomains,
+  canUseOrganizationDomains,
+}: {
+  billingAccessUnknown: boolean;
+  billingPending: boolean;
+  canManageDomains: boolean;
+  canUseOrganizationDomains: boolean;
+}) => {
+  if (billingPending) {
+    return "Loading billing access…";
+  }
+  if (billingAccessUnknown) {
+    return "Could not load billing access.";
+  }
+  if (!canUseOrganizationDomains) {
+    return `Registering domains requires ${BILLING_FEATURES.organizationDomains.requirementLabel} billing.`;
+  }
+  if (!canManageDomains) {
+    return "Only admins and owners can register team domains.";
+  }
+  return null;
+};
+
+const DomainsList = ({
+  domains,
+  isSendingPaused,
+  onOpenDomain,
+}: {
+  domains: OrganizationMailDomain[];
+  isSendingPaused: boolean;
+  onOpenDomain: (domainId: string) => void;
+}) => (
+  <SettingsRows>
+    {domains.map((domain) => {
+      let status = resolveMailDomainVerified(domain)
+        ? "Verified"
+        : formatMailDomainStatus(domain.status);
+      if (isSendingPaused) {
+        status = "Sending paused";
+      }
+      return (
+        <SettingsNavigationRow
+          description={
+            domain.mode === "send_only"
+              ? "Outbound mail only"
+              : "Outbound and incoming mail"
+          }
+          key={domain.id}
+          meta={status}
+          onClick={() => {
+            onOpenDomain(domain.id);
+          }}
+          title={domain.domain}
+        />
+      );
+    })}
+  </SettingsRows>
+);
 
 export const DomainsView = ({
   billingAccessUnknown,
@@ -47,15 +111,15 @@ export const DomainsView = ({
     isError: isDomainsError,
     isPending: isDomainsPending,
   } = useQuery(organizationMailDomainsQueryOptions(organization.id));
+  const isSendingPaused =
+    !billingPending && !billingAccessUnknown && !canUseOrganizationDomains;
   const domains = domainsData?.domains ?? [];
-  const manageDomainsReason =
-    (billingPending && "Loading billing access…") ||
-    (billingAccessUnknown && "Could not load billing access.") ||
-    (!canUseOrganizationDomains &&
-      `Registering domains requires ${BILLING_FEATURES.organizationDomains.requirementLabel} billing.`) ||
-    (!canManageDomains &&
-      "Only admins and owners can register team domains.") ||
-    null;
+  const manageDomainsReason = getManageDomainsReason({
+    billingAccessUnknown,
+    billingPending,
+    canManageDomains,
+    canUseOrganizationDomains,
+  });
   let domainsContent: ReactNode;
   if (isDomainsPending) {
     domainsContent = <SettingsLoadingState label="Loading domains" />;
@@ -72,27 +136,11 @@ export const DomainsView = ({
     );
   } else if (domains.length > 0) {
     domainsContent = (
-      <SettingsRows>
-        {domains.map((domain) => (
-          <SettingsNavigationRow
-            description={
-              domain.mode === "send_only"
-                ? "Outbound mail only"
-                : "Outbound and incoming mail"
-            }
-            key={domain.id}
-            meta={
-              resolveMailDomainVerified(domain)
-                ? "Verified"
-                : formatMailDomainStatus(domain.status)
-            }
-            onClick={() => {
-              onOpenDomain(domain.id);
-            }}
-            title={domain.domain}
-          />
-        ))}
-      </SettingsRows>
+      <DomainsList
+        domains={domains}
+        isSendingPaused={isSendingPaused}
+        onOpenDomain={onOpenDomain}
+      />
     );
   } else {
     domainsContent = (
@@ -121,7 +169,14 @@ export const DomainsView = ({
           </p>
         </div>
 
-        {manageDomainsReason ? (
+        {manageDomainsReason === null ? (
+          <RegisterDomainDialog
+            onCreated={(domainId) => {
+              onOpenDomain(domainId);
+            }}
+            organizationId={organization.id}
+          />
+        ) : (
           <MutedActionButton
             icon={
               <HugeiconsIcon
@@ -133,16 +188,12 @@ export const DomainsView = ({
             label="Register"
             reason={manageDomainsReason}
           />
-        ) : (
-          <RegisterDomainDialog
-            onCreated={(domainId) => {
-              onOpenDomain(domainId);
-            }}
-            organizationId={organization.id}
-          />
         )}
       </div>
 
+      {isSendingPaused && domains.length > 0 && (
+        <BillingAccessNotice organizationId={organization.id} />
+      )}
       {domainsContent}
     </div>
   );
