@@ -25,6 +25,8 @@ Run `vp run agent:doctor` to check required Codex MCP configuration and saved OA
 
 PlanetScale's MCP creates temporary read-only credentials for SQL execution. The user approved that mechanism for this connection. It does not authorize production writes, schema changes, restores, deployments, or persistent role changes. `quieter_dev` is a logical database on the production `main` branch, so selecting only PlanetScale development branches would not provide access to it.
 
+A fresh Codex app-server connection subsequently completed tool discovery for Sentry, PlanetScale, Cloudflare bindings, builds and observability. Sentry returned 9 tools and PlanetScale 25. The active desktop task still has its older tool list; trying to attach the separate connection was rejected because this task already has an active writer. No task or model turn was created. Tool discovery is verified, but resource reads in this task still require the desktop MCP connections to reload. Polar sandbox still exposes no tools because its OAuth fails.
+
 ## Bootstrap and verification
 
 Use the [official Sentry MCP](https://mcp.sentry.dev/), [PlanetScale MCP](https://planetscale.com/docs/mcp-server), and [Polar MCP](https://polar.sh/docs/integrate/mcp). First inspect existing entries; do not overwrite another agent's in-progress OAuth setup or start duplicate login flows.

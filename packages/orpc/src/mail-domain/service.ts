@@ -16,6 +16,7 @@ import { serverEnv } from "@quieter/env/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
+import { assertLocalMailDomain } from "../local-managed-mail";
 import { hasText } from "../text";
 import type { MailDomainCheck } from "./records";
 
@@ -186,6 +187,7 @@ export const getEmailIdentity = async (domain: string) => {
 };
 
 export const createOrLoadEmailIdentity = async (domain: string) => {
+  assertLocalMailDomain();
   try {
     const { CreateEmailIdentityCommand } =
       await import("@aws-sdk/client-sesv2");
@@ -209,6 +211,7 @@ export const ensureMailFromDomain = async (input: {
   const { PutEmailIdentityMailFromAttributesCommand } =
     await import("@aws-sdk/client-sesv2");
   const client = await getSesv2Client();
+  assertLocalMailDomain();
   await client.send(
     new PutEmailIdentityMailFromAttributesCommand({
       BehaviorOnMxFailure: "REJECT_MESSAGE",
@@ -323,6 +326,7 @@ const createReceiptRuleName = (domain: string) => {
 };
 
 export const ensureReceiptRule = async (domain: string) => {
+  assertLocalMailDomain();
   const config = await getReceiptRuleConfig();
   const rule = {
     Actions: [
@@ -386,6 +390,7 @@ export const ensureReceiptRule = async (domain: string) => {
 };
 
 export const deleteMailDomainReceiptRule = async (domain: string) => {
+  assertLocalMailDomain();
   try {
     const config = await getReceiptRuleConfig();
     const { DeleteReceiptRuleCommand } = await import("@aws-sdk/client-ses");
@@ -403,6 +408,7 @@ export const deleteMailDomainReceiptRule = async (domain: string) => {
 };
 
 export const deleteMailDomainAwsResources = async (domain: string) => {
+  assertLocalMailDomain();
   let cleanupSucceeded = await deleteMailDomainReceiptRule(domain);
 
   try {

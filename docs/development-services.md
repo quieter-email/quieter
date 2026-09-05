@@ -12,12 +12,12 @@ Agent connector readiness is tracked separately in [Agent tooling](agent-tooling
 | Identity | Real localhost Google sign-in succeeds after adding its missing callback | Magic-link, passkey/device and full role lifecycle acceptance |
 | Gmail | Separate OAuth client and Pub/Sub pull subscription; observation guards; fresh consent; real inbox loads 18 conversations | Test-account passkey consent, provider writes and delivered-notification processing |
 | Cloudflare | Native web/Worker runtime; signed WebSocket smoke; native queue/DO tests; authenticated manual maintenance/dispatch | Deployed concurrency, hibernation, IAM and cloud pooling |
-| Secrets | 22 development SST secrets in local-leander; 21 runtime links; fresh-checkout pull verified; SST starts web and background runtimes together | Isolated AWS managed-mail stage |
+| Secrets | 22 development SST secrets in local-leander; 21 runtime links; fresh-checkout pull verified; SST starts web and background runtimes together | No AWS managed-mail stage is required or authorized for local development |
 | OpenRouter | Separate $1-capped development key; API smoke cost $0.000002; actual app chat streamed the expected response and saved its conversation | Voice, tool use and automation quality tests |
 | Workers AI | Separate AI-only token; real 1024-dimension embedding | Application memory write/search/delete lifecycle |
 | Polar | Non-expiring sandbox token, existing Managed/Pro products, official CLI 1.3.9 in WSL; six real customer/member events returned HTTP 200 | Checkout/portal/renewal/cancellation/credits with bypass off |
 | Telemetry | Explicit opt-in implemented; off by default; consent still required for PostHog | Development-project ingestion and browser privacy assertions |
-| Managed mail | Provider paths and isolation requirements audited | Private development R2, SST Live resources, test domain and SES simulator/MX acceptance |
+| Managed mail | Fixture tests through `vp run test:mail`; cloud domain changes and external sending blocked locally | SES/MX delivery requires a deployment and is excluded from this local setup |
 | Calendar/Linear | Independent server-side write controls; Calendar verifies the actual primary calendar account; OAuth configuration present | Real connector authorization and dedicated resources for writes |
 | logo.dev/c15t | Real publishable logo configuration; consent uses offline mode | Focused UI/network acceptance |
 | Domain Connect | Inactive | Deferred until activated |
@@ -30,7 +30,7 @@ Two old development migration hashes differ from current files. Forward migratio
 
 ## Provider-native development systems
 
-The following research describes supported tools and their limits. Where a paragraph recommends further work, the verified-setup table above is the authority on what has actually been exercised.
+The following research describes supported tools and their limits. The user subsequently clarified that local development must not provision cloud mail resources. Hosted deployment options below are provider capabilities, not setup requirements or authorization to deploy them. Keep unsupported local behavior explicit.
 
 ### SST
 
@@ -60,7 +60,7 @@ The Vite plugin also has built-in tunnel support, including named tunnels. A sta
 
 R2 has native local simulation through Worker bindings, plus optional remote bindings to a real bucket. However, Quieter reads and writes raw mail using the S3 HTTP API. Those requests do not become local merely because a local R2 binding exists. See [R2 Worker API development](https://developers.cloudflare.com/r2/get-started/workers-api/).
 
-For immediate provider-connected testing, use a dedicated private development R2 bucket with scoped credentials, shared by the local app and SST mail handlers. For deterministic offline tests, add a provider-neutral storage boundary that can use native local R2 for Workers and an appropriate test implementation for Lambda. A local S3-compatible service is another option, but requires explicit SDK endpoint configuration. Public `r2.dev` access is unsuitable for private mail.
+Use native local R2 bindings or storage fixtures for local tests. Do not create a remote development bucket for this setup. The current S3 HTTP adapter needs a local storage boundary before it can use native R2 simulation. Public `r2.dev` access is unsuitable for private mail.
 
 Workers AI executes models remotely even during local development. Quieter calls its REST API for the 1024-dimensional `@cf/qwen/qwen3-embedding-0.6b` model and stores embeddings in PostgreSQL. Local binding configuration alone will not intercept those REST calls. Supply a restricted development AI token for real embedding checks and deterministic embedding fixtures for offline tests. Vectorize is not required by the current implementation. See [Cloudflare local development](https://developers.cloudflare.com/workers/local-development/).
 

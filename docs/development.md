@@ -7,7 +7,7 @@ Agent debugging access has separate requirements from the application runtime. R
 - Vite+ (`vp`), which manages the pinned Node runtime and dependency installs
 - Git
 - Access to the allowlisted PlanetScale `quieter_dev` logical database
-- Non-production AWS credentials only when running the SST mail and background-processing stack
+- AWS SSO access when loading development SST Secrets
 - OAuth and provider credentials for integrations you want to test
 
 Normal development uses `quieter_dev` on the existing PlanetScale cluster, with its exact hostname pinned by `QUIETER_LOCAL_PLANETSCALE_HOST`. It has separate data and database roles but shares compute, storage capacity, and availability with production. Do not provision another paid branch/cluster for development. Loopback PostgreSQL remains supported for optional disposable tests; it is not a daily prerequisite. Arbitrary hosted databases and the production `quieter` logical database remain rejected.
@@ -72,7 +72,7 @@ Local development requires only the values needed by the paths you exercise. Imp
 - Google Gmail OAuth: separate client for mailbox authorization
 - Gmail credential encryption keys
 - OpenRouter: chat and mailbox AI features
-- AWS and SST: optional provider-infrastructure integration tests only
+- SST: development Secret links and local process startup
 - Polar: checkout and subscription flows
 - PostHog, Sentry, and logo.dev: optional integrations
 
@@ -149,15 +149,15 @@ Sentry and PostHog default off. To test them, set `VITE_QUIETER_LOCAL_TELEMETRY=
 
 Cloudflare Local Explorer is available at `http://localhost:3000/cdn-cgi/local/explorer` for inspecting local resources and requests. It discovers configured bindings automatically. An empty resource list does not mean the application's background services are running.
 
-Run the optional remote mail and background-processing infrastructure only for explicit provider integration tests:
+Managed-mail fixture tests run on this machine:
 
 ```bash
-vp run dev:mail
+vp run test:mail
 ```
 
-The package command invokes SST with the `mail-dev` stage and loads `.env.local` plus optional `.env.sst.local`. Despite its name, `dev:mail` evaluates the full infrastructure app. It requires a reviewed development-stage configuration and must not be used as an offline emulator. Prefer an AWS SSO profile over persistent credentials in environment files.
+The old `dev:mail` and AWS package `dev` commands were removed because they evaluated cloud infrastructure. Local development must not create mail domains, DNS records, SES identities, Lambda functions, SNS topics or remote mail buckets. Real managed-mail domain changes and external sending are blocked in the local application.
 
-`dev:cloud` now uses the isolated local SST configuration described above. The production infrastructure's frontend also has an explicit Vite+ command. Remote managed-mail resources can outlive the terminal; manage their lifecycle through the intended SST stage.
+SES has no native local delivery service. Fixtures cover MIME, routing, request validation and feedback processing. They do not prove real MX routing, IAM permissions, SES delivery or cloud retries. Those are deployment-only checks, outside this local setup. SST Lambda Live still uses cloud resources and is not a local-only substitute. `dev:cloud` is only an alias for the Secret-linked local session described above.
 
 ## Where Changes Belong
 

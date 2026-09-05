@@ -392,9 +392,9 @@ export const startInstance = createStart(() => ({
     securityHeadersMiddleware,
     wellKnownAgentSurfaceMiddleware,
     markdownNegotiationMiddleware,
+    databaseMiddleware,
     abuseProtectionMiddleware,
     sitePasswordMiddleware,
-    databaseMiddleware,
     csrfMiddleware,
   ],
 }));

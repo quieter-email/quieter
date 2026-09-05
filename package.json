@@ -28,7 +28,7 @@
     "dev:polar": "wsl -e bash scripts/local-polar.sh",
     "dev:trigger": "node --env-file=.env.local scripts/local-worker-request.ts",
     "dev:cloud": "vp run dev:sst",
-    "dev:mail": "vp run @quieter/env#doctor && vp run @quieter/aws#dev",
+    "test:mail": "vp test packages/aws/tests packages/mail/tests packages/orpc/tests/managed-mail packages/orpc/tests/local-managed-mail packages/orpc/tests/mail-domain packages/orpc/tests/organization-mail",
     "env:doctor": "vp run @quieter/env#doctor",
     "generate:assets": "node scripts/generate-web-assets.ts",
     "prepare": "vp config --no-agent",

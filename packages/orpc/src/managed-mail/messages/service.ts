@@ -59,6 +59,7 @@ import {
 } from "drizzle-orm";
 import type { z } from "zod";
 
+import { assertLocalMailSend } from "../../local-managed-mail";
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
 import {
   assertOrganizationMailRecipientsNotSuppressed,
@@ -1659,6 +1660,7 @@ export const sendManagedMailboxMessage = async (input: {
       organizationId,
       sender: selectedMailbox.emailAddress,
     });
+    assertLocalMailSend();
     await assertOrganizationMailRecipientsNotSuppressed({
       organizationId,
       recipients: [...to, ...cc, ...bcc],

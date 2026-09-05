@@ -7,8 +7,9 @@ This document records the development architecture and ownership rules. Startup 
 | System | Normal development choice | Additional testing |
 | --- | --- | --- |
 | PlanetScale | Existing `quieter_dev` logical database on the current production cluster, with separate app and migrator roles | Disposable database only for destructive migration tests, preferably the existing CI job |
-| Cloudflare | Native Vite/workerd runtime for the web app and background Workers, with local queues and Durable Objects | Deployed development checks for cloud-specific behavior |
-| SST | Development-stage Secrets, linked bindings, and native development process management | AWS Lambda Live against explicitly selected development resources |
+| Cloudflare | Native Vite/workerd runtime for the web app and background Workers, with local queues and Durable Objects | Cloud-specific behavior is outside local acceptance |
+| SST | Development-stage Secrets, linked bindings, and native development process management | No cloud mail resources; Lambda Live is not local-only |
+| Managed mail | Local fixture tests for MIME, routing, API validation and feedback | Real SES/MX delivery requires a deployment and is excluded from this setup |
 | Gmail/Pub/Sub | Shared-account observation mode, own development subscription, one watch owner | Dedicated mailbox or exclusive ownership handoff for provider writes |
 | AI | Separate OpenRouter development key with a small spending cap; development Workers AI credentials for embeddings | Native AI SDK fixtures for repeatable failure/stream tests |
 | Polar | Existing sandbox, with sandbox credentials, products, and local webhook forwarding | Turn billing bypass off for entitlement and checkout acceptance tests |
@@ -85,7 +86,7 @@ Cloudflare's installed Vite plugin supports `auxiliaryWorkers`, persistent state
 
 Use Cloudflare Local Explorer and the runtime inspector for local state, requests, and errors. Its API/UI already provides inspection; avoid building a replacement developer dashboard. Keep these tools on loopback when exposing selected app routes for webhooks. See [Local Explorer](https://developers.cloudflare.com/workers/local-development/local-explorer/).
 
-Correct SST frontend startup ownership and set its dev command to Vite+. Verify generated links reach the actual web process. Keep separate development storage and managed-mail resource configuration for the SES path. The shared PlanetScale choice does not authorize shared production mail mutations or cloud deployment changes.
+SST frontend startup uses Vite+ and links development secrets into the local runtimes. Do not provision AWS/R2 mail resources or real mail domains to extend local coverage. The user's explicit hosted-database and AI exceptions do not authorize additional cloud infrastructure.
 
 ## Implementation status, September 5, 2026
 
@@ -95,6 +96,6 @@ Native background queues, Durable Objects, signed realtime connections, manual s
 
 The `local-leander` SST store contains development secrets for the app, database, OAuth, encryption, AI and Polar. Real OpenRouter generation, Workers AI embeddings and native Polar CLI webhook delivery have passed connected smoke tests. Polar uses a non-expiring sandbox token. Telemetry has an explicit local opt-in and remains disabled by default.
 
-Managed mail still needs dedicated development R2/AWS resources, an isolated test domain and a reviewed SES receipt routing arrangement. The legacy `dev:mail` command evaluates the full infrastructure and is not the normal local entrypoint. Deployed concurrency, IAM, real incoming MX routing and full provider mutation acceptance remain separate checks.
+The user clarified that unsupported local behavior must remain a documented limitation, rather than trigger a cloud deployment. The attempted cloud mail setup was rolled back, including its bucket, credentials, SES identity, Lambda/SNS/IAM resources and regional bootstrap. No DNS records were added. The legacy cloud mail startup commands are removed. `vp run test:mail` runs the fixture suites. Real SES/MX delivery, cloud concurrency and IAM acceptance are outside this local setup.
 
 Sentry/PostHog opt-in checks, c15t coverage, and disposable migration tests remain part of targeted verification. Domain Connect is deferred until used. A change is complete only when the affected local feature can be started, exercised, and debugged, or an exact external blocker is recorded with the required user action.
