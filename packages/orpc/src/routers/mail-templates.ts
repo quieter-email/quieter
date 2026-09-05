@@ -1,8 +1,5 @@
 import { ORPCError } from "@orpc/server";
 import { reportAiUsage } from "@quieter/billing";
-import { getBillingCreditUsage } from "@quieter/billing/credits";
-import { hasUserBillingFeature } from "@quieter/billing/entitlements";
-import { BILLING_FEATURES } from "@quieter/billing/plans";
 import { db } from "@quieter/database/client";
 import { mailTemplate, member } from "@quieter/database/schema";
 import type { MailTemplateScope } from "@quieter/database/schema";
@@ -10,6 +7,7 @@ import { reportError } from "@quieter/observability";
 import { and, desc, eq, or } from "drizzle-orm";
 import { z } from "zod";
 
+import { assertCanUseAi } from "../ai-access";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import { mailboxIdSchema, protectedProcedure } from "./base";
 
@@ -112,37 +110,6 @@ const assertCanWriteScope = ({
   if (scope === "team" && !canManageTeamTemplates) {
     throw new ORPCError("FORBIDDEN", {
       message: "Only team owners and admins can manage shared templates.",
-    });
-  }
-};
-
-const assertCanUseAi = async ({
-  organizationId,
-  userId,
-}: {
-  organizationId: string;
-  userId: string;
-}) => {
-  const entitlement = await hasUserBillingFeature({
-    feature: "aiChat",
-    organizationId,
-    userId,
-  });
-
-  if (!entitlement.hasAccess) {
-    throw new ORPCError("FORBIDDEN", {
-      message: `AI suggestions require ${BILLING_FEATURES.aiChat.requirementLabel}.`,
-    });
-  }
-
-  if (entitlement.hasUnlimitedAccess || !entitlement.account) {
-    return;
-  }
-
-  const usage = await getBillingCreditUsage(entitlement.account);
-  if (usage.costMicroCents >= usage.creditAmountMicroCents) {
-    throw new ORPCError("FORBIDDEN", {
-      message: "AI suggestions require available usage balance.",
     });
   }
 };

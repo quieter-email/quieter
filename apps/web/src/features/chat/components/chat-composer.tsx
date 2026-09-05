@@ -102,7 +102,7 @@ export const ChatComposer = ({
 
   return (
     <form
-      className="squircle flex w-full flex-col rounded-xl border border-border bg-bg/85 shadow-xl has-[[data-slot=token-field-input]:focus-visible]:border-ring has-[[data-slot=token-field-input]:focus-visible]:ring-1 has-[[data-slot=token-field-input]:focus-visible]:ring-ring/45 has-[[data-slot=token-field-input]:focus-visible]:outline-none"
+      className="squircle flex w-full flex-col rounded-xl border border-border bg-bg-raised/85 shadow-xl has-[[data-slot=token-field-input]:focus-visible]:border-ring has-[[data-slot=token-field-input]:focus-visible]:ring-1 has-[[data-slot=token-field-input]:focus-visible]:ring-ring/45 has-[[data-slot=token-field-input]:focus-visible]:outline-none"
       onSubmit={onSubmit}
     >
       <div className="px-4 pt-4 pb-2">

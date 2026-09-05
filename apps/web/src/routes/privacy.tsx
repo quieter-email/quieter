@@ -5,7 +5,19 @@ import { LegalDocumentPage } from "#/features/legal/components/legal-document-pa
 export const Route = createFileRoute("/privacy")({
   component: PrivacyPage,
   head: () => ({
-    meta: [{ title: "Privacy Policy | Quieter" }],
+    links: [
+      {
+        href: "https://quieter.email/privacy",
+        rel: "canonical",
+      },
+    ],
+    meta: [
+      { title: "Privacy Policy | Quieter" },
+      {
+        content: "https://quieter.email/privacy",
+        property: "og:url",
+      },
+    ],
   }),
 });
 

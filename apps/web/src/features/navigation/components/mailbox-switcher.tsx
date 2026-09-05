@@ -42,6 +42,7 @@ const hasText = (value: string | null | undefined): value is string =>
   typeof value === "string" && value.length > 0;
 
 type MailboxSwitcherMailbox = {
+  accessMode?: "private" | "shared" | null;
   connectionStatus: "connected" | "needs_reconnect";
   displayName: string | null;
   divisionName?: string | null;
@@ -361,6 +362,11 @@ const MailboxSummary = ({
           </p>
         )}
       </div>
+      {mailbox.provider === "managed" && (
+        <span className="shrink-0 text-caption text-muted-fg">
+          {mailbox.accessMode === "private" ? "Private" : "Shared"}
+        </span>
+      )}
       {action}
       <MailboxInboxStatus mailbox={mailbox} />
     </div>

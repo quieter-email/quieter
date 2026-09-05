@@ -14,6 +14,7 @@ import {
   managedMailLabel,
   managedMailMessage,
   managedMailMessageLabel,
+  organizationMailDeliveryRecipient,
 } from "@quieter/database/schema";
 import type {
   ManagedMailHeader,
@@ -61,7 +62,10 @@ import type { z } from "zod";
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
 import {
   assertOrganizationMailRecipientsNotSuppressed,
+  buildOpenTrackingHtmlTransform,
   getOrganizationMailDelivery,
+  groupDeliveryStatusesByMessage,
+  resolveOrganizationMailOpenTracking,
 } from "../../organization-mail-delivery";
 import {
   assertOrganizationOwnsVerifiedSenderDomain,
@@ -1557,6 +1561,55 @@ export const getManagedMessageDelivery = async (input: {
   });
 };
 
+export const listManagedMessageDeliveryStatuses = async (input: {
+  mailboxId: string;
+  messageIds: string[];
+  userId: string;
+}) => {
+  if (input.messageIds.length === 0) {
+    return {};
+  }
+  const selectedMailbox = await getAuthorizedManagedMailbox({
+    mailboxId: input.mailboxId,
+    requiredRoles: ["reader", "responder", "manager"],
+    userId: input.userId,
+  });
+  if (!selectedMailbox.organizationId) {
+    throw new ORPCError("INTERNAL_SERVER_ERROR", {
+      message: "Managed mailbox team is missing.",
+    });
+  }
+
+  const rows = await db
+    .select({
+      messageId: managedMailMessage.id,
+      status: organizationMailDeliveryRecipient.status,
+    })
+    .from(managedMailMessage)
+    .innerJoin(
+      organizationMailDeliveryRecipient,
+      and(
+        eq(
+          organizationMailDeliveryRecipient.providerMessageId,
+          managedMailMessage.providerMessageId
+        ),
+        eq(
+          organizationMailDeliveryRecipient.organizationId,
+          selectedMailbox.organizationId
+        )
+      )
+    )
+    .where(
+      and(
+        eq(managedMailMessage.mailboxId, input.mailboxId),
+        eq(managedMailMessage.direction, "outbound"),
+        inArray(managedMailMessage.id, input.messageIds)
+      )
+    );
+
+  return groupDeliveryStatusesByMessage(rows);
+};
+
 export const sendManagedMailboxMessage = async (input: {
   mailboxId: string;
   message: ComposeMessageInput;
@@ -1628,11 +1681,18 @@ export const sendManagedMailboxMessage = async (input: {
     });
   }
   const messageHeaderId = `<${randomUUID()}@${domain}>`;
+  const openTrackingEnabled = await resolveOrganizationMailOpenTracking({
+    organizationId,
+  });
   const rawMessage = await buildMimeMessage(input.message, {
     from: selectedMailbox.emailAddress,
     messageId: messageHeaderId,
     omitBccHeader: true,
     sentAt,
+    ...buildOpenTrackingHtmlTransform({
+      messageHeaderId,
+      openTrackingEnabled,
+    }),
   });
   const { SendEmailCommand } = await import("@aws-sdk/client-sesv2");
   const client = await getSesv2Client();

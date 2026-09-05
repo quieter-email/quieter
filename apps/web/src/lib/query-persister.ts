@@ -195,7 +195,7 @@ export const shouldPersistQueryKey = (queryKey: readonly unknown[]) => {
   if (queryKey.length === 2) {
     return (
       (queryKey[0] === "gmail-labels" ||
-        queryKey[0] === "managed-saved-views" ||
+        queryKey[0] === "saved-views" ||
         queryKey[0] === "managed-label-counts") &&
       typeof queryKey[1] === "string" &&
       queryKey[1].length > 0

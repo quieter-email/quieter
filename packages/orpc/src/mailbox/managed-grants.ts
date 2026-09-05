@@ -16,7 +16,7 @@ import {
   organizationDivision,
   user,
 } from "@quieter/database/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 import { assertOrganizationManager } from "../organization/divisions";
 import { hasText } from "../text";
@@ -39,7 +39,7 @@ const getManagedMailboxRecord = async (mailboxId: string) => {
       id: mailbox.id,
       includeApiSentMessages: mailbox.includeApiSentMessages,
       organizationId: mailbox.organizationId,
-      ownerUserId: mailbox.ownerUserId,
+      ownerUserId: mailbox.managedOwnerUserId,
       usefulDetailsEnabled: mailboxAutomationSettings.usefulDetailsEnabled,
     })
     .from(mailbox)
@@ -95,6 +95,7 @@ export const createManagedMailbox = async (input: {
   includeApiSentMessages?: boolean;
   organizationId: string;
   ownerUserId?: string | null;
+  receiveWholeDomain?: boolean;
   userId: string;
 }) => {
   await assertOrganizationManager({
@@ -114,6 +115,15 @@ export const createManagedMailbox = async (input: {
       });
     }
   }
+  if (
+    accessMode === "shared" &&
+    input.ownerUserId !== null &&
+    input.ownerUserId !== undefined
+  ) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Shared inboxes do not have an individual owner.",
+    });
+  }
   const ownerId = accessMode === "private" ? (input.ownerUserId ?? null) : null;
 
   await assertDivisionBelongsToOrganization(
@@ -122,48 +132,48 @@ export const createManagedMailbox = async (input: {
   );
   const emailAddress = normalizeEmailAddress(input.emailAddress);
   const domain = emailAddress.split("@")[1] ?? "";
-  const [receivingDomain] = await db
-    .select({ id: mailDomain.id })
-    .from(mailDomain)
-    .where(
-      and(
-        eq(mailDomain.domain, domain),
-        eq(mailDomain.organizationId, input.organizationId),
-        eq(mailDomain.status, "verified"),
-        eq(mailDomain.mode, "send_and_receive")
-      )
-    )
-    .limit(1);
-  if (receivingDomain === undefined) {
-    throw new ORPCError("BAD_REQUEST", {
-      message:
-        accessMode === "private"
-          ? "Private mailboxes require a verified domain with incoming mail enabled."
-          : "Shared inboxes require a verified domain with incoming mail enabled.",
-    });
-  }
-
-  if (ownerId !== null) {
-    const [ownerMembership] = await db
-      .select({ id: member.id })
-      .from(member)
-      .where(
-        and(
-          eq(member.userId, ownerId),
-          eq(member.organizationId, input.organizationId)
-        )
-      )
-      .limit(1);
-    if (ownerMembership === undefined) {
-      throw new ORPCError("BAD_REQUEST", {
-        message: "The mailbox owner must be a member of this team.",
-      });
-    }
-  }
 
   const mailboxId = randomUUID();
   const now = new Date();
   await db.transaction(async (tx) => {
+    const [receivingDomain] = await tx
+      .select({ id: mailDomain.id })
+      .from(mailDomain)
+      .where(
+        and(
+          eq(mailDomain.domain, domain),
+          eq(mailDomain.organizationId, input.organizationId),
+          eq(mailDomain.status, "verified"),
+          eq(mailDomain.mode, "send_and_receive")
+        )
+      )
+      .limit(1)
+      .for("update");
+    if (receivingDomain === undefined) {
+      throw new ORPCError("BAD_REQUEST", {
+        message:
+          "Mailboxes require a verified domain with incoming mail enabled.",
+      });
+    }
+
+    if (ownerId !== null) {
+      const [ownerMembership] = await tx
+        .select({ id: member.id })
+        .from(member)
+        .where(
+          and(
+            eq(member.userId, ownerId),
+            eq(member.organizationId, input.organizationId)
+          )
+        )
+        .limit(1)
+        .for("key share");
+      if (ownerMembership === undefined) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: "The mailbox owner must be a member of this team.",
+        });
+      }
+    }
     await tx.insert(mailbox).values({
       accessMode,
       createdAt: now,
@@ -172,8 +182,8 @@ export const createManagedMailbox = async (input: {
       emailAddress,
       id: mailboxId,
       includeApiSentMessages: input.includeApiSentMessages ?? false,
+      managedOwnerUserId: ownerId,
       organizationId: input.organizationId,
-      ownerUserId: ownerId,
       provider: MAILBOX_PROVIDER_MANAGED,
       status: "connected",
       updatedAt: now,
@@ -188,6 +198,27 @@ export const createManagedMailbox = async (input: {
       updatedAt: now,
       userId: ownerId ?? input.userId,
     });
+    if (input.receiveWholeDomain === true) {
+      const [claimedDomain] = await tx
+        .update(mailDomain)
+        .set({ catchAllMailboxId: mailboxId, updatedAt: now })
+        .where(
+          and(
+            eq(mailDomain.id, receivingDomain.id),
+            eq(mailDomain.organizationId, input.organizationId),
+            eq(mailDomain.mode, "send_and_receive"),
+            eq(mailDomain.status, "verified"),
+            isNull(mailDomain.catchAllMailboxId)
+          )
+        )
+        .returning({ id: mailDomain.id });
+      if (claimedDomain === undefined) {
+        throw new ORPCError("CONFLICT", {
+          message:
+            "Incoming mail is no longer available for this domain, or another shared inbox already receives every address. Refresh and try again.",
+        });
+      }
+    }
   });
   return { mailboxId };
 };
@@ -226,6 +257,7 @@ export const listManagedMailboxAdministration = async (input: {
   const rows = await db
     .select({
       accessMode: mailbox.accessMode,
+      catchAllDomain: mailDomain.domain,
       directRole: mailboxGrant.role,
       directUserId: mailboxGrant.userId,
       displayName: mailbox.displayName,
@@ -236,7 +268,7 @@ export const listManagedMailboxAdministration = async (input: {
       emailAddress: mailbox.emailAddress,
       id: mailbox.id,
       includeApiSentMessages: mailbox.includeApiSentMessages,
-      ownerUserId: mailbox.ownerUserId,
+      ownerUserId: mailbox.managedOwnerUserId,
       status: mailbox.status,
     })
     .from(mailbox)
@@ -249,6 +281,7 @@ export const listManagedMailboxAdministration = async (input: {
       mailboxDivisionGrant,
       eq(mailboxDivisionGrant.mailboxId, mailbox.id)
     )
+    .leftJoin(mailDomain, eq(mailDomain.catchAllMailboxId, mailbox.id))
     .where(
       and(
         eq(mailbox.organizationId, input.organizationId),
@@ -260,6 +293,7 @@ export const listManagedMailboxAdministration = async (input: {
     string,
     {
       accessMode: MailboxAccessMode;
+      catchAllDomain: string | null;
       directGrantCount: number;
       directGrantIds: Set<string>;
       displayName: string | null;
@@ -279,6 +313,7 @@ export const listManagedMailboxAdministration = async (input: {
   for (const row of rows) {
     const record = mailboxes.get(row.id) ?? {
       accessMode: row.accessMode,
+      catchAllDomain: row.catchAllDomain ?? null,
       directGrantCount: 0,
       directGrantIds: new Set<string>(),
       displayName: row.displayName,
@@ -342,48 +377,58 @@ export const getManagedMailboxDetails = async (input: {
     input.mailboxId,
     input.userId
   );
-  const [directGrants, divisionGrants, ownerProfile, selectedDivision] =
-    await Promise.all([
-      db
-        .select({
-          email: user.email,
-          name: user.name,
-          role: mailboxGrant.role,
-          userId: user.id,
-        })
-        .from(mailboxGrant)
-        .innerJoin(user, eq(user.id, mailboxGrant.userId))
-        .where(eq(mailboxGrant.mailboxId, input.mailboxId)),
-      db
-        .select({
-          divisionId: organizationDivision.id,
-          divisionName: organizationDivision.name,
-          role: mailboxDivisionGrant.role,
-        })
-        .from(mailboxDivisionGrant)
-        .innerJoin(
-          organizationDivision,
-          eq(organizationDivision.id, mailboxDivisionGrant.divisionId)
-        )
-        .where(eq(mailboxDivisionGrant.mailboxId, input.mailboxId)),
-      selectedMailbox.ownerUserId === null
-        ? Promise.resolve([])
-        : db
-            .select({ email: user.email, name: user.name })
-            .from(user)
-            .where(eq(user.id, selectedMailbox.ownerUserId))
-            .limit(1),
-      selectedMailbox.divisionId === null
-        ? Promise.resolve([])
-        : db
-            .select({
-              id: organizationDivision.id,
-              name: organizationDivision.name,
-            })
-            .from(organizationDivision)
-            .where(eq(organizationDivision.id, selectedMailbox.divisionId))
-            .limit(1),
-    ]);
+  const [
+    directGrants,
+    divisionGrants,
+    ownerProfile,
+    selectedDivision,
+    catchAllDomain,
+  ] = await Promise.all([
+    db
+      .select({
+        email: user.email,
+        name: user.name,
+        role: mailboxGrant.role,
+        userId: user.id,
+      })
+      .from(mailboxGrant)
+      .innerJoin(user, eq(user.id, mailboxGrant.userId))
+      .where(eq(mailboxGrant.mailboxId, input.mailboxId)),
+    db
+      .select({
+        divisionId: organizationDivision.id,
+        divisionName: organizationDivision.name,
+        role: mailboxDivisionGrant.role,
+      })
+      .from(mailboxDivisionGrant)
+      .innerJoin(
+        organizationDivision,
+        eq(organizationDivision.id, mailboxDivisionGrant.divisionId)
+      )
+      .where(eq(mailboxDivisionGrant.mailboxId, input.mailboxId)),
+    selectedMailbox.ownerUserId === null
+      ? Promise.resolve([])
+      : db
+          .select({ email: user.email, name: user.name })
+          .from(user)
+          .where(eq(user.id, selectedMailbox.ownerUserId))
+          .limit(1),
+    selectedMailbox.divisionId === null
+      ? Promise.resolve([])
+      : db
+          .select({
+            id: organizationDivision.id,
+            name: organizationDivision.name,
+          })
+          .from(organizationDivision)
+          .where(eq(organizationDivision.id, selectedMailbox.divisionId))
+          .limit(1),
+    db
+      .select({ domain: mailDomain.domain })
+      .from(mailDomain)
+      .where(eq(mailDomain.catchAllMailboxId, input.mailboxId))
+      .limit(1),
+  ]);
 
   return {
     directGrants,
@@ -391,6 +436,7 @@ export const getManagedMailboxDetails = async (input: {
     mailbox: {
       ...selectedMailbox,
       autoLabelEnabled: selectedMailbox.autoLabelEnabled ?? false,
+      catchAllDomain: catchAllDomain[0]?.domain ?? null,
       divisionName: selectedDivision[0]?.name ?? null,
       includeApiSentMessages: selectedMailbox.includeApiSentMessages,
       ownerEmail: ownerProfile[0]?.email ?? null,
@@ -406,137 +452,130 @@ export const updateManagedMailbox = async (input: {
   includeApiSentMessages?: boolean;
   mailboxId: string;
   userId: string;
-}) => {
-  const selectedMailbox = await assertManagedMailboxConfigurator(
-    input.mailboxId,
-    input.userId
-  );
-  if (
-    selectedMailbox.accessMode === "private" &&
-    input.divisionId !== undefined
-  ) {
-    throw new ORPCError("BAD_REQUEST", {
-      message: "Private mailboxes cannot belong to a division.",
-    });
-  }
-  await assertDivisionBelongsToOrganization(
-    input.divisionId,
-    selectedMailbox.organizationId
-  );
-  await db
-    .update(mailbox)
-    .set({
-      ...(input.displayName === undefined
-        ? {}
-        : {
-            displayName: hasText(input.displayName)
-              ? input.displayName.trim()
-              : null,
-          }),
-      ...(input.divisionId === undefined
-        ? {}
-        : { divisionId: input.divisionId }),
-      ...(input.includeApiSentMessages === undefined
-        ? {}
-        : { includeApiSentMessages: input.includeApiSentMessages }),
-      updatedAt: new Date(),
-    })
-    .where(eq(mailbox.id, input.mailboxId));
+}) =>
+  await db.transaction(async (tx) => {
+    await tx
+      .select({ id: mailbox.id })
+      .from(mailbox)
+      .where(eq(mailbox.id, input.mailboxId))
+      .for("update");
+    const selectedMailbox = await assertManagedMailboxConfigurator(
+      input.mailboxId,
+      input.userId
+    );
+    if (
+      selectedMailbox.accessMode === "private" &&
+      input.divisionId !== undefined
+    ) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Private mailboxes cannot belong to a division.",
+      });
+    }
+    await assertDivisionBelongsToOrganization(
+      input.divisionId,
+      selectedMailbox.organizationId
+    );
+    await tx
+      .update(mailbox)
+      .set({
+        ...(input.displayName === undefined
+          ? {}
+          : {
+              displayName: hasText(input.displayName)
+                ? input.displayName.trim()
+                : null,
+            }),
+        ...(input.divisionId === undefined
+          ? {}
+          : { divisionId: input.divisionId }),
+        ...(input.includeApiSentMessages === undefined
+          ? {}
+          : { includeApiSentMessages: input.includeApiSentMessages }),
+        updatedAt: new Date(),
+      })
+      .where(eq(mailbox.id, input.mailboxId));
 
-  return { mailboxId: input.mailboxId };
-};
+    return { mailboxId: input.mailboxId };
+  });
 
 export const setManagedMailboxAccessMode = async (input: {
   accessMode: MailboxAccessMode;
   mailboxId: string;
   ownerUserId?: string | null;
   userId: string;
-}) => {
-  const selectedMailbox = await assertManagedMailboxConfigurator(
-    input.mailboxId,
-    input.userId
-  );
-  if (input.accessMode === selectedMailbox.accessMode) {
-    return {
-      accessMode: input.accessMode,
-      mailboxId: input.mailboxId,
-      ownerUserId: selectedMailbox.ownerUserId,
-    };
-  }
-
-  if (input.accessMode === "private") {
-    // Converting a shared inbox locks everyone else out, so only a team
-    // owner or admin may perform it.
-    await assertOrganizationManager({
-      organizationId: selectedMailbox.organizationId,
-      userId: input.userId,
-    });
-    const ownerId = input.ownerUserId ?? null;
-    if (!hasText(ownerId)) {
-      throw new ORPCError("BAD_REQUEST", {
-        message: "Choose a team member who owns this private mailbox.",
-      });
-    }
-    const [ownerMembership] = await db
-      .select({ id: member.id })
-      .from(member)
-      .where(
-        and(
-          eq(member.organizationId, selectedMailbox.organizationId),
-          eq(member.userId, ownerId)
-        )
-      )
-      .limit(1);
-    if (ownerMembership === undefined) {
-      throw new ORPCError("BAD_REQUEST", {
-        message: "The mailbox owner must be a member of this team.",
-      });
-    }
-
-    const now = new Date();
-    await db.transaction(async (tx) => {
-      await tx
-        .delete(mailboxDivisionGrant)
-        .where(eq(mailboxDivisionGrant.mailboxId, input.mailboxId));
-      await tx
-        .update(mailbox)
-        .set({
-          accessMode: "private",
-          divisionId: null,
-          ownerUserId: ownerId,
-          updatedAt: now,
-        })
-        .where(
-          and(eq(mailbox.id, input.mailboxId), eq(mailbox.accessMode, "shared"))
-        );
-      await tx
-        .insert(mailboxGrant)
-        .values({
-          createdAt: now,
-          id: randomUUID(),
-          mailboxId: input.mailboxId,
-          role: "manager",
-          updatedAt: now,
-          userId: ownerId,
-        })
-        .onConflictDoUpdate({
-          set: { role: "manager", updatedAt: now },
-          target: [mailboxGrant.mailboxId, mailboxGrant.userId],
-        });
-    });
-    return {
-      accessMode: "private",
-      mailboxId: input.mailboxId,
-      ownerUserId: ownerId,
-    };
-  }
-
-  const now = new Date();
-  const outgoingOwnerId = selectedMailbox.ownerUserId;
+}) =>
   await db.transaction(async (tx) => {
-    // Keep explicit control after ownership is cleared: the outgoing owner
-    // retains a manager grant so the shared inbox never loses its managers.
-    if (hasText(outgoingOwnerId)) {
+    await tx
+      .select({ id: mailbox.id })
+      .from(mailbox)
+      .where(eq(mailbox.id, input.mailboxId))
+      .for("update");
+    const selectedMailbox = await assertManagedMailboxConfigurator(
+      input.mailboxId,
+      input.userId
+    );
+    const ownerId =
+      input.accessMode === "private"
+        ? (input.ownerUserId ?? selectedMailbox.ownerUserId)
+        : null;
+    if (
+      input.accessMode === "shared" &&
+      input.ownerUserId !== null &&
+      input.ownerUserId !== undefined
+    ) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Shared inboxes do not have an individual owner.",
+      });
+    }
+    if (
+      input.accessMode === selectedMailbox.accessMode &&
+      ownerId === selectedMailbox.ownerUserId
+    ) {
+      return {
+        accessMode: input.accessMode,
+        mailboxId: input.mailboxId,
+        ownerUserId: ownerId,
+      };
+    }
+    if (input.accessMode === "private") {
+      await assertOrganizationManager({
+        organizationId: selectedMailbox.organizationId,
+        userId: input.userId,
+      });
+      if (!hasText(ownerId)) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: "Choose a team member who owns this private mailbox.",
+        });
+      }
+      const [ownerMembership] = await tx
+        .select({ id: member.id })
+        .from(member)
+        .where(
+          and(
+            eq(member.organizationId, selectedMailbox.organizationId),
+            eq(member.userId, ownerId)
+          )
+        )
+        .limit(1)
+        .for("key share");
+      if (ownerMembership === undefined) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: "The mailbox owner must be a member of this team.",
+        });
+      }
+    }
+    const now = new Date();
+    // Clear latent division grants in both directions so changing mode cannot revive access.
+    await tx
+      .delete(mailboxDivisionGrant)
+      .where(eq(mailboxDivisionGrant.mailboxId, input.mailboxId));
+    if (input.accessMode === "private") {
+      await tx
+        .delete(mailboxGrant)
+        .where(eq(mailboxGrant.mailboxId, input.mailboxId));
+    }
+    const managerId = ownerId ?? selectedMailbox.ownerUserId;
+    if (managerId !== null) {
       await tx
         .insert(mailboxGrant)
         .values({
@@ -545,7 +584,7 @@ export const setManagedMailboxAccessMode = async (input: {
           mailboxId: input.mailboxId,
           role: "manager",
           updatedAt: now,
-          userId: outgoingOwnerId,
+          userId: managerId,
         })
         .onConflictDoUpdate({
           set: { role: "manager", updatedAt: now },
@@ -554,188 +593,217 @@ export const setManagedMailboxAccessMode = async (input: {
     }
     await tx
       .update(mailbox)
-      .set({ accessMode: "shared", ownerUserId: null, updatedAt: now })
-      .where(
-        and(eq(mailbox.id, input.mailboxId), eq(mailbox.accessMode, "private"))
-      );
+      .set({
+        accessMode: input.accessMode,
+        divisionId: null,
+        managedOwnerUserId: ownerId,
+        updatedAt: now,
+      })
+      .where(eq(mailbox.id, input.mailboxId));
+    return {
+      accessMode: input.accessMode,
+      mailboxId: input.mailboxId,
+      ownerUserId: ownerId,
+    };
   });
-  return {
-    accessMode: "shared",
-    mailboxId: input.mailboxId,
-    ownerUserId: null,
-  };
-};
 
 export const setManagedMailboxGrant = async (input: {
   mailboxId: string;
   role: MailboxGrantRole;
   targetUserId: string;
   userId: string;
-}) => {
-  const selectedMailbox = await assertManagedMailboxConfigurator(
-    input.mailboxId,
-    input.userId
-  );
-  if (
-    selectedMailbox.accessMode === "private" &&
-    selectedMailbox.ownerUserId === input.targetUserId
-  ) {
-    throw new ORPCError("BAD_REQUEST", {
-      message:
-        "The mailbox owner always keeps manager access to a private mailbox.",
-    });
-  }
-  const [target] = await db
-    .select({ organizationId: mailbox.organizationId })
-    .from(mailbox)
-    .innerJoin(
-      member,
-      and(
-        eq(member.organizationId, mailbox.organizationId),
-        eq(member.userId, input.targetUserId)
+}) =>
+  await db.transaction(async (tx) => {
+    await tx
+      .select({ id: mailbox.id })
+      .from(mailbox)
+      .where(eq(mailbox.id, input.mailboxId))
+      .for("update");
+    const selectedMailbox = await assertManagedMailboxConfigurator(
+      input.mailboxId,
+      input.userId
+    );
+    if (
+      selectedMailbox.accessMode === "private" &&
+      selectedMailbox.ownerUserId === input.targetUserId
+    ) {
+      throw new ORPCError("BAD_REQUEST", {
+        message:
+          "The mailbox owner always keeps manager access to a private mailbox.",
+      });
+    }
+    const [target] = await tx
+      .select({ organizationId: mailbox.organizationId })
+      .from(mailbox)
+      .innerJoin(
+        member,
+        and(
+          eq(member.organizationId, mailbox.organizationId),
+          eq(member.userId, input.targetUserId)
+        )
       )
-    )
-    .where(eq(mailbox.id, input.mailboxId))
-    .limit(1);
-  if (target === undefined) {
-    throw new ORPCError("BAD_REQUEST", {
-      message: "Mailbox grants can only be assigned to team members.",
-    });
-  }
+      .where(eq(mailbox.id, input.mailboxId))
+      .limit(1);
+    if (target === undefined) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Mailbox grants can only be assigned to team members.",
+      });
+    }
 
-  const now = new Date();
-  await db
-    .insert(mailboxGrant)
-    .values({
-      createdAt: now,
-      id: randomUUID(),
+    const now = new Date();
+    await tx
+      .insert(mailboxGrant)
+      .values({
+        createdAt: now,
+        id: randomUUID(),
+        mailboxId: input.mailboxId,
+        role: input.role,
+        updatedAt: now,
+        userId: input.targetUserId,
+      })
+      .onConflictDoUpdate({
+        set: { role: input.role, updatedAt: now },
+        target: [mailboxGrant.mailboxId, mailboxGrant.userId],
+      });
+    return {
       mailboxId: input.mailboxId,
       role: input.role,
-      updatedAt: now,
       userId: input.targetUserId,
-    })
-    .onConflictDoUpdate({
-      set: { role: input.role, updatedAt: now },
-      target: [mailboxGrant.mailboxId, mailboxGrant.userId],
-    });
-  return {
-    mailboxId: input.mailboxId,
-    role: input.role,
-    userId: input.targetUserId,
-  };
-};
+    };
+  });
 
 export const removeManagedMailboxGrant = async (input: {
   mailboxId: string;
   targetUserId: string;
   userId: string;
-}) => {
-  const selectedMailbox = await assertManagedMailboxConfigurator(
-    input.mailboxId,
-    input.userId
-  );
-  if (
-    selectedMailbox.accessMode === "private" &&
-    selectedMailbox.ownerUserId === input.targetUserId
-  ) {
-    throw new ORPCError("BAD_REQUEST", {
-      message:
-        "The mailbox owner cannot lose access. Transfer ownership or make the mailbox shared first.",
-    });
-  }
-  const managerGrants = await db
-    .select({ userId: mailboxGrant.userId })
-    .from(mailboxGrant)
-    .where(
-      and(
-        eq(mailboxGrant.mailboxId, input.mailboxId),
-        eq(mailboxGrant.role, "manager")
-      )
+}) =>
+  await db.transaction(async (tx) => {
+    await tx
+      .select({ id: mailbox.id })
+      .from(mailbox)
+      .where(eq(mailbox.id, input.mailboxId))
+      .for("update");
+    const selectedMailbox = await assertManagedMailboxConfigurator(
+      input.mailboxId,
+      input.userId
     );
-  if (
-    input.targetUserId === input.userId &&
-    managerGrants.length === 1 &&
-    managerGrants[0]?.userId === input.userId
-  ) {
-    throw new ORPCError("BAD_REQUEST", {
-      message:
-        "Assign another mailbox manager before removing the last manager.",
-    });
-  }
+    if (
+      selectedMailbox.accessMode === "private" &&
+      selectedMailbox.ownerUserId === input.targetUserId
+    ) {
+      throw new ORPCError("BAD_REQUEST", {
+        message:
+          "The mailbox owner cannot lose access. Transfer ownership or make the mailbox shared first.",
+      });
+    }
+    const managerGrants = await tx
+      .select({ userId: mailboxGrant.userId })
+      .from(mailboxGrant)
+      .where(
+        and(
+          eq(mailboxGrant.mailboxId, input.mailboxId),
+          eq(mailboxGrant.role, "manager")
+        )
+      );
+    if (
+      input.targetUserId === input.userId &&
+      managerGrants.length === 1 &&
+      managerGrants[0]?.userId === input.userId
+    ) {
+      throw new ORPCError("BAD_REQUEST", {
+        message:
+          "Assign another mailbox manager before removing the last manager.",
+      });
+    }
 
-  await db
-    .delete(mailboxGrant)
-    .where(
-      and(
-        eq(mailboxGrant.mailboxId, input.mailboxId),
-        eq(mailboxGrant.userId, input.targetUserId)
-      )
-    );
-  return { removed: true };
-};
+    await tx
+      .delete(mailboxGrant)
+      .where(
+        and(
+          eq(mailboxGrant.mailboxId, input.mailboxId),
+          eq(mailboxGrant.userId, input.targetUserId)
+        )
+      );
+    return { removed: true };
+  });
 
 export const setManagedMailboxDivisionGrant = async (input: {
   divisionId: string;
   mailboxId: string;
   role: MailboxGrantRole;
   userId: string;
-}) => {
-  const selectedMailbox = await assertManagedMailboxConfigurator(
-    input.mailboxId,
-    input.userId
-  );
-  if (selectedMailbox.accessMode === "private") {
-    throw new ORPCError("BAD_REQUEST", {
-      message: "Division access isn't available for private mailboxes.",
-    });
-  }
-  await assertDivisionBelongsToOrganization(
-    input.divisionId,
-    selectedMailbox.organizationId
-  );
-  const now = new Date();
-  await db
-    .insert(mailboxDivisionGrant)
-    .values({
-      createdAt: now,
+}) =>
+  await db.transaction(async (tx) => {
+    await tx
+      .select({ id: mailbox.id })
+      .from(mailbox)
+      .where(eq(mailbox.id, input.mailboxId))
+      .for("update");
+    const selectedMailbox = await assertManagedMailboxConfigurator(
+      input.mailboxId,
+      input.userId
+    );
+    if (selectedMailbox.accessMode === "private") {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Division access isn't available for private mailboxes.",
+      });
+    }
+    await assertDivisionBelongsToOrganization(
+      input.divisionId,
+      selectedMailbox.organizationId
+    );
+    const now = new Date();
+    await tx
+      .insert(mailboxDivisionGrant)
+      .values({
+        createdAt: now,
+        divisionId: input.divisionId,
+        id: randomUUID(),
+        mailboxId: input.mailboxId,
+        role: input.role,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        set: { role: input.role, updatedAt: now },
+        target: [
+          mailboxDivisionGrant.mailboxId,
+          mailboxDivisionGrant.divisionId,
+        ],
+      });
+    return {
       divisionId: input.divisionId,
-      id: randomUUID(),
       mailboxId: input.mailboxId,
       role: input.role,
-      updatedAt: now,
-    })
-    .onConflictDoUpdate({
-      set: { role: input.role, updatedAt: now },
-      target: [mailboxDivisionGrant.mailboxId, mailboxDivisionGrant.divisionId],
-    });
-  return {
-    divisionId: input.divisionId,
-    mailboxId: input.mailboxId,
-    role: input.role,
-  };
-};
+    };
+  });
 
 export const removeManagedMailboxDivisionGrant = async (input: {
   divisionId: string;
   mailboxId: string;
   userId: string;
-}) => {
-  const selectedMailbox = await assertManagedMailboxConfigurator(
-    input.mailboxId,
-    input.userId
-  );
-  if (selectedMailbox.accessMode === "private") {
-    throw new ORPCError("BAD_REQUEST", {
-      message: "Division access isn't available for private mailboxes.",
-    });
-  }
-  await db
-    .delete(mailboxDivisionGrant)
-    .where(
-      and(
-        eq(mailboxDivisionGrant.mailboxId, input.mailboxId),
-        eq(mailboxDivisionGrant.divisionId, input.divisionId)
-      )
+}) =>
+  await db.transaction(async (tx) => {
+    await tx
+      .select({ id: mailbox.id })
+      .from(mailbox)
+      .where(eq(mailbox.id, input.mailboxId))
+      .for("update");
+    const selectedMailbox = await assertManagedMailboxConfigurator(
+      input.mailboxId,
+      input.userId
     );
-  return { removed: true };
-};
+    if (selectedMailbox.accessMode === "private") {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Division access isn't available for private mailboxes.",
+      });
+    }
+    await tx
+      .delete(mailboxDivisionGrant)
+      .where(
+        and(
+          eq(mailboxDivisionGrant.mailboxId, input.mailboxId),
+          eq(mailboxDivisionGrant.divisionId, input.divisionId)
+        )
+      );
+    return { removed: true };
+  });

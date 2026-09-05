@@ -3,10 +3,13 @@
 import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useCallback, useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
 
+import { getAggregateDeliveryStatusFromStatuses } from "#/features/message-delivery/domain/delivery-status";
+import { getMessageListDeliveryOptions } from "#/features/message-delivery/domain/message-delivery-query";
+import { supportsMessageDelivery } from "#/features/message-delivery/domain/message-delivery-support";
 import type { ThreadListEntry } from "#/lib/gmail/thread-list";
 import {
   getThreadQueryKey,
@@ -93,32 +96,29 @@ const useThreadIntentPrefetch = (
 ) => {
   const intentTimerRef = useRef<number | null>(null);
   const intentThreadIdRef = useRef<string | null>(null);
-  const handleThreadIntent = useCallback(
-    (threadId: string | null) => {
-      if (intentTimerRef.current !== null) {
-        window.clearTimeout(intentTimerRef.current);
-        intentTimerRef.current = null;
-      }
-      intentThreadIdRef.current = threadId;
-      if (threadId === null || threadId === "") {
+  const handleThreadIntent = (threadId: string | null) => {
+    if (intentTimerRef.current !== null) {
+      window.clearTimeout(intentTimerRef.current);
+      intentTimerRef.current = null;
+    }
+    intentThreadIdRef.current = threadId;
+    if (threadId === null || threadId === "") {
+      return;
+    }
+    intentTimerRef.current = window.setTimeout(() => {
+      intentTimerRef.current = null;
+      if (intentThreadIdRef.current !== threadId) {
         return;
       }
-      intentTimerRef.current = window.setTimeout(() => {
-        intentTimerRef.current = null;
-        if (intentThreadIdRef.current !== threadId) {
-          return;
-        }
-        const queryKey = getThreadQueryKey(mailboxId, threadId);
-        if (queryClient.isFetching({ exact: true, queryKey }) > 0) {
-          return;
-        }
-        void queryClient.prefetchQuery(
-          getThreadWithDetailsOptions(mailboxId, threadId)
-        );
-      }, 200);
-    },
-    [mailboxId, queryClient]
-  );
+      const queryKey = getThreadQueryKey(mailboxId, threadId);
+      if (queryClient.isFetching({ exact: true, queryKey }) > 0) {
+        return;
+      }
+      void queryClient.prefetchQuery(
+        getThreadWithDetailsOptions(mailboxId, threadId)
+      );
+    }, 200);
+  };
 
   useLayoutEffect(
     () => () => {
@@ -170,6 +170,42 @@ export const MessageListScrollPane = ({
     list.mailboxId,
     queryClient
   );
+
+  const deliveryMessageIds = useMemo(
+    () =>
+      threadedMessages
+        .filter((thread) =>
+          supportsMessageDelivery({
+            mailboxId: list.mailboxId,
+            mailboxProvider: list.mailboxProvider,
+            message: thread.anchorMessage,
+          })
+        )
+        .map((thread) => thread.anchorMessage.id),
+    [threadedMessages, list.mailboxId, list.mailboxProvider]
+  );
+  const { data: deliveryStatusMap } = useQuery(
+    getMessageListDeliveryOptions({
+      enabled: deliveryMessageIds.length > 0,
+      mailboxId: list.mailboxId,
+      messageIds: deliveryMessageIds,
+    })
+  );
+  const deliveryStatusByMessageId = useMemo(() => {
+    const statuses = new Map<
+      string,
+      ReturnType<typeof getAggregateDeliveryStatusFromStatuses>
+    >();
+    for (const [messageId, messageStatuses] of Object.entries(
+      deliveryStatusMap ?? {}
+    )) {
+      statuses.set(
+        messageId,
+        getAggregateDeliveryStatusFromStatuses(messageStatuses)
+      );
+    }
+    return statuses;
+  }, [deliveryStatusMap]);
 
   // Track when we first see each thread ID to identify new messages
   const seenTimestampsRef = useRef<Map<string, number> | null>(null);
@@ -336,6 +372,11 @@ export const MessageListScrollPane = ({
                 activeMailbox={list.activeMailbox}
                 className="absolute top-0 left-0 w-full"
                 dataIndex={virtualItem.index}
+                deliveryStatus={
+                  thread.anchorMessage.id === undefined
+                    ? undefined
+                    : deliveryStatusByMessageId.get(thread.anchorMessage.id)
+                }
                 gmailLabels={gmailLabels}
                 isNew={isNew}
                 key={thread.threadId}

@@ -11,13 +11,11 @@ import {
 } from "@quieter/ui/select";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { TextFieldInput } from "@quieter/ui/text-field";
-import { toast } from "@quieter/ui/toast";
 import { useState } from "react";
 
 import { MailboxAccessPill } from "#/features/mailbox/components/mailbox-access-pill";
 import type { MailboxGrantRole } from "#/features/mailbox/components/mailbox-access-pill";
 import {
-  getMutationErrorMessage,
   mailboxGrantRoleOptions,
   mailboxGrantSelectItems,
   parseMailboxGrantRole,
@@ -35,6 +33,7 @@ type ManagedMailboxDetails = {
   mailbox: {
     accessMode: "private" | "shared";
     autoLabelEnabled: boolean;
+    catchAllDomain: string | null;
     displayName: string | null;
     divisionId: string | null;
     includeApiSentMessages: boolean;
@@ -140,7 +139,7 @@ const ManagedMailboxIntelligenceRow = ({
   </SettingsSection>
 );
 
-const ManagedMailboxAccessSection = ({
+export const ManagedMailboxAccessSection = ({
   canMakePrivate,
   details,
   detailManagedMembers,
@@ -175,7 +174,7 @@ const ManagedMailboxAccessSection = ({
     (ownerItem) => ownerItem.value === selectedOwnerUserId
   )
     ? selectedOwnerUserId
-    : (ownerItems[0]?.value ?? "");
+    : "";
 
   return (
     <SettingsSection
@@ -254,7 +253,7 @@ const ManagedMailboxAccessSection = ({
               </div>
             </>
           )}
-          {!isPrivate && canMakePrivate && isSelectingOwner && (
+          {canMakePrivate && isSelectingOwner && (
             <>
               <div
                 className={cn(
@@ -296,7 +295,8 @@ const ManagedMailboxAccessSection = ({
                 )}
               >
                 <span className="min-w-0 flex-1 text-caption/5 text-muted-fg">
-                  Everyone else loses division-based access immediately.
+                  All existing access is removed. Only the selected owner keeps
+                  access.
                 </span>
                 <Button
                   disabled={effectiveOwnerUserId === "" || isAccessModePending}
@@ -311,7 +311,7 @@ const ManagedMailboxAccessSection = ({
                   size="sm"
                   type="button"
                 >
-                  Make private
+                  {isPrivate ? "Transfer ownership" : "Make private"}
                 </Button>
                 <Button
                   disabled={isAccessModePending}
@@ -327,7 +327,7 @@ const ManagedMailboxAccessSection = ({
               </div>
             </>
           )}
-          {!isPrivate && canMakePrivate && !isSelectingOwner && (
+          {canMakePrivate && !isSelectingOwner && (
             <div
               className={cn(
                 settingsSurfaceVariants({ variant: "insetRow" }),
@@ -336,10 +336,11 @@ const ManagedMailboxAccessSection = ({
             >
               <span className="min-w-0 flex-1">
                 <span className="block text-body text-fg">
-                  Make private mailbox
+                  {isPrivate ? "Transfer ownership" : "Make private mailbox"}
                 </span>
                 <span className="mt-0.5 block max-w-md text-caption/5 text-muted-fg">
-                  Assign one owner and remove all division access.
+                  Choose one owner and remove all existing direct and division
+                  access.
                 </span>
               </span>
               <Button
@@ -352,7 +353,7 @@ const ManagedMailboxAccessSection = ({
                 type="button"
                 variant="outline"
               >
-                Make private
+                {isPrivate ? "Transfer ownership" : "Make private"}
               </Button>
             </div>
           )}
@@ -414,6 +415,7 @@ export const ManagedMailboxDetailSettings = ({
   return (
     <>
       <ManagedMailboxAccessSection
+        key={mailboxId}
         canMakePrivate={canMakePrivate}
         details={details}
         detailManagedMembers={detailManagedMembers}
@@ -499,6 +501,28 @@ export const ManagedMailboxDetailSettings = ({
                 </Select>
               </div>
             )}
+            <div
+              className={cn(
+                settingsSurfaceVariants({ variant: "insetRow" }),
+                "gap-4"
+              )}
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block text-body text-fg">
+                  Whole-domain delivery
+                </span>
+                <span className="mt-0.5 block text-caption/5 text-muted-fg">
+                  {details.mailbox.catchAllDomain === null
+                    ? "Receives mail addressed to this inbox only."
+                    : `Also receives mail addressed to any address at ${details.mailbox.catchAllDomain}. Exact shared inboxes keep priority.`}
+                </span>
+              </span>
+              <span className="shrink-0 text-caption text-muted-fg">
+                {details.mailbox.catchAllDomain === null
+                  ? "Off"
+                  : `*@${details.mailbox.catchAllDomain}`}
+              </span>
+            </div>
             <label
               className={cn(
                 settingsSurfaceVariants({ variant: "insetRow" }),
@@ -653,57 +677,41 @@ export const ManagedMailboxDetailSettings = ({
                       {member.user.email}
                     </span>
                   </span>
-                  {isPrivate ? (
-                    <Switch
-                      aria-label={`${member.user.email} mailbox access`}
-                      checked={grant !== undefined}
-                      className="shrink-0"
-                      onCheckedChange={(hasAccess) => {
-                        onMemberGrantChange(
-                          member.userId,
-                          hasAccess ? "responder" : null
-                        );
-                      }}
+                  <Select
+                    items={mailboxGrantSelectItems}
+                    onValueChange={(value) => {
+                      if ((value ?? "") === "" || value === "none") {
+                        onMemberGrantChange(member.userId, null);
+                        return;
+                      }
+                      const role = parseMailboxGrantRole(value ?? "");
+                      if (role === null) {
+                        return;
+                      }
+                      onMemberGrantChange(member.userId, role);
+                    }}
+                    value={grant?.role ?? "none"}
+                  >
+                    <SelectTrigger
+                      aria-label={`${member.user.email} mailbox role`}
+                      size="sm"
+                      variant="ghost"
                     >
-                      <SwitchThumb />
-                    </Switch>
-                  ) : (
-                    <Select
-                      items={mailboxGrantSelectItems}
-                      onValueChange={(value) => {
-                        if ((value ?? "") === "" || value === "none") {
-                          onMemberGrantChange(member.userId, null);
-                          return;
-                        }
-                        const role = parseMailboxGrantRole(value ?? "");
-                        if (role === null) {
-                          return;
-                        }
-                        onMemberGrantChange(member.userId, role);
-                      }}
-                      value={grant?.role ?? "none"}
-                    >
-                      <SelectTrigger
-                        aria-label={`${member.user.email} mailbox role`}
-                        size="sm"
-                        variant="ghost"
-                      >
-                        {grant ? (
-                          <MailboxAccessPill role={grant.role} />
-                        ) : (
-                          <span className="text-muted-fg">No access</span>
-                        )}
-                      </SelectTrigger>
-                      <SelectContent align="end">
-                        <SelectItem value="none">No access</SelectItem>
-                        {mailboxGrantRoleOptions.map((role) => (
-                          <SelectItem key={role.value} value={role.value}>
-                            <MailboxAccessPill role={role.value} />
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
+                      {grant ? (
+                        <MailboxAccessPill role={grant.role} />
+                      ) : (
+                        <span className="text-muted-fg">No access</span>
+                      )}
+                    </SelectTrigger>
+                    <SelectContent align="end">
+                      <SelectItem value="none">No access</SelectItem>
+                      {mailboxGrantRoleOptions.map((role) => (
+                        <SelectItem key={role.value} value={role.value}>
+                          <MailboxAccessPill role={role.value} />
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               );
             })}
@@ -713,8 +721,3 @@ export const ManagedMailboxDetailSettings = ({
     </>
   );
 };
-
-export const showManagedMailboxMutationError =
-  (fallback: string) => (error: unknown) => {
-    toast.error(getMutationErrorMessage(error, fallback));
-  };

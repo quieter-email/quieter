@@ -15,6 +15,7 @@ import type {
 } from "@quieter/ai/chat-agent";
 import { CHAT_TITLE_MODEL, chatModelSchema } from "@quieter/ai/chat-models";
 import { summarizeAiUsage } from "@quieter/ai/chat-usage";
+import { generateChatTitle } from "@quieter/ai/generate-chat-title";
 import { createChatModel } from "@quieter/ai/openrouter";
 import { reportAiUsage } from "@quieter/billing";
 import { db } from "@quieter/database/client";
@@ -30,7 +31,7 @@ import {
   streamText,
   toUIMessageStream,
 } from "ai";
-import type { UIMessage } from "ai";
+import type { UIMessage, UIMessageChunk } from "ai";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
@@ -60,6 +61,7 @@ import { createLinearChatTools } from "./linear-tools";
 
 const CHAT_HISTORY_WINDOW_MESSAGES = 30;
 const CHAT_MAX_COMPLETION_TOKENS = 2048;
+const CHAT_MAX_STEPS = 6;
 const MAIL_TOOL_TIMEOUT_MS = 25_000;
 
 export class ChatRequestError extends Error {
@@ -679,8 +681,6 @@ const generateChatTitleInBackground = (input: {
 }) => {
   void (async () => {
     try {
-      const { generateChatTitle } =
-        await import("@quieter/ai/generate-chat-title");
       const title = await generateChatTitle({
         onUsage: (usage) => {
           void reportAiUsage({
@@ -780,33 +780,38 @@ export const createAiChatResponse = async (input: {
     userId: input.userId,
   });
 
+  const [existingChat] = await db
+    .select({
+      id: chatTable.id,
+      mailboxId: chatTable.mailboxId,
+      title: chatTable.title,
+      userId: chatTable.userId,
+    })
+    .from(chatTable)
+    .where(eq(chatTable.id, threadId))
+    .limit(1);
+  if (
+    existingChat !== undefined &&
+    (existingChat.mailboxId !== mailboxId ||
+      existingChat.userId !== input.userId)
+  ) {
+    throw new ChatRequestError(404, "Chat not found.");
+  }
+  if (validated.kind !== "message" && existingChat === undefined) {
+    throw new ChatRequestError(404, "Chat not found.");
+  }
+
   const rows = await loadRecentRows(threadId);
   const lastRow = rows.at(-1);
   let transcript: UIMessage[];
   let assistantMessageId: string;
   let assistantPosition: number;
   let continuingRowId: string | null = null;
+  let continuingOriginalParts: ChatMessagePart[] | null = null;
   let createdChat = false;
+  let replacedAssistantIds: string[] = [];
 
   if (validated.kind === "message") {
-    const [existingChat] = await db
-      .select({
-        id: chatTable.id,
-        mailboxId: chatTable.mailboxId,
-        title: chatTable.title,
-        userId: chatTable.userId,
-      })
-      .from(chatTable)
-      .where(eq(chatTable.id, threadId))
-      .limit(1);
-    if (
-      existingChat !== undefined &&
-      (existingChat.mailboxId !== mailboxId ||
-        existingChat.userId !== input.userId)
-    ) {
-      throw new ChatRequestError(404, "Chat not found.");
-    }
-
     const userParts: ChatMessagePart[] = [
       { text: validated.userMessage.text, type: "text" },
     ];
@@ -840,25 +845,44 @@ export const createAiChatResponse = async (input: {
       const now = new Date();
       if (existingChat === undefined) {
         createdChat = true;
-        await db.insert(chatTable).values({
-          createdAt: now,
-          id: threadId,
-          mailboxId,
-          title: createChatTitle(validated.userMessage.text),
-          updatedAt: now,
-          userId: input.userId,
-        });
       }
       const userPosition = (lastRow?.position ?? -1) + 1;
-      await db.insert(chatMessage).values({
-        chatId: threadId,
-        createdAt: now,
-        id: validated.userMessage.id,
-        parts: userParts,
-        position: userPosition,
-        role: "user",
-        userId: input.userId,
-      });
+      try {
+        await db.transaction(async (transaction) => {
+          if (existingChat === undefined) {
+            await transaction.insert(chatTable).values({
+              createdAt: now,
+              id: threadId,
+              mailboxId,
+              title: createChatTitle(validated.userMessage.text),
+              updatedAt: now,
+              userId: input.userId,
+            });
+          }
+          await transaction.insert(chatMessage).values({
+            chatId: threadId,
+            createdAt: now,
+            id: validated.userMessage.id,
+            parts: userParts,
+            position: userPosition,
+            role: "user",
+            userId: input.userId,
+          });
+        });
+      } catch (error) {
+        const errorCode =
+          error !== null && typeof error === "object" && "code" in error
+            ? error.code
+            : undefined;
+        if (errorCode === "23505") {
+          throw new ChatRequestError(
+            409,
+            "This chat changed while your message was sending. Retry it.",
+            { cause: error }
+          );
+        }
+        throw error;
+      }
       transcript = [
         ...toCanonicalTranscript(rows),
         {
@@ -880,7 +904,11 @@ export const createAiChatResponse = async (input: {
       });
     }
   } else if (validated.kind === "continue") {
-    if (lastRow === undefined || lastRow.role !== "assistant") {
+    if (
+      lastRow === undefined ||
+      lastRow.role !== "assistant" ||
+      lastRow.id !== validated.assistantMessageId
+    ) {
       throw new ChatRequestError(
         409,
         "This answer is no longer waiting for a response."
@@ -930,6 +958,7 @@ export const createAiChatResponse = async (input: {
     assistantMessageId = lastRow.id;
     assistantPosition = lastRow.position;
     continuingRowId = lastRow.id;
+    continuingOriginalParts = lastRow.parts;
   } else {
     if (lastRow === undefined) {
       throw new ChatRequestError(409, "There is no answer to retry yet.");
@@ -945,9 +974,7 @@ export const createAiChatResponse = async (input: {
       }
     }
     if (trailingAssistantIds.length > 0) {
-      await db
-        .delete(chatMessage)
-        .where(inArray(chatMessage.id, trailingAssistantIds));
+      replacedAssistantIds = trailingAssistantIds;
       rows.splice(rows.length - trailingAssistantIds.length);
     }
     const lastRemaining = rows.at(-1);
@@ -960,24 +987,6 @@ export const createAiChatResponse = async (input: {
   }
 
   const latestUserRequest = getLatestUserRequest(transcript);
-  const preparedContext = await prepareChatContext({
-    context: validated.context ?? {},
-    mailboxId,
-    memoryQuery: transcript
-      .filter((message) => message.role === "user")
-      .slice(-3)
-      .flatMap((message) =>
-        message.parts.flatMap((part) =>
-          part.type === "text" && typeof part.text === "string"
-            ? [part.text]
-            : []
-        )
-      )
-      .join(" ")
-      .slice(0, 4000),
-    userId: input.userId,
-  });
-
   const checkConnector = async (
     provider: typeof GOOGLE_CALENDAR_CONNECTOR_PROVIDER
   ) => {
@@ -988,9 +997,27 @@ export const createAiChatResponse = async (input: {
       return false;
     }
   };
-  const hasGoogleCalendarConnector = await checkConnector(
-    GOOGLE_CALENDAR_CONNECTOR_PROVIDER
-  );
+  const memoryQuery = transcript
+    .filter((message) => message.role === "user")
+    .slice(-3)
+    .flatMap((message) =>
+      message.parts.flatMap((part) =>
+        part.type === "text" && typeof part.text === "string" ? [part.text] : []
+      )
+    )
+    .join(" ")
+    .slice(0, 4000);
+  const [preparedContext, hasGoogleCalendarConnector, modelMessages] =
+    await Promise.all([
+      prepareChatContext({
+        context: validated.context ?? {},
+        mailboxId,
+        memoryQuery,
+        userId: input.userId,
+      }),
+      checkConnector(GOOGLE_CALENDAR_CONNECTOR_PROVIDER),
+      convertToModelMessages(transcript),
+    ]);
 
   const tools = {
     ...createGmailChatTools(
@@ -1040,7 +1067,6 @@ export const createAiChatResponse = async (input: {
 
   const usageId = crypto.randomUUID();
   let generationFailed = false;
-  const modelMessages = await convertToModelMessages(transcript);
   const result = streamText({
     abortSignal: input.request.signal,
     instructions: systemPrompt,
@@ -1082,10 +1108,7 @@ export const createAiChatResponse = async (input: {
         },
       },
     },
-    // The SDK defaults to a single step, which would end the turn right
-    // after the first tool round; the model may chain tools for as long as
-    // the request stays open.
-    stopWhen: isStepCount(Number.MAX_SAFE_INTEGER),
+    stopWhen: isStepCount(CHAT_MAX_STEPS),
     toolApproval: {
       ...(hasGoogleCalendarConnector
         ? { create_google_calendar_event: "user-approval" as const }
@@ -1097,31 +1120,47 @@ export const createAiChatResponse = async (input: {
     tools,
   });
 
-  return createUIMessageStreamResponse({
-    stream: toUIMessageStream({
-      generateMessageId: () => assistantMessageId,
-      onEnd: async ({ messages }) => {
-        // Stopping keeps whatever was generated so far; only a failed
-        // generation leaves nothing behind, since its partial output cannot
-        // be told apart from a broken answer.
-        if (generationFailed) {
-          return;
-        }
-        const responseMessage = messages.at(-1);
-        if (responseMessage?.role !== "assistant") {
-          return;
-        }
-        const hasContent = responseMessage.parts.some(
-          (part) => part.type !== "step-start"
-        );
-        if (!hasContent) {
-          return;
-        }
-        try {
-          const now = new Date();
-          const parts = responseMessage.parts as ChatMessagePart[];
+  let persistenceErrorText: string | null = null;
+  const responseStream = toUIMessageStream({
+    generateMessageId: () => assistantMessageId,
+    onEnd: async ({ messages }) => {
+      // Stopping keeps whatever was generated so far; only a failed
+      // generation leaves nothing behind, since its partial output cannot
+      // be told apart from a broken answer.
+      if (generationFailed) {
+        return;
+      }
+      const responseMessage = messages.at(-1);
+      if (responseMessage?.role !== "assistant") {
+        persistenceErrorText =
+          "The answer ended before it produced a response. Retry it.";
+        return;
+      }
+      const hasContent = responseMessage.parts.some(
+        (part) => part.type !== "step-start"
+      );
+      if (!hasContent) {
+        persistenceErrorText =
+          "The answer ended before it produced a response. Retry it.";
+        return;
+      }
+      try {
+        const now = new Date();
+        const parts = responseMessage.parts as ChatMessagePart[];
+        await db.transaction(async (transaction) => {
           if (continuingRowId === null) {
-            await db.insert(chatMessage).values({
+            if (replacedAssistantIds.length > 0) {
+              await transaction
+                .delete(chatMessage)
+                .where(
+                  and(
+                    eq(chatMessage.chatId, threadId),
+                    eq(chatMessage.userId, input.userId),
+                    inArray(chatMessage.id, replacedAssistantIds)
+                  )
+                );
+            }
+            await transaction.insert(chatMessage).values({
               chatId: threadId,
               createdAt: now,
               id: assistantMessageId,
@@ -1131,27 +1170,65 @@ export const createAiChatResponse = async (input: {
               userId: input.userId,
             });
           } else {
-            await db
+            const [updatedMessage] = await transaction
               .update(chatMessage)
               .set({ parts })
               .where(
                 and(
                   eq(chatMessage.id, continuingRowId),
-                  eq(chatMessage.chatId, threadId)
+                  eq(chatMessage.chatId, threadId),
+                  eq(chatMessage.userId, input.userId),
+                  eq(chatMessage.parts, continuingOriginalParts ?? [])
                 )
+              )
+              .returning({ id: chatMessage.id });
+            if (updatedMessage === undefined) {
+              throw new ChatRequestError(
+                409,
+                "This chat changed while the answer was being completed. Retry it."
               );
+            }
           }
-          await db
+          await transaction
             .update(chatTable)
             .set({ updatedAt: now })
-            .where(eq(chatTable.id, threadId));
-        } catch (error) {
+            .where(
+              and(
+                eq(chatTable.id, threadId),
+                eq(chatTable.mailboxId, mailboxId),
+                eq(chatTable.userId, input.userId)
+              )
+            );
+        });
+      } catch (error) {
+        if (!(error instanceof ChatRequestError)) {
           reportError(error, { operation: "chat:persist-assistant-turn" });
         }
+        persistenceErrorText =
+          "The answer could not be saved. Retry it before continuing.";
+      }
+    },
+    onError: () => "The answer could not be completed.",
+    originalMessages: transcript,
+    stream: result.stream,
+  });
+  const durableStream = responseStream.pipeThrough(
+    new TransformStream<UIMessageChunk, UIMessageChunk>({
+      flush(controller) {
+        if (persistenceErrorText !== null) {
+          controller.enqueue({
+            errorText: persistenceErrorText,
+            type: "error",
+          });
+        }
       },
-      onError: () => "The answer could not be completed.",
-      originalMessages: transcript,
-      stream: result.stream,
-    }),
+      transform(chunk, controller) {
+        controller.enqueue(chunk);
+      },
+    })
+  );
+
+  return createUIMessageStreamResponse({
+    stream: durableStream,
   });
 };

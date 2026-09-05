@@ -1,9 +1,4 @@
-import { toast } from "@quieter/ui/toast";
-
 import type { MailboxGrantRole } from "#/features/mailbox/components/mailbox-access-pill";
-
-export const getMutationErrorMessage = (error: unknown, fallback: string) =>
-  error instanceof Error ? error.message : fallback;
 
 export const getSettingsReturnTo = (mailboxId = "") => {
   if (mailboxId === "") {
@@ -19,10 +14,6 @@ export const parseMailboxGrantRole = (
     return value;
   }
   return null;
-};
-
-export const showMutationError = (fallback: string) => (error: unknown) => {
-  toast.error(getMutationErrorMessage(error, fallback));
 };
 
 export const mailboxGrantRoleOptions = [

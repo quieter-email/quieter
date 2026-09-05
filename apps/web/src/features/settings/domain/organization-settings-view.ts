@@ -5,6 +5,7 @@ export const ORGANIZATION_SETTINGS_VIEWS = [
   "domains",
   "api-keys",
   "suppressions",
+  "delivery",
   "billing",
   "danger",
 ] as const;

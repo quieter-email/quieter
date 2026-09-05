@@ -9,11 +9,18 @@ import type { IconSvgElement } from "@hugeicons/react";
 import { splitMailAddressList } from "@quieter/mail/compose/schema";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { cn } from "@quieter/ui/cn";
+import { Pill } from "@quieter/ui/pill";
 import { m, useReducedMotion } from "motion/react";
 import type { FocusEvent, KeyboardEvent, MouseEvent } from "react";
 import { useState } from "react";
 
 import { SenderAvatar } from "#/components/sender-avatar";
+import {
+  DELIVERY_PILL_TONES,
+  getDeliveryStatusLabel,
+  getDeliveryStatusTone,
+} from "#/features/message-delivery/domain/delivery-status";
+import type { MessageDeliveryStatus } from "#/features/message-delivery/domain/delivery-status";
 import { MessageLabels } from "#/features/message-labels/components/message-labels";
 import { createMailboxThreadMessageActionHandlers } from "#/features/message-thread/components/message-action-handlers";
 import { MessageActionsContextMenu } from "#/features/message-thread/components/message-actions";
@@ -103,6 +110,7 @@ const rowPressTransition = {
 
 type MessageRowProps = {
   activeMailbox: MessageListProps["activeMailbox"];
+  deliveryStatus?: MessageDeliveryStatus | null;
   gmailLabels: MailboxLabel[];
   mailboxActions: MessageListProps["mailboxActions"];
   mailboxId: string;
@@ -149,7 +157,7 @@ const MessageRowMetaBadge = ({
   title: string;
 }) => (
   <span
-    className="squircle inline-flex h-4.5 shrink-0 items-center gap-1 rounded-md border border-border bg-bg/75 px-1 text-micro font-medium text-muted-fg tabular-nums shadow-xs"
+    className="squircle inline-flex h-4.5 shrink-0 items-center gap-1 rounded-md border border-border bg-bg-raised/75 px-1 text-micro font-medium text-muted-fg tabular-nums shadow-xs"
     title={title}
   >
     <HugeiconsIcon aria-hidden className="size-3" icon={icon} />
@@ -248,7 +256,7 @@ const MessageRowSelectionButton = ({
         >
           <span
             className={cn(
-              "flex size-4.5 items-center justify-center rounded-[5px] border bg-bg text-transparent shadow-xs transition-[background-color,border-color,color] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out)",
+              "flex size-4.5 items-center justify-center rounded-[5px] border bg-bg-raised text-transparent shadow-xs transition-[background-color,border-color,color] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out)",
               {
                 "border-border": !isSelected,
                 "border-primary bg-primary text-primary-fg": isSelected,
@@ -275,6 +283,7 @@ const MessageRowSelectionButton = ({
 
 const MessageRowDetails = ({
   date,
+  deliveryStatus,
   gmailLabels,
   isDraftMailbox,
   metaTextClassName,
@@ -286,6 +295,7 @@ const MessageRowDetails = ({
   unread,
 }: {
   date: string;
+  deliveryStatus?: MessageDeliveryStatus | null;
   gmailLabels: MailboxLabel[];
   isDraftMailbox: boolean;
   metaTextClassName: string;
@@ -319,6 +329,13 @@ const MessageRowDetails = ({
         </p>
 
         <div className="flex shrink-0 items-center gap-2">
+          {deliveryStatus !== undefined && deliveryStatus !== null && (
+            <Pill
+              tone={DELIVERY_PILL_TONES[getDeliveryStatusTone(deliveryStatus)]}
+            >
+              {getDeliveryStatusLabel(deliveryStatus)}
+            </Pill>
+          )}
           {thread.attachmentCount > 0 && (
             <MessageRowMetaBadge
               icon={FileAttachmentIcon}
@@ -482,6 +499,7 @@ type MessageRowSurfaceProps = {
   activeMailbox: MessageListProps["activeMailbox"];
   anchorMessage: ThreadListEntry["anchorMessage"];
   date: string;
+  deliveryStatus?: MessageDeliveryStatus | null;
   gmailLabels: MailboxLabel[];
   isActionPending: boolean;
   isActive: boolean;
@@ -520,6 +538,7 @@ const MessageRowSurface = ({
   activeMailbox,
   anchorMessage,
   date,
+  deliveryStatus,
   gmailLabels,
   isActionPending,
   isActive,
@@ -674,6 +693,7 @@ const MessageRowSurface = ({
         >
           <MessageRowDetails
             date={date}
+            deliveryStatus={deliveryStatus}
             gmailLabels={gmailLabels}
             isDraftMailbox={isDraftMailbox}
             metaTextClassName={metaTextClassName}
@@ -692,6 +712,7 @@ const MessageRowSurface = ({
 
 const MessageRowContent = ({
   activeMailbox,
+  deliveryStatus,
   gmailLabels,
   mailboxActions,
   mailboxId,
@@ -750,6 +771,7 @@ const MessageRowContent = ({
       activeMailbox={activeMailbox}
       anchorMessage={anchorMessage}
       date={date}
+      deliveryStatus={deliveryStatus}
       gmailLabels={gmailLabels}
       isActionPending={isActionPending}
       isActive={isActive}
@@ -790,6 +812,7 @@ export const MessageRow = ({
   activeMailbox,
   className,
   dataIndex,
+  deliveryStatus,
   gmailLabels,
   mailboxActions,
   mailboxId,
@@ -813,6 +836,7 @@ export const MessageRow = ({
   const element = (
     <MessageRowContent
       activeMailbox={activeMailbox}
+      deliveryStatus={deliveryStatus}
       gmailLabels={gmailLabels}
       mailboxActions={mailboxActions}
       mailboxId={mailboxId}

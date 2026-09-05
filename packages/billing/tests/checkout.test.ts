@@ -2,10 +2,18 @@ import type { Checkout } from "@polar-sh/sdk/models/components/checkout.js";
 import type { Customer } from "@polar-sh/sdk/models/components/customer.js";
 import type * as DatabaseClientModule from "@quieter/database/client";
 import type * as ServerEnvModule from "@quieter/env/server";
-import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
+import {
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  test,
+  vi,
+} from "vite-plus/test";
 import { z } from "zod";
 
 import { createBillingCheckout } from "../src";
+import type * as EntitlementsModule from "../src/entitlements";
 import type * as PolarModule from "../src/polar";
 import type * as SubscriptionSyncModule from "../src/subscription-sync";
 
@@ -37,8 +45,7 @@ const polarState = vi.hoisted(() => ({
 
 const checkoutMocks = vi.hoisted(() => {
   const limit = vi.fn<() => Promise<{ name: string }[]>>();
-  const orderBy = vi.fn<() => Promise<unknown[]>>();
-  const where = vi.fn<() => { limit: typeof limit; orderBy: typeof orderBy }>();
+  const where = vi.fn<() => { limit: typeof limit }>();
   const from = vi.fn<() => { where: typeof where }>();
   const select = vi.fn<() => { from: typeof from }>();
 
@@ -46,14 +53,22 @@ const checkoutMocks = vi.hoisted(() => {
     createCheckout: vi.fn<PolarClient["checkouts"]["create"]>(),
     from,
     getExternalCustomer: vi.fn<PolarClient["customers"]["getExternal"]>(),
+    getSubscription:
+      vi.fn<typeof EntitlementsModule.getOrganizationSubscriptionRecord>(),
     limit,
     loadOrganization: vi.fn<() => Promise<{ name: string }[]>>(),
-    loadSubscriptions: vi.fn<() => Promise<unknown[]>>(),
-    orderBy,
     select,
     syncBillingSubscription:
       vi.fn<typeof SubscriptionSyncModule.syncBillingSubscription>(),
     where,
+  };
+});
+
+vi.mock(import("../src/entitlements"), async (importOriginal) => {
+  const actual = await importOriginal<typeof EntitlementsModule>();
+  return {
+    ...actual,
+    getOrganizationSubscriptionRecord: checkoutMocks.getSubscription,
   };
 });
 
@@ -115,11 +130,17 @@ vi.mock(import("../src/subscription-sync"), async (importOriginal) => {
 });
 
 describe("Polar checkout creation", () => {
+  beforeAll(async () => {
+    // The Polar SDK ships thousands of generated modules; the first lazy load
+    // inside a test can exceed the default timeout under load, so warm it here.
+    await import("@polar-sh/sdk");
+  }, 30_000);
+
   beforeEach(() => {
     vi.clearAllMocks();
+    checkoutMocks.getSubscription.mockResolvedValue(null);
     checkoutMocks.where.mockReturnValue({
       limit: checkoutMocks.limit,
-      orderBy: checkoutMocks.orderBy,
     });
     checkoutMocks.from.mockReturnValue({
       where: checkoutMocks.where,
@@ -133,9 +154,6 @@ describe("Polar checkout creation", () => {
     checkoutMocks.limit.mockImplementation(
       async () => await checkoutMocks.loadOrganization()
     );
-    checkoutMocks.orderBy.mockImplementation(
-      async () => await checkoutMocks.loadSubscriptions()
-    );
     checkoutMocks.getExternalCustomer.mockResolvedValue(
       polarCustomer("customer-1")
     );
@@ -144,17 +162,19 @@ describe("Polar checkout creation", () => {
     );
   });
 
-  test("creates a new checkout when the stored active subscription period has expired", async () => {
-    checkoutMocks.loadSubscriptions.mockResolvedValue([
-      {
-        currentPeriodEnd: new Date("2026-07-23T00:00:00.000Z"),
-        metadata: { quieterOrganizationId: "organization-1" },
-        plan: "pro",
-        providerSubscriptionId: "subscription-1",
-        status: "active",
-        updatedAt: new Date("2026-07-23T00:00:00.000Z"),
-      },
-    ]);
+  test("creates a new checkout after a confirmed cancellation", async () => {
+    checkoutMocks.getSubscription.mockResolvedValue({
+      cancelAtPeriodEnd: false,
+      currentPeriodEnd: new Date("2026-07-23T00:00:00.000Z"),
+      currentPeriodStart: new Date("2026-06-23T00:00:00.000Z"),
+      lastReconciliationFailureAt: null,
+      metadata: { quieterOrganizationId: "organization-1" },
+      plan: "pro",
+      provider: "polar",
+      providerSubscriptionId: "subscription-1",
+      status: "canceled",
+      updatedAt: new Date("2026-07-23T00:00:00.000Z"),
+    });
 
     await expect(
       createBillingCheckout({
@@ -170,5 +190,38 @@ describe("Polar checkout creation", () => {
     });
     const checkoutRequest = checkoutMocks.createCheckout.mock.calls.at(0)?.[0];
     expect(checkoutRequest?.successUrl).toContain("checkoutId={CHECKOUT_ID}");
+    expect(checkoutMocks.getSubscription).toHaveBeenCalledWith(
+      "organization-1",
+      { forceReconcile: true }
+    );
   });
+
+  test.each(["active", "past_due", "pending"] as const)(
+    "does not duplicate an unresolved %s subscription",
+    async (status) => {
+      checkoutMocks.getSubscription.mockResolvedValue({
+        cancelAtPeriodEnd: false,
+        currentPeriodEnd: new Date("2026-07-23T00:00:00.000Z"),
+        currentPeriodStart: new Date("2026-06-23T00:00:00.000Z"),
+        lastReconciliationFailureAt: null,
+        metadata: { quieterOrganizationId: "organization-1" },
+        plan: "pro",
+        provider: "polar",
+        providerSubscriptionId: "subscription-1",
+        status,
+        updatedAt: new Date(),
+      });
+      await expect(
+        createBillingCheckout({
+          customerEmail: "owner@example.com",
+          customerName: "Owner",
+          headers: new Headers({ origin: "https://quieter.email" }),
+          organizationId: "organization-1",
+          product: "pro",
+          userId: "user-1",
+        })
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      expect(checkoutMocks.createCheckout).not.toHaveBeenCalled();
+    }
+  );
 });

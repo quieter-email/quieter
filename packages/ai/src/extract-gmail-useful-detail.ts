@@ -97,6 +97,7 @@ export const extractMailUsefulDetail = async ({
     maxOutputTokens: 550,
     model,
     ...(onUsage === undefined ? {} : { onUsage }),
+    prioritizeLatency: true,
     prompt: JSON.stringify({
       currentTime: now.toISOString(),
       email: {

@@ -310,7 +310,7 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
         id: mailbox.id,
         includeApiSentMessages: mailbox.includeApiSentMessages,
         organizationId: mailbox.organizationId,
-        ownerUserId: mailbox.ownerUserId,
+        ownerUserId: mailbox.managedOwnerUserId,
         provider: mailbox.provider,
         signatureHtml: mailbox.signatureHtml,
         signatureText: mailbox.signatureText,
@@ -357,7 +357,7 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
         id: mailbox.id,
         includeApiSentMessages: mailbox.includeApiSentMessages,
         organizationId: mailbox.organizationId,
-        ownerUserId: mailbox.ownerUserId,
+        ownerUserId: mailbox.managedOwnerUserId,
         provider: mailbox.provider,
         signatureHtml: mailbox.signatureHtml,
         signatureText: mailbox.signatureText,
@@ -397,7 +397,7 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
         and(
           eq(mailbox.provider, MAILBOX_PROVIDER_MANAGED),
           // Private managed mailboxes are never reachable through divisions.
-          isNull(mailbox.ownerUserId),
+          isNull(mailbox.managedOwnerUserId),
           eq(organizationDivision.organizationId, mailbox.organizationId)
         )
       )
@@ -413,7 +413,7 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
         id: mailbox.id,
         includeApiSentMessages: mailbox.includeApiSentMessages,
         organizationId: mailbox.organizationId,
-        ownerUserId: mailbox.ownerUserId,
+        ownerUserId: mailbox.managedOwnerUserId,
         provider: mailbox.provider,
         signatureHtml: mailbox.signatureHtml,
         signatureText: mailbox.signatureText,
@@ -421,6 +421,13 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
         usefulDetailsEnabled: mailboxAutomationSettings.usefulDetailsEnabled,
       })
       .from(mailbox)
+      .innerJoin(
+        member,
+        and(
+          eq(member.userId, input.userId),
+          eq(member.organizationId, mailbox.organizationId)
+        )
+      )
       .leftJoin(
         mailboxAutomationSettings,
         eq(mailboxAutomationSettings.mailboxId, mailbox.id)
@@ -431,7 +438,7 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
       )
       .where(
         and(
-          eq(mailbox.ownerUserId, input.userId),
+          eq(mailbox.managedOwnerUserId, input.userId),
           eq(mailbox.provider, MAILBOX_PROVIDER_MANAGED)
         )
       )

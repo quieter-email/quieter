@@ -5,13 +5,26 @@ import { AI_MEMORY_REQUEST_MAX_LENGTH } from "@quieter/ai/ai-memory";
 import {
   chatModelSchema,
   defaultAutoLabelModel,
+  defaultSearchFilterModel,
   defaultUsefulDetailModel,
 } from "@quieter/ai/chat-models";
+import {
+  MAIL_SEARCH_QUERY_MAX_LENGTH,
+  parseMailSearchWithAi,
+} from "@quieter/ai/parse-mail-search";
+import type { ParsedMailSearch } from "@quieter/ai/parse-mail-search";
+import { reportAiUsage } from "@quieter/billing";
 import { db } from "@quieter/database/client";
 import { user, userAiContext } from "@quieter/database/schema";
+import {
+  isMailSearchFilterSupported,
+  normalizeStructuredMailSearch,
+} from "@quieter/mail/search";
+import { reportError } from "@quieter/observability";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
+import { assertCanUseAi } from "../ai-access";
 import {
   AI_MEMORY_LEARNING_PROMPT_MAX_LENGTH,
   exportMailboxAiMemory,
@@ -27,7 +40,7 @@ import {
   updateAiMemoryScopeConfig,
 } from "../ai-memory";
 import { assertAccessibleMailbox } from "../mailbox/service";
-import { protectedProcedure } from "./base";
+import { mailboxIdSchema, protectedProcedure } from "./base";
 
 const memoryTargetSchema = z
   .object({
@@ -53,6 +66,9 @@ const serializeModels = (
   record: typeof userAiContext.$inferSelect | undefined
 ) => {
   const autoLabelModel = chatModelSchema.safeParse(record?.autoLabelModel);
+  const searchFilterModel = chatModelSchema.safeParse(
+    record?.searchFilterModel
+  );
   const usefulDetailModel = chatModelSchema.safeParse(
     record?.usefulDetailModel
   );
@@ -60,6 +76,9 @@ const serializeModels = (
     autoLabel: autoLabelModel.success
       ? autoLabelModel.data
       : defaultAutoLabelModel,
+    searchFilter: searchFilterModel.success
+      ? searchFilterModel.data
+      : defaultSearchFilterModel,
     usefulDetail: usefulDetailModel.success
       ? usefulDetailModel.data
       : defaultUsefulDetailModel,
@@ -206,6 +225,87 @@ export const aiRouter = {
       }
     }),
 
+  interpretSearchQuery: protectedProcedure
+    .input(
+      z.object({
+        availableLabels: z
+          .array(z.string().trim().min(1).max(120))
+          .max(100)
+          .optional(),
+        mailboxId: mailboxIdSchema,
+        query: z.string().trim().min(1).max(MAIL_SEARCH_QUERY_MAX_LENGTH),
+      })
+    )
+    .handler(async ({ context, input }) => {
+      const mailbox = await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      await assertCanUseAi({
+        organizationId: mailbox.organizationId,
+        userId: context.userId,
+      });
+
+      const requestId = randomUUID();
+      const [modelRecord] = await db
+        .select({ searchFilterModel: userAiContext.searchFilterModel })
+        .from(userAiContext)
+        .where(eq(userAiContext.userId, context.userId))
+        .limit(1);
+      const modelPreference = chatModelSchema.safeParse(
+        modelRecord?.searchFilterModel
+      );
+      const searchModel = modelPreference.success
+        ? modelPreference.data
+        : defaultSearchFilterModel;
+
+      let parsed: ParsedMailSearch;
+      try {
+        parsed = await parseMailSearchWithAi({
+          allowedIsValues:
+            mailbox.provider === "managed"
+              ? undefined
+              : ["archived", "read", "unread"],
+          availableLabels: input.availableLabels ?? [],
+          model: searchModel,
+          onUsage: (usage) => {
+            void reportAiUsage({
+              chatId: null,
+              completionTokens: usage.completionTokens,
+              costUsd: usage.costUsd,
+              externalId: `search-interpret:${requestId}`,
+              mailboxId: mailbox.id,
+              model: searchModel,
+              promptTokens: usage.promptTokens,
+              promptTokensDetails: {
+                cacheWriteTokens: usage.cacheWriteTokens,
+                cachedTokens: usage.cachedTokens,
+              },
+              usageKind: "aiChat",
+              userId: context.userId,
+            }).catch((error: unknown) => {
+              reportError(error, {
+                operation: "ai:interpret-search-query:report-usage",
+              });
+            });
+          },
+          query: input.query,
+        });
+      } catch (error) {
+        reportError(error, { operation: "ai:interpret-search-query" });
+        throw new ORPCError("INTERNAL_SERVER_ERROR", {
+          message: "Could not interpret that search right now.",
+        });
+      }
+
+      return normalizeStructuredMailSearch({
+        filters: parsed.filters.filter((filter) =>
+          isMailSearchFilterSupported(mailbox.provider, filter)
+        ),
+        text: parsed.freeText,
+      });
+    }),
+
   resetPersonalization: protectedProcedure.handler(async ({ context }) => {
     await purgePersonalAiMemory(context.userId);
     return { deleted: true };
@@ -263,6 +363,7 @@ export const aiRouter = {
     .input(
       z.object({
         autoLabel: chatModelSchema,
+        searchFilter: chatModelSchema,
         usefulDetail: chatModelSchema,
       })
     )
@@ -276,6 +377,7 @@ export const aiRouter = {
           id: randomUUID(),
           lastEditedAt: now,
           markdown: "",
+          searchFilterModel: input.searchFilter,
           updatedAt: now,
           usefulDetailModel: input.usefulDetail,
           userId: context.userId,
@@ -283,6 +385,7 @@ export const aiRouter = {
         .onConflictDoUpdate({
           set: {
             autoLabelModel: input.autoLabel,
+            searchFilterModel: input.searchFilter,
             updatedAt: now,
             usefulDetailModel: input.usefulDetail,
           },

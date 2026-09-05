@@ -60,7 +60,7 @@ export const SettingsSearch = ({
           aria-expanded={isOpen}
           aria-label="Search settings"
           autoComplete="off"
-          className="h-9 bg-bg-surface pl-8 shadow-sm"
+          className="h-9 pl-8 shadow-sm"
           onBlur={() => {
             setIsFocused(false);
           }}

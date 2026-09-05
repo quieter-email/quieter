@@ -1,28 +1,17 @@
-import {
-  configureErrorReporter,
-  reportError as reportRuntimeError,
-} from "@quieter/observability";
+import { withRequestDatabaseClient } from "@quieter/database/client";
 import { createRemoteJWKSet, errors as joseErrors, jwtVerify } from "jose";
 import { z } from "zod";
 
 import { timingSafeEqual } from "./crypto-utils";
+import { processGmailQueueMessage } from "./queue-worker";
 import { RequestError } from "./request-error";
-
-export { reportError as reportWorkerError } from "@quieter/observability";
+import { readLinkedSecret, reportWorkerError } from "./worker-runtime";
 
 const GOOGLE_JWKS = createRemoteJWKSet(
   new URL("https://www.googleapis.com/oauth2/v3/certs")
 );
 const PUBSUB_BODY_LIMIT = 64 * 1024;
 const textEncoder = new TextEncoder();
-const runtimeReportError = globalThis as typeof globalThis & {
-  reportError?: (error: unknown) => void;
-};
-
-configureErrorReporter((error) => {
-  runtimeReportError.reportError?.(error);
-});
-
 const pubSubEnvelopeSchema = z.object({
   message: z.object({
     data: z.string().min(1),
@@ -138,9 +127,6 @@ export const verifyLiveSyncToken = async (token: string, secret: string) => {
   return payload.data;
 };
 
-export const readLinkedSecret = (value: string) =>
-  z.object({ value: z.string().min(1) }).parse(JSON.parse(value)).value;
-
 export const readBoundedJson = async (request: Request, limit: number) => {
   const declaredLength = Number(request.headers.get("content-length"));
   if (Number.isFinite(declaredLength) && declaredLength > limit) {
@@ -245,6 +231,23 @@ export const mailboxObject = (env: Env, emailAddress: string) => {
   return env.GmailLiveSyncMailbox.get(id);
 };
 
+const broadcastMailboxEvent = async (
+  env: Env,
+  emailAddress: string,
+  type: "mailbox-details-dirty" | "mailbox-dirty"
+) => {
+  const response = await mailboxObject(env, emailAddress).fetch(
+    "https://internal.quieter/broadcast",
+    {
+      body: JSON.stringify({ type }),
+      method: "POST",
+    }
+  );
+  if (!response.ok) {
+    throw new RequestError(503, "broadcast_response_error");
+  }
+};
+
 export const handleLiveMailboxRequest = async (request: Request, env: Env) => {
   const token = new URL(request.url).searchParams.get("token");
   if (token === null || token === "") {
@@ -258,7 +261,15 @@ export const handleLiveMailboxRequest = async (request: Request, env: Env) => {
   return await mailboxObject(env, payload.emailAddress).fetch(request);
 };
 
-export const handlePubSub = async (request: Request, env: Env) => {
+export const handlePubSub = async (
+  request: Request,
+  env: Env,
+  processNotification = async (message: unknown, bindings: Env) => {
+    await withRequestDatabaseClient(async () => {
+      await processGmailQueueMessage(message, bindings);
+    });
+  }
+) => {
   await verifyPubSubToken(request, env);
   const envelope = pubSubEnvelopeSchema.safeParse(
     await readBoundedJson(request, PUBSUB_BODY_LIMIT)
@@ -272,24 +283,28 @@ export const handlePubSub = async (request: Request, env: Env) => {
 
   const notification = parseGmailNotification(envelope.data.message.data);
   const emailAddress = notification.emailAddress.trim().toLowerCase();
-  const broadcastResponse = await mailboxObject(env, emailAddress).fetch(
-    "https://internal.quieter/broadcast",
-    {
-      body: JSON.stringify({ type: "mailbox-dirty" }),
-      method: "POST",
-    }
-  );
-  if (!broadcastResponse.ok) {
-    throw new Error("Durable Object broadcast failed.");
-  }
-
-  const queueMessage = {
+  const processorMessage = {
     emailAddress,
     historyId: notification.historyId,
     pubSubMessageId: envelope.data.message.messageId,
     type: "notification" as const,
   };
-  await env.GmailPsQueue.send(queueMessage);
+  const [processorResult, initialBroadcastResult] = await Promise.allSettled([
+    processNotification(processorMessage, env),
+    broadcastMailboxEvent(env, emailAddress, "mailbox-dirty"),
+  ]);
+
+  if (processorResult.status === "rejected") {
+    throw processorResult.reason;
+  }
+  if (initialBroadcastResult.status === "rejected") {
+    throw initialBroadcastResult.reason;
+  }
+
+  await Promise.all([
+    broadcastMailboxEvent(env, emailAddress, "mailbox-dirty"),
+    broadcastMailboxEvent(env, emailAddress, "mailbox-details-dirty"),
+  ]);
   return new Response(null, { status: 204 });
 };
 
@@ -298,7 +313,7 @@ export const requestErrorResponse = (error: unknown, route: string) => {
   const category =
     error instanceof RequestError ? error.category : "internal_error";
   if (status >= 500) {
-    reportRuntimeError(error, { category, route, status });
+    reportWorkerError(error, { category, route, status });
   }
   return Response.json({ error: "Request failed" }, { status });
 };

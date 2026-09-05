@@ -65,6 +65,7 @@ import {
   getManagedMessageDelivery,
   getManagedMessageInspector,
   getManagedThread,
+  listManagedMessageDeliveryStatuses,
   listManagedMessages,
   saveManagedDraft,
   sendManagedMailboxMessage,
@@ -79,6 +80,7 @@ import {
   getOrganizationApiMailDelivery,
   getOrganizationApiMailThread,
   isOrganizationApiMailboxId,
+  listOrganizationApiMailDeliveryStatuses,
   listOrganizationApiMailMessages,
   parseOrganizationApiMailboxId,
 } from "../organization-api-mail";
@@ -93,6 +95,7 @@ import {
 } from "./base";
 import { mailboxProcedures } from "./mail/mailboxes";
 import { managedOrganizationMailRouter } from "./mail/managed-organization";
+import { mailboxSavedViewRouter } from "./mail/saved-views";
 
 type MailActionMemoryInput = Parameters<typeof LearnAiMemoryFromMailAction>[0];
 type SentMessageMemoryInput = Parameters<
@@ -239,6 +242,7 @@ const recordGmailLabelFeedback = async (input: {
 
 export const mailRouter = {
   ...mailboxProcedures,
+  ...mailboxSavedViewRouter,
   ...managedOrganizationMailRouter,
   applyChanges: protectedProcedure
     .input(
@@ -689,6 +693,34 @@ export const mailRouter = {
           }));
         }
       );
+    }),
+  listMessageDeliveryStatuses: protectedProcedure
+    .route({ method: "GET" })
+    .input(
+      z.object({
+        mailboxId: mailboxIdSchema,
+        messageIds: z.array(z.string().trim().min(1)).max(100),
+      })
+    )
+    .handler(async ({ context, input }) => {
+      if (isOrganizationApiMailboxId(input.mailboxId)) {
+        return await listOrganizationApiMailDeliveryStatuses({
+          ...input,
+          userId: context.userId,
+        });
+      }
+
+      const selectedMailbox = await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      if (selectedMailbox.provider !== "managed") {
+        return {};
+      }
+      return await listManagedMessageDeliveryStatuses({
+        ...input,
+        userId: context.userId,
+      });
     }),
   listThreads: protectedProcedure
     .route({ method: "GET" })

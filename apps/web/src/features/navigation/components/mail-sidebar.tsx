@@ -39,10 +39,11 @@ import type {
 } from "react";
 
 import { WorkspaceDitherBackground } from "#/components/workspace-dither-background";
+import { loadComposeWorkspace } from "#/features/mailbox/components/mailbox-workspace/workspace-component-loaders";
 import type { MailboxWorkspaceView } from "#/features/mailbox/domain/mailbox-workspace-view";
+import { MailboxOrganizer } from "#/features/navigation/components/mailbox-organizer";
 import { MailboxSwitcherDropdown } from "#/features/navigation/components/mailbox-switcher";
 import type { MailboxSwitcherOrder } from "#/features/navigation/components/mailbox-switcher";
-import { ManagedMailboxOrganizer } from "#/features/navigation/components/managed-mailbox-organizer";
 import { SidebarLabelNav } from "#/features/navigation/components/sidebar-label-nav";
 import { SidebarMailboxNav } from "#/features/navigation/components/sidebar-mailbox-nav";
 import { SidebarNavItem } from "#/features/navigation/components/sidebar-nav-item";
@@ -401,6 +402,9 @@ const SidebarInboxSection = ({
             selectedMailboxProvider === "api"
           }
           onClick={handleComposeNewMail}
+          onFocus={() => void loadComposeWorkspace()}
+          onMouseEnter={() => void loadComposeWorkspace()}
+          onPointerDown={() => void loadComposeWorkspace()}
           type="button"
         >
           <HugeiconsIcon
@@ -419,15 +423,22 @@ const SidebarInboxSection = ({
           onSelectMailbox={handleSelectMailbox}
           selectedMailbox={selectedMailbox}
         />
-        {selectedMailboxProvider === "managed" && hasText(selectedMailboxId) ? (
-          <ManagedMailboxOrganizer
-            canManage={selectedMailboxGrantRole === "manager"}
+        {selectedMailboxProvider !== null &&
+        selectedMailboxProvider !== "api" &&
+        hasText(selectedMailboxId) ? (
+          <MailboxOrganizer
+            canManage={
+              selectedMailboxProvider === "gmail" ||
+              selectedMailboxGrantRole === "manager"
+            }
             mailboxId={selectedMailboxId}
             onSearch={(query) => {
               onSearch(query);
               onRequestClose?.();
             }}
             searchQuery={searchQuery}
+            supportsRules={selectedMailboxProvider === "managed"}
+            supportsSharedViews={selectedMailboxProvider === "managed"}
           />
         ) : null}
         {selectedMailboxProvider !== "api" && (
@@ -833,7 +844,7 @@ export const MailSidebar = ({
             <>
               <m.button
                 aria-label="Close sidebar"
-                className="fixed inset-0 z-40 bg-bg-elevated/50 backdrop-blur-[2px] lg:hidden"
+                className="fixed inset-0 z-40 bg-bg/50 backdrop-blur-[2px] lg:hidden"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
@@ -844,7 +855,7 @@ export const MailSidebar = ({
               />
               <m.aside
                 aria-label="Mail sidebar"
-                className="fixed inset-y-0 left-0 isolate z-50 flex w-[min(20rem,calc(100vw-2.5rem))] flex-col overflow-hidden bg-bg-elevated pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-fg shadow-2xl lg:hidden"
+                className="fixed inset-y-0 left-0 isolate z-50 flex w-[min(20rem,calc(100vw-2.5rem))] flex-col overflow-hidden bg-bg pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-fg shadow-2xl lg:hidden"
                 initial={
                   reducedMotion === true
                     ? { opacity: 0, transform: "translate3d(0, 0, 0)" }

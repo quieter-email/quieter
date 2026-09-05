@@ -322,7 +322,7 @@ export default defineConfig({
         // These loops preserve ordering or bounded concurrency across remote
         // mail operations; parallelizing them would change mailbox semantics.
         files: [
-          "apps/web/scripts/check-worker-memory-boundaries.ts",
+          "apps/web/scripts/check-worker-deployment-boundaries.ts",
           "packages/orpc/src/ai-memory.ts",
           "packages/orpc/src/gmail-sync/service.ts",
           "packages/orpc/src/mailbox-actions/executor.ts",

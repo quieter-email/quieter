@@ -70,7 +70,7 @@ export const SiteFooter = () => {
   }
 
   return (
-    <footer className="border-t border-border bg-bg py-6 text-body text-muted-fg">
+    <footer className="border-t border-border bg-bg-raised py-6 text-body text-muted-fg">
       <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-x-6 gap-y-2 px-6 md:px-8">
         <p>© 2026 quieter</p>
         <FooterLinks className="max-w-xl md:justify-end" />

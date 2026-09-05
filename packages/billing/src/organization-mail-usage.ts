@@ -249,8 +249,14 @@ const getPeriodUsageMicroCents = async (input: {
 }) => {
   const [usage] = await db
     .select({
-      billableCostMicroCents: sql<number>`coalesce(sum(${organizationMailUsageEvent.billableCostMicroCents}), 0)`,
-      sesCostMicroCents: sql<number>`coalesce(sum(${organizationMailUsageEvent.sesCostMicroCents}), 0)`,
+      billableCostMicroCents:
+        sql`coalesce(sum(${organizationMailUsageEvent.billableCostMicroCents}), 0)`.mapWith(
+          Number
+        ),
+      sesCostMicroCents:
+        sql`coalesce(sum(${organizationMailUsageEvent.sesCostMicroCents}), 0)`.mapWith(
+          Number
+        ),
     })
     .from(organizationMailUsageEvent)
     .where(

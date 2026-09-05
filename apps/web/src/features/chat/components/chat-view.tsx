@@ -7,7 +7,6 @@ import { BILLING_FEATURES } from "@quieter/billing/plans";
 import type { RouterOutputs } from "@quieter/orpc";
 import { Button } from "@quieter/ui/button";
 import { toast } from "@quieter/ui/toast";
-import * as Sentry from "@sentry/tanstackstart-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -38,12 +37,12 @@ import {
   getChatQueryKey,
   getChatsQueryKey,
 } from "#/lib/chat-query";
-import { isExpectedClientError } from "#/lib/client-error-reporting";
 import { connectorsQueryOptions } from "#/lib/connectors-query";
+import { toastError } from "#/lib/error-toast";
 import { orpc, rpc } from "#/lib/orpc";
 import { shouldRetryOrpcError } from "#/lib/orpc-errors";
 
-import { toInitialMessages } from "../domain/chat-messages";
+import { getChatRetryAction, toInitialMessages } from "../domain/chat-messages";
 import type { ChatToolApproval } from "../domain/chat-tools";
 import { getToolName, isChatToolPart } from "../domain/chat-tools";
 import { toChatComposeMessageInput } from "../domain/compose-proposal";
@@ -57,38 +56,6 @@ const MAX_TRANSCRIPTION_AUDIO_DURATION_MS = 60_000;
 const MAX_TRANSCRIPTION_AUDIO_BASE64_LENGTH = 14_000_000;
 
 type ChatData = RouterOutputs["chat"]["get"];
-
-// Workers extend fetch with preconnect for subrequest connection warming; the
-// Node runtime leaves it unset, so it stays optional here.
-type PreconnectableFetch = typeof fetch & {
-  preconnect?: (url: string | URL) => void;
-};
-const workersFetch: PreconnectableFetch = fetch;
-
-// The transport reports error bodies through statusText so the composer can
-// show the server's reason (for example a 409 for a busy chat).
-const fetchChat = Object.assign(
-  async (
-    input: Parameters<typeof fetch>[0],
-    init?: Parameters<typeof fetch>[1]
-  ) => {
-    const response = await fetch(input, init);
-    if (response.ok) {
-      return response;
-    }
-    const responseText = await response.clone().text();
-    const message = responseText.trim();
-    if (message === "") {
-      return response;
-    }
-    return new Response(response.body, {
-      headers: response.headers,
-      status: response.status,
-      statusText: message,
-    });
-  },
-  { preconnect: workersFetch.preconnect }
-);
 
 const PlanRequired = ({
   organizationId,
@@ -143,6 +110,10 @@ const ChatSession = ({
 }) => {
   const queryClient = useQueryClient();
   const isCurrentSessionRef = useRef(true);
+  const composeResolutionRef = useRef(false);
+  const retryPendingRef = useRef(false);
+  const submitPendingRef = useRef(false);
+  const reconciledChatRef = useRef(chatData);
   const defaultModel = useDefaultChatModel();
   const threadId = chatId ?? draftChatKey;
   const [input, setInput] = useState("");
@@ -168,7 +139,6 @@ const ChatSession = ({
     () =>
       new DefaultChatTransport({
         api: CHAT_API_ENDPOINT,
-        fetch: fetchChat,
         prepareSendMessagesRequest: ({ messages, trigger }) => ({
           body: {
             category: activeMailbox,
@@ -185,20 +155,18 @@ const ChatSession = ({
   );
 
   const synchronizeChat = async () => {
-    await Promise.all([
+    const [chatResult] = await Promise.allSettled([
+      queryClient.fetchQuery({
+        ...chatQueryOptions(mailboxId, threadId),
+        staleTime: 0,
+      }),
       queryClient.invalidateQueries({ queryKey: USER_BILLING_QUERY_KEY }),
       queryClient.invalidateQueries({ queryKey: getChatsQueryKey(mailboxId) }),
-      queryClient.invalidateQueries({
-        queryKey: getChatQueryKey(mailboxId, threadId),
-      }),
     ]);
-    let shouldSelectDraft = false;
-    try {
-      await queryClient.fetchQuery(chatQueryOptions(mailboxId, threadId));
-      shouldSelectDraft = true;
-    } catch (fetchError) {
-      shouldSelectDraft = shouldRetryOrpcError(0, fetchError);
-    }
+    const shouldSelectDraft =
+      chatResult?.status === "fulfilled" ||
+      (chatResult?.status === "rejected" &&
+        shouldRetryOrpcError(0, chatResult.reason));
     if (chatId === null && shouldSelectDraft && isCurrentSessionRef.current) {
       onChatIdChange(threadId);
     }
@@ -222,6 +190,7 @@ const ChatSession = ({
       void synchronizeChat();
     },
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
+    throttle: 50,
     transport,
   });
 
@@ -291,118 +260,187 @@ const ChatSession = ({
   // Reconcile with the server copy whenever a fresh one arrives while this
   // session is idle (after sends, retries, or external chat changes).
   useEffect(() => {
-    if (isStreaming || chatData === undefined) {
+    if (
+      status !== "ready" ||
+      isRetrying ||
+      chatData === undefined ||
+      chatData === reconciledChatRef.current
+    ) {
       return;
     }
+    reconciledChatRef.current = chatData;
     setMessages(toInitialMessages(chatData.messages));
-  }, [chatData, isStreaming, setMessages]);
+  }, [chatData, isRetrying, setMessages, status]);
 
   const resolveCompose = async (
     toolCallId: string,
     action: "decline" | "save_draft" | "send",
     values?: ComposeValues
   ) => {
-    setIsResolvingCompose(true);
-    let output: ComposeEmailResult;
-    try {
-      if (action === "decline" || values === undefined) {
-        output = { status: "declined" };
-      } else {
-        const composeInput = toChatComposeMessageInput(values);
-        if (action === "save_draft") {
-          const draft = await rpc.mail.saveDraft({
-            draft: composeInput,
-            mailboxId,
-          });
-          output = {
-            draftId: draft.draftId,
-            ...(draft.messageId === null ? {} : { messageId: draft.messageId }),
-            status: "draft_saved",
-            subject: values.subject,
-            to: values.to,
-          };
-        } else {
-          const sent = await rpc.mail.sendMessage({
-            mailboxId,
-            message: composeInput,
-          });
-          output = {
-            messageId: sent.id,
-            status: "sent",
-            subject: values.subject,
-            ...(sent.threadId === undefined ? {} : { threadId: sent.threadId }),
-            to: values.to,
-          };
-        }
-      }
-    } catch (composeError) {
-      // Authorization and user-state failures are expected; anything else is a
-      // defect worth reporting.
-      if (!isExpectedClientError(composeError)) {
-        const errorStatus =
-          typeof composeError === "object" &&
-          composeError !== null &&
-          "status" in composeError
-            ? composeError.status
-            : undefined;
-        if (!(typeof errorStatus === "number" && errorStatus < 500)) {
-          Sentry.captureException(composeError, {
-            tags: { boundary: "chat-compose" },
-          });
-        }
-      }
-      const errorText =
-        action === "save_draft"
-          ? "The draft could not be saved."
-          : "The email could not be sent.";
-      toast.error(errorText);
-      addToolOutput({
-        errorText,
-        state: "output-error",
-        tool: "compose_email",
-        toolCallId,
-      });
-      setIsResolvingCompose(false);
-      await sendMessage();
+    if (composeResolutionRef.current) {
       return;
     }
-    addToolOutput({ output, tool: "compose_email", toolCallId });
+    composeResolutionRef.current = true;
+    setIsResolvingCompose(true);
+    try {
+      let output: ComposeEmailResult | undefined;
+      try {
+        if (action === "decline" || values === undefined) {
+          output = { status: "declined" };
+        } else {
+          const composeInput = toChatComposeMessageInput(values);
+          if (action === "save_draft") {
+            const draft = await rpc.mail.saveDraft({
+              draft: composeInput,
+              mailboxId,
+            });
+            output = {
+              draftId: draft.draftId,
+              ...(draft.messageId === null
+                ? {}
+                : { messageId: draft.messageId }),
+              status: "draft_saved",
+              subject: values.subject,
+              to: values.to,
+            };
+          } else {
+            const sent = await rpc.mail.sendMessage({
+              mailboxId,
+              message: composeInput,
+            });
+            output = {
+              messageId: sent.id,
+              status: "sent",
+              subject: values.subject,
+              ...(sent.threadId === undefined
+                ? {}
+                : { threadId: sent.threadId }),
+              to: values.to,
+            };
+          }
+        }
+      } catch (composeError) {
+        const errorText =
+          action === "save_draft"
+            ? "The draft could not be saved."
+            : "The email could not be sent.";
+        toastError(composeError, {
+          boundary: "chat-compose",
+          fallback: errorText,
+        });
+        addToolOutput({
+          errorText,
+          state: "output-error",
+          tool: "compose_email",
+          toolCallId,
+        });
+      }
+      if (output !== undefined) {
+        addToolOutput({ output, tool: "compose_email", toolCallId });
+      }
+      await sendMessage();
+    } catch (continuationError) {
+      toastError(continuationError, { boundary: "chat-compose-continuation" });
+    }
+    composeResolutionRef.current = false;
     setIsResolvingCompose(false);
-    await sendMessage();
   };
 
   const submitPrompt = async () => {
     const prompt = input.trim();
-    if (!prompt || disabled) {
+    if (!prompt || disabled || submitPendingRef.current) {
       return;
     }
 
-    setInput("");
+    submitPendingRef.current = true;
     try {
+      clearError();
+      setInput("");
       await sendMessage({ text: prompt });
     } catch (sendError) {
-      if (
-        isCurrentSessionRef.current &&
-        !(sendError instanceof Error && sendError.name === "AbortError")
-      ) {
-        setInput((current) => current || prompt);
-      }
+      setInput((current) => current || prompt);
+      toastError(sendError, { boundary: "chat-submit" });
     }
-    await synchronizeChat();
+    submitPendingRef.current = false;
   };
 
   const retryLastTurn = async () => {
-    if (isRetrying || isStreaming) {
+    if (isRetrying || isStreaming || retryPendingRef.current) {
       return;
     }
+    retryPendingRef.current = true;
     setIsRetrying(true);
     try {
-      clearError();
-      await regenerate();
-      await synchronizeChat();
-    } finally {
-      setIsRetrying(false);
+      let retryFailure: unknown;
+      try {
+        const persistedChat = await rpc.chat.get({
+          chatId: threadId,
+          mailboxId,
+        });
+        const persistedMessages = toInitialMessages(persistedChat.messages);
+        const retryAction = getChatRetryAction(messages, persistedMessages);
+        if (retryAction.type === "resubmit-user") {
+          clearError();
+          await sendMessage({
+            messageId: retryAction.messageId,
+            text: retryAction.text,
+          });
+        } else if (retryAction.type === "unavailable") {
+          toast.error(
+            "The answer could not be retried. Send your message again."
+          );
+        } else {
+          clearError();
+          queryClient.setQueryData(
+            getChatQueryKey(mailboxId, threadId),
+            persistedChat
+          );
+          setMessages(persistedMessages);
+          if (retryAction.type === "regenerate") {
+            await regenerate();
+          }
+        }
+      } catch (retryError) {
+        retryFailure = retryError;
+      }
+      if (retryFailure !== undefined) {
+        const errorCode =
+          retryFailure !== null &&
+          typeof retryFailure === "object" &&
+          "code" in retryFailure
+            ? retryFailure.code
+            : undefined;
+        const errorStatus =
+          retryFailure !== null &&
+          typeof retryFailure === "object" &&
+          "status" in retryFailure
+            ? retryFailure.status
+            : undefined;
+        if (errorCode !== "NOT_FOUND" && errorStatus !== 404) {
+          toastError(retryFailure, {
+            boundary: "chat-retry",
+            fallback: "The answer could not be retried. Try again.",
+          });
+        } else {
+          const retryAction = getChatRetryAction(messages, []);
+          if (retryAction.type === "resubmit-user") {
+            clearError();
+            await sendMessage({
+              messageId: retryAction.messageId,
+              text: retryAction.text,
+            });
+          } else {
+            toast.error(
+              "The answer could not be retried. Send your message again."
+            );
+          }
+        }
+      }
+    } catch (retryError) {
+      toastError(retryError, { boundary: "chat-retry" });
     }
+    retryPendingRef.current = false;
+    setIsRetrying(false);
   };
 
   const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {

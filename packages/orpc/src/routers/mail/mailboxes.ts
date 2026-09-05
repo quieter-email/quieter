@@ -62,6 +62,7 @@ export const mailboxProcedures = {
         includeApiSentMessages: z.boolean().optional(),
         organizationId: z.string().trim().min(1),
         ownerUserId: z.string().trim().min(1).nullish(),
+        receiveWholeDomain: z.boolean().optional(),
       })
     )
     .handler(

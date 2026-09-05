@@ -112,7 +112,7 @@ export const getAuthorizedManagedMailbox = async (input: {
       emailAddress: mailbox.emailAddress,
       id: mailbox.id,
       organizationId: mailbox.organizationId,
-      ownerUserId: mailbox.ownerUserId,
+      ownerUserId: mailbox.managedOwnerUserId,
       provider: mailbox.provider,
       role: mailboxGrant.role,
     })
@@ -140,7 +140,7 @@ export const getAuthorizedManagedMailbox = async (input: {
       emailAddress: mailbox.emailAddress,
       id: mailbox.id,
       organizationId: mailbox.organizationId,
-      ownerUserId: mailbox.ownerUserId,
+      ownerUserId: mailbox.managedOwnerUserId,
       provider: mailbox.provider,
       role: mailboxDivisionGrant.role,
     })
@@ -168,7 +168,7 @@ export const getAuthorizedManagedMailbox = async (input: {
         eq(mailbox.provider, MAILBOX_PROVIDER_MANAGED),
         // Private managed mailboxes never grant access through divisions;
         // organization membership alone must never reveal the mailbox.
-        isNull(mailbox.ownerUserId),
+        isNull(mailbox.managedOwnerUserId),
         eq(organizationDivision.organizationId, mailbox.organizationId)
       )
     );
@@ -195,14 +195,21 @@ export const getAuthorizedManagedMailbox = async (input: {
       emailAddress: mailbox.emailAddress,
       id: mailbox.id,
       organizationId: mailbox.organizationId,
-      ownerUserId: mailbox.ownerUserId,
+      ownerUserId: mailbox.managedOwnerUserId,
       provider: mailbox.provider,
     })
     .from(mailbox)
+    .innerJoin(
+      member,
+      and(
+        eq(member.userId, input.userId),
+        eq(member.organizationId, mailbox.organizationId)
+      )
+    )
     .where(
       and(
         eq(mailbox.id, input.mailboxId),
-        eq(mailbox.ownerUserId, input.userId),
+        eq(mailbox.managedOwnerUserId, input.userId),
         eq(mailbox.provider, MAILBOX_PROVIDER_MANAGED)
       )
     )

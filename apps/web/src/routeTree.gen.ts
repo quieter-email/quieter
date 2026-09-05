@@ -10,7 +10,9 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AboutRouteImport } from './routes/about'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as ContactRouteImport } from './routes/contact'
 import { Route as CookiesRouteImport } from './routes/cookies'
 import { Route as DesignSystemRouteImport } from './routes/design-system'
 import { Route as HomeRouteImport } from './routes/home'
@@ -35,17 +37,28 @@ import { Route as ApiV1SuppressionsRouteImport } from './routes/api/v1/suppressi
 import { Route as ApiDomainConnectTemplatesServiceIdRouteImport } from './routes/api/domain-connect.templates.$serviceId'
 import { Route as ApiInternalGmailCredentialsRotateRouteImport } from './routes/api.internal.gmail-credentials.rotate'
 import { Route as ApiV1MessagesMessageIdRouteImport } from './routes/api/v1/messages.$messageId'
+import { Route as ApiV1OTokenRouteImport } from './routes/api/v1/o.$token'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any).lazy(() => import('./routes/index.lazy').then((d) => d.Route))
+const AboutRoute = AboutRouteImport.update({
+  id: '/about',
+  path: '/about',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any).lazy(() => import('./routes/auth.lazy').then((d) => d.Route))
+const ContactRoute = ContactRouteImport.update({
+  id: '/contact',
+  path: '/contact',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CookiesRoute = CookiesRouteImport.update({
   id: '/cookies',
   path: '/cookies',
@@ -169,10 +182,17 @@ const ApiV1MessagesMessageIdRoute = ApiV1MessagesMessageIdRouteImport.update({
   path: '/api/v1/messages/$messageId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1OTokenRoute = ApiV1OTokenRouteImport.update({
+  id: '/api/v1/o/$token',
+  path: '/api/v1/o/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
   '/auth': typeof AuthRoute
+  '/contact': typeof ContactRoute
   '/cookies': typeof CookiesRoute
   '/design-system': typeof DesignSystemRoute
   '/home': typeof HomeRoute
@@ -197,10 +217,13 @@ export interface FileRoutesByFullPath {
   '/api/domain-connect/templates/$serviceId': typeof ApiDomainConnectTemplatesServiceIdRoute
   '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
   '/api/v1/messages/$messageId': typeof ApiV1MessagesMessageIdRoute
+  '/api/v1/o/$token': typeof ApiV1OTokenRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
   '/auth': typeof AuthRoute
+  '/contact': typeof ContactRoute
   '/cookies': typeof CookiesRoute
   '/design-system': typeof DesignSystemRoute
   '/home': typeof HomeRoute
@@ -225,11 +248,14 @@ export interface FileRoutesByTo {
   '/api/domain-connect/templates/$serviceId': typeof ApiDomainConnectTemplatesServiceIdRoute
   '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
   '/api/v1/messages/$messageId': typeof ApiV1MessagesMessageIdRoute
+  '/api/v1/o/$token': typeof ApiV1OTokenRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
   '/auth': typeof AuthRoute
+  '/contact': typeof ContactRoute
   '/cookies': typeof CookiesRoute
   '/design-system': typeof DesignSystemRoute
   '/home': typeof HomeRoute
@@ -254,12 +280,15 @@ export interface FileRoutesById {
   '/api/domain-connect/templates/$serviceId': typeof ApiDomainConnectTemplatesServiceIdRoute
   '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
   '/api/v1/messages/$messageId': typeof ApiV1MessagesMessageIdRoute
+  '/api/v1/o/$token': typeof ApiV1OTokenRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/about'
     | '/auth'
+    | '/contact'
     | '/cookies'
     | '/design-system'
     | '/home'
@@ -284,10 +313,13 @@ export interface FileRouteTypes {
     | '/api/domain-connect/templates/$serviceId'
     | '/api/internal/gmail-credentials/rotate'
     | '/api/v1/messages/$messageId'
+    | '/api/v1/o/$token'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/about'
     | '/auth'
+    | '/contact'
     | '/cookies'
     | '/design-system'
     | '/home'
@@ -312,10 +344,13 @@ export interface FileRouteTypes {
     | '/api/domain-connect/templates/$serviceId'
     | '/api/internal/gmail-credentials/rotate'
     | '/api/v1/messages/$messageId'
+    | '/api/v1/o/$token'
   id:
     | '__root__'
     | '/'
+    | '/about'
     | '/auth'
+    | '/contact'
     | '/cookies'
     | '/design-system'
     | '/home'
@@ -340,11 +375,14 @@ export interface FileRouteTypes {
     | '/api/domain-connect/templates/$serviceId'
     | '/api/internal/gmail-credentials/rotate'
     | '/api/v1/messages/$messageId'
+    | '/api/v1/o/$token'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AboutRoute: typeof AboutRoute
   AuthRoute: typeof AuthRoute
+  ContactRoute: typeof ContactRoute
   CookiesRoute: typeof CookiesRoute
   DesignSystemRoute: typeof DesignSystemRoute
   HomeRoute: typeof HomeRoute
@@ -369,6 +407,7 @@ export interface RootRouteChildren {
   ApiDomainConnectTemplatesServiceIdRoute: typeof ApiDomainConnectTemplatesServiceIdRoute
   ApiInternalGmailCredentialsRotateRoute: typeof ApiInternalGmailCredentialsRotateRoute
   ApiV1MessagesMessageIdRoute: typeof ApiV1MessagesMessageIdRoute
+  ApiV1OTokenRoute: typeof ApiV1OTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -380,11 +419,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/about': {
+      id: '/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof AboutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/auth': {
       id: '/auth'
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/contact': {
+      id: '/contact'
+      path: '/contact'
+      fullPath: '/contact'
+      preLoaderRoute: typeof ContactRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/cookies': {
@@ -555,12 +608,21 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1MessagesMessageIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/o/$token': {
+      id: '/api/v1/o/$token'
+      path: '/api/v1/o/$token'
+      fullPath: '/api/v1/o/$token'
+      preLoaderRoute: typeof ApiV1OTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AboutRoute: AboutRoute,
   AuthRoute: AuthRoute,
+  ContactRoute: ContactRoute,
   CookiesRoute: CookiesRoute,
   DesignSystemRoute: DesignSystemRoute,
   HomeRoute: HomeRoute,
@@ -587,6 +649,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiInternalGmailCredentialsRotateRoute:
     ApiInternalGmailCredentialsRotateRoute,
   ApiV1MessagesMessageIdRoute: ApiV1MessagesMessageIdRoute,
+  ApiV1OTokenRoute: ApiV1OTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
