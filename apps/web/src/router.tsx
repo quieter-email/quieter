@@ -5,7 +5,7 @@ import { RootErrorComponent } from "./components/root/root-error-component";
 import { RootNotFoundComponent } from "./components/root/root-not-found-component";
 import { clientEnv } from "./env";
 import { shouldDiscardClientError } from "./lib/client-error-reporting";
-import { installStaleDeploymentRecovery } from "./lib/stale-deployment";
+import { handleDeploymentPreloadError } from "./lib/stale-deployment";
 import { routeTree } from "./routeTree.gen";
 
 const isSentryEnabled =
@@ -25,7 +25,7 @@ export const getRouter = () => {
   });
 
   if (!router.isServer) {
-    installStaleDeploymentRecovery();
+    window.addEventListener("vite:preloadError", handleDeploymentPreloadError);
   }
 
   if (!router.isServer && isSentryEnabled) {

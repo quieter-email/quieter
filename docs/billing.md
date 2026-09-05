@@ -6,6 +6,8 @@ Production configuration, secrets, migrations, and deployments require explicit 
 
 Production SST state and secrets are in AWS `eu-central-1`. The production provider is pinned to that region in `sst.config.ts`; local development can still use a different region. A successful secret read from another region does not verify production configuration. For older worktrees on this workstation, use `quieter-sst -Stage production` from the shared PowerShell tooling to select the correct region.
 
+Every runtime that reads billing uses `billingEnvironment` from `infra/runtime.ts`, including the web app, Gmail workers, action worker, and receipt processor. Production always sets `QUIETER_DEPLOYMENT_ENV=production` and `POLAR_SANDBOX=false`. Do not infer the billing environment from a Worker's `NODE_ENV`. The September 5 Sentry investigation found production Gmail workers calling the sandbox API with a production token. Their failed reconciliations also blocked the web billing overview through the shared subscription record. After deploying the corrected environment to all writers, allow the five-minute reconciliation retry window and verify both billing and Gmail sync recover.
+
 In the production Polar organization, inspect the existing endpoint before creating another one. Wait for the endpoint list to finish loading; its initial empty state is not evidence that no endpoint exists. Configure the endpoint for `https://quieter.email/api/auth/polar/webhooks`. Subscribe to:
 
 - `subscription.created`

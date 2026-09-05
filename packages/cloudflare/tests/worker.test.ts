@@ -429,7 +429,20 @@ describe("Cloudflare worker runtime", () => {
         });
       await expect(
         processGmailQueueMessage(body, env, { processNotification })
-      ).rejects.toThrow("already being processed");
+      ).resolves.toStrictEqual({ retry: true });
+    });
+
+    test("retries maintenance while the mailbox is busy", async () => {
+      const maintainMailbox = vi
+        .fn<typeof maintainGmailPubSubMailbox>()
+        .mockResolvedValue({ status: "busy" });
+      await expect(
+        processGmailQueueMessage(
+          { emailAddress, mailboxId, type: "maintenance" },
+          env,
+          { maintainMailbox }
+        )
+      ).resolves.toStrictEqual({ retry: true });
     });
 
     test("processes maintenance jobs with the configured topic", async () => {

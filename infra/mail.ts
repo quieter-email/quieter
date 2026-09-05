@@ -233,9 +233,7 @@ export const createMailResources = async (
     environment: {
       DATABASE_URL: context.databaseUrl,
       POLAR_ACCESS_TOKEN: context.polarAccessToken,
-      POLAR_ORGANIZATION_ID: context.polarOrganizationId,
-      POLAR_SANDBOX: context.polarSandbox,
-      QUIETER_DEPLOYMENT_ENV: deploymentEnvironment,
+      ...context.billingEnvironment,
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
       ...context.r2Environment,
       ...context.sentryEnvironment,
