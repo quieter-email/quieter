@@ -57,9 +57,6 @@ export const readLimitedJsonRequest = async (
     text += decoder.decode();
     return JSON.parse(text) as unknown;
   } catch (error) {
-    if (error instanceof LimitedJsonRequestError) {
-      throw error;
-    }
     throw new LimitedJsonRequestError(400, "Invalid chat request body.", {
       cause: error,
     });

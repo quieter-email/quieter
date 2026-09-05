@@ -904,7 +904,11 @@ export const createAiChatResponse = async (input: {
       });
     }
   } else if (validated.kind === "continue") {
-    if (lastRow === undefined || lastRow.role !== "assistant") {
+    if (
+      lastRow === undefined ||
+      lastRow.role !== "assistant" ||
+      lastRow.id !== validated.assistantMessageId
+    ) {
       throw new ChatRequestError(
         409,
         "This answer is no longer waiting for a response."

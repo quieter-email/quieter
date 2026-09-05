@@ -18,6 +18,19 @@ type StoredMessage = {
 };
 
 describe("chat message conversion", () => {
+  test("does not regenerate an empty or assistant-only conversation", () => {
+    expect(getChatRetryAction([], [])).toStrictEqual({ type: "unavailable" });
+    expect(
+      getChatRetryAction(
+        [],
+        [{ id: "assistant", parts: [], role: "assistant" }]
+      )
+    ).toStrictEqual({ type: "unavailable" });
+    expect(
+      getChatRetryAction([{ id: "user", parts: [], role: "user" }], [])
+    ).toStrictEqual({ type: "unavailable" });
+  });
+
   test("projects persisted rows onto UI messages and skips system rows", () => {
     const storedMessage: StoredMessage = {
       createdAt: new Date("2026-08-20T10:00:00.000Z"),

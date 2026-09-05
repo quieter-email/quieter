@@ -62,6 +62,9 @@ export const getChatRetryAction = (
 
   const localLastMessage = localMessages.at(-1);
   const persistedLastMessage = persistedMessages.at(-1);
+  if (!persistedMessages.some((message) => message.role === "user")) {
+    return { type: "unavailable" };
+  }
   if (
     persistedLastMessage?.role !== "assistant" ||
     (localLastMessage?.role === "assistant" &&

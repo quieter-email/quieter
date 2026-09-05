@@ -113,6 +113,7 @@ const ChatSession = ({
   const composeResolutionRef = useRef(false);
   const retryPendingRef = useRef(false);
   const submitPendingRef = useRef(false);
+  const reconciledChatRef = useRef(chatData);
   const defaultModel = useDefaultChatModel();
   const threadId = chatId ?? draftChatKey;
   const [input, setInput] = useState("");
@@ -259,11 +260,17 @@ const ChatSession = ({
   // Reconcile with the server copy whenever a fresh one arrives while this
   // session is idle (after sends, retries, or external chat changes).
   useEffect(() => {
-    if (status !== "ready" || chatData === undefined) {
+    if (
+      status !== "ready" ||
+      isRetrying ||
+      chatData === undefined ||
+      chatData === reconciledChatRef.current
+    ) {
       return;
     }
+    reconciledChatRef.current = chatData;
     setMessages(toInitialMessages(chatData.messages));
-  }, [chatData, setMessages, status]);
+  }, [chatData, isRetrying, setMessages, status]);
 
   const resolveCompose = async (
     toolCallId: string,
@@ -275,60 +282,66 @@ const ChatSession = ({
     }
     composeResolutionRef.current = true;
     setIsResolvingCompose(true);
-    let output: ComposeEmailResult;
     try {
-      if (action === "decline" || values === undefined) {
-        output = { status: "declined" };
-      } else {
-        const composeInput = toChatComposeMessageInput(values);
-        if (action === "save_draft") {
-          const draft = await rpc.mail.saveDraft({
-            draft: composeInput,
-            mailboxId,
-          });
-          output = {
-            draftId: draft.draftId,
-            ...(draft.messageId === null ? {} : { messageId: draft.messageId }),
-            status: "draft_saved",
-            subject: values.subject,
-            to: values.to,
-          };
+      let output: ComposeEmailResult | undefined;
+      try {
+        if (action === "decline" || values === undefined) {
+          output = { status: "declined" };
         } else {
-          const sent = await rpc.mail.sendMessage({
-            mailboxId,
-            message: composeInput,
-          });
-          output = {
-            messageId: sent.id,
-            status: "sent",
-            subject: values.subject,
-            ...(sent.threadId === undefined ? {} : { threadId: sent.threadId }),
-            to: values.to,
-          };
+          const composeInput = toChatComposeMessageInput(values);
+          if (action === "save_draft") {
+            const draft = await rpc.mail.saveDraft({
+              draft: composeInput,
+              mailboxId,
+            });
+            output = {
+              draftId: draft.draftId,
+              ...(draft.messageId === null
+                ? {}
+                : { messageId: draft.messageId }),
+              status: "draft_saved",
+              subject: values.subject,
+              to: values.to,
+            };
+          } else {
+            const sent = await rpc.mail.sendMessage({
+              mailboxId,
+              message: composeInput,
+            });
+            output = {
+              messageId: sent.id,
+              status: "sent",
+              subject: values.subject,
+              ...(sent.threadId === undefined
+                ? {}
+                : { threadId: sent.threadId }),
+              to: values.to,
+            };
+          }
         }
+      } catch (composeError) {
+        const errorText =
+          action === "save_draft"
+            ? "The draft could not be saved."
+            : "The email could not be sent.";
+        toastError(composeError, {
+          boundary: "chat-compose",
+          fallback: errorText,
+        });
+        addToolOutput({
+          errorText,
+          state: "output-error",
+          tool: "compose_email",
+          toolCallId,
+        });
       }
-    } catch (composeError) {
-      const errorText =
-        action === "save_draft"
-          ? "The draft could not be saved."
-          : "The email could not be sent.";
-      toastError(composeError, {
-        boundary: "chat-compose",
-        fallback: errorText,
-      });
-      addToolOutput({
-        errorText,
-        state: "output-error",
-        tool: "compose_email",
-        toolCallId,
-      });
+      if (output !== undefined) {
+        addToolOutput({ output, tool: "compose_email", toolCallId });
+      }
       await sendMessage();
-      composeResolutionRef.current = false;
-      setIsResolvingCompose(false);
-      return;
+    } catch (continuationError) {
+      toastError(continuationError, { boundary: "chat-compose-continuation" });
     }
-    addToolOutput({ output, tool: "compose_email", toolCallId });
-    await sendMessage();
     composeResolutionRef.current = false;
     setIsResolvingCompose(false);
   };
@@ -340,9 +353,14 @@ const ChatSession = ({
     }
 
     submitPendingRef.current = true;
-    clearError();
-    setInput("");
-    await sendMessage({ text: prompt });
+    try {
+      clearError();
+      setInput("");
+      await sendMessage({ text: prompt });
+    } catch (sendError) {
+      setInput((current) => current || prompt);
+      toastError(sendError, { boundary: "chat-submit" });
+    }
     submitPendingRef.current = false;
   };
 
@@ -352,67 +370,74 @@ const ChatSession = ({
     }
     retryPendingRef.current = true;
     setIsRetrying(true);
-    let retryFailure: unknown;
     try {
-      const persistedChat = await rpc.chat.get({ chatId: threadId, mailboxId });
-      const persistedMessages = toInitialMessages(persistedChat.messages);
-      const retryAction = getChatRetryAction(messages, persistedMessages);
-      if (retryAction.type === "resubmit-user") {
-        clearError();
-        await sendMessage({
-          messageId: retryAction.messageId,
-          text: retryAction.text,
+      let retryFailure: unknown;
+      try {
+        const persistedChat = await rpc.chat.get({
+          chatId: threadId,
+          mailboxId,
         });
-      } else if (retryAction.type === "unavailable") {
-        toast.error(
-          "The answer could not be retried. Send your message again."
-        );
-      } else {
-        clearError();
-        queryClient.setQueryData(
-          getChatQueryKey(mailboxId, threadId),
-          persistedChat
-        );
-        setMessages(persistedMessages);
-        if (retryAction.type === "regenerate") {
-          await regenerate();
-        }
-      }
-    } catch (retryError) {
-      retryFailure = retryError;
-    }
-    if (retryFailure !== undefined) {
-      const errorCode =
-        retryFailure !== null &&
-        typeof retryFailure === "object" &&
-        "code" in retryFailure
-          ? retryFailure.code
-          : undefined;
-      const errorStatus =
-        retryFailure !== null &&
-        typeof retryFailure === "object" &&
-        "status" in retryFailure
-          ? retryFailure.status
-          : undefined;
-      if (errorCode !== "NOT_FOUND" && errorStatus !== 404) {
-        toastError(retryFailure, {
-          boundary: "chat-retry",
-          fallback: "The answer could not be retried. Try again.",
-        });
-      } else {
-        const retryAction = getChatRetryAction(messages, []);
+        const persistedMessages = toInitialMessages(persistedChat.messages);
+        const retryAction = getChatRetryAction(messages, persistedMessages);
         if (retryAction.type === "resubmit-user") {
           clearError();
           await sendMessage({
             messageId: retryAction.messageId,
             text: retryAction.text,
           });
-        } else {
+        } else if (retryAction.type === "unavailable") {
           toast.error(
             "The answer could not be retried. Send your message again."
           );
+        } else {
+          clearError();
+          queryClient.setQueryData(
+            getChatQueryKey(mailboxId, threadId),
+            persistedChat
+          );
+          setMessages(persistedMessages);
+          if (retryAction.type === "regenerate") {
+            await regenerate();
+          }
+        }
+      } catch (retryError) {
+        retryFailure = retryError;
+      }
+      if (retryFailure !== undefined) {
+        const errorCode =
+          retryFailure !== null &&
+          typeof retryFailure === "object" &&
+          "code" in retryFailure
+            ? retryFailure.code
+            : undefined;
+        const errorStatus =
+          retryFailure !== null &&
+          typeof retryFailure === "object" &&
+          "status" in retryFailure
+            ? retryFailure.status
+            : undefined;
+        if (errorCode !== "NOT_FOUND" && errorStatus !== 404) {
+          toastError(retryFailure, {
+            boundary: "chat-retry",
+            fallback: "The answer could not be retried. Try again.",
+          });
+        } else {
+          const retryAction = getChatRetryAction(messages, []);
+          if (retryAction.type === "resubmit-user") {
+            clearError();
+            await sendMessage({
+              messageId: retryAction.messageId,
+              text: retryAction.text,
+            });
+          } else {
+            toast.error(
+              "The answer could not be retried. Send your message again."
+            );
+          }
         }
       }
+    } catch (retryError) {
+      toastError(retryError, { boundary: "chat-retry" });
     }
     retryPendingRef.current = false;
     setIsRetrying(false);
