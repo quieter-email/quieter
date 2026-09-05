@@ -19,6 +19,7 @@ import type { SendMessageInput, SendMessageResult } from "@quieter/mail/send";
 import { reportError } from "@quieter/observability";
 import { and, eq, lt } from "drizzle-orm";
 
+import { assertLocalMailSend } from "./local-managed-mail";
 import { recordOutboundManagedMessageForSender } from "./managed-mail/messages/service";
 import { recordOrganizationApiMailMessage } from "./organization-api-mail";
 import {
@@ -305,6 +306,7 @@ export const sendOrganizationMailMessage = async (input: {
       organizationId: input.organizationId,
       sender: input.message.from,
     });
+    assertLocalMailSend();
     await assertOrganizationMailRecipientsNotSuppressed({
       organizationId: input.organizationId,
       recipients: [...builtMessage.to, ...builtMessage.cc, ...builtMessage.bcc],

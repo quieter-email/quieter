@@ -4,6 +4,7 @@ import type { createAppDatabase } from "./database";
 import { cloudflareWorkerObservability } from "./runtime";
 import type { DeploymentContext } from "./runtime";
 import { requireSecretBinding, requireSecretResource } from "./secrets";
+import { deploymentEnvironment } from "./stage";
 import type { SecretBindings, SecretResources } from "./types";
 
 const processingSecretNames = [
@@ -146,6 +147,7 @@ export const createGmailResources = (
             date: COMPATIBILITY_DATE,
             flags: ["nodejs_compat"],
           },
+          environment: { QUIETER_DEPLOYMENT_ENV: deploymentEnvironment },
           handler: "packages/cloudflare/src/gmail-maintenance-worker.ts",
           link: [appDatabase, gmailPubSubQueue, sentryDsnBinding],
           transform: {

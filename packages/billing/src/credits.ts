@@ -8,7 +8,10 @@ import { reportError } from "@quieter/observability";
 import { and, asc, eq, gt, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 
 import type { BillingAccount } from "./entitlements.ts";
-import { getPolarApiOrganizationId } from "./polar-config.ts";
+import {
+  getBillingExternalIdentity,
+  getPolarApiOrganizationId,
+} from "./polar-config.ts";
 
 const BILLING_CREDIT_USAGE_EVENT_NAME = "credit-usage";
 const MICROCENTS_PER_CENT = 1_000_000;
@@ -302,7 +305,10 @@ export const syncUnreportedBillingCreditUsage = async (
     rows.map((row) =>
       createPolarCreditUsageEvent({
         account: {
-          externalCustomerId: `organization:${row.organizationId}`,
+          externalCustomerId: getBillingExternalIdentity(
+            "organization",
+            row.organizationId
+          ),
         },
         billableCostMicroCents: row.billableCostMicroCents,
         category: row.category,

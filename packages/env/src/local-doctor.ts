@@ -9,12 +9,8 @@ export const forbiddenLocalKeys = [
   "CLOUDFLARE_API_TOKEN",
   "CLOUDFLARE_DEFAULT_ACCOUNT_ID",
   "GMAIL_CREDENTIAL_ROTATION_TOKEN",
-  "GMAIL_LIVE_SYNC_TOKEN_SECRET",
-  "GMAIL_LIVE_SYNC_URL",
   "GMAIL_PUBSUB_PUSH_AUDIENCE",
   "GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT",
-  "GMAIL_PUBSUB_SUBSCRIPTION",
-  "GMAIL_PUBSUB_TOPIC",
   "MAIL_BUCKET",
   "MAIL_RECEIPT_ROLE_ARN",
   "MAIL_RECEIPT_RULE_SET_NAME",
@@ -26,11 +22,8 @@ export const forbiddenLocalKeys = [
   "R2_ENDPOINT",
   "R2_SECRET_ACCESS_KEY",
   "SENTRY_AUTH_TOKEN",
-  "SENTRY_DSN",
   "SENTRY_ORG",
   "SENTRY_PROJECT",
-  "VITE_PUBLIC_POSTHOG_PROJECT_TOKEN",
-  "VITE_SENTRY_DSN",
 ] as const;
 
 export const parseEnvFile = (path: string) => {
@@ -143,6 +136,64 @@ const validateDatabaseUrls = (
 
 const validateAuthAndDeployment = (env: Map<string, string>) => {
   const errors: string[] = [];
+  const telemetryKeys = [
+    "SENTRY_DSN",
+    "VITE_SENTRY_DSN",
+    "VITE_PUBLIC_POSTHOG_PROJECT_TOKEN",
+  ];
+  if (telemetryKeys.some((key) => env.has(key))) {
+    if (env.get("VITE_QUIETER_LOCAL_TELEMETRY") !== "true") {
+      errors.push(
+        "Local telemetry credentials require VITE_QUIETER_LOCAL_TELEMETRY=true. Use development projects only."
+      );
+    }
+    if (
+      env.has("SENTRY_DSN") &&
+      env.get("SENTRY_ENVIRONMENT") !== "development"
+    ) {
+      errors.push(
+        "Local Sentry testing requires SENTRY_ENVIRONMENT=development."
+      );
+    }
+  }
+  const liveUrl = env.get("GMAIL_LIVE_SYNC_URL");
+  if (hasText(liveUrl)) {
+    try {
+      const url = new URL(liveUrl);
+      if (
+        !["ws:", "wss:"].includes(url.protocol) ||
+        !loopbackHosts.has(getHostname(liveUrl))
+      ) {
+        errors.push("GMAIL_LIVE_SYNC_URL must target a loopback Worker.");
+      }
+    } catch {
+      errors.push("GMAIL_LIVE_SYNC_URL is invalid.");
+    }
+    if ((env.get("GMAIL_LIVE_SYNC_TOKEN_SECRET")?.length ?? 0) < 32) {
+      errors.push(
+        "GMAIL_LIVE_SYNC_TOKEN_SECRET must have at least 32 characters."
+      );
+    }
+  }
+  const subscription = env.get("GMAIL_PUBSUB_SUBSCRIPTION");
+  if (
+    hasText(subscription) &&
+    !/^projects\/[^/]+\/subscriptions\/quieter-gmail-local-[a-z0-9-]+$/u.test(
+      subscription
+    )
+  ) {
+    errors.push(
+      "GMAIL_PUBSUB_SUBSCRIPTION must be a separate quieter-gmail-local-* subscription."
+    );
+  }
+  if (
+    env.get("QUIETER_LOCAL_PROVIDER_MODE") === "write" &&
+    !hasText(env.get("QUIETER_LOCAL_GMAIL_WRITE_ACCOUNTS"))
+  ) {
+    errors.push(
+      "Write tests require QUIETER_LOCAL_GMAIL_WRITE_ACCOUNTS and dedicated mailboxes or an explicit production handoff."
+    );
+  }
   const authUrl = env.get("BETTER_AUTH_URL");
 
   if (hasText(authUrl)) {

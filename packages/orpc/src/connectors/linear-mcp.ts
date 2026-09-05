@@ -1,5 +1,6 @@
 import { createMCPClient } from "@ai-sdk/mcp";
 import type { MCPClient } from "@ai-sdk/mcp";
+import { serverEnv } from "@quieter/env/server";
 import { z } from "zod";
 
 import {
@@ -144,6 +145,16 @@ const callTool = async (input: {
   };
 
   try {
+    if (
+      serverEnv.QUIETER_DEPLOYMENT_ENV === "local" &&
+      (serverEnv.QUIETER_LOCAL_PROVIDER_MODE !== "write" ||
+        serverEnv.QUIETER_LOCAL_LINEAR_WRITES !== true) &&
+      isMutatingLinearMcpTool({ name: input.call.toolName })
+    ) {
+      throw new Error(
+        "This development environment can read connected accounts, but cannot change them."
+      );
+    }
     const output: unknown = await input.client.callTool({
       arguments: input.call.arguments ?? {},
       name: input.call.toolName,

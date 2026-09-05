@@ -7,6 +7,7 @@ const root = path.join(import.meta.dirname, "../../..");
 const check = process.argv.includes("--check");
 const targets = [
   "local-worker.jsonc",
+  "local-background-worker.jsonc",
   "packages/cloudflare/wrangler.types.jsonc",
 ] as const;
 

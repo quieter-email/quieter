@@ -2172,6 +2172,7 @@ export const managedMailAttachment = pgTable(
       .references(() => managedMailMessage.id, { onDelete: "cascade" }),
     mimeType: text("mimeType").notNull(),
     normalizedFileName: text("normalizedFileName").notNull(),
+    partIndex: integer("partIndex"),
     size: integer("size").notNull(),
   },
   (table) => [

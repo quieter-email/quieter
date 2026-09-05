@@ -16,6 +16,7 @@ import {
   mailboxAutomationSettings,
   mailbox,
 } from "@quieter/database/schema";
+import { serverEnv } from "@quieter/env/server";
 import {
   getGmailProfile,
   getMessageWithDetails,
@@ -490,6 +491,23 @@ const processAutoLabelMessage = async ({
     const labelIds = (event.labelIds ?? []).filter((labelId) =>
       autoLabelContext.availableLabelIds.has(labelId)
     );
+
+    if (
+      serverEnv.QUIETER_DEPLOYMENT_ENV === "local" &&
+      serverEnv.QUIETER_LOCAL_PROVIDER_MODE !== "write"
+    ) {
+      await db
+        .update(gmailAutoLabelEvent)
+        .set({
+          lastError:
+            "Development observation: classification saved; mailbox unchanged.",
+          nextAttemptAt: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(gmailAutoLabelEvent.id, event.id));
+      await reportAutoLabelUsage({ ...event, userId });
+      return;
+    }
 
     if (labelIds.length > 0) {
       try {
@@ -1003,6 +1021,13 @@ const renewMailboxWatch = async ({
   topicName: string;
   userId: string;
 }) => {
+  if (
+    serverEnv.QUIETER_DEPLOYMENT_ENV === "local" &&
+    serverEnv.QUIETER_LOCAL_GMAIL_WATCH_OWNER !== "local"
+  ) {
+    await ensureWatchState(mailboxId);
+    return;
+  }
   await ensureWatchState(mailboxId);
   const [state] = await db
     .select({
@@ -1037,6 +1062,12 @@ const renewMailboxWatch = async ({
 };
 
 const disableMailboxWatch = async (mailboxId: string, userId: string) => {
+  if (
+    serverEnv.QUIETER_DEPLOYMENT_ENV === "local" &&
+    serverEnv.QUIETER_LOCAL_GMAIL_WATCH_OWNER !== "local"
+  ) {
+    return;
+  }
   const [state] = await db
     .select({
       watchExpirationAt: gmailWatchState.watchExpirationAt,
