@@ -582,6 +582,9 @@ importers:
       '@quieter/env':
         specifier: workspace:*
         version: link:../env
+      '@quieter/mail':
+        specifier: workspace:*
+        version: link:../mail
       '@quieter/observability':
         specifier: workspace:*
         version: link:../observability

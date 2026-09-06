@@ -5,9 +5,12 @@ import { rolldown } from "rolldown";
 
 const packageRoot = path.resolve(import.meta.dirname, "..");
 const outputDirectory = path.join(packageRoot, ".bundle-check");
-const entrypoints = ["inbound.ts", "outbound-feedback.ts", "receipt.ts"].map(
-  (fileName) => path.join(packageRoot, "src", fileName)
-);
+const entrypoints = [
+  "mail-feedback-bridge.ts",
+  "inbound.ts",
+  "outbound-feedback.ts",
+  "receipt.ts",
+].map((fileName) => path.join(packageRoot, "src", fileName));
 
 await rm(outputDirectory, { force: true, recursive: true });
 try {

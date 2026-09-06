@@ -87,6 +87,7 @@ describe("immutable Git release planning", () => {
       "gmail-realtime",
       "gmail-sync",
       "mail-api",
+      "mail-feedback-intake",
       "mail-outbox-publisher",
       "mail-sender",
       "mailbox-action-dispatch",

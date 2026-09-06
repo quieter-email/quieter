@@ -622,6 +622,42 @@ describe.skipIf(databaseUrl === undefined)(
       ).rejects.toThrow("conflicts");
     });
 
+    it("replays feedback after processing learns its provider message identifier", async () => {
+      const input = {
+        payload: { event: "Delivery" },
+        providerEventId: randomUUID(),
+        providerMessageId: null,
+        region: "eu-central-1",
+        schemaVersion: 1,
+        source: organizationId,
+      };
+      const original = await retainMailFeedback(database, input);
+      await database
+        .update(mailFeedbackInbox)
+        .set({
+          processedAt: new Date(),
+          providerMessageId: "learned",
+          status: "applied",
+        })
+        .where(eq(mailFeedbackInbox.id, original.id));
+      await expect(retainMailFeedback(database, input)).resolves.toStrictEqual({
+        id: original.id,
+        replayed: true,
+      });
+      await expect(
+        retainMailFeedback(database, {
+          ...input,
+          payload: { event: "changed" },
+        })
+      ).rejects.toThrow("conflicts");
+      await expect(
+        retainMailFeedback(database, {
+          ...input,
+          providerMessageId: "different",
+        })
+      ).rejects.toThrow("conflicts");
+    });
+
     /* oxlint-disable vitest/max-expects -- Verify the authorization and ownership boundary for both read contracts. */
     it("replays original acceptance separately from current status and checks authorization on every read", async () => {
       const messageId = await createSubmission();

@@ -4,6 +4,11 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
+    "./mail-feedback": {
+      "types": "./src/mail-feedback.ts",
+      "development": "./src/mail-feedback.ts",
+      "default": "./dist/mail-feedback.js"
+    },
     "./mail-sender": {
       "types": "./src/mail-sender.ts",
       "development": "./src/mail-sender.ts",

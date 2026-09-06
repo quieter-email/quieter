@@ -1,6 +1,6 @@
 # Durable mail ledger development
 
-The new ledger is dormant. The mail API, sender, and outbox publisher have Worker entrypoints, but infrastructure does not activate them yet. No public route or existing v1 send path calls the ledger. These additive migrations can precede runtime activation. Async acceptance must stay disabled until runtime wiring, feedback processing, retention, and controlled end-to-end tests are complete.
+The new ledger is dormant. The mail API, sender, feedback intake, and outbox publisher have Worker entrypoints, but infrastructure does not activate them yet. No public route or existing v1 send path calls the ledger. These additive migrations can precede runtime activation. Async acceptance must stay disabled until runtime wiring, retention, and controlled end-to-end tests are complete.
 
 ## Transaction boundaries
 
@@ -41,6 +41,14 @@ The dormant `mail-submission-sender-worker.ts` handles one queue message per inv
 The sender acknowledges after the ledger operation completes. A failed wakeup leaves durable outbox work for scheduled recovery. Unknown outcomes remain pending confirmation on redelivery. Mailbox-scoped submissions are refused until their actor authorization contract exists. The native API integration fixture exercises quota refresh, R2 payload reads, signed SES requests, duplicate delivery, and lost responses with synthetic credentials and intercepted HTTP. Normal local development still forbids external sends. No production credential or send is needed for this test.
 
 ## Retention and remaining integration
+
+The dormant `mail-feedback-bridge.ts` Lambda consumes an SQS envelope and forwards its SNS notification to `mail-feedback-worker.ts`. It validates the exact queue and topic, forwards at most one record per invocation, and returns excess or failed records through `batchItemFailures`. Configure batch size one, `ReportBatchItemFailures`, a published Lambda alias, bounded concurrency, an SQS policy allowing only the intended SNS topic, a primary queue and DLQ with fourteen-day retention, and age/DLQ alerts before activation. This uses [AWS partial batch responses](https://docs.aws.amazon.com/lambda/latest/dg/services-sqs-errorhandling.html); it does not provision or enable the new subscription yet. The existing direct subscription must be handed over explicitly.
+
+Both runtimes parse version-1 `QUIETER_MAIL_FEEDBACK_CONFIG` containing `enabled`, `stage`, `endpoint`, `queueArn`, and `topicArn`. The endpoint is a fixed HTTPS `/internal/mail/feedback` URL without credentials, query parameters, or fragments. The `MailFeedbackBridgeToken` SST Secret holds JSON with that stage and a random 64-character hexadecimal `token`; each runtime's linked app stage must match. The bridge uses this token over TLS and refuses redirects. Topic and queue must belong to the same account and region. These are service credentials; browser requests do not receive them.
+
+The intake authenticates before reading the body, bounds the envelope to 128 KiB and ten seconds, and acknowledges only after inbox retention. Its versioned receipt names the exact SNS event ID. Repeated content returns the existing receipt even after processing learns the provider message ID; changed content under the same identity fails. `waitUntil` applies retained feedback, while a one-minute scheduled trigger recovers five due records per invocation. Quarantines and dependency failures report fixed error categories. Private bodies, tokens, addresses, and identifiers are excluded from those reports. Inbox retention limits and recovery throughput still need rollout budgets and alerts.
+
+The native API fixture covers an unknown send followed by authenticated late confirmation and duplicate intake. The submission settles once, with no additional SES call. Bridge tests cover lost or mismatched receipts, unexpected sources, redirects, and oversized responses. The bridge has no database, R2, send, or domain-management imports.
 
 Feedback recovery claims at most five due records from the configured source and region. Two-minute leases allow a replacement process to recover abandoned claims. Completion and retry writes check the claim generation. A failed projection transaction leaves its payload pending and schedules a one-minute retry; missing legacy mappings retry after five minutes. Quarantine is retained outside automatic retries. Recovery returns aggregate outcome counts for the future scheduled handler and alerts.
 

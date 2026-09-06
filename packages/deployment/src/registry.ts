@@ -5,15 +5,39 @@ export type RuntimeRegistration = {
   trigger:
     | "http"
     | "http-durable-object"
+    | "http-scheduled"
     | "queue"
     | "scheduled"
     | "queue-scheduled"
-    | "sns";
+    | "sns"
+    | "sqs";
   nativeReleaseBlockers: string[];
 };
 
 // These are existing runtime boundaries. New mail services join only when their handlers exist.
 export const runtimeRegistry: RuntimeRegistration[] = [
+  {
+    entrypoint: "packages/cloudflare/src/mail-feedback-worker.ts",
+    nativeReleaseBlockers: [
+      "mail_runtime_foundation",
+      "protected_health_bindings",
+      "independent_recovery_workflow",
+    ],
+    package: "@quieter/cloudflare",
+    service: "mail-feedback-intake",
+    trigger: "http-scheduled",
+  },
+  {
+    entrypoint: "packages/aws/src/mail-feedback-bridge.ts",
+    nativeReleaseBlockers: [
+      "published_lambda_alias",
+      "alias_trigger_proof",
+      "feedback_queue_ownership",
+    ],
+    package: "@quieter/aws",
+    service: "mail-feedback-bridge",
+    trigger: "sqs",
+  },
   {
     entrypoint: "packages/cloudflare/src/mail-submission-sender-worker.ts",
     nativeReleaseBlockers: [

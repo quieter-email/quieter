@@ -154,7 +154,8 @@ export const retainMailFeedback = async (
       existing === undefined ||
       existing.payloadDigest !== digest ||
       existing.schemaVersion !== input.schemaVersion ||
-      existing.providerMessageId !== input.providerMessageId
+      (input.providerMessageId !== null &&
+        existing.providerMessageId !== input.providerMessageId)
     ) {
       throw new Error("Feedback identity conflicts with retained content.");
     }

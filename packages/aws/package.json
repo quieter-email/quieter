@@ -16,6 +16,7 @@
     "@quieter/billing": "workspace:*",
     "@quieter/database": "workspace:*",
     "@quieter/env": "workspace:*",
+    "@quieter/mail": "workspace:*",
     "@quieter/observability": "workspace:*",
     "@quieter/orpc": "workspace:*",
     "@sentry/node": "catalog:",

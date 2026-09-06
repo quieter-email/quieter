@@ -6,6 +6,7 @@ import {
   apikey,
   billingSubscription,
   mailDomain,
+  mailFeedbackInbox,
   mailPayloadUpload,
   mailSendAttempt,
   mailSendCapacity,
@@ -13,6 +14,8 @@ import {
   mailSubmissionOutbox,
   mailUsageReservation,
   organization,
+  organizationMailDeliveryEvent,
+  organizationMailDeliveryRecipient,
   user,
 } from "@quieter/database/schema";
 import { env } from "cloudflare:workers";
@@ -22,6 +25,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 
 import { mailStorageTestLimits } from "../../database/tests/mail-ledger-fixtures.ts";
 import { handleMailApiRequest } from "../src/mail-api-worker.ts";
+import { handleMailFeedbackRequest } from "../src/mail-feedback-worker.ts";
 import { mailSubmissionSenderHandler } from "../src/mail-submission-sender-worker.ts";
 import { reportWorkerError } from "../src/worker-runtime.ts";
 
@@ -376,6 +380,10 @@ describe.skipIf(typeof url !== "string" || url === "")(
             ack: vi.fn<() => void>(),
             body: { ...dispatch.body, submissionId: unknownId },
           };
+          await database
+            .update(mailSendCapacity)
+            .set({ nextSendAt: new Date(0) })
+            .where(eq(mailSendCapacity.key, "000000000269:eu-central-1"));
           fetch.mockRejectedValue(new Error("private lost response"));
           await mailSubmissionSenderHandler.queue(
             { ...batch, messages: [uncertainDispatch] },
@@ -393,6 +401,108 @@ describe.skipIf(typeof url !== "string" || url === "")(
             .where(eq(mailSubmission.id, unknownId));
           expect(unconfirmed.status).toBe("pending_confirmation");
           vi.unstubAllGlobals();
+          const [attempt] = await database
+            .select()
+            .from(mailSendAttempt)
+            .where(eq(mailSendAttempt.submissionId, unknownId));
+          const feedbackConfig = {
+            enabled: true,
+            endpoint: "https://feedback.example.test/internal/mail/feedback",
+            queueArn: "arn:aws:sqs:eu-central-1:000000000269:fixture",
+            schemaVersion: 1,
+            stage: "native-fixture",
+            topicArn: `arn:aws:sns:eu-central-1:000000000269:${organizationId}`,
+          };
+          const feedbackBindings = {
+            QUIETER_MAIL_FEEDBACK_CONFIG: JSON.stringify(feedbackConfig),
+            SST_RESOURCE_App: JSON.stringify({ stage: "native-fixture" }),
+            SST_RESOURCE_MailFeedbackBridgeToken: JSON.stringify({
+              value: JSON.stringify({
+                stage: "native-fixture",
+                token: "a".repeat(64),
+              }),
+            }),
+          };
+          const feedback = {
+            Message: JSON.stringify({
+              delivery: {
+                recipients: message.to,
+                timestamp: new Date().toISOString(),
+              },
+              eventType: "Delivery",
+              mail: {
+                destination: message.to,
+                messageId: "native-late-confirmation",
+                source: message.from,
+                tags: {
+                  quieter_attempt: [attempt.id],
+                  quieter_submission: [unknownId],
+                },
+                timestamp: attempt.intentAt.toISOString(),
+              },
+            }),
+            MessageId: crypto.randomUUID(),
+            TopicArn: feedbackConfig.topicArn,
+            Type: "Notification",
+          };
+          const feedbackRequest = (body = feedback, token = "a".repeat(64)) =>
+            new Request(feedbackConfig.endpoint, {
+              body: JSON.stringify(body),
+              headers: {
+                authorization: `Bearer ${token}`,
+                "content-type": "application/json",
+                "x-quieter-feedback-version": "1",
+              },
+              method: "POST",
+            });
+          await expect(
+            handleMailFeedbackRequest(
+              feedbackRequest(feedback, "wrong"),
+              feedbackBindings,
+              context
+            )
+          ).resolves.toMatchObject({ status: 401 });
+          await expect(
+            handleMailFeedbackRequest(
+              feedbackRequest({
+                ...feedback,
+                TopicArn: `${feedback.TopicArn}-other`,
+              }),
+              feedbackBindings,
+              context
+            )
+          ).resolves.toMatchObject({ status: 403 });
+          const retained = await handleMailFeedbackRequest(
+            feedbackRequest(),
+            feedbackBindings,
+            context
+          );
+          expect(retained.status).toBe(201);
+          await expect(retained.json()).resolves.toStrictEqual({
+            eventId: feedback.MessageId,
+            schemaVersion: 1,
+            status: "retained",
+          });
+          await Promise.all(background);
+          await expect(
+            handleMailFeedbackRequest(
+              feedbackRequest(),
+              feedbackBindings,
+              context
+            )
+          ).resolves.toMatchObject({ status: 200 });
+          await Promise.all(background);
+          const [confirmed] = await database
+            .select({ status: mailSubmission.status })
+            .from(mailSubmission)
+            .where(eq(mailSubmission.id, unknownId));
+          expect(confirmed.status).toBe("accepted");
+          expect(fetch).toHaveBeenCalledTimes(3);
+          const [inbox] = await database
+            .select({ status: mailFeedbackInbox.status })
+            .from(mailFeedbackInbox)
+            .where(eq(mailFeedbackInbox.providerEventId, feedback.MessageId));
+          expect(inbox.status).toBe("applied");
           await database
             .update(apikey)
             .set({
@@ -422,6 +532,7 @@ describe.skipIf(typeof url !== "string" || url === "")(
             events.map((event) => event.eventType).toSorted()
           ).toStrictEqual([
             "submission.accepted",
+            "submission.accepted",
             "submission.dispatch",
             "submission.dispatch",
           ]);
@@ -430,6 +541,27 @@ describe.skipIf(typeof url !== "string" || url === "")(
         vi.unstubAllGlobals();
         await Promise.allSettled(background);
         await withRequestDatabaseClient(async (database) => {
+          await database
+            .delete(mailFeedbackInbox)
+            .where(
+              eq(
+                mailFeedbackInbox.source,
+                `arn:aws:sns:eu-central-1:000000000269:${organizationId}`
+              )
+            );
+          await database
+            .delete(organizationMailDeliveryEvent)
+            .where(
+              eq(organizationMailDeliveryEvent.organizationId, organizationId)
+            );
+          await database
+            .delete(organizationMailDeliveryRecipient)
+            .where(
+              eq(
+                organizationMailDeliveryRecipient.organizationId,
+                organizationId
+              )
+            );
           const uploads = await database
             .select()
             .from(mailPayloadUpload)
