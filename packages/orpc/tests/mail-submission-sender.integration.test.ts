@@ -7,7 +7,11 @@ import type { DatabaseClient } from "@quieter/database/client";
 import { assertLocalDatabaseUrl } from "@quieter/database/local-development";
 import { acceptMailSubmission } from "@quieter/database/mail-acceptance";
 import { recordMailSendOutcome } from "@quieter/database/mail-attempts";
-import { retainMailFeedback } from "@quieter/database/mail-feedback-inbox";
+import {
+  claimMailFeedback,
+  deferMailFeedback,
+  retainMailFeedback,
+} from "@quieter/database/mail-feedback-inbox";
 import { storeMailSendCapacity } from "@quieter/database/mail-send-capacity";
 import {
   billingCreditUsageEvent,
@@ -42,7 +46,10 @@ import {
   vi,
 } from "vite-plus/test";
 
-import { applyMailSubmissionFeedback } from "../src/mail-submission-feedback.ts";
+import {
+  applyMailSubmissionFeedback,
+  recoverMailSubmissionFeedback,
+} from "../src/mail-submission-feedback.ts";
 import { prepareMailSubmissionPayload } from "../src/mail-submission-payload.ts";
 import type { SubmissionPayloadStorage } from "../src/mail-submission-payload.ts";
 import { dispatchMailSubmission } from "../src/mail-submission-sender.ts";
@@ -493,6 +500,100 @@ describe.skipIf(databaseUrl === undefined)("durable submission sender", () => {
       status: "quarantined",
     });
     expect(inbox.payload).toHaveProperty("Message");
+  });
+
+  it("recovers feedback after a claimed worker disappears and fences its stale result", async () => {
+    const id = await accept();
+    send.mockResolvedValue({ code: "timeout", outcome: "unknown" });
+    await dispatch(id);
+    const retained = await retainFeedback(send.mock.calls[0][0], randomUUID());
+    const claimInput = {
+      limit: 5,
+      owner: "first",
+      region: "eu-central-1",
+      source: expectedSource,
+    };
+    const [first] = await claimMailFeedback(database, claimInput);
+    await expect(
+      claimMailFeedback(database, { ...claimInput, owner: "second" })
+    ).resolves.toHaveLength(0);
+    await database
+      .update(mailFeedbackInbox)
+      .set({
+        dueAt: sql`now() - interval '1 second'`,
+        leaseUntil: sql`now() - interval '1 second'`,
+      })
+      .where(eq(mailFeedbackInbox.id, retained.id));
+    const [second] = await claimMailFeedback(database, {
+      ...claimInput,
+      owner: "second",
+    });
+    await expect(
+      applyMailSubmissionFeedback(database, {
+        claim: first,
+        expectedSource,
+        inboxId: retained.id,
+        region: "eu-central-1",
+      })
+    ).resolves.toBe("superseded");
+    await expect(deferMailFeedback(database, first)).resolves.toBeFalsy();
+    await expect(
+      applyMailSubmissionFeedback(database, {
+        claim: second,
+        expectedSource,
+        inboxId: retained.id,
+        region: "eu-central-1",
+      })
+    ).resolves.toBe("applied");
+    expect(send).toHaveBeenCalledOnce();
+  });
+
+  it("defers a failed recovery transaction and drains it after repair without resending", async () => {
+    const id = await accept();
+    send.mockResolvedValue({ code: "timeout", outcome: "unknown" });
+    await dispatch(id);
+    const retained = await retainFeedback(send.mock.calls[0][0], randomUUID());
+    await database.insert(billingCreditUsageEvent).values({
+      billableCostMicroCents: 0,
+      category: "mail",
+      costMicroCents: 0,
+      createdAt: new Date(),
+      dedupeKey: `mail:submission:${id}`,
+      id: randomUUID(),
+      organizationId,
+    });
+    const recoveryInput = {
+      expectedSource,
+      limit: 5,
+      owner: "recovery",
+      region: "eu-central-1",
+    };
+    await expect(
+      recoverMailSubmissionFeedback(database, recoveryInput)
+    ).resolves.toMatchObject({ applied: 0, claimed: 1, deferred: 1 });
+    await expect(
+      recoverMailSubmissionFeedback(database, recoveryInput)
+    ).resolves.toMatchObject({ claimed: 0 });
+    const [pending] = await database
+      .select()
+      .from(mailFeedbackInbox)
+      .where(eq(mailFeedbackInbox.id, retained.id));
+    expect(pending).toMatchObject({
+      lastErrorCode: "feedback_processing_failed",
+      leaseUntil: null,
+      status: "pending",
+    });
+    await database
+      .delete(billingCreditUsageEvent)
+      .where(eq(billingCreditUsageEvent.organizationId, organizationId));
+    await database
+      .update(mailFeedbackInbox)
+      .set({ dueAt: sql`now() - interval '1 second'` })
+      .where(eq(mailFeedbackInbox.id, retained.id));
+    await expect(
+      recoverMailSubmissionFeedback(database, recoveryInput)
+    ).resolves.toMatchObject({ applied: 1, claimed: 1, deferred: 0 });
+    expect(send).toHaveBeenCalledOnce();
   });
 
   it("bounds safe retries for explicit throttling rejections", async () => {

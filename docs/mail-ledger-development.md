@@ -28,6 +28,8 @@ The dormant `@quieter/mail/ses-submission-transport` adapter uses one SDK attemp
 
 ## Retention and remaining integration
 
+Feedback recovery claims at most five due records from the configured source and region. Two-minute leases allow a replacement process to recover abandoned claims. Completion and retry writes check the claim generation. A failed projection transaction leaves its payload pending and schedules a one-minute retry; missing legacy mappings retry after five minutes. Quarantine is retained outside automatic retries. Recovery returns aggregate outcome counts for the future scheduled handler and alerts.
+
 The existing synchronous senders now also disable automatic SES SDK retries and use a ten-second transport timeout. They still have their original persistence ambiguity and legacy unkeyed retries can duplicate delivery. Customer tag names beginning with `quieter_` are reserved, case-insensitively, across both contracts. This validation change is required before operational correlation tags can be trusted.
 
 Idempotency retention is at least seven days. Nonterminal and unknown work needs longer retention. No cleanup currently deletes these records. Submission ownership uses restrictive foreign keys, so accepted work cannot disappear through organization or mailbox deletion. Before activation, deletion handlers need an explicit drain/cancel/retention procedure for this ownership constraint.

@@ -2,6 +2,11 @@ import { createHash } from "node:crypto";
 
 import type { DatabaseClient } from "@quieter/database/client";
 import { recordMailSendOutcome } from "@quieter/database/mail-attempts";
+import {
+  claimMailFeedback,
+  deferMailFeedback,
+} from "@quieter/database/mail-feedback-inbox";
+import type { MailFeedbackClaim } from "@quieter/database/mail-feedback-inbox";
 import { canonicalMailJson } from "@quieter/database/mail-ledger-json";
 import {
   mailFeedbackInbox,
@@ -43,7 +48,12 @@ const correlationSchema = z.object({
 
 export const applyMailSubmissionFeedback = async (
   database: DatabaseClient,
-  input: { inboxId: string; expectedSource: string; region: string }
+  input: {
+    inboxId: string;
+    expectedSource: string;
+    region: string;
+    claim?: MailFeedbackClaim;
+  }
 ) =>
   await database.transaction(async (transaction) => {
     const [inbox] = await transaction
@@ -56,6 +66,14 @@ export const applyMailSubmissionFeedback = async (
     }
     if (inbox.status !== "pending") {
       return inbox.status;
+    }
+    if (
+      input.claim !== undefined &&
+      (input.claim.id !== inbox.id ||
+        input.claim.claimOwner !== inbox.claimOwner ||
+        input.claim.claimGeneration !== inbox.claimGeneration)
+    ) {
+      return "superseded";
     }
     const quarantine = async (code: string) => {
       await transaction
@@ -131,9 +149,11 @@ export const applyMailSubmissionFeedback = async (
         await transaction
           .update(mailFeedbackInbox)
           .set({
-            attemptCount: sql`${mailFeedbackInbox.attemptCount} + 1`,
+            claimGeneration: sql`${mailFeedbackInbox.claimGeneration} + 1`,
+            claimOwner: null,
             dueAt: sql`now() + interval '5 minutes'`,
             lastErrorCode: "feedback_mapping_pending",
+            leaseUntil: null,
           })
           .where(eq(mailFeedbackInbox.id, inbox.id));
         return "pending";
@@ -230,3 +250,42 @@ export const applyMailSubmissionFeedback = async (
       .where(eq(mailFeedbackInbox.id, inbox.id));
     return "applied";
   });
+
+export const recoverMailSubmissionFeedback = async (
+  database: DatabaseClient,
+  input: {
+    owner: string;
+    expectedSource: string;
+    region: string;
+    limit: number;
+  }
+) => {
+  const claims = await claimMailFeedback(database, {
+    limit: input.limit,
+    owner: input.owner,
+    region: input.region,
+    source: input.expectedSource,
+  });
+  const results = await Promise.all(
+    claims.map(async (claim) => {
+      try {
+        return await applyMailSubmissionFeedback(database, {
+          claim,
+          expectedSource: input.expectedSource,
+          inboxId: claim.id,
+          region: input.region,
+        });
+      } catch {
+        await deferMailFeedback(database, claim);
+        return "deferred";
+      }
+    })
+  );
+  return {
+    applied: results.filter((result) => result === "applied").length,
+    claimed: claims.length,
+    deferred: results.filter((result) => result === "deferred").length,
+    pending: results.filter((result) => result === "pending").length,
+    quarantined: results.filter((result) => result === "quarantined").length,
+  };
+};
