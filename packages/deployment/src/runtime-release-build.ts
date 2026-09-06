@@ -205,6 +205,9 @@ export const buildRuntimeRelease = async (input: {
       vp,
       [
         "exec",
+        "--filter",
+        "@quieter/deployment",
+        "--fail-if-no-match",
         "wrangler",
         "deploy",
         "--dry-run",
