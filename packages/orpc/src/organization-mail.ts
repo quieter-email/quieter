@@ -61,7 +61,15 @@ let sesv2Client: SESv2Client | null = null;
 
 const getSesv2Client = async (): Promise<SESv2Client> => {
   const { SESv2Client } = await import("@aws-sdk/client-sesv2");
-  sesv2Client ??= new SESv2Client({ region: getAwsRegion() });
+  sesv2Client ??= new SESv2Client({
+    maxAttempts: 1,
+    region: getAwsRegion(),
+    requestHandler: {
+      connectionTimeout: 5000,
+      requestTimeout: 10_000,
+      throwOnRequestTimeout: true,
+    },
+  });
   return sesv2Client;
 };
 

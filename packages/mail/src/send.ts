@@ -345,7 +345,13 @@ export const sendAttachmentSchema = z.object({
 });
 
 export const sendTagSchema = z.object({
-  name: z.string().trim().min(1),
+  name: z
+    .string()
+    .trim()
+    .min(1)
+    .refine((name) => !name.toLowerCase().startsWith("quieter_"), {
+      message: "Tag names beginning with quieter_ are reserved.",
+    }),
   value: z.string().trim(),
 });
 

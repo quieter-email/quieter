@@ -169,7 +169,7 @@ describe("submission payload preparation", () => {
         organizationId: "organization",
         storage,
       })
-    ).rejects.toThrow("tags exceed");
+    ).rejects.toThrow("reserved");
     expect(createMailPayloadUpload).not.toHaveBeenCalled();
   });
 });

@@ -3,6 +3,20 @@ import { describe, expect, test } from "vite-plus/test";
 import { buildSendMimeMessage, sendMessageInputSchema } from "../src/send";
 
 describe("send message input schema", () => {
+  test.each(["quieter_attempt", "QuIeTeR_submission"])(
+    "rejects customer correlation tag %s",
+    (name) => {
+      const result = sendMessageInputSchema.safeParse({
+        from: "sender@example.com",
+        subject: "fixture",
+        tags: [{ name, value: "spoofed" }],
+        text: "fixture",
+        to: ["reader@example.com"],
+      });
+      expect(result.success).toBeFalsy();
+    }
+  );
+
   test("accepts display-name senders and string recipients", () => {
     const result = sendMessageInputSchema.safeParse({
       from: "Demo <demo@example.com>",

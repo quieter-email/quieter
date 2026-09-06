@@ -26,6 +26,8 @@ The dormant `@quieter/mail/ses-submission-transport` adapter uses one SDK attemp
 
 ## Retention and remaining integration
 
+The existing synchronous senders now also disable automatic SES SDK retries and use a ten-second transport timeout. They still have their original persistence ambiguity and legacy unkeyed retries can duplicate delivery. Customer tag names beginning with `quieter_` are reserved, case-insensitively, across both contracts. This validation change is required before operational correlation tags can be trusted.
+
 Idempotency retention is at least seven days. Nonterminal and unknown work needs longer retention. No cleanup currently deletes these records. Submission ownership uses restrictive foreign keys, so accepted work cannot disappear through organization or mailbox deletion. Before activation, deletion handlers need an explicit drain/cancel/retention procedure for this ownership constraint.
 
 `@quieter/billing/mail-submission-usage` reserves confirmed usage plus outstanding reservations under the shared billing lock. Its entitlement reads use the acceptance transaction and reject stale billing state without contacting Polar; the caller refreshes billing before entering the transaction. Confirmed sends finalize their reservation and write usage and billing events in the same transaction. Final charges use confirmed usage and the retained credit allowance, so an earlier failed reservation cannot consume included credit. Unknown sends retain their reservations.
