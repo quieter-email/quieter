@@ -29,9 +29,15 @@ import {
   recoverQueuedMailOutbox,
 } from "../src/mail-outbox.ts";
 import {
+  createMailPayloadUpload,
+  completeMailPayloadUpload,
+  cleanupMailPayloadUploads,
+} from "../src/mail-payload-uploads.ts";
+import {
   mailSendAttempt,
   billingCreditUsageEvent,
   mailFeedbackInbox,
+  mailPayloadUpload,
   mailSubmission,
   mailSubmissionOutbox,
   mailUsageReservation,
@@ -70,13 +76,18 @@ describe.skipIf(databaseUrl === undefined)(
             bcc: [],
             cc: [],
             from: "sender@example.com",
-            headers: {},
+            headers: [],
             html: null,
+            messageHeaderId: "<fixture@example.com>",
+            metadata: {},
+            openTracking: false,
+            preparedAt: now.toISOString(),
             replyTo: [],
             subject: "fixture",
-            tags: {},
+            tags: [],
             text: "test",
             to: ["recipient@example.com"],
+            transportHtml: null,
           },
           payloadDigest: "a".repeat(64),
           recipientCount: 1,
@@ -143,6 +154,9 @@ describe.skipIf(databaseUrl === undefined)(
       await database
         .delete(mailSubmission)
         .where(eq(mailSubmission.organizationId, organizationId));
+      await database
+        .delete(mailPayloadUpload)
+        .where(eq(mailPayloadUpload.organizationId, organizationId));
     });
 
     afterAll(async () => {
@@ -166,6 +180,9 @@ describe.skipIf(databaseUrl === undefined)(
           .delete(mailSubmission)
           .where(eq(mailSubmission.organizationId, organizationId));
         await database
+          .delete(mailPayloadUpload)
+          .where(eq(mailPayloadUpload.organizationId, organizationId));
+        await database
           .delete(organization)
           .where(eq(organization.id, organizationId));
       } finally {
@@ -173,6 +190,155 @@ describe.skipIf(databaseUrl === undefined)(
         fixtureLock.release();
         await connection.end();
       }
+    });
+
+    it("claims prepared attachments atomically and keeps committed objects out of cleanup", async () => {
+      const seedId = await createSubmission();
+      const [seed] = await database
+        .select()
+        .from(mailSubmission)
+        .where(eq(mailSubmission.id, seedId));
+      const upload = await createMailPayloadUpload(database, {
+        objects: [{ bytes: 3, digest: "a".repeat(64) }],
+        organizationId,
+      });
+      await expect(
+        completeMailPayloadUpload(database, {
+          id: upload.id,
+          organizationId: randomUUID(),
+        })
+      ).rejects.toThrow("expired or was fenced");
+      await completeMailPayloadUpload(database, {
+        id: upload.id,
+        organizationId,
+      });
+      const input = {
+        ...seed,
+        async assertAuthorization(
+          transaction: Parameters<
+            Parameters<DatabaseClient["transaction"]>[0]
+          >[0]
+        ) {
+          await transaction.execute(sql`select 1`);
+        },
+        attachmentBytes: 3,
+        idempotencyKey: randomUUID(),
+        payload: {
+          ...seed.payload,
+          attachments: [
+            {
+              ...upload.objects[0],
+              contentId: null,
+              contentType: "text/plain",
+              disposition: "attachment" as const,
+              filename: "fixture.txt",
+            },
+          ],
+        },
+        payloadUploadId: upload.id,
+        async reserveBudget(
+          transaction: Parameters<
+            Parameters<DatabaseClient["transaction"]>[0]
+          >[0]
+        ) {
+          await transaction.execute(sql`select 1`);
+          return {
+            billableCostMicroCents: 100,
+            includedCostMicroCents: 0,
+            periodEnd: new Date(now.getTime() + 86_400_000),
+            periodStart: now,
+            sesCostMicroCents: 50,
+          };
+        },
+      };
+      await expect(
+        acceptMailSubmission(database, {
+          ...input,
+          payload: {
+            ...input.payload,
+            attachments: [
+              { ...input.payload.attachments[0], digest: "c".repeat(64) },
+            ],
+          },
+        })
+      ).rejects.toThrow("does not match");
+      await acceptMailSubmission(database, input);
+      await database
+        .update(mailPayloadUpload)
+        .set({
+          createdAt: sql`now() - interval '1 hour'`,
+          expiresAt: sql`now() - interval '1 minute'`,
+          nextActionAt: sql`now() - interval '1 minute'`,
+        })
+        .where(eq(mailPayloadUpload.id, upload.id));
+      const cleanup = await cleanupMailPayloadUploads(database, {
+        limit: 10,
+        // oxlint-disable-next-line require-await -- In-memory test adapter preserves the asynchronous storage contract.
+        async remove() {
+          throw new Error("Committed objects cannot be removed.");
+        },
+      });
+      expect(cleanup).toStrictEqual({ claimed: 0, cleaned: 0 });
+      await expect(
+        acceptMailSubmission(database, {
+          ...input,
+          idempotencyKey: randomUUID(),
+        })
+      ).rejects.toThrow("expired, unowned");
+    });
+
+    it("fences expired uploads and revisits failed and late object writes", async () => {
+      const upload = await createMailPayloadUpload(database, {
+        objects: [{ bytes: 3, digest: "a".repeat(64) }],
+        organizationId,
+      });
+      await database
+        .update(mailPayloadUpload)
+        .set({
+          createdAt: sql`now() - interval '1 hour'`,
+          expiresAt: sql`now() - interval '1 minute'`,
+          nextActionAt: sql`now() - interval '1 minute'`,
+        })
+        .where(eq(mailPayloadUpload.id, upload.id));
+      await expect(
+        cleanupMailPayloadUploads(database, {
+          limit: 10,
+          // oxlint-disable-next-line require-await -- In-memory test adapter preserves the asynchronous storage contract.
+          async remove() {
+            throw new Error("Storage unavailable.");
+          },
+        })
+      ).resolves.toStrictEqual({ claimed: 1, cleaned: 0 });
+      await expect(
+        completeMailPayloadUpload(database, { id: upload.id, organizationId })
+      ).rejects.toThrow("expired or was fenced");
+      await database
+        .update(mailPayloadUpload)
+        .set({ nextActionAt: sql`now() - interval '1 minute'` })
+        .where(eq(mailPayloadUpload.id, upload.id));
+      const removed: string[] = [];
+      await expect(
+        cleanupMailPayloadUploads(database, {
+          limit: 10,
+          // oxlint-disable-next-line require-await -- In-memory test adapter preserves the asynchronous storage contract.
+          async remove(key) {
+            removed.push(key);
+          },
+        })
+      ).resolves.toStrictEqual({ claimed: 1, cleaned: 1 });
+      expect(removed).toStrictEqual([upload.objects[0].key]);
+      await database
+        .update(mailPayloadUpload)
+        .set({ nextActionAt: sql`now() - interval '1 minute'` })
+        .where(eq(mailPayloadUpload.id, upload.id));
+      await cleanupMailPayloadUploads(database, {
+        limit: 10,
+        // oxlint-disable-next-line require-await -- In-memory test adapter preserves the asynchronous storage contract.
+        async remove(key) {
+          removed.push(key);
+        },
+      });
+      expect(removed).toHaveLength(2);
     });
 
     it("retains feedback before a provider mapping exists and deduplicates canonical content", async () => {
@@ -235,13 +401,18 @@ describe.skipIf(databaseUrl === undefined)(
           bcc: [],
           cc: [],
           from: "sender@example.com",
-          headers: {},
+          headers: [],
           html: null,
+          messageHeaderId: "<fixture@example.com>",
+          metadata: {},
+          openTracking: false,
+          preparedAt: now.toISOString(),
           replyTo: [],
           subject: "fixture",
-          tags: {},
+          tags: [],
           text: "test",
           to: ["recipient@example.com"],
+          transportHtml: null,
         },
         recipientCount: 1,
         requestHash: "b".repeat(64),
@@ -305,13 +476,18 @@ describe.skipIf(databaseUrl === undefined)(
             bcc: [],
             cc: [],
             from: "sender@example.com",
-            headers: {},
+            headers: [],
             html: null,
+            messageHeaderId: "<fixture@example.com>",
+            metadata: {},
+            openTracking: false,
+            preparedAt: now.toISOString(),
             replyTo: [],
             subject: "fixture",
-            tags: {},
+            tags: [],
             text: "test",
             to: ["recipient@example.com"],
+            transportHtml: null,
           },
           recipientCount: 1,
           requestHash: "b".repeat(64),

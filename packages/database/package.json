@@ -9,6 +9,7 @@
     "./mail-attempts": "./src/mail-attempts.ts",
     "./mail-acceptance": "./src/mail-acceptance.ts",
     "./mail-feedback-inbox": "./src/mail-feedback-inbox.ts",
+    "./mail-payload-uploads": "./src/mail-payload-uploads.ts",
     "./schema": "./src/schema.ts"
   },
   "dependencies": {

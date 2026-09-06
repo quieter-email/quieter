@@ -6,6 +6,7 @@ import type { DatabaseClient } from "./client.ts";
 import { canonicalMailJson } from "./mail-ledger-json.ts";
 import {
   mailSubmission,
+  mailPayloadUpload,
   mailSubmissionOutbox,
   mailUsageReservation,
 } from "./schema.ts";
@@ -39,6 +40,7 @@ export const acceptMailSubmission = async (
     idempotencyKey: string;
     requestHash: string;
     payload: MailSubmissionPayload;
+    payloadUploadId?: string;
     messageBytes: number;
     attachmentBytes: number;
     recipientCount: number;
@@ -85,6 +87,40 @@ export const acceptMailSubmission = async (
       return { replayed: true, result: existing.acceptedResult };
     }
     // Callers must check authorization and budget through this transaction, without external I/O.
+    if (input.payload.attachments.length > 0) {
+      if (input.payloadUploadId === undefined) {
+        throw new Error("Attachments have no prepared upload lease.");
+      }
+      const [upload] = await transaction
+        .select()
+        .from(mailPayloadUpload)
+        .where(
+          and(
+            eq(mailPayloadUpload.id, input.payloadUploadId),
+            eq(mailPayloadUpload.organizationId, input.organizationId),
+            eq(mailPayloadUpload.status, "ready"),
+            sql`${mailPayloadUpload.expiresAt} > clock_timestamp()`
+          )
+        )
+        .for("update");
+      const objects = input.payload.attachments.map(
+        ({ key, bytes, digest }) => ({ bytes, digest, key })
+      );
+      if (
+        upload === undefined ||
+        canonicalMailJson(upload.objects) !== canonicalMailJson(objects)
+      ) {
+        throw new Error(
+          "Prepared upload is expired, unowned, or does not match the attachments."
+        );
+      }
+      await transaction
+        .update(mailPayloadUpload)
+        .set({ status: "committed" })
+        .where(eq(mailPayloadUpload.id, upload.id));
+    } else if (input.payloadUploadId !== undefined) {
+      throw new Error("An empty submission cannot claim an upload lease.");
+    }
     const budget = await input.reserveBudget(transaction);
     const id = randomUUID();
     const result = { messageId: id, status: "queued" } as const;
@@ -101,6 +137,7 @@ export const acceptMailSubmission = async (
       organizationId: input.organizationId,
       payload: input.payload,
       payloadDigest,
+      payloadUploadId: input.payloadUploadId,
       recipientCount: input.recipientCount,
       requestHash: input.requestHash,
       sendAfter: sql`now()`,

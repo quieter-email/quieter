@@ -2539,23 +2539,67 @@ export type MailSubmissionStatus =
   | "failed"
   | "canceled";
 export type MailAttemptOutcome = "intent" | "unknown" | "accepted" | "rejected";
+export type MailPayloadObject = { key: string; bytes: number; digest: string };
+
+export const mailPayloadUpload = pgTable(
+  "mailPayloadUpload",
+  {
+    cleanupGeneration: integer("cleanupGeneration").notNull().default(0),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expiresAt", { withTimezone: true }).notNull(),
+    id: text("id").primaryKey(),
+    nextActionAt: timestamp("nextActionAt", { withTimezone: true }).notNull(),
+    objects: jsonb("objects").$type<MailPayloadObject[]>().notNull(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "restrict" }),
+    status: text("status")
+      .$type<"uploading" | "ready" | "committed" | "deleting">()
+      .notNull()
+      .default("uploading"),
+  },
+  (table) => [
+    unique("mail_payload_upload_owner_unique").on(
+      table.id,
+      table.organizationId
+    ),
+    index("mail_payload_upload_recovery_idx")
+      .on(table.nextActionAt, table.id)
+      .where(sql`${table.status} <> 'committed'`),
+    check(
+      "mail_payload_upload_status_check",
+      sql`${table.status} IN ('uploading', 'ready', 'committed', 'deleting')`
+    ),
+    check(
+      "mail_payload_upload_bounds_check",
+      sql`${table.expiresAt} > ${table.createdAt} AND ${table.cleanupGeneration} >= 0 AND jsonb_array_length(${table.objects}) BETWEEN 1 AND 50 AND octet_length(${table.objects}::text) <= 65536`
+    ),
+  ]
+);
+
 export type MailSubmissionPayload = {
   attachments: {
     bytes: number;
     contentId: string | null;
     contentType: string;
     digest: string;
+    disposition: "attachment" | "inline";
     filename: string;
     key: string;
   }[];
   bcc: string[];
   cc: string[];
   from: string;
-  headers: Record<string, string>;
+  headers: { name: string; value: string }[];
   html: string | null;
+  messageHeaderId: string;
+  metadata: Record<string, string | number | boolean | null>;
+  openTracking: boolean;
+  preparedAt: string;
+  transportHtml: string | null;
   replyTo: string[];
   subject: string;
-  tags: Record<string, string>;
+  tags: { name: string; value: string }[];
   text: string | null;
   to: string[];
 };
@@ -2586,6 +2630,7 @@ export const mailSubmission = pgTable(
       .references(() => organization.id, { onDelete: "restrict" }),
     payload: jsonb("payload").$type<MailSubmissionPayload>().notNull(),
     payloadDigest: text("payloadDigest").notNull(),
+    payloadUploadId: text("payloadUploadId"),
     recipientCount: integer("recipientCount").notNull(),
     requestHash: text("requestHash").notNull(),
     schemaVersion: integer("schemaVersion").default(1).notNull(),
@@ -2607,6 +2652,14 @@ export const mailSubmission = pgTable(
       table.id,
       table.organizationId
     ),
+    foreignKey({
+      columns: [table.payloadUploadId, table.organizationId],
+      foreignColumns: [mailPayloadUpload.id, mailPayloadUpload.organizationId],
+      name: "mail_submission_payload_owner_fk",
+    }).onDelete("restrict"),
+    uniqueIndex("mail_submission_payload_upload_unique")
+      .on(table.payloadUploadId)
+      .where(sql`${table.payloadUploadId} IS NOT NULL`),
     index("mail_submission_recovery_idx")
       .on(table.nextActionAt, table.id)
       .where(
@@ -3081,6 +3134,7 @@ export const tables = {
   mailDomain,
   mailDomainConnectAttempt,
   mailFeedbackInbox,
+  mailPayloadUpload,
   mailSendAttempt,
   mailSubmission,
   mailSubmissionOutbox,

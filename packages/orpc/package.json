@@ -18,6 +18,7 @@
     "./server": "./src/server.ts",
     "./server-client": "./src/server-client.ts",
     "./organization-mail": "./src/organization-mail.ts",
+    "./mail-submission-payload": "./src/mail-submission-payload.ts",
     "./organization-mail-delivery": "./src/organization-mail-delivery.ts",
     "./organization-mail-policy": "./src/organization-mail-policy.ts",
     "./router": "./src/routers/index.ts",
