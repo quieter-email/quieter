@@ -123,6 +123,14 @@ export const buildRuntimeRelease = async (input: {
   // A new directory makes incomplete builds visible and prevents overwriting previously verified bytes.
   await mkdir(input.output);
   const configPath = path.join(input.output, "build-worker.jsonc");
+  const entryPath = path.join(input.output, "index.ts");
+  const entryModule = JSON.stringify(
+    path.join(input.directory, runtime.entrypoint).replaceAll("\\", "/")
+  );
+  const entrySource = `export { default } from ${entryModule};\nexport * from ${entryModule};\n`;
+  if (!web) {
+    await writeFile(entryPath, entrySource, { flag: "wx" });
+  }
   const buildId = randomUUID();
   const run = async (
     command: string,
@@ -161,7 +169,7 @@ export const buildRuntimeRelease = async (input: {
       "--name",
       "quieter-release-build",
       "--main",
-      path.join(input.directory, runtime.entrypoint),
+      web ? path.join(input.directory, runtime.entrypoint) : entryPath,
       "--out",
       configPath,
     ],
@@ -202,8 +210,8 @@ export const buildRuntimeRelease = async (input: {
         "--dry-run",
         "--config",
         configPath,
-        "--outfile",
-        path.join(builtDirectory, "server/index.js"),
+        "--outdir",
+        path.join(builtDirectory, "server"),
         "--minify",
         "--upload-source-maps",
       ],
@@ -282,7 +290,10 @@ export const buildRuntimeRelease = async (input: {
     buildId,
     source.sourceSha,
     {
-      buildConfigDigest: createHash("sha256").update(buildConfig).digest("hex"),
+      buildConfigDigest: createHash("sha256")
+        .update(buildConfig)
+        .update(web ? "" : entrySource)
+        .digest("hex"),
       command: web
         ? "vp run --no-cache @quieter/web#build"
         : "vp exec wrangler deploy --dry-run",
@@ -328,7 +339,8 @@ export const buildRuntimeRelease = async (input: {
   const afterConfig = await readFile(configPath);
   if (
     JSON.stringify(source) !== JSON.stringify(after) ||
-    !afterConfig.equals(buildConfig)
+    !afterConfig.equals(buildConfig) ||
+    (!web && (await readFile(entryPath, "utf-8")) !== entrySource)
   ) {
     throw new Error(
       "Release source or build configuration changed during compilation."
@@ -338,6 +350,7 @@ export const buildRuntimeRelease = async (input: {
   await verifyReleaseSourceMaps(manifest, input.output);
   await rm(configPath);
   if (!web) {
+    await rm(entryPath);
     if (
       path.dirname(path.resolve(builtDirectory)) !== path.resolve(input.output)
     ) {
