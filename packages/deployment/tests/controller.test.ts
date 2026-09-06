@@ -1,7 +1,7 @@
 /* oxlint-disable require-await, max-classes-per-file, class-methods-use-this, no-await-expression-member -- In-memory provider and journal implement the production asynchronous interfaces. */
 import { randomUUID } from "node:crypto";
 
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import { planPromotion } from "../src/compatibility.ts";
 import { ReleaseController } from "../src/controller.ts";
@@ -9,6 +9,7 @@ import { releaseStateSchema } from "../src/schema.ts";
 import type {
   ActiveDeployment,
   Checkpoint,
+  HealthyRelease,
   ReleaseJournal,
   ReleaseState,
   RuntimeProvider,
@@ -112,9 +113,15 @@ const fixture = async () => {
     });
   }
   let time = Date.now();
+  const preflight = {
+    verify: vi
+      .fn<(release: HealthyRelease) => Promise<void>>()
+      .mockResolvedValue(),
+  };
   const controller = new ReleaseController(
     journal,
     provider,
+    preflight,
     () => new Date(time)
   );
   return {
@@ -125,11 +132,40 @@ const fixture = async () => {
     candidate,
     controller,
     journal,
+    preflight,
     provider,
   };
 };
 
 describe("durable runtime release recovery", () => {
+  it("blocks preparation when the rollback archive cannot be verified", async () => {
+    const { candidate, controller, journal, provider, preflight } =
+      await fixture();
+    preflight.verify.mockRejectedValueOnce(
+      new Error("Missing archived object.")
+    );
+    await expect(
+      controller.prepare({ candidate, id: "attempt", workflowRunId: "1" })
+    ).rejects.toThrow("Missing archived object");
+    expect(journal.checkpoint?.state.attempt).toBeNull();
+    expect(provider.calls).toHaveLength(0);
+  });
+
+  it("rechecks archives after preparation and leaves recovery independent of them", async () => {
+    const { candidate, controller, journal, provider, preflight } =
+      await fixture();
+    await controller.prepare({ candidate, id: "attempt", workflowRunId: "1" });
+    preflight.verify.mockRejectedValue(
+      new Error("Archive became unavailable.")
+    );
+    await expect(controller.promote("attempt")).rejects.toThrow(
+      "Archive became unavailable"
+    );
+    expect(provider.calls).toHaveLength(0);
+    await controller.recover("attempt", "preflight_failed");
+    expect(journal.checkpoint?.state.attempt?.status).toBe("rolled_back");
+  });
+
   it("promotes the complete group and certifies only after observation", async () => {
     const { candidate, controller, journal, provider, advance } =
       await fixture();
@@ -158,7 +194,7 @@ describe("durable runtime release recovery", () => {
   });
 
   it("recovers a lost activation response using a new controller", async () => {
-    const { baseline, candidate, controller, journal, provider } =
+    const { baseline, candidate, controller, journal, provider, preflight } =
       await fixture();
     await controller.prepare({ candidate, id: "attempt", workflowRunId: "1" });
     provider.failAfterMutation = true;
@@ -167,7 +203,7 @@ describe("durable runtime release recovery", () => {
     );
     expect(journal.checkpoint?.state.attempt?.intent?.service).toBe("backend");
     provider.failAfterMutation = false;
-    await new ReleaseController(journal, provider).recover(
+    await new ReleaseController(journal, provider, preflight).recover(
       "attempt",
       "runner_lost"
     );
@@ -181,7 +217,7 @@ describe("durable runtime release recovery", () => {
   it.each([3, 4, 5, 6, 7])(
     "recovers process termination at journal write %i",
     async (failAt) => {
-      const { baseline, candidate, controller, journal, provider } =
+      const { baseline, candidate, controller, journal, provider, preflight } =
         await fixture();
       await controller.prepare({
         candidate,
@@ -193,7 +229,7 @@ describe("durable runtime release recovery", () => {
         "Runner stopped"
       );
       journal.failAt = -1;
-      await new ReleaseController(journal, provider).recover(
+      await new ReleaseController(journal, provider, preflight).recover(
         "attempt",
         "runner_lost"
       );

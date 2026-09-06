@@ -2,7 +2,7 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parseArgs } from "node:util";
 
-import { inventoryWorkerArtifact } from "./artifact.ts";
+import { inventoryWorkerArtifact, releaseArtifactSchema } from "./artifact.ts";
 import { inventoryAssets } from "./assets.ts";
 
 const { values } = parseArgs({
@@ -28,16 +28,25 @@ const { artifact, digest } = await inventoryWorkerArtifact(
   values.build,
   values.sha
 );
-const archive = await inventoryAssets(
-  path.join(values.directory, "client"),
-  values.build,
-  digest
-);
+const archive = artifact.assets.some(
+  (file) =>
+    file.path.startsWith("assets/") && file.path !== "assets/build-id.txt"
+)
+  ? await inventoryAssets(
+      path.join(values.directory, "client"),
+      values.build,
+      digest
+    )
+  : null;
 await writeFile(
   values.output,
-  JSON.stringify({ archive, artifact, digest }, null, 2),
+  JSON.stringify(
+    releaseArtifactSchema.parse({ archive, artifact, digest }),
+    null,
+    2
+  ),
   { flag: "wx" }
 );
 process.stdout.write(
-  `Verified artifact ${digest}: ${artifact.modules.length} modules, ${artifact.assets.length} static assets, ${archive.files.length} retained browser assets.\n`
+  `Verified artifact ${digest}: ${artifact.modules.length} modules, ${artifact.assets.length} static assets, ${archive?.files.length ?? 0} retained browser assets.\n`
 );

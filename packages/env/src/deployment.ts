@@ -37,6 +37,10 @@ export const createDeploymentEnv = (
       AWS_REGION: z.string().default("eu-central-1"),
       CLOUDFLARE_ACCOUNT_ID: z.string().regex(/^[a-f\d]{32}$/u),
       CLOUDFLARE_API_TOKEN: z.string().min(1),
+      CLOUDFLARE_ARCHIVE_PARENT_KEY_ID: z
+        .string()
+        .regex(/^[a-f\d]{32}$/u)
+        .optional(),
       GITHUB_REPOSITORY: z
         .string()
         .regex(/^[\w.-]+\/[\w.-]+$/u)

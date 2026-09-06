@@ -7,7 +7,9 @@
     "./schema": "./src/schema.ts"
   },
   "scripts": {
+    "archive": "node --conditions=development src/archive-cli.ts",
     "artifact": "node --conditions=development src/artifact-cli.ts",
+    "verify:archive": "node --conditions=development src/verify-archive-proof.ts",
     "verify:proof": "node --conditions=development src/verify-live-proof.ts",
     "verify:upload": "node --conditions=development src/verify-upload-proof.ts",
     "release": "node --conditions=development src/cli.ts"
@@ -18,9 +20,11 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "catalog:",
     "@quieter/config": "workspace:*",
     "@types/node": "catalog:",
     "typescript": "catalog:",
-    "vite-plus": "catalog:"
+    "vite-plus": "catalog:",
+    "wrangler": "catalog:"
   }
 }

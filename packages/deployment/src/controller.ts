@@ -15,15 +15,20 @@ export class ReleaseController {
   readonly journal: ReleaseJournal;
   readonly provider: RuntimeProvider;
   readonly now: () => Date;
+  private readonly preflight: {
+    verify: (release: HealthyRelease) => Promise<void>;
+  };
 
   constructor(
     journal: ReleaseJournal,
     provider: RuntimeProvider,
+    preflight: { verify: (release: HealthyRelease) => Promise<void> },
     now = () => new Date()
   ) {
     this.journal = journal;
     this.provider = provider;
     this.now = now;
+    this.preflight = preflight;
   }
 
   async prepare(input: {
@@ -60,6 +65,8 @@ export class ReleaseController {
     if (order.length === 0) {
       throw new Error("The release changes no runtime versions.");
     }
+    await this.preflight.verify(state.healthy);
+    await this.preflight.verify(candidate);
     for (const service of candidate.services) {
       if (state.quarantinedArtifacts.includes(service.artifactDigest)) {
         throw new Error("The release contains a quarantined artifact.");
@@ -106,6 +113,8 @@ export class ReleaseController {
     ) {
       throw new Error("This attempt is not eligible for promotion.");
     }
+    await this.preflight.verify(checkpoint.state.attempt.baseline);
+    await this.preflight.verify(checkpoint.state.attempt.candidate);
     await this.assertExpectedMap(checkpoint);
     for (const name of checkpoint.state.attempt.order) {
       // oxlint-disable-next-line no-await-in-loop -- Pointer changes must follow the proven contract order.

@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { z } from "zod";
 
+import { assetManifestSchema } from "./assets.ts";
 import { digestSchema, identifierSchema } from "./schema.ts";
 
 const fileSchema = z.strictObject({
@@ -70,6 +71,44 @@ export const artifactSchema = z
     }
   });
 export type WorkerArtifact = z.infer<typeof artifactSchema>;
+
+export const releaseArtifactSchema = z
+  .strictObject({
+    archive: assetManifestSchema.nullable(),
+    artifact: artifactSchema,
+    digest: digestSchema,
+  })
+  .superRefine((release, context) => {
+    const digest = createHash("sha256")
+      .update(JSON.stringify(release.artifact))
+      .digest("hex");
+    if (
+      digest !== release.digest ||
+      (release.archive !== null &&
+        (release.archive.artifactDigest !== digest ||
+          release.archive.buildId !== release.artifact.buildId))
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Release artifact and archive identity differ.",
+      });
+    }
+    const expected = release.artifact.assets.filter(
+      (file) =>
+        file.path.startsWith("assets/") && file.path !== "assets/build-id.txt"
+    );
+    if (
+      (expected.length === 0 && release.archive !== null) ||
+      (expected.length > 0 &&
+        JSON.stringify(expected) !== JSON.stringify(release.archive?.files))
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "The archive does not cover the artifact's browser assets.",
+      });
+    }
+  });
+export type ReleaseArtifact = z.infer<typeof releaseArtifactSchema>;
 
 const publicContentTypes: Record<string, string> = {
   ".avif": "image/avif",

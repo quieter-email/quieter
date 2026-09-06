@@ -2,8 +2,6 @@ import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
-import type { S3Client } from "@aws-sdk/client-s3";
-import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { z } from "zod";
 
 import { digestSchema, identifierSchema } from "./schema.ts";
@@ -107,13 +105,19 @@ export const inventoryAssets = async (
   });
 };
 
-export class AssetArchive {
-  private readonly client: S3Client;
-  private readonly bucket: string;
+export type ArchiveStore = {
+  create: (key: string, body: Uint8Array, contentType: string) => Promise<void>;
+  read: (
+    key: string,
+    expectedBytes: number
+  ) => Promise<{ body: Uint8Array; contentType: string | undefined }>;
+};
 
-  constructor(client: S3Client, bucket: string) {
-    this.client = client;
-    this.bucket = bucket;
+export class AssetArchive {
+  private readonly store: ArchiveStore;
+
+  constructor(store: ArchiveStore) {
+    this.store = store;
   }
 
   async upload(clientDirectory: string, manifest: AssetManifest) {
@@ -128,7 +132,7 @@ export class AssetArchive {
         throw new Error("The archived build differs from the tested artifact.");
       }
       // oxlint-disable-next-line no-await-in-loop -- Never overwrite an existing hashed URL, including on reruns.
-      await this.put(file.path, body, file.contentType);
+      await this.store.create(file.path, body, file.contentType);
       // oxlint-disable-next-line no-await-in-loop -- Read back bytes and MIME before publishing a receipt.
       await this.verifyObject(
         file.path,
@@ -140,7 +144,7 @@ export class AssetArchive {
     const body = Buffer.from(JSON.stringify(validated));
     const digest = createHash("sha256").update(body).digest("hex");
     const key = `receipts/${validated.artifactDigest}.json`;
-    await this.put(key, body, "application/json");
+    await this.store.create(key, body, "application/json");
     await this.verifyObject(key, digest, body.byteLength, "application/json");
     return digest;
   }
@@ -165,44 +169,20 @@ export class AssetArchive {
     }
   }
 
-  private async put(key: string, body: Buffer, contentType: string) {
-    await this.client
-      .send(
-        new PutObjectCommand({
-          Body: body,
-          Bucket: this.bucket,
-          CacheControl: "public, max-age=31536000, immutable",
-          ContentType: contentType,
-          IfNoneMatch: "*",
-          Key: key,
-        })
-      )
-      .catch((error: unknown) => {
-        if (!(error instanceof Error) || error.name !== "PreconditionFailed") {
-          throw new Error(
-            "Asset archive upload failed; traffic must remain unchanged."
-          );
-        }
-      });
-  }
-
   private async verifyObject(
     key: string,
     digest: string,
     bytes: number,
     contentType: string
   ) {
-    const object = await this.client.send(
-      new GetObjectCommand({ Bucket: this.bucket, Key: key })
-    );
+    const object = await this.store.read(key, bytes);
     if (
-      !object.Body ||
-      object.ContentLength !== bytes ||
-      object.ContentType !== contentType
+      object.body.byteLength !== bytes ||
+      object.contentType !== contentType
     ) {
       throw new Error("Asset archive size or content type mismatch.");
     }
-    const body = await object.Body.transformToByteArray();
+    const { body } = object;
     if (createHash("sha256").update(body).digest("hex") !== digest) {
       throw new Error(
         "Asset archive checksum mismatch. Refusing to overwrite existing bytes."

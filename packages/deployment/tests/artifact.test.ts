@@ -6,7 +6,11 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { z } from "zod";
 
-import { inventoryWorkerArtifact } from "../src/artifact.ts";
+import {
+  inventoryWorkerArtifact,
+  releaseArtifactSchema,
+} from "../src/artifact.ts";
+import { inventoryAssets } from "../src/assets.ts";
 import { CloudflareRuntimeProvider } from "../src/cloudflare.ts";
 
 const directories: string[] = [];
@@ -78,6 +82,56 @@ describe("verified native uploads", () => {
         await rm(directory, { force: true, recursive: true });
       })
     );
+  });
+
+  it("rejects incomplete archives and changed release identity", async () => {
+    const { directory } = await build();
+    await mkdir(path.join(directory, "client/assets"));
+    await Promise.all([
+      writeFile(
+        path.join(directory, "client/assets/main-12345678.js"),
+        "script"
+      ),
+      writeFile(
+        path.join(directory, "client/assets/font-12345678.woff2"),
+        "font"
+      ),
+    ]);
+    const release = await inventoryWorkerArtifact(
+      directory,
+      "proof",
+      "a".repeat(40)
+    );
+    const archive = await inventoryAssets(
+      path.join(directory, "client"),
+      "proof",
+      release.digest
+    );
+    expect(
+      releaseArtifactSchema.safeParse({ ...release, archive }).success
+    ).toBeTruthy();
+    for (const changed of [
+      { ...release, archive, digest: "b".repeat(64) },
+      { ...release, archive: { ...archive, buildId: "other-build" } },
+      { ...release, archive: { ...archive, files: archive.files.slice(1) } },
+      {
+        ...release,
+        archive: {
+          ...archive,
+          files: archive.files.map((file) => ({
+            ...file,
+            digest: "b".repeat(64),
+          })),
+        },
+      },
+      {
+        ...release,
+        archive,
+        artifact: { ...release.artifact, sourceSha: "b".repeat(40) },
+      },
+    ]) {
+      expect(releaseArtifactSchema.safeParse(changed).success).toBeFalsy();
+    }
   });
 
   it("inherits bindings from the recorded version and never calls deployment APIs to write", async () => {

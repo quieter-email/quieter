@@ -10,6 +10,7 @@ Milestone A is in progress. Production still runs the legacy SST workflow. `@qui
 - Recovery from a separate process, drift detection across the entire map, quarantine of failed artifacts, and refusal to start over unresolved attempts.
 - Two-minute authenticated health observation with explicit checks and actual version identity. Certification requires fresh evidence covering every service.
 - Browser asset inventory, immutable uploads, byte/MIME verification, receipt written last, and repair from the same artifact. Receipts are excluded from public fallback.
+- Immutable artifact manifests retained alongside the journal. Bootstrap, preparation, and promotion require these manifests; preparation and promotion verify both the candidate and rollback target's browser archives. Recovery does not require build files or archive access.
 - Deterministic compiled module/static asset manifests, byte verification before upload, and native inactive uploads inheriting bindings from an explicit baseline UUID. Uploads reject compatibility changes, binding removal, incomplete assets, and active-deployment drift.
 - Independent recovery checks the journal's recorded GitHub writer, waits for that writer to end, and rejects obsolete completion events. The recovery workflow uses separately pinned tooling and the shared mutation group. It remains disabled pending environment configuration and cutover.
 
@@ -40,6 +41,7 @@ Set `QUIETER_RELEASE_BUCKET`, `QUIETER_RELEASE_STAGE`, `CLOUDFLARE_ACCOUNT_ID`, 
 
 ```powershell
 vp run @quieter/deployment#release status
+vp run @quieter/deployment#release register --file <absolute-artifact-manifest> --directory <absolute-built-directory>
 vp run @quieter/deployment#release bootstrap --file <absolute-baseline-manifest>
 vp run @quieter/deployment#release prepare --attempt proof-recovery --run 1 --file <absolute-candidate-manifest>
 vp run @quieter/deployment#release promote --attempt proof-recovery
@@ -47,6 +49,8 @@ vp run @quieter/deployment#release recover --attempt proof-recovery --reason pro
 ```
 
 Each command is a separate process. If a command fails, read status and actual provider state before continuing. Do not bootstrap over an existing journal or delete history to rerun a failed release. A failed recovery stays discoverable and blocks the next release. The final `rolled_back` state must match the original baseline version. The new deployment ID will differ because restoration itself creates a deployment.
+
+Registration checks every compiled module and static file against the manifest, verifies its archive, then creates the manifest conditionally in the journal bucket. Register every referenced artifact before bootstrap or preparation. Old probe runs used synthetic digests without retained manifests; they remain historical evidence and cannot be promoted through the new gate. This gate verifies retained bytes and archive coverage. Provider-version provenance and binding-generation approval remain separate unfinished requirements.
 
 ## Evidence recorded on 2026-09-06
 
@@ -58,6 +62,8 @@ Each command is a separate process. If a command fails, read status and actual p
 - A native candidate inherited the active baseline's bindings while a newer SST-uploaded candidate had different configuration. Authenticated candidate code and static assets passed; unauthenticated access returned 404. `_headers` behavior passed and the active deployment ID stayed unchanged.
 - The isolated credential initially included PowerShell's trailing newline. It was corrected through stdin without changing any production secret. That correction and later asset-binding addition deliberately established new fixture baselines. The earlier journal remains intact as historical recovery evidence and must not be treated as the current fixture baseline.
 - Unit tests cover interruption around journal writes, lost activation responses, stale writers, external drift, failed compensation, quarantined artifacts, incompatible contracts, archive repair, corruption, and missing objects behind a valid receipt.
+- The native R2 development binding passed interrupted-upload, idempotent-repair, and missing-object drills without changing the active runtime. Bulk transfers through Wrangler's remote proxy later failed with internal errors. Release archives therefore use the R2 S3 API with short-lived credentials instead of the development proxy.
+- The actual TanStack artifact contains 315 modules, 172 static assets, and 145 retained browser assets. Its complete archive passed byte, MIME, and receipt verification in the isolated bucket. Repeating upload and verification after a machine shutdown passed using the same artifact, without rebuilding.
 
 These tests establish the controller, linked Worker behavior, and native static-asset upload. An actual TanStack build has also been inventoried. They do not yet establish a complete deployed TanStack candidate, protected production previews, queue/scheduled/DO version selection, production ownership transfer, or a live independent recovery workflow. No production pointer, secret, or database was changed by this proof.
 
@@ -66,6 +72,25 @@ Run the native upload proof under the limited SST operations target. It copies t
 ```powershell
 vp exec sst shell --config sst.release-proof.config.ts --stage release-proof-leander --target ReleaseOperations -- node --conditions=development packages/deployment/src/verify-upload-proof.ts
 ```
+
+## Archive verification
+
+Generate the release artifact once with `@quieter/deployment#artifact`. Keep its compiled directory and manifest together. The archive CLI checks the manifest's digest and complete browser-file coverage, then checks the compiled modules before accessing the archive. Never rebuild to repair an upload under an existing manifest.
+
+Set `CLOUDFLARE_ARCHIVE_PARENT_KEY_ID` to the existing R2 parent access key ID. The bootstrap API credential mints temporary credentials for one bucket, limited to `assets/` and `receipts/`, with a ten-minute lifetime. The SDK refreshes them during longer uploads. `--verify` requests read-only access. The parent credential must already have the intended R2 permissions; this command does not change account permissions.
+
+```powershell
+vp run @quieter/deployment#archive --bucket release-proof-leander-archive --directory <absolute-built-directory> --manifest <absolute-artifact-manifest>
+vp run @quieter/deployment#archive --bucket release-proof-leander-archive --directory <absolute-built-directory> --manifest <absolute-artifact-manifest> --verify
+```
+
+Both commands require the isolated stage configuration described above. Uploads create objects conditionally and verify existing bytes on a rerun. A receipt is written only after every referenced file passes verification. Verification reads every object even when the receipt exists.
+
+## Database durability evidence
+
+Read-only PlanetScale inspection on 2026-09-06 found the existing `quieter` main branch on a single-node PS-5 configuration in AWS Frankfurt, with zero replicas and a 50-connection PostgreSQL limit. PgBouncer allows 4,000 client connections; that does not increase the database's execution capacity. The default MCP SQL connection used the `postgres` database, so its settings are not evidence of application-database overrides. Access to `quieter_dev` through that connector was denied; no permissions were changed.
+
+This topology does not establish provider-failure RPO 0 or high availability. Keep the submission guarantee scoped to application failures while the database and payload store remain intact. A topology change needs a separate cost and infrastructure decision. See [PlanetScale single-node documentation](https://planetscale.com/docs/postgres/cluster-configuration/single-node).
 
 ## Independent recovery configuration
 

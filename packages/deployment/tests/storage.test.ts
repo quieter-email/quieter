@@ -10,8 +10,12 @@ import {
 } from "@aws-sdk/client-s3";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
+import { S3ArchiveStore } from "../src/archive-store.ts";
+import { ReleaseArtifactStore } from "../src/artifact-store.ts";
+import { artifactSchema, releaseArtifactSchema } from "../src/artifact.ts";
 import { AssetArchive, inventoryAssets } from "../src/assets.ts";
 import { ObjectReleaseJournal } from "../src/journal.ts";
+import { ReleasePreflight } from "../src/preflight.ts";
 import type { ReleaseState } from "../src/schema.ts";
 
 const directories: string[] = [];
@@ -115,10 +119,77 @@ const build = async () => {
 };
 
 describe("immutable archive and durable journal", () => {
+  it("retains immutable manifests and detects missing archived bytes during release preflight", async () => {
+    const { client, objects, writes } = objectStore();
+    const { directory, manifest } = await build();
+    const artifact = artifactSchema.parse({
+      assetRouting: {},
+      assets: manifest.files,
+      buildId: manifest.buildId,
+      compatibilityDate: "2026-08-04",
+      compatibilityFlags: [],
+      mainModule: "index.js",
+      modules: [
+        {
+          bytes: 1,
+          contentType: "application/javascript+module",
+          digest: "a".repeat(64),
+          path: "index.js",
+        },
+      ],
+      schemaVersion: 1,
+      sourceSha: "a".repeat(40),
+    });
+    const digest = createHash("sha256")
+      .update(JSON.stringify(artifact))
+      .digest("hex");
+    const release = releaseArtifactSchema.parse({
+      archive: { ...manifest, artifactDigest: digest },
+      artifact,
+      digest,
+    });
+    const archive = new AssetArchive(new S3ArchiveStore(client, "archive"));
+    if (release.archive === null) {
+      throw new Error("Expected browser archive.");
+    }
+    await archive.upload(directory, release.archive);
+    const artifacts = new ReleaseArtifactStore(client, "journal", "test");
+    await artifacts.write(release);
+    await artifacts.write(release);
+    expect(writes.filter((key) => key.includes("/artifacts/"))).toHaveLength(1);
+    const preflight = new ReleasePreflight(artifacts, archive);
+    const candidate = {
+      id: "candidate",
+      services: [
+        {
+          artifactDigest: digest,
+          bindingGeneration: "b".repeat(64),
+          contracts: [],
+          requirements: {},
+          scriptName: "web",
+          service: "web",
+          versionId: "f2a8db85-f29a-4148-9e85-22b214a427a9",
+        },
+      ],
+      sourceSha: artifact.sourceSha,
+    };
+    await preflight.verify(candidate);
+    objects.delete(manifest.files[0].path);
+    await expect(preflight.verify(candidate)).rejects.toThrow("Missing object");
+    const key = `test/artifacts/${digest}.json`;
+    objects.set(key, {
+      body: Buffer.from(JSON.stringify({ ...release, digest: "c".repeat(64) })),
+      contentType: "application/json",
+      etag: "corrupt",
+    });
+    await expect(artifacts.read(digest)).rejects.toThrow("identity differ");
+    await expect(artifacts.write(release)).rejects.toThrow("identity differ");
+  });
+
   it("archives nested assets and publishes the verified receipt last", async () => {
     const { client, objects, writes } = objectStore();
     const { directory, manifest } = await build();
-    const archive = new AssetArchive(client, "archive");
+    const archive = new AssetArchive(new S3ArchiveStore(client, "archive"));
     await archive.upload(directory, manifest);
     await archive.verify(manifest);
     expect(manifest.files.map((file) => file.path)).toStrictEqual([
@@ -140,7 +211,10 @@ describe("immutable archive and durable journal", () => {
       contentType: file.contentType,
       etag: "existing",
     });
-    await new AssetArchive(client, "archive").upload(directory, manifest);
+    await new AssetArchive(new S3ArchiveStore(client, "archive")).upload(
+      directory,
+      manifest
+    );
     expect(writes).toStrictEqual([
       "assets/page-abcdefgh.js",
       `receipts/${manifest.artifactDigest}.json`,
@@ -157,7 +231,10 @@ describe("immutable archive and durable journal", () => {
       etag: "conflict",
     });
     await expect(
-      new AssetArchive(client, "archive").upload(directory, manifest)
+      new AssetArchive(new S3ArchiveStore(client, "archive")).upload(
+        directory,
+        manifest
+      )
     ).rejects.toThrow("checksum mismatch");
     expect(writes).toStrictEqual([]);
   });
@@ -165,7 +242,7 @@ describe("immutable archive and durable journal", () => {
   it("detects a missing object even when the receipt exists", async () => {
     const { client, objects } = objectStore();
     const { directory, manifest } = await build();
-    const archive = new AssetArchive(client, "archive");
+    const archive = new AssetArchive(new S3ArchiveStore(client, "archive"));
     await archive.upload(directory, manifest);
     objects.delete(manifest.files[0].path);
     await expect(archive.verify(manifest)).rejects.toThrow("Missing object");
@@ -176,7 +253,10 @@ describe("immutable archive and durable journal", () => {
     const { directory, manifest } = await build();
     await writeFile(path.join(directory, manifest.files[0].path), "changed");
     await expect(
-      new AssetArchive(client, "archive").upload(directory, manifest)
+      new AssetArchive(new S3ArchiveStore(client, "archive")).upload(
+        directory,
+        manifest
+      )
     ).rejects.toThrow("tested artifact");
     expect(writes).toStrictEqual([]);
   });

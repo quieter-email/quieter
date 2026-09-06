@@ -1,15 +1,23 @@
 import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { parseArgs } from "node:util";
 
 import { S3Client } from "@aws-sdk/client-s3";
 import { createDeploymentEnv } from "@quieter/env/deployment";
 import { z } from "zod";
 
+import { S3ArchiveStore } from "./archive-store.ts";
+import { ReleaseArtifactStore } from "./artifact-store.ts";
+import { readArtifactFile, releaseArtifactSchema } from "./artifact.ts";
+import { AssetArchive } from "./assets.ts";
+import type { AssetManifest } from "./assets.ts";
 import { CloudflareRuntimeProvider } from "./cloudflare.ts";
 import { assertCompatible } from "./compatibility.ts";
 import { ReleaseController } from "./controller.ts";
 import { observeRelease, probeConfigurationSchema } from "./health.ts";
 import { ObjectReleaseJournal } from "./journal.ts";
+import { ReleasePreflight } from "./preflight.ts";
+import { createR2ArchiveClient } from "./r2-archive-client.ts";
 import { reconcileRelease } from "./recovery.ts";
 import { healthyReleaseSchema, identifierSchema } from "./schema.ts";
 
@@ -17,6 +25,7 @@ const { positionals, values } = parseArgs({
   allowPositionals: true,
   options: {
     attempt: { type: "string" },
+    directory: { type: "string" },
     "event-run": { type: "string" },
     file: { type: "string" },
     reason: { type: "string" },
@@ -26,6 +35,7 @@ const { positionals, values } = parseArgs({
 const command = z
   .enum([
     "status",
+    "register",
     "bootstrap",
     "prepare",
     "promote",
@@ -43,16 +53,17 @@ if (
     "Runtime mutation is restricted to isolated release-proof stages until ownership and recovery cutover is verified."
   );
 }
+const storage = new S3Client({
+  maxAttempts: 1,
+  region: env.AWS_REGION,
+  requestHandler: {
+    connectionTimeout: 5000,
+    requestTimeout: 15_000,
+    throwOnRequestTimeout: true,
+  },
+});
 const journal = new ObjectReleaseJournal(
-  new S3Client({
-    maxAttempts: 1,
-    region: env.AWS_REGION,
-    requestHandler: {
-      connectionTimeout: 5000,
-      requestTimeout: 15_000,
-      throwOnRequestTimeout: true,
-    },
-  }),
+  storage,
   env.QUIETER_RELEASE_BUCKET,
   env.QUIETER_RELEASE_STAGE
 );
@@ -60,7 +71,37 @@ const provider = new CloudflareRuntimeProvider(
   env.CLOUDFLARE_ACCOUNT_ID,
   env.CLOUDFLARE_API_TOKEN
 );
-const controller = new ReleaseController(journal, provider);
+const artifacts = new ReleaseArtifactStore(
+  storage,
+  env.QUIETER_RELEASE_BUCKET,
+  env.QUIETER_RELEASE_STAGE
+);
+const archive = {
+  async verify(manifest: AssetManifest) {
+    if (env.CLOUDFLARE_ARCHIVE_PARENT_KEY_ID === undefined) {
+      throw new Error(
+        "Browser release verification requires archive read access."
+      );
+    }
+    const bucket = `${env.QUIETER_RELEASE_STAGE}-archive`;
+    const client = createR2ArchiveClient({
+      accountId: env.CLOUDFLARE_ACCOUNT_ID,
+      bucket,
+      parentAccessKeyId: env.CLOUDFLARE_ARCHIVE_PARENT_KEY_ID,
+      readOnly: true,
+      token: env.CLOUDFLARE_API_TOKEN,
+    });
+    try {
+      await new AssetArchive(new S3ArchiveStore(client, bucket)).verify(
+        manifest
+      );
+    } finally {
+      client.destroy();
+    }
+  },
+};
+const preflight = new ReleasePreflight(artifacts, archive);
+const controller = new ReleaseController(journal, provider, preflight);
 const existing = await journal.read();
 if (
   command !== "status" &&
@@ -75,6 +116,33 @@ if (
 }
 // oxlint-disable-next-line default-case -- The validated command union is exhaustive.
 switch (command) {
+  case "register": {
+    if (values.file === undefined || values.directory === undefined) {
+      throw new Error(
+        "Register requires the tested --file manifest and compiled --directory."
+      );
+    }
+    const manifest = releaseArtifactSchema.parse(
+      JSON.parse(await readFile(values.file, "utf-8"))
+    );
+    for (const file of manifest.artifact.modules) {
+      const subdirectory = ["_headers", "_redirects"].includes(file.path)
+        ? "client"
+        : "server";
+      // oxlint-disable-next-line no-await-in-loop -- Verify the retained manifest against the tested build.
+      await readArtifactFile(path.join(values.directory, subdirectory), file);
+    }
+    for (const file of manifest.artifact.assets) {
+      // oxlint-disable-next-line no-await-in-loop -- Include static files that are not eligible for browser fallback.
+      await readArtifactFile(path.join(values.directory, "client"), file);
+    }
+    if (manifest.archive !== null) {
+      await archive.verify(manifest.archive);
+    }
+    await artifacts.write(manifest);
+    process.stdout.write(`Retained verified artifact ${manifest.digest}.\n`);
+    break;
+  }
   case "reconcile": {
     if (env.GITHUB_REPOSITORY === undefined || env.GITHUB_TOKEN === undefined) {
       throw new Error("Reconciliation requires GitHub workflow read access.");
@@ -107,6 +175,7 @@ switch (command) {
       JSON.parse(await readFile(values.file, "utf-8"))
     );
     assertCompatible(healthy.services);
+    await preflight.verify(healthy);
     if (
       healthy.services.some(
         (service) =>
