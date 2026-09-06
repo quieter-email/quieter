@@ -19,6 +19,7 @@ describe("immutable Git release planning", () => {
   const git = async (...args: string[]) => {
     const result = await execute("git", args, {
       cwd: directory,
+      timeout: 5000,
       windowsHide: true,
     });
     return result.stdout.trim();
@@ -63,7 +64,7 @@ describe("immutable Git release planning", () => {
       path.join(directory, "packages/aws/dirty.ts"),
       "uncommitted work"
     );
-  });
+  }, 30_000);
 
   afterAll(async () => {
     if (

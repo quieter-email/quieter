@@ -34,7 +34,7 @@ import {
   cleanupOrganizationsForDeletedUser,
   ensureUserOrganizationState,
 } from "./organization";
-import { ORGANIZATION_API_KEY_CONFIG_ID } from "./organization-api-key";
+import { organizationApiKeyOptions } from "./organization-api-key";
 import { readTermsAcceptedAtFromRequest } from "./terms-acceptance";
 
 const throwPlanRequiredError = (plan: string, description: string) => {
@@ -114,16 +114,7 @@ const trustedOrigins = [
     .map((origin) => origin.trim())
     .filter(Boolean) ?? []),
 ];
-const organizationApiKeyPlugin = apiKey({
-  configId: ORGANIZATION_API_KEY_CONFIG_ID,
-  defaultPrefix: "quieter_",
-  maximumNameLength: 64,
-  references: "organization",
-  startingCharactersConfig: {
-    charactersLength: 12,
-    shouldStore: true,
-  },
-});
+const organizationApiKeyPlugin = apiKey(organizationApiKeyOptions);
 
 export const auth = betterAuth({
   account: {

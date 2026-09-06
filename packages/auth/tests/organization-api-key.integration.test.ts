@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { defaultKeyHasher } from "@better-auth/api-key";
 import { db } from "@quieter/database/client";
 import { apikey } from "@quieter/database/schema";
+import { reportError } from "@quieter/observability";
 import { eq } from "drizzle-orm";
 import {
   afterAll,
@@ -14,11 +15,19 @@ import {
   vi,
 } from "vite-plus/test";
 
+import {
+  verifyOrganizationApiKey,
+  assertOrganizationApiKeyAuthorization,
+} from "../src/api-key-verification";
 import { organizationApiKeyApi } from "../src/index";
 import { ORGANIZATION_API_KEY_CONFIG_ID } from "../src/organization-api-key";
 
 const { databaseUrl } = vi.hoisted(() => ({
   databaseUrl: process.env.MIGRATION_TEST_DATABASE_URL,
+}));
+vi.mock(import("@quieter/observability"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  reportError: vi.fn<typeof reportError>(),
 }));
 vi.mock(import("@quieter/env/server"), async (importOriginal) => {
   const original = await importOriginal();
@@ -69,6 +78,7 @@ describe.skipIf(databaseUrl === undefined)(
       const verified = await organizationApiKeyApi.verifyApiKey({
         body: { configId: ORGANIZATION_API_KEY_CONFIG_ID, key },
       });
+
       expect({
         id: verified.key?.id,
         organizationId: verified.key?.referenceId,
@@ -82,6 +92,75 @@ describe.skipIf(databaseUrl === undefined)(
         key: null,
         valid: false,
       });
+    });
+
+    test("verifies without dashboard hooks and fences revocation or replacement before a commit", async () => {
+      await db.update(apikey).set({ enabled: true }).where(eq(apikey.id, id));
+      const identity = await verifyOrganizationApiKey(
+        new Request("https://mail.example.test/api/v2/send", {
+          headers: { authorization: `Bearer ${key}` },
+        })
+      );
+      if (identity === null) {
+        throw new Error("Expected a verified fixture key.");
+      }
+      expect({
+        id: identity.id,
+        organizationId: identity.organizationId,
+      }).toStrictEqual({ id, organizationId });
+      await db.transaction(async (transaction) => {
+        await assertOrganizationApiKeyAuthorization(transaction, identity);
+      });
+      await expect(
+        db.transaction(async (transaction) => {
+          await assertOrganizationApiKeyAuthorization(transaction, {
+            ...identity,
+            organizationId: randomUUID(),
+          });
+        })
+      ).rejects.toThrow("no longer authorized");
+      await db.update(apikey).set({ enabled: false }).where(eq(apikey.id, id));
+      await expect(
+        db.transaction(async (transaction) => {
+          await assertOrganizationApiKeyAuthorization(transaction, identity);
+        })
+      ).rejects.toThrow("no longer authorized");
+      await db
+        .update(apikey)
+        .set({
+          enabled: true,
+          key: await defaultKeyHasher("replacement-fixture-key"),
+        })
+        .where(eq(apikey.id, id));
+      await expect(
+        db.transaction(async (transaction) => {
+          await assertOrganizationApiKeyAuthorization(transaction, identity);
+        })
+      ).rejects.toThrow("no longer authorized");
+    });
+
+    test("reports database failure without treating it as an invalid key or exposing query details", async () => {
+      const select = db.select.bind(db);
+      db.select = () => {
+        throw new Error("private database query and credential fixture");
+      };
+      try {
+        await expect(
+          verifyOrganizationApiKey(
+            new Request("https://mail.example.test/api/v2/send", {
+              headers: { authorization: `Bearer ${key}` },
+            })
+          )
+        ).rejects.toThrow("temporarily unavailable");
+        expect(reportError).toHaveBeenCalledWith(
+          expect.objectContaining({
+            message: "API key verification is temporarily unavailable.",
+          }),
+          { operation: "organization-api-key:verification" }
+        );
+      } finally {
+        db.select = select;
+      }
     });
   }
 );

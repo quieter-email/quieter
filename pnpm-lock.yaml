@@ -665,6 +665,9 @@ importers:
 
   packages/cloudflare:
     dependencies:
+      '@quieter/auth':
+        specifier: workspace:*
+        version: link:../auth
       '@quieter/database':
         specifier: workspace:*
         version: link:../database

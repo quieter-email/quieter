@@ -16,6 +16,7 @@
     "write:build-wrangler": "node scripts/write-build-wrangler.ts"
   },
   "dependencies": {
+    "@quieter/auth": "workspace:*",
     "@quieter/database": "workspace:*",
     "@quieter/env": "workspace:*",
     "@quieter/mail": "workspace:*",

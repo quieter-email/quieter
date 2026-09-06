@@ -1,50 +1,21 @@
+import { verifyOrganizationApiKey } from "@quieter/auth/api-key-verification";
+
 export const getOrganizationApiKeyOrganizationId = async (
   request: Request
 ): Promise<string | null> => {
-  const authorization = request.headers.get("authorization")?.trim();
-  if (
-    authorization === undefined ||
-    authorization === "" ||
-    !authorization.startsWith("Bearer ")
-  ) {
+  const identity = await verifyOrganizationApiKey(request);
+  if (identity === null) {
     return null;
   }
-
-  const apiKey = authorization.slice("Bearer ".length).trim();
-  if (apiKey === "") {
-    return null;
-  }
-
-  const [
-    { organizationApiKeyApi },
-    { ORGANIZATION_API_KEY_CONFIG_ID, organizationHasBillingFeature },
-  ] = await Promise.all([
-    import("@quieter/auth"),
-    import("@quieter/orpc/organization-mail"),
-  ]);
-  const verifiedApiKey = await organizationApiKeyApi.verifyApiKey({
-    body: {
-      configId: ORGANIZATION_API_KEY_CONFIG_ID,
-      key: apiKey,
-    },
-  });
-
-  if (
-    !verifiedApiKey.valid ||
-    verifiedApiKey.key === null ||
-    verifiedApiKey.key === undefined ||
-    verifiedApiKey.key.configId !== ORGANIZATION_API_KEY_CONFIG_ID
-  ) {
-    return null;
-  }
-
+  const { organizationHasBillingFeature } =
+    await import("@quieter/orpc/organization-mail");
   const hasAccess = await organizationHasBillingFeature({
     feature: "organizationApiKeys",
-    organizationId: verifiedApiKey.key.referenceId,
+    organizationId: identity.organizationId,
   });
   if (!hasAccess) {
     return null;
   }
 
-  return verifiedApiKey.key.referenceId;
+  return identity.organizationId;
 };
