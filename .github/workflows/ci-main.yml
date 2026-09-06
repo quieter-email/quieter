@@ -2,13 +2,6 @@ name: Checks
 
 on:
   workflow_call:
-    inputs:
-      release_stage:
-        type: string
-        default: ci
-      public_configuration:
-        type: string
-        default: "{}"
   workflow_dispatch:
   pull_request:
     branches:
@@ -18,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: quieter-checks-${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -58,15 +51,10 @@ jobs:
       - name: Test Cloudflare Worker runtime
         run: vp run @quieter/cloudflare#test:workers
 
-      - name: Verify native release fixtures
-        run: vp run @quieter/cloudflare#test:release-proofs
-
   deployment-checks:
     name: Deployment safety checks
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 10
-    outputs:
-      workers: ${{ steps.runtimes.outputs.workers }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -89,47 +77,6 @@ jobs:
       - name: Bundle Cloudflare workers
         run: vp run @quieter/cloudflare#check:bundles
 
-      - name: Select registered Worker builds
-        id: runtimes
-        run: |
-          vp exec node --input-type=module -e 'import { appendFileSync } from "node:fs"; import { runtimeRegistry } from "./packages/deployment/src/registry.ts"; appendFileSync(process.env.GITHUB_OUTPUT, `workers=${JSON.stringify(runtimeRegistry.filter(runtime => runtime.package === "@quieter/cloudflare").map(runtime => runtime.service))}\n`);'
-
-  worker-release-build:
-    name: Worker release build (${{ matrix.service }})
-    needs: deployment-checks
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      max-parallel: 3
-      matrix:
-        service: ${{ fromJSON(needs.deployment-checks.outputs.workers) }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - name: Setup repository
-        uses: ./.github/actions/setup
-
-      - name: Build and inventory exact runtime bytes
-        env:
-          RELEASE_STAGE: ${{ inputs.release_stage || 'ci' }}
-          RELEASE_SERVICE: ${{ matrix.service }}
-          PUBLIC_CONFIGURATION: ${{ inputs.public_configuration || '{}' }}
-        shell: bash
-        run: |
-          printf '%s' "$PUBLIC_CONFIGURATION" > "$RUNNER_TEMP/release-public-configuration.json"
-          vp run @quieter/deployment#build:runtime --service "$RELEASE_SERVICE" --directory "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/runtime-release" --stage "$RELEASE_STAGE" --public-config "$RUNNER_TEMP/release-public-configuration.json"
-
-      - name: Retain verified runtime and private source maps
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: ${{ matrix.service }}-release-${{ github.sha }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/runtime-release
-          if-no-files-found: error
-          retention-days: 14
-
   web-worker-build:
     name: Web worker build
     runs-on: blacksmith-2vcpu-ubuntu-2404
@@ -142,22 +89,21 @@ jobs:
       - name: Setup repository
         uses: ./.github/actions/setup
 
-      - name: Build and inventory exact web release bytes
-        env:
-          RELEASE_STAGE: ${{ inputs.release_stage || 'ci' }}
-          PUBLIC_CONFIGURATION: ${{ inputs.public_configuration || '{}' }}
-        shell: bash
+      - name: Build runtime dependencies
         run: |
-          printf '%s' "$PUBLIC_CONFIGURATION" > "$RUNNER_TEMP/release-public-configuration.json"
-          vp run @quieter/deployment#build:web --directory "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/web-release" --stage "$RELEASE_STAGE" --public-config "$RUNNER_TEMP/release-public-configuration.json"
+          vp run @quieter/observability#build
+          vp run @quieter/sdk#build
 
-      - name: Retain verified web build and private source maps
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: web-release-${{ github.sha }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/web-release
-          if-no-files-found: error
-          retention-days: 14
+      - name: Build web worker
+        env:
+          SST_WRANGLER_PATH: ${{ github.workspace }}/ci-build-worker.wrangler.jsonc
+        run: |
+          touch .env.local
+          node packages/cloudflare/scripts/write-build-wrangler.ts \
+            --name quieter-ci-artifact \
+            --main ./apps/web/src/server.ts \
+            --out ci-build-worker.wrangler.jsonc
+          vp run @quieter/web#build
 
   migration-conflict:
     name: Migration conflict check
@@ -220,10 +166,4 @@ jobs:
         run: vp run @quieter/database#db:test-migrations
 
       - name: Test delivery persistence against migrated PostgreSQL
-        run: vp test packages/orpc/tests/organization-mail-delivery.integration.test.ts packages/orpc/tests/private-mailbox.integration.test.ts packages/auth/tests/private-mailbox-account.integration.test.ts packages/auth/tests/organization-api-key.integration.test.ts
-
-      - name: Test durable mail claims against migrated PostgreSQL
-        run: vp test packages/database/tests/mail-outbox.integration.test.ts packages/billing/tests/mail-submission-usage.integration.test.ts packages/orpc/tests/mail-submission-sender.integration.test.ts
-
-      - name: Test durable mail publication through native queues
-        run: vp run @quieter/cloudflare#test:workers
+        run: vp test packages/orpc/tests/organization-mail-delivery.integration.test.ts packages/orpc/tests/private-mailbox.integration.test.ts packages/auth/tests/private-mailbox-account.integration.test.ts

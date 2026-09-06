@@ -1,29 +1,50 @@
 export const getOrganizationApiKeyOrganizationId = async (
   request: Request
 ): Promise<string | null> => {
-  const { verifyOrganizationApiKey, OrganizationApiKeyRateLimitError } =
-    await import("@quieter/auth/api-key-verification");
-  let identity: Awaited<ReturnType<typeof verifyOrganizationApiKey>>;
-  try {
-    identity = await verifyOrganizationApiKey(request);
-  } catch (error) {
-    if (error instanceof OrganizationApiKeyRateLimitError) {
-      return null;
-    }
-    throw error;
-  }
-  if (identity === null) {
+  const authorization = request.headers.get("authorization")?.trim();
+  if (
+    authorization === undefined ||
+    authorization === "" ||
+    !authorization.startsWith("Bearer ")
+  ) {
     return null;
   }
-  const { organizationHasBillingFeature } =
-    await import("@quieter/orpc/organization-mail");
+
+  const apiKey = authorization.slice("Bearer ".length).trim();
+  if (apiKey === "") {
+    return null;
+  }
+
+  const [
+    { organizationApiKeyApi },
+    { ORGANIZATION_API_KEY_CONFIG_ID, organizationHasBillingFeature },
+  ] = await Promise.all([
+    import("@quieter/auth"),
+    import("@quieter/orpc/organization-mail"),
+  ]);
+  const verifiedApiKey = await organizationApiKeyApi.verifyApiKey({
+    body: {
+      configId: ORGANIZATION_API_KEY_CONFIG_ID,
+      key: apiKey,
+    },
+  });
+
+  if (
+    !verifiedApiKey.valid ||
+    verifiedApiKey.key === null ||
+    verifiedApiKey.key === undefined ||
+    verifiedApiKey.key.configId !== ORGANIZATION_API_KEY_CONFIG_ID
+  ) {
+    return null;
+  }
+
   const hasAccess = await organizationHasBillingFeature({
     feature: "organizationApiKeys",
-    organizationId: identity.organizationId,
+    organizationId: verifiedApiKey.key.referenceId,
   });
   if (!hasAccess) {
     return null;
   }
 
-  return identity.organizationId;
+  return verifiedApiKey.key.referenceId;
 };

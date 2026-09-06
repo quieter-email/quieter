@@ -2,9 +2,6 @@ packages:
   - "apps/*"
   - "packages/*"
 
-patchedDependencies:
-  postgres@3.4.9: patches/postgres@3.4.9.patch
-
 catalog:
   "@cloudflare/vite-plugin": "1.50.0"
   "@cloudflare/vitest-pool-workers": "0.20.1"

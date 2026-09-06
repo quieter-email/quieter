@@ -1,6 +1,5 @@
 import type { Subscription } from "@polar-sh/sdk/models/components/subscription.js";
 import type * as DatabaseClientModule from "@quieter/database/client";
-import { db } from "@quieter/database/client";
 import type * as ServerEnvModule from "@quieter/env/server";
 import {
   beforeAll,
@@ -322,25 +321,6 @@ describe("organization subscription reconciliation", () => {
       providerSubscription
     );
     expect(billingMocks.loadRows).toHaveBeenCalledTimes(2);
-  });
-
-  test("never calls Polar from a transaction-bound entitlement read", async () => {
-    billingMocks.loadRows.mockResolvedValueOnce([staleRow]);
-    await expect(
-      getOrganizationSubscriptionRecord("organization-a", { database: db })
-    ).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
-    expect(billingMocks.getPolarSubscription).not.toHaveBeenCalled();
-    expect(billingMocks.updateSet).not.toHaveBeenCalled();
-  });
-
-  test("reads a refreshed subscription through the supplied transaction without remote reconciliation", async () => {
-    billingMocks.loadRows.mockResolvedValueOnce([refreshedRow]);
-    await expect(
-      getOrganizationSubscription("organization-a", db)
-    ).resolves.toMatchObject({
-      currentPeriodEnd: refreshedRow.currentPeriodEnd,
-    });
-    expect(billingMocks.getPolarSubscription).not.toHaveBeenCalled();
   });
 
   test("fails closed when Polar still returns an expired period", async () => {

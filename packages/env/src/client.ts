@@ -1,7 +1,7 @@
 import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod";
 
-import { httpUrl, throwEnvironmentValidationError } from "./schema.ts";
+import { httpUrl, throwEnvironmentValidationError } from "./schema";
 
 type WebClientRuntimeEnv = Readonly<{
   VITE_QUIETER_LOCAL_TELEMETRY?: string;

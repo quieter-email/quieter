@@ -1,1 +1,0 @@
-ALTER TABLE "mailSubmission" ADD COLUMN "sendAfter" timestamp with time zone DEFAULT now() NOT NULL;

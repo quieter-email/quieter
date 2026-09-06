@@ -5,24 +5,15 @@ import { rolldown } from "rolldown";
 
 const packageRoot = path.resolve(import.meta.dirname, "..");
 const outputDirectory = path.join(packageRoot, ".bundle-check");
-const entrypoints = [
-  "mail-feedback-bridge.ts",
-  "inbound.ts",
-  "outbound-feedback.ts",
-  "receipt.ts",
-].map((fileName) => path.join(packageRoot, "src", fileName));
+const entrypoints = ["inbound.ts", "outbound-feedback.ts", "receipt.ts"].map(
+  (fileName) => path.join(packageRoot, "src", fileName)
+);
 
 await rm(outputDirectory, { force: true, recursive: true });
 try {
   const bundle = await rolldown({
     external: ["sst"],
     input: entrypoints,
-    onLog(level, log, handler) {
-      if (log.code === "UNRESOLVED_IMPORT") {
-        throw new Error(log.message);
-      }
-      handler(level, log);
-    },
     platform: "node",
   });
   try {

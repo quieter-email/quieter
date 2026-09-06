@@ -3,7 +3,6 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./feedback-bridge": "./src/feedback-bridge.ts",
     "./data-plane": "./src/data-plane.ts",
     "./compose/draft-anchor": "./src/compose/draft-anchor.ts",
     "./compose/mime": "./src/compose/mime.ts",
@@ -14,16 +13,11 @@
     "./raw-message": "./src/raw-message.ts",
     "./search": "./src/search.ts",
     "./send": "./src/send.ts",
-    "./submission-transport": "./src/submission-transport.ts",
-    "./submission-events": "./src/submission-events.ts",
-    "./ses-submission-transport": "./src/ses-submission-transport.ts",
     "./sender-avatar": "./src/sender-avatar.ts",
     "./tracking": "./src/tracking.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-sesv2": "catalog:",
     "@quieter/env": "workspace:*",
-    "@smithy/fetch-http-handler": "5.7.2",
     "fast-xml-parser": "catalog:",
     "postal-mime": "^3.0.0",
     "zod": "catalog:"

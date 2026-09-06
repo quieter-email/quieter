@@ -1,2 +1,0 @@
-CREATE INDEX "mail_submission_pending_accepted_idx" ON "mailSubmission" ("acceptedAt","id") WHERE "status" IN ('queued', 'dispatching', 'pending_confirmation');--> statement-breakpoint
-CREATE INDEX "mail_submission_organization_pending_idx" ON "mailSubmission" ("organizationId","acceptedAt","id") WHERE "status" IN ('queued', 'dispatching', 'pending_confirmation');

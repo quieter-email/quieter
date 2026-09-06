@@ -1,1 +1,0 @@
-ALTER TABLE "mailUsageReservation" ADD CONSTRAINT "mail_reservation_credit_check" CHECK ("creditAmountMicroCents" >= 0);

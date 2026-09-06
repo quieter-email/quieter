@@ -36,10 +36,6 @@ export const readArchivedAsset = async (pathname: string, head = false) => {
   headers.set("cache-control", "public, max-age=31536000, immutable");
   headers.set("etag", object.httpEtag);
 
-  if (head) {
-    await object.body.cancel();
-  }
-
   return new Response(head ? null : object.body, { headers, status: 200 });
 };
 
@@ -49,7 +45,7 @@ export const serveArchivedAssetRequest = async <T>(
 ): Promise<Response | T> => {
   const { pathname } = new URL(request.url);
   const isArchivedAsset =
-    /^\/assets\/(?:releases\/[\w.-]{1,128}\.txt|(?:[\w-]+\/)*[\w.-]+-[\w-]{8,}\.(?:avif|css|gif|ico|jpeg|jpg|js|png|svg|webp|woff|woff2))$/u.test(
+    /^\/assets\/(?:releases\/[\w.-]{1,128}\.txt|[\w.-]+-[\w-]{8,}\.(?:css|js|woff2))$/u.test(
       pathname
     );
   if (!["GET", "HEAD"].includes(request.method) || !isArchivedAsset) {

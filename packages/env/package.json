@@ -4,36 +4,6 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
-    "./runtime-health": {
-      "types": "./src/runtime-health.ts",
-      "development": "./src/runtime-health.ts",
-      "default": "./dist/runtime-health.js"
-    },
-    "./mail-feedback": {
-      "types": "./src/mail-feedback.ts",
-      "development": "./src/mail-feedback.ts",
-      "default": "./dist/mail-feedback.js"
-    },
-    "./mail-sender": {
-      "types": "./src/mail-sender.ts",
-      "development": "./src/mail-sender.ts",
-      "default": "./dist/mail-sender.js"
-    },
-    "./mail-api": {
-      "types": "./src/mail-api.ts",
-      "development": "./src/mail-api.ts",
-      "default": "./dist/mail-api.js"
-    },
-    "./build": {
-      "types": "./src/build.ts",
-      "development": "./src/build.ts",
-      "default": "./dist/build.js"
-    },
-    "./deployment": {
-      "types": "./src/deployment.ts",
-      "development": "./src/deployment.ts",
-      "default": "./dist/deployment.js"
-    },
     "./client": {
       "types": "./src/client.ts",
       "development": "./src/client.ts",

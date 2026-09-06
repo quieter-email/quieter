@@ -128,11 +128,8 @@ export const subscriptionBelongsToOrganization = (
   organizationId: string
 ) => metadata?.quieterOrganizationId === organizationId;
 
-const getActiveOverride = async (
-  userId: string,
-  database: Pick<typeof db, "select"> = db
-) => {
-  const [override] = await database
+const getActiveOverride = async (userId: string) => {
+  const [override] = await db
     .select({ plan: billingEntitlementOverride.plan })
     .from(billingEntitlementOverride)
     .where(
@@ -173,11 +170,8 @@ const toBillingAccount = (
   };
 };
 
-const getOrganizationBillingOwnerId = async (
-  organizationId: string,
-  database: Pick<typeof db, "select" | "update"> = db
-) => {
-  const [record] = await database
+const getOrganizationBillingOwnerId = async (organizationId: string) => {
+  const [record] = await db
     .select({ billingOwnerUserId: organization.billingOwnerUserId })
     .from(organization)
     .where(eq(organization.id, organizationId))
@@ -187,7 +181,7 @@ const getOrganizationBillingOwnerId = async (
     return record.billingOwnerUserId;
   }
 
-  const [owner] = await database
+  const [owner] = await db
     .select({ userId: member.userId })
     .from(member)
     .where(
@@ -199,7 +193,7 @@ const getOrganizationBillingOwnerId = async (
     return null;
   }
 
-  const [assigned] = await database
+  const [assigned] = await db
     .update(organization)
     .set({ billingOwnerUserId: owner.userId, updatedAt: new Date() })
     .where(
@@ -238,13 +232,10 @@ const recordReconciliationFailure = async ({
 
 export const getOrganizationSubscriptionRecord = async (
   organizationId: string,
-  options: {
-    forceReconcile?: boolean;
-    database?: Pick<typeof db, "select">;
-  } = {}
+  options: { forceReconcile?: boolean } = {}
 ) => {
   const loadRows = () =>
-    (options.database ?? db)
+    db
       .select({
         cancelAtPeriodEnd: billingSubscription.cancelAtPeriodEnd,
         currentPeriodEnd: billingSubscription.currentPeriodEnd,
@@ -287,11 +278,6 @@ export const getOrganizationSubscriptionRecord = async (
     row.provider === "polar" &&
     (options.forceReconcile === true || shouldReconcileBillingSubscription(row))
   ) {
-    if (options.database !== undefined) {
-      throw new ORPCError("SERVICE_UNAVAILABLE", {
-        message: "Could not check billing access. Please try again.",
-      });
-    }
     const { providerSubscriptionId } = row;
     try {
       const [{ getPolarClient }, { syncBillingSubscription }] =
@@ -335,13 +321,8 @@ export const getOrganizationSubscriptionRecord = async (
   return row ?? null;
 };
 
-export const getOrganizationSubscription = async (
-  organizationId: string,
-  database?: Pick<typeof db, "select">
-) => {
-  const row = await getOrganizationSubscriptionRecord(organizationId, {
-    database,
-  });
+export const getOrganizationSubscription = async (organizationId: string) => {
+  const row = await getOrganizationSubscriptionRecord(organizationId);
   return row !== null && isActiveBillingSubscription(row)
     ? toBillingAccount(row, organizationId)
     : null;
@@ -352,7 +333,6 @@ export const hasUnlimitedBillingAccess = async (userId: string) =>
   (await getActiveOverride(userId)) !== null;
 
 export const getOrganizationBillingEntitlement = async (input: {
-  database?: Pick<typeof db, "select" | "update">;
   feature: BillingFeature;
   organizationId: string;
   subscription?: SubscriptionRow | null;
@@ -362,11 +342,8 @@ export const getOrganizationBillingEntitlement = async (input: {
   }
 
   let account: BillingAccount | null = null;
-  if (input.database !== undefined || input.subscription === undefined) {
-    account = await getOrganizationSubscription(
-      input.organizationId,
-      input.database
-    );
+  if (input.subscription === undefined) {
+    account = await getOrganizationSubscription(input.organizationId);
   } else if (
     input.subscription !== null &&
     isActiveBillingSubscription(input.subscription)
@@ -374,12 +351,11 @@ export const getOrganizationBillingEntitlement = async (input: {
     account = toBillingAccount(input.subscription, input.organizationId);
   }
   const billingOwnerId = await getOrganizationBillingOwnerId(
-    input.organizationId,
-    input.database
+    input.organizationId
   );
   let activeOverride = null;
   if (typeof billingOwnerId === "string" && billingOwnerId !== "") {
-    activeOverride = await getActiveOverride(billingOwnerId, input.database);
+    activeOverride = await getActiveOverride(billingOwnerId);
   }
   const hasUnlimitedAccess = activeOverride !== null;
 

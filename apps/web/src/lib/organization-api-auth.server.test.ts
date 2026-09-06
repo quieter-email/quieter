@@ -6,20 +6,16 @@ const mocks = vi.hoisted(() => ({
   hasBillingAccess: vi.fn<() => Promise<boolean>>(),
   verifyApiKey: vi.fn<
     () => Promise<{
-      id: string;
-      keyHash: string;
-      organizationId: string;
-    } | null>
+      valid: boolean;
+      key: { configId: string; referenceId: string } | null;
+    }>
   >(),
 }));
 
-vi.mock(
-  import("@quieter/auth/api-key-verification"),
-  async (importOriginal) => ({
-    ...(await importOriginal()),
-    verifyOrganizationApiKey: mocks.verifyApiKey,
-  })
-);
+// oxlint-disable-next-line vitest/prefer-import-in-mock -- Partial mock avoids initializing server dependencies.
+vi.mock("@quieter/auth", () => ({
+  organizationApiKeyApi: { verifyApiKey: mocks.verifyApiKey },
+}));
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- Only the API authorization contract is needed here.
 vi.mock("@quieter/orpc/organization-mail", () => ({
   ORGANIZATION_API_KEY_CONFIG_ID: "organization",
@@ -30,9 +26,8 @@ describe("organization API access", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.verifyApiKey.mockResolvedValue({
-      id: "key-a",
-      keyHash: "test-hash",
-      organizationId: "team-a",
+      key: { configId: "organization", referenceId: "team-a" },
+      valid: true,
     });
   });
 
@@ -68,7 +63,7 @@ describe("organization API access", () => {
   });
 
   test("does not look up billing for an invalid key", async () => {
-    mocks.verifyApiKey.mockResolvedValue(null);
+    mocks.verifyApiKey.mockResolvedValue({ key: null, valid: false });
     await expect(
       getOrganizationApiKeyOrganizationId(
         new Request("https://quieter.email/api/v1/send", {

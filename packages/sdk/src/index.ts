@@ -34,7 +34,6 @@ export type QuieterSendBaseInput = {
   headers?: Record<string, string> | QuieterHeader[];
   idempotencyKey?: string;
   metadata?: Record<string, string | number | boolean | null>;
-  openTracking?: boolean;
   replyTo?: QuieterAddress;
   subject: string;
   tags?: QuieterTag[];
@@ -65,30 +64,6 @@ export type QuieterSendResult = {
   idempotent?: boolean;
   messageId: string | null;
   sent: true;
-};
-
-export type QuieterSubmissionOptions = {
-  idempotencyKey: string;
-  signal?: AbortSignal;
-};
-
-export type QuieterSubmissionResult = {
-  messageId: string;
-  status: "queued";
-};
-
-export type QuieterSubmissionStatus = {
-  acceptedAt: string;
-  completedAt: string | null;
-  messageId: string;
-  status:
-    | "queued"
-    | "dispatching"
-    | "pending_confirmation"
-    | "accepted"
-    | "failed"
-    | "canceled";
-  updatedAt: string;
 };
 
 export type QuieterDeliveryStatus =
@@ -369,127 +344,6 @@ export class Quieter {
     }
 
     return json;
-  }
-
-  async submit(
-    input: QuieterSendInput,
-    options: QuieterSubmissionOptions
-  ): Promise<QuieterSubmissionResult> {
-    if (
-      typeof options?.idempotencyKey !== "string" ||
-      !/^[\u0021-\u007E]{1,128}$/u.test(options.idempotencyKey)
-    ) {
-      throw new Error(
-        "Quieter requires a valid idempotencyKey for each logical submission."
-      );
-    }
-    if (
-      input.idempotencyKey !== undefined &&
-      input.idempotencyKey !== options.idempotencyKey
-    ) {
-      throw new Error("The message and options idempotency keys must match.");
-    }
-    const request = await normalizeSendInput(input, options);
-    const response = await this.fetch(new URL("/api/v2/send", this.baseUrl), {
-      body: JSON.stringify(request),
-      headers: {
-        accept: "application/json",
-        authorization: `Bearer ${this.apiKey}`,
-        "content-type": "application/json",
-        "idempotency-key": options.idempotencyKey,
-      },
-      method: "POST",
-      signal: options.signal,
-    });
-    const json: unknown = await response.json().catch(() => null);
-    if (!response.ok) {
-      const error = isApiErrorBody(json) ? json : null;
-      throw new QuieterApiError({
-        issues: error?.issues,
-        message: error?.error ?? `Quieter API returned ${response.status}.`,
-        response: json,
-        status: response.status,
-      });
-    }
-    if (
-      (response.status !== 200 && response.status !== 201) ||
-      typeof json !== "object" ||
-      json === null ||
-      !("messageId" in json) ||
-      typeof json.messageId !== "string" ||
-      !/^[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}$/u.test(json.messageId) ||
-      !("status" in json) ||
-      json.status !== "queued" ||
-      "sent" in json
-    ) {
-      throw new QuieterApiError({
-        message:
-          "Quieter API returned an unexpected acceptance response. Retry with the same idempotency key.",
-        response: json,
-        status: response.status,
-      });
-    }
-    return { messageId: json.messageId, status: "queued" };
-  }
-
-  async getSubmission(
-    messageId: string,
-    options: QuieterRequestOptions = {}
-  ): Promise<QuieterSubmissionStatus> {
-    if (!/^[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}$/u.test(messageId)) {
-      throw new Error("Quieter requires a submission messageId.");
-    }
-    const { json, status } = await this.getJson(
-      `/api/v2/messages/${messageId}`,
-      options.signal
-    );
-    if (
-      typeof json !== "object" ||
-      json === null ||
-      !("messageId" in json) ||
-      json.messageId !== messageId ||
-      !("status" in json) ||
-      !("acceptedAt" in json) ||
-      typeof json.acceptedAt !== "string" ||
-      !Number.isFinite(Date.parse(json.acceptedAt)) ||
-      !("updatedAt" in json) ||
-      typeof json.updatedAt !== "string" ||
-      !Number.isFinite(Date.parse(json.updatedAt)) ||
-      !("completedAt" in json) ||
-      (json.completedAt !== null &&
-        (typeof json.completedAt !== "string" ||
-          !Number.isFinite(Date.parse(json.completedAt))))
-    ) {
-      throw new QuieterApiError({
-        message: "Quieter API returned an unexpected submission status.",
-        response: json,
-        status,
-      });
-    }
-    const submissionStatus = (
-      [
-        "queued",
-        "dispatching",
-        "pending_confirmation",
-        "accepted",
-        "failed",
-        "canceled",
-      ] as const
-    ).find((value) => value === json.status);
-    if (submissionStatus === undefined) {
-      throw new QuieterApiError({
-        message: "Quieter API returned an unexpected submission status.",
-        response: json,
-        status,
-      });
-    }
-    return {
-      acceptedAt: json.acceptedAt,
-      completedAt: json.completedAt,
-      messageId,
-      status: submissionStatus,
-      updatedAt: json.updatedAt,
-    };
   }
 }
 

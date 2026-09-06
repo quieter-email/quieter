@@ -34,7 +34,7 @@ import {
   cleanupOrganizationsForDeletedUser,
   ensureUserOrganizationState,
 } from "./organization";
-import { organizationApiKeyOptions } from "./organization-api-key";
+import { ORGANIZATION_API_KEY_CONFIG_ID } from "./organization-api-key";
 import { readTermsAcceptedAtFromRequest } from "./terms-acceptance";
 
 const throwPlanRequiredError = (plan: string, description: string) => {
@@ -114,7 +114,16 @@ const trustedOrigins = [
     .map((origin) => origin.trim())
     .filter(Boolean) ?? []),
 ];
-const organizationApiKeyPlugin = apiKey(organizationApiKeyOptions);
+const organizationApiKeyPlugin = apiKey({
+  configId: ORGANIZATION_API_KEY_CONFIG_ID,
+  defaultPrefix: "quieter_",
+  maximumNameLength: 64,
+  references: "organization",
+  startingCharactersConfig: {
+    charactersLength: 12,
+    shouldStore: true,
+  },
+});
 
 export const auth = betterAuth({
   account: {
@@ -172,7 +181,7 @@ export const auth = betterAuth({
     before: createAuthMiddleware(async (ctx) => {
       const requiresSession =
         ctx.path === "/get-session" ||
-        ctx.path?.startsWith("/organization") ||
+        ctx.path.startsWith("/organization") ||
         ctx.path === "/api-key/create";
 
       if (!requiresSession) {
@@ -287,7 +296,11 @@ export const auth = betterAuth({
     },
   },
 });
-const organizationApiKeyApi = auth.api;
+const organizationApiKeyApi: typeof auth.api &
+  Pick<typeof organizationApiKeyPlugin.endpoints, "verifyApiKey"> = {
+  ...auth.api,
+  verifyApiKey: organizationApiKeyPlugin.endpoints.verifyApiKey,
+};
 export { organizationApiKeyApi };
 
 export { GOOGLE_AUTH_SCOPES } from "./google-scopes";

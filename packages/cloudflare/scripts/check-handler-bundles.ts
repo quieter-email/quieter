@@ -6,12 +6,7 @@ import { rolldown } from "rolldown";
 const packageRoot = path.resolve(import.meta.dirname, "..");
 const outputDirectory = path.join(packageRoot, ".bundle-check");
 const entrypoints = [
-  path.join(packageRoot, "src", "mail-submission-projection-worker.ts"),
-  path.join(packageRoot, "src", "mail-feedback-worker.ts"),
-  path.join(packageRoot, "src", "mail-submission-sender-worker.ts"),
-  path.join(packageRoot, "src", "mail-api-worker.ts"),
   path.join(packageRoot, "src", "gmail-maintenance-worker.ts"),
-  path.join(packageRoot, "src", "mail-submission-publisher-worker.ts"),
   path.join(packageRoot, "src", "mailbox-action-dispatch-worker.ts"),
   path.join(packageRoot, "src", "mailbox-action-worker.ts"),
   path.join(packageRoot, "src", "queue-worker.ts"),
@@ -23,12 +18,6 @@ try {
   const bundle = await rolldown({
     external: ["cloudflare:workers", "sst", "sst/resource"],
     input: entrypoints,
-    onLog(level, log, handler) {
-      if (log.code === "UNRESOLVED_IMPORT") {
-        throw new Error(log.message);
-      }
-      handler(level, log);
-    },
     // Workers use nodejs_compat; match the AWS handler check target so Node builtins resolve.
     platform: "node",
   });

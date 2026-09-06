@@ -140,10 +140,6 @@ describe(serveArchivedAssetRequest, () => {
     ["POST", "/assets/old.js"],
     ["GET", "/api/v1/send"],
     ["GET", "/assets/random"],
-    ["GET", "/assets/build-id.txt"],
-    ["GET", "/assets/page-abcdefgh.js.map"],
-    ["GET", "/receipts/abcdefgh.json"],
-    ["GET", "/assets/page-abcdefgh.html"],
   ])("continues %s requests to %s", async (method, pathname) => {
     const downstream = new Response("next");
     const next = vi.fn<() => Promise<Response>>().mockResolvedValue(downstream);

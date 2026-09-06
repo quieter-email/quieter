@@ -33,12 +33,11 @@ const getSenderDomain = (sender: string) => {
 };
 
 export const assertOrganizationOwnsVerifiedSenderDomain = async (input: {
-  database?: Pick<typeof db, "select">;
   organizationId: string;
   sender: string;
 }) => {
   const domain = getSenderDomain(input.sender);
-  const [ownedDomain] = await (input.database ?? db)
+  const [ownedDomain] = await db
     .select({ id: mailDomain.id })
     .from(mailDomain)
     .where(

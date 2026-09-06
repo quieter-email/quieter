@@ -4,18 +4,7 @@
   "type": "module",
   "exports": {
     "./client": "./src/client.ts",
-    "./organization-usage-lock": "./src/organization-usage-lock.ts",
     "./local-development": "./scripts/local-development.ts",
-    "./mail-outbox": "./src/mail-outbox.ts",
-    "./mail-attempts": "./src/mail-attempts.ts",
-    "./mail-acceptance": "./src/mail-acceptance.ts",
-    "./mail-admission": "./src/mail-admission.ts",
-    "./mail-storage-capacity": "./src/mail-storage-capacity.ts",
-    "./mail-feedback-inbox": "./src/mail-feedback-inbox.ts",
-    "./mail-payload-uploads": "./src/mail-payload-uploads.ts",
-    "./mail-send-capacity": "./src/mail-send-capacity.ts",
-    "./mail-submission-read": "./src/mail-submission-read.ts",
-    "./mail-ledger-json": "./src/mail-ledger-json.ts",
     "./schema": "./src/schema.ts"
   },
   "dependencies": {

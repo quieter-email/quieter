@@ -2,7 +2,6 @@ import { fileURLToPath } from "node:url";
 
 import { cloudflare } from "@cloudflare/vite-plugin";
 import { assertLocalDevelopmentDatabaseUrls } from "@quieter/database/local-development";
-import { createWebBuildEnv } from "@quieter/env/build";
 import babel from "@rolldown/plugin-babel";
 import { sentryTanstackStart } from "@sentry/tanstackstart-react/vite";
 import tailwindcss from "@tailwindcss/vite";
@@ -60,11 +59,9 @@ const preferNodeAwsSdkResolution = (): Plugin => {
  * chunk is genuinely broken". Read at module scope so every environment in a
  * build agrees on the value.
  */
-const buildEnvironment = createWebBuildEnv();
-const releaseBuild = buildEnvironment.QUIETER_RELEASE_BUILD === "true";
 const buildId =
-  buildEnvironment.QUIETER_BUILD_ID ??
-  buildEnvironment.GITHUB_SHA ??
+  process.env.QUIETER_BUILD_ID ??
+  process.env.GITHUB_SHA ??
   Date.now().toString(36);
 
 /** Served from `/assets/` because that prefix bypasses the site password gate. */
@@ -90,14 +87,13 @@ const validateLocalDevelopment = (): Plugin => ({
 
 export default defineConfig(({ command }) => {
   const isDev = command === "serve";
-  const isSentryEnabled =
-    !isDev && !releaseBuild && !!buildEnvironment.SENTRY_AUTH_TOKEN;
+  const isSentryEnabled = !isDev && !!process.env.SENTRY_AUTH_TOKEN;
   const sentryPlugins = isSentryEnabled
     ? sentryTanstackStart({
-        authToken: buildEnvironment.SENTRY_AUTH_TOKEN,
+        authToken: process.env.SENTRY_AUTH_TOKEN,
         autoInstrumentMiddleware: false,
-        org: buildEnvironment.SENTRY_ORG,
-        project: buildEnvironment.SENTRY_PROJECT,
+        org: process.env.SENTRY_ORG,
+        project: process.env.SENTRY_PROJECT,
         sourcemaps: {
           assets: ["./dist/client/**/*.js"],
           filesToDeleteAfterUpload: ["./dist/client/**/*.map"],
@@ -117,12 +113,12 @@ export default defineConfig(({ command }) => {
         // Supplied by the Workers runtime itself, so no bundler can resolve it.
         external: ["cloudflare:workers"],
       },
-      sourcemap: releaseBuild ? "hidden" : isSentryEnabled,
+      sourcemap: isSentryEnabled,
     },
     define: {
       __QUIETER_BUILD_ID__: JSON.stringify(buildId),
     },
-    envDir: releaseBuild ? false : workspaceRoot,
+    envDir: workspaceRoot,
     optimizeDeps: {
       include: [
         "@tiptap/core",
@@ -137,7 +133,7 @@ export default defineConfig(({ command }) => {
         persistState: { path: `${workspaceRoot}/.wrangler/state` },
         remoteBindings: false,
         configPath:
-          buildEnvironment.SST_WRANGLER_PATH ??
+          process.env.SST_WRANGLER_PATH ??
           (isDev
             ? fileURLToPath(
                 new URL("../../local-worker.jsonc", import.meta.url)

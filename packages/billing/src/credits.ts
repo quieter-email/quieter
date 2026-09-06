@@ -1,5 +1,4 @@
 import { db } from "@quieter/database/client";
-import { lockOrganizationUsage } from "@quieter/database/organization-usage-lock";
 import {
   billingCreditUsageEvent,
   billingSubscription,
@@ -122,10 +121,8 @@ const getBillingCreditUsageWithClient = async (
   };
 };
 
-export const getBillingCreditUsage = async (
-  account: BillingAccount,
-  database: Pick<typeof db, "select"> = db
-) => await getBillingCreditUsageWithClient(database, account);
+export const getBillingCreditUsage = async (account: BillingAccount) =>
+  await getBillingCreditUsageWithClient(db, account);
 
 export const recordBillingCreditUsage = async (input: {
   account: BillingAccount;
@@ -134,8 +131,11 @@ export const recordBillingCreditUsage = async (input: {
   dedupeKey: string;
   metadata?: Record<string, string | number | boolean>;
 }) => {
+  const lockKey = `organization:${input.account.organizationId}`;
   const result = await db.transaction(async (transaction) => {
-    await lockOrganizationUsage(transaction, input.account.organizationId);
+    await transaction.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`
+    );
     const [existingEvent] = await transaction
       .select({
         billableCostMicroCents: billingCreditUsageEvent.billableCostMicroCents,

@@ -7,12 +7,6 @@ export default defineConfig({
     },
     dts: false,
     entry: [
-      "src/runtime-health.ts",
-      "src/mail-feedback.ts",
-      "src/mail-sender.ts",
-      "src/mail-api.ts",
-      "src/build.ts",
-      "src/deployment.ts",
       "src/client.ts",
       "src/local-doctor.ts",
       "src/public.ts",

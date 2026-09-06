@@ -1,7 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import { db } from "@quieter/database/client";
-import type { DatabaseClient } from "@quieter/database/client";
 import {
   mailbox,
   managedMailMessage,
@@ -118,11 +117,8 @@ const mergeDeliveryStatusSql = (statusColumn: unknown) => sql`case
   else excluded."status"
 end`;
 
-export const resolveOrganizationId = async (
-  providerMessageId: string,
-  database: Pick<typeof db, "select"> = db
-) => {
-  const [apiMessage] = await database
+const resolveOrganizationId = async (providerMessageId: string) => {
+  const [apiMessage] = await db
     .select({ organizationId: organizationApiMailMessage.organizationId })
     .from(organizationApiMailMessage)
     .where(eq(organizationApiMailMessage.providerMessageId, providerMessageId))
@@ -132,7 +128,7 @@ export const resolveOrganizationId = async (
     return apiMessage.organizationId;
   }
 
-  const [managedMessage] = await database
+  const [managedMessage] = await db
     .select({ organizationId: mailbox.organizationId })
     .from(managedMailMessage)
     .innerJoin(mailbox, eq(mailbox.id, managedMailMessage.mailboxId))
@@ -202,7 +198,6 @@ export const getSuppressionReason = (
 };
 
 export const assertOrganizationMailRecipientsNotSuppressed = async (input: {
-  database?: Pick<typeof db, "select">;
   organizationId: string;
   recipients: string[];
 }) => {
@@ -211,7 +206,7 @@ export const assertOrganizationMailRecipientsNotSuppressed = async (input: {
     return;
   }
 
-  const [suppression] = await (input.database ?? db)
+  const [suppression] = await db
     .select({ recipient: organizationMailRecipientSuppression.recipient })
     .from(organizationMailRecipientSuppression)
     .where(
@@ -356,12 +351,11 @@ const applySuppressionChange = async (
 };
 
 export const recordOrganizationMailFeedback = async (
-  feedback: OrganizationMailFeedback,
-  context?: { transaction: DatabaseTransaction; organizationId: string }
+  feedback: OrganizationMailFeedback
 ) => {
-  const organizationId =
-    context?.organizationId ??
-    (await resolveOrganizationId(feedback.providerMessageId));
+  const organizationId = await resolveOrganizationId(
+    feedback.providerMessageId
+  );
   if (organizationId === null) {
     throw new OrganizationMailFeedbackMessageNotFoundError(
       feedback.providerMessageId
@@ -377,7 +371,7 @@ export const recordOrganizationMailFeedback = async (
   const suppressionReason = getSuppressionReason(feedback);
   const now = new Date();
 
-  const apply = async (transaction: DatabaseTransaction) => {
+  await db.transaction(async (transaction) => {
     await transaction.execute(
       sql`select pg_advisory_xact_lock(hashtextextended(${JSON.stringify([organizationId, feedback.providerMessageId])}, 0))`
     );
@@ -461,12 +455,7 @@ export const recordOrganizationMailFeedback = async (
         });
       }
     }
-  };
-  if (context === undefined) {
-    await db.transaction(apply);
-  } else {
-    await apply(context.transaction);
-  }
+  });
 };
 
 export const suppressOrganizationMailRecipient = async (input: {
@@ -792,10 +781,9 @@ export type OrganizationMailTrackingSettings = {
 };
 
 export const getOrganizationMailTrackingSettings = async (input: {
-  database?: DatabaseClient;
   organizationId: string;
 }): Promise<OrganizationMailTrackingSettings> => {
-  const [settings] = await (input.database ?? db)
+  const [settings] = await db
     .select({
       allowPerSendOverride:
         organizationMailTrackingSettings.allowPerSendOverride,
@@ -876,7 +864,6 @@ export const resolveEffectiveOpenTracking = (
 };
 
 export const resolveOrganizationMailOpenTracking = async (input: {
-  database?: DatabaseClient;
   openTracking?: boolean;
   organizationId: string;
 }) =>

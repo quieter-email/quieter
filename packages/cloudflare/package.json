@@ -12,15 +12,11 @@
     "check:compatibility-date": "node scripts/sync-compatibility-date.ts --check",
     "sync:compatibility-date": "node scripts/sync-compatibility-date.ts",
     "test:workers": "vp test run --config vite.config.ts",
-    "test:release-proofs": "vp test run --config vite.release-proofs.config.ts",
     "write:build-wrangler": "node scripts/write-build-wrangler.ts"
   },
   "dependencies": {
-    "@orpc/server": "catalog:",
-    "@quieter/auth": "workspace:*",
     "@quieter/database": "workspace:*",
     "@quieter/env": "workspace:*",
-    "@quieter/mail": "workspace:*",
     "@quieter/observability": "workspace:*",
     "@quieter/orpc": "workspace:*",
     "@sentry/cloudflare": "catalog:",
@@ -32,7 +28,6 @@
     "@cloudflare/vitest-pool-workers": "catalog:",
     "@quieter/config": "workspace:*",
     "@types/node": "catalog:",
-    "postgres": "^3.4.9",
     "rolldown": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",

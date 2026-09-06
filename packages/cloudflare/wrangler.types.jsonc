@@ -5,13 +5,6 @@
   "main": "src/worker.ts",
   "compatibility_date": "2026-08-04",
   "compatibility_flags": ["nodejs_compat"],
-  "r2_buckets": [
-    {
-      "binding": "MailSubmissionPayloads",
-      "bucket_name": "mail-submission-payload-types",
-    },
-    { "binding": "LocalMailStorage", "bucket_name": "quieter-local-mail" },
-  ],
   "vars": {
     "CONNECTOR_TOKEN_ENCRYPTION_KEY": "connector-token-key",
     "GMAIL_TOKEN_ENCRYPTION_KEY": "gmail-token-key",
@@ -58,18 +51,6 @@
   ],
   "queues": {
     "producers": [
-      {
-        "binding": "MailSubmissionDispatchQueue",
-        "queue": "mail-submission-dispatch-types",
-      },
-      {
-        "binding": "MailSubmissionProjectionQueue",
-        "queue": "mail-submission-projection-types",
-      },
-      {
-        "binding": "MailSubmissionWakeQueue",
-        "queue": "mail-submission-wake-types",
-      },
       {
         "binding": "GmailPsQueue",
         "queue": "gmail-pubsub-types",
