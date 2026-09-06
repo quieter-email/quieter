@@ -255,3 +255,29 @@ A run can therefore finish successfully while the last usage report is still in 
 Persist usage events as part of completed step results and drain them through the existing billing reporting path. Awaiting the immediate write is a small improvement; a durable pending event is the recoverable solution. Do not merely add a longer arbitrary delay before acknowledgement.
 
 Validation: delay the final usage write and verify queue completion cannot lose its durable record.
+
+## F41
+
+### P2: Pinned dependencies have a large unresolved advisory backlog
+
+Evidence: [pnpm-workspace.yaml:40](https://github.com/quieter-email/quieter/blob/78621b3454b4fc304f41c6040c5c72577d2c0163/pnpm-workspace.yaml#L40), [pnpm-workspace.yaml:66](https://github.com/quieter-email/quieter/blob/78621b3454b4fc304f41c6040c5c72577d2c0163/pnpm-workspace.yaml#L66), [pnpm-lock.yaml:4853](https://github.com/quieter-email/quieter/blob/78621b3454b4fc304f41c6040c5c72577d2c0163/pnpm-lock.yaml#L4853).
+
+GitHub's authenticated Dependabot API returned 80 open alerts across 19 package names: one critical, 29 high, 45 medium, and five low. The [alert snapshot](dependency-alerts.csv) records all 80 IDs, affected ranges, patch versions, and links. These are advisory counts, not 80 confirmed application vulnerabilities.
+
+The catalog and overrides both pin Better Auth and related packages to 1.5.0. Other affected versions in the lockfile include Tiptap core 3.30.2, Hono 4.11.4, fast-uri 3.1.5, PostCSS 8.5.16, and undici 7.28.0. Dependency patches need active ownership; ordinary semver updates cannot move the explicitly pinned auth packages.
+
+Initial applicability checks prevent overstating the risk:
+
+| Advisory or group | What was verified |
+| --- | --- |
+| Critical Better Auth refresh-token replay, GHSA-pw9m-5jxm-xr6h | Requires the OIDC-provider or MCP auth plugin. Neither is configured in the inspected auth setup. A critical reachable application issue was not established. |
+| Better Auth magic-link pre-account hijacking, GHSA-qq9h-g4jm-xgf3 | Magic links are enabled, but the advisory also requires open email/password registration. The inspected configuration does not enable email/password signup. Do not infer account takeover from the package version alone. |
+| Tiptap core, GHSA-cp6q-959q-f8rh | Locked at 3.30.2; the alert identifies 3.30.4 as the first patched version. The editor is used by the app. Reachability of attacker-controlled prototype attributes was not demonstrated. |
+| Valibot, GHSA-5qjj-4xww-7phc | GitHub still reports the alert, but the lockfile resolves 1.4.2, the alert's first patched version. Reconcile this stale alert instead of counting it as an unresolved vulnerable version. |
+| Remaining transitive alerts | Inventory collected, but complete runtime reachability was not proved. GitHub's runtime/development classification is not a substitute for tracing the actual production bundle. |
+
+The first two conditions come from the maintainers' [refresh-token advisory](https://github.com/better-auth/better-auth/security/advisories/GHSA-pw9m-5jxm-xr6h) and [magic-link advisory](https://github.com/better-auth/better-auth/security/advisories/GHSA-qq9h-g4jm-xgf3).
+
+Upgrade coherent dependency families through vp, starting with auth and the editor. Review why each override exists before changing it, and remove obsolete pins. Reconcile already-fixed or inapplicable alerts with documented evidence and revisit them when enabling new plugins. Use the existing dependency alert service with a clear review cadence instead of building another scanner.
+
+Validation: authentication, invitation acceptance, passkeys, editor paste/rendering, and deployment bundle compatibility. Do not blindly apply transitive major-version overrides or claim that a green lint run validates a security upgrade.

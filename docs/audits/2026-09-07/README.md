@@ -2,14 +2,15 @@
 
 The repository has strong foundations: strict checking, explicit mailbox access rules, separate identity and mail OAuth, shared UI primitives, and deployment bundle checks. The main weakness is that successful external operations and local state are not consistently joined by a recoverable lifecycle. Sending, ingestion, chat approvals, and mailbox actions each handle that problem differently.
 
-I found **40 actionable items: 13 P1, 23 P2, and 4 P3**. The first 13 deserve attention before expanding the affected features. The rest include concrete bugs, architecture corrections, and small cleanup. This is an audit report only; application behavior was not changed.
+I found **41 actionable items: 13 P1, 24 P2, and 4 P3**. The first 13 deserve attention before expanding the affected features. The rest include concrete bugs, architecture corrections, dependency maintenance, and small cleanup. This is an audit report only; application behavior was not changed.
 
 The evidence is pinned to commit [78621b3](https://github.com/quieter-email/quieter/commit/78621b3454b4fc304f41c6040c5c72577d2c0163). Every finding includes the relevant code, impact, a suggested correction, and proportionate validation. A finding can be high confidence from control flow without having been triggered against a real customer account.
 
 - [Reliability findings, F01-F21](reliability.md)
-- [Code quality and maintainability, F22-F40](quality.md)
+- [Code quality and maintainability, F22-F41](quality.md)
 - [Scope, coverage, verification, and limitations](scope.md)
 - [File inventory at the audited commit](inventory.csv)
+- [Dependency advisory snapshot](dependency-alerts.csv), with applicability qualifications in F41
 
 ## Findings
 
@@ -57,6 +58,7 @@ P1 means fix before building further on the affected path. P2 means schedule a s
 | [F38](quality.md#f38) | P2 | Tests need core failure scenarios rather than implementation assertions |
 | [F39](quality.md#f39) | P2 | The custom workflow engine needs a bounded keep-or-replace decision |
 | [F40](quality.md#f40) | P2 | Action usage reporting is outside the awaited queue lifecycle |
+| [F41](quality.md#f41) | P2 | Pinned dependencies have an unresolved advisory backlog |
 
 ## How I would turn this into mergeable work
 
@@ -71,6 +73,7 @@ Start with the lost-data and repeated-action risks. Avoid one repository-wide cl
 | Draft recovery and session isolation | F12, F15, F27-F28 | Mailbox-scoped compose state, safe storage, user-bound cache lifecycle |
 | Small independent fixes | F18-F21, F31, F36 | Calendar parsing, return URLs, migration classification, SDK selector, index ordering, hue parsing |
 | Architecture and cleanup | F22-F26, F29-F30, F32-F35, F37-F38 | Enforced package boundaries and focused extractions after behavior is stable |
+| Dependency maintenance | F41 | Upgrade related packages together and reconcile alerts against enabled features and current resolved versions |
 
 For sending and actions, introduce new operation records and compatible readers before removing old state. Drain existing jobs and preserve old message access during any storage transition. Those changes need expand/contract migrations and protected deployment; this audit performed neither.
 

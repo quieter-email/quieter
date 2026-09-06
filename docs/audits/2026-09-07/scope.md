@@ -77,6 +77,8 @@ The PlanetScale connector could list the organization. Database discovery then r
 
 Provider documentation was consulted for Hyperdrive's unsupported advisory locks, pgvector index ordering, PostgreSQL ALTER TABLE grammar, MIME encoding requirements, and the proposed Cloudflare Workflows comparison. Sources are linked beside the corresponding findings.
 
+The authenticated GitHub API also returned 80 open Dependabot alerts. Their complete metadata inventory is in dependency-alerts.csv. F41 compares selected alerts with the current lockfile and enabled auth plugins, including an apparently stale alert and prerequisites absent from the app. Complete exploitability analysis of every transitive dependency was not performed; the advisory count is not a count of confirmed application vulnerabilities.
+
 No secrets are included in this report. No database mutation, migration application, provider write, infrastructure deployment, billing change, or new paid service was performed. Local tests used their configured fixtures and mocks. The audit did not provision or reset a database.
 
 ## How to use the inventory
