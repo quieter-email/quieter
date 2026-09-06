@@ -7,11 +7,13 @@ import type { DatabaseClient } from "@quieter/database/client";
 import { assertLocalDatabaseUrl } from "@quieter/database/local-development";
 import { acceptMailSubmission } from "@quieter/database/mail-acceptance";
 import { recordMailSendOutcome } from "@quieter/database/mail-attempts";
+import { retainMailFeedback } from "@quieter/database/mail-feedback-inbox";
 import { storeMailSendCapacity } from "@quieter/database/mail-send-capacity";
 import {
   billingCreditUsageEvent,
   billingSubscription,
   mailDomain,
+  mailFeedbackInbox,
   mailPayloadUpload,
   mailSendAttempt,
   mailSendCapacity,
@@ -19,6 +21,8 @@ import {
   mailSubmissionOutbox,
   mailUsageReservation,
   organization,
+  organizationMailDeliveryEvent,
+  organizationMailDeliveryRecipient,
   user,
 } from "@quieter/database/schema";
 import type {
@@ -38,6 +42,7 @@ import {
   vi,
 } from "vite-plus/test";
 
+import { applyMailSubmissionFeedback } from "../src/mail-submission-feedback.ts";
 import { prepareMailSubmissionPayload } from "../src/mail-submission-payload.ts";
 import type { SubmissionPayloadStorage } from "../src/mail-submission-payload.ts";
 import { dispatchMailSubmission } from "../src/mail-submission-sender.ts";
@@ -59,6 +64,7 @@ describe.skipIf(databaseUrl === undefined)("durable submission sender", () => {
   const userId = randomUUID();
   const domain = `${organizationId}.example.com`;
   const capacityKey = "000000000270:eu-central-1";
+  const expectedSource = "arn:aws:sns:eu-central-1:000000000270:feedback";
   const now = new Date();
   const objects = new Map<string, Uint8Array>();
   const send =
@@ -126,6 +132,17 @@ describe.skipIf(databaseUrl === undefined)("durable submission sender", () => {
     });
   const clearLedger = async () => {
     await database
+      .delete(mailFeedbackInbox)
+      .where(eq(mailFeedbackInbox.source, expectedSource));
+    await database
+      .delete(organizationMailDeliveryEvent)
+      .where(eq(organizationMailDeliveryEvent.organizationId, organizationId));
+    await database
+      .delete(organizationMailDeliveryRecipient)
+      .where(
+        eq(organizationMailDeliveryRecipient.organizationId, organizationId)
+      );
+    await database
       .delete(mailUsageReservation)
       .where(eq(mailUsageReservation.organizationId, organizationId));
     await database
@@ -146,6 +163,41 @@ describe.skipIf(databaseUrl === undefined)("durable submission sender", () => {
     await database
       .delete(billingCreditUsageEvent)
       .where(eq(billingCreditUsageEvent.organizationId, organizationId));
+  };
+
+  const retainFeedback = async (
+    message: PreparedSubmission,
+    providerMessageId: string,
+    schemaVersion = 1
+  ) => {
+    const eventId = randomUUID();
+    const timestamp = new Date().toISOString();
+    return await retainMailFeedback(database, {
+      payload: {
+        Message: JSON.stringify({
+          delivery: { recipients: message.to, timestamp },
+          eventType: "Delivery",
+          mail: {
+            destination: [...message.to, ...message.cc, ...message.bcc],
+            messageId: providerMessageId,
+            source: message.from,
+            tags: {
+              quieter_attempt: [message.attemptId],
+              quieter_submission: [message.submissionId],
+            },
+            timestamp,
+          },
+        }),
+        MessageId: eventId,
+        TopicArn: expectedSource,
+        Type: "Notification",
+      },
+      providerEventId: eventId,
+      providerMessageId,
+      region: "eu-central-1",
+      schemaVersion,
+      source: expectedSource,
+    });
   };
 
   beforeAll(async () => {
@@ -311,6 +363,136 @@ describe.skipIf(databaseUrl === undefined)("durable submission sender", () => {
       status: "queued",
     });
     expect(submission.sendAfter.getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it("applies feedback before the sender response and keeps the stronger confirmation", async () => {
+    const id = await accept();
+    const providerMessageId = randomUUID();
+    send.mockImplementationOnce(async (message) => {
+      const retained = await retainFeedback(message, providerMessageId);
+      await applyMailSubmissionFeedback(database, {
+        expectedSource,
+        inboxId: retained.id,
+        region: "eu-central-1",
+      });
+      return { code: "provider_outcome_unknown", outcome: "unknown" };
+    });
+    await expect(dispatch(id)).resolves.toBe("accepted");
+    const [event] = await database
+      .select()
+      .from(organizationMailDeliveryEvent)
+      .where(eq(organizationMailDeliveryEvent.organizationId, organizationId));
+    expect(event.eventType).toBe("delivered");
+    const [inbox] = await database
+      .select()
+      .from(mailFeedbackInbox)
+      .where(eq(mailFeedbackInbox.source, expectedSource));
+    expect(inbox.status).toBe("applied");
+    expect(send).toHaveBeenCalledOnce();
+  });
+
+  it("rolls back feedback and settlement together and retries without duplicate delivery events", async () => {
+    const id = await accept();
+    send.mockResolvedValue({ code: "timeout", outcome: "unknown" });
+    await dispatch(id);
+    const retained = await retainFeedback(send.mock.calls[0][0], randomUUID());
+    await database.insert(billingCreditUsageEvent).values({
+      billableCostMicroCents: 0,
+      category: "mail",
+      costMicroCents: 0,
+      createdAt: new Date(),
+      dedupeKey: `mail:submission:${id}`,
+      id: randomUUID(),
+      organizationId,
+    });
+    await expect(
+      applyMailSubmissionFeedback(database, {
+        expectedSource,
+        inboxId: retained.id,
+        region: "eu-central-1",
+      })
+    ).rejects.toThrow("Failed query");
+    const [pending] = await database
+      .select()
+      .from(mailFeedbackInbox)
+      .where(eq(mailFeedbackInbox.id, retained.id));
+    expect(pending.status).toBe("pending");
+    await database
+      .delete(billingCreditUsageEvent)
+      .where(eq(billingCreditUsageEvent.organizationId, organizationId));
+    await applyMailSubmissionFeedback(database, {
+      expectedSource,
+      inboxId: retained.id,
+      region: "eu-central-1",
+    });
+    await applyMailSubmissionFeedback(database, {
+      expectedSource,
+      inboxId: retained.id,
+      region: "eu-central-1",
+    });
+    await expect(
+      database
+        .select()
+        .from(organizationMailDeliveryEvent)
+        .where(eq(organizationMailDeliveryEvent.organizationId, organizationId))
+    ).resolves.toHaveLength(1);
+    expect(send).toHaveBeenCalledOnce();
+  });
+
+  it("quarantines a correlation that names a different sender", async () => {
+    const id = await accept();
+    send.mockResolvedValue({ code: "timeout", outcome: "unknown" });
+    await dispatch(id);
+    const retained = await retainFeedback(
+      { ...send.mock.calls[0][0], from: "attacker@example.com" },
+      randomUUID()
+    );
+    await expect(
+      applyMailSubmissionFeedback(database, {
+        expectedSource,
+        inboxId: retained.id,
+        region: "eu-central-1",
+      })
+    ).resolves.toBe("quarantined");
+    const [attempt] = await database
+      .select()
+      .from(mailSendAttempt)
+      .where(eq(mailSendAttempt.submissionId, id));
+    expect(attempt.outcome).toBe("unknown");
+    await expect(
+      database
+        .select()
+        .from(organizationMailDeliveryEvent)
+        .where(eq(organizationMailDeliveryEvent.organizationId, organizationId))
+    ).resolves.toHaveLength(0);
+  });
+
+  it("retains unsupported feedback schemas in quarantine", async () => {
+    const id = await accept();
+    send.mockResolvedValue({ code: "timeout", outcome: "unknown" });
+    await dispatch(id);
+    const retained = await retainFeedback(
+      send.mock.calls[0][0],
+      randomUUID(),
+      2
+    );
+    await expect(
+      applyMailSubmissionFeedback(database, {
+        expectedSource,
+        inboxId: retained.id,
+        region: "eu-central-1",
+      })
+    ).resolves.toBe("quarantined");
+    const [inbox] = await database
+      .select()
+      .from(mailFeedbackInbox)
+      .where(eq(mailFeedbackInbox.id, retained.id));
+    expect(inbox).toMatchObject({
+      lastErrorCode: "feedback_schema_or_digest_invalid",
+      processedAt: null,
+      status: "quarantined",
+    });
+    expect(inbox.payload).toHaveProperty("Message");
   });
 
   it("bounds safe retries for explicit throttling rejections", async () => {

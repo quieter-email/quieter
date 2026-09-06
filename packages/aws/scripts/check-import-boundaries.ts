@@ -5,6 +5,7 @@ const sourceRoot = path.join(import.meta.dirname, "..", "src");
 const allowedOrpcImports = new Set([
   "@quieter/orpc/managed-mail/ingestion",
   "@quieter/orpc/organization-mail-delivery",
+  "@quieter/orpc/ses-feedback",
 ]);
 
 const listTypeScriptFiles = async (directory: string): Promise<string[]> => {

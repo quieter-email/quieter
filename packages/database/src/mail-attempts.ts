@@ -115,7 +115,7 @@ export const beginMailSendAttempt = async (
 };
 
 export const recordMailSendOutcome = async (
-  database: DatabaseClient,
+  database: Pick<DatabaseClient, "transaction">,
   identity: Pick<
     Attempt,
     "id" | "submissionId" | "organizationId" | "dispatchGeneration"
@@ -163,6 +163,9 @@ export const recordMailSendOutcome = async (
       throw new Error("Provider outcome has no matching durable attempt.");
     }
     if (attempt.outcome === "accepted" || attempt.outcome === "rejected") {
+      if (attempt.outcome === "accepted" && outcome.outcome === "unknown") {
+        return "duplicate";
+      }
       if (
         attempt.outcome !== outcome.outcome ||
         (outcome.outcome === "accepted" &&

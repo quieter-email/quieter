@@ -20,6 +20,8 @@
     "./organization-mail": "./src/organization-mail.ts",
     "./mail-submission-payload": "./src/mail-submission-payload.ts",
     "./mail-submission-sender": "./src/mail-submission-sender.ts",
+    "./ses-feedback": "./src/ses-feedback.ts",
+    "./mail-submission-feedback": "./src/mail-submission-feedback.ts",
     "./organization-mail-delivery": "./src/organization-mail-delivery.ts",
     "./organization-mail-policy": "./src/organization-mail-policy.ts",
     "./router": "./src/routers/index.ts",

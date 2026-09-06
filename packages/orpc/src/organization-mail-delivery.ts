@@ -117,8 +117,11 @@ const mergeDeliveryStatusSql = (statusColumn: unknown) => sql`case
   else excluded."status"
 end`;
 
-const resolveOrganizationId = async (providerMessageId: string) => {
-  const [apiMessage] = await db
+export const resolveOrganizationId = async (
+  providerMessageId: string,
+  database: Pick<typeof db, "select"> = db
+) => {
+  const [apiMessage] = await database
     .select({ organizationId: organizationApiMailMessage.organizationId })
     .from(organizationApiMailMessage)
     .where(eq(organizationApiMailMessage.providerMessageId, providerMessageId))
@@ -128,7 +131,7 @@ const resolveOrganizationId = async (providerMessageId: string) => {
     return apiMessage.organizationId;
   }
 
-  const [managedMessage] = await db
+  const [managedMessage] = await database
     .select({ organizationId: mailbox.organizationId })
     .from(managedMailMessage)
     .innerJoin(mailbox, eq(mailbox.id, managedMailMessage.mailboxId))
@@ -352,11 +355,12 @@ const applySuppressionChange = async (
 };
 
 export const recordOrganizationMailFeedback = async (
-  feedback: OrganizationMailFeedback
+  feedback: OrganizationMailFeedback,
+  context?: { transaction: DatabaseTransaction; organizationId: string }
 ) => {
-  const organizationId = await resolveOrganizationId(
-    feedback.providerMessageId
-  );
+  const organizationId =
+    context?.organizationId ??
+    (await resolveOrganizationId(feedback.providerMessageId));
   if (organizationId === null) {
     throw new OrganizationMailFeedbackMessageNotFoundError(
       feedback.providerMessageId
@@ -372,7 +376,7 @@ export const recordOrganizationMailFeedback = async (
   const suppressionReason = getSuppressionReason(feedback);
   const now = new Date();
 
-  await db.transaction(async (transaction) => {
+  const apply = async (transaction: DatabaseTransaction) => {
     await transaction.execute(
       sql`select pg_advisory_xact_lock(hashtextextended(${JSON.stringify([organizationId, feedback.providerMessageId])}, 0))`
     );
@@ -456,7 +460,12 @@ export const recordOrganizationMailFeedback = async (
         });
       }
     }
-  });
+  };
+  if (context === undefined) {
+    await db.transaction(apply);
+  } else {
+    await apply(context.transaction);
+  }
 };
 
 export const suppressOrganizationMailRecipient = async (input: {

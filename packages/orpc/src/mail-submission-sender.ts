@@ -169,7 +169,7 @@ export const dispatchMailSubmission = async (
             )
         )
       : undefined;
-  await recordMailSendOutcome(
+  const recorded = await recordMailSendOutcome(
     database,
     attempt,
     outcome.outcome === "rejected"
@@ -180,7 +180,7 @@ export const dispatchMailSubmission = async (
     return "accepted";
   }
   if (outcome.outcome === "unknown") {
-    return "pending_confirmation";
+    return recorded === "duplicate" ? "accepted" : "pending_confirmation";
   }
   return retryAt === undefined ? "failed" : "queued";
 };
