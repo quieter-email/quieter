@@ -5,6 +5,7 @@ import {
   GetAccountCommand,
 } from "@aws-sdk/client-sesv2";
 import type { SESv2ClientConfig } from "@aws-sdk/client-sesv2";
+import { FetchHttpHandler } from "@smithy/fetch-http-handler";
 import { z } from "zod";
 
 import type {
@@ -49,11 +50,9 @@ export class SesSubmissionTransport {
       credentials: input.credentials,
       maxAttempts: 1,
       region: input.region,
-      requestHandler: input.requestHandler ?? {
-        connectionTimeout: 5000,
-        requestTimeout: 10_000,
-        throwOnRequestTimeout: true,
-      },
+      requestHandler:
+        input.requestHandler ??
+        new FetchHttpHandler({ requestTimeout: 10_000 }),
     });
   }
 

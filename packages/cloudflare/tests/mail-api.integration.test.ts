@@ -7,6 +7,8 @@ import {
   billingSubscription,
   mailDomain,
   mailPayloadUpload,
+  mailSendAttempt,
+  mailSendCapacity,
   mailSubmission,
   mailSubmissionOutbox,
   mailUsageReservation,
@@ -20,6 +22,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 
 import { mailStorageTestLimits } from "../../database/tests/mail-ledger-fixtures.ts";
 import { handleMailApiRequest } from "../src/mail-api-worker.ts";
+import { mailSubmissionSenderHandler } from "../src/mail-submission-sender-worker.ts";
 import { reportWorkerError } from "../src/worker-runtime.ts";
 
 vi.mock(import("../src/worker-runtime.ts"), async (importOriginal) => ({
@@ -36,6 +39,7 @@ vi.mock(import("@quieter/env/server"), async (importOriginal) => {
       ...original.serverEnv,
       BETTER_AUTH_SECRET: "native-test-only-api-key-secret-at-least-32",
       DATABASE_URL: bindings.AppDatabaseV2.connectionString,
+      QUIETER_DEPLOYMENT_ENV: "production" as const,
     },
   };
 });
@@ -271,6 +275,124 @@ describe.skipIf(typeof url !== "string" || url === "")(
             status: "queued",
           });
           expect(status.headers.get("cache-control")).toBe("no-store");
+          const submissionId = location.split("/").at(-1);
+          if (submissionId === undefined) {
+            throw new Error("Missing submission identifier.");
+          }
+          const senderConfig = {
+            accountId: "000000000269",
+            configurationSetName: "native-fixture",
+            enabled: true,
+            organizationIds: [organizationId],
+            region: "eu-central-1",
+            schemaVersion: 1,
+            stage: "native-fixture",
+          };
+          const senderBindings = {
+            ...bindings,
+            QUIETER_MAIL_SENDER_CONFIG: JSON.stringify(senderConfig),
+            SST_RESOURCE_App: JSON.stringify({ stage: "native-fixture" }),
+            SST_RESOURCE_MailSenderCredentials: JSON.stringify({
+              value: JSON.stringify({
+                accessKeyId: "fixture",
+                secretAccessKey: "fixture",
+                stage: "native-fixture",
+              }),
+            }),
+          };
+          const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+            Response.json({
+              SendQuota: {
+                Max24HourSend: 100,
+                MaxSendRate: 10,
+                SentLast24Hours: 0,
+              },
+              SendingEnabled: true,
+            })
+          );
+          vi.stubGlobal("fetch", fetch);
+          const dispatch = {
+            ack: vi.fn<() => void>(),
+            attempts: 1,
+            body: {
+              eventType: "submission.dispatch",
+              id: crypto.randomUUID(),
+              organizationId,
+              schemaVersion: 1,
+              submissionId,
+            },
+            id: crypto.randomUUID(),
+            retry: vi.fn<(options?: QueueRetryOptions) => void>(),
+            timestamp: now,
+          };
+          const batch = {
+            ackAll: vi.fn<() => void>(),
+            messages: [dispatch],
+            metadata: { metrics: { backlogBytes: 0, backlogCount: 1 } },
+            queue: "native-fixture",
+            retryAll: vi.fn<() => void>(),
+          };
+          await mailSubmissionSenderHandler.queue(batch, {
+            ...senderBindings,
+            QUIETER_MAIL_SENDER_CONFIG: undefined,
+          });
+          expect(dispatch.retry).toHaveBeenCalledWith({ delaySeconds: 30 });
+          expect(fetch).not.toHaveBeenCalled();
+          await mailSubmissionSenderHandler.scheduled(
+            {
+              cron: "* * * * *",
+              noRetry: vi.fn<() => void>(),
+              scheduledTime: Date.now(),
+            },
+            senderBindings
+          );
+          fetch.mockResolvedValue(
+            Response.json({ MessageId: "native-accepted" })
+          );
+          await mailSubmissionSenderHandler.queue(batch, senderBindings);
+          expect(dispatch.ack).toHaveBeenCalledOnce();
+          const sent = await handleMailApiRequest(
+            statusRequest(),
+            bindings,
+            context
+          );
+          await expect(sent.json()).resolves.toMatchObject({
+            status: "accepted",
+          });
+          await mailSubmissionSenderHandler.queue(batch, senderBindings);
+          expect(fetch).toHaveBeenCalledTimes(2);
+          const unknown = await handleMailApiRequest(
+            request(message, crypto.randomUUID()),
+            bindings,
+            context
+          );
+          const unknownId = unknown.headers.get("location")?.split("/").at(-1);
+          expect(unknown.status).toBe(201);
+          if (unknownId === undefined) {
+            throw new Error("Missing unknown-outcome fixture.");
+          }
+          const uncertainDispatch = {
+            ...dispatch,
+            ack: vi.fn<() => void>(),
+            body: { ...dispatch.body, submissionId: unknownId },
+          };
+          fetch.mockRejectedValue(new Error("private lost response"));
+          await mailSubmissionSenderHandler.queue(
+            { ...batch, messages: [uncertainDispatch] },
+            senderBindings
+          );
+          await mailSubmissionSenderHandler.queue(
+            { ...batch, messages: [uncertainDispatch] },
+            senderBindings
+          );
+          expect(fetch).toHaveBeenCalledTimes(3);
+          expect(uncertainDispatch.ack).toHaveBeenCalledTimes(2);
+          const [unconfirmed] = await database
+            .select({ status: mailSubmission.status })
+            .from(mailSubmission)
+            .where(eq(mailSubmission.id, unknownId));
+          expect(unconfirmed.status).toBe("pending_confirmation");
+          vi.unstubAllGlobals();
           await database
             .update(apikey)
             .set({
@@ -296,9 +418,16 @@ describe.skipIf(typeof url !== "string" || url === "")(
             .select()
             .from(mailSubmissionOutbox)
             .where(eq(mailSubmissionOutbox.organizationId, organizationId));
-          expect(events).toHaveLength(1);
+          expect(
+            events.map((event) => event.eventType).toSorted()
+          ).toStrictEqual([
+            "submission.accepted",
+            "submission.dispatch",
+            "submission.dispatch",
+          ]);
         });
       } finally {
+        vi.unstubAllGlobals();
         await Promise.allSettled(background);
         await withRequestDatabaseClient(async (database) => {
           const uploads = await database
@@ -315,6 +444,12 @@ describe.skipIf(typeof url !== "string" || url === "")(
           await database
             .delete(mailUsageReservation)
             .where(eq(mailUsageReservation.organizationId, organizationId));
+          await database
+            .delete(mailSendAttempt)
+            .where(eq(mailSendAttempt.organizationId, organizationId));
+          await database
+            .delete(mailSendCapacity)
+            .where(eq(mailSendCapacity.key, "000000000269:eu-central-1"));
           await database
             .delete(mailSubmissionOutbox)
             .where(eq(mailSubmissionOutbox.organizationId, organizationId));

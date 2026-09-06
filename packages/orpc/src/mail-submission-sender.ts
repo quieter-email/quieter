@@ -58,6 +58,11 @@ export const dispatchMailSubmission = async (
     throw new Error("Dispatch has no durable submission.");
   }
   const { submission, eligible } = record;
+  if (submission.mailboxId !== null) {
+    throw new Error(
+      "Mailbox submissions require an explicit actor authorization contract."
+    );
+  }
   if (submission.status !== "queued" || !eligible) {
     return "inactive";
   }

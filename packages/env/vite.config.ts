@@ -7,6 +7,7 @@ export default defineConfig({
     },
     dts: false,
     entry: [
+      "src/mail-sender.ts",
       "src/mail-api.ts",
       "src/build.ts",
       "src/deployment.ts",
