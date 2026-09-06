@@ -1,6 +1,9 @@
+import type { RuntimeHealthBindings } from "@quieter/env/runtime-health";
 import { configureErrorReporter } from "@quieter/observability";
 import * as Sentry from "@sentry/cloudflare";
 import { z } from "zod";
+
+import { handleRuntimeHealthRequest } from "./runtime-health.ts";
 
 export { reportError as reportWorkerError } from "@quieter/observability";
 
@@ -34,12 +37,28 @@ export const readOptionalLinkedSecret = (value: string | undefined) =>
 
 export const withSentryReporting = <Handler extends ExportedHandler<Env>>(
   handler: Handler
-): Handler =>
+) =>
   Sentry.withSentry(
     (env) => ({
       dsn: readOptionalLinkedSecret(env.SST_RESOURCE_SentryDsn),
       environment: env.SENTRY_ENVIRONMENT,
       tracesSampleRate: 0,
     }),
-    handler
+    {
+      ...handler,
+      async fetch(
+        request: Request<unknown, IncomingRequestCfProperties>,
+        env: Env & RuntimeHealthBindings,
+        context: ExecutionContext
+      ) {
+        const health = handleRuntimeHealthRequest(request, env);
+        if (health !== null) {
+          return health;
+        }
+        return (
+          (await handler.fetch?.(request, env, context)) ??
+          new Response("Not found.", { status: 404 })
+        );
+      },
+    }
   );

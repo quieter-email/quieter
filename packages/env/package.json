@@ -4,6 +4,11 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
+    "./runtime-health": {
+      "types": "./src/runtime-health.ts",
+      "development": "./src/runtime-health.ts",
+      "default": "./dist/runtime-health.js"
+    },
     "./mail-feedback": {
       "types": "./src/mail-feedback.ts",
       "development": "./src/mail-feedback.ts",

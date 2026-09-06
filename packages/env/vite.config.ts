@@ -7,6 +7,7 @@ export default defineConfig({
     },
     dts: false,
     entry: [
+      "src/runtime-health.ts",
       "src/mail-feedback.ts",
       "src/mail-sender.ts",
       "src/mail-api.ts",
