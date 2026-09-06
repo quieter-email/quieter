@@ -69,6 +69,9 @@ export const createReleaseProofEnv = (
       QUIETER_RELEASE_PROOF_PHASE: z
         .enum(["baseline", "adopt", "candidate"])
         .default("baseline"),
+      QUIETER_RELEASE_TRIGGER_SCHEDULE: z
+        .enum(["true", "false"])
+        .default("false"),
       QUIETER_RELEASE_WEB_PROOF: z.enum(["true", "false"]).default("false"),
     })
     .safeParse(runtime);
@@ -99,4 +102,35 @@ export const parseReleaseProbeBindings = (bindings: unknown) => {
     throw new Error("Release probe bindings are incomplete.");
   }
   return result.data;
+};
+
+export const parseReleaseTriggerProbeBindings = (bindings: unknown) => {
+  const base = parseReleaseProbeBindings(bindings);
+  const result = z
+    .object({
+      PROBE_QUEUE: z.custom<{ send: (body: { id: string }) => Promise<void> }>(
+        (value) =>
+          typeof value === "object" &&
+          value !== null &&
+          "send" in value &&
+          typeof value.send === "function"
+      ),
+      PROBE_RECORDS: z.custom<{
+        get: (key: string) => Promise<{ text: () => Promise<string> } | null>;
+        put: (key: string, value: string) => Promise<unknown>;
+      }>(
+        (value) =>
+          typeof value === "object" &&
+          value !== null &&
+          "get" in value &&
+          typeof value.get === "function" &&
+          "put" in value &&
+          typeof value.put === "function"
+      ),
+    })
+    .safeParse(bindings);
+  if (!result.success) {
+    throw new Error("Release trigger probe bindings are incomplete.");
+  }
+  return { ...base, ...result.data };
 };

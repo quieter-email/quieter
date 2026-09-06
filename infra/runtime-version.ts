@@ -48,6 +48,9 @@ export const createRuntimeVersion = (
                 type,
               };
             }
+            case "queue": {
+              return { name: bindingName, queueName: binding.queueName, type };
+            }
             case "assets": {
               return { name: bindingName, type };
             }

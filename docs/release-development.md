@@ -134,6 +134,22 @@ This topology does not establish provider-failure RPO 0 or high availability. Ke
 
 ## Existing production ownership
 
+### Queue and scheduled trigger fixture
+
+The isolated `release-proof-triggers-leander` drill passed on 2026-09-06. Candidate `2f15dea9-f50b-41e0-9d6f-155463017cd7` executed both triggers after activation; rollback restored `b6288a2a-7e39-4d6d-87c7-81058835ea7d` and both triggers executed it again. Each combined queue/scheduled sample completed within one minute. A following SST update disabled the schedule while preserving the rollback deployment ID, queue ID, and consumer ID, and another queue message executed the baseline. This proves the isolated trigger behavior, not the production handlers' contracts or Durable Object migration behavior.
+
+`sst.release-trigger-proof.config.ts` creates a separate `quieter-release-triggers` application in a `release-proof-triggers-*` stage. It has a synthetic Worker, queue and DLQ, private R2 evidence bucket, and linked `ReleaseProofToken`. Supply that random token through SST stdin without a trailing newline. There are no application database, mailbox, or send-provider bindings.
+
+Deploy with `QUIETER_RELEASE_PROOF_PHASE=baseline` and `QUIETER_RELEASE_TRIGGER_SCHEDULE=true`. Set the usual release account/stage variables and `QUIETER_RELEASE_BUCKET` from the journal output. Create an empty local evidence directory, then run:
+
+```powershell
+vp exec sst shell --config sst.release-trigger-proof.config.ts --stage <isolated-stage> --target ReleaseOperations -- node --conditions=development packages/deployment/src/verify-trigger-proof.ts --mode baseline --directory <absolute-evidence-directory>
+```
+
+Deploy again with phase `candidate`, then run the same verification command with `--mode candidate`. It first checks that inactive upload preserved the deployment and trigger identities, and samples both triggers on the baseline. It then activates the candidate, checks both triggers, restores the baseline, and checks both again. Queue evidence must arrive within two minutes; the scheduled check allows fifteen minutes for provider propagation. The script records an activation intent before mutation and attempts rollback on candidate-check failure. If that process dies, read its retained baseline version and actual provider state before repairing this isolated fixture; it is not the independent production recovery controller.
+
+Finally keep phase `candidate`, set `QUIETER_RELEASE_TRIGGER_SCHEDULE=false`, and deploy once more. Run verification with `--mode after-infrastructure`. That requires an unchanged rollback deployment ID and queue consumer identity, checks another queue event, and verifies the fixture schedule is disabled. Preserve the small evidence records for review. No step deletes a queue or moves an existing production resource.
+
 Read-only inspection on 2026-09-06 exported the encrypted production SST snapshot from 2026-09-05 at 22:16 UTC, containing 217 resources, and checked live runtime metadata. Production has six Workers using compatibility date `2026-08-04` and `nodejs_compat`. The realtime Worker owns a Durable Object migration tagged `v1`. The web Worker runs assets before code and does not yet have the new archive or version-metadata bindings. Its full secret set and existing resource identities must survive a reviewed ownership transition.
 
 AWS confirms that all three current mail functions use unpublished `$LATEST` code and have no aliases. The receipt and feedback functions still receive direct SNS delivery. This is existing production behavior, not the new bridge design. Published versions, stable aliases, primary SQS buffers, health bindings, and archive bootstrap need protected infrastructure work before their runtime rollback paths can be enabled. This inventory changed no production resources.
