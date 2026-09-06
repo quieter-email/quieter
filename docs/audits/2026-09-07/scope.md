@@ -1,5 +1,9 @@
 # Scope and verification
 
+## Second-pass addendum
+
+The original area table and check results below describe the first pass. The [second-pass scope and evidence](second-pass.md) adds repository-wide AST/import/unused-code scans, specific UI and mail reproductions, and local-tool/test mutation probes. Its new findings supersede first-pass statements that an area had no separate finding, particularly environment handling. The application baseline and original inventory remain unchanged.
+
 ## What was covered
 
 Baseline: commit 78621b3454b4fc304f41c6040c5c72577d2c0163 on main, with a clean working tree when the audit began.

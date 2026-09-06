@@ -1,8 +1,8 @@
 # Codebase audit, 7 September 2026
 
-The repository has strong foundations: strict checking, explicit mailbox access rules, separate identity and mail OAuth, shared UI primitives, and deployment bundle checks. The main weakness is that successful external operations and local state are not consistently joined by a recoverable lifecycle. Sending, ingestion, chat approvals, and mailbox actions each handle that problem differently.
+The largest problems are duplicated business paths with different safeguards, unrecoverable side effects, and inconsistent state and data contracts. Smaller issues include dead code and exports, needless wrappers, misleading types and names, inconsistent shared controls, and tests that constrain harmless refactors while missing core boundaries.
 
-I found **41 actionable items: 13 P1, 24 P2, and 4 P3**. The first 13 deserve attention before expanding the affected features. The rest include concrete bugs, architecture corrections, dependency maintenance, and small cleanup. This is an audit report only; application behavior was not changed.
+The expanded audit contains **122 findings: 17 P1, 65 P2, and 40 P3**, including 81 additions from the second pass. It covers major reliability risks and small, concrete cleanup. Repeated occurrences are cataloged without counting each match as another finding. This is an audit report only; application behavior was not changed.
 
 The evidence is pinned to commit [78621b3](https://github.com/quieter-email/quieter/commit/78621b3454b4fc304f41c6040c5c72577d2c0163). Every finding includes the relevant code, impact, a suggested correction, and proportionate validation. A finding can be high confidence from control flow without having been triggered against a real customer account.
 
@@ -11,6 +11,17 @@ The evidence is pinned to commit [78621b3](https://github.com/quieter-email/quie
 - [Scope, coverage, verification, and limitations](scope.md)
 - [File inventory at the audited commit](inventory.csv)
 - [Dependency advisory snapshot](dependency-alerts.csv), with applicability qualifications in F41
+
+- [Additional code quality findings, F42-F66](granular-quality.md)
+- [Backend behavior and contracts, F67-F79](backend-details.md)
+- [UI state and shared controls, F80-F91](ui-details.md)
+- [Mail parsing, search, and SDK details, F92-F101](mail-details.md)
+- [Small backend cleanup, F102-F106](small-cleanup.md)
+- [Tooling, dead code, and test quality, F107-F122](tooling-details.md)
+- [Second-pass scope, reproductions, and mergeable groups](second-pass.md)
+- [Occurrence catalog](occurrences.csv), [duplicate review](duplicate-review.csv), and [diagnostic triage](diagnostic-triage.csv)
+- [Filterable findings index](findings.csv) and [verified unused code/dependencies](verified-unused.csv)
+- [All 33 reviewed app export candidates](unused-exports.csv), distinguishing private helpers from dead definitions
 
 ## Findings
 
@@ -59,10 +70,91 @@ P1 means fix before building further on the affected path. P2 means schedule a s
 | [F39](quality.md#f39) | P2 | The custom workflow engine needs a bounded keep-or-replace decision |
 | [F40](quality.md#f40) | P2 | Action usage reporting is outside the awaited queue lifecycle |
 | [F41](quality.md#f41) | P2 | Pinned dependencies have an unresolved advisory backlog |
+| [F42](granular-quality.md#f42) | P1 | Connector token handling is duplicated, and the copies already disagree |
+| [F43](granular-quality.md#f43) | P2 | A refresh marks a connector unusable but still hands its token to the action |
+| [F44](granular-quality.md#f44) | P2 | Connector cancellation stops at the token-refresh boundary |
+| [F45](granular-quality.md#f45) | P2 | Omitting an optional owner silently widens connector authorization |
+| [F46](granular-quality.md#f46) | P2 | Optional cache persistence participates in the mutation success contract |
+| [F47](granular-quality.md#f47) | P2 | Whole-query rollback can erase mail received while an action is pending |
+| [F48](granular-quality.md#f48) | P2 | Landing-page wrappers create a new React component on every render |
+| [F49](granular-quality.md#f49) | P2 | BIMI caches expire values without bounding retained keys |
+| [F50](granular-quality.md#f50) | P2 | Recording failures after startup disappear without an error contract |
+| [F51](granular-quality.md#f51) | P3 | Audio support detection omits the microphone acquisition API |
+| [F52](granular-quality.md#f52) | P3 | Twenty-two conditional class expressions violate the required object syntax |
+| [F53](granular-quality.md#f53) | P3 | useEntrance is an ordinary value factory named like a React hook |
+| [F54](granular-quality.md#f54) | P3 | Immediate values are needlessly wrapped in resolved promises |
+| [F55](granular-quality.md#f55) | P2 | Automatic-label usage reporting is copied across provider services |
+| [F56](granular-quality.md#f56) | P3 | Two settings screens independently define the same mailbox navigation contract |
+| [F57](granular-quality.md#f57) | P3 | The Durable Object duplicates the shared Worker error response |
+| [F58](granular-quality.md#f58) | P3 | QueryClient ownership uses a performance cache and redundant default objects |
+| [F59](granular-quality.md#f59) | P3 | Window activity has different initial and subsequent definitions |
+| [F60](granular-quality.md#f60) | P3 | A bounded stream reader uses async recursion for an ordinary loop |
+| [F61](granular-quality.md#f61) | P3 | The two web JSON body readers have different resource and decoding rules |
+| [F62](granular-quality.md#f62) | P3 | Strict event types are followed by impossible undefined checks |
+| [F63](granular-quality.md#f63) | P2 | Chat unconditionally transcodes browser audio through a handwritten WAV encoder |
+| [F64](granular-quality.md#f64) | P3 | Compose omits the transcription limits that chat checks before upload |
+| [F65](granular-quality.md#f65) | P2 | Transcription error classification depends on English message prefixes |
+| [F66](granular-quality.md#f66) | P3 | The recording value type is declared twice with the same fields |
+| [F67](backend-details.md#f67) | P1 | Backfill ownership is checked after another mailbox's batch runs |
+| [F68](backend-details.md#f68) | P2 | Reading backfill status is the scheduler, and processing stops without readers |
+| [F69](backend-details.md#f69) | P2 | Backfill writes can resurrect cancelled jobs and overwrite concurrent progress |
+| [F70](backend-details.md#f70) | P2 | Backfill advances past failures without a retry record or useful failure detail |
+| [F71](backend-details.md#f71) | P2 | Rule preview ORs repeated filter types while execution ANDs every filter |
+| [F72](backend-details.md#f72) | P2 | Accepted `is:archived` conditions never match archived messages in rules |
+| [F73](backend-details.md#f73) | P2 | Separate text matchers disagree on nulls, whitespace, filenames, and free-text semantics |
+| [F74](backend-details.md#f74) | P2 | The rule search assertion accepts invalid filters that SQL silently removes |
+| [F75](backend-details.md#f75) | P1 | A partly applied rule can invalidate its own match and permanently skip remaining actions |
+| [F76](backend-details.md#f76) | P2 | Label renames and deletions leave saved searches and rule predicates inconsistent |
+| [F77](backend-details.md#f77) | P2 | Normal duplicate-name input escapes as an unexpected database error |
+| [F78](backend-details.md#f78) | P1 | Interactive memory requests bypass entitlement and balance checks |
+| [F79](backend-details.md#f79) | P2 | Memory RPCs turn arbitrary backend failures into verbatim user errors |
+| [F80](ui-details.md#f80) | P2 | Saving reordered milestones can leave the form permanently dirty |
+| [F81](ui-details.md#f81) | P2 | Usage settings accept edits during save and then discard them |
+| [F82](ui-details.md#f82) | P2 | Managed mailbox name remains at an unsaved value after failure |
+| [F83](ui-details.md#f83) | P3 | Clearing a Gmail name never reaches a clean saved state |
+| [F84](ui-details.md#f84) | P2 | IME confirmation can submit an unfinished chat prompt |
+| [F85](ui-details.md#f85) | P2 | Multiple mentions force a full editable-DOM rebuild on every input |
+| [F86](ui-details.md#f86) | P2 | Settings search result activation requires a mouse-down event |
+| [F87](ui-details.md#f87) | P3 | Domain mode cards look clickable but only their radio circles work |
+| [F88](ui-details.md#f88) | P3 | Empty token suggestions advertise an active option that does not exist |
+| [F89](ui-details.md#f89) | P3 | Keyboard shortcuts close button omits the required shared tooltip |
+| [F90](ui-details.md#f90) | P3 | Message-image error handling uses a redundant ref and synchronization effect |
+| [F91](ui-details.md#f91) | P2 | Transcription completion can append after the active mailbox changes |
+| [F92](mail-details.md#f92) | P2 | Managed-mail invitations expose an action that requires a Gmail mailbox |
+| [F93](mail-details.md#f93) | P2 | Parsing combined status filters silently keeps only the last one |
+| [F94](mail-details.md#f94) | P2 | Search normalization changes quoted phrases and Boolean expressions |
+| [F95](mail-details.md#f95) | P2 | Mojibake repair truncates unrelated Unicode characters |
+| [F96](mail-details.md#f96) | P2 | Header decoding applies destructive HTML and zero-width cleanup to addresses and subjects |
+| [F97](mail-details.md#f97) | P2 | An inline attachment can disappear from both exported attachment lists |
+| [F98](mail-details.md#f98) | P2 | Sender extraction mistakes an email in the display name for the actual sender |
+| [F99](mail-details.md#f99) | P2 | Recipient validation accepts a valid substring and silently drops another address |
+| [F100](mail-details.md#f100) | P2 | Draft save responses return encoded subjects as editable text |
+| [F101](mail-details.md#f101) | P3 | SDK base URL silently discards a configured path prefix |
+| [F102](small-cleanup.md#f102) | P3 | Rule-history parsing constructs an argument it never reads |
+| [F103](small-cleanup.md#f103) | P3 | A private division lookup carries an unused database override |
+| [F104](small-cleanup.md#f104) | P3 | Subscription normalization is followed by impossible checks and a redundant alias |
+| [F105](small-cleanup.md#f105) | P3 | Three files independently spell the same client-or-transaction type |
+| [F106](small-cleanup.md#f106) | P3 | Live-sync token payload validation is copied between issuer and Worker |
+| [F107](tooling-details.md#f107) | P2 | Zero backfill concurrency reports successful copies without doing them |
+| [F108](tooling-details.md#f108) | P2 | The local Worker and Node commands parse the same env file differently |
+| [F109](tooling-details.md#f109) | P2 | Secret refresh serializes dotenv values as JSON strings |
+| [F110](tooling-details.md#f110) | P2 | Catch-all authorization and claim tests survive removal of every SQL predicate |
+| [F111](tooling-details.md#f111) | P3 | Prefetch tests lock down independent call order and do not test their claimed deduplication |
+| [F112](tooling-details.md#f112) | P3 | Five dependency declarations have no consumer in their owning workspace |
+| [F113](tooling-details.md#f113) | P3 | A complete managed-message deletion implementation is unreachable |
+| [F114](tooling-details.md#f114) | P3 | The unused contour renderer retains 323 lines and a lint exception |
+| [F115](tooling-details.md#f115) | P3 | The browser terms-cookie writer has no caller |
+| [F116](tooling-details.md#f116) | P3 | Obsolete compose and AI compatibility exports remain after caller migration |
+| [F117](tooling-details.md#f117) | P3 | PR size label-definition synchronization can never run |
+| [F118](tooling-details.md#f118) | P3 | The custom PNG CRC loop duplicates the supported Node builtin |
+| [F119](tooling-details.md#f119) | P3 | A compiler exception is attached to a hook that does not match its rationale |
+| [F120](tooling-details.md#f120) | P3 | App modules export internal helpers and retain unused small definitions |
+| [F121](tooling-details.md#f121) | P3 | SettingsListRow and its exclusive style variant are dead |
+| [F122](tooling-details.md#f122) | P3 | MailboxSettingsRow is an unused wrapper inside the live switcher module |
 
 ## How I would turn this into mergeable work
 
-Start with the lost-data and repeated-action risks. Avoid one repository-wide cleanup PR.
+Start with the lost-data, unauthorized-work, repeated-action, and local provider-isolation risks. F42, F67, F75, and F78 add four P1 concerns to the original set. Avoid one repository-wide cleanup PR. The [second-pass grouping](second-pass.md#mergeable-groups) includes scoped UI and cleanup work.
 
 | Workstream | Findings | Suggested boundary |
 | --- | --- | --- |

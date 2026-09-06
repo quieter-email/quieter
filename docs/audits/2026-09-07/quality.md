@@ -190,6 +190,8 @@ Apply the existing convention during scoped edits. Keep helpers for domain decis
 
 This is a low-priority cleanup, not a reason to mix hundreds of unrelated formatting edits into the reliability fixes. No tests are needed for the inline-only changes.
 
+The second pass located 25 `hasText` definitions and 10 `isRecord` definitions across implementation files, all listed under F35 in [occurrences.csv](occurrences.csv). The variants differ on whitespace; preserve each caller's intended semantics when inlining them. The same catalog includes `getIsRefreshing`, which passes four positional booleans to a one-use expression. Query-key factories and meaningful shared business operations were not automatically treated as bad abstractions because their bodies are short.
+
 ## F36
 
 ### P3: CSS hue unit support is unreachable in the custom color fallback
