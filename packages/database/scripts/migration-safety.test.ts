@@ -254,6 +254,7 @@ describe("automated migration safety", () => {
 
   test.each([
     'DROP TABLE "user";',
+    '-- quieter:contract\nDROP TABLE "user";',
     "DROP SCHEMA public CASCADE;",
     'TRUNCATE TABLE "user";',
     'DELETE FROM "user";',

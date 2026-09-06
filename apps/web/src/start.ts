@@ -1,6 +1,7 @@
 import { withRequestDatabaseClient } from "@quieter/database/client";
 import { serverEnv } from "@quieter/env/server";
 import { consumeRateLimit } from "@quieter/orpc/abuse-protection";
+import { checkDeploymentDatabase } from "@quieter/orpc/deployment-health";
 import {
   sentryGlobalFunctionMiddleware,
   sentryGlobalRequestMiddleware,
@@ -67,6 +68,42 @@ const csrfMiddleware = createCsrfMiddleware({
 
 const databaseMiddleware = createMiddleware().server(
   async ({ next }) => await withRequestDatabaseClient(next)
+);
+
+let databaseHealthyUntil = 0;
+let databaseCheckRunning = false;
+const deploymentHealthMiddleware = createMiddleware().server(
+  async ({ next, request }) => {
+    if (new URL(request.url).pathname !== "/api/health") {
+      return await next();
+    }
+    const headers = { "cache-control": "no-store" };
+    if (request.method !== "GET") {
+      return new Response(null, {
+        headers: { ...headers, allow: "GET" },
+        status: 405,
+      });
+    }
+    if (databaseHealthyUntil <= Date.now()) {
+      if (databaseCheckRunning) {
+        return new Response(null, { headers, status: 503 });
+      }
+      databaseCheckRunning = true;
+      try {
+        await checkDeploymentDatabase();
+        databaseHealthyUntil = Date.now() + 30_000;
+      } catch (error) {
+        reportServerError(error, "deployment-health");
+        return new Response(null, { headers, status: 503 });
+      } finally {
+        databaseCheckRunning = false;
+      }
+    }
+    return Response.json(
+      { buildId: __QUIETER_BUILD_ID__, healthy: true },
+      { headers }
+    );
+  }
 );
 
 const getRateLimitPolicy = (pathname: string) => {
@@ -309,20 +346,6 @@ const markdownNegotiationMiddleware = createMiddleware().server(
   }
 );
 
-/**
- * Serves chunks from previous releases that the current asset manifest has
- * dropped, so tabs opened before a deploy keep loading instead of failing on
- * their next lazy import. Runs before the site password gate because
- * `/assets/` is already public.
- */
-const assetArchiveMiddleware = createMiddleware().server(
-  async ({ next, request }) => {
-    const { serveArchivedAssetRequest } =
-      await import("#/lib/asset-archive.server");
-    return await serveArchivedAssetRequest(request, async () => await next());
-  }
-);
-
 const sitePasswordMiddleware = createMiddleware().server(
   async ({ next, request }) => {
     if (!isSitePasswordGateEnabled() || !hasSitePasswordConfigured()) {
@@ -404,10 +427,10 @@ export const startInstance = createStart(() => ({
   requestMiddleware: [
     ...(isSentryEnabled ? [sentryGlobalRequestMiddleware] : []),
     securityHeadersMiddleware,
-    assetArchiveMiddleware,
     wellKnownAgentSurfaceMiddleware,
     markdownNegotiationMiddleware,
     databaseMiddleware,
+    deploymentHealthMiddleware,
     abuseProtectionMiddleware,
     sitePasswordMiddleware,
     csrfMiddleware,

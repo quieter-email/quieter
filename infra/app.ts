@@ -18,7 +18,6 @@ export const createInfrastructure = async (input: {
   const webSecretBindings = Object.values(secretBindings);
 
   const context = createDeploymentContext(secretResources);
-  const webAssetArchive = new sst.cloudflare.Bucket("WebAssetArchive");
   const actions = createMailboxActionResources(
     context,
     secretBindings,
@@ -49,7 +48,7 @@ export const createInfrastructure = async (input: {
       SES_CONFIGURATION_SET_NAME:
         mail.mailOutboundConfigurationSet.configurationSetName,
     },
-    [mail.mailBucket, mail.webAwsPermissions, webAssetArchive]
+    [mail.mailBucket, mail.webAwsPermissions]
   );
 
   return {
@@ -73,7 +72,6 @@ export const createInfrastructure = async (input: {
     mailReceiptRuleSetName,
     mailReceiptTopicArn: mail.mailReceiptTopic.arn,
     stage: $app.stage,
-    webAssetArchiveBucket: webAssetArchive.name,
     webUrl: web.url,
   };
 };

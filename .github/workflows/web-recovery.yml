@@ -1,0 +1,58 @@
+name: Recover Web Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployment_run:
+        description: Failed deployment run ID containing the previous-web artifact
+        required: true
+        type: string
+      current_version:
+        description: Current active web Worker version UUID from Cloudflare
+        required: true
+        type: string
+      compatible_web_only:
+        description: I verified only the web code needs recovery and the previous version is compatible with current database, bindings and background jobs
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: quieter-deploy-production
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    if: github.ref == 'refs/heads/main' && inputs.compatible_web_only
+    environment: production
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Verify and download production recovery record
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          DEPLOYMENT_RUN: ${{ inputs.deployment_run }}
+        run: |
+          [[ "$DEPLOYMENT_RUN" =~ ^[0-9]+$ ]]
+          gh api "repos/$GH_REPO/actions/runs/$DEPLOYMENT_RUN" > run.json
+          jq -e '.path == ".github/workflows/sst-deploy.yml" and .head_branch == "main" and .status == "completed" and (.event == "push" or .event == "workflow_dispatch")' run.json
+          gh run download "$DEPLOYMENT_RUN" --name previous-web --dir recovery
+          test "$(jq -r .release recovery/previous-web.json)" = "$(jq -r .head_sha run.json)-$DEPLOYMENT_RUN"
+      - name: Restore and verify previous web version
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_DEFAULT_ACCOUNT_ID: ${{ vars.CLOUDFLARE_DEFAULT_ACCOUNT_ID }}
+          CURRENT_VERSION: ${{ inputs.current_version }}
+        run: node scripts/web-recovery.ts restore recovery/previous-web.json "$CURRENT_VERSION"
+      - name: Recovery summary
+        run: |
+          echo 'Web recovery verified. Database and background jobs were not rolled back. The normal deployment workflow refreshes SST state before preparing the next release.' >> "$GITHUB_STEP_SUMMARY"

@@ -4,7 +4,6 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "archive:web-assets": "node scripts/archive-web-assets.ts",
     "agent:doctor": "node scripts/agent-tooling-doctor.ts",
     "billing:sync-credit-usage-polar": "vp run @quieter/billing#credit-usage:sync",
     "billing:sync-polar": "vp run @quieter/billing#catalog:sync",
@@ -34,7 +33,6 @@
     "env:doctor": "vp run @quieter/env#doctor",
     "generate:assets": "node scripts/generate-web-assets.ts",
     "prepare": "vp config --no-agent",
-    "verify:web-asset-archive": "node scripts/verify-web-asset-archive.ts",
     "secrets:dev": "node --env-file-if-exists=.env.sst.local scripts/local-secrets.ts",
     "sst": "node --env-file-if-exists=.env.local --env-file-if-exists=.env.sst.local scripts/run-sst.ts"
   },
@@ -51,7 +49,8 @@
     "typescript": "catalog:",
     "ultracite": "7.10.1",
     "vite": "catalog:",
-    "vite-plus": "catalog:"
+    "vite-plus": "catalog:",
+    "zod": "catalog:"
   },
   "packageManager": "pnpm@11.22.0"
 }

@@ -4,36 +4,33 @@
 
 Production deploys run through `.github/workflows/sst-deploy.yml` on pushes to `main` or a manual workflow dispatch. It calls `.github/workflows/ci-main.yml` as the same reusable verification workflow used by pull requests. SST is the source of truth for application runtime secrets; the protected GitHub `production` environment supplies deployment and operational credentials plus non-secret deployment configuration.
 
-The release workflow:
+The release workflow runs the existing CI checks, refreshes SST state, and runs `sst diff` to prepare the production web build with SST-resolved configuration. Source-map upload must succeed during preparation. The installed SST site builder runs build commands during both `diff` and `refresh`; neither publishes the new Worker.
 
-1. runs type, lint, boundary, bundle, and test checks;
-2. validates database migrations against a temporary PostgreSQL service;
-3. applies committed forward-only production migrations;
-4. loads application secrets directly from SST's encrypted secret store;
-5. runs `sst deploy` without application runtime secrets in the deploy process, deploying the AWS mail/background stack and the Cloudflare web Worker from SST-managed values;
-6. wires SST resource outputs directly into the Worker and attaches `quieter.email`;
-7. archives the client assets this release built so earlier tabs keep loading;
-8. invokes the authenticated Gmail credential rotation endpoint.
+`sst deploy` reuses the prepared web output. A local SHA-256 receipt verifies every output file, the build ID and the generated SST Wrangler configuration. Changed or missing output fails closed. The receipt and generated Wrangler files can contain configuration and must never be uploaded as public artifacts. There is no R2 asset archive.
 
-There is no separate hosting-provider build, deploy hook, or dashboard environment configuration. Cloudflare receives runtime variables and encrypted bindings from SST for each release. Generated resource URLs and names remain deployment outputs and are never copied into a second configuration store.
+Preparation completes before migrations or runtime updates. Migrations remain forward-only and expand-safe. Deploys must keep the previous application's database queries, API calls and queued-message formats valid. Add fields before using them, keep readers tolerant of older messages, and remove old contracts in a later reviewed change. SQL checks catch known destructive statements, not every compatibility error. A `quieter:contract` comment does not bypass the guard.
 
-### Client asset retention
+After SST finishes, `scripts/check-deployment.ts` verifies the server build ID, a read-only database query, the static build marker, server-rendered `/about` HTML, and its JavaScript/CSS assets. The public `/api/health` endpoint returns only a build ID and health status, caches successful database checks for 30 seconds per isolate, and bounds database statements to two seconds. It never returns credentials or user data. A failed check fails the release workflow.
 
-A deploy replaces the Worker asset manifest wholesale, so the previous release's hashed chunks stop resolving. A tab opened before the deploy then fails on its next lazy import, and because a missing asset falls through to the Worker it receives the HTML shell rather than JavaScript.
+Open tabs check the build marker on focus and every minute while visible. A different build opens the reload dialog; the user decides when to reload. Network failures do not claim a new version exists, and no automatic reload occurs. Existing tabs still require backend compatibility until they reload.
 
-Each release therefore uploads `apps/web/dist/client/assets` to the `WebAssetArchive` R2 bucket via `vp run archive:web-assets`, reading the bucket name from the stack outputs written by `sst deploy`. The upload ends with a marker for that build. Before a later deployment may replace the Worker, `vp run verify:web-asset-archive` checks the currently served build ID and requires its marker to resolve through the archive. The marker proves that the deployment upload completed; R2 retention policy and access controls keep those uploaded objects available afterward. When the live manifest misses, the Worker serves the chunk from that archive, so tabs opened before a release keep working untouched and pick up the new build on their next navigation.
+### Web recovery
 
-The first archive-aware release requires a manual `workflow_dispatch` run with `bootstrap_web_asset_archive` enabled because the preceding release has no plaintext build ID. This exception applies only to that explicitly authorized run; normal pushes fail closed. After bootstrap, a missing marker blocks a different release. If archiving fails after SST activates a release, rerun the same GitHub Actions workflow: its stable release ID permits that repair run, while a new workflow remains blocked until the upload completes. Post-deploy verification always runs in strict mode and requires production to serve that workflow's build ID and marker.
+Before changing production, the workflow records the currently healthy web Worker version in the private `previous-web` GitHub artifact, retained for 90 days. The first deployment introducing build markers and health checks has no verified predecessor and therefore no recovery record. Later deployments fail before mutation if the existing marked release is unhealthy; repair the release or recover it before continuing.
 
-Never delete objects from this bucket as part of a deploy: older tabs are reading from it. Prune it only through a retention policy chosen to outlive the longest realistic session, and only for objects no longer referenced by any recent release.
+For a compatible web-only failure, run **Recover Web Release** on `main`:
 
-Asset retention covers loading, not protocol. An old client calling a server function whose shape has changed is a separate compatibility boundary, handled by expand/contract like any other. The client also compares its build id against `/assets/build-id.txt` and reloads when a chunk fails and the ids differ, which is the backstop for anything retention does not cover.
+1. Select the deployment run ID that recorded the previous healthy version.
+2. Inspect the web Worker's current active version UUID in Cloudflare and enter it.
+3. Confirm that restoring the previous web code is compatible with the current database, bindings and background jobs.
 
-### Worker rollback and Durable Object versions
+The workflow uses the protected production environment and the same concurrency group as deployments. It verifies the artifact came from a completed production workflow on `main`, checks the domain's Worker and expected active version, restores the recorded version through Cloudflare, and reruns health checks. No Git history changes or database rollback occur. It is intentionally manual; smoke-test failure does not authorize an infrastructure rollback.
 
-Roll back a production Worker by redeploying a known-good repository revision through the protected SST workflow. Do not deploy production Worker code with Wrangler or edit the Worker in the Cloudflare dashboard. Confirm that any database migration applied since that revision is compatible with the older application before rollback; otherwise ship a forward fix.
+Do not use this button after incompatible schema, binding, Durable Object, queue or background-job changes. Use a reviewed forward fix through SST. Cloudflare can refuse version rollback when dependent resources changed. If restoration succeeds but checks fail, inspect the live state before retrying. The next normal deployment always runs `sst refresh` before planning, reconciling emergency provider changes with SST state. A recovered web release does not establish that background jobs are healthy.
 
-Treat Durable Object migration tags and lifecycle changes as compatibility boundaries. Deploy code that can safely communicate with both the preceding and succeeding object behavior, keep migration tags append-only, and verify object state before removing compatibility paths. Quieter does not use gradual deployments for the realtime Worker by default because each Durable Object instance is assigned to one Worker version and Durable Object migrations are applied atomically. A failed realtime release should be replaced through the same SST workflow with a compatible known-good or forward-fix revision.
+### Local verification
+
+Run `vp check --fix`, `vp test`, and the existing web/handler build checks. `node scripts/check-deployment.ts <origin> <build-id>` also works against a running local Worker with development bindings. Keep production credentials out of local files. Live production deployment and recovery run only through the protected workflows; unit tests simulate provider failures and artifact tampering without touching production.
 
 ## GitHub environment contract
 
@@ -62,6 +59,4 @@ The `vector` extension must be enabled on a database before the memory-embedding
 
 ## Failure behavior
 
-- Verification or migration failure prevents deployment.
-- A failed production deployment leaves the previous Worker release serving traffic.
-- Gmail credential rotation runs only after SST reports a successful production deployment.
+A preparation failure prevents migrations and runtime updates. A migration failure stops SST deployment, but earlier migrations may already have committed. An SST failure can leave some resources updated. Smoke checks detect a broken published web release but cannot undo its effects. Keep adjacent releases compatible and use the recovery procedure above where applicable. This workflow does not make the entire AWS/Cloudflare stack transactional.
