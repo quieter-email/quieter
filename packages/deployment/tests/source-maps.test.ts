@@ -6,6 +6,7 @@ import {
   readFile,
   readdir,
   rm,
+  rmdir,
   stat,
   writeFile,
 } from "node:fs/promises";
@@ -27,6 +28,7 @@ import {
   prepareGeneratedSourceMaps,
   verifyReleaseSourceMaps,
 } from "../src/source-maps.ts";
+import { verifyTrustedBuildFiles } from "../src/trusted-build-files.ts";
 
 // oxlint-disable-next-line strict-void-return -- promisify waits for the subprocess callback.
 const execute = promisify(execFile);
@@ -118,6 +120,46 @@ describe("retained source-map identities", () => {
     await expect(
       verifyReleaseSourceMaps(manifest, directory)
     ).resolves.toHaveLength(1);
+  });
+
+  it("checks downloaded bytes against trusted provenance and rejects extra files", async () => {
+    const { directory, manifest } = await buildFixture();
+    await rm(path.join(directory, "server/index.js.map"));
+    await rm(path.join(directory, "server/wrangler.json"));
+    await rmdir(path.join(directory, "client"));
+    await writeFile(
+      path.join(directory, "artifact.json"),
+      JSON.stringify(manifest)
+    );
+    const build = {
+      archiveDigest: "f".repeat(64),
+      artifactId: 1,
+      artifactName: "fixture",
+      lockfileDigest: "c".repeat(64),
+      publicConfigurationDigest: "d".repeat(64),
+      repository: "fixture/repository",
+      runAttempt: 1,
+      runId: 1,
+      schemaVersion: 1 as const,
+      sourceSha: "a".repeat(40),
+      sourceTree: "e".repeat(40),
+      stage: "release-proof-maps",
+    };
+    await expect(
+      verifyTrustedBuildFiles(directory, build)
+    ).resolves.toStrictEqual(manifest);
+    await expect(
+      verifyTrustedBuildFiles(directory, { ...build, stage: "production" })
+    ).rejects.toThrow("provenance");
+    await writeFile(path.join(directory, "server/unlisted.js"), "unlisted");
+    await expect(verifyTrustedBuildFiles(directory, build)).rejects.toThrow(
+      "unlisted"
+    );
+    await rm(path.join(directory, "server/unlisted.js"));
+    await writeFile(path.join(directory, "server/index.js"), "corrupt");
+    await expect(verifyTrustedBuildFiles(directory, build)).rejects.toThrow(
+      "changed files"
+    );
   });
 
   it("uploads only verified pairs and removes the upload directory after processing", async () => {

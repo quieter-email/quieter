@@ -1,0 +1,91 @@
+name: Verify Runtime Build
+
+on:
+  workflow_call:
+    inputs:
+      run_id:
+        required: true
+        type: string
+    outputs:
+      artifact_id:
+        value: ${{ jobs.verify.outputs.artifact_id }}
+      artifact_digest:
+        value: ${{ jobs.verify.outputs.artifact_digest }}
+      source_sha:
+        value: ${{ jobs.verify.outputs.source_sha }}
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful Build Runtime Release run ID
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  verify:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 10
+    outputs:
+      artifact_id: ${{ steps.verify.outputs.artifact-id }}
+      artifact_digest: ${{ steps.verify.outputs.artifact-digest }}
+      source_sha: ${{ steps.verify.outputs.source-sha }}
+    env:
+      CONTROLLER_SHA: ${{ vars.RELEASE_CONTROLLER_SHA }}
+      BUILD_RUN_ID: ${{ inputs.run_id }}
+      PUBLIC_CONFIGURATION: ${{ vars.PRODUCTION_RELEASE_PUBLIC_CONFIGURATION }}
+    steps:
+      - name: Require reviewed tooling and build configuration
+        shell: bash
+        run: |
+          [[ "$CONTROLLER_SHA" =~ ^[a-f0-9]{40}$ ]] || { echo "Pin RELEASE_CONTROLLER_SHA to a reviewed commit."; exit 1; }
+          [[ "$BUILD_RUN_ID" =~ ^[1-9][0-9]*$ ]] || { echo "A numeric build run ID is required."; exit 1; }
+          test -n "$PUBLIC_CONFIGURATION" || { echo "Configure PRODUCTION_RELEASE_PUBLIC_CONFIGURATION."; exit 1; }
+
+      - name: Checkout pinned verification tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ env.CONTROLLER_SHA }}
+          persist-credentials: false
+
+      - name: Setup repository
+        uses: ./.github/actions/setup
+
+      - name: Verify source run and archive digest
+        id: select
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          printf '%s' "$PUBLIC_CONFIGURATION" > "$RUNNER_TEMP/release-public-configuration.json"
+          vp run @quieter/deployment#verify:ci --run "$BUILD_RUN_ID" --stage production --public-config "$RUNNER_TEMP/release-public-configuration.json" --receipt "$RUNNER_TEMP/selected-build.json"
+
+      - name: Download the verified immutable artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ steps.select.outputs.artifact-id }}
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.run_id }}
+          path: ${{ runner.temp }}/verified-web-release
+          merge-multiple: true
+
+      - name: Recheck run identity and every downloaded file
+        id: verify
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SELECTED_ARTIFACT_ID: ${{ steps.select.outputs.artifact-id }}
+          SELECTED_ARCHIVE_DIGEST: ${{ steps.select.outputs.archive-digest }}
+        shell: bash
+        run: |
+          vp run @quieter/deployment#verify:ci --run "$BUILD_RUN_ID" --stage production --public-config "$RUNNER_TEMP/release-public-configuration.json" --directory "$RUNNER_TEMP/verified-web-release" --artifact-id "$SELECTED_ARTIFACT_ID" --archive-digest "$SELECTED_ARCHIVE_DIGEST" --receipt "$RUNNER_TEMP/verified-build.json"
+
+      - name: Retain verification evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: verified-build-${{ inputs.run_id }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/verified-build.json
+          if-no-files-found: error
+          retention-days: 14

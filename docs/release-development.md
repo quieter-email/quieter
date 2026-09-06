@@ -200,6 +200,16 @@ Controlled version-2 artifacts require a matching durable processing receipt dur
 
 Local tests cover missing evidence, interrupted uploads, stage mismatch, corrupted bytes, idempotent receipt retention, and wrong-project receipts. Live Sentry processing remains unverified until the existing staging upload credential is available.
 
+### Trusted CI build reuse
+
+`Build Runtime Release` runs the checks and controlled build from `main`, with no cloud credentials. Its public configuration must be set explicitly in the repository's `PRODUCTION_RELEASE_PUBLIC_CONFIGURATION` JSON variable. It uses the same six public settings accepted by the local builder. Review that value against production before enabling releases; changing it invalidates earlier builds. Pull-request checks retain their separate `ci` artifacts and cannot authorize production.
+
+`Verify Runtime Build` accepts the successful build run ID. It checks out the independently pinned `RELEASE_CONTROLLER_SHA`, verifies the GitHub run's workflow, success, repository, main ancestry, and current attempt, and requires the uniquely named artifact from that attempt. The verifier hashes the actual archive download and requires GitHub's recorded SHA-256 digest. GitHub credentials are never forwarded to signed artifact storage. The pinned download action retrieves the selected immutable artifact ID. A second verification checks that selection again, validates source tree, lockfile and public configuration, and checks every extracted file and source-map pair. Unlisted files, symlinks, missing files, oversized trees, expired artifacts, or a rerun replacing the selection block verification.
+
+The verification workflow has only repository and Actions read permissions. It writes evidence and outputs the verified source, artifact ID, and compiled digest. Runtime promotion must repeat these checks in its credential-free steps before using cloud access and bind the retained receipt to the release intent. Verification alone does not authorize activation. Both new workflows require `main`; they have not been run as trusted production workflows from this PR.
+
+On 2026-09-06, downloading an actual 16,271,145-byte PR artifact through GitHub's redirect endpoint matched its recorded archive digest. This verifies the transport mechanism only. The trusted-run checks deliberately reject that PR artifact. See [GitHub artifact metadata and downloads](https://docs.github.com/en/rest/actions/artifacts) and [workflow security guidance](https://docs.github.com/en/actions/reference/security/secure-use).
+
 ## Independent recovery configuration
 
 `.github/workflows/release-recovery.yml` listens for release completion and reconciles every five minutes. `RUNTIME_RELEASE_RECOVERY_ENABLED` defaults off. Before enabling it, configure the `release-recovery` environment with a reviewed 40-character `RELEASE_CONTROLLER_SHA`, `RELEASE_STAGE`, `RELEASE_JOURNAL_BUCKET`, `CLOUDFLARE_ACCOUNT_ID`, and `AWS_REGION`. Supply `RELEASE_RECOVERY_AWS_ROLE` and `RELEASE_RECOVERY_CLOUDFLARE_TOKEN` with only journal/version/deployment permissions. The recovery job does not need application secrets, database access, migrations, or an SST deploy.

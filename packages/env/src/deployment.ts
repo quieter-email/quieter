@@ -2,6 +2,24 @@ import { z } from "zod";
 
 import type { RuntimeEnvironment } from "./schema";
 
+export const createTrustedBuildEnv = (
+  runtime: RuntimeEnvironment = process.env
+) => {
+  const result = z
+    .object({
+      GITHUB_OUTPUT: z.string().optional(),
+      GITHUB_REPOSITORY: z.string().regex(/^[\w.-]+\/[\w.-]+$/u),
+      GITHUB_TOKEN: z.string().min(1),
+    })
+    .safeParse(runtime);
+  if (!result.success) {
+    throw new Error(
+      "Trusted build verification requires a repository and GitHub read credential."
+    );
+  }
+  return result.data;
+};
+
 export const createSourceMapDestinationEnv = (
   runtime: RuntimeEnvironment = process.env
 ) => {

@@ -7,6 +7,7 @@
     "./schema": "./src/schema.ts"
   },
   "scripts": {
+    "verify:ci": "node --conditions=development src/trusted-build-cli.ts",
     "build:web": "node --conditions=development src/web-release-build-cli.ts",
     "upload:source-maps": "node --conditions=development src/source-map-upload-cli.ts",
     "archive": "node --conditions=development src/archive-cli.ts",
