@@ -60,6 +60,11 @@ describe.skipIf(databaseUrl === undefined)("transactional mail budgets", () => {
       },
       attachmentBytes: 0,
       idempotencyKey,
+      limits: {
+        global: { maxPending: 100, maxPendingBytes: 100_000_000 },
+        maxQueuedAgeSeconds: 3600,
+        organization: { maxPending: 100, maxPendingBytes: 100_000_000 },
+      },
       mailboxId: null,
       messageBytes: 10,
       organizationId,

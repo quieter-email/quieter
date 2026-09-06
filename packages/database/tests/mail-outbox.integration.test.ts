@@ -15,6 +15,7 @@ import {
 import { assertLocalDatabaseUrl } from "../scripts/local-development.ts";
 import type { DatabaseClient } from "../src/client.ts";
 import { acceptMailSubmission } from "../src/mail-acceptance.ts";
+import { assertMailAdmissionCapacity } from "../src/mail-admission.ts";
 import {
   beginMailSendAttempt,
   recordMailSendOutcome,
@@ -64,6 +65,11 @@ describe.skipIf(databaseUrl === undefined)(
     const organizationId = randomUUID();
     const capacityKey = "000000000269:eu-central-1";
     const now = new Date();
+    const admissionLimits = {
+      global: { maxPending: 100, maxPendingBytes: 100_000_000 },
+      maxQueuedAgeSeconds: 3600,
+      organization: { maxPending: 100, maxPendingBytes: 100_000_000 },
+    };
 
     const createSubmission = async () => {
       const id = randomUUID();
@@ -334,6 +340,7 @@ describe.skipIf(databaseUrl === undefined)(
         },
         attachmentBytes: 3,
         idempotencyKey: randomUUID(),
+        limits: admissionLimits,
         payload: {
           ...seed.payload,
           attachments: [
@@ -570,6 +577,131 @@ describe.skipIf(databaseUrl === undefined)(
     });
     /* oxlint-enable vitest/max-expects */
 
+    it.each(["global", "organization"] as const)(
+      "bounds pending count and bytes for %s admission",
+      async (scope) => {
+        await createSubmission();
+        await expect(
+          database.transaction(async (transaction) => {
+            await assertMailAdmissionCapacity(transaction, {
+              limits: {
+                ...admissionLimits,
+                [scope]: { ...admissionLimits[scope], maxPending: 1 },
+              },
+              organizationId:
+                scope === "global" ? randomUUID() : organizationId,
+              payloadBytes: 1,
+            });
+          })
+        ).rejects.toThrow("temporarily at capacity");
+        await expect(
+          database.transaction(async (transaction) => {
+            await assertMailAdmissionCapacity(transaction, {
+              limits: {
+                ...admissionLimits,
+                [scope]: { ...admissionLimits[scope], maxPendingBytes: 10 },
+              },
+              organizationId:
+                scope === "global" ? randomUUID() : organizationId,
+              payloadBytes: 1,
+            });
+          })
+        ).rejects.toThrow("temporarily at capacity");
+      }
+    );
+
+    it("serializes different organizations at the global admission boundary", async () => {
+      const seedId = await createSubmission();
+      const [seed] = await database
+        .select()
+        .from(mailSubmission)
+        .where(eq(mailSubmission.id, seedId));
+      const otherOrganization = randomUUID();
+      await database.insert(organization).values({
+        createdAt: now,
+        id: otherOrganization,
+        name: "Admission fixture",
+        slug: otherOrganization,
+      });
+      try {
+        const results = await Promise.allSettled(
+          [organizationId, otherOrganization].map(async (owner) => {
+            await database.transaction(async (transaction) => {
+              await assertMailAdmissionCapacity(transaction, {
+                limits: {
+                  ...admissionLimits,
+                  global: { ...admissionLimits.global, maxPending: 2 },
+                },
+                organizationId: owner,
+                payloadBytes: 10,
+              });
+              const id = randomUUID();
+              await transaction.insert(mailSubmission).values({
+                ...seed,
+                acceptedResult: { messageId: id, status: "queued" },
+                id,
+                idempotencyKey: randomUUID(),
+                organizationId: owner,
+              });
+            });
+          })
+        );
+        expect(
+          results.filter((result) => result.status === "fulfilled")
+        ).toHaveLength(1);
+        expect(
+          results.filter((result) => result.status === "rejected")
+        ).toHaveLength(1);
+        const rows = await database
+          .select({ id: mailSubmission.id })
+          .from(mailSubmission);
+        expect(rows).toHaveLength(2);
+      } finally {
+        await database
+          .delete(mailSubmission)
+          .where(eq(mailSubmission.organizationId, otherOrganization));
+        await database
+          .delete(organization)
+          .where(eq(organization.id, otherOrganization));
+      }
+    });
+
+    it("uses database age for a stuck queue but preserves ambiguous attempts without an age-triggered global outage", async () => {
+      const id = await createSubmission();
+      await database
+        .update(mailSubmission)
+        .set({ acceptedAt: sql`now() - interval '2 hours'` })
+        .where(eq(mailSubmission.id, id));
+      await expect(
+        database.transaction(async (transaction) => {
+          await assertMailAdmissionCapacity(transaction, {
+            limits: admissionLimits,
+            organizationId,
+            payloadBytes: 1,
+          });
+        })
+      ).rejects.toThrow("temporarily at capacity");
+      await database
+        .update(mailSubmission)
+        .set({ status: "pending_confirmation" })
+        .where(eq(mailSubmission.id, id));
+      await expect(
+        database.transaction(async (transaction) => {
+          await assertMailAdmissionCapacity(transaction, {
+            limits: admissionLimits,
+            organizationId,
+            payloadBytes: 1,
+          });
+        })
+      ).resolves.toBeUndefined();
+      const [preserved] = await database
+        .select({ status: mailSubmission.status })
+        .from(mailSubmission)
+        .where(eq(mailSubmission.id, id));
+      expect(preserved.status).toBe("pending_confirmation");
+    });
+
+    /* oxlint-disable vitest/max-expects -- Concurrent acceptance and replay must share the same full-capacity fixture. */
     it("atomically accepts one submission and replays its original result under concurrent retries", async () => {
       const input = {
         async assertAuthorization(
@@ -581,6 +713,10 @@ describe.skipIf(databaseUrl === undefined)(
         },
         attachmentBytes: 0,
         idempotencyKey: randomUUID(),
+        limits: {
+          ...admissionLimits,
+          global: { ...admissionLimits.global, maxPending: 1 },
+        },
         mailboxId: null,
         messageBytes: 10,
         organizationId,
@@ -633,6 +769,12 @@ describe.skipIf(databaseUrl === undefined)(
       await expect(
         acceptMailSubmission(database, {
           ...input,
+          idempotencyKey: randomUUID(),
+        })
+      ).rejects.toThrow("temporarily at capacity");
+      await expect(
+        acceptMailSubmission(database, {
+          ...input,
           requestHash: "c".repeat(64),
         })
       ).rejects.toThrow("different message");
@@ -647,6 +789,7 @@ describe.skipIf(databaseUrl === undefined)(
       });
       expect(attempt).not.toBeNull();
     });
+    /* oxlint-enable vitest/max-expects */
 
     it.each([
       { billable: -1, endOffset: 86_400_000, error: "Failed query" },
@@ -661,6 +804,7 @@ describe.skipIf(databaseUrl === undefined)(
             },
             attachmentBytes: 0,
             idempotencyKey: randomUUID(),
+            limits: admissionLimits,
             mailboxId: null,
             messageBytes: 10,
             organizationId,

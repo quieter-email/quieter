@@ -115,6 +115,11 @@ describe.skipIf(databaseUrl === undefined)("durable submission sender", () => {
         await transaction.execute(sql`select 1`);
       },
       idempotencyKey: randomUUID(),
+      limits: {
+        global: { maxPending: 100, maxPendingBytes: 100_000_000 },
+        maxQueuedAgeSeconds: 3600,
+        organization: { maxPending: 100, maxPendingBytes: 100_000_000 },
+      },
       mailboxId: null,
       organizationId,
       requestHash: "a".repeat(64),

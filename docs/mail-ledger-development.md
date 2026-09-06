@@ -65,6 +65,12 @@ The PostgreSQL tests cover concurrent acceptance, transaction failure, separate 
 
 `vp run @quieter/cloudflare#test:workers` also verifies immutable attachment writes and corruption detection against the provider's local R2 runtime. This uses the test-only `LocalMailStorage` binding and cannot access production objects.
 
+## Admission limits
+
+Every new acceptance requires explicit global and organization limits for pending count and combined message/attachment bytes, plus a maximum queued age. Indexed aggregates inspect at most the configured count cap (up to 10,000 rows). A short global advisory lock serializes admission across organizations; it covers database work only. Capacity failure rolls back before reserving usage or committing an upload lease. Existing keys replay before the capacity check. Ambiguous attempts still consume count and byte capacity, but their age alone does not stop every tenant: they need reconciliation, not another send attempt.
+
+The additive `20260906152700_sturdy_iron_patriot` migration adds the two partial indexes. Tests cover competing organizations, count/byte limits, database-clock queue age, and replay at capacity. Deployment-specific limits, orphan-upload/storage-retention budgets, and overload HTTP responses remain required before public activation. Pending limits alone do not bound the lifetime storage of completed submissions or abandoned preparations.
+
 ## Submission request identity and reads
 
 `normalizeMailSubmissionRequest` hashes validated client intent before payload preparation. Parsed defaults, object key order, header casing, and equivalent base64 encodings share an identity. Attachment content and metadata remain significant. Repeated headers with the same name preserve their order. The key itself, generated message ID, upload location, preparation timestamp, and resolved tracking default are excluded. An explicit tracking choice remains significant. Unknown request fields are rejected so a misspelled option cannot silently become an accepted different message.

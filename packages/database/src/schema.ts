@@ -2669,6 +2669,16 @@ export const mailSubmission = pgTable(
       table.organizationId,
       table.acceptedAt
     ),
+    index("mail_submission_pending_accepted_idx")
+      .on(table.acceptedAt, table.id)
+      .where(
+        sql`${table.status} IN ('queued', 'dispatching', 'pending_confirmation')`
+      ),
+    index("mail_submission_organization_pending_idx")
+      .on(table.organizationId, table.acceptedAt, table.id)
+      .where(
+        sql`${table.status} IN ('queued', 'dispatching', 'pending_confirmation')`
+      ),
     index("mail_submission_mailbox_idx").on(table.mailboxId),
     check(
       "mail_submission_status_check",

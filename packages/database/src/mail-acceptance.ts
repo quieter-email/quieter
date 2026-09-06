@@ -3,6 +3,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 
 import type { DatabaseClient } from "./client.ts";
+import { assertMailAdmissionCapacity } from "./mail-admission.ts";
+import type { MailAdmissionLimits } from "./mail-admission.ts";
 import { canonicalMailJson } from "./mail-ledger-json.ts";
 import {
   mailSubmission,
@@ -44,6 +46,7 @@ export const acceptMailSubmission = async (
     messageBytes: number;
     attachmentBytes: number;
     recipientCount: number;
+    limits: MailAdmissionLimits;
     assertAuthorization: (transaction: LedgerTransaction) => Promise<void>;
     reserveBudget: (
       transaction: LedgerTransaction
@@ -90,6 +93,11 @@ export const acceptMailSubmission = async (
       }
       return { replayed: true, result: existing.acceptedResult };
     }
+    await assertMailAdmissionCapacity(transaction, {
+      limits: input.limits,
+      organizationId: input.organizationId,
+      payloadBytes: input.messageBytes + input.attachmentBytes,
+    });
     // Callers must check authorization and budget through this transaction, without external I/O.
     if (input.payload.attachments.length > 0) {
       if (input.payloadUploadId === undefined) {

@@ -8,6 +8,7 @@
     "./mail-outbox": "./src/mail-outbox.ts",
     "./mail-attempts": "./src/mail-attempts.ts",
     "./mail-acceptance": "./src/mail-acceptance.ts",
+    "./mail-admission": "./src/mail-admission.ts",
     "./mail-feedback-inbox": "./src/mail-feedback-inbox.ts",
     "./mail-payload-uploads": "./src/mail-payload-uploads.ts",
     "./mail-send-capacity": "./src/mail-send-capacity.ts",
