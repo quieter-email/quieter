@@ -7,6 +7,7 @@
     "./schema": "./src/schema.ts"
   },
   "scripts": {
+    "operations": "node --conditions=development src/operations-cli.ts",
     "verify:ci": "node --conditions=development src/trusted-build-cli.ts",
     "build:web": "node --conditions=development src/runtime-release-build-cli.ts --service web",
     "build:runtime": "node --conditions=development src/runtime-release-build-cli.ts",
@@ -22,6 +23,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "catalog:",
+    "@aws-sdk/client-ssm": "3.1116.0",
     "@quieter/env": "workspace:*",
     "zod": "catalog:"
   },

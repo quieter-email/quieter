@@ -56,6 +56,7 @@ describe("controlled release build inputs", () => {
     const git = async (...args: string[]) => {
       const result = await execute("git", args, {
         cwd: directory,
+        timeout: 5000,
         windowsHide: true,
       });
       return result.stdout.trim();
@@ -102,9 +103,14 @@ describe("controlled release build inputs", () => {
         "untracked source"
       );
     } finally {
-      await rm(directory, { force: true, recursive: true });
+      if (
+        path.dirname(path.resolve(directory)) === path.resolve(tmpdir()) &&
+        path.basename(directory).startsWith("quieter-build-source-")
+      ) {
+        await rm(directory, { force: true, recursive: true });
+      }
     }
-  });
+  }, 30_000);
 
   it.each([".env.sentry-build-plugin", ".sentryclirc"])(
     "rejects implicit %s configuration before building",
@@ -118,7 +124,12 @@ describe("controlled release build inputs", () => {
           "implicit Sentry configuration"
         );
       } finally {
-        await rm(directory, { force: true, recursive: true });
+        if (
+          path.dirname(path.resolve(directory)) === path.resolve(tmpdir()) &&
+          path.basename(directory).startsWith("quieter-build-config-")
+        ) {
+          await rm(directory, { force: true, recursive: true });
+        }
       }
     }
   );

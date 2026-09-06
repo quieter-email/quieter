@@ -20,6 +20,8 @@ export default $config({
     const { readFile } = await import("node:fs/promises");
     const { createReleaseProofEnv } = await import("@quieter/env/deployment");
     const { createRuntimeVersion } = await import("./infra/runtime-version");
+    const { createReleaseOperationBindings } =
+      await import("./infra/release-operations");
     const { COMPATIBILITY_DATE } =
       await import("@quieter/cloudflare/compatibility-date");
     const proofEnv = createReleaseProofEnv();
@@ -55,8 +57,9 @@ export default $config({
       link: [token, journal],
     });
     void operations;
+    let sourceMapToken: sst.Secret | undefined;
     if (proofEnv.QUIETER_RELEASE_SOURCE_MAP_UPLOAD === "true") {
-      const sourceMapToken = new sst.Secret("ReleaseSourceMapToken");
+      sourceMapToken = new sst.Secret("ReleaseSourceMapToken");
       const sourceMapOperations = new sst.x.DevCommand("SourceMapOperations", {
         dev: {
           autostart: false,
@@ -65,6 +68,17 @@ export default $config({
         link: [sourceMapToken, journal],
       });
       void sourceMapOperations;
+    }
+    let operationBindings:
+      | ReturnType<typeof createReleaseOperationBindings>
+      | undefined;
+    if (proofEnv.QUIETER_RELEASE_OPERATION_BINDINGS === "true") {
+      operationBindings = createReleaseOperationBindings({
+        healthToken: token,
+        recoveryToken: new sst.Secret("ReleaseRecoveryCloudflareToken"),
+        runtimeToken: new sst.Secret("ReleaseRuntimeCloudflareToken"),
+        sourceMapToken,
+      });
     }
     let captured: cloudflare.WorkersScriptArgs | undefined;
     const worker = new sst.cloudflare.Worker("Probe", {
@@ -187,7 +201,10 @@ export default $config({
       candidateVersion: candidate?.id,
       journal: journal.name,
       phase,
+      recoveryBindingsParameter: operationBindings?.recovery.arn,
+      runtimeBindingsParameter: operationBindings?.runtime.arn,
       scriptName: worker.nodes.worker.scriptName,
+      sourceMapBindingsParameter: operationBindings?.sourceMaps?.arn,
       url: worker.url,
       webScriptName: web?.nodes.worker.scriptName,
       webUrl: web?.url,

@@ -35,6 +35,11 @@ jobs:
       QUIETER_RELEASE_STAGE: ${{ vars.RELEASE_STAGE || 'production' }}
       QUIETER_RELEASE_BUCKET: ${{ vars.RELEASE_JOURNAL_BUCKET }}
       AWS_REGION: ${{ vars.AWS_REGION || 'eu-central-1' }}
+      QUIETER_RELEASE_BINDINGS_PARAMETER: ${{ vars.RELEASE_RECOVERY_BINDINGS_PARAMETER }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+      SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+      SENTRY_URL: ${{ vars.SENTRY_URL }}
     steps:
       - name: Require reviewed recovery tooling
         shell: bash
@@ -58,12 +63,10 @@ jobs:
 
       - name: Reconcile unfinished runtime release
         env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.RELEASE_RECOVERY_CLOUDFLARE_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
           EVENT_RUN_ID: ${{ github.event.workflow_run.id }}
         shell: bash
         run: |
           args=()
           if [[ -n "$EVENT_RUN_ID" ]]; then args+=(--event-run "$EVENT_RUN_ID"); fi
-          vp run @quieter/deployment#release reconcile "${args[@]}"
+          vp run @quieter/deployment#operations recovery reconcile "${args[@]}"

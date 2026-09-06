@@ -2,6 +2,90 @@ import { z } from "zod";
 
 import type { RuntimeEnvironment } from "./schema";
 
+export const createReleaseOperationsEnv = (
+  purpose: "runtime" | "recovery" | "source-maps",
+  runtime: RuntimeEnvironment = process.env
+) => {
+  const result = z
+    .object({
+      AWS_REGION: z
+        .string()
+        .regex(/^[a-z]{2}-[a-z]+-\d$/u)
+        .default("eu-central-1"),
+      QUIETER_RELEASE_BINDINGS_PARAMETER: z
+        .string()
+        .regex(
+          /^arn:aws:ssm:[a-z\d-]+:\d{12}:parameter\/[\w-]+\/[\w-]+\/release\/(?:runtime|recovery|source-maps)$/u
+        ),
+      QUIETER_RELEASE_STAGE: z.string().regex(/^[\w-]{1,128}$/u),
+    })
+    .safeParse(runtime);
+  if (
+    !result.success ||
+    !result.data.QUIETER_RELEASE_BINDINGS_PARAMETER.startsWith(
+      `arn:aws:ssm:${result.data.AWS_REGION}:`
+    ) ||
+    !result.data.QUIETER_RELEASE_BINDINGS_PARAMETER.endsWith(
+      `/${result.data.QUIETER_RELEASE_STAGE}/release/${purpose}`
+    )
+  ) {
+    throw new Error(
+      "Release operations require the intended stage, region, and binding parameter."
+    );
+  }
+  return result.data;
+};
+
+export const createReleaseOperationsChildEnv = (
+  value: string,
+  stage: string,
+  purpose: "runtime" | "recovery" | "source-maps",
+  runtime: RuntimeEnvironment = process.env
+) => {
+  const app = z.strictObject({ stage: z.literal(stage) });
+  const secret = z.strictObject({ value: z.string().min(1) });
+  const schema = z.discriminatedUnion("purpose", [
+    z.strictObject({
+      purpose: z.enum(["runtime", "recovery"]),
+      resources: z.strictObject({
+        App: app,
+        ReleaseCloudflareToken: secret,
+        ReleaseProofToken: z.strictObject({ value: z.string().min(32) }),
+      }),
+      schemaVersion: z.literal(1),
+    }),
+    z.strictObject({
+      purpose: z.literal("source-maps"),
+      resources: z.strictObject({ App: app, ReleaseSourceMapToken: secret }),
+      schemaVersion: z.literal(1),
+    }),
+  ]);
+  let input: unknown;
+  try {
+    input = JSON.parse(value);
+  } catch {
+    throw new Error("Invalid release operation bindings.");
+  }
+  const result = schema.safeParse(input);
+  if (!result.success || result.data.purpose !== purpose) {
+    throw new Error(
+      "Release operation bindings do not match their purpose and stage."
+    );
+  }
+  return {
+    ...Object.fromEntries(
+      Object.entries(runtime).filter(
+        ([key]) =>
+          !key.toUpperCase().startsWith("SST_RESOURCE") &&
+          !["CLOUDFLARE_API_TOKEN", "QUIETER_RELEASE_PROBE_TOKEN"].includes(
+            key.toUpperCase()
+          )
+      )
+    ),
+    SST_RESOURCES_JSON: JSON.stringify(result.data.resources),
+  };
+};
+
 export const createTrustedBuildEnv = (
   runtime: RuntimeEnvironment = process.env
 ) => {
@@ -109,10 +193,14 @@ export const createDeploymentEnv = (
   runtime: RuntimeEnvironment = process.env
 ) => {
   let probeToken = runtime.QUIETER_RELEASE_PROBE_TOKEN;
+  let cloudflareToken = runtime.CLOUDFLARE_API_TOKEN;
   if (runtime.SST_RESOURCES_JSON !== undefined) {
     const links = z
       .object({
         App: z.object({ stage: z.string() }),
+        ReleaseCloudflareToken: z
+          .object({ value: z.string().min(1) })
+          .optional(),
         ReleaseProofToken: z.object({ value: z.string().min(32) }).optional(),
       })
       .safeParse(JSON.parse(runtime.SST_RESOURCES_JSON));
@@ -125,6 +213,8 @@ export const createDeploymentEnv = (
       );
     }
     probeToken = links.data.ReleaseProofToken?.value ?? probeToken;
+    cloudflareToken =
+      links.data.ReleaseCloudflareToken?.value ?? cloudflareToken;
   }
   if (runtime.SST_RESOURCE_ReleaseProofToken !== undefined) {
     const linked = z
@@ -155,7 +245,11 @@ export const createDeploymentEnv = (
       QUIETER_RELEASE_PROBE_TOKEN: z.string().min(32).optional(),
       QUIETER_RELEASE_STAGE: z.string().regex(/^[\w-]{1,128}$/u),
     })
-    .safeParse({ ...runtime, QUIETER_RELEASE_PROBE_TOKEN: probeToken });
+    .safeParse({
+      ...runtime,
+      CLOUDFLARE_API_TOKEN: cloudflareToken,
+      QUIETER_RELEASE_PROBE_TOKEN: probeToken,
+    });
   if (!result.success) {
     throw new Error(
       `Invalid release configuration: ${result.error.issues.map((issue) => issue.path.join(".")).join(", ")}`
@@ -169,6 +263,9 @@ export const createReleaseProofEnv = (
 ) => {
   const result = z
     .object({
+      QUIETER_RELEASE_OPERATION_BINDINGS: z
+        .enum(["true", "false"])
+        .default("false"),
       QUIETER_RELEASE_PROOF_PHASE: z
         .enum(["baseline", "adopt", "candidate"])
         .default("baseline"),
