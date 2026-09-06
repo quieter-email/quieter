@@ -30,6 +30,7 @@ import { ReleaseUpload, uploadIntentSchema } from "./upload.ts";
 const { positionals, values } = parseArgs({
   allowPositionals: true,
   options: {
+    artifact: { type: "string" },
     attempt: { type: "string" },
     directory: { type: "string" },
     "event-run": { type: "string" },
@@ -45,6 +46,7 @@ const command = z
     "status",
     "verify-artifacts",
     "register",
+    "restore",
     "upload",
     "reconcile-upload",
     "bootstrap",
@@ -150,6 +152,16 @@ if (
 }
 // oxlint-disable-next-line default-case -- The validated command union is exhaustive.
 switch (command) {
+  case "restore": {
+    if (values.directory === undefined || values.artifact === undefined) {
+      throw new Error("Restore requires --artifact and a fresh --directory.");
+    }
+    const manifest = await artifacts.restore(values.artifact, values.directory);
+    process.stdout.write(
+      `Restored verified compiled artifact ${manifest.digest}.\n`
+    );
+    break;
+  }
   case "upload": {
     if (values.file === undefined || values.directory === undefined) {
       throw new Error(
@@ -212,7 +224,7 @@ switch (command) {
     if (manifest.archive !== null) {
       await archive.verify(manifest.archive);
     }
-    await artifacts.write(manifest);
+    await artifacts.retain(manifest, values.directory);
     process.stdout.write(`Retained verified artifact ${manifest.digest}.\n`);
     break;
   }

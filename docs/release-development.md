@@ -99,6 +99,10 @@ The receipt command repeats read-only provider/module and HTTP checks against th
 
 ## Inactive upload recovery
 
+Registration now retains every compiled module and static file in the private release bucket. Each conditional upload is read back and checked against the tested bytes and MIME type. The compiled receipt is written last. `release restore --artifact <digest> --directory <new-absolute-directory>` requires that receipt and verifies every downloaded file. It refuses an existing destination and never restores secrets, build configuration, or source maps. A failed restore leaves a partial directory for inspection; use a fresh destination when retrying.
+
+On 2026-09-06, the complete protected web candidate was retained in the isolated release bucket and restored into a fresh local directory. Every compiled module and static file matched the original tested manifest. No rebuild or runtime activation occurred.
+
 Register the tested artifact and verify its archive before invoking `release upload --file <intent.json> --directory <compiled-directory>`. The intent contains a UUID, artifact digest, exact baseline deployment/version, script name, creation time, and workflow run ID. Keep that identity across retries. The journal conditionally creates the intent before contacting Cloudflare; only the process that creates it may upload. An uncertain journal write stops the process.
 
 Cloudflare versions carry the upload UUID and inherited baseline in their annotations. `release reconcile-upload --attempt <uuid>` scans bounded version history, rejects duplicate/conflicting matches, compares the complete compiled modules, verifies the archive, and checks the unchanged active deployment before retaining a receipt. A missing match remains unknown and never causes an automatic re-upload. If a runner stopped between claiming and sending, an operator can review and start a distinct inactive upload after confirming that the old writer ended. Activation still requires the normal release checks.

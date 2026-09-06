@@ -12,7 +12,11 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { S3ArchiveStore } from "../src/archive-store.ts";
 import { ReleaseArtifactStore } from "../src/artifact-store.ts";
-import { artifactSchema, releaseArtifactSchema } from "../src/artifact.ts";
+import {
+  artifactSchema,
+  inventoryWorkerArtifact,
+  releaseArtifactSchema,
+} from "../src/artifact.ts";
 import { AssetArchive, inventoryAssets } from "../src/assets.ts";
 import type { CloudflareRuntimeProvider } from "../src/cloudflare.ts";
 import { ObjectReleaseJournal } from "../src/journal.ts";
@@ -121,6 +125,99 @@ const build = async () => {
 };
 
 describe("immutable archive and durable journal", () => {
+  it("retains exact compiled files before the receipt and restores without rebuilding", async () => {
+    const { client, objects, writes } = objectStore();
+    const directory = await mkdtemp(path.join(tmpdir(), "quieter-compiled-"));
+    directories.push(directory);
+    const original = path.join(directory, "original");
+    await mkdir(path.join(original, "server"), { recursive: true });
+    await mkdir(path.join(original, "client"));
+    await Promise.all([
+      writeFile(
+        path.join(original, "server/wrangler.json"),
+        JSON.stringify({
+          compatibility_date: "2026-08-04",
+          compatibility_flags: ["nodejs_compat"],
+        })
+      ),
+      writeFile(path.join(original, "server/index.js"), "export default {}"),
+      writeFile(
+        path.join(original, "server/index.js.map"),
+        "private source map"
+      ),
+      writeFile(path.join(original, "client/_headers"), "/*\n  x-proof: true"),
+      writeFile(path.join(original, "client/favicon.svg"), "<svg />"),
+    ]);
+    const manifest = {
+      ...(await inventoryWorkerArtifact(original, "proof", "a".repeat(40))),
+      archive: null,
+    };
+    const store = new ReleaseArtifactStore(client, "journal", "test");
+    await store.retain(manifest, original);
+    const receiptKey = `test/compiled/${manifest.digest}/receipt.json`;
+    expect(writes.at(-1)).toBe(receiptKey);
+    const restored = path.join(directory, "restored");
+    await store.restore(manifest.digest, restored);
+    await expect(
+      readFile(path.join(restored, "server/index.js"), "utf-8")
+    ).resolves.toBe("export default {}");
+    await expect(
+      readFile(path.join(restored, "client/_headers"), "utf-8")
+    ).resolves.toBe("/*\n  x-proof: true");
+    await expect(
+      readFile(path.join(restored, "server/index.js.map"))
+    ).rejects.toThrow("ENOENT");
+    objects.delete(`test/compiled/${manifest.digest}/client/favicon.svg`);
+    await expect(
+      store.restore(manifest.digest, path.join(directory, "missing"))
+    ).rejects.toThrow("Missing object");
+  });
+
+  it("does not certify conflicting retained bytes and rejects restoring over an existing directory", async () => {
+    const { client, objects } = objectStore();
+    const directory = await mkdtemp(
+      path.join(tmpdir(), "quieter-compiled-conflict-")
+    );
+    directories.push(directory);
+    await mkdir(path.join(directory, "server"));
+    await mkdir(path.join(directory, "client"));
+    await Promise.all([
+      writeFile(
+        path.join(directory, "server/wrangler.json"),
+        JSON.stringify({
+          compatibility_date: "2026-08-04",
+          compatibility_flags: [],
+        })
+      ),
+      writeFile(path.join(directory, "server/index.js"), "export default {}"),
+    ]);
+    const manifest = {
+      ...(await inventoryWorkerArtifact(directory, "proof", "a".repeat(40))),
+      archive: null,
+    };
+    const store = new ReleaseArtifactStore(client, "journal", "test");
+    const key = `test/compiled/${manifest.digest}/server/index.js`;
+    objects.set(key, {
+      body: Buffer.from("export default []"),
+      contentType: "application/javascript+module",
+      etag: "conflict",
+    });
+    await expect(store.retain(manifest, directory)).rejects.toThrow(
+      "bytes differ"
+    );
+    expect(
+      objects.has(`test/compiled/${manifest.digest}/receipt.json`)
+    ).toBeFalsy();
+    objects.delete(key);
+    await store.retain(manifest, directory);
+    await expect(store.restore(manifest.digest, directory)).rejects.toThrow(
+      "EEXIST"
+    );
+    await expect(
+      readFile(path.join(directory, "server/index.js"), "utf-8")
+    ).resolves.toBe("export default {}");
+  });
+
   it("claims upload intents once and rejects conflicting completion receipts", async () => {
     const { client, objects } = objectStore();
     const store = new ObjectUploadStore(client, "journal", "test");
