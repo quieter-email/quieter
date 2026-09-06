@@ -181,7 +181,7 @@ export const auth = betterAuth({
     before: createAuthMiddleware(async (ctx) => {
       const requiresSession =
         ctx.path === "/get-session" ||
-        ctx.path.startsWith("/organization") ||
+        ctx.path?.startsWith("/organization") ||
         ctx.path === "/api-key/create";
 
       if (!requiresSession) {
@@ -296,11 +296,7 @@ export const auth = betterAuth({
     },
   },
 });
-const organizationApiKeyApi: typeof auth.api &
-  Pick<typeof organizationApiKeyPlugin.endpoints, "verifyApiKey"> = {
-  ...auth.api,
-  verifyApiKey: organizationApiKeyPlugin.endpoints.verifyApiKey,
-};
+const organizationApiKeyApi = auth.api;
 export { organizationApiKeyApi };
 
 export { GOOGLE_AUTH_SCOPES } from "./google-scopes";
