@@ -4,6 +4,11 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
+    "./build": {
+      "types": "./src/build.ts",
+      "development": "./src/build.ts",
+      "default": "./dist/build.js"
+    },
     "./deployment": {
       "types": "./src/deployment.ts",
       "development": "./src/deployment.ts",

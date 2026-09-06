@@ -92,21 +92,17 @@ jobs:
       - name: Setup repository
         uses: ./.github/actions/setup
 
-      - name: Build runtime dependencies
-        run: |
-          vp run @quieter/observability#build
-          vp run @quieter/sdk#build
+      - name: Build and inventory exact web release bytes
+        run: >-
+          vp run @quieter/deployment#build:web --directory "${{ github.workspace }}" --output "${{ runner.temp }}/web-release" --stage ci
 
-      - name: Build web worker
-        env:
-          SST_WRANGLER_PATH: ${{ github.workspace }}/ci-build-worker.wrangler.jsonc
-        run: |
-          touch .env.local
-          node packages/cloudflare/scripts/write-build-wrangler.ts \
-            --name quieter-ci-artifact \
-            --main ./apps/web/src/server.ts \
-            --out ci-build-worker.wrangler.jsonc
-          vp run @quieter/web#build
+      - name: Retain verified web build and private source maps
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: web-release-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/web-release
+          if-no-files-found: error
+          retention-days: 14
 
   migration-conflict:
     name: Migration conflict check

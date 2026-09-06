@@ -7,6 +7,7 @@ export default defineConfig({
     },
     dts: false,
     entry: [
+      "src/build.ts",
       "src/deployment.ts",
       "src/client.ts",
       "src/local-doctor.ts",

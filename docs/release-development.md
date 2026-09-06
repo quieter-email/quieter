@@ -176,6 +176,14 @@ Read-only inspection on 2026-09-06 exported the encrypted production SST snapsho
 
 AWS confirms that all three current mail functions use unpublished `$LATEST` code and have no aliases. The receipt and feedback functions still receive direct SNS delivery. This is existing production behavior, not the new bridge design. Published versions, stable aliases, primary SQS buffers, health bindings, and archive bootstrap need protected infrastructure work before their runtime rollback paths can be enabled. This inventory changed no production resources.
 
+## Controlled web builds
+
+`vp run @quieter/deployment#build:web --directory <absolute-checkout> --output <new-absolute-directory> --stage <stage>` builds the web Worker once with task caching disabled. Use an ignored output directory or a directory outside the checkout. The checkout must be clean before and after compilation. Optional `--public-config <json-file>` accepts only the public settings validated by `@quieter/env`; inherited credentials, arbitrary Vite variables, Node hooks, and local dotenv files are excluded. The generated Wrangler configuration has no application bindings. Local development keeps its existing dotenv behavior.
+
+The version-2 artifact records the Git commit/tree, lockfile checksum, actual Node/Vite+ toolchain, stage, public configuration checksum, build configuration checksum, and private source-map inventory. A completion manifest is written only after the copied bytes match their inventory and the source remains unchanged. Source maps use hidden references and live under `source-maps/`, outside both the Worker modules and public asset archive. S3 retention and restore verify them before completing. This is retention evidence, not proof of a Sentry upload; monitored production promotion still requires that separate gate. Version-1 historical artifacts remain readable.
+
+CI now retains this exact build for fourteen days. A local build is useful verification but is not trusted CI authorization. The protected release workflow still needs to consume the successful trusted-main artifact, validate stage/configuration and source-map upload evidence, and retain it in the release journal before activation. The legacy SST workflow still rebuilds and has not been replaced yet.
+
 ## Independent recovery configuration
 
 `.github/workflows/release-recovery.yml` listens for release completion and reconciles every five minutes. `RUNTIME_RELEASE_RECOVERY_ENABLED` defaults off. Before enabling it, configure the `release-recovery` environment with a reviewed 40-character `RELEASE_CONTROLLER_SHA`, `RELEASE_STAGE`, `RELEASE_JOURNAL_BUCKET`, `CLOUDFLARE_ACCOUNT_ID`, and `AWS_REGION`. Supply `RELEASE_RECOVERY_AWS_ROLE` and `RELEASE_RECOVERY_CLOUDFLARE_TOKEN` with only journal/version/deployment permissions. The recovery job does not need application secrets, database access, migrations, or an SST deploy.

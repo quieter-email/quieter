@@ -84,6 +84,10 @@ export class ReleaseArtifactStore {
           : "server",
       })),
       ...manifest.artifact.assets.map((file) => ({ file, root: "client" })),
+      ...(manifest.artifact.provenance?.sourceMaps ?? []).map((file) => ({
+        file,
+        root: "source-maps",
+      })),
     ];
     for (let offset = 0; offset < files.length; offset += 5) {
       // oxlint-disable-next-line no-await-in-loop -- Bound concurrent immutable uploads and verification reads.
@@ -151,6 +155,10 @@ export class ReleaseArtifactStore {
           : "server",
       })),
       ...manifest.artifact.assets.map((file) => ({ file, root: "client" })),
+      ...(manifest.artifact.provenance?.sourceMaps ?? []).map((file) => ({
+        file,
+        root: "source-maps",
+      })),
     ];
     for (let offset = 0; offset < files.length; offset += 5) {
       // oxlint-disable-next-line no-await-in-loop -- Restore only bounded verified batches into the fresh directory.

@@ -36,6 +36,27 @@ export const assetRoutingSchema = z.object({
     .default("none"),
   run_worker_first: z.union([z.boolean(), z.array(z.string())]).default(false),
 });
+export const buildProvenanceSchema = z.strictObject({
+  buildConfigDigest: digestSchema,
+  command: z.literal("vp run --no-cache @quieter/web#build"),
+  lockfileDigest: digestSchema,
+  nodeVersion: z.string().regex(/^v\d+\.\d+\.\d+$/u),
+  publicConfigurationDigest: digestSchema,
+  sourceMaps: z
+    .array(
+      fileSchema.extend({
+        contentType: z.literal("application/json"),
+        path: fileSchema.shape.path.refine((value) =>
+          /^(?:client|server)\/.+\.map$/u.test(value)
+        ),
+      })
+    )
+    .min(1)
+    .max(4000),
+  sourceTree: z.string().regex(/^[a-f\d]{40}$/u),
+  stage: identifierSchema,
+  toolchain: z.string().min(1).max(4000),
+});
 export const artifactSchema = z
   .strictObject({
     assetRouting: assetRoutingSchema,
@@ -45,10 +66,30 @@ export const artifactSchema = z
     compatibilityFlags: z.array(identifierSchema),
     mainModule: z.literal("index.js"),
     modules: z.array(fileSchema).min(1).max(2000),
-    schemaVersion: z.literal(1),
+    provenance: buildProvenanceSchema.optional(),
+    schemaVersion: z.union([z.literal(1), z.literal(2)]),
     sourceSha: z.string().regex(/^[a-f\d]{40}$/u),
   })
   .superRefine((artifact, context) => {
+    if (
+      (artifact.schemaVersion === 2) !==
+      (artifact.provenance !== undefined)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Artifact version does not match its build provenance.",
+      });
+    }
+    const sourceMaps = artifact.provenance?.sourceMaps ?? [];
+    if (
+      new Set(sourceMaps.map((file) => file.path)).size !== sourceMaps.length ||
+      sourceMaps.reduce((bytes, file) => bytes + file.bytes, 0) > 200_000_000
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Invalid private source-map inventory.",
+      });
+    }
     if (
       artifact.modules.reduce((bytes, file) => bytes + file.bytes, 0) >
       64_000_000
@@ -133,7 +174,8 @@ const publicContentTypes: Record<string, string> = {
 export const inventoryWorkerArtifact = async (
   directory: string,
   buildId: string,
-  sourceSha: string
+  sourceSha: string,
+  provenance?: z.infer<typeof buildProvenanceSchema>
 ) => {
   const config = z
     .object({
@@ -212,8 +254,9 @@ export const inventoryWorkerArtifact = async (
     compatibilityFlags: config.compatibility_flags,
     mainModule: "index.js",
     modules: modules.toSorted((a, b) => a.path.localeCompare(b.path)),
-    schemaVersion: 1,
+    schemaVersion: provenance === undefined ? 1 : 2,
     sourceSha,
+    ...(provenance === undefined ? {} : { provenance }),
   });
   return {
     artifact,

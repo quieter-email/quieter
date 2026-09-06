@@ -125,6 +125,78 @@ const build = async () => {
 };
 
 describe("immutable archive and durable journal", () => {
+  /* oxlint-disable vitest/max-expects -- One retained artifact exercises privacy, corruption, and version compatibility together. */
+  it("retains provenance and private source maps without adding them to public assets", async () => {
+    const { client, objects } = objectStore();
+    const directory = await mkdtemp(path.join(tmpdir(), "quieter-provenance-"));
+    directories.push(directory);
+    await mkdir(path.join(directory, "server"));
+    await mkdir(path.join(directory, "client"));
+    await mkdir(path.join(directory, "source-maps/client"), {
+      recursive: true,
+    });
+    const map = Buffer.from('{"version":3,"sources":["private-source.ts"]}');
+    await Promise.all([
+      writeFile(
+        path.join(directory, "server/wrangler.json"),
+        JSON.stringify({
+          compatibility_date: "2026-08-04",
+          compatibility_flags: [],
+        })
+      ),
+      writeFile(path.join(directory, "server/index.js"), "export default {}"),
+      writeFile(path.join(directory, "source-maps/client/page.js.map"), map),
+    ]);
+    const manifest = {
+      ...(await inventoryWorkerArtifact(directory, "build", "a".repeat(40), {
+        buildConfigDigest: "b".repeat(64),
+        command: "vp run --no-cache @quieter/web#build",
+        lockfileDigest: "c".repeat(64),
+        nodeVersion: "v24.18.0",
+        publicConfigurationDigest: "d".repeat(64),
+        sourceMaps: [
+          {
+            bytes: map.byteLength,
+            contentType: "application/json",
+            digest: createHash("sha256").update(map).digest("hex"),
+            path: "client/page.js.map",
+          },
+        ],
+        sourceTree: "e".repeat(40),
+        stage: "review",
+        toolchain: "fixture",
+      })),
+      archive: null,
+    };
+    expect(manifest.artifact.schemaVersion).toBe(2);
+    expect(manifest.artifact.assets).toHaveLength(0);
+    const store = new ReleaseArtifactStore(client, "journal", "test");
+    await store.retain(manifest, directory);
+    const restored = path.join(directory, "restored");
+    await expect(
+      store.restore(manifest.digest, restored)
+    ).resolves.toStrictEqual(manifest);
+    await expect(
+      readFile(path.join(restored, "source-maps/client/page.js.map"))
+    ).resolves.toStrictEqual(map);
+    await expect(
+      readFile(path.join(restored, "client/page.js.map"))
+    ).rejects.toThrow("ENOENT");
+    objects.delete(
+      `test/compiled/${manifest.digest}/source-maps/client/page.js.map`
+    );
+    await expect(
+      store.restore(manifest.digest, path.join(directory, "missing-map"))
+    ).rejects.toThrow("Missing object");
+    expect(() =>
+      artifactSchema.parse({ ...manifest.artifact, schemaVersion: 1 })
+    ).toThrow("build provenance");
+    expect(() =>
+      artifactSchema.parse({ ...manifest.artifact, provenance: undefined })
+    ).toThrow("build provenance");
+  });
+
+  /* oxlint-enable vitest/max-expects */
   it("retains exact compiled files before the receipt and restores without rebuilding", async () => {
     const { client, objects, writes } = objectStore();
     const directory = await mkdtemp(path.join(tmpdir(), "quieter-compiled-"));
