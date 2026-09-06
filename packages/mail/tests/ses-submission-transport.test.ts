@@ -24,6 +24,49 @@ const responseSchema = z.object({
 });
 
 describe("SES submission transport", () => {
+  it("reads regional capacity through the SDK without issuing a send", async () => {
+    const requests: string[] = [];
+    const transport = new SesSubmissionTransport({
+      configurationSetName: "proof",
+      credentials: { accessKeyId: "test", secretAccessKey: "test" },
+      region: "eu-central-1",
+      requestHandler: {
+        // oxlint-disable-next-line require-await -- The SDK requires an asynchronous HTTP handler.
+        async handle(request: { method: string; path: string }) {
+          requests.push(`${request.method} ${request.path}`);
+          return {
+            response: {
+              body: new TextEncoder().encode(
+                JSON.stringify({
+                  SendQuota: {
+                    Max24HourSend: 200,
+                    MaxSendRate: 1,
+                    SentLast24Hours: 3,
+                  },
+                  SendingEnabled: true,
+                })
+              ),
+              headers: { "content-type": "application/json" },
+              statusCode: 200,
+            },
+          };
+        },
+      },
+    });
+    try {
+      const capacity = await transport.inspectCapacity();
+      expect(capacity).toMatchObject({
+        max24HourSend: 200,
+        maxSendRate: 1,
+        sendingEnabled: true,
+        sentLast24Hours: 3,
+      });
+      expect(requests).toStrictEqual(["GET /v2/email/account"]);
+    } finally {
+      transport.close();
+    }
+  });
+
   it.each([
     [429, "TooManyRequestsException", "rejected", "provider_throttled"],
     [400, "MessageRejected", "rejected", "provider_rejected"],

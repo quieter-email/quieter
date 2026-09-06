@@ -33,11 +33,13 @@ import {
   completeMailPayloadUpload,
   cleanupMailPayloadUploads,
 } from "../src/mail-payload-uploads.ts";
+import { storeMailSendCapacity } from "../src/mail-send-capacity.ts";
 import {
   mailSendAttempt,
   billingCreditUsageEvent,
   mailFeedbackInbox,
   mailPayloadUpload,
+  mailSendCapacity,
   mailSubmission,
   mailSubmissionOutbox,
   mailUsageReservation,
@@ -56,6 +58,7 @@ describe.skipIf(databaseUrl === undefined)(
       ReturnType<ReturnType<typeof postgres>["reserve"]>
     >;
     const organizationId = randomUUID();
+    const capacityKey = "000000000269:eu-central-1";
     const now = new Date();
 
     const createSubmission = async () => {
@@ -149,6 +152,9 @@ describe.skipIf(databaseUrl === undefined)(
         .delete(mailSendAttempt)
         .where(eq(mailSendAttempt.organizationId, organizationId));
       await database
+        .delete(mailSendCapacity)
+        .where(eq(mailSendCapacity.key, capacityKey));
+      await database
         .delete(mailSubmissionOutbox)
         .where(eq(mailSubmissionOutbox.organizationId, organizationId));
       await database
@@ -174,6 +180,9 @@ describe.skipIf(databaseUrl === undefined)(
           .delete(mailSendAttempt)
           .where(eq(mailSendAttempt.organizationId, organizationId));
         await database
+          .delete(mailSendCapacity)
+          .where(eq(mailSendCapacity.key, capacityKey));
+        await database
           .delete(mailSubmissionOutbox)
           .where(eq(mailSubmissionOutbox.organizationId, organizationId));
         await database
@@ -190,6 +199,104 @@ describe.skipIf(databaseUrl === undefined)(
         fixtureLock.release();
         await connection.end();
       }
+    });
+
+    it("shares recipient capacity across concurrent intents and keeps unknown sends reserved", async () => {
+      const first = await createSubmission();
+      const second = await createSubmission();
+      await storeMailSendCapacity(database, {
+        accountId: "000000000269",
+        max24HourSend: 1,
+        maxSendRate: 100,
+        observedAt: new Date(),
+        region: "eu-central-1",
+        sendingEnabled: true,
+        sentLast24Hours: 0,
+      });
+      const input = {
+        async assertPolicy(
+          transaction: Parameters<
+            Parameters<DatabaseClient["transaction"]>[0]
+          >[0]
+        ) {
+          await transaction.execute(sql`select 1`);
+        },
+        capacityKey,
+        organizationId,
+        owner: "capacity-fixture",
+        region: "eu-central-1",
+      };
+      const results = await Promise.allSettled([
+        beginMailSendAttempt(database, { ...input, submissionId: first }),
+        beginMailSendAttempt(database, { ...input, submissionId: second }),
+      ]);
+      expect(
+        results.filter((result) => result.status === "fulfilled")
+      ).toHaveLength(1);
+      const [attempt] = await database
+        .select()
+        .from(mailSendAttempt)
+        .where(eq(mailSendAttempt.organizationId, organizationId));
+      const other = attempt.submissionId === first ? second : first;
+      await recordMailSendOutcome(database, attempt, {
+        code: "timeout",
+        outcome: "unknown",
+      });
+      await database
+        .update(mailSendCapacity)
+        .set({ nextSendAt: sql`now() - interval '1 second'` })
+        .where(eq(mailSendCapacity.key, capacityKey));
+      await expect(
+        beginMailSendAttempt(database, { ...input, submissionId: other })
+      ).rejects.toThrow("capacity is temporarily unavailable");
+      await recordMailSendOutcome(database, attempt, {
+        code: "provider_rejected",
+        outcome: "rejected",
+      });
+      const replacement = await beginMailSendAttempt(database, {
+        ...input,
+        submissionId: other,
+      });
+      expect(replacement?.recipientCount).toBe(1);
+    });
+
+    it("leaves queued work without a send intent when the regional capacity snapshot expires", async () => {
+      const submissionId = await createSubmission();
+      await storeMailSendCapacity(database, {
+        accountId: "000000000269",
+        max24HourSend: 10,
+        maxSendRate: 10,
+        observedAt: new Date(Date.now() - 61_000),
+        region: "eu-central-1",
+        sendingEnabled: true,
+        sentLast24Hours: 0,
+      });
+      await expect(
+        beginMailSendAttempt(database, {
+          async assertPolicy(transaction) {
+            await transaction.execute(sql`select 1`);
+          },
+          capacityKey,
+          organizationId,
+          owner: "capacity-fixture",
+          region: "eu-central-1",
+          submissionId,
+        })
+      ).rejects.toThrow("capacity is temporarily unavailable");
+      const [submission] = await database
+        .select()
+        .from(mailSubmission)
+        .where(eq(mailSubmission.id, submissionId));
+      expect(submission).toMatchObject({
+        dispatchGeneration: 0,
+        status: "queued",
+      });
+      await expect(
+        database
+          .select()
+          .from(mailSendAttempt)
+          .where(eq(mailSendAttempt.organizationId, organizationId))
+      ).resolves.toHaveLength(0);
     });
 
     it("claims prepared attachments atomically and keeps committed objects out of cleanup", async () => {
@@ -460,60 +567,66 @@ describe.skipIf(databaseUrl === undefined)(
       expect(attempt).not.toBeNull();
     });
 
-    it("rolls back acceptance when reserving usage fails", async () => {
-      await expect(
-        acceptMailSubmission(database, {
-          async assertAuthorization(transaction) {
-            await transaction.execute(sql`select 1`);
-          },
-          attachmentBytes: 0,
-          idempotencyKey: randomUUID(),
-          mailboxId: null,
-          messageBytes: 10,
-          organizationId,
-          payload: {
-            attachments: [],
-            bcc: [],
-            cc: [],
-            from: "sender@example.com",
-            headers: [],
-            html: null,
-            messageHeaderId: "<fixture@example.com>",
-            metadata: {},
-            openTracking: false,
-            preparedAt: now.toISOString(),
-            replyTo: [],
-            subject: "fixture",
-            tags: [],
-            text: "test",
-            to: ["recipient@example.com"],
-            transportHtml: null,
-          },
-          recipientCount: 1,
-          requestHash: "b".repeat(64),
-          async reserveBudget(transaction) {
-            await transaction.execute(sql`select 1`);
-            return {
-              billableCostMicroCents: -1,
-              includedCostMicroCents: 0,
-              periodEnd: new Date(now.getTime() + 86_400_000),
-              periodStart: now,
-              sesCostMicroCents: 100,
-            };
-          },
-        })
-      ).rejects.toThrow("Failed query");
-      const submissions = await database
-        .select()
-        .from(mailSubmission)
-        .where(eq(mailSubmission.organizationId, organizationId));
-      const events = await database
-        .select()
-        .from(mailSubmissionOutbox)
-        .where(eq(mailSubmissionOutbox.organizationId, organizationId));
-      expect(submissions).toHaveLength(0);
-      expect(events).toHaveLength(0);
-    });
+    it.each([
+      { billable: -1, endOffset: 86_400_000, error: "Failed query" },
+      { billable: 100, endOffset: -1000, error: "billing period changed" },
+    ])(
+      "rolls back acceptance for $error",
+      async ({ billable, endOffset, error }) => {
+        await expect(
+          acceptMailSubmission(database, {
+            async assertAuthorization(transaction) {
+              await transaction.execute(sql`select 1`);
+            },
+            attachmentBytes: 0,
+            idempotencyKey: randomUUID(),
+            mailboxId: null,
+            messageBytes: 10,
+            organizationId,
+            payload: {
+              attachments: [],
+              bcc: [],
+              cc: [],
+              from: "sender@example.com",
+              headers: [],
+              html: null,
+              messageHeaderId: "<fixture@example.com>",
+              metadata: {},
+              openTracking: false,
+              preparedAt: now.toISOString(),
+              replyTo: [],
+              subject: "fixture",
+              tags: [],
+              text: "test",
+              to: ["recipient@example.com"],
+              transportHtml: null,
+            },
+            recipientCount: 1,
+            requestHash: "b".repeat(64),
+            async reserveBudget(transaction) {
+              await transaction.execute(sql`select 1`);
+              return {
+                billableCostMicroCents: billable,
+                includedCostMicroCents: 0,
+                periodEnd: new Date(now.getTime() + endOffset),
+                periodStart: new Date(now.getTime() - 86_400_000),
+                sesCostMicroCents: 100,
+              };
+            },
+          })
+        ).rejects.toThrow(error);
+        const submissions = await database
+          .select()
+          .from(mailSubmission)
+          .where(eq(mailSubmission.organizationId, organizationId));
+        const events = await database
+          .select()
+          .from(mailSubmissionOutbox)
+          .where(eq(mailSubmissionOutbox.organizationId, organizationId));
+        expect(submissions).toHaveLength(0);
+        expect(events).toHaveLength(0);
+      }
+    );
 
     it("records one send intent, preserves an unknown outcome, and settles late success once", async () => {
       const submissionId = await createSubmission();

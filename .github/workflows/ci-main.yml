@@ -169,4 +169,4 @@ jobs:
         run: vp test packages/orpc/tests/organization-mail-delivery.integration.test.ts packages/orpc/tests/private-mailbox.integration.test.ts packages/auth/tests/private-mailbox-account.integration.test.ts
 
       - name: Test durable mail claims against migrated PostgreSQL
-        run: vp test packages/database/tests/mail-outbox.integration.test.ts packages/billing/tests/mail-submission-usage.integration.test.ts
+        run: vp test packages/database/tests/mail-outbox.integration.test.ts packages/billing/tests/mail-submission-usage.integration.test.ts packages/orpc/tests/mail-submission-sender.integration.test.ts

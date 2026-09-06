@@ -122,6 +122,16 @@ export const acceptMailSubmission = async (
       throw new Error("An empty submission cannot claim an upload lease.");
     }
     const budget = await input.reserveBudget(transaction);
+    const [period] = await transaction
+      .select({
+        valid: sql<boolean>`now() >= ${budget.periodStart.toISOString()}::timestamptz AND clock_timestamp() < ${budget.periodEnd.toISOString()}::timestamptz`,
+      })
+      .from(sql`(SELECT 1) AS billing_period`);
+    if (!period.valid) {
+      throw new Error(
+        "The billing period changed before mail acceptance. Retry with refreshed billing."
+      );
+    }
     const id = randomUUID();
     const result = { messageId: id, status: "queued" } as const;
     await transaction.insert(mailSubmission).values({

@@ -198,6 +198,7 @@ export const getSuppressionReason = (
 };
 
 export const assertOrganizationMailRecipientsNotSuppressed = async (input: {
+  database?: Pick<typeof db, "select">;
   organizationId: string;
   recipients: string[];
 }) => {
@@ -206,7 +207,7 @@ export const assertOrganizationMailRecipientsNotSuppressed = async (input: {
     return;
   }
 
-  const [suppression] = await db
+  const [suppression] = await (input.database ?? db)
     .select({ recipient: organizationMailRecipientSuppression.recipient })
     .from(organizationMailRecipientSuppression)
     .where(

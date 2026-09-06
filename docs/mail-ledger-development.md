@@ -1,6 +1,6 @@
 # Durable mail ledger development
 
-The new ledger is dormant. No public route, scheduled handler, queue consumer, or existing v1 send path calls it yet. These additive migrations can precede runtime activation. Async acceptance must stay disabled until payload preparation, billing limits, the sender, feedback processing, status retrieval, and controlled end-to-end tests are complete.
+The new ledger is dormant. No public route, scheduled handler, queue consumer, or existing v1 send path calls it yet. These additive migrations can precede runtime activation. Async acceptance must stay disabled until runtime wiring, feedback processing, status retrieval, capacity refresh, and controlled end-to-end tests are complete.
 
 ## Transaction boundaries
 
@@ -20,13 +20,17 @@ Recovery re-enqueues queued submissions even after an earlier queue publication 
 
 The dormant `@quieter/mail/ses-submission-transport` adapter uses one SDK attempt and a ten-second deadline. It requires an explicit regional feedback configuration set, adds opaque `quieter_submission` and `quieter_attempt` tags, and rejects customer tags in the reserved namespace. Only documented service rejections count as a definite failure. A transport error, server error, or successful response without a valid message ID stays unknown. HTTP-handler tests exercise the installed AWS SDK's retry behavior without sending email. See [SESv2 SendEmail responses and errors](https://docs.aws.amazon.com/ses/latest/APIReference-V2/API_SendEmail.html).
 
+`@quieter/orpc/mail-submission-sender` verifies stored content, refreshes billing outside the transaction, then rechecks billing access, sender ownership, and suppression using the attempt transaction. A permanent policy rejection releases the reservation and records a failure event without calling SES. Capacity deferrals keep work queued with a durable retry time. The sender makes one transport call per committed intent; explicit retryable rejections stop after five attempts. A failure while persisting confirmed success leaves the existing attempt unresolved, so queue redelivery cannot resend it. PostgreSQL's clock determines send eligibility.
+
+`@quieter/database/mail-send-capacity` serializes capacity reservations with send intents. Keys identify an AWS account and region. Snapshots expire after sixty seconds; `inspectCapacity` obtains them through SES GetAccount outside database transactions. The observation time is taken before that request. The daily check includes reported usage, unresolved attempts, and confirmations since observation, conservatively double-counting overlap during the read. Rate pacing uses eighty percent of the reported rate and charges each recipient. SES remains authoritative and can throttle below its advertised maximum; this check does not reserve capacity against unrelated senders. Legacy senders and any other environment sharing the account must be coordinated before activation. See [SES regional quotas](https://docs.aws.amazon.com/ses/latest/APIReference-V2/API_SendQuota.html).
+
 ## Retention and remaining integration
 
 Idempotency retention is at least seven days. Nonterminal and unknown work needs longer retention. No cleanup currently deletes these records. Submission ownership uses restrictive foreign keys, so accepted work cannot disappear through organization or mailbox deletion. Before activation, deletion handlers need an explicit drain/cancel/retention procedure for this ownership constraint.
 
 `@quieter/billing/mail-submission-usage` reserves confirmed usage plus outstanding reservations under the shared billing lock. Its entitlement reads use the acceptance transaction and reject stale billing state without contacting Polar; the caller refreshes billing before entering the transaction. Confirmed sends finalize their reservation and write usage and billing events in the same transaction. Final charges use confirmed usage and the retained credit allowance, so an earlier failed reservation cannot consume included credit. Unknown sends retain their reservations.
 
-Polar reporting must preserve delayed confirmation across billing-period boundaries. The existing v1 path must account for reservations before both paths operate together. The SDK contract, HTTP 201 versus replay 200, send-time suppression policy, quota reservation, signed feedback correlation, and scheduled recovery wiring remain disabled integration work.
+Acceptance checks the billing period against the database clock before committing. Polar reporting must preserve delayed confirmation across billing-period boundaries. The existing v1 path must account for reservations before both paths operate together. The SDK contract, HTTP 201 versus replay 200, mailbox-specific authorization, signed feedback correlation, capacity refresh, and scheduled recovery wiring remain disabled integration work.
 
 ## Disposable PostgreSQL verification
 
@@ -42,7 +46,7 @@ In another terminal, run the generated migration history and ledger tests:
 $env:MIGRATION_TEST_DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:55432/quieter_migration_test'
 vp run db:check
 vp run db:test-migrations
-vp test packages/database/tests/mail-outbox.integration.test.ts packages/billing/tests/mail-submission-usage.integration.test.ts
+vp test packages/database/tests/mail-outbox.integration.test.ts packages/billing/tests/mail-submission-usage.integration.test.ts packages/orpc/tests/mail-submission-sender.integration.test.ts
 ```
 
 The migration test deliberately resets this disposable database. Both test entry points reject non-loopback hosts and require the exact `quieter_migration_test` database. Never point them at shared development. Stop and remove the fixture after testing:

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, gte, inArray, lt, lte, sql } from "drizzle-orm";
 
 import type { DatabaseClient } from "./client.ts";
+import { reserveMailSendCapacity } from "./mail-send-capacity.ts";
 import {
   billingCreditUsageEvent,
   mailSendAttempt,
@@ -29,6 +30,7 @@ export const beginMailSendAttempt = async (
     submissionId: string;
     owner: string;
     region: string;
+    capacityKey?: string;
     assertPolicy: (
       transaction: LedgerTransaction,
       submission: Submission
@@ -83,16 +85,26 @@ export const beginMailSendAttempt = async (
     if (claimed === undefined) {
       return null;
     }
+    if (input.capacityKey !== undefined) {
+      await reserveMailSendCapacity(transaction, {
+        key: input.capacityKey,
+        recipientCount: submission.recipientCount,
+        region: input.region,
+      });
+    }
     const [attempt] = await transaction
       .insert(mailSendAttempt)
       .values({
         attemptNumber: claimed.dispatchGeneration,
+        capacityKey: input.capacityKey,
         deadline: sql`now() + interval '1 minute'`,
         dispatchGeneration: claimed.dispatchGeneration,
         id: randomUUID(),
         intentAt: sql`now()`,
         organizationId: input.organizationId,
         owner: input.owner,
+        recipientCount:
+          input.capacityKey === undefined ? 0 : submission.recipientCount,
         region: input.region,
         submissionId: input.submissionId,
         updatedAt: sql`now()`,
@@ -304,6 +316,18 @@ export const recordMailSendOutcome = async (
           submissionId: submission.id,
         })
         .onConflictDoNothing();
+    } else if (outcome.outcome === "rejected" && retryAt === undefined) {
+      await transaction
+        .insert(mailSubmissionOutbox)
+        .values({
+          createdAt: sql`now()`,
+          dueAt: sql`now()`,
+          eventType: "submission.failed",
+          id: randomUUID(),
+          organizationId: submission.organizationId,
+          submissionId: submission.id,
+        })
+        .onConflictDoNothing();
     } else if (retryAt !== undefined) {
       await transaction
         .update(mailSubmissionOutbox)
@@ -324,6 +348,84 @@ export const recordMailSendOutcome = async (
         );
     }
     return "recorded";
+  });
+};
+
+export const finishQueuedMailSubmission = async (
+  database: DatabaseClient,
+  identity: Pick<Submission, "id" | "organizationId" | "dispatchGeneration">,
+  outcome: { code: string; retryAt?: Date }
+) => {
+  if (
+    !/^[a-z_]{1,64}$/u.test(outcome.code) ||
+    (outcome.retryAt !== undefined &&
+      !Number.isFinite(outcome.retryAt.getTime()))
+  ) {
+    throw new Error("Invalid queued submission outcome.");
+  }
+  return await database.transaction(async (transaction) => {
+    const [updated] = await transaction
+      .update(mailSubmission)
+      .set({
+        completedAt: outcome.retryAt === undefined ? sql`now()` : null,
+        failureCode: outcome.code,
+        nextActionAt: outcome.retryAt ?? sql`now()`,
+        sendAfter: outcome.retryAt ?? sql`now()`,
+        status: outcome.retryAt === undefined ? "failed" : "queued",
+        updatedAt: sql`now()`,
+      })
+      .where(
+        and(
+          eq(mailSubmission.id, identity.id),
+          eq(mailSubmission.organizationId, identity.organizationId),
+          eq(mailSubmission.dispatchGeneration, identity.dispatchGeneration),
+          eq(mailSubmission.status, "queued")
+        )
+      )
+      .returning({ id: mailSubmission.id });
+    if (updated === undefined) {
+      return false;
+    }
+    if (outcome.retryAt === undefined) {
+      await transaction
+        .update(mailUsageReservation)
+        .set({ settledAt: sql`now()`, status: "released" })
+        .where(
+          and(
+            eq(mailUsageReservation.submissionId, identity.id),
+            eq(mailUsageReservation.status, "reserved")
+          )
+        );
+      await transaction
+        .insert(mailSubmissionOutbox)
+        .values({
+          createdAt: sql`now()`,
+          dueAt: sql`now()`,
+          eventType: "submission.failed",
+          id: randomUUID(),
+          organizationId: identity.organizationId,
+          submissionId: identity.id,
+        })
+        .onConflictDoNothing();
+    } else {
+      await transaction
+        .update(mailSubmissionOutbox)
+        .set({
+          claimGeneration: sql`${mailSubmissionOutbox.claimGeneration} + 1`,
+          claimOwner: null,
+          dueAt: outcome.retryAt,
+          leaseUntil: null,
+          publicationReceipt: null,
+          publishedAt: null,
+        })
+        .where(
+          and(
+            eq(mailSubmissionOutbox.submissionId, identity.id),
+            eq(mailSubmissionOutbox.eventType, "submission.dispatch")
+          )
+        );
+    }
+    return true;
   });
 };
 

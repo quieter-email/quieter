@@ -2697,10 +2697,33 @@ export const mailSubmission = pgTable(
   ]
 );
 
+export const mailSendCapacity = pgTable(
+  "mailSendCapacity",
+  {
+    key: text("key").primaryKey(),
+    max24HourSend: bigint("max24HourSend", { mode: "number" }).notNull(),
+    maxSendRate: doublePrecision("maxSendRate").notNull(),
+    nextSendAt: timestamp("nextSendAt", { withTimezone: true }).notNull(),
+    observedAt: timestamp("observedAt", { withTimezone: true }).notNull(),
+    region: text("region").notNull(),
+    sendingEnabled: boolean("sendingEnabled").notNull(),
+    sentLast24Hours: bigint("sentLast24Hours", { mode: "number" }).notNull(),
+  },
+  (table) => [
+    check(
+      "mail_send_capacity_bounds_check",
+      sql`${table.max24HourSend} >= 0 AND ${table.maxSendRate} >= 0 AND ${table.sentLast24Hours} >= 0`
+    ),
+  ]
+);
+
 export const mailSendAttempt = pgTable(
   "mailSendAttempt",
   {
     attemptNumber: integer("attemptNumber").notNull(),
+    capacityKey: text("capacityKey").references(() => mailSendCapacity.key, {
+      onDelete: "restrict",
+    }),
     completedAt: timestamp("completedAt", { withTimezone: true }),
     deadline: timestamp("deadline", { withTimezone: true }).notNull(),
     dispatchGeneration: integer("dispatchGeneration").notNull(),
@@ -2714,6 +2737,7 @@ export const mailSendAttempt = pgTable(
       .notNull(),
     owner: text("owner").notNull(),
     providerMessageId: text("providerMessageId"),
+    recipientCount: integer("recipientCount").notNull().default(0),
     region: text("region").notNull(),
     submissionId: text("submissionId").notNull(),
     updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
@@ -2737,6 +2761,15 @@ export const mailSendAttempt = pgTable(
     index("mail_attempt_reconciliation_idx")
       .on(table.deadline, table.id)
       .where(sql`${table.outcome} IN ('intent', 'unknown')`),
+    index("mail_attempt_capacity_window_idx")
+      .on(table.capacityKey, table.intentAt)
+      .where(
+        sql`${table.capacityKey} IS NOT NULL AND ${table.outcome} <> 'rejected'`
+      ),
+    check(
+      "mail_attempt_capacity_check",
+      sql`(${table.capacityKey} IS NULL AND ${table.recipientCount} = 0) OR (${table.capacityKey} IS NOT NULL AND ${table.recipientCount} BETWEEN 1 AND 50)`
+    ),
     check(
       "mail_attempt_outcome_check",
       sql`${table.outcome} IN ('intent', 'unknown', 'accepted', 'rejected')`
@@ -2813,7 +2846,9 @@ export const mailSubmissionOutbox = pgTable(
     createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
     dueAt: timestamp("dueAt", { withTimezone: true }).notNull(),
     eventType: text("eventType")
-      .$type<"submission.dispatch" | "submission.accepted">()
+      .$type<
+        "submission.dispatch" | "submission.accepted" | "submission.failed"
+      >()
       .notNull(),
     id: text("id").primaryKey(),
     lastErrorCode: text("lastErrorCode"),
@@ -2840,7 +2875,7 @@ export const mailSubmissionOutbox = pgTable(
       .where(sql`${table.publishedAt} IS NULL`),
     check(
       "mail_outbox_event_check",
-      sql`${table.eventType} IN ('submission.dispatch', 'submission.accepted') AND ${table.schemaVersion} > 0`
+      sql`${table.eventType} IN ('submission.dispatch', 'submission.accepted', 'submission.failed') AND ${table.schemaVersion} > 0`
     ),
     check(
       "mail_outbox_claim_check",
@@ -3136,6 +3171,7 @@ export const tables = {
   mailFeedbackInbox,
   mailPayloadUpload,
   mailSendAttempt,
+  mailSendCapacity,
   mailSubmission,
   mailSubmissionOutbox,
   mailTemplate,

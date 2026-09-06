@@ -2,6 +2,7 @@ import {
   SESv2Client,
   SESv2ServiceException,
   SendEmailCommand,
+  GetAccountCommand,
 } from "@aws-sdk/client-sesv2";
 import type { SESv2ClientConfig } from "@aws-sdk/client-sesv2";
 import { z } from "zod";
@@ -130,6 +131,38 @@ export class SesSubmissionTransport {
         }
       }
       return { code: "provider_outcome_unknown", outcome: "unknown" };
+    }
+  }
+
+  async inspectCapacity(): Promise<{
+    max24HourSend: number;
+    maxSendRate: number;
+    sentLast24Hours: number;
+    sendingEnabled: boolean;
+    observedAt: Date;
+  }> {
+    const observedAt = new Date();
+    try {
+      const response = await this.client.send(new GetAccountCommand({}), {
+        abortSignal: AbortSignal.timeout(10_000),
+      });
+      const quota = response.SendQuota;
+      if (
+        quota?.Max24HourSend === undefined ||
+        quota.MaxSendRate === undefined ||
+        quota.SentLast24Hours === undefined
+      ) {
+        throw new Error("Missing send capacity.");
+      }
+      return {
+        max24HourSend: quota.Max24HourSend,
+        maxSendRate: quota.MaxSendRate,
+        observedAt,
+        sendingEnabled: response.SendingEnabled === true,
+        sentLast24Hours: quota.SentLast24Hours,
+      };
+    } catch {
+      throw new Error("Could not inspect regional mail sending capacity.");
     }
   }
 
