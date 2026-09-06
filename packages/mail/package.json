@@ -13,10 +13,13 @@
     "./raw-message": "./src/raw-message.ts",
     "./search": "./src/search.ts",
     "./send": "./src/send.ts",
+    "./submission-transport": "./src/submission-transport.ts",
+    "./ses-submission-transport": "./src/ses-submission-transport.ts",
     "./sender-avatar": "./src/sender-avatar.ts",
     "./tracking": "./src/tracking.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-sesv2": "catalog:",
     "@quieter/env": "workspace:*",
     "fast-xml-parser": "catalog:",
     "postal-mime": "^3.0.0",

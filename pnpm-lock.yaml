@@ -844,6 +844,9 @@ importers:
 
   packages/mail:
     dependencies:
+      '@aws-sdk/client-sesv2':
+        specifier: 'catalog:'
+        version: 3.1116.0
       '@quieter/env':
         specifier: workspace:*
         version: link:../env

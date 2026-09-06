@@ -16,6 +16,8 @@ Recovery re-enqueues queued submissions even after an earlier queue publication 
 
 `@quieter/database/mail-feedback-inbox` retains authenticated feedback without requiring a provider-message mapping. The intake adapter must validate the configured source before calling it. Repeated identities must match canonical content and schema metadata. The later projection transaction must apply dedupe and delivery changes together; intake alone does not mark feedback applied.
 
+The dormant `@quieter/mail/ses-submission-transport` adapter uses one SDK attempt and a ten-second deadline. It requires an explicit regional feedback configuration set, adds opaque `quieter_submission` and `quieter_attempt` tags, and rejects customer tags in the reserved namespace. Only documented service rejections count as a definite failure. A transport error, server error, or successful response without a valid message ID stays unknown. HTTP-handler tests exercise the installed AWS SDK's retry behavior without sending email. See [SESv2 SendEmail responses and errors](https://docs.aws.amazon.com/ses/latest/APIReference-V2/API_SendEmail.html).
+
 ## Retention and remaining integration
 
 Idempotency retention is at least seven days. Nonterminal and unknown work needs longer retention. No cleanup currently deletes these records. Submission ownership uses restrictive foreign keys, so accepted work cannot disappear through organization or mailbox deletion. Before activation, deletion handlers need an explicit drain/cancel/retention procedure for this ownership constraint.
