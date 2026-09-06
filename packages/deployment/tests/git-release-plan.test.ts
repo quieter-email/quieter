@@ -1,12 +1,18 @@
 import { execFile } from "node:child_process";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
-import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vite-plus/test";
 
-import { createGitReleasePlan } from "../src/git-release-plan.ts";
+import type { ReleaseArtifactStore } from "../src/artifact-store.ts";
+import { artifactSchema } from "../src/artifact.ts";
+import {
+  createGitReleasePlan,
+  verifyPlannedRelease,
+} from "../src/git-release-plan.ts";
 
 // oxlint-disable-next-line strict-void-return -- Node's callback API returns a ChildProcess while promisify waits for its callback.
 const execute = promisify(execFile);
@@ -116,4 +122,106 @@ describe("immutable Git release planning", () => {
     });
     expect(result.affected).toStrictEqual([]);
   });
+
+  /* oxlint-disable vitest/max-expects -- Verify one complete candidate against the independent plan and retained source evidence. */
+  it("preserves unaffected runtimes and rejects incomplete or stale candidates", async () => {
+    const plan = await createGitReleasePlan({
+      baselineSha,
+      directory,
+      sourceSha: skippedSha,
+    });
+    const artifact = artifactSchema.parse({
+      assetRouting: {},
+      assets: [],
+      buildId: "fixture",
+      compatibilityDate: "2026-08-04",
+      compatibilityFlags: [],
+      mainModule: "index.js",
+      modules: [
+        {
+          bytes: 1,
+          contentType: "application/javascript+module",
+          digest: "a".repeat(64),
+          path: "index.js",
+        },
+      ],
+      schemaVersion: 1,
+      sourceSha: skippedSha,
+    });
+    const manifest = {
+      archive: null,
+      artifact,
+      digest: createHash("sha256")
+        .update(JSON.stringify(artifact))
+        .digest("hex"),
+    };
+    const artifacts = {
+      read: vi.fn<ReleaseArtifactStore["read"]>().mockResolvedValue(manifest),
+    };
+    const baseline = {
+      id: "baseline",
+      services: ["web", "gmail-sync"].map((service) => ({
+        artifactDigest: "b".repeat(64),
+        bindingGeneration: "c".repeat(64),
+        contracts: [],
+        requirements: {},
+        scriptName: `test-${service}`,
+        service,
+        versionId: randomUUID(),
+      })),
+      sourceSha: baselineSha,
+    };
+    const candidate = {
+      ...baseline,
+      id: "candidate",
+      services: baseline.services.map((service) =>
+        service.service === "web"
+          ? {
+              ...service,
+              artifactDigest: manifest.digest,
+              versionId: randomUUID(),
+            }
+          : service
+      ),
+      sourceSha: skippedSha,
+    };
+    await verifyPlannedRelease({ baseline, candidate, plan }, artifacts);
+    expect(artifacts.read).toHaveBeenCalledExactlyOnceWith(manifest.digest);
+    await expect(
+      verifyPlannedRelease(
+        {
+          baseline,
+          candidate,
+          plan: { ...plan, affected: ["gmail-sync", "web"] },
+        },
+        artifacts
+      )
+    ).rejects.toThrow("exactly the runtimes");
+    await expect(
+      verifyPlannedRelease(
+        { baseline, candidate, plan: { ...plan, affected: [] } },
+        artifacts
+      )
+    ).rejects.toThrow("exactly the runtimes");
+    await expect(
+      verifyPlannedRelease(
+        { baseline, candidate, plan: { ...plan, runtimeOnly: false } },
+        artifacts
+      )
+    ).rejects.toThrow("matching source plan");
+    await expect(
+      verifyPlannedRelease(
+        { baseline, candidate, plan: { ...plan, baselineSha: sourceSha } },
+        artifacts
+      )
+    ).rejects.toThrow("matching source plan");
+    artifacts.read.mockResolvedValue({
+      ...manifest,
+      artifact: { ...artifact, sourceSha: baselineSha },
+    });
+    await expect(
+      verifyPlannedRelease({ baseline, candidate, plan }, artifacts)
+    ).rejects.toThrow("different source");
+  });
+  /* oxlint-enable vitest/max-expects */
 });

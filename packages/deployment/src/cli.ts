@@ -17,7 +17,10 @@ import type { AssetManifest } from "./assets.ts";
 import { CloudflareRuntimeProvider } from "./cloudflare.ts";
 import { assertCompatible } from "./compatibility.ts";
 import { ReleaseController } from "./controller.ts";
-import { createGitReleasePlan } from "./git-release-plan.ts";
+import {
+  createGitReleasePlan,
+  verifyPlannedRelease,
+} from "./git-release-plan.ts";
 import { observeRelease, verifyReleaseHealth } from "./health.ts";
 import { ObjectReleaseJournal } from "./journal.ts";
 import { ReleasePreflight } from "./preflight.ts";
@@ -360,15 +363,45 @@ switch (command) {
     break;
   }
   case "prepare": {
-    if (values.file === undefined || values.probes === undefined) {
+    if (
+      existing === null ||
+      values.file === undefined ||
+      values.probes === undefined
+    ) {
       throw new Error(
         "Prepare requires an immutable release manifest and --probes configuration."
       );
     }
+    const candidate = healthyReleaseSchema.parse(
+      JSON.parse(await readFile(values.file, "utf-8"))
+    );
+    if (
+      !values.rollback &&
+      (!env.QUIETER_RELEASE_STAGE.startsWith("release-proof-") ||
+        values.source !== undefined)
+    ) {
+      if (
+        values.source !== undefined &&
+        values.source !== candidate.sourceSha
+      ) {
+        throw new Error("The candidate differs from the requested source.");
+      }
+      await verifyPlannedRelease(
+        {
+          baseline: existing.state.healthy,
+          candidate,
+          plan: await createGitReleasePlan({
+            baselineSha: existing.state.healthy.sourceSha,
+            directory: path.resolve(import.meta.dirname, "../../.."),
+            sourceSha: candidate.sourceSha,
+          }),
+        },
+        artifacts
+      );
+    }
     await controller.prepare({
-      candidate: healthyReleaseSchema.parse(
-        JSON.parse(await readFile(values.file, "utf-8"))
-      ),
+      candidate,
+      expectedBaseline: existing.state.healthy,
       id: identifierSchema.parse(values.attempt),
       mode: values.rollback ? "rollback" : "promote",
       probes: probeConfigurationSchema.parse(

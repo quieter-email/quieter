@@ -4,7 +4,10 @@ import { promisify } from "node:util";
 import { z } from "zod";
 
 import { identifyAffectedRuntimes } from "./affected.ts";
+import type { ReleaseArtifactStore } from "./artifact-store.ts";
+import { planPromotion } from "./compatibility.ts";
 import { runtimeRegistry } from "./registry.ts";
+import type { HealthyRelease } from "./schema.ts";
 
 // oxlint-disable-next-line strict-void-return -- Node's callback API returns a ChildProcess while promisify waits for its callback.
 const execute = promisify(execFile);
@@ -111,4 +114,44 @@ export const createGitReleasePlan = async (input: {
     ),
     sourceSha,
   };
+};
+
+export const verifyPlannedRelease = async (
+  input: {
+    baseline: HealthyRelease;
+    candidate: HealthyRelease;
+    plan: Awaited<ReturnType<typeof createGitReleasePlan>>;
+  },
+  artifacts: Pick<ReleaseArtifactStore, "read">
+) => {
+  const { baseline, candidate, plan } = input;
+  if (
+    plan.baselineSha !== baseline.sourceSha ||
+    plan.sourceSha !== candidate.sourceSha ||
+    !plan.runtimeOnly
+  ) {
+    throw new Error(
+      "Automatic runtime release requires a matching source plan without infrastructure, tooling, or unclassified changes."
+    );
+  }
+  const changed = planPromotion(baseline, candidate).toSorted();
+  const affected = plan.affected.toSorted();
+  if (
+    changed.length !== affected.length ||
+    changed.some((service, index) => service !== affected[index])
+  ) {
+    throw new Error(
+      "The candidate must replace exactly the runtimes affected since the healthy source."
+    );
+  }
+  for (const service of candidate.services) {
+    if (!changed.includes(service.service)) {
+      continue;
+    }
+    // oxlint-disable-next-line no-await-in-loop -- Every changed runtime must come from the exact planned commit.
+    const manifest = await artifacts.read(service.artifactDigest);
+    if (manifest.artifact.sourceSha !== candidate.sourceSha) {
+      throw new Error("A changed runtime was built from a different source.");
+    }
+  }
 };

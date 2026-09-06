@@ -48,6 +48,7 @@ export class ReleaseController {
 
   async prepare(input: {
     candidate: HealthyRelease;
+    expectedBaseline?: HealthyRelease;
     id: string;
     mode?: "promote" | "rollback";
     probes: z.input<typeof probeConfigurationSchema>;
@@ -55,6 +56,14 @@ export class ReleaseController {
   }) {
     const checkpoint = await this.requireState();
     const { state } = checkpoint;
+    if (
+      input.expectedBaseline !== undefined &&
+      JSON.stringify(input.expectedBaseline) !== JSON.stringify(state.healthy)
+    ) {
+      throw new Error(
+        "The healthy release changed after planning. Plan again."
+      );
+    }
     if (
       state.attempt &&
       !["healthy", "rolled_back"].includes(state.attempt.status)

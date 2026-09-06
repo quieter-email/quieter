@@ -161,6 +161,21 @@ const fixture = async () => {
 };
 
 describe("durable runtime release recovery", () => {
+  it("rejects a candidate planned against a superseded healthy baseline", async () => {
+    const { candidate, controller, journal, provider } = await fixture();
+    await expect(
+      controller.prepare({
+        candidate,
+        expectedBaseline: candidate,
+        id: "stale-plan",
+        probes,
+        workflowRunId: "1",
+      })
+    ).rejects.toThrow("changed after planning");
+    expect(journal.checkpoint?.state.attempt).toBeNull();
+    expect(provider.calls).toHaveLength(0);
+  });
+
   it("does not activate a candidate that fails its protected checks", async () => {
     const { candidate, controller, provider, health } = await fixture();
     await controller.prepare({
