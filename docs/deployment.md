@@ -8,7 +8,7 @@ The release workflow runs the existing CI checks, refreshes SST state, and runs 
 
 `sst deploy` reuses the prepared web output. A local SHA-256 receipt verifies every output file, the build ID and the generated SST Wrangler configuration. Changed or missing output fails closed. The receipt and generated Wrangler files can contain configuration and must never be uploaded as public artifacts. There is no R2 asset archive.
 
-Preparation completes before migrations or runtime updates. Migrations remain forward-only and expand-safe. Deploys must keep the previous application's database queries, API calls and queued-message formats valid. Add fields before using them, keep readers tolerant of older messages, and remove old contracts in a later reviewed change. SQL checks catch known destructive statements, not every compatibility error. A `quieter:contract` comment does not bypass the guard.
+Preparation completes before migrations or runtime updates. Migrations remain forward-only and expand-safe. Deploys must keep the previous application's database queries, API calls and queued-message formats valid. Add fields before using them, keep readers tolerant of older messages, and remove old contracts in a later reviewed change. SQL checks catch known destructive statements, not every compatibility error. Four historical contract migrations are accepted only with their recorded checksums. A `quieter:contract` comment does not bypass the guard for new or modified migrations.
 
 After SST finishes, `scripts/check-deployment.ts` verifies the server build ID, a read-only database query, the static build marker, server-rendered `/about` HTML, and its JavaScript/CSS assets. The public `/api/health` endpoint returns only a build ID and health status, caches successful database checks for 30 seconds per isolate, and bounds database statements to two seconds. It never returns credentials or user data. A failed check fails the release workflow.
 
@@ -30,7 +30,7 @@ Do not use this button after incompatible schema, binding, Durable Object, queue
 
 ### Local verification
 
-Run `vp check --fix`, `vp test`, and the existing web/handler build checks. `node scripts/check-deployment.ts <origin> <build-id>` also works against a running local Worker with development bindings. Keep production credentials out of local files. Live production deployment and recovery run only through the protected workflows; unit tests simulate provider failures and artifact tampering without touching production.
+Run `vp check --fix`, `vp test`, and the existing web/handler build checks. `vp exec node scripts/check-deployment.ts <origin> <build-id>` also works against a running local Worker with development bindings. Keep production credentials out of local files. Live production deployment and recovery run only through the protected workflows; unit tests simulate provider failures and artifact tampering without touching production.
 
 ## GitHub environment contract
 

@@ -52,7 +52,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_DEFAULT_ACCOUNT_ID: ${{ vars.CLOUDFLARE_DEFAULT_ACCOUNT_ID }}
           CURRENT_VERSION: ${{ inputs.current_version }}
-        run: node scripts/web-recovery.ts restore recovery/previous-web.json "$CURRENT_VERSION"
+        run: vp exec node scripts/web-recovery.ts restore recovery/previous-web.json "$CURRENT_VERSION"
       - name: Recovery summary
         run: |
           echo 'Web recovery verified. Database and background jobs were not rolled back. The normal deployment workflow refreshes SST state before preparing the next release.' >> "$GITHUB_STEP_SUMMARY"

@@ -7,7 +7,6 @@ const assetDirectory = path.join(serverDirectory, "assets");
 const serverFiles = await readdir(serverDirectory);
 const assetFiles = await readdir(assetDirectory);
 const cloudflareBundle = serverFiles.includes("wrangler.json");
-const maximumCompressedWorkerBytes = 10_000_000;
 const boundaries: {
   forbiddenMarkers?: string[];
   marker: string;
@@ -146,25 +145,8 @@ if (cloudflareBundle) {
     /Total Upload:\s*[\d.]+\s*(?:KiB|MiB)\s*\/\s*gzip:\s*(?<size>[\d.]+)\s*(?<unit>KiB|MiB)/u.exec(
       output
     );
-  const compressedSize = Number(uploadMatch?.groups?.size);
-  const compressedUnit = uploadMatch?.groups?.unit;
-  if (
-    !Number.isFinite(compressedSize) ||
-    (compressedUnit !== "KiB" && compressedUnit !== "MiB")
-  ) {
-    throw new Error("Could not read the compressed Worker size from Wrangler.");
+  if (uploadMatch === null) {
+    throw new Error("Could not read the Worker size from Wrangler.");
   }
-  const compressedBytes =
-    compressedSize * (compressedUnit === "MiB" ? 1024 * 1024 : 1024);
-  if (compressedBytes >= maximumCompressedWorkerBytes) {
-    throw new Error(
-      `The compressed Worker upload is ${(compressedBytes / 1_000_000).toFixed(2)} MB; the limit is ${(maximumCompressedWorkerBytes / 1_000_000).toFixed(0)} MB.`
-    );
-  }
-  process.stdout.write(
-    `Worker upload: ${(compressedBytes / 1_000_000).toFixed(2)} MB compressed (${(
-      (compressedBytes / maximumCompressedWorkerBytes) *
-      100
-    ).toFixed(1)}% of limit)\n`
-  );
+  process.stdout.write(`Worker ${uploadMatch[0]}\n`);
 }

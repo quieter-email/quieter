@@ -89,7 +89,7 @@ jobs:
           vp exec sst diff --config sst.config.ts --stage "$SST_STAGE"
 
       - name: Record previous healthy web version
-        run: node scripts/web-recovery.ts record previous-web.json
+        run: vp exec node scripts/web-recovery.ts record previous-web.json
 
       - name: Retain web recovery record before deployment
         uses: actions/upload-artifact@v4
@@ -110,4 +110,4 @@ jobs:
 
       - name: Verify production release
         timeout-minutes: 5
-        run: node scripts/check-deployment.ts https://quieter.email "$QUIETER_BUILD_ID"
+        run: vp exec node scripts/check-deployment.ts https://quieter.email "$QUIETER_BUILD_ID"

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, test } from "vite-plus/test";
 
 import {
@@ -8,6 +10,23 @@ import {
 import { assertMigrationSqlIsDeploySafe } from "./migration-safety.ts";
 
 describe("destructive database target guard", () => {
+  test("preserves exact historical contracts but rejects changed SQL", () => {
+    const name = "20260819222359_concerned_the_watchers";
+    const sql = readFileSync(
+      new URL(`../drizzle/${name}/migration.sql`, import.meta.url),
+      "utf-8"
+    );
+    expect(() => {
+      assertMigrationSqlIsDeploySafe(sql, name);
+    }).not.toThrow();
+    expect(() => {
+      assertMigrationSqlIsDeploySafe(`${sql}\nDROP TABLE extra;`, name);
+    }).toThrow("destructive SQL");
+    expect(() => {
+      assertMigrationSqlIsDeploySafe(sql, "new-migration");
+    }).toThrow("destructive SQL");
+  });
+
   test("accepts the dedicated local migration test database", () => {
     expect(() => {
       assertLocalDatabaseUrl(

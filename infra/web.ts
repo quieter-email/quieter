@@ -24,7 +24,7 @@ export const createWeb = (
 ) =>
   new sst.cloudflare.TanStackStart("Web", {
     buildCommand: production
-      ? `node ../../scripts/prepared-web-build.ts ${$cli.command}`
+      ? `vp exec node ../../scripts/prepared-web-build.ts ${$cli.command}`
       : "vp run build",
     dev: { command: "vp run dev" },
     domain: webDomain,
