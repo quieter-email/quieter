@@ -5,6 +5,10 @@
   "exports": {
     "./client": "./src/client.ts",
     "./local-development": "./scripts/local-development.ts",
+    "./mail-outbox": "./src/mail-outbox.ts",
+    "./mail-attempts": "./src/mail-attempts.ts",
+    "./mail-acceptance": "./src/mail-acceptance.ts",
+    "./mail-feedback-inbox": "./src/mail-feedback-inbox.ts",
     "./schema": "./src/schema.ts"
   },
   "dependencies": {

@@ -2531,6 +2531,320 @@ export const organizationMailSendIdempotency = pgTable(
   ]
 );
 
+export type MailSubmissionStatus =
+  | "queued"
+  | "dispatching"
+  | "pending_confirmation"
+  | "accepted"
+  | "failed"
+  | "canceled";
+export type MailAttemptOutcome = "intent" | "unknown" | "accepted" | "rejected";
+export type MailSubmissionPayload = {
+  attachments: {
+    bytes: number;
+    contentId: string | null;
+    contentType: string;
+    digest: string;
+    filename: string;
+    key: string;
+  }[];
+  bcc: string[];
+  cc: string[];
+  from: string;
+  headers: Record<string, string>;
+  html: string | null;
+  replyTo: string[];
+  subject: string;
+  tags: Record<string, string>;
+  text: string | null;
+  to: string[];
+};
+
+export const mailSubmission = pgTable(
+  "mailSubmission",
+  {
+    acceptedAt: timestamp("acceptedAt", { withTimezone: true }).notNull(),
+    acceptedResult: jsonb("acceptedResult")
+      .$type<{ messageId: string; status: "queued" }>()
+      .notNull(),
+    attachmentBytes: integer("attachmentBytes").notNull(),
+    completedAt: timestamp("completedAt", { withTimezone: true }),
+    dispatchGeneration: integer("dispatchGeneration").default(0).notNull(),
+    failureCode: text("failureCode"),
+    id: text("id").primaryKey(),
+    idempotencyKey: text("idempotencyKey").notNull(),
+    idempotencyRetainUntil: timestamp("idempotencyRetainUntil", {
+      withTimezone: true,
+    }).notNull(),
+    mailboxId: text("mailboxId").references(() => mailbox.id, {
+      onDelete: "restrict",
+    }),
+    messageBytes: integer("messageBytes").notNull(),
+    nextActionAt: timestamp("nextActionAt", { withTimezone: true }).notNull(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "restrict" }),
+    payload: jsonb("payload").$type<MailSubmissionPayload>().notNull(),
+    payloadDigest: text("payloadDigest").notNull(),
+    recipientCount: integer("recipientCount").notNull(),
+    requestHash: text("requestHash").notNull(),
+    schemaVersion: integer("schemaVersion").default(1).notNull(),
+    sendAfter: timestamp("sendAfter", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    status: text("status")
+      .$type<MailSubmissionStatus>()
+      .default("queued")
+      .notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    unique("mail_submission_organization_key_unique").on(
+      table.organizationId,
+      table.idempotencyKey
+    ),
+    unique("mail_submission_id_organization_unique").on(
+      table.id,
+      table.organizationId
+    ),
+    index("mail_submission_recovery_idx")
+      .on(table.nextActionAt, table.id)
+      .where(
+        sql`${table.status} IN ('queued', 'dispatching', 'pending_confirmation')`
+      ),
+    index("mail_submission_organization_accepted_idx").on(
+      table.organizationId,
+      table.acceptedAt
+    ),
+    index("mail_submission_mailbox_idx").on(table.mailboxId),
+    check(
+      "mail_submission_status_check",
+      sql`${table.status} IN ('queued', 'dispatching', 'pending_confirmation', 'accepted', 'failed', 'canceled')`
+    ),
+    check(
+      "mail_submission_counts_check",
+      sql`${table.recipientCount} BETWEEN 1 AND 50 AND ${table.messageBytes} >= 0 AND ${table.attachmentBytes} >= 0 AND ${table.dispatchGeneration} >= 0`
+    ),
+    check(
+      "mail_submission_hash_check",
+      sql`${table.requestHash} ~ '^[a-f0-9]{64}$' AND ${table.payloadDigest} ~ '^[a-f0-9]{64}$'`
+    ),
+    check(
+      "mail_submission_retention_check",
+      sql`${table.idempotencyRetainUntil} >= ${table.acceptedAt} + interval '7 days'`
+    ),
+    check(
+      "mail_submission_result_check",
+      sql`${table.acceptedResult}->>'messageId' IS NOT DISTINCT FROM ${table.id} AND ${table.acceptedResult}->>'status' IS NOT DISTINCT FROM 'queued'`
+    ),
+    check(
+      "mail_submission_completion_check",
+      sql`(${table.completedAt} IS NOT NULL) = (${table.status} IN ('accepted', 'failed', 'canceled'))`
+    ),
+  ]
+);
+
+export const mailSendAttempt = pgTable(
+  "mailSendAttempt",
+  {
+    attemptNumber: integer("attemptNumber").notNull(),
+    completedAt: timestamp("completedAt", { withTimezone: true }),
+    deadline: timestamp("deadline", { withTimezone: true }).notNull(),
+    dispatchGeneration: integer("dispatchGeneration").notNull(),
+    failureCode: text("failureCode"),
+    id: text("id").primaryKey(),
+    intentAt: timestamp("intentAt", { withTimezone: true }).notNull(),
+    organizationId: text("organizationId").notNull(),
+    outcome: text("outcome")
+      .$type<MailAttemptOutcome>()
+      .default("intent")
+      .notNull(),
+    owner: text("owner").notNull(),
+    providerMessageId: text("providerMessageId"),
+    region: text("region").notNull(),
+    submissionId: text("submissionId").notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.submissionId, table.organizationId],
+      foreignColumns: [mailSubmission.id, mailSubmission.organizationId],
+      name: "mail_attempt_submission_owner_fk",
+    }).onDelete("restrict"),
+    unique("mail_attempt_submission_number_unique").on(
+      table.submissionId,
+      table.attemptNumber
+    ),
+    uniqueIndex("mail_attempt_unresolved_unique")
+      .on(table.submissionId)
+      .where(sql`${table.outcome} IN ('intent', 'unknown')`),
+    uniqueIndex("mail_attempt_provider_message_unique")
+      .on(table.region, table.providerMessageId)
+      .where(sql`${table.providerMessageId} IS NOT NULL`),
+    index("mail_attempt_reconciliation_idx")
+      .on(table.deadline, table.id)
+      .where(sql`${table.outcome} IN ('intent', 'unknown')`),
+    check(
+      "mail_attempt_outcome_check",
+      sql`${table.outcome} IN ('intent', 'unknown', 'accepted', 'rejected')`
+    ),
+    check(
+      "mail_attempt_generation_check",
+      sql`${table.attemptNumber} > 0 AND ${table.dispatchGeneration} > 0 AND ${table.deadline} > ${table.intentAt}`
+    ),
+    check(
+      "mail_attempt_result_check",
+      sql`(${table.providerMessageId} IS NOT NULL) = (${table.outcome} = 'accepted') AND (${table.completedAt} IS NOT NULL) = (${table.outcome} IN ('accepted', 'rejected'))`
+    ),
+  ]
+);
+
+export const mailUsageReservation = pgTable(
+  "mailUsageReservation",
+  {
+    attachmentBytes: integer("attachmentBytes").notNull(),
+    billableCostMicroCents: bigint("billableCostMicroCents", {
+      mode: "number",
+    }).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    includedCostMicroCents: bigint("includedCostMicroCents", {
+      mode: "number",
+    }).notNull(),
+    organizationId: text("organizationId").notNull(),
+    periodEnd: timestamp("periodEnd", { withTimezone: true }).notNull(),
+    periodStart: timestamp("periodStart", { withTimezone: true }).notNull(),
+    recipientCount: integer("recipientCount").notNull(),
+    sesCostMicroCents: bigint("sesCostMicroCents", {
+      mode: "number",
+    }).notNull(),
+    settledAt: timestamp("settledAt", { withTimezone: true }),
+    status: text("status")
+      .$type<"reserved" | "finalized" | "released">()
+      .default("reserved")
+      .notNull(),
+    submissionId: text("submissionId").primaryKey(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.submissionId, table.organizationId],
+      foreignColumns: [mailSubmission.id, mailSubmission.organizationId],
+      name: "mail_reservation_submission_owner_fk",
+    }).onDelete("restrict"),
+    index("mail_reservation_pending_budget_idx")
+      .on(table.organizationId, table.periodStart, table.periodEnd)
+      .where(sql`${table.status} = 'reserved'`),
+    check(
+      "mail_reservation_status_check",
+      sql`${table.status} IN ('reserved', 'finalized', 'released') AND (${table.settledAt} IS NOT NULL) = (${table.status} <> 'reserved')`
+    ),
+    check(
+      "mail_reservation_amounts_check",
+      sql`${table.attachmentBytes} >= 0 AND ${table.billableCostMicroCents} >= 0 AND ${table.includedCostMicroCents} >= 0 AND ${table.sesCostMicroCents} >= 0 AND ${table.recipientCount} BETWEEN 1 AND 50 AND ${table.periodEnd} > ${table.periodStart}`
+    ),
+  ]
+);
+
+export const mailSubmissionOutbox = pgTable(
+  "mailSubmissionOutbox",
+  {
+    attemptCount: integer("attemptCount").default(0).notNull(),
+    claimGeneration: integer("claimGeneration").default(0).notNull(),
+    claimOwner: text("claimOwner"),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    dueAt: timestamp("dueAt", { withTimezone: true }).notNull(),
+    eventType: text("eventType")
+      .$type<"submission.dispatch" | "submission.accepted">()
+      .notNull(),
+    id: text("id").primaryKey(),
+    lastErrorCode: text("lastErrorCode"),
+    leaseUntil: timestamp("leaseUntil", { withTimezone: true }),
+    organizationId: text("organizationId").notNull(),
+    publicationReceipt: text("publicationReceipt"),
+    publishedAt: timestamp("publishedAt", { withTimezone: true }),
+    schemaVersion: integer("schemaVersion").default(1).notNull(),
+    submissionId: text("submissionId").notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.submissionId, table.organizationId],
+      foreignColumns: [mailSubmission.id, mailSubmission.organizationId],
+      name: "mail_outbox_submission_owner_fk",
+    }).onDelete("restrict"),
+    unique("mail_outbox_submission_event_unique").on(
+      table.submissionId,
+      table.eventType,
+      table.schemaVersion
+    ),
+    index("mail_outbox_due_idx")
+      .on(table.dueAt, table.id)
+      .where(sql`${table.publishedAt} IS NULL`),
+    check(
+      "mail_outbox_event_check",
+      sql`${table.eventType} IN ('submission.dispatch', 'submission.accepted') AND ${table.schemaVersion} > 0`
+    ),
+    check(
+      "mail_outbox_claim_check",
+      sql`${table.claimGeneration} >= 0 AND ${table.attemptCount} >= 0 AND (${table.claimOwner} IS NULL) = (${table.leaseUntil} IS NULL)`
+    ),
+    check(
+      "mail_outbox_publication_check",
+      sql`(${table.publishedAt} IS NULL) = (${table.publicationReceipt} IS NULL)`
+    ),
+  ]
+);
+
+export const mailFeedbackInbox = pgTable(
+  "mailFeedbackInbox",
+  {
+    attemptCount: integer("attemptCount").default(0).notNull(),
+    claimGeneration: integer("claimGeneration").default(0).notNull(),
+    claimOwner: text("claimOwner"),
+    dueAt: timestamp("dueAt", { withTimezone: true }).notNull(),
+    id: text("id").primaryKey(),
+    lastErrorCode: text("lastErrorCode"),
+    leaseUntil: timestamp("leaseUntil", { withTimezone: true }),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    payloadDigest: text("payloadDigest").notNull(),
+    processedAt: timestamp("processedAt", { withTimezone: true }),
+    providerEventId: text("providerEventId").notNull(),
+    providerMessageId: text("providerMessageId"),
+    receivedAt: timestamp("receivedAt", { withTimezone: true }).notNull(),
+    region: text("region").notNull(),
+    schemaVersion: integer("schemaVersion").default(1).notNull(),
+    source: text("source").notNull(),
+    status: text("status")
+      .$type<"pending" | "applied" | "quarantined">()
+      .default("pending")
+      .notNull(),
+  },
+  (table) => [
+    unique("mail_feedback_source_event_unique").on(
+      table.source,
+      table.region,
+      table.providerEventId
+    ),
+    index("mail_feedback_due_idx")
+      .on(table.dueAt, table.id)
+      .where(sql`${table.status} = 'pending'`),
+    index("mail_feedback_message_idx").on(
+      table.region,
+      table.providerMessageId
+    ),
+    check(
+      "mail_feedback_status_check",
+      sql`${table.status} IN ('pending', 'applied', 'quarantined') AND (${table.processedAt} IS NOT NULL) = (${table.status} = 'applied')`
+    ),
+    check(
+      "mail_feedback_claim_check",
+      sql`${table.claimGeneration} >= 0 AND ${table.attemptCount} >= 0 AND (${table.claimOwner} IS NULL) = (${table.leaseUntil} IS NULL)`
+    ),
+    check(
+      "mail_feedback_payload_check",
+      sql`${table.schemaVersion} > 0 AND ${table.payloadDigest} ~ '^[a-f0-9]{64}$' AND octet_length(${table.payload}::text) <= 262144`
+    ),
+  ]
+);
+
 export const rateLimitBucket = pgTable(
   "rateLimitBucket",
   {
@@ -2759,7 +3073,12 @@ export const tables = {
   mailAutomationMemoryProfile,
   mailDomain,
   mailDomainConnectAttempt,
+  mailFeedbackInbox,
+  mailSendAttempt,
+  mailSubmission,
+  mailSubmissionOutbox,
   mailTemplate,
+  mailUsageReservation,
   mailbox,
   mailboxAction,
   mailboxActionExternalEffect,
