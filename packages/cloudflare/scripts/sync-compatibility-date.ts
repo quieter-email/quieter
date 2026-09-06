@@ -9,6 +9,7 @@ const targets = [
   "local-worker.jsonc",
   "local-background-worker.jsonc",
   "packages/cloudflare/wrangler.types.jsonc",
+  "packages/cloudflare/wrangler.release-proofs.jsonc",
 ] as const;
 
 const datePattern =

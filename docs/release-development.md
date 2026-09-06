@@ -134,6 +134,24 @@ This topology does not establish provider-failure RPO 0 or high availability. Ke
 
 ## Existing production ownership
 
+### Durable Object fixture
+
+The `release-proof-do-leander` drill passed on 2026-09-06 using `sst.release-durable-proof.config.ts`. Namespace `05bea87f189c4e30b1a98b06d38aaf24` retained its counter across inactive upload, activation of `30e15fce-8968-4df4-8147-22757efae418`, rollback to `f7710d70-fe91-41ec-bf0a-342c7f88eb02`, and another SST run. The counter reached five without a reset or lost increment. The final SST run also preserved the rollback deployment ID. The native version API omitted `migration_tag` for the code-only candidate; the fixture permits that omission, rejects another tag, and compares the namespace ID and class before activation and after rollback.
+
+This fixture alone omits the already-applied `v1` migration declaration when creating its inactive version. The normal artifact upload path still blocks Workers with a migration tag until the exact inherited-binding upload path is verified. Namespace creation, deletion, renaming, or storage-schema changes remain infrastructure and compatibility operations.
+
+Use a separate `release-proof-do-*` stage with a linked random `ReleaseProofToken`, supplied through SST stdin without a newline. Deploy first with `QUIETER_RELEASE_PROOF_PHASE=baseline`, record evidence in an empty directory, then deploy with phase `candidate` and run the candidate drill. Run SST once more in candidate phase, then verify the retained state:
+
+```powershell
+vp exec sst shell --config sst.release-durable-proof.config.ts --stage <isolated-stage> --target ReleaseOperations -- node --conditions=development packages/deployment/src/verify-durable-proof.ts --mode baseline --directory <absolute-evidence-directory>
+# After the inactive candidate upload:
+vp exec sst shell --config sst.release-durable-proof.config.ts --stage <isolated-stage> --target ReleaseOperations -- node --conditions=development packages/deployment/src/verify-durable-proof.ts --mode candidate --directory <absolute-evidence-directory>
+# After the following SST run:
+vp exec sst shell --config sst.release-durable-proof.config.ts --stage <isolated-stage> --target ReleaseOperations -- node --conditions=development packages/deployment/src/verify-durable-proof.ts --mode after-infrastructure --directory <absolute-evidence-directory>
+```
+
+The script checks both the request Worker's version and the executing object's version, and never retries an increment automatically. The local counterpart, `vp run @quieter/cloudflare#test:release-proofs`, uses native SQLite-backed Durable Objects and runs in CI. It verifies concurrent increments and authorization without cloud access. This proves provider behavior for compatible fixture code, not production mailbox contracts or arbitrary object migrations.
+
 ### Queue and scheduled trigger fixture
 
 The isolated `release-proof-triggers-leander` drill passed on 2026-09-06. Candidate `2f15dea9-f50b-41e0-9d6f-155463017cd7` executed both triggers after activation; rollback restored `b6288a2a-7e39-4d6d-87c7-81058835ea7d` and both triggers executed it again. Each combined queue/scheduled sample completed within one minute. A following SST update disabled the schedule while preserving the rollback deployment ID, queue ID, and consumer ID, and another queue message executed the baseline. This proves the isolated trigger behavior, not the production handlers' contracts or Durable Object migration behavior.

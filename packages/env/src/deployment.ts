@@ -134,3 +134,26 @@ export const parseReleaseTriggerProbeBindings = (bindings: unknown) => {
   }
   return { ...base, ...result.data };
 };
+
+export const parseReleaseDurableProbeBindings = (bindings: unknown) => {
+  const base = parseReleaseProbeBindings(bindings);
+  const result = z
+    .object({
+      ReleaseCounter: z.custom<{
+        getByName: (name: string) => {
+          fetch: (request: Request) => Promise<Response>;
+        };
+      }>(
+        (value) =>
+          typeof value === "object" &&
+          value !== null &&
+          "getByName" in value &&
+          typeof value.getByName === "function"
+      ),
+    })
+    .safeParse(bindings);
+  if (!result.success) {
+    throw new Error("Release Durable Object probe bindings are incomplete.");
+  }
+  return { ...base, ...result.data };
+};

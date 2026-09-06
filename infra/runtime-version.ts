@@ -51,6 +51,15 @@ export const createRuntimeVersion = (
             case "queue": {
               return { name: bindingName, queueName: binding.queueName, type };
             }
+            case "durable_object_namespace": {
+              return {
+                className: binding.className,
+                name: bindingName,
+                namespaceId: binding.namespaceId,
+                scriptName: binding.scriptName,
+                type,
+              };
+            }
             case "assets": {
               return { name: bindingName, type };
             }

@@ -417,6 +417,7 @@ export default defineConfig({
       ...configDefaults.exclude,
       ".scratch/**",
       "packages/cloudflare/tests/**",
+      "packages/cloudflare/release-proof-tests/**",
     ],
     setupFiles: ["./vitest.setup.ts"],
   },

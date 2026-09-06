@@ -51,6 +51,9 @@ jobs:
       - name: Test Cloudflare Worker runtime
         run: vp run @quieter/cloudflare#test:workers
 
+      - name: Verify native release fixtures
+        run: vp run @quieter/cloudflare#test:release-proofs
+
   deployment-checks:
     name: Deployment safety checks
     runs-on: blacksmith-2vcpu-ubuntu-2404

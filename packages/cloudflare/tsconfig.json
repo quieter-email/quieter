@@ -8,6 +8,8 @@
     "src/**/*.ts",
     "scripts/**/*.ts",
     "tests/**/*.ts",
+    "release-proof-tests/**/*.ts",
+    "vite.release-proofs.config.ts",
     "vite.config.ts",
     "worker-configuration.d.ts"
   ]
