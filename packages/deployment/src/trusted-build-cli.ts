@@ -3,11 +3,16 @@ import { appendFile, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parseArgs } from "node:util";
 
+import { S3Client } from "@aws-sdk/client-s3";
 import { createWebReleaseEnvironment } from "@quieter/env/build";
-import { createTrustedBuildEnv } from "@quieter/env/deployment";
+import {
+  createTrustedBuildEnv,
+  createReleaseStorageEnv,
+} from "@quieter/env/deployment";
 import { z } from "zod";
 
 import { verifyTrustedBuildFiles } from "./trusted-build-files.ts";
+import { TrustedBuildReceiptStore } from "./trusted-build-store.ts";
 import { verifyTrustedBuild } from "./trusted-build.ts";
 
 const { values } = parseArgs({
@@ -17,6 +22,7 @@ const { values } = parseArgs({
     directory: { type: "string" },
     "public-config": { type: "string" },
     receipt: { type: "string" },
+    retain: { default: false, type: "boolean" },
     run: { type: "string" },
     stage: { type: "string" },
   },
@@ -63,6 +69,36 @@ const manifest =
   values.directory === undefined
     ? undefined
     : await verifyTrustedBuildFiles(values.directory, build);
+if (values.retain) {
+  if (manifest === undefined) {
+    throw new Error(
+      "Retaining CI evidence requires verified downloaded artifact files."
+    );
+  }
+  const destination = createReleaseStorageEnv();
+  if (destination.QUIETER_RELEASE_STAGE !== values.stage) {
+    throw new Error("Trusted build retention stage differs from verification.");
+  }
+  const storage = new S3Client({
+    maxAttempts: 1,
+    region: destination.AWS_REGION,
+    requestHandler: {
+      connectionTimeout: 5000,
+      requestTimeout: 15_000,
+      throwOnRequestTimeout: true,
+    },
+  });
+  try {
+    await new TrustedBuildReceiptStore(
+      storage,
+      destination.QUIETER_RELEASE_BUCKET,
+      destination.QUIETER_RELEASE_STAGE,
+      env.GITHUB_REPOSITORY
+    ).retain(manifest, build);
+  } finally {
+    storage.destroy();
+  }
+}
 await writeFile(
   values.receipt,
   JSON.stringify({ artifactDigest: manifest?.digest ?? null, build }, null, 2),

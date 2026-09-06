@@ -29,6 +29,7 @@ import {
   probeConfigurationSchema,
 } from "./schema.ts";
 import { SourceMapReceiptStore } from "./source-map-store.ts";
+import { TrustedBuildReceiptStore } from "./trusted-build-store.ts";
 import { ObjectUploadStore } from "./upload-store.ts";
 import { ReleaseUpload, uploadIntentSchema } from "./upload.ts";
 
@@ -121,12 +122,30 @@ const archive = {
   },
 };
 const preflight = new ReleasePreflight(artifacts, archive, provider, {
-  async verify(manifest) {
-    return await new SourceMapReceiptStore(
-      storage,
-      env.QUIETER_RELEASE_BUCKET,
-      createSourceMapDestinationEnv()
-    ).verify(manifest);
+  isolatedProof: env.QUIETER_RELEASE_STAGE.startsWith("release-proof-"),
+  sourceMaps: {
+    async verify(manifest) {
+      return await new SourceMapReceiptStore(
+        storage,
+        env.QUIETER_RELEASE_BUCKET,
+        createSourceMapDestinationEnv()
+      ).verify(manifest);
+    },
+  },
+  trustedBuilds: {
+    async verify(manifest) {
+      if (env.GITHUB_REPOSITORY === undefined) {
+        throw new Error(
+          "Trusted build preflight requires the reviewed repository identity."
+        );
+      }
+      return await new TrustedBuildReceiptStore(
+        storage,
+        env.QUIETER_RELEASE_BUCKET,
+        env.QUIETER_RELEASE_STAGE,
+        env.GITHUB_REPOSITORY
+      ).verify(manifest);
+    },
   },
 });
 const uploads = new ObjectUploadStore(

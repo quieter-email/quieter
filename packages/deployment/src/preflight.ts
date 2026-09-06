@@ -3,6 +3,7 @@ import type { AssetArchive } from "./assets.ts";
 import type { CloudflareRuntimeProvider } from "./cloudflare.ts";
 import type { HealthyRelease } from "./schema.ts";
 import type { SourceMapReceiptStore } from "./source-map-store.ts";
+import type { TrustedBuildReceiptStore } from "./trusted-build-store.ts";
 
 export class ReleasePreflight {
   private readonly artifacts: Pick<ReleaseArtifactStore, "read">;
@@ -11,23 +12,42 @@ export class ReleasePreflight {
   private readonly sourceMaps:
     | Pick<SourceMapReceiptStore, "verify">
     | undefined;
+  private readonly trustedBuilds:
+    | Pick<TrustedBuildReceiptStore, "verify">
+    | undefined;
+  private readonly isolatedProof: boolean;
 
   constructor(
     artifacts: Pick<ReleaseArtifactStore, "read">,
     archive: Pick<AssetArchive, "verify">,
     provider: Pick<CloudflareRuntimeProvider, "verifyArtifact">,
-    sourceMaps?: Pick<SourceMapReceiptStore, "verify">
+    options: {
+      sourceMaps?: Pick<SourceMapReceiptStore, "verify">;
+      trustedBuilds?: Pick<TrustedBuildReceiptStore, "verify">;
+      isolatedProof?: boolean;
+    } = {}
   ) {
     this.artifacts = artifacts;
     this.archive = archive;
     this.provider = provider;
-    this.sourceMaps = sourceMaps;
+    this.sourceMaps = options.sourceMaps;
+    this.trustedBuilds = options.trustedBuilds;
+    this.isolatedProof = options.isolatedProof ?? false;
   }
 
   async verify(release: HealthyRelease) {
     for (const service of release.services) {
       // oxlint-disable-next-line no-await-in-loop -- Check every retained artifact without unbounded storage requests.
       const manifest = await this.artifacts.read(service.artifactDigest);
+      if (!this.isolatedProof) {
+        if (this.trustedBuilds === undefined) {
+          throw new Error(
+            "Release preflight requires retained trusted build evidence."
+          );
+        }
+        // oxlint-disable-next-line no-await-in-loop -- Rollback uses retained CI evidence without depending on GitHub artifact availability.
+        await this.trustedBuilds.verify(manifest);
+      }
       if (manifest.artifact.provenance !== undefined) {
         if (this.sourceMaps === undefined) {
           throw new Error(

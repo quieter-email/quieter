@@ -23,6 +23,7 @@ import { ObjectReleaseJournal } from "../src/journal.ts";
 import { ReleasePreflight } from "../src/preflight.ts";
 import type { ReleaseState } from "../src/schema.ts";
 import { SourceMapReceiptStore } from "../src/source-map-store.ts";
+import { TrustedBuildReceiptStore } from "../src/trusted-build-store.ts";
 import { ObjectUploadStore } from "../src/upload-store.ts";
 
 const directories: string[] = [];
@@ -127,7 +128,7 @@ const build = async () => {
 
 describe("immutable archive and durable journal", () => {
   /* oxlint-disable vitest/max-expects -- Exercise the complete receipt gate, including missing, replayed, and corrupted evidence. */
-  it("requires immutable upload evidence for the configured project before controlled release preflight", async () => {
+  it("requires retained CI and source-map evidence for the configured destination before release preflight", async () => {
     const { client, objects } = objectStore();
     const artifact = artifactSchema.parse({
       assetRouting: {},
@@ -181,6 +182,12 @@ describe("immutable archive and durable journal", () => {
       url: "https://de.sentry.io" as const,
     };
     const maps = new SourceMapReceiptStore(client, "journal", destination);
+    const trustedBuilds = new TrustedBuildReceiptStore(
+      client,
+      "journal",
+      "test",
+      "quieter-email/quieter"
+    );
     const candidate = {
       id: "candidate",
       services: [
@@ -206,10 +213,37 @@ describe("immutable archive and durable journal", () => {
     };
     await expect(
       new ReleasePreflight(artifacts, archive, provider).verify(candidate)
-    ).rejects.toThrow("processing evidence");
-    const preflight = new ReleasePreflight(artifacts, archive, provider, maps);
+    ).rejects.toThrow("trusted build evidence");
+    const preflight = new ReleasePreflight(artifacts, archive, provider, {
+      sourceMaps: maps,
+      trustedBuilds,
+    });
     await expect(preflight.verify(candidate)).rejects.toThrow("Missing object");
     expect(provider.verifyArtifact).not.toHaveBeenCalled();
+    const trustedBuild = {
+      archiveDigest: "f".repeat(64),
+      artifactId: 123,
+      artifactName: "release-build",
+      lockfileDigest: "c".repeat(64),
+      publicConfigurationDigest: "d".repeat(64),
+      repository: "quieter-email/quieter",
+      runAttempt: 1,
+      runId: 456,
+      schemaVersion: 1 as const,
+      sourceSha: artifact.sourceSha,
+      sourceTree: "e".repeat(40),
+      stage: "test",
+    };
+    const trustedReceipt = await trustedBuilds.retain(manifest, trustedBuild);
+    await expect(
+      trustedBuilds.retain(manifest, { ...trustedBuild, runId: 789 })
+    ).resolves.toStrictEqual(trustedReceipt);
+    await expect(
+      new ReleasePreflight(artifacts, archive, provider, {
+        trustedBuilds,
+      }).verify(candidate)
+    ).rejects.toThrow("processing evidence");
+    await expect(preflight.verify(candidate)).rejects.toThrow("Missing object");
     const receipt = {
       ...destination,
       artifactDigest: manifest.digest,
@@ -230,6 +264,35 @@ describe("immutable archive and durable journal", () => {
       candidate.services[0].versionId,
       artifact
     );
+    await expect(
+      new TrustedBuildReceiptStore(
+        client,
+        "journal",
+        "test",
+        "wrong/repo"
+      ).verify(manifest)
+    ).rejects.toThrow("destination");
+    await expect(
+      trustedBuilds.retain(manifest, {
+        ...trustedBuild,
+        stage: "release-proof-forged",
+      })
+    ).rejects.toThrow("destination");
+    const trustedKey = `test/trusted-build-receipts/${manifest.digest}.json`;
+    objects.set(trustedKey, {
+      body: Buffer.from(
+        JSON.stringify({
+          ...trustedReceipt,
+          build: { ...trustedBuild, sourceTree: "f".repeat(40) },
+        })
+      ),
+      contentType: "application/json",
+      etag: "corrupt",
+    });
+    await expect(preflight.verify(candidate)).rejects.toThrow("destination");
+    objects.delete(trustedKey);
+    await expect(preflight.verify(candidate)).rejects.toThrow("Missing object");
+    await trustedBuilds.retain(manifest, trustedBuild);
     await expect(
       new SourceMapReceiptStore(client, "journal", {
         ...destination,
@@ -489,10 +552,13 @@ describe("immutable archive and durable journal", () => {
     await artifacts.write(release);
     await artifacts.write(release);
     expect(writes.filter((key) => key.includes("/artifacts/"))).toHaveLength(1);
-    const preflight = new ReleasePreflight(artifacts, archive, {
+    const provider = {
       verifyArtifact: vi
         .fn<CloudflareRuntimeProvider["verifyArtifact"]>()
         .mockResolvedValue(),
+    };
+    const preflight = new ReleasePreflight(artifacts, archive, provider, {
+      isolatedProof: true,
     });
     const candidate = {
       id: "candidate",
@@ -509,6 +575,9 @@ describe("immutable archive and durable journal", () => {
       ],
       sourceSha: artifact.sourceSha,
     };
+    await expect(
+      new ReleasePreflight(artifacts, archive, provider).verify(candidate)
+    ).rejects.toThrow("trusted build evidence");
     await preflight.verify(candidate);
     objects.delete(manifest.files[0].path);
     await expect(preflight.verify(candidate)).rejects.toThrow("Missing object");
