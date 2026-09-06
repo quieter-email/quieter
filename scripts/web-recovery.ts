@@ -166,7 +166,7 @@ if (import.meta.main) {
     expectedVersion,
     mode,
     recordFile,
-    release: process.env.QUIETER_BUILD_ID,
+    release: `${process.env.GITHUB_SHA ?? ""}-${process.env.GITHUB_RUN_ID ?? ""}`,
     token: process.env.CLOUDFLARE_API_TOKEN ?? "",
   });
 }
