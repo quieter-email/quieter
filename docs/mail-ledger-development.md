@@ -22,7 +22,9 @@ The dormant `@quieter/mail/ses-submission-transport` adapter uses one SDK attemp
 
 Idempotency retention is at least seven days. Nonterminal and unknown work needs longer retention. No cleanup currently deletes these records. Submission ownership uses restrictive foreign keys, so accepted work cannot disappear through organization or mailbox deletion. Before activation, deletion handlers need an explicit drain/cancel/retention procedure for this ownership constraint.
 
-Finalized reservations still need the existing usage-event and billing projection. Budget checks must count them until that projection commits, without charging twice. The existing v1 path must account for reservations before both paths operate together. The SDK contract, HTTP 201 versus replay 200, send-time suppression policy, quota reservation, signed feedback correlation, and scheduled recovery wiring remain disabled integration work.
+`@quieter/billing/mail-submission-usage` reserves confirmed usage plus outstanding reservations under the shared billing lock. Its entitlement reads use the acceptance transaction and reject stale billing state without contacting Polar; the caller refreshes billing before entering the transaction. Confirmed sends finalize their reservation and write usage and billing events in the same transaction. Final charges use confirmed usage and the retained credit allowance, so an earlier failed reservation cannot consume included credit. Unknown sends retain their reservations.
+
+Polar reporting must preserve delayed confirmation across billing-period boundaries. The existing v1 path must account for reservations before both paths operate together. The SDK contract, HTTP 201 versus replay 200, send-time suppression policy, quota reservation, signed feedback correlation, and scheduled recovery wiring remain disabled integration work.
 
 ## Disposable PostgreSQL verification
 
@@ -38,7 +40,7 @@ In another terminal, run the generated migration history and ledger tests:
 $env:MIGRATION_TEST_DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:55432/quieter_migration_test'
 vp run db:check
 vp run db:test-migrations
-vp test packages/database/tests/mail-outbox.integration.test.ts
+vp test packages/database/tests/mail-outbox.integration.test.ts packages/billing/tests/mail-submission-usage.integration.test.ts
 ```
 
 The migration test deliberately resets this disposable database. Both test entry points reject non-loopback hosts and require the exact `quieter_migration_test` database. Never point them at shared development. Stop and remove the fixture after testing:

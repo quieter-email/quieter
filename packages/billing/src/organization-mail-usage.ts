@@ -103,9 +103,10 @@ export const normalizeOrganizationMailAlertMilestones = (
   ].toSorted((left, right) => left - right);
 
 export const getOrganizationMailUsageSettings = async (
-  organizationId: string
+  organizationId: string,
+  database: Pick<typeof db, "select"> = db
 ): Promise<OrganizationMailUsageSettings> => {
-  const [settings] = await db
+  const [settings] = await database
     .select({
       alertMilestonePercents:
         organizationMailUsageSettings.alertMilestonePercents,

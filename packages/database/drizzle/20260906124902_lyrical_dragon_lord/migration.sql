@@ -1,0 +1,1 @@
+ALTER TABLE "mailUsageReservation" ADD COLUMN "creditAmountMicroCents" bigint DEFAULT 0 NOT NULL;

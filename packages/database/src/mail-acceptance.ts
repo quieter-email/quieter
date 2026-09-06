@@ -17,6 +17,7 @@ type LedgerTransaction = Parameters<
 export type MailAcceptanceBudget = Pick<
   typeof mailUsageReservation.$inferInsert,
   | "billableCostMicroCents"
+  | "creditAmountMicroCents"
   | "includedCostMicroCents"
   | "sesCostMicroCents"
   | "periodStart"

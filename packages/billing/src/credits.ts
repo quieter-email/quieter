@@ -121,8 +121,10 @@ const getBillingCreditUsageWithClient = async (
   };
 };
 
-export const getBillingCreditUsage = async (account: BillingAccount) =>
-  await getBillingCreditUsageWithClient(db, account);
+export const getBillingCreditUsage = async (
+  account: BillingAccount,
+  database: Pick<typeof db, "select"> = db
+) => await getBillingCreditUsageWithClient(database, account);
 
 export const recordBillingCreditUsage = async (input: {
   account: BillingAccount;

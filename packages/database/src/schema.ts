@@ -2707,6 +2707,9 @@ export const mailUsageReservation = pgTable(
       mode: "number",
     }).notNull(),
     createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    creditAmountMicroCents: bigint("creditAmountMicroCents", { mode: "number" })
+      .default(0)
+      .notNull(),
     includedCostMicroCents: bigint("includedCostMicroCents", {
       mode: "number",
     }).notNull(),
@@ -2740,6 +2743,10 @@ export const mailUsageReservation = pgTable(
     check(
       "mail_reservation_amounts_check",
       sql`${table.attachmentBytes} >= 0 AND ${table.billableCostMicroCents} >= 0 AND ${table.includedCostMicroCents} >= 0 AND ${table.sesCostMicroCents} >= 0 AND ${table.recipientCount} BETWEEN 1 AND 50 AND ${table.periodEnd} > ${table.periodStart}`
+    ),
+    check(
+      "mail_reservation_credit_check",
+      sql`${table.creditAmountMicroCents} >= 0`
     ),
   ]
 );

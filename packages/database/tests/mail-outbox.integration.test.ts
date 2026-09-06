@@ -30,11 +30,13 @@ import {
 } from "../src/mail-outbox.ts";
 import {
   mailSendAttempt,
+  billingCreditUsageEvent,
   mailFeedbackInbox,
   mailSubmission,
   mailSubmissionOutbox,
   mailUsageReservation,
   organization,
+  organizationMailUsageEvent,
 } from "../src/schema.ts";
 
 const databaseUrl = process.env.MIGRATION_TEST_DATABASE_URL;
@@ -44,6 +46,9 @@ describe.skipIf(databaseUrl === undefined)(
   () => {
     let database: DatabaseClient;
     let connection: ReturnType<typeof postgres>;
+    let fixtureLock: Awaited<
+      ReturnType<ReturnType<typeof postgres>["reserve"]>
+    >;
     const organizationId = randomUUID();
     const now = new Date();
 
@@ -105,6 +110,9 @@ describe.skipIf(databaseUrl === undefined)(
     beforeAll(async () => {
       assertLocalDatabaseUrl(databaseUrl ?? "", "quieter_migration_test");
       connection = postgres(databaseUrl ?? "", { max: 4 });
+      fixtureLock = await connection.reserve();
+      // Dispatchers scan across organizations; isolate suites sharing this disposable database.
+      await fixtureLock`select pg_advisory_lock(26920260906)`;
       database = drizzle({ client: connection });
       await database.insert(organization).values({
         createdAt: now,
@@ -114,6 +122,12 @@ describe.skipIf(databaseUrl === undefined)(
       });
     });
     beforeEach(async () => {
+      await database
+        .delete(billingCreditUsageEvent)
+        .where(eq(billingCreditUsageEvent.organizationId, organizationId));
+      await database
+        .delete(organizationMailUsageEvent)
+        .where(eq(organizationMailUsageEvent.organizationId, organizationId));
       await database
         .delete(mailFeedbackInbox)
         .where(eq(mailFeedbackInbox.source, organizationId));
@@ -155,6 +169,8 @@ describe.skipIf(databaseUrl === undefined)(
           .delete(organization)
           .where(eq(organization.id, organizationId));
       } finally {
+        await fixtureLock`select pg_advisory_unlock(26920260906)`;
+        fixtureLock.release();
         await connection.end();
       }
     });
@@ -497,6 +513,64 @@ describe.skipIf(databaseUrl === undefined)(
         .where(eq(mailSubmission.id, submissionId));
       expect(attempts).toHaveLength(0);
       expect(submission.status).toBe("queued");
+    });
+
+    it("does not charge overage for included credit held by an earlier failed reservation", async () => {
+      const earlier = await createSubmission();
+      const later = await createSubmission();
+      await database
+        .update(mailUsageReservation)
+        .set({ creditAmountMicroCents: 100 })
+        .where(eq(mailUsageReservation.organizationId, organizationId));
+      const input = {
+        async assertPolicy(
+          transaction: Parameters<
+            Parameters<DatabaseClient["transaction"]>[0]
+          >[0]
+        ) {
+          await transaction.execute(sql`select 1`);
+        },
+        organizationId,
+        owner: "sender",
+        region: "eu-central-1",
+      };
+      const first = await beginMailSendAttempt(database, {
+        ...input,
+        submissionId: earlier,
+      });
+      const second = await beginMailSendAttempt(database, {
+        ...input,
+        submissionId: later,
+      });
+      if (first === null || second === null) {
+        throw new Error("Expected both send attempts.");
+      }
+      await recordMailSendOutcome(database, first, {
+        code: "policy_rejected",
+        outcome: "rejected",
+      });
+      await recordMailSendOutcome(database, second, {
+        outcome: "accepted",
+        providerMessageId: "included-after-release",
+      });
+      await recordMailSendOutcome(database, second, {
+        outcome: "accepted",
+        providerMessageId: "included-after-release",
+      });
+      const events = await database
+        .select({
+          billable: billingCreditUsageEvent.billableCostMicroCents,
+          cost: billingCreditUsageEvent.costMicroCents,
+        })
+        .from(billingCreditUsageEvent)
+        .where(eq(billingCreditUsageEvent.organizationId, organizationId));
+      expect(events).toStrictEqual([{ billable: 0, cost: 100 }]);
+      const [settled] = await database
+        .select()
+        .from(mailUsageReservation)
+        .where(eq(mailUsageReservation.submissionId, later));
+      expect(settled.includedCostMicroCents).toBe(100);
+      expect(settled.billableCostMicroCents).toBe(0);
     });
 
     it("gives concurrent dispatchers different claims", async () => {

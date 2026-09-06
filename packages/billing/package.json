@@ -11,7 +11,8 @@
     "./plans": "./src/plans.ts",
     "./ses-pricing": "./src/ses-pricing.ts",
     "./subscription-sync": "./src/subscription-sync.ts",
-    "./organization-mail-usage": "./src/organization-mail-usage.ts"
+    "./organization-mail-usage": "./src/organization-mail-usage.ts",
+    "./mail-submission-usage": "./src/mail-submission-usage.ts"
   },
   "dependencies": {
     "@orpc/server": "catalog:",
@@ -26,6 +27,7 @@
   "devDependencies": {
     "@quieter/config": "workspace:*",
     "@types/node": "catalog:",
+    "postgres": "^3.4.9",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:"

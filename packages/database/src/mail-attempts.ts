@@ -1,13 +1,15 @@
 import { randomUUID } from "node:crypto";
 
-import { and, eq, inArray, lte, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, lte, sql } from "drizzle-orm";
 
 import type { DatabaseClient } from "./client.ts";
 import {
+  billingCreditUsageEvent,
   mailSendAttempt,
   mailSubmission,
   mailSubmissionOutbox,
   mailUsageReservation,
+  organizationMailUsageEvent,
 } from "./schema.ts";
 
 type LedgerTransaction = Parameters<
@@ -216,6 +218,81 @@ export const recordMailSendOutcome = async (
         .where(eq(mailUsageReservation.submissionId, submission.id));
     }
     if (outcome.outcome === "accepted") {
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`organization:${submission.organizationId}`}, 0))`
+      );
+      const [usage] = await transaction
+        .select({
+          cost: sql`coalesce(sum(${billingCreditUsageEvent.costMicroCents}), 0)`.mapWith(
+            Number
+          ),
+        })
+        .from(billingCreditUsageEvent)
+        .where(
+          and(
+            eq(
+              billingCreditUsageEvent.organizationId,
+              submission.organizationId
+            ),
+            gte(billingCreditUsageEvent.createdAt, reservation.periodStart),
+            lt(billingCreditUsageEvent.createdAt, reservation.periodEnd)
+          )
+        );
+      const used = usage?.cost ?? 0;
+      const cost =
+        reservation.billableCostMicroCents + reservation.includedCostMicroCents;
+      const billable =
+        Math.max(0, used + cost - reservation.creditAmountMicroCents) -
+        Math.max(0, used - reservation.creditAmountMicroCents);
+      if (
+        ![
+          used,
+          cost,
+          used + cost,
+          billable,
+          reservation.creditAmountMicroCents,
+        ].every((value) => Number.isSafeInteger(value) && value >= 0)
+      ) {
+        throw new Error(
+          "Confirmed mail usage exceeds the safe accounting range."
+        );
+      }
+      await transaction.insert(billingCreditUsageEvent).values({
+        billableCostMicroCents: billable,
+        category: "mail",
+        costMicroCents: cost,
+        createdAt: submission.acceptedAt,
+        dedupeKey: `mail:submission:${submission.id}`,
+        id: randomUUID(),
+        metadata: { direction: "outbound", submissionId: submission.id },
+        organizationId: submission.organizationId,
+        scope: "team",
+      });
+      await transaction.insert(organizationMailUsageEvent).values({
+        attachmentSizeBytes: submission.attachmentBytes,
+        billableCostMicroCents: billable,
+        createdAt: submission.acceptedAt,
+        dedupeKey: `outbound:submission:${submission.id}`,
+        direction: "outbound",
+        id: randomUUID(),
+        includedSesCostMicroCents: cost - billable,
+        incomingChunkCount: 0,
+        messageCount: submission.recipientCount,
+        messageSizeBytes: submission.messageBytes,
+        metadata: { submissionId: submission.id },
+        organizationId: submission.organizationId,
+        provider: "ses",
+        providerMessageId: outcome.providerMessageId,
+        recipientCount: submission.recipientCount,
+        sesCostMicroCents: reservation.sesCostMicroCents,
+      });
+      await transaction
+        .update(mailUsageReservation)
+        .set({
+          billableCostMicroCents: billable,
+          includedCostMicroCents: cost - billable,
+        })
+        .where(eq(mailUsageReservation.submissionId, submission.id));
       await transaction
         .insert(mailSubmissionOutbox)
         .values({
