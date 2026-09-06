@@ -165,6 +165,72 @@ describe("retained source-map identities", { timeout: 15_000 }, () => {
     );
   });
 
+  it.each([
+    {
+      expected: new Error(
+        "Application source content is missing from its source map."
+      ),
+      source: "fixture.ts",
+    },
+    { expected: 1, source: "../../node_modules/vendor/src/index.ts" },
+  ])(
+    "checks source-content coverage for $source",
+    async ({ source, expected }) => {
+      const { directory, manifest } = await buildFixture();
+      const { provenance } = manifest.artifact;
+      if (provenance === undefined) {
+        throw new Error("Expected controlled source-map fixture.");
+      }
+      const original = z
+        .looseObject({ sources: z.array(z.string()) })
+        .parse(
+          JSON.parse(
+            await readFile(
+              path.join(directory, "source-maps/server/index.js.map"),
+              "utf-8"
+            )
+          )
+        );
+      const bytes = Buffer.from(
+        JSON.stringify({
+          ...original,
+          sources: [source],
+          sourcesContent: [null],
+        })
+      );
+      await writeFile(
+        path.join(directory, "source-maps/server/index.js.map"),
+        bytes
+      );
+      const artifact = {
+        ...manifest.artifact,
+        provenance: {
+          ...provenance,
+          sourceMaps: provenance.sourceMaps.map((map) => ({
+            ...map,
+            bytes: bytes.byteLength,
+            digest: createHash("sha256").update(bytes).digest("hex"),
+          })),
+        },
+      };
+      const candidate = releaseArtifactSchema.parse({
+        ...manifest,
+        artifact,
+        digest: createHash("sha256")
+          .update(JSON.stringify(artifact))
+          .digest("hex"),
+      });
+      let result: unknown;
+      try {
+        const files = await verifyReleaseSourceMaps(candidate, directory);
+        result = files.length;
+      } catch (error) {
+        result = error;
+      }
+      expect(result).toStrictEqual(expected);
+    }
+  );
+
   it("uploads only verified pairs and removes the upload directory after processing", async () => {
     const fixture = await buildFixture();
     let uploadDirectory = "";

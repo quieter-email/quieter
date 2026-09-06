@@ -12,7 +12,7 @@ const mapSchema = z.object({
   debug_id: z.uuid(),
   mappings: z.string(),
   sources: z.array(z.string()),
-  sourcesContent: z.array(z.string()),
+  sourcesContent: z.array(z.string().nullable()),
   version: z.literal(3),
 });
 
@@ -116,6 +116,17 @@ export const verifyReleaseSourceMaps = async (
     const markers = [...code.matchAll(/\/\/# debugId=(?<id>[a-f\d-]{36})/gu)];
     const identity = `${file.digest}:${map.digest}`;
     const existing = identities.get(sourceMap.debug_id);
+    if (
+      sourceMap.sources.some(
+        (source, index) =>
+          sourceMap.sourcesContent[index] === null &&
+          !source.replaceAll("\\", "/").split("/").includes("node_modules")
+      )
+    ) {
+      throw new Error(
+        "Application source content is missing from its source map."
+      );
+    }
     if (
       markers.length !== 1 ||
       markers[0].groups?.id !== sourceMap.debug_id ||
