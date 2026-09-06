@@ -8,12 +8,16 @@ import { promisify } from "node:util";
 import { createWebReleaseEnvironment } from "@quieter/env/build";
 import SentryCli from "@sentry/cli";
 import { afterEach, describe, expect, it } from "vite-plus/test";
+import { z } from "zod";
 
 import {
   inventoryWorkerArtifact,
   releaseArtifactSchema,
 } from "../src/artifact.ts";
-import { verifyReleaseSourceMaps } from "../src/source-maps.ts";
+import {
+  prepareGeneratedSourceMaps,
+  verifyReleaseSourceMaps,
+} from "../src/source-maps.ts";
 
 // oxlint-disable-next-line strict-void-return -- promisify waits for the subprocess callback.
 const execute = promisify(execFile);
@@ -105,6 +109,35 @@ describe("retained source-map identities", () => {
     await expect(
       verifyReleaseSourceMaps(manifest, directory)
     ).resolves.toHaveLength(1);
+  });
+
+  it("maps known generated helpers to their actual source and rejects unmapped application code", async () => {
+    const { directory } = await buildFixture();
+    const generated =
+      "//#region \\0rolldown/runtime.js\nvar helper = Object.create;\n";
+    await writeFile(path.join(directory, "server/runtime.js"), generated);
+    await prepareGeneratedSourceMaps(directory);
+    const map = z
+      .object({
+        sources: z.array(z.string()),
+        sourcesContent: z.array(z.string()),
+      })
+      .parse(
+        JSON.parse(
+          await readFile(path.join(directory, "server/runtime.js.map"), "utf-8")
+        )
+      );
+    expect(map).toStrictEqual({
+      sources: ["generated/server/runtime.js"],
+      sourcesContent: [generated],
+    });
+    await writeFile(
+      path.join(directory, "server/application.js"),
+      "export function lostSource() {};"
+    );
+    await expect(prepareGeneratedSourceMaps(directory)).rejects.toThrow(
+      "missing its compiler source map"
+    );
   });
 
   it("rejects missing coverage before any source-map upload", async () => {

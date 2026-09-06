@@ -16,7 +16,10 @@ import {
 } from "./artifact.ts";
 import { inventoryAssets } from "./assets.ts";
 import { identifierSchema } from "./schema.ts";
-import { verifyReleaseSourceMaps } from "./source-maps.ts";
+import {
+  prepareGeneratedSourceMaps,
+  verifyReleaseSourceMaps,
+} from "./source-maps.ts";
 
 // oxlint-disable-next-line strict-void-return -- promisify waits for the subprocess callback.
 const execute = promisify(execFile);
@@ -164,6 +167,7 @@ export const buildWebRelease = async (input: {
     await run(vp, ["run", "--no-cache", task], buildEnvironment);
   }
   const builtDirectory = path.join(input.directory, "apps/web/dist");
+  await prepareGeneratedSourceMaps(builtDirectory);
   await run(
     SentryCli.getPath(),
     [
