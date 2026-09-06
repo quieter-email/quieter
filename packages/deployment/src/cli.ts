@@ -14,6 +14,7 @@ import type { AssetManifest } from "./assets.ts";
 import { CloudflareRuntimeProvider } from "./cloudflare.ts";
 import { assertCompatible } from "./compatibility.ts";
 import { ReleaseController } from "./controller.ts";
+import { createGitReleasePlan } from "./git-release-plan.ts";
 import { observeRelease, verifyReleaseHealth } from "./health.ts";
 import { ObjectReleaseJournal } from "./journal.ts";
 import { ReleasePreflight } from "./preflight.ts";
@@ -39,11 +40,13 @@ const { positionals, values } = parseArgs({
     reason: { type: "string" },
     rollback: { default: false, type: "boolean" },
     run: { type: "string" },
+    source: { type: "string" },
   },
 });
 const command = z
   .enum([
     "status",
+    "plan",
     "verify-artifacts",
     "register",
     "restore",
@@ -59,7 +62,7 @@ const command = z
   .parse(positionals[0]);
 const env = createDeploymentEnv();
 if (
-  !["status", "verify-artifacts"].includes(command) &&
+  !["status", "plan", "verify-artifacts"].includes(command) &&
   !env.QUIETER_RELEASE_STAGE.startsWith("release-proof-")
 ) {
   throw new Error(
@@ -140,7 +143,7 @@ const controller = new ReleaseController(journal, provider, preflight, {
 });
 const existing = await journal.read();
 if (
-  command !== "status" &&
+  !["status", "plan"].includes(command) &&
   existing !== null &&
   existing.state.healthy.services.some(
     (service) => !service.scriptName.includes(`-${env.QUIETER_RELEASE_STAGE}-`)
@@ -152,6 +155,29 @@ if (
 }
 // oxlint-disable-next-line default-case -- The validated command union is exhaustive.
 switch (command) {
+  case "plan": {
+    if (existing === null || values.source === undefined) {
+      throw new Error(
+        "Planning requires a healthy journal baseline and an exact --source commit."
+      );
+    }
+    if (
+      existing.state.attempt !== null &&
+      !["healthy", "rolled_back"].includes(existing.state.attempt.status)
+    ) {
+      throw new Error(
+        "Reconcile the unfinished release before calculating its successor."
+      );
+    }
+    const plan = await createGitReleasePlan({
+      baselineSha: existing.state.healthy.sourceSha,
+      directory:
+        values.directory ?? path.resolve(import.meta.dirname, "../../.."),
+      sourceSha: values.source,
+    });
+    process.stdout.write(`${JSON.stringify(plan, null, 2)}\n`);
+    break;
+  }
   case "restore": {
     if (values.directory === undefined || values.artifact === undefined) {
       throw new Error("Restore requires --artifact and a fresh --directory.");

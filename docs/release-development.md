@@ -4,6 +4,10 @@ Milestone A is in progress. Production still runs the legacy SST workflow. `@qui
 
 ## Implemented
 
+`release plan --source <full-commit-sha> --directory <absolute-checkout>` reads the journal's last healthy source and compares it with the exact candidate tree. Fetch complete Git history first. An unfinished release, missing ancestry, stale rerun, or divergent history blocks planning. The planner reads manifests from both commits and includes accumulated changes from skipped runs. It ignores uncommitted files.
+
+The current runtime registry lists the six Workers and three Lambda handlers that already exist. Workspace dependency coverage is conservative at package granularity, so a shared Cloudflare package change includes all its handlers. Dashboard-only source and UI changes do not include mail consumers. Root build tooling and lockfile changes invalidate every runtime; infrastructure and database schema changes require the foundation path. Unclassified files block runtime-only planning. This is a dependency plan, not build or authorization evidence. Trigger and ownership blockers remain explicit in each registration, and the eventual protected workflow must enforce them before activation.
+
 - A complete release map with artifact digests, binding generations, and dependency contracts.
 - Compatibility checks for intermediate promotion states and retained producer contracts after rollback.
 - Intent recorded before every pointer change, conditional journal updates, immutable checksummed checkpoints, and reconciliation of lost activation responses.
