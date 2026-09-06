@@ -13,6 +13,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { describe, expect, it, vi } from "vite-plus/test";
 
+import { mailStorageTestLimits } from "../../database/tests/mail-ledger-fixtures.ts";
 import { publishPendingMailSubmissions } from "../src/mail-submission-publisher-worker.ts";
 
 const url: unknown = Reflect.get(env, "MIGRATION_TEST_DATABASE_URL");
@@ -121,6 +122,7 @@ describe.skipIf(typeof url !== "string" || url === "")(
               sesCostMicroCents: 1,
             };
           },
+          storageLimits: mailStorageTestLimits,
         });
         const id = accepted.result.messageId;
         await expect(

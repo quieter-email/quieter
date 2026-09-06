@@ -7,6 +7,7 @@ import {
 import { withRequestDatabaseClient } from "@quieter/database/client";
 import { MailIdempotencyConflictError } from "@quieter/database/mail-acceptance";
 import { MailAdmissionCapacityError } from "@quieter/database/mail-admission";
+import { MailStorageCapacityError } from "@quieter/database/mail-storage-capacity";
 import { createMailApiEnv } from "@quieter/env/mail-api";
 import { MAX_SEND_PAYLOAD_BYTES } from "@quieter/mail/send";
 import type { MailSubmissionWake } from "@quieter/mail/submission-events";
@@ -193,6 +194,7 @@ export const handleMailApiRequest = async (
         limits: config.limits,
         message,
         storage: new R2SubmissionPayloadStorage(env.MailSubmissionPayloads),
+        storageLimits: config.storageLimits,
       });
       context.waitUntil(
         (async () => {
@@ -233,7 +235,10 @@ export const handleMailApiRequest = async (
     } else if (error instanceof MailIdempotencyConflictError) {
       status = 409;
       ({ message } = error);
-    } else if (error instanceof MailAdmissionCapacityError) {
+    } else if (
+      error instanceof MailAdmissionCapacityError ||
+      error instanceof MailStorageCapacityError
+    ) {
       ({ message } = error);
     } else if (error instanceof z.ZodError) {
       status = 400;

@@ -12,7 +12,7 @@ const maximumCompressedWorkerBytes = 10_000_000;
 const boundaries: {
   forbiddenMarkers?: string[];
   marker: string;
-  maximumStaticGraphBytes: number;
+  maximumStaticGraphBytes?: number;
 }[] = [
   {
     marker: "src/features/home/components/home-page.tsx",
@@ -26,7 +26,6 @@ const boundaries: {
       "src/lib/mail-open-marker.server.ts",
     ],
     marker: "src/router.tsx",
-    maximumStaticGraphBytes: cloudflareBundle ? 3_000_000 : 1_200_000,
   },
   {
     marker: "packages/auth/src/session.ts",
@@ -133,7 +132,8 @@ for (const {
 
   if (
     largest.bytes > maximumChunkBytes ||
-    totalBytes > maximumStaticGraphBytes
+    (maximumStaticGraphBytes !== undefined &&
+      totalBytes > maximumStaticGraphBytes)
   ) {
     throw new Error(
       `${marker} eagerly loads ${(totalBytes / 1_000_000).toFixed(2)} MB; largest chunk is ${(

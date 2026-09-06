@@ -14,6 +14,12 @@ try {
   const bundle = await rolldown({
     external: ["sst"],
     input: entrypoints,
+    onLog(level, log, handler) {
+      if (log.code === "UNRESOLVED_IMPORT") {
+        throw new Error(log.message);
+      }
+      handler(level, log);
+    },
     platform: "node",
   });
   try {

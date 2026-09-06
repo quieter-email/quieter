@@ -18,6 +18,7 @@ import { eq } from "drizzle-orm";
 import postgres from "postgres";
 import { describe, expect, it, vi } from "vite-plus/test";
 
+import { mailStorageTestLimits } from "../../database/tests/mail-ledger-fixtures.ts";
 import { handleMailApiRequest } from "../src/mail-api-worker.ts";
 import { reportWorkerError } from "../src/worker-runtime.ts";
 
@@ -73,6 +74,7 @@ describe.skipIf(typeof url !== "string" || url === "")(
         },
         organizationIds: [organizationId],
         schemaVersion: 1,
+        storageLimits: mailStorageTestLimits,
       };
       const bindings = {
         MailSubmissionPayloads: env.LocalMailStorage,

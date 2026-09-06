@@ -20,6 +20,12 @@ try {
   const bundle = await rolldown({
     external: ["cloudflare:workers", "sst", "sst/resource"],
     input: entrypoints,
+    onLog(level, log, handler) {
+      if (log.code === "UNRESOLVED_IMPORT") {
+        throw new Error(log.message);
+      }
+      handler(level, log);
+    },
     // Workers use nodejs_compat; match the AWS handler check target so Node builtins resolve.
     platform: "node",
   });

@@ -10,6 +10,7 @@ import { estimateOutboundOrganizationMailUsage } from "@quieter/billing/organiza
 import type { DatabaseClient } from "@quieter/database/client";
 import { acceptMailSubmission } from "@quieter/database/mail-acceptance";
 import type { MailAdmissionLimits } from "@quieter/database/mail-admission";
+import type { MailStorageLimits } from "@quieter/database/mail-storage-capacity";
 import {
   findMailSubmissionReplay,
   readMailSubmissionStatus,
@@ -36,6 +37,7 @@ export const acceptOrganizationMailSubmission = async (
     idempotencyKey: string;
     storage: SubmissionPayloadStorage;
     limits: MailAdmissionLimits;
+    storageLimits: MailStorageLimits;
   }
 ) => {
   if (!/^[\u0021-\u007E]{1,128}$/u.test(input.idempotencyKey)) {
@@ -108,6 +110,7 @@ export const acceptOrganizationMailSubmission = async (
     openTracking,
     organizationId,
     storage: input.storage,
+    storageLimits: input.storageLimits,
     transformHtml(html, messageHeaderId) {
       const transform = buildOpenTrackingHtmlTransform({
         messageHeaderId,
@@ -149,6 +152,7 @@ export const acceptOrganizationMailSubmission = async (
         sesCostMicroCents: estimate.sesCostMicroCents,
       });
     },
+    storageLimits: input.storageLimits,
   });
 };
 

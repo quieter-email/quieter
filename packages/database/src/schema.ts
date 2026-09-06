@@ -2563,6 +2563,10 @@ export const mailPayloadUpload = pgTable(
       table.id,
       table.organizationId
     ),
+    index("mail_payload_upload_storage_owner_idx").on(
+      table.organizationId,
+      table.id
+    ),
     index("mail_payload_upload_recovery_idx")
       .on(table.nextActionAt, table.id)
       .where(sql`${table.status} <> 'committed'`),
@@ -2641,6 +2645,11 @@ export const mailSubmission = pgTable(
       .$type<MailSubmissionStatus>()
       .default("queued")
       .notNull(),
+    storageBytes: integer("storageBytes")
+      .notNull()
+      .generatedAlwaysAs(
+        sql`greatest(octet_length("payload"::text), "messageBytes")`
+      ),
     updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
   },
   (table) => [
@@ -2651,6 +2660,10 @@ export const mailSubmission = pgTable(
     unique("mail_submission_id_organization_unique").on(
       table.id,
       table.organizationId
+    ),
+    index("mail_submission_storage_owner_idx").on(
+      table.organizationId,
+      table.id
     ),
     foreignKey({
       columns: [table.payloadUploadId, table.organizationId],

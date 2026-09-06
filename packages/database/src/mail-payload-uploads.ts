@@ -3,12 +3,18 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray, lte, ne, sql } from "drizzle-orm";
 
 import type { DatabaseClient } from "./client.ts";
+import { assertMailStorageCapacity } from "./mail-storage-capacity.ts";
+import type { MailStorageLimits } from "./mail-storage-capacity.ts";
 import { mailPayloadUpload, mailSubmission } from "./schema.ts";
 import type { MailPayloadObject } from "./schema.ts";
 
 export const createMailPayloadUpload = async (
   database: DatabaseClient,
-  input: { organizationId: string; objects: Omit<MailPayloadObject, "key">[] }
+  input: {
+    organizationId: string;
+    objects: Omit<MailPayloadObject, "key">[];
+    limits: MailStorageLimits;
+  }
 ) => {
   if (
     input.objects.length < 1 ||
@@ -24,22 +30,30 @@ export const createMailPayloadUpload = async (
   ) {
     throw new Error("Invalid bounded payload upload.");
   }
-  const id = randomUUID();
-  const [upload] = await database
-    .insert(mailPayloadUpload)
-    .values({
-      createdAt: sql`now()`,
-      expiresAt: sql`now() + interval '10 minutes'`,
-      id,
-      nextActionAt: sql`now() + interval '10 minutes'`,
-      objects: input.objects.map((object, index) => ({
-        ...object,
-        key: `submissions/${id}/${index}-${object.digest}`,
-      })),
+  return await database.transaction(async (transaction) => {
+    await assertMailStorageCapacity(transaction, {
+      bytes: input.objects.reduce((total, object) => total + object.bytes, 0),
+      kind: "upload",
+      limits: input.limits,
       organizationId: input.organizationId,
-    })
-    .returning();
-  return upload;
+    });
+    const id = randomUUID();
+    const [upload] = await transaction
+      .insert(mailPayloadUpload)
+      .values({
+        createdAt: sql`now()`,
+        expiresAt: sql`now() + interval '10 minutes'`,
+        id,
+        nextActionAt: sql`now() + interval '10 minutes'`,
+        objects: input.objects.map((object, index) => ({
+          ...object,
+          key: `submissions/${id}/${index}-${object.digest}`,
+        })),
+        organizationId: input.organizationId,
+      })
+      .returning();
+    return upload;
+  });
 };
 
 export const completeMailPayloadUpload = async (

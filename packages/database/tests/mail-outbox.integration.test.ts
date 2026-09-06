@@ -35,6 +35,7 @@ import {
   cleanupMailPayloadUploads,
 } from "../src/mail-payload-uploads.ts";
 import { storeMailSendCapacity } from "../src/mail-send-capacity.ts";
+import { assertMailStorageCapacity } from "../src/mail-storage-capacity.ts";
 import {
   findMailSubmissionReplay,
   readMailSubmissionStatus,
@@ -51,6 +52,7 @@ import {
   organization,
   organizationMailUsageEvent,
 } from "../src/schema.ts";
+import { mailStorageTestLimits } from "./mail-ledger-fixtures.ts";
 
 const databaseUrl = process.env.MIGRATION_TEST_DATABASE_URL;
 
@@ -309,6 +311,123 @@ describe.skipIf(databaseUrl === undefined)(
       ).resolves.toHaveLength(0);
     });
 
+    it("serializes upload storage reservations across organizations before any object write", async () => {
+      const otherOrganization = randomUUID();
+      await database.insert(organization).values({
+        createdAt: now,
+        id: otherOrganization,
+        name: "Storage fixture",
+        slug: otherOrganization,
+      });
+      try {
+        const results = await Promise.allSettled(
+          [organizationId, otherOrganization].map(
+            async (owner) =>
+              await createMailPayloadUpload(database, {
+                limits: {
+                  ...mailStorageTestLimits,
+                  global: {
+                    ...mailStorageTestLimits.global,
+                    maxPayloadUploads: 1,
+                  },
+                },
+                objects: [{ bytes: 3, digest: "a".repeat(64) }],
+                organizationId: owner,
+              })
+          )
+        );
+        expect(
+          results.filter((result) => result.status === "fulfilled")
+        ).toHaveLength(1);
+        expect(
+          results.filter((result) => result.status === "rejected")
+        ).toHaveLength(1);
+      } finally {
+        await database
+          .delete(mailPayloadUpload)
+          .where(eq(mailPayloadUpload.organizationId, otherOrganization));
+        await database
+          .delete(organization)
+          .where(eq(organization.id, otherOrganization));
+      }
+    });
+
+    it.each(["global", "organization"] as const)(
+      "keeps cleaned and late-write payload manifests within the %s byte cap",
+      async (scope) => {
+        const limits = {
+          ...mailStorageTestLimits,
+          [scope]: { ...mailStorageTestLimits[scope], maxPayloadBytes: 3 },
+        };
+        const upload = await createMailPayloadUpload(database, {
+          limits,
+          objects: [{ bytes: 3, digest: "a".repeat(64) }],
+          organizationId,
+        });
+        await database
+          .update(mailPayloadUpload)
+          .set({ status: "deleting" })
+          .where(eq(mailPayloadUpload.id, upload.id));
+        await expect(
+          createMailPayloadUpload(database, {
+            limits,
+            objects: [{ bytes: 1, digest: "b".repeat(64) }],
+            organizationId,
+          })
+        ).rejects.toThrow("storage is temporarily at capacity");
+        const uploads = await database
+          .select()
+          .from(mailPayloadUpload)
+          .where(eq(mailPayloadUpload.organizationId, organizationId));
+        expect(uploads).toHaveLength(1);
+      }
+    );
+
+    it.each(["global", "organization"] as const)(
+      "counts terminal submissions and retained JSON bytes against %s storage",
+      async (scope) => {
+        const id = await createSubmission();
+        await database
+          .update(mailSubmission)
+          .set({ completedAt: new Date(), status: "failed" })
+          .where(eq(mailSubmission.id, id));
+        const [stored] = await database
+          .select({ bytes: mailSubmission.storageBytes })
+          .from(mailSubmission)
+          .where(eq(mailSubmission.id, id));
+        expect(stored.bytes).toBeGreaterThan(10);
+        await expect(
+          database.transaction(async (transaction) => {
+            await assertMailStorageCapacity(transaction, {
+              bytes: 1,
+              kind: "submission",
+              limits: {
+                ...mailStorageTestLimits,
+                [scope]: {
+                  ...mailStorageTestLimits[scope],
+                  maxSubmissionBytes: stored.bytes,
+                },
+              },
+              organizationId,
+            });
+          })
+        ).rejects.toThrow("storage is temporarily at capacity");
+        await expect(
+          database.transaction(async (transaction) => {
+            await assertMailStorageCapacity(transaction, {
+              bytes: 1,
+              kind: "submission",
+              limits: {
+                ...mailStorageTestLimits,
+                [scope]: { ...mailStorageTestLimits[scope], maxSubmissions: 1 },
+              },
+              organizationId,
+            });
+          })
+        ).rejects.toThrow("storage is temporarily at capacity");
+      }
+    );
+
     it("claims prepared attachments atomically and keeps committed objects out of cleanup", async () => {
       const seedId = await createSubmission();
       const [seed] = await database
@@ -316,6 +435,7 @@ describe.skipIf(databaseUrl === undefined)(
         .from(mailSubmission)
         .where(eq(mailSubmission.id, seedId));
       const upload = await createMailPayloadUpload(database, {
+        limits: mailStorageTestLimits,
         objects: [{ bytes: 3, digest: "a".repeat(64) }],
         organizationId,
       });
@@ -368,6 +488,7 @@ describe.skipIf(databaseUrl === undefined)(
             sesCostMicroCents: 50,
           };
         },
+        storageLimits: mailStorageTestLimits,
       };
       await expect(
         acceptMailSubmission(database, {
@@ -407,6 +528,7 @@ describe.skipIf(databaseUrl === undefined)(
 
     it("fences expired uploads and revisits failed and late object writes", async () => {
       const upload = await createMailPayloadUpload(database, {
+        limits: mailStorageTestLimits,
         objects: [{ bytes: 3, digest: "a".repeat(64) }],
         organizationId,
       });
@@ -754,6 +876,7 @@ describe.skipIf(databaseUrl === undefined)(
             sesCostMicroCents: 100,
           };
         },
+        storageLimits: mailStorageTestLimits,
       };
       const results = await Promise.all([
         acceptMailSubmission(database, input),
@@ -838,6 +961,7 @@ describe.skipIf(databaseUrl === undefined)(
                 sesCostMicroCents: 100,
               };
             },
+            storageLimits: mailStorageTestLimits,
           })
         ).rejects.toThrow(error);
         const submissions = await database

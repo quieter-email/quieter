@@ -5,6 +5,7 @@ import {
   createMailPayloadUpload,
   completeMailPayloadUpload,
 } from "@quieter/database/mail-payload-uploads";
+import type { MailStorageLimits } from "@quieter/database/mail-storage-capacity";
 import type {
   MailPayloadObject,
   MailSubmissionPayload,
@@ -34,6 +35,7 @@ export const prepareMailSubmissionPayload = async (
     openTracking: boolean;
     transformHtml?: (html: string, messageHeaderId: string) => string;
     storage: SubmissionPayloadStorage;
+    storageLimits: MailStorageLimits;
   }
 ) => {
   const { message, requestHash } = normalizeMailSubmissionRequest(
@@ -82,6 +84,7 @@ export const prepareMailSubmissionPayload = async (
     objects.length === 0
       ? null
       : await createMailPayloadUpload(database, {
+          limits: input.storageLimits,
           objects,
           organizationId: input.organizationId,
         });

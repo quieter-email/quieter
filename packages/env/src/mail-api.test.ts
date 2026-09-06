@@ -12,6 +12,20 @@ describe("mail API configuration", () => {
     },
     organizationIds: ["fixture"],
     schemaVersion: 1,
+    storageLimits: {
+      global: {
+        maxPayloadBytes: 100_000_000,
+        maxPayloadUploads: 100,
+        maxSubmissionBytes: 100_000_000,
+        maxSubmissions: 100,
+      },
+      organization: {
+        maxPayloadBytes: 100_000_000,
+        maxPayloadUploads: 100,
+        maxSubmissionBytes: 100_000_000,
+        maxSubmissions: 100,
+      },
+    },
   };
 
   it("defaults to disabled and requires explicit bounded cohort configuration", () => {

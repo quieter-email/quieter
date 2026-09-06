@@ -8,6 +8,7 @@ import {
 } from "@quieter/database/mail-payload-uploads";
 import { describe, expect, test, vi, beforeEach } from "vite-plus/test";
 
+import { mailStorageTestLimits } from "../../database/tests/mail-ledger-fixtures.ts";
 import {
   prepareMailSubmissionPayload,
   readMailSubmissionMessage,
@@ -91,6 +92,7 @@ describe("submission payload preparation", () => {
       openTracking: true,
       organizationId: "organization",
       storage,
+      storageLimits: mailStorageTestLimits,
       transformHtml: (html) => `${html}<img src="https://example.com/pixel">`,
     });
     expect(prepared.payload).toMatchObject({
@@ -149,6 +151,7 @@ describe("submission payload preparation", () => {
             throw new Error("Storage unavailable.");
           },
         },
+        storageLimits: mailStorageTestLimits,
       })
     ).rejects.toThrow("Storage unavailable");
     expect(completeMailPayloadUpload).not.toHaveBeenCalled();
@@ -168,6 +171,7 @@ describe("submission payload preparation", () => {
         openTracking: false,
         organizationId: "organization",
         storage,
+        storageLimits: mailStorageTestLimits,
       })
     ).rejects.toThrow("reserved");
     expect(createMailPayloadUpload).not.toHaveBeenCalled();

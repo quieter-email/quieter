@@ -31,6 +31,7 @@ import {
 } from "vite-plus/test";
 
 import { assertLocalDatabaseUrl } from "../../database/scripts/local-development.ts";
+import { mailStorageTestLimits } from "../../database/tests/mail-ledger-fixtures.ts";
 import { reserveMailSubmissionUsage } from "../src/mail-submission-usage.ts";
 import { getPolarClient } from "../src/polar.ts";
 
@@ -94,6 +95,7 @@ describe.skipIf(databaseUrl === undefined)("transactional mail budgets", () => {
           sesCostMicroCents: 50,
         });
       },
+      storageLimits: mailStorageTestLimits,
     });
 
   beforeAll(async () => {

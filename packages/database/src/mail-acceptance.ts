@@ -6,6 +6,8 @@ import type { DatabaseClient } from "./client.ts";
 import { assertMailAdmissionCapacity } from "./mail-admission.ts";
 import type { MailAdmissionLimits } from "./mail-admission.ts";
 import { canonicalMailJson } from "./mail-ledger-json.ts";
+import { assertMailStorageCapacity } from "./mail-storage-capacity.ts";
+import type { MailStorageLimits } from "./mail-storage-capacity.ts";
 import { lockOrganizationUsage } from "./organization-usage-lock.ts";
 import {
   mailSubmission,
@@ -48,6 +50,7 @@ export const acceptMailSubmission = async (
     attachmentBytes: number;
     recipientCount: number;
     limits: MailAdmissionLimits;
+    storageLimits: MailStorageLimits;
     assertAuthorization: (transaction: LedgerTransaction) => Promise<void>;
     reserveBudget: (
       transaction: LedgerTransaction
@@ -95,6 +98,20 @@ export const acceptMailSubmission = async (
       limits: input.limits,
       organizationId: input.organizationId,
       payloadBytes: input.messageBytes + input.attachmentBytes,
+    });
+    const [storageSize] = await transaction
+      .select({
+        bytes:
+          sql`greatest(octet_length(${payload}::jsonb::text), ${input.messageBytes})`.mapWith(
+            Number
+          ),
+      })
+      .from(sql`(SELECT 1) AS new_submission_storage`);
+    await assertMailStorageCapacity(transaction, {
+      bytes: storageSize.bytes,
+      kind: "submission",
+      limits: input.storageLimits,
+      organizationId: input.organizationId,
     });
     // Callers must check authorization and budget through this transaction, without external I/O.
     if (input.payload.attachments.length > 0) {

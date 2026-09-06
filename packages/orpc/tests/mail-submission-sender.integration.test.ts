@@ -48,6 +48,7 @@ import {
   vi,
 } from "vite-plus/test";
 
+import { mailStorageTestLimits } from "../../database/tests/mail-ledger-fixtures.ts";
 import {
   applyMailSubmissionFeedback,
   recoverMailSubmissionFeedback,
@@ -115,8 +116,10 @@ describe.skipIf(databaseUrl === undefined)("durable submission sender", () => {
       openTracking: false,
       organizationId,
       storage,
+      storageLimits: mailStorageTestLimits,
     });
     const accepted = await acceptMailSubmission(database, {
+      storageLimits: mailStorageTestLimits,
       ...prepared,
       async assertAuthorization(transaction) {
         await transaction.execute(sql`select 1`);
@@ -344,6 +347,7 @@ describe.skipIf(databaseUrl === undefined)("durable submission sender", () => {
         limits,
         message,
         storage,
+        storageLimits: mailStorageTestLimits,
       };
       const first = await acceptOrganizationMailSubmission(database, input);
       expect(first).toMatchObject({
@@ -386,6 +390,7 @@ describe.skipIf(databaseUrl === undefined)("durable submission sender", () => {
         limits,
         message,
         storage,
+        storageLimits: mailStorageTestLimits,
       };
       await expect(
         acceptOrganizationMailSubmission(database, {
@@ -409,6 +414,52 @@ describe.skipIf(databaseUrl === undefined)("durable submission sender", () => {
       expect(objects.size).toBe(0);
     });
 
+    it("rejects storage exhaustion before uploading and replays a committed message at the storage limit", async () => {
+      const input = {
+        idempotencyKey: randomUUID(),
+        identity,
+        limits,
+        message,
+        storage,
+        storageLimits: mailStorageTestLimits,
+      };
+      await expect(
+        acceptOrganizationMailSubmission(database, {
+          ...input,
+          storageLimits: {
+            ...mailStorageTestLimits,
+            organization: {
+              ...mailStorageTestLimits.organization,
+              maxPayloadBytes: 1,
+            },
+          },
+        })
+      ).rejects.toThrow("storage is temporarily at capacity");
+      expect(objects.size).toBe(0);
+      const first = await acceptOrganizationMailSubmission(database, input);
+      const restricted = {
+        ...input,
+        storageLimits: {
+          ...mailStorageTestLimits,
+          organization: {
+            ...mailStorageTestLimits.organization,
+            maxPayloadUploads: 1,
+            maxSubmissions: 1,
+          },
+        },
+      };
+      await expect(
+        acceptOrganizationMailSubmission(database, restricted)
+      ).resolves.toStrictEqual({ replayed: true, result: first.result });
+      await expect(
+        acceptOrganizationMailSubmission(database, {
+          ...restricted,
+          idempotencyKey: randomUUID(),
+        })
+      ).rejects.toThrow("storage is temporarily at capacity");
+      expect(objects.size).toBe(1);
+    });
+
     it("rechecks revocation after uploading and rolls back the acceptance", async () => {
       const revokingStorage: SubmissionPayloadStorage = {
         ...storage,
@@ -427,6 +478,7 @@ describe.skipIf(databaseUrl === undefined)("durable submission sender", () => {
           limits,
           message,
           storage: revokingStorage,
+          storageLimits: mailStorageTestLimits,
         })
       ).rejects.toThrow("no longer authorized");
       const submissions = await database
@@ -448,6 +500,7 @@ describe.skipIf(databaseUrl === undefined)("durable submission sender", () => {
         limits,
         message,
         storage,
+        storageLimits: mailStorageTestLimits,
       };
       const accepted = await acceptOrganizationMailSubmission(database, input);
       await database
