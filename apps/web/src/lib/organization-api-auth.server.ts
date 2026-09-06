@@ -1,9 +1,17 @@
-import { verifyOrganizationApiKey } from "@quieter/auth/api-key-verification";
-
 export const getOrganizationApiKeyOrganizationId = async (
   request: Request
 ): Promise<string | null> => {
-  const identity = await verifyOrganizationApiKey(request);
+  const { verifyOrganizationApiKey, OrganizationApiKeyRateLimitError } =
+    await import("@quieter/auth/api-key-verification");
+  let identity: Awaited<ReturnType<typeof verifyOrganizationApiKey>>;
+  try {
+    identity = await verifyOrganizationApiKey(request);
+  } catch (error) {
+    if (error instanceof OrganizationApiKeyRateLimitError) {
+      return null;
+    }
+    throw error;
+  }
   if (identity === null) {
     return null;
   }

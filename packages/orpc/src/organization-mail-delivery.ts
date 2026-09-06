@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import { db } from "@quieter/database/client";
+import type { DatabaseClient } from "@quieter/database/client";
 import {
   mailbox,
   managedMailMessage,
@@ -791,9 +792,10 @@ export type OrganizationMailTrackingSettings = {
 };
 
 export const getOrganizationMailTrackingSettings = async (input: {
+  database?: DatabaseClient;
   organizationId: string;
 }): Promise<OrganizationMailTrackingSettings> => {
-  const [settings] = await db
+  const [settings] = await (input.database ?? db)
     .select({
       allowPerSendOverride:
         organizationMailTrackingSettings.allowPerSendOverride,
@@ -874,6 +876,7 @@ export const resolveEffectiveOpenTracking = (
 };
 
 export const resolveOrganizationMailOpenTracking = async (input: {
+  database?: DatabaseClient;
   openTracking?: boolean;
   organizationId: string;
 }) =>

@@ -1,6 +1,7 @@
 /// <reference types="node" />
 import { randomUUID } from "node:crypto";
 
+import { ORGANIZATION_API_KEY_CONFIG_ID } from "@quieter/auth/organization-api-key";
 import type { getOrganizationSubscriptionRecord } from "@quieter/billing/entitlements";
 import { reserveMailSubmissionUsage } from "@quieter/billing/mail-submission-usage";
 import type { DatabaseClient } from "@quieter/database/client";
@@ -14,6 +15,7 @@ import {
 } from "@quieter/database/mail-feedback-inbox";
 import { storeMailSendCapacity } from "@quieter/database/mail-send-capacity";
 import {
+  apikey,
   billingCreditUsageEvent,
   billingSubscription,
   mailDomain,
@@ -53,6 +55,10 @@ import {
 import { prepareMailSubmissionPayload } from "../src/mail-submission-payload.ts";
 import type { SubmissionPayloadStorage } from "../src/mail-submission-payload.ts";
 import { dispatchMailSubmission } from "../src/mail-submission-sender.ts";
+import {
+  acceptOrganizationMailSubmission,
+  getOrganizationMailSubmission,
+} from "../src/mail-submission-service.ts";
 
 vi.mock(import("@quieter/billing/entitlements"), async (importOriginal) => ({
   ...(await importOriginal()),
@@ -69,6 +75,7 @@ describe.skipIf(databaseUrl === undefined)("durable submission sender", () => {
   let fixtureLock: Awaited<ReturnType<ReturnType<typeof postgres>["reserve"]>>;
   const organizationId = randomUUID();
   const userId = randomUUID();
+  const identity = { id: randomUUID(), keyHash: randomUUID(), organizationId };
   const domain = `${organizationId}.example.com`;
   const capacityKey = "000000000270:eu-central-1";
   const expectedSource = "arn:aws:sns:eu-central-1:000000000270:feedback";
@@ -258,6 +265,15 @@ describe.skipIf(databaseUrl === undefined)("durable submission sender", () => {
       status: "verified",
       updatedAt: now,
     });
+    await database.insert(apikey).values({
+      configId: ORGANIZATION_API_KEY_CONFIG_ID,
+      createdAt: now,
+      enabled: true,
+      id: identity.id,
+      key: identity.keyHash,
+      referenceId: organizationId,
+      updatedAt: now,
+    });
   });
   beforeEach(async () => {
     await clearLedger();
@@ -272,8 +288,12 @@ describe.skipIf(databaseUrl === undefined)("durable submission sender", () => {
       .where(eq(mailDomain.organizationId, organizationId));
     await database
       .update(billingSubscription)
-      .set({ updatedAt: new Date() })
+      .set({ status: "active", updatedAt: new Date() })
       .where(eq(billingSubscription.organizationId, organizationId));
+    await database
+      .update(apikey)
+      .set({ enabled: true })
+      .where(eq(apikey.id, identity.id));
     await storeMailSendCapacity(database, {
       accountId: "000000000270",
       max24HourSend: 100,
@@ -291,6 +311,7 @@ describe.skipIf(databaseUrl === undefined)("durable submission sender", () => {
     }
     try {
       await clearLedger();
+      await database.delete(apikey).where(eq(apikey.id, identity.id));
       await database
         .delete(organization)
         .where(eq(organization.id, organizationId));
@@ -300,6 +321,177 @@ describe.skipIf(databaseUrl === undefined)("durable submission sender", () => {
       fixtureLock.release();
       await connection.end();
     }
+  });
+
+  describe("organization API acceptance", () => {
+    const message = {
+      attachments: [{ content: "Zml4dHVyZQ==", filename: "fixture.txt" }],
+      from: `sender@${domain}`,
+      subject: "accepted fixture",
+      text: "fixture",
+      to: ["reader@example.com"],
+    };
+    const limits = {
+      global: { maxPending: 100, maxPendingBytes: 100_000_000 },
+      maxQueuedAgeSeconds: 3600,
+      organization: { maxPending: 100, maxPendingBytes: 100_000_000 },
+    };
+
+    it("returns the original acceptance on retry without another upload or reservation", async () => {
+      const input = {
+        idempotencyKey: randomUUID(),
+        identity,
+        limits,
+        message,
+        storage,
+      };
+      const first = await acceptOrganizationMailSubmission(database, input);
+      expect(first).toMatchObject({
+        replayed: false,
+        result: { status: "queued" },
+      });
+      const objectCount = objects.size;
+      await expect(
+        acceptOrganizationMailSubmission(database, input)
+      ).resolves.toStrictEqual({
+        replayed: true,
+        result: first.result,
+      });
+      const reservations = await database
+        .select()
+        .from(mailUsageReservation)
+        .where(eq(mailUsageReservation.organizationId, organizationId));
+      const events = await database
+        .select()
+        .from(mailSubmissionOutbox)
+        .where(eq(mailSubmissionOutbox.organizationId, organizationId));
+      expect({
+        events: events.length,
+        reservations: reservations.length,
+        sent: "sent" in first.result,
+      }).toStrictEqual({ events: 1, reservations: 1, sent: false });
+      await expect(
+        acceptOrganizationMailSubmission(database, {
+          ...input,
+          message: { ...message, subject: "changed" },
+        })
+      ).rejects.toThrow("different message");
+      expect(objects.size).toBe(objectCount);
+    });
+
+    it("rejects malformed keys and revoked authorization before storing content", async () => {
+      const input = {
+        idempotencyKey: randomUUID(),
+        identity,
+        limits,
+        message,
+        storage,
+      };
+      await expect(
+        acceptOrganizationMailSubmission(database, {
+          ...input,
+          idempotencyKey: "",
+        })
+      ).rejects.toThrow("Idempotency-Key");
+      await expect(
+        acceptOrganizationMailSubmission(database, {
+          ...input,
+          message: { ...message, idempotencyKey: "different" },
+        })
+      ).rejects.toThrow("must match");
+      await database
+        .update(apikey)
+        .set({ enabled: false })
+        .where(eq(apikey.id, identity.id));
+      await expect(
+        acceptOrganizationMailSubmission(database, input)
+      ).rejects.toThrow("no longer authorized");
+      expect(objects.size).toBe(0);
+    });
+
+    it("rechecks revocation after uploading and rolls back the acceptance", async () => {
+      const revokingStorage: SubmissionPayloadStorage = {
+        ...storage,
+        async write(object, bytes) {
+          await storage.write(object, bytes);
+          await database
+            .update(apikey)
+            .set({ enabled: false })
+            .where(eq(apikey.id, identity.id));
+        },
+      };
+      await expect(
+        acceptOrganizationMailSubmission(database, {
+          idempotencyKey: randomUUID(),
+          identity,
+          limits,
+          message,
+          storage: revokingStorage,
+        })
+      ).rejects.toThrow("no longer authorized");
+      const submissions = await database
+        .select()
+        .from(mailSubmission)
+        .where(eq(mailSubmission.organizationId, organizationId));
+      expect(submissions).toHaveLength(0);
+      const reservations = await database
+        .select()
+        .from(mailUsageReservation)
+        .where(eq(mailUsageReservation.organizationId, organizationId));
+      expect(reservations).toHaveLength(0);
+    });
+
+    it("keeps owned status readable after billing ends but prevents new acceptance and revoked reads", async () => {
+      const input = {
+        idempotencyKey: randomUUID(),
+        identity,
+        limits,
+        message,
+        storage,
+      };
+      const accepted = await acceptOrganizationMailSubmission(database, input);
+      await database
+        .update(billingSubscription)
+        .set({ status: "canceled" })
+        .where(eq(billingSubscription.organizationId, organizationId));
+      await expect(
+        getOrganizationMailSubmission(database, {
+          identity,
+          messageId: accepted.result.messageId,
+        })
+      ).resolves.toMatchObject({
+        messageId: accepted.result.messageId,
+        status: "queued",
+      });
+      await expect(
+        acceptOrganizationMailSubmission(database, {
+          ...input,
+          idempotencyKey: randomUUID(),
+        })
+      ).rejects.toThrow("active eligible plan");
+      await expect(
+        getOrganizationMailSubmission(database, {
+          identity,
+          messageId: randomUUID(),
+        })
+      ).resolves.toBeNull();
+      await expect(
+        getOrganizationMailSubmission(database, {
+          identity: { ...identity, organizationId: randomUUID() },
+          messageId: accepted.result.messageId,
+        })
+      ).rejects.toThrow("no longer authorized");
+      await database
+        .update(apikey)
+        .set({ enabled: false })
+        .where(eq(apikey.id, identity.id));
+      await expect(
+        getOrganizationMailSubmission(database, {
+          identity,
+          messageId: accepted.result.messageId,
+        })
+      ).rejects.toThrow("no longer authorized");
+    });
   });
 
   it("sends one prepared message across concurrent queue deliveries and settles usage once", async () => {

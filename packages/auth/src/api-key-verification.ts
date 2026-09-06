@@ -22,7 +22,10 @@ const verifier = betterAuth({
   database: drizzleAdapter(db, { provider: "pg", schema: tables }),
   logger: {
     log(level, _message, ...args) {
-      if (level !== "error" || args.some((value) => isAPIError(value))) {
+      if (
+        level !== "error" ||
+        args.some((value) => isAPIError(value) && value.statusCode < 500)
+      ) {
         return;
       }
       const state = verificationState.getStore();
@@ -45,6 +48,14 @@ export class OrganizationApiKeyAuthorizationError extends Error {
   constructor() {
     super("The API key is no longer authorized.");
     this.name = "OrganizationApiKeyAuthorizationError";
+  }
+}
+
+// oxlint-disable-next-line max-classes-per-file -- Callers distinguish invalid credentials from retryable quota exhaustion.
+export class OrganizationApiKeyRateLimitError extends Error {
+  constructor() {
+    super("API request limit reached. Retry with the same idempotency key.");
+    this.name = "OrganizationApiKeyRateLimitError";
   }
 }
 
@@ -86,6 +97,12 @@ export const verifyOrganizationApiKey = async (
     verified.key === null ||
     verified.key.configId !== ORGANIZATION_API_KEY_CONFIG_ID
   ) {
+    if (
+      verified.error?.code === "RATE_LIMITED" ||
+      verified.error?.code === "USAGE_EXCEEDED"
+    ) {
+      throw new OrganizationApiKeyRateLimitError();
+    }
     return null;
   }
   return {

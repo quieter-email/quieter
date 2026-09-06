@@ -18,6 +18,7 @@ import {
 } from "@quieter/mail/send";
 
 import { normalizeMailSubmissionRequest } from "./mail-submission-request.ts";
+import { OrganizationMailSendError } from "./organization-mail-policy.ts";
 
 export type SubmissionPayloadStorage = {
   write: (object: MailPayloadObject, bytes: Uint8Array) => Promise<void>;
@@ -42,8 +43,9 @@ export const prepareMailSubmissionPayload = async (
     message.attachments.length > 50 ||
     message.tags.some((tag) => tag.name.toLowerCase().startsWith("quieter_"))
   ) {
-    throw new Error(
-      "Submission attachments or tags exceed the supported contract."
+    throw new OrganizationMailSendError(
+      "Submission attachments or tags exceed the supported contract.",
+      400
     );
   }
   const preparedAt = new Date();
@@ -57,12 +59,17 @@ export const prepareMailSubmissionPayload = async (
     { messageId: messageHeaderId, sentAt: preparedAt }
   );
   const recipientCount = new Set([...built.to, ...built.cc, ...built.bcc]).size;
-  if (
-    recipientCount < 1 ||
-    recipientCount > 50 ||
-    built.rawSizeBytes > MAX_SEND_PAYLOAD_BYTES
-  ) {
-    throw new Error("Submission exceeds the recipient or message size limit.");
+  if (recipientCount < 1 || recipientCount > 50) {
+    throw new OrganizationMailSendError(
+      "Submission exceeds the recipient limit.",
+      400
+    );
+  }
+  if (built.rawSizeBytes > MAX_SEND_PAYLOAD_BYTES) {
+    throw new OrganizationMailSendError(
+      "Submission exceeds the message size limit.",
+      413
+    );
   }
   const content = message.attachments.map(
     (attachment) => new Uint8Array(Buffer.from(attachment.content, "base64"))

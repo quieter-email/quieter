@@ -8,6 +8,8 @@ import {
 } from "@quieter/mail/send";
 import { z } from "zod";
 
+import { OrganizationMailSendError } from "./organization-mail-policy.ts";
+
 const submissionRequestSchema = sendMessageInputSchema
   .safeExtend({
     idempotencyKey: z
@@ -23,11 +25,17 @@ export const normalizeMailSubmissionRequest = (input: unknown) => {
     serialized === undefined ||
     Buffer.byteLength(serialized) > MAX_SEND_PAYLOAD_BYTES
   ) {
-    throw new Error("Submission exceeds the acceptance limit.");
+    throw new OrganizationMailSendError(
+      "Submission exceeds the acceptance limit.",
+      413
+    );
   }
   const message = submissionRequestSchema.parse(input);
   if (message.attachments.length > 50) {
-    throw new Error("Submission attachments exceed the supported contract.");
+    throw new OrganizationMailSendError(
+      "Submission attachments exceed the supported contract.",
+      400
+    );
   }
   const normalized = {
     attachments: message.attachments.map((attachment) => {

@@ -4,6 +4,11 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
+    "./mail-api": {
+      "types": "./src/mail-api.ts",
+      "development": "./src/mail-api.ts",
+      "default": "./dist/mail-api.js"
+    },
     "./build": {
       "types": "./src/build.ts",
       "development": "./src/build.ts",
