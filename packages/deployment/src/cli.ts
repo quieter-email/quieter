@@ -18,6 +18,7 @@ import { CloudflareRuntimeProvider } from "./cloudflare.ts";
 import { assertCompatible } from "./compatibility.ts";
 import { ReleaseController } from "./controller.ts";
 import {
+  assembleReleaseCandidate,
   createGitReleasePlan,
   verifyPlannedRelease,
 } from "./git-release-plan.ts";
@@ -46,6 +47,7 @@ const { positionals, values } = parseArgs({
     file: { type: "string" },
     probes: { type: "string" },
     reason: { type: "string" },
+    release: { type: "string" },
     rollback: { default: false, type: "boolean" },
     run: { type: "string" },
     source: { type: "string" },
@@ -55,6 +57,8 @@ const command = z
   .enum([
     "status",
     "plan",
+    "candidate",
+    "select-rollback",
     "verify-artifacts",
     "register",
     "restore",
@@ -70,7 +74,9 @@ const command = z
   .parse(positionals[0]);
 const env = createDeploymentEnv();
 if (
-  !["status", "plan", "verify-artifacts"].includes(command) &&
+  !["status", "plan", "select-rollback", "verify-artifacts"].includes(
+    command
+  ) &&
   !env.QUIETER_RELEASE_STAGE.startsWith("release-proof-")
 ) {
   throw new Error(
@@ -177,7 +183,7 @@ const controller = new ReleaseController(journal, provider, preflight, {
 });
 const existing = await journal.read();
 if (
-  !["status", "plan"].includes(command) &&
+  !["status", "plan", "select-rollback"].includes(command) &&
   existing !== null &&
   existing.state.healthy.services.some(
     (service) => !service.scriptName.includes(`-${env.QUIETER_RELEASE_STAGE}-`)
@@ -189,6 +195,83 @@ if (
 }
 // oxlint-disable-next-line default-case -- The validated command union is exhaustive.
 switch (command) {
+  case "candidate": {
+    if (
+      existing === null ||
+      values.file === undefined ||
+      values.source === undefined ||
+      values.release === undefined
+    ) {
+      throw new Error(
+        "Candidate requires a healthy baseline, --release ID, --source SHA, and an upload ID array in --file."
+      );
+    }
+    if (
+      existing.state.attempt !== null &&
+      !["healthy", "rolled_back"].includes(existing.state.attempt.status)
+    ) {
+      throw new Error("Reconcile the unfinished release before its successor.");
+    }
+    const ids = z
+      .array(z.uuid())
+      .min(1)
+      .max(existing.state.healthy.services.length)
+      .parse(JSON.parse(await readFile(values.file, "utf-8")));
+    const receipts = [];
+    for (const id of ids) {
+      // oxlint-disable-next-line no-await-in-loop -- Fence provider inspection to the recorded stage before reconciling the upload.
+      const intent = await uploads.read(id);
+      if (
+        !existing.state.healthy.services.some(
+          (service) => service.scriptName === intent.scriptName
+        )
+      ) {
+        throw new Error(
+          "The upload targets a Worker outside the healthy release."
+        );
+      }
+      // oxlint-disable-next-line no-await-in-loop -- Reuse completed uploads and verify their actual bytes, inherited bindings, and unchanged deployment.
+      receipts.push(await uploader.reconcile(id));
+    }
+    const candidate = assembleReleaseCandidate({
+      baseline: existing.state.healthy,
+      id: values.release,
+      receipts,
+      sourceSha: values.source,
+    });
+    await verifyPlannedRelease(
+      {
+        baseline: existing.state.healthy,
+        candidate,
+        plan: await createGitReleasePlan({
+          baselineSha: existing.state.healthy.sourceSha,
+          directory:
+            values.directory ?? path.resolve(import.meta.dirname, "../../.."),
+          sourceSha: values.source,
+        }),
+      },
+      artifacts
+    );
+    process.stdout.write(`${JSON.stringify(candidate, null, 2)}\n`);
+    break;
+  }
+  case "select-rollback": {
+    const candidates =
+      existing?.state.history.filter(
+        (release) => release.id !== existing.state.healthy.id
+      ) ?? [];
+    const selected =
+      values.release === undefined
+        ? candidates.at(-1)
+        : candidates.findLast((release) => release.id === values.release);
+    if (selected === undefined) {
+      throw new Error(
+        "There is no matching retained healthy release to roll back to."
+      );
+    }
+    process.stdout.write(`${JSON.stringify(selected, null, 2)}\n`);
+    break;
+  }
   case "plan": {
     if (existing === null || values.source === undefined) {
       throw new Error(

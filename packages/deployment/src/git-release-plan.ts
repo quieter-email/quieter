@@ -8,6 +8,8 @@ import type { ReleaseArtifactStore } from "./artifact-store.ts";
 import { planPromotion } from "./compatibility.ts";
 import { runtimeRegistry } from "./registry.ts";
 import type { HealthyRelease } from "./schema.ts";
+import { healthyReleaseSchema } from "./schema.ts";
+import type { UploadReceipt } from "./upload.ts";
 
 // oxlint-disable-next-line strict-void-return -- Node's callback API returns a ChildProcess while promisify waits for its callback.
 const execute = promisify(execFile);
@@ -160,4 +162,52 @@ export const verifyPlannedRelease = async (
       throw new Error("A changed runtime was built for a different service.");
     }
   }
+};
+
+export const assembleReleaseCandidate = (input: {
+  baseline: HealthyRelease;
+  id: string;
+  sourceSha: string;
+  receipts: UploadReceipt[];
+}): HealthyRelease => {
+  const { baseline, receipts } = input;
+  if (
+    receipts.length === 0 ||
+    new Set(receipts.map((receipt) => receipt.intent.scriptName)).size !==
+      receipts.length ||
+    receipts.some(
+      (receipt) =>
+        !baseline.services.some(
+          (service) => service.scriptName === receipt.intent.scriptName
+        )
+    )
+  ) {
+    throw new Error("Choose one retained upload per existing changed runtime.");
+  }
+  const services = baseline.services.map((service) => {
+    const receipt = receipts.find(
+      (upload) => upload.intent.scriptName === service.scriptName
+    );
+    if (receipt === undefined) {
+      return service;
+    }
+    if (
+      receipt.intent.baseline.versionId !== service.versionId ||
+      receipt.versionId === service.versionId
+    ) {
+      throw new Error(
+        "The upload does not replace the current healthy version."
+      );
+    }
+    return {
+      ...service,
+      artifactDigest: receipt.intent.artifactDigest,
+      versionId: receipt.versionId,
+    };
+  });
+  return healthyReleaseSchema.parse({
+    id: input.id,
+    services,
+    sourceSha: input.sourceSha,
+  });
 };
