@@ -57,6 +57,8 @@ The locally installed Cloudflare Pulumi package is `6.15.0`, matching `sst.confi
 
 ## Guarantees and limits
 
+Implementation verification found that Hyperdrive documents advisory locks as unsupported. New acceptance, admission, and credit settlement must use transaction-held row locks. The existing synchronous mail session lock is a migration blocker; passing direct PostgreSQL or Miniflare tests does not certify hosted pooling behavior. See [Hyperdrive supported features](https://developers.cloudflare.com/hyperdrive/reference/supported-databases-and-features/).
+
 ### Release guarantees
 
 1. Build, test, archive, and candidate-smoke failures do not activate the candidate.

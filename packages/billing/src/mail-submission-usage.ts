@@ -1,6 +1,7 @@
 import { ORPCError } from "@orpc/server";
 import type { DatabaseClient } from "@quieter/database/client";
 import type { MailAcceptanceBudget } from "@quieter/database/mail-acceptance";
+import { lockOrganizationUsage } from "@quieter/database/organization-usage-lock";
 import { mailUsageReservation } from "@quieter/database/schema";
 import { and, eq, sql } from "drizzle-orm";
 
@@ -19,9 +20,7 @@ export const reserveMailSubmissionUsage = async (
   ) {
     throw new Error("Invalid mail usage estimate.");
   }
-  await transaction.execute(
-    sql`select pg_advisory_xact_lock(hashtextextended(${`organization:${input.organizationId}`}, 0))`
-  );
+  await lockOrganizationUsage(transaction, input.organizationId);
   const entitlement = await getOrganizationBillingEntitlement({
     database: transaction,
     feature: "organizationMail",

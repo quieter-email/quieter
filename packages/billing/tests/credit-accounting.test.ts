@@ -47,6 +47,9 @@ describe("credit accounting with PostgreSQL numeric aggregates", () => {
     vi.clearAllMocks();
     // oxlint-disable-next-line require-await
     mocks.query.mockImplementation(async (query) => {
+      if (query.includes('from "organization"')) {
+        return { rows: [["team-a"]] };
+      }
       if (query.includes("group by")) {
         return { rows: [["78000000", "aiChat"]] };
       }

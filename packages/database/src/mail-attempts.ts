@@ -4,6 +4,7 @@ import { and, eq, gte, inArray, lt, lte, sql } from "drizzle-orm";
 
 import type { DatabaseClient } from "./client.ts";
 import { reserveMailSendCapacity } from "./mail-send-capacity.ts";
+import { lockOrganizationUsage } from "./organization-usage-lock.ts";
 import {
   billingCreditUsageEvent,
   mailSendAttempt,
@@ -233,9 +234,7 @@ export const recordMailSendOutcome = async (
         .where(eq(mailUsageReservation.submissionId, submission.id));
     }
     if (outcome.outcome === "accepted") {
-      await transaction.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${`organization:${submission.organizationId}`}, 0))`
-      );
+      await lockOrganizationUsage(transaction, submission.organizationId);
       const [usage] = await transaction
         .select({
           cost: sql`coalesce(sum(${billingCreditUsageEvent.costMicroCents}), 0)`.mapWith(

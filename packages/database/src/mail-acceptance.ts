@@ -6,6 +6,7 @@ import type { DatabaseClient } from "./client.ts";
 import { assertMailAdmissionCapacity } from "./mail-admission.ts";
 import type { MailAdmissionLimits } from "./mail-admission.ts";
 import { canonicalMailJson } from "./mail-ledger-json.ts";
+import { lockOrganizationUsage } from "./organization-usage-lock.ts";
 import {
   mailSubmission,
   mailPayloadUpload,
@@ -65,10 +66,7 @@ export const acceptMailSubmission = async (
   }
   const payloadDigest = createHash("sha256").update(payload).digest("hex");
   return await database.transaction(async (transaction) => {
-    // Share the legacy mail budget lock until all senders use reservations.
-    await transaction.execute(
-      sql`select pg_advisory_xact_lock(hashtextextended(${input.organizationId}, 0))`
-    );
+    await lockOrganizationUsage(transaction, input.organizationId);
     await input.assertAuthorization(transaction);
     const [existing] = await transaction
       .select({

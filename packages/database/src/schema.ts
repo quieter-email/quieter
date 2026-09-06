@@ -2707,6 +2707,12 @@ export const mailSubmission = pgTable(
   ]
 );
 
+export const mailAdmissionGate = pgTable(
+  "mailAdmissionGate",
+  { id: integer("id").primaryKey() },
+  (table) => [check("mail_admission_single_gate", sql`${table.id} = 1`)]
+);
+
 export const mailSendCapacity = pgTable(
   "mailSendCapacity",
   {
@@ -3174,6 +3180,7 @@ export const tables = {
   gmailUsefulDetailSettings,
   gmailWatchState,
   invitation,
+  mailAdmissionGate,
   mailAutoLabelFeedback,
   mailAutomationMemoryProfile,
   mailDomain,

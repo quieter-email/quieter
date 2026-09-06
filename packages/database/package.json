@@ -4,6 +4,7 @@
   "type": "module",
   "exports": {
     "./client": "./src/client.ts",
+    "./organization-usage-lock": "./src/organization-usage-lock.ts",
     "./local-development": "./scripts/local-development.ts",
     "./mail-outbox": "./src/mail-outbox.ts",
     "./mail-attempts": "./src/mail-attempts.ts",

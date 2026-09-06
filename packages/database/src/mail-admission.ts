@@ -1,7 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 
 import type { DatabaseClient } from "./client.ts";
-import { mailSubmission } from "./schema.ts";
+import { mailAdmissionGate, mailSubmission } from "./schema.ts";
 
 export type MailAdmissionLimits = {
   global: { maxPending: number; maxPendingBytes: number };
@@ -45,9 +45,15 @@ export const assertMailAdmissionCapacity = async (
     throw new Error("Invalid bounded mail admission limits.");
   }
   // Every new acceptance shares this short database-only section; concurrent tenants cannot overfill the global cap.
-  await transaction.execute(
-    sql`select pg_advisory_xact_lock(hashtextextended('mail-submission-admission', 0))`
-  );
+  await transaction
+    .insert(mailAdmissionGate)
+    .values({ id: 1 })
+    .onConflictDoNothing();
+  await transaction
+    .select({ id: mailAdmissionGate.id })
+    .from(mailAdmissionGate)
+    .where(eq(mailAdmissionGate.id, 1))
+    .for("update");
   for (const scope of ["global", "organization"] as const) {
     const limit = limits[scope];
     const pending = transaction
