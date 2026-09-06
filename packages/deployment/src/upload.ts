@@ -45,6 +45,11 @@ type UploadProvider = {
     versionId: string,
     artifact: WorkerArtifact
   ) => Promise<void>;
+  verifyBindingInheritance: (
+    scriptName: string,
+    baselineVersionId: string,
+    versionId: string
+  ) => Promise<void>;
 };
 
 export class ReleaseUpload {
@@ -120,6 +125,11 @@ export class ReleaseUpload {
       intent.scriptName,
       versionId,
       manifest.artifact
+    );
+    await this.provider.verifyBindingInheritance(
+      intent.scriptName,
+      intent.baseline.versionId,
+      versionId
     );
     if (manifest.archive !== null) {
       await this.archive.verify(manifest.archive);

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 
 import { z } from "zod";
 
@@ -21,6 +22,32 @@ const deploymentSchema = z.object({
     .array(z.object({ percentage: z.number(), version_id: z.uuid() }))
     .min(1),
 });
+
+const inheritedBindingSchema = z
+  .looseObject({
+    class_name: identifierSchema.optional(),
+    name: identifierSchema,
+    namespace_id: z
+      .string()
+      .regex(/^[a-f\d]{32}$/u)
+      .optional(),
+    script_name: identifierSchema
+      .nullish()
+      .transform((value) => value ?? undefined),
+    type: z.string(),
+  })
+  .superRefine((binding, context) => {
+    if (
+      binding.type === "durable_object_namespace" &&
+      (binding.class_name === undefined || binding.namespace_id === undefined)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "Durable Object inheritance requires its physical namespace and class.",
+      });
+    }
+  });
 
 export class CloudflareRuntimeProvider implements RuntimeProvider {
   private readonly base: string;
@@ -59,6 +86,49 @@ export class CloudflareRuntimeProvider implements RuntimeProvider {
       .parse(await this.call(scriptName, `versions/${versionId}`));
     if (version.id !== versionId) {
       throw new Error("Cloudflare returned an unexpected version.");
+    }
+  }
+
+  async verifyBindingInheritance(
+    scriptName: string,
+    baselineVersionId: string,
+    versionId: string
+  ) {
+    identifierSchema.parse(scriptName);
+    z.uuid().parse(baselineVersionId);
+    z.uuid().parse(versionId);
+    const schema = z.object({
+      bindings: z.array(inheritedBindingSchema),
+      id: z.uuid(),
+      migration_tag: z.string().optional(),
+    });
+    const [baseline, candidate] = await Promise.all(
+      [baselineVersionId, versionId].map(async (id) =>
+        schema.parse(
+          await this.call(null, `workers/${scriptName}/versions/${id}`)
+        )
+      )
+    );
+    if (baseline.id !== baselineVersionId || candidate.id !== versionId) {
+      throw new Error("Binding verification returned an unexpected version.");
+    }
+    if (
+      candidate.migration_tag !== undefined &&
+      candidate.migration_tag !== baseline.migration_tag
+    ) {
+      throw new Error(
+        "Runtime upload changed the Durable Object migration tag."
+      );
+    }
+    if (
+      !isDeepStrictEqual(
+        baseline.bindings.toSorted((a, b) => a.name.localeCompare(b.name)),
+        candidate.bindings.toSorted((a, b) => a.name.localeCompare(b.name))
+      )
+    ) {
+      throw new Error(
+        "The uploaded version did not preserve inherited bindings and namespaces."
+      );
     }
   }
 
@@ -166,9 +236,7 @@ export class CloudflareRuntimeProvider implements RuntimeProvider {
     const baseline = z
       .object({
         assets: z.object({ config: assetRoutingSchema }).optional(),
-        bindings: z.array(
-          z.object({ name: identifierSchema, type: z.string() })
-        ),
+        bindings: z.array(inheritedBindingSchema),
         compatibility_date: z.iso.date(),
         compatibility_flags: z.array(z.string()),
         id: z.uuid(),
@@ -194,11 +262,6 @@ export class CloudflareRuntimeProvider implements RuntimeProvider {
           `workers/${scriptName}/versions/${baselineVersionId}`
         )
       );
-    if (baseline.migration_tag !== undefined) {
-      throw new Error(
-        "Durable Object lifecycle requires a separately verified upload path."
-      );
-    }
     if (
       baseline.id !== baselineVersionId ||
       baseline.compatibility_date !== artifact.compatibilityDate ||
@@ -295,10 +358,9 @@ export class CloudflareRuntimeProvider implements RuntimeProvider {
     }
     const version = z
       .object({
-        bindings: z.array(
-          z.object({ name: identifierSchema, type: z.string() })
-        ),
+        bindings: z.array(inheritedBindingSchema),
         id: z.uuid(),
+        migration_tag: z.string().optional(),
       })
       .parse(
         await this.call(null, `workers/${scriptName}/versions?deploy=false`, {
@@ -310,12 +372,21 @@ export class CloudflareRuntimeProvider implements RuntimeProvider {
       a.name.localeCompare(b.name)
     );
     if (
-      JSON.stringify(
-        version.bindings.toSorted((a, b) => a.name.localeCompare(b.name))
-      ) !== JSON.stringify(expectedBindings)
+      version.migration_tag !== undefined &&
+      version.migration_tag !== baseline.migration_tag
     ) {
       throw new Error(
-        "The uploaded version did not preserve all binding names and types."
+        "Runtime upload changed the Durable Object migration tag."
+      );
+    }
+    if (
+      !isDeepStrictEqual(
+        version.bindings.toSorted((a, b) => a.name.localeCompare(b.name)),
+        expectedBindings
+      )
+    ) {
+      throw new Error(
+        "The uploaded version did not preserve inherited bindings and namespaces."
       );
     }
     const after = await this.active(scriptName);

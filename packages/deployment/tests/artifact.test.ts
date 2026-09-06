@@ -304,6 +304,89 @@ describe("verified native uploads", () => {
     }).toStrictEqual({ parts: ["index.js"], privateValue: false });
   });
 
+  it.each(["preserved", "namespace", "class", "migration"] as const)(
+    "checks Durable Object identity after inactive upload: %s",
+    async (change) => {
+      const { artifact, directory } = await build();
+      const binding = {
+        class_name: "Counter",
+        name: "COUNTER",
+        namespace_id: "a".repeat(32),
+        type: "durable_object_namespace",
+      };
+      const request = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(deploymentResponse())
+        .mockResolvedValueOnce(
+          Response.json({
+            result: {
+              bindings: [binding],
+              compatibility_date: artifact.compatibilityDate,
+              compatibility_flags: artifact.compatibilityFlags,
+              id: baselineId,
+              migration_tag: "v1",
+            },
+            success: true,
+          })
+        )
+        .mockResolvedValueOnce(deploymentResponse())
+        .mockResolvedValueOnce(
+          Response.json({
+            result: {
+              bindings: [
+                {
+                  ...binding,
+                  class_name: change === "class" ? "Other" : binding.class_name,
+                  namespace_id:
+                    change === "namespace"
+                      ? "b".repeat(32)
+                      : binding.namespace_id,
+                },
+              ],
+              id: candidateId,
+              ...(change === "migration" ? { migration_tag: "v2" } : {}),
+            },
+            success: true,
+          })
+        )
+        .mockResolvedValueOnce(deploymentResponse());
+      const upload = new CloudflareRuntimeProvider(
+        "a".repeat(32),
+        "token",
+        request
+      ).uploadArtifact("probe", baselineId, artifact, directory);
+      const outcome = await upload.then(
+        (result) => result.versionId,
+        (error: unknown) =>
+          error instanceof Error ? error.message : "Unexpected rejection"
+      );
+      const expected = {
+        class:
+          "The uploaded version did not preserve inherited bindings and namespaces.",
+        migration: "Runtime upload changed the Durable Object migration tag.",
+        namespace:
+          "The uploaded version did not preserve inherited bindings and namespaces.",
+        preserved: candidateId,
+      };
+      expect(outcome).toBe(expected[change]);
+      const mutations = request.mock.calls.filter(
+        ([, init]) => init?.method === "POST"
+      );
+      expect(mutations).toHaveLength(1);
+      expect(mutations[0][0]).toContain("versions?deploy=false");
+      const body = mutations[0][1]?.body;
+      if (typeof body !== "string") {
+        throw new TypeError("Expected version upload metadata.");
+      }
+      expect(JSON.parse(body)).toMatchObject({
+        bindings: [
+          { name: "COUNTER", type: "inherit", version_id: baselineId },
+        ],
+      });
+      expect(JSON.parse(body)).not.toHaveProperty("migrations");
+    }
+  );
+
   it("rejects build mutation before creating an inactive version", async () => {
     const { artifact, directory } = await build();
     await writeFile(path.join(directory, "server/index.js"), "changed");
@@ -322,6 +405,47 @@ describe("verified native uploads", () => {
       request.mock.calls.some(([, init]) => init?.method === "POST")
     ).toBeFalsy();
   });
+
+  it.each([
+    { field: "bucket_name", type: "r2_bucket" },
+    { field: "queue_name", type: "queue" },
+    { field: "text", type: "plain_text" },
+  ])(
+    "reconciliation rejects changed $type binding details",
+    async ({ field, type }) => {
+      const request = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(
+          Response.json({
+            result: {
+              bindings: [{ name: "BOUND", type, [field]: "retained" }],
+              id: baselineId,
+            },
+            success: true,
+          })
+        )
+        .mockResolvedValueOnce(
+          Response.json({
+            result: {
+              bindings: [{ name: "BOUND", type, [field]: "changed" }],
+              id: candidateId,
+            },
+            success: true,
+          })
+        );
+      const provider = new CloudflareRuntimeProvider(
+        "a".repeat(32),
+        "token",
+        request
+      );
+      await expect(
+        provider.verifyBindingInheritance("probe", baselineId, candidateId)
+      ).rejects.toThrow("preserve inherited bindings");
+      expect(
+        request.mock.calls.every(([, init]) => init?.method !== "POST")
+      ).toBeTruthy();
+    }
+  );
 
   it("does not upload code when static asset completion is missing", async () => {
     const { directory } = await build();
@@ -419,7 +543,7 @@ describe("verified native uploads", () => {
         "token",
         request
       ).uploadArtifact("probe", baselineId, artifact, directory)
-    ).rejects.toThrow("preserve all binding");
+    ).rejects.toThrow("preserve inherited bindings");
   });
 
   it("rejects runtime compatibility changes without uploading", async () => {

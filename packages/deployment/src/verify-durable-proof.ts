@@ -10,12 +10,20 @@ import { z } from "zod";
 import { CloudflareRuntimeProvider } from "./cloudflare.ts";
 
 const { values } = parseArgs({
-  options: { directory: { type: "string" }, mode: { type: "string" } },
+  options: {
+    "candidate-generation": { default: "candidate", type: "string" },
+    "candidate-version": { type: "string" },
+    directory: { type: "string" },
+    mode: { type: "string" },
+  },
 });
 const mode = z
   .enum(["baseline", "candidate", "after-infrastructure"])
   .parse(values.mode);
 const directory = z.string().min(1).parse(values.directory);
+const candidateGeneration = z
+  .enum(["baseline", "candidate"])
+  .parse(values["candidate-generation"]);
 const env = createDeploymentEnv();
 if (
   !/^release-proof-do-[a-z0-9-]+$/u.test(env.QUIETER_RELEASE_STAGE) ||
@@ -182,7 +190,9 @@ if (mode === "baseline") {
     "Inactive upload changed the deployment."
   );
   assert.deepEqual(namespace, baseline.namespace);
-  const candidate = z.uuid().parse(outputs.candidateVersion);
+  const candidate = z
+    .uuid()
+    .parse(values["candidate-version"] ?? outputs.candidateVersion);
   assert.deepEqual(
     await inspect(candidate),
     namespace,
@@ -205,7 +215,7 @@ if (mode === "baseline") {
   let activated;
   try {
     await provider.activate(outputs.scriptName, candidate);
-    activated = await increment(candidate, inactive.count, "candidate");
+    activated = await increment(candidate, inactive.count, candidateGeneration);
   } finally {
     const active = await provider.active(outputs.scriptName);
     if (

@@ -57,6 +57,7 @@ const setup = () => {
         versionId,
       }),
     verifyArtifact: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    verifyBindingInheritance: vi.fn<() => Promise<void>>().mockResolvedValue(),
   };
   const manifest: ReleaseArtifact = {
     archive: null,
@@ -162,6 +163,19 @@ describe("durable inactive uploads", () => {
     await expect(uploader.upload(intent, "build")).rejects.toThrow(
       "uncertain journal write"
     );
+    expect(provider.uploadArtifact).not.toHaveBeenCalled();
+  });
+
+  it("refuses to certify a lost-response upload whose namespace differs", async () => {
+    const { intent, provider, store, uploader } = setup();
+    await store.claim(intent);
+    provider.verifyBindingInheritance.mockRejectedValueOnce(
+      new Error("namespace differs")
+    );
+    await expect(uploader.reconcile(intent.id)).rejects.toThrow(
+      "namespace differs"
+    );
+    expect(store.complete).not.toHaveBeenCalled();
     expect(provider.uploadArtifact).not.toHaveBeenCalled();
   });
 });
