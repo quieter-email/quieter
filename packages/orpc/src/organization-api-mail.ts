@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import {
@@ -15,8 +13,6 @@ import type {
   MessageListItem,
   ThreadMessagesResult,
 } from "@quieter/gmail";
-import { extractMailAddress } from "@quieter/mail/compose/schema";
-import type { SendHeader } from "@quieter/mail/send";
 import { getSenderAvatarUrls } from "@quieter/mail/sender-avatar";
 import { and, asc, count, desc, eq, ilike, inArray, lt, or } from "drizzle-orm";
 
@@ -26,10 +22,6 @@ import {
 } from "./mail-domain/service";
 import { createManagedMailbox } from "./mailbox/managed-grants";
 import { recordOutboundManagedMessageForSender } from "./managed-mail/messages/service";
-import {
-  createManagedMessageSearchText,
-  normalizeManagedSearchValue,
-} from "./managed-mail/search/normalization";
 import {
   getOrganizationMailDelivery,
   groupDeliveryStatusesByMessage,
@@ -56,8 +48,6 @@ export const parseOrganizationApiMailboxId = (mailboxId: string) => {
 
 export const isOrganizationApiMailboxId = (mailboxId: string) =>
   parseOrganizationApiMailboxId(mailboxId) !== null;
-
-const normalizeEmailAddress = (value: string) => value.trim().toLowerCase();
 
 const parsePageCursor = (pageToken: string | undefined) => {
   if (!hasText(pageToken)) {
@@ -191,16 +181,6 @@ const getMessageMailboxState = async (input: {
   );
 };
 
-const createSnippet = (input: { bodyHtml?: string; bodyText?: string }) => {
-  const rawBody =
-    input.bodyText ?? input.bodyHtml?.replaceAll(/<[^>]+>/gu, " ");
-  if (!hasText(rawBody)) {
-    return null;
-  }
-  const trimmed = rawBody.replaceAll(/\s+/gu, " ").trim().slice(0, 240);
-  return hasText(trimmed) ? trimmed : null;
-};
-
 const toMessageListItem = async (
   record: typeof organizationApiMailMessage.$inferSelect,
   options: {
@@ -279,110 +259,6 @@ const findApiMessage = async (input: {
     throw new ORPCError("NOT_FOUND", { message: "API message not found." });
   }
   return record;
-};
-
-const hasAttachmentsToRecord = (
-  inserted: { id: string } | undefined,
-  attachmentCount: number
-) => inserted !== undefined && attachmentCount > 0;
-
-export const recordOrganizationApiMailMessage = async (input: {
-  attachments?: {
-    contentId?: string | null;
-    fileName: string;
-    inline: boolean;
-    mimeType: string;
-    size: number;
-  }[];
-  bcc?: string[];
-  bodyHtml?: string;
-  bodyText?: string;
-  cc?: string[];
-  headers?: SendHeader[];
-  messageHeaderId?: string;
-  organizationId: string;
-  providerMessageId: string;
-  rawSizeBytes?: number | null;
-  replyTo?: string[];
-  sender: string;
-  senderAddress?: string;
-  sentAt?: Date;
-  subject: string;
-  to: string[];
-}) => {
-  const id = randomUUID();
-  const sentAt = input.sentAt ?? new Date();
-  const senderAddress = normalizeEmailAddress(
-    input.senderAddress ?? extractMailAddress(input.sender)
-  );
-  const snippet = createSnippet({
-    bodyHtml: input.bodyHtml,
-    bodyText: input.bodyText,
-  });
-  const bccJoined = input.bcc?.join(", ");
-  const ccJoined = input.cc?.join(", ");
-  const replyToJoined = input.replyTo?.join(", ");
-  const [inserted] = await db
-    .insert(organizationApiMailMessage)
-    .values({
-      bcc: hasText(bccJoined) ? bccJoined : null,
-      bccNormalized: normalizeManagedSearchValue(bccJoined),
-      bodyHtml: input.bodyHtml ?? null,
-      bodyText: input.bodyText ?? null,
-      cc: hasText(ccJoined) ? ccJoined : null,
-      ccNormalized: normalizeManagedSearchValue(ccJoined),
-      createdAt: sentAt,
-      from: input.sender,
-      fromNormalized: normalizeManagedSearchValue(input.sender),
-      headers: input.headers ?? [],
-      id,
-      messageHeaderId: input.messageHeaderId ?? null,
-      organizationId: input.organizationId,
-      providerMessageId: input.providerMessageId,
-      rawSizeBytes: input.rawSizeBytes ?? null,
-      replyTo: hasText(replyToJoined) ? replyToJoined : null,
-      searchText: createManagedMessageSearchText({
-        bodyText: input.bodyText,
-        snippet,
-        subject: input.subject,
-      }),
-      senderAddress,
-      sentAt,
-      snippet,
-      subject: hasText(input.subject) ? input.subject : null,
-      to: input.to.join(", "),
-      toNormalized: normalizeManagedSearchValue(input.to.join(", ")),
-      updatedAt: sentAt,
-    })
-    .onConflictDoNothing({
-      target: [
-        organizationApiMailMessage.organizationId,
-        organizationApiMailMessage.providerMessageId,
-      ],
-    })
-    .returning({ id: organizationApiMailMessage.id });
-
-  const attachmentCount = input.attachments?.length ?? 0;
-  if (!hasAttachmentsToRecord(inserted, attachmentCount)) {
-    return inserted ?? null;
-  }
-
-  const attachments = input.attachments ?? [];
-  await db.insert(organizationApiMailAttachment).values(
-    attachments.map((attachment) => ({
-      contentId: attachment.contentId ?? null,
-      createdAt: sentAt,
-      fileName: attachment.fileName,
-      id: randomUUID(),
-      inline: attachment.inline,
-      messageId: inserted.id,
-      mimeType: attachment.mimeType,
-      normalizedFileName: normalizeManagedSearchValue(attachment.fileName),
-      organizationId: input.organizationId,
-      size: attachment.size,
-    }))
-  );
-  return inserted;
 };
 
 export const listOrganizationApiMailMessages = async (input: {
@@ -804,3 +680,5 @@ export const createManagedMailboxForApiMessage = async (input: {
   });
   return created;
 };
+
+export { recordOrganizationApiMailMessage } from "./organization-api-mail-record.ts";

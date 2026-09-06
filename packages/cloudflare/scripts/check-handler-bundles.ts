@@ -6,6 +6,7 @@ import { rolldown } from "rolldown";
 const packageRoot = path.resolve(import.meta.dirname, "..");
 const outputDirectory = path.join(packageRoot, ".bundle-check");
 const entrypoints = [
+  path.join(packageRoot, "src", "mail-submission-projection-worker.ts"),
   path.join(packageRoot, "src", "mail-feedback-worker.ts"),
   path.join(packageRoot, "src", "mail-submission-sender-worker.ts"),
   path.join(packageRoot, "src", "mail-api-worker.ts"),

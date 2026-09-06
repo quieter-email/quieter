@@ -17,6 +17,17 @@ export type RuntimeRegistration = {
 // These are existing runtime boundaries. New mail services join only when their handlers exist.
 export const runtimeRegistry: RuntimeRegistration[] = [
   {
+    entrypoint: "packages/cloudflare/src/mail-submission-projection-worker.ts",
+    nativeReleaseBlockers: [
+      "mail_runtime_foundation",
+      "protected_health_bindings",
+      "independent_recovery_workflow",
+    ],
+    package: "@quieter/cloudflare",
+    service: "mail-projections",
+    trigger: "queue-scheduled",
+  },
+  {
     entrypoint: "packages/cloudflare/src/mail-feedback-worker.ts",
     nativeReleaseBlockers: [
       "mail_runtime_foundation",

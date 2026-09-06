@@ -89,6 +89,7 @@ describe("immutable Git release planning", () => {
       "mail-api",
       "mail-feedback-intake",
       "mail-outbox-publisher",
+      "mail-projections",
       "mail-sender",
       "mailbox-action-dispatch",
       "mailbox-actions",

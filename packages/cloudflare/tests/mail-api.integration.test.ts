@@ -6,6 +6,9 @@ import {
   apikey,
   billingSubscription,
   mailDomain,
+  mailbox,
+  managedMailAttachment,
+  managedMailMessage,
   mailFeedbackInbox,
   mailPayloadUpload,
   mailSendAttempt,
@@ -14,18 +17,21 @@ import {
   mailSubmissionOutbox,
   mailUsageReservation,
   organization,
+  organizationApiMailAttachment,
+  organizationApiMailMessage,
   organizationMailDeliveryEvent,
   organizationMailDeliveryRecipient,
   user,
 } from "@quieter/database/schema";
 import { env } from "cloudflare:workers";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import postgres from "postgres";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import { mailStorageTestLimits } from "../../database/tests/mail-ledger-fixtures.ts";
 import { handleMailApiRequest } from "../src/mail-api-worker.ts";
 import { handleMailFeedbackRequest } from "../src/mail-feedback-worker.ts";
+import { mailSubmissionProjectionHandler } from "../src/mail-submission-projection-worker.ts";
 import { mailSubmissionSenderHandler } from "../src/mail-submission-sender-worker.ts";
 import { reportWorkerError } from "../src/worker-runtime.ts";
 
@@ -503,6 +509,113 @@ describe.skipIf(typeof url !== "string" || url === "")(
             .from(mailFeedbackInbox)
             .where(eq(mailFeedbackInbox.providerEventId, feedback.MessageId));
           expect(inbox.status).toBe("applied");
+          const mailboxId = crypto.randomUUID();
+          await database.insert(mailbox).values({
+            createdAt: now,
+            emailAddress: message.from,
+            id: mailboxId,
+            includeApiSentMessages: true,
+            organizationId,
+            provider: "managed",
+            updatedAt: now,
+          });
+          const [prepared] = await database
+            .select({ payload: mailSubmission.payload })
+            .from(mailSubmission)
+            .where(eq(mailSubmission.id, submissionId));
+          const [object] = prepared.payload.attachments;
+          await env.LocalMailStorage.delete(object.key);
+          await database
+            .update(mailSubmission)
+            .set({ nextActionAt: new Date(0) })
+            .where(eq(mailSubmission.organizationId, organizationId));
+          const scheduled = {
+            cron: "* * * * *",
+            noRetry: vi.fn<() => void>(),
+            scheduledTime: Date.now(),
+          };
+          await expect(
+            mailSubmissionProjectionHandler.scheduled(scheduled, bindings)
+          ).rejects.toThrow("Mail history projection recovery failed.");
+          await expect(
+            database
+              .select()
+              .from(organizationApiMailMessage)
+              .where(
+                eq(organizationApiMailMessage.organizationId, organizationId)
+              )
+          ).resolves.toHaveLength(1);
+          await env.LocalMailStorage.put(
+            object.key,
+            new TextEncoder().encode("fixture")
+          );
+          await database
+            .update(mailSubmission)
+            .set({ nextActionAt: new Date(0) })
+            .where(eq(mailSubmission.id, submissionId));
+          await mailSubmissionProjectionHandler.scheduled(scheduled, bindings);
+          await expect(
+            database
+              .select()
+              .from(organizationApiMailMessage)
+              .where(
+                eq(organizationApiMailMessage.organizationId, organizationId)
+              )
+          ).resolves.toHaveLength(2);
+          await expect(
+            database
+              .select()
+              .from(organizationApiMailAttachment)
+              .where(
+                eq(organizationApiMailAttachment.organizationId, organizationId)
+              )
+          ).resolves.toHaveLength(2);
+          await expect(
+            database
+              .select()
+              .from(managedMailAttachment)
+              .where(eq(managedMailAttachment.mailboxId, mailboxId))
+          ).resolves.toHaveLength(2);
+          const [projectedEvent] = await database
+            .select()
+            .from(mailSubmissionOutbox)
+            .where(
+              and(
+                eq(mailSubmissionOutbox.submissionId, submissionId),
+                eq(mailSubmissionOutbox.eventType, "submission.accepted")
+              )
+            );
+          await database
+            .delete(managedMailMessage)
+            .where(
+              and(
+                eq(managedMailMessage.mailboxId, mailboxId),
+                eq(managedMailMessage.providerMessageId, "native-accepted")
+              )
+            );
+          const projectedDispatch = {
+            ...dispatch,
+            ack: vi.fn<() => void>(),
+            body: {
+              eventType: projectedEvent.eventType,
+              id: projectedEvent.id,
+              organizationId,
+              schemaVersion: 1,
+              submissionId,
+            },
+          };
+          await env.LocalMailStorage.delete(object.key);
+          await mailSubmissionProjectionHandler.queue(
+            { ...batch, messages: [projectedDispatch] },
+            bindings
+          );
+          expect(projectedDispatch.ack).toHaveBeenCalledOnce();
+          await expect(
+            database
+              .select()
+              .from(managedMailMessage)
+              .where(eq(managedMailMessage.mailboxId, mailboxId))
+          ).resolves.toHaveLength(1);
           await database
             .update(apikey)
             .set({

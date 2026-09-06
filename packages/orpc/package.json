@@ -21,6 +21,7 @@
     "./mail-submission-payload": "./src/mail-submission-payload.ts",
     "./mail-submission-service": "./src/mail-submission-service.ts",
     "./mail-submission-sender": "./src/mail-submission-sender.ts",
+    "./mail-submission-projection": "./src/mail-submission-projection.ts",
     "./ses-feedback": "./src/ses-feedback.ts",
     "./mail-submission-feedback": "./src/mail-submission-feedback.ts",
     "./organization-mail-delivery": "./src/organization-mail-delivery.ts",
