@@ -351,14 +351,20 @@ export const buildRuntimeRelease = async (input: {
   await rm(configPath);
   if (!web) {
     await rm(entryPath);
-    if (
-      path.dirname(path.resolve(builtDirectory)) !== path.resolve(input.output)
-    ) {
-      throw new Error(
-        "Temporary build output escaped the new artifact directory."
-      );
+    for (const temporary of [
+      builtDirectory,
+      path.join(input.output, ".wrangler"),
+    ]) {
+      if (
+        path.dirname(path.resolve(temporary)) !== path.resolve(input.output)
+      ) {
+        throw new Error(
+          "Temporary build output escaped the new artifact directory."
+        );
+      }
+      // oxlint-disable-next-line no-await-in-loop -- Remove only tool output inside the newly created artifact directory.
+      await rm(temporary, { force: true, recursive: true });
     }
-    await rm(builtDirectory, { recursive: true });
   }
   await writeFile(
     path.join(input.output, "artifact.json"),
