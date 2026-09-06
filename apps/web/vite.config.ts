@@ -91,36 +91,22 @@ const validateLocalDevelopment = (): Plugin => ({
 export default defineConfig(({ command }) => {
   const isDev = command === "serve";
   const isSentryEnabled =
-    !isDev && (releaseBuild || !!buildEnvironment.SENTRY_AUTH_TOKEN);
+    !isDev && !releaseBuild && !!buildEnvironment.SENTRY_AUTH_TOKEN;
   const sentryPlugins = isSentryEnabled
     ? sentryTanstackStart({
         authToken: buildEnvironment.SENTRY_AUTH_TOKEN,
         autoInstrumentMiddleware: false,
         org: buildEnvironment.SENTRY_ORG,
         project: buildEnvironment.SENTRY_PROJECT,
-        release: releaseBuild
-          ? {
-              create: false,
-              finalize: false,
-              inject: true,
-              name: buildId,
-              setCommits: false,
-            }
-          : undefined,
-        sourcemaps: releaseBuild
-          ? {
-              disable: "disable-upload",
-              filesToDeleteAfterUpload: [],
-            }
-          : {
-              assets: ["./dist/client/**/*.js"],
-              filesToDeleteAfterUpload: ["./dist/client/**/*.map"],
-            },
+        sourcemaps: {
+          assets: ["./dist/client/**/*.js"],
+          filesToDeleteAfterUpload: ["./dist/client/**/*.map"],
+        },
         telemetry: false,
       }).map((plugin) => ({
         ...plugin,
         applyToEnvironment: (environment: Environment) =>
-          releaseBuild || environment.name === "client",
+          environment.name === "client",
       }))
     : [];
 

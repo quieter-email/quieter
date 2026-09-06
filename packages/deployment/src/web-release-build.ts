@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify, stripVTControlCharacters } from "node:util";
 
 import { createWebReleaseEnvironment } from "@quieter/env/build";
+import SentryCli from "@sentry/cli";
 import { z } from "zod";
 
 import type { buildProvenanceSchema } from "./artifact.ts";
@@ -15,6 +16,7 @@ import {
 } from "./artifact.ts";
 import { inventoryAssets } from "./assets.ts";
 import { identifierSchema } from "./schema.ts";
+import { verifyReleaseSourceMaps } from "./source-maps.ts";
 
 // oxlint-disable-next-line strict-void-return -- promisify waits for the subprocess callback.
 const execute = promisify(execFile);
@@ -162,6 +164,17 @@ export const buildWebRelease = async (input: {
     await run(vp, ["run", "--no-cache", task], buildEnvironment);
   }
   const builtDirectory = path.join(input.directory, "apps/web/dist");
+  await run(
+    SentryCli.getPath(),
+    [
+      "sourcemaps",
+      "inject",
+      "--quiet",
+      path.join(builtDirectory, "client"),
+      path.join(builtDirectory, "server"),
+    ],
+    environment
+  );
   if (
     (await readFile(
       path.join(builtDirectory, "client/assets/build-id.txt"),
@@ -268,6 +281,7 @@ export const buildWebRelease = async (input: {
     );
   }
   const manifest = releaseArtifactSchema.parse({ archive, artifact, digest });
+  await verifyReleaseSourceMaps(manifest, input.output);
   await writeFile(
     path.join(input.output, "artifact.json"),
     JSON.stringify(manifest, null, 2),
