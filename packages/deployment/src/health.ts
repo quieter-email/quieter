@@ -9,6 +9,65 @@ import type {
 } from "./schema.ts";
 import { identifierSchema, probeConfigurationSchema } from "./schema.ts";
 
+export const createReleaseProbes = (
+  baseline: HealthyRelease,
+  candidate: HealthyRelease,
+  configuration: unknown
+) => {
+  const targets = z
+    .record(
+      identifierSchema,
+      z.strictObject({
+        checks: z.array(identifierSchema).min(1),
+        criticalChecks: z.array(identifierSchema).default([]),
+        previewUrl: z.url(),
+        url: z.url(),
+      })
+    )
+    .parse(configuration);
+  const probes: z.input<typeof probeConfigurationSchema> = {};
+  for (const service of candidate.services) {
+    const previous = baseline.services.find(
+      (entry) => entry.service === service.service
+    );
+    const target = targets[service.service];
+    if (previous === undefined || target === undefined) {
+      throw new Error(
+        "Every runtime requires a baseline and reviewed probe target."
+      );
+    }
+    const preview = new URL(target.previewUrl);
+    if (
+      preview.protocol !== "https:" ||
+      preview.port !== "" ||
+      preview.username !== "" ||
+      preview.password !== "" ||
+      preview.search !== "" ||
+      preview.hash !== "" ||
+      preview.hostname.split(".").length !== 4 ||
+      !preview.hostname.endsWith(".workers.dev") ||
+      preview.hostname.split(".")[0] !== service.scriptName ||
+      previous.scriptName !== service.scriptName
+    ) {
+      throw new Error(
+        "Preview targets must identify the recorded Worker's canonical workers.dev URL."
+      );
+    }
+    const baselineUrl = new URL(preview);
+    baselineUrl.hostname = `${previous.versionId.slice(0, 8)}-${preview.hostname}`;
+    const candidateUrl = new URL(preview);
+    candidateUrl.hostname = `${service.versionId.slice(0, 8)}-${preview.hostname}`;
+    probes[service.service] = {
+      baselineUrl: baselineUrl.href,
+      candidateUrl: candidateUrl.href,
+      checks: target.checks,
+      criticalChecks: target.criticalChecks,
+      url: target.url,
+    };
+  }
+  return probeConfigurationSchema.parse(probes);
+};
+
 const sampleHealth = async (
   url: string,
   versionId: string,

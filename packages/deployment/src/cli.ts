@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parseArgs } from "node:util";
 
@@ -22,7 +22,11 @@ import {
   createGitReleasePlan,
   verifyPlannedRelease,
 } from "./git-release-plan.ts";
-import { observeRelease, verifyReleaseHealth } from "./health.ts";
+import {
+  createReleaseProbes,
+  observeRelease,
+  verifyReleaseHealth,
+} from "./health.ts";
 import { ObjectReleaseJournal } from "./journal.ts";
 import { ReleasePreflight } from "./preflight.ts";
 import { createR2ArchiveClient } from "./r2-archive-client.ts";
@@ -45,12 +49,15 @@ const { positionals, values } = parseArgs({
     directory: { type: "string" },
     "event-run": { type: "string" },
     file: { type: "string" },
+    output: { type: "string" },
     probes: { type: "string" },
     reason: { type: "string" },
     release: { type: "string" },
     rollback: { default: false, type: "boolean" },
     run: { type: "string" },
+    service: { type: "string" },
     source: { type: "string" },
+    targets: { type: "string" },
   },
 });
 const command = z
@@ -252,7 +259,13 @@ switch (command) {
       },
       artifacts
     );
-    process.stdout.write(`${JSON.stringify(candidate, null, 2)}\n`);
+    if (values.output === undefined) {
+      process.stdout.write(`${JSON.stringify(candidate, null, 2)}\n`);
+    } else {
+      await writeFile(values.output, JSON.stringify(candidate, null, 2), {
+        flag: "wx",
+      });
+    }
     break;
   }
   case "select-rollback": {
@@ -269,7 +282,13 @@ switch (command) {
         "There is no matching retained healthy release to roll back to."
       );
     }
-    process.stdout.write(`${JSON.stringify(selected, null, 2)}\n`);
+    if (values.output === undefined) {
+      process.stdout.write(`${JSON.stringify(selected, null, 2)}\n`);
+    } else {
+      await writeFile(values.output, JSON.stringify(selected, null, 2), {
+        flag: "wx",
+      });
+    }
     break;
   }
   case "plan": {
@@ -292,7 +311,13 @@ switch (command) {
         values.directory ?? path.resolve(import.meta.dirname, "../../.."),
       sourceSha: values.source,
     });
-    process.stdout.write(`${JSON.stringify(plan, null, 2)}\n`);
+    if (values.output === undefined) {
+      process.stdout.write(`${JSON.stringify(plan, null, 2)}\n`);
+    } else {
+      await writeFile(values.output, JSON.stringify(plan, null, 2), {
+        flag: "wx",
+      });
+    }
     break;
   }
   case "restore": {
@@ -306,21 +331,56 @@ switch (command) {
     break;
   }
   case "upload": {
-    if (values.file === undefined || values.directory === undefined) {
+    if (values.directory === undefined) {
       throw new Error(
         "Upload requires the durable intent --file and compiled --directory."
       );
     }
-    const intent = uploadIntentSchema.parse(
-      JSON.parse(await readFile(values.file, "utf-8"))
-    );
+    let intent: z.infer<typeof uploadIntentSchema>;
+    if (values.file === undefined) {
+      const service = existing?.state.healthy.services.find(
+        (entry) => entry.service === values.service
+      );
+      if (
+        service === undefined ||
+        (existing?.state.attempt !== null &&
+          existing?.state.attempt !== undefined &&
+          !["healthy", "rolled_back"].includes(existing.state.attempt.status))
+      ) {
+        throw new Error(
+          "Upload requires an existing healthy service and a settled journal."
+        );
+      }
+      const baseline = await provider.active(service.scriptName);
+      if (baseline.versionId !== service.versionId) {
+        throw new Error(
+          "The upload baseline differs from the healthy journal."
+        );
+      }
+      intent = uploadIntentSchema.parse({
+        artifactDigest: values.artifact,
+        baseline,
+        createdAt: new Date().toISOString(),
+        id: values.attempt,
+        scriptName: service.scriptName,
+        workflowRunId: values.run,
+      });
+    } else {
+      intent = uploadIntentSchema.parse(
+        JSON.parse(await readFile(values.file, "utf-8"))
+      );
+    }
     if (!intent.scriptName.includes(`-${env.QUIETER_RELEASE_STAGE}-`)) {
       throw new Error(
         "Upload intent references a Worker outside this proof stage."
       );
     }
     const receipt = await uploader.upload(intent, values.directory);
-    process.stdout.write(`${JSON.stringify(receipt)}\n`);
+    if (values.output === undefined) {
+      process.stdout.write(`${JSON.stringify(receipt)}\n`);
+    } else {
+      await writeFile(values.output, JSON.stringify(receipt), { flag: "wx" });
+    }
     break;
   }
   case "reconcile-upload": {
@@ -449,10 +509,10 @@ switch (command) {
     if (
       existing === null ||
       values.file === undefined ||
-      values.probes === undefined
+      (values.probes === undefined) === (values.targets === undefined)
     ) {
       throw new Error(
-        "Prepare requires an immutable release manifest and --probes configuration."
+        "Prepare requires an immutable release manifest and exactly one --probes or --targets configuration."
       );
     }
     const candidate = healthyReleaseSchema.parse(
@@ -487,9 +547,18 @@ switch (command) {
       expectedBaseline: existing.state.healthy,
       id: identifierSchema.parse(values.attempt),
       mode: values.rollback ? "rollback" : "promote",
-      probes: probeConfigurationSchema.parse(
-        JSON.parse(await readFile(values.probes, "utf-8"))
-      ),
+      probes:
+        values.targets === undefined
+          ? probeConfigurationSchema.parse(
+              JSON.parse(
+                await readFile(z.string().parse(values.probes), "utf-8")
+              )
+            )
+          : createReleaseProbes(
+              existing.state.healthy,
+              candidate,
+              JSON.parse(await readFile(values.targets, "utf-8"))
+            ),
       workflowRunId: z.string().regex(/^\d+$/u).parse(values.run),
     });
     break;

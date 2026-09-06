@@ -3,7 +3,11 @@ import { randomUUID } from "node:crypto";
 
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { observeRelease, verifyReleaseHealth } from "../src/health.ts";
+import {
+  createReleaseProbes,
+  observeRelease,
+  verifyReleaseHealth,
+} from "../src/health.ts";
 import type { ReleaseAttempt } from "../src/schema.ts";
 
 const fixture = () => {
@@ -57,6 +61,63 @@ describe("release health observation", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.useRealTimers();
+  });
+
+  it("derives preview probes from the exact baseline and rollback or promotion target", () => {
+    const { attempt } = fixture();
+    const candidate = {
+      ...attempt.candidate,
+      services: attempt.candidate.services.map((service) => ({
+        ...service,
+        versionId: randomUUID(),
+      })),
+    };
+    const targets = {
+      web: {
+        checks: ["startup"],
+        previewUrl: "https://probe.account.workers.dev/__release/health",
+        url: "https://mail.example.com/__release/health",
+      },
+    };
+    const result = createReleaseProbes(attempt.baseline, candidate, targets);
+    expect(result.web.baselineUrl).toBe(
+      `https://${attempt.baseline.services[0].versionId.slice(0, 8)}-probe.account.workers.dev/__release/health`
+    );
+    expect(result.web.candidateUrl).toBe(
+      `https://${candidate.services[0].versionId.slice(0, 8)}-probe.account.workers.dev/__release/health`
+    );
+    expect(
+      createReleaseProbes(candidate, attempt.baseline, targets).web.candidateUrl
+    ).toBe(result.web.baselineUrl);
+  });
+
+  it.each([
+    "https://another.account.workers.dev/__release/health",
+    "https://probe.account.workers.dev.attacker.example/__release/health",
+    "https://probe.account.workers.dev/__release/health?token=private",
+    // oxlint-disable-next-line sonarjs/no-clear-text-protocols -- Deliberately reject an insecure probe target.
+    "http://probe.account.workers.dev/__release/health",
+  ])(
+    "rejects a preview target outside the recorded Worker: %s",
+    (previewUrl) => {
+      const { attempt } = fixture();
+      expect(() =>
+        createReleaseProbes(attempt.baseline, attempt.candidate, {
+          web: {
+            checks: ["startup"],
+            previewUrl,
+            url: "https://mail.example.com/__release/health",
+          },
+        })
+      ).toThrow("recorded Worker");
+    }
+  );
+
+  it("requires reviewed targets for the complete release", () => {
+    const { attempt } = fixture();
+    expect(() =>
+      createReleaseProbes(attempt.baseline, attempt.candidate, {})
+    ).toThrow("Every runtime");
   });
 
   it.each(["candidateUrl", "url"] as const)(
