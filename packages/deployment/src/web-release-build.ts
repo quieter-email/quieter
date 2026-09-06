@@ -133,7 +133,6 @@ export const buildWebRelease = async (input: {
   for (const task of [
     "@quieter/env#build",
     "@quieter/observability#build",
-    "@quieter/sdk#build",
     "@quieter/web#build",
   ]) {
     // oxlint-disable-next-line no-await-in-loop -- Build dependencies before the one web build, without task-cache reuse.
