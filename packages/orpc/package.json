@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./deployment-health": "./src/deployment-health.ts",
     ".": "./src/client.ts",
     "./context": "./src/context.ts",
     "./abuse-protection": "./src/abuse-protection.ts",
