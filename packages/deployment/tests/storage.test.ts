@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -18,6 +18,7 @@ import type { CloudflareRuntimeProvider } from "../src/cloudflare.ts";
 import { ObjectReleaseJournal } from "../src/journal.ts";
 import { ReleasePreflight } from "../src/preflight.ts";
 import type { ReleaseState } from "../src/schema.ts";
+import { ObjectUploadStore } from "../src/upload-store.ts";
 
 const directories: string[] = [];
 // oxlint-disable-next-line vitest/require-top-level-describe -- Shared cleanup covers every storage test below.
@@ -120,6 +121,44 @@ const build = async () => {
 };
 
 describe("immutable archive and durable journal", () => {
+  it("claims upload intents once and rejects conflicting completion receipts", async () => {
+    const { client, objects } = objectStore();
+    const store = new ObjectUploadStore(client, "journal", "test");
+    const intent = {
+      artifactDigest: "a".repeat(64),
+      baseline: { id: randomUUID(), versionId: randomUUID() },
+      createdAt: "2026-09-06T12:00:00.000Z",
+      id: randomUUID(),
+      scriptName: "probe",
+      workflowRunId: "123",
+    };
+    const claims = await Promise.all([
+      store.claim(intent),
+      store.claim(intent),
+    ]);
+    expect(claims.filter(Boolean)).toHaveLength(1);
+    await expect(store.receipt(intent.id)).resolves.toBeNull();
+    const receipt = { intent, versionId: randomUUID() };
+    await store.complete(receipt);
+    await store.complete(receipt);
+    await expect(
+      store.complete({ ...receipt, versionId: randomUUID() })
+    ).rejects.toThrow("Conflicting upload completion");
+    await expect(
+      store.complete({
+        ...receipt,
+        intent: { ...intent, artifactDigest: "b".repeat(64) },
+      })
+    ).rejects.toThrow("does not match");
+    const key = `test/uploads/${intent.id}/intent.json`;
+    objects.set(key, {
+      body: Buffer.from(JSON.stringify({ ...intent, id: randomUUID() })),
+      contentType: "application/json",
+      etag: "corrupt",
+    });
+    await expect(store.read(intent.id)).rejects.toThrow("identity mismatch");
+  });
+
   it("retains immutable manifests and detects missing archived bytes during release preflight", async () => {
     const { client, objects, writes } = objectStore();
     const { directory, manifest } = await build();

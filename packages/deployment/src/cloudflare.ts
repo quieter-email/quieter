@@ -11,6 +11,8 @@ import {
 import type { WorkerArtifact } from "./artifact.ts";
 import { identifierSchema } from "./schema.ts";
 import type { RuntimeProvider } from "./schema.ts";
+import { uploadIntentSchema } from "./upload.ts";
+import type { UploadIntent } from "./upload.ts";
 
 const deploymentSchema = z.object({
   created_on: z.iso.datetime({ offset: true }),
@@ -152,7 +154,8 @@ export class CloudflareRuntimeProvider implements RuntimeProvider {
     scriptName: string,
     baselineVersionId: string,
     input: WorkerArtifact,
-    directory: string
+    directory: string,
+    uploadIntent?: UploadIntent
   ) {
     const artifact = artifactSchema.parse(input);
     z.uuid().parse(baselineVersionId);
@@ -220,6 +223,19 @@ export class CloudflareRuntimeProvider implements RuntimeProvider {
     const digest = createHash("sha256")
       .update(JSON.stringify(artifact))
       .digest("hex");
+    const intent =
+      uploadIntent === undefined
+        ? undefined
+        : uploadIntentSchema.parse(uploadIntent);
+    if (
+      intent !== undefined &&
+      (intent.artifactDigest !== digest ||
+        intent.scriptName !== scriptName ||
+        intent.baseline.id !== before.id ||
+        intent.baseline.versionId !== baselineVersionId)
+    ) {
+      throw new Error("Upload arguments differ from the durable intent.");
+    }
     const previousRouting = baseline.assets?.config;
     if (
       previousRouting !== undefined &&
@@ -248,7 +264,10 @@ export class CloudflareRuntimeProvider implements RuntimeProvider {
     }
     const metadata = {
       annotations: {
-        "workers/message": `source ${artifact.sourceSha}`,
+        "workers/message":
+          intent === undefined
+            ? `source ${artifact.sourceSha}`
+            : `upload ${intent.id} baseline ${baselineVersionId} source ${artifact.sourceSha}`,
         "workers/tag": digest,
       },
       ...(assetToken === undefined
@@ -306,6 +325,58 @@ export class CloudflareRuntimeProvider implements RuntimeProvider {
       );
     }
     return { artifactDigest: digest, versionId: version.id };
+  }
+
+  async findUpload(input: UploadIntent) {
+    const intent = uploadIntentSchema.parse(input);
+    const matches = new Set<string>();
+    for (let page = 1; page <= 10; page += 1) {
+      const versions = z
+        .array(
+          z.object({
+            annotations: z.record(z.string(), z.string()).optional(),
+            id: z.uuid(),
+          })
+        )
+        .max(100)
+        .parse(
+          // oxlint-disable-next-line no-await-in-loop -- Follow bounded provider pagination without treating truncation as absence.
+          await this.call(
+            null,
+            `workers/${intent.scriptName}/versions?page=${page}&per_page=100`
+          )
+        );
+      for (const version of versions) {
+        const message = version.annotations?.["workers/message"];
+        if (
+          message !== undefined &&
+          message.startsWith(`upload ${intent.id} `)
+        ) {
+          if (
+            version.annotations?.["workers/tag"] !== intent.artifactDigest ||
+            !message.startsWith(
+              `upload ${intent.id} baseline ${intent.baseline.versionId} source `
+            )
+          ) {
+            throw new Error(
+              "Provider upload annotation conflicts with the durable intent."
+            );
+          }
+          matches.add(version.id);
+        }
+      }
+      if (matches.size > 1) {
+        throw new Error(
+          "Multiple provider versions claim the same upload intent."
+        );
+      }
+      if (versions.length < 100) {
+        return [...matches][0] ?? null;
+      }
+    }
+    throw new Error(
+      "Provider version history exceeds the reconciliation bound."
+    );
   }
 
   private async uploadStaticAssets(

@@ -12,6 +12,7 @@ import {
 } from "../src/artifact.ts";
 import { inventoryAssets } from "../src/assets.ts";
 import { CloudflareRuntimeProvider } from "../src/cloudflare.ts";
+import type { UploadIntent } from "../src/upload.ts";
 
 const directories: string[] = [];
 const baselineId = randomUUID();
@@ -81,6 +82,68 @@ describe("verified native uploads", () => {
       directories.splice(0).map(async (directory) => {
         await rm(directory, { force: true, recursive: true });
       })
+    );
+  });
+
+  it("reconciles annotated uploads across pages and rejects ambiguity or conflicting metadata", async () => {
+    const intent: UploadIntent = {
+      artifactDigest: "a".repeat(64),
+      baseline: { id: deploymentId, versionId: baselineId },
+      createdAt: "2026-09-06T12:00:00.000Z",
+      id: randomUUID(),
+      scriptName: "probe",
+      workflowRunId: "123",
+    };
+    const candidate = {
+      annotations: {
+        "workers/message": `upload ${intent.id} baseline ${baselineId} source ${"a".repeat(40)}`,
+        "workers/tag": intent.artifactDigest,
+      },
+      id: candidateId,
+    };
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        Response.json({
+          result: Array.from({ length: 100 }, () => ({ id: randomUUID() })),
+          success: true,
+        })
+      )
+      .mockResolvedValueOnce(
+        Response.json({ result: [candidate], success: true })
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          result: [candidate, { ...candidate, id: randomUUID() }],
+          success: true,
+        })
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          result: [
+            {
+              ...candidate,
+              annotations: {
+                ...candidate.annotations,
+                "workers/tag": "b".repeat(64),
+              },
+            },
+          ],
+          success: true,
+        })
+      );
+    const provider = new CloudflareRuntimeProvider(
+      "a".repeat(32),
+      "token",
+      request
+    );
+    await expect(provider.findUpload(intent)).resolves.toBe(candidateId);
+    expect(request.mock.calls[1]?.[0]).toContain("page=2&per_page=100");
+    await expect(provider.findUpload(intent)).rejects.toThrow(
+      "Multiple provider versions"
+    );
+    await expect(provider.findUpload(intent)).rejects.toThrow(
+      "annotation conflicts"
     );
   });
 

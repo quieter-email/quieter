@@ -24,6 +24,8 @@ import {
   identifierSchema,
   probeConfigurationSchema,
 } from "./schema.ts";
+import { ObjectUploadStore } from "./upload-store.ts";
+import { ReleaseUpload, uploadIntentSchema } from "./upload.ts";
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,
@@ -43,6 +45,8 @@ const command = z
     "status",
     "verify-artifacts",
     "register",
+    "upload",
+    "reconcile-upload",
     "bootstrap",
     "prepare",
     "promote",
@@ -108,6 +112,12 @@ const archive = {
   },
 };
 const preflight = new ReleasePreflight(artifacts, archive, provider);
+const uploads = new ObjectUploadStore(
+  storage,
+  env.QUIETER_RELEASE_BUCKET,
+  env.QUIETER_RELEASE_STAGE
+);
+const uploader = new ReleaseUpload(uploads, artifacts, archive, provider);
 const controller = new ReleaseController(journal, provider, preflight, {
   async candidate(attempt) {
     await verifyReleaseHealth(
@@ -140,6 +150,35 @@ if (
 }
 // oxlint-disable-next-line default-case -- The validated command union is exhaustive.
 switch (command) {
+  case "upload": {
+    if (values.file === undefined || values.directory === undefined) {
+      throw new Error(
+        "Upload requires the durable intent --file and compiled --directory."
+      );
+    }
+    const intent = uploadIntentSchema.parse(
+      JSON.parse(await readFile(values.file, "utf-8"))
+    );
+    if (!intent.scriptName.includes(`-${env.QUIETER_RELEASE_STAGE}-`)) {
+      throw new Error(
+        "Upload intent references a Worker outside this proof stage."
+      );
+    }
+    const receipt = await uploader.upload(intent, values.directory);
+    process.stdout.write(`${JSON.stringify(receipt)}\n`);
+    break;
+  }
+  case "reconcile-upload": {
+    const intent = await uploads.read(z.uuid().parse(values.attempt));
+    if (!intent.scriptName.includes(`-${env.QUIETER_RELEASE_STAGE}-`)) {
+      throw new Error(
+        "Upload intent references a Worker outside this proof stage."
+      );
+    }
+    const receipt = await uploader.reconcile(intent.id);
+    process.stdout.write(`${JSON.stringify(receipt)}\n`);
+    break;
+  }
   case "verify-artifacts": {
     if (existing === null) {
       throw new Error("There is no retained release to verify.");

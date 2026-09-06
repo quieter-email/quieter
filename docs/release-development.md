@@ -97,6 +97,14 @@ vp run @quieter/deployment#release verify-artifacts
 
 The receipt command repeats read-only provider/module and HTTP checks against the retained web candidate. It neither rebuilds nor uploads another version.
 
+## Inactive upload recovery
+
+Register the tested artifact and verify its archive before invoking `release upload --file <intent.json> --directory <compiled-directory>`. The intent contains a UUID, artifact digest, exact baseline deployment/version, script name, creation time, and workflow run ID. Keep that identity across retries. The journal conditionally creates the intent before contacting Cloudflare; only the process that creates it may upload. An uncertain journal write stops the process.
+
+Cloudflare versions carry the upload UUID and inherited baseline in their annotations. `release reconcile-upload --attempt <uuid>` scans bounded version history, rejects duplicate/conflicting matches, compares the complete compiled modules, verifies the archive, and checks the unchanged active deployment before retaining a receipt. A missing match remains unknown and never causes an automatic re-upload. If a runner stopped between claiming and sending, an operator can review and start a distinct inactive upload after confirming that the old writer ended. Activation still requires the normal release checks.
+
+The live `verify-upload-recovery.ts` drill passed on `release-proof-leander-v2` on 2026-09-06. It discarded an accepted upload response, recovered the exact version in a fresh process, retried the original intent without another upload, and preserved the active deployment. This exercises local process recovery; the independent GitHub workflow remains a separate cutover gate.
+
 ## Archive verification
 
 Generate the release artifact once with `@quieter/deployment#artifact`. Keep its compiled directory and manifest together. The archive CLI checks the manifest's digest and complete browser-file coverage, then checks the compiled modules before accessing the archive. Never rebuild to repair an upload under an existing manifest.
