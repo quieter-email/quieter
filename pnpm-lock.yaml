@@ -185,6 +185,9 @@ overrides:
   vitest: 4.1.10
   zod: ^4.4.3
 
+patchedDependencies:
+  postgres@3.4.9: d42c73466dac7bbeb96e76104cd66331d517d00a377b9326b51b1a25d38b681a
+
 importers:
 
   .:
@@ -239,10 +242,10 @@ importers:
         version: 1.0.0
       '@better-auth/api-key':
         specifier: 1.5.0
-        version: 1.5.0(f6c291488f6591174852b02b717d2c3c)
+        version: 1.5.0(94d963dae0882bb13e844ecfe6571c74)
       '@better-auth/passkey':
         specifier: 1.5.0
-        version: 1.5.0(570faead6ac47d1d11ff95bb861910fc)
+        version: 1.5.0(01061b82062460e21a2bc87154c9138f)
       '@c15t/react':
         specifier: ^2.2.1
         version: 2.2.1(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2)(use-sync-external-store@1.6.0(react@19.2.8))
@@ -374,7 +377,7 @@ importers:
         version: 7.0.77(zod@4.4.3)
       better-auth:
         specifier: 1.5.0
-        version: 1.5.0(@cloudflare/workers-types@5.20260804.1)(@prisma/client@7.4.2(prisma@7.4.2(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2))(typescript@7.0.2))(@tanstack/react-start@1.168.48(@voidzero-dev/vite-plus-core@0.2.9(@types/node@26.2.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@10.2.2))(drizzle-orm@1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9)(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3))(mongodb@7.1.0)(mysql2@3.15.3)(prisma@7.4.2(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.10)
+        version: 1.5.0(@cloudflare/workers-types@5.20260804.1)(@prisma/client@7.4.2(prisma@7.4.2(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2))(typescript@7.0.2))(@tanstack/react-start@1.168.48(@voidzero-dev/vite-plus-core@0.2.9(@types/node@26.2.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@10.2.2))(drizzle-orm@1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9(patch_hash=d42c73466dac7bbeb96e76104cd66331d517d00a377b9326b51b1a25d38b681a))(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3))(mongodb@7.1.0)(mysql2@3.15.3)(prisma@7.4.2(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.10)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -386,7 +389,7 @@ importers:
         version: 3.4.14
       drizzle-orm:
         specifier: 'catalog:'
-        version: 1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9)(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3)
+        version: 1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9(patch_hash=d42c73466dac7bbeb96e76104cd66331d517d00a377b9326b51b1a25d38b681a))(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3)
       lenis:
         specifier: ^1.3.26
         version: 1.3.26(react@19.2.8)
@@ -530,13 +533,13 @@ importers:
     devDependencies:
       '@better-auth/api-key':
         specifier: 1.5.0
-        version: 1.5.0(f6c291488f6591174852b02b717d2c3c)
+        version: 1.5.0(94d963dae0882bb13e844ecfe6571c74)
       '@better-auth/core':
         specifier: 1.5.0
         version: 1.5.0(@better-auth/utils@0.3.1)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@5.20260804.1)(better-call@1.3.2(zod@4.4.3))(jose@6.1.3)(kysely@0.28.11)(nanostores@1.1.1)
       '@better-auth/passkey':
         specifier: 1.5.0
-        version: 1.5.0(570faead6ac47d1d11ff95bb861910fc)
+        version: 1.5.0(01061b82062460e21a2bc87154c9138f)
       '@quieter/config':
         specifier: workspace:*
         version: link:../config
@@ -548,10 +551,10 @@ importers:
         version: 19.2.18
       better-auth:
         specifier: 1.5.0
-        version: 1.5.0(@cloudflare/workers-types@5.20260804.1)(@prisma/client@7.4.2(prisma@7.4.2(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2))(typescript@7.0.2))(@tanstack/react-start@1.168.48(@voidzero-dev/vite-plus-core@0.2.9(@types/node@26.2.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@10.2.2))(drizzle-orm@1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9)(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3))(mongodb@7.1.0)(mysql2@3.15.3)(prisma@7.4.2(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.10)
+        version: 1.5.0(@cloudflare/workers-types@5.20260804.1)(@prisma/client@7.4.2(prisma@7.4.2(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2))(typescript@7.0.2))(@tanstack/react-start@1.168.48(@voidzero-dev/vite-plus-core@0.2.9(@types/node@26.2.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@10.2.2))(drizzle-orm@1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9(patch_hash=d42c73466dac7bbeb96e76104cd66331d517d00a377b9326b51b1a25d38b681a))(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3))(mongodb@7.1.0)(mysql2@3.15.3)(prisma@7.4.2(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.10)
       drizzle-orm:
         specifier: 'catalog:'
-        version: 1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9)(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3)
+        version: 1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9(patch_hash=d42c73466dac7bbeb96e76104cd66331d517d00a377b9326b51b1a25d38b681a))(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3)
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -590,7 +593,7 @@ importers:
         version: 10.70.0(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(supports-color@10.2.2)
       drizzle-orm:
         specifier: 'catalog:'
-        version: 1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9)(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3)
+        version: 1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9(patch_hash=d42c73466dac7bbeb96e76104cd66331d517d00a377b9326b51b1a25d38b681a))(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3)
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -636,7 +639,7 @@ importers:
         version: link:../observability
       drizzle-orm:
         specifier: 'catalog:'
-        version: 1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9)(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3)
+        version: 1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9(patch_hash=d42c73466dac7bbeb96e76104cd66331d517d00a377b9326b51b1a25d38b681a))(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3)
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -649,7 +652,7 @@ importers:
         version: 26.2.0
       postgres:
         specifier: ^3.4.9
-        version: 3.4.9
+        version: 3.4.9(patch_hash=d42c73466dac7bbeb96e76104cd66331d517d00a377b9326b51b1a25d38b681a)
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -668,6 +671,9 @@ importers:
       '@quieter/env':
         specifier: workspace:*
         version: link:../env
+      '@quieter/mail':
+        specifier: workspace:*
+        version: link:../mail
       '@quieter/observability':
         specifier: workspace:*
         version: link:../observability
@@ -679,7 +685,7 @@ importers:
         version: 10.71.0(@cloudflare/workers-types@5.20260804.1)(supports-color@10.2.2)(wrangler@4.118.0(@cloudflare/workers-types@5.20260804.1))
       drizzle-orm:
         specifier: 'catalog:'
-        version: 1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9)(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3)
+        version: 1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9(patch_hash=d42c73466dac7bbeb96e76104cd66331d517d00a377b9326b51b1a25d38b681a))(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3)
       jose:
         specifier: 5.10.0
         version: 5.10.0
@@ -696,6 +702,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
+      postgres:
+        specifier: ^3.4.9
+        version: 3.4.9(patch_hash=d42c73466dac7bbeb96e76104cd66331d517d00a377b9326b51b1a25d38b681a)
       rolldown:
         specifier: 'catalog:'
         version: 1.0.0-rc.17
@@ -734,10 +743,10 @@ importers:
         version: link:../env
       drizzle-orm:
         specifier: 'catalog:'
-        version: 1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9)(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3)
+        version: 1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9(patch_hash=d42c73466dac7bbeb96e76104cd66331d517d00a377b9326b51b1a25d38b681a))(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3)
       postgres:
         specifier: ^3.4.9
-        version: 3.4.9
+        version: 3.4.9(patch_hash=d42c73466dac7bbeb96e76104cd66331d517d00a377b9326b51b1a25d38b681a)
       sst:
         specifier: ^4.17.1
         version: 4.17.1
@@ -959,10 +968,10 @@ importers:
         version: 26.2.0
       drizzle-orm:
         specifier: 'catalog:'
-        version: 1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9)(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3)
+        version: 1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9(patch_hash=d42c73466dac7bbeb96e76104cd66331d517d00a377b9326b51b1a25d38b681a))(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3)
       postgres:
         specifier: ^3.4.9
-        version: 3.4.9
+        version: 3.4.9(patch_hash=d42c73466dac7bbeb96e76104cd66331d517d00a377b9326b51b1a25d38b681a)
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -8044,11 +8053,11 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.2.18
 
-  '@better-auth/api-key@1.5.0(f6c291488f6591174852b02b717d2c3c)':
+  '@better-auth/api-key@1.5.0(94d963dae0882bb13e844ecfe6571c74)':
     dependencies:
       '@better-auth/core': 1.5.0(@better-auth/utils@0.3.1)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@5.20260804.1)(better-call@1.3.2(zod@4.4.3))(jose@6.1.3)(kysely@0.28.11)(nanostores@1.1.1)
       '@better-auth/utils': 0.3.1
-      better-auth: 1.5.0(@cloudflare/workers-types@5.20260804.1)(@prisma/client@7.4.2(prisma@7.4.2(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2))(typescript@7.0.2))(@tanstack/react-start@1.168.48(@voidzero-dev/vite-plus-core@0.2.9(@types/node@26.2.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@10.2.2))(drizzle-orm@1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9)(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3))(mongodb@7.1.0)(mysql2@3.15.3)(prisma@7.4.2(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.10)
+      better-auth: 1.5.0(@cloudflare/workers-types@5.20260804.1)(@prisma/client@7.4.2(prisma@7.4.2(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2))(typescript@7.0.2))(@tanstack/react-start@1.168.48(@voidzero-dev/vite-plus-core@0.2.9(@types/node@26.2.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@10.2.2))(drizzle-orm@1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9(patch_hash=d42c73466dac7bbeb96e76104cd66331d517d00a377b9326b51b1a25d38b681a))(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3))(mongodb@7.1.0)(mysql2@3.15.3)(prisma@7.4.2(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.10)
       zod: 4.4.3
 
   '@better-auth/core@1.5.0(@better-auth/utils@0.3.1)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@5.20260804.1)(better-call@1.3.2(zod@4.4.3))(jose@6.1.3)(kysely@0.28.11)(nanostores@1.1.1)':
@@ -8064,11 +8073,11 @@ snapshots:
     optionalDependencies:
       '@cloudflare/workers-types': 5.20260804.1
 
-  '@better-auth/drizzle-adapter@1.5.0(@better-auth/core@1.5.0(@better-auth/utils@0.3.1)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@5.20260804.1)(better-call@1.3.2(zod@4.4.3))(jose@6.1.3)(kysely@0.28.11)(nanostores@1.1.1))(@better-auth/utils@0.3.1)(drizzle-orm@1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9)(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3))':
+  '@better-auth/drizzle-adapter@1.5.0(@better-auth/core@1.5.0(@better-auth/utils@0.3.1)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@5.20260804.1)(better-call@1.3.2(zod@4.4.3))(jose@6.1.3)(kysely@0.28.11)(nanostores@1.1.1))(@better-auth/utils@0.3.1)(drizzle-orm@1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9(patch_hash=d42c73466dac7bbeb96e76104cd66331d517d00a377b9326b51b1a25d38b681a))(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3))':
     dependencies:
       '@better-auth/core': 1.5.0(@better-auth/utils@0.3.1)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@5.20260804.1)(better-call@1.3.2(zod@4.4.3))(jose@6.1.3)(kysely@0.28.11)(nanostores@1.1.1)
       '@better-auth/utils': 0.3.1
-      drizzle-orm: 1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9)(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3)
+      drizzle-orm: 1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9(patch_hash=d42c73466dac7bbeb96e76104cd66331d517d00a377b9326b51b1a25d38b681a))(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3)
 
   '@better-auth/kysely-adapter@1.5.0(@better-auth/core@1.5.0(@better-auth/utils@0.3.1)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@5.20260804.1)(better-call@1.3.2(zod@4.4.3))(jose@6.1.3)(kysely@0.28.11)(nanostores@1.1.1))(@better-auth/utils@0.3.1)(kysely@0.28.11)':
     dependencies:
@@ -8087,14 +8096,14 @@ snapshots:
       '@better-auth/utils': 0.3.1
       mongodb: 7.1.0
 
-  '@better-auth/passkey@1.5.0(570faead6ac47d1d11ff95bb861910fc)':
+  '@better-auth/passkey@1.5.0(01061b82062460e21a2bc87154c9138f)':
     dependencies:
       '@better-auth/core': 1.5.0(@better-auth/utils@0.3.1)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@5.20260804.1)(better-call@1.3.2(zod@4.4.3))(jose@6.1.3)(kysely@0.28.11)(nanostores@1.1.1)
       '@better-auth/utils': 0.3.1
       '@better-fetch/fetch': 1.1.21
       '@simplewebauthn/browser': 13.3.0
       '@simplewebauthn/server': 13.3.0
-      better-auth: 1.5.0(@cloudflare/workers-types@5.20260804.1)(@prisma/client@7.4.2(prisma@7.4.2(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2))(typescript@7.0.2))(@tanstack/react-start@1.168.48(@voidzero-dev/vite-plus-core@0.2.9(@types/node@26.2.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@10.2.2))(drizzle-orm@1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9)(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3))(mongodb@7.1.0)(mysql2@3.15.3)(prisma@7.4.2(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.10)
+      better-auth: 1.5.0(@cloudflare/workers-types@5.20260804.1)(@prisma/client@7.4.2(prisma@7.4.2(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2))(typescript@7.0.2))(@tanstack/react-start@1.168.48(@voidzero-dev/vite-plus-core@0.2.9(@types/node@26.2.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@10.2.2))(drizzle-orm@1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9(patch_hash=d42c73466dac7bbeb96e76104cd66331d517d00a377b9326b51b1a25d38b681a))(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3))(mongodb@7.1.0)(mysql2@3.15.3)(prisma@7.4.2(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.10)
       better-call: 1.3.2(zod@4.4.3)
       nanostores: 1.1.1
       zod: 4.4.3
@@ -11103,10 +11112,10 @@ snapshots:
 
   baseline-browser-mapping@2.10.20: {}
 
-  better-auth@1.5.0(@cloudflare/workers-types@5.20260804.1)(@prisma/client@7.4.2(prisma@7.4.2(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2))(typescript@7.0.2))(@tanstack/react-start@1.168.48(@voidzero-dev/vite-plus-core@0.2.9(@types/node@26.2.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@10.2.2))(drizzle-orm@1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9)(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3))(mongodb@7.1.0)(mysql2@3.15.3)(prisma@7.4.2(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.10):
+  better-auth@1.5.0(@cloudflare/workers-types@5.20260804.1)(@prisma/client@7.4.2(prisma@7.4.2(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2))(typescript@7.0.2))(@tanstack/react-start@1.168.48(@voidzero-dev/vite-plus-core@0.2.9(@types/node@26.2.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@10.2.2))(drizzle-orm@1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9(patch_hash=d42c73466dac7bbeb96e76104cd66331d517d00a377b9326b51b1a25d38b681a))(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3))(mongodb@7.1.0)(mysql2@3.15.3)(prisma@7.4.2(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.10):
     dependencies:
       '@better-auth/core': 1.5.0(@better-auth/utils@0.3.1)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@5.20260804.1)(better-call@1.3.2(zod@4.4.3))(jose@6.1.3)(kysely@0.28.11)(nanostores@1.1.1)
-      '@better-auth/drizzle-adapter': 1.5.0(@better-auth/core@1.5.0(@better-auth/utils@0.3.1)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@5.20260804.1)(better-call@1.3.2(zod@4.4.3))(jose@6.1.3)(kysely@0.28.11)(nanostores@1.1.1))(@better-auth/utils@0.3.1)(drizzle-orm@1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9)(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3))
+      '@better-auth/drizzle-adapter': 1.5.0(@better-auth/core@1.5.0(@better-auth/utils@0.3.1)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@5.20260804.1)(better-call@1.3.2(zod@4.4.3))(jose@6.1.3)(kysely@0.28.11)(nanostores@1.1.1))(@better-auth/utils@0.3.1)(drizzle-orm@1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9(patch_hash=d42c73466dac7bbeb96e76104cd66331d517d00a377b9326b51b1a25d38b681a))(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3))
       '@better-auth/kysely-adapter': 1.5.0(@better-auth/core@1.5.0(@better-auth/utils@0.3.1)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@5.20260804.1)(better-call@1.3.2(zod@4.4.3))(jose@6.1.3)(kysely@0.28.11)(nanostores@1.1.1))(@better-auth/utils@0.3.1)(kysely@0.28.11)
       '@better-auth/memory-adapter': 1.5.0(@better-auth/core@1.5.0(@better-auth/utils@0.3.1)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@5.20260804.1)(better-call@1.3.2(zod@4.4.3))(jose@6.1.3)(kysely@0.28.11)(nanostores@1.1.1))(@better-auth/utils@0.3.1)
       '@better-auth/mongo-adapter': 1.5.0(@better-auth/core@1.5.0(@better-auth/utils@0.3.1)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@5.20260804.1)(better-call@1.3.2(zod@4.4.3))(jose@6.1.3)(kysely@0.28.11)(nanostores@1.1.1))(@better-auth/utils@0.3.1)(mongodb@7.1.0)
@@ -11125,7 +11134,7 @@ snapshots:
     optionalDependencies:
       '@prisma/client': 7.4.2(prisma@7.4.2(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2))(typescript@7.0.2)
       '@tanstack/react-start': 1.168.48(@voidzero-dev/vite-plus-core@0.2.9(@types/node@26.2.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@10.2.2)
-      drizzle-orm: 1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9)(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3)
+      drizzle-orm: 1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9(patch_hash=d42c73466dac7bbeb96e76104cd66331d517d00a377b9326b51b1a25d38b681a))(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3)
       mongodb: 7.1.0
       mysql2: 3.15.3
       prisma: 7.4.2(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2)
@@ -11378,13 +11387,13 @@ snapshots:
       get-tsconfig: 4.13.6
       jiti: 2.7.0
 
-  drizzle-orm@1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9)(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3):
+  drizzle-orm@1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9(patch_hash=d42c73466dac7bbeb96e76104cd66331d517d00a377b9326b51b1a25d38b681a))(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3):
     optionalDependencies:
       '@cloudflare/workers-types': 5.20260804.1
       '@electric-sql/pglite': 0.3.15
       '@opentelemetry/api': 1.9.1
       mysql2: 3.15.3
-      postgres: 3.4.9
+      postgres: 3.4.9(patch_hash=d42c73466dac7bbeb96e76104cd66331d517d00a377b9326b51b1a25d38b681a)
       valibot: 1.4.2(typescript@7.0.2)
       zod: 4.4.3
 
@@ -12438,7 +12447,7 @@ snapshots:
 
   postgres@3.4.7: {}
 
-  postgres@3.4.9: {}
+  postgres@3.4.9(patch_hash=d42c73466dac7bbeb96e76104cd66331d517d00a377b9326b51b1a25d38b681a): {}
 
   prelude-ls@1.2.1: {}
 

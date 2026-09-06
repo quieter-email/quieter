@@ -7,6 +7,7 @@ const packageRoot = path.resolve(import.meta.dirname, "..");
 const outputDirectory = path.join(packageRoot, ".bundle-check");
 const entrypoints = [
   path.join(packageRoot, "src", "gmail-maintenance-worker.ts"),
+  path.join(packageRoot, "src", "mail-submission-publisher-worker.ts"),
   path.join(packageRoot, "src", "mailbox-action-dispatch-worker.ts"),
   path.join(packageRoot, "src", "mailbox-action-worker.ts"),
   path.join(packageRoot, "src", "queue-worker.ts"),

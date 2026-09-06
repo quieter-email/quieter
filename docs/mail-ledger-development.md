@@ -1,6 +1,6 @@
 # Durable mail ledger development
 
-The new ledger is dormant. No public route, scheduled handler, queue consumer, or existing v1 send path calls it yet. These additive migrations can precede runtime activation. Async acceptance must stay disabled until runtime wiring, feedback processing, status retrieval, capacity refresh, and controlled end-to-end tests are complete.
+The new ledger is dormant. The outbox publisher has queue and scheduled entrypoints, but infrastructure does not activate them yet. No public route or existing v1 send path calls the ledger. These additive migrations can precede runtime activation. Async acceptance must stay disabled until runtime wiring, feedback processing, status retrieval, capacity refresh, and controlled end-to-end tests are complete.
 
 ## Transaction boundaries
 
@@ -53,6 +53,7 @@ $env:MIGRATION_TEST_DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:55432
 vp run db:check
 vp run db:test-migrations
 vp test packages/database/tests/mail-outbox.integration.test.ts packages/billing/tests/mail-submission-usage.integration.test.ts packages/orpc/tests/mail-submission-sender.integration.test.ts
+vp run @quieter/cloudflare#test:workers
 ```
 
 The migration test deliberately resets this disposable database. Both test entry points reject non-loopback hosts and require the exact `quieter_migration_test` database. Never point them at shared development. Stop and remove the fixture after testing:
@@ -64,6 +65,16 @@ wsl -d Ubuntu -u root -- docker stop quieter-release-ledger-test
 The PostgreSQL tests cover concurrent acceptance, transaction failure, separate outbox claims, generation fencing, queue-loss recovery, unknown sends, late confirmation, safe retry accounting, feedback before mapping, and restrictive ownership. CI runs these after migrating its disposable PostgreSQL service.
 
 `vp run @quieter/cloudflare#test:workers` also verifies immutable attachment writes and corruption detection against the provider's local R2 runtime. This uses the test-only `LocalMailStorage` binding and cannot access production objects.
+
+With `MIGRATION_TEST_DATABASE_URL` set, the native Worker tests use Miniflare's supported local Hyperdrive mapping to the disposable database. They publish real native queue messages, recover a lost wakeup with the same event ID, and preserve an abandoned send attempt without another dispatch. CI runs this after the migration tests. Without that variable, only the PostgreSQL integration tests skip.
+
+## Outbox publisher
+
+`packages/cloudflare/src/mail-submission-publisher-worker.ts` drains at most sixty events per invocation, with five concurrent publications and a ten-second deadline per native queue request. Strict versioned contracts route dispatch events to the sender queue and accepted/failed events to the projection queue. Native queue acceptance is recorded as a receipt tied to the durable event ID. It does not claim to be a provider message ID.
+
+A wakeup retries when publication is uncertain or a full bounded drain leaves more work. The scheduled entrypoint first recovers expired attempts and lost queued work, then drains the outbox. It reports deferred publication as a failed scheduled invocation, preserving database recovery eligibility. Infrastructure must configure its independent wake queue, schedule, dead-letter handling, and alerts before activation.
+
+The native tests reproduced two defects in the pinned `postgres@3.4.9`: cold `reserve()` with `fetch_types:false` hangs, and the Cloudflare socket teardown emits an unhandled rejection after listeners are removed. The checked-in package patch restores the cold reservation's pool callback in all shipped JavaScript builds and guards the post-teardown error emission. Tests exercise reservation, ordinary SQL failure, pool reuse, and awaited shutdown. Remove the patch only after the same tests pass with an upstream fix. See the upstream [cold reservation report](https://github.com/porsager/postgres/issues/751) and [Worker teardown report](https://github.com/porsager/postgres/issues/1202). This patch does not repair the legacy session-lock design or certify database failover behavior; both remain part of runtime migration and failure testing.
 
 ## Admission limits
 

@@ -2,12 +2,29 @@ export type RuntimeRegistration = {
   service: string;
   package: string;
   entrypoint: string;
-  trigger: "http" | "http-durable-object" | "queue" | "scheduled" | "sns";
+  trigger:
+    | "http"
+    | "http-durable-object"
+    | "queue"
+    | "scheduled"
+    | "queue-scheduled"
+    | "sns";
   nativeReleaseBlockers: string[];
 };
 
 // These are existing runtime boundaries. New mail services join only when their handlers exist.
 export const runtimeRegistry: RuntimeRegistration[] = [
+  {
+    entrypoint: "packages/cloudflare/src/mail-submission-publisher-worker.ts",
+    nativeReleaseBlockers: [
+      "mail_runtime_foundation",
+      "protected_health_bindings",
+      "independent_recovery_workflow",
+    ],
+    package: "@quieter/cloudflare",
+    service: "mail-outbox-publisher",
+    trigger: "queue-scheduled",
+  },
   {
     entrypoint: "apps/web/src/server.ts",
     nativeReleaseBlockers: [

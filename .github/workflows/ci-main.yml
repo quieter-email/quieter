@@ -169,3 +169,6 @@ jobs:
 
       - name: Test durable mail claims against migrated PostgreSQL
         run: vp test packages/database/tests/mail-outbox.integration.test.ts packages/billing/tests/mail-submission-usage.integration.test.ts packages/orpc/tests/mail-submission-sender.integration.test.ts
+
+      - name: Test durable mail publication through native queues
+        run: vp run @quieter/cloudflare#test:workers

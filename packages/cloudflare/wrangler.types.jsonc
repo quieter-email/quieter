@@ -55,6 +55,18 @@
   "queues": {
     "producers": [
       {
+        "binding": "MailSubmissionDispatchQueue",
+        "queue": "mail-submission-dispatch-types",
+      },
+      {
+        "binding": "MailSubmissionProjectionQueue",
+        "queue": "mail-submission-projection-types",
+      },
+      {
+        "binding": "MailSubmissionWakeQueue",
+        "queue": "mail-submission-wake-types",
+      },
+      {
         "binding": "GmailPsQueue",
         "queue": "gmail-pubsub-types",
       },

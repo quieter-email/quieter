@@ -14,6 +14,7 @@
     "./search": "./src/search.ts",
     "./send": "./src/send.ts",
     "./submission-transport": "./src/submission-transport.ts",
+    "./submission-events": "./src/submission-events.ts",
     "./ses-submission-transport": "./src/ses-submission-transport.ts",
     "./sender-avatar": "./src/sender-avatar.ts",
     "./tracking": "./src/tracking.ts"

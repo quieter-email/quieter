@@ -3,24 +3,7 @@ import { createHash } from "node:crypto";
 import type { MailPayloadObject } from "@quieter/database/schema";
 import type { SubmissionPayloadStorage } from "@quieter/orpc/mail-submission-payload";
 
-const storageDeadline = async <T>(operation: Promise<T>): Promise<T> => {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      operation,
-      // oxlint-disable-next-line promise/avoid-new -- Native R2 operations do not accept an abort signal.
-      new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(() => {
-          reject(new Error("Submission storage deadline exceeded."));
-        }, 10_000);
-      }),
-    ]);
-  } catch {
-    throw new Error("Submission storage operation failed.");
-  } finally {
-    clearTimeout(timer);
-  }
-};
+import { withMailOperationDeadline } from "./mail-operation-deadline.ts";
 
 export class R2SubmissionPayloadStorage implements SubmissionPayloadStorage {
   private readonly bucket: Pick<R2Bucket, "get" | "put" | "delete">;
@@ -37,7 +20,7 @@ export class R2SubmissionPayloadStorage implements SubmissionPayloadStorage {
     ) {
       throw new Error("Invalid submission object.");
     }
-    await storageDeadline(
+    await withMailOperationDeadline(
       this.bucket.put(object.key, bytes, {
         httpMetadata: { contentType: "application/octet-stream" },
         onlyIf: { etagDoesNotMatch: "*" },
@@ -55,13 +38,15 @@ export class R2SubmissionPayloadStorage implements SubmissionPayloadStorage {
     ) {
       throw new Error("Invalid submission object.");
     }
-    const stored = await storageDeadline(this.bucket.get(object.key));
+    const stored = await withMailOperationDeadline(this.bucket.get(object.key));
     if (stored === null || stored.size !== object.bytes) {
       throw new Error(
         "Submission object is missing or has an unexpected size."
       );
     }
-    const bytes = new Uint8Array(await storageDeadline(stored.arrayBuffer()));
+    const bytes = new Uint8Array(
+      await withMailOperationDeadline(stored.arrayBuffer())
+    );
     if (createHash("sha256").update(bytes).digest("hex") !== object.digest) {
       throw new Error("Submission object checksum differs from its manifest.");
     }
@@ -72,6 +57,6 @@ export class R2SubmissionPayloadStorage implements SubmissionPayloadStorage {
     if (!/^submissions\/[a-f\d-]{36}\/\d{1,2}-[a-f\d]{64}$/u.test(key)) {
       throw new Error("Invalid submission cleanup object.");
     }
-    await storageDeadline(this.bucket.delete(key));
+    await withMailOperationDeadline(this.bucket.delete(key));
   }
 }

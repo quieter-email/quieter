@@ -1,14 +1,23 @@
 import { cloudflareTest } from "@cloudflare/vitest-pool-workers";
+import { assertLocalDatabaseUrl } from "@quieter/database/local-development";
 import { defineConfig } from "vite-plus";
 
 const dependencyBuild = [{ from: "dependencies" as const, task: "build" }];
+const migrationTestDatabaseUrl = process.env.MIGRATION_TEST_DATABASE_URL;
+if (migrationTestDatabaseUrl !== undefined) {
+  assertLocalDatabaseUrl(migrationTestDatabaseUrl, "quieter_migration_test");
+}
 
 export default defineConfig({
   plugins: [
     cloudflareTest({
       miniflare: {
+        ...(migrationTestDatabaseUrl === undefined
+          ? {}
+          : { hyperdrives: { AppDatabaseV2: migrationTestDatabaseUrl } }),
         r2Buckets: { LocalMailStorage: "quieter-local-mail" },
         bindings: {
+          MIGRATION_TEST_DATABASE_URL: migrationTestDatabaseUrl ?? "",
           CONNECTOR_TOKEN_ENCRYPTION_KEY: "connector-token-key",
           GMAIL_TOKEN_ENCRYPTION_KEY: "gmail-token-key",
           GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT: "gmail-token-key-current",

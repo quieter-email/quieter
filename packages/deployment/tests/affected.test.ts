@@ -57,13 +57,16 @@ describe("affected runtime planning", () => {
     ).toStrictEqual(["sender", "web"]);
   });
 
-  it("invalidates all consumers and requires review for toolchain changes", () => {
-    expect(plan(["pnpm-lock.yaml"])).toMatchObject({
-      affected: ["sender", "web"],
-      runtimeOnly: false,
-      toolingPaths: ["pnpm-lock.yaml"],
-    });
-  });
+  it.each(["pnpm-lock.yaml", "patches/postgres@3.4.9.patch"])(
+    "invalidates all consumers and requires review for %s",
+    (file) => {
+      expect(plan([file])).toMatchObject({
+        affected: ["sender", "web"],
+        runtimeOnly: false,
+        toolingPaths: [file],
+      });
+    }
+  );
 
   it("keeps infrastructure changes outside runtime-only promotion", () => {
     expect(plan(["infra/mail.ts"])).toMatchObject({

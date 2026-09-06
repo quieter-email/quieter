@@ -94,6 +94,7 @@ export const identifyAffectedRuntimes = (input: {
       ].includes(file) ||
       file.startsWith(".github/") ||
       file.startsWith("scripts/") ||
+      file.startsWith("patches/") ||
       file.startsWith("packages/deployment/") ||
       file.startsWith("packages/config/")
     ) {

@@ -18,6 +18,7 @@
   "dependencies": {
     "@quieter/database": "workspace:*",
     "@quieter/env": "workspace:*",
+    "@quieter/mail": "workspace:*",
     "@quieter/observability": "workspace:*",
     "@quieter/orpc": "workspace:*",
     "@sentry/cloudflare": "catalog:",
@@ -29,6 +30,7 @@
     "@cloudflare/vitest-pool-workers": "catalog:",
     "@quieter/config": "workspace:*",
     "@types/node": "catalog:",
+    "postgres": "^3.4.9",
     "rolldown": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
