@@ -10,19 +10,29 @@ import { assertCompatible } from "./compatibility.ts";
 import { ReleaseController } from "./controller.ts";
 import { observeRelease, probeConfigurationSchema } from "./health.ts";
 import { ObjectReleaseJournal } from "./journal.ts";
+import { reconcileRelease } from "./recovery.ts";
 import { healthyReleaseSchema, identifierSchema } from "./schema.ts";
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,
   options: {
     attempt: { type: "string" },
+    "event-run": { type: "string" },
     file: { type: "string" },
     reason: { type: "string" },
     run: { type: "string" },
   },
 });
 const command = z
-  .enum(["status", "bootstrap", "prepare", "promote", "recover", "observe"])
+  .enum([
+    "status",
+    "bootstrap",
+    "prepare",
+    "promote",
+    "recover",
+    "observe",
+    "reconcile",
+  ])
   .parse(positionals[0]);
 const env = createDeploymentEnv();
 if (
@@ -34,7 +44,15 @@ if (
   );
 }
 const journal = new ObjectReleaseJournal(
-  new S3Client({ maxAttempts: 1, region: env.AWS_REGION }),
+  new S3Client({
+    maxAttempts: 1,
+    region: env.AWS_REGION,
+    requestHandler: {
+      connectionTimeout: 5000,
+      requestTimeout: 15_000,
+      throwOnRequestTimeout: true,
+    },
+  }),
   env.QUIETER_RELEASE_BUCKET,
   env.QUIETER_RELEASE_STAGE
 );
@@ -57,6 +75,21 @@ if (
 }
 // oxlint-disable-next-line default-case -- The validated command union is exhaustive.
 switch (command) {
+  case "reconcile": {
+    if (env.GITHUB_REPOSITORY === undefined || env.GITHUB_TOKEN === undefined) {
+      throw new Error("Reconciliation requires GitHub workflow read access.");
+    }
+    const result = await reconcileRelease(controller, {
+      eventRunId:
+        values["event-run"] === undefined
+          ? undefined
+          : z.string().regex(/^\d+$/u).parse(values["event-run"]),
+      repository: env.GITHUB_REPOSITORY,
+      token: env.GITHUB_TOKEN,
+    });
+    process.stdout.write(`${result}\n`);
+    break;
+  }
   case "status": {
     const checkpoint = await journal.read();
     process.stdout.write(

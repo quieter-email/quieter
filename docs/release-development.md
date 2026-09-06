@@ -10,6 +10,8 @@ Milestone A is in progress. Production still runs the legacy SST workflow. `@qui
 - Recovery from a separate process, drift detection across the entire map, quarantine of failed artifacts, and refusal to start over unresolved attempts.
 - Two-minute authenticated health observation with explicit checks and actual version identity. Certification requires fresh evidence covering every service.
 - Browser asset inventory, immutable uploads, byte/MIME verification, receipt written last, and repair from the same artifact. Receipts are excluded from public fallback.
+- Deterministic compiled module/static asset manifests, byte verification before upload, and native inactive uploads inheriting bindings from an explicit baseline UUID. Uploads reject compatibility changes, binding removal, incomplete assets, and active-deployment drift.
+- Independent recovery checks the journal's recorded GitHub writer, waits for that writer to end, and rejects obsolete completion events. The recovery workflow uses separately pinned tooling and the shared mutation group. It remains disabled pending environment configuration and cutover.
 
 The controller alone is not a deployment lock. Every mutating production workflow and emergency operator must share the ownership rule. Cloudflare has no compare-and-set deployment endpoint; read-before-write cannot fence a competing external operator.
 
@@ -30,7 +32,9 @@ $env:QUIETER_RELEASE_PROOF_PHASE = "candidate"
 vp exec sst deploy --config sst.release-proof.config.ts --stage release-proof-leander
 ```
 
-The existing `WorkersScript` ignores changes during the candidate phase. `WorkerVersion` uploads the compiled module and linked bindings without activating it. The checked-in proof rejects unsupported binding types and Durable Object migrations rather than silently dropping them.
+The existing `WorkersScript` stores its baseline module inline and ignores changes during the candidate phase. File-backed content is unsafe here: a later build can replace the retained path's bytes while Pulumi retains its previous checksum. The `adopt` phase is only for the recorded development transition from file-backed state. It requires the exact original compiled module downloaded from the provider, verified against its original checksum. Do not apply it to production without its own reviewed inventory and transition.
+
+`WorkerVersion` uploads the compiled module and linked bindings without activating it. The checked-in proof rejects unsupported binding types and Durable Object migrations rather than silently dropping them. Rebuild `@quieter/env` before deploying after changing its schema; SST consumes its compiled package export.
 
 Set `QUIETER_RELEASE_BUCKET`, `QUIETER_RELEASE_STAGE`, `CLOUDFLARE_ACCOUNT_ID`, and `AWS_REGION` from the intended proof stage. The CLI uses AWS's credential chain and the existing `CLOUDFLARE_API_TOKEN`. Read configuration through `@quieter/env/deployment`.
 
@@ -49,7 +53,22 @@ Each command is a separate process. If a command fails, read status and actual p
 - Pinned SST 4.17.1 and Cloudflare Pulumi 6.15.0 created an inactive native version while preserving the exact active deployment ID.
 - The provider rejects `modules.contentSha256` as read-only despite exposing it in its TypeScript input definition. Uploading the compiled bytes through `contentBase64` works and makes content changes visible to Pulumi.
 - A real S3 connection reset left a durable `prepared` attempt. A fresh process read it, promoted the candidate, and another process restored the original Cloudflare version.
-- A subsequent SST update in candidate mode changed neither the native version nor the restored active Worker. The candidate remained inactive after rollback.
+- The first subsequent SST test used unchanged source. Changing the source exposed the file/checksum problem above. After moving baseline content inline, source changes uploaded new candidates without replacing the active baseline.
+- Cloudflare's older multipart version endpoint rejects explicit binding-source UUIDs and only accepts `latest`. The JSON version endpoint used by the pinned provider accepts the baseline UUID with `deploy=false`. The native uploader uses that endpoint, checks returned binding names/types, and never falls back to `latest`.
+- A native candidate inherited the active baseline's bindings while a newer SST-uploaded candidate had different configuration. Authenticated candidate code and static assets passed; unauthenticated access returned 404. `_headers` behavior passed and the active deployment ID stayed unchanged.
+- The isolated credential initially included PowerShell's trailing newline. It was corrected through stdin without changing any production secret. That correction and later asset-binding addition deliberately established new fixture baselines. The earlier journal remains intact as historical recovery evidence and must not be treated as the current fixture baseline.
 - Unit tests cover interruption around journal writes, lost activation responses, stale writers, external drift, failed compensation, quarantined artifacts, incompatible contracts, archive repair, corruption, and missing objects behind a valid receipt.
 
-These tests establish the controller and basic linked Worker behavior. They do not yet establish TanStack asset upload behavior, protected production previews, queue/scheduled/DO version selection, production ownership transfer, or the independent recovery workflow. No production pointer, secret, or database was changed by this proof.
+These tests establish the controller, linked Worker behavior, and native static-asset upload. An actual TanStack build has also been inventoried. They do not yet establish a complete deployed TanStack candidate, protected production previews, queue/scheduled/DO version selection, production ownership transfer, or a live independent recovery workflow. No production pointer, secret, or database was changed by this proof.
+
+Run the native upload proof under the limited SST operations target. It copies the compiled probe, adds a candidate asset, uploads exact bytes, and tests the versioned preview. It does not activate the upload.
+
+```powershell
+vp exec sst shell --config sst.release-proof.config.ts --stage release-proof-leander --target ReleaseOperations -- node --conditions=development packages/deployment/src/verify-upload-proof.ts
+```
+
+## Independent recovery configuration
+
+`.github/workflows/release-recovery.yml` listens for release completion and reconciles every five minutes. `RUNTIME_RELEASE_RECOVERY_ENABLED` defaults off. Before enabling it, configure the `release-recovery` environment with a reviewed 40-character `RELEASE_CONTROLLER_SHA`, `RELEASE_STAGE`, `RELEASE_JOURNAL_BUCKET`, `CLOUDFLARE_ACCOUNT_ID`, and `AWS_REGION`. Supply `RELEASE_RECOVERY_AWS_ROLE` and `RELEASE_RECOVERY_CLOUDFLARE_TOKEN` with only journal/version/deployment permissions. The recovery job does not need application secrets, database access, migrations, or an SST deploy.
+
+The CLI still refuses production mutations, including reconciliation. Production enablement requires the remaining cutover gates; setting a workflow variable alone cannot bypass them. Every writer must use the same `quieter-deploy-<stage>` mutation group. A completed writer with unfinished journal state is recoverable even if GitHub labels its run successful. An unavailable GitHub status or expired but still active writer blocks compensation and fails the recovery job visibly.

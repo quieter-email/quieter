@@ -7,7 +7,9 @@
     "./schema": "./src/schema.ts"
   },
   "scripts": {
+    "artifact": "node --conditions=development src/artifact-cli.ts",
     "verify:proof": "node --conditions=development src/verify-live-proof.ts",
+    "verify:upload": "node --conditions=development src/verify-upload-proof.ts",
     "release": "node --conditions=development src/cli.ts"
   },
   "dependencies": {

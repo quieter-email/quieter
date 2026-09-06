@@ -17,6 +17,7 @@ export default $config({
     };
   },
   async run() {
+    const { readFile } = await import("node:fs/promises");
     const { createReleaseProofEnv } = await import("@quieter/env/deployment");
     const { createRuntimeVersion } = await import("./infra/runtime-version");
     const { COMPATIBILITY_DATE } =
@@ -36,18 +37,48 @@ export default $config({
       transform: { bucket: { name: `${$app.stage}-archive` } },
     });
     const journal = new sst.aws.Bucket("ReleaseJournal", { versioning: true });
+    const operations = new sst.x.DevCommand("ReleaseOperations", {
+      dev: {
+        autostart: false,
+        command: "vp run @quieter/deployment#release status",
+      },
+      link: [token, journal],
+    });
+    void operations;
     let captured: cloudflare.WorkersScriptArgs | undefined;
     const worker = new sst.cloudflare.Worker("Probe", {
+      assets: {
+        directory: "packages/deployment/fixtures/client",
+        runWorkerFirst: true,
+      },
       compatibility: { date: COMPATIBILITY_DATE, flags: ["nodejs_compat"] },
-      environment: { PROBE_GENERATION: phase },
+      environment: {
+        PROBE_GENERATION: phase === "baseline" ? "baseline" : "candidate",
+      },
       handler: "packages/deployment/src/release-probe.ts",
       link: [binding, archive],
       transform: {
         worker(args, options) {
-          captured = args;
+          captured = { ...args };
           if (phase === "candidate") {
             options.ignoreChanges = ["*"];
+          } else if (phase === "adopt") {
+            options.ignoreChanges = Object.keys(args).filter(
+              (key) =>
+                !["content", "contentFile", "contentSha256"].includes(key)
+            );
           }
+          args.content =
+            phase === "adopt"
+              ? readFile(".scratch/release-proof-original-module.js", "utf-8")
+              : $util.output(args.contentFile).apply(async (file) => {
+                  if (file === undefined) {
+                    throw new Error("Missing compiled probe module.");
+                  }
+                  return await readFile(file, "utf-8");
+                });
+          args.contentFile = undefined;
+          args.contentSha256 = undefined;
         },
       },
       url: true,
@@ -56,9 +87,9 @@ export default $config({
       throw new Error("SST did not produce a native Worker module.");
     }
     const candidate =
-      phase === "candidate"
-        ? createRuntimeVersion("Candidate", worker, captured)
-        : undefined;
+      phase === "baseline"
+        ? undefined
+        : createRuntimeVersion("Candidate", worker, captured);
     return {
       archive: archive.name,
       candidateVersion: candidate?.id,

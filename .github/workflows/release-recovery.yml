@@ -1,0 +1,69 @@
+name: Recover Runtime Release
+
+on:
+  workflow_run:
+    workflows:
+      [
+        Deploy Runtime Release,
+        Roll Back Runtime Release,
+        Release Provider Proof,
+      ]
+    types: [completed]
+    branches: [main]
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recover:
+    if: ${{ vars.RUNTIME_RELEASE_RECOVERY_ENABLED == 'true' }}
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    environment: release-recovery
+    concurrency:
+      group: quieter-deploy-${{ vars.RELEASE_STAGE || 'production' }}
+      cancel-in-progress: false
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    env:
+      CONTROLLER_SHA: ${{ vars.RELEASE_CONTROLLER_SHA }}
+      QUIETER_RELEASE_STAGE: ${{ vars.RELEASE_STAGE || 'production' }}
+      QUIETER_RELEASE_BUCKET: ${{ vars.RELEASE_JOURNAL_BUCKET }}
+      AWS_REGION: ${{ vars.AWS_REGION || 'eu-central-1' }}
+    steps:
+      - name: Require reviewed recovery tooling
+        shell: bash
+        run: |
+          [[ "$CONTROLLER_SHA" =~ ^[a-f0-9]{40}$ ]] || { echo "Pin RELEASE_CONTROLLER_SHA to a reviewed commit."; exit 1; }
+
+      - name: Checkout recovery tooling
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CONTROLLER_SHA }}
+          persist-credentials: false
+
+      - name: Setup repository
+        uses: ./.github/actions/setup
+
+      - name: Configure journal credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.RELEASE_RECOVERY_AWS_ROLE }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Reconcile unfinished runtime release
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.RELEASE_RECOVERY_CLOUDFLARE_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+          EVENT_RUN_ID: ${{ github.event.workflow_run.id }}
+        shell: bash
+        run: |
+          args=()
+          if [[ -n "$EVENT_RUN_ID" ]]; then args+=(--event-run "$EVENT_RUN_ID"); fi
+          vp run @quieter/deployment#release reconcile "${args[@]}"
