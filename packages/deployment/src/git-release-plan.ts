@@ -153,5 +153,11 @@ export const verifyPlannedRelease = async (
     if (manifest.artifact.sourceSha !== candidate.sourceSha) {
       throw new Error("A changed runtime was built from a different source.");
     }
+    if (
+      manifest.artifact.provenance === undefined ||
+      (manifest.artifact.provenance.service ?? "web") !== service.service
+    ) {
+      throw new Error("A changed runtime was built for a different service.");
+    }
   }
 };

@@ -11,7 +11,7 @@ import {
 } from "@quieter/env/build";
 import { describe, expect, it } from "vite-plus/test";
 
-import { readReleaseBuildSource } from "../src/web-release-build.ts";
+import { readReleaseBuildSource } from "../src/runtime-release-build.ts";
 
 // oxlint-disable-next-line strict-void-return -- promisify waits for the subprocess callback.
 const execute = promisify(execFile);

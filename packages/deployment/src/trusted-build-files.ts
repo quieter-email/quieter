@@ -29,6 +29,7 @@ export const verifyTrustedBuildFiles = async (
   if (
     manifest.artifact.sourceSha !== build.sourceSha ||
     provenance === undefined ||
+    (provenance.service ?? "web") !== (build.service ?? "web") ||
     provenance.stage !== build.stage ||
     provenance.sourceTree !== build.sourceTree ||
     provenance.lockfileDigest !== build.lockfileDigest ||

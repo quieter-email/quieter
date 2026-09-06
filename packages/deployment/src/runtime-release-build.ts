@@ -1,6 +1,13 @@
 import { execFile, spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { lstat, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { promisify, stripVTControlCharacters } from "node:util";
 
@@ -15,6 +22,7 @@ import {
   releaseArtifactSchema,
 } from "./artifact.ts";
 import { inventoryAssets } from "./assets.ts";
+import { runtimeRegistry } from "./registry.ts";
 import { identifierSchema } from "./schema.ts";
 import {
   prepareGeneratedSourceMaps,
@@ -76,16 +84,29 @@ export const readReleaseBuildSource = async (directory: string) => {
   };
 };
 
-export const buildWebRelease = async (input: {
+export const buildRuntimeRelease = async (input: {
   directory: string;
   output: string;
   stage: string;
   publicConfiguration: unknown;
+  service: string;
 }) => {
   if (!path.isAbsolute(input.directory) || !path.isAbsolute(input.output)) {
     throw new Error("Release build paths must be absolute.");
   }
   const stage = identifierSchema.parse(input.stage);
+  const runtime = runtimeRegistry.find(
+    (entry) => entry.service === input.service
+  );
+  if (
+    runtime === undefined ||
+    !["@quieter/web", "@quieter/cloudflare"].includes(runtime.package)
+  ) {
+    throw new Error(
+      "Controlled builds require a registered Cloudflare runtime."
+    );
+  }
+  const web = runtime.service === "web";
   const source = await readReleaseBuildSource(input.directory);
   const { environment, publicConfiguration } = createWebReleaseEnvironment(
     input.publicConfiguration
@@ -140,7 +161,7 @@ export const buildWebRelease = async (input: {
       "--name",
       "quieter-release-build",
       "--main",
-      path.join(input.directory, "apps/web/src/server.ts"),
+      path.join(input.directory, runtime.entrypoint),
       "--out",
       configPath,
     ],
@@ -161,12 +182,39 @@ export const buildWebRelease = async (input: {
   for (const task of [
     "@quieter/env#build",
     "@quieter/observability#build",
-    "@quieter/web#build",
+    ...(web ? ["@quieter/web#build"] : []),
   ]) {
     // oxlint-disable-next-line no-await-in-loop -- Build dependencies before the one web build, without task-cache reuse.
     await run(vp, ["run", "--no-cache", task], buildEnvironment);
   }
-  const builtDirectory = path.join(input.directory, "apps/web/dist");
+  const builtDirectory = web
+    ? path.join(input.directory, "apps/web/dist")
+    : path.join(input.output, "build");
+  if (!web) {
+    await mkdir(path.join(builtDirectory, "client"), { recursive: true });
+    await mkdir(path.join(builtDirectory, "server"), { recursive: true });
+    await run(
+      vp,
+      [
+        "exec",
+        "wrangler",
+        "deploy",
+        "--dry-run",
+        "--config",
+        configPath,
+        "--outfile",
+        path.join(builtDirectory, "server/index.js"),
+        "--minify",
+        "--upload-source-maps",
+      ],
+      buildEnvironment
+    );
+    await writeFile(
+      path.join(builtDirectory, "server/wrangler.json"),
+      buildConfig,
+      { flag: "wx" }
+    );
+  }
   await prepareGeneratedSourceMaps(builtDirectory);
   await run(
     SentryCli.getPath(),
@@ -180,6 +228,7 @@ export const buildWebRelease = async (input: {
     environment
   );
   if (
+    web &&
     (await readFile(
       path.join(builtDirectory, "client/assets/build-id.txt"),
       "utf-8"
@@ -234,12 +283,15 @@ export const buildWebRelease = async (input: {
     source.sourceSha,
     {
       buildConfigDigest: createHash("sha256").update(buildConfig).digest("hex"),
-      command: "vp run --no-cache @quieter/web#build",
+      command: web
+        ? "vp run --no-cache @quieter/web#build"
+        : "vp exec wrangler deploy --dry-run",
       lockfileDigest: source.lockfileDigest,
       nodeVersion: process.version,
       publicConfigurationDigest: createHash("sha256")
         .update(JSON.stringify(publicConfiguration))
         .digest("hex"),
+      service: runtime.service,
       sourceMaps: sourceMaps.toSorted((a, b) => a.path.localeCompare(b.path)),
       sourceTree: source.sourceTree,
       stage,
@@ -269,11 +321,9 @@ export const buildWebRelease = async (input: {
       })
     );
   }
-  const archive = await inventoryAssets(
-    path.join(input.output, "client"),
-    buildId,
-    digest
-  );
+  const archive = web
+    ? await inventoryAssets(path.join(input.output, "client"), buildId, digest)
+    : null;
   const after = await readReleaseBuildSource(input.directory);
   const afterConfig = await readFile(configPath);
   if (
@@ -286,6 +336,17 @@ export const buildWebRelease = async (input: {
   }
   const manifest = releaseArtifactSchema.parse({ archive, artifact, digest });
   await verifyReleaseSourceMaps(manifest, input.output);
+  await rm(configPath);
+  if (!web) {
+    if (
+      path.dirname(path.resolve(builtDirectory)) !== path.resolve(input.output)
+    ) {
+      throw new Error(
+        "Temporary build output escaped the new artifact directory."
+      );
+    }
+    await rm(builtDirectory, { recursive: true });
+  }
   await writeFile(
     path.join(input.output, "artifact.json"),
     JSON.stringify(manifest, null, 2),

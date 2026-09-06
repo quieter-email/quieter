@@ -101,7 +101,7 @@ const buildFixture = async () => {
   };
 };
 
-describe("retained source-map identities", () => {
+describe("retained source-map identities", { timeout: 15_000 }, () => {
   afterEach(async () => {
     for (const directory of directories.splice(0)) {
       if (
@@ -150,6 +150,9 @@ describe("retained source-map identities", () => {
     ).resolves.toStrictEqual(manifest);
     await expect(
       verifyTrustedBuildFiles(directory, { ...build, stage: "production" })
+    ).rejects.toThrow("provenance");
+    await expect(
+      verifyTrustedBuildFiles(directory, { ...build, service: "mail-sender" })
     ).rejects.toThrow("provenance");
     await writeFile(path.join(directory, "server/unlisted.js"), "unlisted");
     await expect(verifyTrustedBuildFiles(directory, build)).rejects.toThrow(

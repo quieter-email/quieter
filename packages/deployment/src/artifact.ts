@@ -38,10 +38,14 @@ export const assetRoutingSchema = z.object({
 });
 export const buildProvenanceSchema = z.strictObject({
   buildConfigDigest: digestSchema,
-  command: z.literal("vp run --no-cache @quieter/web#build"),
+  command: z.enum([
+    "vp run --no-cache @quieter/web#build",
+    "vp exec wrangler deploy --dry-run",
+  ]),
   lockfileDigest: digestSchema,
   nodeVersion: z.string().regex(/^v\d+\.\d+\.\d+$/u),
   publicConfigurationDigest: digestSchema,
+  service: identifierSchema.optional(),
   sourceMaps: z
     .array(
       fileSchema.extend({
@@ -81,6 +85,18 @@ export const artifactSchema = z
       });
     }
     const sourceMaps = artifact.provenance?.sourceMaps ?? [];
+    const { provenance } = artifact;
+    if (
+      provenance !== undefined &&
+      (provenance.command === "vp run --no-cache @quieter/web#build"
+        ? provenance.service !== undefined && provenance.service !== "web"
+        : provenance.service === undefined || provenance.service === "web")
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Build command does not match the runtime identity.",
+      });
+    }
     if (
       new Set(sourceMaps.map((file) => file.path)).size !== sourceMaps.length ||
       sourceMaps.reduce((bytes, file) => bytes + file.bytes, 0) > 200_000_000

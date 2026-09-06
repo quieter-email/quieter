@@ -24,6 +24,7 @@ const { values } = parseArgs({
     receipt: { type: "string" },
     retain: { default: false, type: "boolean" },
     run: { type: "string" },
+    service: { default: "web", type: "string" },
     stage: { type: "string" },
   },
 });
@@ -62,6 +63,7 @@ const build = await verifyTrustedBuild({
     .digest("hex"),
   repository: env.GITHUB_REPOSITORY,
   runId: z.number().int().positive().parse(Number(values.run)),
+  service: values.service,
   stage: values.stage,
   token: env.GITHUB_TOKEN,
 });

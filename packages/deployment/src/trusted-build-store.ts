@@ -94,6 +94,7 @@ export class TrustedBuildReceiptStore {
     const { build } = receipt;
     if (
       provenance === undefined ||
+      (provenance.service ?? "web") !== (build.service ?? "web") ||
       receipt.artifactDigest !== manifest.digest ||
       build.sourceSha !== manifest.artifact.sourceSha ||
       build.stage !== this.stage ||

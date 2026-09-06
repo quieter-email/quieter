@@ -49,6 +49,7 @@ export const trustedBuildSchema = z.strictObject({
   runAttempt: z.number().int().positive(),
   runId: z.number().int().positive(),
   schemaVersion: z.literal(1),
+  service: identifierSchema.optional(),
   sourceSha: shaSchema,
   sourceTree: shaSchema,
   stage: identifierSchema,
@@ -63,11 +64,13 @@ export const verifyTrustedBuild = async (
     stage: string;
     publicConfigurationDigest: string;
     token: string;
+    service?: string;
   },
   request: typeof fetch = fetch
 ) => {
   const repository = repositorySchema.parse(input.repository);
   const runId = z.number().int().positive().parse(input.runId);
+  const service = identifierSchema.parse(input.service ?? "web");
   const api = `https://api.github.com/repos/${repository}`;
   const headers = {
     accept: "application/vnd.github+json",
@@ -115,7 +118,7 @@ export const verifyTrustedBuild = async (
   if (comparison.base_commit.sha !== run.head_sha) {
     throw new Error("Release build source is not in trusted main history.");
   }
-  const name = `web-release-${run.head_sha}-${run.run_attempt}`;
+  const name = `${service}-release-${run.head_sha}-${run.run_attempt}`;
   const artifacts = z
     .object({
       artifacts: z.array(z.unknown()).max(100),
@@ -224,6 +227,7 @@ export const verifyTrustedBuild = async (
     runAttempt: run.run_attempt,
     runId,
     schemaVersion: 1,
+    service,
     sourceSha: run.head_sha,
     sourceTree: commit.commit.tree.sha,
     stage: input.stage,

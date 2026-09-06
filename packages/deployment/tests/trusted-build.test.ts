@@ -96,6 +96,20 @@ const input = {
 };
 
 describe("trusted main build authorization", () => {
+  it("selects the requested runtime's immutable artifact", async () => {
+    const data = fixture();
+    await expect(
+      verifyTrustedBuild({ ...input, service: "mail-sender" }, data.request)
+    ).rejects.toThrow("artifact");
+    data.artifact.name = `mail-sender-release-${data.sourceSha}-2`;
+    await expect(
+      verifyTrustedBuild({ ...input, service: "mail-sender" }, data.request)
+    ).resolves.toMatchObject({
+      artifactId: data.artifact.id,
+      service: "mail-sender",
+    });
+  });
+
   it("rejects a selected artifact replaced between verification and download", async () => {
     const data = fixture();
     await expect(

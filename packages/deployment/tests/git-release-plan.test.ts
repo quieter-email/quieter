@@ -145,7 +145,26 @@ describe("immutable Git release planning", () => {
           path: "index.js",
         },
       ],
-      schemaVersion: 1,
+      provenance: {
+        buildConfigDigest: "b".repeat(64),
+        command: "vp run --no-cache @quieter/web#build",
+        lockfileDigest: "c".repeat(64),
+        nodeVersion: "v24.18.0",
+        publicConfigurationDigest: "d".repeat(64),
+        service: "web",
+        sourceMaps: [
+          {
+            bytes: 1,
+            contentType: "application/json",
+            digest: "f".repeat(64),
+            path: "server/index.js.map",
+          },
+        ],
+        sourceTree: "e".repeat(40),
+        stage: "test",
+        toolchain: "fixture",
+      },
+      schemaVersion: 2,
       sourceSha: skippedSha,
     });
     const manifest = {
@@ -155,6 +174,9 @@ describe("immutable Git release planning", () => {
         .update(JSON.stringify(artifact))
         .digest("hex"),
     };
+    if (artifact.provenance === undefined) {
+      throw new Error("Expected controlled build fixture.");
+    }
     const artifacts = {
       read: vi.fn<ReleaseArtifactStore["read"]>().mockResolvedValue(manifest),
     };
@@ -215,6 +237,20 @@ describe("immutable Git release planning", () => {
         artifacts
       )
     ).rejects.toThrow("matching source plan");
+    artifacts.read.mockResolvedValue({
+      ...manifest,
+      artifact: {
+        ...artifact,
+        provenance: {
+          ...artifact.provenance,
+          command: "vp exec wrangler deploy --dry-run",
+          service: "mail-sender",
+        },
+      },
+    });
+    await expect(
+      verifyPlannedRelease({ baseline, candidate, plan }, artifacts)
+    ).rejects.toThrow("different service");
     artifacts.read.mockResolvedValue({
       ...manifest,
       artifact: { ...artifact, sourceSha: baselineSha },
