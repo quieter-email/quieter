@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { createWebClientEnv } from "./client";
+import { createWebClientEnv } from "./client.ts";
 import type { RuntimeEnvironment } from "./schema";
 
 export const createWebBuildEnv = (
