@@ -1,6 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify, stripVTControlCharacters } from "node:util";
 
@@ -20,6 +20,29 @@ import { identifierSchema } from "./schema.ts";
 const execute = promisify(execFile);
 
 export const readReleaseBuildSource = async (directory: string) => {
+  for (const root of [directory, path.join(directory, "apps/web")]) {
+    for (const file of [".env.sentry-build-plugin", ".sentryclirc"]) {
+      // oxlint-disable-next-line no-await-in-loop -- Reject implicit plugin configuration even when Git ignores it.
+      const exists = await lstat(path.join(root, file)).then(
+        () => true,
+        (error: unknown) => {
+          if (
+            error instanceof Error &&
+            "code" in error &&
+            error.code === "ENOENT"
+          ) {
+            return false;
+          }
+          throw new Error("Could not inspect implicit build configuration.");
+        }
+      );
+      if (exists) {
+        throw new Error(
+          "Release builds reject implicit Sentry configuration files."
+        );
+      }
+    }
+  }
   const git = async (args: string[]) => {
     const result = await execute("git", args, {
       cwd: directory,

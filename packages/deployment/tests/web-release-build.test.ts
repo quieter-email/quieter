@@ -105,4 +105,21 @@ describe("controlled release build inputs", () => {
       await rm(directory, { force: true, recursive: true });
     }
   });
+
+  it.each([".env.sentry-build-plugin", ".sentryclirc"])(
+    "rejects implicit %s configuration before building",
+    async (file) => {
+      const directory = await mkdtemp(
+        path.join(tmpdir(), "quieter-build-config-")
+      );
+      try {
+        await writeFile(path.join(directory, file), "PRIVATE=fixture\n");
+        await expect(readReleaseBuildSource(directory)).rejects.toThrow(
+          "implicit Sentry configuration"
+        );
+      } finally {
+        await rm(directory, { force: true, recursive: true });
+      }
+    }
+  );
 });

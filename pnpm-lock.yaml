@@ -788,6 +788,9 @@ importers:
       '@quieter/config':
         specifier: workspace:*
         version: link:../config
+      '@sentry/cli':
+        specifier: 2.58.5
+        version: 2.58.5(supports-color@10.2.2)
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0

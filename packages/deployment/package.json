@@ -25,6 +25,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:",
     "@quieter/config": "workspace:*",
+    "@sentry/cli": "2.58.5",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vite-plus": "catalog:",
