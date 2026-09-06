@@ -64,3 +64,9 @@ wsl -d Ubuntu -u root -- docker stop quieter-release-ledger-test
 The PostgreSQL tests cover concurrent acceptance, transaction failure, separate outbox claims, generation fencing, queue-loss recovery, unknown sends, late confirmation, safe retry accounting, feedback before mapping, and restrictive ownership. CI runs these after migrating its disposable PostgreSQL service.
 
 `vp run @quieter/cloudflare#test:workers` also verifies immutable attachment writes and corruption detection against the provider's local R2 runtime. This uses the test-only `LocalMailStorage` binding and cannot access production objects.
+
+## Submission request identity and reads
+
+`normalizeMailSubmissionRequest` hashes validated client intent before payload preparation. Parsed defaults, object key order, header casing, and equivalent base64 encodings share an identity. Attachment content and metadata remain significant. Repeated headers with the same name preserve their order. The key itself, generated message ID, upload location, preparation timestamp, and resolved tracking default are excluded. An explicit tracking choice remains significant. Unknown request fields are rejected so a misspelled option cannot silently become an accepted different message.
+
+`findMailSubmissionReplay` allows an authorized retry to return its original queued result before attempting any new payload upload. Acceptance repeats the lookup inside its transaction to resolve concurrent preparations. `readMailSubmissionStatus` separately returns processing status and timestamps, scoped to the organization and exact mailbox scope. Both recheck authorization in their read transaction; neither returns message bodies, recipient addresses, provider IDs, or internal failure details. These package contracts remain dormant until the complete async runtime is enabled.

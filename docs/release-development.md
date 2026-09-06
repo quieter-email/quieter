@@ -182,6 +182,8 @@ AWS confirms that all three current mail functions use unpublished `$LATEST` cod
 
 The version-2 artifact records the Git commit/tree, lockfile checksum, actual Node/Vite+ toolchain, stage, public configuration checksum, build configuration checksum, and private source-map inventory. A completion manifest is written only after the copied bytes match their inventory and the source remains unchanged. Source maps use hidden references and live under `source-maps/`, outside both the Worker modules and public asset archive. S3 retention and restore verify them before completing. This is retention evidence, not proof of a Sentry upload; monitored production promotion still requires that separate gate. Version-1 historical artifacts remain readable.
 
+On 2026-09-06 a controlled build passed the real web bundle checks, retained 316 modules, 172 static assets, and 437 private source maps in the isolated development release store, and restored all 925 files with matching hashes. A scan of those restored bytes found none of the local private configuration values. CI also passed the controlled build and artifact retention job on Linux.
+
 CI now retains this exact build for fourteen days. A local build is useful verification but is not trusted CI authorization. The protected release workflow still needs to consume the successful trusted-main artifact, validate stage/configuration and source-map upload evidence, and retain it in the release journal before activation. The legacy SST workflow still rebuilds and has not been replaced yet.
 
 ## Independent recovery configuration

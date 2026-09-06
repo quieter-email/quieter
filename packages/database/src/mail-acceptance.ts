@@ -68,7 +68,11 @@ export const acceptMailSubmission = async (
     );
     await input.assertAuthorization(transaction);
     const [existing] = await transaction
-      .select()
+      .select({
+        acceptedResult: mailSubmission.acceptedResult,
+        mailboxId: mailSubmission.mailboxId,
+        requestHash: mailSubmission.requestHash,
+      })
       .from(mailSubmission)
       .where(
         and(

@@ -35,6 +35,10 @@ import {
 } from "../src/mail-payload-uploads.ts";
 import { storeMailSendCapacity } from "../src/mail-send-capacity.ts";
 import {
+  findMailSubmissionReplay,
+  readMailSubmissionStatus,
+} from "../src/mail-submission-read.ts";
+import {
   mailSendAttempt,
   billingCreditUsageEvent,
   mailFeedbackInbox,
@@ -488,6 +492,83 @@ describe.skipIf(databaseUrl === undefined)(
         })
       ).rejects.toThrow("conflicts");
     });
+
+    /* oxlint-disable vitest/max-expects -- Verify the authorization and ownership boundary for both read contracts. */
+    it("replays original acceptance separately from current status and checks authorization on every read", async () => {
+      const messageId = await createSubmission();
+      const [row] = await database
+        .select({ idempotencyKey: mailSubmission.idempotencyKey })
+        .from(mailSubmission)
+        .where(eq(mailSubmission.id, messageId));
+      const scope = {
+        async assertAuthorization(
+          transaction: Parameters<
+            Parameters<DatabaseClient["transaction"]>[0]
+          >[0]
+        ) {
+          await transaction.execute(sql`select 1`);
+        },
+        mailboxId: null,
+        organizationId,
+      };
+      await database
+        .update(mailSubmission)
+        .set({ status: "pending_confirmation" })
+        .where(eq(mailSubmission.id, messageId));
+      const replay = {
+        ...scope,
+        idempotencyKey: row.idempotencyKey,
+        requestHash: "b".repeat(64),
+      };
+      await expect(
+        findMailSubmissionReplay(database, replay)
+      ).resolves.toStrictEqual({
+        messageId,
+        status: "queued",
+      });
+      await expect(
+        readMailSubmissionStatus(database, { ...scope, messageId })
+      ).resolves.toMatchObject({ messageId, status: "pending_confirmation" });
+      await expect(
+        readMailSubmissionStatus(database, {
+          ...scope,
+          mailboxId: randomUUID(),
+          messageId,
+        })
+      ).resolves.toBeNull();
+      await expect(
+        readMailSubmissionStatus(database, {
+          ...scope,
+          messageId,
+          organizationId: randomUUID(),
+        })
+      ).resolves.toBeNull();
+      await expect(
+        findMailSubmissionReplay(database, {
+          ...replay,
+          requestHash: "c".repeat(64),
+        })
+      ).rejects.toThrow("different message");
+      await expect(
+        findMailSubmissionReplay(database, {
+          ...replay,
+          mailboxId: randomUUID(),
+        })
+      ).rejects.toThrow("different message");
+      const revoked = {
+        // oxlint-disable-next-line require-await -- Simulate an authorization failure before any protected read.
+        async assertAuthorization() {
+          throw new Error("Authorization revoked.");
+        },
+      };
+      await expect(
+        findMailSubmissionReplay(database, { ...replay, ...revoked })
+      ).rejects.toThrow("Authorization revoked");
+      await expect(
+        readMailSubmissionStatus(database, { ...scope, ...revoked, messageId })
+      ).rejects.toThrow("Authorization revoked");
+    });
+    /* oxlint-enable vitest/max-expects */
 
     it("atomically accepts one submission and replays its original result under concurrent retries", async () => {
       const input = {

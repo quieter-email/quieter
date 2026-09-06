@@ -17,6 +17,8 @@ import {
   MAX_SEND_PAYLOAD_BYTES,
 } from "@quieter/mail/send";
 
+import { normalizeMailSubmissionRequest } from "./mail-submission-request.ts";
+
 export type SubmissionPayloadStorage = {
   write: (object: MailPayloadObject, bytes: Uint8Array) => Promise<void>;
   read: (object: MailPayloadObject) => Promise<Uint8Array>;
@@ -33,12 +35,9 @@ export const prepareMailSubmissionPayload = async (
     storage: SubmissionPayloadStorage;
   }
 ) => {
-  if (
-    Buffer.byteLength(JSON.stringify(input.message)) > MAX_SEND_PAYLOAD_BYTES
-  ) {
-    throw new Error("Submission exceeds the acceptance limit.");
-  }
-  const message = sendMessageInputSchema.parse(input.message);
+  const { message, requestHash } = normalizeMailSubmissionRequest(
+    input.message
+  );
   if (
     message.attachments.length > 50 ||
     message.tags.some((tag) => tag.name.toLowerCase().startsWith("quieter_"))
@@ -133,6 +132,7 @@ export const prepareMailSubmissionPayload = async (
     payload,
     payloadUploadId: upload?.id,
     recipientCount,
+    requestHash,
   };
 };
 
