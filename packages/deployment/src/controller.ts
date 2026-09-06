@@ -1,3 +1,5 @@
+import type { z } from "zod";
+
 import { planPromotion } from "./compatibility.ts";
 import type {
   ActiveDeployment,
@@ -9,7 +11,11 @@ import type {
   ReleaseState,
   RuntimeProvider,
 } from "./schema.ts";
-import { healthyReleaseSchema, healthEvidenceSchema } from "./schema.ts";
+import {
+  healthyReleaseSchema,
+  healthEvidenceSchema,
+  probeConfigurationSchema,
+} from "./schema.ts";
 
 export class ReleaseController {
   readonly journal: ReleaseJournal;
@@ -18,23 +24,33 @@ export class ReleaseController {
   private readonly preflight: {
     verify: (release: HealthyRelease) => Promise<void>;
   };
+  private readonly health: {
+    candidate: (attempt: ReleaseAttempt) => Promise<void>;
+    recovered: (attempt: ReleaseAttempt) => Promise<void>;
+  };
 
   constructor(
     journal: ReleaseJournal,
     provider: RuntimeProvider,
     preflight: { verify: (release: HealthyRelease) => Promise<void> },
+    health: {
+      candidate: (attempt: ReleaseAttempt) => Promise<void>;
+      recovered: (attempt: ReleaseAttempt) => Promise<void>;
+    },
     now = () => new Date()
   ) {
     this.journal = journal;
     this.provider = provider;
     this.now = now;
     this.preflight = preflight;
+    this.health = health;
   }
 
   async prepare(input: {
     candidate: HealthyRelease;
     id: string;
     mode?: "promote" | "rollback";
+    probes: z.input<typeof probeConfigurationSchema>;
     workflowRunId: string;
   }) {
     const checkpoint = await this.requireState();
@@ -48,6 +64,16 @@ export class ReleaseController {
       );
     }
     const candidate = healthyReleaseSchema.parse(input.candidate);
+    const probes = probeConfigurationSchema.parse(input.probes);
+    if (
+      candidate.services.some(
+        (service) => !Object.hasOwn(probes, service.service)
+      )
+    ) {
+      throw new Error(
+        "Every release service requires protected health probes."
+      );
+    }
     if (
       input.mode === "rollback" &&
       !state.history.some(
@@ -88,6 +114,7 @@ export class ReleaseController {
       deployments[service.service] = active;
     }
     const attempt: ReleaseAttempt = {
+      activatedServices: [],
       baseline: state.healthy,
       candidate,
       deadline: new Date(this.now().getTime() + 10 * 60_000).toISOString(),
@@ -99,6 +126,7 @@ export class ReleaseController {
       mode: input.mode ?? "promote",
       observationStartedAt: null,
       order,
+      probes,
       status: "prepared",
       workflowRunId: input.workflowRunId,
     };
@@ -115,6 +143,7 @@ export class ReleaseController {
     }
     await this.preflight.verify(checkpoint.state.attempt.baseline);
     await this.preflight.verify(checkpoint.state.attempt.candidate);
+    await this.health.candidate(checkpoint.state.attempt);
     await this.assertExpectedMap(checkpoint);
     for (const name of checkpoint.state.attempt.order) {
       // oxlint-disable-next-line no-await-in-loop -- Pointer changes must follow the proven contract order.
@@ -198,6 +227,8 @@ export class ReleaseController {
     if (!current) {
       throw new Error("Release attempt missing.");
     }
+    await this.health.recovered(current);
+    await this.assertActive(checkpoint, attempt.baseline);
     return await this.journal.write(checkpoint.revision, {
       ...checkpoint.state,
       attempt: { ...current, intent: null, status: "rolled_back" },
@@ -205,7 +236,9 @@ export class ReleaseController {
         ...new Set([
           ...checkpoint.state.quarantinedArtifacts,
           ...attempt.candidate.services
-            .filter((service) => attempt.order.includes(service.service))
+            .filter((service) =>
+              current.activatedServices.includes(service.service)
+            )
             .map((service) => service.artifactDigest),
         ]),
       ],
@@ -249,6 +282,12 @@ export class ReleaseController {
       actual.id !== pending.expected.id
     ) {
       checkpoint = await this.updateAttempt(checkpoint, {
+        activatedServices: [
+          ...new Set([
+            ...attempt.activatedServices,
+            ...(actual.versionId === candidate.versionId ? [name] : []),
+          ]),
+        ],
         deployments: { ...attempt.deployments, [name]: actual },
         intent: null,
       });
@@ -267,6 +306,15 @@ export class ReleaseController {
     }
     if (actual.versionId === target.versionId) {
       return checkpoint;
+    }
+    if (rollback && actual.versionId === candidate.versionId) {
+      const current = checkpoint.state.attempt;
+      if (!current) {
+        throw new Error("Release attempt missing.");
+      }
+      checkpoint = await this.updateAttempt(checkpoint, {
+        activatedServices: [...new Set([...current.activatedServices, name])],
+      });
     }
     if (
       actual.versionId !== (rollback ? candidate.versionId : baseline.versionId)
@@ -303,6 +351,9 @@ export class ReleaseController {
       throw new Error("Release attempt missing.");
     }
     return await this.updateAttempt(checkpoint, {
+      activatedServices: [
+        ...new Set([...latest.activatedServices, ...(rollback ? [] : [name])]),
+      ],
       deployments: { ...latest.deployments, [name]: observed },
       intent: null,
     });

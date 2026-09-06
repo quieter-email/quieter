@@ -8,7 +8,8 @@ Milestone A is in progress. Production still runs the legacy SST workflow. `@qui
 - Compatibility checks for intermediate promotion states and retained producer contracts after rollback.
 - Intent recorded before every pointer change, conditional journal updates, immutable checksummed checkpoints, and reconciliation of lost activation responses.
 - Recovery from a separate process, drift detection across the entire map, quarantine of failed artifacts, and refusal to start over unresolved attempts.
-- Two-minute authenticated health observation with explicit checks and actual version identity. Certification requires fresh evidence covering every service.
+- Three protected candidate checks before activation and a two-minute clean health window afterward, with actual version identity on every sample. Transient failures restart the window; three consecutive candidate failures with a passing baseline confirm regression. Configured critical safety checks fail immediately. Missing telemetry never certifies a release.
+- Compensation records actual candidate activation, preserves quarantine evidence across interrupted recovery, and checks restored service health before marking rollback complete. Pre-activation archive failures remain repairable without quarantining code that never ran.
 - Browser asset inventory, immutable uploads, byte/MIME verification, receipt written last, and repair from the same artifact. Receipts are excluded from public fallback.
 - Immutable artifact manifests retained alongside the journal. Bootstrap, preparation, and promotion require these manifests; preparation and promotion verify both the candidate and rollback target's browser archives. Recovery does not require build files or archive access.
 - Deterministic compiled module/static asset manifests, byte verification before upload, and native inactive uploads inheriting bindings from an explicit baseline UUID. Uploads reject compatibility changes, binding removal, incomplete assets, and active-deployment drift.
@@ -43,7 +44,7 @@ Set `QUIETER_RELEASE_BUCKET`, `QUIETER_RELEASE_STAGE`, `CLOUDFLARE_ACCOUNT_ID`, 
 vp run @quieter/deployment#release status
 vp run @quieter/deployment#release register --file <absolute-artifact-manifest> --directory <absolute-built-directory>
 vp run @quieter/deployment#release bootstrap --file <absolute-baseline-manifest>
-vp run @quieter/deployment#release prepare --attempt proof-recovery --run 1 --file <absolute-candidate-manifest>
+vp run @quieter/deployment#release prepare --attempt proof-recovery --run 1 --file <absolute-candidate-manifest> --probes <absolute-probe-configuration>
 vp run @quieter/deployment#release promote --attempt proof-recovery
 vp run @quieter/deployment#release recover --attempt proof-recovery --reason process_ended
 ```
@@ -51,6 +52,10 @@ vp run @quieter/deployment#release recover --attempt proof-recovery --reason pro
 Each command is a separate process. If a command fails, read status and actual provider state before continuing. Do not bootstrap over an existing journal or delete history to rerun a failed release. A failed recovery stays discoverable and blocks the next release. The final `rolled_back` state must match the original baseline version. The new deployment ID will differ because restoration itself creates a deployment.
 
 Registration checks every compiled module and static file against the manifest, verifies its archive, then creates the manifest conditionally in the journal bucket. Register every referenced artifact before bootstrap or preparation. Old probe runs used synthetic digests without retained manifests; they remain historical evidence and cannot be promoted through the new gate. This gate verifies retained bytes and archive coverage. Provider-version provenance and binding-generation approval remain separate unfinished requirements.
+
+Probe configuration maps each service name to its public `url`, protected `candidateUrl` and `baselineUrl`, required `checks`, and optional `criticalChecks`. Critical checks must also appear in `checks`. Each endpoint returns the actual provider `versionId` and Boolean results for every named check. Preparation retains this configuration in the attempt. Promotion, observation, and recovery need the operational probe secret through their intended linked configuration. Recovery uses the restored public URL, requires three passing samples, and checks the complete provider map again afterward. A failed recovery health check leaves the attempt discoverable as `recovering`.
+
+Older terminal journal records omit probes and activation history. They remain readable. They do not establish health for a new run; an unfinished historical attempt without probes needs explicit reconciliation. Production recovery still needs its separate SST-linked health credential wiring before cutover.
 
 ## Evidence recorded on 2026-09-06
 

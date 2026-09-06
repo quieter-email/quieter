@@ -25,6 +25,7 @@ const fixture = () => {
     revision: "1",
     state: {
       attempt: {
+        activatedServices: [],
         baseline: release,
         candidate: { ...release, id: "candidate" },
         deadline: "2026-09-06T12:10:00Z",

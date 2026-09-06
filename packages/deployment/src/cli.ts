@@ -14,12 +14,16 @@ import type { AssetManifest } from "./assets.ts";
 import { CloudflareRuntimeProvider } from "./cloudflare.ts";
 import { assertCompatible } from "./compatibility.ts";
 import { ReleaseController } from "./controller.ts";
-import { observeRelease, probeConfigurationSchema } from "./health.ts";
+import { observeRelease, verifyReleaseHealth } from "./health.ts";
 import { ObjectReleaseJournal } from "./journal.ts";
 import { ReleasePreflight } from "./preflight.ts";
 import { createR2ArchiveClient } from "./r2-archive-client.ts";
 import { reconcileRelease } from "./recovery.ts";
-import { healthyReleaseSchema, identifierSchema } from "./schema.ts";
+import {
+  healthyReleaseSchema,
+  identifierSchema,
+  probeConfigurationSchema,
+} from "./schema.ts";
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,
@@ -28,6 +32,7 @@ const { positionals, values } = parseArgs({
     directory: { type: "string" },
     "event-run": { type: "string" },
     file: { type: "string" },
+    probes: { type: "string" },
     reason: { type: "string" },
     run: { type: "string" },
   },
@@ -101,7 +106,24 @@ const archive = {
   },
 };
 const preflight = new ReleasePreflight(artifacts, archive);
-const controller = new ReleaseController(journal, provider, preflight);
+const controller = new ReleaseController(journal, provider, preflight, {
+  async candidate(attempt) {
+    await verifyReleaseHealth(
+      attempt.candidate,
+      attempt.probes,
+      env.QUIETER_RELEASE_PROBE_TOKEN,
+      "candidateUrl"
+    );
+  },
+  async recovered(attempt) {
+    await verifyReleaseHealth(
+      attempt.baseline,
+      attempt.probes,
+      env.QUIETER_RELEASE_PROBE_TOKEN,
+      "url"
+    );
+  },
+});
 const existing = await journal.read();
 if (
   command !== "status" &&
@@ -206,14 +228,19 @@ switch (command) {
     break;
   }
   case "prepare": {
-    if (values.file === undefined) {
-      throw new Error("Prepare requires an immutable release manifest.");
+    if (values.file === undefined || values.probes === undefined) {
+      throw new Error(
+        "Prepare requires an immutable release manifest and --probes configuration."
+      );
     }
     await controller.prepare({
       candidate: healthyReleaseSchema.parse(
         JSON.parse(await readFile(values.file, "utf-8"))
       ),
       id: identifierSchema.parse(values.attempt),
+      probes: probeConfigurationSchema.parse(
+        JSON.parse(await readFile(values.probes, "utf-8"))
+      ),
       workflowRunId: z.string().regex(/^\d+$/u).parse(values.run),
     });
     break;
@@ -233,8 +260,7 @@ switch (command) {
     const checkpoint = await journal.read();
     const attempt = checkpoint?.state.attempt;
     if (
-      values.file === undefined ||
-      !attempt ||
+      attempt?.probes === undefined ||
       attempt.id !== values.attempt ||
       env.QUIETER_RELEASE_PROBE_TOKEN === undefined
     ) {
@@ -242,12 +268,9 @@ switch (command) {
         "Observe requires the active attempt, probe configuration, and linked probe secret."
       );
     }
-    const probes = probeConfigurationSchema.parse(
-      JSON.parse(await readFile(values.file, "utf-8"))
-    );
     const evidence = await observeRelease(
       attempt,
-      probes,
+      attempt.probes,
       env.QUIETER_RELEASE_PROBE_TOKEN
     );
     await controller.certify(attempt.id, evidence);

@@ -3,6 +3,32 @@ import { z } from "zod";
 export const identifierSchema = z.string().regex(/^[\w-]{1,128}$/u);
 export const digestSchema = z.string().regex(/^[a-f\d]{64}$/u);
 
+const probeUrlSchema = z.url().refine((value) => {
+  const url = new URL(value);
+  return (
+    url.protocol === "https:" &&
+    url.username === "" &&
+    url.password === "" &&
+    url.hash === ""
+  );
+});
+export const probeConfigurationSchema = z.record(
+  identifierSchema,
+  z
+    .strictObject({
+      baselineUrl: probeUrlSchema,
+      candidateUrl: probeUrlSchema,
+      checks: z.array(identifierSchema).min(1),
+      criticalChecks: z.array(identifierSchema).default([]),
+      url: probeUrlSchema,
+    })
+    .refine(
+      (probe) =>
+        probe.criticalChecks.every((check) => probe.checks.includes(check)),
+      "Critical checks must be part of the configured checks."
+    )
+);
+
 export const serviceVersionSchema = z.strictObject({
   artifactDigest: digestSchema,
   bindingGeneration: digestSchema,
@@ -40,6 +66,7 @@ export const healthEvidenceSchema = z.strictObject({
 export type HealthEvidence = z.infer<typeof healthEvidenceSchema>;
 
 export const releaseAttemptSchema = z.strictObject({
+  activatedServices: z.array(identifierSchema).default([]),
   baseline: healthyReleaseSchema,
   candidate: healthyReleaseSchema,
   deadline: z.iso.datetime(),
@@ -57,6 +84,7 @@ export const releaseAttemptSchema = z.strictObject({
   mode: z.enum(["promote", "rollback"]),
   observationStartedAt: z.iso.datetime().nullable(),
   order: z.array(identifierSchema),
+  probes: probeConfigurationSchema.optional(),
   status: z.enum([
     "prepared",
     "promoting",

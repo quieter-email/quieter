@@ -10,6 +10,7 @@ import type {
   ActiveDeployment,
   Checkpoint,
   HealthyRelease,
+  ReleaseAttempt,
   ReleaseJournal,
   ReleaseState,
   RuntimeProvider,
@@ -71,6 +72,18 @@ class Provider implements RuntimeProvider {
   }
 }
 
+const probes = Object.fromEntries(
+  ["backend", "frontend"].map((service) => [
+    service,
+    {
+      baselineUrl: `https://baseline-${service}.example/health`,
+      candidateUrl: `https://candidate-${service}.example/health`,
+      checks: ["ready"],
+      url: `https://${service}.example/health`,
+    },
+  ])
+);
+
 const fixture = async () => {
   const services: ServiceVersion[] = [
     "backend",
@@ -118,10 +131,19 @@ const fixture = async () => {
       .fn<(release: HealthyRelease) => Promise<void>>()
       .mockResolvedValue(),
   };
+  const health = {
+    candidate: vi
+      .fn<(attempt: ReleaseAttempt) => Promise<void>>()
+      .mockResolvedValue(),
+    recovered: vi
+      .fn<(attempt: ReleaseAttempt) => Promise<void>>()
+      .mockResolvedValue(),
+  };
   const controller = new ReleaseController(
     journal,
     provider,
     preflight,
+    health,
     () => new Date(time)
   );
   return {
@@ -131,6 +153,7 @@ const fixture = async () => {
     baseline,
     candidate,
     controller,
+    health,
     journal,
     preflight,
     provider,
@@ -138,6 +161,52 @@ const fixture = async () => {
 };
 
 describe("durable runtime release recovery", () => {
+  it("does not activate a candidate that fails its protected checks", async () => {
+    const { candidate, controller, provider, health } = await fixture();
+    await controller.prepare({
+      candidate,
+      id: "attempt",
+      probes,
+      workflowRunId: "1",
+    });
+    health.candidate.mockRejectedValueOnce(
+      new Error("Candidate smoke failed.")
+    );
+    await expect(controller.promote("attempt")).rejects.toThrow(
+      "Candidate smoke failed"
+    );
+    expect(provider.calls).toHaveLength(0);
+  });
+
+  it("keeps compensation pending until restored services pass health checks", async () => {
+    const { candidate, controller, journal, provider, health } =
+      await fixture();
+    await controller.prepare({
+      candidate,
+      id: "attempt",
+      probes,
+      workflowRunId: "1",
+    });
+    await controller.promote("attempt");
+    health.recovered.mockRejectedValueOnce(
+      new Error("Baseline still unhealthy.")
+    );
+    await expect(controller.recover("attempt", "regression")).rejects.toThrow(
+      "Baseline still unhealthy"
+    );
+    expect(journal.checkpoint?.state.attempt?.status).toBe("recovering");
+    await controller.recover("attempt", "recovery_retry");
+    expect({
+      calls: provider.calls.length,
+      quarantined: journal.checkpoint?.state.quarantinedArtifacts,
+      status: journal.checkpoint?.state.attempt?.status,
+    }).toStrictEqual({
+      calls: 4,
+      quarantined: ["c".repeat(64)],
+      status: "rolled_back",
+    });
+  });
+
   it("blocks preparation when the rollback archive cannot be verified", async () => {
     const { candidate, controller, journal, provider, preflight } =
       await fixture();
@@ -145,7 +214,12 @@ describe("durable runtime release recovery", () => {
       new Error("Missing archived object.")
     );
     await expect(
-      controller.prepare({ candidate, id: "attempt", workflowRunId: "1" })
+      controller.prepare({
+        candidate,
+        id: "attempt",
+        probes,
+        workflowRunId: "1",
+      })
     ).rejects.toThrow("Missing archived object");
     expect(journal.checkpoint?.state.attempt).toBeNull();
     expect(provider.calls).toHaveLength(0);
@@ -154,7 +228,12 @@ describe("durable runtime release recovery", () => {
   it("rechecks archives after preparation and leaves recovery independent of them", async () => {
     const { candidate, controller, journal, provider, preflight } =
       await fixture();
-    await controller.prepare({ candidate, id: "attempt", workflowRunId: "1" });
+    await controller.prepare({
+      candidate,
+      id: "attempt",
+      probes,
+      workflowRunId: "1",
+    });
     preflight.verify.mockRejectedValue(
       new Error("Archive became unavailable.")
     );
@@ -164,12 +243,25 @@ describe("durable runtime release recovery", () => {
     expect(provider.calls).toHaveLength(0);
     await controller.recover("attempt", "preflight_failed");
     expect(journal.checkpoint?.state.attempt?.status).toBe("rolled_back");
+    expect(journal.checkpoint?.state.quarantinedArtifacts).toHaveLength(0);
+    preflight.verify.mockResolvedValue();
+    await controller.prepare({
+      candidate,
+      id: "repaired",
+      probes,
+      workflowRunId: "2",
+    });
   });
 
   it("promotes the complete group and certifies only after observation", async () => {
     const { candidate, controller, journal, provider, advance } =
       await fixture();
-    await controller.prepare({ candidate, id: "attempt", workflowRunId: "1" });
+    await controller.prepare({
+      candidate,
+      id: "attempt",
+      probes,
+      workflowRunId: "1",
+    });
     const health = {
       attemptId: "attempt",
       finishedAt: new Date(controller.now().getTime() + 120_000).toISOString(),
@@ -194,16 +286,28 @@ describe("durable runtime release recovery", () => {
   });
 
   it("recovers a lost activation response using a new controller", async () => {
-    const { baseline, candidate, controller, journal, provider, preflight } =
-      await fixture();
-    await controller.prepare({ candidate, id: "attempt", workflowRunId: "1" });
+    const {
+      baseline,
+      candidate,
+      controller,
+      journal,
+      provider,
+      preflight,
+      health,
+    } = await fixture();
+    await controller.prepare({
+      candidate,
+      id: "attempt",
+      probes,
+      workflowRunId: "1",
+    });
     provider.failAfterMutation = true;
     await expect(controller.promote("attempt")).rejects.toThrow(
       "response was lost"
     );
     expect(journal.checkpoint?.state.attempt?.intent?.service).toBe("backend");
     provider.failAfterMutation = false;
-    await new ReleaseController(journal, provider, preflight).recover(
+    await new ReleaseController(journal, provider, preflight, health).recover(
       "attempt",
       "runner_lost"
     );
@@ -217,11 +321,19 @@ describe("durable runtime release recovery", () => {
   it.each([3, 4, 5, 6, 7])(
     "recovers process termination at journal write %i",
     async (failAt) => {
-      const { baseline, candidate, controller, journal, provider, preflight } =
-        await fixture();
+      const {
+        baseline,
+        candidate,
+        controller,
+        journal,
+        provider,
+        preflight,
+        health,
+      } = await fixture();
       await controller.prepare({
         candidate,
         id: "attempt",
+        probes,
         workflowRunId: "1",
       });
       journal.failAt = failAt;
@@ -229,7 +341,7 @@ describe("durable runtime release recovery", () => {
         "Runner stopped"
       );
       journal.failAt = -1;
-      await new ReleaseController(journal, provider, preflight).recover(
+      await new ReleaseController(journal, provider, preflight, health).recover(
         "attempt",
         "runner_lost"
       );
@@ -245,7 +357,12 @@ describe("durable runtime release recovery", () => {
 
   it("never mutates a newer deployment when an old alarm arrives", async () => {
     const { candidate, controller, provider } = await fixture();
-    await controller.prepare({ candidate, id: "attempt", workflowRunId: "1" });
+    await controller.prepare({
+      candidate,
+      id: "attempt",
+      probes,
+      workflowRunId: "1",
+    });
     await controller.promote("attempt");
     const unrelated = { id: randomUUID(), versionId: randomUUID() };
     provider.deployments.set("test-frontend", unrelated);
@@ -260,7 +377,12 @@ describe("durable runtime release recovery", () => {
 
   it("keeps a failed rollback recoverable and prevents a new release", async () => {
     const { candidate, controller, journal, provider } = await fixture();
-    await controller.prepare({ candidate, id: "attempt", workflowRunId: "1" });
+    await controller.prepare({
+      candidate,
+      id: "attempt",
+      probes,
+      workflowRunId: "1",
+    });
     await controller.promote("attempt");
     provider.failBeforeMutation = true;
     await expect(controller.recover("attempt", "gate_failed")).rejects.toThrow(
@@ -268,7 +390,7 @@ describe("durable runtime release recovery", () => {
     );
     expect(journal.checkpoint?.state.attempt?.status).toBe("recovering");
     await expect(
-      controller.prepare({ candidate, id: "next", workflowRunId: "2" })
+      controller.prepare({ candidate, id: "next", probes, workflowRunId: "2" })
     ).rejects.toThrow("unresolved");
     provider.failBeforeMutation = false;
     await controller.recover("attempt", "recovery_retry");
@@ -277,10 +399,16 @@ describe("durable runtime release recovery", () => {
 
   it("quarantines the rejected artifacts and ignores superseded attempt IDs", async () => {
     const { candidate, controller } = await fixture();
-    await controller.prepare({ candidate, id: "attempt", workflowRunId: "1" });
+    await controller.prepare({
+      candidate,
+      id: "attempt",
+      probes,
+      workflowRunId: "1",
+    });
+    await controller.promote("attempt");
     await controller.recover("attempt", "gate_failed");
     await expect(
-      controller.prepare({ candidate, id: "retry", workflowRunId: "2" })
+      controller.prepare({ candidate, id: "retry", probes, workflowRunId: "2" })
     ).rejects.toThrow("quarantined");
     await expect(controller.recover("old", "old_alarm")).rejects.toThrow(
       "superseded"
