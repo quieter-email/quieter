@@ -51,6 +51,9 @@ export const createRuntimeVersion = (
             case "assets": {
               return { name: bindingName, type };
             }
+            case "version_metadata": {
+              return { name: bindingName, type };
+            }
             default: {
               throw new Error(
                 `Runtime upload does not yet support binding type ${type}.`

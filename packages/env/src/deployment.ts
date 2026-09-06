@@ -69,6 +69,7 @@ export const createReleaseProofEnv = (
       QUIETER_RELEASE_PROOF_PHASE: z
         .enum(["baseline", "adopt", "candidate"])
         .default("baseline"),
+      QUIETER_RELEASE_WEB_PROOF: z.enum(["true", "false"]).default("false"),
     })
     .safeParse(runtime);
   if (!result.success) {
@@ -91,6 +92,7 @@ export const parseReleaseProbeBindings = (bindings: unknown) => {
         .optional(),
       PROBE_GENERATION: z.enum(["baseline", "candidate"]),
       PROBE_TOKEN: z.string().min(32),
+      PROBE_VERSION: z.object({ id: z.uuid() }),
     })
     .safeParse(bindings);
   if (!result.success) {

@@ -43,7 +43,7 @@ Set `QUIETER_RELEASE_BUCKET`, `QUIETER_RELEASE_STAGE`, `CLOUDFLARE_ACCOUNT_ID`, 
 ```powershell
 vp run @quieter/deployment#release status
 vp run @quieter/deployment#release register --file <absolute-artifact-manifest> --directory <absolute-built-directory>
-vp run @quieter/deployment#release bootstrap --file <absolute-baseline-manifest>
+vp run @quieter/deployment#release bootstrap --file <absolute-baseline-manifest> --probes <absolute-probe-configuration>
 vp run @quieter/deployment#release prepare --attempt proof-recovery --run 1 --file <absolute-candidate-manifest> --probes <absolute-probe-configuration>
 vp run @quieter/deployment#release promote --attempt proof-recovery
 vp run @quieter/deployment#release recover --attempt proof-recovery --reason process_ended
@@ -51,7 +51,7 @@ vp run @quieter/deployment#release recover --attempt proof-recovery --reason pro
 
 Each command is a separate process. If a command fails, read status and actual provider state before continuing. Do not bootstrap over an existing journal or delete history to rerun a failed release. A failed recovery stays discoverable and blocks the next release. The final `rolled_back` state must match the original baseline version. The new deployment ID will differ because restoration itself creates a deployment.
 
-Registration checks every compiled module and static file against the manifest, verifies its archive, then creates the manifest conditionally in the journal bucket. Register every referenced artifact before bootstrap or preparation. Old probe runs used synthetic digests without retained manifests; they remain historical evidence and cannot be promoted through the new gate. This gate verifies retained bytes and archive coverage. Provider-version provenance and binding-generation approval remain separate unfinished requirements.
+Registration checks every compiled module and static file against the manifest, verifies its archive, then creates the manifest conditionally in the journal bucket. Register every referenced artifact before bootstrap or preparation. Preflight downloads the selected provider version's modules and compares their bytes, MIME types, compatibility settings, and routing configuration with the retained artifact. It accepts SST's main-module alias while checking the complete module set. An available native artifact tag must also match. Old probe runs used synthetic digests without retained manifests; they remain historical evidence and cannot be promoted through the new gate. Workflow provenance, durable upload reconciliation, and binding-generation approval remain separate unfinished requirements.
 
 Probe configuration maps each service name to its public `url`, protected `candidateUrl` and `baselineUrl`, required `checks`, and optional `criticalChecks`. Critical checks must also appear in `checks`. Each endpoint returns the actual provider `versionId` and Boolean results for every named check. Preparation retains this configuration in the attempt. Promotion, observation, and recovery need the operational probe secret through their intended linked configuration. Recovery uses the restored public URL, requires three passing samples, and checks the complete provider map again afterward. A failed recovery health check leaves the attempt discoverable as `recovering`.
 
@@ -69,14 +69,33 @@ Older terminal journal records omit probes and activation history. They remain r
 - Unit tests cover interruption around journal writes, lost activation responses, stale writers, external drift, failed compensation, quarantined artifacts, incompatible contracts, archive repair, corruption, and missing objects behind a valid receipt.
 - The native R2 development binding passed interrupted-upload, idempotent-repair, and missing-object drills without changing the active runtime. Bulk transfers through Wrangler's remote proxy later failed with internal errors. Release archives therefore use the R2 S3 API with short-lived credentials instead of the development proxy.
 - The actual TanStack artifact contains 315 modules, 172 static assets, and 145 retained browser assets. Its complete archive passed byte, MIME, and receipt verification in the isolated bucket. Repeating upload and verification after a machine shutdown passed using the same artifact, without rebuilding.
+- A fresh `release-proof-leander-v2` stage passed baseline bootstrap, protected candidate checks, actual two-minute certification, explicit rollback with another two-minute certification, and separate-process compensation after promotion ended before certification. The final pointer returned to the original version; restored health passed and the failed attempt's artifact was quarantined.
+- A subsequent SST update created a separate web proof Worker and another inactive probe version. It preserved the tested probe's exact deployment ID and version. Provider module readback also matched the retained baseline.
+- The real TanStack build rendered `/terms` remotely from an inactive version. A small outer fixture permits only that public page and static assets, strips session cookies, and rejects mutations. It uses SST-linked development database/auth configuration, with a guard requiring `quieter_dev`. Anonymous page and asset requests returned 404, mutations returned 405, and authenticated JavaScript, CSS, and font bytes and MIME types matched. Every uploaded module matched the retained manifest; the active web pointer stayed unchanged.
 
-These tests establish the controller, linked Worker behavior, and native static-asset upload. An actual TanStack build has also been inventoried. They do not yet establish a complete deployed TanStack candidate, protected production previews, queue/scheduled/DO version selection, production ownership transfer, or a live independent recovery workflow. No production pointer, secret, or database was changed by this proof.
+These tests establish the controller, linked Worker behavior, and native upload of a compiled TanStack application with assets. The web fixture adds an outer guard and runs the Worker before assets; its derived artifact has a separate digest. It is an SSR/static-asset test, not full authenticated application coverage. Protected production previews, queue/scheduled/DO version selection, production ownership transfer, and a live independent recovery workflow remain unverified. No production pointer, secret, or database was changed by this proof.
 
 Run the native upload proof under the limited SST operations target. It copies the compiled probe, adds a candidate asset, uploads exact bytes, and tests the versioned preview. It does not activate the upload.
 
 ```powershell
 vp exec sst shell --config sst.release-proof.config.ts --stage release-proof-leander --target ReleaseOperations -- node --conditions=development packages/deployment/src/verify-upload-proof.ts
 ```
+
+The complete controller drill uses a fresh baseline-stage journal and actual version metadata. It refuses an existing journal; inspect and resume interrupted steps through the CLI rather than deleting history. Each command inside the drill runs in a separate process.
+
+```powershell
+vp exec sst shell --config sst.release-proof.config.ts --stage release-proof-leander-v2 --target ReleaseOperations -- node --conditions=development packages/deployment/src/verify-controller-proof.ts
+```
+
+For the optional web proof, set `QUIETER_RELEASE_WEB_PROOF=true`, supply `ReleaseWebDatabaseUrl` from the approved development database and a separate random `ReleaseWebAuthSecret` through SST stdin, then preview/deploy the proof stage. Keep `QUIETER_RELEASE_PROOF_PHASE=candidate` after establishing its baseline. The web fixture's inline baseline remains frozen across later updates.
+
+```powershell
+vp exec sst shell --config sst.release-proof.config.ts --stage release-proof-leander-v2 --target ReleaseOperations -- node --conditions=development packages/deployment/src/verify-web-proof.ts --directory <absolute-built-directory> --manifest <absolute-artifact-manifest>
+vp exec sst shell --config sst.release-proof.config.ts --stage release-proof-leander-v2 --target ReleaseOperations -- node --conditions=development packages/deployment/src/verify-web-receipt.ts
+vp run @quieter/deployment#release verify-artifacts
+```
+
+The receipt command repeats read-only provider/module and HTTP checks against the retained web candidate. It neither rebuilds nor uploads another version.
 
 ## Archive verification
 
@@ -97,8 +116,16 @@ Read-only PlanetScale inspection on 2026-09-06 found the existing `quieter` main
 
 This topology does not establish provider-failure RPO 0 or high availability. Keep the submission guarantee scoped to application failures while the database and payload store remain intact. A topology change needs a separate cost and infrastructure decision. See [PlanetScale single-node documentation](https://planetscale.com/docs/postgres/cluster-configuration/single-node).
 
+## Existing production ownership
+
+Read-only inspection on 2026-09-06 exported the encrypted production SST snapshot from 2026-09-05 at 22:16 UTC, containing 217 resources, and checked live runtime metadata. Production has six Workers using compatibility date `2026-08-04` and `nodejs_compat`. The realtime Worker owns a Durable Object migration tagged `v1`. The web Worker runs assets before code and does not yet have the new archive or version-metadata bindings. Its full secret set and existing resource identities must survive a reviewed ownership transition.
+
+AWS confirms that all three current mail functions use unpublished `$LATEST` code and have no aliases. The receipt and feedback functions still receive direct SNS delivery. This is existing production behavior, not the new bridge design. Published versions, stable aliases, primary SQS buffers, health bindings, and archive bootstrap need protected infrastructure work before their runtime rollback paths can be enabled. This inventory changed no production resources.
+
 ## Independent recovery configuration
 
 `.github/workflows/release-recovery.yml` listens for release completion and reconciles every five minutes. `RUNTIME_RELEASE_RECOVERY_ENABLED` defaults off. Before enabling it, configure the `release-recovery` environment with a reviewed 40-character `RELEASE_CONTROLLER_SHA`, `RELEASE_STAGE`, `RELEASE_JOURNAL_BUCKET`, `CLOUDFLARE_ACCOUNT_ID`, and `AWS_REGION`. Supply `RELEASE_RECOVERY_AWS_ROLE` and `RELEASE_RECOVERY_CLOUDFLARE_TOKEN` with only journal/version/deployment permissions. The recovery job does not need application secrets, database access, migrations, or an SST deploy.
 
 The CLI still refuses production mutations, including reconciliation. Production enablement requires the remaining cutover gates; setting a workflow variable alone cannot bypass them. Every writer must use the same `quieter-deploy-<stage>` mutation group. A completed writer with unfinished journal state is recoverable even if GitHub labels its run successful. An unavailable GitHub status or expired but still active writer blocks compensation and fails the recovery job visibly.
+
+Read-only GitHub inspection found `Production` and `Review` environments with branch policies, and `Review` permits only `main`. There is no configured release-recovery environment or development AWS role in that environment. No branch protection, credentials, or permissions were changed to run the local provider proofs. Independent GitHub recovery still requires a reviewed environment and least-privilege access setup.

@@ -14,6 +14,7 @@ import { S3ArchiveStore } from "../src/archive-store.ts";
 import { ReleaseArtifactStore } from "../src/artifact-store.ts";
 import { artifactSchema, releaseArtifactSchema } from "../src/artifact.ts";
 import { AssetArchive, inventoryAssets } from "../src/assets.ts";
+import type { CloudflareRuntimeProvider } from "../src/cloudflare.ts";
 import { ObjectReleaseJournal } from "../src/journal.ts";
 import { ReleasePreflight } from "../src/preflight.ts";
 import type { ReleaseState } from "../src/schema.ts";
@@ -157,7 +158,11 @@ describe("immutable archive and durable journal", () => {
     await artifacts.write(release);
     await artifacts.write(release);
     expect(writes.filter((key) => key.includes("/artifacts/"))).toHaveLength(1);
-    const preflight = new ReleasePreflight(artifacts, archive);
+    const preflight = new ReleasePreflight(artifacts, archive, {
+      verifyArtifact: vi
+        .fn<CloudflareRuntimeProvider["verifyArtifact"]>()
+        .mockResolvedValue(),
+    });
     const candidate = {
       id: "candidate",
       services: [

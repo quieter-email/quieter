@@ -60,6 +60,83 @@ export class CloudflareRuntimeProvider implements RuntimeProvider {
     }
   }
 
+  async verifyArtifact(
+    scriptName: string,
+    versionId: string,
+    input: WorkerArtifact
+  ) {
+    identifierSchema.parse(scriptName);
+    z.uuid().parse(versionId);
+    const artifact = artifactSchema.parse(input);
+    const version = z
+      .object({
+        annotations: z.record(z.string(), z.string()).optional(),
+        assets: z.object({ config: assetRoutingSchema }).optional(),
+        compatibility_date: z.iso.date(),
+        compatibility_flags: z.array(z.string()),
+        id: z.uuid(),
+        main_module: z.string(),
+        modules: z
+          .array(
+            z.object({
+              content_base64: z.string(),
+              content_type: z.string(),
+              name: z.string(),
+            })
+          )
+          .max(2000),
+      })
+      .parse(
+        await this.call(
+          null,
+          `workers/${scriptName}/versions/${versionId}?include=modules`
+        )
+      );
+    const digest = createHash("sha256")
+      .update(JSON.stringify(artifact))
+      .digest("hex");
+    if (
+      version.id !== versionId ||
+      version.compatibility_date !== artifact.compatibilityDate ||
+      JSON.stringify(version.compatibility_flags.toSorted()) !==
+        JSON.stringify(artifact.compatibilityFlags.toSorted()) ||
+      (version.annotations?.["workers/tag"] !== undefined &&
+        version.annotations["workers/tag"] !== digest) ||
+      version.modules.length !== artifact.modules.length ||
+      (artifact.assets.length > 0 &&
+        JSON.stringify(version.assets?.config) !==
+          JSON.stringify(artifact.assetRouting))
+    ) {
+      throw new Error(
+        "Provider version metadata differs from the retained artifact."
+      );
+    }
+    const seen = new Set<string>();
+    for (const module of version.modules) {
+      const name =
+        module.name === version.main_module ? artifact.mainModule : module.name;
+      const expected = artifact.modules.find((file) => file.path === name);
+      if (
+        !expected ||
+        seen.has(name) ||
+        module.content_type !== expected.contentType ||
+        module.content_base64.length > Math.ceil(expected.bytes / 3) * 4
+      ) {
+        throw new Error("Provider modules differ from the retained artifact.");
+      }
+      seen.add(name);
+      const body = Buffer.from(module.content_base64, "base64");
+      if (
+        body.byteLength !== expected.bytes ||
+        createHash("sha256").update(body).digest("hex") !== expected.digest
+      ) {
+        throw new Error(
+          "Provider module bytes differ from the tested artifact."
+        );
+      }
+    }
+  }
+
   async activate(scriptName: string, versionId: string) {
     z.uuid().parse(versionId);
     await this.call(scriptName, "deployments", {

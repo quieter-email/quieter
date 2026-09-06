@@ -22,7 +22,8 @@ export default $config({
     const { createRuntimeVersion } = await import("./infra/runtime-version");
     const { COMPATIBILITY_DATE } =
       await import("@quieter/cloudflare/compatibility-date");
-    const phase = createReleaseProofEnv().QUIETER_RELEASE_PROOF_PHASE;
+    const proofEnv = createReleaseProofEnv();
+    const phase = proofEnv.QUIETER_RELEASE_PROOF_PHASE;
     const token = new sst.Secret("ReleaseProofToken");
     const binding = new sst.Linkable("PROBE_TOKEN", {
       include: [
@@ -35,6 +36,15 @@ export default $config({
     });
     const archive = new sst.cloudflare.Bucket("ProbeArchive", {
       transform: { bucket: { name: `${$app.stage}-archive` } },
+    });
+    const version = new sst.Linkable("PROBE_VERSION", {
+      include: [
+        sst.cloudflare.binding({
+          properties: {},
+          type: "versionMetadataBindings",
+        }),
+      ],
+      properties: {},
     });
     const journal = new sst.aws.Bucket("ReleaseJournal", { versioning: true });
     const operations = new sst.x.DevCommand("ReleaseOperations", {
@@ -56,7 +66,7 @@ export default $config({
         PROBE_GENERATION: phase === "baseline" ? "baseline" : "candidate",
       },
       handler: "packages/deployment/src/release-probe.ts",
-      link: [binding, archive],
+      link: [binding, archive, version],
       transform: {
         worker(args, options) {
           captured = { ...args };
@@ -90,6 +100,77 @@ export default $config({
       phase === "baseline"
         ? undefined
         : createRuntimeVersion("Candidate", worker, captured);
+    let web: sst.cloudflare.Worker | undefined;
+    if (proofEnv.QUIETER_RELEASE_WEB_PROOF === "true") {
+      const databaseUrl = new sst.Secret("ReleaseWebDatabaseUrl");
+      const authSecret = new sst.Secret("ReleaseWebAuthSecret");
+      const databaseBinding = new sst.Linkable("DATABASE_URL", {
+        include: [
+          sst.cloudflare.binding({
+            properties: {
+              text: databaseUrl.value.apply((value) => {
+                const url = new URL(value);
+                if (
+                  !["postgres:", "postgresql:"].includes(url.protocol) ||
+                  url.pathname !== "/quieter_dev"
+                ) {
+                  throw new Error(
+                    "The web release proof only permits the existing quieter_dev database."
+                  );
+                }
+                return value;
+              }),
+            },
+            type: "secretTextBindings",
+          }),
+        ],
+        properties: {},
+      });
+      const authBinding = new sst.Linkable("BETTER_AUTH_SECRET", {
+        include: [
+          sst.cloudflare.binding({
+            properties: { text: authSecret.value },
+            type: "secretTextBindings",
+          }),
+        ],
+        properties: {},
+      });
+      web = new sst.cloudflare.Worker("WebProof", {
+        assets: {
+          directory: "packages/deployment/fixtures/client",
+          runWorkerFirst: true,
+        },
+        compatibility: { date: COMPATIBILITY_DATE, flags: ["nodejs_compat"] },
+        environment: {
+          BETTER_AUTH_URL: "https://release-proof.invalid",
+          NODE_ENV: "production",
+          PROBE_GENERATION: "baseline",
+          QUIETER_AUTH_MAIL_MODE: "console",
+          QUIETER_DEPLOYMENT_ENV: "local",
+          QUIETER_GMAIL_AI_AUTOMATION_ENABLED: "false",
+          QUIETER_LOCAL_PROVIDER_MODE: "observe",
+          VITE_QUIETER_LOCAL_TELEMETRY: "false",
+        },
+        handler: "packages/deployment/src/release-probe.ts",
+        link: [binding, version, databaseBinding, authBinding],
+        transform: {
+          worker(args, options) {
+            options.ignoreChanges = ["*"];
+            args.content = $util
+              .output(args.contentFile)
+              .apply(async (file) => {
+                if (file === undefined) {
+                  throw new Error("Missing compiled web proof baseline.");
+                }
+                return await readFile(file, "utf-8");
+              });
+            args.contentFile = undefined;
+            args.contentSha256 = undefined;
+          },
+        },
+        url: true,
+      });
+    }
     return {
       archive: archive.name,
       candidateVersion: candidate?.id,
@@ -97,6 +178,8 @@ export default $config({
       phase,
       scriptName: worker.nodes.worker.scriptName,
       url: worker.url,
+      webScriptName: web?.nodes.worker.scriptName,
+      webUrl: web?.url,
     };
   },
 });

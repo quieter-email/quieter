@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -81,6 +81,54 @@ describe("verified native uploads", () => {
       directories.splice(0).map(async (directory) => {
         await rm(directory, { force: true, recursive: true });
       })
+    );
+  });
+
+  it("compares provider module bytes with the tested artifact, including an SST main-module alias", async () => {
+    const { artifact, directory } = await build();
+    const module = await readFile(path.join(directory, "server/index.js"));
+    const version = {
+      compatibility_date: artifact.compatibilityDate,
+      compatibility_flags: artifact.compatibilityFlags,
+      id: baselineId,
+      main_module: "placeholder",
+      modules: [
+        {
+          content_base64: module.toString("base64"),
+          content_type: "application/javascript+module",
+          name: "placeholder",
+        },
+      ],
+    };
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ result: version, success: true }))
+      .mockResolvedValueOnce(
+        Response.json({
+          result: {
+            ...version,
+            modules: [
+              {
+                ...version.modules[0],
+                content_base64:
+                  Buffer.from("different code").toString("base64"),
+              },
+            ],
+          },
+          success: true,
+        })
+      );
+    const provider = new CloudflareRuntimeProvider(
+      "a".repeat(32),
+      "token",
+      request
+    );
+    await provider.verifyArtifact("probe", baselineId, artifact);
+    await expect(
+      provider.verifyArtifact("probe", baselineId, artifact)
+    ).rejects.toThrow("bytes differ");
+    expect(request.mock.calls[0]?.[0]).toBe(
+      `https://api.cloudflare.com/client/v4/accounts/${"a".repeat(32)}/workers/workers/probe/versions/${baselineId}?include=modules`
     );
   });
 

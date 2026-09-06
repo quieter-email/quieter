@@ -10,8 +10,10 @@
     "archive": "node --conditions=development src/archive-cli.ts",
     "artifact": "node --conditions=development src/artifact-cli.ts",
     "verify:archive": "node --conditions=development src/verify-archive-proof.ts",
+    "verify:controller": "node --conditions=development src/verify-controller-proof.ts",
     "verify:proof": "node --conditions=development src/verify-live-proof.ts",
     "verify:upload": "node --conditions=development src/verify-upload-proof.ts",
+    "verify:web": "node --conditions=development src/verify-web-proof.ts",
     "release": "node --conditions=development src/cli.ts"
   },
   "dependencies": {

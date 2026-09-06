@@ -34,12 +34,14 @@ const { positionals, values } = parseArgs({
     file: { type: "string" },
     probes: { type: "string" },
     reason: { type: "string" },
+    rollback: { default: false, type: "boolean" },
     run: { type: "string" },
   },
 });
 const command = z
   .enum([
     "status",
+    "verify-artifacts",
     "register",
     "bootstrap",
     "prepare",
@@ -51,7 +53,7 @@ const command = z
   .parse(positionals[0]);
 const env = createDeploymentEnv();
 if (
-  command !== "status" &&
+  !["status", "verify-artifacts"].includes(command) &&
   !env.QUIETER_RELEASE_STAGE.startsWith("release-proof-")
 ) {
   throw new Error(
@@ -105,7 +107,7 @@ const archive = {
     }
   },
 };
-const preflight = new ReleasePreflight(artifacts, archive);
+const preflight = new ReleasePreflight(artifacts, archive, provider);
 const controller = new ReleaseController(journal, provider, preflight, {
   async candidate(attempt) {
     await verifyReleaseHealth(
@@ -138,6 +140,16 @@ if (
 }
 // oxlint-disable-next-line default-case -- The validated command union is exhaustive.
 switch (command) {
+  case "verify-artifacts": {
+    if (existing === null) {
+      throw new Error("There is no retained release to verify.");
+    }
+    await preflight.verify(existing.state.healthy);
+    process.stdout.write(
+      "Verified retained modules and archives for the recorded healthy release.\n"
+    );
+    break;
+  }
   case "register": {
     if (values.file === undefined || values.directory === undefined) {
       throw new Error(
@@ -188,7 +200,11 @@ switch (command) {
     break;
   }
   case "bootstrap": {
-    if (values.file === undefined || (await journal.read()) !== null) {
+    if (
+      values.file === undefined ||
+      values.probes === undefined ||
+      (await journal.read()) !== null
+    ) {
       throw new Error(
         "Bootstrap requires a baseline file and an empty journal."
       );
@@ -217,6 +233,14 @@ switch (command) {
         );
       }
     }
+    await verifyReleaseHealth(
+      healthy,
+      probeConfigurationSchema.parse(
+        JSON.parse(await readFile(values.probes, "utf-8"))
+      ),
+      env.QUIETER_RELEASE_PROBE_TOKEN,
+      "url"
+    );
     await journal.write(null, {
       attempt: null,
       healthy,
@@ -238,6 +262,7 @@ switch (command) {
         JSON.parse(await readFile(values.file, "utf-8"))
       ),
       id: identifierSchema.parse(values.attempt),
+      mode: values.rollback ? "rollback" : "promote",
       probes: probeConfigurationSchema.parse(
         JSON.parse(await readFile(values.probes, "utf-8"))
       ),
