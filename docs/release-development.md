@@ -190,6 +190,16 @@ On 2026-09-06 a controlled build passed the real web bundle checks, retained 316
 
 CI now retains this exact build for fourteen days. A local build is useful verification but is not trusted CI authorization. The protected release workflow still needs to consume the successful trusted-main artifact, validate stage/configuration and source-map upload evidence, and retain it in the release journal before activation. The legacy SST workflow still rebuilds and has not been replaced yet.
 
+### Source-map processing gate
+
+`vp run @quieter/deployment#upload:source-maps --directory <absolute-artifact-directory> --receipt <new-absolute-json-path>` uploads only verified JavaScript/map pairs through the pinned Sentry CLI. The upload runs outside the checkout with an explicit destination, no inherited application credentials, and rewriting disabled. It waits up to two minutes for Sentry processing. A failed or interrupted upload leaves no success receipt; retrying uses the same immutable debug IDs. The CLI rechecks the original files after upload and conditionally retains a receipt in `<stage>/source-map-receipts/<artifact-digest>.json` in the release bucket. The local receipt is written only after that object is read back successfully.
+
+Set `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_URL`, `QUIETER_RELEASE_STAGE`, `QUIETER_RELEASE_BUCKET`, and `AWS_REGION` explicitly. Upload credentials must come from the intended stage's linked SST `ReleaseSourceMapToken` secret. Raw `SENTRY_AUTH_TOKEN` configuration is rejected. For an isolated proof, enable `QUIETER_RELEASE_SOURCE_MAP_UPLOAD=true` in `sst.release-proof.config.ts` and run the command through `sst shell --target SourceMapOperations`. This target links only the upload secret and journal. Use the existing `quieter-staging` project for development evidence.
+
+Controlled version-2 artifacts require a matching durable processing receipt during both promotion and rollback preflight. A receipt must match the artifact, build, number of JavaScript pairs, stage, organization, project, and Sentry region. Missing or conflicting receipts block before provider verification. Recovery needs the configured destination and receipt read permission but does not need the upload token. Historical version-1 proof artifacts remain readable; they do not establish controlled-build provenance for a production cutover.
+
+Local tests cover missing evidence, interrupted uploads, stage mismatch, corrupted bytes, idempotent receipt retention, and wrong-project receipts. Live Sentry processing remains unverified until the existing staging upload credential is available.
+
 ## Independent recovery configuration
 
 `.github/workflows/release-recovery.yml` listens for release completion and reconciles every five minutes. `RUNTIME_RELEASE_RECOVERY_ENABLED` defaults off. Before enabling it, configure the `release-recovery` environment with a reviewed 40-character `RELEASE_CONTROLLER_SHA`, `RELEASE_STAGE`, `RELEASE_JOURNAL_BUCKET`, `CLOUDFLARE_ACCOUNT_ID`, and `AWS_REGION`. Supply `RELEASE_RECOVERY_AWS_ROLE` and `RELEASE_RECOVERY_CLOUDFLARE_TOKEN` with only journal/version/deployment permissions. The recovery job does not need application secrets, database access, migrations, or an SST deploy.

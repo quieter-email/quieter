@@ -1,19 +1,28 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
 import { createWebReleaseEnvironment } from "@quieter/env/build";
 import SentryCli from "@sentry/cli";
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { z } from "zod";
 
 import {
   inventoryWorkerArtifact,
   releaseArtifactSchema,
 } from "../src/artifact.ts";
+import { uploadReleaseSourceMaps } from "../src/source-map-upload.ts";
 import {
   prepareGeneratedSourceMaps,
   verifyReleaseSourceMaps,
@@ -109,6 +118,93 @@ describe("retained source-map identities", () => {
     await expect(
       verifyReleaseSourceMaps(manifest, directory)
     ).resolves.toHaveLength(1);
+  });
+
+  it("uploads only verified pairs and removes the upload directory after processing", async () => {
+    const fixture = await buildFixture();
+    let uploadDirectory = "";
+    const receipt = await uploadReleaseSourceMaps(
+      {
+        ...fixture,
+        destination: {
+          organization: "fixture",
+          project: "fixture-staging",
+          stage: "release-proof-maps",
+          token: "test-secret",
+          url: "https://de.sentry.io",
+        },
+      },
+      async (directory) => {
+        uploadDirectory = directory;
+        await expect(
+          readdir(path.join(directory, "server"))
+        ).resolves.toStrictEqual(["index.js", "index.js.map"]);
+        await expect(
+          readFile(path.join(directory, "server/index.js"))
+        ).resolves.toStrictEqual(
+          await readFile(path.join(fixture.directory, "server/index.js"))
+        );
+      }
+    );
+    expect(receipt).toMatchObject({
+      artifactDigest: fixture.manifest.digest,
+      files: 1,
+      project: "fixture-staging",
+    });
+    expect(JSON.stringify(receipt)).not.toContain("test-secret");
+    await expect(stat(uploadDirectory)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("does not acknowledge an unsuccessful upload and cleans its temporary copies", async () => {
+    const fixture = await buildFixture();
+    let uploadDirectory = "";
+    await expect(
+      uploadReleaseSourceMaps(
+        {
+          ...fixture,
+          destination: {
+            organization: "fixture",
+            project: "fixture-staging",
+            stage: "release-proof-maps",
+            token: "test-secret",
+            url: "https://de.sentry.io",
+          },
+        },
+        async (directory) => {
+          uploadDirectory = directory;
+          await Promise.reject(new Error("Upload failed"));
+        }
+      )
+    ).rejects.toThrow("Upload failed");
+    await expect(stat(uploadDirectory)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(
+      verifyReleaseSourceMaps(fixture.manifest, fixture.directory)
+    ).resolves.toHaveLength(1);
+  });
+
+  it("never invokes the uploader for the wrong stage or changed retained bytes", async () => {
+    const fixture = await buildFixture();
+    const upload = vi.fn<() => Promise<void>>();
+    const destination = {
+      organization: "fixture",
+      project: "fixture-staging",
+      stage: "production",
+      token: "test-secret",
+      url: "https://de.sentry.io" as const,
+    };
+    await expect(
+      uploadReleaseSourceMaps({ ...fixture, destination }, upload)
+    ).rejects.toThrow("build stage");
+    destination.stage = "release-proof-maps";
+    await writeFile(path.join(fixture.directory, "server/index.js"), "corrupt");
+    await expect(
+      uploadReleaseSourceMaps({ ...fixture, destination }, upload)
+    ).rejects.toThrow("bytes changed");
+    expect(upload).not.toHaveBeenCalled();
   });
 
   it("maps known generated helpers to their actual source and rejects unmapped application code", async () => {

@@ -55,6 +55,17 @@ export default $config({
       link: [token, journal],
     });
     void operations;
+    if (proofEnv.QUIETER_RELEASE_SOURCE_MAP_UPLOAD === "true") {
+      const sourceMapToken = new sst.Secret("ReleaseSourceMapToken");
+      const sourceMapOperations = new sst.x.DevCommand("SourceMapOperations", {
+        dev: {
+          autostart: false,
+          command: "vp run @quieter/deployment#upload:source-maps",
+        },
+        link: [sourceMapToken, journal],
+      });
+      void sourceMapOperations;
+    }
     let captured: cloudflare.WorkersScriptArgs | undefined;
     const worker = new sst.cloudflare.Worker("Probe", {
       assets: {

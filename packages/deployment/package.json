@@ -8,6 +8,7 @@
   },
   "scripts": {
     "build:web": "node --conditions=development src/web-release-build-cli.ts",
+    "upload:source-maps": "node --conditions=development src/source-map-upload-cli.ts",
     "archive": "node --conditions=development src/archive-cli.ts",
     "artifact": "node --conditions=development src/artifact-cli.ts",
     "verify:archive": "node --conditions=development src/verify-archive-proof.ts",

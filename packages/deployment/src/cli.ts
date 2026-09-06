@@ -3,7 +3,10 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 
 import { S3Client } from "@aws-sdk/client-s3";
-import { createDeploymentEnv } from "@quieter/env/deployment";
+import {
+  createDeploymentEnv,
+  createSourceMapDestinationEnv,
+} from "@quieter/env/deployment";
 import { z } from "zod";
 
 import { S3ArchiveStore } from "./archive-store.ts";
@@ -25,6 +28,7 @@ import {
   identifierSchema,
   probeConfigurationSchema,
 } from "./schema.ts";
+import { SourceMapReceiptStore } from "./source-map-store.ts";
 import { ObjectUploadStore } from "./upload-store.ts";
 import { ReleaseUpload, uploadIntentSchema } from "./upload.ts";
 
@@ -116,7 +120,15 @@ const archive = {
     }
   },
 };
-const preflight = new ReleasePreflight(artifacts, archive, provider);
+const preflight = new ReleasePreflight(artifacts, archive, provider, {
+  async verify(manifest) {
+    return await new SourceMapReceiptStore(
+      storage,
+      env.QUIETER_RELEASE_BUCKET,
+      createSourceMapDestinationEnv()
+    ).verify(manifest);
+  },
+});
 const uploads = new ObjectUploadStore(
   storage,
   env.QUIETER_RELEASE_BUCKET,

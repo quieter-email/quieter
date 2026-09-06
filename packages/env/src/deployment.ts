@@ -2,6 +2,91 @@ import { z } from "zod";
 
 import type { RuntimeEnvironment } from "./schema";
 
+export const createSourceMapDestinationEnv = (
+  runtime: RuntimeEnvironment = process.env
+) => {
+  const result = z
+    .object({
+      organization: z.string().regex(/^[\w-]{1,128}$/u),
+      project: z.string().regex(/^[\w-]{1,128}$/u),
+      stage: z.string().regex(/^[\w-]{1,128}$/u),
+      url: z.enum([
+        "https://sentry.io",
+        "https://de.sentry.io",
+        "https://us.sentry.io",
+      ]),
+    })
+    .safeParse({
+      organization: runtime.SENTRY_ORG,
+      project: runtime.SENTRY_PROJECT,
+      stage: runtime.QUIETER_RELEASE_STAGE,
+      url: runtime.SENTRY_URL,
+    });
+  if (!result.success) {
+    throw new Error(
+      "Source-map verification requires an explicit destination and stage."
+    );
+  }
+  return result.data;
+};
+
+export const createReleaseStorageEnv = (
+  runtime: RuntimeEnvironment = process.env
+) => {
+  const result = z
+    .object({
+      AWS_REGION: z.string().default("eu-central-1"),
+      QUIETER_RELEASE_BUCKET: z
+        .string()
+        .regex(/^[a-z\d][a-z\d.-]{1,61}[a-z\d]$/u),
+      QUIETER_RELEASE_STAGE: z.string().regex(/^[\w-]{1,128}$/u),
+    })
+    .safeParse(runtime);
+  if (!result.success) {
+    throw new Error("Release storage requires an explicit bucket and stage.");
+  }
+  return result.data;
+};
+
+export const createSourceMapUploadEnv = (
+  runtime: RuntimeEnvironment = process.env
+) => {
+  let resources: unknown;
+  try {
+    const app: unknown = JSON.parse(runtime.SST_RESOURCE_App ?? "null");
+    const secret: unknown = JSON.parse(
+      runtime.SST_RESOURCE_ReleaseSourceMapToken ?? "null"
+    );
+    resources =
+      runtime.SST_RESOURCES_JSON === undefined
+        ? {
+            App: app,
+            ReleaseSourceMapToken: secret,
+          }
+        : JSON.parse(runtime.SST_RESOURCES_JSON);
+  } catch {
+    throw new Error("Invalid linked source-map upload resources.");
+  }
+  const links = z
+    .object({
+      App: z.object({ stage: z.string() }),
+      ReleaseSourceMapToken: z.object({ value: z.string().min(1) }),
+    })
+    .safeParse(resources);
+  if (
+    !links.success ||
+    links.data.App.stage !== runtime.QUIETER_RELEASE_STAGE
+  ) {
+    throw new Error(
+      "Source-map upload bindings do not match the intended stage."
+    );
+  }
+  return {
+    ...createSourceMapDestinationEnv(runtime),
+    token: links.data.ReleaseSourceMapToken.value,
+  };
+};
+
 export const createDeploymentEnv = (
   runtime: RuntimeEnvironment = process.env
 ) => {
@@ -69,6 +154,9 @@ export const createReleaseProofEnv = (
       QUIETER_RELEASE_PROOF_PHASE: z
         .enum(["baseline", "adopt", "candidate"])
         .default("baseline"),
+      QUIETER_RELEASE_SOURCE_MAP_UPLOAD: z
+        .enum(["true", "false"])
+        .default("false"),
       QUIETER_RELEASE_TRIGGER_SCHEDULE: z
         .enum(["true", "false"])
         .default("false"),

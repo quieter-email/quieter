@@ -22,6 +22,7 @@ import type { CloudflareRuntimeProvider } from "../src/cloudflare.ts";
 import { ObjectReleaseJournal } from "../src/journal.ts";
 import { ReleasePreflight } from "../src/preflight.ts";
 import type { ReleaseState } from "../src/schema.ts";
+import { SourceMapReceiptStore } from "../src/source-map-store.ts";
 import { ObjectUploadStore } from "../src/upload-store.ts";
 
 const directories: string[] = [];
@@ -125,6 +126,128 @@ const build = async () => {
 };
 
 describe("immutable archive and durable journal", () => {
+  /* oxlint-disable vitest/max-expects -- Exercise the complete receipt gate, including missing, replayed, and corrupted evidence. */
+  it("requires immutable upload evidence for the configured project before controlled release preflight", async () => {
+    const { client, objects } = objectStore();
+    const artifact = artifactSchema.parse({
+      assetRouting: {},
+      assets: [],
+      buildId: "fixture",
+      compatibilityDate: "2026-08-04",
+      compatibilityFlags: [],
+      mainModule: "index.js",
+      modules: [
+        {
+          bytes: 1,
+          contentType: "application/javascript+module",
+          digest: "a".repeat(64),
+          path: "index.js",
+        },
+      ],
+      provenance: {
+        buildConfigDigest: "b".repeat(64),
+        command: "vp run --no-cache @quieter/web#build",
+        lockfileDigest: "c".repeat(64),
+        nodeVersion: "v24.18.0",
+        publicConfigurationDigest: "d".repeat(64),
+        sourceMaps: [
+          {
+            bytes: 1,
+            contentType: "application/json",
+            digest: "f".repeat(64),
+            path: "server/index.js.map",
+          },
+        ],
+        sourceTree: "e".repeat(40),
+        stage: "test",
+        toolchain: "fixture",
+      },
+      schemaVersion: 2,
+      sourceSha: "a".repeat(40),
+    });
+    const manifest = releaseArtifactSchema.parse({
+      archive: null,
+      artifact,
+      digest: createHash("sha256")
+        .update(JSON.stringify(artifact))
+        .digest("hex"),
+    });
+    const artifacts = new ReleaseArtifactStore(client, "journal", "test");
+    await artifacts.write(manifest);
+    const destination = {
+      organization: "fixture",
+      project: "fixture-staging",
+      stage: "test",
+      url: "https://de.sentry.io" as const,
+    };
+    const maps = new SourceMapReceiptStore(client, "journal", destination);
+    const candidate = {
+      id: "candidate",
+      services: [
+        {
+          artifactDigest: manifest.digest,
+          bindingGeneration: "b".repeat(64),
+          contracts: [],
+          requirements: {},
+          scriptName: "web",
+          service: "web",
+          versionId: randomUUID(),
+        },
+      ],
+      sourceSha: artifact.sourceSha,
+    };
+    const archive = {
+      verify: vi.fn<AssetArchive["verify"]>().mockResolvedValue(),
+    };
+    const provider = {
+      verifyArtifact: vi
+        .fn<CloudflareRuntimeProvider["verifyArtifact"]>()
+        .mockResolvedValue(),
+    };
+    await expect(
+      new ReleasePreflight(artifacts, archive, provider).verify(candidate)
+    ).rejects.toThrow("processing evidence");
+    const preflight = new ReleasePreflight(artifacts, archive, provider, maps);
+    await expect(preflight.verify(candidate)).rejects.toThrow("Missing object");
+    expect(provider.verifyArtifact).not.toHaveBeenCalled();
+    const receipt = {
+      ...destination,
+      artifactDigest: manifest.digest,
+      buildId: artifact.buildId,
+      completedAt: new Date().toISOString(),
+      files: 1,
+      id: randomUUID(),
+      schemaVersion: 1 as const,
+      toolchain: "2.58.5",
+    };
+    await maps.retain(manifest, receipt);
+    await expect(
+      maps.retain(manifest, { ...receipt, id: randomUUID() })
+    ).resolves.toStrictEqual(receipt);
+    await preflight.verify(candidate);
+    expect(provider.verifyArtifact).toHaveBeenCalledExactlyOnceWith(
+      "web",
+      candidate.services[0].versionId,
+      artifact
+    );
+    await expect(
+      new SourceMapReceiptStore(client, "journal", {
+        ...destination,
+        project: "wrong",
+      }).verify(manifest)
+    ).rejects.toThrow("destination");
+    const key = `test/source-map-receipts/${manifest.digest}.json`;
+    objects.set(key, {
+      body: Buffer.from(JSON.stringify({ ...receipt, files: 2 })),
+      contentType: "application/json",
+      etag: "corrupt",
+    });
+    await expect(preflight.verify(candidate)).rejects.toThrow("destination");
+    objects.delete(key);
+    await expect(preflight.verify(candidate)).rejects.toThrow("Missing object");
+  });
+  /* oxlint-enable vitest/max-expects */
+
   /* oxlint-disable vitest/max-expects -- One retained artifact exercises privacy, corruption, and version compatibility together. */
   it("retains provenance and private source maps without adding them to public assets", async () => {
     const { client, objects } = objectStore();
