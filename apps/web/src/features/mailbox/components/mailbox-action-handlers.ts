@@ -35,9 +35,6 @@ type ThreadLabelUpdate = LabelChangeSet & { threadId: string };
 
 const BULK_ACTION_CONCURRENCY = 3;
 
-const hasText = (value: string | null | undefined): value is string =>
-  value !== null && value !== undefined && value !== "";
-
 type MailboxActionHandlerArgs = {
   activeMailbox: MailboxCategory;
   activeSearchQuery: string;
@@ -280,7 +277,7 @@ export const createMailboxActionHandlers = ({
 
   const deleteDraft = async (message: MessageListItem) => {
     const { draftId } = message;
-    if (!hasText(draftId)) {
+    if (!draftId) {
       return;
     }
 
@@ -300,9 +297,7 @@ export const createMailboxActionHandlers = ({
     const draftsByMessageId = new Map(
       threads.flatMap((thread) => {
         const message = thread.anchorMessage;
-        return hasText(message.draftId)
-          ? [[message.id, message.draftId] as const]
-          : [];
+        return message.draftId ? [[message.id, message.draftId] as const] : [];
       })
     );
 
@@ -310,7 +305,7 @@ export const createMailboxActionHandlers = ({
       [...draftsByMessageId.keys()],
       async (messageId) => {
         const draftId = draftsByMessageId.get(messageId);
-        if (!hasText(draftId)) {
+        if (!draftId) {
           return;
         }
         await deleteDraftInMailbox(

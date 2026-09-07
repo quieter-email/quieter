@@ -64,9 +64,6 @@ export const serializeEnvFile = (values: ReadonlyMap<string, string>) => {
 const getHostname = (value: string) =>
   new URL(value).hostname.replace(/^\[(?<host>.*)\]$/u, "$<host>");
 
-const hasText = (value: string | undefined): value is string =>
-  value !== undefined && value !== "";
-
 const isPlanetScaleHostname = (hostname: string) =>
   hostname.endsWith(".pg.psdb.cloud") ||
   hostname.endsWith(".horizon.psdb.cloud");
@@ -78,7 +75,7 @@ const isAllowlistedPlanetScaleUrl = (
 ) => {
   const url = new URL(value);
   return (
-    hasText(configuredPlanetScaleHost) &&
+    !!configuredPlanetScaleHost &&
     isPlanetScaleHostname(configuredPlanetScaleHost) &&
     getHostname(value).toLowerCase() === configuredPlanetScaleHost &&
     url.pathname.slice(1) === "quieter_dev" &&
@@ -104,7 +101,7 @@ const validateDatabaseUrls = (
 
   for (const key of ["DATABASE_URL", "DATABASE_MIGRATION_URL"] as const) {
     const value = env.get(key);
-    if (!hasText(value)) {
+    if (!value) {
       continue;
     }
 
@@ -125,11 +122,11 @@ const validateDatabaseUrls = (
   }
 
   if (
-    hasText(configuredPlanetScaleHost) &&
+    configuredPlanetScaleHost &&
     isPlanetScaleHostname(configuredPlanetScaleHost)
   ) {
     const migrationUrl = env.get("DATABASE_MIGRATION_URL");
-    if (!hasText(migrationUrl)) {
+    if (!migrationUrl) {
       errors.push(
         "DATABASE_MIGRATION_URL is required for the allowlisted local PlanetScale database and must use direct port 5432."
       );
@@ -162,7 +159,7 @@ const validateAuthAndDeployment = (env: Map<string, string>) => {
     }
   }
   const liveUrl = env.get("GMAIL_LIVE_SYNC_URL");
-  if (hasText(liveUrl)) {
+  if (liveUrl) {
     try {
       const url = new URL(liveUrl);
       if (
@@ -182,7 +179,7 @@ const validateAuthAndDeployment = (env: Map<string, string>) => {
   }
   const subscription = env.get("GMAIL_PUBSUB_SUBSCRIPTION");
   if (
-    hasText(subscription) &&
+    subscription &&
     !/^projects\/[^/]+\/subscriptions\/quieter-gmail-local-[a-z0-9-]+$/u.test(
       subscription
     )
@@ -193,7 +190,7 @@ const validateAuthAndDeployment = (env: Map<string, string>) => {
   }
   if (
     env.get("QUIETER_LOCAL_PROVIDER_MODE") === "write" &&
-    !hasText(env.get("QUIETER_LOCAL_GMAIL_WRITE_ACCOUNTS"))
+    !env.get("QUIETER_LOCAL_GMAIL_WRITE_ACCOUNTS")
   ) {
     errors.push(
       "Write tests require QUIETER_LOCAL_GMAIL_WRITE_ACCOUNTS and dedicated mailboxes or an explicit production handoff."
@@ -201,7 +198,7 @@ const validateAuthAndDeployment = (env: Map<string, string>) => {
   }
   const authUrl = env.get("BETTER_AUTH_URL");
 
-  if (hasText(authUrl)) {
+  if (authUrl) {
     try {
       if (loopbackHosts.has(getHostname(authUrl))) {
         // ok

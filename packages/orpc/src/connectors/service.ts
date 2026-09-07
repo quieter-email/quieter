@@ -15,7 +15,6 @@ import { z } from "zod";
 import { runAuthorizedGmailMailbox } from "../gmail-mailbox-access";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import { getManagedMessageAttachment } from "../managed-mail/messages/attachments";
-import { hasText } from "../text";
 import {
   CONNECTOR_PROVIDERS,
   GOOGLE_CALENDAR_CONNECTOR_PROVIDER,
@@ -135,7 +134,7 @@ const connectorDefinitions = {
 const normalizeReturnTo = (returnTo: string | undefined) => {
   const normalized = returnTo?.trim();
   if (
-    hasText(normalized) &&
+    normalized &&
     normalized.startsWith("/") &&
     !normalized.startsWith("//")
   ) {
@@ -149,20 +148,20 @@ const createCodeChallenge = (verifier: string) =>
   createHash("sha256").update(verifier).digest("base64url");
 
 const isGoogleCalendarClientConfigured = () =>
-  hasText(serverEnv.GOOGLE_CALENDAR_CLIENT_ID) &&
-  hasText(serverEnv.GOOGLE_CALENDAR_CLIENT_SECRET) &&
-  hasText(serverEnv.CONNECTOR_TOKEN_ENCRYPTION_KEY);
+  !!serverEnv.GOOGLE_CALENDAR_CLIENT_ID &&
+  !!serverEnv.GOOGLE_CALENDAR_CLIENT_SECRET &&
+  !!serverEnv.CONNECTOR_TOKEN_ENCRYPTION_KEY;
 
 const isGoogleCalendarOAuthConfigured = () =>
-  hasText(serverEnv.BETTER_AUTH_URL) && isGoogleCalendarClientConfigured();
+  !!serverEnv.BETTER_AUTH_URL && isGoogleCalendarClientConfigured();
 
 const isLinearClientConfigured = () =>
-  hasText(serverEnv.LINEAR_CLIENT_ID) &&
-  hasText(serverEnv.LINEAR_CLIENT_SECRET) &&
-  hasText(serverEnv.CONNECTOR_TOKEN_ENCRYPTION_KEY);
+  !!serverEnv.LINEAR_CLIENT_ID &&
+  !!serverEnv.LINEAR_CLIENT_SECRET &&
+  !!serverEnv.CONNECTOR_TOKEN_ENCRYPTION_KEY;
 
 const isLinearOAuthConfigured = () =>
-  hasText(serverEnv.BETTER_AUTH_URL) && isLinearClientConfigured();
+  !!serverEnv.BETTER_AUTH_URL && isLinearClientConfigured();
 
 const assertConnectorConfigured = (provider: ConnectorProvider) => {
   if (
@@ -468,10 +467,10 @@ export const completeConnectorOAuth = async (input: {
       });
     }
 
-    const encryptedRefreshToken = hasText(tokenResponse.refresh_token)
+    const encryptedRefreshToken = tokenResponse.refresh_token
       ? encryptConnectorSecret(tokenResponse.refresh_token)
       : existingCredential?.encryptedRefreshToken;
-    if (!hasText(encryptedRefreshToken)) {
+    if (!encryptedRefreshToken) {
       throw new Error(
         "Google did not return an offline refresh token. Reconnect and grant access."
       );
@@ -531,7 +530,7 @@ export const completeConnectorOAuth = async (input: {
         "Linear did not grant all required connector permissions."
       );
     }
-    if (!hasText(tokenResponse.refresh_token)) {
+    if (!tokenResponse.refresh_token) {
       throw new Error(
         "Linear did not return an offline refresh token. Reconnect and grant access."
       );

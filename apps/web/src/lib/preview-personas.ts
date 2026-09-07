@@ -15,9 +15,6 @@ export type { PreviewPersona } from "./preview-personas.shared";
 const PREVIEW_PERSONA_STORAGE_KEY = "quieter:preview-persona";
 const PREVIEW_PERSONA_CHANGE_EVENT = "quieter:preview-persona-change";
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
-
 export const isPreviewPersonasAvailable = () =>
   import.meta.env.DEV ||
   clientEnv.VITE_QUIETER_PREVIEW_PERSONAS_ENABLED === "true";
@@ -35,7 +32,10 @@ const readPreviewPersona = () => {
   try {
     const stored: unknown = JSON.parse(value);
     if (
-      isRecord(stored) &&
+      typeof stored === "object" &&
+      stored !== null &&
+      "persona" in stored &&
+      "expiresAt" in stored &&
       isPreviewPersonaValue(stored.persona) &&
       typeof stored.expiresAt === "number" &&
       stored.expiresAt > Date.now()

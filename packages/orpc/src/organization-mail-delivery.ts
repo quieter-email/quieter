@@ -33,7 +33,6 @@ import { reportError } from "@quieter/observability";
 import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 
 import { OrganizationMailSendError } from "./organization-mail-policy";
-import { hasText } from "./text";
 
 export type OrganizationMailFeedbackRecipient = {
   diagnosticCode?: string;
@@ -929,7 +928,7 @@ export const buildOpenTrackingHtmlTransform = (input: {
   }
   const secret = serverEnv.BETTER_AUTH_SECRET;
   const baseUrl = serverEnv.BETTER_AUTH_URL;
-  if (!hasText(secret) || !hasText(baseUrl)) {
+  if (!secret || !baseUrl) {
     reportError(
       new Error("Open tracking is enabled but signing config is missing."),
       { operation: "organization-mail:open-tracking-config" }

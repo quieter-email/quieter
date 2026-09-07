@@ -55,9 +55,6 @@ import { SidebarWorkspaceViewSwitch } from "#/features/navigation/components/sid
 import { useSidebarNavHover } from "#/features/navigation/hooks/use-sidebar-nav-hover";
 import type { MailboxCategory } from "#/lib/gmail/gmail";
 
-const hasText = (value: string | null | undefined): value is string =>
-  typeof value === "string" && value.length > 0;
-
 type MailSidebarProps = {
   activeChatId: string | null;
   chats: {
@@ -397,7 +394,7 @@ const SidebarInboxSection = ({
           aria-disabled={embedded === true || selectedMailboxProvider === "api"}
           className="w-full justify-start rounded-md px-4"
           disabled={
-            !hasText(selectedMailboxId) ||
+            !selectedMailboxId ||
             embedded === true ||
             selectedMailboxProvider === "api"
           }
@@ -425,7 +422,7 @@ const SidebarInboxSection = ({
         />
         {selectedMailboxProvider !== null &&
         selectedMailboxProvider !== "api" &&
-        hasText(selectedMailboxId) ? (
+        selectedMailboxId ? (
           <MailboxOrganizer
             canManage={
               selectedMailboxProvider === "gmail" ||
@@ -512,7 +509,7 @@ const SidebarChatSection = ({
   const submitRenameChat = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     const title = editingChat?.title.trim();
-    if (editingChat === null || !hasText(title)) {
+    if (editingChat === null || !title) {
       setEditingChat(null);
       return;
     }

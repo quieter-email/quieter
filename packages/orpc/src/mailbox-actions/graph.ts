@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 import { connectorProviderSchema } from "../connectors/contracts";
-import { hasText } from "../text";
 
 export const MAILBOX_ACTION_GRAPH_VERSION = 1 as const;
 
@@ -290,13 +289,13 @@ export const validateMailboxActionGraph = (graphInput: unknown) => {
         nodeId: node.id,
       });
     }
-    if (!hasText(node.config.credentialId)) {
+    if (!node.config.credentialId) {
       addIssue({
         message: `Step ${node.id} needs a connected account.`,
         nodeId: node.id,
       });
     }
-    if (!hasText(node.config.instructions)) {
+    if (!node.config.instructions) {
       addIssue({
         message: `Step ${node.id} needs an instruction.`,
         nodeId: node.id,

@@ -36,25 +36,23 @@ import {
   markGmailMailboxNeedsReconnect,
   refreshAuthorizedGmailAccessToken,
 } from "./gmail-mailbox-access";
-import { hasText } from "./text";
 
 const isGmailAuthError = (error: unknown) =>
   isGmailServiceError(error) &&
   error.status === 401 &&
-  ((hasText(error.googleReason) &&
-    error.googleReason.toLowerCase() === "autherror") ||
-    (hasText(error.googleStatus) &&
+  ((!!error.googleReason && error.googleReason.toLowerCase() === "autherror") ||
+    (!!error.googleStatus &&
       error.googleStatus.toUpperCase() === "UNAUTHENTICATED"));
 
 const trimMessageBody = (
   bodyText: string | null | undefined,
   snippet: string | null | undefined
 ) => {
-  if (hasText(bodyText)) {
+  if (bodyText) {
     return bodyText.trim();
   }
 
-  if (hasText(snippet)) {
+  if (snippet) {
     return snippet.trim();
   }
 
@@ -335,7 +333,7 @@ export const readGmailAttachmentForUser = async (
       input.attachmentId,
       input.signal
     );
-    if (!hasText(attachment.data)) {
+    if (!attachment.data) {
       throw new Error("The attachment did not contain readable data.");
     }
 

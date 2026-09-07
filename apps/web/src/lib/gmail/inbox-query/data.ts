@@ -30,9 +30,6 @@ export type ThreadMetadataMutationResult = {
   messages: MessageMetadataMutationResult[];
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
-
 export type LabelChangeSet = {
   addLabelIds?: readonly string[];
   removeLabelIds?: readonly string[];
@@ -41,11 +38,16 @@ export type LabelChangeSet = {
 export const isMessagesQueryData = (
   value: unknown
 ): value is MessagesQueryData => {
-  if (!isRecord(value)) {
+  if (!(typeof value === "object" && value !== null)) {
     return false;
   }
 
-  return Array.isArray(value.pages) && Array.isArray(value.pageParams);
+  return (
+    "pages" in value &&
+    Array.isArray(value.pages) &&
+    "pageParams" in value &&
+    Array.isArray(value.pageParams)
+  );
 };
 
 const buildCachedMessageLookup = (

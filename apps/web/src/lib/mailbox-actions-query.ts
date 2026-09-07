@@ -2,9 +2,6 @@ import { queryOptions } from "@tanstack/react-query";
 
 import { rpc } from "#/lib/orpc";
 
-const hasText = (value: string | null | undefined): value is string =>
-  value !== null && value !== undefined && value !== "";
-
 export const mailboxActionsListQueryKey = (mailboxId: string | undefined) =>
   ["mailbox-actions", mailboxId ?? ""] as const;
 
@@ -15,9 +12,9 @@ export const mailboxActionQueryKey = (
 
 export const mailboxActionsListQueryOptions = (mailboxId: string | undefined) =>
   queryOptions({
-    enabled: hasText(mailboxId),
+    enabled: !!mailboxId,
     queryFn: async ({ signal }) => {
-      if (!hasText(mailboxId)) {
+      if (!mailboxId) {
         throw new Error("Mailbox id is required.");
       }
       return await rpc.mailboxActions.list({ mailboxId }, { signal });
@@ -31,9 +28,9 @@ export const mailboxActionQueryOptions = (
   actionId: string | undefined
 ) =>
   queryOptions({
-    enabled: hasText(mailboxId) && hasText(actionId),
+    enabled: !!mailboxId && !!actionId,
     queryFn: async ({ signal }) => {
-      if (!hasText(actionId)) {
+      if (!actionId) {
         throw new Error("Action id is required.");
       }
       return await rpc.mailboxActions.get({ actionId }, { signal });

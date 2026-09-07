@@ -16,7 +16,6 @@ import {
 } from "../mailbox/access";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import { assertOrganizationManager } from "../organization/divisions";
-import { hasText } from "../text";
 import {
   createDefaultMailboxActionGraph,
   validateMailboxActionGraph,
@@ -133,13 +132,12 @@ const validateConnectorCredentialOwnershipIssues = async (input: {
   userId: string;
 }): Promise<MailboxActionValidationIssue[]> => {
   const nodes = connectorAgentNodes(input.graph).filter(
-    (node) =>
-      hasText(node.config.credentialId) && node.config.provider !== undefined
+    (node) => !!node.config.credentialId && node.config.provider !== undefined
   );
   const results = await Promise.all(
     nodes.map(async (node) => {
       const { credentialId, provider } = node.config;
-      if (!hasText(credentialId) || provider === undefined) {
+      if (!credentialId || provider === undefined) {
         return null;
       }
       const [credential] = await db
@@ -229,7 +227,7 @@ export const createMailboxAction = async (input: {
   const graph = createDefaultMailboxActionGraph();
   const validation = validateMailboxActionGraph(graph);
   const trimmedName = input.name?.trim();
-  const actionName = hasText(trimmedName) ? trimmedName : "New action";
+  const actionName = trimmedName || "New action";
 
   await db.transaction(async (tx) => {
     await tx.insert(mailboxAction).values({
@@ -303,7 +301,7 @@ export const saveMailboxActionDraft = async (input: {
       validationErrors: parsed.errors,
       validationStatus: parsed.valid ? "valid" : "invalid",
     });
-    const nameUpdate = hasText(trimmedName) ? { name: trimmedName } : {};
+    const nameUpdate = trimmedName ? { name: trimmedName } : {};
     await tx
       .update(mailboxAction)
       .set({
@@ -326,7 +324,7 @@ export const publishMailboxAction = async (input: {
   userId: string;
 }) => {
   const action = await getConfigurableActionForUser(input);
-  if (!hasText(action.draftRevisionId)) {
+  if (!action.draftRevisionId) {
     throw new ORPCError("BAD_REQUEST", {
       message: "Save a draft before publishing.",
     });
@@ -393,7 +391,7 @@ export const setMailboxActionEnabled = async (input: {
   userId: string;
 }) => {
   const action = await getConfigurableActionForUser(input);
-  if (input.enabled && !hasText(action.publishedRevisionId)) {
+  if (input.enabled && !action.publishedRevisionId) {
     throw new ORPCError("BAD_REQUEST", {
       message: "Publish this action before enabling it.",
     });

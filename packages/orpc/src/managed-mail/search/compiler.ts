@@ -13,7 +13,6 @@ import type {
 import { and, eq, exists, ilike, not, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 
-import { hasText } from "../../text";
 import {
   normalizeManagedSearchValue,
   parseAbsoluteDate,
@@ -44,7 +43,7 @@ const createHeaderFilterCondition = (
   }
   const headerName = normalizeManagedSearchValue(value.slice(0, separator));
   const headerValue = value.slice(separator + 1).trim();
-  if (!hasText(headerName) || !hasText(headerValue)) {
+  if (!headerName || !headerValue) {
     return undefined;
   }
   return exists(
@@ -270,7 +269,7 @@ export const createManagedSearchCondition = (
   const conditions = normalizedSearch.filters.map((filter) =>
     createFilterCondition(mailboxId, filter, now)
   );
-  if (hasText(normalizedSearch.text)) {
+  if (normalizedSearch.text) {
     const textCondition = createTextCondition(normalizedSearch.text, fullText);
     if (textCondition !== undefined) {
       conditions.push(textCondition);

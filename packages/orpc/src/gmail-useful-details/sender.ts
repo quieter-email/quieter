@@ -1,5 +1,3 @@
-import { hasText } from "../text";
-
 const MAX_NAME_LENGTH = 80;
 const MAX_DOMAIN_LENGTH = 253;
 
@@ -105,9 +103,7 @@ const MAILBOX_PATTERN = /^\s*(?<name>[^<>]*?)\s*<(?<address>[^<>]+)>\s*$/u;
 
 export const getSenderSource = (from?: string | null) => {
   const domain = from?.match(ADDRESS_PATTERN)?.groups?.domain;
-  return hasText(domain)
-    ? domain.toLowerCase().slice(0, MAX_DOMAIN_LENGTH)
-    : null;
+  return domain ? domain.toLowerCase().slice(0, MAX_DOMAIN_LENGTH) : null;
 };
 
 const parseSender = (from: string) => {
@@ -125,7 +121,7 @@ const cleanDisplayName = (value: string) => {
   const name = value
     .replaceAll(/^["'\s]+|["'\s]+$/gu, "")
     .replaceAll(/\s+/gu, " ");
-  if (!hasText(name) || name.includes("@")) {
+  if (!name || name.includes("@")) {
     return null;
   }
 
@@ -141,7 +137,7 @@ const cleanDisplayName = (value: string) => {
 
   const trimmed = words.join(" ").replaceAll(/[,\s]+$/gu, "");
   if (
-    !hasText(trimmed) ||
+    !trimmed ||
     GENERIC_SENDER_NAMES.has(trimmed.toLowerCase()) ||
     !/\p{L}/u.test(trimmed)
   ) {
@@ -154,9 +150,7 @@ const cleanDisplayName = (value: string) => {
 const capitalize = (value: string) =>
   value
     .split("-")
-    .map((part) =>
-      hasText(part) ? part[0]?.toUpperCase() + part.slice(1) : part
-    )
+    .map((part) => (part ? part[0]?.toUpperCase() + part.slice(1) : part))
     .join("-");
 
 const getRegistrableLabel = (domain: string) => {
@@ -191,7 +185,7 @@ const getDomainName = (address: string) => {
  * "noreply@hetzner.com" reads as "Hetzner" instead of a robot address.
  */
 export const getSenderServiceName = (from?: string | null) => {
-  if (!hasText(from)) {
+  if (!from) {
     return null;
   }
 

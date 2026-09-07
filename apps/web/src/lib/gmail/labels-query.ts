@@ -1,4 +1,4 @@
-import { mailboxLabelColorSchema } from "@quieter/mail/mailbox-organization";
+import { mailboxLabelSchema } from "@quieter/mail/mailbox-organization";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { queryOptions } from "@tanstack/react-query";
 
@@ -15,30 +15,13 @@ import { getDemoLabels } from "./demo-mail";
 export const getLabelsQueryKey = (mailboxId: string) =>
   ["gmail-labels", mailboxId] as const;
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
-
-const isMailboxLabel = (value: unknown): value is MailboxLabel => {
-  if (!isRecord(value)) {
-    return false;
-  }
-
-  return (
-    typeof value.id === "string" &&
-    typeof value.name === "string" &&
-    typeof value.description === "string" &&
-    typeof value.inclusionCriteria === "string" &&
-    typeof value.position === "number" &&
-    (value.provider === "gmail" || value.provider === "managed") &&
-    (value.type === "system" || value.type === "user") &&
-    typeof value.visible === "boolean" &&
-    (value.color === null ||
-      mailboxLabelColorSchema.safeParse(value.color).success)
-  );
-};
-
 const normalizeMailboxLabels = (value: unknown): MailboxLabel[] =>
-  Array.isArray(value) ? value.filter(isMailboxLabel) : [];
+  Array.isArray(value)
+    ? value.flatMap((label) => {
+        const parsed = mailboxLabelSchema.safeParse(label);
+        return parsed.success ? [parsed.data] : [];
+      })
+    : [];
 
 export const labelsQueryOptions = (mailboxId: string, enabled = true) =>
   queryOptions<MailboxLabel[]>({

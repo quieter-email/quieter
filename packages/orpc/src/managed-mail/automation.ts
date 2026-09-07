@@ -38,7 +38,6 @@ import {
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import { deferAutoLabelAutomation } from "../mail-automation/auto-label-events";
 import { reportAutoLabelUsage } from "../mail-automation/usage";
-import { hasText } from "../text";
 import { updateManagedMessageLabelAssignments } from "./labels/repository";
 
 const AUTO_LABEL_RETRY_BASE_MS = 1000 * 60 * 5;
@@ -154,7 +153,7 @@ const getAutomationOwner = async (mailboxId: string) => {
     .where(eq(mailbox.id, mailboxId))
     .limit(1);
 
-  if (record === undefined || !hasText(record.billingOwnerUserId)) {
+  if (record === undefined || !record.billingOwnerUserId) {
     return null;
   }
   return {

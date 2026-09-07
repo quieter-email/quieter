@@ -75,9 +75,6 @@ const AUTO_LABEL_EXCLUDED_LABELS = new Set<string>([
   MAILBOX_LABELS.trash,
 ]);
 
-const hasText = (value: string | null | undefined): value is string =>
-  typeof value === "string" && value.length > 0;
-
 type AutoLabelContext = {
   availableLabelIds: Set<string>;
   labels: MailAutoLabelCandidate[];
@@ -625,7 +622,7 @@ const beginHistoryRecovery = async (
   lastProcessedAt: Date | null
 ) => {
   const profile = await getGmailProfile(accessToken);
-  if (!hasText(profile.historyId)) {
+  if (!profile.historyId) {
     throw new Error("Gmail profile did not include a history ID.");
   }
 
@@ -714,8 +711,8 @@ const processHistoryRecoveryPage = async ({
   await db
     .update(gmailWatchState)
     .set({
-      recoveryAfter: hasText(page.nextPageToken) ? state.recoveryAfter : null,
-      recoveryBefore: hasText(page.nextPageToken) ? state.recoveryBefore : null,
+      recoveryAfter: page.nextPageToken ? state.recoveryAfter : null,
+      recoveryBefore: page.nextPageToken ? state.recoveryBefore : null,
       recoveryPageToken: page.nextPageToken ?? null,
       updatedAt: new Date(),
     })
@@ -736,7 +733,7 @@ const processMailboxHistory = async ({
   userId: string;
 }) => {
   const leaseId = await claimMailboxProcessingLease(mailboxId);
-  if (!hasText(leaseId)) {
+  if (!leaseId) {
     return { busy: true };
   }
 
@@ -835,7 +832,7 @@ const processMailboxHistory = async ({
             .from(gmailWatchState)
             .where(eq(gmailWatchState.mailboxId, mailboxId))
             .limit(1);
-          if (!hasText(state?.historyId)) {
+          if (!state?.historyId) {
             await beginHistoryRecovery(
               accessToken,
               mailboxId,
@@ -876,9 +873,7 @@ const processMailboxHistory = async ({
           await db
             .update(gmailWatchState)
             .set({
-              historyId: hasText(page.nextPageToken)
-                ? state.historyId
-                : page.historyId,
+              historyId: page.nextPageToken ? state.historyId : page.historyId,
               historyPageToken: page.nextPageToken ?? null,
               lastError: null,
               lastErrorAt: null,
@@ -888,7 +883,7 @@ const processMailboxHistory = async ({
             .where(eq(gmailWatchState.mailboxId, mailboxId));
           await extendMailboxProcessingLease(mailboxId, leaseId);
 
-          if (!hasText(page.nextPageToken)) {
+          if (!page.nextPageToken) {
             break;
           }
         }
@@ -1119,7 +1114,7 @@ export const maintainGmailPubSubMailbox = async (
     .where(and(eq(mailbox.id, input.mailboxId), eq(mailbox.provider, "gmail")))
     .limit(1);
 
-  if (!hasText(gmailMailbox?.ownerUserId)) {
+  if (!gmailMailbox?.ownerUserId) {
     return { status: "skipped" as const };
   }
 
@@ -1189,10 +1184,7 @@ export const processGmailPubSubNotification = async (
     )
     .limit(1);
 
-  if (
-    !hasText(gmailMailbox?.ownerUserId) ||
-    gmailMailbox.status !== "connected"
-  ) {
+  if (!gmailMailbox?.ownerUserId || gmailMailbox.status !== "connected") {
     return { ignored: true, reason: "mailbox_not_connected" as const };
   }
 

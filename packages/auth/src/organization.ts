@@ -183,9 +183,6 @@ export const cleanupOrganizationsForDeletedUser = async (userId: string) => {
 
 type RawMailObjectProvider = "r2" | "s3";
 
-const hasText = (value: string | null | undefined): value is string =>
-  value !== null && value !== undefined && value !== "";
-
 const createManagedMailObjectClient = async (input: {
   provider: RawMailObjectProvider;
 }) => {
@@ -193,16 +190,14 @@ const createManagedMailObjectClient = async (input: {
 
   const { DeleteObjectCommand, S3Client } = await import("@aws-sdk/client-s3");
   let endpoint = serverEnv.R2_ENDPOINT;
-  if (!hasText(endpoint) && hasText(serverEnv.R2_ACCOUNT_ID)) {
+  if (!endpoint && serverEnv.R2_ACCOUNT_ID) {
     endpoint = `https://${serverEnv.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
   }
   const accessKeyId = serverEnv.R2_ACCESS_KEY_ID;
   const secretAccessKey = serverEnv.R2_SECRET_ACCESS_KEY;
 
   if (input.provider === "r2") {
-    if (
-      !(hasText(endpoint) && hasText(accessKeyId) && hasText(secretAccessKey))
-    ) {
+    if (!(!!endpoint && !!accessKeyId && !!secretAccessKey)) {
       throw new Error("Managed mail cleanup is temporarily unavailable.");
     }
     return {
@@ -218,7 +213,7 @@ const createManagedMailObjectClient = async (input: {
     };
   }
 
-  if (!hasText(region)) {
+  if (!region) {
     throw new Error("Managed mail cleanup is temporarily unavailable.");
   }
 

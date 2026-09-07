@@ -19,7 +19,6 @@ import type {
 import { and, asc, countDistinct, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
-import { hasText } from "../../text";
 import { assertManagedLabelsBelongToMailbox } from "../labels/repository";
 import { normalizeManagedOrganizationName } from "../organization/normalize-name";
 import { createManagedSearchCondition } from "../search/compiler";
@@ -402,7 +401,7 @@ const processManagedBackfillBatch = async (
     return backfill;
   }
 
-  const cursorCondition = hasText(backfill.cursor)
+  const cursorCondition = backfill.cursor
     ? sql`${managedMailMessage.id} > ${backfill.cursor}`
     : undefined;
   const records = await db
@@ -430,11 +429,11 @@ const processManagedBackfillBatch = async (
       });
       if (result.matched) {
         matchedCount += 1;
-        if (!hasText(result.error)) {
+        if (!result.error) {
           updatedCount += 1;
         }
       }
-      if (hasText(result.error)) {
+      if (result.error) {
         errorCount += 1;
       }
     } catch {

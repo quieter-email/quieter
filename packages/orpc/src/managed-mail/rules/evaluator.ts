@@ -23,7 +23,6 @@ import { reportError } from "@quieter/observability";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 
-import { hasText } from "../../text";
 import { updateManagedMessageLabelAssignments } from "../labels/repository";
 import { readRawMailObject } from "../messages/raw-object";
 import { sendManagedMailboxMessage } from "../messages/send";
@@ -98,7 +97,7 @@ const describeRuleSearch = (
 ) => {
   const conditions = [
     ...currentSearch.filters.map((filter) => `${filter.type}:${filter.value}`),
-    ...(hasText(currentSearch.text) ? [`text:${currentSearch.text}`] : []),
+    ...(currentSearch.text ? [`text:${currentSearch.text}`] : []),
   ];
   return conditions.length > 0
     ? `Matched ${currentMatchMode === "all" ? "all" : "one or more"} of ${conditions.join(", ")}.`
@@ -188,13 +187,13 @@ const createForwardMessage = async (input: {
   recipients: string[];
   ruleId: string;
 }) => {
-  const subject = hasText(input.message.subject)
+  const subject = input.message.subject
     ? input.message.subject.trim()
     : "(No subject)";
   let forwardedBodyText = "";
-  if (hasText(input.message.bodyText)) {
+  if (input.message.bodyText) {
     forwardedBodyText = input.message.bodyText.trim();
-  } else if (hasText(input.message.snippet)) {
+  } else if (input.message.snippet) {
     forwardedBodyText = input.message.snippet.trim();
   }
   const bodyText = [
@@ -207,7 +206,7 @@ const createForwardMessage = async (input: {
   const bodyHtml = [
     "<p>---------- Forwarded message ----------</p>",
     `<p><strong>From:</strong> ${escapeHtml(input.message.from)}<br><strong>Subject:</strong> ${escapeHtml(subject)}</p>`,
-    hasText(input.message.bodyHtml)
+    input.message.bodyHtml
       ? input.message.bodyHtml.trim()
       : `<p>${escapeHtml(forwardedBodyText).replaceAll("\n", "<br>")}</p>`,
   ].join("");
@@ -216,9 +215,7 @@ const createForwardMessage = async (input: {
     ? await parseRawMailAttachments(await readRawMailObject(input.message))
     : [];
   const attachments = originalAttachments
-    .filter(
-      (attachment) => !attachment.inline || !hasText(attachment.contentId)
-    )
+    .filter((attachment) => !attachment.inline || !attachment.contentId)
     .map((attachment) => ({
       contentId: attachment.contentId,
       file: createAttachmentFile(
@@ -236,7 +233,7 @@ const createForwardMessage = async (input: {
   const inlineImages = originalAttachments
     .filter(
       (attachment): attachment is typeof attachment & { contentId: string } =>
-        attachment.inline && hasText(attachment.contentId)
+        attachment.inline && !!attachment.contentId
     )
     .map((attachment) => ({
       contentId: attachment.contentId,
@@ -371,14 +368,14 @@ const applyRuleActions = async (input: {
     }
 
     if (action.kind === "forward") {
-      if (hasText(getHeader(input.message, "X-Quieter-Rule-Forwarded"))) {
+      if (getHeader(input.message, "X-Quieter-Rule-Forwarded")) {
         await recordActionResult({
           kind: action.kind,
           message:
             "Skipped a message that was already forwarded by an automatic rule.",
           status: "skipped",
         });
-      } else if (hasText(input.ruleOwnerUserId)) {
+      } else if (input.ruleOwnerUserId) {
         await sendManagedMailboxMessage({
           mailboxId: input.mailboxId,
           message: await createForwardMessage({
@@ -442,14 +439,14 @@ const applyManagedRuleLabelUpdates = (
     }
     for (const labelId of action.removeIds) {
       const name = labelNameById.get(labelId);
-      if (hasText(name)) {
+      if (name) {
         customLabelNames.delete(name);
       }
     }
     for (const labelId of action.addIds) {
       customLabelIds.add(labelId);
       const name = labelNameById.get(labelId);
-      if (hasText(name)) {
+      if (name) {
         customLabelNames.add(name);
       }
     }
@@ -653,7 +650,7 @@ const evaluateManagedRuleForMessage = async (input: {
   );
   const applicationIsComplete =
     input.previousApplication?.matched === true &&
-    !hasText(input.previousApplication.error) &&
+    !input.previousApplication.error &&
     previousActionResults.length === actions.length;
   if (applicationIsComplete) {
     return {
@@ -806,9 +803,7 @@ export const applyManagedRulesToMessage = async (input: {
             and(
               eq(managedMailRule.mailboxId, input.mailboxId),
               eq(managedMailRule.enabled, true),
-              hasText(input.ruleId)
-                ? eq(managedMailRule.id, input.ruleId)
-                : undefined
+              input.ruleId ? eq(managedMailRule.id, input.ruleId) : undefined
             )
           )
           .orderBy(asc(managedMailRule.priority), asc(managedMailRule.name)),
@@ -833,7 +828,7 @@ export const applyManagedRulesToMessage = async (input: {
     const customLabelNames = new Set(
       labels.flatMap((label) => {
         const name = labelNameById.get(label.labelId);
-        return hasText(name) ? [name] : [];
+        return name ? [name] : [];
       })
     );
     return await processManagedRulesAtIndex({

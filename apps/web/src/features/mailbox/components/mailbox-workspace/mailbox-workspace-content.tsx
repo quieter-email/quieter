@@ -40,9 +40,6 @@ const TemplateWorkspace = lazy(loadTemplateWorkspace);
 type MailboxSidebarGroups = ComponentProps<typeof MailSidebar>["groups"];
 type MailboxSidebarChats = ComponentProps<typeof MailSidebar>["chats"];
 
-const hasText = (value: string | null | undefined): value is string =>
-  value !== null && value !== undefined && value !== "";
-
 type MailboxWorkspaceLayoutState = {
   isMobileSidebarOpen: boolean;
 };
@@ -251,7 +248,7 @@ const NoMailboxWorkspace = ({
                 Open settings
               </LinkButton>
             </div>
-            {hasText(connectError) ? (
+            {connectError ? (
               <p className="mt-3 text-body text-destructive">{connectError}</p>
             ) : null}
           </m.div>
@@ -306,7 +303,7 @@ export const MailboxWorkspaceContent = ({
   signature,
 }: MailboxWorkspaceContentProps) => {
   let mailboxContent: ReactNode;
-  if (!hasText(selectedMailboxId)) {
+  if (!selectedMailboxId) {
     mailboxContent = (
       <NoMailboxWorkspace
         connectError={reconnectError}
@@ -405,7 +402,7 @@ export const MailboxWorkspaceContent = ({
               />
               Reconnect
             </Button>
-            {hasText(reconnectError) ? (
+            {reconnectError ? (
               <p className="mt-3 text-body text-destructive">
                 {reconnectError}
               </p>
@@ -467,7 +464,7 @@ export const MailboxWorkspaceContent = ({
     <LazyMotion features={domAnimation}>
       <main className="relative isolate flex h-dvh min-h-0 flex-col overflow-hidden pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-fg lg:p-0">
         <div className="relative z-10 flex min-h-0 flex-1 overflow-hidden">
-          {hasText(selectedMailboxId) ? (
+          {selectedMailboxId ? (
             <MailSidebar
               activeChatId={chatId}
               chats={chats}

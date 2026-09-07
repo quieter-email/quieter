@@ -1,34 +1,34 @@
 import { experimental_createQueryPersister } from "@tanstack/query-persist-client-core";
 import type { PersistedQuery } from "@tanstack/query-persist-client-core";
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
-
 const isPersistedQuery = (value: unknown): value is PersistedQuery => {
   if (
-    !isRecord(value) ||
-    typeof value.buster !== "string" ||
-    typeof value.queryHash !== "string" ||
-    !Array.isArray(value.queryKey) ||
-    !isRecord(value.state)
+    !(typeof value === "object" && value !== null) ||
+    typeof Reflect.get(value, "buster") !== "string" ||
+    typeof Reflect.get(value, "queryHash") !== "string" ||
+    !Array.isArray(Reflect.get(value, "queryKey")) ||
+    !("state" in value)
   ) {
     return false;
   }
 
-  const { state } = value;
+  const state: unknown = value.state;
+  if (typeof state !== "object" || state === null) {
+    return false;
+  }
   return (
-    typeof state.dataUpdateCount === "number" &&
-    typeof state.dataUpdatedAt === "number" &&
-    typeof state.errorUpdateCount === "number" &&
-    typeof state.errorUpdatedAt === "number" &&
-    typeof state.fetchFailureCount === "number" &&
-    typeof state.isInvalidated === "boolean" &&
-    (state.status === "pending" ||
-      state.status === "error" ||
-      state.status === "success") &&
-    (state.fetchStatus === "idle" ||
-      state.fetchStatus === "fetching" ||
-      state.fetchStatus === "paused")
+    typeof Reflect.get(state, "dataUpdateCount") === "number" &&
+    typeof Reflect.get(state, "dataUpdatedAt") === "number" &&
+    typeof Reflect.get(state, "errorUpdateCount") === "number" &&
+    typeof Reflect.get(state, "errorUpdatedAt") === "number" &&
+    typeof Reflect.get(state, "fetchFailureCount") === "number" &&
+    typeof Reflect.get(state, "isInvalidated") === "boolean" &&
+    (Reflect.get(state, "status") === "pending" ||
+      Reflect.get(state, "status") === "error" ||
+      Reflect.get(state, "status") === "success") &&
+    (Reflect.get(state, "fetchStatus") === "idle" ||
+      Reflect.get(state, "fetchStatus") === "fetching" ||
+      Reflect.get(state, "fetchStatus") === "paused")
   );
 };
 

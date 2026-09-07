@@ -23,9 +23,6 @@ import type {
 
 import type { searchFilterOptions } from "./message-list-search-filter-options";
 
-const hasText = (value: string | null | undefined): value is string =>
-  typeof value === "string" && value.length > 0;
-
 const createSearchFilterSections = (
   options: typeof searchFilterOptions
 ): readonly { label: string; options: typeof searchFilterOptions }[] => [
@@ -97,11 +94,10 @@ const SearchDropdownRow = ({
       "relative flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-body-sm text-fg hover:bg-muted focus-visible:z-10 focus-visible:border-ring focus-visible:bg-muted focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none",
       className,
       {
-        "bg-accent": active && !hasText(className),
-        "bg-muted": highlighted && !hasText(className),
-        "ring-1 ring-ring/45 ring-inset":
-          active && !highlighted && hasText(className),
-        "ring-2 ring-ring/60 ring-inset": highlighted && hasText(className),
+        "bg-accent": active && !className,
+        "bg-muted": highlighted && !className,
+        "ring-1 ring-ring/45 ring-inset": active && !highlighted && !!className,
+        "ring-2 ring-ring/60 ring-inset": highlighted && !!className,
       }
     )}
     onClick={onClick}
@@ -113,7 +109,7 @@ const SearchDropdownRow = ({
       icon={icon}
     />
     <span className="min-w-0 flex-1 truncate">{label}</span>
-    {hasText(hint) && <span className="text-micro text-muted-fg">{hint}</span>}
+    {!!hint && <span className="text-micro text-muted-fg">{hint}</span>}
   </button>
 );
 
@@ -246,7 +242,7 @@ export const MessageListSearchDropdown = ({
   }, [showLabelsSubmenu]);
 
   let labelsContent: ReactNode;
-  if (hasText(labelsErrorMessage)) {
+  if (labelsErrorMessage) {
     labelsContent = (
       <div className="px-2.5 py-2 text-body-sm text-fg">
         {labelsErrorMessage}

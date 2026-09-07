@@ -41,9 +41,6 @@ type DemoMailState = {
 
 let landingDemoState: DemoMailState | null = null;
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
-
 const daysAgo = (days: number) =>
   new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
@@ -437,11 +434,14 @@ const createInitialDemoState = (): DemoMailState => ({
 });
 
 const isDemoMailState = (value: unknown): value is DemoMailState => {
-  if (!isRecord(value)) {
+  if (!(typeof value === "object" && value !== null)) {
     return false;
   }
   return (
-    value.version === DEMO_MAIL_STATE_VERSION && Array.isArray(value.messages)
+    "version" in value &&
+    value.version === DEMO_MAIL_STATE_VERSION &&
+    "messages" in value &&
+    Array.isArray(value.messages)
   );
 };
 

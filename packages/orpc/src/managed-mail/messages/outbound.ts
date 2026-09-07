@@ -11,7 +11,6 @@ import { extractMailAddress } from "@quieter/mail/compose/schema";
 import type { SendHeader } from "@quieter/mail/send";
 import { and, eq, ne, sql } from "drizzle-orm";
 
-import { hasText } from "../../text";
 import {
   createManagedMessageSearchText,
   normalizeManagedSearchValue,
@@ -82,11 +81,11 @@ export const recordOutboundManagedMessageForSender = async (input: {
     const [inserted] = await tx
       .insert(managedMailMessage)
       .values({
-        bcc: hasText(input.bcc?.join(", ")) ? input.bcc.join(", ") : null,
+        bcc: input.bcc?.join(", ") ? input.bcc.join(", ") : null,
         bccNormalized: normalizeManagedSearchValue(input.bcc?.join(", ")),
         bodyHtml: input.bodyHtml ?? null,
         bodyText: input.bodyText ?? null,
-        cc: hasText(input.cc?.join(", ")) ? input.cc.join(", ") : null,
+        cc: input.cc?.join(", ") ? input.cc.join(", ") : null,
         ccNormalized: normalizeManagedSearchValue(input.cc?.join(", ")),
         createdAt: sentAt,
         direction: "outbound",
@@ -104,24 +103,22 @@ export const recordOutboundManagedMessageForSender = async (input: {
         rawObjectProvider: input.rawObject?.provider ?? null,
         rawSizeBytes: input.rawSizeBytes ?? null,
         references: null,
-        replyTo: hasText(input.replyTo?.join(", "))
-          ? input.replyTo.join(", ")
-          : null,
+        replyTo: input.replyTo?.join(", ") ? input.replyTo.join(", ") : null,
         s3Bucket: null,
         s3Key: null,
         searchText: createManagedMessageSearchText(input),
         sentAt,
         snippet: (() => {
-          const snippetSource = hasText(input.bodyText)
-            ? input.bodyText
-            : (input.bodyHtml?.replaceAll(/<[^>]+>/gu, " ") ?? "");
+          const snippetSource =
+            input.bodyText ||
+            (input.bodyHtml?.replaceAll(/<[^>]+>/gu, " ") ?? "");
           const trimmedSnippet = snippetSource
             .replaceAll(/\s+/gu, " ")
             .trim()
             .slice(0, 240);
-          return hasText(trimmedSnippet) ? trimmedSnippet : null;
+          return trimmedSnippet || null;
         })(),
-        subject: hasText(input.subject) ? input.subject : null,
+        subject: input.subject || null,
         threadId: input.threadId ?? id,
         to: input.to.join(", "),
         toNormalized: normalizeManagedSearchValue(input.to.join(", ")),

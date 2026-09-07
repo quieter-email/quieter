@@ -30,11 +30,8 @@ const authRouteApi = getRouteApi("/auth");
 const AUTHENTICATION_ERROR_MESSAGE =
   "Unable to authenticate. Please check your credentials or try again.";
 
-const hasText = (value: string | null | undefined): value is string =>
-  value !== null && value !== undefined && value !== "";
-
 const normalizeAuthReturnTo = (returnTo?: string) => {
-  if (!hasText(returnTo)) {
+  if (!returnTo) {
     return "/";
   }
 
@@ -369,7 +366,7 @@ const AuthCredentials = ({
         Continue with passkey
       </Button>
 
-      {hasText(errors.google) ? (
+      {errors.google ? (
         <output
           aria-live="assertive"
           className="mt-4 text-body text-destructive"
@@ -377,7 +374,7 @@ const AuthCredentials = ({
           {errors.google}
         </output>
       ) : null}
-      {hasText(errors.passkey) ? (
+      {errors.passkey ? (
         <output
           aria-live="assertive"
           className="mt-4 text-body text-destructive"
@@ -455,7 +452,7 @@ const PreviewPersonaPicker = ({ navigate }: { navigate: AuthNavigate }) => {
           </Button>
         ))}
       </div>
-      {hasText(error) ? (
+      {error ? (
         <output aria-live="assertive" className="text-body text-destructive">
           {error}
         </output>
@@ -467,7 +464,7 @@ const PreviewPersonaPicker = ({ navigate }: { navigate: AuthNavigate }) => {
 export const AuthScreen = () => {
   const { error, returnTo } = authRouteApi.useSearch();
   const navigate = authRouteApi.useNavigate();
-  const authError = hasText(error) ? AUTHENTICATION_ERROR_MESSAGE : null;
+  const authError = error ? AUTHENTICATION_ERROR_MESSAGE : null;
 
   return (
     <div className="auth-scene relative isolate grid h-dvh max-h-dvh w-full overflow-hidden md:grid-cols-[3fr_2fr]">
@@ -488,7 +485,7 @@ export const AuthScreen = () => {
 
           <PreviewPersonaPicker navigate={navigate} />
 
-          {hasText(authError) ? (
+          {authError ? (
             <output
               aria-live="assertive"
               className="mt-4 text-body text-destructive"

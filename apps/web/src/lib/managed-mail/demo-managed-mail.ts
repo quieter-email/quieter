@@ -33,9 +33,6 @@ const DEMO_MANAGED_MAIL_STORAGE_KEY = "quieter:managed-demo-mail-state";
 const DEMO_MANAGED_MAIL_STATE_VERSION = 2;
 const MANAGED_DEMO_THREAD_QUERY_VERSION = 3;
 
-const hasText = (value: string | null | undefined): value is string =>
-  typeof value === "string" && value.trim() !== "";
-
 const DEMO_MANAGED_LABEL_IDS = {
   billing: "demo-managed-label-billing",
   support: "demo-managed-label-support",
@@ -505,7 +502,7 @@ const matchesStructuredFilter = (
     }
     case "label": {
       const labelId = labelsByName.get(filter.value.toLocaleLowerCase());
-      return hasText(labelId) && messageLabelIds.has(labelId);
+      return !!labelId?.trim() && messageLabelIds.has(labelId);
     }
     case "bcc": {
       return matchesTextFilter(message, filter);

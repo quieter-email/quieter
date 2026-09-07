@@ -1,7 +1,5 @@
 import type { AutomationMailMessage } from "@quieter/ai/classify-gmail-message";
 
-import { hasText } from "../text";
-
 /**
  * Generous on purpose. A code printed below a long newsletter body is still a
  * code the reader is waiting for, and scanning the whole message costs
@@ -80,10 +78,10 @@ const decodeCodePoint = (codePoint: number) => {
 
 const resolveEntity = (match: RegExpMatchArray) => {
   const { decimal, hexadecimal, name } = match.groups ?? {};
-  if (hasText(decimal)) {
+  if (decimal) {
     return decodeCodePoint(Math.trunc(Number(decimal)));
   }
-  if (hasText(hexadecimal)) {
+  if (hexadecimal) {
     return decodeCodePoint(Number.parseInt(hexadecimal, 16));
   }
   return NAMED_ENTITIES[(name ?? "").toLowerCase()] ?? match[0];
@@ -204,17 +202,17 @@ export const getMailPlainText = (
   message: AutomationMailMessage
 ): MailPlainText => {
   let body = "";
-  if (hasText(message.bodyText)) {
+  if (message.bodyText) {
     body = normalizeWhitespace(message.bodyText.slice(0, MAX_RAW_LENGTH));
-  } else if (hasText(message.bodyHtml)) {
+  } else if (message.bodyHtml) {
     body = htmlToPlainText(message.bodyHtml);
-  } else if (hasText(message.snippet)) {
+  } else if (message.snippet) {
     body = normalizeWhitespace(message.snippet);
   }
 
   return {
     body: body.slice(0, MAX_TEXT_LENGTH),
-    subject: hasText(message.subject)
+    subject: message.subject
       ? normalizeWhitespace(message.subject).slice(0, 500)
       : "",
   };

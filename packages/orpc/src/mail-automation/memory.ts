@@ -21,7 +21,6 @@ import {
   recordAndRefreshAiMemory,
   replaceMailboxFeedbackMemories,
 } from "../ai-memory";
-import { hasText } from "../text";
 
 const SYSTEM_LABEL_IDS = new Set<string>(Object.values(MAILBOX_LABELS));
 
@@ -195,25 +194,25 @@ export const refreshAutoLabelMemoryProfile = async (
       const label = rule.labelName ?? rule.labelId;
       const action =
         rule.policy === "prefer" ? "Prefer applying" : "Avoid applying";
-      const scope = hasText(rule.source)
+      const scope = rule.source
         ? ` to messages from ${rule.source}`
         : " when it clearly matches";
       return {
         confidence: Math.min(0.98, 0.65 + rule.count * 0.08),
         content: `${action} the “${label}” label${scope}; learned from ${rule.count} manual correction${rule.count === 1 ? "" : "s"}.`,
-        importance: hasText(rule.source) ? 4 : 3,
+        importance: rule.source ? 4 : 3,
         key: `${toMemoryKeyPart(rule.labelId)}:${toMemoryKeyPart(rule.source ?? "all")}`,
         metadata: {
           labelId: rule.labelId,
           policy: rule.policy,
         },
         reinforcementCount: rule.count,
-        sourceDomains: hasText(rule.source) ? [rule.source] : [],
-        summary: `${rule.policy === "prefer" ? "Prefers" : "Avoids"} “${label}”${hasText(rule.source) ? ` for ${rule.source}` : ""}`,
+        sourceDomains: rule.source ? [rule.source] : [],
+        summary: `${rule.policy === "prefer" ? "Prefers" : "Avoids"} “${label}”${rule.source ? ` for ${rule.source}` : ""}`,
         topics: [
           "email-labeling",
           label,
-          ...(hasText(rule.source) ? [rule.source] : []),
+          ...(rule.source ? [rule.source] : []),
         ],
       };
     }),
@@ -284,25 +283,25 @@ export const refreshUsefulDetailMemoryProfile = async (
     mailboxId,
     memories: profile.rules.map((rule) => {
       const action = rule.policy === "prefer" ? "Treat" : "Do not treat";
-      const scope = hasText(rule.source)
+      const scope = rule.source
         ? ` from ${rule.source}`
         : " across this mailbox";
       return {
         confidence: Math.min(0.98, 0.65 + rule.count * 0.08),
         content: `${action} ${rule.kind.replaceAll("_", " ")} details${scope} as useful; learned from ${rule.count} rating${rule.count === 1 ? "" : "s"}.`,
-        importance: hasText(rule.source) ? 4 : 3,
+        importance: rule.source ? 4 : 3,
         key: `${toMemoryKeyPart(rule.kind)}:${toMemoryKeyPart(rule.source ?? "all")}`,
         metadata: {
           detailKind: rule.kind,
           policy: rule.policy,
         },
         reinforcementCount: rule.count,
-        sourceDomains: hasText(rule.source) ? [rule.source] : [],
-        summary: `${rule.policy === "prefer" ? "Prefers" : "Suppresses"} ${rule.kind.replaceAll("_", " ")}${hasText(rule.source) ? ` from ${rule.source}` : ""}`,
+        sourceDomains: rule.source ? [rule.source] : [],
+        summary: `${rule.policy === "prefer" ? "Prefers" : "Suppresses"} ${rule.kind.replaceAll("_", " ")}${rule.source ? ` from ${rule.source}` : ""}`,
         topics: [
           "useful-details",
           rule.kind,
-          ...(hasText(rule.source) ? [rule.source] : []),
+          ...(rule.source ? [rule.source] : []),
         ],
       };
     }),
@@ -459,7 +458,7 @@ export const recordMailAutoLabelFeedback = async (input: {
         )
       ),
     ]
-      .filter((source): source is string => hasText(source))
+      .filter((source): source is string => !!source)
       .join(", ")
       .slice(0, 600),
     userId: input.userId,

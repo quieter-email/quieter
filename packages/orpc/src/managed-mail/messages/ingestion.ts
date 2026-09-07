@@ -12,7 +12,6 @@ import type { ParsedRawMailMessage } from "@quieter/mail/raw-message";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { enqueueMailboxActionsForMessage } from "../../mailbox-actions/enqueue";
-import { hasText } from "../../text";
 import { processManagedMailAutomation } from "../automation";
 import { inheritManagedThreadLabels } from "../labels/repository";
 import { applyManagedRulesToMessage } from "../rules/evaluator";
@@ -29,7 +28,7 @@ const getReplyReferenceIds = (message: ParsedRawMailMessage) => [
   ...new Set(
     [message.inReplyTo, ...(message.references?.match(/<[^>]+>/gu) ?? [])]
       .map((value) => value?.trim())
-      .filter((value): value is string => hasText(value))
+      .filter((value): value is string => !!value)
   ),
 ];
 
@@ -339,7 +338,7 @@ export const recordInboundManagedMessage = async (input: {
     ...new Set(
       input.recipients
         .map(normalizeEmailAddress)
-        .filter((value) => hasText(value))
+        .filter((value): value is string => !!value)
     ),
   ];
   if (recipients.length === 0) {
@@ -356,7 +355,7 @@ export const recordInboundManagedMessage = async (input: {
   const rawObjectProvider = input.rawObjectProvider ?? "s3";
   const rawObjectBucket = input.rawObjectBucket ?? input.s3Bucket;
   const rawObjectKey = input.rawObjectKey ?? input.s3Key;
-  if (!hasText(rawObjectBucket) || !hasText(rawObjectKey)) {
+  if (!rawObjectBucket || !rawObjectKey) {
     throw new Error(
       "Inbound managed mail requires a canonical raw object reference."
     );

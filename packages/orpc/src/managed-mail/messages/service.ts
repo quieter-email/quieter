@@ -43,7 +43,6 @@ import {
   getOrganizationMailDelivery,
   groupDeliveryStatusesByMessage,
 } from "../../organization-mail-delivery";
-import { hasText } from "../../text";
 import { createManagedSearchCondition } from "../search/compiler";
 import { parseManagedSearchQuery } from "../search/normalization";
 
@@ -195,7 +194,7 @@ const getCategoryCondition = (category: MailboxCategory) => {
 };
 
 const parseManagedPageCursor = (pageToken: string | undefined) => {
-  if (!hasText(pageToken)) {
+  if (!pageToken) {
     return null;
   }
   try {
@@ -490,7 +489,7 @@ export const getManagedThread = async (input: {
   return {
     messages: messages.map((message) => ({ ...message, threadLabelIds })),
     snippet: messages.at(-1)?.snippet,
-    subject: messages.find((message) => hasText(message.subject))?.subject,
+    subject: messages.find((message) => !!message.subject)?.subject,
     threadId: input.threadId,
   };
 };

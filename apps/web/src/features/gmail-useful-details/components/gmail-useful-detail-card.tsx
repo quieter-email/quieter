@@ -49,9 +49,6 @@ const summaryFirstKinds = new Set<GmailUsefulDetail["kind"]>([
   "travel",
 ]);
 
-const hasText = (value: string | null | undefined): value is string =>
-  value !== null && value !== undefined && value !== "";
-
 const copyText = async (value: string) => {
   try {
     await navigator.clipboard.writeText(value);
@@ -63,11 +60,11 @@ const copyText = async (value: string) => {
 
 const getDetailMetadata = (detail: GmailUsefulDetail) => {
   if (detail.kind === "verification_code") {
-    return hasText(detail.code) ? [detail.code] : [];
+    return detail.code ? [detail.code] : [];
   }
 
   return [
-    detail.kind === "delivery" && hasText(detail.status)
+    detail.kind === "delivery" && detail.status
       ? deliveryStatusLabels[detail.status]
       : null,
     detail.eventAt instanceof Date
@@ -79,7 +76,7 @@ const getDetailMetadata = (detail: GmailUsefulDetail) => {
 };
 
 const getDetailText = (detail: GmailUsefulDetail, metadata: string[]) => {
-  if (hasText(detail.summary) && summaryFirstKinds.has(detail.kind)) {
+  if (detail.summary && summaryFirstKinds.has(detail.kind)) {
     return {
       headline: detail.summary,
       kicker: metadata.includes(detail.title) ? null : detail.title,
@@ -125,7 +122,7 @@ export const GmailUsefulDetailCard = ({
   const metadata = getDetailMetadata(detail);
   const detailText = getDetailText(detail, metadata);
   const isVerificationCode =
-    detail.kind === "verification_code" && hasText(detail.code);
+    detail.kind === "verification_code" && !!detail.code;
   const feedback = feedbackMutation.isError
     ? detail.feedback
     : (feedbackMutation.variables?.feedback ?? detail.feedback);
@@ -137,7 +134,7 @@ export const GmailUsefulDetailCard = ({
       <span className="mt-2 block font-mono text-title-sm font-medium tracking-widest text-fg">
         {detail.code}
       </span>
-      {hasText(detailText.kicker) ? (
+      {detailText.kicker ? (
         <span className="mt-2 block text-caption/4 wrap-break-word text-muted-fg">
           {detailText.kicker}
         </span>
@@ -157,7 +154,7 @@ export const GmailUsefulDetailCard = ({
           ))}
         </span>
       )}
-      {hasText(detailText.kicker) ? (
+      {detailText.kicker ? (
         <span className="mt-1.5 block text-caption/4 wrap-break-word text-muted-fg">
           {detailText.kicker}
         </span>
@@ -188,7 +185,7 @@ export const GmailUsefulDetailCard = ({
         )}
 
         <div className="flex shrink-0 items-center gap-0.5 justify-self-end">
-          {hasText(copyValue) ? (
+          {copyValue ? (
             <Button
               className="mr-1 h-8 gap-1.5 rounded-lg bg-secondary/65 px-2.5 text-caption hover:bg-secondary"
               onClick={() => void copyText(copyValue)}

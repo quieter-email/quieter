@@ -49,7 +49,6 @@ import type {
 import { getConnectorDisplayName } from "../connectors/contracts";
 import { runAuthorizedGmailMailbox } from "../gmail-mailbox-access";
 import { MAILBOX_PROVIDER_GMAIL } from "../mailbox/access";
-import { hasText } from "../text";
 import { runConnectorWriteCall } from "./effects";
 import { validateMailboxActionGraph } from "./graph";
 import type { MailboxActionGraph, MailboxActionNode } from "./graph";
@@ -111,7 +110,7 @@ const loadActionEmailInput = async (input: {
   }
 
   if (mailboxRecord.provider === MAILBOX_PROVIDER_GMAIL) {
-    if (!hasText(mailboxRecord.ownerUserId)) {
+    if (!mailboxRecord.ownerUserId) {
       throw new ORPCError("NOT_FOUND", { message: "Mailbox not found." });
     }
     const message = await runAuthorizedGmailMailbox(
@@ -337,7 +336,7 @@ const executeNode = async (input: {
     case "connector_agent": {
       const { credentialId, instructions, provider } = input.node.config;
 
-      if (!hasText(credentialId) || provider === undefined) {
+      if (!credentialId || provider === undefined) {
         throw new Error("Connector step is missing its app or account.");
       }
 
@@ -524,7 +523,7 @@ export const executeMailboxActionRun = async (
       .from(mailboxActionRevision)
       .where(eq(mailboxActionRevision.id, run.revisionId))
       .limit(1);
-    if (revision === undefined || !hasText(revision.userId)) {
+    if (revision === undefined || !revision.userId) {
       throw new Error("Action revision was not found.");
     }
 
@@ -555,7 +554,7 @@ export const executeMailboxActionRun = async (
         `mailbox-action:${run.id}:${stepRunId}:${usageIndex}`;
       return (usage) => {
         const billingUserId = actionOwner?.userId;
-        if (!hasText(billingUserId)) {
+        if (!billingUserId) {
           return;
         }
         const usageIndex = usageIndexesByStepRunId.get(stepRunId) ?? 0;

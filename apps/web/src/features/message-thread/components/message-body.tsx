@@ -31,9 +31,6 @@ type MessageBodyProps = {
 
 const REMOTE_IMAGE_REGEX = /^https?:\/\//iu;
 
-const hasText = (value: string | null | undefined): value is string =>
-  typeof value === "string" && value.length > 0;
-
 const CalendarLinkActions = ({ links }: { links: CalendarLink[] }) => {
   if (links.length === 0) {
     return null;
@@ -304,16 +301,12 @@ export const MessageBody = ({
   const fallbackText = text?.trim();
   const htmlBody = html?.trim();
 
-  if (!hasText(htmlBody) && !hasText(fallbackText) && isLoading === true) {
+  if (!htmlBody && !fallbackText && isLoading === true) {
     return <MessageBodyLoadingSkeleton />;
   }
 
-  if (!hasText(htmlBody)) {
-    return (
-      <PlainTextMessageBody
-        text={hasText(fallbackText) ? fallbackText : "No content."}
-      />
-    );
+  if (!htmlBody) {
+    return <PlainTextMessageBody text={fallbackText || "No content."} />;
   }
 
   return (

@@ -86,7 +86,6 @@ import {
   listOrganizationApiMailMessages,
   parseOrganizationApiMailboxId,
 } from "../organization-api-mail";
-import { hasText } from "../text";
 import {
   callGmail,
   historySyncMailboxCategorySchema,
@@ -551,7 +550,7 @@ export const mailRouter = {
             signal
           );
           const attachmentData = attachment.data;
-          const bytes = hasText(attachmentData)
+          const bytes = attachmentData
             ? Uint8Array.from(
                 atob(attachmentData.replaceAll("-", "+").replaceAll("_", "/")),
                 (char) => char.codePointAt(0) ?? 0

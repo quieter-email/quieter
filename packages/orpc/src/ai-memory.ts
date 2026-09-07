@@ -59,7 +59,6 @@ import {
   searchAiMemoryBySimilarity,
 } from "./ai-memory-embedding";
 import { assertAccessibleMailbox } from "./mailbox/service";
-import { hasText } from "./text";
 
 const MEMORY_CANDIDATE_LIMIT = 200;
 const MEMORY_CONTEXT_LIMIT = 8;
@@ -84,7 +83,7 @@ export const buildMailMemoryQuery = (message: {
   to?: string | null;
 }) =>
   [message.from, message.to, message.subject, message.snippet]
-    .filter((value): value is string => hasText(value))
+    .filter((value): value is string => !!value)
     .join(" ")
     .slice(0, 2000);
 
@@ -93,10 +92,8 @@ export const serializeAiAgentContext = ({
   memory,
 }: AiAgentMemoryContext) =>
   [
-    ...(hasText(instructions)
-      ? [`User-authored instructions:\n${instructions}`]
-      : []),
-    ...(hasText(memory) ? [`Relevant learned memory:\n${memory}`] : []),
+    ...(instructions ? [`User-authored instructions:\n${instructions}`] : []),
+    ...(memory ? [`Relevant learned memory:\n${memory}`] : []),
   ].join("\n\n") || null;
 
 type MemoryRow = typeof aiMemory.$inferSelect;
@@ -217,7 +214,7 @@ const toAiMemoryScopeConfig = (
   record: typeof aiMemoryScopeConfig.$inferSelect | undefined
 ) => ({
   activeLearningEnabled: record?.activeLearningEnabled ?? true,
-  learningPrompt: hasText(record?.learningPrompt?.trim())
+  learningPrompt: record?.learningPrompt?.trim()
     ? record.learningPrompt.trim()
     : DEFAULT_AI_MEMORY_LEARNING_PROMPT,
   revision: record?.revision ?? 0,
@@ -258,7 +255,7 @@ export const updateAiMemoryScopeConfig = async ({
     requestedScope === "user"
       ? userScope(userId)
       : mailboxScope(mailboxId ?? "");
-  if (requestedScope === "mailbox" && !hasText(mailboxId)) {
+  if (requestedScope === "mailbox" && !mailboxId) {
     throw new ORPCError("BAD_REQUEST", { message: "A mailbox is required." });
   }
   const normalizedPrompt = learningPrompt
@@ -602,9 +599,7 @@ const buildMemoryValues = ({
   // A null embedding is the re-embedding queue.
   embeddedAt: null,
   embedding: null,
-  expiresAt: hasText(operation.expiresAt)
-    ? new Date(operation.expiresAt)
-    : null,
+  expiresAt: operation.expiresAt ? new Date(operation.expiresAt) : null,
   importance: operation.importance,
   key: operation.key,
   kind: operation.kind,
@@ -647,7 +642,7 @@ const applyAiMemoryPlan = async ({
     const now = new Date();
 
     for (const operation of plan.operations) {
-      const target = hasText(operation.targetId)
+      const target = operation.targetId
         ? recordsById.get(operation.targetId)
         : recordsByKey.get(operation.key);
       if (
@@ -817,7 +812,7 @@ const reportMemoryUsage = async ({
       completionTokens: usage.completionTokens,
       costUsd: usage.costUsd,
       externalId,
-      ...(hasText(mailboxId) ? { mailboxId } : {}),
+      ...(mailboxId ? { mailboxId } : {}),
       model: AI_MEMORY_MODEL,
       promptTokens: usage.promptTokens,
       promptTokensDetails: {
@@ -1298,7 +1293,7 @@ export const rankAiAgentMemoryCandidates = async ({
       userInstructions.length > 0
         ? `Personal instructions (apply across mailboxes):\n${userInstructions.map((memory) => `- ${memory.content}`).join("\n")}`
         : null,
-    ].filter((section): section is string => hasText(section));
+    ].filter((section): section is string => !!section);
     const memorySections = [
       mailboxMemories.length > 0
         ? `Current mailbox memory (more specific):\n${mailboxMemories.map((memory) => `- ${memory.content}`).join("\n")}`
@@ -1306,7 +1301,7 @@ export const rankAiAgentMemoryCandidates = async ({
       userMemories.length > 0
         ? `Personal memory (applies across mailboxes):\n${userMemories.map((memory) => `- ${memory.content}`).join("\n")}`
         : null,
-    ].filter((section): section is string => hasText(section));
+    ].filter((section): section is string => !!section);
 
     if (selected.length > 0) {
       const recordMemoryRetrieval = async () => {
@@ -1404,7 +1399,7 @@ const classifyGreeting = (text: string) => {
     .split("\n")
     .map((line) => line.trim())
     .find((line) => line !== "");
-  if (!hasText(firstLine)) {
+  if (!firstLine) {
     return "none";
   }
   const greeting =
@@ -1425,7 +1420,7 @@ const classifySignOff = (text: string) => {
       /^(?<signOff>best|best regards|kind regards|regards|thanks|thank you|cheers|sincerely|warmly)\b/iu.exec(
         line
       )?.groups?.signOff;
-    if (hasText(signOff)) {
+    if (signOff) {
       return signOff.toLowerCase();
     }
   }
@@ -1449,7 +1444,7 @@ export const learnAiMemoryFromSentMessage = async ({
     .replaceAll(/\r\n?/gu, "\n")
     .trim()
     .slice(0, 20_000);
-  if (!hasText(normalized)) {
+  if (!normalized) {
     return { status: "skipped" as const };
   }
   const words = normalized.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) ?? [];
@@ -1787,7 +1782,7 @@ export const loadUsefulDetailFeedbackPolicies = async ({
     const sourceDomains = memory.metadata.sourceDomains ?? [];
     if (sourceDomains.length === 0) {
       globalPolicies.set(detailKind, policy);
-    } else if (hasText(source) && sourceDomains.includes(source)) {
+    } else if (source && sourceDomains.includes(source)) {
       sourcePolicies.set(detailKind, policy);
     }
   }
@@ -1806,9 +1801,7 @@ const buildAiMemoryScope = ({
     memories.map((memory) => [memory.id, memory.version])
   );
   const undoneIds = new Set(
-    changes.flatMap((change) =>
-      hasText(change.undoOfId) ? [change.undoOfId] : []
-    )
+    changes.flatMap((change) => (change.undoOfId ? [change.undoOfId] : []))
   );
   const now = new Date();
   const activeMemories = memories.filter(
@@ -1860,7 +1853,7 @@ const listAiMemoryScope = async ({
 }) => {
   const target =
     scope === "user" ? userScope(userId) : mailboxScope(mailboxId ?? "");
-  if (scope === "mailbox" && !hasText(mailboxId)) {
+  if (scope === "mailbox" && !mailboxId) {
     throw new ORPCError("BAD_REQUEST", { message: "A mailbox is required." });
   }
   const [memories, changes] = await Promise.all([
@@ -1945,18 +1938,18 @@ export const listMailboxAiMemorySettings = async (
   );
   const configurationsByMailboxId = new Map(
     configurations.flatMap((configuration) =>
-      hasText(configuration.mailboxId)
+      configuration.mailboxId
         ? [[configuration.mailboxId, configuration] as const]
         : []
     )
   );
   for (const memory of memories) {
-    if (hasText(memory.mailboxId)) {
+    if (memory.mailboxId) {
       memoriesByMailboxId.get(memory.mailboxId)?.push(memory);
     }
   }
   for (const change of changes) {
-    if (hasText(change.mailboxId)) {
+    if (change.mailboxId) {
       changesByMailboxId.get(change.mailboxId)?.push(change);
     }
   }
@@ -2001,7 +1994,7 @@ export const forgetAiMemory = async ({
     requestedScope === "user"
       ? userScope(userId)
       : mailboxScope(mailboxId ?? "");
-  if (requestedScope === "mailbox" && !hasText(mailboxId)) {
+  if (requestedScope === "mailbox" && !mailboxId) {
     throw new ORPCError("BAD_REQUEST", { message: "A mailbox is required." });
   }
   const [memory] = await db
@@ -2058,7 +2051,7 @@ export const undoAiMemoryChange = async ({
     requestedScope === "user"
       ? userScope(userId)
       : mailboxScope(mailboxId ?? "");
-  if (requestedScope === "mailbox" && !hasText(mailboxId)) {
+  if (requestedScope === "mailbox" && !mailboxId) {
     throw new ORPCError("BAD_REQUEST", { message: "A mailbox is required." });
   }
   const undoChangeSet = await db.transaction(async (tx) => {
@@ -2129,7 +2122,7 @@ export const undoAiMemoryChange = async ({
                 content: previous.content,
                 embeddedAt: null,
                 embedding: null,
-                expiresAt: hasText(previous.expiresAt)
+                expiresAt: previous.expiresAt
                   ? new Date(previous.expiresAt)
                   : null,
                 importance: previous.importance,

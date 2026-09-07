@@ -1,5 +1,3 @@
-import { hasText } from "../text";
-
 export const DEFAULT_GMAIL_MAILBOX_NAME = "Gmail";
 
 export const getGmailMailboxDisplayName = (
@@ -8,7 +6,7 @@ export const getGmailMailboxDisplayName = (
 ) => {
   const trimmedDisplayName = displayName?.trim();
   if (
-    !hasText(trimmedDisplayName) ||
+    !trimmedDisplayName ||
     trimmedDisplayName.toLowerCase() === emailAddress.trim().toLowerCase()
   ) {
     return DEFAULT_GMAIL_MAILBOX_NAME;

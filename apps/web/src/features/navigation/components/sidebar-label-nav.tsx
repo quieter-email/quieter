@@ -177,9 +177,6 @@ const isNonemptyMailboxId = (
   mailboxId: string | null | undefined
 ): mailboxId is string => (mailboxId?.trim() ?? "") !== "";
 
-const hasText = (value: string | null | undefined): value is string =>
-  value !== null && value !== undefined && value !== "";
-
 const parseHiddenLabelStorage = (
   raw: string | null
 ): Record<string, string[]> => {
@@ -1223,7 +1220,7 @@ export const SidebarLabelNav = ({
           <AlertDialogBody>
             <p className="text-body text-fg">
               Delete{" "}
-              {hasText(deletingLabel?.name)
+              {deletingLabel?.name
                 ? `"${deletingLabel.name}"`
                 : `this ${labelNoun}`}
               ?

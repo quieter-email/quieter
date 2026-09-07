@@ -35,15 +35,11 @@ import {
   getOrganizationMailDelivery,
   groupDeliveryStatusesByMessage,
 } from "./organization-mail-delivery";
-import { hasText } from "./text";
 
 const API_MAILBOX_ID_PREFIX = "api:";
 const API_MESSAGE_PAGE_SIZE = 50;
 const API_MESSAGE_BACKFILL_LIMIT = 500;
 const MAILBOX_EMAIL_UNIQUE_CONSTRAINT = "mailbox_email_address_unique";
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
 
 export const getOrganizationApiMailboxId = (organizationId: string) =>
   `${API_MAILBOX_ID_PREFIX}${organizationId}`;
@@ -61,17 +57,22 @@ export const isOrganizationApiMailboxId = (mailboxId: string) =>
 const normalizeEmailAddress = (value: string) => value.trim().toLowerCase();
 
 const parsePageCursor = (pageToken: string | undefined) => {
-  if (!hasText(pageToken)) {
+  if (!pageToken) {
     return null;
   }
   try {
     const parsed: unknown = JSON.parse(
       Buffer.from(pageToken, "base64url").toString("utf-8")
     );
-    if (!isRecord(parsed)) {
+    if (!(typeof parsed === "object" && parsed !== null)) {
       throw new TypeError("Invalid cursor shape.");
     }
-    if (typeof parsed.id !== "string" || typeof parsed.sentAt !== "string") {
+    if (
+      !("id" in parsed) ||
+      !("sentAt" in parsed) ||
+      typeof parsed.id !== "string" ||
+      typeof parsed.sentAt !== "string"
+    ) {
       throw new TypeError("Invalid cursor shape.");
     }
     const sentAt = new Date(parsed.sentAt);
@@ -195,11 +196,11 @@ const getMessageMailboxState = async (input: {
 const createSnippet = (input: { bodyHtml?: string; bodyText?: string }) => {
   const rawBody =
     input.bodyText ?? input.bodyHtml?.replaceAll(/<[^>]+>/gu, " ");
-  if (!hasText(rawBody)) {
+  if (!rawBody) {
     return null;
   }
   const trimmed = rawBody.replaceAll(/\s+/gu, " ").trim().slice(0, 240);
-  return hasText(trimmed) ? trimmed : null;
+  return trimmed || null;
 };
 
 const toMessageListItem = async (
@@ -324,11 +325,11 @@ export const recordOrganizationApiMailMessage = async (input: {
     const [inserted] = await tx
       .insert(organizationApiMailMessage)
       .values({
-        bcc: hasText(bccJoined) ? bccJoined : null,
+        bcc: bccJoined || null,
         bccNormalized: normalizeManagedSearchValue(bccJoined),
         bodyHtml: input.bodyHtml ?? null,
         bodyText: input.bodyText ?? null,
-        cc: hasText(ccJoined) ? ccJoined : null,
+        cc: ccJoined || null,
         ccNormalized: normalizeManagedSearchValue(ccJoined),
         createdAt: sentAt,
         from: input.sender,
@@ -342,7 +343,7 @@ export const recordOrganizationApiMailMessage = async (input: {
         rawObjectKey: input.rawObject?.key ?? null,
         rawObjectProvider: input.rawObject?.provider ?? null,
         rawSizeBytes: input.rawSizeBytes ?? null,
-        replyTo: hasText(replyToJoined) ? replyToJoined : null,
+        replyTo: replyToJoined || null,
         searchText: createManagedMessageSearchText({
           bodyText: input.bodyText,
           snippet,
@@ -351,7 +352,7 @@ export const recordOrganizationApiMailMessage = async (input: {
         senderAddress,
         sentAt,
         snippet,
-        subject: hasText(input.subject) ? input.subject : null,
+        subject: input.subject || null,
         to: input.to.join(", "),
         toNormalized: normalizeManagedSearchValue(input.to.join(", ")),
         updatedAt: sentAt,
@@ -410,7 +411,7 @@ export const listOrganizationApiMailMessages = async (input: {
 
   const normalizedQuery = input.query?.trim();
   let queryCondition;
-  if (hasText(normalizedQuery)) {
+  if (normalizedQuery) {
     queryCondition = ilike(
       organizationApiMailMessage.searchText,
       `%${normalizedQuery}%`
@@ -715,10 +716,10 @@ export const backfillApiMessagesForManagedMailbox = async (input: {
         partIndex: attachment.partIndex,
         size: attachment.size,
       })),
-      bcc: hasText(record.bcc) ? [record.bcc] : [],
+      bcc: record.bcc ? [record.bcc] : [],
       bodyHtml: record.bodyHtml ?? undefined,
       bodyText: record.bodyText ?? undefined,
-      cc: hasText(record.cc) ? [record.cc] : [],
+      cc: record.cc ? [record.cc] : [],
       headers: record.headers,
       messageHeaderId: record.messageHeaderId ?? undefined,
       organizationId: record.organizationId,
@@ -734,13 +735,13 @@ export const backfillApiMessagesForManagedMailbox = async (input: {
             }
           : null,
       rawSizeBytes: record.rawSizeBytes,
-      replyTo: hasText(record.replyTo) ? [record.replyTo] : [],
+      replyTo: record.replyTo ? [record.replyTo] : [],
       requireApiSentMessageInclusion: true,
       sender: record.from,
       senderAddress: record.senderAddress,
       sentAt: record.sentAt,
       subject: record.subject ?? "",
-      to: hasText(record.to) ? [record.to] : [],
+      to: record.to ? [record.to] : [],
     });
   }
 };

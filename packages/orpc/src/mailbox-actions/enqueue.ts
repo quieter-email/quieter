@@ -8,8 +8,6 @@ import {
 } from "@quieter/database/schema";
 import { and, eq, inArray, isNotNull, isNull, lt, lte, or } from "drizzle-orm";
 
-import { hasText } from "../text";
-
 const enqueueActionTriggers = async (input: {
   action: {
     actionId: string;
@@ -94,7 +92,7 @@ export const enqueueMailboxActionsForMessage = async (input: {
 
   const runIdGroups = await Promise.all(
     actions.flatMap((action) => {
-      if (!hasText(action.revisionId)) {
+      if (!action.revisionId) {
         return [];
       }
 

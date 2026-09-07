@@ -3,8 +3,6 @@ import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { liveSyncTokenPayloadSchema } from "@quieter/mail/live-sync";
 import type { z } from "zod";
 
-import { hasText } from "./text";
-
 const TOKEN_LIFETIME_SECONDS = 90;
 
 export type GmailLiveSyncTokenPayload = z.infer<
@@ -49,11 +47,7 @@ export const verifyGmailLiveSyncToken = (
   now = new Date()
 ): GmailLiveSyncTokenPayload => {
   const [encodedPayload, encodedSignature, extraPart] = token.split(".");
-  if (
-    !hasText(encodedPayload) ||
-    !hasText(encodedSignature) ||
-    extraPart !== undefined
-  ) {
+  if (!encodedPayload || !encodedSignature || extraPart !== undefined) {
     throw new Error("Gmail live-sync token is malformed.");
   }
 

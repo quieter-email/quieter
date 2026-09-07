@@ -24,7 +24,6 @@ import { structuredMailSearchSchema } from "@quieter/mail/search";
 import { and, asc, countDistinct, eq, sql } from "drizzle-orm";
 
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
-import { hasText } from "../../text";
 import { getManagedMessageLabelIds } from "../messages/service";
 import { normalizeManagedOrganizationName } from "../organization/normalize-name";
 import {
@@ -137,7 +136,7 @@ export const createManagedLabel = async (input: {
       color: mailboxLabelColorSchema.parse(input.color),
       createdAt: now,
       createdByUserId: input.userId,
-      description: hasText(input.description) ? input.description.trim() : null,
+      description: input.description ? input.description.trim() : null,
       id: randomUUID(),
       mailboxId: input.mailboxId,
       name,
@@ -169,9 +168,7 @@ export const updateManagedLabel = async (input: {
     input.description === undefined
       ? {}
       : {
-          description: hasText(input.description)
-            ? input.description.trim()
-            : null,
+          description: input.description ? input.description.trim() : null,
         };
   const [record] = await db
     .update(managedMailLabel)
@@ -180,7 +177,7 @@ export const updateManagedLabel = async (input: {
         ? {}
         : { color: mailboxLabelColorSchema.parse(input.color) }),
       ...descriptionUpdate,
-      ...(hasText(name)
+      ...(name
         ? { name, normalizedName: normalizeManagedOrganizationName(name) }
         : {}),
       ...(input.position === undefined ? {} : { position: input.position }),
@@ -281,7 +278,7 @@ export const deleteManagedLabel = async (input: {
         .update(managedMailSavedView)
         .set({
           disabledReason:
-            nextFilters.length === 0 && !hasText(search.text)
+            nextFilters.length === 0 && !search.text
               ? "This view needs new filters."
               : null,
           search: { ...search, filters: nextFilters },

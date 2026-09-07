@@ -13,9 +13,6 @@ export type DatabaseTransaction = Parameters<
 >[0];
 export type DatabaseExecutor = DatabaseClient | DatabaseTransaction;
 
-const isPresentString = (value: string | undefined): value is string =>
-  value !== undefined && value !== "";
-
 const getLinkedHyperdriveConnectionString = (): string | undefined => {
   try {
     const appDatabase: unknown = Reflect.get(Resource, "AppDatabaseV2");
@@ -39,12 +36,12 @@ const getLinkedHyperdriveConnectionString = (): string | undefined => {
 const getDatabaseUrl = () => {
   const linkedConnectionString = getLinkedHyperdriveConnectionString();
 
-  if (isPresentString(linkedConnectionString)) {
+  if (linkedConnectionString) {
     return linkedConnectionString;
   }
 
   const databaseUrl = serverEnv.DATABASE_URL;
-  if (!isPresentString(databaseUrl)) {
+  if (!databaseUrl) {
     throw new Error("DATABASE_URL environment variable is missing");
   }
   return databaseUrl;
@@ -82,7 +79,7 @@ const getDatabaseClient = () => {
 
   const linkedConnectionString = getLinkedHyperdriveConnectionString();
 
-  if (isPresentString(linkedConnectionString)) {
+  if (linkedConnectionString) {
     return createDatabaseClient(linkedConnectionString);
   }
 

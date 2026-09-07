@@ -54,9 +54,6 @@ import {
   ComposerFrame,
 } from "./composer-chrome";
 
-const hasText = (value: string | null | undefined): value is string =>
-  value !== null && value !== undefined && value !== "";
-
 type MailTemplateItem = {
   bodyHtml: string;
   canEdit: boolean;
@@ -138,7 +135,7 @@ export const TemplateWorkspace = ({
         return;
       }
 
-      if (hasText(editingId)) {
+      if (editingId) {
         await updateMutation.mutateAsync({
           ...value,
           id: editingId,
@@ -343,7 +340,7 @@ export const TemplateWorkspace = ({
               </Button>
             </IconButtonTooltip>
             <p className="text-body font-medium tracking-tight text-fg">
-              {hasText(editingId) ? "Edit template" : "New template"}
+              {editingId ? "Edit template" : "New template"}
             </p>
           </div>
 
@@ -454,8 +451,7 @@ export const TemplateWorkspace = ({
                               </>
                             )}
                           </templateForm.Field>
-                          {hasText(editingId) &&
-                          currentTemplate?.canEdit === true ? (
+                          {editingId && currentTemplate?.canEdit === true ? (
                             <ToolbarButton
                               aria-label="Delete template"
                               onClick={() => {

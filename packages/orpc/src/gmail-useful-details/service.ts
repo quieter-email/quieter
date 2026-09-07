@@ -43,7 +43,6 @@ import type { AiAgentMemoryCandidates } from "../ai-memory";
 import { decryptSecret, encryptSecret } from "../gmail-mailbox-access";
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import { refreshUsefulDetailMemoryProfile } from "../mail-automation/memory";
-import { hasText } from "../text";
 import { getMailPlainText } from "./message-text";
 import { getSenderServiceName, getSenderSource } from "./sender";
 import { extractVerificationCode } from "./verification-code";
@@ -159,7 +158,7 @@ const serializeUsefulDetails = (
     }
 
     let code: string | null = null;
-    if (hasText(item.encryptedCode)) {
+    if (item.encryptedCode) {
       try {
         code = decryptSecret(item.encryptedCode);
       } catch (error) {
@@ -195,10 +194,8 @@ const serializeUsefulDetails = (
 };
 
 const trimText = (value: string | null, maxLength: number) => {
-  const normalized = hasText(value)
-    ? value.trim().replaceAll(/\s+/gu, " ")
-    : null;
-  if (!hasText(normalized)) {
+  const normalized = value ? value.trim().replaceAll(/\s+/gu, " ") : null;
+  if (!normalized) {
     return null;
   }
   if (normalized.length <= maxLength) {
@@ -242,7 +239,7 @@ const normalizeCode = (value: string | null) => {
 const buildUsefulDetailRejectionText = (message: AutomationMailMessage) => {
   const { body, subject } = getMailPlainText(message);
   return [message.from, subject, body]
-    .filter((part) => hasText(part))
+    .filter((part): part is string => !!part)
     .join("\n");
 };
 
@@ -270,7 +267,7 @@ const normalizeTrackingKey = (value: string) =>
   value.toUpperCase().replaceAll(/[^A-Z0-9]/gu, "");
 
 const parseExpectedAt = (value: string | null) => {
-  if (!hasText(value)) {
+  if (!value) {
     return null;
   }
   const timestamp = Date.parse(value);
@@ -278,7 +275,7 @@ const parseExpectedAt = (value: string | null) => {
 };
 
 const parseTimestamp = (value: string | null) => {
-  if (!hasText(value)) {
+  if (!value) {
     return null;
   }
   const timestamp = Date.parse(value);
@@ -410,8 +407,7 @@ const isEventKind = (kind: GmailUsefulDetailKind) =>
 
 const hasUsefulDetailRelevanceSource = (
   relevanceSource: GmailUsefulDetailRelevanceSource | null | undefined
-): relevanceSource is GmailUsefulDetailRelevanceSource =>
-  hasText(relevanceSource);
+): relevanceSource is GmailUsefulDetailRelevanceSource => !!relevanceSource;
 
 const rejectInvalidUsefulDetailWindow = ({
   expiresAt,
@@ -461,20 +457,20 @@ const rejectMissingUsefulDetailFields = ({
   }
   if (
     candidate.kind === "delivery" &&
-    !hasText(carrier) &&
-    !hasText(merchant) &&
-    !hasText(trackingNumber) &&
-    !hasText(summary)
+    !carrier &&
+    !merchant &&
+    !trackingNumber &&
+    !summary
   ) {
     return true;
   }
   return (
     candidate.kind !== "delivery" &&
     candidate.kind !== "verification_code" &&
-    !hasText(summary) &&
+    !summary &&
     eventAt === null &&
-    !hasText(reference) &&
-    !hasText(location)
+    !reference &&
+    !location
   );
 };
 
@@ -536,7 +532,7 @@ const buildMaterializedUsefulDetailFields = ({
     candidate.kind === "delivery"
       ? trimText(candidate.trackingNumber, 80)
       : null;
-  const normalizedTrackingNumber = hasText(trackingNumber)
+  const normalizedTrackingNumber = trackingNumber
     ? normalizeTrackingKey(trackingNumber)
     : "";
   const expectedAt =
@@ -573,9 +569,7 @@ const buildMaterializedUsefulDetailFields = ({
     return null;
   }
 
-  const normalizedReference = hasText(reference)
-    ? normalizeReferenceKey(reference)
-    : "";
+  const normalizedReference = reference ? normalizeReferenceKey(reference) : "";
   const dedupeKey = buildUsefulDetailDedupeKey({
     kind: candidate.kind,
     messageId: message.id,
@@ -847,9 +841,7 @@ const upsertGmailUsefulDetail = async ({
   };
 }) => {
   const now = new Date();
-  const encryptedCode = hasText(detail.code)
-    ? encryptSecret(detail.code)
-    : null;
+  const encryptedCode = detail.code ? encryptSecret(detail.code) : null;
   await db.transaction(async (tx) => {
     await tx
       .insert(gmailUsefulDetail)
@@ -920,7 +912,7 @@ const upsertGmailUsefulDetail = async ({
         updatedAt: now,
         // Cost-less AI extractions are terminal; only retryable reporting
         // failures keep usageReportedAt unset.
-        usageReportedAt: !hasText(model) || usage.costUsd === null ? now : null,
+        usageReportedAt: !model || usage.costUsd === null ? now : null,
       })
       .where(eq(gmailUsefulDetailEvent.id, event.id));
   });
@@ -934,7 +926,7 @@ const upsertGmailUsefulDetail = async ({
     processedAt: now,
     promptTokens: usage.promptTokens,
     usageReportedAt:
-      !hasText(model) || usage.costUsd === null ? now : event.usageReportedAt,
+      !model || usage.costUsd === null ? now : event.usageReportedAt,
   };
 };
 

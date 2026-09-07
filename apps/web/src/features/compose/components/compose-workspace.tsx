@@ -93,9 +93,6 @@ type ComposeFormFieldProps = Pick<
   placeholder?: string;
 };
 
-const hasText = (value: string | null | undefined): value is string =>
-  value !== null && value !== undefined && value !== "";
-
 /**
  * The recipient input lives inside a shared field primitive that does not take
  * a ref, so it is found by its marker attribute.
@@ -210,7 +207,7 @@ export const ComposeSurface = ({
   const canEditBody =
     state.draft.saveStatus !== "sending" &&
     state.draft.saveStatus !== "saving" &&
-    hasText(mailboxId);
+    !!mailboxId;
   const audioBusy = audioRecorder.isRecording || isTranscribingAudio;
   const canSubmitCompose = canEditBody && !audioBusy;
   const isInline = variant === "inline";
@@ -355,7 +352,7 @@ export const ComposeSurface = ({
       >
         <p className="sr-only">
           {getDraftStatusMessage(compose.state.draft, persistDrafts)}
-          {hasText(senderEmail) ? `, sending from ${senderEmail}` : ""}
+          {senderEmail ? `, sending from ${senderEmail}` : ""}
         </p>
 
         <form.Field name="bodyHtml">
@@ -580,7 +577,7 @@ export const ComposeSurface = ({
                     }
                     trailing={
                       <>
-                        {hasText(mailboxId) ? (
+                        {mailboxId ? (
                           <>
                             <ComposeTemplatePicker
                               disabled={!canEditBody || audioBusy}
@@ -617,16 +614,12 @@ export const ComposeSurface = ({
                         <ComposeEditorDictationButton />
                         <IconButtonTooltip
                           label={
-                            hasText(state.draft.draftId)
-                              ? "Discard draft"
-                              : "Discard"
+                            state.draft.draftId ? "Discard draft" : "Discard"
                           }
                         >
                           <ToolbarButton
                             aria-label={
-                              hasText(state.draft.draftId)
-                                ? "Discard draft"
-                                : "Discard"
+                              state.draft.draftId ? "Discard draft" : "Discard"
                             }
                             className="size-8 px-0"
                             disabled={state.draft.saveStatus === "sending"}
@@ -668,7 +661,7 @@ export const ComposeSurface = ({
           )}
         </form.Field>
 
-        {hasText(state.draft.errorMessage) ? (
+        {state.draft.errorMessage ? (
           <div
             aria-live="polite"
             className="flex min-w-0 shrink-0 items-start gap-2 text-body text-destructive"

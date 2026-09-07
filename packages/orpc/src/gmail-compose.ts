@@ -13,8 +13,6 @@ import type {
 } from "@quieter/mail/compose/schema";
 import type { z } from "zod";
 
-import { hasText } from "./text";
-
 type ComposeDraftInput = z.infer<typeof composeDraftInputSchema>;
 type ComposeMessageInput = z.infer<typeof composeMessageInputSchema>;
 
@@ -26,7 +24,7 @@ export const saveGmailDraft = async (
   const raw = Buffer.from(
     await buildMimeMessage(draft, { includeQuieterDraftHeaders: true })
   ).toString("base64url");
-  const response = hasText(draft.draftId)
+  const response = draft.draftId
     ? await updateDraft(
         accessToken,
         draft.draftId,
@@ -39,25 +37,19 @@ export const saveGmailDraft = async (
   const parsed = parseDraftMessage(savedDraft);
 
   return {
-    bodyHtml: hasText(parsed.bodyHtml) ? parsed.bodyHtml : draft.bodyHtml,
-    bodyText: hasText(parsed.bodyText) ? parsed.bodyText : draft.bodyText,
+    bodyHtml: parsed.bodyHtml || draft.bodyHtml,
+    bodyText: parsed.bodyText || draft.bodyText,
     draftAnchor: parsed.draftAnchor ?? draft.draftAnchor ?? null,
     draftId: savedDraft.id,
     messageId:
       savedDraft.message?.id ?? response.message?.id ?? parsed.messageId,
     recipients: {
-      bcc: hasText(parsed.recipients.bcc)
-        ? parsed.recipients.bcc
-        : draft.recipients.bcc,
-      cc: hasText(parsed.recipients.cc)
-        ? parsed.recipients.cc
-        : draft.recipients.cc,
-      to: hasText(parsed.recipients.to)
-        ? parsed.recipients.to
-        : draft.recipients.to,
+      bcc: parsed.recipients.bcc || draft.recipients.bcc,
+      cc: parsed.recipients.cc || draft.recipients.cc,
+      to: parsed.recipients.to || draft.recipients.to,
     },
     replyContext: parsed.replyContext ?? draft.replyContext ?? null,
-    subject: hasText(parsed.subject) ? parsed.subject : draft.subject,
+    subject: parsed.subject || draft.subject,
   };
 };
 

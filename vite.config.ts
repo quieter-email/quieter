@@ -58,6 +58,15 @@ export default defineConfig({
         files: ["**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}"],
         rules: {
           complexity: "off",
+          "typescript/prefer-nullish-coalescing": [
+            "error",
+            { ignorePrimitives: { string: true } },
+          ],
+          // Empty, null, and undefined strings all mean "absent" at these guards.
+          "typescript/strict-boolean-expressions": [
+            "error",
+            { allowNullableString: true },
+          ],
         },
       },
       {

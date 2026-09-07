@@ -10,7 +10,6 @@ import {
   decryptGmailCredentialSecret,
   encryptGmailCredentialSecret,
 } from "../gmail-credential-crypto";
-import { hasText } from "../text";
 import {
   GOOGLE_CALENDAR_CONNECTOR_PROVIDER,
   LINEAR_CONNECTOR_PROVIDER,
@@ -154,7 +153,7 @@ class ConnectorHttpError extends Error {
 const createGoogleApiError = async (response: Response) => {
   const body = await response.text().catch(() => "");
   const parsedBody = (() => {
-    if (!hasText(body.trim())) {
+    if (!body.trim()) {
       return null;
     }
 
@@ -166,9 +165,7 @@ const createGoogleApiError = async (response: Response) => {
   })();
   const message =
     parsedBody?.error.message ??
-    (hasText(body)
-      ? body
-      : `Google Calendar request failed with status ${response.status}.`);
+    (body || `Google Calendar request failed with status ${response.status}.`);
   return new ConnectorHttpError(message, response.status);
 };
 
@@ -179,7 +176,7 @@ const hasCachedConnectorAccessToken = (record: {
   accessTokenExpiresAt: Date;
   encryptedAccessToken: string;
 } =>
-  hasText(record.encryptedAccessToken) &&
+  !!record.encryptedAccessToken &&
   record.accessTokenExpiresAt !== null &&
   record.accessTokenExpiresAt.getTime() >
     Date.now() + CONNECTOR_ACCESS_TOKEN_EXPIRY_BUFFER_MS;
@@ -241,7 +238,7 @@ const refreshConnectorAccessToken = async (
   signal?: AbortSignal
 ) => {
   signal?.throwIfAborted();
-  if (!hasText(record.encryptedRefreshToken)) {
+  if (!record.encryptedRefreshToken) {
     await db
       .update(connectorCredential)
       .set({ status: "needs_reconnect", updatedAt: new Date() })
@@ -314,7 +311,7 @@ const refreshConnectorAccessToken = async (
       ),
       encryptedAccessToken: encryptConnectorSecret(refreshed.access_token),
       encryptedRefreshToken:
-        "refresh_token" in refreshed && hasText(refreshed.refresh_token)
+        "refresh_token" in refreshed && refreshed.refresh_token
           ? encryptConnectorSecret(refreshed.refresh_token)
           : record.encryptedRefreshToken,
       scopes,
@@ -626,12 +623,12 @@ type GoogleCalendarEventDraft = {
 const normalizeGoogleCalendarEventDate = (
   value: GoogleCalendarEventInput["start"]
 ): GoogleCalendarEventDraft["start"] => {
-  if (hasText(value.date) && !hasText(value.dateTime)) {
+  if (value.date && !value.dateTime) {
     return { date: value.date };
   }
 
-  if (hasText(value.dateTime) && !hasText(value.date)) {
-    if (hasText(value.timeZone)) {
+  if (value.dateTime && !value.date) {
+    if (value.timeZone) {
       return { dateTime: value.dateTime, timeZone: value.timeZone };
     }
     return { dateTime: value.dateTime };
@@ -646,9 +643,9 @@ const normalizeGoogleCalendarEventDate = (
 const normalizeGoogleCalendarEvent = (
   event: GoogleCalendarEventInput
 ): GoogleCalendarEventDraft => ({
-  ...(hasText(event.description) ? { description: event.description } : {}),
+  ...(event.description ? { description: event.description } : {}),
   end: normalizeGoogleCalendarEventDate(event.end),
-  ...(hasText(event.location) ? { location: event.location } : {}),
+  ...(event.location ? { location: event.location } : {}),
   start: normalizeGoogleCalendarEventDate(event.start),
   summary: event.summary,
 });
@@ -692,10 +689,10 @@ const resolveLinearDisplayName = (viewer: {
   email: string;
   name?: string | null;
 }) => {
-  if (hasText(viewer.displayName)) {
+  if (viewer.displayName) {
     return viewer.displayName;
   }
-  if (hasText(viewer.name)) {
+  if (viewer.name) {
     return viewer.name;
   }
   return viewer.email;
