@@ -1,4 +1,5 @@
 import { withRequestDatabaseClient } from "@quieter/database/client";
+import { cleanupRateLimitBuckets } from "@quieter/orpc/abuse-protection";
 import { recoverMailSends } from "@quieter/orpc/mail-send";
 import {
   claimPendingMailboxActionRuns,
@@ -62,6 +63,7 @@ export default withSentryReporting({
           dispatchPendingMailboxActionRuns(env),
           recoverMailSends(),
           cleanupMailObjects(),
+          cleanupRateLimitBuckets(),
         ]);
         const failed = results.find((result) => result.status === "rejected");
         if (failed !== undefined) {

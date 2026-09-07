@@ -99,12 +99,15 @@ export default {
       );
     }
     if (url.pathname === "/__dev/mail-recovery") {
+      const { cleanupRateLimitBuckets } =
+        await import("@quieter/orpc/abuse-protection");
       const { recoverMailSends } = await import("@quieter/orpc/mail-send");
       const { cleanupMailObjects } =
         await import("@quieter/orpc/managed-mail/storage");
       await withRequestDatabaseClient(async () => {
         await recoverMailSends();
         await cleanupMailObjects();
+        await cleanupRateLimitBuckets();
       });
       return new Response(null, { status: 204 });
     }

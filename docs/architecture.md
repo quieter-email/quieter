@@ -58,6 +58,8 @@ Owns the Drizzle schema, client, migrations, schema-drift checks, and migration 
 
 Every Worker invocation uses `withRequestDatabaseClient`; unscoped Worker database access throws. The same client remains available to nested calls and streamed response work. Cloudflare closes invocation sockets automatically, including Hyperdrive connections. Node processes reuse a bounded pool, with one connection in local development and five elsewhere; idle connections close after 20 seconds. See Cloudflare's [connection lifecycle](https://developers.cloudflare.com/hyperdrive/concepts/connection-lifecycle/) and documented [runtime detection](https://developers.cloudflare.com/workers/runtime-apis/web-standards/#navigatoruseragent).
 
+Interactive write requests use database-backed rate limits. The minute dispatcher deletes up to 5,000 expired IP buckets per run, using the expiry index and skipping locked rows. The local `mail-recovery` trigger performs the same cleanup. During database failure, each isolate retains at most 1,000 fallback identities and rejects new identities at capacity until entries expire. Signed billing webhooks bypass the interactive login bucket and remain subject to their own signature validation. Read-only requests do not advertise a measured remaining allowance.
+
 ### `packages/mail` and `packages/gmail`
 
 `packages/mail` owns shared message, attachment, label, category, and pagination contracts, along with MIME construction, raw parsing, content extraction, draft anchors, and avatar derivation. Both provider adapters return these contracts. The browser's mail helpers live in `apps/web/src/lib/mail.ts`; the web and AI packages have no direct Gmail-package dependency.
