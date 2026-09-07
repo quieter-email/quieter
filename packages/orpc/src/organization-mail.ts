@@ -6,12 +6,13 @@ import { getSendEnvelopeAddress } from "@quieter/mail/send";
 import type { SendMessageInput, SendMessageResult } from "@quieter/mail/send";
 import { buildSendMimeMessage } from "@quieter/mail/send-mime";
 
-import { hashMailSend, sendPreparedMail } from "./mail-send";
+import { sendPreparedMail } from "./mail-send";
 import {
   buildOpenTrackingHtmlTransform,
   resolveOrganizationMailOpenTracking,
 } from "./organization-mail-delivery";
 import { OrganizationMailSendError } from "./organization-mail-policy";
+import { hashRequest } from "./request-hash";
 
 export { ORGANIZATION_API_KEY_CONFIG_ID } from "@quieter/auth/organization-api-key";
 export { organizationHasBillingFeature } from "@quieter/billing/entitlements";
@@ -47,7 +48,7 @@ export const sendOrganizationMailMessage = async (input: {
       messageHeaderId,
       organizationId,
       raw: built.raw,
-      requestHash: hashMailSend(message),
+      requestHash: hashRequest(message),
       snapshot: {
         attachments: parsed.attachments.map((attachment, partIndex) => ({
           ...attachment,

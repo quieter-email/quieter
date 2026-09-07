@@ -173,6 +173,8 @@ The root [`sst.config.ts`](../sst.config.ts) owns only app-wide SST settings and
 - `database.ts` owns the Cloudflare Hyperdrive binding.
 - `web.ts` owns the TanStack Start Worker and its common bindings.
 - Mailbox actions execute asynchronously from their persisted runs: Gmail sync and maintenance dispatch new runs straight onto Cloudflare Queues, while a per-minute fallback cron atomically claims SES-ingested, lost, or crashed runs before dispatching them. Transient execution failures stay retryable until the queue's final delivery settles the run as failed.
+- Connector writes persist their planned arguments and an input hash before execution. Successful results are reusable even without an external object ID. Changed arguments, legacy effects without a plan, and ambiguous provider outcomes stop the run for review instead of repeating a write. Effect identities include the branch's edge path, so separate visits to a node do not collide. Merge nodes support pass-through only; legacy `wait_all` configurations must be corrected before publishing or running.
+- Apply `20260907144353_redundant_typhoid_mary` before deploying the effect guard. Pause dispatch and drain old action workers before activating it: older workers do not understand incomplete effect records. Existing completed effect records remain intact; an old partially executed run may require review. The migration only adds nullable columns and permits missing external IDs.
 - `mail.ts` owns SES receipt storage, processing, ingress, and send permissions.
 - `gmail.ts` owns Gmail live-sync and Pub/Sub resources on Cloudflare.
 - `app.ts` is the small stage-aware composition entry point; `types.ts` contains shared infra boundary types.

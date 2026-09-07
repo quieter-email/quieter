@@ -127,7 +127,7 @@ describe(validateMailboxActionGraph, () => {
           variable("bug", "bug"),
           variable("feature", "feature"),
           {
-            config: { mode: "wait_all" },
+            config: { mode: "pass_through" },
             id: "merge",
             position,
             type: "merge",
@@ -146,6 +146,20 @@ describe(validateMailboxActionGraph, () => {
     );
 
     expect(result.valid).toBeTruthy();
+  });
+
+  test("rejects legacy wait-for-all merges instead of silently passing each branch through", () => {
+    const result = validateMailboxActionGraph({
+      edges: [],
+      nodes: [
+        { config: { mode: "wait_all" }, id: "merge", position, type: "merge" },
+      ],
+      version: 1,
+    });
+    expect(result.valid).toBeFalsy();
+    expect(result.errors.join(" ")).toContain(
+      "Wait-for-all merges are not supported"
+    );
   });
 
   test("rejects invalid ports", () => {

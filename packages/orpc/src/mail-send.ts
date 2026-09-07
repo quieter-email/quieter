@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 import {
   SESv2Client,
   SESv2ServiceException,
@@ -36,19 +34,6 @@ type MailSend = typeof organizationMailSendIdempotency.$inferSelect;
 const UNCERTAIN_DELIVERY_MESSAGE =
   "The delivery result is still being confirmed. Check Sent before sending again.";
 let sesClient: SESv2Client | undefined;
-
-export const hashMailSend = (message: object) => {
-  const serialized = JSON.stringify(message, (_key, value: unknown) =>
-    typeof value === "object" && value !== null && !Array.isArray(value)
-      ? Object.fromEntries(
-          Object.entries(value).toSorted(([left], [right]) =>
-            left.localeCompare(right)
-          )
-        )
-      : value
-  );
-  return createHash("sha256").update(serialized).digest("hex");
-};
 
 const completeMailSend = async (operation: MailSend) => {
   const { snapshot, response } = operation;

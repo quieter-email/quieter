@@ -13,13 +13,14 @@ import { parseRawMailMessage } from "@quieter/mail/raw-message";
 import { and, eq } from "drizzle-orm";
 import type { z } from "zod";
 
-import { hashMailSend, sendPreparedMail } from "../../mail-send";
+import { sendPreparedMail } from "../../mail-send";
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
 import {
   buildOpenTrackingHtmlTransform,
   resolveOrganizationMailOpenTracking,
 } from "../../organization-mail-delivery";
 import { OrganizationMailSendError } from "../../organization-mail-policy";
+import { hashRequest } from "../../request-hash";
 
 export const sendManagedMailboxMessage = async (input: {
   mailboxId: string;
@@ -74,7 +75,7 @@ export const sendManagedMailboxMessage = async (input: {
       };
     })
   );
-  const requestHash = hashMailSend({
+  const requestHash = hashRequest({
     bodyHtml: message.bodyHtml,
     bodyText: message.bodyText,
     files,

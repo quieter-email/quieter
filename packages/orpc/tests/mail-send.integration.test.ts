@@ -26,11 +26,7 @@ import {
   vi,
 } from "vite-plus/test";
 
-import {
-  hashMailSend,
-  recoverMailSends,
-  sendPreparedMail,
-} from "../src/mail-send";
+import { recoverMailSends, sendPreparedMail } from "../src/mail-send";
 import {
   cleanupMailObjects,
   storeRawMailObject,
@@ -38,6 +34,7 @@ import {
 import { sendOrganizationMailMessage } from "../src/organization-mail";
 import { recordOrganizationMailFeedback } from "../src/organization-mail-delivery";
 import type { assertOrganizationOwnsVerifiedSenderDomain } from "../src/organization-mail-policy";
+import { hashRequest } from "../src/request-hash";
 
 const state = vi.hoisted(() => ({
   databaseUrl: process.env.MIGRATION_TEST_DATABASE_URL,
@@ -198,7 +195,7 @@ describe.skipIf(state.databaseUrl === undefined)(
         messageHeaderId: `<${id}@example.com>`,
         organizationId,
         raw: "Hello",
-        requestHash: hashMailSend(snapshot),
+        requestHash: hashRequest(snapshot),
         snapshot,
       };
     });

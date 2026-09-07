@@ -24,7 +24,11 @@ const setVariableConfigSchema = z.object({
   value: z.unknown(),
 });
 const mergeConfigSchema = z.object({
-  mode: z.enum(["wait_all", "pass_through"]).default("wait_all"),
+  mode: z
+    .literal("pass_through", {
+      error: "Wait-for-all merges are not supported. Use a pass-through merge.",
+    })
+    .default("pass_through"),
 });
 const stopConfigSchema = z.object({}).default({});
 /**

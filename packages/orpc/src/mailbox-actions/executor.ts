@@ -20,7 +20,6 @@ import type { ConnectorProvider } from "@quieter/database/schema";
 import {
   mailbox,
   mailboxAction,
-  mailboxActionExternalEffect,
   mailboxActionRevision,
   mailboxActionRun,
   mailboxActionRunFrame,
@@ -42,7 +41,6 @@ import {
 import {
   listConnectorAgentTools,
   runConnectorAgentReadCalls,
-  runConnectorAgentWriteCall,
 } from "../connectors/agent-tools";
 import type {
   ConnectorAgentTool,
@@ -52,6 +50,7 @@ import { getConnectorDisplayName } from "../connectors/contracts";
 import { runAuthorizedGmailMailbox } from "../gmail-mailbox-access";
 import { MAILBOX_PROVIDER_GMAIL } from "../mailbox/access";
 import { hasText } from "../text";
+import { runConnectorWriteCall } from "./effects";
 import { validateMailboxActionGraph } from "./graph";
 import type { MailboxActionGraph, MailboxActionNode } from "./graph";
 
@@ -177,74 +176,10 @@ const loadActionEmailInput = async (input: {
   });
 };
 
-/**
- * Runs one mutating connector call at most once per run. A step can now make
- * several calls, so the key carries the call's position within the step.
- */
-const runConnectorWriteCall = async (input: {
-  actionId: string;
-  call: ConnectorAgentToolCall;
-  callIndex: number;
-  credentialId: string;
-  nodeId: string;
-  provider: ConnectorProvider;
-  revisionId: string;
-  runId: string;
-  stepRunId: string;
-  userId: string;
-  signal?: AbortSignal;
-}) => {
-  const idempotencyKey = `${input.runId}:${input.nodeId}:${input.callIndex}`;
-  const [existing] = await db
-    .select({
-      externalId: mailboxActionExternalEffect.externalId,
-      externalUrl: mailboxActionExternalEffect.externalUrl,
-    })
-    .from(mailboxActionExternalEffect)
-    .where(eq(mailboxActionExternalEffect.idempotencyKey, idempotencyKey))
-    .limit(1);
-
-  if (existing !== undefined) {
-    return {
-      externalId: existing.externalId,
-      externalUrl: existing.externalUrl ?? undefined,
-      replayed: true,
-      status: "success" as const,
-      toolName: input.call.toolName,
-    };
-  }
-
-  const result = await runConnectorAgentWriteCall({
-    call: input.call,
-    credentialId: input.credentialId,
-    provider: input.provider,
-    signal: input.signal,
-    userId: input.userId,
-  });
-
-  if (result.status === "success" && hasText(result.externalId)) {
-    await db.insert(mailboxActionExternalEffect).values({
-      actionId: input.actionId,
-      connectorCredentialId: input.credentialId,
-      createdAt: new Date(),
-      externalId: result.externalId,
-      externalUrl: result.externalUrl,
-      id: randomUUID(),
-      idempotencyKey,
-      metadata: { toolName: result.toolName },
-      provider: input.provider,
-      revisionId: input.revisionId,
-      runId: input.runId,
-      stepRunId: input.stepRunId,
-    });
-  }
-
-  return { ...result, replayed: false };
-};
-
 const toolArgumentsSchema = z.record(z.string(), z.unknown());
 
 type ConnectorStepIdentity = {
+  invocationPath: string[];
   actionId: string;
   credentialId: string;
   nodeId: string;
@@ -418,6 +353,7 @@ const executeNode = async (input: {
       const identity = {
         actionId: input.actionId,
         credentialId,
+        invocationPath: input.frame.branchPath,
         nodeId: input.node.id,
         provider,
         revisionId: input.revisionId,
@@ -455,7 +391,10 @@ const executeNode = async (input: {
       } catch (error) {
         // Changes already made are real, so report them rather than losing them
         // to a timeout or a model error partway through the loop.
-        if (effects.length === 0) {
+        if (
+          effects.length === 0 ||
+          (error instanceof ORPCError && error.code === "CONFLICT")
+        ) {
           throw error;
         }
 
@@ -521,7 +460,7 @@ export type MailboxActionFailureUpdate = {
   completedAt: Date | null;
   lastError: string;
   leasedUntil: null;
-  status: "failed" | "queued";
+  status: "failed" | "queued" | "needs_review";
   updatedAt: Date;
 };
 
@@ -538,6 +477,15 @@ export const mailboxActionFailureUpdate = (
   const at = new Date();
   const lastError =
     error instanceof Error ? error.message : "Mailbox action failed.";
+  if (error instanceof ORPCError && error.code === "CONFLICT") {
+    return {
+      completedAt: at,
+      lastError,
+      leasedUntil: null,
+      status: "needs_review",
+      updatedAt: at,
+    };
+  }
   if (options.finalAttempt) {
     return {
       completedAt: at,
@@ -582,7 +530,11 @@ export const executeMailboxActionRun = async (
 
     const revisionUserId = revision.userId;
     const validation = validateMailboxActionGraph(revision.graph);
-    if (validation.graph === undefined || validation.graph === null) {
+    if (
+      !validation.valid ||
+      validation.graph === undefined ||
+      validation.graph === null
+    ) {
       throw new Error("Action revision graph is invalid.");
     }
     const { graph } = validation;
@@ -749,11 +701,7 @@ export const executeMailboxActionRun = async (
             continue;
           }
           const childFrameId = randomUUID();
-          const childPath = [
-            ...item.frame.branchPath,
-            `${item.node.id}:${outputPort}`,
-            targetNode.id,
-          ];
+          const childPath = [...item.frame.branchPath, edge.id, targetNode.id];
           await db.insert(mailboxActionRunFrame).values({
             createdAt: stepCompletedAt,
             id: childFrameId,

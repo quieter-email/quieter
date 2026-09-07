@@ -1484,18 +1484,22 @@ export const mailboxActionExternalEffect = pgTable(
       }
     ),
     createdAt: timestamp("createdAt").notNull(),
-    externalId: text("externalId").notNull(),
+    externalId: text("externalId"),
     externalUrl: text("externalUrl"),
     id: text("id").primaryKey(),
     idempotencyKey: text("idempotencyKey").notNull(),
+    input: jsonb("input").$type<MailboxActionJsonObject>(),
     metadata: jsonb("metadata").$type<MailboxActionJsonObject>(),
     provider: text("provider").$type<MailboxActionExternalProvider>().notNull(),
+    requestHash: text("requestHash"),
+    result: jsonb("result").$type<MailboxActionJsonObject>(),
     revisionId: text("revisionId")
       .notNull()
       .references(() => mailboxActionRevision.id, { onDelete: "cascade" }),
     runId: text("runId")
       .notNull()
       .references(() => mailboxActionRun.id, { onDelete: "cascade" }),
+    status: text("status").$type<"submitting" | "succeeded" | "unknown">(),
     stepRunId: text("stepRunId").references(() => mailboxActionStepRun.id, {
       onDelete: "set null",
     }),
