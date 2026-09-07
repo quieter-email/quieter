@@ -323,28 +323,6 @@ export default defineConfig({
         },
       },
       {
-        // These loops preserve ordering or bounded concurrency across remote
-        // mail operations; parallelizing them would change mailbox semantics.
-        files: [
-          "apps/web/scripts/check-worker-deployment-boundaries.ts",
-          "packages/orpc/src/ai-memory.ts",
-          "packages/orpc/src/gmail-sync/service.ts",
-          "packages/orpc/src/mailbox-actions/executor.ts",
-          "packages/orpc/src/managed-mail/rules/service.ts",
-          "packages/orpc/src/organization-api-mail.ts",
-        ],
-        rules: {
-          "eslint/no-await-in-loop": "off",
-        },
-      },
-      {
-        // Request-body streams must be consumed and cancelled in order.
-        files: ["apps/web/src/routes/api/v1/send.ts"],
-        rules: {
-          "eslint/no-await-in-loop": "off",
-        },
-      },
-      {
         // These cache/query helpers intentionally return undefined for a
         // missing result or JSON-replacer omission.
         files: [
@@ -388,6 +366,8 @@ export default defineConfig({
       },
     ],
     rules: {
+      // Ordering and bounded concurrency are deliberate choices, not lint failures.
+      "eslint/no-await-in-loop": "off",
       "import/no-commonjs": "error",
       "jsx-a11y/no-autofocus": "error",
       "no-console": "error",

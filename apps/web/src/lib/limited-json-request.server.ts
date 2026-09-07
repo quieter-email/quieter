@@ -38,14 +38,12 @@ export const readLimitedJsonRequest = async (
   try {
     while (true) {
       // A request stream must be read serially; parallel reads are invalid.
-      // eslint-disable-next-line no-await-in-loop
       const { done, value } = await reader.read();
       if (done) {
         break;
       }
       totalBytes += value.byteLength;
       if (totalBytes > maxBytes) {
-        // eslint-disable-next-line no-await-in-loop
         await reader.cancel();
         throw new LimitedJsonRequestError("too_large");
       }

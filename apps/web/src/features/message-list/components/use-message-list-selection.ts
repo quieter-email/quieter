@@ -154,7 +154,7 @@ export const useMessageListSelection = ({
           scrollElement.scrollTop > SCROLL_TOP_EPSILON_PX &&
           Date.now() < deadline
         ) {
-          // oxlint-disable-next-line no-await-in-loop, promise/avoid-new -- Poll the browser animation with a real timer.
+          // oxlint-disable-next-line promise/avoid-new -- Poll the browser animation with a real timer.
           await new Promise<void>((resolve) => {
             setTimeout(resolve, FRAME_DELAY_MS);
           });

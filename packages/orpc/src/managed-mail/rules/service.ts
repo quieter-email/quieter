@@ -20,6 +20,7 @@ import { and, asc, countDistinct, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
 import { assertManagedLabelsBelongToMailbox } from "../labels/repository";
+import { throwMailboxOrganizationNameConflict } from "../organization/name-conflict";
 import { normalizeManagedOrganizationName } from "../organization/normalize-name";
 import { createManagedSearchCondition } from "../search/compiler";
 import { assertManagedRuleSearch } from "../search/normalization";
@@ -168,7 +169,8 @@ export const createManagedRule = async (input: {
       updatedAt: now,
       updatedByUserId: input.userId,
     })
-    .returning();
+    .returning()
+    .catch(throwMailboxOrganizationNameConflict);
   if (record === undefined) {
     return record;
   }
@@ -242,7 +244,8 @@ export const updateManagedRule = async (input: {
         eq(managedMailRule.mailboxId, input.mailboxId)
       )
     )
-    .returning();
+    .returning()
+    .catch(throwMailboxOrganizationNameConflict);
   if (record === undefined) {
     throw new ORPCError("NOT_FOUND", { message: "Rule not found." });
   }

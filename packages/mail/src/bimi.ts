@@ -519,14 +519,12 @@ const readResponseText = async (
   try {
     while (true) {
       // A response stream can only be consumed one chunk at a time.
-      // oxlint-disable-next-line eslint/no-await-in-loop
       const chunk = await reader.read();
       if (chunk.done) {
         break;
       }
       byteLength += chunk.value.byteLength;
       if (byteLength > maxBytes) {
-        // oxlint-disable-next-line eslint/no-await-in-loop
         await reader.cancel();
         return undefined;
       }
@@ -942,7 +940,6 @@ export const createBimiResolver = (
   ): Promise<{ domain: string; policy: DmarcPolicy } | undefined> => {
     for (const candidate of getDomainCandidates(domain)) {
       // Candidate lookups must remain ordered so a subdomain policy wins over its parent.
-      // oxlint-disable-next-line eslint/no-await-in-loop
       const result = await lookupDns(`_dmarc.${candidate}`);
       const policies = result.records
         .map(parseDmarcRecord)
@@ -1069,17 +1066,11 @@ export const createBimiResolver = (
 
     for (const candidateDomain of getDomainCandidates(domain)) {
       // BIMI lookup falls back from the author domain to the organizational domain.
-      // oxlint-disable-next-line eslint/no-await-in-loop
       const record = await lookupBimiRecord(selector, candidateDomain);
-      if (
-        record === undefined ||
-        // oxlint-disable-next-line eslint/no-await-in-loop
-        !(await hasEnforcedDmarc(candidateDomain))
-      ) {
+      if (record === undefined || !(await hasEnforcedDmarc(candidateDomain))) {
         continue;
       }
       // Keep the first valid assertion record's precedence over broader fallback domains.
-      // oxlint-disable-next-line eslint/no-await-in-loop
       const asset = await fetchAsset(record.logoUrl);
       if (asset !== undefined) {
         return asset;

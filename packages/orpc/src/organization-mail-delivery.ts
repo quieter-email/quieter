@@ -427,7 +427,6 @@ export const recordOrganizationMailFeedback = async (
         recipient: recipient.emailAddress,
         sourceEventId: feedback.sourceEventId,
       });
-      // oxlint-disable-next-line no-await-in-loop -- Consistent recipient lock order prevents cross-message deadlocks.
       const insertedEvents = await transaction
         .insert(organizationMailDeliveryEvent)
         .values({
@@ -457,7 +456,6 @@ export const recordOrganizationMailFeedback = async (
         feedback.eventType !== "opened" &&
         feedback.eventType !== "unsubscribed"
       ) {
-        // oxlint-disable-next-line no-await-in-loop -- Preserve recipient lock order within the transaction.
         await transaction
           .insert(organizationMailDeliveryRecipient)
           .values({
@@ -485,7 +483,6 @@ export const recordOrganizationMailFeedback = async (
           });
       }
       if (suppressionReason !== null) {
-        // oxlint-disable-next-line no-await-in-loop -- Preserve recipient lock order within the transaction.
         await applySuppressionChange(transaction, {
           actorUserId: null,
           createdAt: now,

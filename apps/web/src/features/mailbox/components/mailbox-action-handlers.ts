@@ -156,7 +156,6 @@ export const createMailboxActionHandlers = ({
               try {
                 // The worker pool intentionally serializes each lane while
                 // keeping the overall bulk action concurrency bounded.
-                // oxlint-disable-next-line eslint/no-await-in-loop
                 await action(id);
                 shouldRefreshSearchResults = true;
               } catch (error) {

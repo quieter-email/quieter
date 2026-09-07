@@ -46,7 +46,6 @@ describe.skipIf(state.databaseUrl === undefined)(
     test("bounds connections across sequential, nested and concurrent requests", async () => {
       const pids = new Set<number>();
       for (let index = 0; index < 20; index += 1) {
-        // oxlint-disable-next-line no-await-in-loop -- Exercise successive requests, separately from concurrent requests below.
         const rows = await withRequestDatabaseClient(
           async () =>
             await withRequestDatabaseClient(

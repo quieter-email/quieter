@@ -82,7 +82,6 @@ export const getMessageListDeliveryOptions = ({
       for (let offset = 0; offset < ids.length; offset += 100) {
         Object.assign(
           result,
-          // oxlint-disable-next-line no-await-in-loop -- Bound concurrent requests when many pages are loaded.
           await rpc.mail.listMessageDeliveryStatuses(
             { mailboxId, messageIds: ids.slice(offset, offset + 100) },
             { signal }

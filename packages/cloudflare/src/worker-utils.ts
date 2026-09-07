@@ -134,7 +134,6 @@ export const readBoundedJson = async (request: Request, limit: number) => {
   try {
     while (true) {
       // Request chunks must be consumed serially to enforce the byte limit.
-      // oxlint-disable-next-line no-await-in-loop
       const result = await reader.read();
       if (result.done) {
         break;
@@ -145,7 +144,6 @@ export const readBoundedJson = async (request: Request, limit: number) => {
       }
       length += value.byteLength;
       if (length > limit) {
-        // oxlint-disable-next-line no-await-in-loop
         await reader.cancel();
         throw new RequestError(413, "request_body_too_large");
       }

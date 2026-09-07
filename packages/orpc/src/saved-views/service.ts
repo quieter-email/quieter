@@ -14,6 +14,7 @@ import {
   MAILBOX_PROVIDER_GMAIL,
   MAILBOX_PROVIDER_MANAGED,
 } from "../mailbox/access";
+import { throwMailboxOrganizationNameConflict } from "../managed-mail/organization/name-conflict";
 import { normalizeManagedOrganizationName } from "../managed-mail/organization/normalize-name";
 
 type SavedViewProvider = "gmail" | "managed";
@@ -169,7 +170,8 @@ export const createSavedView = async (input: {
       sort: definition.sort,
       updatedAt: now,
     })
-    .returning();
+    .returning()
+    .catch(throwMailboxOrganizationNameConflict);
   return record;
 };
 
@@ -216,7 +218,8 @@ export const updateSavedView = async (input: {
       updatedAt: new Date(),
     })
     .where(eq(managedMailSavedView.id, view.id))
-    .returning();
+    .returning()
+    .catch(throwMailboxOrganizationNameConflict);
   return updated;
 };
 

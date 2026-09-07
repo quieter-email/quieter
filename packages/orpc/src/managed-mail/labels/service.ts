@@ -25,6 +25,7 @@ import { and, asc, countDistinct, eq, sql } from "drizzle-orm";
 
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
 import { getManagedMessageLabelIds } from "../messages/service";
+import { throwMailboxOrganizationNameConflict } from "../organization/name-conflict";
 import { normalizeManagedOrganizationName } from "../organization/normalize-name";
 import {
   assertManagedLabelsBelongToMailbox,
@@ -144,7 +145,8 @@ export const createManagedLabel = async (input: {
       updatedAt: now,
       updatedByUserId: input.userId,
     })
-    .returning();
+    .returning()
+    .catch(throwMailboxOrganizationNameConflict);
   return toMailboxLabel(record);
 };
 
@@ -191,7 +193,8 @@ export const updateManagedLabel = async (input: {
         eq(managedMailLabel.mailboxId, input.mailboxId)
       )
     )
-    .returning();
+    .returning()
+    .catch(throwMailboxOrganizationNameConflict);
   if (record === undefined) {
     throw new ORPCError("NOT_FOUND", { message: "Label not found." });
   }
