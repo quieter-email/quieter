@@ -13,7 +13,9 @@ import {
   getSessionFromCtx,
 } from "better-auth/api";
 import {
+  bearer,
   createAccessControl,
+  deviceAuthorization,
   magicLink,
   organization,
   lastLoginMethod,
@@ -230,6 +232,12 @@ export const auth = betterAuth({
     }),
   },
   plugins: [
+    bearer(),
+    deviceAuthorization({
+      schema: {},
+      validateClient: (clientId) => clientId === "quieter-desktop",
+      verificationUri: "/device",
+    }),
     passkey(),
     organization({
       ac: organizationAccessControl,

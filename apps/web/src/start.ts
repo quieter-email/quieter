@@ -32,6 +32,9 @@ import {
 } from "#/lib/site-password.server";
 
 const sitePasswordPaths = new Set([
+  "/api/auth/device/code",
+  "/api/auth/device/token",
+  "/api/auth/sign-out",
   "/api/auth/polar/webhooks",
   "/api/internal/gmail-credentials/rotate",
   "/api/openapi",
@@ -451,6 +454,11 @@ const shouldGatePath = (pathname: string) => {
   const normalizedPath = normalizePathname(pathname);
 
   if (sitePasswordPaths.has(normalizedPath)) {
+    return false;
+  }
+
+  // Desktop procedures authenticate their bearer session; browser approval remains gated.
+  if (normalizedPath.startsWith("/api/desktop/")) {
     return false;
   }
 
