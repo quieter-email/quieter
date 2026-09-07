@@ -1,5 +1,8 @@
+import type { MailCommand } from "@quieter/mail/data-plane";
+
 import {
   addUnreadLabel,
+  MAILBOX_LABELS,
   applyLabelIdChanges,
   isMessageUnread,
   removeUnreadLabel,
@@ -573,3 +576,51 @@ export const applySyncDeltaToQueryData = (
     pages: nextPages,
   };
 };
+
+export const getMailCommandUpdater =
+  (command: MailCommand) => (message: MessageListItem) => {
+    if (command.kind === "set-read") {
+      return command.read
+        ? markMessageReadLocally(message)
+        : markMessageUnreadLocally(message);
+    }
+    if (command.kind === "set-labels") {
+      return applyMessageLabelChangesLocally(message, {
+        addLabelIds: command.addIds,
+        removeLabelIds: command.removeIds,
+      });
+    }
+    if (command.kind === "delete-permanently") {
+      return message;
+    }
+    if (command.destination === "archive") {
+      return applyMessageLabelChangesLocally(message, {
+        removeLabelIds: [MAILBOX_LABELS.inbox],
+      });
+    }
+    if (command.destination === "spam") {
+      return applyMessageLabelChangesLocally(message, {
+        addLabelIds: [MAILBOX_LABELS.spam],
+        removeLabelIds: [MAILBOX_LABELS.inbox],
+      });
+    }
+    if (command.destination === "trash") {
+      return applyMessageLabelChangesLocally(message, {
+        addLabelIds: [MAILBOX_LABELS.trash],
+        removeLabelIds: [
+          MAILBOX_LABELS.inbox,
+          MAILBOX_LABELS.spam,
+          MAILBOX_LABELS.sent,
+          MAILBOX_LABELS.drafts,
+        ],
+      });
+    }
+    return applyMessageLabelChangesLocally(message, {
+      addLabelIds: [MAILBOX_LABELS.inbox],
+      removeLabelIds: [
+        MAILBOX_LABELS.archive,
+        MAILBOX_LABELS.spam,
+        MAILBOX_LABELS.trash,
+      ],
+    });
+  };

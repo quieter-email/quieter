@@ -14,6 +14,7 @@ import { getThreadQueryKey } from "../thread-query";
 import {
   applyMessageLabelChangesLocally,
   applyMessageMetadata,
+  getMailCommandUpdater,
   applyThreadLabelChangesLocally,
   mergeMessagePreservingLoadedDetails,
   markMessageReadLocally,
@@ -82,47 +83,6 @@ const enqueueMailboxMutation = async <T>(
   }
 };
 
-const getOptimisticCommandUpdater =
-  (command: MailCommand) => (message: MessageListItem) => {
-    if (command.kind === "set-read") {
-      return command.read
-        ? markMessageReadLocally(message)
-        : markMessageUnreadLocally(message);
-    }
-    if (command.kind === "set-labels") {
-      return applyMessageLabelChangesLocally(message, {
-        addLabelIds: command.addIds,
-        removeLabelIds: command.removeIds,
-      });
-    }
-    if (command.kind === "delete-permanently") {
-      return message;
-    }
-    if (command.destination === "archive") {
-      return applyMessageLabelChangesLocally(message, ARCHIVE_LABEL_CHANGES);
-    }
-    if (command.destination === "spam") {
-      return applyMessageLabelChangesLocally(
-        message,
-        MARK_AS_SPAM_LABEL_CHANGES
-      );
-    }
-    if (command.destination === "trash") {
-      return applyMessageLabelChangesLocally(
-        message,
-        MOVE_TO_TRASH_LABEL_CHANGES
-      );
-    }
-    return applyMessageLabelChangesLocally(message, {
-      addLabelIds: [MAILBOX_LABELS.inbox],
-      removeLabelIds: [
-        MAILBOX_LABELS.archive,
-        MAILBOX_LABELS.spam,
-        MAILBOX_LABELS.trash,
-      ],
-    });
-  };
-
 export const applyBulkChangesInMailbox = async (
   queryClient: QueryClient,
   mailboxId: string,
@@ -131,7 +91,7 @@ export const applyBulkChangesInMailbox = async (
 ) =>
   await enqueueMailboxMutation(mailboxId, async () => {
     const messageIds = new Set(targets.flatMap((target) => target.messageIds));
-    const updater = getOptimisticCommandUpdater(command);
+    const updater = getMailCommandUpdater(command);
     const rollback = await applyOptimisticMailboxUpdate(
       queryClient,
       mailboxId,
