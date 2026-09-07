@@ -53,7 +53,7 @@ import {
 } from "#/features/navigation/components/sidebar-surfaces";
 import { SidebarWorkspaceViewSwitch } from "#/features/navigation/components/sidebar-workspace-view-switch";
 import { useSidebarNavHover } from "#/features/navigation/hooks/use-sidebar-nav-hover";
-import type { MailboxCategory } from "#/lib/gmail/gmail";
+import type { MailboxCategory } from "#/lib/mail";
 
 type MailSidebarProps = {
   activeChatId: string | null;

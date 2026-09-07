@@ -23,7 +23,7 @@
   "dependencies": {
     "@openrouter/ai-sdk-provider": "catalog:",
     "@quieter/env": "workspace:*",
-    "@quieter/gmail": "workspace:*",
+    "@quieter/mail": "workspace:*",
     "@quieter/observability": "workspace:*",
     "ai": "catalog:",
     "zod": "catalog:"

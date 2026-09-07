@@ -11,7 +11,6 @@ import {
   managedMailSavedView,
 } from "@quieter/database/schema";
 import type { ManagedMailMailboxState } from "@quieter/database/schema";
-import { MAILBOX_LABELS } from "@quieter/gmail";
 import {
   mailboxLabelColorSchema,
   managedMailboxRuleActionSchema,
@@ -20,6 +19,7 @@ import type {
   MailboxLabel,
   ManagedMailboxRuleAction,
 } from "@quieter/mail/mailbox-organization";
+import { MAILBOX_LABELS } from "@quieter/mail/messages";
 import { structuredMailSearchSchema } from "@quieter/mail/search";
 import { and, asc, countDistinct, eq, sql } from "drizzle-orm";
 

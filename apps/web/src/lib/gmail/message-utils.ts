@@ -1,6 +1,6 @@
 import { extractSenderEmail } from "@quieter/mail/sender-avatar";
 
-import type { MessageListItem } from "./gmail";
+import type { MessageListItem } from "#/lib/mail";
 
 const compactMessageDateFormatter = new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",

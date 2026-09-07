@@ -21,8 +21,8 @@ import { reportAiUsage } from "@quieter/billing";
 import { db } from "@quieter/database/client";
 import { chat as chatTable, chatMessage } from "@quieter/database/schema";
 import type { ChatMessagePart } from "@quieter/database/schema";
-import type { MailboxCategory } from "@quieter/gmail";
 import { mailCategorySchema } from "@quieter/mail/data-plane";
+import type { MailboxCategory } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
 import {
   convertToModelMessages,

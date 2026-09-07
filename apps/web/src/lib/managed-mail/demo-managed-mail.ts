@@ -9,6 +9,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { clientEnv } from "#/env";
 import type { ComposeDraftState } from "#/features/compose/domain/draft";
 import { parseStructuredSearchQuery } from "#/features/message-search/state/message-list-search-state";
+import type { ThreadListEntry } from "#/lib/gmail/thread-list";
 import {
   addUnreadLabel,
   applyLabelIdChanges,
@@ -16,15 +17,14 @@ import {
   isMessageInMailbox,
   MAILBOX_LABELS,
   removeUnreadLabel,
-} from "#/lib/gmail/gmail";
+} from "#/lib/mail";
 import type {
   ListMessagesPageResult,
   MailboxCategory,
   MessageInspectorResult,
   MessageListItem,
   ThreadMessagesResult,
-} from "#/lib/gmail/gmail";
-import type { ThreadListEntry } from "#/lib/gmail/thread-list";
+} from "#/lib/mail";
 import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
 
 export const DEMO_MANAGED_MAILBOX_ID = "demo:managed-mailbox";

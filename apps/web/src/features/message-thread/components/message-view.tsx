@@ -55,18 +55,18 @@ import { MessageDeliveryStatus } from "#/features/message-delivery/components/me
 import { supportsMessageDelivery } from "#/features/message-delivery/domain/message-delivery-support";
 import { MessageLabels } from "#/features/message-labels/components/message-labels";
 import { toastError } from "#/lib/error-toast";
-import {
-  hasRenderableMessageBody,
-  isMessageUnread,
-  MAILBOX_LABELS,
-} from "#/lib/gmail/gmail";
-import type { MailboxCategory, MessageListItem } from "#/lib/gmail/gmail";
 import { labelsQueryOptions } from "#/lib/gmail/labels-query";
 import { getMessageInspectorOptions } from "#/lib/gmail/message-inspector-query";
 import { formatMessageDate, parseSender } from "#/lib/gmail/message-utils";
 import { getThreadLabelIds } from "#/lib/gmail/thread-list";
 import { getThreadWithDetailsOptions } from "#/lib/gmail/thread-query";
 import { gmailThreadUsefulDetailsQueryOptions } from "#/lib/gmail/useful-details-query";
+import {
+  hasRenderableMessageBody,
+  isMessageUnread,
+  MAILBOX_LABELS,
+} from "#/lib/mail";
+import type { MailboxCategory, MessageListItem } from "#/lib/mail";
 import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
 import { orpc } from "#/lib/orpc";
 

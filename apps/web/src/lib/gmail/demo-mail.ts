@@ -5,8 +5,6 @@ import type { QueryClient } from "@tanstack/react-query";
 import { clientEnv } from "#/env";
 import type { ComposeDraftState } from "#/features/compose/domain/draft";
 import { parseStructuredSearchQuery } from "#/features/message-search/state/message-list-search-state";
-import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
-
 import {
   addUnreadLabel,
   applyLabelIdChanges,
@@ -14,15 +12,17 @@ import {
   isMessageInMailbox,
   MAILBOX_LABELS,
   removeUnreadLabel,
-} from "./gmail";
+} from "#/lib/mail";
 import type {
-  GmailLabelListItem,
+  MailLabelListItem,
   ListMessagesPageResult,
   MailboxCategory,
   MessageInspectorResult,
   MessageListItem,
   ThreadMessagesResult,
-} from "./gmail";
+} from "#/lib/mail";
+import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
+
 import type { ThreadListEntry } from "./thread-list";
 import { getMailboxThreadQueriesKey } from "./thread-query-keys";
 
@@ -799,7 +799,7 @@ export const getDemoThread = (
   };
 };
 
-export const getDemoLabels = (): (GmailLabelListItem & {
+export const getDemoLabels = (): (MailLabelListItem & {
   color?: MailboxLabelColor | null;
   description: string | null;
   inclusionCriteria: string | null;

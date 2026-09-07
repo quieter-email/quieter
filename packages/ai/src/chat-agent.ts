@@ -1,13 +1,9 @@
-import { MAILBOX_LABELS } from "@quieter/gmail";
-import type { MailboxCategory } from "@quieter/gmail";
+import { mailCategorySchema } from "@quieter/mail/data-plane";
+import type { MailboxCategory } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
 import { tool } from "ai";
 import type { ToolSet } from "ai";
 import { z } from "zod";
-
-const mailboxCategories = Object.keys(MAILBOX_LABELS).filter(
-  (key): key is MailboxCategory => key in MAILBOX_LABELS
-);
 
 export const gmailToolsPrompt = `You are Quieter's email assistant — an autonomous agent embedded in the user's mailbox. Your job is to understand what they want, investigate their mail when needed, and deliver useful outcomes without making them micromanage every step.
 
@@ -153,7 +149,7 @@ const toolErrorSchema = z.object({
 
 export const gmailSearchResultSchema = z.discriminatedUnion("status", [
   z.object({
-    category: z.enum(mailboxCategories),
+    category: mailCategorySchema,
     fetchedAt: z.string(),
     messages: z.array(
       z.object({
@@ -173,7 +169,7 @@ export const gmailSearchResultSchema = z.discriminatedUnion("status", [
     status: z.literal("success"),
   }),
   toolErrorSchema.extend({
-    category: z.enum(mailboxCategories),
+    category: mailCategorySchema,
     query: z.string(),
   }),
 ]);
@@ -182,7 +178,7 @@ export type GmailSearchResult = z.infer<typeof gmailSearchResultSchema>;
 
 export const gmailThreadResultSchema = z.discriminatedUnion("status", [
   z.object({
-    category: z.enum(mailboxCategories),
+    category: mailCategorySchema,
     fetchedAt: z.string(),
     messages: z.array(
       z.object({
@@ -204,7 +200,7 @@ export const gmailThreadResultSchema = z.discriminatedUnion("status", [
     threadId: z.string(),
   }),
   toolErrorSchema.extend({
-    category: z.enum(mailboxCategories),
+    category: mailCategorySchema,
     threadId: z.string(),
   }),
 ]);
@@ -214,7 +210,7 @@ export type GmailThreadResult = z.infer<typeof gmailThreadResultSchema>;
 export const mailboxOverviewResultSchema = z.discriminatedUnion("status", [
   z.object({
     attachmentMessages: z.number().nonnegative().optional(),
-    category: z.enum(mailboxCategories),
+    category: mailCategorySchema,
     categoryMessages: z.number().nonnegative().optional(),
     emailAddress: z.string(),
     fetchedAt: z.string(),
@@ -225,7 +221,7 @@ export const mailboxOverviewResultSchema = z.discriminatedUnion("status", [
     unreadMessages: z.number().nonnegative().optional(),
   }),
   toolErrorSchema.extend({
-    category: z.enum(mailboxCategories),
+    category: mailCategorySchema,
   }),
 ]);
 
@@ -291,7 +287,7 @@ export const gmailMessageResultSchema = z.discriminatedUnion("status", [
     ),
     body: z.string(),
     bodyTruncated: z.boolean(),
-    category: z.enum(mailboxCategories),
+    category: mailCategorySchema,
     date: z.string().optional(),
     fetchedAt: z.string(),
     from: z.string().optional(),
@@ -305,7 +301,7 @@ export const gmailMessageResultSchema = z.discriminatedUnion("status", [
     to: z.string().optional(),
   }),
   toolErrorSchema.extend({
-    category: z.enum(mailboxCategories),
+    category: mailCategorySchema,
     messageId: z.string(),
   }),
 ]);
@@ -351,7 +347,7 @@ export type GmailAttachmentResult = z.infer<typeof gmailAttachmentResultSchema>;
 
 export const gmailLabelListResultSchema = z.discriminatedUnion("status", [
   z.object({
-    category: z.enum(mailboxCategories),
+    category: mailCategorySchema,
     fetchedAt: z.string(),
     labels: z.array(
       z.object({
@@ -365,7 +361,7 @@ export const gmailLabelListResultSchema = z.discriminatedUnion("status", [
     status: z.literal("success"),
   }),
   toolErrorSchema.extend({
-    category: z.enum(mailboxCategories),
+    category: mailCategorySchema,
   }),
 ]);
 
@@ -384,14 +380,14 @@ const modifyMailActions = [
 export const modifyMailResultSchema = z.discriminatedUnion("status", [
   z.object({
     action: z.enum(modifyMailActions),
-    category: z.enum(mailboxCategories),
+    category: mailCategorySchema,
     id: z.string(),
     status: z.literal("success"),
     target: z.enum(["message", "thread"]),
   }),
   toolErrorSchema.extend({
     action: z.enum(modifyMailActions),
-    category: z.enum(mailboxCategories),
+    category: mailCategorySchema,
     id: z.string(),
     target: z.enum(["message", "thread"]),
   }),

@@ -1,13 +1,13 @@
 import type { QueryClient } from "@tanstack/react-query";
 
-import { persistQueryByKey } from "#/lib/query-persister";
-
-import { isMessageInMailbox } from "../gmail";
+import { isMessageInMailbox } from "#/lib/mail";
 import type {
   MailboxCategory,
   MessageListItem,
   ThreadMessagesResult,
-} from "../gmail";
+} from "#/lib/mail";
+import { persistQueryByKey } from "#/lib/query-persister";
+
 import { getThreadLabelIds } from "../thread-list";
 import { getThreadQueryKey } from "../thread-query";
 import {

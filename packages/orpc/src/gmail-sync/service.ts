@@ -22,11 +22,11 @@ import {
   listGmailAddedMessageHistoryPage,
   listGmailMessageIds,
   listLabels,
-  MAILBOX_LABELS,
   stopGmailWatch,
   updateMessageLabels,
   watchGmailMailbox,
 } from "@quieter/gmail";
+import { MAILBOX_LABELS } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
 import {
   and,

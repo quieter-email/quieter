@@ -17,8 +17,8 @@ import {
   getChatQueryKey,
   getChatsQueryKey,
 } from "#/lib/chat-query";
-import type { MailboxCategory } from "#/lib/gmail/gmail";
 import { openGoogleAccountLink } from "#/lib/google-account-link";
+import type { MailboxCategory } from "#/lib/mail";
 import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
 import { orpc } from "#/lib/orpc";
 import { getErrorMessage } from "#/lib/orpc-errors";

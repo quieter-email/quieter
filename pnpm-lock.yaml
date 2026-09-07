@@ -285,9 +285,6 @@ importers:
       '@quieter/env':
         specifier: workspace:*
         version: link:../../packages/env
-      '@quieter/gmail':
-        specifier: workspace:*
-        version: link:../../packages/gmail
       '@quieter/mail':
         specifier: workspace:*
         version: link:../../packages/mail
@@ -463,9 +460,9 @@ importers:
       '@quieter/env':
         specifier: workspace:*
         version: link:../env
-      '@quieter/gmail':
+      '@quieter/mail':
         specifier: workspace:*
-        version: link:../gmail
+        version: link:../mail
       '@quieter/observability':
         specifier: workspace:*
         version: link:../observability

@@ -1,6 +1,16 @@
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 import type { QueryClient, QueryPersister } from "@tanstack/react-query";
 
+import {
+  GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS,
+  GMAIL_QUERY_STALE_TIME_MS,
+} from "#/lib/mail";
+import type {
+  ListMessagesPageResult,
+  MailboxCategory,
+  MessageListItem,
+  ThreadMessagesResult,
+} from "#/lib/mail";
 import { listManagedDemoMessages } from "#/lib/managed-mail/demo-managed-mail";
 import { rpc } from "#/lib/orpc";
 import { shouldRetryOrpcError } from "#/lib/orpc-errors";
@@ -11,16 +21,6 @@ import {
 } from "#/lib/sandbox-mailbox";
 
 import { LANDING_DEMO_MAILBOX_ID, listDemoMessages } from "../demo-mail";
-import {
-  GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS,
-  GMAIL_QUERY_STALE_TIME_MS,
-} from "../gmail";
-import type {
-  ListMessagesPageResult,
-  MailboxCategory,
-  MessageListItem,
-  ThreadMessagesResult,
-} from "../gmail";
 import { getThreadQueryKey } from "../thread-query";
 import {
   applySyncDeltaToQueryData,

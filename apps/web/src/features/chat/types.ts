@@ -1,4 +1,4 @@
-import type { MailboxCategory } from "#/lib/gmail/gmail";
+import type { MailboxCategory } from "#/lib/mail";
 
 export type ChatViewProps = {
   activeMailbox: MailboxCategory;

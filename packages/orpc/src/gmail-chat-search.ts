@@ -28,7 +28,7 @@ import {
   updateMessageLabels,
   updateThreadLabels,
 } from "@quieter/gmail";
-import type { MailboxCategory } from "@quieter/gmail";
+import type { MailboxCategory } from "@quieter/mail/messages";
 
 import { syncGmailLabels } from "./gmail-labels";
 import {

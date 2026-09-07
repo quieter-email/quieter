@@ -1,15 +1,15 @@
 import type { MailCommand, MailMutationTarget } from "@quieter/mail/data-plane";
 import type { QueryClient } from "@tanstack/react-query";
 
-import { rpc } from "#/lib/orpc";
-
-import { getGmailUnreadCountsQueryKey } from "../../mailboxes-query";
-import { MAILBOX_LABELS } from "../gmail";
+import { MAILBOX_LABELS } from "#/lib/mail";
 import type {
   MailboxCategory,
   MessageListItem,
   ThreadMessagesResult,
-} from "../gmail";
+} from "#/lib/mail";
+import { rpc } from "#/lib/orpc";
+
+import { getGmailUnreadCountsQueryKey } from "../../mailboxes-query";
 import { getThreadQueryKey } from "../thread-query";
 import {
   applyMessageLabelChangesLocally,

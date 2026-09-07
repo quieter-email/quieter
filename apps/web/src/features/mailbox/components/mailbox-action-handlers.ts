@@ -3,7 +3,6 @@
 import type { MailCommand } from "@quieter/mail/data-plane";
 import type { QueryClient } from "@tanstack/react-query";
 
-import type { MailboxCategory, MessageListItem } from "#/lib/gmail/gmail";
 import {
   applyBulkChangesInMailbox,
   archiveMessageInMailbox,
@@ -25,6 +24,7 @@ import {
   updateThreadLabelsInMailbox,
 } from "#/lib/gmail/inbox-query";
 import type { ThreadListEntry } from "#/lib/gmail/thread-list";
+import type { MailboxCategory, MessageListItem } from "#/lib/mail";
 
 type LabelChangeSet = {
   addLabelIds?: string[];

@@ -13,7 +13,7 @@ import type {
   MailAutoLabelFeedbackSignal,
   PersistedMailboxProvider,
 } from "@quieter/database/schema";
-import { MAILBOX_LABELS } from "@quieter/gmail";
+import { MAILBOX_LABELS } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
 import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
 

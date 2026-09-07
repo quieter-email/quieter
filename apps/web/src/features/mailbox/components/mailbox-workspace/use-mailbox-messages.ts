@@ -5,10 +5,6 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import type {
-  ListMessagesPageResult,
-  MailboxCategory,
-} from "#/lib/gmail/gmail";
 import {
   getLiveSyncQueryKey,
   getMessagesQueryKey,
@@ -19,6 +15,7 @@ import {
 } from "#/lib/gmail/inbox-query";
 import { getThreadWithDetailsOptions } from "#/lib/gmail/thread-query";
 import { useMailboxLiveSync } from "#/lib/gmail/use-gmail-live-sync";
+import type { ListMessagesPageResult, MailboxCategory } from "#/lib/mail";
 import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
 import { isMailboxScopeRepairRequiredError } from "#/lib/orpc-errors";
 

@@ -1,5 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 
+import { GMAIL_QUERY_STALE_TIME_MS } from "#/lib/mail";
 import { rpc } from "#/lib/orpc";
 import {
   isManagedSandboxMailboxId,
@@ -8,7 +9,6 @@ import {
 
 import { getManagedDemoMessageInspector } from "../managed-mail/demo-managed-mail";
 import { getDemoMessageInspector } from "./demo-mail";
-import { GMAIL_QUERY_STALE_TIME_MS } from "./gmail";
 
 const MESSAGE_INSPECTOR_QUERY_VERSION = 2;
 

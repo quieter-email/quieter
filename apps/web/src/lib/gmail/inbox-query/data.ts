@@ -3,12 +3,12 @@ import {
   applyLabelIdChanges,
   isMessageUnread,
   removeUnreadLabel,
-} from "../gmail";
+} from "#/lib/mail";
 import type {
   ListMessagesPageResult,
   MessageListItem,
   ThreadMessagesResult,
-} from "../gmail";
+} from "#/lib/mail";
 
 export type MessagesQueryData = {
   pages: ListMessagesPageResult[];

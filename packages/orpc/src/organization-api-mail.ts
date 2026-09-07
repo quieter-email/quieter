@@ -8,14 +8,14 @@ import {
   organizationApiMailMessage,
   organizationMailDeliveryRecipient,
 } from "@quieter/database/schema";
-import { MAILBOX_LABELS } from "@quieter/gmail";
+import { extractMailAddress } from "@quieter/mail/compose/schema";
+import { MAILBOX_LABELS } from "@quieter/mail/messages";
 import type {
   ListMessagesPageResult,
   MessageInspectorResult,
   MessageListItem,
   ThreadMessagesResult,
-} from "@quieter/gmail";
-import { extractMailAddress } from "@quieter/mail/compose/schema";
+} from "@quieter/mail/messages";
 import type { SendHeader } from "@quieter/mail/send";
 import { getSenderAvatarUrls } from "@quieter/mail/sender-avatar";
 import { and, asc, count, desc, eq, ilike, inArray, lt, or } from "drizzle-orm";

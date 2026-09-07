@@ -26,7 +26,7 @@ import type {
   GmailUsefulDetailKind,
   GmailUsefulDetailRelevanceSource,
 } from "@quieter/database/schema";
-import { MAILBOX_LABELS } from "@quieter/gmail";
+import { MAILBOX_LABELS } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
 import { and, asc, eq, gt, isNull, lte, or } from "drizzle-orm";
 

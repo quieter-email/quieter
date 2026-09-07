@@ -14,16 +14,16 @@ import type {
   ManagedMailHeader,
   ManagedMailMailboxState,
 } from "@quieter/database/schema";
-import { MAILBOX_LABELS } from "@quieter/gmail";
+import { parseDraftAnchorFromHeaderReader } from "@quieter/mail/compose/draft-anchor";
+import type { MailCommand, MailMutationTarget } from "@quieter/mail/data-plane";
+import { MAILBOX_LABELS } from "@quieter/mail/messages";
 import type {
   ListMessagesPageResult,
   MailboxCategory,
   MessageInspectorResult,
   MessageListItem,
   ThreadMessagesResult,
-} from "@quieter/gmail";
-import { parseDraftAnchorFromHeaderReader } from "@quieter/mail/compose/draft-anchor";
-import type { MailCommand, MailMutationTarget } from "@quieter/mail/data-plane";
+} from "@quieter/mail/messages";
 import { getSenderAvatarUrls } from "@quieter/mail/sender-avatar";
 import {
   and,

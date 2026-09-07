@@ -5,8 +5,8 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { shouldIgnoreAppShortcut } from "#/features/hotkeys/domain/hotkey-guards";
 import { toastError } from "#/lib/error-toast";
-import type { MailboxCategory } from "#/lib/gmail/gmail";
 import type { ThreadListEntry } from "#/lib/gmail/thread-list";
+import type { MailboxCategory } from "#/lib/mail";
 
 import type { ThreadPressGesture } from "./message-list-types";
 

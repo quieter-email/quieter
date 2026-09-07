@@ -1,20 +1,20 @@
 import {
-  GMAIL_UNREAD_LABEL,
-  isGmailMessageArchived,
+  MAIL_UNREAD_LABEL,
+  isMessageArchived,
   MAILBOX_LABELS,
-} from "@quieter/gmail";
-import type { MailboxCategory } from "@quieter/gmail";
+} from "@quieter/mail/messages";
+import type { MailboxCategory } from "@quieter/mail/messages";
 
 export {
   MAILBOX_LABELS,
-  type GmailLabelListItem,
+  type MailLabelListItem,
   type ListMessagesPageResult,
   type MailboxCategory,
   type MessageAttachment,
   type MessageInspectorResult,
   type MessageListItem,
   type ThreadMessagesResult,
-} from "@quieter/gmail";
+} from "@quieter/mail/messages";
 
 export const GMAIL_QUERY_STALE_TIME_MS = 1000 * 30;
 export const GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS = 1000 * 60;
@@ -41,13 +41,13 @@ export const removeUnreadLabel = (
   labelIds: string[] | undefined
 ): string[] | undefined =>
   normalizeLabelIds(
-    labelIds?.filter((labelId) => labelId !== GMAIL_UNREAD_LABEL)
+    labelIds?.filter((labelId) => labelId !== MAIL_UNREAD_LABEL)
   );
 
 export const addUnreadLabel = (
   labelIds: string[] | undefined
 ): string[] | undefined =>
-  normalizeLabelIds([...(labelIds ?? []), GMAIL_UNREAD_LABEL]);
+  normalizeLabelIds([...(labelIds ?? []), MAIL_UNREAD_LABEL]);
 
 export const applyLabelIdChanges = (
   labelIds: readonly string[] | undefined,
@@ -77,7 +77,7 @@ export const isMessageUnread = (message: {
   isUnread?: boolean;
   labelIds?: string[];
 }) =>
-  message.isUnread ?? message.labelIds?.includes(GMAIL_UNREAD_LABEL) === true;
+  message.isUnread ?? message.labelIds?.includes(MAIL_UNREAD_LABEL) === true;
 
 export const hasRenderableMessageBody = (message: {
   bodyHtml?: string | null;
@@ -92,7 +92,7 @@ export const isMessageInMailbox = (
 ) => {
   const { labelIds } = message;
   if (mailbox === "archive") {
-    return isGmailMessageArchived(labelIds);
+    return isMessageArchived(labelIds);
   }
   if (labelIds?.includes(MAILBOX_LABELS[mailbox]) !== true) {
     return false;

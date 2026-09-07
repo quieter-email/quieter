@@ -17,7 +17,7 @@ import { LayoutGroup } from "motion/react";
 import { SidebarNavItem } from "#/features/navigation/components/sidebar-nav-item";
 import { SidebarEntrance } from "#/features/navigation/components/sidebar-surfaces";
 import { useSidebarNavHover } from "#/features/navigation/hooks/use-sidebar-nav-hover";
-import type { MailboxCategory } from "#/lib/gmail/gmail";
+import type { MailboxCategory } from "#/lib/mail";
 
 const SIDEBAR_MAILBOX_ITEMS: readonly {
   id: MailboxCategory;

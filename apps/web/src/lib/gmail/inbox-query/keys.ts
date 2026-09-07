@@ -3,7 +3,7 @@ import {
   serializeStructuredSearchState,
 } from "@quieter/mail/search";
 
-import type { MailboxCategory } from "../gmail";
+import type { MailboxCategory } from "#/lib/mail";
 
 export const normalizeSearchQuery = (
   searchQuery: string | null | undefined

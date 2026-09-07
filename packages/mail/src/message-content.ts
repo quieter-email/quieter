@@ -1,28 +1,11 @@
-type GmailMessagePart = {
-  mimeType?: string;
-  filename?: string;
-  headers?: { name: string; value: string }[];
-  body?: {
-    attachmentId?: string;
-    size?: number;
-    data?: string;
-  };
-  parts?: GmailMessagePart[];
-};
+import type { MessagePart, MessageAttachment } from "./messages";
 
 type ExtractedMessageContent = {
   html?: string;
   text?: string;
 };
 
-type ExtractedMessageAttachment = {
-  attachmentId: string;
-  fileName: string;
-  mimeType: string;
-  size: number;
-};
-
-type ExtractedInlineMessageAttachment = ExtractedMessageAttachment & {
+type ExtractedInlineMessageAttachment = MessageAttachment & {
   contentId: string;
 };
 
@@ -32,7 +15,7 @@ const MOJIBAKE_TOKEN_REGEX =
   /\u00C3[\u0080-\u00BF]|\u00C2[\u0080-\u00BF]|\u00E2[\u0080-\u00BF]|\u00D0[\u0080-\u00BF]|\u00D1[\u0080-\u00BF]|\u00F0\u0178[\u0080-\u00BF]|\u00EF\u00BF\u00BD|\uFFFD/gu;
 
 const getHeader = (
-  part: GmailMessagePart | undefined,
+  part: MessagePart | undefined,
   headerName: string
 ): string | undefined =>
   part?.headers?.find(
@@ -238,10 +221,10 @@ export const decodeMimeHeaderValue = (value?: string): string | undefined => {
   return normalizedValue.length > 0 ? normalizedValue : undefined;
 };
 
-const getContentDisposition = (part: GmailMessagePart): string | undefined =>
+const getContentDisposition = (part: MessagePart): string | undefined =>
   getHeader(part, "Content-Disposition")?.toLowerCase();
 
-const isAttachmentPart = (part: GmailMessagePart): boolean => {
+const isAttachmentPart = (part: MessagePart): boolean => {
   const fileName = part.filename?.trim();
   if (fileName !== undefined && fileName.length > 0) {
     return true;
@@ -251,9 +234,7 @@ const isAttachmentPart = (part: GmailMessagePart): boolean => {
   return contentDisposition?.startsWith("attachment") === true;
 };
 
-const collectParts = (
-  part: GmailMessagePart | undefined
-): GmailMessagePart[] => {
+const collectParts = (part: MessagePart | undefined): MessagePart[] => {
   if (part === undefined) {
     return [];
   }
@@ -261,10 +242,7 @@ const collectParts = (
   return [part, ...nested];
 };
 
-const getAttachmentFileName = (
-  part: GmailMessagePart,
-  index: number
-): string => {
+const getAttachmentFileName = (part: MessagePart, index: number): string => {
   const decoded = decodeMimeHeaderValue(part.filename?.trim())?.trim();
   if (decoded !== undefined && decoded.length > 0) {
     return decoded;
@@ -273,10 +251,10 @@ const getAttachmentFileName = (
 };
 
 export const findRenderablePart = (
-  payload: GmailMessagePart | undefined,
+  payload: MessagePart | undefined,
   mimeType: "text/html" | "text/plain",
   options?: { requireInlineData?: boolean }
-): GmailMessagePart | undefined =>
+): MessagePart | undefined =>
   collectParts(payload).find(
     (part) =>
       normalizeMimeType(part.mimeType) === mimeType &&
@@ -288,11 +266,11 @@ export const findRenderablePart = (
   );
 
 const findRenderableInlinePart = (
-  payload: GmailMessagePart | undefined,
+  payload: MessagePart | undefined,
   mimeType: "text/html" | "text/plain"
 ) => findRenderablePart(payload, mimeType, { requireInlineData: true });
 
-export const decodePartBody = (part: GmailMessagePart): string | undefined => {
+export const decodePartBody = (part: MessagePart): string | undefined => {
   const data = part.body?.data;
   if (data === undefined || data.length === 0) {
     return undefined;
@@ -316,7 +294,7 @@ const normalizeContentId = (value?: string): string | undefined => {
 };
 
 const extractReferencedInlineContentIds = (
-  payload: GmailMessagePart | undefined
+  payload: MessagePart | undefined
 ): ReadonlySet<string> => {
   const htmlPart = findRenderableInlinePart(payload, "text/html");
   const html = htmlPart ? decodePartBody(htmlPart) : undefined;
@@ -336,7 +314,7 @@ const extractReferencedInlineContentIds = (
 };
 
 export const extractMessageContent = (
-  payload: GmailMessagePart | undefined
+  payload: MessagePart | undefined
 ): ExtractedMessageContent => {
   const htmlPart = findRenderableInlinePart(payload, "text/html");
   const textPart = findRenderableInlinePart(payload, "text/plain");
@@ -348,9 +326,9 @@ export const extractMessageContent = (
 };
 
 export const extractMessageAttachments = (
-  payload: GmailMessagePart | undefined
-): ExtractedMessageAttachment[] => {
-  const attachments: ExtractedMessageAttachment[] = [];
+  payload: MessagePart | undefined
+): MessageAttachment[] => {
+  const attachments: MessageAttachment[] = [];
   const seenAttachments = new Set<string>();
   const referencedInlineContentIds = extractReferencedInlineContentIds(payload);
 
@@ -392,7 +370,7 @@ export const extractMessageAttachments = (
 };
 
 export const extractInlineMessageAttachments = (
-  payload: GmailMessagePart | undefined
+  payload: MessagePart | undefined
 ): ExtractedInlineMessageAttachment[] => {
   const attachments: ExtractedInlineMessageAttachment[] = [];
   const seenAttachments = new Set<string>();
