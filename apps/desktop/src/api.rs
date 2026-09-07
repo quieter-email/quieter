@@ -5,9 +5,12 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use thiserror::Error;
+use url::{Host, Url};
 use uuid::Uuid;
 
-use crate::model::{MailCategory, MailboxList, ThreadCommand, ThreadDetail, ThreadList};
+use crate::model::{
+    MailCategory, MailboxLabel, MailboxList, ReplyContext, ThreadCommand, ThreadDetail, ThreadList,
+};
 
 const DESKTOP_CLIENT_ID: &str = "quieter-desktop";
 
@@ -32,8 +35,10 @@ pub enum ApiError {
     DeviceCodeExpired,
     #[error("Desktop authorization was declined.")]
     AccessDenied,
-    #[error("The server returned {status}: {message}")]
+    #[error("{message}")]
     Server { status: u16, message: String },
+    #[error("The server returned an invalid response. Please try again.")]
+    InvalidResponse,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -54,7 +59,6 @@ pub struct DeviceToken {
 #[derive(Serialize)]
 struct DeviceCodeRequest<'a> {
     client_id: &'a str,
-    scope: &'a str,
 }
 
 #[derive(Serialize)]
@@ -80,13 +84,37 @@ impl ApiClient {
                 "https://quieter.email".to_owned()
             }
         });
+        Self::from_base_url(&base_url, token)
+    }
+
+    pub fn from_base_url(base_url: &str, token: Option<String>) -> anyhow::Result<Self> {
+        let parsed = Url::parse(base_url)?;
+        let is_loopback = match parsed.host() {
+            Some(Host::Domain(host)) => host == "localhost",
+            Some(Host::Ipv4(address)) => address.is_loopback(),
+            Some(Host::Ipv6(address)) => address.is_loopback(),
+            None => false,
+        };
+        anyhow::ensure!(
+            parsed.scheme() == "https" || (parsed.scheme() == "http" && is_loopback),
+            "The server must use HTTPS, except for local development on loopback."
+        );
+        anyhow::ensure!(
+            parsed.username().is_empty()
+                && parsed.password().is_none()
+                && parsed.path() == "/"
+                && parsed.query().is_none()
+                && parsed.fragment().is_none(),
+            "The server URL must contain only a scheme, host, and optional port."
+        );
         let client = Client::builder()
             .connect_timeout(Duration::from_secs(10))
             .timeout(Duration::from_secs(30))
+            .redirect(reqwest::redirect::Policy::none())
             .user_agent(concat!("QuieterDesktop/", env!("CARGO_PKG_VERSION")))
             .build()?;
         Ok(Self {
-            base_url: base_url.trim_end_matches('/').to_owned(),
+            base_url: parsed.origin().ascii_serialization(),
             client,
             token,
         })
@@ -104,19 +132,51 @@ impl ApiClient {
         &self.base_url
     }
 
+    pub fn workspace_url(&self, view: &str, mailbox_id: Option<&str>) -> Url {
+        let mut url = Url::parse(&self.base_url).expect("validated server origin");
+        url.query_pairs_mut().append_pair("view", view);
+        if let Some(mailbox_id) = mailbox_id {
+            url.query_pairs_mut().append_pair("mailboxId", mailbox_id);
+        }
+        url
+    }
+
     pub fn request_device_code(&self) -> Result<DeviceCode, ApiError> {
-        self.decode(
+        let code: DeviceCode = self.decode(
             self.client
                 .post(format!("{}/api/auth/device/code", self.base_url))
                 .json(&DeviceCodeRequest {
                     client_id: DESKTOP_CLIENT_ID,
-                    scope: "mailbox.read mailbox.write",
                 }),
-        )
+        )?;
+        for verification_uri in [&code.verification_uri, &code.verification_uri_complete] {
+            let url = Url::parse(verification_uri).map_err(|_| ApiError::InvalidResponse)?;
+            if url.origin().ascii_serialization() != self.base_url
+                || !url.username().is_empty()
+                || url.password().is_some()
+                || url.path() != "/device"
+                || url.fragment().is_some()
+            {
+                return Err(ApiError::InvalidResponse);
+            }
+        }
+        let complete =
+            Url::parse(&code.verification_uri_complete).map_err(|_| ApiError::InvalidResponse)?;
+        if code.device_code.is_empty()
+            || code.user_code.is_empty()
+            || code.expires_in == 0
+            || code.expires_in > 86_400
+            || !complete
+                .query_pairs()
+                .any(|(key, value)| key == "user_code" && value == code.user_code)
+        {
+            return Err(ApiError::InvalidResponse);
+        }
+        Ok(code)
     }
 
     pub fn poll_device_token(&self, device_code: &str) -> Result<DeviceToken, ApiError> {
-        self.decode(
+        let token: DeviceToken = self.decode(
             self.client
                 .post(format!("{}/api/auth/device/token", self.base_url))
                 .json(&DeviceTokenRequest {
@@ -124,7 +184,11 @@ impl ApiClient {
                     device_code,
                     grant_type: "urn:ietf:params:oauth:grant-type:device_code",
                 }),
-        )
+        )?;
+        if token.access_token.trim().is_empty() {
+            return Err(ApiError::InvalidResponse);
+        }
+        Ok(token)
     }
 
     pub fn list_mailboxes(&self) -> Result<MailboxList, ApiError> {
@@ -141,6 +205,7 @@ impl ApiClient {
         mailbox_id: &str,
         category: MailCategory,
         query: Option<&str>,
+        page_token: Option<&str>,
     ) -> Result<ThreadList, ApiError> {
         let mut parameters = vec![
             ("mailboxId", mailbox_id),
@@ -149,12 +214,25 @@ impl ApiClient {
         if let Some(query) = query.filter(|query| !query.is_empty()) {
             parameters.push(("query", query));
         }
+        if let Some(page_token) = page_token {
+            parameters.push(("pageToken", page_token));
+        }
         self.decode(
             self.authorize(
                 self.client
                     .get(format!("{}/api/desktop/mail/listThreads", self.base_url))
                     .query(&parameters),
             ),
+        )
+    }
+
+    pub fn list_labels(&self, mailbox_id: &str) -> Result<Vec<MailboxLabel>, ApiError> {
+        self.decode(
+            self.authorize(
+                self.client
+                    .get(format!("{}/api/desktop/mail/listLabels", self.base_url)),
+            )
+            .query(&[("mailboxId", mailbox_id)]),
         )
     }
 
@@ -184,8 +262,13 @@ impl ApiClient {
                 }),
             ),
             ThreadCommand::MoveToInbox => (
-                "untrashThread",
-                json!({ "mailboxId": mailbox_id, "threadId": thread_id }),
+                "updateThreadLabels",
+                json!({
+                    "mailboxId": mailbox_id,
+                    "threadId": thread_id,
+                    "addLabelIds": ["INBOX"],
+                    "removeLabelIds": ["SPAM", "TRASH"],
+                }),
             ),
             ThreadCommand::MarkRead => (
                 "markThreadAsRead",
@@ -225,6 +308,7 @@ impl ApiClient {
         to: &str,
         subject: &str,
         body_text: &str,
+        reply_context: Option<&ReplyContext>,
     ) -> Result<serde_json::Value, ApiError> {
         let updated_at = chrono::Utc::now().timestamp_millis();
         self.decode(
@@ -241,7 +325,7 @@ impl ApiClient {
                     "inlineImages": [],
                     "localId": Uuid::new_v4().to_string(),
                     "recipients": { "bcc": "", "cc": "", "to": to },
-                    "replyContext": null,
+                    "replyContext": reply_context,
                     "saveStatus": "idle",
                     "subject": subject,
                     "updatedAt": updated_at,
@@ -255,7 +339,8 @@ impl ApiClient {
             self.authorize(
                 self.client
                     .post(format!("{}/api/auth/sign-out", self.base_url)),
-            ),
+            )
+            .json(&json!({})),
         )
     }
 
@@ -284,18 +369,320 @@ impl ApiClient {
                 Some("access_denied") => return Err(ApiError::AccessDenied),
                 _ => {}
             }
-            let message = error
-                .and_then(|value| value.error_description.or(value.message).or(value.error))
-                .unwrap_or_else(|| "Request failed".to_owned());
+            let message = if status.is_client_error() {
+                error.and_then(|value| value.error_description.or(value.message).or(value.error))
+            } else {
+                None
+            }
+            .unwrap_or_else(|| "Something went wrong. Please try again.".to_owned());
             return Err(ApiError::Server {
                 status: status.as_u16(),
                 message,
             });
         }
 
-        serde_json::from_str(&body).map_err(|error| ApiError::Server {
-            status: status.as_u16(),
-            message: format!("The response could not be read: {error}"),
-        })
+        serde_json::from_str(&body).map_err(|_| ApiError::InvalidResponse)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::sync::mpsc;
+    use std::thread;
+
+    use super::*;
+
+    struct MockServer {
+        base_url: String,
+        request: mpsc::Receiver<String>,
+    }
+
+    impl MockServer {
+        fn start(status: u16, body: impl FnOnce(&str) -> String + Send + 'static) -> Self {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let base_url = format!("http://{}", listener.local_addr().unwrap());
+            let response_body = body(&base_url);
+            let (sender, request) = mpsc::channel();
+            thread::spawn(move || {
+                let (mut stream, _) = listener.accept().unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                let mut bytes = Vec::new();
+                let mut buffer = [0; 4096];
+                loop {
+                    let read = stream.read(&mut buffer).unwrap();
+                    if read == 0 {
+                        break;
+                    }
+                    bytes.extend_from_slice(&buffer[..read]);
+                    if let Some(boundary) = bytes.windows(4).position(|part| part == b"\r\n\r\n") {
+                        let headers = String::from_utf8_lossy(&bytes[..boundary]);
+                        let length = headers
+                            .lines()
+                            .filter_map(|line| line.split_once(':'))
+                            .find(|(name, _)| name.eq_ignore_ascii_case("content-length"))
+                            .map(|(_, value)| value.trim().parse::<usize>().unwrap())
+                            .unwrap_or(0);
+                        if bytes.len() >= boundary + 4 + length {
+                            break;
+                        }
+                    }
+                }
+                sender.send(String::from_utf8(bytes).unwrap()).unwrap();
+                write!(stream, "HTTP/1.1 {status} Test\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response_body}", response_body.len()).unwrap();
+            });
+            Self { base_url, request }
+        }
+    }
+
+    #[test]
+    fn browser_workspace_links_preserve_origin_and_encode_mailbox_scope() {
+        for origin in ["http://localhost:3000", "https://quieter.email"] {
+            let api = ApiClient::from_base_url(origin, Some("private-token".into())).unwrap();
+            let url = api.workspace_url("chat", Some("mailbox/a & b"));
+            assert_eq!(url.origin().ascii_serialization(), origin);
+            assert_eq!(url.path(), "/");
+            assert_eq!(
+                url.query_pairs().collect::<Vec<_>>(),
+                [
+                    ("view".into(), "chat".into()),
+                    ("mailboxId".into(), "mailbox/a & b".into())
+                ]
+            );
+            assert!(!url.as_str().contains("private-token"));
+            assert_eq!(api.workspace_url("inbox", None).query(), Some("view=inbox"));
+        }
+    }
+
+    #[test]
+    fn server_configuration_keeps_credentials_on_secure_origins() {
+        for accepted in [
+            "https://quieter.email",
+            "https://QUIETER.EMAIL:443/",
+            "http://localhost:3000",
+            "http://127.0.0.1:4000",
+            "http://[::1]:3000",
+        ] {
+            assert!(
+                ApiClient::from_base_url(accepted, None).is_ok(),
+                "{accepted}"
+            );
+        }
+        for rejected in [
+            "http://quieter.email",
+            "http://192.168.1.5:3000",
+            "https://user:password@quieter.email",
+            "https://quieter.email/api",
+            "https://quieter.email?token=secret",
+            "https://quieter.email/#fragment",
+            "file:///tmp/quieter",
+            "http://localhost.attacker.test",
+        ] {
+            assert!(
+                ApiClient::from_base_url(rejected, None).is_err(),
+                "{rejected}"
+            );
+        }
+        assert_eq!(
+            ApiClient::from_base_url("https://QUIETER.EMAIL:443/", None)
+                .unwrap()
+                .base_url(),
+            "https://quieter.email"
+        );
+        assert_ne!(
+            ApiClient::from_base_url("http://localhost:3000", None)
+                .unwrap()
+                .base_url(),
+            ApiClient::from_base_url("https://quieter.email", None)
+                .unwrap()
+                .base_url()
+        );
+    }
+
+    #[test]
+    fn device_code_only_opens_the_configured_server_and_matching_code() {
+        for (verification, accepted) in [
+            ("same", true),
+            ("https://attacker.test/device", false),
+            ("file:///C:/Windows/System32/calc.exe", false),
+        ] {
+            let server = MockServer::start(200, move |base| {
+                let verification = if verification == "same" {
+                    format!("{base}/device")
+                } else {
+                    verification.to_owned()
+                };
+                json!({ "device_code": "secret-device-code", "user_code": "TEST-CODE", "verification_uri": verification, "verification_uri_complete": format!("{verification}?user_code=TEST-CODE"), "expires_in": 300, "interval": 5 }).to_string()
+            });
+            let api = ApiClient::from_base_url(&server.base_url, None).unwrap();
+            assert_eq!(api.request_device_code().is_ok(), accepted);
+            let request = server.request.recv_timeout(Duration::from_secs(5)).unwrap();
+            assert!(request.starts_with("POST /api/auth/device/code "));
+            assert!(!request.to_lowercase().contains("authorization:"));
+        }
+    }
+
+    #[test]
+    fn device_polling_decodes_protocol_states() {
+        for (code, expected) in [
+            ("authorization_pending", "pending"),
+            ("slow_down", "slow"),
+            ("expired_token", "expired"),
+            ("access_denied", "denied"),
+        ] {
+            let server = MockServer::start(400, move |_| {
+                json!({ "error": code, "error_description": "Device authorization state" })
+                    .to_string()
+            });
+            let api = ApiClient::from_base_url(&server.base_url, None).unwrap();
+            let state = match api.poll_device_token("device-secret") {
+                Err(ApiError::AuthorizationPending) => "pending",
+                Err(ApiError::SlowDown) => "slow",
+                Err(ApiError::DeviceCodeExpired) => "expired",
+                Err(ApiError::AccessDenied) => "denied",
+                _ => panic!("Unexpected device state"),
+            };
+            assert_eq!(state, expected);
+        }
+    }
+
+    #[test]
+    fn mailbox_requests_preserve_scoping_and_search_encoding() {
+        let server = MockServer::start(200, |_| {
+            json!({"messages": [], "nextPageToken": "page-2", "resultSizeEstimate": 72}).to_string()
+        });
+        let api =
+            ApiClient::from_base_url(&server.base_url, Some("test-token".to_owned())).unwrap();
+        let page = api
+            .list_threads(
+                "mailbox/a?b",
+                MailCategory::Inbox,
+                Some("from:maya@example.com subject:quarter & plan"),
+                Some("cursor/next+=page"),
+            )
+            .unwrap();
+        assert_eq!(page.next_page_token.as_deref(), Some("page-2"));
+        let request = server.request.recv_timeout(Duration::from_secs(5)).unwrap();
+        let path = request
+            .lines()
+            .next()
+            .unwrap()
+            .split_whitespace()
+            .nth(1)
+            .unwrap();
+        let url = Url::parse(&format!("{}{path}", server.base_url)).unwrap();
+        let parameters = url
+            .query_pairs()
+            .collect::<std::collections::HashMap<_, _>>();
+        assert_eq!(parameters["mailboxId"], "mailbox/a?b");
+        assert_eq!(parameters["pageToken"], "cursor/next+=page");
+        assert_eq!(
+            parameters["query"],
+            "from:maya@example.com subject:quarter & plan"
+        );
+        assert!(
+            request
+                .to_lowercase()
+                .contains("authorization: bearer test-token")
+        );
+    }
+
+    #[test]
+    fn moving_to_inbox_changes_labels_instead_of_only_untrashing() {
+        let server = MockServer::start(200, |_| "{}".to_owned());
+        let api =
+            ApiClient::from_base_url(&server.base_url, Some("test-token".to_owned())).unwrap();
+        api.thread_action(ThreadCommand::MoveToInbox, "mailbox-a", "thread-b")
+            .unwrap();
+        let request = server.request.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(request.starts_with("POST /api/desktop/mail/updateThreadLabels "));
+        let body: serde_json::Value =
+            serde_json::from_str(request.split_once("\r\n\r\n").unwrap().1).unwrap();
+        assert_eq!(body["mailboxId"], "mailbox-a");
+        assert_eq!(body["addLabelIds"], json!(["INBOX"]));
+        assert_eq!(body["removeLabelIds"], json!(["SPAM", "TRASH"]));
+    }
+
+    #[test]
+    fn sign_out_sends_json_to_revoke_the_bearer_session() {
+        let server = MockServer::start(200, |_| "{\"success\":true}".to_owned());
+        let api =
+            ApiClient::from_base_url(&server.base_url, Some("test-token".to_owned())).unwrap();
+        api.sign_out().unwrap();
+        let request = server.request.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(request.starts_with("POST /api/auth/sign-out "));
+        assert!(
+            request
+                .to_lowercase()
+                .contains("content-type: application/json")
+        );
+        assert!(
+            request
+                .to_lowercase()
+                .contains("authorization: bearer test-token")
+        );
+        assert!(!request.to_lowercase().contains("origin:"));
+        assert_eq!(request.split_once("\r\n\r\n").unwrap().1, "{}");
+    }
+
+    #[test]
+    fn replies_retain_thread_and_message_headers() {
+        let server = MockServer::start(200, |_| "{}".to_owned());
+        let api =
+            ApiClient::from_base_url(&server.base_url, Some("test-token".to_owned())).unwrap();
+        let context = ReplyContext {
+            thread_id: "thread-b".to_owned(),
+            message_header_id: Some("<message@example.com>".to_owned()),
+            references: vec!["<prior@example.com>".to_owned()],
+        };
+        api.send_message(
+            "mailbox-a",
+            "Maya <maya@example.com>",
+            "Re: Review",
+            "Looks good.",
+            Some(&context),
+        )
+        .unwrap();
+        let request = server.request.recv_timeout(Duration::from_secs(5)).unwrap();
+        let body: serde_json::Value =
+            serde_json::from_str(request.split_once("\r\n\r\n").unwrap().1).unwrap();
+        assert_eq!(body["message"]["replyContext"]["threadId"], "thread-b");
+        assert_eq!(
+            body["message"]["replyContext"]["messageHeaderId"],
+            "<message@example.com>"
+        );
+        assert_eq!(
+            body["message"]["replyContext"]["references"],
+            json!(["<prior@example.com>"])
+        );
+        assert!(
+            serde_json::to_value(ReplyContext {
+                message_header_id: None,
+                ..context
+            })
+            .unwrap()
+            .get("messageHeaderId")
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn server_errors_hide_unexpected_details_but_preserve_validation_messages() {
+        for (status, expected) in [
+            (422, "Add at least one recipient in To."),
+            (500, "Something went wrong. Please try again."),
+        ] {
+            let server = MockServer::start(status, |_| {
+                json!({ "message": "Add at least one recipient in To." }).to_string()
+            });
+            let api = ApiClient::from_base_url(&server.base_url, None).unwrap();
+            assert_eq!(api.list_mailboxes().unwrap_err().to_string(), expected);
+        }
+        let server = MockServer::start(401, |_| "{}".to_owned());
+        let api = ApiClient::from_base_url(&server.base_url, None).unwrap();
+        assert!(matches!(api.list_mailboxes(), Err(ApiError::Unauthorized)));
     }
 }

@@ -1,10 +1,10 @@
-mod api;
 mod app;
 mod assets;
-mod auth;
 mod dither;
-mod model;
+mod motion;
 mod theme;
+
+use quieter_desktop::{api, auth, model};
 
 use std::borrow::Cow;
 
@@ -41,6 +41,7 @@ fn main() {
                     ..WindowOptions::default()
                 },
                 |window, cx| {
+                    window.set_window_title("Quieter");
                     let desktop = cx.new(|cx| QuieterDesktop::new(window, cx));
                     cx.new(|cx| Root::new(desktop, window, cx))
                 },

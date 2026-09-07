@@ -6,6 +6,7 @@
     "./deployment-health": "./src/deployment-health.ts",
     ".": "./src/client.ts",
     "./context": "./src/context.ts",
+    "./desktop-router": "./src/desktop-router.ts",
     "./abuse-protection": "./src/abuse-protection.ts",
     "./errors": "./src/errors.ts",
     "./mailbox": "./src/mailbox/service.ts",

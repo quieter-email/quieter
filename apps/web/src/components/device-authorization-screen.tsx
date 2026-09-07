@@ -3,56 +3,46 @@
 import { Button } from "@quieter/ui/button";
 import { useMutation } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
-import { useState } from "react";
 
 import { AuthVisual } from "#/components/auth-visual";
 import { authClient } from "#/lib/auth";
+import { toastError } from "#/lib/error-toast";
 
 const deviceRouteApi = getRouteApi("/device");
 
-type Decision = "approved" | "denied" | null;
+type Decision = "approved" | "denied";
 
 export const DeviceAuthorizationScreen = () => {
   const { user_code: userCode } = deviceRouteApi.useSearch();
-  const [decision, setDecision] = useState<Decision>(null);
-
-  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- Device authorization has no query-backed browser state.
-  const approval = useMutation({
-    mutationFn: async () => {
-      if (!userCode) {
+  // oxlint-disable-next-line react-doctor/query-mutation-missing-invalidation -- Device authorization only changes the local approval result, not cached browser data.
+  const authorization = useMutation({
+    mutationFn: async (decision: Decision) => {
+      if (userCode === undefined) {
         throw new Error("This device code is missing.");
       }
-      const response = await authClient.device.approve({ userCode });
+      const response = await (decision === "approved"
+        ? authClient.device.approve({ userCode })
+        : authClient.device.deny({ userCode }));
       if (response.error) {
-        throw new Error(
-          response.error.error_description ??
-            "This device could not be authorized."
+        throw Object.assign(
+          new Error(
+            response.error.error_description ??
+              "This authorization request could not be completed."
+          ),
+          { status: response.error.status }
         );
       }
+      return decision;
     },
-    mutationKey: ["auth", "device", "approve", userCode],
-    onSuccess: () => setDecision("approved"),
-  });
-  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- Device authorization has no query-backed browser state.
-  const denial = useMutation({
-    mutationFn: async () => {
-      if (!userCode) {
-        throw new Error("This device code is missing.");
-      }
-      const response = await authClient.device.deny({ userCode });
-      if (response.error) {
-        throw new Error(
-          response.error.error_description ??
-            "This request could not be declined."
-        );
-      }
+    mutationKey: ["auth", "device", "decision", userCode],
+    onError: (error) => {
+      toastError(error, { boundary: "device-authorization" });
     },
-    mutationKey: ["auth", "device", "deny", userCode],
-    onSuccess: () => setDecision("denied"),
   });
 
-  const error = approval.error ?? denial.error;
-  const pending = approval.isPending || denial.isPending;
+  const decision = authorization.data ?? null;
+  const { error } = authorization;
+  const pending = authorization.isPending;
 
   return (
     <div className="grid h-dvh max-h-dvh w-full overflow-hidden md:grid-cols-2">
@@ -68,7 +58,8 @@ export const DeviceAuthorizationScreen = () => {
               </h1>
               <p className="mt-2 text-body text-muted-fg">
                 Confirm that this code matches the one shown in the desktop app.
-                The app will be able to read and manage mail for your account.
+                This signs the desktop app into your Quieter account, including
+                access to read, send, and manage mail.
               </p>
 
               <div className="mt-8 rounded-xl border border-border bg-bg-raised px-5 py-6 text-center shadow-sm">
@@ -80,11 +71,11 @@ export const DeviceAuthorizationScreen = () => {
                 </p>
               </div>
 
-              {userCode ? null : (
+              {userCode === undefined ? (
                 <p className="mt-4 text-body text-destructive">
                   Open this page from Quieter desktop to get a valid code.
                 </p>
-              )}
+              ) : null}
               {error ? (
                 <output
                   aria-live="assertive"
@@ -97,20 +88,24 @@ export const DeviceAuthorizationScreen = () => {
               <div className="mt-8 flex gap-3">
                 <Button
                   className="flex-1 justify-center"
-                  disabled={pending || !userCode}
-                  onClick={() => approval.mutate()}
+                  disabled={pending || userCode === undefined}
+                  onClick={() => {
+                    authorization.mutate("approved");
+                  }}
                   type="button"
                 >
-                  {approval.isPending ? "Authorizing…" : "Authorize"}
+                  {pending ? "Working…" : "Authorize"}
                 </Button>
                 <Button
                   className="flex-1 justify-center"
-                  disabled={pending || !userCode}
-                  onClick={() => denial.mutate()}
+                  disabled={pending || userCode === undefined}
+                  onClick={() => {
+                    authorization.mutate("denied");
+                  }}
                   type="button"
                   variant="outline"
                 >
-                  {denial.isPending ? "Declining…" : "Decline"}
+                  {pending ? "Working…" : "Decline"}
                 </Button>
               </div>
               <p className="mt-5 text-caption text-muted-fg">

@@ -1,10 +1,19 @@
 import { createHash } from "node:crypto";
 
 import { db } from "@quieter/database/client";
-import { mailbox, mailDomain, member, user } from "@quieter/database/schema";
+import {
+  mailbox,
+  mailDomain,
+  managedMailLabel,
+  managedMailMessage,
+  managedMailMessageLabel,
+  member,
+  user,
+} from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 
+import { createLocalFixtureCorpus } from "./local-fixture-corpus";
 import { getLocalMailStorage, LOCAL_MAIL_BUCKET } from "./local-storage";
 import { recordInboundManagedMessage } from "./messages/ingestion";
 
@@ -118,7 +127,86 @@ export const seedLocalManagedMail = async (ownerEmail: string) => {
     receivedAt: now,
     recipients: [address],
   });
+
+  const labels = await db
+    .insert(managedMailLabel)
+    .values(
+      [
+        { color: "green", name: "Finance" },
+        { color: "blue", name: "Product" },
+        { color: "purple", name: "Clients" },
+      ].map((label, position) => ({
+        ...label,
+        createdAt: now,
+        createdByUserId: owner.userId,
+        id: `local-label-${suffix}-${label.name.toLowerCase()}`,
+        mailboxId,
+        normalizedName: label.name.toLowerCase(),
+        position,
+        updatedAt: now,
+      }))
+    )
+    .onConflictDoUpdate({
+      set: { updatedAt: now },
+      target: [managedMailLabel.mailboxId, managedMailLabel.normalizedName],
+    })
+    .returning({ id: managedMailLabel.id, name: managedMailLabel.name });
+
+  const corpus = createLocalFixtureCorpus(address, suffix);
+  /* oxlint-disable eslint/no-await-in-loop -- Reply references must follow their parents; sequential ingestion also limits shared development database concurrency. */
+  for (const fixture of corpus) {
+    await storage.put(fixture.key, fixture.raw);
+    await recordInboundManagedMessage({
+      providerMessageId: fixture.providerMessageId,
+      rawMessage: fixture.raw,
+      rawObjectBucket: LOCAL_MAIL_BUCKET,
+      rawObjectKey: fixture.key,
+      rawObjectProvider: "r2",
+      rawSizeBytes: fixture.raw.byteLength,
+      receivedAt: fixture.receivedAt,
+      recipients: [address],
+    });
+    const [message] = await db
+      .update(managedMailMessage)
+      .set({ isRead: fixture.isRead, mailboxState: "active", updatedAt: now })
+      .where(
+        and(
+          eq(managedMailMessage.mailboxId, mailboxId),
+          eq(managedMailMessage.providerMessageId, fixture.providerMessageId)
+        )
+      )
+      .returning({ id: managedMailMessage.id });
+    const label = labels.find((candidate) => candidate.name === fixture.label);
+    if (label !== undefined) {
+      await db
+        .insert(managedMailMessageLabel)
+        .values({
+          assignedByUserId: owner.userId,
+          createdAt: now,
+          id: `${fixture.providerMessageId}-${label.id}`,
+          labelId: label.id,
+          mailboxId,
+          messageId: message.id,
+          source: "manual",
+        })
+        .onConflictDoNothing({
+          target: [
+            managedMailMessageLabel.messageId,
+            managedMailMessageLabel.labelId,
+          ],
+        });
+    }
+  }
+  /* oxlint-enable eslint/no-await-in-loop */
+  await db
+    .update(mailbox)
+    .set({
+      contentRevision: sql`${mailbox.contentRevision} + 1`,
+      updatedAt: now,
+    })
+    .where(eq(mailbox.id, mailboxId));
   return {
+    fixtureMessageCount: corpus.length + 1,
     mailboxId,
     storage: "local",
     url: `http://localhost:3000/?mailboxId=${mailboxId}&mailbox=inbox&query=&view=inbox`,

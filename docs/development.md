@@ -161,7 +161,9 @@ For a mailbox in the running app, sign in locally, then run:
 vp run dev:fixtures your-local-login@example.com
 ```
 
-The command creates a private fixture mailbox in `quieter_dev` and prints its localhost URL. Its reserved `.test` address has no DNS records and cannot receive Internet mail. The background Worker writes the original MIME message to Wrangler's native R2 simulation. Both local runtimes share `.wrangler/state`, so attachments remain available after a restart. No remote bucket or R2 credential is required. Running the command again restores the raw fixture without duplicating the message. If you erase local storage, run it again.
+The command creates a private fixture mailbox in the configured development database and prints its localhost URL. Its reserved `.test` address has no DNS records and cannot receive Internet mail. It includes 13 messages, a three-message conversation, read and unread states, three labels, and real text and CSV attachments. The sender names and subjects match the web demo, with `.test` addresses. Both the web app and desktop client read these same server records, so the mailbox can be used for visual comparisons and API verification.
+
+The background Worker writes the original MIME messages to Wrangler's native R2 simulation. Both local runtimes share `.wrangler/state`, so attachments remain available after a restart. No remote bucket or R2 credential is required. Running the command again restores the corpus's read/inbox states and raw files without duplicating messages. It does not reset other messages or mailboxes. If you erase local storage, run it again.
 
 The fixture endpoint requires the local Worker bearer token and rejects browser origins. Raw-message reads and deletes locally accept only the fixture storage namespace and `fixtures/` keys; copied production object references cannot reach remote storage.
 
@@ -208,6 +210,12 @@ CI runs destructive migration integration tests only against a dedicated tempora
 Read [Database safety](database-safety.md) before changing migration tooling.
 
 ## Testing and Quality
+
+On a fresh checkout, install the SST provider packages and generated platform types before type checking. This is the same preparation used in CI and does not deploy resources or load linked secrets:
+
+```bash
+vp exec sst install --stage ci
+```
 
 Run the full verification suite:
 
