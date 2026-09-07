@@ -17,6 +17,7 @@ const sessionAuth = betterAuth({
     provider: "pg",
     schema: tables,
   }),
+  secret: serverEnv.BETTER_AUTH_SECRET,
   user: {
     additionalFields: {
       onboardingCompletedAt: {

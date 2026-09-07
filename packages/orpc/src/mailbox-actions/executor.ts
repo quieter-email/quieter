@@ -204,57 +204,51 @@ const createConnectorStepTools = (
   // one step cannot collide on the same idempotency key.
   let nextWriteCallIndex = 0;
   return Object.fromEntries(
-    tools.map((connectorTool) => {
-      // MCP-authored schemas pass through verbatim; the provider validates
-      // the call against them.
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-      const inputSchema = connectorTool.inputSchema as Parameters<
-        typeof jsonSchema<Record<string, unknown>>
-      >[0];
-      return [
-        connectorTool.name,
-        tool({
-          description: connectorTool.description ?? connectorTool.name,
-          execute: async (args) => {
-            const call: ConnectorAgentToolCall = {
-              arguments: toolArgumentsSchema.parse(args ?? {}),
-              toolName: connectorTool.name,
-            };
+    tools.map((connectorTool) => [
+      connectorTool.name,
+      tool({
+        description: connectorTool.description ?? connectorTool.name,
+        execute: async (args) => {
+          const call: ConnectorAgentToolCall = {
+            arguments: toolArgumentsSchema.parse(args ?? {}),
+            toolName: connectorTool.name,
+          };
 
-            if (!connectorTool.mutates) {
-              const [result] = await runConnectorAgentReadCalls({
-                calls: [call],
-                credentialId: identity.credentialId,
-                provider: identity.provider,
-                signal: identity.signal,
-                userId: identity.userId,
-              });
-              return (
-                result ?? { error: "Tool returned nothing.", status: "error" }
-              );
-            }
-
-            if (nextWriteCallIndex >= CONNECTOR_AGENT_MAX_WRITE_CALLS) {
-              return {
-                error: `This step has already made ${CONNECTOR_AGENT_MAX_WRITE_CALLS} changes, which is the limit. Finish without further changes.`,
-                status: "error",
-              };
-            }
-            const callIndex = nextWriteCallIndex;
-            nextWriteCallIndex += 1;
-
-            const result = await runConnectorWriteCall({
-              ...identity,
-              call,
-              callIndex,
+          if (!connectorTool.mutates) {
+            const [result] = await runConnectorAgentReadCalls({
+              calls: [call],
+              credentialId: identity.credentialId,
+              provider: identity.provider,
+              signal: identity.signal,
+              userId: identity.userId,
             });
-            effects[callIndex] = result;
-            return result;
-          },
-          inputSchema: jsonSchema<Record<string, unknown>>(inputSchema),
-        }),
-      ];
-    })
+            return (
+              result ?? { error: "Tool returned nothing.", status: "error" }
+            );
+          }
+
+          if (nextWriteCallIndex >= CONNECTOR_AGENT_MAX_WRITE_CALLS) {
+            return {
+              error: `This step has already made ${CONNECTOR_AGENT_MAX_WRITE_CALLS} changes, which is the limit. Finish without further changes.`,
+              status: "error",
+            };
+          }
+          const callIndex = nextWriteCallIndex;
+          nextWriteCallIndex += 1;
+
+          const result = await runConnectorWriteCall({
+            ...identity,
+            call,
+            callIndex,
+          });
+          effects[callIndex] = result;
+          return result;
+        },
+        inputSchema: jsonSchema<Record<string, unknown>>(
+          connectorTool.inputSchema
+        ),
+      }),
+    ])
   );
 };
 

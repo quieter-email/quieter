@@ -266,6 +266,7 @@ export const auth = betterAuth({
     // Must be last so Set-Cookie from other plugins is forwarded on TanStack Start.
     tanstackStartCookies(),
   ] as const,
+  secret: serverEnv.BETTER_AUTH_SECRET,
   socialProviders: {
     google: {
       clientId: serverEnv.GOOGLE_AUTH_CLIENT_ID ?? "",

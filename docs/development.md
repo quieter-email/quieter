@@ -16,6 +16,8 @@ See [Development integration plan](development-integrations.md) for the accepted
 
 ## Install
 
+Dependency installation checks peers strictly and does not auto-install optional integration trees. Declare required peers in the consuming workspace. The Vite peer-version exception maps the pinned Vite+ core alias; update it with Vite+. Run `vp pm audit` when updating dependencies, and upgrade related authentication or Cloudflare packages together.
+
 ```bash
 git clone https://github.com/quieter-email/quieter.git
 cd quieter

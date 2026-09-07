@@ -1,5 +1,6 @@
 import { googleCalendarCreateEventInputSchema } from "@quieter/ai/chat-agent";
 import type { ConnectorProvider } from "@quieter/database/schema";
+import type { JSONSchema7 } from "ai";
 import { z } from "zod";
 
 import {
@@ -13,12 +14,7 @@ import { createGoogleCalendarEventForCredential } from "./runtime";
  * A JSON Schema object describing a connector tool's input. MCP servers author
  * these schemas, so they arrive untyped.
  */
-export type ToolInputJsonSchema = {
-  properties?: Record<string, unknown>;
-  required?: string[];
-  type: "object";
-  [key: string]: unknown;
-};
+export type ToolInputJsonSchema = JSONSchema7 & { type: "object" };
 
 /**
  * One tool a connector exposes to a mailbox action. `mutates` decides whether
