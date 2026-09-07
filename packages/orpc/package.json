@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./managed-mail/rule-backfills": "./src/managed-mail/rules/backfill.ts",
     "./mail-send": "./src/mail-send.ts",
     "./managed-mail/storage": "./src/managed-mail/messages/raw-object-lifecycle.ts",
     "./deployment-health": "./src/deployment-health.ts",

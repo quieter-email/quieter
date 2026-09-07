@@ -170,6 +170,12 @@ For private production testing, a 100% subscription discount must cover every in
 
 ## Infrastructure Ownership
 
+Managed mail rules store the matching decision, definition, and completed actions before forwarding. Forwarding uses the send coordinator outside the rule transaction, with a stable identity per action. Ingestion retries resume the stored definition even after a rule edit; explicitly applying an edited rule to existing messages creates a new revision. Historical attempts with uncertain delivery require review.
+
+Historical rule runs advance through the existing per-minute dispatcher, independently of status polling. Each job stores its definition and checks its lease and running status before updating progress. Cancellation prevents further messages and progress writes; an already executing message can finish. A failure retains the cursor and diagnostic. Running the same rule revision again resumes the failed job. Local execution uses `vp run dev:trigger mail-recovery`.
+
+Apply the additive rule migrations `20260907172554_thankful_alex_power` and `20260907211509_abnormal_amphibian` before releasing these changes. Drain older ingestion and rule workers before enabling the new execution path because they do not understand the stored action decisions. Keep the historical application table during this transition.
+
 SST provisions both providers. AWS owns the SES receipt bucket, receipt topic and role, and mail-processing functions. Cloudflare owns Gmail notification ingress, queueing, scheduled maintenance, and live-sync Durable Objects.
 
 Cloudflare Workers hosts the web application. SST builds and publishes production and binds deployment outputs directly.

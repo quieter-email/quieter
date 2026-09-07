@@ -1908,6 +1908,12 @@ const ManagedRuleBackfill = (props: MailboxOrganizerContentProps) => {
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="font-medium">Historical rule run</p>
+          {backfillData.status === "failed" && (
+            <p className="text-caption text-muted-fg">
+              Processing stopped before the failed message. Run this rule again
+              to retry.
+            </p>
+          )}
           <p className="text-caption text-muted-fg">
             {backfillData.processedCount} processed {backfillData.matchedCount}{" "}
             matched

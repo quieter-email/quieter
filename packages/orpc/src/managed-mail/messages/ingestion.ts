@@ -76,10 +76,13 @@ const runPostIngestionOrganization = async (input: {
     messageId: input.messageId,
     threadId: input.threadId,
   });
-  await applyManagedRulesToMessage({
+  const rules = await applyManagedRulesToMessage({
     mailboxId: input.mailboxId,
     messageId: input.messageId,
   });
+  if (rules.error !== null) {
+    throw new Error(rules.error);
+  }
   await processManagedMailAutomation({
     mailboxId: input.mailboxId,
     messageId: input.messageId,

@@ -1,3 +1,4 @@
+/* oxlint-disable vitest/no-conditional-expect -- Each parameterized delivery failure has a different recovery sequence. */
 import { SESv2Client, SESv2ServiceException } from "@aws-sdk/client-sesv2";
 import { reserveOrganizationMailSend } from "@quieter/billing/mail-send-reservation";
 import type { ingestPolarEvents } from "@quieter/billing/polar";
@@ -5,14 +6,19 @@ import { db } from "@quieter/database/client";
 import {
   billingCreditUsageEvent,
   mailbox,
+  mailboxGrant,
   mailObjectCleanup,
   managedMailAttachment,
   managedMailMessage,
+  managedMailRuleRun,
+  member,
   organization,
   organizationMailSendIdempotency,
   organizationMailUsageSettings,
+  user,
 } from "@quieter/database/schema";
 import type { MailSendSnapshot } from "@quieter/database/schema";
+import { managedMailboxRuleDefinitionSchema } from "@quieter/mail/mailbox-organization";
 import { parseRawMailAttachments } from "@quieter/mail/raw-message";
 import { sendMessageInputSchema } from "@quieter/mail/send";
 import { and, eq, inArray } from "drizzle-orm";
@@ -31,6 +37,15 @@ import {
   cleanupMailObjects,
   storeRawMailObject,
 } from "../src/managed-mail/messages/raw-object-lifecycle";
+import { processManagedRuleBackfills } from "../src/managed-mail/rules/backfill";
+import { applyManagedRulesToMessage } from "../src/managed-mail/rules/evaluator";
+import {
+  createManagedRule,
+  startManagedRuleBackfill,
+  getManagedRuleBackfill,
+  cancelManagedRuleBackfill,
+  updateManagedRule,
+} from "../src/managed-mail/rules/service";
 import { sendOrganizationMailMessage } from "../src/organization-mail";
 import { recordOrganizationMailFeedback } from "../src/organization-mail-delivery";
 import type { assertOrganizationOwnsVerifiedSenderDomain } from "../src/organization-mail-policy";
@@ -125,6 +140,7 @@ describe.skipIf(state.databaseUrl === undefined)(
   "durable mail sends on PostgreSQL",
   () => {
     const organizationIds: string[] = [];
+    const userIds: string[] = [];
     let organizationId = "";
     let mailboxId = "";
     let request: Parameters<typeof sendPreparedMail>[0];
@@ -204,12 +220,275 @@ describe.skipIf(state.databaseUrl === undefined)(
       await db
         .delete(organization)
         .where(inArray(organization.id, organizationIds));
+      if (userIds.length > 0) {
+        await db.delete(user).where(inArray(user.id, userIds));
+      }
       if (state.objects.size > 0) {
         await db
           .delete(mailObjectCleanup)
           .where(inArray(mailObjectCleanup.key, [...state.objects.keys()]));
       }
       await db.$client.end();
+    });
+
+    const createRuleFixture = async () => {
+      const now = new Date();
+      const userId = crypto.randomUUID();
+      const messageId = crypto.randomUUID();
+      userIds.push(userId);
+      await db.insert(user).values({
+        createdAt: now,
+        email: `${userId}@example.com`,
+        emailVerified: true,
+        id: userId,
+        name: "Rule owner",
+        updatedAt: now,
+      });
+      await db.insert(member).values({
+        createdAt: now,
+        id: crypto.randomUUID(),
+        organizationId,
+        role: "member",
+        userId,
+      });
+      await db.insert(mailboxGrant).values({
+        createdAt: now,
+        id: crypto.randomUUID(),
+        mailboxId,
+        role: "manager",
+        updatedAt: now,
+        userId,
+      });
+      await db.insert(managedMailMessage).values({
+        bodyText: "Message",
+        createdAt: now,
+        direction: "inbound",
+        from: "sender@example.com",
+        id: messageId,
+        isRead: false,
+        mailboxId,
+        providerMessageId: messageId,
+        sentAt: now,
+        subject: "Original",
+        threadId: messageId,
+        updatedAt: now,
+      });
+      const definition = managedMailboxRuleDefinitionSchema.parse({
+        actions: [
+          { kind: "set-read", read: true },
+          {
+            includeAttachments: false,
+            kind: "forward",
+            recipients: ["original@example.com"],
+          },
+          { destination: "archive", kind: "move" },
+        ],
+        enabled: true,
+        labelIds: [],
+        matchMode: "all",
+        name: "Forward unread",
+        search: { filters: [{ type: "is", value: "unread" }], text: "" },
+      });
+      const rule = await createManagedRule({ definition, mailboxId, userId });
+      if (rule === undefined) {
+        throw new Error("Rule was not created");
+      }
+      return { definition, messageId, now, rule, userId };
+    };
+
+    test.each(["rejected", "unknown", "concurrent"] as const)(
+      "rule forwards recover after %s delivery without repeating completed actions",
+      async (failure) => {
+        const { definition, messageId, now, rule, userId } =
+          await createRuleFixture();
+        if (failure === "rejected") {
+          state.send.mockRejectedValueOnce(
+            new SESv2ServiceException({
+              $fault: "client",
+              $metadata: { httpStatusCode: 400 },
+              message: "Rejected",
+              name: "MessageRejected",
+            })
+          );
+        } else if (failure === "unknown") {
+          state.send.mockRejectedValueOnce(
+            new Error("Connection reset after submission")
+          );
+        }
+        const input = { mailboxId, messageId };
+        if (failure === "concurrent") {
+          await Promise.all([
+            applyManagedRulesToMessage(input),
+            applyManagedRulesToMessage(input),
+          ]);
+        } else {
+          const result = await applyManagedRulesToMessage(input);
+          expect(result.error).not.toBeNull();
+          await updateManagedRule({
+            definition: {
+              ...definition,
+              actions: [
+                {
+                  includeAttachments: false,
+                  kind: "forward",
+                  recipients: ["edited@example.com"],
+                },
+              ],
+            },
+            mailboxId,
+            ruleId: rule.id,
+            userId,
+          });
+        }
+        if (failure === "unknown") {
+          const result = await applyManagedRulesToMessage(input);
+          expect(result.error).not.toBeNull();
+          const [operation] = await db
+            .select()
+            .from(organizationMailSendIdempotency)
+            .where(
+              eq(organizationMailSendIdempotency.organizationId, organizationId)
+            );
+          await recordOrganizationMailFeedback({
+            eventType: "sent",
+            occurredAt: now,
+            provider: "ses",
+            providerMessageId: "confirmed-rule-forward",
+            recipients: [{ emailAddress: "original@example.com" }],
+            sendOperationId: operation.id,
+            sender: request.snapshot.sender,
+            sourceEventId: crypto.randomUUID(),
+          });
+          await recoverMailSends();
+        }
+        await expect(applyManagedRulesToMessage(input)).resolves.toStrictEqual({
+          error: null,
+          matched: true,
+        });
+        await expect(applyManagedRulesToMessage(input)).resolves.toStrictEqual({
+          error: null,
+          matched: true,
+        });
+        const [message] = await db
+          .select()
+          .from(managedMailMessage)
+          .where(eq(managedMailMessage.id, messageId));
+        expect(message).toMatchObject({
+          isRead: true,
+          mailboxState: "archived",
+        });
+        const runs = await db
+          .select()
+          .from(managedMailRuleRun)
+          .where(eq(managedMailRuleRun.messageId, messageId));
+        expect(runs).toHaveLength(1);
+        expect(runs[0].completedAt).not.toBeNull();
+        const [operation] = await db
+          .select()
+          .from(organizationMailSendIdempotency)
+          .where(
+            eq(organizationMailSendIdempotency.organizationId, organizationId)
+          );
+        expect(operation.snapshot?.to).toStrictEqual(["original@example.com"]);
+        expect(state.send).toHaveBeenCalledTimes(
+          failure === "rejected" ? 2 : 1
+        );
+      }
+    );
+
+    test("backfills run without readers and resume failed messages from their original snapshot", async () => {
+      const { definition, rule, userId } = await createRuleFixture();
+      const input = { mailboxId, ruleId: rule.id, userId };
+      const starts = await Promise.allSettled([
+        startManagedRuleBackfill(input),
+        startManagedRuleBackfill(input),
+      ]);
+      expect(
+        starts.filter((result) => result.status === "fulfilled")
+      ).toHaveLength(1);
+      const started = starts.find((result) => result.status === "fulfilled");
+      if (started?.status !== "fulfilled") {
+        throw new Error("Backfill did not start");
+      }
+      const statusInput = { backfillId: started.value.id, mailboxId, userId };
+      await expect(getManagedRuleBackfill(statusInput)).resolves.toMatchObject({
+        processedCount: 0,
+        status: "pending",
+      });
+      expect(state.send).not.toHaveBeenCalled();
+      state.send.mockRejectedValueOnce(
+        new SESv2ServiceException({
+          $fault: "client",
+          $metadata: { httpStatusCode: 400 },
+          message: "Rejected",
+          name: "MessageRejected",
+        })
+      );
+      await Promise.all([
+        processManagedRuleBackfills(),
+        processManagedRuleBackfills(),
+      ]);
+      await expect(getManagedRuleBackfill(statusInput)).resolves.toMatchObject({
+        cursor: null,
+        errorCount: 1,
+
+        processedCount: 0,
+        status: "failed",
+      });
+      await expect(startManagedRuleBackfill(input)).resolves.toMatchObject({
+        id: started.value.id,
+        status: "pending",
+      });
+      await updateManagedRule({
+        ...input,
+        definition: {
+          ...definition,
+          actions: [
+            {
+              includeAttachments: false,
+              kind: "forward",
+              recipients: ["edited@example.com"],
+            },
+          ],
+        },
+      });
+      await processManagedRuleBackfills();
+      await expect(getManagedRuleBackfill(statusInput)).resolves.toMatchObject({
+        lastError: null,
+        matchedCount: 1,
+        processedCount: 1,
+        status: "completed",
+      });
+      const [operation] = await db
+        .select()
+        .from(organizationMailSendIdempotency)
+        .where(
+          eq(organizationMailSendIdempotency.organizationId, organizationId)
+        );
+      expect(operation.snapshot?.to).toStrictEqual(["original@example.com"]);
+      expect(state.send).toHaveBeenCalledTimes(2);
+    });
+
+    test("cancellation during a forward cannot be overwritten by the backfill processor", async () => {
+      const { rule, userId } = await createRuleFixture();
+      const backfill = await startManagedRuleBackfill({
+        mailboxId,
+        ruleId: rule.id,
+        userId,
+      });
+      const input = { backfillId: backfill.id, mailboxId, userId };
+      state.send.mockImplementationOnce(async () => {
+        await cancelManagedRuleBackfill(input);
+        return { MessageId: crypto.randomUUID() };
+      });
+      await processManagedRuleBackfills();
+      await processManagedRuleBackfills();
+      await expect(getManagedRuleBackfill(input)).resolves.toMatchObject({
+        completedAt: null,
+        processedCount: 0,
+        status: "cancelled",
+      });
+      expect(state.send).toHaveBeenCalledOnce();
     });
 
     test("reserves a limited balance atomically with a single-connection pool", async () => {

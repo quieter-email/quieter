@@ -5,6 +5,7 @@ import {
   claimPendingMailboxActionRuns,
   releaseMailboxActionRunDispatchClaims,
 } from "@quieter/orpc/mailbox-actions";
+import { processManagedRuleBackfills } from "@quieter/orpc/managed-mail/rule-backfills";
 import { cleanupMailObjects } from "@quieter/orpc/managed-mail/storage";
 
 import { reportWorkerError, withSentryReporting } from "./worker-runtime";
@@ -64,6 +65,7 @@ export default withSentryReporting({
           recoverMailSends(),
           cleanupMailObjects(),
           cleanupRateLimitBuckets(),
+          processManagedRuleBackfills(),
         ]);
         const failed = results.find((result) => result.status === "rejected");
         if (failed !== undefined) {

@@ -6,7 +6,6 @@ import type { DatabaseExecutor } from "@quieter/database/client";
 import {
   managedMailMessage,
   managedMailRule,
-  managedMailRuleApplication,
   managedMailRuleBackfill,
 } from "@quieter/database/schema";
 import {
@@ -17,7 +16,7 @@ import type {
   ManagedMailboxRuleAction,
   ManagedMailboxRuleDefinition,
 } from "@quieter/mail/mailbox-organization";
-import { and, asc, countDistinct, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, countDistinct, desc, eq, inArray } from "drizzle-orm";
 
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
 import { resolveManagedSearchLabels } from "../labels/references";
@@ -26,7 +25,7 @@ import { throwMailboxOrganizationNameConflict } from "../organization/name-confl
 import { normalizeManagedOrganizationName } from "../organization/normalize-name";
 import { createManagedSearchCondition } from "../search/compiler";
 import { assertManagedRuleSearch } from "../search/normalization";
-import { applyManagedRulesToMessage } from "./evaluator";
+import { managedRuleSnapshotSchema, snapshotManagedRule } from "./snapshot";
 
 const assertRuleActions = (definition: {
   actions?: unknown;
@@ -215,38 +214,6 @@ export const updateManagedRule = async (input: {
       input.definition,
       tx
     );
-    const [existing] = await tx
-      .select({
-        actions: managedMailRule.actions,
-        conditionGroups: managedMailRule.conditionGroups,
-        labelIds: managedMailRule.labelIds,
-        matchMode: managedMailRule.matchMode,
-        search: managedMailRule.search,
-      })
-      .from(managedMailRule)
-      .where(
-        and(
-          eq(managedMailRule.id, input.ruleId),
-          eq(managedMailRule.mailboxId, input.mailboxId)
-        )
-      )
-      .limit(1);
-    if (existing === undefined) {
-      throw new ORPCError("NOT_FOUND", { message: "Rule not found." });
-    }
-    const matchingOrActionConfigurationChanged =
-      existing.matchMode !== definition.matchMode ||
-      JSON.stringify(existing.search) !== JSON.stringify(definition.search) ||
-      JSON.stringify(existing.conditionGroups ?? []) !==
-        JSON.stringify(definition.conditionGroups ?? []) ||
-      JSON.stringify(existing.labelIds) !==
-        JSON.stringify(definition.labelIds) ||
-      JSON.stringify(
-        getManagedMailboxRuleActions({
-          actions: existing.actions,
-          labelIds: existing.labelIds,
-        })
-      ) !== JSON.stringify(definition.actions);
     const [record] = await tx
       .update(managedMailRule)
       .set({
@@ -272,11 +239,6 @@ export const updateManagedRule = async (input: {
       .catch(throwMailboxOrganizationNameConflict);
     if (record === undefined) {
       throw new ORPCError("NOT_FOUND", { message: "Rule not found." });
-    }
-    if (matchingOrActionConfigurationChanged) {
-      await tx
-        .delete(managedMailRuleApplication)
-        .where(eq(managedMailRuleApplication.ruleId, input.ruleId));
     }
     return toRuleResponse(record);
   });
@@ -400,99 +362,6 @@ export const previewManagedRule = async (input: {
   };
 };
 
-const processManagedBackfillBatch = async (
-  backfillId: string,
-  mailboxId: string
-) => {
-  const [backfill] = await db
-    .select()
-    .from(managedMailRuleBackfill)
-    .where(
-      and(
-        eq(managedMailRuleBackfill.id, backfillId),
-        eq(managedMailRuleBackfill.mailboxId, mailboxId)
-      )
-    )
-    .limit(1);
-  if (
-    backfill === undefined ||
-    !["pending", "running"].includes(backfill.status)
-  ) {
-    return backfill;
-  }
-  const [rule] = await db
-    .select({ id: managedMailRule.id })
-    .from(managedMailRule)
-    .where(eq(managedMailRule.id, backfill.ruleId))
-    .limit(1);
-  if (rule === undefined) {
-    return backfill;
-  }
-
-  const cursorCondition = backfill.cursor
-    ? sql`${managedMailMessage.id} > ${backfill.cursor}`
-    : undefined;
-  const records = await db
-    .select()
-    .from(managedMailMessage)
-    .where(
-      and(
-        eq(managedMailMessage.mailboxId, backfill.mailboxId),
-        eq(managedMailMessage.direction, "inbound"),
-        cursorCondition
-      )
-    )
-    .orderBy(asc(managedMailMessage.id))
-    .limit(100);
-
-  let matchedCount = 0;
-  let updatedCount = 0;
-  let errorCount = 0;
-  for (const message of records) {
-    try {
-      const result = await applyManagedRulesToMessage({
-        mailboxId: backfill.mailboxId,
-        messageId: message.id,
-        ruleId: backfill.ruleId,
-      });
-      if (result.matched) {
-        matchedCount += 1;
-        if (!result.error) {
-          updatedCount += 1;
-        }
-      }
-      if (result.error) {
-        errorCount += 1;
-      }
-    } catch {
-      errorCount += 1;
-    }
-  }
-
-  const complete = records.length < 100;
-  const [updated] = await db
-    .update(managedMailRuleBackfill)
-    .set({
-      completedAt: complete ? new Date() : null,
-      cursor: records.at(-1)?.id ?? backfill.cursor,
-      errorCount: backfill.errorCount + errorCount,
-      matchedCount: backfill.matchedCount + matchedCount,
-      processedCount: backfill.processedCount + records.length,
-      startedAt: backfill.startedAt ?? new Date(),
-      status: complete ? "completed" : "running",
-      updatedAt: new Date(),
-      updatedCount: backfill.updatedCount + updatedCount,
-    })
-    .where(
-      and(
-        eq(managedMailRuleBackfill.id, backfill.id),
-        eq(managedMailRuleBackfill.mailboxId, mailboxId)
-      )
-    )
-    .returning();
-  return updated;
-};
-
 export const startManagedRuleBackfill = async (input: {
   mailboxId: string;
   ruleId: string;
@@ -503,50 +372,81 @@ export const startManagedRuleBackfill = async (input: {
     requiredRoles: ["manager"],
     userId: input.userId,
   });
-  const [rule] = await db
-    .select({ id: managedMailRule.id })
-    .from(managedMailRule)
-    .where(
-      and(
-        eq(managedMailRule.id, input.ruleId),
-        eq(managedMailRule.mailboxId, input.mailboxId)
+  return await db.transaction(async (tx) => {
+    const [rule] = await tx
+      .select()
+      .from(managedMailRule)
+      .where(
+        and(
+          eq(managedMailRule.id, input.ruleId),
+          eq(managedMailRule.mailboxId, input.mailboxId)
+        )
       )
-    )
-    .limit(1);
-  if (rule === undefined) {
-    throw new ORPCError("NOT_FOUND", { message: "Rule not found." });
-  }
-  const [active] = await db
-    .select({ id: managedMailRuleBackfill.id })
-    .from(managedMailRuleBackfill)
-    .where(
-      and(
-        eq(managedMailRuleBackfill.ruleId, input.ruleId),
-        inArray(managedMailRuleBackfill.status, ["pending", "running"])
+      .for("update");
+    if (rule === undefined) {
+      throw new ORPCError("NOT_FOUND", { message: "Rule not found." });
+    }
+    if (!rule.enabled) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Enable this rule before applying it to existing messages.",
+      });
+    }
+    const jobs = await tx
+      .select()
+      .from(managedMailRuleBackfill)
+      .where(
+        and(
+          eq(managedMailRuleBackfill.ruleId, input.ruleId),
+          inArray(managedMailRuleBackfill.status, [
+            "pending",
+            "running",
+            "failed",
+          ])
+        )
       )
-    )
-    .limit(1);
-  if (active !== undefined) {
-    throw new ORPCError("CONFLICT", {
-      message: "This rule already has an active backfill.",
-    });
-  }
-  const now = new Date();
-  const [backfill] = await db
-    .insert(managedMailRuleBackfill)
-    .values({
-      createdAt: now,
-      id: randomUUID(),
-      mailboxId: input.mailboxId,
-      ruleId: input.ruleId,
-      startedAt: now,
-      status: "running",
-      updatedAt: now,
-    })
-    .returning();
-  return await processManagedBackfillBatch(backfill.id, input.mailboxId);
+      .orderBy(desc(managedMailRuleBackfill.createdAt));
+    if (jobs.some((job) => job.status !== "failed")) {
+      throw new ORPCError("CONFLICT", {
+        message: "This rule already has an active backfill.",
+      });
+    }
+    const definition = snapshotManagedRule(rule);
+    const now = new Date();
+    const retry = jobs.find(
+      (job) =>
+        managedRuleSnapshotSchema.safeParse(job.definition).data?.revision ===
+        definition.revision
+    );
+    if (retry !== undefined) {
+      const [backfill] = await tx
+        .update(managedMailRuleBackfill)
+        .set({
+          completedAt: null,
+          lastError: null,
+          leaseId: null,
+          leasedUntil: null,
+          status: "pending",
+          updatedAt: now,
+        })
+        .where(eq(managedMailRuleBackfill.id, retry.id))
+        .returning();
+      return backfill;
+    }
+    const [backfill] = await tx
+      .insert(managedMailRuleBackfill)
+      .values({
+        createdAt: now,
+        definition,
+        id: randomUUID(),
+        mailboxId: input.mailboxId,
+        ruleId: input.ruleId,
+        status: "pending",
+        updatedAt: now,
+      })
+      .returning();
+    return backfill;
+  });
 };
-
 export const getManagedRuleBackfill = async (input: {
   backfillId: string;
   mailboxId: string;
@@ -557,11 +457,16 @@ export const getManagedRuleBackfill = async (input: {
     requiredRoles: ["manager"],
     userId: input.userId,
   });
-  const updated = await processManagedBackfillBatch(
-    input.backfillId,
-    input.mailboxId
-  );
-  if (updated === undefined || updated.mailboxId !== input.mailboxId) {
+  const [updated] = await db
+    .select()
+    .from(managedMailRuleBackfill)
+    .where(
+      and(
+        eq(managedMailRuleBackfill.id, input.backfillId),
+        eq(managedMailRuleBackfill.mailboxId, input.mailboxId)
+      )
+    );
+  if (updated === undefined) {
     throw new ORPCError("NOT_FOUND", { message: "Backfill not found." });
   }
   return updated;

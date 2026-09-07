@@ -2257,6 +2257,41 @@ export const managedMailRuleApplication = pgTable(
   ]
 );
 
+export const managedMailRuleRun = pgTable(
+  "managedMailRuleRun",
+  {
+    actionResults: jsonb("actionResults").$type<unknown[]>().notNull(),
+    completedAt: timestamp("completedAt"),
+    createdAt: timestamp("createdAt").notNull(),
+    definition: jsonb("definition").$type<unknown>().notNull(),
+    error: text("error"),
+    id: text("id").primaryKey(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    matched: boolean("matched").notNull(),
+    messageId: text("messageId")
+      .notNull()
+      .references(() => managedMailMessage.id, { onDelete: "cascade" }),
+    revision: text("revision").notNull(),
+    ruleId: text("ruleId")
+      .notNull()
+      .references(() => managedMailRule.id, { onDelete: "cascade" }),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    unique("managed_mail_rule_run_revision_unique").on(
+      table.ruleId,
+      table.messageId,
+      table.revision
+    ),
+    index("managed_mail_rule_run_message_idx").on(
+      table.mailboxId,
+      table.messageId
+    ),
+  ]
+);
+
 export const managedMailRuleBackfill = pgTable(
   "managedMailRuleBackfill",
   {
@@ -2264,9 +2299,12 @@ export const managedMailRuleBackfill = pgTable(
     completedAt: timestamp("completedAt"),
     createdAt: timestamp("createdAt").notNull(),
     cursor: text("cursor"),
+    definition: jsonb("definition").$type<unknown>(),
     errorCount: integer("errorCount").notNull().default(0),
     id: text("id").primaryKey(),
     lastError: text("lastError"),
+    leaseId: text("leaseId"),
+    leasedUntil: timestamp("leasedUntil"),
     mailboxId: text("mailboxId")
       .notNull()
       .references(() => mailbox.id, { onDelete: "cascade" }),
@@ -2868,6 +2906,7 @@ export const tables = {
   managedMailRule,
   managedMailRuleApplication,
   managedMailRuleBackfill,
+  managedMailRuleRun,
   managedMailSavedView,
   member,
   organization,

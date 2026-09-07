@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
+import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
-import type { DatabaseExecutor } from "@quieter/database/client";
 import {
   mailbox,
   managedMailAttachment,
@@ -10,136 +10,43 @@ import {
   managedMailMessageLabel,
   managedMailRule,
   managedMailRuleApplication,
+  managedMailRuleRun,
 } from "@quieter/database/schema";
 import { composeMessageInputSchema } from "@quieter/mail/compose/schema";
-import {
-  getManagedMailboxRuleActions,
-  managedMailboxRuleConditionGroupSchema,
-} from "@quieter/mail/mailbox-organization";
+import { managedMailboxRuleConditionGroupSchema } from "@quieter/mail/mailbox-organization";
 import type { ManagedMailboxRuleAction } from "@quieter/mail/mailbox-organization";
 import { parseRawMailAttachments } from "@quieter/mail/raw-message";
 import { structuredMailSearchSchema } from "@quieter/mail/search";
 import { reportError } from "@quieter/observability";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { updateManagedMessageLabelAssignments } from "../labels/repository";
 import { readRawMailObject } from "../messages/raw-object";
 import { sendManagedMailboxMessage } from "../messages/send";
 import { matchesManagedMailRule } from "../search/evaluator";
+import { managedRuleSnapshotSchema, snapshotManagedRule } from "./snapshot";
+import type { ManagedRuleSnapshot } from "./snapshot";
 
 type ManagedMessageRecord = typeof managedMailMessage.$inferSelect;
 type ManagedAttachmentRecord = Pick<
   typeof managedMailAttachment.$inferSelect,
   "fileName" | "normalizedFileName"
 >;
-type RuleActionResult = {
-  kind: ManagedMailboxRuleAction["kind"];
-  message?: string;
-  status: "applied" | "skipped";
-};
-
-const storedRuleActionResultSchema = z.object({
-  kind: z.enum([
-    "set-read",
-    "move",
-    "set-labels",
-    "forward",
-    "stop-processing",
-  ]),
-  message: z.string().optional(),
-  status: z.enum(["applied", "skipped"]),
-});
-
-const parseStoredRuleActionResults = (
-  value: unknown
-): RuleActionResult[] | null => {
-  if (value === null || value === undefined) {
-    return [];
-  }
-  const parsed = storedRuleActionResultSchema.array().safeParse(value);
-  if (parsed.success) {
-    return parsed.data;
-  }
-  reportError(parsed.error, {
-    operation: "managed-mail:parse-rule-action-results",
-  });
-  return null;
-};
-
-const alignStoredRuleActionResults = (
-  actions: readonly ManagedMailboxRuleAction[],
-  results: readonly RuleActionResult[]
-) => {
-  const aligned: RuleActionResult[] = [];
-  for (
-    let index = 0;
-    index < actions.length && index < results.length;
-    index += 1
-  ) {
-    const result = results[index];
-    if (result === undefined || actions[index]?.kind !== result.kind) {
-      break;
-    }
-    aligned.push(result);
-  }
-  return aligned;
-};
-
-const getHeader = (message: ManagedMessageRecord, name: string) =>
-  message.headers.find(
-    (header) => header.name.toLowerCase() === name.toLowerCase()
-  )?.value;
-
-const describeRuleSearch = (
-  currentSearch: { filters: { type: string; value: string }[]; text: string },
-  currentMatchMode: "all" | "any"
-) => {
-  const conditions = [
-    ...currentSearch.filters.map((filter) => `${filter.type}:${filter.value}`),
-    ...(currentSearch.text ? [`text:${currentSearch.text}`] : []),
-  ];
-  return conditions.length > 0
-    ? `Matched ${currentMatchMode === "all" ? "all" : "one or more"} of ${conditions.join(", ")}.`
-    : "Matched the rule conditions.";
-};
-
-const getConditionExplanation = (
-  search: { filters: { type: string; value: string }[]; text: string },
-  matchMode: "all" | "any",
-  conditionGroups: unknown
-) => {
-  const parsedGroups = managedMailboxRuleConditionGroupSchema
-    .array()
-    .safeParse(conditionGroups);
-  const descriptions = [
-    describeRuleSearch(search, matchMode),
-    ...(parsedGroups.success
-      ? parsedGroups.data.map((group) =>
-          describeRuleSearch(group.search, group.matchMode)
-        )
-      : []),
-  ];
-  return descriptions.length === 1
-    ? descriptions[0]
-    : descriptions
-        .map((description, index) => `Condition ${index + 1}: ${description}`)
-        .join(" ");
-};
-
-const escapeHtml = (value: string) =>
-  value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-
-const createAttachmentFile = (
-  content: Uint8Array,
-  fileName: string,
-  mimeType: string
-) => new File([Uint8Array.from(content).buffer], fileName, { type: mimeType });
+const actionResultsSchema = z.array(
+  z.object({
+    kind: z.enum([
+      "set-read",
+      "move",
+      "set-labels",
+      "forward",
+      "stop-processing",
+    ]),
+    message: z.string().optional(),
+    status: z.enum(["applied", "skipped"]),
+  })
+);
+type ActionResults = z.infer<typeof actionResultsSchema>;
 
 const matchesRuleConditions = (input: {
   attachments: readonly ManagedAttachmentRecord[];
@@ -161,14 +68,14 @@ const matchesRuleConditions = (input: {
   });
   const groups = managedMailboxRuleConditionGroupSchema
     .array()
-    .safeParse(input.conditionGroups);
-  if (!groups.success || groups.data.length === 0) {
+    .parse(input.conditionGroups ?? []);
+  if (groups.length === 0) {
     return mainMatch;
   }
 
   return (
     mainMatch &&
-    groups.data.every((group) =>
+    groups.every((group) =>
       matchesManagedMailRule({
         attachments: input.attachments,
         customLabelIds: input.customLabelIds,
@@ -182,83 +89,70 @@ const matchesRuleConditions = (input: {
 };
 
 const createForwardMessage = async (input: {
-  includeAttachments: boolean;
+  action: Extract<ManagedMailboxRuleAction, { kind: "forward" }>;
+  localId: string;
   message: ManagedMessageRecord;
-  recipients: string[];
   ruleId: string;
 }) => {
-  const subject = input.message.subject
-    ? input.message.subject.trim()
-    : "(No subject)";
-  let forwardedBodyText = "";
-  if (input.message.bodyText) {
-    forwardedBodyText = input.message.bodyText.trim();
-  } else if (input.message.snippet) {
-    forwardedBodyText = input.message.snippet.trim();
-  }
-  const bodyText = [
-    "---------- Forwarded message ----------",
-    `From: ${input.message.from}`,
-    `Subject: ${subject}`,
-    "",
-    forwardedBodyText,
-  ].join("\n");
-  const bodyHtml = [
-    "<p>---------- Forwarded message ----------</p>",
-    `<p><strong>From:</strong> ${escapeHtml(input.message.from)}<br><strong>Subject:</strong> ${escapeHtml(subject)}</p>`,
-    input.message.bodyHtml
-      ? input.message.bodyHtml.trim()
-      : `<p>${escapeHtml(forwardedBodyText).replaceAll("\n", "<br>")}</p>`,
-  ].join("");
-
-  const originalAttachments = input.includeAttachments
+  const subject = input.message.subject?.trim() || "(No subject)";
+  const text = (input.message.bodyText ?? input.message.snippet ?? "").trim();
+  const [escapedFrom, escapedSubject, escapedText] = [
+    input.message.from,
+    subject,
+    text,
+  ].map((value) =>
+    value
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;")
+  );
+  const attachments: z.infer<typeof composeMessageInputSchema>["attachments"] =
+    [];
+  const inlineImages: z.infer<
+    typeof composeMessageInputSchema
+  >["inlineImages"] = [];
+  const originalAttachments = input.action.includeAttachments
     ? await parseRawMailAttachments(await readRawMailObject(input.message))
     : [];
-  const attachments = originalAttachments
-    .filter((attachment) => !attachment.inline || !attachment.contentId)
-    .map((attachment) => ({
-      contentId: attachment.contentId,
-      file: createAttachmentFile(
-        attachment.content,
-        attachment.fileName,
-        attachment.mimeType
-      ),
-      fileName: attachment.fileName,
-      id: randomUUID(),
-      isInline: false,
+  for (const [index, attachment] of originalAttachments.entries()) {
+    const file = new File(
+      [Uint8Array.from(attachment.content).buffer],
+      attachment.fileName,
+      { type: attachment.mimeType }
+    );
+    const metadata = {
+      file,
+      id: `${input.localId}:${index}`,
       mimeType: attachment.mimeType,
       name: attachment.fileName,
-      size: attachment.content.byteLength,
-    }));
-  const inlineImages = originalAttachments
-    .filter(
-      (attachment): attachment is typeof attachment & { contentId: string } =>
-        attachment.inline && !!attachment.contentId
-    )
-    .map((attachment) => ({
-      contentId: attachment.contentId,
-      file: createAttachmentFile(
-        attachment.content,
-        attachment.fileName,
-        attachment.mimeType
-      ),
-      id: randomUUID(),
-      isInline: true,
-      mimeType: attachment.mimeType,
-      name: attachment.fileName,
-      size: attachment.content.byteLength,
-    }));
-
+      size: file.size,
+    };
+    if (attachment.inline && attachment.contentId) {
+      inlineImages.push({
+        ...metadata,
+        contentId: attachment.contentId,
+        isInline: true,
+      });
+    } else {
+      attachments.push({ ...metadata, isInline: false });
+    }
+  }
   return composeMessageInputSchema.parse({
     attachments,
-    bodyHtml,
-    bodyText,
+    bodyHtml: `<p>---------- Forwarded message ----------</p><p><strong>From:</strong> ${escapedFrom}<br><strong>Subject:</strong> ${escapedSubject}</p>${input.message.bodyHtml?.trim() || `<p>${escapedText.replaceAll("\n", "<br>")}</p>`}`,
+    bodyText: [
+      "---------- Forwarded message ----------",
+      `From: ${input.message.from}`,
+      `Subject: ${subject}`,
+      "",
+      text,
+    ].join("\n"),
     headers: [{ name: "X-Quieter-Rule-Forwarded", value: input.ruleId }],
     inlineImages,
-    lastSavedAt: null,
-    localId: randomUUID(),
-    messageId: null,
-    recipients: { bcc: "", cc: "", to: input.recipients.join(", ") },
+    localId: input.localId,
+    recipients: { bcc: "", cc: "", to: input.action.recipients.join(", ") },
     replyContext: null,
     saveStatus: "idle",
     subject: subject.toLowerCase().startsWith("fwd:")
@@ -268,497 +162,11 @@ const createForwardMessage = async (input: {
   });
 };
 
-const applyRuleActions = async (input: {
-  actions: readonly ManagedMailboxRuleAction[];
-  completedActionResults: readonly RuleActionResult[];
-  database: DatabaseExecutor;
-  mailboxId: string;
-  message: ManagedMessageRecord;
-  persistActionResults: (
-    actionResults: readonly RuleActionResult[]
-  ) => Promise<void>;
-  ruleId: string;
-  ruleOwnerUserId: string | null;
-}) => {
-  const results: RuleActionResult[] = [...input.completedActionResults];
-  let contentChanged = false;
-  const recordActionResult = async (result: RuleActionResult) => {
-    results.push(result);
-    await input.persistActionResults(results);
-  };
-
-  const processActionAtIndex = async (index: number): Promise<void> => {
-    if (index >= input.actions.length) {
-      return;
-    }
-
-    const action = input.actions[index];
-    if (action.kind === "set-read") {
-      if (input.message.isRead === action.read) {
-        await recordActionResult({
-          kind: action.kind,
-          message: "Already in that state.",
-          status: "skipped",
-        });
-      } else {
-        await input.database
-          .update(managedMailMessage)
-          .set({ isRead: action.read, updatedAt: new Date() })
-          .where(
-            and(
-              eq(managedMailMessage.id, input.message.id),
-              eq(managedMailMessage.mailboxId, input.mailboxId)
-            )
-          );
-        input.message.isRead = action.read;
-        contentChanged = true;
-        await recordActionResult({ kind: action.kind, status: "applied" });
-      }
-      await processActionAtIndex(index + 1);
-      return;
-    }
-
-    if (action.kind === "move") {
-      let state: typeof managedMailMessage.$inferSelect.mailboxState;
-      if (action.destination === "archive") {
-        state = "archived";
-      } else if (action.destination === "inbox") {
-        state = "active";
-      } else {
-        state = action.destination;
-      }
-      if (input.message.mailboxState === state) {
-        await recordActionResult({
-          kind: action.kind,
-          message: "Already in that mailbox.",
-          status: "skipped",
-        });
-      } else {
-        await input.database
-          .update(managedMailMessage)
-          .set({ mailboxState: state, updatedAt: new Date() })
-          .where(
-            and(
-              eq(managedMailMessage.id, input.message.id),
-              eq(managedMailMessage.mailboxId, input.mailboxId)
-            )
-          );
-        input.message.mailboxState = state;
-        contentChanged = true;
-        await recordActionResult({ kind: action.kind, status: "applied" });
-      }
-      await processActionAtIndex(index + 1);
-      return;
-    }
-
-    if (action.kind === "set-labels") {
-      await updateManagedMessageLabelAssignments({
-        addLabelIds: action.addIds,
-        database: input.database,
-        mailboxId: input.mailboxId,
-        messageIds: [input.message.id],
-        removeLabelIds: action.removeIds,
-        ruleId: input.ruleId,
-        source: "rule",
-      });
-      contentChanged = true;
-      await recordActionResult({ kind: action.kind, status: "applied" });
-      await processActionAtIndex(index + 1);
-      return;
-    }
-
-    if (action.kind === "forward") {
-      if (getHeader(input.message, "X-Quieter-Rule-Forwarded")) {
-        await recordActionResult({
-          kind: action.kind,
-          message:
-            "Skipped a message that was already forwarded by an automatic rule.",
-          status: "skipped",
-        });
-      } else if (input.ruleOwnerUserId) {
-        await sendManagedMailboxMessage({
-          mailboxId: input.mailboxId,
-          message: await createForwardMessage({
-            includeAttachments: action.includeAttachments,
-            message: input.message,
-            recipients: action.recipients,
-            ruleId: input.ruleId,
-          }),
-          userId: input.ruleOwnerUserId,
-        });
-        contentChanged = true;
-        await recordActionResult({ kind: action.kind, status: "applied" });
-      } else {
-        throw new Error(
-          "The rule owner is no longer available to send an automatic forward."
-        );
-      }
-      await processActionAtIndex(index + 1);
-      return;
-    }
-
-    if (action.kind === "stop-processing") {
-      await recordActionResult({ kind: action.kind, status: "applied" });
-      return;
-    }
-
-    await processActionAtIndex(index + 1);
-  };
-
-  await processActionAtIndex(input.completedActionResults.length);
-
-  if (contentChanged) {
-    await input.database
-      .update(mailbox)
-      .set({
-        contentRevision: sql`${mailbox.contentRevision} + 1`,
-        updatedAt: new Date(),
-      })
-      .where(eq(mailbox.id, input.mailboxId));
-  }
-
-  return results;
-};
-
-type ManagedRuleRecord = typeof managedMailRule.$inferSelect;
-type ManagedRuleApplicationRecord =
-  typeof managedMailRuleApplication.$inferSelect;
-
-const applyManagedRuleLabelUpdates = (
-  actions: readonly ManagedMailboxRuleAction[],
-  customLabelIds: Set<string>,
-  customLabelNames: Set<string>,
-  labelNameById: Map<string, string>
-) => {
-  for (const action of actions) {
-    if (action.kind !== "set-labels") {
-      continue;
-    }
-    for (const labelId of action.removeIds) {
-      customLabelIds.delete(labelId);
-    }
-    for (const labelId of action.removeIds) {
-      const name = labelNameById.get(labelId);
-      if (name) {
-        customLabelNames.delete(name);
-      }
-    }
-    for (const labelId of action.addIds) {
-      customLabelIds.add(labelId);
-      const name = labelNameById.get(labelId);
-      if (name) {
-        customLabelNames.add(name);
-      }
-    }
-  }
-};
-
-const persistManagedRuleApplication = async (input: {
-  actionResults: readonly RuleActionResult[];
-  appliedAt: Date | null;
-  database: DatabaseExecutor;
-  explanation: string;
-  mailboxId: string;
-  matched: boolean;
-  messageId: string;
-  now: Date;
-  ruleId: string;
-}) => {
-  await input.database
-    .insert(managedMailRuleApplication)
-    .values({
-      actionResults: [...input.actionResults],
-      appliedAt: input.appliedAt,
-      createdAt: input.now,
-      explanation: input.explanation,
-      id: randomUUID(),
-      mailboxId: input.mailboxId,
-      matched: input.matched,
-      messageId: input.messageId,
-      ruleId: input.ruleId,
-      updatedAt: input.now,
-    })
-    .onConflictDoUpdate({
-      set: {
-        actionResults: [...input.actionResults],
-        appliedAt: input.appliedAt,
-        error: null,
-        explanation: input.explanation,
-        matched: input.matched,
-        updatedAt: input.now,
-      },
-      target: [
-        managedMailRuleApplication.ruleId,
-        managedMailRuleApplication.messageId,
-      ],
-    });
-};
-
-const runManagedRuleEvaluation = async (input: {
-  actions: readonly ManagedMailboxRuleAction[];
-  attachments: readonly ManagedAttachmentRecord[];
-  customLabelIds: Set<string>;
-  customLabelNames: Set<string>;
-  labelNameById: Map<string, string>;
-  mailboxId: string;
-  message: ManagedMessageRecord;
-  messageId: string;
-  now: Date;
-  previousActionResults: readonly RuleActionResult[];
-  rule: ManagedRuleRecord;
-  tx: DatabaseExecutor;
-}) => {
-  const matched = matchesRuleConditions({
-    attachments: input.attachments,
-    conditionGroups: input.rule.conditionGroups,
-    customLabelIds: [...input.customLabelIds],
-    customLabelNames: [...input.customLabelNames],
-    matchMode: input.rule.matchMode,
-    message: input.message,
-    search: input.rule.search,
-  });
-  const explanation = matched
-    ? getConditionExplanation(
-        structuredMailSearchSchema.parse(input.rule.search),
-        input.rule.matchMode,
-        input.rule.conditionGroups
-      )
-    : "The rule conditions did not match this message.";
-  const actionResults = matched
-    ? await applyRuleActions({
-        actions: input.actions,
-        completedActionResults: input.previousActionResults,
-        database: input.tx,
-        mailboxId: input.mailboxId,
-        message: input.message,
-        persistActionResults: async (partialActionResults) => {
-          await persistManagedRuleApplication({
-            actionResults: partialActionResults,
-            appliedAt: input.now,
-            database: input.tx,
-            explanation,
-            mailboxId: input.mailboxId,
-            matched: true,
-            messageId: input.messageId,
-            now: input.now,
-            ruleId: input.rule.id,
-          });
-        },
-        ruleId: input.rule.id,
-        ruleOwnerUserId:
-          input.rule.updatedByUserId ?? input.rule.createdByUserId,
-      })
-    : [];
-  if (matched) {
-    applyManagedRuleLabelUpdates(
-      input.actions,
-      input.customLabelIds,
-      input.customLabelNames,
-      input.labelNameById
-    );
-  }
-  await persistManagedRuleApplication({
-    actionResults,
-    appliedAt: matched ? input.now : null,
-    database: input.tx,
-    explanation,
-    mailboxId: input.mailboxId,
-    matched,
-    messageId: input.messageId,
-    now: input.now,
-    ruleId: input.rule.id,
-  });
-  return {
-    breakLoop:
-      matched &&
-      input.actions.some((action) => action.kind === "stop-processing"),
-    matched,
-  };
-};
-
-const persistManagedRuleFailure = async (input: {
-  database: DatabaseExecutor;
-  errorMessage: string;
-  explanation: string;
-  mailboxId: string;
-  matched: boolean;
-  messageId: string;
-  now: Date;
-  ruleId: string;
-}) => {
-  await input.database
-    .insert(managedMailRuleApplication)
-    .values({
-      createdAt: input.now,
-      error: input.errorMessage,
-      explanation: input.explanation,
-      id: randomUUID(),
-      mailboxId: input.mailboxId,
-      matched: input.matched,
-      messageId: input.messageId,
-      ruleId: input.ruleId,
-      updatedAt: input.now,
-    })
-    .onConflictDoUpdate({
-      set: {
-        error: input.errorMessage,
-        explanation: input.explanation,
-        matched: input.matched,
-        updatedAt: input.now,
-      },
-      target: [
-        managedMailRuleApplication.ruleId,
-        managedMailRuleApplication.messageId,
-      ],
-    });
-};
-
-const evaluateManagedRuleForMessage = async (input: {
-  attachments: readonly ManagedAttachmentRecord[];
-  customLabelIds: Set<string>;
-  customLabelNames: Set<string>;
-  labelNameById: Map<string, string>;
-  mailboxId: string;
-  message: ManagedMessageRecord;
-  messageId: string;
-  previousApplication: ManagedRuleApplicationRecord | undefined;
-  rule: ManagedRuleRecord;
-  tx: DatabaseExecutor;
-}): Promise<{
-  breakLoop: boolean;
-  error: string | null;
-  matched: boolean;
-}> => {
-  const actions = getManagedMailboxRuleActions({
-    actions: input.rule.actions,
-    labelIds: input.rule.labelIds,
-  });
-  const storedActionResults = parseStoredRuleActionResults(
-    input.previousApplication?.actionResults
-  );
-  if (storedActionResults === null) {
-    return {
-      breakLoop: true,
-      error: "Stored rule action history is invalid.",
-      matched: false,
-    };
-  }
-
-  const previousActionResults = alignStoredRuleActionResults(
-    actions,
-    storedActionResults
-  );
-  const applicationIsComplete =
-    input.previousApplication?.matched === true &&
-    !input.previousApplication.error &&
-    previousActionResults.length === actions.length;
-  if (applicationIsComplete) {
-    return {
-      breakLoop: actions.some((action) => action.kind === "stop-processing"),
-      error: null,
-      matched: true,
-    };
-  }
-
-  const now = new Date();
-  const matched = false;
-  try {
-    const result = await runManagedRuleEvaluation({
-      actions,
-      attachments: input.attachments,
-      customLabelIds: input.customLabelIds,
-      customLabelNames: input.customLabelNames,
-      labelNameById: input.labelNameById,
-      mailboxId: input.mailboxId,
-      message: input.message,
-      messageId: input.messageId,
-      now,
-      previousActionResults,
-      rule: input.rule,
-      tx: input.tx,
-    });
-    return {
-      breakLoop: result.breakLoop,
-      error: null,
-      matched: result.matched,
-    };
-  } catch (error) {
-    const explanation = matched
-      ? "The rule matched, but one or more actions could not be completed."
-      : "The rule conditions could not be evaluated.";
-    const errorMessage =
-      error instanceof Error ? error.message : "Rule evaluation failed.";
-    await persistManagedRuleFailure({
-      database: input.tx,
-      errorMessage,
-      explanation,
-      mailboxId: input.mailboxId,
-      matched,
-      messageId: input.messageId,
-      now,
-      ruleId: input.rule.id,
-    });
-    return {
-      breakLoop: false,
-      error: errorMessage,
-      matched,
-    };
-  }
-};
-
-const processManagedRulesAtIndex = async (input: {
-  applicationByRuleId: Map<string, ManagedRuleApplicationRecord>;
-  attachments: readonly ManagedAttachmentRecord[];
-  customLabelIds: Set<string>;
-  customLabelNames: Set<string>;
-  index: number;
-  labelNameById: Map<string, string>;
-  mailboxId: string;
-  matchedRule: boolean;
-  message: ManagedMessageRecord;
-  messageId: string;
-  ruleError: string | null;
-  rules: readonly ManagedRuleRecord[];
-  tx: DatabaseExecutor;
-}): Promise<{ error: string | null; matched: boolean }> => {
-  if (input.index >= input.rules.length || input.ruleError !== null) {
-    return { error: input.ruleError, matched: input.matchedRule };
-  }
-
-  const rule = input.rules[input.index];
-  const evaluation = await evaluateManagedRuleForMessage({
-    attachments: input.attachments,
-    customLabelIds: input.customLabelIds,
-    customLabelNames: input.customLabelNames,
-    labelNameById: input.labelNameById,
-    mailboxId: input.mailboxId,
-    message: input.message,
-    messageId: input.messageId,
-    previousApplication: input.applicationByRuleId.get(rule.id),
-    rule,
-    tx: input.tx,
-  });
-  if (evaluation.error !== null) {
-    return {
-      error: evaluation.error,
-      matched: input.matchedRule || evaluation.matched,
-    };
-  }
-  if (evaluation.breakLoop) {
-    return { error: null, matched: input.matchedRule || evaluation.matched };
-  }
-
-  return await processManagedRulesAtIndex({
-    ...input,
-    index: input.index + 1,
-    matchedRule: input.matchedRule || evaluation.matched,
-  });
-};
-
-export const applyManagedRulesToMessage = async (input: {
+const prepareRuleRun = async (input: {
   mailboxId: string;
   messageId: string;
-  ruleId?: string;
+  reapply: boolean;
+  rule: ManagedRuleSnapshot;
 }) =>
   await db.transaction(async (tx) => {
     const [message] = await tx
@@ -770,80 +178,360 @@ export const applyManagedRulesToMessage = async (input: {
           eq(managedMailMessage.mailboxId, input.mailboxId)
         )
       )
-      .for("update", { skipLocked: true })
-      .limit(1);
+      .for("update");
     if (message === undefined || message.direction !== "inbound") {
-      return { error: null, matched: false };
+      return null;
+    }
+    const [existing] = await tx
+      .select()
+      .from(managedMailRuleRun)
+      .where(
+        and(
+          eq(managedMailRuleRun.ruleId, input.rule.id),
+          eq(managedMailRuleRun.messageId, input.messageId),
+          input.reapply
+            ? eq(managedMailRuleRun.revision, input.rule.revision)
+            : undefined
+        )
+      )
+      .orderBy(asc(managedMailRuleRun.createdAt))
+      .limit(1);
+    if (existing !== undefined) {
+      return existing;
     }
 
-    const [attachments, labels, mailboxLabels, rules, applications] =
-      await Promise.all([
-        tx
-          .select({
-            fileName: managedMailAttachment.fileName,
-            normalizedFileName: managedMailAttachment.normalizedFileName,
-          })
-          .from(managedMailAttachment)
-          .where(eq(managedMailAttachment.messageId, input.messageId)),
-        tx
-          .select({ labelId: managedMailMessageLabel.labelId })
-          .from(managedMailMessageLabel)
-          .where(eq(managedMailMessageLabel.messageId, input.messageId)),
-        tx
-          .select({
-            id: managedMailLabel.id,
-            name: managedMailLabel.normalizedName,
-          })
-          .from(managedMailLabel)
-          .where(eq(managedMailLabel.mailboxId, input.mailboxId)),
-        tx
-          .select()
-          .from(managedMailRule)
-          .where(
-            and(
-              eq(managedMailRule.mailboxId, input.mailboxId),
-              eq(managedMailRule.enabled, true),
-              input.ruleId ? eq(managedMailRule.id, input.ruleId) : undefined
-            )
-          )
-          .orderBy(asc(managedMailRule.priority), asc(managedMailRule.name)),
-        tx
-          .select()
-          .from(managedMailRuleApplication)
-          .where(
-            and(
-              eq(managedMailRuleApplication.mailboxId, input.mailboxId),
-              eq(managedMailRuleApplication.messageId, input.messageId)
-            )
-          ),
-      ]);
-
-    const applicationByRuleId = new Map(
-      applications.map((application) => [application.ruleId, application])
-    );
-    const labelNameById = new Map(
-      mailboxLabels.map((label) => [label.id, label.name])
-    );
-    const customLabelIds = new Set(labels.map((label) => label.labelId));
-    const customLabelNames = new Set(
-      labels.flatMap((label) => {
-        const name = labelNameById.get(label.labelId);
-        return name ? [name] : [];
+    // Historical applications have no immutable send identity. Never replay an uncertain forward.
+    const [legacy] = await tx
+      .select()
+      .from(managedMailRuleApplication)
+      .where(
+        and(
+          eq(managedMailRuleApplication.ruleId, input.rule.id),
+          eq(managedMailRuleApplication.messageId, input.messageId)
+        )
+      )
+      .limit(1);
+    if (legacy !== undefined) {
+      if (legacy.error) {
+        throw new ORPCError("CONFLICT", {
+          message:
+            "An earlier rule attempt needs review before this message can be processed again.",
+        });
+      }
+      if (!input.reapply) {
+        return {
+          legacyMatched: legacy.matched,
+          legacyStop:
+            legacy.matched &&
+            actionResultsSchema
+              .parse(legacy.actionResults ?? [])
+              .some((result) => result.kind === "stop-processing"),
+        };
+      }
+    }
+    const attachments = await tx
+      .select({
+        fileName: managedMailAttachment.fileName,
+        normalizedFileName: managedMailAttachment.normalizedFileName,
       })
-    );
-    return await processManagedRulesAtIndex({
-      applicationByRuleId,
+      .from(managedMailAttachment)
+      .where(eq(managedMailAttachment.messageId, input.messageId));
+    const labels = await tx
+      .select({
+        id: managedMailLabel.id,
+        name: managedMailLabel.normalizedName,
+      })
+      .from(managedMailMessageLabel)
+      .innerJoin(
+        managedMailLabel,
+        eq(managedMailLabel.id, managedMailMessageLabel.labelId)
+      )
+      .where(eq(managedMailMessageLabel.messageId, input.messageId));
+    const matched = matchesRuleConditions({
       attachments,
-      customLabelIds,
-      customLabelNames,
-      index: 0,
-      labelNameById,
-      mailboxId: input.mailboxId,
-      matchedRule: false,
+      conditionGroups: input.rule.conditionGroups,
+      customLabelIds: labels.map((label) => label.id),
+      customLabelNames: labels.map((label) => label.name),
+      matchMode: input.rule.matchMode,
       message,
-      messageId: input.messageId,
-      ruleError: null,
-      rules,
-      tx,
+      search: input.rule.search,
     });
+    const now = new Date();
+    const [run] = await tx
+      .insert(managedMailRuleRun)
+      .values({
+        actionResults: [],
+        completedAt: matched ? null : now,
+        createdAt: now,
+        definition: input.rule,
+        id: randomUUID(),
+        mailboxId: input.mailboxId,
+        matched,
+        messageId: input.messageId,
+        revision: input.rule.revision,
+        ruleId: input.rule.id,
+        updatedAt: now,
+      })
+      .returning();
+    return run;
   });
+
+type PendingForward = {
+  action: Extract<ManagedMailboxRuleAction, { kind: "forward" }>;
+  actionResults: ActionResults;
+  message: ManagedMessageRecord;
+  ownerUserId: string | null;
+  ruleId: string;
+};
+
+const advanceRuleRun = async (
+  run: typeof managedMailRuleRun.$inferSelect
+): Promise<PendingForward | null> =>
+  await db.transaction(async (tx) => {
+    const [message] = await tx
+      .select()
+      .from(managedMailMessage)
+      .where(
+        and(
+          eq(managedMailMessage.id, run.messageId),
+          eq(managedMailMessage.mailboxId, run.mailboxId)
+        )
+      )
+      .for("update");
+    if (message === undefined) {
+      return null;
+    }
+    const [current] = await tx
+      .select()
+      .from(managedMailRuleRun)
+      .where(eq(managedMailRuleRun.id, run.id));
+    if (current === undefined || current.completedAt !== null) {
+      return null;
+    }
+    const [rule] = await tx
+      .select({ enabled: managedMailRule.enabled })
+      .from(managedMailRule)
+      .where(
+        and(
+          eq(managedMailRule.id, run.ruleId),
+          eq(managedMailRule.mailboxId, run.mailboxId)
+        )
+      );
+    if (!rule?.enabled) {
+      throw new ORPCError("CONFLICT", {
+        message:
+          "This rule was disabled before its remaining actions finished.",
+      });
+    }
+    const definition = managedRuleSnapshotSchema.parse(current.definition);
+    const results = actionResultsSchema.parse(current.actionResults);
+    if (
+      results.some(
+        (result, index) => result.kind !== definition.actions[index]?.kind
+      )
+    ) {
+      throw new Error("Stored rule results do not match their definition.");
+    }
+    let forward: PendingForward | null = null;
+    let changed = false;
+    for (const action of definition.actions.slice(results.length)) {
+      if (action.kind === "forward") {
+        if (
+          message.headers.some(
+            (header) => header.name.toLowerCase() === "x-quieter-rule-forwarded"
+          )
+        ) {
+          results.push({
+            kind: action.kind,
+            message:
+              "Skipped a message already forwarded by an automatic rule.",
+            status: "skipped",
+          });
+          continue;
+        }
+        forward = {
+          action,
+          actionResults: [...results],
+          message,
+          ownerUserId: definition.ownerUserId,
+          ruleId: definition.id,
+        };
+        break;
+      }
+      if (action.kind === "set-read") {
+        await tx
+          .update(managedMailMessage)
+          .set({ isRead: action.read, updatedAt: new Date() })
+          .where(eq(managedMailMessage.id, message.id));
+        message.isRead = action.read;
+        changed = true;
+      } else if (action.kind === "move") {
+        const mailboxState = (
+          {
+            archive: "archived",
+            inbox: "active",
+            spam: "spam",
+            trash: "trash",
+          } as const
+        )[action.destination];
+        await tx
+          .update(managedMailMessage)
+          .set({ mailboxState, updatedAt: new Date() })
+          .where(eq(managedMailMessage.id, message.id));
+        message.mailboxState = mailboxState;
+        changed = true;
+      } else if (action.kind === "set-labels") {
+        await updateManagedMessageLabelAssignments({
+          addLabelIds: action.addIds,
+          database: tx,
+          mailboxId: run.mailboxId,
+          messageIds: [message.id],
+          removeLabelIds: action.removeIds,
+          ruleId: run.ruleId,
+          source: "rule",
+        });
+        changed = true;
+      }
+      results.push({ kind: action.kind, status: "applied" });
+      if (action.kind === "stop-processing") {
+        break;
+      }
+    }
+    await tx
+      .update(managedMailRuleRun)
+      .set({
+        actionResults: results,
+        completedAt: forward === null ? new Date() : null,
+        error: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(managedMailRuleRun.id, run.id));
+    if (changed) {
+      await tx
+        .update(mailbox)
+        .set({
+          contentRevision: sql`${mailbox.contentRevision} + 1`,
+          updatedAt: new Date(),
+        })
+        .where(eq(mailbox.id, run.mailboxId));
+    }
+    return forward;
+  });
+
+export const applyManagedRulesToMessage = async (input: {
+  mailboxId: string;
+  messageId: string;
+  ruleId?: string;
+  snapshot?: ManagedRuleSnapshot;
+}) => {
+  let rules: ManagedRuleSnapshot[];
+  if (input.snapshot === undefined) {
+    const records = await db
+      .select()
+      .from(managedMailRule)
+      .where(
+        and(
+          eq(managedMailRule.mailboxId, input.mailboxId),
+          eq(managedMailRule.enabled, true),
+          input.ruleId ? eq(managedMailRule.id, input.ruleId) : undefined
+        )
+      )
+      .orderBy(asc(managedMailRule.priority), asc(managedMailRule.name));
+    rules = records.map(snapshotManagedRule);
+  } else {
+    rules = [input.snapshot];
+  }
+  let matched = false;
+  for (const rule of rules) {
+    let run: typeof managedMailRuleRun.$inferSelect | undefined;
+    try {
+      const prepared = await prepareRuleRun({
+        ...input,
+        reapply: input.ruleId !== undefined,
+        rule,
+      });
+      if (prepared === null) {
+        continue;
+      }
+      if ("legacyMatched" in prepared) {
+        matched ||= prepared.legacyMatched;
+        if (prepared.legacyStop) {
+          break;
+        }
+        continue;
+      }
+      run = prepared;
+      if (!run.matched) {
+        continue;
+      }
+      matched = true;
+      while (true) {
+        const forward = await advanceRuleRun(run);
+        if (forward === null) {
+          break;
+        }
+        if (forward.ownerUserId === null) {
+          throw new ORPCError("CONFLICT", {
+            message:
+              "The rule owner is no longer available to send an automatic forward.",
+          });
+        }
+        await sendManagedMailboxMessage({
+          mailboxId: input.mailboxId,
+          message: await createForwardMessage({
+            action: forward.action,
+            localId: `rule:${run.id}:${forward.actionResults.length}`,
+            message: forward.message,
+            ruleId: forward.ruleId,
+          }),
+          userId: forward.ownerUserId,
+        });
+        await db
+          .update(managedMailRuleRun)
+          .set({
+            actionResults: [
+              ...forward.actionResults,
+              { kind: "forward", status: "applied" },
+            ],
+            error: null,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(managedMailRuleRun.id, run.id),
+              sql`${managedMailRuleRun.actionResults} = ${JSON.stringify(forward.actionResults)}::jsonb`
+            )
+          );
+      }
+      if (
+        managedRuleSnapshotSchema
+          .parse(run.definition)
+          .actions.some((action) => action.kind === "stop-processing")
+      ) {
+        break;
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Rule execution failed.";
+      if (run !== undefined) {
+        await db
+          .update(managedMailRuleRun)
+          .set({ error: message.slice(0, 2000), updatedAt: new Date() })
+          .where(
+            and(
+              eq(managedMailRuleRun.id, run.id),
+              isNull(managedMailRuleRun.completedAt)
+            )
+          );
+      }
+      if (
+        !(error instanceof ORPCError) ||
+        error.code === "INTERNAL_SERVER_ERROR"
+      ) {
+        reportError(error, { operation: "managed-mail:apply-rules" });
+      }
+      return { error: message, matched };
+    }
+  }
+  return { error: null, matched };
+};

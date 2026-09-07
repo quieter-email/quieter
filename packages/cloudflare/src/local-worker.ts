@@ -104,10 +104,13 @@ export default {
       const { recoverMailSends } = await import("@quieter/orpc/mail-send");
       const { cleanupMailObjects } =
         await import("@quieter/orpc/managed-mail/storage");
+      const { processManagedRuleBackfills } =
+        await import("@quieter/orpc/managed-mail/rule-backfills");
       await withRequestDatabaseClient(async () => {
         await recoverMailSends();
         await cleanupMailObjects();
         await cleanupRateLimitBuckets();
+        await processManagedRuleBackfills();
       });
       return new Response(null, { status: 204 });
     }
