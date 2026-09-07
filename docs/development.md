@@ -246,3 +246,7 @@ Do not hand-edit:
 - Preserve existing layout and density for incremental UI changes.
 - Remove obsolete paths in the same change instead of keeping compatibility branches.
 - Update documentation when architecture, tooling, or operational behavior changes.
+
+## Transcription format verification
+
+Chat and compose share recording preparation. The configured `microsoft/mai-transcribe-1.5` endpoint accepted WAV, MP3, FLAC, and Ogg in a September 7, 2026 development probe. It returned HTTP 400 for WebM, M4A, and AAC, so those formats are decoded and sent as PCM WAV. Keep this conversion until a replacement model accepts the browser output. The probe used synthetic speech and the budget-limited development key, with $0.0024 reported usage across successful requests. Recordings are base64-encoded once, after preparation; size and duration limits apply to both composers.

@@ -22,11 +22,7 @@ import { MobileHeader } from "#/components/mobile-header";
 import { WorkspaceSection } from "#/components/workspace-section";
 import { USER_BILLING_QUERY_KEY } from "#/features/settings/domain/billing";
 import { useAudioRecorder } from "#/lib/audio-recorder";
-import {
-  getTranscriptionAudioFormat,
-  MAX_TRANSCRIPTION_AUDIO_DURATION_MS,
-  MAX_TRANSCRIPTION_AUDIO_BASE64_LENGTH,
-} from "#/lib/audio-transcription";
+import { prepareTranscriptionRecording } from "#/lib/audio-transcription";
 import { toastError } from "#/lib/error-toast";
 import { orpc } from "#/lib/orpc";
 
@@ -202,7 +198,9 @@ export const ComposeSurface = ({
       await queryClient.invalidateQueries({ queryKey: USER_BILLING_QUERY_KEY });
     },
   });
-  const isTranscribingAudio = transcribeAudioMutation.isPending;
+  const [isPreparingAudio, setIsPreparingAudio] = useState(false);
+  const isTranscribingAudio =
+    isPreparingAudio || transcribeAudioMutation.isPending;
 
   const canEditBody =
     state.draft.saveStatus !== "sending" &&
@@ -240,37 +238,22 @@ export const ComposeSurface = ({
   };
 
   const handleRecordingStop = () => {
+    setIsPreparingAudio(true);
     void (async () => {
       try {
-        const recording = await audioRecorder.stop();
+        const recording = await prepareTranscriptionRecording(
+          await audioRecorder.stop()
+        );
         if (!mountedRef.current) {
           return;
         }
-        if (
-          recording.durationMs > MAX_TRANSCRIPTION_AUDIO_DURATION_MS ||
-          recording.base64.length > MAX_TRANSCRIPTION_AUDIO_BASE64_LENGTH
-        ) {
-          compose.setActiveDraftError(
-            "Recordings must be 60 seconds or shorter and fit the upload limit."
-          );
-          return;
-        }
-        const format = getTranscriptionAudioFormat(recording.mimeType);
-
-        if (!format) {
-          compose.setActiveDraftError("This audio format is not supported.");
-          return;
-        }
-
         if (mailboxId === null || mailboxId === undefined || mailboxId === "") {
           compose.setActiveDraftError("Select a mailbox before transcribing.");
           return;
         }
 
         const result = await transcribeAudioMutation.mutateAsync({
-          audioBase64: recording.base64,
-          durationMs: recording.durationMs,
-          format,
+          ...recording,
           mailboxId,
           mode: "email",
         });
@@ -300,6 +283,10 @@ export const ComposeSurface = ({
         compose.setActiveDraftError(
           "Could not transcribe recording. Please try again."
         );
+      } finally {
+        if (mountedRef.current) {
+          setIsPreparingAudio(false);
+        }
       }
     })();
   };

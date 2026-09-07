@@ -1,3 +1,4 @@
+import { ORPCError } from "@orpc/client";
 import type { RouterInputs } from "@quieter/orpc";
 
 import type { AudioRecorderRecording } from "./audio-recorder";
@@ -88,47 +89,53 @@ export const encodePcmWav = (channels: Float32Array[], sampleRate: number) => {
   return bytes;
 };
 
-const bytesToBase64 = (bytes: Uint8Array) => {
-  let binary = "";
-  const chunkSize = 32_768;
-
-  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-    binary += String.fromCodePoint(
-      ...bytes.subarray(offset, offset + chunkSize)
-    );
-  }
-
-  return btoa(binary);
-};
-
-export const normalizeTranscriptionRecording = async (
+export const prepareTranscriptionRecording = async (
   recording: AudioRecorderRecording
-): Promise<AudioRecorderRecording> => {
-  if (getTranscriptionAudioFormat(recording.mimeType) === "wav") {
-    return recording;
+) => {
+  if (recording.durationMs > MAX_TRANSCRIPTION_AUDIO_DURATION_MS) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Recordings must be 60 seconds or shorter.",
+    });
   }
-
-  const audioContext = new AudioContext();
-
-  try {
-    const decoded = await audioContext.decodeAudioData(
-      await recording.blob.arrayBuffer()
-    );
-    const bytes = encodePcmWav(
-      Array.from({ length: decoded.numberOfChannels }, (_, index) =>
-        decoded.getChannelData(index)
-      ),
-      decoded.sampleRate
-    );
-    const blob = new Blob([bytes], { type: "audio/wav" });
-
-    return {
-      base64: bytesToBase64(bytes),
-      blob,
-      durationMs: recording.durationMs,
-      mimeType: blob.type,
-    };
-  } finally {
-    await audioContext.close();
+  let format = getTranscriptionAudioFormat(recording.mimeType);
+  if (format === null) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "This audio format is not supported.",
+    });
   }
+  if (
+    Math.ceil(recording.blob.size / 3) * 4 >
+    MAX_TRANSCRIPTION_AUDIO_BASE64_LENGTH
+  ) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "This recording is too large to transcribe.",
+    });
+  }
+  let bytes = new Uint8Array(await recording.blob.arrayBuffer());
+  // The configured transcription model rejects these containers, including the browser's WebM output.
+  if (format === "webm" || format === "m4a" || format === "aac") {
+    const context = new AudioContext();
+    try {
+      const decoded = await context.decodeAudioData(bytes.buffer);
+      bytes = encodePcmWav(
+        Array.from({ length: decoded.numberOfChannels }, (_, index) =>
+          decoded.getChannelData(index)
+        ),
+        decoded.sampleRate
+      );
+      format = "wav";
+    } finally {
+      await context.close();
+    }
+  }
+  if (Math.ceil(bytes.length / 3) * 4 > MAX_TRANSCRIPTION_AUDIO_BASE64_LENGTH) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "This recording is too large to transcribe.",
+    });
+  }
+  return {
+    audioBase64: bytes.toBase64(),
+    durationMs: recording.durationMs,
+    format,
+  };
 };

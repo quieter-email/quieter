@@ -29,12 +29,7 @@ import {
   userBillingQueryOptions,
 } from "#/features/settings/domain/billing";
 import { useAudioRecorder } from "#/lib/audio-recorder";
-import {
-  getTranscriptionAudioFormat,
-  MAX_TRANSCRIPTION_AUDIO_DURATION_MS,
-  MAX_TRANSCRIPTION_AUDIO_BASE64_LENGTH,
-  normalizeTranscriptionRecording,
-} from "#/lib/audio-transcription";
+import { prepareTranscriptionRecording } from "#/lib/audio-transcription";
 import {
   chatQueryOptions,
   getChatQueryKey,
@@ -474,31 +469,12 @@ const ChatSession = ({
   const stopRecording = async () => {
     setIsPreparingTranscription(true);
     try {
-      const nativeRecording = await audioRecorder.stop();
-      if (nativeRecording.durationMs > MAX_TRANSCRIPTION_AUDIO_DURATION_MS) {
-        toast.error("Recordings must be 60 seconds or shorter.");
-        setIsPreparingTranscription(false);
-        return;
-      }
-
-      const recording = await normalizeTranscriptionRecording(nativeRecording);
-      const format = getTranscriptionAudioFormat(recording.mimeType);
-      if (!format) {
-        toast.error("This recording could not be prepared for transcription.");
-        setIsPreparingTranscription(false);
-        return;
-      }
-      if (recording.base64.length > MAX_TRANSCRIPTION_AUDIO_BASE64_LENGTH) {
-        toast.error("This recording is too large to transcribe.");
-        setIsPreparingTranscription(false);
-        return;
-      }
-
+      const recording = await prepareTranscriptionRecording(
+        await audioRecorder.stop()
+      );
       const result = await transcribeAudio.mutateAsync({
-        audioBase64: recording.base64,
+        ...recording,
         chatId: chatId ?? undefined,
-        durationMs: recording.durationMs,
-        format,
         mailboxId,
       });
       setInput((current) =>
