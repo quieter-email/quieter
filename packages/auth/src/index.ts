@@ -234,6 +234,7 @@ export const auth = betterAuth({
   plugins: [
     bearer(),
     deviceAuthorization({
+      schema: {},
       validateClient: (clientId) => clientId === "quieter-desktop",
       verificationUri: "/device",
     }),
