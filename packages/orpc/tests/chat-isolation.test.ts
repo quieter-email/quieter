@@ -1,3 +1,4 @@
+import type * as DatabaseClientModule from "@quieter/database/client";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
 import { createAiChatResponse } from "../src/chat/service";
@@ -10,13 +11,15 @@ const mocks = vi.hoisted(() => ({
     >(),
 }));
 
-vi.mock(import("@quieter/database/client"), async (importOriginal) => {
-  const actual = await importOriginal();
+// This fake implements only the database operations exercised by the test.
+// oxlint-disable-next-line vitest/prefer-import-in-mock
+vi.mock("@quieter/database/client", async (importOriginal) => {
+  const actual = await importOriginal<typeof DatabaseClientModule>();
   const { drizzle } = await import("drizzle-orm/pg-proxy");
   const database = drizzle(mocks.query);
   return {
     ...actual,
-    db: Object.assign(actual.db, { select: database.select.bind(database) }),
+    db: { select: database.select.bind(database) },
   };
 });
 

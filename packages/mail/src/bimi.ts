@@ -420,6 +420,27 @@ type AssetLookup = {
   value: string | undefined;
 };
 
+const setCachedValue = <TValue>(
+  cache: Map<string, CacheEntry<TValue>>,
+  key: string,
+  entry: CacheEntry<TValue>,
+  now: number
+) => {
+  for (const [cachedKey, cached] of cache) {
+    if (cached.expiresAt <= now) {
+      cache.delete(cachedKey);
+    }
+  }
+  cache.delete(key);
+  cache.set(key, entry);
+  if (cache.size > 512) {
+    const oldestKey = cache.keys().next().value;
+    if (oldestKey !== undefined) {
+      cache.delete(oldestKey);
+    }
+  }
+};
+
 const getFreshCacheValue = <TValue>(
   cache: Map<string, CacheEntry<TValue>>,
   key: string,
@@ -908,10 +929,12 @@ export const createBimiResolver = (
     dnsInflight.set(name, request);
     const result = await request;
     dnsInflight.delete(name);
-    dnsCache.set(name, {
-      expiresAt: now() + result.ttlMs,
-      value: result,
-    });
+    setCachedValue(
+      dnsCache,
+      name,
+      { expiresAt: now() + result.ttlMs, value: result },
+      now()
+    );
     return result;
   };
 
@@ -1020,10 +1043,12 @@ export const createBimiResolver = (
     assetInflight.set(url, request);
     const result = await request;
     assetInflight.delete(url);
-    assetCache.set(url, {
-      expiresAt: now() + result.cacheDurationMs,
-      value: result.value,
-    });
+    setCachedValue(
+      assetCache,
+      url,
+      { expiresAt: now() + result.cacheDurationMs, value: result.value },
+      now()
+    );
     return result.value;
   };
 

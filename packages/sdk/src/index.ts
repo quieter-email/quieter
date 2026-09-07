@@ -155,9 +155,9 @@ const isSuppressionList = (
   "data" in value &&
   Array.isArray(value.data);
 
-const SEND_PATH = "/api/v1/send";
-const MESSAGE_PATH = "/api/v1/messages/";
-const SUPPRESSIONS_PATH = "/api/v1/suppressions";
+const SEND_PATH = "api/v1/send";
+const MESSAGE_PATH = "api/v1/messages/";
+const SUPPRESSIONS_PATH = "api/v1/suppressions";
 const DEFAULT_BASE_URL = "https://quieter.email";
 
 const bytesToBase64 = (bytes: Uint8Array) => {

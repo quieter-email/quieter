@@ -1,4 +1,5 @@
 import type { MCPClient } from "@ai-sdk/mcp";
+import type * as DatabaseClientModule from "@quieter/database/client";
 import {
   afterEach,
   beforeEach,
@@ -55,11 +56,13 @@ vi.mock(import("@ai-sdk/mcp"), () => ({
     { callTool: mocks.callTool, close: mocks.close } as unknown as MCPClient
   ),
 }));
-vi.mock(import("@quieter/database/client"), async (importOriginal) => {
-  const actual = await importOriginal();
+// This fake implements only the database operations exercised by the test.
+// oxlint-disable-next-line vitest/prefer-import-in-mock
+vi.mock("@quieter/database/client", async (importOriginal) => {
+  const actual = await importOriginal<typeof DatabaseClientModule>();
   return {
     ...actual,
-    db: Object.assign(actual.db, {
+    db: {
       select: () => ({
         from: () => ({
           where: () => ({
@@ -76,7 +79,7 @@ vi.mock(import("@quieter/database/client"), async (importOriginal) => {
           }),
         }),
       }),
-    }),
+    },
   };
 });
 vi.mock(import("../src/gmail-credential-crypto"), () => ({

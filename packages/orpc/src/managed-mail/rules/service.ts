@@ -74,6 +74,12 @@ const assertRuleDefinition = async (
   definition: ManagedMailboxRuleDefinition
 ) => {
   const parsed = managedMailboxRuleDefinitionSchema.parse(definition);
+  for (const search of [
+    parsed.search,
+    ...(parsed.conditionGroups ?? []).map((group) => group.search),
+  ]) {
+    createManagedSearchCondition(mailboxId, search, { fullText: false });
+  }
   const actions = assertRuleActions(parsed);
   const forwardedRecipients = actions.flatMap((action) =>
     action.kind === "forward" ? action.recipients : []
@@ -327,17 +333,15 @@ export const previewManagedRule = async (input: {
   const searchCondition = createManagedSearchCondition(
     input.mailboxId,
     definition.search,
-    now,
-    definition.matchMode
+    { fullText: false, matchMode: definition.matchMode, now }
   );
   const conditionGroupConditions =
     definition.conditionGroups?.map((group) =>
-      createManagedSearchCondition(
-        input.mailboxId,
-        group.search,
+      createManagedSearchCondition(input.mailboxId, group.search, {
+        fullText: false,
+        matchMode: group.matchMode,
         now,
-        group.matchMode
-      )
+      })
     ) ?? [];
   const where = and(
     eq(managedMailMessage.mailboxId, input.mailboxId),
@@ -369,11 +373,19 @@ export const previewManagedRule = async (input: {
   };
 };
 
-const processManagedBackfillBatch = async (backfillId: string) => {
+const processManagedBackfillBatch = async (
+  backfillId: string,
+  mailboxId: string
+) => {
   const [backfill] = await db
     .select()
     .from(managedMailRuleBackfill)
-    .where(eq(managedMailRuleBackfill.id, backfillId))
+    .where(
+      and(
+        eq(managedMailRuleBackfill.id, backfillId),
+        eq(managedMailRuleBackfill.mailboxId, mailboxId)
+      )
+    )
     .limit(1);
   if (
     backfill === undefined ||
@@ -444,7 +456,12 @@ const processManagedBackfillBatch = async (backfillId: string) => {
       updatedAt: new Date(),
       updatedCount: backfill.updatedCount + updatedCount,
     })
-    .where(eq(managedMailRuleBackfill.id, backfill.id))
+    .where(
+      and(
+        eq(managedMailRuleBackfill.id, backfill.id),
+        eq(managedMailRuleBackfill.mailboxId, mailboxId)
+      )
+    )
     .returning();
   return updated;
 };
@@ -500,7 +517,7 @@ export const startManagedRuleBackfill = async (input: {
       updatedAt: now,
     })
     .returning();
-  return await processManagedBackfillBatch(backfill.id);
+  return await processManagedBackfillBatch(backfill.id, input.mailboxId);
 };
 
 export const getManagedRuleBackfill = async (input: {
@@ -513,7 +530,10 @@ export const getManagedRuleBackfill = async (input: {
     requiredRoles: ["manager"],
     userId: input.userId,
   });
-  const updated = await processManagedBackfillBatch(input.backfillId);
+  const updated = await processManagedBackfillBatch(
+    input.backfillId,
+    input.mailboxId
+  );
   if (updated === undefined || updated.mailboxId !== input.mailboxId) {
     throw new ORPCError("NOT_FOUND", { message: "Backfill not found." });
   }

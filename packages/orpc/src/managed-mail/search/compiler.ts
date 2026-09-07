@@ -1,3 +1,4 @@
+import { ORPCError } from "@orpc/server";
 import {
   managedMailAttachment,
   managedMailLabel,
@@ -28,7 +29,7 @@ const createAddressFilterCondition = (
 ) => {
   const value = filter.value.trim();
   return ilike(
-    column,
+    sql`coalesce(${column}, '')`,
     createContainsPattern(normalizeManagedSearchValue(value))
   );
 };
@@ -181,15 +182,15 @@ const createFilterCondition = (
     }
     case "subject": {
       condition = ilike(
-        managedMailMessage.subject,
-        createContainsPattern(value)
+        sql`regexp_replace(lower(trim(coalesce(${managedMailMessage.subject}, ''))), '[[:space:]]+', ' ', 'g')`,
+        createContainsPattern(normalizeManagedSearchValue(value))
       );
       break;
     }
     case "content": {
       condition = ilike(
-        managedMailMessage.bodyText,
-        createContainsPattern(value)
+        sql`regexp_replace(lower(trim(coalesce(${managedMailMessage.bodyText}, ''))), '[[:space:]]+', ' ', 'g')`,
+        createContainsPattern(normalizeManagedSearchValue(value))
       );
       break;
     }
@@ -228,7 +229,9 @@ const createFilterCondition = (
   }
 
   if (condition === undefined) {
-    return undefined;
+    throw new ORPCError("BAD_REQUEST", {
+      message: "This search contains an invalid filter value.",
+    });
   }
   if (filter.negated === true) {
     return not(condition);
@@ -236,11 +239,12 @@ const createFilterCondition = (
   return condition;
 };
 
-const createTextCondition = (text: string) => {
+const createTextCondition = (text: string, fullText: boolean) => {
   const conditions = [
-    sql`to_tsvector('simple', ${managedMailMessage.searchText})
-        @@ websearch_to_tsquery('simple', ${text})`,
-    ilike(managedMailMessage.searchText, createContainsPattern(text)),
+    ilike(
+      sql`regexp_replace(lower(trim(coalesce(${managedMailMessage.searchText}, ''))), '[[:space:]]+', ' ', 'g')`,
+      createContainsPattern(normalizeManagedSearchValue(text))
+    ),
     exists(
       sql`select 1 from ${managedMailAttachment}
           where ${managedMailAttachment.messageId} = ${managedMailMessage.id}
@@ -248,58 +252,29 @@ const createTextCondition = (text: string) => {
               like ${createContainsPattern(normalizeManagedSearchValue(text))}`
     ),
   ];
+  if (fullText) {
+    conditions.push(
+      sql`to_tsvector('simple', ${managedMailMessage.searchText}) @@ websearch_to_tsquery('simple', ${text})`
+    );
+  }
   return or(...conditions);
 };
 
 export const createManagedSearchCondition = (
   mailboxId: string,
   search: StructuredMailSearch,
-  now = new Date(),
-  matchMode: "all" | "any" = "all"
+  options: { now?: Date; matchMode?: "all" | "any"; fullText?: boolean } = {}
 ) => {
+  const { now = new Date(), matchMode = "all", fullText = true } = options;
   const normalizedSearch = normalizeStructuredMailSearch(search);
-  if (matchMode === "any") {
-    const conditions = normalizedSearch.filters
-      .map((filter) => createFilterCondition(mailboxId, filter, now))
-      .filter((condition): condition is SQL => condition !== undefined);
-    if (hasText(normalizedSearch.text)) {
-      const textCondition = createTextCondition(normalizedSearch.text);
-      if (textCondition !== undefined) {
-        conditions.push(textCondition);
-      }
-    }
-    return conditions.length > 0 ? or(...conditions) : undefined;
-  }
-
-  const groupedFilters = new Map<
-    MailSearchFilter["type"],
-    MailSearchFilter[]
-  >();
-  for (const filter of normalizedSearch.filters) {
-    const filters = groupedFilters.get(filter.type) ?? [];
-    filters.push(filter);
-    groupedFilters.set(filter.type, filters);
-  }
-
-  const conditions: SQL[] = [];
-  for (const filters of groupedFilters.values()) {
-    const groupConditions = filters
-      .map((filter) => createFilterCondition(mailboxId, filter, now))
-      .filter((condition): condition is SQL => condition !== undefined);
-    const groupCondition =
-      groupConditions.length === 1
-        ? groupConditions[0]
-        : or(...groupConditions);
-    if (groupCondition !== undefined) {
-      conditions.push(groupCondition);
-    }
-  }
-
+  const conditions = normalizedSearch.filters.map((filter) =>
+    createFilterCondition(mailboxId, filter, now)
+  );
   if (hasText(normalizedSearch.text)) {
-    const textCondition = createTextCondition(normalizedSearch.text);
+    const textCondition = createTextCondition(normalizedSearch.text, fullText);
     if (textCondition !== undefined) {
       conditions.push(textCondition);
     }
   }
-  return conditions.length > 0 ? and(...conditions) : undefined;
+  return matchMode === "any" ? or(...conditions) : and(...conditions);
 };

@@ -9,10 +9,6 @@ import {
   extractMessageContent,
   findRenderablePart,
 } from "@quieter/mail/message-content";
-import {
-  parseStructuredSearchQuery,
-  serializeStructuredSearchState,
-} from "@quieter/mail/search";
 import { getSenderAvatarUrls } from "@quieter/mail/sender-avatar";
 import { z } from "zod";
 
@@ -514,43 +510,23 @@ const compileGmailSearchQuery = (
   mailbox: MailboxCategory | undefined,
   query: string | undefined
 ) => {
-  const parsed = parseStructuredSearchQuery(query ?? "");
-  const archived = parsed.filters.some(
-    (filter) =>
-      filter.negated !== true &&
-      filter.type === "is" &&
-      filter.value.toLowerCase() === "archived"
+  const providerQuery = query?.replaceAll(
+    /"(?:\\.|[^"\\])*"|(?<prefix>^|[\s({])(?<archive>-?is:archived)(?=$|[\s)}])/giu,
+    (
+      match: string,
+      prefix: string | undefined,
+      archive: string | undefined
+    ) => {
+      if (archive === undefined) {
+        return match;
+      }
+      const terms = archive.startsWith("-")
+        ? "{in:inbox in:sent label:drafts in:spam in:trash}"
+        : "(-in:inbox -in:sent -label:drafts -in:spam -in:trash)";
+      return (prefix ?? "") + terms;
+    }
   );
-  const notArchived = parsed.filters.some(
-    (filter) =>
-      filter.negated === true &&
-      filter.type === "is" &&
-      filter.value.toLowerCase() === "archived"
-  );
-  const providerQuery = serializeStructuredSearchState({
-    ...parsed,
-    filters: parsed.filters.filter(
-      (filter) =>
-        !(filter.type === "is" && filter.value.toLowerCase() === "archived")
-    ),
-  });
-  const archiveQuery = archived
-    ? appendGmailQueryTerms(providerQuery, [
-        "-in:inbox",
-        "-in:sent",
-        "-label:drafts",
-        "-in:spam",
-        "-in:trash",
-      ])
-    : providerQuery;
-  return getListMessagesQuery(
-    mailbox,
-    notArchived
-      ? appendGmailQueryTerms(archiveQuery, [
-          "{in:inbox in:sent label:drafts in:spam in:trash}",
-        ])
-      : archiveQuery
-  );
+  return getListMessagesQuery(mailbox, providerQuery);
 };
 
 const isKnownGmailRateLimit = (details: {

@@ -190,5 +190,10 @@ export const persistQueryByKey = async (
   if (!queryKey || !shouldPersistQueryKey(queryKey)) {
     return;
   }
-  await queryPersister.persistQueryByKey(queryKey, queryClient);
+  try {
+    await queryPersister.persistQueryByKey(queryKey, queryClient);
+  } catch {
+    // Optional cache persistence must not change a server mutation outcome.
+    persistenceDisabled = true;
+  }
 };

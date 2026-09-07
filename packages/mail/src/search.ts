@@ -23,7 +23,7 @@ export type MailSearchFilterType = z.infer<typeof mailSearchFilterTypeSchema>;
 export const mailSearchFilterSchema = z.object({
   negated: z.boolean().optional(),
   type: mailSearchFilterTypeSchema,
-  value: z.string(),
+  value: z.string().trim().min(1),
 });
 
 export type MailSearchFilter = z.infer<typeof mailSearchFilterSchema>;
@@ -56,6 +56,8 @@ const MANAGED_FILTER_TYPES = new Set<MailSearchFilterType>(
 );
 
 const REPEATABLE_FILTER_TYPES = new Set<MailSearchFilterType>([
+  "is",
+  "has",
   "bcc",
   "cc",
   "content",
@@ -241,6 +243,14 @@ const tokenizeStructuredSearchQuery = (
   let textStart = 0;
 
   while (cursor < query.length) {
+    if (query[cursor] === '"') {
+      cursor += 1;
+      while (cursor < query.length && query[cursor] !== '"') {
+        cursor += query[cursor] === "\\" ? 2 : 1;
+      }
+      cursor += 1;
+      continue;
+    }
     const isTokenStart = cursor === 0 || /\s/u.test(query[cursor - 1] ?? "");
     if (!isTokenStart) {
       cursor += 1;
@@ -298,12 +308,16 @@ export const normalizeStructuredMailSearch = (
     }
   }
 
-  return { filters, text: normalizeSearchText(search.text) };
+  return { filters, text: search.text.trim() };
 };
 
 export const parseStructuredSearchQuery = (
   query: string
 ): StructuredMailSearch => {
+  const unquoted = query.replaceAll(/"(?:\\.|[^"\\])*"/gu, "");
+  if (/(?:^|\s)(?:OR|AND|NOT)(?:\s|$)|[(){}]/u.test(unquoted)) {
+    return { filters: [], text: query.trim() };
+  }
   const filters: MailSearchFilter[] = [];
   const textParts: string[] = [];
 

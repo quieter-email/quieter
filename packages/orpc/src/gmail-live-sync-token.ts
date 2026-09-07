@@ -1,22 +1,15 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 
-import { z } from "zod";
+import { liveSyncTokenPayloadSchema } from "@quieter/mail/live-sync";
+import type { z } from "zod";
 
 import { hasText } from "./text";
 
 const TOKEN_LIFETIME_SECONDS = 90;
 
-const tokenPayloadSchema = z.object({
-  emailAddress: z.email(),
-  expiresAt: z.number().int().positive(),
-  issuedAt: z.number().int().positive(),
-  mailboxId: z.string().min(1),
-  nonce: z.uuid(),
-  userId: z.string().min(1),
-  version: z.literal(1),
-});
-
-export type GmailLiveSyncTokenPayload = z.infer<typeof tokenPayloadSchema>;
+export type GmailLiveSyncTokenPayload = z.infer<
+  typeof liveSyncTokenPayloadSchema
+>;
 
 const signTokenPayload = (encodedPayload: string, secret: string) =>
   createHmac("sha256", secret).update(encodedPayload).digest("base64url");
@@ -75,7 +68,7 @@ export const verifyGmailLiveSyncToken = (
     throw new Error("Gmail live-sync token signature is invalid.");
   }
 
-  const payload = tokenPayloadSchema.parse(
+  const payload = liveSyncTokenPayloadSchema.parse(
     JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf-8"))
   );
   const nowSeconds = Math.floor(now.getTime() / 1000);

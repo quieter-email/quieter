@@ -1,10 +1,10 @@
+import { extractSenderEmail } from "@quieter/mail/sender-avatar";
+
 import type { MessageListItem } from "./gmail";
 
 const hasText = (value: string | null | undefined): value is string =>
   value !== null && value !== undefined && value !== "";
 
-const EMAIL_ADDRESS_PATTERN =
-  /(?<email>[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+)/iu;
 const compactMessageDateFormatter = new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",
   timeStyle: "short",
@@ -28,16 +28,6 @@ const messageListPreviousYearDateFormatter = new Intl.DateTimeFormat(
     year: "numeric",
   }
 );
-
-const extractSenderEmail = (value: string | undefined): string | undefined => {
-  const normalized = value?.trim();
-  if (!hasText(normalized)) {
-    return undefined;
-  }
-
-  const match = EMAIL_ADDRESS_PATTERN.exec(normalized);
-  return match?.groups?.email?.trim().toLowerCase();
-};
 
 const getParsedMessageDate = (message: MessageListItem) => {
   const source = message.internalDate ?? message.date;

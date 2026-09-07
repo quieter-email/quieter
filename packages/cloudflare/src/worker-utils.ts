@@ -1,4 +1,5 @@
 import { withRequestDatabaseClient } from "@quieter/database/client";
+import { liveSyncTokenPayloadSchema } from "@quieter/mail/live-sync";
 import { createRemoteJWKSet, errors as joseErrors, jwtVerify } from "jose";
 import { z } from "zod";
 
@@ -33,16 +34,6 @@ const gmailNotificationSchema = z.object({
         .transform(String),
     ])
     .pipe(z.string().min(1)),
-});
-
-const tokenPayloadSchema = z.object({
-  emailAddress: z.email(),
-  expiresAt: z.number().int().positive(),
-  issuedAt: z.number().int().positive(),
-  mailboxId: z.string().min(1),
-  nonce: z.uuid(),
-  userId: z.string().min(1),
-  version: z.literal(1),
 });
 
 const pubSubJwtPayloadSchema = z.object({
@@ -112,7 +103,7 @@ export const verifyLiveSyncToken = async (token: string, secret: string) => {
     parsedPayload = undefined;
   }
 
-  const payload = tokenPayloadSchema.safeParse(parsedPayload);
+  const payload = liveSyncTokenPayloadSchema.safeParse(parsedPayload);
   if (!payload.success) {
     throw new RequestError(401, "live_sync_token_payload_invalid");
   }

@@ -90,48 +90,20 @@ const getDatabaseClient = () => {
   return directDatabaseClient;
 };
 
-type RequestDatabaseRun<Result> =
-  | ((client: DatabaseClient) => Result | Promise<Result>)
-  | (() => Result | Promise<Result>);
-
-const isClientRun = <Result>(
-  run: RequestDatabaseRun<Result>
-): run is (client: DatabaseClient) => Result | Promise<Result> =>
-  run.length > 0;
-
-const executeRequestDatabaseRun = async <Result>(
-  run: RequestDatabaseRun<Result>,
-  client: DatabaseClient
-): Promise<Result> => {
-  if (isClientRun(run)) {
-    return await run(client);
-  }
-  const runWithoutClient = run as () => Result | Promise<Result>;
-  return await runWithoutClient();
-};
-
 export const withRequestDatabaseClient = async <Result>(
-  run: RequestDatabaseRun<Result>
+  run: (client: DatabaseClient) => Result | Promise<Result>
 ): Promise<Result> => {
   const requestClient = requestDatabaseClient.getStore();
   if (requestClient) {
-    return await executeRequestDatabaseRun(run, requestClient);
+    return await run(requestClient);
   }
 
   const client = createDatabaseClient();
-  return await requestDatabaseClient.run(
-    client,
-    async () => await executeRequestDatabaseRun(run, client)
-  );
+  return await requestDatabaseClient.run(client, async () => await run(client));
 };
-
-const databaseProxyOverrides = new Map<PropertyKey, unknown>();
 
 const databaseProxyHandler: ProxyHandler<DatabaseClient> = {
   get(_target, property): unknown {
-    if (databaseProxyOverrides.has(property)) {
-      return databaseProxyOverrides.get(property);
-    }
     const client = getDatabaseClient();
     const value: unknown = Reflect.get(client, property);
     if (typeof value === "function") {
@@ -139,10 +111,6 @@ const databaseProxyHandler: ProxyHandler<DatabaseClient> = {
         Reflect.apply(value, client, args) as unknown;
     }
     return value;
-  },
-  set(_target, property, value): boolean {
-    databaseProxyOverrides.set(property, value);
-    return true;
   },
 };
 

@@ -28,18 +28,6 @@ type ExtractedInlineMessageAttachment = ExtractedMessageAttachment & {
 
 const UTF8_CHARSET = "utf-8";
 
-const EDGE_NOISE_REGEX = /^[\s\p{Cf}\u034F]+|[\s\p{Cf}\u034F]+$/gu;
-const INLINE_NOISE_REGEX = /\u034F|\u200B|\u200C|\u200D|\u2060|\uFEFF/gu;
-
-const HTML_ENTITY_BY_NAME: Record<string, string> = {
-  amp: "&",
-  apos: "'",
-  gt: ">",
-  lt: "<",
-  nbsp: " ",
-  quot: '"',
-};
-
 const MOJIBAKE_TOKEN_REGEX =
   /\u00C3[\u0080-\u00BF]|\u00C2[\u0080-\u00BF]|\u00E2[\u0080-\u00BF]|\u00D0[\u0080-\u00BF]|\u00D1[\u0080-\u00BF]|\u00F0\u0178[\u0080-\u00BF]|\u00EF\u00BF\u00BD|\uFFFD/gu;
 
@@ -118,16 +106,6 @@ const decodeWithCharset = (
   }
 };
 
-const textToLatin1Bytes = (value: string): Uint8Array => {
-  const bytes = new Uint8Array(value.length);
-
-  for (let index = 0; index < value.length; index += 1) {
-    bytes[index] = toByte(value.codePointAt(index));
-  }
-
-  return bytes;
-};
-
 const getMojibakeScore = (value: string): number =>
   value.match(MOJIBAKE_TOKEN_REGEX)?.length ?? 0;
 
@@ -136,8 +114,20 @@ const repairLikelyUtf8Mojibake = (value: string): string => {
     return value;
   }
 
-  const repaired = decodeWithCharset(textToLatin1Bytes(value), UTF8_CHARSET);
-  if (repaired === undefined) {
+  const bytes: number[] = [];
+  for (const character of value) {
+    const codePoint = character.codePointAt(0);
+    if (codePoint === undefined || codePoint > 255) {
+      return value;
+    }
+    bytes.push(codePoint);
+  }
+  let repaired: string;
+  try {
+    repaired = new TextDecoder(UTF8_CHARSET, { fatal: true }).decode(
+      new Uint8Array(bytes)
+    );
+  } catch {
     return value;
   }
 
@@ -146,69 +136,7 @@ const repairLikelyUtf8Mojibake = (value: string): string => {
     : value;
 };
 
-const decodeHtmlEntityCodePoint = (
-  value: string,
-  radix: 10 | 16
-): string | undefined => {
-  const codePoint = Number.parseInt(value, radix);
-  if (!Number.isInteger(codePoint) || codePoint < 0 || codePoint > 0x10_ff_ff) {
-    return undefined;
-  }
-
-  try {
-    return String.fromCodePoint(codePoint);
-  } catch {
-    return undefined;
-  }
-};
-
-const decodeHtmlEntities = (value: string): string => {
-  let decoded = value;
-
-  for (let pass = 0; pass < 2; pass += 1) {
-    const next = decoded.replaceAll(
-      /&(?:#(?<decimal>\d+)|#x(?<hex>[\da-fA-F]+)|(?<named>[a-zA-Z][a-zA-Z\d]+));/gu,
-      (
-        entity,
-        decimalValue: string | undefined,
-        hexValue: string | undefined,
-        namedValue: string | undefined
-      ) => {
-        if (decimalValue !== undefined) {
-          return decodeHtmlEntityCodePoint(decimalValue, 10) ?? entity;
-        }
-
-        if (hexValue !== undefined) {
-          return decodeHtmlEntityCodePoint(hexValue, 16) ?? entity;
-        }
-
-        if (namedValue !== undefined) {
-          return HTML_ENTITY_BY_NAME[namedValue.toLowerCase()] ?? entity;
-        }
-
-        return entity;
-      }
-    );
-
-    if (next === decoded) {
-      break;
-    }
-    decoded = next;
-  }
-
-  return decoded;
-};
-
 const CID_REFERENCE_REGEX = /cid:(?<contentId>[^"' >]+)/giu;
-
-const stripInlineNoise = (value: string): string =>
-  value.replace(INLINE_NOISE_REGEX, "");
-
-const trimBoundaryNoise = (value: string): string =>
-  value.replace(EDGE_NOISE_REGEX, "");
-
-const normalizeDecodedValue = (value: string): string =>
-  trimBoundaryNoise(stripInlineNoise(decodeHtmlEntities(value)));
 
 const decodeBytesAsText = (bytes: Uint8Array, charset: string): string => {
   const normalizedCharset = charset.trim().toLowerCase();
@@ -305,7 +233,7 @@ export const decodeMimeHeaderValue = (value?: string): string | undefined => {
   const decodedValue = repairLikelyUtf8Mojibake(
     matchedEncodedWord ? output : value
   );
-  const normalizedValue = normalizeDecodedValue(decodedValue);
+  const normalizedValue = decodedValue.trim();
 
   return normalizedValue.length > 0 ? normalizedValue : undefined;
 };
@@ -441,12 +369,7 @@ export const extractMessageAttachments = (
     }
 
     const contentId = normalizeContentId(getHeader(part, "Content-ID"));
-    const contentDisposition = getContentDisposition(part);
-    if (
-      contentId !== undefined &&
-      (referencedInlineContentIds.has(contentId) ||
-        contentDisposition?.startsWith("inline") === true)
-    ) {
+    if (contentId !== undefined && referencedInlineContentIds.has(contentId)) {
       continue;
     }
 

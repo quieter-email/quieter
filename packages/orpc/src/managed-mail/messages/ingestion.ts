@@ -9,7 +9,6 @@ import {
 } from "@quieter/database/schema";
 import { parseRawMailMessage } from "@quieter/mail/raw-message";
 import type { ParsedRawMailMessage } from "@quieter/mail/raw-message";
-import { reportError } from "@quieter/observability";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { enqueueMailboxActionsForMessage } from "../../mailbox-actions/enqueue";
@@ -73,28 +72,24 @@ const runPostIngestionOrganization = async (input: {
   providerMessageId: string;
   threadId: string;
 }) => {
-  try {
-    await inheritManagedThreadLabels({
-      mailboxId: input.mailboxId,
-      messageId: input.messageId,
-      threadId: input.threadId,
-    });
-    await applyManagedRulesToMessage({
-      mailboxId: input.mailboxId,
-      messageId: input.messageId,
-    });
-    await processManagedMailAutomation({
-      mailboxId: input.mailboxId,
-      messageId: input.messageId,
-    });
-    await enqueueMailboxActionsForMessage({
-      mailboxId: input.mailboxId,
-      sourceMessageId: input.providerMessageId,
-      sourceThreadId: input.threadId,
-    });
-  } catch (error) {
-    reportError(error, { operation: "managed-mail:organize-after-ingestion" });
-  }
+  await inheritManagedThreadLabels({
+    mailboxId: input.mailboxId,
+    messageId: input.messageId,
+    threadId: input.threadId,
+  });
+  await applyManagedRulesToMessage({
+    mailboxId: input.mailboxId,
+    messageId: input.messageId,
+  });
+  await processManagedMailAutomation({
+    mailboxId: input.mailboxId,
+    messageId: input.messageId,
+  });
+  await enqueueMailboxActionsForMessage({
+    mailboxId: input.mailboxId,
+    sourceMessageId: input.providerMessageId,
+    sourceThreadId: input.threadId,
+  });
 };
 
 const ingestManagedMessageForMailbox = async (input: {
@@ -231,17 +226,13 @@ const ingestManagedMessageForMailbox = async (input: {
     )
     .limit(1);
   if (existing !== undefined) {
-    await Promise.all([
-      inheritManagedThreadLabels({
-        mailboxId: input.targetMailboxId,
-        messageId: existing.id,
-        threadId: existing.threadId,
-      }),
-      applyManagedRulesToMessage({
-        mailboxId: input.targetMailboxId,
-        messageId: existing.id,
-      }),
-    ]);
+    await runPostIngestionOrganization({
+      mailboxId: input.targetMailboxId,
+      messageId: existing.id,
+      providerMessageId: input.providerMessageId,
+      threadId: existing.threadId,
+    });
+    return input.targetMailboxId;
   }
   return null;
 };
@@ -389,11 +380,11 @@ export const recordInboundManagedMessage = async (input: {
         })
     )
   );
-  const insertedMailboxIds = ingestResults.filter(
+  const processedMailboxIds = ingestResults.filter(
     (mailboxId): mailboxId is string => mailboxId !== null
   );
 
-  return insertedMailboxIds;
+  return processedMailboxIds;
 };
 
 export const hasManagedMailObjectReference = async (input: {

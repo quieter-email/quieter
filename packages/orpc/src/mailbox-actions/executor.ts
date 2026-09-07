@@ -566,6 +566,7 @@ export const executeMailboxActionRun = async (
     return { status: "not_claimed" as const };
   }
 
+  const usageTasks: Promise<void>[] = [];
   try {
     const [revision] = await db
       .select({
@@ -607,28 +608,30 @@ export const executeMailboxActionRun = async (
         }
         const usageIndex = usageIndexesByStepRunId.get(stepRunId) ?? 0;
         usageIndexesByStepRunId.set(stepRunId, usageIndex + 1);
-        void (async () => {
-          try {
-            await reportAiUsage({
-              completionTokens: usage.completionTokens,
-              costUsd: usage.costUsd,
-              externalId: externalIdFor(usageIndex),
-              mailboxId: run.mailboxId,
-              model,
-              promptTokens: usage.promptTokens,
-              promptTokensDetails: {
-                cacheWriteTokens: usage.cacheWriteTokens,
-                cachedTokens: usage.cachedTokens,
-              },
-              usageKind: "aiChat",
-              userId: billingUserId,
-            });
-          } catch (error: unknown) {
-            reportError(error, {
-              operation: "mailbox-actions:report-ai-usage",
-            });
-          }
-        })();
+        usageTasks.push(
+          (async () => {
+            try {
+              await reportAiUsage({
+                completionTokens: usage.completionTokens,
+                costUsd: usage.costUsd,
+                externalId: externalIdFor(usageIndex),
+                mailboxId: run.mailboxId,
+                model,
+                promptTokens: usage.promptTokens,
+                promptTokensDetails: {
+                  cacheWriteTokens: usage.cacheWriteTokens,
+                  cachedTokens: usage.cachedTokens,
+                },
+                usageKind: "aiChat",
+                userId: billingUserId,
+              });
+            } catch (error: unknown) {
+              reportError(error, {
+                operation: "mailbox-actions:report-ai-usage",
+              });
+            }
+          })()
+        );
       };
     };
     const email = await loadActionEmailInput({
@@ -799,5 +802,7 @@ export const executeMailboxActionRun = async (
       )
       .where(eq(mailboxActionRun.id, run.id));
     throw error;
+  } finally {
+    await Promise.all(usageTasks);
   }
 };

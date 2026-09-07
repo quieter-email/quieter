@@ -161,8 +161,11 @@ export const ManagedMailboxManagerSettingsSection = ({
           }
         );
       }}
-      onUpdateMailbox={(input) => {
-        updateManagedMailboxMutation.mutate({ ...input, mailboxId });
+      onUpdateMailbox={(input, onSettled) => {
+        updateManagedMailboxMutation.mutate(
+          { ...input, mailboxId },
+          { onSettled }
+        );
       }}
       onUsefulDetailsChange={(enabled) => {
         setGmailUsefulDetailsMutation.mutate({ enabled, mailboxId });

@@ -69,7 +69,7 @@ const csrfMiddleware = createCsrfMiddleware({
 });
 
 const databaseMiddleware = createMiddleware().server(
-  async ({ next }) => await withRequestDatabaseClient(next)
+  async ({ next }) => await withRequestDatabaseClient(async () => await next())
 );
 
 let databaseHealthyUntil = 0;

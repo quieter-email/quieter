@@ -1,11 +1,9 @@
 import { randomUUID } from "node:crypto";
 
-import { chatModelSchema } from "@quieter/ai/chat-models";
 import type { ChatModel } from "@quieter/ai/chat-models";
 import type { AiUsageReport } from "@quieter/ai/chat-usage";
 import { classifyMailMessage } from "@quieter/ai/classify-gmail-message";
 import type { MailAutoLabelCandidate } from "@quieter/ai/classify-gmail-message";
-import { reportAiUsage } from "@quieter/billing";
 import { hasUserBillingFeature } from "@quieter/billing/entitlements";
 import { db } from "@quieter/database/client";
 import {
@@ -60,6 +58,7 @@ import {
 } from "../gmail-useful-details/service";
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import { deferAutoLabelAutomation } from "../mail-automation/auto-label-events";
+import { reportAutoLabelUsage } from "../mail-automation/usage";
 import { enqueueMailboxActionsForMessage } from "../mailbox-actions/enqueue";
 
 const WATCH_RENEWAL_INTERVAL_MS = 1000 * 60 * 60 * 20;
@@ -227,66 +226,6 @@ const releaseMailboxProcessingLease = async (
         eq(gmailWatchState.processingLeaseId, leaseId)
       )
     );
-};
-
-const reportAutoLabelUsage = async (event: {
-  cachedTokens: number | null;
-  cacheWriteTokens: number | null;
-  completionTokens: number | null;
-  costUsd: number | null;
-  id: string;
-  mailboxId: string;
-  model: string | null;
-  promptTokens: number | null;
-  usageReportedAt: Date | null;
-  userId: string;
-}) => {
-  const model = chatModelSchema.safeParse(event.model);
-  if (
-    event.usageReportedAt ||
-    !model.success ||
-    event.promptTokens === null ||
-    event.promptTokens === undefined ||
-    event.completionTokens === null ||
-    event.completionTokens === undefined ||
-    event.costUsd === null ||
-    event.costUsd === undefined
-  ) {
-    return;
-  }
-
-  try {
-    await reportAiUsage({
-      completionTokens: event.completionTokens,
-      costUsd: event.costUsd,
-      externalId: event.id,
-      mailboxId: event.mailboxId,
-      model: model.data,
-      promptTokens: event.promptTokens,
-      promptTokensDetails: {
-        cacheWriteTokens: event.cacheWriteTokens ?? 0,
-        cachedTokens: event.cachedTokens ?? 0,
-      },
-      usageKind: "autoLabel",
-      userId: event.userId,
-    });
-    await db
-      .update(gmailAutoLabelEvent)
-      .set({
-        lastError: null,
-        updatedAt: new Date(),
-        usageReportedAt: new Date(),
-      })
-      .where(eq(gmailAutoLabelEvent.id, event.id));
-  } catch (error) {
-    await db
-      .update(gmailAutoLabelEvent)
-      .set({
-        lastError: `AI usage reporting failed: ${getErrorMessage(error)}`,
-        updatedAt: new Date(),
-      })
-      .where(eq(gmailAutoLabelEvent.id, event.id));
-  }
 };
 
 const reportPendingAutoLabelUsage = async (

@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./live-sync": "./src/live-sync.ts",
     "./data-plane": "./src/data-plane.ts",
     "./compose/draft-anchor": "./src/compose/draft-anchor.ts",
     "./compose/mime": "./src/compose/mime.ts",

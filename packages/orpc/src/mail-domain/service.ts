@@ -435,8 +435,14 @@ const checkCnameRecord = async (
   try {
     const resolvedCnames = await dns.resolveCname(toLookupName(record.name));
     found = resolvedCnames.map(normalizeDnsValue);
-  } catch {
-    found = [];
+  } catch (error) {
+    if (
+      !(error instanceof Error) ||
+      !("code" in error) ||
+      (error.code !== "ENODATA" && error.code !== "ENOTFOUND")
+    ) {
+      throw error;
+    }
   }
 
   const ok = found.some((value) => expected.includes(value));
@@ -464,8 +470,14 @@ const checkMxRecord = async (
 
   try {
     foundRecords = await dns.resolveMx(toLookupName(record.name));
-  } catch {
-    foundRecords = [];
+  } catch (error) {
+    if (
+      !(error instanceof Error) ||
+      !("code" in error) ||
+      (error.code !== "ENODATA" && error.code !== "ENOTFOUND")
+    ) {
+      throw error;
+    }
   }
 
   const found = foundRecords.map(
@@ -493,8 +505,14 @@ const checkTxtRecord = async (
   try {
     const resolvedTxtRecords = await dns.resolveTxt(toLookupName(record.name));
     found = resolvedTxtRecords.map((chunks) => chunks.join("").toLowerCase());
-  } catch {
-    found = [];
+  } catch (error) {
+    if (
+      !(error instanceof Error) ||
+      !("code" in error) ||
+      (error.code !== "ENODATA" && error.code !== "ENOTFOUND")
+    ) {
+      throw error;
+    }
   }
 
   let ok = false;

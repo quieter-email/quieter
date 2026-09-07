@@ -9,7 +9,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { useColorMode } from "@quieter/ui/color-mode";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 
 import { useExternalImagesEnabled } from "#/features/settings/domain/external-images-setting";
 
@@ -116,9 +116,6 @@ const HtmlMessageBodyContent = ({
   );
   const remoteImagesPresent =
     !shouldLoadImages && processedMail.hasBlockedImages;
-  const handleImageErrorRef = useRef<(event: Event) => void>((event) => {
-    void event;
-  });
 
   useEffect(() => {
     if (!hostRef.current) {
@@ -148,22 +145,20 @@ const HtmlMessageBodyContent = ({
     });
   }, [colorMode, processedMail]);
 
-  useEffect(() => {
-    handleImageErrorRef.current = (event) => {
-      const { target } = event;
-      if (!(target instanceof HTMLImageElement)) {
-        return;
-      }
+  const handleImageError = useEffectEvent((event: Event) => {
+    const { target } = event;
+    if (!(target instanceof HTMLImageElement)) {
+      return;
+    }
 
-      if (
-        !shouldLoadImages &&
-        REMOTE_IMAGE_REGEX.test(target.currentSrc || target.src)
-      ) {
-        setCspViolation(true);
-      }
-      target.style.display = "none";
-    };
-  }, [shouldLoadImages]);
+    if (
+      !shouldLoadImages &&
+      REMOTE_IMAGE_REGEX.test(target.currentSrc || target.src)
+    ) {
+      setCspViolation(true);
+    }
+    target.style.display = "none";
+  });
 
   useEffect(() => {
     const root = shadowRootRef.current;
@@ -171,9 +166,6 @@ const HtmlMessageBodyContent = ({
       return;
     }
 
-    const handleImageError = (event: Event) => {
-      handleImageErrorRef.current(event);
-    };
     root.addEventListener("error", handleImageError, true);
 
     const handleClick = (event: Event) => {
