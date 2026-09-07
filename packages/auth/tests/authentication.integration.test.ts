@@ -12,6 +12,8 @@ import {
   vi,
 } from "vite-plus/test";
 
+import type { auth as configuredAuth } from "../src/index";
+
 const { databaseUrl, sendMagicLinkEmail } = vi.hoisted(() => ({
   databaseUrl: process.env.MIGRATION_TEST_DATABASE_URL,
   sendMagicLinkEmail: vi
@@ -40,6 +42,7 @@ describe.skipIf(databaseUrl === undefined)(
   () => {
     const userId = randomUUID();
     const email = `${userId}@example.com`;
+    let auth: typeof configuredAuth;
 
     beforeAll(async () => {
       const url = new URL(databaseUrl ?? "");
@@ -51,6 +54,7 @@ describe.skipIf(databaseUrl === undefined)(
           "Authentication tests require loopback quieter_migration_test."
         );
       }
+      ({ auth } = await import("../src/index"));
       await db.insert(user).values({
         createdAt: new Date(),
         email,
@@ -66,7 +70,6 @@ describe.skipIf(databaseUrl === undefined)(
     });
 
     test("a magic link creates one session under concurrent redemption and sign-out revokes it", async () => {
-      const { auth } = await import("../src/index");
       const response = await auth.handler(
         new Request("http://localhost:3000/api/auth/sign-in/magic-link", {
           body: JSON.stringify({ callbackURL: "/", email }),

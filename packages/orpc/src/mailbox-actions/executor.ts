@@ -15,10 +15,17 @@ import type {
   ActionExecutionContext,
 } from "@quieter/ai/mailbox-actions";
 import { reportAiUsage } from "@quieter/billing";
+import { getAiUsageCostMicroCents } from "@quieter/billing/ai-pricing";
+import {
+  getBillingCreditUsage,
+  reserveAiCredits,
+} from "@quieter/billing/credits";
+import { hasUserBillingFeature } from "@quieter/billing/entitlements";
 import { db } from "@quieter/database/client";
 import type { ConnectorProvider } from "@quieter/database/schema";
 import {
   mailbox,
+  billingCreditReservation,
   mailboxAction,
   mailboxActionRevision,
   mailboxActionRun,
@@ -48,6 +55,7 @@ import type {
 import { getConnectorDisplayName } from "../connectors/contracts";
 import { runAuthorizedGmailMailbox } from "../gmail-mailbox-access";
 import { MAILBOX_PROVIDER_GMAIL } from "../mailbox/access";
+import { assertMailboxActionConfigurator } from "./access";
 import { runConnectorWriteCall } from "./effects";
 import { validateMailboxActionGraph } from "./graph";
 import type { MailboxActionNode } from "./graph";
@@ -435,7 +443,11 @@ export const mailboxActionFailureUpdate = (
       updatedAt: at,
     };
   }
-  if (options.finalAttempt) {
+  if (
+    options.finalAttempt ||
+    (error instanceof ORPCError &&
+      (error.code === "FORBIDDEN" || error.code === "NOT_FOUND"))
+  ) {
     return {
       completedAt: at,
       lastError,
@@ -454,6 +466,52 @@ export const mailboxActionFailureUpdate = (
   };
 };
 
+const ACTION_ALLOWANCE_MICROCENTS = 25 * 1_000_000;
+
+const getActionExecutionEntitlement = async (input: {
+  actionId: string;
+  mailboxId: string;
+  userId: string;
+}) => {
+  const selectedMailbox = await assertMailboxActionConfigurator(input);
+  const [action] = await db
+    .select({ enabled: mailboxAction.enabled })
+    .from(mailboxAction)
+    .where(
+      and(
+        eq(mailboxAction.id, input.actionId),
+        eq(mailboxAction.mailboxId, input.mailboxId)
+      )
+    )
+    .limit(1);
+  if (!action?.enabled) {
+    throw new ORPCError("FORBIDDEN", { message: "This action is disabled." });
+  }
+  const entitlement = await hasUserBillingFeature({
+    feature: "aiChat",
+    organizationId: selectedMailbox.organizationId,
+    userId: input.userId,
+  });
+  if (
+    !entitlement.hasAccess ||
+    (!entitlement.hasUnlimitedAccess && entitlement.account === null)
+  ) {
+    throw new ORPCError("FORBIDDEN", {
+      message:
+        "This action requires an active AI plan and available usage balance.",
+    });
+  }
+  if (entitlement.account !== null && !entitlement.hasUnlimitedAccess) {
+    const usage = await getBillingCreditUsage(entitlement.account);
+    if (usage.costMicroCents >= usage.creditAmountMicroCents) {
+      throw new ORPCError("FORBIDDEN", {
+        message: "This action requires available usage balance.",
+      });
+    }
+  }
+  return entitlement;
+};
+
 export const executeMailboxActionRun = async (
   runId: string,
   options?: { finalAttempt?: boolean }
@@ -465,6 +523,9 @@ export const executeMailboxActionRun = async (
 
   const signal = AbortSignal.timeout(RUN_BUDGET_MS);
   const usageTasks: Promise<void>[] = [];
+  let usageFailure: Error | undefined;
+  let costMicroCents = 0;
+  const reservationId = `mailbox-action:${run.id}:${run.attempts}`;
   try {
     const [revision] = await db
       .select({
@@ -488,13 +549,19 @@ export const executeMailboxActionRun = async (
       throw new Error("Action revision graph is invalid.");
     }
     const { graph } = validation;
-    const [actionOwner] = await db
-      .select({
-        userId: mailboxAction.createdByUserId,
-      })
-      .from(mailboxAction)
-      .where(eq(mailboxAction.id, run.actionId))
-      .limit(1);
+    const actor = {
+      actionId: run.actionId,
+      mailboxId: run.mailboxId,
+      userId: revisionUserId,
+    };
+    const entitlement = await getActionExecutionEntitlement(actor);
+    if (entitlement.account !== null && !entitlement.hasUnlimitedAccess) {
+      await reserveAiCredits({
+        account: entitlement.account,
+        amountMicroCents: ACTION_ALLOWANCE_MICROCENTS,
+        id: reservationId,
+      });
+    }
     const usageIndexesByStepRunId = new Map<string, number>();
     const createUsageReporter: MailboxActionUsageReporter = ({
       model,
@@ -504,15 +571,14 @@ export const executeMailboxActionRun = async (
       const externalIdFor = (usageIndex: number) =>
         `mailbox-action:${run.id}:${stepRunId}:${usageIndex}`;
       return (usage) => {
-        const billingUserId = actionOwner?.userId;
-        if (!billingUserId) {
-          return;
-        }
         const usageIndex = usageIndexesByStepRunId.get(stepRunId) ?? 0;
         usageIndexesByStepRunId.set(stepRunId, usageIndex + 1);
         usageTasks.push(
           (async () => {
             try {
+              costMicroCents += getAiUsageCostMicroCents(
+                usage.costUsd ?? Number.NaN
+              );
               await reportAiUsage({
                 completionTokens: usage.completionTokens,
                 costUsd: usage.costUsd,
@@ -525,9 +591,15 @@ export const executeMailboxActionRun = async (
                   cachedTokens: usage.cachedTokens,
                 },
                 usageKind: "aiChat",
-                userId: billingUserId,
+                userId: revisionUserId,
               });
             } catch (error: unknown) {
+              usageFailure =
+                error instanceof Error
+                  ? error
+                  : new Error("Action usage could not be recorded.", {
+                      cause: error,
+                    });
               reportError(error, {
                 operation: "mailbox-actions:report-ai-usage",
               });
@@ -545,7 +617,7 @@ export const executeMailboxActionRun = async (
       includeUserScope: false,
       mailboxId: run.mailboxId,
       query: buildMailMemoryQuery(email),
-      userId: actionOwner?.userId ?? "",
+      userId: revisionUserId,
     });
     const memoryContext = serializeAiAgentContext(agentContext);
     const nodesById = new Map(graph.nodes.map((node) => [node.id, node]));
@@ -617,6 +689,17 @@ export const executeMailboxActionRun = async (
       });
       let { result } = step;
       if (result === null) {
+        await getActionExecutionEntitlement(actor);
+        if (
+          costMicroCents >= ACTION_ALLOWANCE_MICROCENTS &&
+          ["ai_condition", "ai_router", "connector_agent"].includes(
+            item.node.type
+          )
+        ) {
+          throw new ORPCError("FORBIDDEN", {
+            message: "This action reached its per-run AI allowance.",
+          });
+        }
         const stepSignal = AbortSignal.any([
           signal,
           AbortSignal.timeout(CONNECTOR_STEP_BUDGET_MS),
@@ -637,6 +720,13 @@ export const executeMailboxActionRun = async (
         });
         stepSignal.throwIfAborted();
         await Promise.all(usageTasks);
+        if (usageFailure !== undefined) {
+          throw new ORPCError("CONFLICT", {
+            cause: usageFailure,
+            message:
+              "Usage could not be recorded. This action needs review before it can resume.",
+          });
+        }
         const savedResult = result;
         await withMailboxActionRun(run, async (tx) => {
           const now = new Date();
@@ -722,5 +812,8 @@ export const executeMailboxActionRun = async (
     throw error;
   } finally {
     await Promise.all(usageTasks);
+    await db
+      .delete(billingCreditReservation)
+      .where(eq(billingCreditReservation.id, reservationId));
   }
 };

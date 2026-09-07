@@ -2464,6 +2464,28 @@ export const billingSubscription = pgTable(
   ]
 );
 
+export const billingCreditReservation = pgTable(
+  "billingCreditReservation",
+  {
+    amountMicroCents: bigint("amountMicroCents", { mode: "number" }).notNull(),
+    expiresAt: timestamp("expiresAt").notNull(),
+    id: text("id").primaryKey(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    index("billing_credit_reservation_organization_expiry_idx").on(
+      table.organizationId,
+      table.expiresAt
+    ),
+    check(
+      "billing_credit_reservation_amount_check",
+      sql`${table.amountMicroCents} > 0`
+    ),
+  ]
+);
+
 export const billingCreditUsageEvent = pgTable(
   "billingCreditUsageEvent",
   {

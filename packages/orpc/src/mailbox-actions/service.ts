@@ -4,18 +4,13 @@ import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import {
   connectorCredential,
-  mailbox,
   mailboxAction,
   mailboxActionRevision,
 } from "@quieter/database/schema";
 import { and, desc, eq, sql } from "drizzle-orm";
 
-import {
-  getAuthorizedManagedMailbox,
-  MAILBOX_PROVIDER_GMAIL,
-} from "../mailbox/access";
 import { assertAccessibleMailbox } from "../mailbox/service";
-import { assertOrganizationManager } from "../organization/divisions";
+import { assertMailboxActionConfigurator } from "./access";
 import {
   createDefaultMailboxActionGraph,
   validateMailboxActionGraph,
@@ -27,52 +22,6 @@ import type {
 } from "./graph";
 
 const RECENT_REVISION_LIMIT = 50;
-
-const assertMailboxActionConfigurator = async (input: {
-  mailboxId: string;
-  userId: string;
-}) => {
-  const [record] = await db
-    .select({
-      id: mailbox.id,
-      organizationId: mailbox.organizationId,
-      ownerUserId: mailbox.ownerUserId,
-      provider: mailbox.provider,
-    })
-    .from(mailbox)
-    .where(eq(mailbox.id, input.mailboxId))
-    .limit(1);
-
-  if (record === undefined) {
-    throw new ORPCError("NOT_FOUND", { message: "Mailbox not found." });
-  }
-
-  if (record.provider === MAILBOX_PROVIDER_GMAIL) {
-    if (record.ownerUserId !== input.userId) {
-      throw new ORPCError("NOT_FOUND", { message: "Mailbox not found." });
-    }
-    return record;
-  }
-
-  try {
-    await getAuthorizedManagedMailbox({
-      mailboxId: input.mailboxId,
-      requiredRoles: ["manager"],
-      userId: input.userId,
-    });
-    return record;
-  } catch (error) {
-    if (!(error instanceof ORPCError)) {
-      throw error;
-    }
-  }
-
-  await assertOrganizationManager({
-    organizationId: record.organizationId,
-    userId: input.userId,
-  });
-  return record;
-};
 
 const getActionForUser = async (input: {
   actionId: string;

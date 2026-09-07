@@ -1,7 +1,15 @@
 import type { evaluateMailboxActionCondition } from "@quieter/ai/mailbox-actions";
+import { reserveAiCredits } from "@quieter/billing/credits";
+import type {
+  BillingAccount,
+  hasUserBillingFeature,
+} from "@quieter/billing/entitlements";
 import { db } from "@quieter/database/client";
 import {
   connectorCredential,
+  billingCreditReservation,
+  member,
+  mailboxGrant,
   mailbox,
   mailboxAction,
   mailboxActionExternalEffect,
@@ -32,7 +40,12 @@ import { claimMailboxActionRun } from "../src/mailbox-actions/lease";
 const state = vi.hoisted(() => ({
   condition: vi.fn<typeof evaluateMailboxActionCondition>(),
   databaseUrl: process.env.MIGRATION_TEST_DATABASE_URL,
+  entitlement: vi.fn<typeof hasUserBillingFeature>(),
   write: vi.fn<typeof runConnectorAgentWriteCall>(),
+}));
+vi.mock(import("@quieter/billing/entitlements"), async (original) => ({
+  ...(await original()),
+  hasUserBillingFeature: state.entitlement,
 }));
 vi.mock(import("@quieter/ai/mailbox-actions"), async (original) => ({
   ...(await original()),
@@ -68,6 +81,14 @@ describe.skipIf(state.databaseUrl === undefined)(
     const mailboxId = crypto.randomUUID();
     const actionId = crypto.randomUUID();
     const revisionId = crypto.randomUUID();
+    const account: BillingAccount = {
+      creditAmountCents: 25,
+      currentPeriodEnd: new Date(Date.now() + 86_400_000),
+      currentPeriodStart: new Date(Date.now() - 86_400_000),
+      externalCustomerId: organizationId,
+      organizationId,
+      product: "pro",
+    };
     let input: Parameters<typeof runConnectorWriteCall>[0];
     beforeAll(async () => {
       const url = new URL(state.databaseUrl ?? "");
@@ -93,6 +114,13 @@ describe.skipIf(state.databaseUrl === undefined)(
         id: organizationId,
         name: "Action test",
         slug: organizationId,
+      });
+      await db.insert(member).values({
+        createdAt: now,
+        id: crypto.randomUUID(),
+        organizationId,
+        role: "owner",
+        userId,
       });
       await db.insert(mailbox).values({
         createdAt: now,
@@ -187,6 +215,30 @@ describe.skipIf(state.databaseUrl === undefined)(
       });
     });
     beforeEach(async () => {
+      state.entitlement.mockReset().mockResolvedValue({
+        account,
+        hasAccess: true,
+        hasUnlimitedAccess: false,
+        product: "pro",
+      });
+      await db
+        .delete(billingCreditReservation)
+        .where(eq(billingCreditReservation.organizationId, organizationId));
+      await db
+        .delete(mailboxGrant)
+        .where(eq(mailboxGrant.mailboxId, mailboxId));
+      await db.insert(mailboxGrant).values({
+        createdAt: new Date(),
+        id: crypto.randomUUID(),
+        mailboxId,
+        role: "manager",
+        updatedAt: new Date(),
+        userId,
+      });
+      await db
+        .update(mailboxAction)
+        .set({ enabled: true })
+        .where(eq(mailboxAction.id, actionId));
       const now = new Date();
       const runId = crypto.randomUUID();
       const stepRunId = crypto.randomUUID();
@@ -245,6 +297,71 @@ describe.skipIf(state.databaseUrl === undefined)(
       await db.delete(organization).where(eq(organization.id, organizationId));
       await db.delete(user).where(eq(user.id, userId));
       await db.$client.end();
+    });
+
+    test("revoked mailbox access prevents queued actions from reaching AI even for a team owner", async () => {
+      await db
+        .delete(mailboxGrant)
+        .where(eq(mailboxGrant.mailboxId, mailboxId));
+      await db
+        .update(mailboxActionRun)
+        .set({ leasedUntil: null, status: "queued" })
+        .where(eq(mailboxActionRun.id, input.runId));
+      await expect(executeMailboxActionRun(input.runId)).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+      expect(state.condition).not.toHaveBeenCalled();
+      const [run] = await db
+        .select()
+        .from(mailboxActionRun)
+        .where(eq(mailboxActionRun.id, input.runId));
+      expect(run?.status).toBe("failed");
+    });
+
+    test("revoked AI entitlement prevents a queued model call", async () => {
+      state.entitlement.mockResolvedValue({
+        account: null,
+        hasAccess: false,
+        hasUnlimitedAccess: false,
+        product: null,
+      });
+      await db
+        .update(mailboxActionRun)
+        .set({ leasedUntil: null, status: "queued" })
+        .where(eq(mailboxActionRun.id, input.runId));
+      await expect(executeMailboxActionRun(input.runId)).rejects.toMatchObject({
+        code: "FORBIDDEN",
+      });
+      expect(state.condition).not.toHaveBeenCalled();
+    });
+
+    test("concurrent AI reservations cannot allocate the same balance twice and expired reservations release it", async () => {
+      const attempts = await Promise.allSettled(
+        ["first", "second"].map(async (suffix) => {
+          await reserveAiCredits({
+            account,
+            amountMicroCents: 25_000_000,
+            id: `${input.runId}:${suffix}`,
+          });
+        })
+      );
+      expect(
+        attempts.filter((attempt) => attempt.status === "fulfilled")
+      ).toHaveLength(1);
+      expect(
+        attempts.filter((attempt) => attempt.status === "rejected")
+      ).toHaveLength(1);
+      await db
+        .update(billingCreditReservation)
+        .set({ expiresAt: new Date(0) })
+        .where(eq(billingCreditReservation.organizationId, organizationId));
+      await expect(
+        reserveAiCredits({
+          account,
+          amountMicroCents: 25_000_000,
+          id: `${input.runId}:replacement`,
+        })
+      ).resolves.toBeUndefined();
     });
 
     test("a replaced worker cannot make another external change or finish its replacement's run", async () => {
