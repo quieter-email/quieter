@@ -1,3 +1,8 @@
+import type {
+  DeliveryEvent,
+  DeliveryStatus,
+  RecipientSuppression,
+} from "@quieter/mail/delivery";
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -157,25 +162,9 @@ export type MailSendSnapshot = {
   threadId?: string;
   to: string[];
 };
-export type OrganizationMailDeliveryEventType =
-  | "bounced"
-  | "complained"
-  | "delayed"
-  | "delivered"
-  | "opened"
-  | "queued"
-  | "rejected"
-  | "sent"
-  | "unsubscribed";
-export type OrganizationMailDeliveryStatus = Exclude<
-  OrganizationMailDeliveryEventType,
-  "opened" | "unsubscribed"
->;
-export type OrganizationMailSuppressionReason =
-  | "bounce"
-  | "complaint"
-  | "manual"
-  | "unsubscribe";
+export type OrganizationMailDeliveryEventType = DeliveryEvent["eventType"];
+export type OrganizationMailDeliveryStatus = DeliveryStatus;
+export type OrganizationMailSuppressionReason = RecipientSuppression["reason"];
 export type OrganizationMailSuppressionAction = "suppressed" | "unsuppressed";
 
 export type MailDomainDnsRecord = {

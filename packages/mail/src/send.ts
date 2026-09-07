@@ -2,6 +2,9 @@ import { z } from "zod";
 
 import { extractMailAddress } from "./compose/schema";
 
+export { sendMessageResultSchema } from "./delivery";
+export type { SendMessageResult } from "./delivery";
+
 export const SEND_API_PATH = "/api/v1/send";
 
 export const MAX_SEND_PAYLOAD_BYTES = 25 * 1024 * 1024;
@@ -174,15 +177,9 @@ export const sendMessageInputSchema = z
     }
   });
 
-export const sendMessageResultSchema = z.object({
-  idempotent: z.boolean().optional(),
-  messageId: z.string().nullable(),
-  sent: z.literal(true),
-});
-
 export type SendAttachmentInput = z.infer<typeof sendAttachmentSchema>;
 export type SendMessageInput = z.infer<typeof sendMessageInputSchema>;
-export type SendMessageResult = z.infer<typeof sendMessageResultSchema>;
+export type SendMessageRequest = z.input<typeof sendMessageInputSchema>;
 export type SendTagInput = z.infer<typeof sendTagSchema>;
 
 export type SendHeader = {

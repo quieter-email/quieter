@@ -723,6 +723,9 @@ importers:
       '@quieter/env':
         specifier: workspace:*
         version: link:../env
+      '@quieter/mail':
+        specifier: workspace:*
+        version: link:../mail
       drizzle-orm:
         specifier: 'catalog:'
         version: 1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260804.1)(@electric-sql/pglite@0.3.15)(@opentelemetry/api@1.9.1)(mysql2@3.15.3)(postgres@3.4.9)(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3)
@@ -935,19 +938,25 @@ importers:
 
   packages/sdk:
     dependencies:
-      '@react-email/render':
-        specifier: ^2.1.0
-        version: 2.1.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      '@types/react':
-        specifier: ^19.2.18
-        version: 19.2.18
-      react:
-        specifier: ^19.2.8
-        version: 19.2.8
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@quieter/config':
         specifier: workspace:*
         version: link:../config
+      '@quieter/mail':
+        specifier: workspace:*
+        version: link:../mail
+      '@react-email/render':
+        specifier: ^2.1.0
+        version: 2.1.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.2.18
+      react:
+        specifier: 'catalog:'
+        version: 19.2.8
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

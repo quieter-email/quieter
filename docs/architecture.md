@@ -66,6 +66,8 @@ Interactive write requests use database-backed rate limits. The minute dispatche
 
 `packages/gmail` contains Gmail REST calls and Gmail-specific draft parsing. It does not own encrypted credential storage or token refresh.
 
+The public SDK derives send inputs from `@quieter/mail/send` and validates responses with the shared delivery schemas. Its build bundles these contracts and permits only Zod and the optional React dependencies in emitted imports. `tsconfig.sdk.json` gives declaration generation a workspace-wide root so the published types include the shared contracts. React rendering lives in `quieter/react`; the core package has no React requirement.
+
 ### Other Packages
 
 - `packages/auth`: Better Auth setup, identity scopes, organizations, API keys, passkeys, and auth mail

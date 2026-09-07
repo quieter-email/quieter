@@ -1,3 +1,4 @@
+import { messageDeliverySchema } from "@quieter/mail/delivery";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { getOrganizationApiKeyOrganizationId } from "#/lib/organization-api-auth.server";
@@ -26,7 +27,7 @@ export const Route = createFileRoute("/api/v1/messages/$messageId")({
               { status: 404 }
             );
           }
-          return Response.json(delivery);
+          return Response.json(messageDeliverySchema.parse(delivery));
         } catch (error) {
           reportServerError(error, "organization-mail-delivery");
           return Response.json(

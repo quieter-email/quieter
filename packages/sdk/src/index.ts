@@ -1,256 +1,105 @@
-import { render } from "@react-email/render";
-import type { ReactElement } from "react";
+import {
+  messageDeliverySchema,
+  recipientSuppressionListSchema,
+  sendMessageResultSchema,
+} from "@quieter/mail/delivery";
+import type {
+  DeliveryEvent,
+  DeliveryStatus,
+  MessageDelivery,
+  RecipientSuppression,
+} from "@quieter/mail/delivery";
+import type {
+  SendHeader,
+  SendMessageRequest,
+  SendMessageResult,
+} from "@quieter/mail/send";
+import { z } from "zod";
 
 import { QuieterApiError } from "./api-error";
 
 export { QuieterApiError } from "./api-error";
+export type QuieterAddress = SendMessageRequest["to"];
+export type QuieterHeader = SendHeader;
+export type QuieterTag = NonNullable<SendMessageRequest["tags"]>[number];
+export type QuieterSendResult = SendMessageResult;
+export type QuieterDeliveryStatus = DeliveryStatus;
+export type QuieterDeliveryEvent = DeliveryEvent;
+export type QuieterMessageDelivery = MessageDelivery;
+export type QuieterRecipientSuppression = RecipientSuppression;
 
-export type QuieterAddress = string | string[];
-
-export type QuieterAttachment = {
+export type QuieterAttachment = Omit<
+  NonNullable<SendMessageRequest["attachments"]>[number],
+  "content"
+> & {
   content: string | Uint8Array | ArrayBuffer | Blob;
   contentEncoding?: "base64" | "raw";
-  contentId?: string;
-  contentType?: string;
-  disposition?: "attachment" | "inline";
-  filename: string;
 };
-
-export type QuieterHeader = {
-  name: string;
-  value: string;
-};
-
-export type QuieterTag = {
-  name: string;
-  value: string;
-};
-
-export type QuieterSendBaseInput = {
+export type QuieterSendInput = Omit<SendMessageRequest, "attachments"> & {
   attachments?: QuieterAttachment[];
-  bcc?: QuieterAddress;
-  cc?: QuieterAddress;
-  from: string;
-  headers?: Record<string, string> | QuieterHeader[];
-  idempotencyKey?: string;
-  metadata?: Record<string, string | number | boolean | null>;
-  replyTo?: QuieterAddress;
-  subject: string;
-  tags?: QuieterTag[];
-  text: string;
-  to: QuieterAddress;
 };
-
-export type QuieterSendInput =
-  | (QuieterSendBaseInput & {
-      html: string;
-      react?: never;
-    })
-  | (QuieterSendBaseInput & {
-      html?: never;
-      react: ReactElement;
-    })
-  | (QuieterSendBaseInput & {
-      html?: never;
-      react?: never;
-    });
-
+export type QuieterSendBaseInput = Omit<QuieterSendInput, "html">;
 export type QuieterSendOptions = {
   idempotencyKey?: string;
   signal?: AbortSignal;
 };
-
-export type QuieterSendResult = {
-  idempotent?: boolean;
-  messageId: string | null;
-  sent: true;
-};
-
-export type QuieterDeliveryStatus =
-  | "bounced"
-  | "complained"
-  | "delayed"
-  | "delivered"
-  | "queued"
-  | "rejected"
-  | "sent";
-
-export type QuieterDeliveryEvent = {
-  diagnosticCode: string | null;
-  eventType: QuieterDeliveryStatus | "opened" | "unsubscribed";
-  occurredAt: string;
-  providerStatus: string | null;
-  reason: string | null;
-  recipient: string;
-};
-
-export type QuieterMessageDelivery = {
-  events: QuieterDeliveryEvent[];
-  messageId: string;
-  recipients: {
-    lastEventAt: string;
-    recipient: string;
-    status: QuieterDeliveryStatus;
-  }[];
-};
-
-export type QuieterRecipientSuppression = {
-  createdAt: string;
-  reason: "bounce" | "complaint" | "manual" | "unsubscribe";
-  recipient: string;
-  sourceProviderMessageId: string | null;
-};
-
-export type QuieterRequestOptions = {
-  signal?: AbortSignal;
-};
-
+export type QuieterRequestOptions = { signal?: AbortSignal };
 export type QuieterListSuppressionsOptions = QuieterRequestOptions & {
   limit?: number;
 };
-
 export type QuieterFetch = (
   input: RequestInfo | URL,
   init?: RequestInit
 ) => Promise<Response>;
-
 export type QuieterOptions = {
   apiKey: string;
   baseUrl?: string;
   fetch?: QuieterFetch;
 };
 
-type SendRequest = Omit<QuieterSendInput, "attachments" | "react"> & {
-  attachments?: (Omit<QuieterAttachment, "content" | "contentEncoding"> & {
-    content: string;
-  })[];
-};
-
-type ApiErrorBody = {
-  error?: string;
-  issues?: unknown;
-};
-
-const isSendResult = (value: unknown): value is QuieterSendResult =>
-  typeof value === "object" &&
-  value !== null &&
-  "sent" in value &&
-  value.sent === true;
-
-const isMessageDelivery = (value: unknown): value is QuieterMessageDelivery =>
-  typeof value === "object" &&
-  value !== null &&
-  "messageId" in value &&
-  typeof value.messageId === "string" &&
-  "recipients" in value &&
-  Array.isArray(value.recipients) &&
-  "events" in value &&
-  Array.isArray(value.events);
-
-const isSuppressionList = (
-  value: unknown
-): value is { data: QuieterRecipientSuppression[] } =>
-  typeof value === "object" &&
-  value !== null &&
-  "data" in value &&
-  Array.isArray(value.data);
-
-const SEND_PATH = "api/v1/send";
-const MESSAGE_PATH = "api/v1/messages/";
-const SUPPRESSIONS_PATH = "api/v1/suppressions";
-const DEFAULT_BASE_URL = "https://quieter.email";
-
-const bytesToBase64 = (bytes: Uint8Array) => {
-  let binary = "";
-  for (const byte of bytes) {
-    binary += String.fromCodePoint(byte);
-  }
-  return btoa(binary);
-};
-
-const encodeAttachmentContent = async (
-  content: QuieterAttachment["content"],
-  encoding: QuieterAttachment["contentEncoding"] = "base64"
-) => {
-  if (typeof content === "string") {
-    return encoding === "raw"
-      ? bytesToBase64(new TextEncoder().encode(content))
-      : content;
-  }
-
-  if (content instanceof Uint8Array) {
-    return bytesToBase64(content);
-  }
-
-  if (content instanceof ArrayBuffer) {
-    return bytesToBase64(new Uint8Array(content));
-  }
-
-  return bytesToBase64(new Uint8Array(await content.arrayBuffer()));
-};
-
-const normalizeSendInput = async (
-  input: QuieterSendInput,
-  options: QuieterSendOptions = {}
-): Promise<SendRequest> => {
-  const { react: _react, ...request } = input;
-
-  return {
-    ...request,
-    attachments: await Promise.all(
-      (input.attachments ?? []).map(
-        async ({ content, contentEncoding, ...attachment }) => ({
-          ...attachment,
-          content: await encodeAttachmentContent(content, contentEncoding),
-        })
-      )
-    ),
-    html: input.react ? await render(input.react) : input.html,
-    idempotencyKey: input.idempotencyKey ?? options.idempotencyKey,
-    text: input.text,
-  };
-};
-
-const isApiErrorBody = (value: unknown): value is ApiErrorBody =>
-  typeof value === "object" && value !== null;
-
 export class Quieter {
-  readonly apiKey: string;
+  readonly #apiKey: string;
   readonly baseUrl: string;
-  readonly fetch: QuieterFetch;
+  readonly #fetch: QuieterFetch;
 
   constructor(options: QuieterOptions) {
-    if (options.apiKey === undefined || options.apiKey.trim() === "") {
+    if (!options.apiKey?.trim()) {
       throw new Error("Quieter requires an apiKey.");
     }
-
-    this.apiKey = options.apiKey;
-    const baseUrl = new URL(options.baseUrl ?? DEFAULT_BASE_URL);
-    baseUrl.pathname = baseUrl.pathname.endsWith("/")
-      ? baseUrl.pathname
-      : `${baseUrl.pathname}/`;
+    this.#apiKey = options.apiKey;
+    const baseUrl = new URL(options.baseUrl ?? "https://quieter.email");
+    if (!baseUrl.pathname.endsWith("/")) {
+      baseUrl.pathname += "/";
+    }
     this.baseUrl = baseUrl.href;
     const fetchImpl = options.fetch ?? globalThis.fetch;
-
     if (fetchImpl === undefined) {
       throw new Error("Quieter requires a fetch implementation.");
     }
-
-    this.fetch = fetchImpl;
+    this.#fetch = fetchImpl;
   }
 
-  private async getJson(path: string, signal?: AbortSignal) {
-    const response = await this.fetch(new URL(path, this.baseUrl), {
-      headers: {
-        accept: "application/json",
-        authorization: `Bearer ${this.apiKey}`,
-      },
+  async #request<T>(
+    path: string,
+    schema: z.ZodType<T>,
+    init: RequestInit = {}
+  ): Promise<T> {
+    const headers = new Headers(init.headers);
+    headers.set("accept", "application/json");
+    headers.set("authorization", `Bearer ${this.#apiKey}`);
+    const response = await this.#fetch(new URL(path, this.baseUrl), {
       method: "GET",
-      signal,
+      ...init,
+      headers,
     });
     const json: unknown = await response.json().catch(() => null);
     if (!response.ok) {
-      const error = isApiErrorBody(json) ? json : null;
+      const error = z
+        .object({
+          error: z.string().optional(),
+          issues: z.unknown().optional(),
+        })
+        .safeParse(json).data;
       throw new QuieterApiError({
         issues: error?.issues,
         message: error?.error ?? `Quieter API returned ${response.status}.`,
@@ -258,93 +107,84 @@ export class Quieter {
         status: response.status,
       });
     }
-    return { json, status: response.status };
+    const parsed = schema.safeParse(json);
+    if (!parsed.success) {
+      throw new QuieterApiError({
+        message: "Quieter API returned an unexpected response.",
+        response: json,
+        status: response.status,
+      });
+    }
+    return parsed.data;
   }
 
   async getMessage(
     messageId: string,
     options: QuieterRequestOptions = {}
   ): Promise<QuieterMessageDelivery> {
-    const normalizedMessageId = messageId.trim();
-    if (normalizedMessageId === "") {
+    const normalized = messageId.trim();
+    if (!normalized) {
       throw new Error("Quieter requires a messageId.");
     }
-    const { json, status } = await this.getJson(
-      `${MESSAGE_PATH}${encodeURIComponent(normalizedMessageId)}`,
-      options.signal
+    return await this.#request(
+      `api/v1/messages/${encodeURIComponent(normalized)}`,
+      messageDeliverySchema,
+      options
     );
-    if (!isMessageDelivery(json)) {
-      throw new QuieterApiError({
-        message: "Quieter API returned an unexpected response.",
-        response: json,
-        status,
-      });
-    }
-    return json;
   }
 
   async listSuppressions(
     options: QuieterListSuppressionsOptions = {}
   ): Promise<QuieterRecipientSuppression[]> {
-    const path = new URL(SUPPRESSIONS_PATH, this.baseUrl);
+    const path = new URL("api/v1/suppressions", this.baseUrl);
     if (options.limit !== undefined) {
       path.searchParams.set("limit", String(options.limit));
     }
-    const { json, status } = await this.getJson(path.href, options.signal);
-    if (!isSuppressionList(json)) {
-      throw new QuieterApiError({
-        message: "Quieter API returned an unexpected response.",
-        response: json,
-        status,
-      });
-    }
-    return json.data;
+    const result = await this.#request(
+      path.href,
+      recipientSuppressionListSchema,
+      { signal: options.signal }
+    );
+    return result.data;
   }
 
   async send(
     input: QuieterSendInput,
     options: QuieterSendOptions = {}
   ): Promise<QuieterSendResult> {
-    const request = await normalizeSendInput(input, {
-      idempotencyKey: input.idempotencyKey ?? options.idempotencyKey,
-    });
-    const response = await this.fetch(new URL(SEND_PATH, this.baseUrl), {
-      body: JSON.stringify(request),
+    const attachments = await Promise.all(
+      (input.attachments ?? []).map(
+        async ({ content, contentEncoding, ...attachment }) => {
+          if (typeof content === "string" && contentEncoding !== "raw") {
+            return { ...attachment, content };
+          }
+          let bytes: Uint8Array;
+          if (typeof content === "string") {
+            bytes = new TextEncoder().encode(content);
+          } else if (content instanceof Uint8Array) {
+            bytes = content;
+          } else if (content instanceof ArrayBuffer) {
+            bytes = new Uint8Array(content);
+          } else {
+            bytes = new Uint8Array(await content.arrayBuffer());
+          }
+          let binary = "";
+          for (const byte of bytes) {
+            binary += String.fromCodePoint(byte);
+          }
+          return { ...attachment, content: btoa(binary) };
+        }
+      )
+    );
+    const idempotencyKey = input.idempotencyKey ?? options.idempotencyKey;
+    return await this.#request("api/v1/send", sendMessageResultSchema, {
+      body: JSON.stringify({ ...input, attachments, idempotencyKey }),
       headers: {
-        accept: "application/json",
-        authorization: `Bearer ${this.apiKey}`,
         "content-type": "application/json",
-        ...(request.idempotencyKey !== null &&
-        request.idempotencyKey !== undefined &&
-        request.idempotencyKey !== ""
-          ? { "idempotency-key": request.idempotencyKey }
-          : {}),
+        ...(idempotencyKey ? { "idempotency-key": idempotencyKey } : {}),
       },
       method: "POST",
       signal: options.signal,
     });
-    const json: unknown = await response.json().catch(() => null);
-
-    if (!response.ok) {
-      const error = isApiErrorBody(json) ? json : null;
-      throw new QuieterApiError({
-        issues: error?.issues,
-        message: error?.error ?? `Quieter API returned ${response.status}.`,
-        response: json,
-        status: response.status,
-      });
-    }
-
-    if (!isSendResult(json)) {
-      throw new QuieterApiError({
-        message: `Quieter API returned an unexpected response.`,
-        response: json,
-        status: response.status,
-      });
-    }
-
-    return json;
   }
 }
-
-export { encodeAttachmentContent, normalizeSendInput };
