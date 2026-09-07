@@ -1,57 +1,89 @@
-import type { DeploymentContext } from "./runtime";
+import { COMPATIBILITY_DATE } from "@quieter/cloudflare/compatibility-date";
 
-export const createMailboxActionResources = (context: DeploymentContext) => {
-  const mailboxActionDeadLetterQueue = new sst.aws.Queue(
-    "MailboxActionDeadLetterQueue",
+import type { createAppDatabase } from "./database";
+import { cloudflareWorkerObservability } from "./runtime";
+import type { DeploymentContext } from "./runtime";
+import { requireSecretBinding } from "./secrets";
+import { deploymentEnvironment } from "./stage";
+import type { SecretBindings } from "./types";
+
+const actionSecretNames = [
+  "CONNECTOR_TOKEN_ENCRYPTION_KEY",
+  "GMAIL_TOKEN_ENCRYPTION_KEY",
+  "GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT",
+  "GOOGLE_CALENDAR_CLIENT_ID",
+  "GOOGLE_CALENDAR_CLIENT_SECRET",
+  "GOOGLE_GMAIL_CLIENT_ID",
+  "GOOGLE_GMAIL_CLIENT_SECRET",
+  "LINEAR_CLIENT_ID",
+  "LINEAR_CLIENT_SECRET",
+  "OPENROUTER_API_KEY",
+  "POLAR_ACCESS_TOKEN",
+] as const;
+
+export const createMailboxActionResources = (
+  context: DeploymentContext,
+  secretBindings: SecretBindings,
+  appDatabase: ReturnType<typeof createAppDatabase>
+) => {
+  const deadLetterQueue = new sst.cloudflare.Queue(
+    "MailboxActionDeadLetterQueue"
+  );
+  const queue = new sst.cloudflare.Queue("MailboxActionQueue", {
+    dlq: {
+      queue: deadLetterQueue.nodes.queue.queueName,
+      retry: 5,
+      retryDelay: "30 seconds",
+    },
+    maxConcurrency: 5,
+  });
+  const actionSecretBindings = actionSecretNames.map((name) =>
+    requireSecretBinding(secretBindings, name)
+  );
+  const sentryDsnBinding = requireSecretBinding(secretBindings, "SENTRY_DSN");
+
+  queue.subscribe(
     {
+      compatibility: {
+        date: COMPATIBILITY_DATE,
+        flags: ["nodejs_compat"],
+      },
+      environment: {
+        ...context.billingEnvironment,
+        SENTRY_ENVIRONMENT: context.sentryEnvironment.SENTRY_ENVIRONMENT,
+      },
+      handler: "packages/cloudflare/src/mailbox-action-worker.ts",
+      link: [appDatabase, sentryDsnBinding, ...actionSecretBindings],
       transform: {
-        queue: {
-          messageRetentionSeconds: 60 * 60 * 24 * 14,
+        worker(args) {
+          args.limits = { cpuMs: 300_000 };
+          args.observability = cloudflareWorkerObservability;
         },
       },
+    },
+    {
+      batch: { size: 1, window: "0 seconds" },
     }
   );
-  const mailboxActionQueue = new sst.aws.Queue("MailboxActionQueue", {
-    dlq: {
-      queue: mailboxActionDeadLetterQueue.arn,
-      retry: 5,
-    },
-    transform: {
-      queue: {
-        messageRetentionSeconds: 60 * 60 * 24 * 14,
+
+  const dispatch = new sst.cloudflare.Cron("MailboxActionDispatch", {
+    schedules: ["* * * * *"],
+    worker: {
+      compatibility: {
+        date: COMPATIBILITY_DATE,
+        flags: ["nodejs_compat"],
+      },
+      environment: { QUIETER_DEPLOYMENT_ENV: deploymentEnvironment },
+      handler: "packages/cloudflare/src/mailbox-action-dispatch-worker.ts",
+      link: [appDatabase, queue, sentryDsnBinding],
+      transform: {
+        worker(args) {
+          args.observability = cloudflareWorkerObservability;
+        },
       },
     },
-    visibilityTimeout: "20 minutes",
   });
+  void dispatch;
 
-  mailboxActionQueue.subscribe(
-    {
-      environment: {
-        CONNECTOR_TOKEN_ENCRYPTION_KEY: context.connectorTokenEncryptionKey,
-        DATABASE_URL: context.databaseUrl,
-        GMAIL_TOKEN_ENCRYPTION_KEY: context.gmailTokenEncryptionKey,
-        GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT:
-          context.gmailTokenEncryptionKeyCurrent,
-        GOOGLE_GMAIL_CLIENT_ID: context.googleGmailClientId,
-        GOOGLE_GMAIL_CLIENT_SECRET: context.googleGmailClientSecret,
-        LINEAR_CLIENT_ID: context.linearClientId,
-        LINEAR_CLIENT_SECRET: context.linearClientSecret,
-        OPENROUTER_API_KEY: context.openRouterApiKey,
-        POLAR_ACCESS_TOKEN: context.polarAccessToken,
-        POLAR_ORGANIZATION_ID: context.polarOrganizationId,
-        POLAR_SANDBOX: context.polarSandbox,
-        ...context.sentryEnvironment,
-      },
-      handler: "packages/aws/src/mailbox-action-consumer.handler",
-      timeout: "15 minutes",
-    },
-    {
-      batch: {
-        partialResponses: true,
-        size: 1,
-      },
-    }
-  );
-
-  return { mailboxActionDeadLetterQueue, mailboxActionQueue };
+  return { mailboxActionQueue: queue };
 };

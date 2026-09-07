@@ -17,3 +17,4 @@ declare module "@barkleapp/css-sanitizer" {
     sanitizeCss(css: string, options?: CssSanitizerOptions): string;
   }
 }
+declare const __QUIETER_BUILD_ID__: string;

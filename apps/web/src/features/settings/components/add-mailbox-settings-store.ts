@@ -6,6 +6,8 @@ type AddMailboxSettingsState = {
   isSharedDetailsVisible: boolean;
   isStartingGmail: boolean;
   mailboxType: "gmail" | "shared" | undefined;
+  managedAccessMode: "private" | "shared";
+  managedOwnerUserId: string;
   managedDisplayName: string;
   managedDivisionId: string | null;
   managedDomain: string | undefined;
@@ -20,11 +22,13 @@ const initialAddMailboxSettingsState: AddMailboxSettingsState = {
   isSharedDetailsVisible: false,
   isStartingGmail: false,
   mailboxType: undefined,
+  managedAccessMode: "shared",
   managedDisplayName: "",
   managedDivisionId: null,
   managedDomain: undefined,
   managedLocalPart: "",
   managedOrganizationId: "",
+  managedOwnerUserId: "",
   receiveWholeDomain: false,
 };
 

@@ -5,24 +5,14 @@ import { rolldown } from "rolldown";
 
 const packageRoot = path.resolve(import.meta.dirname, "..");
 const outputDirectory = path.join(packageRoot, ".bundle-check");
-const entrypoints = [
-  "gmail-live-sync-websocket.ts",
-  "gmail-pubsub-consumer.ts",
-  "gmail-pubsub-ingress.ts",
-  "gmail-pubsub-maintenance.ts",
-  "gmail-pubsub-process.ts",
-  "inbound.ts",
-  "mailbox-action-consumer.ts",
-  "outbound-feedback.ts",
-  "receipt.ts",
-].map((fileName) => path.join(packageRoot, "src", fileName));
+const entrypoints = ["inbound.ts", "outbound-feedback.ts", "receipt.ts"].map(
+  (fileName) => path.join(packageRoot, "src", fileName)
+);
 
 await rm(outputDirectory, { force: true, recursive: true });
 try {
   const bundle = await rolldown({
-    // Better Auth includes an optional TanStack Start integration that is not
-    // reachable from Lambda handlers and requires Vite-only virtual modules.
-    external: ["@tanstack/react-start/server", "sst"],
+    external: ["sst"],
     input: entrypoints,
     platform: "node",
   });

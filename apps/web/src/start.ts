@@ -1,6 +1,7 @@
 import { withRequestDatabaseClient } from "@quieter/database/client";
 import { serverEnv } from "@quieter/env/server";
 import { consumeRateLimit } from "@quieter/orpc/abuse-protection";
+import { checkDeploymentDatabase } from "@quieter/orpc/deployment-health";
 import {
   sentryGlobalFunctionMiddleware,
   sentryGlobalRequestMiddleware,
@@ -49,9 +50,12 @@ const publicLegalPaths = new Set([
 const sitePasswordPagePath = "/site-password";
 const homePagePath = "/home";
 const publicPathPrefixes = ["/_build/", "/assets/"];
+/** Open-tracking markers are fetched by mail clients without cookies. */
+const openTrackingPrefix = "/api/v1/o/";
 const isSentryEnabled =
   import.meta.env.SSR &&
-  serverEnv.NODE_ENV !== "development" &&
+  (serverEnv.NODE_ENV !== "development" ||
+    serverEnv.VITE_QUIETER_LOCAL_TELEMETRY === true) &&
   serverEnv.SENTRY_DSN !== undefined;
 const fallbackRateLimitBuckets = new Map<
   string,
@@ -64,6 +68,42 @@ const csrfMiddleware = createCsrfMiddleware({
 
 const databaseMiddleware = createMiddleware().server(
   async ({ next }) => await withRequestDatabaseClient(next)
+);
+
+let databaseHealthyUntil = 0;
+let databaseCheckRunning = false;
+const deploymentHealthMiddleware = createMiddleware().server(
+  async ({ next, request }) => {
+    if (new URL(request.url).pathname !== "/api/health") {
+      return await next();
+    }
+    const headers = { "cache-control": "no-store" };
+    if (request.method !== "GET") {
+      return new Response(null, {
+        headers: { ...headers, allow: "GET" },
+        status: 405,
+      });
+    }
+    if (databaseHealthyUntil <= Date.now()) {
+      if (databaseCheckRunning) {
+        return new Response(null, { headers, status: 503 });
+      }
+      databaseCheckRunning = true;
+      try {
+        await checkDeploymentDatabase();
+        databaseHealthyUntil = Date.now() + 30_000;
+      } catch (error) {
+        reportServerError(error, "deployment-health");
+        return new Response(null, { headers, status: 503 });
+      } finally {
+        databaseCheckRunning = false;
+      }
+    }
+    return Response.json(
+      { buildId: __QUIETER_BUILD_ID__, healthy: true },
+      { headers }
+    );
+  }
 );
 
 const getRateLimitPolicy = (pathname: string) => {
@@ -389,9 +429,10 @@ export const startInstance = createStart(() => ({
     securityHeadersMiddleware,
     wellKnownAgentSurfaceMiddleware,
     markdownNegotiationMiddleware,
+    databaseMiddleware,
+    deploymentHealthMiddleware,
     abuseProtectionMiddleware,
     sitePasswordMiddleware,
-    databaseMiddleware,
     csrfMiddleware,
   ],
 }));
@@ -427,6 +468,10 @@ const shouldGatePath = (pathname: string) => {
   }
 
   if (publicLegalPaths.has(normalizedPath)) {
+    return false;
+  }
+
+  if (normalizedPath.startsWith(openTrackingPrefix)) {
     return false;
   }
 

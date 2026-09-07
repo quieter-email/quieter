@@ -243,33 +243,23 @@ Resolved on June 20, 2026 by the P0 reliability and security remediation change 
 
 110. **Message and thread metadata are often fetched separately.** This increases provider request volume for list rendering.
 
-111. **Maintenance scans every Gmail mailbox.** It does not first select only entitled or due mailboxes.
+111. **The lease, visibility timeout, and function timeout are very close.** Little margin remains for slow provider calls, retries, or cold starts.
 
-112. **The maintenance fanout is O(total Gmail mailboxes) every 15 minutes.** This will become expensive even when most mailboxes need no work.
+112. **Browser reconnect attempts are not reset after a successful connection.** After enough lifetime disconnects, live sync permanently stops until remount. See [use-gmail-live-sync.ts](/E:/Coding/quieter/apps/web/src/lib/gmail/use-gmail-live-sync.ts:43).
 
-113. **A single maintenance function performs the full fanout.** At scale, listing and enqueueing all mailboxes can exceed its execution window.
+113. **Live-sync connection lifecycle depends on search state.** Search changes can unnecessarily tear down and recreate the socket.
 
-114. **The lease, visibility timeout, and function timeout are very close.** Little margin remains for slow provider calls, retries, or cold starts.
+114. **The live-sync token is placed in a URL query string.** Although short-lived, query tokens can appear in proxy and infrastructure logs.
 
-115. **WebSocket connection TTL is set only at connect time.** Ping traffic does not refresh it, so a healthy long-lived connection can disappear from the connection table. See [gmail-live-sync-websocket.ts](/E:/Coding/quieter/packages/aws/src/gmail-live-sync-websocket.ts:45).
+115. **Connection fanout uses broad parallelism.** Large mailboxes or organizations can trigger provider throttling.
 
-116. **Browser reconnect attempts are not reset after a successful connection.** After enough lifetime disconnects, live sync permanently stops until remount. See [use-gmail-live-sync.ts](/E:/Coding/quieter/apps/web/src/lib/gmail/use-gmail-live-sync.ts:43).
+116. **Polling is the fallback for dropped notifications, but observability does not show how often fallback is required.**
 
-117. **Live-sync connection lifecycle depends on search state.** Search changes can unnecessarily tear down and recreate the socket.
+117. **Pub/Sub ingress treats transient and invalid failures similarly.** Error classification and retry intent are not explicit.
 
-118. **The live-sync token is placed in a URL query string.** Although short-lived, query tokens can appear in proxy and infrastructure logs.
+118. **Token-info verification adds another external request to authorization.** Local JWT verification could reduce latency and dependency failure modes.
 
-119. **Notification delivery failures other than stale connections are swallowed.** The queue message can be acknowledged even when users were not notified.
-
-120. **Connection fanout uses broad parallelism.** Large mailboxes or organizations can trigger provider throttling.
-
-121. **Polling is the fallback for dropped notifications, but observability does not show how often fallback is required.**
-
-122. **Pub/Sub ingress treats transient and invalid failures similarly.** Error classification and retry intent are not explicit.
-
-123. **Token-info verification adds another external request to authorization.** Local JWT verification could reduce latency and dependency failure modes.
-
-124. **Many OAuth/provider requests lack explicit request timeouts.**
+119. **Many OAuth/provider requests lack explicit request timeouts.**
 
 ## Managed-mail correctness and search risks
 

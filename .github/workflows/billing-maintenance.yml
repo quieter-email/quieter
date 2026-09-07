@@ -1,0 +1,44 @@
+name: Repair billing credit overage
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quieter-deploy-production
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    environment: production
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Require this revision to be deployed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$GITHUB_REF" = refs/heads/main
+          result=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/sst-deploy.yml/runs?branch=main&per_page=1" --jq '.workflow_runs[0] | [.head_sha, .conclusion] | join(" ")')
+          test "$result" = "$GITHUB_SHA success"
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: eu-central-1
+      - name: Snapshot and repair invalid credit overage
+        env:
+          DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
+          QUIETER_ALLOW_REMOTE_MIGRATIONS: production
+        run: |
+          vp run @quieter/env#build
+          vp exec node packages/database/scripts/run-billing-credit-repair.ts

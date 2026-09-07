@@ -27,12 +27,15 @@ export const mailboxGrantSelectItems = [
   ...mailboxGrantRoleOptions,
 ];
 
-export const getProviderLabel = (provider: string) => {
+export const getProviderLabel = (
+  provider: string,
+  accessMode?: string | null
+) => {
   if (provider === "gmail") {
     return "Gmail";
   }
   if (provider === "managed") {
-    return "Shared inbox";
+    return accessMode === "private" ? "Private mailbox" : "Shared inbox";
   }
   return "Send-only mailbox";
 };

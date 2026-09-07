@@ -178,7 +178,7 @@ const ingestManagedMessageForMailbox = async (input: {
 
     if (message !== undefined && input.parsed.attachments.length > 0) {
       await tx.insert(managedMailAttachment).values(
-        input.parsed.attachments.map((attachment) => ({
+        input.parsed.attachments.map((attachment, partIndex) => ({
           contentId: attachment.contentId ?? null,
           createdAt: new Date(),
           fileName: attachment.fileName,
@@ -188,6 +188,7 @@ const ingestManagedMessageForMailbox = async (input: {
           messageId: message.id,
           mimeType: attachment.mimeType,
           normalizedFileName: normalizeManagedSearchValue(attachment.fileName),
+          partIndex,
           size: attachment.size,
         }))
       );

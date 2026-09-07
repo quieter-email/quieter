@@ -32,9 +32,12 @@ type MailboxMessagesPanelProps = {
   mailboxId: string;
   mailboxProvider: "api" | "gmail" | "managed";
   onComposeDraftRequested: (draft: ComposeDraftState) => void;
+  onManageTemplates: () => void;
   onOpenSidebar: () => void;
   onSearchQueryChange: (query: string) => void;
+  persistComposeDrafts: boolean;
   searchQuery: string;
+  signature?: { html: string | null; text: string | null };
 };
 
 const noopMailboxAction = async (): Promise<void> => {
@@ -143,9 +146,12 @@ export const MailboxMessagesPanel = ({
   mailboxId,
   mailboxProvider,
   onComposeDraftRequested,
+  onManageTemplates,
   onOpenSidebar,
   onSearchQueryChange,
+  persistComposeDrafts,
   searchQuery,
+  signature,
 }: MailboxMessagesPanelProps) => {
   const messageId = useMailboxMessageId() ?? null;
   const threadId = useMailboxThreadId() ?? null;
@@ -337,12 +343,16 @@ export const MailboxMessagesPanel = ({
         {isMessageRouteOpen ? (
           <MessageDetail
             activeMailbox={activeMailbox}
+            composeDemoMode={isDemoMode}
+            composeManagedDemoMode={isManagedDemoMode}
+            composePersistDrafts={persistComposeDrafts}
+            composeSignature={signature}
             currentUserEmail={currentUserEmail}
             focusOnOpen={shouldFocusMessageView}
             mailboxId={mailboxId}
             mailboxProvider={mailboxProvider}
             mailboxActions={mailboxActions}
-            onComposeDraftRequested={onComposeDraftRequested}
+            onManageTemplates={onManageTemplates}
             pendingActions={pendingActions}
             isPending={isLoadingEmptyMessages}
             onBackToList={backToList}

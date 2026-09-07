@@ -29,7 +29,7 @@ import { TooltipGroup } from "@quieter/ui/tooltip";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import { SenderAvatar } from "#/components/sender-avatar";
@@ -82,17 +82,28 @@ import type { MessageUnsubscribeTarget } from "./message-unsubscribe";
 
 type MessageViewProps = {
   activeMailbox: MailboxCategory;
+  composeDemoMode?: boolean;
+  composeManagedDemoMode?: boolean;
+  composePersistDrafts?: boolean;
+  composeSignature?: { html: string | null; text: string | null };
   focusOnOpen?: boolean;
   currentUserEmail?: string | null;
   mailboxId: string;
   mailboxProvider: "api" | "gmail" | "managed";
   mailboxActions: MailboxActions;
   message: MessageListItem;
-  onComposeDraftRequested?: (draft: ComposeDraftState) => void;
   onBackToList?: () => void;
   onAutoFocusComplete?: () => void;
+  onManageTemplates?: () => void;
   pendingActions: MailboxPendingActions;
 };
+
+const InlineComposeSurface = lazy(
+  async () =>
+    await import("#/features/compose/components/compose-workspace").then(
+      ({ ComposeSurface: Component }) => ({ default: Component })
+    )
+);
 
 type MessageHeaderContentProps = {
   message: MessageListItem;
@@ -1421,8 +1432,14 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     apiSource,
     apiSourceAction,
     canComposeFromMailbox,
+    composeDemoMode,
+    composeManagedDemoMode,
+    composePersistDrafts,
+    composeSignature,
     currentUserEmail,
     gmailLabels,
+    hotkeyLinkedDraftMessage,
+    hotkeyMessage,
     isActionPending,
     isBodyRefreshPending,
     isSingleMessageThread,
@@ -1430,7 +1447,8 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     mailboxId,
     mailboxProvider,
     message,
-    onComposeDraftRequested,
+    onBackToList,
+    onManageTemplates,
     subject,
     threadAttachments,
     threadIsUnread,
@@ -1440,6 +1458,45 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     viewRef,
     visibleMessages,
   } = props;
+  const [inlineDraft, setInlineDraft] = useState<ComposeDraftState | null>(
+    null
+  );
+  const inlineComposerRef = useRef<HTMLDivElement | null>(null);
+  const openInlineCompose = (draft: ComposeDraftState) => {
+    setInlineDraft((current) => current ?? draft);
+    requestAnimationFrame(() => {
+      inlineComposerRef.current?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "auto"
+          : "smooth",
+        block: "nearest",
+      });
+    });
+  };
+  const replyTarget = parseSender(hotkeyMessage.from);
+  const replyTargetLabel =
+    replyTarget.name?.trim() ||
+    replyTarget.display?.trim() ||
+    replyTarget.email?.trim() ||
+    "sender";
+  const showInlineCompose = canComposeFromMailbox && activeMailbox !== "drafts";
+  const showReplyAll = hasDistinctReplyAllRecipients(
+    hotkeyMessage,
+    currentUserEmail
+  );
+
+  useMessageViewHotkeys({
+    activeMailbox,
+    canComposeFromMailbox,
+    currentUserEmail,
+    hotkeyLinkedDraftMessage,
+    hotkeyMessage,
+    isActionPending,
+    mailboxActions,
+    mailboxProvider,
+    onBackToList,
+    onComposeDraftRequested: openInlineCompose,
+  });
 
   return (
     <article ref={viewRef} tabIndex={-1} className="@container w-full">
@@ -1515,7 +1572,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
             mailboxProvider={mailboxProvider}
             message={threadMessage}
             onComposeDraftRequested={
-              canComposeFromMailbox ? onComposeDraftRequested : undefined
+              canComposeFromMailbox ? openInlineCompose : undefined
             }
             onUnsubscribe={
               mailboxProvider === "gmail"
@@ -1538,7 +1595,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
           mailboxProvider={mailboxProvider}
           messages={visibleMessages}
           onComposeDraftRequested={
-            canComposeFromMailbox ? onComposeDraftRequested : undefined
+            canComposeFromMailbox ? openInlineCompose : undefined
           }
           onUnsubscribe={
             mailboxProvider === "gmail"
@@ -1548,6 +1605,116 @@ const MessageViewContent = (props: MessageViewContentProps) => {
           usefulDetails={usefulDetails}
         />
       )}
+
+      {showInlineCompose ? (
+        <div className="border-t px-4 py-4 @sm:px-5 @sm:py-5">
+          {inlineDraft ? (
+            <div data-inline-compose-host ref={inlineComposerRef}>
+              <Suspense
+                fallback={
+                  <output
+                    aria-label="Loading inline composer"
+                    aria-live="polite"
+                    className="grid min-h-64 place-items-center rounded-xl border border-border bg-control text-body text-muted-fg"
+                  >
+                    <HugeiconsIcon
+                      aria-hidden
+                      className="size-5 animate-spin"
+                      icon={Loading03Icon}
+                    />
+                  </output>
+                }
+              >
+                <InlineComposeSurface
+                  demoMode={composeDemoMode}
+                  initialDraft={inlineDraft}
+                  key={inlineDraft.localId}
+                  mailboxId={mailboxId}
+                  managedDemoMode={composeManagedDemoMode}
+                  onClose={() => {
+                    setInlineDraft(null);
+                  }}
+                  onManageTemplates={onManageTemplates}
+                  persistDrafts={composePersistDrafts}
+                  senderEmail={currentUserEmail}
+                  signature={composeSignature}
+                  variant="inline"
+                />
+              </Suspense>
+            </div>
+          ) : (
+            <div className="squircle flex min-w-0 flex-wrap items-center gap-1 rounded-xl border border-border bg-control p-1.5 shadow-sm">
+              <Button
+                className="min-w-44 flex-1 justify-start px-3 text-muted-fg hover:text-fg"
+                onClick={() => {
+                  openInlineCompose(
+                    hotkeyLinkedDraftMessage
+                      ? buildComposeDraftFromSavedDraftMessage(
+                          hotkeyLinkedDraftMessage
+                        )
+                      : buildComposeDraftFromMessageAction({
+                          action: "reply",
+                          currentUserEmail,
+                          existingDraftMessage: hotkeyLinkedDraftMessage,
+                          message: hotkeyMessage,
+                        })
+                  );
+                }}
+                type="button"
+                variant="ghost"
+              >
+                <HugeiconsIcon
+                  aria-hidden
+                  icon={hotkeyLinkedDraftMessage ? Edit01Icon : MailReply02Icon}
+                />
+                {hotkeyLinkedDraftMessage
+                  ? "Continue draft"
+                  : `Reply to ${replyTargetLabel}`}
+              </Button>
+              {showReplyAll ? (
+                <Button
+                  aria-label="Reply all"
+                  onClick={() => {
+                    openInlineCompose(
+                      buildComposeDraftFromMessageAction({
+                        action: "reply-all",
+                        currentUserEmail,
+                        existingDraftMessage: hotkeyLinkedDraftMessage,
+                        message: hotkeyMessage,
+                      })
+                    );
+                  }}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  <HugeiconsIcon aria-hidden icon={MailReplyAll02Icon} />
+                  <span className="hidden @sm:inline">Reply all</span>
+                </Button>
+              ) : null}
+              <Button
+                aria-label="Forward"
+                onClick={() => {
+                  openInlineCompose(
+                    buildComposeDraftFromMessageAction({
+                      action: "forward",
+                      currentUserEmail,
+                      existingDraftMessage: null,
+                      message: hotkeyMessage,
+                    })
+                  );
+                }}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                <HugeiconsIcon aria-hidden icon={ArrowRightDoubleIcon} />
+                <span className="hidden @sm:inline">Forward</span>
+              </Button>
+            </div>
+          )}
+        </div>
+      ) : null}
     </article>
   );
 };
@@ -1562,19 +1729,6 @@ export const MessageView = (props: MessageViewProps) => {
   const viewRef = useMessageViewFocus({
     focusOnOpen: props.focusOnOpen,
     onAutoFocusComplete: props.onAutoFocusComplete,
-  });
-
-  useMessageViewHotkeys({
-    activeMailbox: props.activeMailbox,
-    canComposeFromMailbox: data.canComposeFromMailbox,
-    currentUserEmail: props.currentUserEmail,
-    hotkeyLinkedDraftMessage: data.hotkeyLinkedDraftMessage,
-    hotkeyMessage: data.hotkeyMessage,
-    isActionPending: data.isActionPending,
-    mailboxActions: props.mailboxActions,
-    mailboxProvider: props.mailboxProvider,
-    onBackToList: props.onBackToList,
-    onComposeDraftRequested: props.onComposeDraftRequested,
   });
 
   return <MessageViewContent {...props} {...data} viewRef={viewRef} />;

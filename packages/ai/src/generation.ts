@@ -33,6 +33,7 @@ export const runStructuredGeneration = async <TOutput>(input: {
   maxOutputTokens: number;
   model?: ChatModel;
   onUsage?: (usage: AiUsageReport) => void;
+  prioritizeLatency?: boolean;
   prompt: string;
   reasoningEffort?: "minimal" | "low" | "medium" | "high";
   schema: z.ZodType<TOutput>;
@@ -44,7 +45,9 @@ export const runStructuredGeneration = async <TOutput>(input: {
       : { abortSignal: input.abortSignal }),
     instructions: input.system,
     maxOutputTokens: input.maxOutputTokens,
-    model: createChatModel(input.model ?? defaultChatModel),
+    model: createChatModel(input.model ?? defaultChatModel, {
+      prioritizeLatency: input.prioritizeLatency,
+    }),
     ...reasoningProviderOptions(input.reasoningEffort),
     output: Output.object({ schema: input.schema }),
     prompt: input.prompt,

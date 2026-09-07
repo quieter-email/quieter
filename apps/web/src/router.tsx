@@ -5,11 +5,11 @@ import { RootErrorComponent } from "./components/root/root-error-component";
 import { RootNotFoundComponent } from "./components/root/root-not-found-component";
 import { clientEnv } from "./env";
 import { shouldDiscardClientError } from "./lib/client-error-reporting";
-import { installStaleDeploymentRecovery } from "./lib/stale-deployment";
+import { handleDeploymentPreloadError } from "./lib/stale-deployment";
 import { routeTree } from "./routeTree.gen";
 
 const isSentryEnabled =
-  !import.meta.env.DEV &&
+  (!import.meta.env.DEV || clientEnv.VITE_QUIETER_LOCAL_TELEMETRY === "true") &&
   clientEnv.VITE_SENTRY_DSN !== undefined &&
   clientEnv.VITE_SENTRY_DSN !== "";
 
@@ -25,7 +25,7 @@ export const getRouter = () => {
   });
 
   if (!router.isServer) {
-    installStaleDeploymentRecovery();
+    window.addEventListener("vite:preloadError", handleDeploymentPreloadError);
   }
 
   if (!router.isServer && isSentryEnabled) {

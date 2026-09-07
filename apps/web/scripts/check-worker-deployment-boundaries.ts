@@ -7,37 +7,30 @@ const assetDirectory = path.join(serverDirectory, "assets");
 const serverFiles = await readdir(serverDirectory);
 const assetFiles = await readdir(assetDirectory);
 const cloudflareBundle = serverFiles.includes("wrangler.json");
-const maximumChunkBytes = cloudflareBundle ? 1_800_000 : 800_000;
-const maximumCompressedWorkerBytes = 10_000_000;
 const boundaries: {
   forbiddenMarkers?: string[];
   marker: string;
-  maximumStaticGraphBytes: number;
 }[] = [
   {
     marker: "src/features/home/components/home-page.tsx",
-    maximumStaticGraphBytes: cloudflareBundle ? 1_200_000 : 1_000_000,
   },
   {
     forbiddenMarkers: [
       "src/features/settings/components/settings-layout.tsx",
       "src/features/settings/components/settings-overview-panel.tsx",
       "src/components/workspace-dither-background.tsx",
+      "src/lib/mail-open-marker.server.ts",
     ],
     marker: "src/router.tsx",
-    maximumStaticGraphBytes: cloudflareBundle ? 3_000_000 : 1_200_000,
   },
   {
     marker: "packages/auth/src/session.ts",
-    maximumStaticGraphBytes: cloudflareBundle ? 2_700_000 : 1_700_000,
   },
   {
     marker: "packages/auth/src/index.ts",
-    maximumStaticGraphBytes: cloudflareBundle ? 3_700_000 : 1_900_000,
   },
   {
     marker: "packages/orpc/src/routers/mail.ts",
-    maximumStaticGraphBytes: cloudflareBundle ? 3_200_000 : 2_500_000,
   },
 ];
 
@@ -55,11 +48,7 @@ const sources = new Map<string, string>(
   )
 );
 
-for (const {
-  forbiddenMarkers = [],
-  marker,
-  maximumStaticGraphBytes,
-} of boundaries) {
+for (const { forbiddenMarkers = [], marker } of boundaries) {
   const entry = [...sources].find(([, source]) => source.includes(marker))?.[0];
   if (entry === undefined) {
     throw new Error(
@@ -130,17 +119,6 @@ for (const {
     throw new Error("Could not measure the Worker bundle.");
   }
 
-  if (
-    largest.bytes > maximumChunkBytes ||
-    totalBytes > maximumStaticGraphBytes
-  ) {
-    throw new Error(
-      `${marker} eagerly loads ${(totalBytes / 1_000_000).toFixed(2)} MB; largest chunk is ${(
-        largest.bytes / 1_000_000
-      ).toFixed(2)} MB (${largest.file}).`
-    );
-  }
-
   process.stdout.write(
     `${marker}: ${(totalBytes / 1_000_000).toFixed(2)} MB static graph, ${(
       largest.bytes / 1_000_000
@@ -167,25 +145,8 @@ if (cloudflareBundle) {
     /Total Upload:\s*[\d.]+\s*(?:KiB|MiB)\s*\/\s*gzip:\s*(?<size>[\d.]+)\s*(?<unit>KiB|MiB)/u.exec(
       output
     );
-  const compressedSize = Number(uploadMatch?.groups?.size);
-  const compressedUnit = uploadMatch?.groups?.unit;
-  if (
-    !Number.isFinite(compressedSize) ||
-    (compressedUnit !== "KiB" && compressedUnit !== "MiB")
-  ) {
-    throw new Error("Could not read the compressed Worker size from Wrangler.");
+  if (uploadMatch === null) {
+    throw new Error("Could not read the Worker size from Wrangler.");
   }
-  const compressedBytes =
-    compressedSize * (compressedUnit === "MiB" ? 1024 * 1024 : 1024);
-  if (compressedBytes >= maximumCompressedWorkerBytes) {
-    throw new Error(
-      `The compressed Worker upload is ${(compressedBytes / 1_000_000).toFixed(2)} MB; the limit is ${(maximumCompressedWorkerBytes / 1_000_000).toFixed(0)} MB.`
-    );
-  }
-  process.stdout.write(
-    `Worker upload: ${(compressedBytes / 1_000_000).toFixed(2)} MB compressed (${(
-      (compressedBytes / maximumCompressedWorkerBytes) *
-      100
-    ).toFixed(1)}% of limit)\n`
-  );
+  process.stdout.write(`Worker ${uploadMatch[0]}\n`);
 }

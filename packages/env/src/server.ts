@@ -36,11 +36,9 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
         runtimeEnv.GMAIL_CREDENTIAL_ROTATION_TOKEN,
       GMAIL_LIVE_SYNC_TOKEN_SECRET: runtimeEnv.GMAIL_LIVE_SYNC_TOKEN_SECRET,
       GMAIL_LIVE_SYNC_URL: runtimeEnv.GMAIL_LIVE_SYNC_URL,
-      GMAIL_PUBSUB_PROCESS_TOKEN: runtimeEnv.GMAIL_PUBSUB_PROCESS_TOKEN,
       GMAIL_PUBSUB_PUSH_AUDIENCE: runtimeEnv.GMAIL_PUBSUB_PUSH_AUDIENCE,
       GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT:
         runtimeEnv.GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT,
-      GMAIL_PUBSUB_QUEUE_URL: runtimeEnv.GMAIL_PUBSUB_QUEUE_URL,
       GMAIL_PUBSUB_SUBSCRIPTION: runtimeEnv.GMAIL_PUBSUB_SUBSCRIPTION,
       GMAIL_PUBSUB_TOPIC: runtimeEnv.GMAIL_PUBSUB_TOPIC,
       GMAIL_TOKEN_ENCRYPTION_KEY: runtimeEnv.GMAIL_TOKEN_ENCRYPTION_KEY,
@@ -54,7 +52,6 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       GOOGLE_GMAIL_CLIENT_SECRET: runtimeEnv.GOOGLE_GMAIL_CLIENT_SECRET,
       LINEAR_CLIENT_ID: runtimeEnv.LINEAR_CLIENT_ID,
       LINEAR_CLIENT_SECRET: runtimeEnv.LINEAR_CLIENT_SECRET,
-      MAILBOX_ACTION_QUEUE_URL: runtimeEnv.MAILBOX_ACTION_QUEUE_URL,
       MAIL_BUCKET: runtimeEnv.MAIL_BUCKET,
       MAIL_RECEIPT_ROLE_ARN: runtimeEnv.MAIL_RECEIPT_ROLE_ARN,
       MAIL_RECEIPT_RULE_SET_NAME: runtimeEnv.MAIL_RECEIPT_RULE_SET_NAME,
@@ -74,6 +71,15 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED:
         runtimeEnv.QUIETER_GMAIL_AI_AUTOMATION_ENABLED,
       QUIETER_LOCAL_BILLING_BYPASS: runtimeEnv.QUIETER_LOCAL_BILLING_BYPASS,
+      QUIETER_LOCAL_CALENDAR_WRITE_ACCOUNTS:
+        runtimeEnv.QUIETER_LOCAL_CALENDAR_WRITE_ACCOUNTS,
+      QUIETER_LOCAL_GMAIL_WATCH_OWNER:
+        runtimeEnv.QUIETER_LOCAL_GMAIL_WATCH_OWNER,
+      QUIETER_LOCAL_GMAIL_WRITE_ACCOUNTS:
+        runtimeEnv.QUIETER_LOCAL_GMAIL_WRITE_ACCOUNTS,
+      QUIETER_LOCAL_LINEAR_WRITES: runtimeEnv.QUIETER_LOCAL_LINEAR_WRITES,
+      QUIETER_LOCAL_PROVIDER_MODE: runtimeEnv.QUIETER_LOCAL_PROVIDER_MODE,
+      QUIETER_LOCAL_WORKER_TOKEN: runtimeEnv.QUIETER_LOCAL_WORKER_TOKEN,
       QUIETER_MAIL_API_KEY: runtimeEnv.QUIETER_MAIL_API_KEY,
       QUIETER_MAIL_API_URL: runtimeEnv.QUIETER_MAIL_API_URL,
       QUIETER_PREVIEW_PERSONAS_ENABLED:
@@ -91,6 +97,7 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       SES_CONFIGURATION_SET_NAME: runtimeEnv.SES_CONFIGURATION_SET_NAME,
       SES_FEEDBACK_TOPIC_ARN: runtimeEnv.SES_FEEDBACK_TOPIC_ARN,
       VITE_LOGO_DEV_PUBLISHABLE_KEY: runtimeEnv.VITE_LOGO_DEV_PUBLISHABLE_KEY,
+      VITE_QUIETER_LOCAL_TELEMETRY: runtimeEnv.VITE_QUIETER_LOCAL_TELEMETRY,
     },
     server: {
       APP_SITE_PASSWORD: optionalString,
@@ -111,10 +118,8 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       GMAIL_CREDENTIAL_ROTATION_TOKEN: optionalString,
       GMAIL_LIVE_SYNC_TOKEN_SECRET: optionalString,
       GMAIL_LIVE_SYNC_URL: webSocketUrl.optional(),
-      GMAIL_PUBSUB_PROCESS_TOKEN: optionalString,
       GMAIL_PUBSUB_PUSH_AUDIENCE: optionalHttpUrl,
       GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT: z.email().optional(),
-      GMAIL_PUBSUB_QUEUE_URL: optionalUrl,
       GMAIL_PUBSUB_SUBSCRIPTION: optionalString,
       GMAIL_PUBSUB_TOPIC: optionalString,
       GMAIL_TOKEN_ENCRYPTION_KEY: optionalString,
@@ -127,7 +132,6 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       GOOGLE_GMAIL_CLIENT_SECRET: optionalString,
       LINEAR_CLIENT_ID: optionalString,
       LINEAR_CLIENT_SECRET: optionalString,
-      MAILBOX_ACTION_QUEUE_URL: optionalUrl,
       MAIL_BUCKET: optionalString,
       MAIL_RECEIPT_ROLE_ARN: optionalString,
       MAIL_RECEIPT_RULE_SET_NAME: optionalString,
@@ -146,6 +150,16 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       QUIETER_DEPLOYMENT_ENV: z.enum(["local", "production"]).default("local"),
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED: optionalBooleanString,
       QUIETER_LOCAL_BILLING_BYPASS: optionalBooleanString,
+      QUIETER_LOCAL_CALENDAR_WRITE_ACCOUNTS: optionalString,
+      QUIETER_LOCAL_GMAIL_WATCH_OWNER: z
+        .enum(["production", "local"])
+        .default("production"),
+      QUIETER_LOCAL_GMAIL_WRITE_ACCOUNTS: optionalString,
+      QUIETER_LOCAL_LINEAR_WRITES: optionalBooleanString,
+      QUIETER_LOCAL_PROVIDER_MODE: z
+        .enum(["observe", "write"])
+        .default("observe"),
+      QUIETER_LOCAL_WORKER_TOKEN: z.string().min(32).optional(),
       QUIETER_MAIL_API_KEY: optionalString,
       QUIETER_MAIL_API_URL: optionalHttpUrl,
       QUIETER_PREVIEW_PERSONAS_ENABLED: optionalBooleanString,
@@ -162,6 +176,7 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       SES_CONFIGURATION_SET_NAME: optionalString,
       SES_FEEDBACK_TOPIC_ARN: optionalString,
       VITE_LOGO_DEV_PUBLISHABLE_KEY: optionalString,
+      VITE_QUIETER_LOCAL_TELEMETRY: optionalBooleanString,
     },
   });
 

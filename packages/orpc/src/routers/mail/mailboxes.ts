@@ -11,6 +11,7 @@ import {
   listManagedMailboxAdministration,
   removeManagedMailboxDivisionGrant,
   removeManagedMailboxGrant,
+  setManagedMailboxAccessMode,
   setManagedMailboxDivisionGrant,
   setManagedMailboxGrant,
   updateManagedMailbox,
@@ -54,11 +55,13 @@ export const mailboxProcedures = {
   createManagedMailbox: protectedProcedure
     .input(
       z.object({
+        accessMode: z.enum(["private", "shared"]).optional(),
         displayName: z.string().trim().max(120).nullable().optional(),
         divisionId: z.string().trim().min(1).nullable().optional(),
         emailAddress: z.email(),
         includeApiSentMessages: z.boolean().optional(),
         organizationId: z.string().trim().min(1),
+        ownerUserId: z.string().trim().min(1).nullish(),
         receiveWholeDomain: z.boolean().optional(),
       })
     )
@@ -258,6 +261,18 @@ export const mailboxProcedures = {
         await import("../../gmail-useful-details/settings");
       return await setGmailUsefulDetails({ ...input, userId: context.userId });
     }),
+  setManagedMailboxAccessMode: protectedProcedure
+    .input(
+      z.object({
+        accessMode: z.enum(["private", "shared"]),
+        mailboxId: mailboxIdSchema,
+        ownerUserId: z.string().trim().min(1).nullish(),
+      })
+    )
+    .handler(
+      async ({ context, input }) =>
+        await setManagedMailboxAccessMode({ ...input, userId: context.userId })
+    ),
   setManagedMailboxDivisionGrant: protectedProcedure
     .input(
       z.object({

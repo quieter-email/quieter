@@ -1,3 +1,4 @@
+import { withSentryReporting } from "./worker-runtime";
 import {
   handleLiveMailboxRequest,
   handlePubSub,
@@ -7,7 +8,7 @@ import {
 export { GmailLiveSyncMailbox } from "./gmail-live-sync-mailbox";
 export { signaturesMatch } from "./worker-utils";
 
-export default {
+export default withSentryReporting({
   async fetch(request: Request, env: Env) {
     const route = new URL(request.url).pathname;
     try {
@@ -22,4 +23,4 @@ export default {
       return requestErrorResponse(error, route);
     }
   },
-} satisfies ExportedHandler<Env>;
+} satisfies ExportedHandler<Env>);

@@ -32,12 +32,14 @@ import { and, asc, eq, gt, isNull, lte, or } from "drizzle-orm";
 
 import {
   buildMailMemoryQuery,
-  loadAiAgentContext,
+  loadAiAgentMemoryCandidates,
   loadAiConfiguration,
   loadUsefulDetailFeedbackPolicies,
+  loadAiAgentContext,
   recordAndRefreshAiMemory,
   serializeAiAgentContext,
 } from "../ai-memory";
+import type { AiAgentMemoryCandidates } from "../ai-memory";
 import { decryptSecret, encryptSecret } from "../gmail-mailbox-access";
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import { refreshUsefulDetailMemoryProfile } from "../mail-automation/memory";
@@ -1017,18 +1019,27 @@ export const buildGmailUsefulDetailPreferenceProfile = ({
 type UsefulDetailFeedbackPolicies = Awaited<
   ReturnType<typeof loadUsefulDetailFeedbackPolicies>
 >;
+type UsefulDetailAutomationContext = {
+  memoryCandidates: AiAgentMemoryCandidates;
+  model: ChatModel;
+};
+type MailAutomationBudgetStatus = Awaited<
+  ReturnType<typeof getMailAutomationAiBudgetStatus>
+>;
 
 /**
- * Only the model path needs this. It costs an embedding request plus memory
- * ranking, so the verification-code fast path must never wait on it.
+ * Only the model path needs this, so the verification-code fast path never
+ * waits on configuration or memory retrieval.
  */
 const getGmailUsefulDetailPreferenceProfile = async ({
   feedbackPolicies,
+  getAutomationContext,
   mailboxId,
   message,
   userId,
 }: {
   feedbackPolicies: UsefulDetailFeedbackPolicies;
+  getAutomationContext?: () => Promise<UsefulDetailAutomationContext>;
   mailboxId: string;
   message: AutomationMailMessage;
   userId: string;
@@ -1036,19 +1047,35 @@ const getGmailUsefulDetailPreferenceProfile = async ({
   model: ChatModel;
   preferences: GmailUsefulDetailPreferenceProfile;
 }> => {
-  const [aiConfiguration, memoryContext] = await Promise.all([
-    loadAiConfiguration({ userId }),
-    loadAiAgentContext({
-      agent: "useful_detail",
-      includeUserScope: false,
-      mailboxId,
-      query: buildMailMemoryQuery(message),
-      userId,
-    }),
-  ]);
+  let automationContext: UsefulDetailAutomationContext;
+  if (getAutomationContext) {
+    automationContext = await getAutomationContext();
+  } else {
+    const [aiConfiguration, memoryCandidates] = await Promise.all([
+      loadAiConfiguration({ userId }),
+      loadAiAgentMemoryCandidates({
+        includeUserScope: false,
+        mailboxId,
+        userId,
+      }),
+    ]);
+    automationContext = {
+      memoryCandidates,
+      model: aiConfiguration.usefulDetailModel,
+    };
+  }
+  const memoryContext = await loadAiAgentContext({
+    agent: "useful_detail",
+    candidates: automationContext.memoryCandidates,
+    includeUserScope: false,
+    mailboxId,
+    query: buildMailMemoryQuery(message),
+    semantic: false,
+    userId,
+  });
 
   return {
-    model: aiConfiguration.usefulDetailModel,
+    model: automationContext.model,
     preferences: {
       avoidKinds: USEFUL_DETAIL_KINDS.filter(
         (kind) => feedbackPolicies.get(kind) === "suppress"
@@ -1062,12 +1089,16 @@ const getGmailUsefulDetailPreferenceProfile = async ({
 };
 
 export const processGmailUsefulDetailMessage = async ({
+  getAutomationContext,
+  getBudgetStatus,
   gmailMessageId,
   loadMessage,
   mailboxId,
   organizationId,
   userId,
 }: {
+  getAutomationContext?: () => Promise<UsefulDetailAutomationContext>;
+  getBudgetStatus?: () => Promise<MailAutomationBudgetStatus>;
   gmailMessageId: string;
   loadMessage: () => Promise<AutomationMailMessage | null>;
   mailboxId: string;
@@ -1129,6 +1160,7 @@ export const processGmailUsefulDetailMessage = async ({
 
     const { model, preferences } = await getGmailUsefulDetailPreferenceProfile({
       feedbackPolicies,
+      getAutomationContext,
       mailboxId,
       message,
       userId,
@@ -1146,11 +1178,13 @@ export const processGmailUsefulDetailMessage = async ({
       promptTokens: 0,
     };
 
-    const budgetStatus = await getMailAutomationAiBudgetStatus({
-      organizationId:
-        organizationId ?? (await getMailboxOrganizationId(mailboxId)),
-      userId,
-    });
+    const budgetStatus = getBudgetStatus
+      ? await getBudgetStatus()
+      : await getMailAutomationAiBudgetStatus({
+          organizationId:
+            organizationId ?? (await getMailboxOrganizationId(mailboxId)),
+          userId,
+        });
     if (!budgetStatus.allowed) {
       await deferEventAutomation(event.id, budgetStatus.message);
       return;

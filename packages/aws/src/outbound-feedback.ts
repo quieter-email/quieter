@@ -11,13 +11,17 @@ import { reportAwsError } from "./sentry";
 
 type JsonObject = Record<string, unknown>;
 
-type SqsRecord = {
-  body: string;
-  messageId: string;
+type SnsNotification = {
+  Message: string;
+  MessageId: string;
+  TopicArn: string;
+  Type: string;
 };
 
-type SqsEvent = {
-  Records: SqsRecord[];
+type SnsEvent = {
+  Records: {
+    Sns: SnsNotification;
+  }[];
 };
 
 const isObject = (value: unknown): value is JsonObject =>
@@ -204,11 +208,10 @@ const parseEventDetails = (input: {
   };
 };
 
-export const parseSesFeedbackQueueMessage = (
-  body: string,
+export const parseSesFeedbackNotification = (
+  envelope: unknown,
   expectedTopicArn?: string
 ): OrganizationMailFeedback | null => {
-  const envelope = parseJsonObject(body, "SNS envelope");
   const topicArn = getString(envelope, "TopicArn");
   if (expectedTopicArn !== undefined && topicArn !== expectedTopicArn) {
     throw new Error("SES feedback message came from an unexpected SNS topic.");
@@ -246,35 +249,28 @@ export const parseSesFeedbackQueueMessage = (
   };
 };
 
-const processRecord = async (record: SqsRecord) => {
-  const feedback = parseSesFeedbackQueueMessage(
-    record.body,
+const processNotification = async (notification: SnsNotification) => {
+  const feedback = parseSesFeedbackNotification(
+    notification,
     serverEnv.SES_FEEDBACK_TOPIC_ARN
   );
   if (feedback === null) {
     return;
   }
-  await withRequestDatabaseClient(async () => {
-    await recordOrganizationMailFeedback(feedback);
-  });
+  await recordOrganizationMailFeedback(feedback);
 };
 
-export const handler = async (event: SqsEvent) => {
-  const results = await Promise.all(
-    event.Records.map(async (record) => {
-      try {
-        await processRecord(record);
-        return null;
-      } catch (error) {
-        await reportAwsError(error, "MailOutboundFeedbackProcessor");
-        return record.messageId;
-      }
-    })
-  );
-
-  return {
-    batchItemFailures: results.flatMap((messageId) =>
-      messageId === null ? [] : [{ itemIdentifier: messageId }]
-    ),
-  };
+export const handler = async (event: SnsEvent) => {
+  await withRequestDatabaseClient(async () => {
+    await Promise.all(
+      event.Records.map(async (record) => {
+        try {
+          await processNotification(record.Sns);
+        } catch (error) {
+          await reportAwsError(error, "MailOutboundFeedbackProcessor");
+          throw error;
+        }
+      })
+    );
+  });
 };

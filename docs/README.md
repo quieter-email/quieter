@@ -1,6 +1,7 @@
 # Quieter Documentation
 
 - [Development](development.md)
+- [Development integration plan](development-integrations.md)
 - [Architecture](architecture.md)
 - [Responsive mail baseline](responsive-mail.md)
 - [Database safety](database-safety.md)

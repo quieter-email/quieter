@@ -19,9 +19,14 @@ import type { SendMessageInput, SendMessageResult } from "@quieter/mail/send";
 import { reportError } from "@quieter/observability";
 import { and, eq, lt } from "drizzle-orm";
 
+import { assertLocalMailSend } from "./local-managed-mail";
 import { recordOutboundManagedMessageForSender } from "./managed-mail/messages/service";
 import { recordOrganizationApiMailMessage } from "./organization-api-mail";
-import { assertOrganizationMailRecipientsNotSuppressed } from "./organization-mail-delivery";
+import {
+  assertOrganizationMailRecipientsNotSuppressed,
+  buildOpenTrackingHtmlTransform,
+  resolveOrganizationMailOpenTracking,
+} from "./organization-mail-delivery";
 import {
   assertOrganizationOwnsVerifiedSenderDomain,
   OrganizationMailSendError,
@@ -29,6 +34,7 @@ import {
 import { hasText } from "./text";
 
 export { ORGANIZATION_API_KEY_CONFIG_ID } from "@quieter/auth/organization-api-key";
+export { organizationHasBillingFeature } from "@quieter/billing/entitlements";
 export {
   assertOrganizationOwnsVerifiedSenderDomain,
   OrganizationMailSendError,
@@ -256,7 +262,23 @@ export const sendOrganizationMailMessage = async (input: {
     }
 
     const sentAt = new Date();
-    const builtMessage = buildSendMimeMessage(input.message, { sentAt });
+    const messageHeaderId = `<${randomUUID()}@${getSendEnvelopeAddress(input.message.from).split("@").at(1) ?? "quieter.email"}>`;
+    const openTrackingEnabled = await resolveOrganizationMailOpenTracking({
+      openTracking: input.message.openTracking,
+      organizationId: input.organizationId,
+    });
+    const openTrackingTransform =
+      input.message.html === undefined
+        ? {}
+        : buildOpenTrackingHtmlTransform({
+            messageHeaderId,
+            openTrackingEnabled,
+          });
+    const builtMessage = buildSendMimeMessage(input.message, {
+      messageId: messageHeaderId,
+      sentAt,
+      ...openTrackingTransform,
+    });
     const usageEstimate = estimateOutboundOrganizationMailUsage({
       attachmentSizeBytes: builtMessage.attachmentSizeBytes,
       bcc: builtMessage.bcc,
@@ -284,6 +306,7 @@ export const sendOrganizationMailMessage = async (input: {
       organizationId: input.organizationId,
       sender: input.message.from,
     });
+    assertLocalMailSend();
     await assertOrganizationMailRecipientsNotSuppressed({
       organizationId: input.organizationId,
       recipients: [...builtMessage.to, ...builtMessage.cc, ...builtMessage.bcc],

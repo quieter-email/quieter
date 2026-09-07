@@ -1,27 +1,23 @@
 import { ORPCError } from "@orpc/server";
 import type { Subscription } from "@polar-sh/sdk/models/components/subscription.js";
 import { db } from "@quieter/database/client";
-import {
-  billingSubscription,
-  mailbox,
-  member,
-  organization,
-} from "@quieter/database/schema";
+import { mailbox, member, organization } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { reportError } from "@quieter/observability";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 import { getAiUsageCostMicroCents } from "./ai-pricing.ts";
 import { getBillingCreditUsage, recordBillingCreditUsage } from "./credits.ts";
 import type { BillingUsageKind } from "./credits.ts";
 import {
   getOrganizationBillingEntitlement,
+  getOrganizationSubscriptionRecord,
   hasUserBillingFeature,
   isActiveBillingSubscription,
   isLocalDevelopmentBillingEntitlementEnabled,
-  subscriptionBelongsToOrganization,
 } from "./entitlements.ts";
 import type { BillingProductId } from "./plans.ts";
+import { getBillingExternalIdentity } from "./polar-config.ts";
 import { getPolarApiOrganizationId, getPolarClient } from "./polar.ts";
 import {
   BILLING_METADATA_ORGANIZATION_ID,
@@ -44,10 +40,12 @@ export const createBillingCheckoutMetadata = (input: {
   userId: string;
 }) => ({
   customerMetadata: {
+    quieterEnvironment: serverEnv.QUIETER_DEPLOYMENT_ENV,
     [BILLING_METADATA_ORGANIZATION_ID]: input.organizationId,
     [BILLING_METADATA_USER_ID]: input.userId,
   },
   metadata: {
+    quieterEnvironment: serverEnv.QUIETER_DEPLOYMENT_ENV,
     [BILLING_METADATA_ORGANIZATION_ID]: input.organizationId,
     [BILLING_METADATA_PRODUCT]: input.product,
     [BILLING_METADATA_USER_ID]: input.userId,
@@ -59,8 +57,11 @@ export const createBillingPortalSession = (input: {
   returnUrl: string;
   userId: string;
 }) => ({
-  externalCustomerId: `organization:${input.organizationId}`,
-  externalMemberId: input.userId,
+  externalCustomerId: getBillingExternalIdentity(
+    "organization",
+    input.organizationId
+  ),
+  externalMemberId: getBillingExternalIdentity("user", input.userId),
   returnUrl: input.returnUrl,
 });
 
@@ -167,31 +168,38 @@ export const createBillingCheckout = async (input: {
   }
 
   const providerProductId = getBillingProductId(input.product);
-  const rows = await db
-    .select({
-      currentPeriodEnd: billingSubscription.currentPeriodEnd,
-      metadata: billingSubscription.metadata,
-      plan: billingSubscription.plan,
-      providerSubscriptionId: billingSubscription.providerSubscriptionId,
-      status: billingSubscription.status,
-      updatedAt: billingSubscription.updatedAt,
-    })
-    .from(billingSubscription)
-    .where(
-      and(
-        eq(billingSubscription.organizationId, input.organizationId),
-        inArray(billingSubscription.plan, ["managed", "pro"])
-      )
-    )
-    .orderBy(desc(billingSubscription.updatedAt));
-  const activeSubscription = rows.find(
-    (row) =>
-      isActiveBillingSubscription(row) &&
-      subscriptionBelongsToOrganization(row.metadata, input.organizationId)
+  const subscription = await getOrganizationSubscriptionRecord(
+    input.organizationId,
+    { forceReconcile: true }
   );
+  const activeSubscription =
+    subscription !== null && isActiveBillingSubscription(subscription)
+      ? subscription
+      : null;
+
+  if (
+    subscription !== null &&
+    activeSubscription === null &&
+    subscription.status !== "canceled" &&
+    subscription.status !== "expired"
+  ) {
+    throw new ORPCError("BAD_REQUEST", {
+      message:
+        "Your existing subscription needs attention. Open Manage billing before starting another subscription.",
+    });
+  }
 
   if (activeSubscription) {
     if (activeSubscription.plan !== input.product) {
+      if (
+        activeSubscription.cancelAtPeriodEnd ||
+        activeSubscription.status === "trialing"
+      ) {
+        throw new ORPCError("BAD_REQUEST", {
+          message:
+            "Open Manage billing to update your subscription before changing plans.",
+        });
+      }
       const polarClient = await getPolarClient();
       const updatedSubscription = await polarClient.subscriptions.update({
         id: activeSubscription.providerSubscriptionId,
@@ -212,7 +220,10 @@ export const createBillingCheckout = async (input: {
     userId: input.userId,
   });
   const polar = await getPolarClient();
-  const externalCustomerId = `organization:${input.organizationId}`;
+  const externalCustomerId = getBillingExternalIdentity(
+    "organization",
+    input.organizationId
+  );
   let teamCustomerId: string | undefined;
 
   try {
@@ -235,7 +246,7 @@ export const createBillingCheckout = async (input: {
       organizationId: getPolarApiOrganizationId(),
       owner: {
         email: input.customerEmail,
-        externalId: input.userId,
+        externalId: getBillingExternalIdentity("user", input.userId),
         name: input.customerName,
       },
       type: "team",
@@ -322,20 +333,34 @@ export const getBillingOverview = async (input: { userId: string }) => {
     .where(eq(member.userId, input.userId))
     .orderBy(organization.name);
   const teams = await Promise.all(
-    memberships.map(async (membership) => ({
-      canManageBilling: membership.role
-        .split(",")
-        .map((role) => role.trim().toLowerCase())
-        .some((role) => role === "admin" || role === "owner"),
-      organizationId: membership.organizationId,
-      organizationName: membership.organizationName,
-      ...(await serializeEntitlement(
-        await getOrganizationBillingEntitlement({
-          feature: "organizationMail",
-          organizationId: membership.organizationId,
-        })
-      )),
-    }))
+    memberships.map(async (membership) => {
+      const subscription = isLocalDevelopmentBillingEntitlementEnabled()
+        ? null
+        : await getOrganizationSubscriptionRecord(membership.organizationId);
+      return {
+        canManageBilling: membership.role
+          .split(",")
+          .map((role) => role.trim().toLowerCase())
+          .some((role) => role === "admin" || role === "owner"),
+        organizationId: membership.organizationId,
+        organizationName: membership.organizationName,
+        ...(await serializeEntitlement(
+          await getOrganizationBillingEntitlement({
+            feature: "organizationMail",
+            organizationId: membership.organizationId,
+            subscription,
+          })
+        )),
+        subscription:
+          subscription === null
+            ? null
+            : {
+                cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+                currentPeriodEnd: subscription.currentPeriodEnd,
+                status: subscription.status,
+              },
+      };
+    })
   );
 
   return { teams };
