@@ -298,7 +298,7 @@ export const useComposeDialogController = ({
       if (demoMode) {
         saved = saveDemoDraft(draft);
       } else if (managedDemoMode) {
-        saved = await saveManagedDemoDraft(draft);
+        saved = saveManagedDemoDraft(draft);
       } else {
         saved = await saveComposeDraft(mailboxId, draft);
       }
