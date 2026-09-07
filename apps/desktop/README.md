@@ -4,8 +4,13 @@ This is a native GPUI client for Quieter. It does not embed a browser or share w
 
 ## Run locally
 
-1. Start the web server at `http://localhost:3000`.
-2. Run `cargo run --manifest-path apps/desktop/Cargo.toml`.
+1. Install the current stable Rust toolchain and the native prerequisites below.
+2. Start the web server at `http://localhost:3000` using the development setup in `docs/development.md`.
+3. Run `vp run desktop:dev` from the repository root.
+
+Vite+ runs the native Cargo commands without adding a JavaScript UI or making the Rust workspace depend on web packages. Normal server development uses the allowlisted PlanetScale `quieter_dev` database and development-stage SST Secret bindings. The desktop does not connect to a database; no persistent local PostgreSQL installation is required. The shared fixture verification can also run against a disposable loopback test database.
+
+This pass was built and exercised on Windows. Use the MSVC Rust toolchain, Visual Studio Build Tools with the Desktop development with C++ workload, the Windows SDK, and CMake. Open a Visual Studio Developer PowerShell if the compiler or SDK tools are not found. The [upstream Windows dependency guide](https://github.com/zed-industries/zed/blob/main/docs/src/development/windows.md#dependencies) describes those native tools. Its Zed database setup is not needed by this client. GPUI 0.2.2 release builds also need the SDK's `fxc.exe`, available on `PATH` or through the `GPUI_FXC_PATH` build-tool setting. macOS and Linux builds have not been verified in this pass.
 
 Debug builds use `http://localhost:3000`. Release builds use `https://quieter.email`. Override either with `QUIETER_SERVER_URL`. The app crate is optimized in development too, so the native effects do not incur unoptimized rasterization costs.
 
@@ -14,7 +19,7 @@ Desktop sessions are authorized in the browser with a short-lived device code an
 Start browser sign-in immediately, only when there is no saved session:
 
 ```powershell
-cargo run --manifest-path apps/desktop/Cargo.toml -- --connect
+vp run desktop:dev -- --connect
 ```
 
 For isolated browser QA, `--connect --no-open-browser` prints the verification page URL without opening the default browser or activating the desktop after approval. The device code remains visible in the app, and its explicit browser button still works. The private device secret and session token are never printed.
@@ -22,7 +27,7 @@ For isolated browser QA, `--connect --no-open-browser` prints the verification p
 Start the offline visual preview using the web app's demo inbox fixture:
 
 ```powershell
-cargo run --manifest-path apps/desktop/Cargo.toml -- --preview
+vp run desktop:dev -- --preview
 ```
 
 `QUIETER_DESKTOP_PREVIEW=1` remains supported. `QUIETER_DESKTOP_FORCE_SIGNED_OUT=1` ignores saved credentials for an explicit sign-in test and can be combined with `--connect`. Preview mode never reads, revokes, or removes a saved session. Credentials are stored separately for each server origin. Remote servers require HTTPS; HTTP is accepted only on loopback addresses.
@@ -32,8 +37,9 @@ Keyboard shortcuts use Ctrl on Windows/Linux and Cmd on macOS: N opens compose, 
 ## Verification
 
 ```powershell
-cargo check --manifest-path apps/desktop/Cargo.toml
-cargo test --manifest-path apps/desktop/Cargo.toml
+vp run desktop:check
+vp run desktop:test
+vp run desktop:build
 ```
 
 The tests exercise HTTP request contracts, device authorization states, server-origin restrictions, reply recipients and threading headers, and rollback isolation after mailbox changes or sign-out. The local managed-mail fixture blocks delivery outside the local environment; a successful local read or mutation test does not imply that production mail delivery was exercised.

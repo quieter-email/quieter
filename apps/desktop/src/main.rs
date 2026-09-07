@@ -17,6 +17,12 @@ use gpui::{
 use gpui_component::{Root, TitleBar};
 
 fn main() {
+    if std::env::args().any(|argument| matches!(argument.as_str(), "--help" | "-h")) {
+        println!(
+            "Quieter Desktop\n\nUsage: vp run desktop:dev -- [OPTIONS]\n\n  --preview          Open the offline visual preview\n  --connect          Start browser sign-in if no session is saved\n  --no-open-browser  Print the approval URL instead of opening a browser\n  --help, -h         Show this help without opening a window"
+        );
+        return;
+    }
     Application::new()
         .with_assets(DesktopAssets)
         .run(|cx: &mut App| {
