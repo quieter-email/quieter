@@ -1,5 +1,7 @@
 # Codebase audit, 7 September 2026
 
+Implementation follow-up: all 122 findings now have recorded resolutions. See the [cleanup summary and verification limits](implementation.md) and [per-finding resolution ledger](resolution.csv). The reports below describe the original audited state.
+
 The largest problems are duplicated business paths with different safeguards, unrecoverable side effects, and inconsistent state and data contracts. Smaller issues include dead code and exports, needless wrappers, misleading types and names, inconsistent shared controls, and tests that constrain harmless refactors while missing core boundaries.
 
 The expanded audit contains **122 findings: 17 P1, 65 P2, and 40 P3**, including 81 additions from the second pass. It covers major reliability risks and small, concrete cleanup. Repeated occurrences are cataloged without counting each match as another finding. This is an audit report only; application behavior was not changed.
