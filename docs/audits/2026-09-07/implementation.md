@@ -2,7 +2,7 @@
 
 All 122 findings have a recorded resolution in [resolution.csv](resolution.csv). The original reports remain a historical record of the audited commit. The implementation is split into focused commits on `refactor/codebase-cleanup`.
 
-Application and library source is 2,099 lines smaller across the affected files, excluding tests, declarations, generated route trees and documentation. Generated migration snapshots account for most of the added repository lines.
+Application and library source is about 2,100 lines smaller across the affected files, excluding tests, declarations, generated route trees and documentation. Generated migration snapshots account for most of the added repository lines.
 
 ## What changed
 
@@ -37,7 +37,7 @@ The configured transcription model was probed with synthetic speech using the bu
 
 Apply the additive migrations before the application release and drain older send, rule and action workers as described in [the architecture notes](../../architecture.md). Keep historical records and compatible readers during the transition. No production migrations or deployment were performed.
 
-Local integration tests used disposable loopback PostgreSQL 18.4 with the selected tables and new migrations. The full historical migration sequence requires the pgvector database configured in CI; it was not executed against this local installation. Provider and billing-entitlement boundaries were mocked in the database tests, while database queries, locks, claims and persistence were real.
+Local integration tests used disposable loopback PostgreSQL 18.4 with the selected tables and new migrations. CI also passed the full historical migration sequence and integration tests against pgvector PostgreSQL 16. Provider and billing-entitlement boundaries were mocked in the database tests, while database queries, locks, claims and persistence were real.
 
 Each paid action run reserves 25 cents for up to five minutes. This prevents competing action runs from allocating the same headroom. It is not a hard provider spending cap: an in-flight model step can exceed the allowance, and other AI features retain their existing credit checks. Reservations are separate from actual billed usage.
 

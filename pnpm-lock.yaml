@@ -243,6 +243,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@ai-sdk/provider-utils':
+        specifier: 5.0.29
+        version: 5.0.29(zod@4.5.4)
       '@ai-sdk/react':
         specifier: 'catalog:'
         version: 4.0.80(react@19.2.8)(zod@4.5.4)

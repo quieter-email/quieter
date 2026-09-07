@@ -1,3 +1,4 @@
+import { convertUint8ArrayToBase64 } from "@ai-sdk/provider-utils";
 import { ORPCError } from "@orpc/client";
 import type { RouterInputs } from "@quieter/orpc";
 
@@ -134,7 +135,7 @@ export const prepareTranscriptionRecording = async (
     });
   }
   return {
-    audioBase64: bytes.toBase64(),
+    audioBase64: convertUint8ArrayToBase64(bytes),
     durationMs: recording.durationMs,
     format,
   };

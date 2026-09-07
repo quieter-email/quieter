@@ -16,6 +16,7 @@
     "preview": "vp preview"
   },
   "dependencies": {
+    "@ai-sdk/provider-utils": "5.0.29",
     "@ai-sdk/react": "catalog:",
     "@barkleapp/css-sanitizer": "1.0.0",
     "@better-auth/api-key": "catalog:",
