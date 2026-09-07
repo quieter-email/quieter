@@ -1427,6 +1427,7 @@ export const mailboxActionStepRun = pgTable(
     completedAt: timestamp("completedAt"),
     createdAt: timestamp("createdAt").notNull(),
     error: text("error"),
+    executionResult: jsonb("executionResult").$type<MailboxActionJsonObject>(),
     frameId: text("frameId").references(() => mailboxActionRunFrame.id, {
       onDelete: "set null",
     }),

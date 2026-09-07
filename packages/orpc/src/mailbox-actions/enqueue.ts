@@ -130,28 +130,45 @@ const DISPATCH_LEASE_MS = 15 * 60 * 1000;
 export const claimPendingMailboxActionRuns = async () => {
   const now = new Date();
   const dispatchLeaseExpiry = new Date(now.getTime() - DISPATCH_LEASE_MS);
-  return await db
-    .update(mailboxActionRun)
-    .set({ dispatchedAt: now, updatedAt: now })
-    .where(
-      or(
-        and(
-          eq(mailboxActionRun.status, "queued"),
-          or(
-            isNull(mailboxActionRun.dispatchedAt),
-            lte(mailboxActionRun.dispatchedAt, dispatchLeaseExpiry)
-          )
-        ),
-        and(
-          eq(mailboxActionRun.status, "running"),
-          or(
-            isNull(mailboxActionRun.leasedUntil),
-            lt(mailboxActionRun.leasedUntil, now)
+  return await db.transaction(async (tx) => {
+    const candidates = await tx
+      .select({ id: mailboxActionRun.id })
+      .from(mailboxActionRun)
+      .where(
+        or(
+          and(
+            eq(mailboxActionRun.status, "queued"),
+            or(
+              isNull(mailboxActionRun.dispatchedAt),
+              lte(mailboxActionRun.dispatchedAt, dispatchLeaseExpiry)
+            )
+          ),
+          and(
+            eq(mailboxActionRun.status, "running"),
+            or(
+              isNull(mailboxActionRun.leasedUntil),
+              lt(mailboxActionRun.leasedUntil, now)
+            )
           )
         )
       )
-    )
-    .returning({ runId: mailboxActionRun.id });
+      .orderBy(mailboxActionRun.createdAt)
+      .limit(100)
+      .for("update", { skipLocked: true });
+    if (candidates.length === 0) {
+      return [];
+    }
+    return await tx
+      .update(mailboxActionRun)
+      .set({ dispatchedAt: now, updatedAt: now })
+      .where(
+        inArray(
+          mailboxActionRun.id,
+          candidates.map((candidate) => candidate.id)
+        )
+      )
+      .returning({ runId: mailboxActionRun.id });
+  });
 };
 
 /** Records successful dispatches so the fallback dispatcher leaves them alone. */

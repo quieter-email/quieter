@@ -22,7 +22,6 @@ import {
   mailboxAction,
   mailboxActionRevision,
   mailboxActionRun,
-  mailboxActionRunFrame,
   mailboxActionStepRun,
   managedMailMessage,
 } from "@quieter/database/schema";
@@ -30,7 +29,7 @@ import { getMessageWithDetails } from "@quieter/gmail";
 import { reportError } from "@quieter/observability";
 import { jsonSchema, tool } from "ai";
 import type { ToolSet } from "ai";
-import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import {
@@ -51,20 +50,21 @@ import { runAuthorizedGmailMailbox } from "../gmail-mailbox-access";
 import { MAILBOX_PROVIDER_GMAIL } from "../mailbox/access";
 import { runConnectorWriteCall } from "./effects";
 import { validateMailboxActionGraph } from "./graph";
-import type { MailboxActionGraph, MailboxActionNode } from "./graph";
+import type { MailboxActionNode } from "./graph";
+import { claimMailboxActionRun, withMailboxActionRun } from "./lease";
 
 type RuntimeFrame = {
   branchPath: string[];
-  id: string;
   previousOutputs: Record<string, unknown>;
   variables: Record<string, unknown>;
 };
 
-type NodeResult = {
-  output: Record<string, unknown>;
-  outputPorts: string[];
-  variables?: Record<string, unknown>;
-};
+const nodeResultSchema = z.object({
+  output: z.record(z.string(), z.unknown()),
+  outputPorts: z.array(z.string()),
+  variables: z.record(z.string(), z.unknown()).optional(),
+});
+type NodeResult = z.infer<typeof nodeResultSchema>;
 
 type MailboxActionUsageReporter = (input: {
   model: typeof MAILBOX_ACTION_CONDITION_MODEL;
@@ -73,21 +73,9 @@ type MailboxActionUsageReporter = (input: {
 }) => ((usage: AiUsageReport) => void) | undefined;
 
 const MAX_NODE_EXECUTIONS = 500;
-const RUN_LEASE_MS = 10 * 60 * 1000;
+const RUN_BUDGET_MS = 4 * 60 * 1000;
 /** A step should finish while the mail still feels freshly handled. */
 const CONNECTOR_STEP_BUDGET_MS = 45 * 1000;
-
-const getNodeById = (graph: MailboxActionGraph) =>
-  new Map(graph.nodes.map((node) => [node.id, node]));
-
-const getOutgoingEdges = (
-  graph: MailboxActionGraph,
-  nodeId: string,
-  port: string
-) =>
-  graph.edges.filter(
-    (edge) => edge.source === nodeId && edge.sourcePort === port
-  );
 
 const compactEmailInput = (email: ActionEmailInput) => ({
   ...email,
@@ -178,6 +166,7 @@ const loadActionEmailInput = async (input: {
 const toolArgumentsSchema = z.record(z.string(), z.unknown());
 
 type ConnectorStepIdentity = {
+  attempts: number;
   invocationPath: string[];
   actionId: string;
   credentialId: string;
@@ -253,6 +242,7 @@ const createConnectorStepTools = (
 };
 
 const executeNode = async (input: {
+  attempts: number;
   actionId: string;
   email: ActionEmailInput;
   frame: RuntimeFrame;
@@ -277,6 +267,7 @@ const executeNode = async (input: {
     }
     case "ai_condition": {
       const result = await evaluateMailboxActionCondition({
+        abortSignal: input.signal,
         context,
         criteria: input.node.config.criteria,
         email: input.email,
@@ -300,6 +291,7 @@ const executeNode = async (input: {
         ]),
       ];
       const result = await routeMailboxAction({
+        abortSignal: input.signal,
         context,
         email: input.email,
         fallbackPort: input.node.config.fallbackPort,
@@ -335,7 +327,8 @@ const executeNode = async (input: {
       }
 
       const connectorName = getConnectorDisplayName(provider);
-      const signal = AbortSignal.timeout(CONNECTOR_STEP_BUDGET_MS);
+      const signal =
+        input.signal ?? AbortSignal.timeout(CONNECTOR_STEP_BUDGET_MS);
       const tools = await listConnectorAgentTools({
         credentialId,
         provider,
@@ -345,6 +338,7 @@ const executeNode = async (input: {
       const effects: Awaited<ReturnType<typeof runConnectorWriteCall>>[] = [];
       const identity = {
         actionId: input.actionId,
+        attempts: input.attempts,
         credentialId,
         invocationPath: input.frame.branchPath,
         nodeId: input.node.id,
@@ -411,44 +405,6 @@ const executeNode = async (input: {
   }
 };
 
-const claimRun = async (runId: string) => {
-  const now = new Date();
-  const [run] = await db
-    .update(mailboxActionRun)
-    .set({
-      attempts: sql`${mailboxActionRun.attempts} + 1`,
-      leasedUntil: new Date(now.getTime() + RUN_LEASE_MS),
-      startedAt: now,
-      status: "running",
-      updatedAt: now,
-    })
-    .where(
-      and(
-        eq(mailboxActionRun.id, runId),
-        or(
-          eq(mailboxActionRun.status, "queued"),
-          and(
-            eq(mailboxActionRun.status, "running"),
-            or(
-              isNull(mailboxActionRun.leasedUntil),
-              lt(mailboxActionRun.leasedUntil, now)
-            )
-          )
-        )
-      )
-    )
-    .returning({
-      actionId: mailboxActionRun.actionId,
-      id: mailboxActionRun.id,
-      mailboxId: mailboxActionRun.mailboxId,
-      revisionId: mailboxActionRun.revisionId,
-      sourceMessageId: mailboxActionRun.sourceMessageId,
-      triggerNodeId: mailboxActionRun.triggerNodeId,
-    });
-
-  return run ?? null;
-};
-
 export type MailboxActionFailureUpdate = {
   completedAt: Date | null;
   lastError: string;
@@ -502,11 +458,12 @@ export const executeMailboxActionRun = async (
   runId: string,
   options?: { finalAttempt?: boolean }
 ) => {
-  const run = await claimRun(runId);
+  const run = await claimMailboxActionRun(runId);
   if (run === null) {
     return { status: "not_claimed" as const };
   }
 
+  const signal = AbortSignal.timeout(RUN_BUDGET_MS);
   const usageTasks: Promise<void>[] = [];
   try {
     const [revision] = await db
@@ -591,139 +548,139 @@ export const executeMailboxActionRun = async (
       userId: actionOwner?.userId ?? "",
     });
     const memoryContext = serializeAiAgentContext(agentContext);
-    const nodesById = getNodeById(graph);
+    const nodesById = new Map(graph.nodes.map((node) => [node.id, node]));
     const triggerNode = nodesById.get(run.triggerNodeId);
     if (triggerNode === undefined) {
       throw new Error("Trigger node was not found.");
     }
 
-    const now = new Date();
-    const initialFrameId = randomUUID();
-    await db.insert(mailboxActionRunFrame).values({
-      createdAt: now,
-      id: initialFrameId,
-      path: [triggerNode.id],
-      runId: run.id,
-      status: "running",
-      updatedAt: now,
-      variables: {},
-    });
     const queue: { frame: RuntimeFrame; node: MailboxActionNode }[] = [
       {
         frame: {
           branchPath: [triggerNode.id],
-          id: initialFrameId,
           previousOutputs: {},
           variables: {},
         },
         node: triggerNode,
       },
     ];
-
     let executedCount = 0;
-
-    const processQueueItem = async (): Promise<void> => {
-      const item = queue.shift();
-      if (item === undefined) {
-        return;
-      }
-
+    for (const item of queue) {
+      signal.throwIfAborted();
       executedCount += 1;
       if (executedCount > MAX_NODE_EXECUTIONS) {
         throw new Error("Workflow exceeded the node execution limit.");
       }
-
-      const stepRunId = randomUUID();
-      const stepStartedAt = new Date();
-      const stepInput = {
-        branchPath: item.frame.branchPath,
-        email: compactEmailInput(email),
-        nodeConfig: item.node.config,
-        previousOutputs: item.frame.previousOutputs,
-        variables: item.frame.variables,
-      };
-      await db.insert(mailboxActionStepRun).values({
-        createdAt: stepStartedAt,
-        frameId: item.frame.id,
-        id: stepRunId,
-        input: stepInput,
-        nodeId: item.node.id,
-        nodeType: item.node.type,
-        runId: run.id,
-        startedAt: stepStartedAt,
-        status: "running",
-        updatedAt: stepStartedAt,
+      const step = await withMailboxActionRun(run, async (tx) => {
+        const [completed] = await tx
+          .select()
+          .from(mailboxActionStepRun)
+          .where(
+            and(
+              eq(mailboxActionStepRun.runId, run.id),
+              eq(mailboxActionStepRun.status, "succeeded"),
+              sql`${mailboxActionStepRun.input}->'branchPath' = ${JSON.stringify(item.frame.branchPath)}::jsonb`
+            )
+          )
+          .orderBy(asc(mailboxActionStepRun.createdAt))
+          .limit(1);
+        if (completed !== undefined) {
+          const stored = nodeResultSchema.safeParse(completed.executionResult);
+          if (!stored.success) {
+            throw new ORPCError("CONFLICT", {
+              message:
+                "An earlier action run needs review before it can resume.",
+            });
+          }
+          return { id: completed.id, result: stored.data };
+        }
+        const now = new Date();
+        const id = randomUUID();
+        await tx.insert(mailboxActionStepRun).values({
+          createdAt: now,
+          id,
+          input: {
+            branchPath: item.frame.branchPath,
+            email,
+            nodeConfig: item.node.config,
+            previousOutputs: item.frame.previousOutputs,
+            variables: item.frame.variables,
+          },
+          nodeId: item.node.id,
+          nodeType: item.node.type,
+          runId: run.id,
+          startedAt: now,
+          status: "running",
+          updatedAt: now,
+        });
+        return { id, result: null };
       });
-
-      const result = await executeNode({
-        actionId: run.actionId,
-        email,
-        frame: item.frame,
-        memoryContext,
-        node: item.node,
-        revisionId: run.revisionId,
-        runId: run.id,
-        stepRunId,
-        usageReporter: createUsageReporter,
-        userId: revisionUserId,
-      });
-      const mergedVariables = { ...item.frame.variables, ...result.variables };
+      let { result } = step;
+      if (result === null) {
+        const stepSignal = AbortSignal.any([
+          signal,
+          AbortSignal.timeout(CONNECTOR_STEP_BUDGET_MS),
+        ]);
+        result = await executeNode({
+          actionId: run.actionId,
+          attempts: run.attempts,
+          email,
+          frame: item.frame,
+          memoryContext,
+          node: item.node,
+          revisionId: run.revisionId,
+          runId: run.id,
+          signal: stepSignal,
+          stepRunId: step.id,
+          usageReporter: createUsageReporter,
+          userId: revisionUserId,
+        });
+        stepSignal.throwIfAborted();
+        await Promise.all(usageTasks);
+        const savedResult = result;
+        await withMailboxActionRun(run, async (tx) => {
+          const now = new Date();
+          await tx
+            .update(mailboxActionStepRun)
+            .set({
+              completedAt: now,
+              executionResult: savedResult,
+              output: savedResult.output,
+              status: "succeeded",
+              updatedAt: now,
+            })
+            .where(eq(mailboxActionStepRun.id, step.id));
+        });
+      }
+      const variables = { ...item.frame.variables, ...result.variables };
       const previousOutputs = {
         ...item.frame.previousOutputs,
         [item.node.id]: result.output,
       };
-      const stepCompletedAt = new Date();
-      await db
-        .update(mailboxActionStepRun)
-        .set({
-          completedAt: stepCompletedAt,
-          output: result.output,
-          status: "succeeded",
-          updatedAt: stepCompletedAt,
-        })
-        .where(eq(mailboxActionStepRun.id, stepRunId));
-      await db
-        .update(mailboxActionRunFrame)
-        .set({ updatedAt: stepCompletedAt, variables: mergedVariables })
-        .where(eq(mailboxActionRunFrame.id, item.frame.id));
-
-      for (const outputPort of result.outputPorts) {
-        for (const edge of getOutgoingEdges(graph, item.node.id, outputPort)) {
-          const targetNode = nodesById.get(edge.target);
-          if (targetNode === undefined) {
-            continue;
-          }
-          const childFrameId = randomUUID();
-          const childPath = [...item.frame.branchPath, edge.id, targetNode.id];
-          await db.insert(mailboxActionRunFrame).values({
-            createdAt: stepCompletedAt,
-            id: childFrameId,
-            parentFrameId: item.frame.id,
-            path: childPath,
-            runId: run.id,
-            status: "running",
-            updatedAt: stepCompletedAt,
-            variables: mergedVariables,
-          });
-          queue.push({
-            frame: {
-              branchPath: childPath,
-              id: childFrameId,
-              previousOutputs,
-              variables: mergedVariables,
-            },
-            node: targetNode,
-          });
+      for (const edge of graph.edges) {
+        if (
+          edge.source !== item.node.id ||
+          !result.outputPorts.includes(edge.sourcePort)
+        ) {
+          continue;
         }
+        const node = nodesById.get(edge.target);
+        if (node === undefined) {
+          throw new Error("Action target node was not found.");
+        }
+        queue.push({
+          frame: {
+            branchPath: [...item.frame.branchPath, edge.id, node.id],
+            previousOutputs,
+            variables,
+          },
+          node,
+        });
       }
-
-      await processQueueItem();
-    };
-
-    await processQueueItem();
-
+    }
+    signal.throwIfAborted();
     const completedAt = new Date();
-    await db
+    const [completed] = await db
       .update(mailboxActionRun)
       .set({
         completedAt,
@@ -731,17 +688,37 @@ export const executeMailboxActionRun = async (
         status: executedCount === 1 ? "skipped" : "succeeded",
         updatedAt: completedAt,
       })
-      .where(eq(mailboxActionRun.id, run.id));
+      .where(
+        and(
+          eq(mailboxActionRun.id, run.id),
+          eq(mailboxActionRun.attempts, run.attempts),
+          eq(mailboxActionRun.status, "running"),
+          gt(mailboxActionRun.leasedUntil, new Date())
+        )
+      )
+      .returning({ id: mailboxActionRun.id });
+    if (completed === undefined) {
+      throw new ORPCError("CONFLICT", {
+        message: "This action is no longer owned by this worker.",
+      });
+    }
     return { status: "succeeded" as const };
   } catch (error) {
     await db
       .update(mailboxActionRun)
       .set(
         mailboxActionFailureUpdate(error, {
-          finalAttempt: options?.finalAttempt === true,
+          finalAttempt: options?.finalAttempt === true || run.attempts >= 6,
         })
       )
-      .where(eq(mailboxActionRun.id, run.id));
+      .where(
+        and(
+          eq(mailboxActionRun.id, run.id),
+          eq(mailboxActionRun.attempts, run.attempts),
+          eq(mailboxActionRun.status, "running"),
+          gt(mailboxActionRun.leasedUntil, new Date())
+        )
+      );
     throw error;
   } finally {
     await Promise.all(usageTasks);

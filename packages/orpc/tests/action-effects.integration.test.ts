@@ -1,3 +1,4 @@
+import type { evaluateMailboxActionCondition } from "@quieter/ai/mailbox-actions";
 import { db } from "@quieter/database/client";
 import {
   connectorCredential,
@@ -7,6 +8,7 @@ import {
   mailboxActionRevision,
   mailboxActionRun,
   mailboxActionStepRun,
+  managedMailMessage,
   organization,
   user,
 } from "@quieter/database/schema";
@@ -21,12 +23,26 @@ import {
   vi,
 } from "vite-plus/test";
 
+import type { loadAiAgentContext } from "../src/ai-memory";
 import type { runConnectorAgentWriteCall } from "../src/connectors/agent-tools";
 import { runConnectorWriteCall } from "../src/mailbox-actions/effects";
+import { executeMailboxActionRun } from "../src/mailbox-actions/executor";
+import { claimMailboxActionRun } from "../src/mailbox-actions/lease";
 
 const state = vi.hoisted(() => ({
+  condition: vi.fn<typeof evaluateMailboxActionCondition>(),
   databaseUrl: process.env.MIGRATION_TEST_DATABASE_URL,
   write: vi.fn<typeof runConnectorAgentWriteCall>(),
+}));
+vi.mock(import("@quieter/ai/mailbox-actions"), async (original) => ({
+  ...(await original()),
+  evaluateMailboxActionCondition: state.condition,
+}));
+vi.mock(import("../src/ai-memory"), async (original) => ({
+  ...(await original()),
+  loadAiAgentContext: vi
+    .fn<typeof loadAiAgentContext>()
+    .mockResolvedValue({ instructions: null, memory: null }),
 }));
 vi.mock(import("@quieter/env/server"), async (original) => {
   const actual = await original();
@@ -108,9 +124,66 @@ describe.skipIf(state.databaseUrl === undefined)(
         actionId,
         createdAt: now,
         createdByUserId: userId,
-        graph: { edges: [], nodes: [], version: 1 },
+        graph: {
+          edges: [
+            {
+              id: "edge-1",
+              source: "trigger",
+              sourcePort: "out",
+              target: "first",
+              targetPort: "in",
+            },
+            {
+              id: "edge-2",
+              source: "first",
+              sourcePort: "yes",
+              target: "second",
+              targetPort: "in",
+            },
+            {
+              id: "edge-3",
+              source: "second",
+              sourcePort: "yes",
+              target: "stop",
+              targetPort: "in",
+            },
+          ],
+          nodes: [
+            {
+              config: {},
+              id: "trigger",
+              position: { x: 0, y: 0 },
+              type: "email_received",
+            },
+            {
+              config: { criteria: "First" },
+              id: "first",
+              position: { x: 1, y: 0 },
+              type: "ai_condition",
+            },
+            {
+              config: { criteria: "Second" },
+              id: "second",
+              position: { x: 2, y: 0 },
+              type: "ai_condition",
+            },
+            { config: {}, id: "stop", position: { x: 3, y: 0 }, type: "stop" },
+          ],
+          version: 1,
+        },
         id: revisionId,
         revisionNumber: 1,
+      });
+      await db.insert(managedMailMessage).values({
+        createdAt: now,
+        direction: "inbound",
+        from: "sender@example.com",
+        id: crypto.randomUUID(),
+        mailboxId,
+        providerMessageId: "fixture",
+        sentAt: now,
+        threadId: "fixture",
+        updatedAt: now,
       });
     });
     beforeEach(async () => {
@@ -119,13 +192,16 @@ describe.skipIf(state.databaseUrl === undefined)(
       const stepRunId = crypto.randomUUID();
       await db.insert(mailboxActionRun).values({
         actionId,
+        attempts: 1,
         createdAt: now,
         dedupeKey: runId,
         id: runId,
+        leasedUntil: new Date(Date.now() + 90_000),
         mailboxId,
         organizationId,
         revisionId,
         sourceMessageId: "fixture",
+        status: "running",
         triggerNodeId: "trigger",
         updatedAt: now,
       });
@@ -139,6 +215,7 @@ describe.skipIf(state.databaseUrl === undefined)(
       });
       input = {
         actionId,
+        attempts: 1,
         call: { arguments: { title: "First" }, toolName: "create_issue" },
         callIndex: 0,
         credentialId,
@@ -156,12 +233,99 @@ describe.skipIf(state.databaseUrl === undefined)(
         status: "success",
         toolName: "create_issue",
       });
+      state.condition.mockReset().mockResolvedValue({
+        confidence: 1,
+        evidence: [],
+        matches: true,
+        rationale: "Matched",
+      });
     });
 
     afterAll(async () => {
       await db.delete(organization).where(eq(organization.id, organizationId));
       await db.delete(user).where(eq(user.id, userId));
       await db.$client.end();
+    });
+
+    test("a replaced worker cannot make another external change or finish its replacement's run", async () => {
+      await db
+        .update(mailboxActionRun)
+        .set({ leasedUntil: null, status: "queued" })
+        .where(eq(mailboxActionRun.id, input.runId));
+      state.condition.mockImplementationOnce(async () => {
+        await db
+          .update(mailboxActionRun)
+          .set({ leasedUntil: new Date(0) })
+          .where(eq(mailboxActionRun.id, input.runId));
+        await claimMailboxActionRun(input.runId);
+        return {
+          confidence: 1,
+          evidence: [],
+          matches: true,
+          rationale: "Late result",
+        };
+      });
+      await expect(executeMailboxActionRun(input.runId)).rejects.toMatchObject({
+        code: "CONFLICT",
+      });
+      await expect(
+        runConnectorWriteCall({ ...input, attempts: 2 })
+      ).rejects.toMatchObject({ code: "CONFLICT" });
+      const [run] = await db
+        .select()
+        .from(mailboxActionRun)
+        .where(eq(mailboxActionRun.id, input.runId));
+      expect(run).toMatchObject({
+        attempts: 3,
+        completedAt: null,
+        status: "running",
+      });
+      expect(state.condition).toHaveBeenCalledOnce();
+      expect(state.write).not.toHaveBeenCalled();
+    });
+
+    test("retry reuses completed decisions and continues with the failed step", async () => {
+      await db
+        .update(mailboxActionRun)
+        .set({ leasedUntil: null, status: "queued" })
+        .where(eq(mailboxActionRun.id, input.runId));
+      state.condition
+        .mockResolvedValueOnce({
+          confidence: 1,
+          evidence: [],
+          matches: true,
+          rationale: "Matched",
+        })
+        .mockRejectedValueOnce(new Error("Temporary model failure"));
+      await expect(executeMailboxActionRun(input.runId)).rejects.toThrow(
+        "Temporary model failure"
+      );
+      await expect(executeMailboxActionRun(input.runId)).resolves.toStrictEqual(
+        {
+          status: "succeeded",
+        }
+      );
+      expect(
+        state.condition.mock.calls.map(([call]) => call.criteria)
+      ).toStrictEqual(["First", "Second", "Second"]);
+    });
+
+    test("crashed deliveries cannot restart indefinitely after their retry budget is spent", async () => {
+      await db
+        .update(mailboxActionRun)
+        .set({ attempts: 6, leasedUntil: new Date(0) })
+        .where(eq(mailboxActionRun.id, input.runId));
+      await expect(executeMailboxActionRun(input.runId)).resolves.toStrictEqual(
+        {
+          status: "not_claimed",
+        }
+      );
+      const [run] = await db
+        .select()
+        .from(mailboxActionRun)
+        .where(eq(mailboxActionRun.id, input.runId));
+      expect(run.status).toBe("failed");
+      expect(state.condition).not.toHaveBeenCalled();
     });
 
     test("concurrent calls perform one write and replay successful results without an external ID", async () => {

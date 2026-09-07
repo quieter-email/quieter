@@ -11,6 +11,7 @@ import { z } from "zod";
 import { runConnectorAgentWriteCall } from "../connectors/agent-tools";
 import type { ConnectorAgentToolCall } from "../connectors/agent-tools";
 import { hashRequest } from "../request-hash";
+import { withMailboxActionRun } from "./lease";
 
 const effectResultSchema = z.object({
   durationMs: z.number(),
@@ -22,6 +23,7 @@ const effectResultSchema = z.object({
 });
 
 export const runConnectorWriteCall = async (input: {
+  attempts: number;
   actionId: string;
   call: ConnectorAgentToolCall;
   callIndex: number;
@@ -47,47 +49,56 @@ export const runConnectorWriteCall = async (input: {
     idempotencyKey,
     `${input.runId}:${input.nodeId}:${input.callIndex}`,
   ];
-  const [existing] = await db
-    .select()
-    .from(mailboxActionExternalEffect)
-    .where(inArray(mailboxActionExternalEffect.idempotencyKey, keys))
-    .limit(1);
-  if (existing !== undefined) {
-    if (
-      existing.requestHash !== requestHash ||
-      existing.status !== "succeeded"
-    ) {
-      throw new ORPCError("CONFLICT", {
-        message:
-          "This action may already have changed the connected app. Review its result before running it again.",
-      });
+  const claimed = await withMailboxActionRun(
+    { attempts: input.attempts, id: input.runId },
+    async (tx) => {
+      const [existing] = await tx
+        .select()
+        .from(mailboxActionExternalEffect)
+        .where(inArray(mailboxActionExternalEffect.idempotencyKey, keys))
+        .limit(1);
+      if (existing !== undefined) {
+        if (
+          existing.requestHash !== requestHash ||
+          existing.status !== "succeeded"
+        ) {
+          throw new ORPCError("CONFLICT", {
+            message:
+              "This action may already have changed the connected app. Review its result before running it again.",
+          });
+        }
+        return { ...effectResultSchema.parse(existing.result), replayed: true };
+      }
+      const id = randomUUID();
+      const [created] = await tx
+        .insert(mailboxActionExternalEffect)
+        .values({
+          actionId: input.actionId,
+          connectorCredentialId: input.credentialId,
+          createdAt: new Date(),
+          id,
+          idempotencyKey,
+          input: input.call,
+          metadata: { toolName: input.call.toolName },
+          provider: input.provider,
+          requestHash,
+          revisionId: input.revisionId,
+          runId: input.runId,
+          status: "submitting",
+          stepRunId: input.stepRunId,
+        })
+        .onConflictDoNothing()
+        .returning({ id: mailboxActionExternalEffect.id });
+      if (created === undefined) {
+        throw new ORPCError("CONFLICT", {
+          message: "This action is already being processed.",
+        });
+      }
+      return created;
     }
-    return { ...effectResultSchema.parse(existing.result), replayed: true };
-  }
-  const id = randomUUID();
-  const [claimed] = await db
-    .insert(mailboxActionExternalEffect)
-    .values({
-      actionId: input.actionId,
-      connectorCredentialId: input.credentialId,
-      createdAt: new Date(),
-      id,
-      idempotencyKey,
-      input: input.call,
-      metadata: { toolName: input.call.toolName },
-      provider: input.provider,
-      requestHash,
-      revisionId: input.revisionId,
-      runId: input.runId,
-      status: "submitting",
-      stepRunId: input.stepRunId,
-    })
-    .onConflictDoNothing()
-    .returning({ id: mailboxActionExternalEffect.id });
-  if (claimed === undefined) {
-    throw new ORPCError("CONFLICT", {
-      message: "This action is already being processed.",
-    });
+  );
+  if ("replayed" in claimed) {
+    return claimed;
   }
   try {
     input.signal?.throwIfAborted();

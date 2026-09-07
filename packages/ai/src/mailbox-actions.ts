@@ -73,6 +73,7 @@ const buildActionPromptInput = (input: {
 });
 
 export const evaluateMailboxActionCondition = async (input: {
+  abortSignal?: AbortSignal;
   context: ActionExecutionContext;
   criteria: string;
   email: ActionEmailInput;
@@ -80,6 +81,7 @@ export const evaluateMailboxActionCondition = async (input: {
   onUsage?: (usage: AiUsageReport) => void;
 }) =>
   await runStructuredGeneration({
+    abortSignal: input.abortSignal,
     maxOutputTokens: 900,
     ...(input.onUsage === undefined ? {} : { onUsage: input.onUsage }),
     prompt: JSON.stringify(
@@ -103,6 +105,7 @@ context. If unsure, return matches false.`,
   });
 
 export const routeMailboxAction = async (input: {
+  abortSignal?: AbortSignal;
   context: ActionExecutionContext;
   email: ActionEmailInput;
   fallbackPort: string;
@@ -112,6 +115,7 @@ export const routeMailboxAction = async (input: {
   routingInstructions: string;
 }) => {
   const result = await runStructuredGeneration({
+    abortSignal: input.abortSignal,
     maxOutputTokens: 900,
     ...(input.onUsage === undefined ? {} : { onUsage: input.onUsage }),
     prompt: JSON.stringify({
