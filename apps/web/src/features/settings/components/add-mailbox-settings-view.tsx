@@ -49,7 +49,11 @@ import { orpc } from "#/lib/orpc";
 
 import { useAddMailboxSettingsStore } from "./add-mailbox-settings-store";
 
-export const AddMailboxSettingsView = () => {
+export const AddMailboxSettingsView = ({
+  onNavigateToMailbox,
+}: {
+  onNavigateToMailbox: (mailboxId: string) => Promise<void>;
+}) => {
   const navigate = useNavigate({ from: "/settings" });
   const queryClient = useQueryClient();
   const session = authClient.useSession().data;
@@ -110,17 +114,6 @@ export const AddMailboxSettingsView = () => {
     (hasOrganizationRole(createManagedMember.role, "owner") ||
       hasOrganizationRole(createManagedMember.role, "admin"));
 
-  const navigateToMailbox = async (mailboxId: string) => {
-    await navigate({
-      search: (previous) => ({
-        ...previous,
-        mailboxId,
-        mailboxView: "list",
-        tab: "mailboxes",
-      }),
-      to: ".",
-    });
-  };
   const createManagedMailboxMutation = useMutation({
     ...orpc.mail.createManagedMailbox.mutationOptions(),
     mutationKey: ["mail", "create-managed-mailbox"],
@@ -135,7 +128,7 @@ export const AddMailboxSettingsView = () => {
         successMessage = "Whole-domain shared inbox created.";
       }
       toast.success(successMessage);
-      await navigateToMailbox(
+      await onNavigateToMailbox(
         input.accessMode === "private" && input.ownerUserId !== session?.user.id
           ? ""
           : mailboxId

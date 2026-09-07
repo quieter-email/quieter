@@ -1160,9 +1160,7 @@ export const createAiChatResponse = async (input: {
   const responseStream = toUIMessageStream({
     generateMessageId: () => assistantMessageId,
     onEnd: async ({ messages }) => {
-      // Stopping keeps whatever was generated so far; only a failed
-      // generation leaves nothing behind, since its partial output cannot
-      // be told apart from a broken answer.
+      // Tool outcomes are already durable; failed prose must not replace them.
       if (generationFailed) {
         return;
       }

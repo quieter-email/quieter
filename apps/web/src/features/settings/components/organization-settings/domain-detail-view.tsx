@@ -455,7 +455,7 @@ const DomainHeader = ({
           >
             <HugeiconsIcon
               aria-hidden
-              className={cn("size-4", verifyPending && "animate-spin")}
+              className={cn("size-4", { "animate-spin": verifyPending })}
               icon={verifyPending ? Loading03Icon : Refresh01Icon}
             />
             Verify now
@@ -585,7 +585,7 @@ const DomainConnectCard = ({
             <Button disabled={startPending} onClick={onStart} size="sm">
               <HugeiconsIcon
                 aria-hidden
-                className={cn("size-4", startPending && "animate-spin")}
+                className={cn("size-4", { "animate-spin": startPending })}
                 icon={startPending ? Loading03Icon : Globe02Icon}
               />
               Connect DNS
@@ -1214,10 +1214,9 @@ const DomainDangerSection = ({
           >
             <HugeiconsIcon
               aria-hidden
-              className={cn(
-                "size-4",
-                removeMutation.isPending && "animate-spin"
-              )}
+              className={cn("size-4", {
+                "animate-spin": removeMutation.isPending,
+              })}
               icon={removeMutation.isPending ? Loading03Icon : Delete02Icon}
             />
             Remove domain

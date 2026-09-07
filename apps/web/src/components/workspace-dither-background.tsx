@@ -427,7 +427,7 @@ export const WorkspaceDitherBackground = ({
       className={cn(
         "pointer-events-none absolute inset-0 z-0 size-full overflow-hidden opacity-25 ease-out dark:opacity-100",
         className,
-        animate && !ready && "opacity-0"
+        { "opacity-0": animate && !ready }
       )}
       ref={canvasRef}
       style={

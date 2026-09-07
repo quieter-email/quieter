@@ -23,7 +23,12 @@ export const Route = createFileRoute("/api/chat")({
           body = await readLimitedJsonRequest(request, MAX_CHAT_REQUEST_BYTES);
         } catch (error) {
           if (error instanceof LimitedJsonRequestError) {
-            return new Response(error.message, { status: error.status });
+            return new Response(
+              error.status === 413
+                ? "Chat request body too large."
+                : "Invalid chat request body.",
+              { status: error.status }
+            );
           }
           throw error;
         }

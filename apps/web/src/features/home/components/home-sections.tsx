@@ -75,7 +75,7 @@ const FeatureSection = ({ body, id, image, imageFirst, title }: Feature) => (
   <section className="relative px-6 pt-24 md:pt-32" id={id}>
     <div className="relative mx-auto grid w-full max-w-220 items-center gap-10 md:grid-cols-2 md:gap-14">
       <Reveal
-        className={cn("flex flex-col gap-3", imageFirst && "md:order-2")}
+        className={cn("flex flex-col gap-3", { "md:order-2": imageFirst })}
         delay={imageFirst ? 0.08 : 0}
       >
         <h2 className="font-serif text-title-md/snug font-normal tracking-[-0.012em] text-fg">
@@ -87,7 +87,7 @@ const FeatureSection = ({ body, id, image, imageFirst, title }: Feature) => (
       </Reveal>
 
       <Reveal
-        className={cn(imageFirst && "md:order-1")}
+        className={cn({ "md:order-1": imageFirst })}
         delay={imageFirst ? 0 : 0.08}
       >
         <ImagePlate src={image} />

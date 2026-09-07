@@ -69,7 +69,8 @@ Owns the Drizzle schema, client, migrations, schema-drift checks, and migration 
 - `packages/cloudflare`: Gmail notification ingress, queued synchronization, scheduled maintenance, and mailbox live synchronization
 - `packages/billing`: plans, Polar checkout/webhooks, entitlements, and usage pricing
 - `packages/env`: typed environment schemas and normalization
-- `packages/deployment`: deployment helper scripts
+- `scripts`: SST deployment, local startup, environment checks, and release helpers
+- `packages/deployment`: residual SST-generated binding declarations and their TypeScript configuration; no runtime or deployment scripts
 
 ## Identity and Mailboxes
 

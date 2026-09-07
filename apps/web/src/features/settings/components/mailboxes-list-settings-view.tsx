@@ -127,7 +127,11 @@ const MailboxesListContent = ({
   );
 };
 
-export const MailboxesListSettingsView = () => {
+export const MailboxesListSettingsView = ({
+  onNavigateToMailbox,
+}: {
+  onNavigateToMailbox: (mailboxId: string) => Promise<void>;
+}) => {
   const navigate = useNavigate({ from: "/settings" });
   const queryClient = useQueryClient();
   const {
@@ -139,18 +143,6 @@ export const MailboxesListSettingsView = () => {
   } = useQuery(mailboxesQueryOptions());
   const groups = mailboxesData?.groups ?? [];
   const defaultMailboxId = mailboxesData?.defaultMailboxId ?? null;
-
-  const navigateToMailbox = async (mailboxId: string) => {
-    await navigate({
-      search: (previous) => ({
-        ...previous,
-        mailboxId,
-        mailboxView: "list",
-        tab: "mailboxes",
-      }),
-      to: ".",
-    });
-  };
 
   const renderMailboxSection = () => {
     if (isMailboxesError) {
@@ -174,7 +166,7 @@ export const MailboxesListSettingsView = () => {
       <MailboxesListContent
         defaultMailboxId={defaultMailboxId}
         groups={groups}
-        onNavigateToMailbox={navigateToMailbox}
+        onNavigateToMailbox={onNavigateToMailbox}
         queryClient={queryClient}
       />
     );

@@ -195,10 +195,11 @@ export const MessageListSearchView = ({
                       className={cn(
                         messageListHeaderControlVariants({ control: "chip" }),
                         "gap-1",
-                        label &&
-                          mailboxLabelSearchPillSurfaceClassNameByColor[
-                            label.color ?? "gray"
-                          ]
+                        {
+                          [mailboxLabelSearchPillSurfaceClassNameByColor[
+                            label?.color ?? "gray"
+                          ]]: label !== undefined,
+                        }
                       )}
                       key={filterRenderKey}
                       style={{ order: index * 2 + 1 }}
