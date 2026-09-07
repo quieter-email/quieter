@@ -58,6 +58,7 @@ const createDatabaseClient = (
   const sql = postgres(databaseUrl, {
     connect_timeout: 10,
     fetch_types: false,
+    idle_timeout: 20,
     max: serverEnv.QUIETER_DEPLOYMENT_ENV === "local" ? 1 : 5,
     prepare: hyperdrive,
   });
@@ -68,6 +69,9 @@ const createDatabaseClient = (
 };
 
 const requestDatabaseClient = new AsyncLocalStorage<DatabaseClient>();
+const isWorker =
+  typeof navigator !== "undefined" &&
+  navigator.userAgent === "Cloudflare-Workers";
 let directDatabaseClient: DatabaseClient | undefined;
 
 const getDatabaseClient = () => {
@@ -77,10 +81,10 @@ const getDatabaseClient = () => {
     return scopedClient;
   }
 
-  const linkedConnectionString = getLinkedHyperdriveConnectionString();
-
-  if (linkedConnectionString) {
-    return createDatabaseClient(linkedConnectionString);
+  if (isWorker || getLinkedHyperdriveConnectionString()) {
+    throw new Error(
+      "Worker database access requires withRequestDatabaseClient."
+    );
   }
 
   directDatabaseClient ??= createDatabaseClient();
@@ -95,7 +99,11 @@ export const withRequestDatabaseClient = async <Result>(
     return await run(requestClient);
   }
 
-  const client = createDatabaseClient();
+  // Workers own request-local sockets; Node reuses one bounded process pool.
+  const client =
+    isWorker || getLinkedHyperdriveConnectionString()
+      ? createDatabaseClient()
+      : getDatabaseClient();
   return await requestDatabaseClient.run(client, async () => await run(client));
 };
 
