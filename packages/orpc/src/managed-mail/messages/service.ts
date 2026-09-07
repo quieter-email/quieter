@@ -31,14 +31,10 @@ import type {
 } from "@quieter/gmail";
 import { parseDraftAnchorFromHeaderReader } from "@quieter/mail/compose/draft-anchor";
 import { buildMimeMessage } from "@quieter/mail/compose/mime";
-import type {
-  composeDraftInputSchema,
-  composeMessageInputSchema,
-} from "@quieter/mail/compose/schema";
+import type { composeMessageInputSchema } from "@quieter/mail/compose/schema";
 import {
   extractMailAddress,
   splitMailAddressList,
-  QUIETER_DRAFT_HEADER_NAMES,
 } from "@quieter/mail/compose/schema";
 import type { MailCommand, MailMutationTarget } from "@quieter/mail/data-plane";
 import type { SendHeader } from "@quieter/mail/send";
@@ -80,7 +76,6 @@ import {
 } from "../search/normalization";
 
 type ComposeMessageInput = z.infer<typeof composeMessageInputSchema>;
-type ComposeDraftInput = z.infer<typeof composeDraftInputSchema>;
 
 type ManagedMessagePresentationRecord = Pick<
   typeof managedMailMessage.$inferSelect,
@@ -164,38 +159,6 @@ const getManagedSystemLabelIds = (message: {
 const getManagedHeader = (headers: ManagedMailHeader[], name: string) =>
   headers.find((header) => header.name.toLowerCase() === name.toLowerCase())
     ?.value;
-
-const getManagedDraftHeaders = (
-  draft: ComposeDraftInput
-): ManagedMailHeader[] => {
-  const { draftAnchor } = draft;
-  if (draftAnchor === undefined || draftAnchor === null) {
-    return [];
-  }
-
-  return [
-    {
-      name: QUIETER_DRAFT_HEADER_NAMES.sourceMessageId,
-      value: draftAnchor.sourceMessageId,
-    },
-    {
-      name: QUIETER_DRAFT_HEADER_NAMES.sourceThreadId,
-      value: draftAnchor.sourceThreadId,
-    },
-    {
-      name: QUIETER_DRAFT_HEADER_NAMES.seededBy,
-      value: draftAnchor.seededBy,
-    },
-    ...(hasText(draftAnchor.sourceMessageHeaderId)
-      ? [
-          {
-            name: QUIETER_DRAFT_HEADER_NAMES.sourceMessageHeaderId,
-            value: draftAnchor.sourceMessageHeaderId.trim(),
-          },
-        ]
-      : []),
-  ];
-};
 
 export const getManagedMessageLabelIds = (
   message: {
@@ -643,21 +606,6 @@ export const getManagedMessageInspector = async (input: {
   };
 };
 
-const buildManagedDraftSnippet = (draft: ComposeDraftInput) => {
-  const snippetSource = hasText(draft.bodyText)
-    ? draft.bodyText
-    : draft.bodyHtml.replaceAll(/<[^>]+>/gu, " ");
-  const trimmedSnippet = snippetSource
-    .replaceAll(/\s+/gu, " ")
-    .trim()
-    .slice(0, 240);
-  if (hasText(trimmedSnippet)) {
-    return trimmedSnippet;
-  }
-  const subject = draft.subject.trim();
-  return hasText(subject) ? subject : null;
-};
-
 const resolveManagedMoveMailboxState = (
   destination: "archive" | "inbox" | "spam" | "trash"
 ): ManagedMailMailboxState => {
@@ -668,266 +616,6 @@ const resolveManagedMoveMailboxState = (
     return "archived";
   }
   return destination;
-};
-
-const resolveManagedDraftThreadId = ({
-  draft,
-  existingDraft,
-  resolvedMessageId,
-}: {
-  draft: ComposeDraftInput;
-  existingDraft: { threadId: string } | null;
-  resolvedMessageId: string;
-}) =>
-  (hasText(draft.replyContext?.threadId?.trim())
-    ? draft.replyContext.threadId.trim()
-    : undefined) ??
-  (hasText(draft.draftAnchor?.sourceThreadId?.trim())
-    ? draft.draftAnchor.sourceThreadId.trim()
-    : undefined) ??
-  existingDraft?.threadId ??
-  resolvedMessageId;
-
-const buildManagedDraftValues = ({
-  draft,
-  mailboxEmailAddress,
-  now,
-  selectedMailbox,
-  snippet,
-  threadId,
-}: {
-  draft: ComposeDraftInput;
-  mailboxEmailAddress: string;
-  now: Date;
-  selectedMailbox: { emailAddress: string };
-  snippet: string | null;
-  threadId: string;
-}) => ({
-  bcc: hasText(draft.recipients.bcc) ? draft.recipients.bcc : null,
-  bccNormalized: normalizeManagedSearchValue(draft.recipients.bcc),
-  bodyHtml: hasText(draft.bodyHtml) ? draft.bodyHtml : null,
-  bodyText: hasText(draft.bodyText) ? draft.bodyText : null,
-  cc: hasText(draft.recipients.cc) ? draft.recipients.cc : null,
-  ccNormalized: normalizeManagedSearchValue(draft.recipients.cc),
-  from: selectedMailbox.emailAddress,
-  fromNormalized: normalizeManagedSearchValue(selectedMailbox.emailAddress),
-  headers: getManagedDraftHeaders(draft),
-  inReplyTo: draft.replyContext?.messageHeaderId ?? null,
-  isRead: true,
-  mailboxState: "draft" as const,
-  rawSizeBytes: null,
-  references: hasText(draft.replyContext?.references.join(" "))
-    ? draft.replyContext.references.join(" ")
-    : null,
-  replyTo: mailboxEmailAddress,
-  searchText: createManagedMessageSearchText({
-    bodyText: draft.bodyText,
-    snippet,
-    subject: draft.subject,
-  }),
-  sentAt: now,
-  snippet,
-  subject: hasText(draft.subject) ? draft.subject : null,
-  threadId,
-  to: hasText(draft.recipients.to) ? draft.recipients.to : null,
-  toNormalized: normalizeManagedSearchValue(draft.recipients.to),
-  updatedAt: now,
-});
-
-const persistManagedDraft = async ({
-  draft,
-  draftId,
-  draftValues,
-  existingDraft,
-  mailboxId,
-  now,
-  resolvedMessageId,
-}: {
-  draft: ComposeDraftInput;
-  draftId: string;
-  draftValues: ReturnType<typeof buildManagedDraftValues>;
-  existingDraft: { id: string } | null;
-  mailboxId: string;
-  now: Date;
-  resolvedMessageId: string;
-}) => {
-  await db.transaction(async (tx) => {
-    if (existingDraft === null) {
-      await tx.insert(managedMailMessage).values({
-        ...draftValues,
-        createdAt: now,
-        direction: "outbound",
-        id: resolvedMessageId,
-        mailboxId,
-        messageHeaderId: null,
-        providerMessageId: draftId,
-      });
-    } else {
-      await tx
-        .update(managedMailMessage)
-        .set(draftValues)
-        .where(
-          and(
-            eq(managedMailMessage.id, resolvedMessageId),
-            eq(managedMailMessage.mailboxId, mailboxId),
-            eq(managedMailMessage.mailboxState, "draft")
-          )
-        );
-    }
-
-    await tx
-      .delete(managedMailAttachment)
-      .where(eq(managedMailAttachment.messageId, resolvedMessageId));
-
-    const attachments = [
-      ...draft.attachments.map((attachment) => ({
-        contentId: null,
-        fileName: attachment.fileName ?? attachment.name,
-        inline: false,
-        mimeType: attachment.mimeType,
-        size: attachment.size,
-      })),
-      ...draft.inlineImages.map((attachment) => ({
-        contentId: attachment.contentId,
-        fileName: attachment.name,
-        inline: true,
-        mimeType: attachment.mimeType,
-        size: attachment.size,
-      })),
-    ];
-
-    if (attachments.length > 0) {
-      await tx.insert(managedMailAttachment).values(
-        attachments.map((attachment) => ({
-          contentId: attachment.contentId,
-          createdAt: now,
-          fileName: attachment.fileName,
-          id: randomUUID(),
-          inline: attachment.inline,
-          mailboxId,
-          messageId: resolvedMessageId,
-          mimeType: attachment.mimeType,
-          normalizedFileName: normalizeManagedSearchValue(attachment.fileName),
-          size: attachment.size,
-        }))
-      );
-    }
-    await tx
-      .update(mailbox)
-      .set({
-        contentRevision: sql`${mailbox.contentRevision} + 1`,
-        updatedAt: now,
-      })
-      .where(eq(mailbox.id, mailboxId));
-  });
-};
-
-export const saveManagedDraft = async (input: {
-  draft: ComposeDraftInput;
-  mailboxId: string;
-  userId: string;
-}) => {
-  const selectedMailbox = await getAuthorizedManagedMailbox({
-    mailboxId: input.mailboxId,
-    requiredRoles: ["responder", "manager"],
-    userId: input.userId,
-  });
-  const draftId = hasText(input.draft.draftId?.trim())
-    ? input.draft.draftId.trim()
-    : randomUUID();
-  const messageId = hasText(input.draft.messageId?.trim())
-    ? input.draft.messageId.trim()
-    : randomUUID();
-  const now = new Date();
-  const snippet = buildManagedDraftSnippet(input.draft);
-  const existingDraft = hasText(input.draft.draftId)
-    ? await db
-        .select({
-          id: managedMailMessage.id,
-          threadId: managedMailMessage.threadId,
-        })
-        .from(managedMailMessage)
-        .where(
-          and(
-            eq(managedMailMessage.mailboxId, input.mailboxId),
-            eq(managedMailMessage.providerMessageId, draftId),
-            eq(managedMailMessage.mailboxState, "draft")
-          )
-        )
-        .limit(1)
-        .then((rows) => rows[0] ?? null)
-    : null;
-  const resolvedMessageId = existingDraft?.id ?? messageId;
-  const threadId = resolveManagedDraftThreadId({
-    draft: input.draft,
-    existingDraft,
-    resolvedMessageId,
-  });
-  const draftValues = buildManagedDraftValues({
-    draft: input.draft,
-    mailboxEmailAddress: selectedMailbox.emailAddress,
-    now,
-    selectedMailbox,
-    snippet,
-    threadId,
-  });
-
-  await persistManagedDraft({
-    draft: input.draft,
-    draftId,
-    draftValues,
-    existingDraft,
-    mailboxId: input.mailboxId,
-    now,
-    resolvedMessageId,
-  });
-
-  return {
-    bodyHtml: input.draft.bodyHtml,
-    bodyText: input.draft.bodyText,
-    draftAnchor: input.draft.draftAnchor ?? null,
-    draftId,
-    messageId: resolvedMessageId,
-    recipients: input.draft.recipients,
-    replyContext: input.draft.replyContext ?? null,
-    subject: input.draft.subject,
-  };
-};
-
-export const deleteManagedDraft = async (input: {
-  draftId: string;
-  mailboxId: string;
-  userId: string;
-}) => {
-  await getAuthorizedManagedMailbox({
-    mailboxId: input.mailboxId,
-    requiredRoles: ["responder", "manager"],
-    userId: input.userId,
-  });
-
-  await db.transaction(async (tx) => {
-    const deleted = await tx
-      .delete(managedMailMessage)
-      .where(
-        and(
-          eq(managedMailMessage.mailboxId, input.mailboxId),
-          eq(managedMailMessage.providerMessageId, input.draftId),
-          eq(managedMailMessage.mailboxState, "draft")
-        )
-      )
-      .returning({ id: managedMailMessage.id });
-    if (deleted.length > 0) {
-      await tx
-        .update(mailbox)
-        .set({
-          contentRevision: sql`${mailbox.contentRevision} + 1`,
-          updatedAt: new Date(),
-        })
-        .where(eq(mailbox.id, input.mailboxId));
-    }
-  });
-
-  return { deleted: true };
 };
 
 export const setManagedMessageReadState = async (input: {

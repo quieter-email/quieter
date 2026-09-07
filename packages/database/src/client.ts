@@ -106,7 +106,7 @@ const databaseProxyHandler: ProxyHandler<DatabaseClient> = {
   get(_target, property): unknown {
     const client = getDatabaseClient();
     const value: unknown = Reflect.get(client, property);
-    if (typeof value === "function") {
+    if (typeof value === "function" && property !== "$client") {
       return (...args: unknown[]) =>
         Reflect.apply(value, client, args) as unknown;
     }

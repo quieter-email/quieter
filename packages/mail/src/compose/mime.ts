@@ -47,7 +47,7 @@ export const buildMimeMessage = async (
   const attachments = await Promise.all(
     files.map(async (attachment) => {
       if (!attachment.file) {
-        return null;
+        throw new Error("An attachment is missing its file content.");
       }
       return {
         cid: attachment.contentId,
@@ -70,7 +70,7 @@ export const buildMimeMessage = async (
   ];
   const html = draft.bodyHtml || "<p></p>";
   const message = new MailComposer({
-    attachments: attachments.filter((attachment) => attachment !== null),
+    attachments,
     bcc: splitMailAddressList(draft.recipients.bcc),
     cc: splitMailAddressList(draft.recipients.cc),
     date: options?.sentAt,

@@ -2,7 +2,11 @@ import type { S3Client } from "@aws-sdk/client-s3";
 import { serverEnv } from "@quieter/env/server";
 
 import { hasText } from "../../text";
-import { assertLocalMailObject, getLocalMailStorage } from "../local-storage";
+import {
+  assertLocalMailObject,
+  getLocalMailStorage,
+  LOCAL_MAIL_BUCKET,
+} from "../local-storage";
 
 export type RawMailObjectProvider = "r2" | "s3";
 
@@ -107,6 +111,31 @@ export const readRawMailObject = async (record: RawMailObjectRecord) => {
     throw new Error("The original message is unavailable.");
   }
   return new Uint8Array(await response.Body.transformToByteArray());
+};
+
+export const writeRawMailObject = async (
+  raw: Uint8Array
+): Promise<RawMailObjectReference> => {
+  const key = `messages/${crypto.randomUUID()}.eml`;
+  if (serverEnv.QUIETER_DEPLOYMENT_ENV === "local") {
+    await getLocalMailStorage().put(key, raw);
+    return { bucket: LOCAL_MAIL_BUCKET, key, provider: "r2" };
+  }
+  const client = await getR2Client();
+  const { PutObjectCommand } = await import("@aws-sdk/client-s3");
+  const bucket = serverEnv.R2_BUCKET;
+  if (!hasText(bucket)) {
+    throw new Error("R2 raw mail storage is not configured.");
+  }
+  await client.send(
+    new PutObjectCommand({
+      Body: raw,
+      Bucket: bucket,
+      ContentType: "message/rfc822",
+      Key: key,
+    })
+  );
+  return { bucket, key, provider: "r2" };
 };
 
 export const deleteRawMailObject = async (object: RawMailObjectReference) => {

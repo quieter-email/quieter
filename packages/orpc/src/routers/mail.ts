@@ -61,13 +61,15 @@ import {
 } from "../managed-mail/labels/service";
 import { getManagedMessageAttachment } from "../managed-mail/messages/attachments";
 import {
+  saveManagedDraft,
   deleteManagedDraft,
+} from "../managed-mail/messages/drafts";
+import {
   getManagedMessageDelivery,
   getManagedMessageInspector,
   getManagedThread,
   listManagedMessageDeliveryStatuses,
   listManagedMessages,
-  saveManagedDraft,
   sendManagedMailboxMessage,
   setManagedMessageMailboxState,
   setManagedMessageReadState,

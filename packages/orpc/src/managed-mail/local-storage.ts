@@ -39,7 +39,7 @@ export const assertLocalMailObject = (object: {
   if (
     object.provider !== "r2" ||
     object.bucket !== LOCAL_MAIL_BUCKET ||
-    !object.key.startsWith("fixtures/")
+    !(object.key.startsWith("fixtures/") || object.key.startsWith("messages/"))
   ) {
     throw new Error(
       "Local development cannot access remote mail objects. Load local mail fixtures instead."
