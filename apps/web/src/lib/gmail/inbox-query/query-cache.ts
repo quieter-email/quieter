@@ -26,17 +26,9 @@ import {
 import type { MessagesQueryData, ThreadMetadataMutationResult } from "./data";
 import { getMessagesQueryKey, normalizeSearchQuery } from "./keys";
 
-export type MessagesQuerySnapshot = {
+type CachedMessagesQuery = {
   queryKey: ReturnType<typeof getMessagesQueryKey>;
   data: MessagesQueryData | undefined;
-};
-
-export type ThreadQuerySnapshot = {
-  queryKey: ReturnType<typeof getThreadQueryKey>;
-  data: ThreadMessagesResult | undefined;
-};
-
-type CachedMessagesQuery = MessagesQuerySnapshot & {
   mailbox: MailboxCategory;
   searchQuery?: string;
 };
@@ -91,32 +83,6 @@ export const getCachedMessagesQueries = (
       ];
     });
 
-export const snapshotMessagesQueries = (
-  queryClient: QueryClient,
-  mailboxId: string
-): MessagesQuerySnapshot[] =>
-  getCachedMessagesQueries(queryClient, mailboxId).map((cachedQuery) => ({
-    data: cachedQuery.data,
-    queryKey: cachedQuery.queryKey,
-  }));
-
-export const snapshotThreadQuery = (
-  queryClient: QueryClient,
-  threadQueryKey: ReturnType<typeof getThreadQueryKey>
-): ThreadQuerySnapshot => ({
-  data: queryClient.getQueryData<ThreadMessagesResult>(threadQueryKey),
-  queryKey: threadQueryKey,
-});
-
-export const restoreMessagesQueries = (
-  queryClient: QueryClient,
-  snapshots: readonly MessagesQuerySnapshot[]
-) => {
-  for (const snapshot of snapshots) {
-    queryClient.setQueryData(snapshot.queryKey, snapshot.data);
-  }
-};
-
 export const persistQueryKeys = async (
   queryClient: QueryClient,
   queryKeys: readonly (readonly unknown[])[]
@@ -139,6 +105,61 @@ export const persistQueryKeys = async (
       await persistQueryByKey(queryKey, queryClient);
     })
   );
+};
+
+export const applyOptimisticMailboxUpdate = async (
+  queryClient: QueryClient,
+  mailboxId: string,
+  update: () => void,
+  threadQueryKey?: ReturnType<typeof getThreadQueryKey>
+) => {
+  await Promise.all([
+    queryClient.cancelQueries({ queryKey: ["messages", mailboxId] }),
+    ...(threadQueryKey === undefined
+      ? []
+      : [queryClient.cancelQueries({ exact: true, queryKey: threadQueryKey })]),
+  ]);
+  const queryKeys: (readonly unknown[])[] = [
+    ...getCachedMessagesQueries(queryClient, mailboxId).map(
+      ({ queryKey }) => queryKey
+    ),
+    ...(threadQueryKey === undefined ? [] : [threadQueryKey]),
+  ];
+  const snapshots = queryKeys.map((queryKey) => ({
+    data: queryClient.getQueryData(queryKey),
+    queryKey,
+  }));
+  update();
+  const changes = snapshots
+    .map((snapshot) => ({
+      ...snapshot,
+      optimistic: queryClient.getQueryData(snapshot.queryKey),
+    }))
+    .filter(({ data, optimistic }) => data !== optimistic);
+  await persistQueryKeys(
+    queryClient,
+    changes.map(({ queryKey }) => queryKey)
+  );
+
+  return async () => {
+    await Promise.all(
+      changes.map(async ({ queryKey, data, optimistic }) => {
+        // A live update or another mutation owns newer data; reconcile it from the server.
+        if (
+          queryClient.getQueryData(queryKey) !== optimistic ||
+          data === undefined
+        ) {
+          await queryClient.invalidateQueries({ exact: true, queryKey });
+        } else {
+          queryClient.setQueryData(queryKey, data);
+        }
+      })
+    );
+    await persistQueryKeys(
+      queryClient,
+      changes.map(({ queryKey }) => queryKey)
+    );
+  };
 };
 
 export const findMessageInCachedMailboxQueries = (
