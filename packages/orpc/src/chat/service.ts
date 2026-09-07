@@ -14,6 +14,7 @@ import type {
   GmailToolsContext,
 } from "@quieter/ai/chat-agent";
 import { CHAT_TITLE_MODEL, chatModelSchema } from "@quieter/ai/chat-models";
+import { toCanonicalTranscript } from "@quieter/ai/chat-transcript";
 import { summarizeAiUsage } from "@quieter/ai/chat-usage";
 import { generateChatTitle } from "@quieter/ai/generate-chat-title";
 import { createChatModel } from "@quieter/ai/openrouter";
@@ -28,6 +29,7 @@ import {
   convertToModelMessages,
   createUIMessageStreamResponse,
   isStepCount,
+  isToolUIPart,
   streamText,
   toUIMessageStream,
 } from "ai";
@@ -59,6 +61,8 @@ import {
 import { assertAccessibleMailbox } from "../mailbox/service";
 import { replaceChatParts } from "./continuation";
 import { createLinearChatTools } from "./linear-tools";
+
+type UIMessagePart = UIMessage["parts"][number];
 
 const CHAT_HISTORY_WINDOW_MESSAGES = 30;
 const CHAT_MAX_COMPLETION_TOKENS = 2048;
@@ -270,65 +274,6 @@ export const validateChatRequest = (body: unknown): ValidatedChatRequest => {
     trigger: parsedBody.trigger,
   };
 };
-
-// ---------------------------------------------------------------------------
-// Stored parts → UI messages
-// ---------------------------------------------------------------------------
-
-type UIMessagePart = UIMessage["parts"][number];
-
-const isRenderablePart = (part: ChatMessagePart): boolean => {
-  if (part.type === "text") {
-    return typeof part.text === "string";
-  }
-  if (part.type === "") {
-    return false;
-  }
-  if (part.type === "step-start") {
-    return true;
-  }
-  return part.type.startsWith("tool-") && typeof part.toolCallId === "string";
-};
-
-/**
- * Maps persisted message rows onto AI SDK UI messages. Parts are stored in
- * their native UI message shape, so this only drops malformed entries.
- */
-export const toCanonicalTranscript = (
-  messages: readonly {
-    id: string;
-    parts: ChatMessagePart[];
-    role: "assistant" | "system" | "user";
-  }[]
-): UIMessage[] =>
-  messages.flatMap((message) => {
-    if (message.role !== "assistant" && message.role !== "user") {
-      return [];
-    }
-    const parts = message.parts.filter(isRenderablePart).map((part) =>
-      part.state === "approval-responded"
-        ? {
-            ...part,
-            errorText:
-              "The action was submitted, but its result is not available. Check the affected item before requesting it again.",
-            state: "output-error",
-          }
-        : part
-    );
-    if (parts.length === 0) {
-      return [];
-    }
-    return [
-      {
-        id: message.id,
-        // Parts round-trip as opaque JSON; convertToModelMessages validates
-        // the shapes it consumes.
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-        parts: parts as UIMessagePart[],
-        role: message.role,
-      } satisfies UIMessage,
-    ];
-  });
 
 // ---------------------------------------------------------------------------
 // Tool plumbing
@@ -612,44 +557,29 @@ const applyClientResolutions = (
 ) => ({
   ...message,
   parts: message.parts.map((part): UIMessagePart => {
-    const type: unknown = Reflect.get(part, "type");
-    if (typeof type !== "string" || !type.startsWith("tool-")) {
+    if (!isToolUIPart(part)) {
       return part;
     }
-    const toolCallId: unknown = Reflect.get(part, "toolCallId");
-    if (typeof toolCallId !== "string") {
-      return part;
-    }
-    const state: unknown = Reflect.get(part, "state");
-    const decision = resolutions.toolDecisions.get(toolCallId);
-    if (decision !== undefined && state === "approval-requested") {
-      const approvalId = readStoredApprovalId(part);
-      if (approvalId === null) {
-        // Pending ids are validated before the turn continues; this guard
-        // only satisfies the type.
-        return part;
-      }
-      // Part unions make this override awkward to express directly.
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+    const decision = resolutions.toolDecisions.get(part.toolCallId);
+    if (decision !== undefined && part.state === "approval-requested") {
       return {
         ...part,
         approval: {
           approved: decision,
-          id: approvalId,
+          id: part.approval.id,
         },
         state: "approval-responded",
-      } as unknown as UIMessagePart;
+      };
     }
     if (
-      resolutions.toolOutputs.has(toolCallId) &&
-      state === "input-available"
+      resolutions.toolOutputs.has(part.toolCallId) &&
+      part.state === "input-available"
     ) {
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion
       return {
         ...part,
-        output: resolutions.toolOutputs.get(toolCallId),
+        output: resolutions.toolOutputs.get(part.toolCallId),
         state: "output-available",
-      } as unknown as UIMessagePart;
+      };
     }
     return part;
   }),

@@ -1,30 +1,6 @@
-import type { RouterOutputs } from "@quieter/orpc";
 import type { UIMessage } from "ai";
 
 import { isChatToolPart } from "./chat-tools";
-
-type StoredMessage = RouterOutputs["chat"]["get"]["messages"][number];
-
-/**
- * Persisted rows already store native UI message parts, so loading history is
- * a straight projection; unknown part types are ignored by the renderer.
- */
-export const toInitialMessages = (messages: StoredMessage[]): UIMessage[] =>
-  messages.flatMap((message) => {
-    if (message.role !== "assistant" && message.role !== "user") {
-      return [];
-    }
-    return [
-      {
-        id: message.id,
-        // Parts round-trip as opaque JSON; the renderer switches on known
-        // part types only.
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-        parts: message.parts as UIMessage["parts"],
-        role: message.role,
-      },
-    ];
-  });
 
 export const getMessageText = (parts: UIMessage["parts"]) =>
   parts
@@ -64,6 +40,13 @@ export const getChatRetryAction = (
   const persistedLastMessage = persistedMessages.at(-1);
   if (!persistedMessages.some((message) => message.role === "user")) {
     return { type: "unavailable" };
+  }
+  if (
+    persistedLastMessage?.parts.some((part) =>
+      part.type.startsWith("tool-")
+    ) === true
+  ) {
+    return { type: "hydrate" };
   }
   if (
     persistedLastMessage?.role !== "assistant" ||

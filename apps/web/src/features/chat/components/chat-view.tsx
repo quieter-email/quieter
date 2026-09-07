@@ -3,6 +3,7 @@
 import { useChat } from "@ai-sdk/react";
 import type { ComposeEmailResult } from "@quieter/ai/chat-agent";
 import type { ChatModel } from "@quieter/ai/chat-models";
+import { toCanonicalTranscript } from "@quieter/ai/chat-transcript";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
 import type { RouterOutputs } from "@quieter/orpc";
 import { Button } from "@quieter/ui/button";
@@ -44,7 +45,7 @@ import { toastError } from "#/lib/error-toast";
 import { orpc, rpc } from "#/lib/orpc";
 import { shouldRetryOrpcError } from "#/lib/orpc-errors";
 
-import { getChatRetryAction, toInitialMessages } from "../domain/chat-messages";
+import { getChatRetryAction } from "../domain/chat-messages";
 import type { ChatToolApproval } from "../domain/chat-tools";
 import { getToolName, isChatToolPart } from "../domain/chat-tools";
 import { toChatComposeMessageInput } from "../domain/compose-proposal";
@@ -185,7 +186,7 @@ const ChatSession = ({
     stop,
   } = useChat({
     id: threadId,
-    messages: toInitialMessages(chatData?.messages ?? []),
+    messages: toCanonicalTranscript(chatData?.messages ?? []),
     onFinish: () => {
       void synchronizeChat();
     },
@@ -269,7 +270,7 @@ const ChatSession = ({
       return;
     }
     reconciledChatRef.current = chatData;
-    setMessages(toInitialMessages(chatData.messages));
+    setMessages(toCanonicalTranscript(chatData.messages));
   }, [chatData, isRetrying, setMessages, status]);
 
   const resolveCompose = async (
@@ -377,7 +378,7 @@ const ChatSession = ({
           chatId: threadId,
           mailboxId,
         });
-        const persistedMessages = toInitialMessages(persistedChat.messages);
+        const persistedMessages = toCanonicalTranscript(persistedChat.messages);
         const retryAction = getChatRetryAction(messages, persistedMessages);
         if (retryAction.type === "resubmit-user") {
           clearError();
