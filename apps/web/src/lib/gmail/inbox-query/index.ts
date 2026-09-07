@@ -10,22 +10,10 @@ export {
 
 export {
   applyBulkChangesInMailbox,
-  archiveMessageInMailbox,
-  archiveThreadInMailbox,
+  updateMessageInMailbox,
+  updateThreadInMailbox,
   deleteDraftInMailbox,
-  markMessageAsReadInMailbox,
-  markMessageAsSpamInMailbox,
-  markMessageAsUnreadInMailbox,
-  markThreadAsReadInMailbox,
-  markThreadAsSpamInMailbox,
-  markThreadAsUnreadInMailbox,
-  moveMessageToTrashInMailbox,
-  moveThreadToTrashInMailbox,
   removeDraftMessageFromCaches,
-  unmarkMessageAsSpamInMailbox,
-  unmarkThreadAsSpamInMailbox,
-  untrashMessageInMailbox,
-  untrashThreadInMailbox,
-  updateMessageLabelsInMailbox,
-  updateThreadLabelsInMailbox,
 } from "./actions";
+
+export type { MailMetadataOperation } from "./actions";

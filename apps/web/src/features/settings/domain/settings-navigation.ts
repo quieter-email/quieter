@@ -57,19 +57,13 @@ export const SETTINGS_NAV_ITEMS = [
     title: "Mailboxes",
   },
   {
-    description: "Build mailbox workflows that react to incoming mail.",
-    section: "workspace",
-    tab: "actions",
-    title: "Actions",
-  },
-  {
     description: "Manage your teams and organization settings.",
     section: "workspace",
     tab: "organization",
     title: "Teams",
   },
   {
-    description: "Connect outside services for mail actions and chat.",
+    description: "Connect outside services for chat.",
     section: "workspace",
     tab: "connectors",
     title: "Connectors",

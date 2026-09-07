@@ -26,7 +26,7 @@ The development database needs the current committed schema, including pgvector 
 
 Production and development can read the same Gmail mailbox while keeping their application data separate. They cannot treat Gmail itself as separate state. Changing a label, marking a message read, updating a draft, sending mail, or running an automation affects the same external account.
 
-The existing mailbox-processing leases and action-run claims live in each application's database. They coordinate consumers within one environment but cannot prevent two environments from performing the same external action. Separate OAuth credentials do not solve that problem.
+The existing mailbox-processing leases live in each application's database. They coordinate consumers within one environment but cannot prevent two environments from performing the same external action. Separate OAuth credentials do not solve that problem.
 
 Google's `users.watch` API sets up or updates a watch and requires its topic to belong to the requesting Google project. Avoid relying on undocumented assumptions about independent watches for different clients in the same project. Keep one designated owner for watch creation, renewal, and stopping. See [Gmail watch](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users/watch).
 
@@ -62,7 +62,7 @@ This is development observation of a shared mailbox, not a frozen snapshot: prod
 
 ### Full mutation testing
 
-For tests that must really send, label, modify drafts, or run connector actions, use a dedicated test mailbox or explicitly transfer processing ownership for the shared mailbox. A handoff needs to pause production selection and writes for that mailbox, account for in-flight work and queued retries, verify the pause, enable development writes, and later reconcile history before restoring production ownership.
+For tests that must really send, label, modify drafts, or execute chat connector writes, use a dedicated test mailbox or explicitly transfer processing ownership for the shared mailbox. A handoff needs to pause production selection and writes for that mailbox, account for in-flight work and queued retries, verify the pause, enable development writes, and later reconcile history before restoring production ownership.
 
 The current code has no cross-environment ownership mechanism. Do not implement the handoff as two unrelated flags in separate databases and assume that is atomic. Start with an explicit verified operational handoff or a dedicated test mailbox; add a shared ownership/fencing mechanism only if automated handoffs become necessary. Stopping a local terminal does not pause deployed production processing.
 
@@ -82,7 +82,7 @@ Agents may read and move secrets between the approved local configuration and th
 
 ## Native tooling to wire
 
-Cloudflare's installed Vite plugin supports `auxiliaryWorkers`, persistent state, and development tunnels. Wire the realtime Worker, Gmail queue consumer, Gmail maintenance handler, mailbox-action consumer, and action dispatcher alongside the web Worker. Keep the shared-mailbox restrictions above active even when all handlers run locally. Use scheduled-event injection for tests and an explicit scheduler when continuous local maintenance is needed. See [multiple Workers](https://developers.cloudflare.com/workers/local-development/multi-workers/).
+Cloudflare's installed Vite plugin supports `auxiliaryWorkers`, persistent state, and development tunnels. Wire the realtime Worker, Gmail queue consumer, Gmail maintenance handler, and per-minute mail maintenance worker alongside the web Worker. Keep the shared-mailbox restrictions above active even when all handlers run locally. Use scheduled-event injection for tests and an explicit scheduler when continuous local maintenance is needed. See [multiple Workers](https://developers.cloudflare.com/workers/local-development/multi-workers/).
 
 Use Cloudflare Local Explorer and the runtime inspector for local state, requests, and errors. Its API/UI already provides inspection; avoid building a replacement developer dashboard. Keep these tools on loopback when exposing selected app routes for webhooks. See [Local Explorer](https://developers.cloudflare.com/workers/local-development/local-explorer/).
 
@@ -99,3 +99,11 @@ The `local-leander` SST store contains development secrets for the app, database
 The user clarified that unsupported local behavior must remain a documented limitation, rather than trigger a cloud deployment. The attempted cloud mail setup was rolled back, including its bucket, credentials, SES identity, Lambda/SNS/IAM resources and regional bootstrap. No DNS records were added. The legacy cloud mail startup commands are removed. `vp run test:mail` runs the fixture suites. Real SES/MX delivery, cloud concurrency and IAM acceptance are outside this local setup.
 
 Sentry/PostHog opt-in checks, c15t coverage, and disposable migration tests remain part of targeted verification. Domain Connect is deferred until used. A change is complete only when the affected local feature can be started, exercised, and debugged, or an exact external blocker is recorded with the required user action.
+
+## Custom action removal
+
+Custom action settings and execution are removed. Connectors remain available to chat, and managed inbox rules remain supported. `infra/mail-maintenance.ts` schedules `packages/cloudflare/src/mail-maintenance-worker.ts` every minute for send recovery, storage cleanup, expired rate-limit cleanup, and managed rule backfills. Invoke these operations locally with `vp run dev:trigger mail-recovery`.
+
+Existing action tables remain untouched for expand/contract deployment. The new application does not enqueue action runs. Release requires pausing old dispatch and producers, draining in-flight workers, and accounting for queued retries before retiring their infrastructure. No production changes were performed.
+
+Seven unpublished migrations were consolidated into `20260907233131_melodic_blacklash` after a read-only development-ledger check found none of the seven applied. Main history is unchanged. Preserve normal Drizzle SQL/snapshot pairs and consolidate only unapplied feature migrations; see [migration workflow](architecture.md#migration-workflow). Earlier setup and verification counts in this document describe their dated revision.

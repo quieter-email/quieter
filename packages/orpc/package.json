@@ -13,7 +13,6 @@
     "./errors": "./src/errors.ts",
     "./mailbox": "./src/mailbox/service.ts",
     "./mail-domain": "./src/mail-domain/service.ts",
-    "./mailbox-actions": "./src/mailbox-actions/index.ts",
     "./managed-mail": "./src/managed-mail/messages/service.ts",
     "./managed-mail/ingestion": "./src/managed-mail/messages/ingestion.ts",
     "./managed-mail/local-fixtures": "./src/managed-mail/local-fixtures.ts",
@@ -33,7 +32,6 @@
     "./gmail-live-sync-token": "./src/gmail-live-sync-token.ts",
     "./gmail-credential-rotation": "./src/gmail-credential-rotation.ts",
     "./gmail-pubsub": "./src/gmail-sync/service.ts",
-    "./mailbox-actions/graph": "./src/mailbox-actions/graph.ts",
     "./waitlist": "./src/waitlist.ts"
   },
   "dependencies": {

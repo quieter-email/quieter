@@ -20,8 +20,7 @@ export const createGmailResources = (
   context: DeploymentContext,
   secretBindings: SecretBindings,
   secretResources: SecretResources,
-  appDatabase: ReturnType<typeof createAppDatabase>,
-  mailboxActionQueue: sst.cloudflare.Queue
+  appDatabase: ReturnType<typeof createAppDatabase>
 ) => {
   const gmailLiveSyncTokenSecret = requireSecretResource(
     secretResources,
@@ -74,7 +73,6 @@ export const createGmailResources = (
           gmailLiveSyncMailbox,
           gmailLiveSyncTokenSecret,
           appDatabase,
-          mailboxActionQueue,
           sentryDsnBinding,
           ...processingSecretBindings,
         ],
@@ -109,7 +107,6 @@ export const createGmailResources = (
         handler: "packages/cloudflare/src/queue-worker.ts",
         link: [
           appDatabase,
-          mailboxActionQueue,
           gmailLiveSyncMailbox,
           sentryDsnBinding,
           ...processingSecretBindings,

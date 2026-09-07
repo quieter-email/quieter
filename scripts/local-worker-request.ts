@@ -3,10 +3,8 @@ import { requireServerEnv } from "@quieter/env/server";
 
 assertLocalEnvFile(".env.local");
 const action = process.argv[2] ?? "health";
-if (!["health", "maintenance", "actions", "mail-recovery"].includes(action)) {
-  throw new Error(
-    "Use dev:trigger health, maintenance, actions, or mail-recovery."
-  );
+if (!["health", "maintenance", "mail-recovery"].includes(action)) {
+  throw new Error("Use dev:trigger health, maintenance, or mail-recovery.");
 }
 const response = await fetch(`http://127.0.0.1:8787/__dev/${action}`, {
   headers: {

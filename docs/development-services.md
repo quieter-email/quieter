@@ -4,14 +4,14 @@ Researched and exercised on September 5, 2026. This is a coverage ledger, not a 
 
 Agent connector readiness is tracked separately in [Agent tooling](agent-tooling.md). The original runtime audit omitted verification of Sentry MCP and other agent access. Passing application tests or disabling local telemetry does not establish that debugging tools are ready.
 
-## Verified setup
+## Verified setup, previous revision
 
 | Area | Current evidence | Remaining proof |
 | --- | --- | --- |
 | Database | Existing shared-cluster quieter_dev, separate app/migrator roles, verified TLS, 60 migrations, pgvector 0.8.5, backup before migration | Destructive migration tests run in disposable CI, not against this database |
 | Identity | Real localhost Google sign-in succeeds after adding its missing callback | Magic-link, passkey/device and full role lifecycle acceptance |
 | Gmail | Separate OAuth client and Pub/Sub pull subscription; observation guards; fresh consent; real inbox loads 18 conversations | Test-account passkey consent, provider writes and delivered-notification processing |
-| Cloudflare | Native web/Worker runtime; signed WebSocket smoke; native queue/DO tests; authenticated manual maintenance/dispatch | Deployed concurrency, hibernation, IAM and cloud pooling |
+| Cloudflare | Native web/Worker runtime; signed WebSocket smoke; native queue/DO tests; authenticated manual maintenance | Deployed concurrency, hibernation, IAM and cloud pooling |
 | Secrets | 22 development SST secrets in local-leander; 21 runtime links; fresh-checkout pull verified; SST starts web and background runtimes together | No AWS managed-mail stage is required or authorized for local development |
 | OpenRouter | Separate $1-capped development key; API smoke cost $0.000002; actual app chat streamed the expected response and saved its conversation | Voice, tool use and automation quality tests |
 | Workers AI | Separate AI-only token; real 1024-dimension embedding | Application memory write/search/delete lifecycle |
@@ -22,7 +22,7 @@ Agent connector readiness is tracked separately in [Agent tooling](agent-tooling
 | logo.dev/c15t | Real publishable logo configuration; consent uses offline mode | Focused UI/network acceptance |
 | Domain Connect | Inactive | Deferred until activated |
 
-Checks: 693 tests passed, 16 disposable-database tests skipped; 31 native Cloudflare tests passed; lint/types, database migration checks and all AWS/Cloudflare handler bundles passed. Skipped and provider-specific acceptance remains explicit below.
+Previous-revision checks: 693 tests passed, 16 disposable-database tests skipped; 31 native Cloudflare tests passed; lint/types, database migration checks and all AWS/Cloudflare handler bundles passed. Skipped and provider-specific acceptance remains explicit below.
 
 The existing sandbox also contains webhook endpoints for older deployments. Local billing now namespaces customer/member IDs and stamps subscription metadata; local subscription handlers ignore other environments. Production gains the reciprocal guard only when this change is deployed. Do not copy production billing rows into development or reuse an existing deployment's sandbox customers for tests.
 
@@ -44,7 +44,7 @@ Implemented: `sst.local.config.ts` uses a personal stage and native [DevCommand]
 
 ### Cloudflare Workers, Queues, Durable Objects, scheduled jobs, and Hyperdrive
 
-Cloudflare's Vite plugin runs Worker code in workerd. `auxiliaryWorkers` runs the other application Workers in the same development session. This is the native fit for the realtime ingress, Gmail queue consumer, Gmail maintenance scheduler, mailbox-action consumer, and action dispatcher. Service bindings connect entrypoints. See [multiple Workers](https://developers.cloudflare.com/workers/local-development/multi-workers/).
+Cloudflare's Vite plugin runs Worker code in workerd. `auxiliaryWorkers` runs the other application Workers in the same development session. This is the native fit for the realtime ingress, Gmail queue consumer, Gmail maintenance scheduler, and per-minute mail maintenance worker. Service bindings connect entrypoints. See [multiple Workers](https://developers.cloudflare.com/workers/local-development/multi-workers/).
 
 Queues have native local producers and consumers. They support testing message flow without a cloud queue, but local consumer concurrency is not supported, and Wrangler remote mode does not support Queues. Test distributed concurrency and delivery behavior in the deployed development stage. See [Queues local development](https://developers.cloudflare.com/queues/configuration/local-development/).
 
@@ -130,7 +130,7 @@ logo.dev remains an external image API. The local publishable key exists. Use st
 
 Domain Connect supplies a protocol, example service, templates, and signing examples rather than a complete local DNS-provider emulator. Test signing and callbacks locally; use a dedicated domain for actual registrar/DNS changes and SES verification. The required private signing key is consumed by code but omitted from the current SST secret registry and deployment bindings. See [Domain Connect getting started](https://www.domainconnect.org/getting-started/).
 
-GitHub Actions provides the existing CI execution environment. GitHub CLI authentication works. There is no need to run GitHub itself locally. Vercel is present in older sandbox webhook destinations, but the current app infrastructure targets Cloudflare. D1, KV, Vectorize, Cloudflare Workflows, Redis, and Neon are not prerequisites inferred from the current runtime inventory. Quieter mailbox workflows use its own database/queue execution model.
+GitHub Actions provides the existing CI execution environment. GitHub CLI authentication works. There is no need to run GitHub itself locally. Vercel is present in older sandbox webhook destinations, but the current app infrastructure targets Cloudflare. D1, KV, Vectorize, Cloudflare Workflows, Redis, and Neon are not prerequisites inferred from the current runtime inventory. Gmail synchronization retains its queue processing; managed rule backfills run in mail maintenance. Custom action workflows are removed.
 
 ## Feature acceptance matrix
 
@@ -154,7 +154,7 @@ These are required acceptance cases, not a claim that every row was executed dur
 | AI chat | Stream/tool calls, cancellation, persistence, credit errors, malformed output | Capped real OpenRouter model calls |
 | Voice input | Permission/error UI, format and size validation, transcription fixtures | Actual microphone and OpenRouter transcription |
 | AI memory | Personal/mailbox ownership, lexical/semantic retrieval, deletion | pgvector index and real embedding dimensions |
-| Automatic AI features | Label/detail extraction and action conditions with fixed outputs | Selected real-model quality regression examples |
+| Automatic AI features | Label/detail extraction with fixed outputs | Selected real-model quality regression examples |
 | Calendar connector | OAuth state, credential encryption, events, UTC/DST/all-day cases | Dedicated primary calendar read/write/revoke |
 | Linear connector | MCP/tool schemas, auth expiry, retries, permission errors | Dedicated workspace read/write/revoke |
 | Billing | Webhook signatures, ordering/idempotency, entitlements, credits, usage | Polar sandbox checkout, plan changes, cancellation and renewal |
@@ -165,3 +165,13 @@ These are required acceptance cases, not a claim that every row was executed dur
 | Privacy and monitoring | No pre-consent capture, no PII/content payloads, error filtering | Development Sentry/PostHog ingestion and source maps |
 | UI resilience | Mobile layouts, keyboard use, focus, stale cache, disconnect/reconnect | Multiple browsers, real device and constrained network |
 | Recovery and deployment | Clean seed/reset, migration replay, old/new schema compatibility | Deployment rollback, IAM restrictions, cloud logs and DLQ |
+
+## Custom action removal, verification pending
+
+The current change removes custom action settings, dispatch, queue consumption, graph execution, and action-specific credit reservations. Connectors remain available to chat, and managed inbox rules remain. `MailMaintenance` replaces the retired dispatcher for send recovery, storage cleanup, expired rate-limit cleanup, and managed rule backfills every minute. Local execution uses `vp run dev:trigger mail-recovery`.
+
+The verification counts above describe the earlier service audit, not this removal. Current implementation checks are tracked in [the cleanup record](audits/2026-09-07/implementation.md).
+
+Seven unpublished migrations were consolidated into `20260907233131_melodic_blacklash`. Read-only inspection confirmed that none of the seven appeared in the development ledger; main history is unchanged. This inspection did not apply the consolidated migration. Keep Drizzle's SQL and full snapshots together, and consolidate only unapplied feature migrations as described in [the migration workflow](architecture.md#migration-workflow).
+
+Before production release, pause old action dispatch and producers, drain in-flight workers, and account for queued retries. Existing action tables remain untouched for expand/contract deployment. No production changes were performed.

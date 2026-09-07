@@ -1,1 +1,0 @@
-ALTER TABLE "managedMailRule" ADD COLUMN "disabledReason" text;

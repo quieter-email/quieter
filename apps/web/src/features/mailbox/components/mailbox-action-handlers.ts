@@ -5,24 +5,11 @@ import type { QueryClient } from "@tanstack/react-query";
 
 import {
   applyBulkChangesInMailbox,
-  archiveMessageInMailbox,
-  archiveThreadInMailbox,
+  updateMessageInMailbox,
+  updateThreadInMailbox,
   deleteDraftInMailbox,
-  markMessageAsReadInMailbox,
-  markMessageAsSpamInMailbox,
-  markMessageAsUnreadInMailbox,
-  markThreadAsReadInMailbox,
-  markThreadAsSpamInMailbox,
-  markThreadAsUnreadInMailbox,
-  moveMessageToTrashInMailbox,
-  moveThreadToTrashInMailbox,
-  unmarkMessageAsSpamInMailbox,
-  unmarkThreadAsSpamInMailbox,
-  untrashMessageInMailbox,
-  untrashThreadInMailbox,
-  updateMessageLabelsInMailbox,
-  updateThreadLabelsInMailbox,
 } from "#/lib/gmail/inbox-query";
+import type { MailMetadataOperation } from "#/lib/gmail/inbox-query";
 import type { ThreadListEntry } from "#/lib/gmail/thread-list";
 import type { MailboxCategory, MessageListItem } from "#/lib/mail";
 
@@ -49,14 +36,6 @@ type MailboxActionHandlerArgs = {
   unsubscribeFromMessageMutation: (messageId: string) => Promise<void>;
   mailboxId: string;
 };
-
-type MailboxItemAction = (
-  queryClient: QueryClient,
-  mailboxId: string,
-  mailbox: MailboxCategory,
-  searchQuery: string,
-  itemId: string
-) => Promise<void>;
 
 export type MailboxPendingActions = {
   isMessageActionPending: (messageId: string | null | undefined) => boolean;
@@ -218,30 +197,30 @@ export const createMailboxActionHandlers = ({
 
   const runMailboxMessageAction = async (
     messageId: string,
-    action: MailboxItemAction
+    operation: MailMetadataOperation
   ) => {
     await runMessageAction(messageId, async () => {
-      await action(
-        queryClient,
-        mailboxId,
-        activeMailbox,
-        activeSearchQuery,
-        messageId
+      await updateMessageInMailbox(
+        {
+          mailbox: activeMailbox,
+          mailboxId,
+          messageId,
+          queryClient,
+          searchQuery: activeSearchQuery,
+        },
+        operation
       );
     });
   };
 
   const runMailboxThreadAction = async (
     threadId: string,
-    action: MailboxItemAction
+    operation: MailMetadataOperation
   ) => {
     await runThreadAction(threadId, async () => {
-      await action(
-        queryClient,
-        mailboxId,
-        activeMailbox,
-        activeSearchQuery,
-        threadId
+      await updateThreadInMailbox(
+        { mailboxId, queryClient, threadId },
+        operation
       );
     });
   };
@@ -321,10 +300,10 @@ export const createMailboxActionHandlers = ({
 
   return {
     archiveMessage: async (messageId: string) => {
-      await runMailboxMessageAction(messageId, archiveMessageInMailbox);
+      await runMailboxMessageAction(messageId, "archive");
     },
     archiveThread: async (threadId: string) => {
-      await runMailboxThreadAction(threadId, archiveThreadInMailbox);
+      await runMailboxThreadAction(threadId, "archive");
     },
     archiveThreads: async (threads: ThreadListEntry[]) => {
       await runBulkMailboxCommand(threads, {
@@ -335,22 +314,22 @@ export const createMailboxActionHandlers = ({
     deleteDraft,
     deleteDrafts,
     markMessageAsRead: async (messageId: string) => {
-      await runMailboxMessageAction(messageId, markMessageAsReadInMailbox);
+      await runMailboxMessageAction(messageId, "read");
     },
     markMessageAsSpam: async (messageId: string) => {
-      await runMailboxMessageAction(messageId, markMessageAsSpamInMailbox);
+      await runMailboxMessageAction(messageId, "spam");
     },
     markMessageAsUnread: async (messageId: string) => {
-      await runMailboxMessageAction(messageId, markMessageAsUnreadInMailbox);
+      await runMailboxMessageAction(messageId, "unread");
     },
     markThreadAsRead: async (threadId: string) => {
-      await runMailboxThreadAction(threadId, markThreadAsReadInMailbox);
+      await runMailboxThreadAction(threadId, "read");
     },
     markThreadAsSpam: async (threadId: string) => {
-      await runMailboxThreadAction(threadId, markThreadAsSpamInMailbox);
+      await runMailboxThreadAction(threadId, "spam");
     },
     markThreadAsUnread: async (threadId: string) => {
-      await runMailboxThreadAction(threadId, markThreadAsUnreadInMailbox);
+      await runMailboxThreadAction(threadId, "unread");
     },
     markThreadsAsRead: async (threads: ThreadListEntry[]) => {
       await runBulkMailboxCommand(threads, { kind: "set-read", read: true });
@@ -365,10 +344,10 @@ export const createMailboxActionHandlers = ({
       await runBulkMailboxCommand(threads, { kind: "set-read", read: false });
     },
     moveMessageToTrash: async (messageId: string) => {
-      await runMailboxMessageAction(messageId, moveMessageToTrashInMailbox);
+      await runMailboxMessageAction(messageId, "trash");
     },
     moveThreadToTrash: async (threadId: string) => {
-      await runMailboxThreadAction(threadId, moveThreadToTrashInMailbox);
+      await runMailboxThreadAction(threadId, "trash");
     },
     moveThreadsToTrash: async (threads: ThreadListEntry[]) => {
       await runBulkMailboxCommand(threads, {
@@ -377,10 +356,10 @@ export const createMailboxActionHandlers = ({
       });
     },
     unmarkMessageAsSpam: async (messageId: string) => {
-      await runMailboxMessageAction(messageId, unmarkMessageAsSpamInMailbox);
+      await runMailboxMessageAction(messageId, "unspam");
     },
     unmarkThreadAsSpam: async (threadId: string) => {
-      await runMailboxThreadAction(threadId, unmarkThreadAsSpamInMailbox);
+      await runMailboxThreadAction(threadId, "unspam");
     },
     unmarkThreadsAsSpam: async (threads: ThreadListEntry[]) => {
       await runBulkMailboxCommand(threads, {
@@ -394,10 +373,10 @@ export const createMailboxActionHandlers = ({
       });
     },
     untrashMessage: async (messageId: string) => {
-      await runMailboxMessageAction(messageId, untrashMessageInMailbox);
+      await runMailboxMessageAction(messageId, "untrash");
     },
     untrashThread: async (threadId: string) => {
-      await runMailboxThreadAction(threadId, untrashThreadInMailbox);
+      await runMailboxThreadAction(threadId, "untrash");
     },
     untrashThreads: async (threads: ThreadListEntry[]) => {
       await runBulkMailboxCommand(threads, {
@@ -406,28 +385,10 @@ export const createMailboxActionHandlers = ({
       });
     },
     updateMessageLabels: async (messageId: string, changes: LabelChangeSet) => {
-      await runMessageAction(messageId, async () => {
-        await updateMessageLabelsInMailbox(
-          queryClient,
-          mailboxId,
-          activeMailbox,
-          activeSearchQuery,
-          messageId,
-          changes
-        );
-      });
+      await runMailboxMessageAction(messageId, changes);
     },
     updateThreadLabels: async (threadId: string, changes: LabelChangeSet) => {
-      await runThreadAction(threadId, async () => {
-        await updateThreadLabelsInMailbox(
-          queryClient,
-          mailboxId,
-          activeMailbox,
-          activeSearchQuery,
-          threadId,
-          changes
-        );
-      });
+      await runMailboxThreadAction(threadId, changes);
     },
     updateThreadsLabels: async (updates: readonly ThreadLabelUpdate[]) => {
       const changesByThreadId = new Map(
@@ -441,12 +402,8 @@ export const createMailboxActionHandlers = ({
             await Promise.resolve();
             return;
           }
-          await updateThreadLabelsInMailbox(
-            queryClient,
-            mailboxId,
-            activeMailbox,
-            activeSearchQuery,
-            threadId,
+          await updateThreadInMailbox(
+            { mailboxId, queryClient, threadId },
             changes
           );
         }

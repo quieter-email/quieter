@@ -2,18 +2,18 @@
 
 All 122 findings have a recorded resolution in [resolution.csv](resolution.csv). The original reports remain a historical record of the audited commit. The implementation is split into focused commits on `refactor/codebase-cleanup`.
 
-Application and library source is about 2,100 lines smaller across the affected files, excluding tests, declarations, generated route trees and documentation. Generated migration snapshots account for most of the added repository lines.
+Before the follow-up removal, application and library source was about 2,100 lines smaller across the affected files, excluding tests, declarations, generated route trees and documentation. This is a previous-revision measurement; the current diff and verification are pending.
 
 ## What changed
 
 - Mail sending uses one durable coordinator for quota reservation, provider submission, uncertain outcomes, recovery, projections, billing and object cleanup. Rule forwarding runs outside database transactions and resumes stored decisions without resending uncertain deliveries.
-- Actions persist external-write plans, fence stale workers, reuse completed decisions and enforce attempt limits. Execution rechecks mailbox access and billing, reserves headroom, and stops automatic execution when billing cannot be recorded. Chat approvals are consumed before tool execution, and interrupted results remain visible.
+- Custom actions, settings, graph execution, queue dispatch and consumption, and action-specific credit reservations are removed in the follow-up. Connectors remain available to chat, and managed inbox rules remain. Chat approvals are consumed before tool execution, and interrupted results remain visible.
 - Mail contracts are provider-neutral. The mail router delegates to query, compose, label and mutation services. Gmail request handling stays server-side. The SDK shares those contracts and makes React optional.
 - Browser state preserves newer cache data when optimistic changes fail. Compose and audio preparation are shared. The two demos share search, draft and mutation behavior; sending an unsaved draft no longer removes unrelated messages.
-- Large mailbox, message, domain and action screens now separate controllers, editors and substantial rendering sections. Dead paths, trivial wrappers, duplicate parsers and implementation-detail assertions were removed. Focused tests cover isolation, retries, billing and other core behavior.
+- Large mailbox, message, domain and connector screens now separate controllers, editors and substantial rendering sections. Dead paths, trivial wrappers, duplicate parsers and implementation-detail assertions were removed. Focused tests cover isolation, retries, billing and other core behavior.
 - Database clients respect request boundaries and bounded pools. Import and deployment checks enforce package ownership. Rate-limit identities expire, webhook handling is separate, dependency advisories were patched, and peer dependencies are explicit.
 
-## Verification
+## Verification, previous revision
 
 | Check | Result |
 | --- | --- |
@@ -29,16 +29,16 @@ Application and library source is about 2,100 lines smaller across the affected 
 
 The authentication test initially exceeded its five-second deadline while other checks were running. Its module initialization now runs in setup, outside the timed authentication scenario, and the focused test passes.
 
-Chrome verification covered the managed-demo inbox, organizer controls, message body, inspector and action-settings empty state. Demo saved-view editing is not implemented; the attempted save surfaced a failure. Authenticated domain changes and connector writes were not exercised in the browser.
+Previous-revision Chrome verification covered the managed-demo inbox, organizer controls, message body, inspector and action-settings empty state. Demo saved-view editing is not implemented; the attempted save surfaced a failure. Authenticated domain changes and connector writes were not exercised in the browser.
 
 The configured transcription model was probed with synthetic speech using the budget-limited development key. WAV, MP3, FLAC and Ogg succeeded; WebM, M4A and AAC were rejected. Browser-only formats therefore retain the shared WAV conversion path. The reported probe cost was $0.0024.
 
 ## Release requirements and limits
 
-Apply the additive migrations before the application release and drain older send, rule and action workers as described in [the architecture notes](../../architecture.md). Keep historical records and compatible readers during the transition. No production migrations or deployment were performed.
+Apply `20260907233131_melodic_blacklash` through the protected migration workflow before the application release. It consolidates seven unpublished feature migrations. A read-only development-ledger check verified that none of the seven had been applied there. Main history remains unchanged. Drizzle's full snapshots are expected; only unapplied feature migrations may be consolidated. See [migration workflow](../../architecture.md#migration-workflow).
 
-Local integration tests used disposable loopback PostgreSQL 18.4 with the selected tables and new migrations. CI also passed the full historical migration sequence and integration tests against pgvector PostgreSQL 16. Provider and billing-entitlement boundaries were mocked in the database tests, while database queries, locks, claims and persistence were real.
+Custom action database tables and records remain untouched for expand/contract deployment. The new application cannot enqueue custom actions. Pause old dispatch and producers, drain in-flight action workers, and account for queued retries before retiring the old infrastructure. Confirm old consumers cannot resume; retained records alone do not disable deployed code. Defer table deletion until a separately reviewed contract migration after the rollback window.
 
-Each paid action run reserves 25 cents for up to five minutes. This prevents competing action runs from allocating the same headroom. It is not a hard provider spending cap: an in-flight model step can exceed the allowance, and other AI features retain their existing credit checks. Reservations are separate from actual billed usage.
+`infra/mail-maintenance.ts` and `packages/cloudflare/src/mail-maintenance-worker.ts` retain send recovery, storage cleanup, rate-limit cleanup, and managed rule backfills every minute. Deploy this replacement alongside the application. Drain older send, ingestion, and rule workers as described in [the architecture notes](../../architecture.md). Connectors and chat remain supported. No production migrations or deployment were performed.
 
-The restricted action executor remains on Cloudflare Queues. A second orchestration platform was not added. Uncertain external effects require review rather than automatic replay.
+The previous verification used disposable loopback PostgreSQL 18.4; CI also passed historical migrations and integration tests against pgvector PostgreSQL 16. Those results predate this follow-up. Current removal, simplification, and consolidated-migration checks remain pending and must be recorded after completion. The original audit reports and resolution CSV remain historical records.

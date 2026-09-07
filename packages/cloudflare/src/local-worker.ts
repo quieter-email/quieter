@@ -3,8 +3,6 @@ import { serverEnv } from "@quieter/env/server";
 import { z } from "zod";
 
 import { enqueueGmailMaintenanceJobs } from "./gmail-maintenance-worker";
-import { dispatchPendingMailboxActionRuns } from "./mailbox-action-dispatch-worker";
-import actionWorker from "./mailbox-action-worker";
 import gmailWorker from "./queue-worker";
 import realtimeWorker from "./worker";
 import {
@@ -114,13 +112,6 @@ export default {
       });
       return new Response(null, { status: 204 });
     }
-    if (url.pathname === "/__dev/actions") {
-      return Response.json(
-        await withRequestDatabaseClient(
-          async () => await dispatchPendingMailboxActionRuns(env)
-        )
-      );
-    }
     return new Response(null, { status: 404 });
   },
   async queue(batch, env, ctx) {
@@ -129,8 +120,6 @@ export default {
     }
     if (batch.queue === "quieter-local-gmail") {
       await gmailWorker.queue(batch, env, ctx);
-    } else if (batch.queue === "quieter-local-actions") {
-      await actionWorker.queue(batch, env, ctx);
     } else {
       throw new Error("Unexpected local queue.");
     }

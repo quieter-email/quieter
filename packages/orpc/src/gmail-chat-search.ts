@@ -8,6 +8,7 @@ import type {
   MailboxOverviewResult,
   ModifyMailResult,
 } from "@quieter/ai/chat-agent";
+import type { GmailMetadataChange } from "@quieter/gmail";
 import {
   getGmailMessageCount,
   getGmailProfile,
@@ -17,16 +18,8 @@ import {
   isGmailServiceError,
   listLabels,
   listMessagesForAgent,
-  markMessageAsRead,
-  markMessageAsUnread,
-  markThreadAsRead,
-  markThreadAsUnread,
-  moveMessageToTrash,
-  moveThreadToTrash,
-  untrashMessage,
-  untrashThread,
-  updateMessageLabels,
-  updateThreadLabels,
+  mutateGmailMessage,
+  mutateGmailThread,
 } from "@quieter/gmail";
 import type { MailboxCategory } from "@quieter/mail/messages";
 
@@ -393,105 +386,18 @@ export const modifyMailForUser = async (
   await runAuthorizedGmailChatRequest(input, async (accessToken) => {
     const { action, id, target } = input;
 
-    if (target === "thread") {
-      switch (action) {
-        case "mark_read": {
-          await markThreadAsRead(accessToken, id, input.signal);
-          break;
-        }
-        case "mark_unread": {
-          await markThreadAsUnread(accessToken, id, input.signal);
-          break;
-        }
-        case "star": {
-          await updateThreadLabels(
-            accessToken,
-            id,
-            { addLabelIds: [GMAIL_STARRED_LABEL] },
-            input.signal
-          );
-          break;
-        }
-        case "unstar": {
-          await updateThreadLabels(
-            accessToken,
-            id,
-            { removeLabelIds: [GMAIL_STARRED_LABEL] },
-            input.signal
-          );
-          break;
-        }
-        case "archive": {
-          await updateThreadLabels(
-            accessToken,
-            id,
-            { removeLabelIds: [GMAIL_INBOX_LABEL] },
-            input.signal
-          );
-          break;
-        }
-        case "trash": {
-          await moveThreadToTrash(accessToken, id, input.signal);
-          break;
-        }
-        case "untrash": {
-          await untrashThread(accessToken, id, input.signal);
-          break;
-        }
-        default: {
-          break;
-        }
-      }
-    } else {
-      switch (action) {
-        case "mark_read": {
-          await markMessageAsRead(accessToken, id, input.signal);
-          break;
-        }
-        case "mark_unread": {
-          await markMessageAsUnread(accessToken, id, input.signal);
-          break;
-        }
-        case "star": {
-          await updateMessageLabels(
-            accessToken,
-            id,
-            { addLabelIds: [GMAIL_STARRED_LABEL] },
-            input.signal
-          );
-          break;
-        }
-        case "unstar": {
-          await updateMessageLabels(
-            accessToken,
-            id,
-            { removeLabelIds: [GMAIL_STARRED_LABEL] },
-            input.signal
-          );
-          break;
-        }
-        case "archive": {
-          await updateMessageLabels(
-            accessToken,
-            id,
-            { removeLabelIds: [GMAIL_INBOX_LABEL] },
-            input.signal
-          );
-          break;
-        }
-        case "trash": {
-          await moveMessageToTrash(accessToken, id, input.signal);
-          break;
-        }
-        case "untrash": {
-          await untrashMessage(accessToken, id, input.signal);
-          break;
-        }
-        default: {
-          break;
-        }
-      }
-    }
+    const changes = {
+      archive: { removeLabelIds: [GMAIL_INBOX_LABEL] },
+      mark_read: { removeLabelIds: ["UNREAD"] },
+      mark_unread: { addLabelIds: ["UNREAD"] },
+      star: { addLabelIds: [GMAIL_STARRED_LABEL] },
+      trash: "trash",
+      unstar: { removeLabelIds: [GMAIL_STARRED_LABEL] },
+      untrash: "untrash",
+    } satisfies Record<ModifyMailResult["action"], GmailMetadataChange>;
+    const change = changes[action];
+    const mutate = target === "thread" ? mutateGmailThread : mutateGmailMessage;
+    await mutate(accessToken, id, change, input.signal);
 
     return {
       action,

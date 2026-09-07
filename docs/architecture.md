@@ -34,7 +34,7 @@ TanStack Start application containing:
 - TanStack Query configuration and persisted caches
 - consent-gated browser analytics
 
-Mailbox organization separates state, saved-view actions, rule actions and editors. Message cards and inspection, domain DNS and mail routing, and action forms live beside their page controllers in feature-owned modules. Shared types describe their boundaries without importing page rendering at runtime.
+Mailbox organization separates state, saved-view actions, rule actions and editors. Message cards and inspection, domain DNS and mail routing, and connector settings live beside their page controllers in feature-owned modules. Shared types describe their boundaries without importing page rendering at runtime.
 
 API handlers remain under `apps/web/src/routes/api/**`. Request-scoped auth and SSR data use route loaders or TanStack Start server functions.
 
@@ -62,7 +62,7 @@ Owns the Drizzle schema, client, migrations, schema-drift checks, and migration 
 
 Every Worker invocation uses `withRequestDatabaseClient`; unscoped Worker database access throws. The same client remains available to nested calls and streamed response work. Cloudflare closes invocation sockets automatically, including Hyperdrive connections. Node processes reuse a bounded pool, with one connection in local development and five elsewhere; idle connections close after 20 seconds. See Cloudflare's [connection lifecycle](https://developers.cloudflare.com/hyperdrive/concepts/connection-lifecycle/) and documented [runtime detection](https://developers.cloudflare.com/workers/runtime-apis/web-standards/#navigatoruseragent).
 
-Interactive write requests use database-backed rate limits. The minute dispatcher deletes up to 5,000 expired IP buckets per run, using the expiry index and skipping locked rows. The local `mail-recovery` trigger performs the same cleanup. During database failure, each isolate retains at most 1,000 fallback identities and rejects new identities at capacity until entries expire. Signed billing webhooks bypass the interactive login bucket and remain subject to their own signature validation. Read-only requests do not advertise a measured remaining allowance.
+Interactive write requests use database-backed rate limits. The per-minute mail maintenance worker deletes up to 5,000 expired IP buckets per run, using the expiry index and skipping locked rows. The local `mail-recovery` trigger performs the same cleanup. During database failure, each isolate retains at most 1,000 fallback identities and rejects new identities at capacity until entries expire. Signed billing webhooks bypass the interactive login bucket and remain subject to their own signature validation. Read-only requests do not advertise a measured remaining allowance.
 
 ### `packages/mail` and `packages/gmail`
 
@@ -176,9 +176,9 @@ For private production testing, a 100% subscription discount must cover every in
 
 Managed mail rules store the matching decision, definition, and completed actions before forwarding. Forwarding uses the send coordinator outside the rule transaction, with a stable identity per action. Ingestion retries resume the stored definition even after a rule edit; explicitly applying an edited rule to existing messages creates a new revision. Historical attempts with uncertain delivery require review.
 
-Historical rule runs advance through the existing per-minute dispatcher, independently of status polling. Each job stores its definition and checks its lease and running status before updating progress. Cancellation prevents further messages and progress writes; an already executing message can finish. A failure retains the cursor and diagnostic. Running the same rule revision again resumes the failed job. Local execution uses `vp run dev:trigger mail-recovery`.
+Historical rule runs advance through the per-minute mail maintenance worker, independently of status polling. Each job stores its definition and checks its lease and running status before updating progress. Cancellation prevents further messages and progress writes; an already executing message can finish. A failure retains the cursor and diagnostic. Running the same rule revision again resumes the failed job. Local execution uses `vp run dev:trigger mail-recovery`.
 
-Apply the additive rule migrations `20260907172554_thankful_alex_power` and `20260907211509_abnormal_amphibian` before releasing these changes. Drain older ingestion and rule workers before enabling the new execution path because they do not understand the stored action decisions. Keep the historical application table during this transition.
+Apply the consolidated migration `20260907233131_melodic_blacklash` before releasing these changes. Drain older ingestion and rule workers before enabling the new execution path because they do not understand the stored action decisions. Keep the historical application table during this transition.
 
 SST provisions both providers. AWS owns the SES receipt bucket, receipt topic and role, and mail-processing functions. Cloudflare owns Gmail notification ingress, queueing, scheduled maintenance, and live-sync Durable Objects.
 
@@ -193,18 +193,23 @@ The root [`sst.config.ts`](../sst.config.ts) owns only app-wide SST settings and
 - `secrets.ts` declares stage-aware `sst.Secret` resources and Cloudflare secret bindings.
 - `database.ts` owns the Cloudflare Hyperdrive binding.
 - `web.ts` owns the TanStack Start Worker and its common bindings.
-- Mailbox actions execute asynchronously from their persisted runs: Gmail sync and maintenance dispatch new runs straight onto Cloudflare Queues, while a per-minute fallback cron atomically claims SES-ingested, lost, or crashed runs before dispatching them. Transient execution failures stay retryable until the queue's final delivery settles the run as failed.
-- Connector writes persist their planned arguments and an input hash before execution. Successful results are reusable even without an external object ID. Changed arguments, legacy effects without a plan, and ambiguous provider outcomes stop the run for review instead of repeating a write. Effect identities include the branch's edge path, so separate visits to a node do not collide. Merge nodes support pass-through only; legacy `wait_all` configurations must be corrected before publishing or running.
-- Action execution remains on Queues with sequential graph traversal. Each attempt has a four-minute deadline, 45-second model/tool steps, a renewed 90-second ownership lease, and a six-attempt ceiling across queue redeliveries. Database transitions and external-write claims check the attempt generation. Completed step results include their selected output ports and variables, so retries reuse decisions. Frame records remain readable for old runs; new execution does not write them. Dispatch claims at most 100 runs per tick.
-- Before loading message context and before each new step, actions check the revision author's current mailbox permission, enabled state and AI entitlement. Team-manager status does not replace a mailbox grant. Usage is charged to that same actor; a billing failure stops automatic execution and requires review.
-- Paid action runs reserve 25 cents of billing headroom under a short organization-row lock. Concurrent reservations include existing usage and other live reservations. Reservations expire after five minutes and are released at completion; the four-minute run deadline stays shorter than the reservation. A run stops starting model nodes after reported cost reaches 25 cents. This is admission control, not a hard provider spending cap: a model step already in flight may exceed the allowance, and other AI features still use their existing credit checks. Actual reported cost is billed separately, so a reservation is never a usage charge.
-- Apply the additive `20260907221016_worried_dreaming_celestial` credit-reservation migration before releasing the action budget checks. Drain older action workers so they cannot execute without the new authorization and reservation checks.
-
-- The cleanup keeps this restricted engine instead of adding Workflows alongside existing run storage. [Cloudflare Workflows](https://developers.cloudflare.com/workflows/reference/limits/) supports durable steps and longer lifetimes, but completed state retention is 30 days on paid plans and external-effect reconciliation would still need our database. [Local Workflows execution](https://developers.cloudflare.com/workflows/build/local-development/) is supported by Wrangler. Reconsider that migration if actions need durable sleeps, human waits, or longer execution; do not add those semantics to this engine. No deployed Workflows comparison was performed in this cleanup.
-- Apply `20260907212421_slim_ricochet` before the revised executor and drain old workers. Legacy completed steps without replay results require review rather than generating new decisions. This additive transition preserves historical run readers.
-- Apply `20260907144353_redundant_typhoid_mary` before deploying the effect guard. Pause dispatch and drain old action workers before activating it: older workers do not understand incomplete effect records. Existing completed effect records remain intact; an old partially executed run may require review. The migration only adds nullable columns and permits missing external IDs.
+- `mail-maintenance.ts` owns the per-minute `MailMaintenance` cron. `packages/cloudflare/src/mail-maintenance-worker.ts` runs send recovery, storage cleanup, expired rate-limit bucket cleanup, and managed rule backfills.
 - `mail.ts` owns SES receipt storage, processing, ingress, and send permissions.
 - `gmail.ts` owns Gmail live-sync and Pub/Sub resources on Cloudflare.
 - `app.ts` is the small stage-aware composition entry point; `types.ts` contains shared infra boundary types.
 
 SST is the runtime source of truth for application credentials and tokens; their canonical names live in `packages/env/src/sst-secrets.ts`. Cloudflare receives them as secret-text bindings, while AWS functions receive values derived from SST secret outputs. Deployment environment variables are reserved for non-secret configuration such as feature switches, resource identifiers, domains, and provider deployment credentials.
+
+## Custom action removal and release
+
+Custom actions, their settings UI, graph execution, queue, dispatcher, and action-specific credit reservations are removed. Connectors remain available to chat, and managed inbox rules remain supported. The new application does not enqueue custom action runs.
+
+Existing action tables and records remain untouched for an expand/contract release. Before rollout, pause old action dispatch and quiesce old producers, then drain in-flight action workers and account for queued retries. Confirm that old consumers cannot resume before removing their infrastructure. Removing code does not stop an already deployed worker. Review uncertain external effects instead of replaying them automatically. Table deletion belongs in a later, separately reviewed contract migration after the rollback window.
+
+Deploy `MailMaintenance` with the application so send recovery, object cleanup, rate-limit cleanup, and managed rule backfills continue every minute. Drain older send, ingestion, and rule workers before enabling the revised recovery paths. No production deployment or migration was performed for this cleanup.
+
+## Migration workflow
+
+Use `vp run db:generate` after a coherent schema change and `vp run db:check` before release. Drizzle generates a full schema snapshot beside each SQL migration and compares snapshots to derive later changes. Keep both files in version control. Large snapshots are expected, even when the SQL is short. See [Drizzle generation](https://orm.drizzle.team/docs/drizzle-kit-generate).
+
+Seven unpublished feature migrations were consolidated into `packages/database/drizzle/20260907233131_melodic_blacklash`. A read-only check of the development ledger confirmed that none of the seven had been applied there. Main-branch migration history is unchanged. Consolidate only unapplied feature migrations, regenerate against the unchanged baseline, and review the SQL and migration checks. Never rewrite applied migration history or reset a persistent database to accommodate consolidation. The consolidated migration must pass the protected release workflow before deployment.

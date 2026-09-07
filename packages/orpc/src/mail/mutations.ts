@@ -1,17 +1,10 @@
 import { ORPCError } from "@orpc/server";
+import type { GmailMetadataChange } from "@quieter/gmail";
 import {
   batchModifyMessages,
+  mutateGmailMessage,
+  mutateGmailThread,
   getGmailMessageThreadAssociations,
-  markMessageAsRead,
-  markMessageAsUnread,
-  markThreadAsRead,
-  markThreadAsUnread,
-  moveMessageToTrash,
-  moveThreadToTrash,
-  untrashMessage,
-  untrashThread,
-  updateMessageLabels,
-  updateThreadLabels,
 } from "@quieter/gmail";
 import { reportError } from "@quieter/observability";
 
@@ -35,6 +28,144 @@ import {
   recordGmailLabelFeedback,
 } from "./feedback";
 import type { MailInputs } from "./inputs";
+
+type MetadataOperation =
+  | "read"
+  | "unread"
+  | "trash"
+  | "untrash"
+  | {
+      addLabelIds?: string[];
+      removeLabelIds?: string[];
+    };
+
+type MessageMutationArgs = {
+  context: MailRequestContext;
+  input: { mailboxId: string; messageId: string };
+};
+
+const mutateMessage = async (
+  { context, input }: MessageMutationArgs,
+  operation: MetadataOperation
+) => {
+  const selectedMailbox = await assertAccessibleMailbox({
+    mailboxId: input.mailboxId,
+    userId: context.userId,
+  });
+  if (selectedMailbox.provider === "managed") {
+    const authorizedInput = { ...input, userId: context.userId };
+    if (operation === "read" || operation === "unread") {
+      return await setManagedMessageReadState({
+        ...authorizedInput,
+        read: operation === "read",
+      });
+    }
+    if (operation === "trash" || operation === "untrash") {
+      return await setManagedMessageMailboxState({
+        ...authorizedInput,
+        state: operation === "trash" ? "trash" : "active",
+      });
+    }
+    const result = await updateSingleManagedMessageLabels({
+      ...authorizedInput,
+      ...operation,
+    });
+    await recordLabelFeedback({
+      ...operation,
+      mailboxId: input.mailboxId,
+      providerMessageIds: [result.id],
+      userId: context.userId,
+    });
+    return result;
+  }
+  return await callGmail(context, input.mailboxId, async (accessToken) => {
+    let change: GmailMetadataChange;
+    if (operation === "read") {
+      change = { removeLabelIds: ["UNREAD"] };
+    } else if (operation === "unread") {
+      change = { addLabelIds: ["UNREAD"] };
+    } else {
+      change = operation;
+    }
+    const result = await mutateGmailMessage(
+      accessToken,
+      input.messageId,
+      change
+    );
+    if (typeof operation !== "string") {
+      await recordGmailLabelFeedback({
+        accessToken,
+        ...operation,
+        mailboxId: input.mailboxId,
+        providerMessageIds: [result.id],
+        userId: context.userId,
+      });
+    }
+    return result;
+  });
+};
+
+type ThreadMutationArgs = {
+  context: MailRequestContext;
+  input: { mailboxId: string; threadId: string };
+};
+
+const mutateThread = async (
+  { context, input }: ThreadMutationArgs,
+  operation: MetadataOperation
+) => {
+  const selectedMailbox = await assertAccessibleMailbox({
+    mailboxId: input.mailboxId,
+    userId: context.userId,
+  });
+  if (selectedMailbox.provider === "managed") {
+    const authorizedInput = { ...input, userId: context.userId };
+    if (operation === "read" || operation === "unread") {
+      return await setManagedThreadReadState({
+        ...authorizedInput,
+        read: operation === "read",
+      });
+    }
+    if (operation === "trash" || operation === "untrash") {
+      return await setManagedThreadMailboxState({
+        ...authorizedInput,
+        state: operation === "trash" ? "trash" : "active",
+      });
+    }
+    const result = await updateManagedThreadLabels({
+      ...authorizedInput,
+      ...operation,
+    });
+    await recordLabelFeedback({
+      ...operation,
+      mailboxId: input.mailboxId,
+      providerMessageIds: result.messages.map((message) => message.id),
+      userId: context.userId,
+    });
+    return result;
+  }
+  return await callGmail(context, input.mailboxId, async (accessToken) => {
+    let change: GmailMetadataChange;
+    if (operation === "read") {
+      change = { removeLabelIds: ["UNREAD"] };
+    } else if (operation === "unread") {
+      change = { addLabelIds: ["UNREAD"] };
+    } else {
+      change = operation;
+    }
+    const result = await mutateGmailThread(accessToken, input.threadId, change);
+    if (typeof operation !== "string") {
+      await recordGmailLabelFeedback({
+        accessToken,
+        ...operation,
+        mailboxId: input.mailboxId,
+        providerMessageIds: result.messages.map((message) => message.id),
+        userId: context.userId,
+      });
+    }
+    return result;
+  });
+};
 
 export const mutationsMailOperations = {
   applyChanges: async ({
@@ -132,14 +263,24 @@ export const mutationsMailOperations = {
           await Promise.all(
             messageIds.map(
               async (messageId) =>
-                await moveMessageToTrash(accessToken, messageId, signal)
+                await mutateGmailMessage(
+                  accessToken,
+                  messageId,
+                  "trash",
+                  signal
+                )
             )
           );
         } else if (input.command.destination === "inbox") {
           await Promise.all(
             messageIds.map(
               async (messageId) =>
-                await untrashMessage(accessToken, messageId, signal)
+                await mutateGmailMessage(
+                  accessToken,
+                  messageId,
+                  "untrash",
+                  signal
+                )
             )
           );
           await batchModifyMessages(
@@ -176,291 +317,36 @@ export const mutationsMailOperations = {
       }
     );
   },
-  markMessageAsRead: async ({
-    context,
-    input,
-  }: {
-    context: MailRequestContext;
-    input: MailInputs["markMessageAsRead"];
-  }) => {
-    const selectedMailbox = await assertAccessibleMailbox({
-      mailboxId: input.mailboxId,
-      userId: context.userId,
-    });
-    if (selectedMailbox.provider === "managed") {
-      return await setManagedMessageReadState({
-        ...input,
-        read: true,
-        userId: context.userId,
-      });
-    }
-
-    return await callGmail(
-      context,
-      input.mailboxId,
-      async (accessToken) =>
-        await markMessageAsRead(accessToken, input.messageId)
-    );
-  },
-  markMessageAsUnread: async ({
-    context,
-    input,
-  }: {
-    context: MailRequestContext;
-    input: MailInputs["markMessageAsUnread"];
-  }) => {
-    const selectedMailbox = await assertAccessibleMailbox({
-      mailboxId: input.mailboxId,
-      userId: context.userId,
-    });
-    if (selectedMailbox.provider === "managed") {
-      return await setManagedMessageReadState({
-        ...input,
-        read: false,
-        userId: context.userId,
-      });
-    }
-
-    return await callGmail(
-      context,
-      input.mailboxId,
-      async (accessToken) =>
-        await markMessageAsUnread(accessToken, input.messageId)
-    );
-  },
-  markThreadAsRead: async ({
-    context,
-    input,
-  }: {
-    context: MailRequestContext;
-    input: MailInputs["markThreadAsRead"];
-  }) => {
-    const selectedMailbox = await assertAccessibleMailbox({
-      mailboxId: input.mailboxId,
-      userId: context.userId,
-    });
-    if (selectedMailbox.provider === "managed") {
-      return await setManagedThreadReadState({
-        ...input,
-        read: true,
-        userId: context.userId,
-      });
-    }
-
-    return await callGmail(
-      context,
-      input.mailboxId,
-      async (accessToken) => await markThreadAsRead(accessToken, input.threadId)
-    );
-  },
-  markThreadAsUnread: async ({
-    context,
-    input,
-  }: {
-    context: MailRequestContext;
-    input: MailInputs["markThreadAsUnread"];
-  }) => {
-    const selectedMailbox = await assertAccessibleMailbox({
-      mailboxId: input.mailboxId,
-      userId: context.userId,
-    });
-    if (selectedMailbox.provider === "managed") {
-      return await setManagedThreadReadState({
-        ...input,
-        read: false,
-        userId: context.userId,
-      });
-    }
-
-    return await callGmail(
-      context,
-      input.mailboxId,
-      async (accessToken) =>
-        await markThreadAsUnread(accessToken, input.threadId)
-    );
-  },
-  moveMessageToTrash: async ({
-    context,
-    input,
-  }: {
-    context: MailRequestContext;
-    input: MailInputs["moveMessageToTrash"];
-  }) => {
-    const selectedMailbox = await assertAccessibleMailbox({
-      mailboxId: input.mailboxId,
-      userId: context.userId,
-    });
-    if (selectedMailbox.provider === "managed") {
-      return await setManagedMessageMailboxState({
-        ...input,
-        state: "trash",
-        userId: context.userId,
-      });
-    }
-
-    return await callGmail(
-      context,
-      input.mailboxId,
-      async (accessToken) =>
-        await moveMessageToTrash(accessToken, input.messageId)
-    );
-  },
-  moveThreadToTrash: async ({
-    context,
-    input,
-  }: {
-    context: MailRequestContext;
-    input: MailInputs["moveThreadToTrash"];
-  }) => {
-    const selectedMailbox = await assertAccessibleMailbox({
-      mailboxId: input.mailboxId,
-      userId: context.userId,
-    });
-    if (selectedMailbox.provider === "managed") {
-      return await setManagedThreadMailboxState({
-        ...input,
-        state: "trash",
-        userId: context.userId,
-      });
-    }
-
-    return await callGmail(
-      context,
-      input.mailboxId,
-      async (accessToken) =>
-        await moveThreadToTrash(accessToken, input.threadId)
-    );
-  },
-  untrashMessage: async ({
-    context,
-    input,
-  }: {
-    context: MailRequestContext;
-    input: MailInputs["untrashMessage"];
-  }) => {
-    const selectedMailbox = await assertAccessibleMailbox({
-      mailboxId: input.mailboxId,
-      userId: context.userId,
-    });
-    if (selectedMailbox.provider === "managed") {
-      return await setManagedMessageMailboxState({
-        ...input,
-        state: "active",
-        userId: context.userId,
-      });
-    }
-
-    return await callGmail(
-      context,
-      input.mailboxId,
-      async (accessToken) => await untrashMessage(accessToken, input.messageId)
-    );
-  },
-  untrashThread: async ({
-    context,
-    input,
-  }: {
-    context: MailRequestContext;
-    input: MailInputs["untrashThread"];
-  }) => {
-    const selectedMailbox = await assertAccessibleMailbox({
-      mailboxId: input.mailboxId,
-      userId: context.userId,
-    });
-    if (selectedMailbox.provider === "managed") {
-      return await setManagedThreadMailboxState({
-        ...input,
-        state: "active",
-        userId: context.userId,
-      });
-    }
-
-    return await callGmail(
-      context,
-      input.mailboxId,
-      async (accessToken) => await untrashThread(accessToken, input.threadId)
-    );
-  },
-  updateMessageLabels: async ({
-    context,
-    input,
-  }: {
+  markMessageAsRead: async (args: MessageMutationArgs) =>
+    await mutateMessage(args, "read"),
+  markMessageAsUnread: async (args: MessageMutationArgs) =>
+    await mutateMessage(args, "unread"),
+  markThreadAsRead: async (args: ThreadMutationArgs) =>
+    await mutateThread(args, "read"),
+  markThreadAsUnread: async (args: ThreadMutationArgs) =>
+    await mutateThread(args, "unread"),
+  moveMessageToTrash: async (args: MessageMutationArgs) =>
+    await mutateMessage(args, "trash"),
+  moveThreadToTrash: async (args: ThreadMutationArgs) =>
+    await mutateThread(args, "trash"),
+  untrashMessage: async (args: MessageMutationArgs) =>
+    await mutateMessage(args, "untrash"),
+  untrashThread: async (args: ThreadMutationArgs) =>
+    await mutateThread(args, "untrash"),
+  updateMessageLabels: async (args: {
     context: MailRequestContext;
     input: MailInputs["updateMessageLabels"];
-  }) => {
-    const selectedMailbox = await assertAccessibleMailbox({
-      mailboxId: input.mailboxId,
-      userId: context.userId,
-    });
-    if (selectedMailbox.provider === "managed") {
-      const result = await updateSingleManagedMessageLabels({
-        ...input,
-        userId: context.userId,
-      });
-      await recordLabelFeedback({
-        addLabelIds: input.addLabelIds,
-        mailboxId: input.mailboxId,
-        providerMessageIds: [result.id],
-        removeLabelIds: input.removeLabelIds,
-        userId: context.userId,
-      });
-      return result;
-    }
-    return await callGmail(context, input.mailboxId, async (accessToken) => {
-      const result = await updateMessageLabels(accessToken, input.messageId, {
-        addLabelIds: input.addLabelIds,
-        removeLabelIds: input.removeLabelIds,
-      });
-      await recordGmailLabelFeedback({
-        accessToken,
-        addLabelIds: input.addLabelIds,
-        mailboxId: input.mailboxId,
-        providerMessageIds: [result.id],
-        removeLabelIds: input.removeLabelIds,
-        userId: context.userId,
-      });
-      return result;
-    });
-  },
-  updateThreadLabels: async ({
-    context,
-    input,
-  }: {
+  }) =>
+    await mutateMessage(args, {
+      addLabelIds: args.input.addLabelIds,
+      removeLabelIds: args.input.removeLabelIds,
+    }),
+  updateThreadLabels: async (args: {
     context: MailRequestContext;
     input: MailInputs["updateThreadLabels"];
-  }) => {
-    const selectedMailbox = await assertAccessibleMailbox({
-      mailboxId: input.mailboxId,
-      userId: context.userId,
-    });
-    if (selectedMailbox.provider === "managed") {
-      const result = await updateManagedThreadLabels({
-        ...input,
-        userId: context.userId,
-      });
-      await recordLabelFeedback({
-        addLabelIds: input.addLabelIds,
-        mailboxId: input.mailboxId,
-        providerMessageIds: result.messages.map((message) => message.id),
-        removeLabelIds: input.removeLabelIds,
-        userId: context.userId,
-      });
-      return result;
-    }
-    return await callGmail(context, input.mailboxId, async (accessToken) => {
-      const result = await updateThreadLabels(accessToken, input.threadId, {
-        addLabelIds: input.addLabelIds,
-        removeLabelIds: input.removeLabelIds,
-      });
-      await recordGmailLabelFeedback({
-        accessToken,
-        addLabelIds: input.addLabelIds,
-        mailboxId: input.mailboxId,
-        providerMessageIds: result.messages.map((message) => message.id),
-        removeLabelIds: input.removeLabelIds,
-        userId: context.userId,
-      });
-      return result;
-    });
-  },
+  }) =>
+    await mutateThread(args, {
+      addLabelIds: args.input.addLabelIds,
+      removeLabelIds: args.input.removeLabelIds,
+    }),
 };

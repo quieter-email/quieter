@@ -32,14 +32,6 @@ const SETTINGS_SEARCH_KEYWORDS: Record<SettingsDetailTab, readonly string[]> = {
     "sign out",
     "delete account",
   ],
-  actions: [
-    "automation",
-    "workflow",
-    "rules",
-    "triggers",
-    "linear",
-    "integrations",
-  ],
   ai: [
     "model",
     "memory",

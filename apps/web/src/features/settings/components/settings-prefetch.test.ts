@@ -36,29 +36,6 @@ describe("settings prefetch hierarchy", () => {
     ).toStrictEqual([["auth", "organization", "team-one", "full"]]);
   });
 
-  test("warms only the default mailbox action list on actions intent", async () => {
-    const { prefetchQuery, queryClient } = createQueryClient();
-    queryClient.setQueryData(["mailboxes"], {
-      groups: [
-        {
-          mailboxes: [
-            { id: "api-one", provider: "api" },
-            { id: "gmail-one", provider: "gmail" },
-            { id: "managed-one", provider: "managed" },
-          ],
-        },
-      ],
-    });
-
-    await prefetchSettingsTab(queryClient, "actions");
-
-    expect(
-      new Set(prefetchQuery.mock.calls.map(([options]) => options.queryKey))
-    ).toStrictEqual(
-      new Set([["mailboxes"], ["connectors"], ["mailbox-actions", "gmail-one"]])
-    );
-  });
-
   test("warms manager-only mailbox detail data without fetching it for private mailboxes", async () => {
     const { prefetchQuery, queryClient } = createQueryClient();
 

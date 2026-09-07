@@ -12,7 +12,6 @@
     "./format-transcribed-email": "./src/format-transcribed-email.ts",
     "./generate-chat-title": "./src/generate-chat-title.ts",
     "./generation": "./src/generation.ts",
-    "./mailbox-actions": "./src/mailbox-actions.ts",
     "./memory-embeddings": "./src/memory-embeddings.ts",
     "./openrouter": "./src/openrouter.ts",
     "./openrouter-transcription": "./src/openrouter-transcription.ts",

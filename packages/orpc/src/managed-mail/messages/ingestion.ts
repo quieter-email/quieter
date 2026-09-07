@@ -11,7 +11,6 @@ import { parseRawMailMessage } from "@quieter/mail/raw-message";
 import type { ParsedRawMailMessage } from "@quieter/mail/raw-message";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
-import { enqueueMailboxActionsForMessage } from "../../mailbox-actions/enqueue";
 import { processManagedMailAutomation } from "../automation";
 import { inheritManagedThreadLabels } from "../labels/repository";
 import { applyManagedRulesToMessage } from "../rules/evaluator";
@@ -86,11 +85,6 @@ const runPostIngestionOrganization = async (input: {
   await processManagedMailAutomation({
     mailboxId: input.mailboxId,
     messageId: input.messageId,
-  });
-  await enqueueMailboxActionsForMessage({
-    mailboxId: input.mailboxId,
-    sourceMessageId: input.providerMessageId,
-    sourceThreadId: input.threadId,
   });
 };
 

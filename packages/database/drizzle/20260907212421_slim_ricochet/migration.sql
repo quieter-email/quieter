@@ -1,1 +1,0 @@
-ALTER TABLE "mailboxActionStepRun" ADD COLUMN "executionResult" jsonb;

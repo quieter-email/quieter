@@ -10,7 +10,6 @@ import {
   gmailAutoLabelEvent,
   gmailUsefulDetailSettings,
   gmailWatchState,
-  mailboxAction,
   mailboxAutomationSettings,
   mailbox,
 } from "@quieter/database/schema";
@@ -23,23 +22,12 @@ import {
   listGmailMessageIds,
   listLabels,
   stopGmailWatch,
-  updateMessageLabels,
+  mutateGmailMessage,
   watchGmailMailbox,
 } from "@quieter/gmail";
 import { MAILBOX_LABELS } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
-import {
-  and,
-  eq,
-  exists,
-  isNotNull,
-  isNull,
-  lt,
-  lte,
-  or,
-  sql,
-} from "drizzle-orm";
-import type { AnyColumn } from "drizzle-orm";
+import { and, eq, isNull, lt, lte, or, sql } from "drizzle-orm";
 
 import {
   buildMailMemoryQuery,
@@ -59,7 +47,6 @@ import {
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import { deferAutoLabelAutomation } from "../mail-automation/auto-label-events";
 import { reportAutoLabelUsage } from "../mail-automation/usage";
-import { enqueueMailboxActionsForMessage } from "../mailbox-actions/enqueue";
 
 const WATCH_RENEWAL_INTERVAL_MS = 1000 * 60 * 60 * 20;
 const WATCH_EXPIRATION_BUFFER_MS = 1000 * 60 * 60 * 48;
@@ -126,39 +113,6 @@ const recordWatchError = async (mailboxId: string, error: unknown) => {
       updatedAt: now,
     })
     .where(eq(gmailWatchState.mailboxId, mailboxId));
-};
-
-type OnRunsEnqueued = (runIds: string[]) => Promise<void> | void;
-
-const enqueueMailboxActionRuns = async (input: {
-  mailboxId: string;
-  messageIds: string[];
-  onRunsEnqueued?: OnRunsEnqueued;
-}) => {
-  if (input.messageIds.length === 0) {
-    return;
-  }
-
-  const results = await Promise.allSettled(
-    input.messageIds.map(
-      async (messageId) =>
-        await enqueueMailboxActionsForMessage({
-          mailboxId: input.mailboxId,
-          sourceMessageId: messageId,
-        })
-    )
-  );
-  const runIds: string[] = [];
-  for (const result of results) {
-    if (result.status === "rejected") {
-      reportError(result.reason, {
-        operation: "gmail-sync:enqueue-mailbox-action",
-      });
-      continue;
-    }
-    runIds.push(...result.value.enqueuedRunIds);
-  }
-  await input.onRunsEnqueued?.(runIds);
 };
 
 const claimMailboxProcessingLease = async (mailboxId: string) => {
@@ -447,7 +401,7 @@ const processAutoLabelMessage = async ({
 
     if (labelIds.length > 0) {
       try {
-        await updateMessageLabels(accessToken, gmailMessageId, {
+        await mutateGmailMessage(accessToken, gmailMessageId, {
           addLabelIds: labelIds,
         });
       } catch (error) {
@@ -650,7 +604,6 @@ const processHistoryRecoveryPage = async ({
   automationRuntime,
   autoLabelEnabled,
   mailboxId,
-  onRunsEnqueued,
   organizationId,
   usefulDetailsEnabled,
   userId,
@@ -659,7 +612,6 @@ const processHistoryRecoveryPage = async ({
   automationRuntime: MailAutomationRuntime;
   autoLabelEnabled: boolean;
   mailboxId: string;
-  onRunsEnqueued?: OnRunsEnqueued;
   organizationId: string | null;
   usefulDetailsEnabled: boolean;
   userId: string;
@@ -702,11 +654,6 @@ const processHistoryRecoveryPage = async ({
     usefulDetailsEnabled,
     userId,
   });
-  await enqueueMailboxActionRuns({
-    mailboxId,
-    messageIds: page.messageIds,
-    onRunsEnqueued,
-  });
 
   await db
     .update(gmailWatchState)
@@ -722,13 +669,11 @@ const processHistoryRecoveryPage = async ({
 const processMailboxHistory = async ({
   mailboxId,
   maxHistoryPages,
-  onRunsEnqueued,
   organizationId,
   userId,
 }: {
   mailboxId: string;
   maxHistoryPages: number;
-  onRunsEnqueued?: OnRunsEnqueued;
   organizationId: string | null;
   userId: string;
 }) => {
@@ -864,11 +809,6 @@ const processMailboxHistory = async ({
             usefulDetailsEnabled,
             userId,
           });
-          await enqueueMailboxActionRuns({
-            mailboxId,
-            messageIds: page.messageIds,
-            onRunsEnqueued,
-          });
           const now = new Date();
           await db
             .update(gmailWatchState)
@@ -893,7 +833,6 @@ const processMailboxHistory = async ({
           autoLabelEnabled,
           automationRuntime,
           mailboxId,
-          onRunsEnqueued,
           organizationId,
           usefulDetailsEnabled,
           userId,
@@ -1030,17 +969,7 @@ const disableMailboxWatch = async (mailboxId: string, userId: string) => {
     .where(eq(gmailWatchState.mailboxId, mailboxId));
 };
 
-// Maintenance selection is due-driven: watch renewal is the only job every
-// connected mailbox needs on a schedule, while missed-notification
-// reconciliation only matters for mailboxes with enabled automations, because
-// users sync when they open the app and pushes keep active mailboxes fresh.
-// Deterministic per-mailbox jitter spreads renewals and probes across their
-// windows so they do not cluster on one tick.
-const MAINTENANCE_JITTER_RANGE_SECONDS = 2 * 60 * 60;
-
-const mailboxJitterSeconds = (column: AnyColumn) =>
-  sql`((('x' || md5(${column}))::bit(32)::int & 2147483647) % ${MAINTENANCE_JITTER_RANGE_SECONDS})`;
-
+// Renew expiring watches; each maintenance run also reconciles missed notifications.
 export const listGmailPubSubMaintenanceJobs = async (limit = 500) =>
   await db
     .select({
@@ -1062,29 +991,7 @@ export const listGmailPubSubMaintenanceJobs = async (limit = 500) =>
           ),
           lte(
             gmailWatchState.watchRenewedAt,
-            sql`now() - interval '36 hours' - make_interval(secs => ${mailboxJitterSeconds(mailbox.id)})`
-          ),
-          and(
-            exists(
-              db
-                .select({ one: sql`1` })
-                .from(mailboxAction)
-                .where(
-                  and(
-                    eq(mailboxAction.mailboxId, mailbox.id),
-                    eq(mailboxAction.enabled, true),
-                    eq(mailboxAction.status, "ready"),
-                    isNotNull(mailboxAction.publishedRevisionId)
-                  )
-                )
-            ),
-            or(
-              isNull(gmailWatchState.lastReconciledAt),
-              lte(
-                gmailWatchState.lastReconciledAt,
-                sql`now() - interval '2 hours' - make_interval(secs => ${mailboxJitterSeconds(mailbox.id)})`
-              )
-            )
+            sql`now() - interval '36 hours' - make_interval(secs => ((('x' || md5(${mailbox.id}))::bit(32)::int & 2147483647) % 7200))`
           )
         ),
         or(
@@ -1096,13 +1003,10 @@ export const listGmailPubSubMaintenanceJobs = async (limit = 500) =>
     .orderBy(sql`coalesce(${gmailWatchState.watchExpirationAt}, '-infinity')`)
     .limit(limit);
 
-export const maintainGmailPubSubMailbox = async (
-  input: {
-    mailboxId: string;
-    topicName: string;
-  },
-  options?: { onRunsEnqueued?: OnRunsEnqueued }
-) => {
+export const maintainGmailPubSubMailbox = async (input: {
+  mailboxId: string;
+  topicName: string;
+}) => {
   const [gmailMailbox] = await db
     .select({
       id: mailbox.id,
@@ -1141,7 +1045,6 @@ export const maintainGmailPubSubMailbox = async (
     const result = await processMailboxHistory({
       mailboxId: gmailMailbox.id,
       maxHistoryPages: 2,
-      onRunsEnqueued: options?.onRunsEnqueued,
       organizationId: gmailMailbox.organizationId,
       userId: gmailMailbox.ownerUserId,
     });
@@ -1165,7 +1068,6 @@ export const processGmailPubSubNotification = async (
   options?: {
     onAccepted?: (input: { mailboxId: string }) => Promise<void>;
     onProcessed?: (input: { mailboxId: string }) => Promise<void>;
-    onRunsEnqueued?: OnRunsEnqueued;
   }
 ) => {
   const [gmailMailbox] = await db
@@ -1211,7 +1113,6 @@ export const processGmailPubSubNotification = async (
   const result = await processMailboxHistory({
     mailboxId: gmailMailbox.id,
     maxHistoryPages: 5,
-    onRunsEnqueued: options?.onRunsEnqueued,
     organizationId: gmailMailbox.organizationId,
     userId: gmailMailbox.ownerUserId,
   });

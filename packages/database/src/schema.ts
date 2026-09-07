@@ -224,7 +224,6 @@ export type MailboxActionGraph = {
   }[];
   version: 1;
 };
-export type MailboxActionJsonObject = Record<string, unknown>;
 
 export type ChatMessageRole = "system" | "user" | "assistant";
 /**
@@ -960,7 +959,7 @@ export const connectorCredential = pgTable(
     encryptedAccessToken: text("encryptedAccessToken"),
     encryptedRefreshToken: text("encryptedRefreshToken"),
     id: text("id").primaryKey(),
-    metadata: jsonb("metadata").$type<MailboxActionJsonObject>(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
     provider: text("provider").$type<ConnectorProvider>().notNull(),
     providerAccountId: text("providerAccountId").notNull(),
     providerWorkspaceId: text("providerWorkspaceId"),
@@ -1262,6 +1261,7 @@ export const mailboxAutomationSettings = pgTable("mailboxAutomationSettings", {
     .default(false),
 });
 
+// Retained until the release removing custom actions has replaced all old workers.
 export const mailboxAction = pgTable(
   "mailboxAction",
   {
@@ -1396,7 +1396,7 @@ export const mailboxActionRunFrame = pgTable(
   {
     createdAt: timestamp("createdAt").notNull(),
     id: text("id").primaryKey(),
-    mergeState: jsonb("mergeState").$type<MailboxActionJsonObject>(),
+    mergeState: jsonb("mergeState").$type<Record<string, unknown>>(),
     parentFrameId: text("parentFrameId"),
     path: jsonb("path").$type<string[]>().notNull().default([]),
     runId: text("runId")
@@ -1408,7 +1408,7 @@ export const mailboxActionRunFrame = pgTable(
       .default("running"),
     updatedAt: timestamp("updatedAt").notNull(),
     variables: jsonb("variables")
-      .$type<MailboxActionJsonObject>()
+      .$type<Record<string, unknown>>()
       .notNull()
       .default({}),
   },
@@ -1427,19 +1427,18 @@ export const mailboxActionStepRun = pgTable(
     completedAt: timestamp("completedAt"),
     createdAt: timestamp("createdAt").notNull(),
     error: text("error"),
-    executionResult: jsonb("executionResult").$type<MailboxActionJsonObject>(),
     frameId: text("frameId").references(() => mailboxActionRunFrame.id, {
       onDelete: "set null",
     }),
     id: text("id").primaryKey(),
     input: jsonb("input")
-      .$type<MailboxActionJsonObject>()
+      .$type<Record<string, unknown>>()
       .notNull()
       .default({}),
     model: text("model"),
     nodeId: text("nodeId").notNull(),
     nodeType: text("nodeType").notNull(),
-    output: jsonb("output").$type<MailboxActionJsonObject>(),
+    output: jsonb("output").$type<Record<string, unknown>>(),
     runId: text("runId")
       .notNull()
       .references(() => mailboxActionRun.id, { onDelete: "cascade" }),
@@ -1448,7 +1447,7 @@ export const mailboxActionStepRun = pgTable(
       .$type<MailboxActionStepStatus>()
       .notNull()
       .default("queued"),
-    toolCalls: jsonb("toolCalls").$type<MailboxActionJsonObject[]>(),
+    toolCalls: jsonb("toolCalls").$type<Record<string, unknown>[]>(),
     updatedAt: timestamp("updatedAt").notNull(),
   },
   (table) => [
@@ -1474,22 +1473,18 @@ export const mailboxActionExternalEffect = pgTable(
       }
     ),
     createdAt: timestamp("createdAt").notNull(),
-    externalId: text("externalId"),
+    externalId: text("externalId").notNull(),
     externalUrl: text("externalUrl"),
     id: text("id").primaryKey(),
     idempotencyKey: text("idempotencyKey").notNull(),
-    input: jsonb("input").$type<MailboxActionJsonObject>(),
-    metadata: jsonb("metadata").$type<MailboxActionJsonObject>(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
     provider: text("provider").$type<MailboxActionExternalProvider>().notNull(),
-    requestHash: text("requestHash"),
-    result: jsonb("result").$type<MailboxActionJsonObject>(),
     revisionId: text("revisionId")
       .notNull()
       .references(() => mailboxActionRevision.id, { onDelete: "cascade" }),
     runId: text("runId")
       .notNull()
       .references(() => mailboxActionRun.id, { onDelete: "cascade" }),
-    status: text("status").$type<"submitting" | "succeeded" | "unknown">(),
     stepRunId: text("stepRunId").references(() => mailboxActionStepRun.id, {
       onDelete: "set null",
     }),
@@ -2460,28 +2455,6 @@ export const billingSubscription = pgTable(
     unique("billing_subscription_provider_subscription_unique").on(
       table.provider,
       table.providerSubscriptionId
-    ),
-  ]
-);
-
-export const billingCreditReservation = pgTable(
-  "billingCreditReservation",
-  {
-    amountMicroCents: bigint("amountMicroCents", { mode: "number" }).notNull(),
-    expiresAt: timestamp("expiresAt").notNull(),
-    id: text("id").primaryKey(),
-    organizationId: text("organizationId")
-      .notNull()
-      .references(() => organization.id, { onDelete: "cascade" }),
-  },
-  (table) => [
-    index("billing_credit_reservation_organization_expiry_idx").on(
-      table.organizationId,
-      table.expiresAt
-    ),
-    check(
-      "billing_credit_reservation_amount_check",
-      sql`${table.amountMicroCents} > 0`
     ),
   ]
 );

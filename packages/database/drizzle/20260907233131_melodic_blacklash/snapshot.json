@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "5147ac61-2d40-4bc0-9eb5-2d78ea5fcfac",
-  "prevIds": ["1401745c-6a2b-475d-8666-6c5d8f1b234c"],
+  "id": "e3c7f418-5eea-4da4-829b-9407a13099c4",
+  "prevIds": ["96989e00-0f86-4375-b6e0-a46c47614c07"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -5437,7 +5437,7 @@
     {
       "type": "text",
       "typeSchema": null,
-      "notNull": false,
+      "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
@@ -5494,19 +5494,6 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "input",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "mailboxActionExternalEffect"
-    },
-    {
-      "type": "jsonb",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
       "name": "metadata",
       "entityType": "columns",
       "schema": "public",
@@ -5521,32 +5508,6 @@
       "generated": null,
       "identity": null,
       "name": "provider",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "mailboxActionExternalEffect"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "requestHash",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "mailboxActionExternalEffect"
-    },
-    {
-      "type": "jsonb",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "result",
       "entityType": "columns",
       "schema": "public",
       "table": "mailboxActionExternalEffect"
@@ -5573,19 +5534,6 @@
       "generated": null,
       "identity": null,
       "name": "runId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "mailboxActionExternalEffect"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "status",
       "entityType": "columns",
       "schema": "public",
       "table": "mailboxActionExternalEffect"
@@ -6093,19 +6041,6 @@
       "generated": null,
       "identity": null,
       "name": "error",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "mailboxActionStepRun"
-    },
-    {
-      "type": "jsonb",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "executionResult",
       "entityType": "columns",
       "schema": "public",
       "table": "mailboxActionStepRun"

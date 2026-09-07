@@ -1,8 +1,6 @@
-import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import {
   billingCreditUsageEvent,
-  billingCreditReservation,
   billingSubscription,
   organization,
 } from "@quieter/database/schema";
@@ -122,73 +120,6 @@ export const getBillingCreditUsage = async (
     costMicroCents: usage?.costMicroCents ?? 0,
     creditAmountMicroCents: account.creditAmountCents * MICROCENTS_PER_CENT,
   };
-};
-
-export const reserveAiCredits = async (input: {
-  account: BillingAccount;
-  amountMicroCents: number;
-  id: string;
-}) => {
-  if (
-    !Number.isSafeInteger(input.amountMicroCents) ||
-    input.amountMicroCents <= 0
-  ) {
-    throw new Error(
-      "AI credit reservations require a positive integer amount."
-    );
-  }
-  await db.transaction(async (tx) => {
-    await tx
-      .select({ id: organization.id })
-      .from(organization)
-      .where(eq(organization.id, input.account.organizationId))
-      .for("update");
-    const now = new Date();
-    await tx
-      .delete(billingCreditReservation)
-      .where(
-        and(
-          eq(
-            billingCreditReservation.organizationId,
-            input.account.organizationId
-          ),
-          lt(billingCreditReservation.expiresAt, now)
-        )
-      );
-    const [reserved] = await tx
-      .select({
-        amount:
-          sql`coalesce(sum(${billingCreditReservation.amountMicroCents}), 0)`.mapWith(
-            Number
-          ),
-      })
-      .from(billingCreditReservation)
-      .where(
-        and(
-          eq(
-            billingCreditReservation.organizationId,
-            input.account.organizationId
-          ),
-          gt(billingCreditReservation.expiresAt, now)
-        )
-      );
-    const usage = await getBillingCreditUsage(input.account, tx);
-    if (
-      usage.costMicroCents + (reserved?.amount ?? 0) + input.amountMicroCents >
-      usage.creditAmountMicroCents
-    ) {
-      throw new ORPCError("FORBIDDEN", {
-        message:
-          "There is not enough available balance to start this action. Try again when other actions finish or add usage balance.",
-      });
-    }
-    await tx.insert(billingCreditReservation).values({
-      amountMicroCents: input.amountMicroCents,
-      expiresAt: new Date(now.getTime() + 5 * 60 * 1000),
-      id: input.id,
-      organizationId: input.account.organizationId,
-    });
-  });
 };
 
 export const recordBillingCreditUsage = async (input: {
