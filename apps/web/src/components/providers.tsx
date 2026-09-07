@@ -6,7 +6,7 @@ import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useLocation } from "@tanstack/react-router";
 import { MotionConfig } from "motion/react";
-import { useEffect, useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import type { PropsWithChildren } from "react";
 
 import { ConsentManager } from "#/components/consent-manager";
@@ -18,19 +18,10 @@ import { authClient } from "#/lib/auth";
 import { shouldRetryOrpcError } from "#/lib/orpc-errors";
 import { setQueryPersistenceUser } from "#/lib/query-persister";
 
-const QueryPersistenceSessionBoundary = () => {
-  const session = authClient.useSession();
-
-  useEffect(() => {
-    if (!session.isPending) {
-      setQueryPersistenceUser(session.data?.user.id);
-    }
-  }, [session.data?.user.id, session.isPending]);
-
-  return null;
-};
-
-export const Providers = ({ children }: PropsWithChildren) => {
+const SessionQueryProvider = ({
+  children,
+  userId,
+}: PropsWithChildren<{ userId: string | undefined }>) => {
   // The client is owned for this provider lifetime and is never replaced by a setter.
   // oxlint-disable-next-line react/hook-use-state
   const [queryClient] = useState(
@@ -46,6 +37,21 @@ export const Providers = ({ children }: PropsWithChildren) => {
       })
   );
 
+  useLayoutEffect(() => {
+    setQueryPersistenceUser(userId);
+    return () => {
+      queryClient.clear();
+    };
+  }, [queryClient, userId]);
+
+  return (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
+};
+
+export const Providers = ({ children }: PropsWithChildren) => {
+  const session = authClient.useSession();
+  const userId = session.data?.user.id;
   const pathname = useLocation({
     select: (location) => location.pathname,
   });
@@ -70,14 +76,13 @@ export const Providers = ({ children }: PropsWithChildren) => {
         >
           <ConsentManager>
             <TelemetryProvider>
-              <QueryClientProvider client={queryClient}>
-                <QueryPersistenceSessionBoundary />
+              <SessionQueryProvider key={userId ?? "anonymous"} userId={userId}>
                 <KeyboardShortcutsProvider>
                   <MailtoProtocolHandler />
                   {children}
                   <Toaster />
                 </KeyboardShortcutsProvider>
-              </QueryClientProvider>
+              </SessionQueryProvider>
             </TelemetryProvider>
             <SiteFooter />
           </ConsentManager>

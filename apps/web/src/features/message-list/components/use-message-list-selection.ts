@@ -4,7 +4,7 @@ import { useHotkey } from "@tanstack/react-hotkeys";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { shouldIgnoreAppShortcut } from "#/features/hotkeys/domain/hotkey-guards";
-import { delay, scheduleFireAndForget } from "#/lib/delay";
+import { toastError } from "#/lib/error-toast";
 import type { MailboxCategory } from "#/lib/gmail/gmail";
 import type { ThreadListEntry } from "#/lib/gmail/thread-list";
 
@@ -18,23 +18,6 @@ type SelectionState = {
   scopeKey: string;
   selectedThreadIds: Set<string>;
   selectionAnchorThreadId: string | null;
-};
-
-const waitForSmoothScrollTop = async (element: HTMLDivElement) => {
-  const deadline = Date.now() + SCROLL_WAIT_TIMEOUT_MS;
-  const poll = async (): Promise<void> => {
-    if (element.scrollTop <= SCROLL_TOP_EPSILON_PX || Date.now() >= deadline) {
-      return;
-    }
-    await delay(FRAME_DELAY_MS);
-    await poll();
-  };
-  await poll();
-};
-
-const waitForNextPaint = async () => {
-  await delay(FRAME_DELAY_MS);
-  await delay(FRAME_DELAY_MS);
 };
 
 export const useMessageListSelection = ({
@@ -165,15 +148,32 @@ export const useMessageListSelection = ({
     scrollElement.scrollTo({ behavior: "smooth", top: 0 });
 
     const finishScroll = async () => {
-      const [scrollResult] = await Promise.allSettled([
-        waitForSmoothScrollTop(scrollElement),
-      ]);
-      if (scrollResult.status === "fulfilled") {
-        await Promise.allSettled([waitForNextPaint()]);
+      try {
+        const deadline = Date.now() + SCROLL_WAIT_TIMEOUT_MS;
+        while (
+          scrollElement.scrollTop > SCROLL_TOP_EPSILON_PX &&
+          Date.now() < deadline
+        ) {
+          // oxlint-disable-next-line no-await-in-loop, promise/avoid-new -- Poll the browser animation with a real timer.
+          await new Promise<void>((resolve) => {
+            setTimeout(resolve, FRAME_DELAY_MS);
+          });
+        }
+        // oxlint-disable-next-line promise/avoid-new -- Let the final scroll position paint before enabling focus scrolling.
+        await new Promise<void>((resolve) => {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              resolve();
+            });
+          });
+        });
+      } catch (error) {
+        toastError(error, { boundary: "message-list-scroll" });
+      } finally {
+        isProgrammaticScrollToTopRef.current = false;
       }
-      isProgrammaticScrollToTopRef.current = false;
     };
-    scheduleFireAndForget(finishScroll);
+    void finishScroll();
 
     return true;
   }, []);

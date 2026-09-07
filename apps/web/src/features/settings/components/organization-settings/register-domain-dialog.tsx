@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
+import { Radio, RadioGroup, RadioIndicator } from "@quieter/ui/radio-group";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -186,42 +187,55 @@ export const RegisterDomainDialog = ({
                       <legend className="mb-2 text-body font-medium text-fg">
                         Mail mode
                       </legend>
-                      {modeOptions.map((option) => {
-                        const selected = field.state.value === option.value;
-                        return (
-                          <div
-                            className={cn(
-                              "squircle flex cursor-pointer gap-3 rounded-lg border p-4 transition-colors",
-                              selected
-                                ? "border-fg/30 bg-muted/40"
-                                : "border-border hover:bg-muted/60",
-                              ""
-                            )}
-                            key={option.value}
-                          >
-                            <input
-                              aria-label={option.label}
-                              checked={selected}
-                              className="mt-1 size-4 accent-fg"
-                              id={`domain-mode-${option.value}`}
-                              name={field.name}
-                              onChange={() => {
-                                field.handleChange(option.value);
-                              }}
-                              type="radio"
-                              value={option.value}
-                            />
-                            <span>
-                              <span className="block text-body font-medium text-fg">
-                                {option.label}
+                      <RadioGroup
+                        aria-label="Mail mode"
+                        value={field.state.value}
+                        onValueChange={(value) => {
+                          if (
+                            value === "send_only" ||
+                            value === "send_and_receive"
+                          ) {
+                            field.handleChange(value);
+                          }
+                        }}
+                      >
+                        {modeOptions.map((option) => {
+                          const selected = field.state.value === option.value;
+                          return (
+                            <label
+                              htmlFor={`domain-mode-${option.value}`}
+                              className={cn(
+                                "squircle flex cursor-pointer gap-3 rounded-lg border p-4 transition-colors",
+                                {
+                                  "border-border hover:bg-muted/60": !selected,
+                                  "border-fg/30 bg-muted/40": selected,
+                                }
+                              )}
+                              key={option.value}
+                            >
+                              <Radio
+                                aria-describedby={`domain-mode-description-${option.value}`}
+                                className="mt-1"
+                                id={`domain-mode-${option.value}`}
+                                value={option.value}
+                              >
+                                <RadioIndicator />
+                              </Radio>
+                              <span>
+                                <span className="block text-body font-medium text-fg">
+                                  {option.label}
+                                </span>
+                                <span
+                                  id={`domain-mode-description-${option.value}`}
+                                  className="mt-1 block text-caption/5 text-muted-fg"
+                                >
+                                  {option.description}
+                                </span>
                               </span>
-                              <span className="mt-1 block text-caption/5 text-muted-fg">
-                                {option.description}
-                              </span>
-                            </span>
-                          </div>
-                        );
-                      })}
+                            </label>
+                          );
+                        })}
+                      </RadioGroup>
                     </fieldset>
                   )}
                 </form.Field>

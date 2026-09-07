@@ -1061,10 +1061,10 @@ const resolveMessageContent = async (
   const inlineContent = extractMessageContent(message.payload);
   const [html, text] = await Promise.all([
     inlineContent.html !== undefined && inlineContent.html !== ""
-      ? Promise.resolve(inlineContent.html)
+      ? inlineContent.html
       : resolveRenderablePartBody(accessToken, message, "text/html", signal),
     inlineContent.text !== undefined && inlineContent.text !== ""
-      ? Promise.resolve(inlineContent.text)
+      ? inlineContent.text
       : resolveRenderablePartBody(accessToken, message, "text/plain", signal),
   ]);
 

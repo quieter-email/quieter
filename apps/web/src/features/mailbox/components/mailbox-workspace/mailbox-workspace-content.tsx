@@ -56,7 +56,11 @@ type MailboxWorkspaceContentProps = {
   };
   chatId: string | null;
   chats: MailboxSidebarChats;
-  composeSessionKey: number;
+  composeSession: {
+    key: number;
+    draft: ComposeDraftState | null;
+    mailboxId: string | null;
+  };
   currentUserEmail: string | null;
   defaultMailboxId: string | null;
   draftChatKey: string;
@@ -262,7 +266,7 @@ export const MailboxWorkspaceContent = ({
   chatContext,
   chatId,
   chats,
-  composeSessionKey,
+  composeSession,
   currentUserEmail,
   defaultMailboxId,
   draftChatKey,
@@ -317,7 +321,12 @@ export const MailboxWorkspaceContent = ({
         fallback={<ComposeWorkspaceLoading onOpenSidebar={onOpenSidebar} />}
       >
         <ComposeWorkspace
-          key={composeSessionKey}
+          key={`${selectedMailboxId}:${composeSession.key}`}
+          initialDraft={
+            composeSession.mailboxId === selectedMailboxId
+              ? composeSession.draft
+              : null
+          }
           demoMode={isDemoMode}
           managedDemoMode={isManagedDemoMode}
           mailboxId={selectedMailboxId}

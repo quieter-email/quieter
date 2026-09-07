@@ -5,7 +5,6 @@ import type { QueryClient } from "@tanstack/react-query";
 import { clientEnv } from "#/env";
 import type { ComposeDraftState } from "#/features/compose/domain/draft";
 import { parseStructuredSearchQuery } from "#/features/message-search/state/message-list-search-state";
-import { delay } from "#/lib/delay";
 import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
 
 import {
@@ -1146,9 +1145,8 @@ export const createDemoMailboxActions = (
       })
     );
   },
-  unsubscribeFromMessage: async () => {
-    await delay(0);
-  },
+  // oxlint-disable-next-line require-await, no-empty-function -- Demo actions preserve the asynchronous mail action contract.
+  unsubscribeFromMessage: async () => {},
   untrashMessage: async (messageId: string) => {
     await updateItemLabels(
       queryClient,

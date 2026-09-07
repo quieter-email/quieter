@@ -418,14 +418,14 @@ export const getManagedMailboxDetails = async (input: {
       )
       .where(eq(mailboxDivisionGrant.mailboxId, input.mailboxId)),
     selectedMailbox.ownerUserId === null
-      ? Promise.resolve([])
+      ? []
       : db
           .select({ email: user.email, name: user.name })
           .from(user)
           .where(eq(user.id, selectedMailbox.ownerUserId))
           .limit(1),
     selectedMailbox.divisionId === null
-      ? Promise.resolve([])
+      ? []
       : db
           .select({
             id: organizationDivision.id,

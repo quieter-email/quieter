@@ -409,7 +409,10 @@ const refreshAuthorizedConnectorAccessToken = async (input: {
 
 export const runAuthorizedConnector = async <TValue>(
   input: { provider: ConnectorProvider; signal?: AbortSignal; userId: string },
-  runner: (accessToken: string, signal?: AbortSignal) => Promise<TValue>
+  runner: (
+    accessToken: string,
+    signal?: AbortSignal
+  ) => TValue | Promise<TValue>
 ) => {
   const accessToken = await getAuthorizedConnectorAccessToken(input);
 
@@ -517,7 +520,7 @@ const runAuthorizedConnectorCredential = async <TValue>(
     accessToken: string,
     credential: { userId: string },
     signal?: AbortSignal
-  ) => Promise<TValue>
+  ) => TValue | Promise<TValue>
 ) => {
   const credential = await getAuthorizedConnectorCredentialAccessToken(input);
 
@@ -768,7 +771,7 @@ export const getLinearAccessTokenForCredential = async (input: {
       signal: input.signal,
       userId: input.userId,
     },
-    async (accessToken) => await Promise.resolve(accessToken)
+    (accessToken) => accessToken
   );
 
 const createGoogleCalendarEvent = async (input: {

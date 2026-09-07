@@ -152,14 +152,14 @@ export const auth = betterAuth({
          * product unusable until `termsAcceptedAt` is set, and a stale
          * acceptance cookie from a previous flow still counts.
          */
-        before: async (createdUser, context) =>
-          await Promise.resolve({
-            data: {
-              ...createdUser,
-              termsAcceptedAt:
-                readTermsAcceptedAtFromRequest(context?.request) ?? null,
-            },
-          }),
+        // oxlint-disable-next-line require-await -- Better Auth requires an asynchronous hook.
+        before: async (createdUser, context) => ({
+          data: {
+            ...createdUser,
+            termsAcceptedAt:
+              readTermsAcceptedAtFromRequest(context?.request) ?? null,
+          },
+        }),
       },
       delete: {
         before: async (deletedUser) => {

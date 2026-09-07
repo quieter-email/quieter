@@ -1,14 +1,12 @@
 import type { RouterInputs } from "@quieter/orpc";
 
+import type { AudioRecorderRecording } from "./audio-recorder";
+
 export type TranscriptionAudioFormat =
   RouterInputs["chat"]["transcribeAudio"]["format"];
 
-export type BrowserAudioRecording = {
-  base64: string;
-  blob: Blob;
-  durationMs: number;
-  mimeType: string;
-};
+export const MAX_TRANSCRIPTION_AUDIO_DURATION_MS = 60_000;
+export const MAX_TRANSCRIPTION_AUDIO_BASE64_LENGTH = 14_000_000;
 
 export const getTranscriptionAudioFormat = (
   mimeType: string
@@ -104,8 +102,8 @@ const bytesToBase64 = (bytes: Uint8Array) => {
 };
 
 export const normalizeTranscriptionRecording = async (
-  recording: BrowserAudioRecording
-): Promise<BrowserAudioRecording> => {
+  recording: AudioRecorderRecording
+): Promise<AudioRecorderRecording> => {
   if (getTranscriptionAudioFormat(recording.mimeType) === "wav") {
     return recording;
   }

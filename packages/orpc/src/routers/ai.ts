@@ -137,15 +137,15 @@ const loadTargetMemory = async (target: MemoryTarget, userId: string) =>
     ? await listPersonalAiMemory(userId)
     : await listMailboxAiMemory(target.mailboxId ?? "", userId);
 
-const toUserMemoryError = (error: unknown) =>
-  error instanceof ORPCError
-    ? error
-    : new ORPCError("BAD_REQUEST", {
-        message:
-          error instanceof Error && error.message
-            ? error.message
-            : "Quieter could not safely update AI memory. Nothing changed.",
-      });
+const toUserMemoryError = (error: unknown) => {
+  if (error instanceof ORPCError) {
+    return error;
+  }
+  reportError(error, { operation: "ai-memory:request" });
+  return new ORPCError("INTERNAL_SERVER_ERROR", {
+    message: "Quieter could not complete the memory request. Please try again.",
+  });
+};
 
 export const aiRouter = {
   deleteMemory: protectedProcedure
@@ -206,7 +206,9 @@ export const aiRouter = {
         const billingMailboxId =
           input.mailboxId ?? (await getBillingMailboxId(context.userId));
         if (billingMailboxId === null || billingMailboxId.length === 0) {
-          throw new Error("Connect a mailbox before updating AI memory.");
+          throw new ORPCError("BAD_REQUEST", {
+            message: "Connect a mailbox before updating AI memory.",
+          });
         }
         const change = await requestAiMemoryUpdate({
           allowMutations,

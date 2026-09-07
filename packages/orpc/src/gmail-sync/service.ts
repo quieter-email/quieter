@@ -541,7 +541,7 @@ const processMessageIds = async ({
             mailboxId,
             userId,
           })
-        : Promise.resolve(),
+        : undefined,
       usefulDetailsEnabled
         ? processGmailUsefulDetailMessage({
             getAutomationContext:
@@ -553,7 +553,7 @@ const processMessageIds = async ({
             organizationId,
             userId,
           })
-        : Promise.resolve(),
+        : undefined,
     ]);
   }
 };
@@ -596,10 +596,10 @@ const retryPendingAutomationMessages = async ({
             )
           )
           .limit(20)
-      : Promise.resolve([]),
+      : [],
     usefulDetailsEnabled
       ? listPendingGmailUsefulDetailMessageIds(mailboxId)
-      : Promise.resolve([]),
+      : [],
   ]);
 
   await processMessageIds({

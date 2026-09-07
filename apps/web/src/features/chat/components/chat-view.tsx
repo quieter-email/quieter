@@ -30,6 +30,8 @@ import {
 import { useAudioRecorder } from "#/lib/audio-recorder";
 import {
   getTranscriptionAudioFormat,
+  MAX_TRANSCRIPTION_AUDIO_DURATION_MS,
+  MAX_TRANSCRIPTION_AUDIO_BASE64_LENGTH,
   normalizeTranscriptionRecording,
 } from "#/lib/audio-transcription";
 import {
@@ -52,8 +54,6 @@ import { ChatComposer } from "./chat-composer";
 import { ChatTranscript } from "./chat-transcript";
 
 const CHAT_API_ENDPOINT = "/api/chat";
-const MAX_TRANSCRIPTION_AUDIO_DURATION_MS = 60_000;
-const MAX_TRANSCRIPTION_AUDIO_BASE64_LENGTH = 14_000_000;
 
 type ChatData = RouterOutputs["chat"]["get"];
 
@@ -504,14 +504,11 @@ const ChatSession = ({
         current.trim() ? `${current.trimEnd()}\n${result.text}` : result.text
       );
     } catch (transcriptionError) {
-      toast.error(
-        transcriptionError instanceof Error &&
-          (transcriptionError.message.startsWith("Transcription ") ||
-            transcriptionError.message.startsWith("We could not transcribe ") ||
-            transcriptionError.message === "No speech was detected.")
-          ? transcriptionError.message
-          : "We could not transcribe that recording. Try recording it again."
-      );
+      toastError(transcriptionError, {
+        boundary: "chat-transcription",
+        fallback:
+          "We could not transcribe that recording. Try recording it again.",
+      });
     }
     setIsPreparingTranscription(false);
   };

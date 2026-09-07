@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { ORPCError } from "@orpc/server";
 import {
   AI_MEMORY_MODEL,
   AI_MEMORY_REQUEST_MAX_LENGTH,
@@ -51,11 +52,13 @@ import {
   sql,
 } from "drizzle-orm";
 
+import { assertCanUseAi } from "./ai-access";
 import {
   embedAiMemories,
   embedPendingAiMemories,
   searchAiMemoryBySimilarity,
 } from "./ai-memory-embedding";
+import { assertAccessibleMailbox } from "./mailbox/service";
 import { hasText } from "./text";
 
 const MEMORY_CANDIDATE_LIMIT = 200;
@@ -256,7 +259,7 @@ export const updateAiMemoryScopeConfig = async ({
       ? userScope(userId)
       : mailboxScope(mailboxId ?? "");
   if (requestedScope === "mailbox" && !hasText(mailboxId)) {
-    throw new Error("A mailbox is required.");
+    throw new ORPCError("BAD_REQUEST", { message: "A mailbox is required." });
   }
   const normalizedPrompt = learningPrompt
     .replaceAll(/\r\n?/gu, "\n")
@@ -295,9 +298,10 @@ export const updateAiMemoryScopeConfig = async ({
           )
           .returning();
   if (record === undefined) {
-    throw new Error(
-      "Learning guidance changed elsewhere. Review the latest version."
-    );
+    throw new ORPCError("CONFLICT", {
+      message:
+        "Learning guidance changed elsewhere. Review the latest version.",
+    });
   }
   return await loadAiMemoryScopeConfig(scope);
 };
@@ -673,9 +677,9 @@ const applyAiMemoryPlan = async ({
           )
           .returning();
         if (updated === undefined) {
-          throw new Error(
-            "AI memory changed while the update was being applied."
-          );
+          throw new ORPCError("CONFLICT", {
+            message: "AI memory changed while the update was being applied.",
+          });
         }
         changes.push({
           after: toSnapshot(updated),
@@ -710,9 +714,9 @@ const applyAiMemoryPlan = async ({
           )
           .returning();
         if (updated === undefined) {
-          throw new Error(
-            "AI memory changed while the update was being applied."
-          );
+          throw new ORPCError("CONFLICT", {
+            message: "AI memory changed while the update was being applied.",
+          });
         }
         changes.push({
           after: toSnapshot(updated),
@@ -850,8 +854,15 @@ export const requestAiMemoryUpdate = async ({
     .trim()
     .slice(0, AI_MEMORY_REQUEST_MAX_LENGTH);
   if (!normalizedRequest) {
-    throw new Error("Ask a question or describe what should change.");
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Ask a question or describe what should change.",
+    });
   }
+  const billingMailbox = await assertAccessibleMailbox({ mailboxId, userId });
+  await assertCanUseAi({
+    organizationId: billingMailbox.organizationId,
+    userId,
+  });
   const scope =
     requestedScope === "user" ? userScope(userId) : mailboxScope(mailboxId);
   const [current, config] = await Promise.all([
@@ -1850,7 +1861,7 @@ const listAiMemoryScope = async ({
   const target =
     scope === "user" ? userScope(userId) : mailboxScope(mailboxId ?? "");
   if (scope === "mailbox" && !hasText(mailboxId)) {
-    throw new Error("A mailbox is required.");
+    throw new ORPCError("BAD_REQUEST", { message: "A mailbox is required." });
   }
   const [memories, changes] = await Promise.all([
     listScopeMemories(target.scopeKey),
@@ -1991,7 +2002,7 @@ export const forgetAiMemory = async ({
       ? userScope(userId)
       : mailboxScope(mailboxId ?? "");
   if (requestedScope === "mailbox" && !hasText(mailboxId)) {
-    throw new Error("A mailbox is required.");
+    throw new ORPCError("BAD_REQUEST", { message: "A mailbox is required." });
   }
   const [memory] = await db
     .select()
@@ -2048,7 +2059,7 @@ export const undoAiMemoryChange = async ({
       ? userScope(userId)
       : mailboxScope(mailboxId ?? "");
   if (requestedScope === "mailbox" && !hasText(mailboxId)) {
-    throw new Error("A mailbox is required.");
+    throw new ORPCError("BAD_REQUEST", { message: "A mailbox is required." });
   }
   const undoChangeSet = await db.transaction(async (tx) => {
     const scopeCondition =
@@ -2068,7 +2079,9 @@ export const undoAiMemoryChange = async ({
       changeSet.status !== "applied" ||
       changeSet.changes.length === 0
     ) {
-      throw new Error("That memory change cannot be undone.");
+      throw new ORPCError("BAD_REQUEST", {
+        message: "That memory change cannot be undone.",
+      });
     }
     const [existingUndo] = await tx
       .select({ id: aiMemoryChangeSet.id })
@@ -2076,7 +2089,9 @@ export const undoAiMemoryChange = async ({
       .where(eq(aiMemoryChangeSet.undoOfId, changeSet.id))
       .limit(1);
     if (existingUndo !== undefined) {
-      throw new Error("That memory change was already undone.");
+      throw new ORPCError("CONFLICT", {
+        message: "That memory change was already undone.",
+      });
     }
 
     const now = new Date();
@@ -2097,9 +2112,10 @@ export const undoAiMemoryChange = async ({
         change.after === null ||
         current.version !== change.after.version
       ) {
-        throw new Error(
-          "Memory changed again after this update and can no longer be safely undone."
-        );
+        throw new ORPCError("CONFLICT", {
+          message:
+            "Memory changed again after this update and can no longer be safely undone.",
+        });
       }
 
       const previous = change.before;
@@ -2140,7 +2156,9 @@ export const undoAiMemoryChange = async ({
         )
         .returning();
       if (updated === undefined) {
-        throw new Error("Memory changed while the undo was being applied.");
+        throw new ORPCError("CONFLICT", {
+          message: "Memory changed while the undo was being applied.",
+        });
       }
       inverse.push({
         after: toSnapshot(updated),
