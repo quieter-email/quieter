@@ -81,7 +81,7 @@ jobs:
       - name: Build deployment configuration
         run: |
           vp run @quieter/observability#build
-          vp run @quieter/sdk#build
+          vp run quieter#build
 
       - name: Refresh SST state and prepare production build
         run: |

@@ -84,7 +84,6 @@ export default defineConfig({
       },
       {
         files: [
-          "apps/web/src/env.ts",
           "apps/web/vite.config.ts",
           "packages/aws/scripts/**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}",
           "packages/billing/scripts/**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}",
@@ -178,7 +177,6 @@ export default defineConfig({
         files: [
           "apps/web/src/components/atmospheric-background.tsx",
           "apps/web/src/components/auth-visual.tsx",
-          "apps/web/src/components/contour-lines.tsx",
           "apps/web/src/components/workspace-dither-background.tsx",
           "apps/web/src/features/chat/components/chat-transcript.tsx",
           "apps/web/src/features/message-thread/components/message-body.tsx",
@@ -257,7 +255,6 @@ export default defineConfig({
         // terms cookie predates Cookie Store support, and the test fixture
         // verifies javascript URLs are rejected by the mail parser.
         files: [
-          "apps/web/src/lib/terms-acceptance.ts",
           "apps/web/src/features/message-thread/domain/mail-html.test.ts",
         ],
         rules: {
@@ -273,17 +270,7 @@ export default defineConfig({
           "react/no-react-children": "off",
         },
       },
-      {
-        // These components intentionally create the dynamic Motion element
-        // at render time because `as` is a caller-selected element type.
-        files: [
-          "apps/web/src/features/home/components/reveal.tsx",
-          "apps/web/src/features/message-search/components/message-list-search/use-message-list-search-controller.ts",
-        ],
-        rules: {
-          "react/react-compiler": "off",
-        },
-      },
+
       {
         // The token field is an ARIA combobox over a contenteditable region
         // with an aria-activedescendant listbox. Neither select nor datalist

@@ -8,6 +8,10 @@ import { Resource } from "sst";
 import { authRelations } from "./schema.ts";
 
 export type DatabaseClient = ReturnType<typeof drizzlePostgres>;
+export type DatabaseTransaction = Parameters<
+  Parameters<DatabaseClient["transaction"]>[0]
+>[0];
+export type DatabaseExecutor = DatabaseClient | DatabaseTransaction;
 
 const isPresentString = (value: string | undefined): value is string =>
   value !== undefined && value !== "";

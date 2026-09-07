@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { toastError } from "#/lib/error-toast";
+
 export type AudioRecorderRecording = {
   base64: string;
   blob: Blob;
@@ -69,6 +71,7 @@ export const useAudioRecorder = (options: UseAudioRecorderOptions) => {
   const isSupported =
     typeof window !== "undefined" &&
     typeof MediaRecorder !== "undefined" &&
+    typeof navigator.mediaDevices?.getUserMedia === "function" &&
     MediaRecorder.isTypeSupported(mimeType);
 
   const start = useCallback(async () => {
@@ -98,6 +101,9 @@ export const useAudioRecorder = (options: UseAudioRecorderOptions) => {
         setIsRecording(false);
       };
       recorder.addEventListener("error", () => {
+        toastError(new Error("Audio recording failed."), {
+          boundary: "audio-recorder",
+        });
         stopStreamTracks(ownedStream);
         activeStreamRef.current = null;
         setIsRecording(false);

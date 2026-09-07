@@ -6,7 +6,7 @@ import { isSandboxMailboxId } from "#/lib/sandbox-mailbox";
 export const getGmailUsefulDetailsQueryKey = (mailboxId: string) =>
   ["gmail-useful-details", mailboxId] as const;
 
-export const getGmailThreadUsefulDetailsQueryKey = (
+const getGmailThreadUsefulDetailsQueryKey = (
   mailboxId: string,
   gmailThreadId: string
 ) => ["gmail-useful-details", mailboxId, "thread", gmailThreadId] as const;

@@ -437,10 +437,6 @@ const createInitialDemoState = (): DemoMailState => ({
   version: DEMO_MAIL_STATE_VERSION,
 });
 
-export const resetLandingDemoMail = () => {
-  landingDemoState = createInitialDemoState();
-};
-
 const isDemoMailState = (value: unknown): value is DemoMailState => {
   if (!isRecord(value)) {
     return false;
@@ -734,37 +730,6 @@ export const getDemoMailboxes = () => ({
       ],
       name: "Demo",
       slug: "demo-team",
-    },
-  ],
-});
-
-export const getLandingDemoMailboxes = () => ({
-  defaultMailboxId: LANDING_DEMO_MAILBOX_ID,
-  groups: [
-    {
-      id: "landing-demo-team",
-      kind: "organization" as const,
-      mailboxes: [
-        {
-          autoLabelEnabled: false,
-          capabilities: getMailboxCapabilities({ provider: "gmail" }),
-          connectionStatus: "connected" as const,
-          displayName: "Demo Mailbox",
-          emailAddress: DEMO_EMAIL_ADDRESS,
-          grantRole: null,
-          groupId: "landing-demo-team",
-          groupKind: "organization" as const,
-          groupName: "Demo",
-          id: LANDING_DEMO_MAILBOX_ID,
-          organizationId: "landing-demo-team",
-          ownerUserId: "landing-demo-user",
-          provider: "gmail" as const,
-          unreadNonSpamCount: getUnreadNonSpamCount(LANDING_DEMO_MAILBOX_ID),
-          usefulDetailsEnabled: false,
-        },
-      ],
-      name: "Demo",
-      slug: "landing-demo-team",
     },
   ],
 });

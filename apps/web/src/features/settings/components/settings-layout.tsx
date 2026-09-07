@@ -24,8 +24,6 @@ export const settingsSurfaceVariants = cva("", {
         "relative px-4 py-3 after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border/60 after:content-[''] last:after:hidden @md:px-6 @md:after:inset-x-6",
       insetStackedRow:
         "flex w-full flex-col gap-3 px-4 py-3 @md:flex-row @md:items-center @md:px-6",
-      listRow:
-        "flex flex-col gap-3 border-b border-border px-4 py-3 last:border-b-0 @md:flex-row @md:items-center @md:justify-between @md:px-6",
       padding: "px-4 py-3 @md:px-6",
       rowShell:
         "squircle relative flex w-full items-center gap-4 px-4 py-3 after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border/60 after:content-[''] last:after:hidden @md:px-6 @md:after:inset-x-6",
@@ -187,20 +185,6 @@ export const SettingsInsetStackedRow = ({
       settingsSurfaceVariants({ variant: "insetStackedRow" }),
       className
     )}
-  >
-    {children}
-  </div>
-);
-
-export const SettingsListRow = ({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) => (
-  <div
-    className={cn(settingsSurfaceVariants({ variant: "listRow" }), className)}
   >
     {children}
   </div>

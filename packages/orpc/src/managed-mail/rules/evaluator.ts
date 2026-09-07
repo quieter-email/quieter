@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { db } from "@quieter/database/client";
-import type { DatabaseClient } from "@quieter/database/client";
+import type { DatabaseExecutor } from "@quieter/database/client";
 import {
   mailbox,
   managedMailAttachment,
@@ -34,9 +34,6 @@ type ManagedAttachmentRecord = Pick<
   typeof managedMailAttachment.$inferSelect,
   "fileName" | "normalizedFileName"
 >;
-type ManagedMailDatabase =
-  | DatabaseClient
-  | Parameters<Parameters<DatabaseClient["transaction"]>[0]>[0];
 type RuleActionResult = {
   kind: ManagedMailboxRuleAction["kind"];
   message?: string;
@@ -56,8 +53,7 @@ const storedRuleActionResultSchema = z.object({
 });
 
 const parseStoredRuleActionResults = (
-  value: unknown,
-  _context: { mailboxId: string; messageId: string; ruleId: string }
+  value: unknown
 ): RuleActionResult[] | null => {
   if (value === null || value === undefined) {
     return [];
@@ -278,7 +274,7 @@ const createForwardMessage = async (input: {
 const applyRuleActions = async (input: {
   actions: readonly ManagedMailboxRuleAction[];
   completedActionResults: readonly RuleActionResult[];
-  database: ManagedMailDatabase;
+  database: DatabaseExecutor;
   mailboxId: string;
   message: ManagedMessageRecord;
   persistActionResults: (
@@ -463,7 +459,7 @@ const applyManagedRuleLabelUpdates = (
 const persistManagedRuleApplication = async (input: {
   actionResults: readonly RuleActionResult[];
   appliedAt: Date | null;
-  database: ManagedMailDatabase;
+  database: DatabaseExecutor;
   explanation: string;
   mailboxId: string;
   matched: boolean;
@@ -513,7 +509,7 @@ const runManagedRuleEvaluation = async (input: {
   now: Date;
   previousActionResults: readonly RuleActionResult[];
   rule: ManagedRuleRecord;
-  tx: ManagedMailDatabase;
+  tx: DatabaseExecutor;
 }) => {
   const matched = matchesRuleConditions({
     attachments: input.attachments,
@@ -584,7 +580,7 @@ const runManagedRuleEvaluation = async (input: {
 };
 
 const persistManagedRuleFailure = async (input: {
-  database: ManagedMailDatabase;
+  database: DatabaseExecutor;
   errorMessage: string;
   explanation: string;
   mailboxId: string;
@@ -630,7 +626,7 @@ const evaluateManagedRuleForMessage = async (input: {
   messageId: string;
   previousApplication: ManagedRuleApplicationRecord | undefined;
   rule: ManagedRuleRecord;
-  tx: ManagedMailDatabase;
+  tx: DatabaseExecutor;
 }): Promise<{
   breakLoop: boolean;
   error: string | null;
@@ -641,12 +637,7 @@ const evaluateManagedRuleForMessage = async (input: {
     labelIds: input.rule.labelIds,
   });
   const storedActionResults = parseStoredRuleActionResults(
-    input.previousApplication?.actionResults,
-    {
-      mailboxId: input.mailboxId,
-      messageId: input.messageId,
-      ruleId: input.rule.id,
-    }
+    input.previousApplication?.actionResults
   );
   if (storedActionResults === null) {
     return {
@@ -731,7 +722,7 @@ const processManagedRulesAtIndex = async (input: {
   messageId: string;
   ruleError: string | null;
   rules: readonly ManagedRuleRecord[];
-  tx: ManagedMailDatabase;
+  tx: DatabaseExecutor;
 }): Promise<{ error: string | null; matched: boolean }> => {
   if (input.index >= input.rules.length || input.ruleError !== null) {
     return { error: input.ruleError, matched: input.matchedRule };

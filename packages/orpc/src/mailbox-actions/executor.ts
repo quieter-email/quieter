@@ -191,6 +191,8 @@ const runConnectorWriteCall = async (input: {
   revisionId: string;
   runId: string;
   stepRunId: string;
+  userId: string;
+  signal?: AbortSignal;
 }) => {
   const idempotencyKey = `${input.runId}:${input.nodeId}:${input.callIndex}`;
   const [existing] = await db
@@ -216,6 +218,8 @@ const runConnectorWriteCall = async (input: {
     call: input.call,
     credentialId: input.credentialId,
     provider: input.provider,
+    signal: input.signal,
+    userId: input.userId,
   });
 
   if (result.status === "success" && hasText(result.externalId)) {
@@ -248,6 +252,8 @@ type ConnectorStepIdentity = {
   revisionId: string;
   runId: string;
   stepRunId: string;
+  userId: string;
+  signal?: AbortSignal;
 };
 
 /**
@@ -286,6 +292,8 @@ const createConnectorStepTools = (
                 calls: [call],
                 credentialId: identity.credentialId,
                 provider: identity.provider,
+                signal: identity.signal,
+                userId: identity.userId,
               });
               return (
                 result ?? { error: "Tool returned nothing.", status: "error" }
@@ -325,6 +333,8 @@ const executeNode = async (input: {
   revisionId: string;
   runId: string;
   stepRunId: string;
+  userId: string;
+  signal?: AbortSignal;
   usageReporter: MailboxActionUsageReporter;
 }): Promise<NodeResult> => {
   const context: ActionExecutionContext = {
@@ -397,7 +407,13 @@ const executeNode = async (input: {
       }
 
       const connectorName = getConnectorDisplayName(provider);
-      const tools = await listConnectorAgentTools({ credentialId, provider });
+      const signal = AbortSignal.timeout(CONNECTOR_STEP_BUDGET_MS);
+      const tools = await listConnectorAgentTools({
+        credentialId,
+        provider,
+        signal,
+        userId: input.userId,
+      });
       const effects: Awaited<ReturnType<typeof runConnectorWriteCall>>[] = [];
       const identity = {
         actionId: input.actionId,
@@ -406,19 +422,14 @@ const executeNode = async (input: {
         provider,
         revisionId: input.revisionId,
         runId: input.runId,
+        signal,
         stepRunId: input.stepRunId,
+        userId: input.userId,
       };
-
-      // The loop is bounded by model turns as well, but a slow connector could
-      // still stretch a step past the point where the run is worth finishing.
-      const abortController = new AbortController();
-      const deadline = setTimeout(() => {
-        abortController.abort();
-      }, CONNECTOR_STEP_BUDGET_MS);
 
       try {
         const result = await runConnectorAgentStep({
-          abortSignal: abortController.signal,
+          abortSignal: signal,
           connectorName,
           context,
           email: input.email,
@@ -460,8 +471,6 @@ const executeNode = async (input: {
           },
           outputPorts: ["success"],
         };
-      } finally {
-        clearTimeout(deadline);
       }
     }
     default: {
@@ -559,14 +568,18 @@ export const executeMailboxActionRun = async (
 
   try {
     const [revision] = await db
-      .select({ graph: mailboxActionRevision.graph })
+      .select({
+        graph: mailboxActionRevision.graph,
+        userId: mailboxActionRevision.createdByUserId,
+      })
       .from(mailboxActionRevision)
       .where(eq(mailboxActionRevision.id, run.revisionId))
       .limit(1);
-    if (revision === undefined) {
+    if (revision === undefined || !hasText(revision.userId)) {
       throw new Error("Action revision was not found.");
     }
 
+    const revisionUserId = revision.userId;
     const validation = validateMailboxActionGraph(revision.graph);
     if (validation.graph === undefined || validation.graph === null) {
       throw new Error("Action revision graph is invalid.");
@@ -704,6 +717,7 @@ export const executeMailboxActionRun = async (
         runId: run.id,
         stepRunId,
         usageReporter: createUsageReporter,
+        userId: revisionUserId,
       });
       const mergedVariables = { ...item.frame.variables, ...result.variables };
       const previousOutputs = {

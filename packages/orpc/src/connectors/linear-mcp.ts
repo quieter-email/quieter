@@ -242,7 +242,7 @@ const runLinearMcpToolCalls = async (input: {
 export const listLinearMcpToolsForCredential = async (input: {
   credentialId: string;
   signal?: AbortSignal;
-  userId?: string;
+  userId: string;
 }): Promise<LinearMcpToolDescriptor[]> => {
   const accessToken = await getLinearAccessTokenForCredential(input);
   return await withLinearMcpClient(
@@ -268,7 +268,7 @@ export const runLinearMcpToolCallsForCredential = async (input: {
   maxCalls?: number;
   maxOutputBytes?: number;
   signal?: AbortSignal;
-  userId?: string;
+  userId: string;
 }): Promise<LinearMcpToolCallResult[]> => {
   const accessToken = await getLinearAccessTokenForCredential(input);
   return await runLinearMcpToolCalls({ ...input, accessToken });

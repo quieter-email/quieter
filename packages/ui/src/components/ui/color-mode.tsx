@@ -59,10 +59,14 @@ const readStoredColorMode = (
     return initialColorMode;
   }
 
-  const storedColorMode = localStorage.getItem(COLOR_MODE_STORAGE_KEY);
-  return isConfigColorMode(storedColorMode)
-    ? storedColorMode
-    : initialColorMode;
+  try {
+    const storedColorMode = localStorage.getItem(COLOR_MODE_STORAGE_KEY);
+    return isConfigColorMode(storedColorMode)
+      ? storedColorMode
+      : initialColorMode;
+  } catch {
+    return initialColorMode;
+  }
 };
 
 const resolveColorMode = (
@@ -136,15 +140,18 @@ export const ColorModeProvider = ({
   }, [colorMode]);
 
   const setColorMode = useCallback((value: ConfigColorMode) => {
-    localStorage.setItem(COLOR_MODE_STORAGE_KEY, value);
+    try {
+      localStorage.setItem(COLOR_MODE_STORAGE_KEY, value);
+    } catch {
+      /* The preference remains available for this session. */
+    }
     setConfigColorMode(value);
   }, []);
 
   const cycleColorMode = useCallback(() => {
     const next = getNextColorMode(configColorMode);
-    localStorage.setItem(COLOR_MODE_STORAGE_KEY, next);
-    setConfigColorMode(next);
-  }, [configColorMode]);
+    setColorMode(next);
+  }, [configColorMode, setColorMode]);
 
   const value = useMemo(
     () => ({

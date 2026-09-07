@@ -23,7 +23,7 @@ const RANGE_DAYS: Record<MailDeliveryMetricsRange, number> = {
   "7d": 7,
 };
 
-export const getMailDeliveryMetricsQueryKey = (
+const getMailDeliveryMetricsQueryKey = (
   organizationId: string,
   range: MailDeliveryMetricsRange,
   mailboxId?: string

@@ -10,11 +10,6 @@ import {
 } from "./preview-personas.shared";
 import type { PreviewPersona } from "./preview-personas.shared";
 
-export {
-  isPreviewPersona,
-  previewPersonaCookieName,
-  previewPersonas,
-} from "./preview-personas.shared";
 export type { PreviewPersona } from "./preview-personas.shared";
 
 const PREVIEW_PERSONA_STORAGE_KEY = "quieter:preview-persona";

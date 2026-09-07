@@ -159,5 +159,3 @@ Strict rules:
 
   return sanitizeAutoLabelSelection(result.selectedLabelIds, availableLabelIds);
 };
-
-export const classifyGmailMessage = classifyMailMessage;

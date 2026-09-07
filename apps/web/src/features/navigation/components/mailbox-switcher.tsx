@@ -1060,18 +1060,3 @@ export const MailboxSwitcherDropdown = ({
     </Popover>
   );
 };
-
-export const MailboxSettingsRow = ({
-  action,
-  className,
-  mailbox,
-}: MailboxSummaryProps) => (
-  <div
-    className={cn("flex items-center justify-between gap-3 py-3", className)}
-  >
-    <MailboxSummary className="min-w-0 flex-1" mailbox={mailbox} />
-    {action !== null && action !== undefined && action !== false && (
-      <div className="shrink-0">{action}</div>
-    )}
-  </div>
-);

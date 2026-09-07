@@ -93,14 +93,11 @@ export const assertOrganizationManager = async (
   return membership;
 };
 
-const getDivisionWithManagerAccess = async (
-  input: {
-    divisionId: string;
-    userId: string;
-  },
-  database: Pick<typeof db, "select"> = db
-) => {
-  const [division] = await database
+const getDivisionWithManagerAccess = async (input: {
+  divisionId: string;
+  userId: string;
+}) => {
+  const [division] = await db
     .select({
       id: organizationDivision.id,
       organizationId: organizationDivision.organizationId,

@@ -3,15 +3,10 @@
 import { ColorModeProvider } from "@quieter/ui/color-mode";
 import { Toaster } from "@quieter/ui/toaster";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
-import {
-  MutationCache,
-  QueryCache,
-  QueryClient,
-  QueryClientProvider,
-} from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useLocation } from "@tanstack/react-router";
 import { MotionConfig } from "motion/react";
-import { useEffect, useMemo } from "react";
+import { useEffect, useState } from "react";
 import type { PropsWithChildren } from "react";
 
 import { ConsentManager } from "#/components/consent-manager";
@@ -36,7 +31,9 @@ const QueryPersistenceSessionBoundary = () => {
 };
 
 export const Providers = ({ children }: PropsWithChildren) => {
-  const queryClient = useMemo(
+  // The client is owned for this provider lifetime and is never replaced by a setter.
+  // oxlint-disable-next-line react/hook-use-state
+  const [queryClient] = useState(
     () =>
       new QueryClient({
         defaultOptions: {
@@ -46,10 +43,7 @@ export const Providers = ({ children }: PropsWithChildren) => {
             retry: shouldRetryOrpcError,
           },
         },
-        mutationCache: new MutationCache(),
-        queryCache: new QueryCache(),
-      }),
-    []
+      })
   );
 
   const pathname = useLocation({

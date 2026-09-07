@@ -139,27 +139,27 @@ export const readBoundedJson = async (request: Request, limit: number) => {
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
 
-  const readChunks = async (length: number): Promise<number> => {
-    const readResult = await reader.read();
-    if (readResult.done) {
-      return length;
-    }
-    const value: unknown = readResult.value;
-    if (!(value instanceof Uint8Array)) {
-      return await readChunks(length);
-    }
-    const nextLength = length + value.byteLength;
-    if (nextLength > limit) {
-      await reader.cancel();
-      throw new RequestError(413, "request_body_too_large");
-    }
-    chunks.push(value);
-    return await readChunks(nextLength);
-  };
-
   let length = 0;
   try {
-    length = await readChunks(length);
+    while (true) {
+      // Request chunks must be consumed serially to enforce the byte limit.
+      // oxlint-disable-next-line no-await-in-loop
+      const result = await reader.read();
+      if (result.done) {
+        break;
+      }
+      const value: unknown = result.value;
+      if (!(value instanceof Uint8Array)) {
+        continue;
+      }
+      length += value.byteLength;
+      if (length > limit) {
+        // oxlint-disable-next-line no-await-in-loop
+        await reader.cancel();
+        throw new RequestError(413, "request_body_too_large");
+      }
+      chunks.push(value);
+    }
   } finally {
     reader.releaseLock();
   }

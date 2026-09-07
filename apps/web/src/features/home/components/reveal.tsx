@@ -1,7 +1,9 @@
 "use client";
 
 import { m, useReducedMotion } from "motion/react";
-import type { ComponentPropsWithoutRef, ElementType, ReactNode } from "react";
+import type { ReactNode } from "react";
+
+const motionElements = { div: m.div, h2: m.h2, p: m.p, span: m.span };
 
 const EASE = [0.23, 1, 0.32, 1] as const;
 
@@ -11,7 +13,7 @@ const EASE = [0.23, 1, 0.32, 1] as const;
  * Under `prefers-reduced-motion` the movement and blur are dropped and only the
  * opacity remains, so the page still resolves without anything travelling.
  */
-export const useEntrance = (reduced: boolean | null) => ({
+const getEntranceVariants = (reduced: boolean | null) => ({
   hidden:
     reduced === true
       ? { opacity: 0 }
@@ -23,64 +25,41 @@ export const useEntrance = (reduced: boolean | null) => ({
   },
 });
 
-type RevealProps<T extends ElementType> = {
-  as?: T;
+type RevealProps = {
+  as?: keyof typeof motionElements;
   children: ReactNode;
-  /** Seconds to wait before this element starts. */
+  className?: string;
+  id?: string;
   delay?: number;
-} & Omit<ComponentPropsWithoutRef<T>, "children">;
+  onMount?: boolean;
+};
 
 /** Plays the entrance once, the first time the element scrolls into view. */
-export const Reveal = <T extends ElementType = "div">({
+export const Reveal = ({
   as,
   children,
   delay = 0,
+  onMount = false,
   ...props
-}: RevealProps<T>) => {
+}: RevealProps) => {
   const reduced = useReducedMotion();
-  const variants = useEntrance(reduced);
-  const Component = m.create(as ?? "div");
+  const variants = getEntranceVariants(reduced);
+  const duration = onMount ? 0.8 : 0.7;
+  const Component = motionElements[as ?? "div"];
 
   return (
     <Component
       {...props}
+      animate={onMount ? "visible" : undefined}
       initial="hidden"
       transition={{
         delay,
-        duration: reduced === true ? 0.3 : 0.7,
+        duration: reduced === true ? 0.3 : duration,
         ease: EASE,
       }}
       variants={variants}
       viewport={{ margin: "-80px", once: true }}
-      whileInView="visible"
-    >
-      {children}
-    </Component>
-  );
-};
-
-/** Same entrance, but on mount rather than on scroll. For above-the-fold content. */
-export const Entrance = <T extends ElementType = "div">({
-  as,
-  children,
-  delay = 0,
-  ...props
-}: RevealProps<T>) => {
-  const reduced = useReducedMotion();
-  const variants = useEntrance(reduced);
-  const Component = m.create(as ?? "div");
-
-  return (
-    <Component
-      {...props}
-      animate="visible"
-      initial="hidden"
-      transition={{
-        delay,
-        duration: reduced === true ? 0.3 : 0.8,
-        ease: EASE,
-      }}
-      variants={variants}
+      whileInView={onMount ? undefined : "visible"}
     >
       {children}
     </Component>

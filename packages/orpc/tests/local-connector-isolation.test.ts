@@ -67,6 +67,9 @@ vi.mock(import("@quieter/database/client"), async (importOriginal) => {
               {
                 accessTokenExpiresAt: new Date(Date.now() + 3_600_000),
                 encryptedAccessToken: "encrypted-test",
+                provider: "google_calendar",
+                scopes:
+                  "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/calendar.events read write",
                 status: "connected",
               },
             ],

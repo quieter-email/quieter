@@ -85,7 +85,7 @@ export type ConnectorAgentToolResult = {
 type ConnectorCredentialInput = {
   credentialId: string;
   signal?: AbortSignal;
-  userId?: string;
+  userId: string;
 };
 
 /** A provider whose tools are static does not need to reach the network. */

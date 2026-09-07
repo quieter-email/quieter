@@ -103,8 +103,13 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       APP_SITE_PASSWORD: optionalString,
       AWS_DEFAULT_REGION: optionalString,
       AWS_REGION: optionalString,
-      BACKFILL_BATCH_SIZE: optionalString,
-      BACKFILL_CONCURRENCY: optionalString,
+      BACKFILL_BATCH_SIZE: z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(1000)
+        .default(100),
+      BACKFILL_CONCURRENCY: z.coerce.number().int().min(1).max(10).default(5),
       BETTER_AUTH_APP_NAME: z.string().trim().min(1).default("quieter"),
       BETTER_AUTH_SECRET: optionalString,
       BETTER_AUTH_TRUSTED_ORIGINS: optionalString,

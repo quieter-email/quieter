@@ -243,6 +243,14 @@ const processReceiptRecord = async (record: SnsRecord) => {
     throw error;
   }
 
+  if (mailboxIds.length > 0) {
+    await recordInboundOrganizationMailUsage({
+      messageSizeBytes,
+      providerMessageId: resolvedProviderMessageId,
+      recipients,
+    });
+  }
+
   await deleteR2ObjectIfNeeded(
     rawObjectProvider,
     rawObjectBucket,
@@ -252,13 +260,6 @@ const processReceiptRecord = async (record: SnsRecord) => {
     bucket: Resource.MailBucket.name,
     key: resolvedS3Key,
   });
-  if (mailboxIds.length > 0) {
-    await recordInboundOrganizationMailUsage({
-      messageSizeBytes,
-      providerMessageId: resolvedProviderMessageId,
-      recipients,
-    });
-  }
 };
 
 export const handler = withSentry(

@@ -77,7 +77,7 @@ const SETTINGS_SEARCH_KEYWORDS: Record<SettingsDetailTab, readonly string[]> = {
   shortcuts: ["keyboard", "hotkeys", "keys", "bindings"],
 };
 
-export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] =
+const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] =
   SETTINGS_NAV_ITEMS.map((item) => ({
     description: item.description,
     developmentOnly: "developmentOnly" in item && item.developmentOnly,

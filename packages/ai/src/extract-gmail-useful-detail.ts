@@ -253,5 +253,3 @@ statuses. Inferred relevance boundaries are allowed, but inferred event facts ar
 
   return result;
 };
-
-export const extractGmailUsefulDetail = extractMailUsefulDetail;

@@ -171,7 +171,9 @@ const markMailboxNeedsReconnectInCache = (
 const useWindowActive = () => {
   const [isWindowActive, setIsWindowActive] = useState(
     () =>
-      typeof document !== "undefined" && document.visibilityState === "visible"
+      typeof document !== "undefined" &&
+      document.visibilityState === "visible" &&
+      document.hasFocus()
   );
 
   useEffect(() => {
@@ -183,6 +185,7 @@ const useWindowActive = () => {
       );
     };
 
+    updateWindowActivity();
     window.addEventListener("focus", updateWindowActivity);
     window.addEventListener("blur", updateWindowActivity);
     document.addEventListener("visibilitychange", updateWindowActivity);

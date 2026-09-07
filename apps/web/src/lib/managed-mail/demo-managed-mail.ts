@@ -36,7 +36,7 @@ const MANAGED_DEMO_THREAD_QUERY_VERSION = 3;
 const hasText = (value: string | null | undefined): value is string =>
   typeof value === "string" && value.trim() !== "";
 
-export const DEMO_MANAGED_LABEL_IDS = {
+const DEMO_MANAGED_LABEL_IDS = {
   billing: "demo-managed-label-billing",
   support: "demo-managed-label-support",
   vip: "demo-managed-label-vip",
@@ -1136,8 +1136,4 @@ export const deleteManagedDemoDraft = (draft: ComposeDraftState) => {
     return;
   }
   removeMessages((message) => message.id === draft.messageId);
-};
-
-export const resetManagedDemoMail = () => {
-  writeDemoState(createInitialDemoState());
 };

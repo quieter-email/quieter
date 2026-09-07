@@ -5,7 +5,7 @@ import type { ConnectorProvider } from "./connectors-query";
  * so it lives here and nowhere else. Everything else about a connector comes
  * from the connector list itself.
  */
-export const connectorIcons = {
+const connectorIcons = {
   google_calendar: { className: "", src: "/google-calendar.svg" },
   linear: { className: "invert dark:invert-0", src: "/linear.svg" },
 } as const satisfies Record<

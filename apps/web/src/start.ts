@@ -31,6 +31,8 @@ import {
   sitePasswordCookieName,
 } from "#/lib/site-password.server";
 
+import { getSafeAuthReturnTo } from "./lib/return-to";
+
 const sitePasswordPaths = new Set([
   "/api/auth/polar/webhooks",
   "/api/internal/gmail-credentials/rotate",
@@ -362,7 +364,13 @@ const sitePasswordMiddleware = createMiddleware().server(
       requestUrl.pathname === sitePasswordPagePath &&
       (hasValidSitePassword || hasValidSession)
     ) {
-      return Response.redirect(getSafeReturnToUrl(requestUrl), 302);
+      return Response.redirect(
+        new URL(
+          getSafeAuthReturnTo(requestUrl.searchParams.get("returnTo")) ?? "/",
+          requestUrl
+        ),
+        302
+      );
     }
 
     if (!shouldGatePath(requestUrl.pathname)) {
@@ -536,19 +544,4 @@ const getHomePageUrl = (request: Request) => {
   const homePageUrl = new URL(homePagePath, requestUrl);
 
   return homePageUrl;
-};
-
-const getSafeReturnToUrl = (requestUrl: URL) => {
-  const returnTo = requestUrl.searchParams.get("returnTo");
-
-  if (
-    returnTo === null ||
-    returnTo === "" ||
-    !returnTo.startsWith("/") ||
-    returnTo.startsWith("//")
-  ) {
-    return new URL("/", requestUrl);
-  }
-
-  return new URL(returnTo, requestUrl);
 };

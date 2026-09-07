@@ -112,7 +112,7 @@ const getLinearOAuthClient = () => ({
   clientSecret: requireServerEnv("LINEAR_CLIENT_SECRET"),
 });
 
-const getConnectorOAuthClient = (provider: ConnectorProvider) => {
+export const getConnectorOAuthClient = (provider: ConnectorProvider) => {
   if (provider === GOOGLE_CALENDAR_CONNECTOR_PROVIDER) {
     return getGoogleCalendarOAuthClient();
   }
@@ -128,7 +128,7 @@ const getConnectorOAuthClient = (provider: ConnectorProvider) => {
 const getConnectorCredentialEncryptionKey = () =>
   requireServerEnv("CONNECTOR_TOKEN_ENCRYPTION_KEY");
 
-const encryptConnectorSecret = (value: string) =>
+export const encryptConnectorSecret = (value: string) =>
   encryptGmailCredentialSecret(value, {
     legacyKey: getConnectorCredentialEncryptionKey(),
   });
@@ -138,7 +138,7 @@ const decryptConnectorSecret = (value: string) =>
     legacyKey: getConnectorCredentialEncryptionKey(),
   });
 
-const normalizeOAuthScope = (scope: string | string[]) =>
+export const normalizeOAuthScope = (scope: string | string[]) =>
   Array.isArray(scope) ? scope.join(" ") : scope;
 
 class ConnectorHttpError extends Error {
@@ -223,18 +223,24 @@ const hasRequiredConnectorScopes = (
   provider: ConnectorProvider,
   scopes: string
 ) => {
-  const granted = new Set(scopes.split(" ").filter((value) => value !== ""));
+  const granted = new Set(
+    scopes.split(/[\s,]+/u).filter((value) => value !== "")
+  );
   return connectorDefinitions[provider].scopes.every((scope) =>
     granted.has(scope)
   );
 };
 
-const refreshConnectorAccessToken = async (record: {
-  encryptedRefreshToken: string | null;
-  id: string;
-  provider: ConnectorProvider;
-  scopes: string | null;
-}) => {
+const refreshConnectorAccessToken = async (
+  record: {
+    encryptedRefreshToken: string | null;
+    id: string;
+    provider: ConnectorProvider;
+    scopes: string | null;
+  },
+  signal?: AbortSignal
+) => {
+  signal?.throwIfAborted();
   if (!hasText(record.encryptedRefreshToken)) {
     await db
       .update(connectorCredential)
@@ -257,6 +263,10 @@ const refreshConnectorAccessToken = async (record: {
       }),
       headers: { "content-type": "application/x-www-form-urlencoded" },
       method: "POST",
+      signal:
+        signal === undefined
+          ? AbortSignal.timeout(15_000)
+          : AbortSignal.any([signal, AbortSignal.timeout(15_000)]),
     }
   );
 
@@ -295,6 +305,7 @@ const refreshConnectorAccessToken = async (record: {
       : googleRefreshResponseSchema.parse(await response.json());
   const now = new Date();
   const scopes = getRefreshedScopes(record, refreshed.scope);
+  const hasRequiredScopes = hasRequiredConnectorScopes(record.provider, scopes);
   await db
     .update(connectorCredential)
     .set({
@@ -310,19 +321,21 @@ const refreshConnectorAccessToken = async (record: {
       // An older, narrower grant still refreshes, but it cannot do what the connector
       // now asks of it, so it is surfaced as needing a reconnect rather than silently
       // failing at the first call that needs the missing scope.
-      status: hasRequiredConnectorScopes(record.provider, scopes)
-        ? "connected"
-        : "needs_reconnect",
+      status: hasRequiredScopes ? "connected" : "needs_reconnect",
       updatedAt: now,
     })
     .where(eq(connectorCredential.id, record.id));
 
+  if (!hasRequiredScopes) {
+    throw getConnectorRepairRequiredError(record.provider);
+  }
   return refreshed.access_token;
 };
 
 const getAuthorizedConnectorAccessToken = async (input: {
   provider: ConnectorProvider;
   userId: string;
+  signal?: AbortSignal;
 }) => {
   const [record] = await db
     .select({
@@ -349,7 +362,11 @@ const getAuthorizedConnectorAccessToken = async (input: {
     });
   }
 
-  if (record.status === "needs_reconnect") {
+  input.signal?.throwIfAborted();
+  if (
+    record.status === "needs_reconnect" ||
+    !hasRequiredConnectorScopes(record.provider, record.scopes ?? "")
+  ) {
     throw getConnectorRepairRequiredError(record.provider);
   }
 
@@ -357,12 +374,13 @@ const getAuthorizedConnectorAccessToken = async (input: {
     return decryptConnectorSecret(record.encryptedAccessToken);
   }
 
-  return await refreshConnectorAccessToken(record);
+  return await refreshConnectorAccessToken(record, input.signal);
 };
 
 const refreshAuthorizedConnectorAccessToken = async (input: {
   provider: ConnectorProvider;
   userId: string;
+  signal?: AbortSignal;
 }) => {
   const [record] = await db
     .select({
@@ -386,10 +404,10 @@ const refreshAuthorizedConnectorAccessToken = async (input: {
     });
   }
 
-  return await refreshConnectorAccessToken(record);
+  return await refreshConnectorAccessToken(record, input.signal);
 };
 
-const runAuthorizedConnector = async <TValue>(
+export const runAuthorizedConnector = async <TValue>(
   input: { provider: ConnectorProvider; signal?: AbortSignal; userId: string },
   runner: (accessToken: string, signal?: AbortSignal) => Promise<TValue>
 ) => {
@@ -411,7 +429,8 @@ const runAuthorizedConnector = async <TValue>(
 const getAuthorizedConnectorCredentialAccessToken = async (input: {
   credentialId: string;
   provider: ConnectorProvider;
-  userId?: string;
+  userId: string;
+  signal?: AbortSignal;
 }) => {
   const [record] = await db
     .select({
@@ -426,16 +445,11 @@ const getAuthorizedConnectorCredentialAccessToken = async (input: {
     })
     .from(connectorCredential)
     .where(
-      input.userId === undefined
-        ? and(
-            eq(connectorCredential.id, input.credentialId),
-            eq(connectorCredential.provider, input.provider)
-          )
-        : and(
-            eq(connectorCredential.id, input.credentialId),
-            eq(connectorCredential.provider, input.provider),
-            eq(connectorCredential.userId, input.userId)
-          )
+      and(
+        eq(connectorCredential.id, input.credentialId),
+        eq(connectorCredential.provider, input.provider),
+        eq(connectorCredential.userId, input.userId)
+      )
     )
     .limit(1);
 
@@ -445,13 +459,17 @@ const getAuthorizedConnectorCredentialAccessToken = async (input: {
     });
   }
 
-  if (record.status === "needs_reconnect") {
+  input.signal?.throwIfAborted();
+  if (
+    record.status === "needs_reconnect" ||
+    !hasRequiredConnectorScopes(record.provider, record.scopes ?? "")
+  ) {
     throw getConnectorRepairRequiredError(record.provider);
   }
 
   const accessToken = hasCachedConnectorAccessToken(record)
     ? decryptConnectorSecret(record.encryptedAccessToken)
-    : await refreshConnectorAccessToken(record);
+    : await refreshConnectorAccessToken(record, input.signal);
 
   return { accessToken, userId: record.userId };
 };
@@ -459,7 +477,8 @@ const getAuthorizedConnectorCredentialAccessToken = async (input: {
 const refreshAuthorizedConnectorCredentialAccessToken = async (input: {
   credentialId: string;
   provider: ConnectorProvider;
-  userId?: string;
+  userId: string;
+  signal?: AbortSignal;
 }) => {
   const [record] = await db
     .select({
@@ -470,16 +489,11 @@ const refreshAuthorizedConnectorCredentialAccessToken = async (input: {
     })
     .from(connectorCredential)
     .where(
-      input.userId === undefined
-        ? and(
-            eq(connectorCredential.id, input.credentialId),
-            eq(connectorCredential.provider, input.provider)
-          )
-        : and(
-            eq(connectorCredential.id, input.credentialId),
-            eq(connectorCredential.provider, input.provider),
-            eq(connectorCredential.userId, input.userId)
-          )
+      and(
+        eq(connectorCredential.id, input.credentialId),
+        eq(connectorCredential.provider, input.provider),
+        eq(connectorCredential.userId, input.userId)
+      )
     )
     .limit(1);
 
@@ -489,7 +503,7 @@ const refreshAuthorizedConnectorCredentialAccessToken = async (input: {
     });
   }
 
-  return await refreshConnectorAccessToken(record);
+  return await refreshConnectorAccessToken(record, input.signal);
 };
 
 const runAuthorizedConnectorCredential = async <TValue>(
@@ -497,7 +511,7 @@ const runAuthorizedConnectorCredential = async <TValue>(
     credentialId: string;
     provider: ConnectorProvider;
     signal?: AbortSignal;
-    userId?: string;
+    userId: string;
   },
   runner: (
     accessToken: string,
@@ -528,9 +542,10 @@ const runAuthorizedConnectorCredential = async <TValue>(
   );
 };
 
-const postGoogleCalendarEvent = async (input: {
+export const postGoogleCalendarEvent = async (input: {
   accessToken: string;
   event: GoogleCalendarEventDraft;
+  importEvent?: boolean;
   signal?: AbortSignal;
 }) => {
   if (
@@ -573,7 +588,7 @@ const postGoogleCalendarEvent = async (input: {
     }
   }
   const response = await fetch(
-    `${GOOGLE_CALENDAR_API_URL}/calendars/primary/events`,
+    `${GOOGLE_CALENDAR_API_URL}/calendars/primary/events${input.importEvent === true ? "/import" : ""}`,
     {
       body: JSON.stringify(input.event),
       headers: {
@@ -593,6 +608,7 @@ const postGoogleCalendarEvent = async (input: {
 };
 
 type GoogleCalendarEventDraft = {
+  iCalUID?: string;
   description?: string;
   end:
     | { date: string; dateTime?: never; timeZone?: never }
@@ -729,9 +745,13 @@ export const getLinearIdentityFromAccessToken = async (accessToken: string) => {
 };
 
 /** A refreshed token for the caller's own Linear connection, for the MCP client. */
-export const getLinearAccessTokenForUser = async (input: { userId: string }) =>
+export const getLinearAccessTokenForUser = async (input: {
+  userId: string;
+  signal?: AbortSignal;
+}) =>
   await getAuthorizedConnectorAccessToken({
     provider: LINEAR_CONNECTOR_PROVIDER,
+    signal: input.signal,
     userId: input.userId,
   });
 
@@ -739,7 +759,7 @@ export const getLinearAccessTokenForUser = async (input: { userId: string }) =>
 export const getLinearAccessTokenForCredential = async (input: {
   credentialId: string;
   signal?: AbortSignal;
-  userId?: string;
+  userId: string;
 }) =>
   await runAuthorizedConnectorCredential(
     {
@@ -794,7 +814,7 @@ export const createGoogleCalendarEventForCredential = async (input: {
   credentialId: string;
   event: GoogleCalendarEventInput;
   signal?: AbortSignal;
-  userId?: string;
+  userId: string;
 }) =>
   await runAuthorizedConnectorCredential(
     {

@@ -92,7 +92,7 @@ jobs:
       - name: Build runtime dependencies
         run: |
           vp run @quieter/observability#build
-          vp run @quieter/sdk#build
+          vp run quieter#build
 
       - name: Build web worker
         env:

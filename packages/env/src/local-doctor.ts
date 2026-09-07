@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import { parseEnv } from "node:util";
 
 const loopbackHosts = new Set(["127.0.0.1", "::1", "localhost"]);
 
@@ -26,34 +27,38 @@ export const forbiddenLocalKeys = [
   "SENTRY_PROJECT",
 ] as const;
 
-export const parseEnvFile = (path: string) => {
-  const values = new Map<string, string>();
+export const parseEnvFile = (path: string) =>
+  new Map(
+    Object.entries(parseEnv(readFileSync(path, "utf-8"))).filter(
+      (entry): entry is [string, string] =>
+        entry[1] !== undefined && entry[1] !== ""
+    )
+  );
 
-  for (const rawLine of readFileSync(path, "utf-8").split(/\r?\n/u)) {
-    const line = rawLine.trim();
-    if (line === "" || line.startsWith("#")) {
-      continue;
+export const serializeEnvFile = (values: ReadonlyMap<string, string>) => {
+  const lines = [...values].map(([key, value]) => {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/u.test(key)) {
+      throw new Error("Invalid environment variable name.");
     }
-
-    const equalsIndex = line.indexOf("=");
-    if (equalsIndex === -1) {
-      continue;
+    const quote = ["'", '"', "`"].find(
+      (candidate) => !value.includes(candidate)
+    );
+    if (quote === undefined) {
+      throw new Error(
+        "Environment value cannot be represented without changing it."
+      );
     }
-
-    const key = line.slice(0, equalsIndex).trim();
-    let value = line.slice(equalsIndex + 1).trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-    if (value !== "") {
-      values.set(key, value);
-    }
+    return `${key}=${quote}${value}${quote}`;
+  });
+  const serialized = `${lines.join("\n")}\n`;
+  const parsed = parseEnv(serialized);
+  if (
+    Object.keys(parsed).length !== values.size ||
+    [...values].some(([key, value]) => parsed[key] !== value)
+  ) {
+    throw new Error("Environment values did not survive serialization.");
   }
-
-  return values;
+  return serialized;
 };
 
 const getHostname = (value: string) =>
