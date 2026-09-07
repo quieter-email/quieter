@@ -177,6 +177,8 @@ const SavedViewsSection = ({
                 }
               )}
               key={view.id}
+              disabled={view.disabledReason !== null}
+              title={view.disabledReason ?? undefined}
               onClick={() => {
                 onSearch(serializeStructuredSearchState(search));
               }}
@@ -1090,6 +1092,11 @@ const MailboxSavedViewsPanel = (props: MailboxOrganizerContentProps) => {
               <span className="min-w-0 flex-1 truncate text-body">
                 {view.name}
               </span>
+              {view.disabledReason ? (
+                <span className="text-caption text-muted-fg">
+                  {view.disabledReason}
+                </span>
+              ) : null}
               {supportsSharedViews ? (
                 <span className="text-caption text-muted-fg">
                   {view.ownerUserId === null ? "Shared" : "Personal"}
@@ -1654,10 +1661,14 @@ const ManagedRuleRow = (props: ManagedRuleRowProps) => {
             })
           )}
         </p>
+        {rule.disabledReason ? (
+          <p className="text-caption text-muted-fg">{rule.disabledReason}</p>
+        ) : null}
       </div>
       <Switch
         aria-label={`${rule.enabled ? "Disable" : "Enable"} ${rule.name}`}
         checked={rule.enabled}
+        disabled={rule.disabledReason !== null}
         className="shrink-0"
         size="sm"
         onCheckedChange={(enabled) => {

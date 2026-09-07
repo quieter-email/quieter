@@ -108,6 +108,7 @@ export const MessageListSearchView = ({
   const userLabelsBySelectionKey = new Map<string, MailboxLabel>();
   for (const label of userLabels) {
     if (label.type === "user") {
+      userLabelsBySelectionKey.set(normalizeLabelSelectionKey(label.id), label);
       userLabelsBySelectionKey.set(
         normalizeLabelSelectionKey(label.name),
         label
@@ -189,8 +190,8 @@ export const MessageListSearchView = ({
                     <button
                       aria-label={
                         filter.negated === true
-                          ? `Remove excluded label ${filter.value}`
-                          : `Exclude label ${filter.value}`
+                          ? `Remove excluded label ${label?.name ?? filter.value}`
+                          : `Exclude label ${label?.name ?? filter.value}`
                       }
                       className={cn(
                         messageListHeaderControlVariants({ control: "chip" }),
@@ -229,7 +230,9 @@ export const MessageListSearchView = ({
                       {filter.negated === true ? (
                         <span className="text-muted-fg">Not</span>
                       ) : null}
-                      <span className="min-w-0 truncate">{filter.value}</span>
+                      <span className="min-w-0 truncate">
+                        {label?.name ?? filter.value}
+                      </span>
                     </button>
                   );
                 }

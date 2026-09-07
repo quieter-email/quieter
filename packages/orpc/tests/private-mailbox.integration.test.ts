@@ -13,6 +13,8 @@ import {
   organizationDivision,
   organizationDivisionMember,
   user,
+  managedMailSavedView,
+  managedMailRule,
 } from "@quieter/database/schema";
 import {
   mailboxSavedViewDefinitionSchema,
@@ -38,6 +40,7 @@ import {
 } from "../src/mailbox/managed-grants";
 import {
   createManagedLabel,
+  deleteManagedLabel,
   updateManagedLabel,
 } from "../src/managed-mail/labels/service";
 import {
@@ -253,6 +256,96 @@ describe.skipIf(databaseUrl === undefined)(
           })
         ).rejects.toMatchObject({ code: "CONFLICT" });
       }
+    });
+
+    test("label rename repairs legacy references and deletion disables every affected definition", async () => {
+      const mailboxId = await create();
+      const context = { mailboxId, userId: owner };
+      const label = await createManagedLabel({
+        ...context,
+        color: "blue",
+        name: "VIP",
+      });
+      const viewDefinition = mailboxSavedViewDefinitionSchema.parse({
+        color: null,
+        icon: null,
+        name: "VIP view",
+        search: {
+          filters: [{ negated: true, type: "label", value: "VIP" }],
+          text: "",
+        },
+      });
+      const view = await createSavedView({
+        ...context,
+        definition: viewDefinition,
+        shared: false,
+      });
+      expect(view.search).toMatchObject({
+        filters: [{ negated: true, type: "label", value: label.id }],
+      });
+      const definition = managedMailboxRuleDefinitionSchema.parse({
+        actions: [{ kind: "set-read", read: true }],
+        conditionGroups: [
+          {
+            matchMode: "any",
+            search: { filters: [{ type: "label", value: "VIP" }], text: "" },
+          },
+        ],
+        enabled: true,
+        matchMode: "all",
+        name: "VIP rule",
+        search: {
+          filters: [{ negated: true, type: "label", value: label.id }],
+          text: "",
+        },
+      });
+      const rule = await createManagedRule({ ...context, definition });
+      if (rule === undefined) {
+        throw new Error("Rule creation returned no record.");
+      }
+      await db
+        .update(managedMailSavedView)
+        .set({ search: viewDefinition.search })
+        .where(eq(managedMailSavedView.id, view.id));
+      await db
+        .update(managedMailRule)
+        .set({ conditionGroups: definition.conditionGroups })
+        .where(eq(managedMailRule.id, rule.id));
+      await updateManagedLabel({
+        ...context,
+        labelId: label.id,
+        name: "Important",
+      });
+      const [renamedView] = await db
+        .select()
+        .from(managedMailSavedView)
+        .where(eq(managedMailSavedView.id, view.id));
+      expect(renamedView.search).toStrictEqual(view.search);
+      await deleteManagedLabel({ ...context, labelId: label.id });
+      const [disabledView] = await db
+        .select()
+        .from(managedMailSavedView)
+        .where(eq(managedMailSavedView.id, view.id));
+      const [disabledRule] = await db
+        .select()
+        .from(managedMailRule)
+        .where(eq(managedMailRule.id, rule.id));
+      expect(disabledView.disabledReason).toContain("deleted");
+      expect(disabledView.search).toStrictEqual(view.search);
+      expect(disabledRule).toMatchObject({
+        conditionGroups: [
+          {
+            matchMode: "any",
+            search: { filters: [{ type: "label", value: label.id }], text: "" },
+          },
+        ],
+        enabled: false,
+        search: definition.search,
+      });
+      expect(disabledRule.disabledReason).toContain("deleted");
+      await expect(
+        updateManagedRule({ ...context, definition, ruleId: rule.id })
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
     });
 
     test("creates exactly one owner grant without granting the creating admin or team", async () => {

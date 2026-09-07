@@ -2120,6 +2120,7 @@ export const managedMailRule = pgTable(
     createdByUserId: text("createdByUserId").references(() => user.id, {
       onDelete: "set null",
     }),
+    disabledReason: text("disabledReason"),
     enabled: boolean("enabled").notNull().default(true),
     id: text("id").primaryKey(),
     labelIds: jsonb("labelIds").$type<string[]>().notNull(),

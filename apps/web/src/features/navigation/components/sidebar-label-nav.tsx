@@ -650,9 +650,9 @@ export const SidebarLabelNav = ({
       );
     }
     return visibleUserLabels.map((label, index) => {
-      const isActive = selectedLabelKeys.has(
-        normalizeLabelSelectionKey(label.name)
-      );
+      const isActive =
+        selectedLabelKeys.has(normalizeLabelSelectionKey(label.id)) ||
+        selectedLabelKeys.has(normalizeLabelSelectionKey(label.name));
       const labelHovered = isHovered(label.id);
       const labelHoverExiting = isHoverExiting(label.id);
 
@@ -680,7 +680,15 @@ export const SidebarLabelNav = ({
               clearLabelHoverIfLeavingNav(event.relatedTarget);
             }}
             onClick={() => {
-              onSearch(updateLabelFilter(searchQuery, label.name, !isActive));
+              onSearch(
+                updateLabelFilter(
+                  searchQuery,
+                  selectedLabelKeys.has(normalizeLabelSelectionKey(label.id))
+                    ? label.id
+                    : label.name,
+                  !isActive
+                )
+              );
             }}
             onFocus={() => {
               if (isActive) {

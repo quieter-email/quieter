@@ -258,9 +258,9 @@ export const MessageListSearchDropdown = ({
     labelsContent = (
       <div className="flex flex-col gap-0.5">
         {userLabels.map((label) => {
-          const selectionState = selectedUserLabelStates.get(
-            normalizeLabelSelectionKey(label.name)
-          );
+          const selectionState =
+            selectedUserLabelStates.get(normalizeLabelSelectionKey(label.id)) ??
+            selectedUserLabelStates.get(normalizeLabelSelectionKey(label.name));
           return (
             <SearchDropdownRow
               active={selectionState !== undefined}

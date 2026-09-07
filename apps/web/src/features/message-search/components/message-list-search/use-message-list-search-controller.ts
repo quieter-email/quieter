@@ -543,7 +543,16 @@ export const useMessageListSearchController = ({
   };
 
   const toggleLabelToken = (labelName: string) => {
-    const existingIndex = findLabelFilterIndex(currentState.filters, labelName);
+    const label = userLabels.find(
+      (candidate) =>
+        normalizeLabelSelectionKey(candidate.name) ===
+        normalizeLabelSelectionKey(labelName)
+    );
+    const nameIndex = findLabelFilterIndex(currentState.filters, labelName);
+    const existingIndex =
+      nameIndex === -1 && label !== undefined
+        ? findLabelFilterIndex(currentState.filters, label.id)
+        : nameIndex;
     if (existingIndex === -1) {
       const { filters, index } = insertFilterAtTextInput({
         type: "label",

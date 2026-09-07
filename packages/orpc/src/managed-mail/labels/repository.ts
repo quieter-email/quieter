@@ -28,7 +28,8 @@ export const assertManagedLabelsBelongToMailbox = async (
         eq(managedMailLabel.mailboxId, mailboxId),
         inArray(managedMailLabel.id, uniqueLabelIds)
       )
-    );
+    )
+    .for("share");
   if (labels.length !== uniqueLabelIds.length) {
     throw new ORPCError("BAD_REQUEST", {
       message: "One or more labels are unavailable.",
