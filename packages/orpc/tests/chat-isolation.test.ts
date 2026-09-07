@@ -23,8 +23,8 @@ vi.mock("@quieter/database/client", async (importOriginal) => {
   };
 });
 
-vi.mock(import("../src/chat/access"), () => ({
-  assertAiChatCredits: vi.fn<() => Promise<void>>(),
+vi.mock(import("../src/ai-access"), () => ({
+  assertCanUseAi: vi.fn<() => Promise<void>>(),
 }));
 vi.mock(import("../src/mailbox/service"), async () => {
   const { getMailboxCapabilities } = await import("@quieter/mail/data-plane");

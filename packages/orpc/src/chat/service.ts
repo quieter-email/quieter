@@ -31,10 +31,11 @@ import {
   streamText,
   toUIMessageStream,
 } from "ai";
-import type { UIMessage, UIMessageChunk } from "ai";
+import type { TextStreamPart, UIMessage, UIMessageChunk } from "ai";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
+import { assertCanUseAi } from "../ai-access";
 import {
   loadAiAgentContext,
   requestAiMemoryUpdate,
@@ -56,7 +57,7 @@ import {
   searchGmailForUser,
 } from "../gmail-chat-search";
 import { assertAccessibleMailbox } from "../mailbox/service";
-import { assertAiChatCredits } from "./access";
+import { replaceChatParts } from "./continuation";
 import { createLinearChatTools } from "./linear-tools";
 
 const CHAT_HISTORY_WINDOW_MESSAGES = 30;
@@ -304,7 +305,16 @@ export const toCanonicalTranscript = (
     if (message.role !== "assistant" && message.role !== "user") {
       return [];
     }
-    const parts = message.parts.filter(isRenderablePart);
+    const parts = message.parts.filter(isRenderablePart).map((part) =>
+      part.state === "approval-responded"
+        ? {
+            ...part,
+            errorText:
+              "The action was submitted, but its result is not available. Check the affected item before requesting it again.",
+            state: "output-error",
+          }
+        : part
+    );
     if (parts.length === 0) {
       return [];
     }
@@ -329,7 +339,7 @@ const assertCanUseAiCredits = async (input: {
   userId: string;
 }) => {
   try {
-    await assertAiChatCredits({
+    await assertCanUseAi({
       organizationId: input.organizationId,
       userId: input.userId,
     });
@@ -914,6 +924,12 @@ export const createAiChatResponse = async (input: {
         "This answer is no longer waiting for a response."
       );
     }
+    if (lastRow.parts.some((part) => part.state === "approval-responded")) {
+      throw new ChatRequestError(
+        409,
+        "An action was already submitted. Wait for its result, or check the affected item and send a new message."
+      );
+    }
     for (const part of lastRow.parts) {
       if (
         Reflect.get(part, "state") === "approval-requested" &&
@@ -968,6 +984,12 @@ export const createAiChatResponse = async (input: {
       const row = rows[index];
       if (row?.role !== "assistant") {
         break;
+      }
+      if (row.parts.some((part) => part.type.startsWith("tool-"))) {
+        throw new ChatRequestError(
+          409,
+          "This answer includes tool actions. Send a new message to continue without repeating them."
+        );
       }
       if (row.id !== undefined) {
         trailingAssistantIds.push(row.id);
@@ -1066,36 +1088,50 @@ export const createAiChatResponse = async (input: {
   ].join("\n\n");
 
   const usageId = crypto.randomUUID();
+  const model = createChatModel(validated.model);
+  input.request.signal.throwIfAborted();
+  if (continuingRowId !== null && continuingOriginalParts !== null) {
+    const resolvedParts: ChatMessagePart[] = transcript.at(-1)?.parts ?? [];
+    const claimed = await replaceChatParts({
+      chatId: threadId,
+      expectedParts: continuingOriginalParts,
+      messageId: continuingRowId,
+      parts: resolvedParts,
+      userId: input.userId,
+    });
+    if (!claimed) {
+      throw new ChatRequestError(409, "This action has already been answered.");
+    }
+    continuingOriginalParts = resolvedParts;
+  }
   let generationFailed = false;
   const result = streamText({
     abortSignal: input.request.signal,
     instructions: systemPrompt,
     maxOutputTokens: CHAT_MAX_COMPLETION_TOKENS,
     messages: modelMessages,
-    model: createChatModel(validated.model),
-    onEnd: ({ steps }) => {
+    model,
+    onEnd: async ({ steps }) => {
       const usage = summarizeAiUsage({ steps });
-      void (async () => {
-        try {
-          await reportAiUsage({
-            chatId: threadId,
-            completionTokens: usage.completionTokens,
-            costUsd: usage.costUsd,
-            externalId: `${usageId}:${assistantMessageId}`,
-            mailboxId,
-            model: validated.model,
-            promptTokens: usage.promptTokens,
-            promptTokensDetails: {
-              cacheWriteTokens: usage.cacheWriteTokens,
-              cachedTokens: usage.cachedTokens,
-            },
-            usageKind: "aiChat",
-            userId: input.userId,
-          });
-        } catch (error: unknown) {
-          reportError(error, { operation: "chat:report-ai-usage" });
-        }
-      })();
+      try {
+        await reportAiUsage({
+          chatId: threadId,
+          completionTokens: usage.completionTokens,
+          costUsd: usage.costUsd,
+          externalId: `${usageId}:${assistantMessageId}`,
+          mailboxId,
+          model: validated.model,
+          promptTokens: usage.promptTokens,
+          promptTokensDetails: {
+            cacheWriteTokens: usage.cacheWriteTokens,
+            cachedTokens: usage.cachedTokens,
+          },
+          usageKind: "aiChat",
+          userId: input.userId,
+        });
+      } catch (error: unknown) {
+        reportError(error, { operation: "chat:report-ai-usage" });
+      }
     },
     onError: ({ error }) => {
       generationFailed = true;
@@ -1210,7 +1246,62 @@ export const createAiChatResponse = async (input: {
     },
     onError: () => "The answer could not be completed.",
     originalMessages: transcript,
-    stream: result.stream,
+    stream: result.stream.pipeThrough(
+      new TransformStream<
+        TextStreamPart<typeof tools>,
+        TextStreamPart<typeof tools>
+      >({
+        async transform(chunk, controller) {
+          if (
+            continuingRowId !== null &&
+            continuingOriginalParts !== null &&
+            (chunk.type === "tool-result" ||
+              chunk.type === "tool-error" ||
+              chunk.type === "tool-output-denied") &&
+            continuingOriginalParts.some(
+              (part) => part.toolCallId === chunk.toolCallId
+            )
+          ) {
+            const parts = continuingOriginalParts.map((part) => {
+              if (part.toolCallId !== chunk.toolCallId) {
+                return part;
+              }
+              if (chunk.type === "tool-result") {
+                const output: unknown = chunk.output;
+                return {
+                  ...part,
+                  output,
+                  state: "output-available",
+                };
+              }
+              return chunk.type === "tool-output-denied"
+                ? { ...part, state: "output-denied" }
+                : {
+                    ...part,
+                    errorText:
+                      "The action could not be confirmed. Check the affected item before trying again.",
+                    state: "output-error",
+                  };
+            });
+            const saved = await replaceChatParts({
+              chatId: threadId,
+              expectedParts: continuingOriginalParts,
+              messageId: continuingRowId,
+              parts,
+              userId: input.userId,
+            });
+            if (!saved) {
+              throw new ChatRequestError(
+                409,
+                "This chat changed while the action was being saved."
+              );
+            }
+            continuingOriginalParts = parts;
+          }
+          controller.enqueue(chunk);
+        },
+      })
+    ),
   });
   const durableStream = responseStream.pipeThrough(
     new TransformStream<UIMessageChunk, UIMessageChunk>({
