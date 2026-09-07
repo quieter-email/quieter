@@ -1,12 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import type { SESv2Client } from "@aws-sdk/client-sesv2";
 import { ORPCError } from "@orpc/server";
-import {
-  assertCanConsumeOrganizationMailUsage,
-  estimateOutboundOrganizationMailUsage,
-  recordOrganizationMailUsage,
-} from "@quieter/billing/organization-mail-usage";
 import { db } from "@quieter/database/client";
 import {
   mailbox,
@@ -20,7 +14,6 @@ import type {
   ManagedMailHeader,
   ManagedMailMailboxState,
 } from "@quieter/database/schema";
-import { serverEnv } from "@quieter/env/server";
 import { MAILBOX_LABELS } from "@quieter/gmail";
 import type {
   ListMessagesPageResult,
@@ -30,16 +23,8 @@ import type {
   ThreadMessagesResult,
 } from "@quieter/gmail";
 import { parseDraftAnchorFromHeaderReader } from "@quieter/mail/compose/draft-anchor";
-import { buildMimeMessage } from "@quieter/mail/compose/mime";
-import type { composeMessageInputSchema } from "@quieter/mail/compose/schema";
-import {
-  extractMailAddress,
-  splitMailAddressList,
-} from "@quieter/mail/compose/schema";
 import type { MailCommand, MailMutationTarget } from "@quieter/mail/data-plane";
-import type { SendHeader } from "@quieter/mail/send";
 import { getSenderAvatarUrls } from "@quieter/mail/sender-avatar";
-import { reportError } from "@quieter/observability";
 import {
   and,
   asc,
@@ -52,30 +37,15 @@ import {
   or,
   sql,
 } from "drizzle-orm";
-import type { z } from "zod";
 
-import { assertLocalMailSend } from "../../local-managed-mail";
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
 import {
-  assertOrganizationMailRecipientsNotSuppressed,
-  buildOpenTrackingHtmlTransform,
   getOrganizationMailDelivery,
   groupDeliveryStatusesByMessage,
-  resolveOrganizationMailOpenTracking,
 } from "../../organization-mail-delivery";
-import {
-  assertOrganizationOwnsVerifiedSenderDomain,
-  OrganizationMailSendError,
-} from "../../organization-mail-policy";
 import { hasText } from "../../text";
 import { createManagedSearchCondition } from "../search/compiler";
-import {
-  createManagedMessageSearchText,
-  normalizeManagedSearchValue,
-  parseManagedSearchQuery,
-} from "../search/normalization";
-
-type ComposeMessageInput = z.infer<typeof composeMessageInputSchema>;
+import { parseManagedSearchQuery } from "../search/normalization";
 
 type ManagedMessagePresentationRecord = Pick<
   typeof managedMailMessage.$inferSelect,
@@ -103,28 +73,6 @@ type ManagedMessagePresentationRecord = Pick<
   >;
 
 const MANAGED_MESSAGE_PAGE_SIZE = 15;
-
-/**
- * Send policy failures are the sender's problem, not ours, so they keep their
- * own status instead of collapsing into a server error.
- */
-const getOrganizationMailSendErrorCode = (status: number) => {
-  if (status === 400) {
-    return "BAD_REQUEST";
-  }
-  if (status === 403) {
-    return "FORBIDDEN";
-  }
-  if (status === 409) {
-    return "CONFLICT";
-  }
-  if (status === 422) {
-    return "UNPROCESSABLE_CONTENT";
-  }
-  return "INTERNAL_SERVER_ERROR";
-};
-
-const normalizeEmailAddress = (value: string) => value.trim().toLowerCase();
 
 const getManagedPrimarySystemLabelId = (message: {
   direction: "inbound" | "outbound";
@@ -168,24 +116,6 @@ export const getManagedMessageLabelIds = (
   },
   customLabelIds: string[] = []
 ) => [...getManagedSystemLabelIds(message), ...customLabelIds];
-
-const getAwsRegion = () => {
-  const region = serverEnv.AWS_REGION ?? serverEnv.AWS_DEFAULT_REGION;
-  if (!hasText(region)) {
-    throw new ORPCError("INTERNAL_SERVER_ERROR", {
-      message: "Mail sending is temporarily unavailable.",
-    });
-  }
-  return region;
-};
-
-let sesv2Client: SESv2Client | null = null;
-
-const getSesv2Client = async (): Promise<SESv2Client> => {
-  const { SESv2Client } = await import("@aws-sdk/client-sesv2");
-  sesv2Client ??= new SESv2Client({ region: getAwsRegion() });
-  return sesv2Client;
-};
 
 const toMessageListItem = async (
   record: ManagedMessagePresentationRecord,
@@ -1058,179 +988,6 @@ export const setManagedThreadMailboxState = async (input: {
   };
 };
 
-export const recordOutboundManagedMessageForSender = async (input: {
-  attachments?: {
-    contentId?: string | null;
-    fileName: string;
-    inline: boolean;
-    mimeType: string;
-    size: number;
-  }[];
-  bcc?: string[];
-  bodyHtml?: string;
-  bodyText?: string;
-  cc?: string[];
-  headers?: SendHeader[];
-  messageHeaderId?: string;
-  organizationId: string;
-  providerMessageId: string;
-  rawSizeBytes?: number | null;
-  replyTo?: string[];
-  requireApiSentMessageInclusion?: boolean;
-  sender: string;
-  senderAddress?: string;
-  sentAt?: Date;
-  subject: string;
-  threadId?: string;
-  to: string[];
-}) => {
-  const senderAddress = normalizeEmailAddress(
-    input.senderAddress ?? extractMailAddress(input.sender)
-  );
-  const [senderMailbox] = await db
-    .select({ id: mailbox.id })
-    .from(mailbox)
-    .where(
-      and(
-        eq(mailbox.emailAddress, senderAddress),
-        eq(mailbox.organizationId, input.organizationId),
-        eq(mailbox.provider, "managed"),
-        input.requireApiSentMessageInclusion === true
-          ? eq(mailbox.includeApiSentMessages, true)
-          : undefined
-      )
-    )
-    .limit(1);
-  if (senderMailbox === undefined) {
-    return null;
-  }
-
-  const id = randomUUID();
-  const sentAt = input.sentAt ?? new Date();
-  return await db.transaction(async (tx) => {
-    const [inserted] = await tx
-      .insert(managedMailMessage)
-      .values({
-        bcc: hasText(input.bcc?.join(", ")) ? input.bcc.join(", ") : null,
-        bccNormalized: normalizeManagedSearchValue(input.bcc?.join(", ")),
-        bodyHtml: input.bodyHtml ?? null,
-        bodyText: input.bodyText ?? null,
-        cc: hasText(input.cc?.join(", ")) ? input.cc.join(", ") : null,
-        ccNormalized: normalizeManagedSearchValue(input.cc?.join(", ")),
-        createdAt: sentAt,
-        direction: "outbound",
-        from: input.sender,
-        fromNormalized: normalizeManagedSearchValue(input.sender),
-        headers: input.headers ?? [],
-        id,
-        inReplyTo: null,
-        isRead: true,
-        mailboxId: senderMailbox.id,
-        messageHeaderId: input.messageHeaderId ?? null,
-        providerMessageId: input.providerMessageId,
-        rawSizeBytes: input.rawSizeBytes ?? null,
-        references: null,
-        replyTo: hasText(input.replyTo?.join(", "))
-          ? input.replyTo.join(", ")
-          : null,
-        s3Bucket: null,
-        s3Key: null,
-        searchText: createManagedMessageSearchText(input),
-        sentAt,
-        snippet: (() => {
-          const snippetSource = hasText(input.bodyText)
-            ? input.bodyText
-            : (input.bodyHtml?.replaceAll(/<[^>]+>/gu, " ") ?? "");
-          const trimmedSnippet = snippetSource
-            .replaceAll(/\s+/gu, " ")
-            .trim()
-            .slice(0, 240);
-          return hasText(trimmedSnippet) ? trimmedSnippet : null;
-        })(),
-        subject: hasText(input.subject) ? input.subject : null,
-        threadId: input.threadId ?? id,
-        to: input.to.join(", "),
-        toNormalized: normalizeManagedSearchValue(input.to.join(", ")),
-        updatedAt: sentAt,
-      })
-      .onConflictDoNothing({
-        target: [
-          managedMailMessage.mailboxId,
-          managedMailMessage.providerMessageId,
-        ],
-      })
-      .returning({
-        id: managedMailMessage.id,
-        threadId: managedMailMessage.threadId,
-      });
-
-    if (inserted === undefined) {
-      return null;
-    }
-
-    if (input.attachments !== undefined && input.attachments.length > 0) {
-      await tx.insert(managedMailAttachment).values(
-        input.attachments.map((attachment) => ({
-          contentId: attachment.contentId ?? null,
-          createdAt: sentAt,
-          fileName: attachment.fileName,
-          id: randomUUID(),
-          inline: attachment.inline,
-          mailboxId: senderMailbox.id,
-          messageId: inserted.id,
-          mimeType: attachment.mimeType,
-          normalizedFileName: normalizeManagedSearchValue(attachment.fileName),
-          size: attachment.size,
-        }))
-      );
-    }
-    const inheritedLabels = await tx
-      .selectDistinct({ labelId: managedMailMessageLabel.labelId })
-      .from(managedMailMessageLabel)
-      .innerJoin(
-        managedMailMessage,
-        eq(managedMailMessage.id, managedMailMessageLabel.messageId)
-      )
-      .where(
-        and(
-          eq(managedMailMessage.mailboxId, senderMailbox.id),
-          eq(managedMailMessage.threadId, inserted.threadId),
-          ne(managedMailMessage.id, inserted.id)
-        )
-      );
-    if (inheritedLabels.length > 0) {
-      await tx
-        .insert(managedMailMessageLabel)
-        .values(
-          inheritedLabels.map(({ labelId }) => ({
-            assignedByUserId: null,
-            createdAt: sentAt,
-            id: randomUUID(),
-            labelId,
-            mailboxId: senderMailbox.id,
-            messageId: inserted.id,
-            ruleId: null,
-            source: "inherited" as const,
-          }))
-        )
-        .onConflictDoNothing({
-          target: [
-            managedMailMessageLabel.messageId,
-            managedMailMessageLabel.labelId,
-          ],
-        });
-    }
-    await tx
-      .update(mailbox)
-      .set({
-        contentRevision: sql`${mailbox.contentRevision} + 1`,
-        updatedAt: new Date(),
-      })
-      .where(eq(mailbox.id, senderMailbox.id));
-    return inserted;
-  });
-};
-
 export const getManagedMessageDelivery = async (input: {
   mailboxId: string;
   messageId: string;
@@ -1313,189 +1070,4 @@ export const listManagedMessageDeliveryStatuses = async (input: {
     );
 
   return groupDeliveryStatusesByMessage(rows);
-};
-
-export const sendManagedMailboxMessage = async (input: {
-  mailboxId: string;
-  message: ComposeMessageInput;
-  userId: string;
-}) => {
-  const selectedMailbox = await getAuthorizedManagedMailbox({
-    mailboxId: input.mailboxId,
-    requiredRoles: ["responder", "manager"],
-    userId: input.userId,
-  });
-  if (!selectedMailbox.organizationId) {
-    throw new ORPCError("INTERNAL_SERVER_ERROR", {
-      message: "Managed mailbox team is missing.",
-    });
-  }
-  const { organizationId } = selectedMailbox;
-
-  const to = splitMailAddressList(input.message.recipients.to).map(
-    extractMailAddress
-  );
-  const cc = splitMailAddressList(input.message.recipients.cc).map(
-    extractMailAddress
-  );
-  const bcc = splitMailAddressList(input.message.recipients.bcc).map(
-    extractMailAddress
-  );
-  const attachmentSizeBytes = [
-    ...input.message.attachments,
-    ...input.message.inlineImages,
-  ].reduce((total, attachment) => total + attachment.size, 0);
-  const usageEstimate = estimateOutboundOrganizationMailUsage({
-    attachmentSizeBytes,
-    bcc,
-    cc,
-    html: input.message.bodyHtml,
-    subject: input.message.subject,
-    text: input.message.bodyText,
-    to,
-  });
-
-  try {
-    await assertCanConsumeOrganizationMailUsage({
-      estimate: usageEstimate,
-      organizationId,
-    });
-    await assertOrganizationOwnsVerifiedSenderDomain({
-      organizationId,
-      sender: selectedMailbox.emailAddress,
-    });
-    assertLocalMailSend();
-    await assertOrganizationMailRecipientsNotSuppressed({
-      organizationId,
-      recipients: [...to, ...cc, ...bcc],
-    });
-  } catch (error) {
-    if (error instanceof OrganizationMailSendError) {
-      throw new ORPCError(getOrganizationMailSendErrorCode(error.status), {
-        message: error.message,
-        status: error.status,
-      });
-    }
-    throw error;
-  }
-
-  const sentAt = new Date();
-  const domain = selectedMailbox.emailAddress.split("@").at(1);
-  if (!hasText(domain)) {
-    throw new ORPCError("INTERNAL_SERVER_ERROR", {
-      message: "Managed mailbox address is invalid.",
-    });
-  }
-  const messageHeaderId = `<${randomUUID()}@${domain}>`;
-  const openTrackingEnabled = await resolveOrganizationMailOpenTracking({
-    organizationId,
-  });
-  const rawMessage = await buildMimeMessage(input.message, {
-    from: selectedMailbox.emailAddress,
-    messageId: messageHeaderId,
-    omitBccHeader: true,
-    sentAt,
-    ...buildOpenTrackingHtmlTransform({
-      messageHeaderId,
-      openTrackingEnabled,
-    }),
-  });
-  const { SendEmailCommand } = await import("@aws-sdk/client-sesv2");
-  const client = await getSesv2Client();
-  const response = await client.send(
-    new SendEmailCommand({
-      ConfigurationSetName: serverEnv.SES_CONFIGURATION_SET_NAME,
-      Content: {
-        Raw: {
-          Data: new TextEncoder().encode(rawMessage),
-        },
-      },
-      Destination: {
-        BccAddresses: bcc,
-        CcAddresses: cc,
-        ToAddresses: to,
-      },
-      FromEmailAddress: selectedMailbox.emailAddress,
-      ReplyToAddresses: [selectedMailbox.emailAddress],
-    })
-  );
-  const providerMessageId = response.MessageId;
-  if (!hasText(providerMessageId)) {
-    throw new ORPCError("INTERNAL_SERVER_ERROR", {
-      message:
-        "The message was accepted, but no delivery reference was returned.",
-    });
-  }
-
-  const persistSendRecord = async () => {
-    try {
-      return await recordOutboundManagedMessageForSender({
-        attachments: [
-          ...input.message.attachments.map((attachment) => ({
-            contentId: attachment.contentId,
-            fileName: attachment.fileName ?? attachment.name,
-            inline: false,
-            mimeType: attachment.mimeType,
-            size: attachment.size,
-          })),
-          ...input.message.inlineImages.map((attachment) => ({
-            contentId: attachment.contentId,
-            fileName: attachment.name,
-            inline: true,
-            mimeType: attachment.mimeType,
-            size: attachment.size,
-          })),
-        ],
-        bcc,
-        bodyHtml: input.message.bodyHtml,
-        bodyText: input.message.bodyText,
-        cc,
-        headers: input.message.headers,
-        messageHeaderId,
-        organizationId,
-        providerMessageId,
-        replyTo: [selectedMailbox.emailAddress],
-        sender: selectedMailbox.emailAddress,
-        sentAt,
-        subject: input.message.subject,
-        threadId: input.message.replyContext?.threadId,
-        to,
-      });
-    } catch (error) {
-      reportError(error, {
-        operation: "managed-mail:persist-outbound-message",
-      });
-      return null;
-    }
-  };
-
-  const persistUsage = async () => {
-    try {
-      await recordOrganizationMailUsage({
-        ...usageEstimate,
-        metadata: {
-          mailboxId: selectedMailbox.id,
-          sender: selectedMailbox.emailAddress,
-        },
-        organizationId,
-        providerMessageId,
-      });
-    } catch (error) {
-      reportError(error, { operation: "managed-mail:record-mail-usage" });
-    }
-  };
-
-  const [savedMessage] = await Promise.all([
-    persistSendRecord(),
-    persistUsage(),
-  ]);
-
-  return {
-    id: savedMessage?.id ?? providerMessageId,
-    messageId: providerMessageId,
-    threadId:
-      savedMessage?.threadId ??
-      input.message.replyContext?.threadId ??
-      providerMessageId,
-  };
 };

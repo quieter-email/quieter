@@ -197,13 +197,16 @@ export const useComposeDialogController = ({
     const message = buildDraftFromForm(values);
     setDraft(() => ({ ...message, errorMessage: null, saveStatus: "sending" }));
 
+    let draftCleanupHandled = false;
     try {
       if (demoMode) {
         sendDemoDraft(message);
       } else if (managedDemoMode) {
         sendManagedDemoDraft(message);
       } else {
-        await sendComposeMessage(mailboxId ?? "", message);
+        const sent = await sendComposeMessage(mailboxId ?? "", message);
+        draftCleanupHandled =
+          "draftCleanupHandled" in sent && sent.draftCleanupHandled;
       }
     } catch (error) {
       handleSendFailure(error);
@@ -212,7 +215,11 @@ export const useComposeDialogController = ({
 
     closeDialog();
 
-    if (message.draftId !== undefined && message.draftId !== "") {
+    if (
+      !draftCleanupHandled &&
+      message.draftId !== undefined &&
+      message.draftId !== ""
+    ) {
       try {
         if (demoMode) {
           deleteDemoDraft(message);

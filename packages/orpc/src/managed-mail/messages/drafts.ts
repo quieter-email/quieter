@@ -17,11 +17,8 @@ import {
   createManagedMessageSearchText,
   normalizeManagedSearchValue,
 } from "../search/normalization";
-import {
-  deleteRawMailObject,
-  getRawMailObjectReference,
-  writeRawMailObject,
-} from "./raw-object";
+import { deleteRawMailObject, getRawMailObjectReference } from "./raw-object";
+import { storeRawMailObject } from "./raw-object-lifecycle";
 
 export const saveManagedDraft = async (input: {
   draft: z.infer<typeof composeDraftInputSchema>;
@@ -71,7 +68,7 @@ export const saveManagedDraft = async (input: {
     })
   );
   const parsed = await parseRawMailMessage(raw);
-  const object = await writeRawMailObject(raw);
+  const object = await storeRawMailObject(raw);
   const values = {
     bcc: draft.recipients.bcc || null,
     bccNormalized: normalizeManagedSearchValue(draft.recipients.bcc),

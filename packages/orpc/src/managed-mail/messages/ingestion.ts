@@ -362,7 +362,7 @@ export const recordInboundManagedMessage = async (input: {
     );
   }
 
-  const ingestResults = await Promise.all(
+  const ingestResults = await Promise.allSettled(
     targetMailboxIds.map(
       async (targetMailboxId) =>
         await ingestManagedMessageForMailbox({
@@ -380,11 +380,13 @@ export const recordInboundManagedMessage = async (input: {
         })
     )
   );
-  const processedMailboxIds = ingestResults.filter(
-    (mailboxId): mailboxId is string => mailboxId !== null
+  const failed = ingestResults.find((result) => result.status === "rejected");
+  if (failed !== undefined) {
+    throw failed.reason;
+  }
+  return ingestResults.flatMap((result) =>
+    result.status === "fulfilled" && result.value !== null ? [result.value] : []
   );
-
-  return processedMailboxIds;
 };
 
 export const hasManagedMailObjectReference = async (input: {

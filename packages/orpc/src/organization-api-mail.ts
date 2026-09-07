@@ -25,7 +25,8 @@ import {
   assertUserOrganizationMember,
 } from "./mail-domain/service";
 import { createManagedMailbox } from "./mailbox/managed-grants";
-import { recordOutboundManagedMessageForSender } from "./managed-mail/messages/service";
+import { recordOutboundManagedMessageForSender } from "./managed-mail/messages/outbound";
+import type { RawMailObjectReference } from "./managed-mail/messages/raw-object";
 import {
   createManagedMessageSearchText,
   normalizeManagedSearchValue,
@@ -281,17 +282,13 @@ const findApiMessage = async (input: {
   return record;
 };
 
-const hasAttachmentsToRecord = (
-  inserted: { id: string } | undefined,
-  attachmentCount: number
-) => inserted !== undefined && attachmentCount > 0;
-
 export const recordOrganizationApiMailMessage = async (input: {
   attachments?: {
     contentId?: string | null;
     fileName: string;
     inline: boolean;
     mimeType: string;
+    partIndex?: number | null;
     size: number;
   }[];
   bcc?: string[];
@@ -302,6 +299,7 @@ export const recordOrganizationApiMailMessage = async (input: {
   messageHeaderId?: string;
   organizationId: string;
   providerMessageId: string;
+  rawObject?: RawMailObjectReference | null;
   rawSizeBytes?: number | null;
   replyTo?: string[];
   sender: string;
@@ -309,81 +307,86 @@ export const recordOrganizationApiMailMessage = async (input: {
   sentAt?: Date;
   subject: string;
   to: string[];
-}) => {
-  const id = randomUUID();
-  const sentAt = input.sentAt ?? new Date();
-  const senderAddress = normalizeEmailAddress(
-    input.senderAddress ?? extractMailAddress(input.sender)
-  );
-  const snippet = createSnippet({
-    bodyHtml: input.bodyHtml,
-    bodyText: input.bodyText,
-  });
-  const bccJoined = input.bcc?.join(", ");
-  const ccJoined = input.cc?.join(", ");
-  const replyToJoined = input.replyTo?.join(", ");
-  const [inserted] = await db
-    .insert(organizationApiMailMessage)
-    .values({
-      bcc: hasText(bccJoined) ? bccJoined : null,
-      bccNormalized: normalizeManagedSearchValue(bccJoined),
-      bodyHtml: input.bodyHtml ?? null,
-      bodyText: input.bodyText ?? null,
-      cc: hasText(ccJoined) ? ccJoined : null,
-      ccNormalized: normalizeManagedSearchValue(ccJoined),
-      createdAt: sentAt,
-      from: input.sender,
-      fromNormalized: normalizeManagedSearchValue(input.sender),
-      headers: input.headers ?? [],
-      id,
-      messageHeaderId: input.messageHeaderId ?? null,
-      organizationId: input.organizationId,
-      providerMessageId: input.providerMessageId,
-      rawSizeBytes: input.rawSizeBytes ?? null,
-      replyTo: hasText(replyToJoined) ? replyToJoined : null,
-      searchText: createManagedMessageSearchText({
-        bodyText: input.bodyText,
+}) =>
+  await db.transaction(async (tx) => {
+    const id = randomUUID();
+    const sentAt = input.sentAt ?? new Date();
+    const senderAddress = normalizeEmailAddress(
+      input.senderAddress ?? extractMailAddress(input.sender)
+    );
+    const snippet = createSnippet({
+      bodyHtml: input.bodyHtml,
+      bodyText: input.bodyText,
+    });
+    const bccJoined = input.bcc?.join(", ");
+    const ccJoined = input.cc?.join(", ");
+    const replyToJoined = input.replyTo?.join(", ");
+    const [inserted] = await tx
+      .insert(organizationApiMailMessage)
+      .values({
+        bcc: hasText(bccJoined) ? bccJoined : null,
+        bccNormalized: normalizeManagedSearchValue(bccJoined),
+        bodyHtml: input.bodyHtml ?? null,
+        bodyText: input.bodyText ?? null,
+        cc: hasText(ccJoined) ? ccJoined : null,
+        ccNormalized: normalizeManagedSearchValue(ccJoined),
+        createdAt: sentAt,
+        from: input.sender,
+        fromNormalized: normalizeManagedSearchValue(input.sender),
+        headers: input.headers ?? [],
+        id,
+        messageHeaderId: input.messageHeaderId ?? null,
+        organizationId: input.organizationId,
+        providerMessageId: input.providerMessageId,
+        rawObjectBucket: input.rawObject?.bucket ?? null,
+        rawObjectKey: input.rawObject?.key ?? null,
+        rawObjectProvider: input.rawObject?.provider ?? null,
+        rawSizeBytes: input.rawSizeBytes ?? null,
+        replyTo: hasText(replyToJoined) ? replyToJoined : null,
+        searchText: createManagedMessageSearchText({
+          bodyText: input.bodyText,
+          snippet,
+          subject: input.subject,
+        }),
+        senderAddress,
+        sentAt,
         snippet,
-        subject: input.subject,
-      }),
-      senderAddress,
-      sentAt,
-      snippet,
-      subject: hasText(input.subject) ? input.subject : null,
-      to: input.to.join(", "),
-      toNormalized: normalizeManagedSearchValue(input.to.join(", ")),
-      updatedAt: sentAt,
-    })
-    .onConflictDoNothing({
-      target: [
-        organizationApiMailMessage.organizationId,
-        organizationApiMailMessage.providerMessageId,
-      ],
-    })
-    .returning({ id: organizationApiMailMessage.id });
+        subject: hasText(input.subject) ? input.subject : null,
+        to: input.to.join(", "),
+        toNormalized: normalizeManagedSearchValue(input.to.join(", ")),
+        updatedAt: sentAt,
+      })
+      .onConflictDoNothing({
+        target: [
+          organizationApiMailMessage.organizationId,
+          organizationApiMailMessage.providerMessageId,
+        ],
+      })
+      .returning({ id: organizationApiMailMessage.id });
 
-  const attachmentCount = input.attachments?.length ?? 0;
-  if (!hasAttachmentsToRecord(inserted, attachmentCount)) {
-    return inserted ?? null;
-  }
+    const attachmentCount = input.attachments?.length ?? 0;
+    if (inserted === undefined || attachmentCount === 0) {
+      return inserted ?? null;
+    }
 
-  const attachments = input.attachments ?? [];
-  await db.insert(organizationApiMailAttachment).values(
-    attachments.map((attachment) => ({
-      contentId: attachment.contentId ?? null,
-      createdAt: sentAt,
-      fileName: attachment.fileName,
-      id: randomUUID(),
-      inline: attachment.inline,
-      messageId: inserted.id,
-      mimeType: attachment.mimeType,
-      normalizedFileName: normalizeManagedSearchValue(attachment.fileName),
-      organizationId: input.organizationId,
-      size: attachment.size,
-    }))
-  );
-  return inserted;
-};
+    const attachments = input.attachments ?? [];
+    await tx.insert(organizationApiMailAttachment).values(
+      attachments.map((attachment) => ({
+        contentId: attachment.contentId ?? null,
+        createdAt: sentAt,
+        fileName: attachment.fileName,
+        id: randomUUID(),
+        inline: attachment.inline,
+        messageId: inserted.id,
+        mimeType: attachment.mimeType,
+        normalizedFileName: normalizeManagedSearchValue(attachment.fileName),
+        organizationId: input.organizationId,
+        partIndex: attachment.partIndex ?? null,
+        size: attachment.size,
+      }))
+    );
+    return inserted;
+  });
 
 export const listOrganizationApiMailMessages = async (input: {
   category: string;
@@ -709,6 +712,7 @@ export const backfillApiMessagesForManagedMailbox = async (input: {
         fileName: attachment.fileName,
         inline: attachment.inline,
         mimeType: attachment.mimeType,
+        partIndex: attachment.partIndex,
         size: attachment.size,
       })),
       bcc: hasText(record.bcc) ? [record.bcc] : [],
@@ -719,6 +723,16 @@ export const backfillApiMessagesForManagedMailbox = async (input: {
       messageHeaderId: record.messageHeaderId ?? undefined,
       organizationId: record.organizationId,
       providerMessageId: record.providerMessageId,
+      rawObject:
+        record.rawObjectBucket !== null &&
+        record.rawObjectKey !== null &&
+        record.rawObjectProvider !== null
+          ? {
+              bucket: record.rawObjectBucket,
+              key: record.rawObjectKey,
+              provider: record.rawObjectProvider,
+            }
+          : null,
       rawSizeBytes: record.rawSizeBytes,
       replyTo: hasText(record.replyTo) ? [record.replyTo] : [],
       requireApiSentMessageInclusion: true,

@@ -25,7 +25,12 @@ describe("native local mail storage", () => {
     const raw = new TextEncoder().encode(
       "From: sender@example.com\r\n\r\nDraft bytes"
     );
-    const object = await writeRawMailObject(raw);
+    const object = {
+      bucket: LOCAL_MAIL_BUCKET,
+      key: `messages/${crypto.randomUUID()}.eml`,
+      provider: "r2" as const,
+    };
+    await writeRawMailObject(object, raw);
     expect(object.bucket).toBe(LOCAL_MAIL_BUCKET);
     await expect(
       readRawMailObject({

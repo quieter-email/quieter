@@ -4,11 +4,13 @@ import { db } from "@quieter/database/client";
 import {
   mailbox,
   managedMailMessage,
+  organization,
   organizationApiMailMessage,
   organizationMailDeliveryEvent,
   organizationMailDeliveryRecipient,
   organizationMailOpenEvent,
   organizationMailRecipientSuppression,
+  organizationMailSendIdempotency,
   organizationMailSuppressionAudit,
   organizationMailTrackingSettings,
 } from "@quieter/database/schema";
@@ -41,6 +43,8 @@ export type OrganizationMailFeedbackRecipient = {
 };
 
 export type OrganizationMailFeedback = {
+  sendOperationId?: string;
+  sender?: string;
   eventType: OrganizationMailDeliveryEventType;
   occurredAt: Date;
   permanentFailure?: boolean;
@@ -353,9 +357,46 @@ const applySuppressionChange = async (
 export const recordOrganizationMailFeedback = async (
   feedback: OrganizationMailFeedback
 ) => {
-  const organizationId = await resolveOrganizationId(
-    feedback.providerMessageId
-  );
+  let recoveredOrganizationId: string | undefined;
+  if (feedback.sendOperationId !== undefined && feedback.sender !== undefined) {
+    const [operation] = await db
+      .select()
+      .from(organizationMailSendIdempotency)
+      .where(eq(organizationMailSendIdempotency.id, feedback.sendOperationId))
+      .limit(1);
+    if (
+      operation?.snapshot !== undefined &&
+      operation.snapshot !== null &&
+      normalizeRecipient(operation.snapshot.sender) ===
+        normalizeRecipient(feedback.sender)
+    ) {
+      const [accepted] = await db
+        .update(organizationMailSendIdempotency)
+        .set({
+          response: { messageId: feedback.providerMessageId, sent: true },
+          status: "accepted",
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(organizationMailSendIdempotency.id, operation.id),
+            inArray(organizationMailSendIdempotency.status, [
+              "submitting",
+              "unknown",
+              "accepted",
+            ]),
+            sql`(${organizationMailSendIdempotency.response} is null or ${organizationMailSendIdempotency.response}->>'messageId' = ${feedback.providerMessageId})`
+          )
+        )
+        .returning({
+          organizationId: organizationMailSendIdempotency.organizationId,
+        });
+      recoveredOrganizationId = accepted?.organizationId;
+    }
+  }
+  const organizationId =
+    recoveredOrganizationId ??
+    (await resolveOrganizationId(feedback.providerMessageId));
   if (organizationId === null) {
     throw new OrganizationMailFeedbackMessageNotFoundError(
       feedback.providerMessageId
@@ -372,9 +413,11 @@ export const recordOrganizationMailFeedback = async (
   const now = new Date();
 
   await db.transaction(async (transaction) => {
-    await transaction.execute(
-      sql`select pg_advisory_xact_lock(hashtextextended(${JSON.stringify([organizationId, feedback.providerMessageId])}, 0))`
-    );
+    await transaction
+      .select({ id: organization.id })
+      .from(organization)
+      .where(eq(organization.id, organizationId))
+      .for("update");
     for (const recipient of recipients.toSorted((a, b) =>
       a.emailAddress.localeCompare(b.emailAddress)
     )) {

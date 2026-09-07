@@ -98,6 +98,16 @@ export default {
         )
       );
     }
+    if (url.pathname === "/__dev/mail-recovery") {
+      const { recoverMailSends } = await import("@quieter/orpc/mail-send");
+      const { cleanupMailObjects } =
+        await import("@quieter/orpc/managed-mail/storage");
+      await withRequestDatabaseClient(async () => {
+        await recoverMailSends();
+        await cleanupMailObjects();
+      });
+      return new Response(null, { status: 204 });
+    }
     if (url.pathname === "/__dev/actions") {
       return Response.json(
         await withRequestDatabaseClient(

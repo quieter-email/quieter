@@ -3,6 +3,8 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./mail-send": "./src/mail-send.ts",
+    "./managed-mail/storage": "./src/managed-mail/messages/raw-object-lifecycle.ts",
     "./deployment-health": "./src/deployment-health.ts",
     ".": "./src/client.ts",
     "./context": "./src/context.ts",

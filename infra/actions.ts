@@ -4,7 +4,6 @@ import type { createAppDatabase } from "./database";
 import { cloudflareWorkerObservability } from "./runtime";
 import type { DeploymentContext } from "./runtime";
 import { requireSecretBinding } from "./secrets";
-import { deploymentEnvironment } from "./stage";
 import type { SecretBindings } from "./types";
 
 const actionSecretNames = [
@@ -73,9 +72,25 @@ export const createMailboxActionResources = (
         date: COMPATIBILITY_DATE,
         flags: ["nodejs_compat"],
       },
-      environment: { QUIETER_DEPLOYMENT_ENV: deploymentEnvironment },
+      environment: {
+        ...context.billingEnvironment,
+        R2_ACCOUNT_ID: context.env.R2_ACCOUNT_ID ?? "",
+        R2_BUCKET: context.env.R2_BUCKET ?? "",
+        R2_ENDPOINT: context.env.R2_ENDPOINT ?? "",
+      },
       handler: "packages/cloudflare/src/mailbox-action-dispatch-worker.ts",
-      link: [appDatabase, queue, sentryDsnBinding],
+      link: [
+        appDatabase,
+        queue,
+        sentryDsnBinding,
+        ...(
+          [
+            "POLAR_ACCESS_TOKEN",
+            "R2_ACCESS_KEY_ID",
+            "R2_SECRET_ACCESS_KEY",
+          ] as const
+        ).map((name) => requireSecretBinding(secretBindings, name)),
+      ],
       transform: {
         worker(args) {
           args.observability = cloudflareWorkerObservability;

@@ -1,8 +1,10 @@
 import { withRequestDatabaseClient } from "@quieter/database/client";
+import { recoverMailSends } from "@quieter/orpc/mail-send";
 import {
   claimPendingMailboxActionRuns,
   releaseMailboxActionRunDispatchClaims,
 } from "@quieter/orpc/mailbox-actions";
+import { cleanupMailObjects } from "@quieter/orpc/managed-mail/storage";
 
 import { reportWorkerError, withSentryReporting } from "./worker-runtime";
 
@@ -56,7 +58,15 @@ export default withSentryReporting({
   async scheduled(_event, env, _ctx) {
     try {
       await withRequestDatabaseClient(async () => {
-        await dispatchPendingMailboxActionRuns(env);
+        const results = await Promise.allSettled([
+          dispatchPendingMailboxActionRuns(env),
+          recoverMailSends(),
+          cleanupMailObjects(),
+        ]);
+        const failed = results.find((result) => result.status === "rejected");
+        if (failed !== undefined) {
+          throw failed.reason;
+        }
       });
     } catch (error) {
       reportWorkerError(error, {

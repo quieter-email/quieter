@@ -64,13 +64,13 @@ import {
   saveManagedDraft,
   deleteManagedDraft,
 } from "../managed-mail/messages/drafts";
+import { sendManagedMailboxMessage } from "../managed-mail/messages/send";
 import {
   getManagedMessageDelivery,
   getManagedMessageInspector,
   getManagedThread,
   listManagedMessageDeliveryStatuses,
   listManagedMessages,
-  sendManagedMailboxMessage,
   setManagedMessageMailboxState,
   setManagedMessageReadState,
   setManagedThreadMailboxState,

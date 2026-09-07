@@ -26,7 +26,7 @@ import { z } from "zod";
 import { hasText } from "../../text";
 import { updateManagedMessageLabelAssignments } from "../labels/repository";
 import { readRawMailObject } from "../messages/raw-object";
-import { sendManagedMailboxMessage } from "../messages/service";
+import { sendManagedMailboxMessage } from "../messages/send";
 import { matchesManagedMailRule } from "../search/evaluator";
 
 type ManagedMessageRecord = typeof managedMailMessage.$inferSelect;

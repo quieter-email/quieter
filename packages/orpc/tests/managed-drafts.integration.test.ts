@@ -34,7 +34,11 @@ vi.mock(import("@quieter/env/server"), async (original) => {
   const actual = await original();
   return {
     ...actual,
-    serverEnv: { ...actual.serverEnv, DATABASE_URL: state.databaseUrl },
+    serverEnv: {
+      ...actual.serverEnv,
+      DATABASE_URL: state.databaseUrl,
+      R2_BUCKET: "test",
+    },
   };
 });
 vi.mock(
@@ -53,14 +57,12 @@ vi.mock(
       }
       return raw;
     },
-    writeRawMailObject: async (raw: Uint8Array) => {
+    writeRawMailObject: async (object, raw: Uint8Array) => {
       if (state.rejectWrite) {
         throw new Error("Storage unavailable");
       }
-      const key = crypto.randomUUID();
-      state.objects.set(key, new Uint8Array(raw));
+      state.objects.set(object.key, new Uint8Array(raw));
       await state.barrier?.();
-      return { bucket: "test", key, provider: "r2" as const };
     },
   })
 );

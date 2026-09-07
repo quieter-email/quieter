@@ -121,6 +121,42 @@ export type OrganizationMailUsageAlertTarget =
   | "included_usage"
   | "overage_limit";
 export type OrganizationMailUsageDirection = "inbound" | "outbound";
+
+export type MailSendSnapshot = {
+  rawSizeBytes: number;
+  billingAccount?: {
+    creditAmountCents: number;
+    currentPeriodEnd: string;
+    currentPeriodStart: string;
+    externalCustomerId: string;
+    organizationId: string;
+    product: Exclude<BillingPlan, "free">;
+  } | null;
+  attachments: {
+    contentId?: string | null;
+    fileName: string;
+    inline: boolean;
+    mimeType: string;
+    partIndex: number;
+    size: number;
+  }[];
+  bcc: string[];
+  bodyHtml?: string;
+  bodyText: string;
+  cc: string[];
+  draftId?: string;
+  draftUpdatedAt?: string;
+  headers: ManagedMailHeader[];
+  kind: "api" | "mailbox";
+  mailboxId?: string;
+  replyTo: string[];
+  sender: string;
+  sentAt: string;
+  subject: string;
+  tags: { name: string; value: string }[];
+  threadId?: string;
+  to: string[];
+};
 export type OrganizationMailDeliveryEventType =
   | "bounced"
   | "complained"
@@ -1801,6 +1837,10 @@ export const organizationApiMailMessage = pgTable(
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
     providerMessageId: text("providerMessageId").notNull(),
+    rawObjectBucket: text("rawObjectBucket"),
+    rawObjectKey: text("rawObjectKey"),
+    rawObjectProvider:
+      text("rawObjectProvider").$type<ManagedMailRawObjectProvider>(),
     rawSizeBytes: integer("rawSizeBytes"),
     replyTo: text("replyTo"),
     searchText: text("searchText").notNull().default(""),
@@ -1813,6 +1853,11 @@ export const organizationApiMailMessage = pgTable(
     updatedAt: timestamp("updatedAt").notNull(),
   },
   (table) => [
+    index("organization_api_mail_raw_object_idx").on(
+      table.rawObjectProvider,
+      table.rawObjectBucket,
+      table.rawObjectKey
+    ),
     index("organization_api_mail_message_header_idx").on(table.messageHeaderId),
     index("organization_api_mail_message_provider_idx").on(
       table.providerMessageId
@@ -1849,6 +1894,7 @@ export const organizationApiMailAttachment = pgTable(
     organizationId: text("organizationId")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
+    partIndex: integer("partIndex"),
     size: integer("size").notNull(),
   },
   (table) => [
@@ -2505,21 +2551,52 @@ export const organizationMailUsageEvent = pgTable(
 export const organizationMailSendIdempotency = pgTable(
   "organizationMailSendIdempotency",
   {
+    attemptedAt: timestamp("attemptedAt"),
     createdAt: timestamp("createdAt").notNull(),
+    estimatedCostMicroCents: bigint("estimatedCostMicroCents", {
+      mode: "number",
+    }),
+    failureMessage: text("failureMessage"),
     id: text("id").primaryKey(),
     idempotencyKey: text("idempotencyKey").notNull(),
+    messageHeaderId: text("messageHeaderId"),
     organizationId: text("organizationId")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
+    rawObjectBucket: text("rawObjectBucket"),
+    rawObjectKey: text("rawObjectKey"),
+    rawObjectProvider:
+      text("rawObjectProvider").$type<ManagedMailRawObjectProvider>(),
     requestHash: text("requestHash").notNull(),
     response: jsonb("response").$type<{
       messageId: string | null;
       sent: true;
     }>(),
-    status: text("status").default("completed").notNull(),
+    snapshot: jsonb("snapshot").$type<MailSendSnapshot>(),
+    status: text("status")
+      .$type<
+        | "pending"
+        | "prepared"
+        | "submitting"
+        | "accepted"
+        | "unknown"
+        | "rejected"
+        | "completed"
+      >()
+      .default("completed")
+      .notNull(),
     updatedAt: timestamp("updatedAt").notNull(),
   },
   (table) => [
+    index("organization_mail_send_recovery_idx").on(
+      table.status,
+      table.updatedAt
+    ),
+    index("organization_mail_send_raw_object_idx").on(
+      table.rawObjectProvider,
+      table.rawObjectBucket,
+      table.rawObjectKey
+    ),
     index("organization_mail_send_idempotency_organization_created_idx").on(
       table.organizationId,
       table.createdAt
@@ -2527,6 +2604,26 @@ export const organizationMailSendIdempotency = pgTable(
     unique("organization_mail_send_idempotency_organization_key_unique").on(
       table.organizationId,
       table.idempotencyKey
+    ),
+  ]
+);
+
+export const mailObjectCleanup = pgTable(
+  "mailObjectCleanup",
+  {
+    bucket: text("bucket").notNull(),
+    createdAt: timestamp("createdAt").notNull(),
+    id: text("id").primaryKey(),
+    key: text("key").notNull(),
+    notBefore: timestamp("notBefore").notNull(),
+    provider: text("provider").$type<ManagedMailRawObjectProvider>().notNull(),
+  },
+  (table) => [
+    index("mail_object_cleanup_due_idx").on(table.notBefore),
+    unique("mail_object_cleanup_reference_unique").on(
+      table.provider,
+      table.bucket,
+      table.key
     ),
   ]
 );
