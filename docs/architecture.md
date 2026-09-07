@@ -50,6 +50,8 @@ The application and database boundary. It owns:
 
 No application module should bypass this package to query PostgreSQL.
 
+The mail router contains procedure registration, transport schemas and route metadata. Services under `packages/orpc/src/mail/` own queries, compose, labels and mutations, including provider selection and authorization. Shared Gmail request handling lives in `gmail-request.ts`; service modules do not import router bootstrapping. Feedback writes finish before request completion, with Gmail metadata reads processed in batches of four.
+
 `vp run check:boundaries` checks imports with Oxc, including dynamic imports, re-exports, and type imports. It enforces package/application separation, application database and UI boundaries, and the AWS oRPC entrypoint allowlist. Computed dynamic imports are rejected because their targets cannot be checked. The only application database import allowed is `withRequestDatabaseClient` in the request bootstrap. CI runs this check alongside the AWS and Cloudflare handler bundles.
 
 ### `packages/database`

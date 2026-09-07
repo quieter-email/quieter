@@ -1,12 +1,10 @@
-import { ORPCError, os } from "@orpc/server";
+import { os } from "@orpc/server";
 import { getSessionWithOrganization } from "@quieter/auth/session";
-import { isGmailRateLimitedError } from "@quieter/gmail";
 import { z } from "zod";
 
 import { getRequestHeaders } from "../context";
 import type { OrpcContext } from "../context";
 import { orpcErrorMap } from "../errors";
-import { runAuthorizedGmailMailbox } from "../gmail-mailbox-access";
 
 export { mailCategorySchema as mailboxCategorySchema } from "@quieter/mail/data-plane";
 
@@ -62,53 +60,3 @@ export const mailboxSwitcherOrderSchema = z.object({
     z.array(z.string().trim().min(1))
   ),
 });
-
-const toRetryAfterSeconds = (retryAfterMs?: number) =>
-  Math.max(1, Math.ceil((retryAfterMs ?? 1000) / 1000));
-
-const rethrowKnownRateLimit = (context: OrpcContext, error: unknown): never => {
-  if (!isGmailRateLimitedError(error)) {
-    throw error;
-  }
-
-  const retryAfter = toRetryAfterSeconds(error.retryAfterMs);
-  context.resHeaders?.set("retry-after", String(retryAfter));
-
-  throw new ORPCError("RATE_LIMITED", {
-    data: {
-      provider: "gmail",
-      retryAfter,
-    },
-    message: error.message,
-    status: 429,
-  });
-};
-
-export const callWithRateLimitHandling = async <TValue>(
-  context: OrpcContext,
-  work: Promise<TValue>
-): Promise<TValue> => {
-  try {
-    return await work;
-  } catch (error) {
-    return rethrowKnownRateLimit(context, error);
-  }
-};
-
-export const callGmail = async <TValue>(
-  context: ProtectedContext,
-  mailboxId: string,
-  runner: (accessToken: string, signal?: AbortSignal) => Promise<TValue>
-): Promise<TValue> => {
-  try {
-    return await runAuthorizedGmailMailbox(
-      {
-        mailboxId,
-        userId: context.userId,
-      },
-      async (accessToken) => await runner(accessToken, context.signal)
-    );
-  } catch (error) {
-    return rethrowKnownRateLimit(context, error);
-  }
-};
