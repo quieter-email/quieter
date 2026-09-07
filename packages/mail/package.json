@@ -13,6 +13,7 @@
     "./natural-language-search": "./src/natural-language-search.ts",
     "./raw-message": "./src/raw-message.ts",
     "./search": "./src/search.ts",
+    "./send-mime": "./src/send-mime.ts",
     "./send": "./src/send.ts",
     "./sender-avatar": "./src/sender-avatar.ts",
     "./tracking": "./src/tracking.ts"
@@ -20,6 +21,7 @@
   "dependencies": {
     "@quieter/env": "workspace:*",
     "fast-xml-parser": "catalog:",
+    "nodemailer": "^10.0.0",
     "postal-mime": "^3.0.0",
     "zod": "catalog:"
   },

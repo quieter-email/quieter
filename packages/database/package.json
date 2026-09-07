@@ -17,6 +17,7 @@
     "@quieter/config": "workspace:*",
     "@types/node": "catalog:",
     "drizzle-kit": "catalog:",
+    "libpg-query": "^17.7.4",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:"

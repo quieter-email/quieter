@@ -11,11 +11,9 @@ import {
 import { db } from "@quieter/database/client";
 import { organizationMailSendIdempotency } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
-import {
-  buildSendMimeMessage,
-  getSendEnvelopeAddress,
-} from "@quieter/mail/send";
+import { getSendEnvelopeAddress } from "@quieter/mail/send";
 import type { SendMessageInput, SendMessageResult } from "@quieter/mail/send";
+import { buildSendMimeMessage } from "@quieter/mail/send-mime";
 import { reportError } from "@quieter/observability";
 import { and, eq, lt } from "drizzle-orm";
 
@@ -274,7 +272,7 @@ export const sendOrganizationMailMessage = async (input: {
             messageHeaderId,
             openTrackingEnabled,
           });
-    const builtMessage = buildSendMimeMessage(input.message, {
+    const builtMessage = await buildSendMimeMessage(input.message, {
       messageId: messageHeaderId,
       sentAt,
       ...openTrackingTransform,

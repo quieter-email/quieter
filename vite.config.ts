@@ -45,6 +45,14 @@ export default defineConfig({
     },
     overrides: [
       {
+        files: ["**/*.test.{ts,tsx}"],
+        plugins: ["vitest"],
+        rules: {
+          "vitest/max-expects": "off",
+          "unicorn/text-encoding-identifier-case": "off",
+        },
+      },
+      {
         // Linear control flow reads better than artificial helper extraction;
         // the complexity gate pushed code into worse shapes to satisfy a number.
         files: ["**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}"],

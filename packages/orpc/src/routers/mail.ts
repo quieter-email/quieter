@@ -31,7 +31,6 @@ import {
   updateThreadLabels,
 } from "@quieter/gmail";
 import {
-  arrayBufferToBase64Url,
   buildMimeMessage,
   buildPlainTextMessage,
 } from "@quieter/mail/compose/mime";
@@ -978,8 +977,8 @@ export const mailRouter = {
     .handler(
       async ({ context, input }) =>
         await callGmail(context, input.mailboxId, async (accessToken) => {
-          const raw = arrayBufferToBase64Url(
-            new TextEncoder().encode(await buildMimeMessage(input.draft))
+          const raw = Buffer.from(await buildMimeMessage(input.draft)).toString(
+            "base64url"
           );
           let draftId = input.draft.draftId ?? null;
           if (draftId === null || draftId.length === 0) {
@@ -1175,13 +1174,11 @@ export const mailRouter = {
               });
             }
 
-            const raw = arrayBufferToBase64Url(
-              new TextEncoder().encode(
-                buildPlainTextMessage(
-                  parseListUnsubscribeMailto(unsubscribeMailto)
-                )
+            const raw = Buffer.from(
+              await buildPlainTextMessage(
+                parseListUnsubscribeMailto(unsubscribeMailto)
               )
-            );
+            ).toString("base64url");
 
             await sendRawMessage(accessToken, raw);
 

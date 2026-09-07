@@ -3,40 +3,22 @@ import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { loadModule, parseSync } from "libpg-query";
+import type { ParseResult } from "libpg-query";
+
+import historicalMigrations from "./historical-migrations.json" with { type: "json" };
+
 const packageDirectory = fileURLToPath(new URL("..", import.meta.url));
 const migrationsDirectory = path.join(packageDirectory, "drizzle");
-// Preserve the already committed contract history without allowing new comment-based bypasses.
-const historicalContracts = new Map([
-  [
-    "20260819222359_concerned_the_watchers",
-    "03447a76e82a7b1493ce3e1955e5ced29ef0a5381a4958915434f12505563a1b",
-  ],
-  [
-    "20260820224503_elite_overlord",
-    "17f03052f7984c7fdd6639fd02ea48d9370d74722f137c160df538a558322269",
-  ],
-  [
-    "20260821175937_flimsy_elektra",
-    "b91bb43c096c9e221ebdedf347dbc819e737c5eb82f5efdbad4e729b8c43f95e",
-  ],
-  [
-    "20260821213731_light_princess_powerful",
-    "562ee4061f8f2864ed2f732491faeea94dfc1438d30165ccdc8de7ff86a37e3a",
-  ],
-]);
-const destructiveStatements = [
-  /\bDROP\s+(?:DATABASE|SCHEMA|TABLE)\b/iu,
-  /\bTRUNCATE\b/iu,
-  /\bDELETE\s+FROM\b/iu,
-  /\bDROP\s+COLUMN\b/iu,
-  /\bALTER\s+COLUMN\b[\s\S]*?\bTYPE\b/iu,
-];
+// Freeze existing history; new contract SQL must use the reviewed manual procedure.
+const historicalHashes = new Map(Object.entries(historicalMigrations));
+await loadModule();
 
 export const assertMigrationSqlIsDeploySafe = (
   sql: string,
   migrationName: string
 ) => {
-  const historicalHash = historicalContracts.get(migrationName);
+  const historicalHash = historicalHashes.get(migrationName);
   if (
     historicalHash !== undefined &&
     createHash("sha256").update(sql.replaceAll("\r\n", "\n")).digest("hex") ===
@@ -44,23 +26,102 @@ export const assertMigrationSqlIsDeploySafe = (
   ) {
     return;
   }
-  if (destructiveStatements.some((pattern) => pattern.test(sql))) {
-    throw new Error(
-      `Migration ${migrationName} contains destructive SQL. Production deploys only allow expand-safe migrations; run contract migrations through a separately reviewed manual procedure.`
-    );
-  }
 
-  const isNonTransactional = sql.includes("-- quieter:no-transaction");
-  const createsConcurrentIndex =
-    /\bCREATE\s+(?:UNIQUE\s+)?INDEX\s+CONCURRENTLY\b/iu.test(sql);
-  if (isNonTransactional && !createsConcurrentIndex) {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The parser returns its exported AST shape but declares the entry point as any.
+  const parsed = parseSync(sql) as ParseResult;
+  const isNonTransactional = /^-- quieter:no-transaction(?:\r?\n|$)/u.test(sql);
+  const createdTables = new Set<string>();
+  for (const { stmt } of parsed.stmts ?? []) {
+    if (!stmt) {
+      throw new Error(
+        `Migration ${migrationName} has an unrecognized statement.`
+      );
+    }
+    if (
+      isNonTransactional &&
+      !("IndexStmt" in stmt && stmt.IndexStmt.concurrent === true)
+    ) {
+      throw new Error(
+        `Migration ${migrationName} opts out of transactions without exclusively creating concurrent indexes.`
+      );
+    }
+    if ("IndexStmt" in stmt) {
+      if (stmt.IndexStmt.concurrent === true && !isNonTransactional) {
+        throw new Error(
+          `Migration ${migrationName} creates a concurrent index without the -- quieter:no-transaction marker.`
+        );
+      }
+      const { relation, unique } = stmt.IndexStmt;
+      if (
+        unique !== true ||
+        createdTables.has(
+          JSON.stringify([relation?.schemaname ?? "public", relation?.relname])
+        )
+      ) {
+        continue;
+      }
+    }
+    if (
+      "CreateStmt" in stmt &&
+      (stmt.CreateStmt.inhRelations?.length ?? 0) === 0 &&
+      !stmt.CreateStmt.partbound
+    ) {
+      const { relation } = stmt.CreateStmt;
+      if (stmt.CreateStmt.if_not_exists !== true) {
+        createdTables.add(
+          JSON.stringify([relation?.schemaname ?? "public", relation?.relname])
+        );
+      }
+      continue;
+    }
+    if ("CreateEnumStmt" in stmt) {
+      continue;
+    }
+    if ("AlterTableStmt" in stmt) {
+      const { cmds, relation } = stmt.AlterTableStmt;
+      const isNewTable = createdTables.has(
+        JSON.stringify([relation?.schemaname ?? "public", relation?.relname])
+      );
+      if (
+        cmds !== undefined &&
+        cmds.length > 0 &&
+        cmds.every((node) => {
+          if (!("AlterTableCmd" in node)) {
+            return false;
+          }
+          const { subtype, def } = node.AlterTableCmd;
+          if (
+            subtype === "AT_DropNotNull" ||
+            subtype === "AT_ValidateConstraint"
+          ) {
+            return true;
+          }
+          if (subtype === "AT_AddConstraint") {
+            return isNewTable;
+          }
+          if (subtype !== "AT_AddColumn" || !def || !("ColumnDef" in def)) {
+            return false;
+          }
+          const column = def.ColumnDef;
+          return (
+            isNewTable ||
+            (column.is_not_null !== true &&
+              !column.raw_default &&
+              (column.identity ?? "") === "" &&
+              (column.generated ?? "") === "" &&
+              (column.constraints ?? []).every(
+                (constraint) =>
+                  "Constraint" in constraint &&
+                  constraint.Constraint.contype === "CONSTR_NULL"
+              ))
+          );
+        })
+      ) {
+        continue;
+      }
+    }
     throw new Error(
-      `Migration ${migrationName} opts out of transactions without creating a concurrent index. Reserve non-transactional migrations for reviewed PostgreSQL operations that cannot run in a transaction.`
-    );
-  }
-  if (createsConcurrentIndex && !isNonTransactional) {
-    throw new Error(
-      `Migration ${migrationName} creates a concurrent index without the -- quieter:no-transaction marker.`
+      `Migration ${migrationName} contains destructive SQL or an operation outside the additive allowlist (${Object.keys(stmt).join(", ")}). Use a separately reviewed manual procedure for contract changes, data updates, defaults, and constraints on existing tables.`
     );
   }
 };
@@ -72,7 +133,6 @@ export const assertMigrationFilesAreDeploySafe = () => {
     if (!entry.isDirectory()) {
       continue;
     }
-
     const sql = readFileSync(
       path.join(migrationsDirectory, entry.name, "migration.sql"),
       "utf-8"

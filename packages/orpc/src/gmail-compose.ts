@@ -6,10 +6,7 @@ import {
 } from "@quieter/gmail";
 import type { GmailMessage } from "@quieter/gmail";
 import { parseDraftMessage } from "@quieter/gmail/compose";
-import {
-  arrayBufferToBase64Url,
-  buildMimeMessage,
-} from "@quieter/mail/compose/mime";
+import { buildMimeMessage } from "@quieter/mail/compose/mime";
 import type {
   composeDraftInputSchema,
   composeMessageInputSchema,
@@ -26,11 +23,9 @@ export const saveGmailDraft = async (
   draft: ComposeDraftInput,
   signal?: AbortSignal
 ) => {
-  const raw = arrayBufferToBase64Url(
-    new TextEncoder().encode(
-      await buildMimeMessage(draft, { includeQuieterDraftHeaders: true })
-    )
-  );
+  const raw = Buffer.from(
+    await buildMimeMessage(draft, { includeQuieterDraftHeaders: true })
+  ).toString("base64url");
   const response = hasText(draft.draftId)
     ? await updateDraft(
         accessToken,
@@ -71,8 +66,8 @@ export const sendGmailMessage = async (
   message: ComposeMessageInput,
   signal?: AbortSignal
 ): Promise<GmailMessage> => {
-  const raw = arrayBufferToBase64Url(
-    new TextEncoder().encode(await buildMimeMessage(message))
+  const raw = Buffer.from(await buildMimeMessage(message)).toString(
+    "base64url"
   );
   return await sendRawMessage(
     accessToken,

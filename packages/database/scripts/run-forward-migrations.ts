@@ -15,7 +15,7 @@ import postgres from "postgres";
 
 import { runKitMigrate } from "./drizzle-kit.ts";
 
-const NON_TRANSACTIONAL_MARKER = "-- quieter:no-transaction";
+const NON_TRANSACTIONAL_MARKER = /^-- quieter:no-transaction(?:\r?\n|$)/u;
 const STATEMENT_BREAKPOINT = "--> statement-breakpoint";
 
 const toMigrationMillis = (name: string) => {
@@ -137,7 +137,7 @@ export const runForwardMigrations = async (input: {
     sql: readFileSync(migration.path, "utf-8"),
   }));
   const nonTransactionalMigrations = migrationSources.filter((migration) =>
-    migration.sql.includes(NON_TRANSACTIONAL_MARKER)
+    NON_TRANSACTIONAL_MARKER.test(migration.sql)
   );
 
   if (nonTransactionalMigrations.length === 0) {
