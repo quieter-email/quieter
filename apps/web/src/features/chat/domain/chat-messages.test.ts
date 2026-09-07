@@ -1,4 +1,4 @@
-import type { ChatMessagePart } from "@quieter/database/schema";
+import type { RouterOutputs } from "@quieter/orpc";
 import type { UIMessage } from "ai";
 import { describe, expect, test } from "vite-plus/test";
 
@@ -9,13 +9,7 @@ import {
   toInitialMessages,
 } from "./chat-messages";
 
-type StoredMessage = {
-  createdAt: Date;
-  id: string;
-  parts: ChatMessagePart[];
-  position: number;
-  role: "assistant" | "system" | "user";
-};
+type StoredMessage = RouterOutputs["chat"]["get"]["messages"][number];
 
 describe("chat message conversion", () => {
   test("does not regenerate an empty or assistant-only conversation", () => {

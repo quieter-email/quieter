@@ -68,8 +68,8 @@ jobs:
           vp run check:cloudflare
           vp run @quieter/cloudflare#cf-typecheck
 
-      - name: Check backend import boundaries
-        run: vp run @quieter/aws#check:boundaries
+      - name: Check package import boundaries
+        run: vp run check:boundaries
 
       - name: Bundle AWS handlers
         run: vp run @quieter/aws#check:bundles

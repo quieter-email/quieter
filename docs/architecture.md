@@ -50,6 +50,8 @@ The application and database boundary. It owns:
 
 No application module should bypass this package to query PostgreSQL.
 
+`vp run check:boundaries` checks imports with Oxc, including dynamic imports, re-exports, and type imports. It enforces package/application separation, application database and UI boundaries, and the AWS oRPC entrypoint allowlist. Computed dynamic imports are rejected because their targets cannot be checked. The only application database import allowed is `withRequestDatabaseClient` in the request bootstrap. CI runs this check alongside the AWS and Cloudflare handler bundles.
+
 ### `packages/database`
 
 Owns the Drizzle schema, client, migrations, schema-drift checks, and migration safety tooling.
