@@ -2,7 +2,7 @@
 
 All 122 findings have a recorded resolution in [resolution.csv](resolution.csv). The original reports remain a historical record of the audited commit. The implementation is split into focused commits on `refactor/codebase-cleanup`.
 
-Before the follow-up removal, application and library source was about 2,100 lines smaller across the affected files, excluding tests, declarations, generated route trees and documentation. This is a previous-revision measurement; the current diff and verification are pending.
+The follow-up removes about 5,200 application and library source lines compared with `a9469b22`. Consolidating the unpublished migrations reduces generated snapshots from 121,885 to 17,479 lines, removing 104,406 generated lines. These measurements describe the current follow-up.
 
 ## What changed
 
@@ -13,25 +13,26 @@ Before the follow-up removal, application and library source was about 2,100 lin
 - Large mailbox, message, domain and connector screens now separate controllers, editors and substantial rendering sections. Dead paths, trivial wrappers, duplicate parsers and implementation-detail assertions were removed. Focused tests cover isolation, retries, billing and other core behavior.
 - Database clients respect request boundaries and bounded pools. Import and deployment checks enforce package ownership. Rate-limit identities expire, webhook handling is separate, dependency advisories were patched, and peer dependencies are explicit.
 
-## Verification, previous revision
+## Verification, current follow-up
 
-| Check | Result |
+| Check | Verified result |
 | --- | --- |
-| Full lint, formatting and TypeScript | Clean, 764 files |
-| Unit tests | 797 passed |
-| PostgreSQL integration tests | 58 passed |
-| Native Cloudflare Worker tests | 45 passed |
-| AWS and Cloudflare handler bundles | Eight passed |
-| Package import boundaries | 641 source files and manifests checked |
-| Cloudflare compatibility date and generated bindings | Passed |
-| Migration structure, drift and safety | Passed |
-| Production web build and deployment boundaries | Passed |
+| `vp check` | Clean, 745 files |
+| `vp test` | 793 passed, including three authentication request-scope regressions and six focused mail tests |
+| PostgreSQL integration tests | 47 passed |
+| Native Cloudflare Worker tests | 40 passed |
+| Full historical migration test | Passed on local PostgreSQL 18.4 |
+| AWS and Cloudflare handler bundles | Seven passed: three AWS, four Cloudflare |
+| Package import boundaries | 620 source files and manifests checked |
+| Schema, drift and migration safety | Passed |
+| Production web build and Worker boundaries | Passed |
+| Cloudflare typecheck | Passed |
+| Browser verification | Passed the scoped managed-preview checks below |
+| React Doctor, changes since `a9469b22` | 93/100; one existing settings-screen complexity warning |
 
-The authentication test initially exceeded its five-second deadline while other checks were running. Its module initialization now runs in setup, outside the timed authentication scenario, and the focused test passes.
+Chrome verification through the managed preview confirmed that settings no longer show Actions, `tab=actions` normalizes to Overview, and Connectors still lists Google Calendar and Linear. An inbox thread opened and the chat composer loaded. No real connector writes or AI requests were made. After the lazy-initialization fix, an anonymous authentication GET returned HTTP 200 with `null`.
 
-Previous-revision Chrome verification covered the managed-demo inbox, organizer controls, message body, inspector and action-settings empty state. Demo saved-view editing is not implemented; the attempted save surfaced a failure. Authenticated domain changes and connector writes were not exercised in the browser.
-
-The configured transcription model was probed with synthetic speech using the budget-limited development key. WAV, MP3, FLAC and Ogg succeeded; WebM, M4A and AAC were rejected. Browser-only formats therefore retain the shared WAV conversion path. The reported probe cost was $0.0024.
+The React Doctor result covers only the follow-up changes since `a9469b22`. The broader main-branch scan did not complete, so no repository-wide score is claimed.
 
 ## Release requirements and limits
 
@@ -41,4 +42,4 @@ Custom action database tables and records remain untouched for expand/contract d
 
 `infra/mail-maintenance.ts` and `packages/cloudflare/src/mail-maintenance-worker.ts` retain send recovery, storage cleanup, rate-limit cleanup, and managed rule backfills every minute. Deploy this replacement alongside the application. Drain older send, ingestion, and rule workers as described in [the architecture notes](../../architecture.md). Connectors and chat remain supported. No production migrations or deployment were performed.
 
-The previous verification used disposable loopback PostgreSQL 18.4; CI also passed historical migrations and integration tests against pgvector PostgreSQL 16. Those results predate this follow-up. Current removal, simplification, and consolidated-migration checks remain pending and must be recorded after completion. The original audit reports and resolution CSV remain historical records.
+The previous verification used disposable loopback PostgreSQL 18.4; CI also passed historical migrations and integration tests against pgvector PostgreSQL 16. Those results predate this follow-up. Completed follow-up checks and their scope are recorded above. The original audit reports and resolution CSV remain historical records.

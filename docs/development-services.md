@@ -13,7 +13,7 @@ Agent connector readiness is tracked separately in [Agent tooling](agent-tooling
 | Gmail | Separate OAuth client and Pub/Sub pull subscription; observation guards; fresh consent; real inbox loads 18 conversations | Test-account passkey consent, provider writes and delivered-notification processing |
 | Cloudflare | Native web/Worker runtime; signed WebSocket smoke; native queue/DO tests; authenticated manual maintenance | Deployed concurrency, hibernation, IAM and cloud pooling |
 | Secrets | 22 development SST secrets in local-leander; 21 runtime links; fresh-checkout pull verified; SST starts web and background runtimes together | No AWS managed-mail stage is required or authorized for local development |
-| OpenRouter | Separate $1-capped development key; API smoke cost $0.000002; actual app chat streamed the expected response and saved its conversation | Voice, tool use and automation quality tests |
+| OpenRouter | Separate $1-capped development key; API smoke cost $0.000002; actual app chat streamed the expected response and saved its conversation | Voice, tool use, auto-label and useful-detail quality tests |
 | Workers AI | Separate AI-only token; real 1024-dimension embedding | Application memory write/search/delete lifecycle |
 | Polar | Non-expiring sandbox token, existing Managed/Pro products, official CLI 1.3.9 in WSL; six real customer/member events returned HTTP 200 | Checkout/portal/renewal/cancellation/credits with bypass off |
 | Telemetry | Explicit opt-in implemented; off by default; consent still required for PostHog | Development-project ingestion and browser privacy assertions |
@@ -149,8 +149,6 @@ These are required acceptance cases, not a claim that every row was executed dur
 | Labels and organization | CRUD, batch operations, optimistic rollback | Gmail label changes and reconciliation |
 | Realtime | Signed socket auth, reconnect, broadcasts, wrong-mailbox denials | Google push, deployed DO lifecycle and WSS |
 | Gmail maintenance | Watch expiry, missing history, retry/backoff, stale leases | Real watch renewal, OAuth expiry, subscription authentication |
-| Automation editor | Graph validation, save/publish, conditions, invalid connectors | Executed published workflow with real test connectors |
-| Automation execution | Queue delivery, retries, duplicate events, crash recovery, run status | Deployed consumer concurrency, DLQ and scheduling |
 | AI chat | Stream/tool calls, cancellation, persistence, credit errors, malformed output | Capped real OpenRouter model calls |
 | Voice input | Permission/error UI, format and size validation, transcription fixtures | Actual microphone and OpenRouter transcription |
 | AI memory | Personal/mailbox ownership, lexical/semantic retrieval, deletion | pgvector index and real embedding dimensions |

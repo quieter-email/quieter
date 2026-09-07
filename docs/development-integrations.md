@@ -24,7 +24,7 @@ The development database needs the current committed schema, including pgvector 
 
 ## Shared Gmail accounts
 
-Production and development can read the same Gmail mailbox while keeping their application data separate. They cannot treat Gmail itself as separate state. Changing a label, marking a message read, updating a draft, sending mail, or running an automation affects the same external account.
+Production and development can read the same Gmail mailbox while keeping their application data separate. They cannot treat Gmail itself as separate state. Changing a label, marking a message read, updating a draft, sending mail, or applying automatic labels affects the same external account.
 
 The existing mailbox-processing leases live in each application's database. They coordinate consumers within one environment but cannot prevent two environments from performing the same external action. Separate OAuth credentials do not solve that problem.
 

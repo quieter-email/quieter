@@ -118,7 +118,7 @@ For Pro mailboxes:
 2. The ingress validates the Google identity, notifies the mailbox Durable Object, and enqueues a mailbox job in Cloudflare Queues.
 3. A Cloudflare queue consumer reconciles Gmail history through Hyperdrive and updates persisted state.
 4. Focused browser tabs receive mailbox-dirty signals from the mailbox Durable Object and refresh immediately.
-5. Scheduled maintenance on Cloudflare selects only mailboxes with due work: watch renewal (heartbeat plus expiry lookahead), first-time setup, or stale reconciliation for mailboxes with enabled automations.
+5. Scheduled maintenance on Cloudflare selects only mailboxes with due work: watch renewal (heartbeat plus expiry lookahead), first-time setup, or stale reconciliation for mailboxes with auto-labeling or useful-detail extraction enabled.
 
 The notification is a wake-up signal, not the source of truth.
 
