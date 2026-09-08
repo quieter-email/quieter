@@ -162,6 +162,34 @@ describe("independent local connector write controls", () => {
     expect(mocks.close).toHaveBeenCalledOnce();
   });
 
+  test("Linear batches run in order, retain failures and respect the call limit", async () => {
+    let completed = 0;
+    mocks.callTool.mockImplementation(async ({ name }) => {
+      const predecessor = completed;
+      await Promise.resolve();
+      expect(completed).toBe(predecessor);
+      completed += 1;
+      if (name === "get_failure") {
+        throw new Error("Provider failed");
+      }
+      return { content: [{ text: String(completed), type: "text" }] };
+    });
+    const results = await runLinearMcpToolCallsForUser({
+      calls: ["get_first", "get_failure", "get_last", "get_excluded"].map(
+        (toolName) => ({ toolName })
+      ),
+      maxCalls: 3,
+      userId: "test",
+    });
+    expect(completed).toBe(3);
+    expect(results).toMatchObject([
+      { output: { content: [{ text: "1" }] }, toolName: "get_first" },
+      { error: "Provider failed", status: "error", toolName: "get_failure" },
+      { output: { content: [{ text: "3" }] }, toolName: "get_last" },
+    ]);
+    expect(mocks.close).toHaveBeenCalledOnce();
+  });
+
   test("Linear writes require both explicit controls", async () => {
     mocks.env.QUIETER_LOCAL_LINEAR_WRITES = true;
     mocks.env.QUIETER_LOCAL_PROVIDER_MODE = "observe";
