@@ -3,11 +3,7 @@ import type { MCPClient } from "@ai-sdk/mcp";
 import { serverEnv } from "@quieter/env/server";
 import { z } from "zod";
 
-import {
-  getLinearAccessTokenForCredential,
-  getLinearAccessTokenForUser,
-  LINEAR_MCP_URL,
-} from "./runtime";
+import { getLinearAccessTokenForUser, LINEAR_MCP_URL } from "./runtime";
 
 const LINEAR_MCP_READ_PREFIXES = ["get_", "list_", "search_"];
 const MCP_REQUEST_TIMEOUT_MS = 20_000;
@@ -238,41 +234,6 @@ const runLinearMcpToolCalls = async (input: {
         maxOutputBytes: input.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES,
       })
   );
-
-export const listLinearMcpToolsForCredential = async (input: {
-  credentialId: string;
-  signal?: AbortSignal;
-  userId: string;
-}): Promise<LinearMcpToolDescriptor[]> => {
-  const accessToken = await getLinearAccessTokenForCredential(input);
-  return await withLinearMcpClient(
-    { accessToken, signal: input.signal },
-    async (client) => {
-      const { tools } = await client.listTools();
-      return tools.map((tool) => ({
-        ...(tool.description === undefined
-          ? {}
-          : { description: tool.description }),
-        ...(tool.inputSchema === undefined
-          ? {}
-          : { inputSchema: tool.inputSchema }),
-        name: tool.name,
-      }));
-    }
-  );
-};
-
-export const runLinearMcpToolCallsForCredential = async (input: {
-  calls: LinearMcpToolCallInput[];
-  credentialId: string;
-  maxCalls?: number;
-  maxOutputBytes?: number;
-  signal?: AbortSignal;
-  userId: string;
-}): Promise<LinearMcpToolCallResult[]> => {
-  const accessToken = await getLinearAccessTokenForCredential(input);
-  return await runLinearMcpToolCalls({ ...input, accessToken });
-};
 
 export const listLinearMcpToolsForUser = async (input: {
   signal?: AbortSignal;

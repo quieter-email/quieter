@@ -65,37 +65,25 @@ export const createMailboxActionHandlers = ({
   unsubscribeFromMessageMutation,
   mailboxId,
 }: MailboxActionHandlerArgs) => {
-  const runMessageAction = async (
-    messageId: string,
+  const runAction = async (
+    scope: "message" | "thread",
+    id: string,
     action: () => Promise<void>
   ) => {
-    if (isMessageActionPending(messageId)) {
+    const isPending =
+      scope === "message" ? isMessageActionPending : isThreadActionPending;
+    const setPending =
+      scope === "message" ? setMessageActionPending : setThreadActionPending;
+    if (isPending(id)) {
       return;
     }
 
-    setMessageActionPending(messageId, true);
+    setPending(id, true);
     try {
       await action();
       await refreshSearchResultsIfNeeded();
     } finally {
-      setMessageActionPending(messageId, false);
-    }
-  };
-
-  const runThreadAction = async (
-    threadId: string,
-    action: () => Promise<void>
-  ) => {
-    if (isThreadActionPending(threadId)) {
-      return;
-    }
-
-    setThreadActionPending(threadId, true);
-    try {
-      await action();
-      await refreshSearchResultsIfNeeded();
-    } finally {
-      setThreadActionPending(threadId, false);
+      setPending(id, false);
     }
   };
 
@@ -171,35 +159,11 @@ export const createMailboxActionHandlers = ({
     }
   };
 
-  const runBulkMessageAction = async (
-    messageIds: readonly string[],
-    action: (messageId: string) => Promise<void>
-  ) => {
-    await runBulkAction({
-      action,
-      ids: messageIds,
-      isPending: isMessageActionPending,
-      setPending: setMessageActionsPending,
-    });
-  };
-
-  const runBulkThreadAction = async (
-    threadIds: readonly string[],
-    action: (threadId: string) => Promise<void>
-  ) => {
-    await runBulkAction({
-      action,
-      ids: threadIds,
-      isPending: isThreadActionPending,
-      setPending: setThreadActionsPending,
-    });
-  };
-
   const runMailboxMessageAction = async (
     messageId: string,
     operation: MailMetadataOperation
   ) => {
-    await runMessageAction(messageId, async () => {
+    await runAction("message", messageId, async () => {
       await updateMessageInMailbox(
         {
           mailbox: activeMailbox,
@@ -217,7 +181,7 @@ export const createMailboxActionHandlers = ({
     threadId: string,
     operation: MailMetadataOperation
   ) => {
-    await runThreadAction(threadId, async () => {
+    await runAction("thread", threadId, async () => {
       await updateThreadInMailbox(
         { mailboxId, queryClient, threadId },
         operation
@@ -259,7 +223,7 @@ export const createMailboxActionHandlers = ({
       return;
     }
 
-    await runMessageAction(message.id, async () => {
+    await runAction("message", message.id, async () => {
       await deleteDraftInMailbox(
         queryClient,
         mailboxId,
@@ -279,9 +243,8 @@ export const createMailboxActionHandlers = ({
       })
     );
 
-    await runBulkMessageAction(
-      [...draftsByMessageId.keys()],
-      async (messageId) => {
+    await runBulkAction({
+      action: async (messageId) => {
         const draftId = draftsByMessageId.get(messageId);
         if (!draftId) {
           return;
@@ -294,8 +257,11 @@ export const createMailboxActionHandlers = ({
           messageId,
           draftId
         );
-      }
-    );
+      },
+      ids: [...draftsByMessageId.keys()],
+      isPending: isMessageActionPending,
+      setPending: setMessageActionsPending,
+    });
   };
 
   return {
@@ -368,7 +334,7 @@ export const createMailboxActionHandlers = ({
       });
     },
     unsubscribeFromMessage: async (messageId: string) => {
-      await runMessageAction(messageId, async () => {
+      await runAction("message", messageId, async () => {
         await unsubscribeFromMessageMutation(messageId);
       });
     },
@@ -394,9 +360,8 @@ export const createMailboxActionHandlers = ({
       const changesByThreadId = new Map(
         updates.map(({ threadId, ...changes }) => [threadId, changes])
       );
-      await runBulkThreadAction(
-        updates.map((update) => update.threadId),
-        async (threadId) => {
+      await runBulkAction({
+        action: async (threadId) => {
           const changes = changesByThreadId.get(threadId);
           if (!changes) {
             await Promise.resolve();
@@ -406,8 +371,11 @@ export const createMailboxActionHandlers = ({
             { mailboxId, queryClient, threadId },
             changes
           );
-        }
-      );
+        },
+        ids: updates.map((update) => update.threadId),
+        isPending: isThreadActionPending,
+        setPending: setThreadActionsPending,
+      });
     },
   };
 };

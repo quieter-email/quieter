@@ -36,7 +36,6 @@ import {
 
 export {
   GOOGLE_CALENDAR_SCOPES,
-  getLinearMcpEndpoint,
   hasConnectedConnector,
   createGoogleCalendarEventForUser,
   LINEAR_CONNECTOR_PROVIDER,

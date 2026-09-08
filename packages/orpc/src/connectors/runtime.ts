@@ -426,122 +426,6 @@ export const runAuthorizedConnector = async <TValue>(
   return await runner(refreshedAccessToken, input.signal);
 };
 
-const getAuthorizedConnectorCredentialAccessToken = async (input: {
-  credentialId: string;
-  provider: ConnectorProvider;
-  userId: string;
-  signal?: AbortSignal;
-}) => {
-  const [record] = await db
-    .select({
-      accessTokenExpiresAt: connectorCredential.accessTokenExpiresAt,
-      encryptedAccessToken: connectorCredential.encryptedAccessToken,
-      encryptedRefreshToken: connectorCredential.encryptedRefreshToken,
-      id: connectorCredential.id,
-      provider: connectorCredential.provider,
-      scopes: connectorCredential.scopes,
-      status: connectorCredential.status,
-      userId: connectorCredential.userId,
-    })
-    .from(connectorCredential)
-    .where(
-      and(
-        eq(connectorCredential.id, input.credentialId),
-        eq(connectorCredential.provider, input.provider),
-        eq(connectorCredential.userId, input.userId)
-      )
-    )
-    .limit(1);
-
-  if (record === undefined) {
-    throw new ORPCError("BAD_REQUEST", {
-      message: `Connect ${connectorDefinitions[input.provider].displayName} before using this action.`,
-    });
-  }
-
-  input.signal?.throwIfAborted();
-  if (
-    record.status === "needs_reconnect" ||
-    !hasRequiredConnectorScopes(record.provider, record.scopes ?? "")
-  ) {
-    throw getConnectorRepairRequiredError(record.provider);
-  }
-
-  const accessToken = hasCachedConnectorAccessToken(record)
-    ? decryptConnectorSecret(record.encryptedAccessToken)
-    : await refreshConnectorAccessToken(record, input.signal);
-
-  return { accessToken, userId: record.userId };
-};
-
-const refreshAuthorizedConnectorCredentialAccessToken = async (input: {
-  credentialId: string;
-  provider: ConnectorProvider;
-  userId: string;
-  signal?: AbortSignal;
-}) => {
-  const [record] = await db
-    .select({
-      encryptedRefreshToken: connectorCredential.encryptedRefreshToken,
-      id: connectorCredential.id,
-      provider: connectorCredential.provider,
-      scopes: connectorCredential.scopes,
-    })
-    .from(connectorCredential)
-    .where(
-      and(
-        eq(connectorCredential.id, input.credentialId),
-        eq(connectorCredential.provider, input.provider),
-        eq(connectorCredential.userId, input.userId)
-      )
-    )
-    .limit(1);
-
-  if (record === undefined) {
-    throw new ORPCError("BAD_REQUEST", {
-      message: `Connect ${connectorDefinitions[input.provider].displayName} before using this action.`,
-    });
-  }
-
-  return await refreshConnectorAccessToken(record, input.signal);
-};
-
-const runAuthorizedConnectorCredential = async <TValue>(
-  input: {
-    credentialId: string;
-    provider: ConnectorProvider;
-    signal?: AbortSignal;
-    userId: string;
-  },
-  runner: (
-    accessToken: string,
-    credential: { userId: string },
-    signal?: AbortSignal
-  ) => TValue | Promise<TValue>
-) => {
-  const credential = await getAuthorizedConnectorCredentialAccessToken(input);
-
-  try {
-    return await runner(
-      credential.accessToken,
-      { userId: credential.userId },
-      input.signal
-    );
-  } catch (error) {
-    if (!(error instanceof ConnectorHttpError) || error.status !== 401) {
-      throw error;
-    }
-  }
-
-  const refreshedAccessToken =
-    await refreshAuthorizedConnectorCredentialAccessToken(input);
-  return await runner(
-    refreshedAccessToken,
-    { userId: credential.userId },
-    input.signal
-  );
-};
-
 export const postGoogleCalendarEvent = async (input: {
   accessToken: string;
   event: GoogleCalendarEventDraft;
@@ -650,8 +534,6 @@ const normalizeGoogleCalendarEvent = (
   summary: event.summary,
 });
 
-export const getLinearMcpEndpoint = () => LINEAR_MCP_URL;
-
 const LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql";
 /** The one Linear read that is not a tool call: naming the connection being made. */
 const LINEAR_IDENTITY_QUERY = `query ConnectorIdentity {
@@ -755,42 +637,6 @@ export const getLinearAccessTokenForUser = async (input: {
     userId: input.userId,
   });
 
-/** The same, for a mailbox action acting on one stored connection. */
-export const getLinearAccessTokenForCredential = async (input: {
-  credentialId: string;
-  signal?: AbortSignal;
-  userId: string;
-}) =>
-  await runAuthorizedConnectorCredential(
-    {
-      credentialId: input.credentialId,
-      provider: LINEAR_CONNECTOR_PROVIDER,
-      signal: input.signal,
-      userId: input.userId,
-    },
-    (accessToken) => accessToken
-  );
-
-const createGoogleCalendarEvent = async (input: {
-  accessToken: string;
-  event: GoogleCalendarEventInput;
-  signal?: AbortSignal;
-}) => {
-  const eventDraft = normalizeGoogleCalendarEvent(input.event);
-  const event = await postGoogleCalendarEvent({
-    accessToken: input.accessToken,
-    event: eventDraft,
-    signal: input.signal,
-  });
-
-  return {
-    htmlLink: event.htmlLink,
-    id: event.id,
-    status: "success" as const,
-    summary: event.summary ?? eventDraft.summary,
-  };
-};
-
 export const createGoogleCalendarEventForUser = async (input: {
   event: GoogleCalendarEventInput;
   signal?: AbortSignal;
@@ -802,31 +648,18 @@ export const createGoogleCalendarEventForUser = async (input: {
       signal: input.signal,
       userId: input.userId,
     },
-    async (accessToken, signal) =>
-      await createGoogleCalendarEvent({
+    async (accessToken, signal) => {
+      const eventDraft = normalizeGoogleCalendarEvent(input.event);
+      const event = await postGoogleCalendarEvent({
         accessToken,
-        event: input.event,
+        event: eventDraft,
         signal,
-      })
-  );
-
-export const createGoogleCalendarEventForCredential = async (input: {
-  credentialId: string;
-  event: GoogleCalendarEventInput;
-  signal?: AbortSignal;
-  userId: string;
-}) =>
-  await runAuthorizedConnectorCredential(
-    {
-      credentialId: input.credentialId,
-      provider: GOOGLE_CALENDAR_CONNECTOR_PROVIDER,
-      signal: input.signal,
-      userId: input.userId,
-    },
-    async (accessToken, _credential, signal) =>
-      await createGoogleCalendarEvent({
-        accessToken,
-        event: input.event,
-        signal,
-      })
+      });
+      return {
+        htmlLink: event.htmlLink,
+        id: event.id,
+        status: "success" as const,
+        summary: event.summary ?? eventDraft.summary,
+      };
+    }
   );

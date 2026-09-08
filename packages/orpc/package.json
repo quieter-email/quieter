@@ -19,7 +19,6 @@
     "./managed-mail/local-storage": "./src/managed-mail/local-storage.ts",
     "./managed-mail/raw-object": "./src/managed-mail/messages/raw-object.ts",
     "./server": "./src/server.ts",
-    "./server-client": "./src/server-client.ts",
     "./organization-mail": "./src/organization-mail.ts",
     "./organization-mail-delivery": "./src/organization-mail-delivery.ts",
     "./organization-mail-policy": "./src/organization-mail-policy.ts",

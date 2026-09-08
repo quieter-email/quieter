@@ -8,6 +8,7 @@ import {
   user,
 } from "@quieter/database/schema";
 import { composeDraftInputSchema } from "@quieter/mail/compose/schema";
+import { MAILBOX_LABELS } from "@quieter/mail/messages";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import {
   afterAll,
@@ -23,6 +24,12 @@ import {
   deleteManagedDraft,
   saveManagedDraft,
 } from "../src/managed-mail/messages/drafts";
+import {
+  setManagedMessageMailboxState,
+  setManagedMessageReadState,
+  setManagedThreadMailboxState,
+  setManagedThreadReadState,
+} from "../src/managed-mail/messages/service";
 
 const state = vi.hoisted(() => ({
   barrier: undefined as (() => Promise<void>) | undefined,
@@ -211,6 +218,122 @@ describe.skipIf(state.databaseUrl === undefined)(
       expect(record?.subject).toBe("Original");
       expect(state.objects.has(record?.rawObjectKey ?? "")).toBeTruthy();
       await deleteManagedDraft({ draftId: saved.draftId, mailboxId, userId });
+    });
+
+    test("thread archive excludes drafts while read changes and single-message archive include them", async () => {
+      const saved = await saveManagedDraft({
+        ...input,
+        draft: { ...draft, localId: crypto.randomUUID() },
+      });
+      const sibling = await saveManagedDraft({
+        ...input,
+        draft: { ...draft, localId: crypto.randomUUID() },
+      });
+      const threadId = crypto.randomUUID();
+      await db
+        .update(managedMailMessage)
+        .set({ threadId })
+        .where(
+          inArray(managedMailMessage.id, [saved.messageId, sibling.messageId])
+        );
+      await expect(
+        setManagedThreadMailboxState({
+          mailboxId,
+          state: "archived",
+          threadId,
+          userId,
+        })
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+        message: "Message thread not found.",
+      });
+      await db
+        .update(managedMailMessage)
+        .set({ mailboxState: "active" })
+        .where(eq(managedMailMessage.id, sibling.messageId));
+      const [before] = await db
+        .select()
+        .from(mailbox)
+        .where(eq(mailbox.id, mailboxId));
+      await expect(
+        setManagedThreadMailboxState({
+          mailboxId,
+          state: "archived",
+          threadId,
+          userId,
+        })
+      ).resolves.toStrictEqual({
+        messages: [
+          {
+            id: sibling.messageId,
+            isUnread: false,
+            labelIds: [MAILBOX_LABELS.archive],
+          },
+        ],
+        threadId,
+      });
+      const unread = await setManagedThreadReadState({
+        mailboxId,
+        read: false,
+        threadId,
+        userId,
+      });
+      expect(unread.threadId).toBe(threadId);
+      expect(unread.messages).toHaveLength(2);
+      expect(unread.messages).toStrictEqual(
+        expect.arrayContaining([
+          {
+            id: saved.messageId,
+            isUnread: true,
+            labelIds: [MAILBOX_LABELS.drafts, MAILBOX_LABELS.unread],
+          },
+          {
+            id: sibling.messageId,
+            isUnread: true,
+            labelIds: [MAILBOX_LABELS.archive, MAILBOX_LABELS.unread],
+          },
+        ])
+      );
+      await expect(
+        setManagedMessageReadState({
+          mailboxId,
+          messageId: saved.messageId,
+          read: true,
+          userId,
+        })
+      ).resolves.toStrictEqual({
+        id: saved.messageId,
+        isUnread: false,
+        labelIds: [MAILBOX_LABELS.drafts],
+      });
+      await expect(
+        setManagedMessageMailboxState({
+          mailboxId,
+          messageId: saved.messageId,
+          state: "archived",
+          userId,
+        })
+      ).resolves.toStrictEqual({
+        id: saved.messageId,
+        isUnread: false,
+        labelIds: [MAILBOX_LABELS.archive],
+      });
+      const records = await db
+        .select()
+        .from(managedMailMessage)
+        .where(eq(managedMailMessage.threadId, threadId));
+      expect(records).toHaveLength(2);
+      expect(
+        records.every((record) => record.mailboxState === "archived")
+      ).toBeTruthy();
+      expect(
+        records.find((record) => record.id === sibling.messageId)?.isRead
+      ).toBeFalsy();
+      const [after] = await db
+        .select()
+        .from(mailbox)
+        .where(eq(mailbox.id, mailboxId));
+      expect(after?.contentRevision).toBe((before?.contentRevision ?? 0) + 4);
     });
 
     test("concurrent saves cannot silently overwrite each other", async () => {

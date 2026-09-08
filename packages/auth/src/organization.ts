@@ -139,20 +139,6 @@ export const ensureUserOrganizationState = async (
   });
 };
 
-export const getUserById = async (userId: string) => {
-  const [currentUser] = await db
-    .select({
-      email: user.email,
-      id: user.id,
-      name: user.name,
-    })
-    .from(user)
-    .where(eq(user.id, userId))
-    .limit(1);
-
-  return currentUser ?? null;
-};
-
 export const cleanupOrganizationsForDeletedUser = async (userId: string) => {
   await db.transaction(async (tx) => {
     await tx

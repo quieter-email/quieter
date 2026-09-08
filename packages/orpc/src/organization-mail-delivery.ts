@@ -782,38 +782,6 @@ export const reconcileOrganizationMailDeliveryRecipients = async (input: {
     return { reconciled: projections.size };
   });
 
-export const summarizeOrganizationMailDeliveryEvents = async (input: {
-  from?: Date;
-  organizationId: string;
-  to?: Date;
-}) => {
-  const conditions = [
-    eq(organizationMailDeliveryEvent.organizationId, input.organizationId),
-  ];
-  if (input.from !== undefined) {
-    conditions.push(gte(organizationMailDeliveryEvent.occurredAt, input.from));
-  }
-  if (input.to !== undefined) {
-    conditions.push(lte(organizationMailDeliveryEvent.occurredAt, input.to));
-  }
-
-  const rows = await db
-    .select({
-      count: sql<number>`count(distinct (${organizationMailDeliveryEvent.providerMessageId}, ${organizationMailDeliveryEvent.recipient}))::int`,
-      eventType: organizationMailDeliveryEvent.eventType,
-    })
-    .from(organizationMailDeliveryEvent)
-    .where(and(...conditions))
-    .groupBy(organizationMailDeliveryEvent.eventType);
-
-  const summary: Partial<Record<OrganizationMailDeliveryEventType, number>> =
-    {};
-  for (const row of rows) {
-    summary[row.eventType] = row.count;
-  }
-  return summary;
-};
-
 export type OrganizationMailTrackingSettings = {
   allowPerSendOverride: boolean;
   openTrackingEnabled: boolean;

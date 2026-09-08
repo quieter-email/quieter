@@ -328,10 +328,6 @@ export const getOrganizationSubscription = async (organizationId: string) => {
     : null;
 };
 
-export const hasUnlimitedBillingAccess = async (userId: string) =>
-  isLocalDevelopmentBillingEntitlementEnabled() ||
-  (await getActiveOverride(userId)) !== null;
-
 export const getOrganizationBillingEntitlement = async (input: {
   feature: BillingFeature;
   organizationId: string;
@@ -411,24 +407,6 @@ export const hasUserBillingFeature = async (input: {
     feature: input.feature,
     organizationId: input.organizationId,
   });
-};
-
-export const assertUserBillingFeature = async (input: {
-  feature: BillingFeature;
-  organizationId: string;
-  userId: string;
-}) => {
-  const result = await hasUserBillingFeature(input);
-
-  if (!result.hasAccess) {
-    const requirement = BILLING_FEATURES[input.feature];
-
-    throw new ORPCError("FORBIDDEN", {
-      message: `${requirement.description} requires ${requirement.requirementLabel}.`,
-    });
-  }
-
-  return result;
 };
 
 export const organizationHasBillingFeature = async (input: {

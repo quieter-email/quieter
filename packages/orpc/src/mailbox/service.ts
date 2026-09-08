@@ -23,11 +23,7 @@ import {
   organizationDivisionMember,
   user,
 } from "@quieter/database/schema";
-import {
-  getGmailMessageCount,
-  getGmailProfile,
-  isGmailServiceError,
-} from "@quieter/gmail";
+import { getGmailMessageCount, getGmailProfile } from "@quieter/gmail";
 import { getMailboxCapabilities } from "@quieter/mail/data-plane";
 import { and, asc, count, eq, inArray, isNull, lt } from "drizzle-orm";
 import { z } from "zod";
@@ -1360,6 +1356,3 @@ export const updateMailboxSignature = async (input: {
   }
   return updated;
 };
-
-export const isGmailAccessRepairError = (error: unknown) =>
-  isGmailServiceError(error) && (error.status === 401 || error.status === 403);

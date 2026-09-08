@@ -39,18 +39,7 @@ import type {
   UserAiContextEventKind,
 } from "@quieter/database/schema";
 import { reportError } from "@quieter/observability";
-import {
-  and,
-  desc,
-  eq,
-  getColumns,
-  inArray,
-  isNull,
-  lt,
-  lte,
-  or,
-  sql,
-} from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 
 import { assertCanUseAi } from "./ai-access";
 import {
@@ -1873,104 +1862,6 @@ const listAiMemoryScope = async ({
       .limit(12),
   ]);
   return buildAiMemoryScope({ changes, memories });
-};
-
-type AiMemoryScopeSettings = {
-  learning: ReturnType<typeof toAiMemoryScopeConfig>;
-  memory: ReturnType<typeof buildAiMemoryScope>;
-};
-
-export const listMailboxAiMemorySettings = async (
-  mailboxIds: string[]
-): Promise<Map<string, AiMemoryScopeSettings>> => {
-  if (mailboxIds.length === 0) {
-    return new Map<string, AiMemoryScopeSettings>();
-  }
-  const scopeKeys = mailboxIds.map((mailboxId) => `mailbox:${mailboxId}`);
-  const rankedMemories = db
-    .select({
-      ...getColumns(aiMemory),
-      scopeRank:
-        sql<number>`row_number() over (partition by ${aiMemory.mailboxId} order by ${aiMemory.status} desc, ${aiMemory.updatedAt} desc)`.as(
-          "scopeRank"
-        ),
-    })
-    .from(aiMemory)
-    .where(inArray(aiMemory.scopeKey, scopeKeys))
-    .as("rankedAiMemorySettings");
-  const rankedChanges = db
-    .select({
-      ...getColumns(aiMemoryChangeSet),
-      scopeRank:
-        sql<number>`row_number() over (partition by ${aiMemoryChangeSet.mailboxId} order by ${aiMemoryChangeSet.createdAt} desc)`.as(
-          "scopeRank"
-        ),
-    })
-    .from(aiMemoryChangeSet)
-    .where(inArray(aiMemoryChangeSet.mailboxId, mailboxIds))
-    .as("rankedAiMemoryChangeSettings");
-  const [rankedMemoryRows, rankedChangeRows, configurations] =
-    await Promise.all([
-      db
-        .select()
-        .from(rankedMemories)
-        .where(lte(rankedMemories.scopeRank, MEMORY_CANDIDATE_LIMIT)),
-      db.select().from(rankedChanges).where(lte(rankedChanges.scopeRank, 12)),
-      db
-        .select()
-        .from(aiMemoryScopeConfig)
-        .where(inArray(aiMemoryScopeConfig.scopeKey, scopeKeys)),
-    ]);
-  const memories = rankedMemoryRows.map(
-    ({ scopeRank: _scopeRank, ...memory }) => memory
-  );
-  const changes = rankedChangeRows.map(
-    ({ scopeRank: _scopeRank, ...change }) => change
-  );
-  const memoriesByMailboxId = new Map(
-    mailboxIds.map((mailboxId) => [mailboxId, [] as MemoryRow[]])
-  );
-  const changesByMailboxId = new Map(
-    mailboxIds.map((mailboxId) => [
-      mailboxId,
-      [] as (typeof aiMemoryChangeSet.$inferSelect)[],
-    ])
-  );
-  const configurationsByMailboxId = new Map(
-    configurations.flatMap((configuration) =>
-      configuration.mailboxId
-        ? [[configuration.mailboxId, configuration] as const]
-        : []
-    )
-  );
-  for (const memory of memories) {
-    if (memory.mailboxId) {
-      memoriesByMailboxId.get(memory.mailboxId)?.push(memory);
-    }
-  }
-  for (const change of changes) {
-    if (change.mailboxId) {
-      changesByMailboxId.get(change.mailboxId)?.push(change);
-    }
-  }
-
-  return new Map(
-    mailboxIds.map((mailboxId) => [
-      mailboxId,
-      {
-        learning: toAiMemoryScopeConfig(
-          configurationsByMailboxId.get(mailboxId)
-        ),
-        memory: buildAiMemoryScope({
-          changes: changesByMailboxId.get(mailboxId)?.slice(0, 12) ?? [],
-          memories:
-            memoriesByMailboxId
-              .get(mailboxId)
-              ?.slice(0, MEMORY_CANDIDATE_LIMIT) ?? [],
-        }),
-      },
-    ])
-  );
 };
 
 export const listPersonalAiMemory = async (userId: string) =>

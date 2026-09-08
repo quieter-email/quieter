@@ -43,16 +43,7 @@ export const protectedProcedure = base.use(
   }
 );
 
-export const historySyncMailboxCategorySchema = z.enum([
-  "inbox",
-  "unread",
-  "archive",
-  "spam",
-  "sent",
-  "trash",
-]);
 export const mailboxIdSchema = z.string().trim().min(1);
-export const gmailUserLabelNameSchema = z.string().trim().min(1).max(225);
 export const mailboxSwitcherOrderSchema = z.object({
   groupIds: z.array(z.string().trim().min(1)),
   mailboxIdsByGroupId: z.record(

@@ -92,7 +92,6 @@ export default defineConfig({
           "packages/orpc/src/client.ts",
           "packages/orpc/src/context.ts",
           "packages/orpc/src/routers/**/*.ts",
-          "packages/orpc/src/server-client.ts",
           "packages/orpc/src/server.ts",
         ],
         rules: {

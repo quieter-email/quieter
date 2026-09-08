@@ -547,19 +547,22 @@ const resolveManagedMoveMailboxState = (
   return destination;
 };
 
-export const setManagedMessageReadState = async (input: {
+const updateManagedMessageState = async (input: {
   mailboxId: string;
   messageId: string;
-  read: boolean;
+  changes: { isRead: boolean } | { mailboxState: ManagedMailMailboxState };
   userId: string;
 }) => {
   await getAuthorizedManagedMailbox({
     mailboxId: input.mailboxId,
+    requiredRoles:
+      "mailboxState" in input.changes ? ["manager", "responder"] : undefined,
     userId: input.userId,
   });
   const [record] = await db
     .select({
       direction: managedMailMessage.direction,
+      isRead: managedMailMessage.isRead,
       mailboxState: managedMailMessage.mailboxState,
     })
     .from(managedMailMessage)
@@ -577,7 +580,7 @@ export const setManagedMessageReadState = async (input: {
   await db.transaction(async (tx) => {
     await tx
       .update(managedMailMessage)
-      .set({ isRead: input.read, updatedAt: new Date() })
+      .set({ ...input.changes, updatedAt: new Date() })
       .where(
         and(
           eq(managedMailMessage.mailboxId, input.mailboxId),
@@ -597,11 +600,12 @@ export const setManagedMessageReadState = async (input: {
     .from(managedMailMessageLabel)
     .where(eq(managedMailMessageLabel.messageId, input.messageId));
 
+  const updated = { ...record, ...input.changes };
   return {
     id: input.messageId,
-    isUnread: !input.read,
+    isUnread: !updated.isRead,
     labelIds: getManagedMessageLabelIds(
-      { ...record, isRead: input.read },
+      updated,
       customLabels.map((assignment) => assignment.labelId)
     ),
   };
@@ -764,158 +768,20 @@ export const applyManagedMessageChanges = async (input: {
   });
 };
 
-export const setManagedThreadReadState = async (input: {
+const updateManagedThreadState = async (input: {
   mailboxId: string;
-  read: boolean;
+  changes: { isRead: boolean } | { mailboxState: ManagedMailMailboxState };
   threadId: string;
   userId: string;
 }) => {
   await getAuthorizedManagedMailbox({
     mailboxId: input.mailboxId,
-    userId: input.userId,
-  });
-  const records = await db
-    .select({
-      direction: managedMailMessage.direction,
-      id: managedMailMessage.id,
-      mailboxState: managedMailMessage.mailboxState,
-    })
-    .from(managedMailMessage)
-    .where(
-      and(
-        eq(managedMailMessage.mailboxId, input.mailboxId),
-        eq(managedMailMessage.threadId, input.threadId)
-      )
-    );
-  if (records.length === 0) {
-    throw new ORPCError("NOT_FOUND", { message: "Message thread not found." });
-  }
-
-  await db.transaction(async (tx) => {
-    await tx
-      .update(managedMailMessage)
-      .set({ isRead: input.read, updatedAt: new Date() })
-      .where(
-        and(
-          eq(managedMailMessage.mailboxId, input.mailboxId),
-          eq(managedMailMessage.threadId, input.threadId)
-        )
-      );
-    await tx
-      .update(mailbox)
-      .set({
-        contentRevision: sql`${mailbox.contentRevision} + 1`,
-        updatedAt: new Date(),
-      })
-      .where(eq(mailbox.id, input.mailboxId));
-  });
-  const customLabels = await db
-    .select({
-      labelId: managedMailMessageLabel.labelId,
-      messageId: managedMailMessageLabel.messageId,
-    })
-    .from(managedMailMessageLabel)
-    .where(
-      inArray(
-        managedMailMessageLabel.messageId,
-        records.map((record) => record.id)
-      )
-    );
-  const labelIdsByMessageId = new Map<string, string[]>();
-  for (const assignment of customLabels) {
-    const labelIds = labelIdsByMessageId.get(assignment.messageId) ?? [];
-    labelIds.push(assignment.labelId);
-    labelIdsByMessageId.set(assignment.messageId, labelIds);
-  }
-
-  return {
-    messages: records.map((record) => ({
-      id: record.id,
-      isUnread: !input.read,
-      labelIds: getManagedMessageLabelIds(
-        { ...record, isRead: input.read },
-        labelIdsByMessageId.get(record.id) ?? []
-      ),
-    })),
-    threadId: input.threadId,
-  };
-};
-
-export const setManagedMessageMailboxState = async (input: {
-  mailboxId: string;
-  messageId: string;
-  state: ManagedMailMailboxState;
-  userId: string;
-}) => {
-  await getAuthorizedManagedMailbox({
-    mailboxId: input.mailboxId,
-    requiredRoles: ["manager", "responder"],
-    userId: input.userId,
-  });
-  const [record] = await db
-    .select({
-      direction: managedMailMessage.direction,
-      id: managedMailMessage.id,
-      isRead: managedMailMessage.isRead,
-    })
-    .from(managedMailMessage)
-    .where(
-      and(
-        eq(managedMailMessage.mailboxId, input.mailboxId),
-        eq(managedMailMessage.id, input.messageId)
-      )
-    )
-    .limit(1);
-  if (record === undefined) {
-    throw new ORPCError("NOT_FOUND", { message: "Message not found." });
-  }
-
-  await db.transaction(async (tx) => {
-    await tx
-      .update(managedMailMessage)
-      .set({ mailboxState: input.state, updatedAt: new Date() })
-      .where(
-        and(
-          eq(managedMailMessage.mailboxId, input.mailboxId),
-          eq(managedMailMessage.id, input.messageId)
-        )
-      );
-    await tx
-      .update(mailbox)
-      .set({
-        contentRevision: sql`${mailbox.contentRevision} + 1`,
-        updatedAt: new Date(),
-      })
-      .where(eq(mailbox.id, input.mailboxId));
-  });
-  const customLabels = await db
-    .select({ labelId: managedMailMessageLabel.labelId })
-    .from(managedMailMessageLabel)
-    .where(eq(managedMailMessageLabel.messageId, input.messageId));
-
-  return {
-    id: input.messageId,
-    isUnread: !record.isRead,
-    labelIds: getManagedMessageLabelIds(
-      { ...record, mailboxState: input.state },
-      customLabels.map((assignment) => assignment.labelId)
-    ),
-  };
-};
-
-export const setManagedThreadMailboxState = async (input: {
-  mailboxId: string;
-  state: ManagedMailMailboxState;
-  threadId: string;
-  userId: string;
-}) => {
-  await getAuthorizedManagedMailbox({
-    mailboxId: input.mailboxId,
-    requiredRoles: ["manager", "responder"],
+    requiredRoles:
+      "mailboxState" in input.changes ? ["manager", "responder"] : undefined,
     userId: input.userId,
   });
   const stateCondition =
-    input.state === "archived"
+    "mailboxState" in input.changes && input.changes.mailboxState === "archived"
       ? ne(managedMailMessage.mailboxState, "draft")
       : undefined;
   const records = await db
@@ -923,6 +789,7 @@ export const setManagedThreadMailboxState = async (input: {
       direction: managedMailMessage.direction,
       id: managedMailMessage.id,
       isRead: managedMailMessage.isRead,
+      mailboxState: managedMailMessage.mailboxState,
     })
     .from(managedMailMessage)
     .where(
@@ -939,7 +806,7 @@ export const setManagedThreadMailboxState = async (input: {
   await db.transaction(async (tx) => {
     await tx
       .update(managedMailMessage)
-      .set({ mailboxState: input.state, updatedAt: new Date() })
+      .set({ ...input.changes, updatedAt: new Date() })
       .where(
         and(
           eq(managedMailMessage.mailboxId, input.mailboxId),
@@ -975,17 +842,61 @@ export const setManagedThreadMailboxState = async (input: {
   }
 
   return {
-    messages: records.map((record) => ({
-      id: record.id,
-      isUnread: !record.isRead,
-      labelIds: getManagedMessageLabelIds(
-        { ...record, mailboxState: input.state },
-        labelIdsByMessageId.get(record.id) ?? []
-      ),
-    })),
+    messages: records.map((record) => {
+      const updated = { ...record, ...input.changes };
+      return {
+        id: record.id,
+        isUnread: !updated.isRead,
+        labelIds: getManagedMessageLabelIds(
+          updated,
+          labelIdsByMessageId.get(record.id) ?? []
+        ),
+      };
+    }),
     threadId: input.threadId,
   };
 };
+
+export const setManagedMessageReadState = async (input: {
+  mailboxId: string;
+  messageId: string;
+  read: boolean;
+  userId: string;
+}) =>
+  await updateManagedMessageState({
+    ...input,
+    changes: { isRead: input.read },
+  });
+
+export const setManagedThreadReadState = async (input: {
+  mailboxId: string;
+  read: boolean;
+  threadId: string;
+  userId: string;
+}) =>
+  await updateManagedThreadState({ ...input, changes: { isRead: input.read } });
+
+export const setManagedMessageMailboxState = async (input: {
+  mailboxId: string;
+  messageId: string;
+  state: ManagedMailMailboxState;
+  userId: string;
+}) =>
+  await updateManagedMessageState({
+    ...input,
+    changes: { mailboxState: input.state },
+  });
+
+export const setManagedThreadMailboxState = async (input: {
+  mailboxId: string;
+  state: ManagedMailMailboxState;
+  threadId: string;
+  userId: string;
+}) =>
+  await updateManagedThreadState({
+    ...input,
+    changes: { mailboxState: input.state },
+  });
 
 export const getManagedMessageDelivery = async (input: {
   mailboxId: string;
