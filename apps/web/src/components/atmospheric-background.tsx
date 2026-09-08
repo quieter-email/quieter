@@ -36,6 +36,7 @@ struct Params {
   fadeColorTop: vec3f,
   fadeColorBottom: vec3f,
   danger: f32,
+  closing: f32,
   mood: f32,
   hardness: f32,
   thick: f32,
@@ -46,7 +47,6 @@ struct Params {
   cosA: vec2f,
   cosB: vec2f,
   cosC: vec2f,
-  grainTick: f32,
   pointer: vec2f,
   pointerStrength: f32,
 }
@@ -93,13 +93,15 @@ fn ridge(p: vec2f, phase: f32, thickness: f32, hard: f32, cs: vec2f, freq: f32) 
   let ca = cs.x;
   let sa = cs.y;
   let r = vec2f(ca * p.x + sa * p.y, -sa * p.x + ca * p.y);
+  let frequency = freq * mix(1.0, 0.7, params.closing);
+  let detail = mix(1.0, 0.3, params.closing);
   let fold =
     r.y
     - (
       -0.1
-      + 0.3 * sin(r.x * (1.15 * freq) + phase)
-      + 0.12 * sin(r.x * (2.35 * freq) + phase * 1.7)
-      + 0.05 * sin(r.x * (4.2 * freq) - phase * 0.65)
+      + 0.3 * sin(r.x * (1.15 * frequency) + phase)
+      + 0.12 * detail * sin(r.x * (2.35 * frequency) + phase * 1.7)
+      + 0.05 * detail * sin(r.x * (4.2 * frequency) - phase * 0.65)
     );
   let soft = exp(-(fold * fold) / max(thickness * thickness, 0.0001));
   let sharp = min(
@@ -120,12 +122,16 @@ fn layerLight(a: f32, b: f32) -> f32 {
   let t = params.time * params.animate * 0.095 + params.seed.x * 40.0;
 
   let mood = params.mood;
-  let hardness = params.hardness;
+  let hardness = params.hardness * mix(1.0, 0.55, params.closing);
   let drift = params.drift.x;
   let drift2 = params.drift.y;
   let pointerOffset = p - (params.pointer - 0.5) * vec2f(aspect, 1.0);
   let pointerInfluence = exp(-dot(pointerOffset, pointerOffset) * 14.0) * params.pointerStrength;
   let q = p - params.layoutOffset + vec2f(-pointerOffset.y, pointerOffset.x) * pointerInfluence * 0.16;
+  let grainUv = (q + vec2f(drift, drift2) * 0.14) * params.resolution.y * 0.8 + params.seed.xy * 173.0;
+  let fineGrain = hash12(floor(grainUv)) - 0.5;
+  let softGrain = valueNoise3(vec3f(q * 120.0 + params.seed.xy * 35.0, t * 0.025)) - 0.5;
+  let materialGrain = fineGrain * 0.65 + softGrain * 0.35;
 
   var ambient =
     softGlow(q, vec2f(-0.25 + drift, -0.06 + drift2), vec2f(1.2, 0.8)) * 0.4 +
@@ -143,9 +149,9 @@ fn layerLight(a: f32, b: f32) -> f32 {
   let blueHole = softGlow(q, vec2f(-0.05 + drift2, 0.08), vec2f(0.55, 0.35)) * 0.4;
   blueField *= mix(0.35, 1.15, blueBreak);
   blueField *= 1.0 - blueHole * mix(0.25, 0.55, 1.0 - mood);
-  blueField = clamp(blueField, 0.0, 1.0);
+  blueField = clamp(blueField * (1.0 + materialGrain * params.grain * 0.025), 0.0, 1.0);
 
-  let thick = params.thick;
+  let thick = params.thick * mix(1.0, 1.35, params.closing);
   let ridgeMain = ridge(
     q + vec2f(drift * 0.5, drift2),
     params.phase.x,
@@ -177,10 +183,13 @@ fn layerLight(a: f32, b: f32) -> f32 {
 
   let ridgeLayer = layerLight(
     ridgeMain * 0.75,
-    layerLight(ridgeB * params.ridgeAmp.x, ridgeC * params.ridgeAmp.y)
+    layerLight(
+      ridgeB * params.ridgeAmp.x * mix(1.0, 0.55, params.closing),
+      ridgeC * params.ridgeAmp.y * mix(1.0, 0.2, params.closing)
+    )
   );
   var highlight = layerLight(ridgeLayer, bloom * 0.55);
-  highlight = clamp(highlight * params.intensity, 0.0, 1.0);
+  highlight = clamp(highlight * params.intensity * mix(1.0, 1.2, params.closing), 0.0, 1.0);
 
   let valley =
     softGlow(q, vec2f(0.1 + drift, -0.02), vec2f(0.4, 0.16)) * 0.65 +
@@ -190,15 +199,17 @@ fn layerLight(a: f32, b: f32) -> f32 {
   let textSafe = softGlow(p, vec2f(0.0, 0.02), vec2f(0.7, 0.36));
   highlight *= mix(1.0, 0.3, textSafe * 0.9);
   ambient *= mix(1.0, 0.6, textSafe * 0.65);
+  highlight *= max(0.0, 1.0 + materialGrain * params.grain * 0.022);
+  ambient *= max(0.0, 1.0 + materialGrain * params.grain * 0.016);
 
   let black = vec3f(0.0);
-  let charcoal = mix(vec3f(0.045, 0.05, 0.06), vec3f(0.052, 0.032, 0.034), params.danger);
-  let navy = mix(vec3f(0.07, 0.09, 0.13), vec3f(0.14, 0.04, 0.05), params.danger);
-  let dustyBlue = mix(vec3f(0.15, 0.19, 0.27), vec3f(0.3, 0.08, 0.09), params.danger);
-  let steel = mix(vec3f(0.32, 0.36, 0.42), vec3f(0.4, 0.26, 0.26), params.danger);
-  let offWhite = mix(vec3f(0.8, 0.82, 0.86), vec3f(0.84, 0.78, 0.77), params.danger);
+  let charcoal = mix(mix(vec3f(0.045, 0.05, 0.06), vec3f(0.025, 0.038, 0.05), params.closing), vec3f(0.052, 0.032, 0.034), params.danger);
+  let navy = mix(mix(vec3f(0.07, 0.09, 0.13), vec3f(0.035, 0.08, 0.125), params.closing), vec3f(0.14, 0.04, 0.05), params.danger);
+  let dustyBlue = mix(mix(vec3f(0.15, 0.19, 0.27), vec3f(0.07, 0.2, 0.33), params.closing), vec3f(0.3, 0.08, 0.09), params.danger);
+  let steel = mix(mix(vec3f(0.32, 0.36, 0.42), vec3f(0.25, 0.42, 0.55), params.closing), vec3f(0.4, 0.26, 0.26), params.danger);
+  let offWhite = mix(mix(vec3f(0.8, 0.82, 0.86), vec3f(0.73, 0.86, 0.94), params.closing), vec3f(0.84, 0.78, 0.77), params.danger);
 
-  let blueAmt = mix(0.4, 0.85, mood) * mix(1.0, 1.12, params.danger);
+  let blueAmt = mix(0.4, 0.85, mood) * mix(1.0, 1.25, params.closing) * mix(1.0, 1.12, params.danger);
   let blueTone = valueNoise3(vec3f(q * 1.6 + params.seed.xy, t * 0.12));
   var color = mix(black, charcoal, clamp(ambient + 0.3, 0.0, 1.0));
   color = mix(color, navy, clamp(blueField * 0.65 * blueAmt * mix(0.7, 1.15, blueTone), 0.0, 1.0));
@@ -222,11 +233,6 @@ fn layerLight(a: f32, b: f32) -> f32 {
     color = mix(params.fadeColorTop, color, smoothstep(0.0, 0.16, 1.0 - uv.y));
   }
 
-  let fragCoord = uv * params.resolution;
-  let gn = hash12(fragCoord + params.grainTick * 17.0);
-  let luma = dot(color, vec3f(0.299, 0.587, 0.114));
-  color += (gn - 0.5) * mix(0.02, 0.045, smoothstep(0.02, 0.3, luma)) * params.grain;
-
   return vec4f(clamp(color, vec3f(0.0), vec3f(1.0)), 1.0);
 }
 `;
@@ -241,8 +247,9 @@ type FadeTarget = "black" | "canvas";
 type AtmosphericBackgroundProps = {
   interactive?: boolean;
   className?: string;
-  /** Film grain strength. Default 1. */
+  /** Texture in the light field. Default 1. */
   grain?: number;
+  variant?: "default" | "closing";
   /** Light-field strength. Default 1. */
   intensity?: number;
   /** When false, freezes motion (also auto for prefers-reduced-motion). Default true. */
@@ -324,7 +331,6 @@ type FrameGlobals = {
   phaseC: number;
   ridgeAmpB: number;
   ridgeAmpC: number;
-  grainTick: number;
 };
 
 const computeFrameGlobals = (
@@ -348,9 +354,6 @@ const computeFrameGlobals = (
     detail,
     drift,
     drift2,
-    grainTick: animate
-      ? Math.floor(f32(timeSeconds * 3 + sx * 100))
-      : f32(sx * 100),
     hardness,
     mood,
     phaseA: f32(f32(sx * 6.28318) + f32(t * 1.42)),
@@ -376,6 +379,7 @@ type AtmosphericShaderParams = {
   fadeColorTop: readonly [number, number, number];
   fadeColorBottom: readonly [number, number, number];
   danger: number;
+  closing: number;
   mood: number;
   hardness: number;
   thick: number;
@@ -386,7 +390,6 @@ type AtmosphericShaderParams = {
   cosA: [number, number];
   cosB: [number, number];
   cosC: [number, number];
-  grainTick: number;
 };
 
 type AtmosphericSession = {
@@ -410,6 +413,7 @@ export const AtmosphericBackground = ({
   intensity = 1,
   interactive = false,
   danger,
+  variant = "default",
 }: AtmosphericBackgroundProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [ready, setReady] = useState(false);
@@ -464,10 +468,12 @@ export const AtmosphericBackground = ({
       window.addEventListener("blur", handlePointerBlur);
     }
     const [sx, sy, sz] = session.seed;
+    const closing = variant === "closing";
+    const motionSpeed = closing ? 0.7 : 1;
 
     const layoutX = f32(f32(sx - 0.5) * 0.55);
-    const layoutY = f32(f32(sy - 0.5) * 0.55);
-    const angA = f32(-0.22 + f32(sx - 0.5) * 0.55);
+    const layoutY = f32(f32(sy - 0.5) * 0.55 - (closing ? 0.12 : 0));
+    const angA = f32((closing ? 0.34 : -0.22) + f32(sx - 0.5) * 0.55);
     const angB = f32(0.48 + f32(sy - 0.5) * 0.7);
     const angC = f32(-0.61 + f32(sz - 0.5) * 0.65);
     const cosA: [number, number] = [f32(Math.cos(angA)), f32(Math.sin(angA))];
@@ -499,15 +505,15 @@ export const AtmosphericBackground = ({
       if (!(gpuContext && canvasSurface && atmosphericEffect && shaderParams)) {
         return;
       }
-      const g = computeFrameGlobals(timeSeconds, shouldAnimate, session.seed);
-      shaderParams.time = timeSeconds;
+      const shaderTime = timeSeconds * motionSpeed;
+      const g = computeFrameGlobals(shaderTime, shouldAnimate, session.seed);
+      shaderParams.time = shaderTime;
       shaderParams.mood = g.mood;
       shaderParams.hardness = g.hardness;
       shaderParams.thick = g.thick;
       shaderParams.drift = [g.drift, g.drift2];
       shaderParams.phase = [g.phaseA, g.phaseB, g.phaseC];
       shaderParams.ridgeAmp = [g.ridgeAmpB, g.ridgeAmpC];
-      shaderParams.grainTick = g.grainTick;
       shaderParams.pointer[0] += (pointerX - shaderParams.pointer[0]) * 0.06;
       shaderParams.pointer[1] += (pointerY - shaderParams.pointer[1]) * 0.06;
       shaderParams.pointerStrength +=
@@ -587,12 +593,13 @@ export const AtmosphericBackground = ({
         });
         canvasSurface = nextSurface;
         const initialGlobals = computeFrameGlobals(
-          session.timeOffset,
+          session.timeOffset * motionSpeed,
           shouldAnimate,
           session.seed
         );
         shaderParams = {
           animate: shouldAnimate ? 1 : 0,
+          closing: closing ? 1 : 0,
           cosA,
           cosB,
           cosC,
@@ -603,7 +610,6 @@ export const AtmosphericBackground = ({
           fadeColorTop: [tr, tg, tb],
           fadeTop: fadeTop ? 1 : 0,
           grain,
-          grainTick: initialGlobals.grainTick,
           hardness: initialGlobals.hardness,
           intensity,
           layoutOffset: [layoutX, layoutY],
@@ -619,7 +625,7 @@ export const AtmosphericBackground = ({
           ridgeAmp: [initialGlobals.ridgeAmpB, initialGlobals.ridgeAmpC],
           seed: session.seed,
           thick: initialGlobals.thick,
-          time: session.timeOffset,
+          time: session.timeOffset * motionSpeed,
         };
         atmosphericEffect = effect(nextGpu, ATMOSPHERIC_SHADER_SOURCE, {
           label: "atmospheric-background",
@@ -698,6 +704,7 @@ export const AtmosphericBackground = ({
     intensity,
     interactive,
     session,
+    variant,
   ]);
 
   return (

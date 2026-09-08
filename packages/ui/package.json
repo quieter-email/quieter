@@ -19,6 +19,7 @@
     "./cn": "./src/lib/cn.ts",
     "./collapsible": "./src/components/ui/collapsible.tsx",
     "./color-mode": "./src/components/ui/color-mode.tsx",
+    "./composer-chrome": "./src/components/ui/composer-chrome.tsx",
     "./context-menu": "./src/components/ui/context-menu.tsx",
     "./dialog": "./src/components/ui/dialog.tsx",
     "./drawer": "./src/components/ui/drawer.tsx",

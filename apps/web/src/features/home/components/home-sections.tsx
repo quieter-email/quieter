@@ -1,153 +1,116 @@
 "use client";
 
+import { AI_COST_RECOVERY_BASIS_POINTS } from "@quieter/billing/ai-pricing";
 import { BILLING_PRODUCTS } from "@quieter/billing/plans";
-import { cn } from "@quieter/ui/cn";
+import { getManagedUsageRates } from "@quieter/billing/ses-pricing";
 
-import {
-  HomeAtmosphericBackground,
-  HomeWorkspaceDitherBackground,
-} from "./lazy-webgl-backgrounds";
-import { Reveal } from "./reveal";
+import { AiSection } from "./ai-section";
+import { ConnectSection } from "./connect-section";
+import { HomeAtmosphericBackground } from "./lazy-webgl-backgrounds";
+import { WorkflowPreview } from "./product-previews";
+import { Reveal, RevealChild } from "./reveal";
 import { WaitlistForm } from "./waitlist-form";
 
-type Feature = {
-  body: string;
-  id: string;
-  image: string;
-  /** Alternates the composition so the page reads as a zigzag, not a stack. */
-  imageFirst: boolean;
-  title: string;
-};
-
-const features: Feature[] = [
+const rates = getManagedUsageRates();
+const tiers = [
   {
-    body: "Two-way sync with the mailbox you already use.",
-    id: "gmail",
-    image: "/landing_sync.webp",
-    imageFirst: false,
-    title: "Connect Gmail",
+    credits: null,
+    name: "Free",
+    price: 0,
+    summary: "Unlimited Gmail accounts.",
   },
   {
-    body: "support@, billing@ and press@ on your own domain, with roles.",
-    id: "team-mail",
-    image: "/landing_team_mail.webp",
-    imageFirst: true,
-    title: "Team mailboxes",
+    credits: BILLING_PRODUCTS.managed.creditAmountCents / 100,
+    name: BILLING_PRODUCTS.managed.name,
+    price: BILLING_PRODUCTS.managed.monthlyPriceCents / 100,
+    summary: "Unlimited mailboxes and custom domains.",
   },
   {
-    body: "Send from verified domains over the API, MCP or SDK.",
-    id: "sending",
-    image: "/landing_sending.webp",
-    imageFirst: false,
-    title: "Sending",
+    credits: BILLING_PRODUCTS.pro.creditAmountCents / 100,
+    name: BILLING_PRODUCTS.pro.name,
+    price: BILLING_PRODUCTS.pro.monthlyPriceCents / 100,
+    summary: "Everything in Managed, plus all AI features.",
   },
-  {
-    body: "Context and drafts inside one mailbox. Optional, and you send them.",
-    id: "ai",
-    image: "/landing_ai.webp",
-    imageFirst: true,
-    title: "AI",
-  },
-];
-
-const ImagePlate = ({ src }: { src: string }) => (
-  <div className="aspect-5/3 w-full">
-    <img
-      alt=""
-      aria-hidden
-      className="size-full object-cover"
-      decoding="async"
-      height="972"
-      loading="lazy"
-      src={src}
-      style={{
-        WebkitMaskImage:
-          "radial-gradient(ellipse at center, black 58%, transparent 100%)",
-        maskImage:
-          "radial-gradient(ellipse at center, black 58%, transparent 100%)",
-      }}
-      width="1619"
-    />
-  </div>
-);
-
-const FeatureSection = ({ body, id, image, imageFirst, title }: Feature) => (
-  <section className="relative px-6 pt-24 md:pt-32" id={id}>
-    <div className="relative mx-auto grid w-full max-w-220 items-center gap-10 md:grid-cols-2 md:gap-14">
-      <Reveal
-        className={cn("flex flex-col gap-3", { "md:order-2": imageFirst })}
-        delay={imageFirst ? 0.08 : 0}
-      >
-        <h2 className="font-serif text-title-md/snug font-normal tracking-[-0.012em] text-fg">
-          {title}
-        </h2>
-        <p className="max-w-[320px] text-body leading-[1.73] text-muted-fg">
-          {body}
-        </p>
-      </Reveal>
-
-      <Reveal
-        className={cn({ "md:order-1": imageFirst })}
-        delay={imageFirst ? 0 : 0.08}
-      >
-        <ImagePlate src={image} />
-      </Reveal>
-    </div>
-  </section>
-);
+] as const;
 
 const Pricing = () => (
-  <section className="relative px-6 pt-28 md:pt-36" id="pricing">
-    <div className="mx-auto w-full max-w-220">
-      <Reveal
-        as="h2"
-        className="text-center font-serif text-title-md/snug font-normal tracking-[-0.012em] text-fg"
-      >
-        Pricing
-      </Reveal>
-
-      <dl className="mt-12 md:mt-14">
-        {Object.values(BILLING_PRODUCTS).map((product, index) => (
-          <Reveal
-            className="flex flex-wrap items-baseline gap-x-6 gap-y-2 border-t border-border/60 px-1 py-7 last:border-b"
-            delay={index * 0.07}
-            key={product.name}
-          >
-            <dt className="w-37.5 shrink-0 text-body-lg text-fg">
-              {product.name}
-            </dt>
-            <dd className="min-w-60 flex-1 text-body leading-[1.73] text-muted-fg">
-              {product.description}
-            </dd>
-            <dd className="ml-auto text-body-lg text-fg tabular-nums">
-              ${product.monthlyPriceCents / 100}
-            </dd>
-            <dd className="w-16 text-right text-body text-muted-fg/70">
-              / month
-            </dd>
-          </Reveal>
+  <section
+    aria-labelledby="home-pricing-title"
+    className="home-feature home-pricing"
+    id="pricing"
+  >
+    <Reveal className="home-feature-heading" stagger={0.18}>
+      <RevealChild as="h2" className="home-heading" id="home-pricing-title">
+        Pricing.
+      </RevealChild>
+      <RevealChild as="p" className="home-description">
+        Start with Gmail. <br className="home-desktop-break" />
+        Add managed email or AI when you need it.
+      </RevealChild>
+    </Reveal>
+    <div>
+      <Reveal className="home-pricing-rows" delay={0.24} stagger={0.18}>
+        {tiers.map((tier) => (
+          <RevealChild className="home-pricing-row" key={tier.name}>
+            <h3>{tier.name}</h3>
+            <div className="home-plan-description">
+              <p>{tier.summary}</p>
+              {tier.credits === null ? null : (
+                <p className="home-plan-credits">
+                  ${tier.credits} in credits included.
+                </p>
+              )}
+            </div>
+            <p className="home-plan-price">
+              <span>${tier.price}</span>
+              <span className="home-plan-period">/ month</span>
+            </p>
+          </RevealChild>
         ))}
-      </dl>
+      </Reveal>
+      <Reveal className="home-pricing-notes" stagger={0.14}>
+        <RevealChild as="p">
+          Managed mail starts at ${rates.messagesPerThousandUsd.toFixed(2)} per
+          1k messages.
+        </RevealChild>
+        <RevealChild as="p">
+          Outbound: ${rates.messagesPerThousandUsd.toFixed(2)} per 1k recipient
+          deliveries, plus ${rates.attachmentDataPerGbUsd.toFixed(2)} per GB of
+          attachments.
+          <br />
+          Inbound: ${rates.messagesPerThousandUsd.toFixed(2)} per 1k messages,
+          plus ${rates.inboundProcessingPerThousandUsd.toFixed(2)} per 1k 256 KB
+          units of data, including attachments.
+        </RevealChild>
+        <RevealChild as="p">
+          AI usage is billed at{" "}
+          <a href="https://openrouter.ai" rel="noreferrer" target="_blank">
+            API cost
+          </a>{" "}
+          plus {AI_COST_RECOVERY_BASIS_POINTS / 100}%.
+        </RevealChild>
+        <RevealChild as="p">
+          Usage beyond your included credits is billed separately.
+        </RevealChild>
+      </Reveal>
     </div>
   </section>
 );
 
 const Closing = () => (
-  <section className="dark relative z-10 flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-black px-6 pt-32 pb-24 md:pt-36">
-    <div className="absolute inset-0">
-      <HomeAtmosphericBackground fadeBottom="black" fadeTop="black" />
-    </div>
-
-    <div className="relative z-10 flex w-full max-w-220 flex-col items-center text-fg">
-      <Reveal
-        as="h2"
-        className="max-w-205 text-center font-serif text-title-md leading-[1.42] font-normal tracking-[-0.014em] text-balance text-fg sm:text-title-lg md:text-display-md md:leading-[1.48]"
-      >
-        Email can do more without asking more from you.
+  <section className="home-closing">
+    <HomeAtmosphericBackground
+      fadeBottom="black"
+      fadeTop="black"
+      variant="closing"
+    />
+    <div className="home-closing-content">
+      <Reveal as="h2" className="home-closing-heading" stagger={0.2}>
+        <RevealChild as="span">Email can do more without</RevealChild>{" "}
+        <RevealChild as="span">asking more from you.</RevealChild>
       </Reveal>
-
-      <Reveal className="mt-12 flex w-full flex-col items-center" delay={0.1}>
-        <WaitlistForm id="closing" />
+      <Reveal className="home-waitlist-wrap" delay={0.44}>
+        <WaitlistForm className="home-waitlist" id="closing" />
       </Reveal>
     </div>
   </section>
@@ -155,22 +118,18 @@ const Closing = () => (
 
 export const HomeSections = () => (
   <>
-    <div className="dark relative overflow-hidden bg-black pt-24 pb-28 md:pt-32 md:pb-36">
-      <HomeWorkspaceDitherBackground
-        animate
-        className="opacity-30 dark:opacity-25"
-        dotRgb="210, 216, 230"
-        falloff={1}
-        pattern="dual-foci"
-        strength={1.5}
-      />
-
-      <div className="relative z-10 text-fg">
-        {features.map((feature) => (
-          <FeatureSection key={feature.id} {...feature} />
-        ))}
-        <Pricing />
-      </div>
+    <div className="home-features">
+      <ConnectSection />
+      <AiSection />
+      <section aria-labelledby="home-tools-title" className="home-feature">
+        <Reveal>
+          <h2 className="home-heading" id="home-tools-title">
+            Everyday email tools.
+          </h2>
+        </Reveal>
+        <WorkflowPreview />
+      </section>
+      <Pricing />
     </div>
     <Closing />
   </>
