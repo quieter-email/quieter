@@ -93,13 +93,15 @@ fn ridge(p: vec2f, phase: f32, thickness: f32, hard: f32, cs: vec2f, freq: f32) 
   let ca = cs.x;
   let sa = cs.y;
   let r = vec2f(ca * p.x + sa * p.y, -sa * p.x + ca * p.y);
+  let frequency = freq * mix(1.0, 0.7, params.closing);
+  let detail = mix(1.0, 0.3, params.closing);
   let fold =
     r.y
     - (
       -0.1
-      + 0.3 * sin(r.x * (1.15 * freq) + phase)
-      + 0.12 * sin(r.x * (2.35 * freq) + phase * 1.7)
-      + 0.05 * sin(r.x * (4.2 * freq) - phase * 0.65)
+      + 0.3 * sin(r.x * (1.15 * frequency) + phase)
+      + 0.12 * detail * sin(r.x * (2.35 * frequency) + phase * 1.7)
+      + 0.05 * detail * sin(r.x * (4.2 * frequency) - phase * 0.65)
     );
   let soft = exp(-(fold * fold) / max(thickness * thickness, 0.0001));
   let sharp = min(
@@ -120,7 +122,7 @@ fn layerLight(a: f32, b: f32) -> f32 {
   let t = params.time * params.animate * 0.095 + params.seed.x * 40.0;
 
   let mood = params.mood;
-  let hardness = min(0.8, params.hardness + params.closing * 0.18);
+  let hardness = params.hardness * mix(1.0, 0.55, params.closing);
   let drift = params.drift.x;
   let drift2 = params.drift.y;
   let pointerOffset = p - (params.pointer - 0.5) * vec2f(aspect, 1.0);
@@ -149,7 +151,7 @@ fn layerLight(a: f32, b: f32) -> f32 {
   blueField *= 1.0 - blueHole * mix(0.25, 0.55, 1.0 - mood);
   blueField = clamp(blueField * (1.0 + materialGrain * params.grain * 0.025), 0.0, 1.0);
 
-  let thick = params.thick * mix(1.0, 0.86, params.closing);
+  let thick = params.thick * mix(1.0, 1.35, params.closing);
   let ridgeMain = ridge(
     q + vec2f(drift * 0.5, drift2),
     params.phase.x,
@@ -181,10 +183,13 @@ fn layerLight(a: f32, b: f32) -> f32 {
 
   let ridgeLayer = layerLight(
     ridgeMain * 0.75,
-    layerLight(ridgeB * params.ridgeAmp.x, ridgeC * params.ridgeAmp.y)
+    layerLight(
+      ridgeB * params.ridgeAmp.x * mix(1.0, 0.55, params.closing),
+      ridgeC * params.ridgeAmp.y * mix(1.0, 0.2, params.closing)
+    )
   );
   var highlight = layerLight(ridgeLayer, bloom * 0.55);
-  highlight = clamp(highlight * params.intensity * mix(1.0, 1.32, params.closing), 0.0, 1.0);
+  highlight = clamp(highlight * params.intensity * mix(1.0, 1.2, params.closing), 0.0, 1.0);
 
   let valley =
     softGlow(q, vec2f(0.1 + drift, -0.02), vec2f(0.4, 0.16)) * 0.65 +
@@ -464,7 +469,7 @@ export const AtmosphericBackground = ({
     }
     const [sx, sy, sz] = session.seed;
     const closing = variant === "closing";
-    const motionSpeed = closing ? 1.65 : 1;
+    const motionSpeed = closing ? 0.7 : 1;
 
     const layoutX = f32(f32(sx - 0.5) * 0.55);
     const layoutY = f32(f32(sy - 0.5) * 0.55 - (closing ? 0.12 : 0));

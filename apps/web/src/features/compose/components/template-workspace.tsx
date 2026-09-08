@@ -22,6 +22,13 @@ import {
 } from "@quieter/ui/alert-dialog";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import {
+  ComposerEditorFrame,
+  ComposerFieldGroup,
+  composerFieldControlClassName,
+  ComposerFieldRow,
+  ComposerFrame,
+} from "@quieter/ui/composer-chrome";
 import { FieldControl } from "@quieter/ui/field";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
@@ -46,13 +53,6 @@ import {
   ComposeEditorToolbar,
 } from "./compose-editor";
 import type { ComposeEditorHandle } from "./compose-editor";
-import {
-  ComposerEditorFrame,
-  ComposerFieldGroup,
-  composerFieldControlClassName,
-  ComposerFieldRow,
-  ComposerFrame,
-} from "./composer-chrome";
 
 type MailTemplateItem = {
   bodyHtml: string;

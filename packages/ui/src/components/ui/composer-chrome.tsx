@@ -1,8 +1,9 @@
 "use client";
 
-import { cn } from "@quieter/ui/cn";
-import { Field, FieldError, FieldLabel } from "@quieter/ui/field";
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
+
+import { cn } from "../../lib/cn";
+import { Field, FieldError, FieldLabel } from "./field";
 
 /** Chrome shared by the mail and template composers. */
 export const ComposerFrame = ({

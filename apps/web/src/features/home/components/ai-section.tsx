@@ -2,74 +2,74 @@
 
 import {
   AssistantPreview,
+  BriefPreview,
   ComposePreview,
-  MailboxPreview,
+  LabelsPreview,
 } from "./product-previews";
-import { Reveal } from "./reveal";
+import { Reveal, RevealChild } from "./reveal";
 
 export const AiSection = () => (
   <>
-    <section
-      aria-labelledby="home-labels-title"
-      className="w-full max-w-6xl px-6"
-    >
-      <Reveal>
-        <h2
-          className="text-center text-3xl font-medium tracking-tight text-balance text-fg sm:text-4xl"
-          id="home-labels-title"
-        >
-          An inbox that sorts itself.
-        </h2>
-        <div aria-hidden className="home-product-stage mt-10">
-          <MailboxPreview
-            accounts={["Projects", "Receipts", "Personal"]}
-            labels
-          />
-        </div>
-        <p className="mx-auto mt-8 max-w-xl text-center text-base leading-relaxed text-balance text-muted-fg">
-          Let AI label your mail around your preferences. Everything in its
-          place.
-        </p>
+    <section aria-labelledby="home-labels-title" className="home-feature">
+      <Reveal className="home-feature-heading" stagger={0.18}>
+        <RevealChild as="h2" className="home-heading" id="home-labels-title">
+          Automatic labels.
+        </RevealChild>
+        <RevealChild as="p" className="home-description">
+          Let AI label your mail around your preferences.{" "}
+          <br className="home-desktop-break" />
+          Everything in its place, as it arrives.
+        </RevealChild>
+      </Reveal>
+      <Reveal delay={0.3}>
+        <LabelsPreview />
       </Reveal>
     </section>
-    <section
-      aria-labelledby="home-drafts-title"
-      className="w-full max-w-6xl px-6"
-    >
-      <Reveal>
-        <h2
-          className="text-center text-3xl font-medium tracking-tight text-balance text-fg sm:text-4xl"
-          id="home-drafts-title"
-        >
-          Still your voice. Just less typing.
-        </h2>
-        <div aria-hidden className="home-product-stage mt-10">
-          <ComposePreview />
-        </div>
-        <p className="mx-auto mt-8 max-w-xl text-center text-base leading-relaxed text-balance text-muted-fg">
-          Draft replies with the context already in your inbox. You review and
-          send.
-        </p>
+    <div className="home-feature home-paired-features">
+      <section aria-labelledby="home-brief-title">
+        <Reveal className="home-paired-feature" stagger={0.18}>
+          <RevealChild as="h2" className="home-heading" id="home-brief-title">
+            Your daily brief.
+          </RevealChild>
+          <RevealChild as="p" className="home-description">
+            A daily brief of what needs your attention.
+            <br />
+            Catch up without opening every email.
+          </RevealChild>
+          <RevealChild>
+            <BriefPreview />
+          </RevealChild>
+        </Reveal>
+      </section>
+      <section aria-labelledby="home-drafts-title">
+        <Reveal className="home-paired-feature" delay={0.12} stagger={0.18}>
+          <RevealChild as="h2" className="home-heading" id="home-drafts-title">
+            Draft replies faster.
+          </RevealChild>
+          <RevealChild as="p" className="home-description">
+            Thoughtful drafts with context from your inbox.
+            <br />
+            You review, make it yours, and send.
+          </RevealChild>
+          <RevealChild>
+            <ComposePreview />
+          </RevealChild>
+        </Reveal>
+      </section>
+    </div>
+    <section aria-labelledby="home-chat-title" className="home-feature">
+      <Reveal className="home-feature-heading" stagger={0.18}>
+        <RevealChild as="h2" className="home-heading" id="home-chat-title">
+          Ask your mailbox.
+        </RevealChild>
+        <RevealChild as="p" className="home-description">
+          Get an answer with the emails to back it up.{" "}
+          <br className="home-desktop-break" />
+          AI is optional, always.
+        </RevealChild>
       </Reveal>
-    </section>
-    <section
-      aria-labelledby="home-chat-title"
-      className="w-full max-w-6xl px-6"
-    >
-      <Reveal>
-        <h2
-          className="text-center text-3xl font-medium tracking-tight text-balance text-fg sm:text-4xl"
-          id="home-chat-title"
-        >
-          Less searching. More knowing.
-        </h2>
-        <div aria-hidden className="home-product-stage mt-10">
-          <AssistantPreview />
-        </div>
-        <p className="mx-auto mt-8 max-w-xl text-center text-base leading-relaxed text-balance text-muted-fg">
-          Start with a daily brief, or ask your mailbox directly. AI is always
-          optional.
-        </p>
+      <Reveal delay={0.3}>
+        <AssistantPreview />
       </Reveal>
     </section>
   </>
