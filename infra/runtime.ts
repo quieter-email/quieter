@@ -1,7 +1,12 @@
 import { createSstConfigEnv } from "@quieter/env/sst";
 
 import { requireSecretResource } from "./secrets";
-import { getEnvironmentValue, production, stage } from "./stage";
+import {
+  deploymentEnvironment,
+  getEnvironmentValue,
+  production,
+  stage,
+} from "./stage";
 import type { SecretResources } from "./types";
 
 export const cloudflareWorkerObservability = {
@@ -51,13 +56,18 @@ const createSentryEnvironment = (secretResources: SecretResources) => ({
 
 export const createDeploymentContext = (secretResources: SecretResources) => {
   const env = createSstConfigEnv({ production });
-  const polarSandbox =
-    env.POLAR_SANDBOX === undefined ? "" : String(env.POLAR_SANDBOX);
   const mailAutomationAiEnabled = String(
     env.QUIETER_GMAIL_AI_AUTOMATION_ENABLED ?? production
   );
 
   return {
+    billingEnvironment: {
+      POLAR_ORGANIZATION_ID: env.POLAR_ORGANIZATION_ID ?? "",
+      POLAR_PRODUCT_MANAGED_ID: env.POLAR_PRODUCT_MANAGED_ID ?? "",
+      POLAR_PRODUCT_PRO_ID: env.POLAR_PRODUCT_PRO_ID ?? "",
+      POLAR_SANDBOX: production ? "false" : String(env.POLAR_SANDBOX ?? ""),
+      QUIETER_DEPLOYMENT_ENV: deploymentEnvironment,
+    },
     connectorTokenEncryptionKey: requireSecretResource(
       secretResources,
       "CONNECTOR_TOKEN_ENCRYPTION_KEY"
@@ -105,10 +115,6 @@ export const createDeploymentContext = (secretResources: SecretResources) => {
       secretResources,
       "POLAR_ACCESS_TOKEN"
     ).value,
-    polarOrganizationId: env.POLAR_ORGANIZATION_ID ?? "",
-    polarProductManagedId: env.POLAR_PRODUCT_MANAGED_ID ?? "",
-    polarProductProId: env.POLAR_PRODUCT_PRO_ID ?? "",
-    polarSandbox,
     r2Environment: createR2Environment(env, secretResources),
     sentryEnvironment: createSentryEnvironment(secretResources),
   };

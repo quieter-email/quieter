@@ -2,10 +2,19 @@ packages:
   - "apps/*"
   - "packages/*"
 
+autoInstallPeers: false
+strictPeerDependencies: true
+
+peerDependencyRules:
+  allowedVersions:
+    # Vite+ replaces Vite with its compatible core under a different version.
+    vite: "0.2.9"
+
 catalog:
-  "@cloudflare/vite-plugin": "1.50.0"
-  "@cloudflare/vitest-pool-workers": "0.20.1"
-  "@cloudflare/workers-types": "5.20260804.1"
+  "@better-auth/api-key": "1.7.3"
+  "@cloudflare/vite-plugin": "1.54.5"
+  "@cloudflare/vitest-pool-workers": "0.22.0"
+  "@cloudflare/workers-types": "5.20260907.1"
   "@aws-sdk/client-s3": "^3.1116.0"
   "@aws-sdk/client-ses": "^3.1116.0"
   "@aws-sdk/client-sesv2": "^3.1116.0"
@@ -37,10 +46,10 @@ catalog:
   "@orpc/tanstack-query": "^1.15.0"
   "@sentry/node": "^10.70.0"
   "@sentry/cloudflare": "^10.70.0"
-  "better-auth": "1.5.0"
+  "better-auth": "1.7.3"
   "@tailwindcss/postcss": "^4.3.3"
-  "@better-auth/core": "1.5.0"
-  "@better-auth/passkey": "1.5.0"
+  "@better-auth/core": "1.7.3"
+  "@better-auth/passkey": "1.7.3"
   "@tanstack/react-router": "^1.170.31"
   "@tanstack/react-start": "^1.168.48"
   "@tanstack/zod-adapter": "^1.167.0"
@@ -57,19 +66,13 @@ catalog:
   "typescript": "^7.0.2"
   "vaul": "^1.1.2"
   "vite": "npm:@voidzero-dev/vite-plus-core@0.2.9"
-  "zod": "^4.4.3"
+  "zod": "^4.5.4"
   "vite-plus": "0.2.9"
   "vitest": "4.1.10"
-  "wrangler": "4.118.0"
+  "wrangler": "4.129.1"
 
 overrides:
   "@aws-sdk/util-dynamodb": "3.996.3"
-  "@better-auth/api-key": "1.5.0"
-  "@better-auth/core": "1.5.0"
-  "@better-auth/passkey": "1.5.0"
-  "@better-auth/utils": "0.3.1"
-  "better-auth": "1.5.0"
-  "better-call": "1.3.2"
   "prosemirror-changeset": "2.4.1"
   "prosemirror-commands": "1.7.1"
   "prosemirror-dropcursor": "1.8.2"
@@ -112,10 +115,20 @@ minimumReleaseAgeExclude:
   - "@aws-sdk/types@3.974.5"
   - "@aws-sdk/xml-builder@3.972.40"
   - ai@7.0.77
+  - "@cloudflare/vite-plugin@1.54.5"
+  - "@cloudflare/workerd-darwin-64@1.20260907.1"
+  - "@cloudflare/workerd-darwin-arm64@1.20260907.1"
+  - "@cloudflare/workerd-linux-64@1.20260907.1"
+  - "@cloudflare/workerd-linux-arm64@1.20260907.1"
+  - "@cloudflare/workerd-windows-64@1.20260907.1"
+  - miniflare@5.20260907.0-alpha
+  - workerd@1.20260907.1
+  - wrangler@4.129.1
+  - "@cloudflare/workers-types@5.20260907.1"
 
 allowBuilds:
-  "@prisma/engines": true
   "@sentry/cli": true
+  "@vgpu/adapter-node": false
   esbuild: true
-  prisma: true
+  webgpu: false
   workerd: true

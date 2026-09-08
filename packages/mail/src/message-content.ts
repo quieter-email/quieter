@@ -1,50 +1,21 @@
-type GmailMessagePart = {
-  mimeType?: string;
-  filename?: string;
-  headers?: { name: string; value: string }[];
-  body?: {
-    attachmentId?: string;
-    size?: number;
-    data?: string;
-  };
-  parts?: GmailMessagePart[];
-};
+import type { MessagePart, MessageAttachment } from "./messages";
 
 type ExtractedMessageContent = {
   html?: string;
   text?: string;
 };
 
-type ExtractedMessageAttachment = {
-  attachmentId: string;
-  fileName: string;
-  mimeType: string;
-  size: number;
-};
-
-type ExtractedInlineMessageAttachment = ExtractedMessageAttachment & {
+type ExtractedInlineMessageAttachment = MessageAttachment & {
   contentId: string;
 };
 
 const UTF8_CHARSET = "utf-8";
 
-const EDGE_NOISE_REGEX = /^[\s\p{Cf}\u034F]+|[\s\p{Cf}\u034F]+$/gu;
-const INLINE_NOISE_REGEX = /\u034F|\u200B|\u200C|\u200D|\u2060|\uFEFF/gu;
-
-const HTML_ENTITY_BY_NAME: Record<string, string> = {
-  amp: "&",
-  apos: "'",
-  gt: ">",
-  lt: "<",
-  nbsp: " ",
-  quot: '"',
-};
-
 const MOJIBAKE_TOKEN_REGEX =
   /\u00C3[\u0080-\u00BF]|\u00C2[\u0080-\u00BF]|\u00E2[\u0080-\u00BF]|\u00D0[\u0080-\u00BF]|\u00D1[\u0080-\u00BF]|\u00F0\u0178[\u0080-\u00BF]|\u00EF\u00BF\u00BD|\uFFFD/gu;
 
 const getHeader = (
-  part: GmailMessagePart | undefined,
+  part: MessagePart | undefined,
   headerName: string
 ): string | undefined =>
   part?.headers?.find(
@@ -118,16 +89,6 @@ const decodeWithCharset = (
   }
 };
 
-const textToLatin1Bytes = (value: string): Uint8Array => {
-  const bytes = new Uint8Array(value.length);
-
-  for (let index = 0; index < value.length; index += 1) {
-    bytes[index] = toByte(value.codePointAt(index));
-  }
-
-  return bytes;
-};
-
 const getMojibakeScore = (value: string): number =>
   value.match(MOJIBAKE_TOKEN_REGEX)?.length ?? 0;
 
@@ -136,8 +97,20 @@ const repairLikelyUtf8Mojibake = (value: string): string => {
     return value;
   }
 
-  const repaired = decodeWithCharset(textToLatin1Bytes(value), UTF8_CHARSET);
-  if (repaired === undefined) {
+  const bytes: number[] = [];
+  for (const character of value) {
+    const codePoint = character.codePointAt(0);
+    if (codePoint === undefined || codePoint > 255) {
+      return value;
+    }
+    bytes.push(codePoint);
+  }
+  let repaired: string;
+  try {
+    repaired = new TextDecoder(UTF8_CHARSET, { fatal: true }).decode(
+      new Uint8Array(bytes)
+    );
+  } catch {
     return value;
   }
 
@@ -146,69 +119,7 @@ const repairLikelyUtf8Mojibake = (value: string): string => {
     : value;
 };
 
-const decodeHtmlEntityCodePoint = (
-  value: string,
-  radix: 10 | 16
-): string | undefined => {
-  const codePoint = Number.parseInt(value, radix);
-  if (!Number.isInteger(codePoint) || codePoint < 0 || codePoint > 0x10_ff_ff) {
-    return undefined;
-  }
-
-  try {
-    return String.fromCodePoint(codePoint);
-  } catch {
-    return undefined;
-  }
-};
-
-const decodeHtmlEntities = (value: string): string => {
-  let decoded = value;
-
-  for (let pass = 0; pass < 2; pass += 1) {
-    const next = decoded.replaceAll(
-      /&(?:#(?<decimal>\d+)|#x(?<hex>[\da-fA-F]+)|(?<named>[a-zA-Z][a-zA-Z\d]+));/gu,
-      (
-        entity,
-        decimalValue: string | undefined,
-        hexValue: string | undefined,
-        namedValue: string | undefined
-      ) => {
-        if (decimalValue !== undefined) {
-          return decodeHtmlEntityCodePoint(decimalValue, 10) ?? entity;
-        }
-
-        if (hexValue !== undefined) {
-          return decodeHtmlEntityCodePoint(hexValue, 16) ?? entity;
-        }
-
-        if (namedValue !== undefined) {
-          return HTML_ENTITY_BY_NAME[namedValue.toLowerCase()] ?? entity;
-        }
-
-        return entity;
-      }
-    );
-
-    if (next === decoded) {
-      break;
-    }
-    decoded = next;
-  }
-
-  return decoded;
-};
-
 const CID_REFERENCE_REGEX = /cid:(?<contentId>[^"' >]+)/giu;
-
-const stripInlineNoise = (value: string): string =>
-  value.replace(INLINE_NOISE_REGEX, "");
-
-const trimBoundaryNoise = (value: string): string =>
-  value.replace(EDGE_NOISE_REGEX, "");
-
-const normalizeDecodedValue = (value: string): string =>
-  trimBoundaryNoise(stripInlineNoise(decodeHtmlEntities(value)));
 
 const decodeBytesAsText = (bytes: Uint8Array, charset: string): string => {
   const normalizedCharset = charset.trim().toLowerCase();
@@ -305,15 +216,15 @@ export const decodeMimeHeaderValue = (value?: string): string | undefined => {
   const decodedValue = repairLikelyUtf8Mojibake(
     matchedEncodedWord ? output : value
   );
-  const normalizedValue = normalizeDecodedValue(decodedValue);
+  const normalizedValue = decodedValue.trim();
 
   return normalizedValue.length > 0 ? normalizedValue : undefined;
 };
 
-const getContentDisposition = (part: GmailMessagePart): string | undefined =>
+const getContentDisposition = (part: MessagePart): string | undefined =>
   getHeader(part, "Content-Disposition")?.toLowerCase();
 
-const isAttachmentPart = (part: GmailMessagePart): boolean => {
+const isAttachmentPart = (part: MessagePart): boolean => {
   const fileName = part.filename?.trim();
   if (fileName !== undefined && fileName.length > 0) {
     return true;
@@ -323,9 +234,7 @@ const isAttachmentPart = (part: GmailMessagePart): boolean => {
   return contentDisposition?.startsWith("attachment") === true;
 };
 
-const collectParts = (
-  part: GmailMessagePart | undefined
-): GmailMessagePart[] => {
+const collectParts = (part: MessagePart | undefined): MessagePart[] => {
   if (part === undefined) {
     return [];
   }
@@ -333,10 +242,7 @@ const collectParts = (
   return [part, ...nested];
 };
 
-const getAttachmentFileName = (
-  part: GmailMessagePart,
-  index: number
-): string => {
+const getAttachmentFileName = (part: MessagePart, index: number): string => {
   const decoded = decodeMimeHeaderValue(part.filename?.trim())?.trim();
   if (decoded !== undefined && decoded.length > 0) {
     return decoded;
@@ -345,10 +251,10 @@ const getAttachmentFileName = (
 };
 
 export const findRenderablePart = (
-  payload: GmailMessagePart | undefined,
+  payload: MessagePart | undefined,
   mimeType: "text/html" | "text/plain",
   options?: { requireInlineData?: boolean }
-): GmailMessagePart | undefined =>
+): MessagePart | undefined =>
   collectParts(payload).find(
     (part) =>
       normalizeMimeType(part.mimeType) === mimeType &&
@@ -360,11 +266,11 @@ export const findRenderablePart = (
   );
 
 const findRenderableInlinePart = (
-  payload: GmailMessagePart | undefined,
+  payload: MessagePart | undefined,
   mimeType: "text/html" | "text/plain"
 ) => findRenderablePart(payload, mimeType, { requireInlineData: true });
 
-export const decodePartBody = (part: GmailMessagePart): string | undefined => {
+export const decodePartBody = (part: MessagePart): string | undefined => {
   const data = part.body?.data;
   if (data === undefined || data.length === 0) {
     return undefined;
@@ -388,7 +294,7 @@ const normalizeContentId = (value?: string): string | undefined => {
 };
 
 const extractReferencedInlineContentIds = (
-  payload: GmailMessagePart | undefined
+  payload: MessagePart | undefined
 ): ReadonlySet<string> => {
   const htmlPart = findRenderableInlinePart(payload, "text/html");
   const html = htmlPart ? decodePartBody(htmlPart) : undefined;
@@ -408,7 +314,7 @@ const extractReferencedInlineContentIds = (
 };
 
 export const extractMessageContent = (
-  payload: GmailMessagePart | undefined
+  payload: MessagePart | undefined
 ): ExtractedMessageContent => {
   const htmlPart = findRenderableInlinePart(payload, "text/html");
   const textPart = findRenderableInlinePart(payload, "text/plain");
@@ -420,9 +326,9 @@ export const extractMessageContent = (
 };
 
 export const extractMessageAttachments = (
-  payload: GmailMessagePart | undefined
-): ExtractedMessageAttachment[] => {
-  const attachments: ExtractedMessageAttachment[] = [];
+  payload: MessagePart | undefined
+): MessageAttachment[] => {
+  const attachments: MessageAttachment[] = [];
   const seenAttachments = new Set<string>();
   const referencedInlineContentIds = extractReferencedInlineContentIds(payload);
 
@@ -441,12 +347,7 @@ export const extractMessageAttachments = (
     }
 
     const contentId = normalizeContentId(getHeader(part, "Content-ID"));
-    const contentDisposition = getContentDisposition(part);
-    if (
-      contentId !== undefined &&
-      (referencedInlineContentIds.has(contentId) ||
-        contentDisposition?.startsWith("inline") === true)
-    ) {
+    if (contentId !== undefined && referencedInlineContentIds.has(contentId)) {
       continue;
     }
 
@@ -469,7 +370,7 @@ export const extractMessageAttachments = (
 };
 
 export const extractInlineMessageAttachments = (
-  payload: GmailMessagePart | undefined
+  payload: MessagePart | undefined
 ): ExtractedInlineMessageAttachment[] => {
   const attachments: ExtractedInlineMessageAttachment[] = [];
   const seenAttachments = new Set<string>();

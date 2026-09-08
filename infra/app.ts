@@ -1,7 +1,7 @@
-import { createMailboxActionResources } from "./actions";
 import { createAppDatabase } from "./database";
 import { createGmailResources } from "./gmail";
 import { createMailResources, mailReceiptRuleSetName } from "./mail";
+import { createMailMaintenanceResources } from "./mail-maintenance";
 import { createDeploymentContext } from "./runtime";
 import { requireSecretResource } from "./secrets";
 import type { SecretBindings, SecretResources } from "./types";
@@ -18,17 +18,12 @@ export const createInfrastructure = async (input: {
   const webSecretBindings = Object.values(secretBindings);
 
   const context = createDeploymentContext(secretResources);
-  const actions = createMailboxActionResources(
-    context,
-    secretBindings,
-    appDatabase
-  );
+  createMailMaintenanceResources(context, secretBindings, appDatabase);
   const gmail = createGmailResources(
     context,
     secretBindings,
     secretResources,
-    appDatabase,
-    actions.mailboxActionQueue
+    appDatabase
   );
   const mail = await createMailResources(context, secretResources);
   const web = createWeb(
@@ -40,10 +35,7 @@ export const createInfrastructure = async (input: {
       MAIL_RECEIPT_ROLE_ARN: mail.mailReceiptRole.arn,
       MAIL_RECEIPT_RULE_SET_NAME: mailReceiptRuleSetName,
       MAIL_RECEIPT_TOPIC_ARN: mail.mailReceiptTopic.arn,
-      POLAR_ORGANIZATION_ID: context.polarOrganizationId,
-      POLAR_PRODUCT_MANAGED_ID: context.polarProductManagedId,
-      POLAR_PRODUCT_PRO_ID: context.polarProductProId,
-      POLAR_SANDBOX: context.polarSandbox,
+      ...context.billingEnvironment,
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
       R2_ACCOUNT_ID: context.env.R2_ACCOUNT_ID ?? "",
       R2_BUCKET: context.env.R2_BUCKET ?? "",

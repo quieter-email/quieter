@@ -97,6 +97,7 @@ export const extractMailUsefulDetail = async ({
     maxOutputTokens: 550,
     model,
     ...(onUsage === undefined ? {} : { onUsage }),
+    prioritizeLatency: true,
     prompt: JSON.stringify({
       currentTime: now.toISOString(),
       email: {
@@ -252,5 +253,3 @@ statuses. Inferred relevance boundaries are allowed, but inferred event facts ar
 
   return result;
 };
-
-export const extractGmailUsefulDetail = extractMailUsefulDetail;

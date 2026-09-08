@@ -1,3 +1,8 @@
+import type {
+  DeliveryEvent,
+  DeliveryStatus,
+  RecipientSuppression,
+} from "@quieter/mail/delivery";
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -31,6 +36,7 @@ export type ConnectorConnectionStatus = "connected" | "needs_reconnect";
 export type ConnectorProvider = "google_calendar" | "linear";
 export type MailboxConnectionStatus = "connected" | "needs_reconnect";
 export type MailboxGrantRole = "manager" | "reader" | "responder";
+export type MailboxAccessMode = "private" | "shared";
 export type PersistedMailboxProvider = "gmail" | "managed";
 export type MailTemplateScope = "personal" | "team";
 export type MailboxAccessSource = "direct" | "division";
@@ -120,15 +126,46 @@ export type OrganizationMailUsageAlertTarget =
   | "included_usage"
   | "overage_limit";
 export type OrganizationMailUsageDirection = "inbound" | "outbound";
-export type OrganizationMailDeliveryEventType =
-  | "bounced"
-  | "complained"
-  | "delayed"
-  | "delivered"
-  | "rejected"
-  | "sent";
-export type OrganizationMailDeliveryStatus = OrganizationMailDeliveryEventType;
-export type OrganizationMailSuppressionReason = "bounce" | "complaint";
+
+export type MailSendSnapshot = {
+  rawSizeBytes: number;
+  billingAccount?: {
+    creditAmountCents: number;
+    currentPeriodEnd: string;
+    currentPeriodStart: string;
+    externalCustomerId: string;
+    organizationId: string;
+    product: Exclude<BillingPlan, "free">;
+  } | null;
+  attachments: {
+    contentId?: string | null;
+    fileName: string;
+    inline: boolean;
+    mimeType: string;
+    partIndex: number;
+    size: number;
+  }[];
+  bcc: string[];
+  bodyHtml?: string;
+  bodyText: string;
+  cc: string[];
+  draftId?: string;
+  draftUpdatedAt?: string;
+  headers: ManagedMailHeader[];
+  kind: "api" | "mailbox";
+  mailboxId?: string;
+  replyTo: string[];
+  sender: string;
+  sentAt: string;
+  subject: string;
+  tags: { name: string; value: string }[];
+  threadId?: string;
+  to: string[];
+};
+export type OrganizationMailDeliveryEventType = DeliveryEvent["eventType"];
+export type OrganizationMailDeliveryStatus = DeliveryStatus;
+export type OrganizationMailSuppressionReason = RecipientSuppression["reason"];
+export type OrganizationMailSuppressionAction = "suppressed" | "unsuppressed";
 
 export type MailDomainDnsRecord = {
   name: string;
@@ -187,7 +224,6 @@ export type MailboxActionGraph = {
   }[];
   version: 1;
 };
-export type MailboxActionJsonObject = Record<string, unknown>;
 
 export type ChatMessageRole = "system" | "user" | "assistant";
 /**
@@ -269,7 +305,7 @@ export const userAiContext = pgTable(
   {
     autoLabelModel: text("autoLabelModel")
       .notNull()
-      .default("openai/gpt-5.6-luna"),
+      .default("google/gemini-3.5-flash-lite"),
     createdAt: timestamp("createdAt").notNull(),
     id: text("id").primaryKey(),
     lastEditedAt: timestamp("lastEditedAt").notNull(),
@@ -281,7 +317,7 @@ export const userAiContext = pgTable(
     updatedAt: timestamp("updatedAt").notNull(),
     usefulDetailModel: text("usefulDetailModel")
       .notNull()
-      .default("openai/gpt-5.6-luna"),
+      .default("google/gemini-3.5-flash-lite"),
     userId: text("userId")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
@@ -482,6 +518,10 @@ export const organizationDivisionMember = pgTable(
 export const mailbox = pgTable(
   "mailbox",
   {
+    accessMode: text("accessMode")
+      .$type<MailboxAccessMode>()
+      .notNull()
+      .default("shared"),
     contentRevision: bigint("contentRevision", { mode: "number" })
       .notNull()
       .default(0),
@@ -495,6 +535,9 @@ export const mailbox = pgTable(
     includeApiSentMessages: boolean("includeApiSentMessages")
       .notNull()
       .default(false),
+    managedOwnerUserId: text("managedOwnerUserId").references(() => user.id, {
+      onDelete: "restrict",
+    }),
     organizationId: text("organizationId")
       .notNull()
       .references(() => organization.id, {
@@ -516,10 +559,20 @@ export const mailbox = pgTable(
     check(
       "mailbox_provider_ownership_check",
       sql`(
-        (${table.provider} = 'gmail' and ${table.ownerUserId} is not null)
+        (${table.provider} = 'gmail' and ${table.ownerUserId} is not null and ${table.managedOwnerUserId} is null)
         or
-        (${table.provider} = 'managed' and ${table.ownerUserId} is null and ${table.organizationId} is not null)
+        (${table.provider} = 'managed' and ${table.accessMode} = 'private' and ${table.ownerUserId} is null and ${table.managedOwnerUserId} is not null and ${table.organizationId} is not null)
+        or
+        (${table.provider} = 'managed' and ${table.accessMode} = 'shared' and ${table.ownerUserId} is null and ${table.managedOwnerUserId} is null and ${table.organizationId} is not null)
       )`
+    ),
+    check(
+      "mailbox_access_mode_check",
+      sql`${table.accessMode} in ('private', 'shared')`
+    ),
+    check(
+      "mailbox_private_division_check",
+      sql`(${table.accessMode} = 'shared' or ${table.divisionId} is null)`
     ),
     check(
       "mailbox_provider_check",
@@ -529,6 +582,7 @@ export const mailbox = pgTable(
       "mailbox_status_check",
       sql`${table.status} in ('connected', 'needs_reconnect')`
     ),
+    index("mailbox_managed_owner_user_id_idx").on(table.managedOwnerUserId),
     index("mailbox_owner_user_id_idx").on(table.ownerUserId),
     index("mailbox_organization_id_idx").on(table.organizationId),
     index("mailbox_division_id_idx").on(table.divisionId),
@@ -905,7 +959,7 @@ export const connectorCredential = pgTable(
     encryptedAccessToken: text("encryptedAccessToken"),
     encryptedRefreshToken: text("encryptedRefreshToken"),
     id: text("id").primaryKey(),
-    metadata: jsonb("metadata").$type<MailboxActionJsonObject>(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
     provider: text("provider").$type<ConnectorProvider>().notNull(),
     providerAccountId: text("providerAccountId").notNull(),
     providerWorkspaceId: text("providerWorkspaceId"),
@@ -1207,6 +1261,7 @@ export const mailboxAutomationSettings = pgTable("mailboxAutomationSettings", {
     .default(false),
 });
 
+// Retained until the release removing custom actions has replaced all old workers.
 export const mailboxAction = pgTable(
   "mailboxAction",
   {
@@ -1341,7 +1396,7 @@ export const mailboxActionRunFrame = pgTable(
   {
     createdAt: timestamp("createdAt").notNull(),
     id: text("id").primaryKey(),
-    mergeState: jsonb("mergeState").$type<MailboxActionJsonObject>(),
+    mergeState: jsonb("mergeState").$type<Record<string, unknown>>(),
     parentFrameId: text("parentFrameId"),
     path: jsonb("path").$type<string[]>().notNull().default([]),
     runId: text("runId")
@@ -1353,7 +1408,7 @@ export const mailboxActionRunFrame = pgTable(
       .default("running"),
     updatedAt: timestamp("updatedAt").notNull(),
     variables: jsonb("variables")
-      .$type<MailboxActionJsonObject>()
+      .$type<Record<string, unknown>>()
       .notNull()
       .default({}),
   },
@@ -1377,13 +1432,13 @@ export const mailboxActionStepRun = pgTable(
     }),
     id: text("id").primaryKey(),
     input: jsonb("input")
-      .$type<MailboxActionJsonObject>()
+      .$type<Record<string, unknown>>()
       .notNull()
       .default({}),
     model: text("model"),
     nodeId: text("nodeId").notNull(),
     nodeType: text("nodeType").notNull(),
-    output: jsonb("output").$type<MailboxActionJsonObject>(),
+    output: jsonb("output").$type<Record<string, unknown>>(),
     runId: text("runId")
       .notNull()
       .references(() => mailboxActionRun.id, { onDelete: "cascade" }),
@@ -1392,7 +1447,7 @@ export const mailboxActionStepRun = pgTable(
       .$type<MailboxActionStepStatus>()
       .notNull()
       .default("queued"),
-    toolCalls: jsonb("toolCalls").$type<MailboxActionJsonObject[]>(),
+    toolCalls: jsonb("toolCalls").$type<Record<string, unknown>[]>(),
     updatedAt: timestamp("updatedAt").notNull(),
   },
   (table) => [
@@ -1422,7 +1477,7 @@ export const mailboxActionExternalEffect = pgTable(
     externalUrl: text("externalUrl"),
     id: text("id").primaryKey(),
     idempotencyKey: text("idempotencyKey").notNull(),
-    metadata: jsonb("metadata").$type<MailboxActionJsonObject>(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
     provider: text("provider").$type<MailboxActionExternalProvider>().notNull(),
     revisionId: text("revisionId")
       .notNull()
@@ -1727,6 +1782,12 @@ export const managedMailMessage = pgTable(
       table.sentAt,
       table.id
     ),
+    index("managed_mail_message_outbound_header_idx")
+      .on(table.messageHeaderId)
+      .where(sql`${table.direction} = 'outbound'`),
+    index("managed_mail_message_outbound_provider_idx")
+      .on(table.providerMessageId)
+      .where(sql`${table.direction} = 'outbound'`),
     index("managed_mail_message_raw_object_idx").on(
       table.rawObjectProvider,
       table.rawObjectBucket,
@@ -1765,6 +1826,10 @@ export const organizationApiMailMessage = pgTable(
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
     providerMessageId: text("providerMessageId").notNull(),
+    rawObjectBucket: text("rawObjectBucket"),
+    rawObjectKey: text("rawObjectKey"),
+    rawObjectProvider:
+      text("rawObjectProvider").$type<ManagedMailRawObjectProvider>(),
     rawSizeBytes: integer("rawSizeBytes"),
     replyTo: text("replyTo"),
     searchText: text("searchText").notNull().default(""),
@@ -1777,6 +1842,15 @@ export const organizationApiMailMessage = pgTable(
     updatedAt: timestamp("updatedAt").notNull(),
   },
   (table) => [
+    index("organization_api_mail_raw_object_idx").on(
+      table.rawObjectProvider,
+      table.rawObjectBucket,
+      table.rawObjectKey
+    ),
+    index("organization_api_mail_message_header_idx").on(table.messageHeaderId),
+    index("organization_api_mail_message_provider_idx").on(
+      table.providerMessageId
+    ),
     index("organization_api_mail_message_org_sent_at_idx").on(
       table.organizationId,
       table.sentAt,
@@ -1809,6 +1883,7 @@ export const organizationApiMailAttachment = pgTable(
     organizationId: text("organizationId")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
+    partIndex: integer("partIndex"),
     size: integer("size").notNull(),
   },
   (table) => [
@@ -1843,7 +1918,7 @@ export const organizationMailDeliveryEvent = pgTable(
   (table) => [
     check(
       "organization_mail_delivery_event_type_check",
-      sql`${table.eventType} in ('bounced', 'complained', 'delayed', 'delivered', 'rejected', 'sent')`
+      sql`${table.eventType} in ('bounced', 'complained', 'delayed', 'delivered', 'opened', 'queued', 'rejected', 'sent', 'unsubscribed')`
     ),
     index("organization_mail_delivery_event_message_idx").on(
       table.organizationId,
@@ -1877,7 +1952,7 @@ export const organizationMailDeliveryRecipient = pgTable(
   (table) => [
     check(
       "organization_mail_delivery_recipient_status_check",
-      sql`${table.status} in ('bounced', 'complained', 'delayed', 'delivered', 'rejected', 'sent')`
+      sql`${table.status} in ('bounced', 'complained', 'delayed', 'delivered', 'queued', 'rejected', 'sent')`
     ),
     index("organization_mail_delivery_recipient_message_idx").on(
       table.organizationId,
@@ -1905,13 +1980,13 @@ export const organizationMailRecipientSuppression = pgTable(
     reason: text("reason").$type<OrganizationMailSuppressionReason>().notNull(),
     recipient: text("recipient").notNull(),
     revokedAt: timestamp("revokedAt"),
-    sourceProviderMessageId: text("sourceProviderMessageId").notNull(),
+    sourceProviderMessageId: text("sourceProviderMessageId"),
     updatedAt: timestamp("updatedAt").notNull(),
   },
   (table) => [
     check(
       "organization_mail_recipient_suppression_reason_check",
-      sql`${table.reason} in ('bounce', 'complaint')`
+      sql`${table.reason} in ('bounce', 'complaint', 'manual', 'unsubscribe')`
     ),
     index("organization_mail_recipient_suppression_active_idx")
       .on(table.organizationId, table.recipient)
@@ -1920,6 +1995,38 @@ export const organizationMailRecipientSuppression = pgTable(
       columns: [table.organizationId, table.recipient],
       name: "organization_mail_recipient_suppression_pk",
     }),
+  ]
+);
+
+export const organizationMailSuppressionAudit = pgTable(
+  "organizationMailSuppressionAudit",
+  {
+    action: text("action").$type<OrganizationMailSuppressionAction>().notNull(),
+    actorUserId: text("actorUserId"),
+    // Plain text without a foreign key so audit history survives user deletion.
+    createdAt: timestamp("createdAt").notNull(),
+    id: text("id").primaryKey(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    reason: text("reason").$type<OrganizationMailSuppressionReason>().notNull(),
+    recipient: text("recipient").notNull(),
+    sourceProviderMessageId: text("sourceProviderMessageId"),
+  },
+  (table) => [
+    check(
+      "organization_mail_suppression_audit_action_check",
+      sql`${table.action} in ('suppressed', 'unsuppressed')`
+    ),
+    index("organization_mail_suppression_audit_recipient_idx").on(
+      table.organizationId,
+      table.recipient,
+      table.createdAt
+    ),
+    index("organization_mail_suppression_audit_created_idx").on(
+      table.organizationId,
+      table.createdAt
+    ),
   ]
 );
 
@@ -2009,6 +2116,7 @@ export const managedMailRule = pgTable(
     createdByUserId: text("createdByUserId").references(() => user.id, {
       onDelete: "set null",
     }),
+    disabledReason: text("disabledReason"),
     enabled: boolean("enabled").notNull().default(true),
     id: text("id").primaryKey(),
     labelIds: jsonb("labelIds").$type<string[]>().notNull(),
@@ -2100,6 +2208,7 @@ export const managedMailAttachment = pgTable(
       .references(() => managedMailMessage.id, { onDelete: "cascade" }),
     mimeType: text("mimeType").notNull(),
     normalizedFileName: text("normalizedFileName").notNull(),
+    partIndex: integer("partIndex"),
     size: integer("size").notNull(),
   },
   (table) => [
@@ -2144,6 +2253,41 @@ export const managedMailRuleApplication = pgTable(
   ]
 );
 
+export const managedMailRuleRun = pgTable(
+  "managedMailRuleRun",
+  {
+    actionResults: jsonb("actionResults").$type<unknown[]>().notNull(),
+    completedAt: timestamp("completedAt"),
+    createdAt: timestamp("createdAt").notNull(),
+    definition: jsonb("definition").$type<unknown>().notNull(),
+    error: text("error"),
+    id: text("id").primaryKey(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    matched: boolean("matched").notNull(),
+    messageId: text("messageId")
+      .notNull()
+      .references(() => managedMailMessage.id, { onDelete: "cascade" }),
+    revision: text("revision").notNull(),
+    ruleId: text("ruleId")
+      .notNull()
+      .references(() => managedMailRule.id, { onDelete: "cascade" }),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    unique("managed_mail_rule_run_revision_unique").on(
+      table.ruleId,
+      table.messageId,
+      table.revision
+    ),
+    index("managed_mail_rule_run_message_idx").on(
+      table.mailboxId,
+      table.messageId
+    ),
+  ]
+);
+
 export const managedMailRuleBackfill = pgTable(
   "managedMailRuleBackfill",
   {
@@ -2151,9 +2295,12 @@ export const managedMailRuleBackfill = pgTable(
     completedAt: timestamp("completedAt"),
     createdAt: timestamp("createdAt").notNull(),
     cursor: text("cursor"),
+    definition: jsonb("definition").$type<unknown>(),
     errorCount: integer("errorCount").notNull().default(0),
     id: text("id").primaryKey(),
     lastError: text("lastError"),
+    leaseId: text("leaseId"),
+    leasedUntil: timestamp("leasedUntil"),
     mailboxId: text("mailboxId")
       .notNull()
       .references(() => mailbox.id, { onDelete: "cascade" }),
@@ -2432,21 +2579,52 @@ export const organizationMailUsageEvent = pgTable(
 export const organizationMailSendIdempotency = pgTable(
   "organizationMailSendIdempotency",
   {
+    attemptedAt: timestamp("attemptedAt"),
     createdAt: timestamp("createdAt").notNull(),
+    estimatedCostMicroCents: bigint("estimatedCostMicroCents", {
+      mode: "number",
+    }),
+    failureMessage: text("failureMessage"),
     id: text("id").primaryKey(),
     idempotencyKey: text("idempotencyKey").notNull(),
+    messageHeaderId: text("messageHeaderId"),
     organizationId: text("organizationId")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
+    rawObjectBucket: text("rawObjectBucket"),
+    rawObjectKey: text("rawObjectKey"),
+    rawObjectProvider:
+      text("rawObjectProvider").$type<ManagedMailRawObjectProvider>(),
     requestHash: text("requestHash").notNull(),
     response: jsonb("response").$type<{
       messageId: string | null;
       sent: true;
     }>(),
-    status: text("status").default("completed").notNull(),
+    snapshot: jsonb("snapshot").$type<MailSendSnapshot>(),
+    status: text("status")
+      .$type<
+        | "pending"
+        | "prepared"
+        | "submitting"
+        | "accepted"
+        | "unknown"
+        | "rejected"
+        | "completed"
+      >()
+      .default("completed")
+      .notNull(),
     updatedAt: timestamp("updatedAt").notNull(),
   },
   (table) => [
+    index("organization_mail_send_recovery_idx").on(
+      table.status,
+      table.updatedAt
+    ),
+    index("organization_mail_send_raw_object_idx").on(
+      table.rawObjectProvider,
+      table.rawObjectBucket,
+      table.rawObjectKey
+    ),
     index("organization_mail_send_idempotency_organization_created_idx").on(
       table.organizationId,
       table.createdAt
@@ -2454,6 +2632,26 @@ export const organizationMailSendIdempotency = pgTable(
     unique("organization_mail_send_idempotency_organization_key_unique").on(
       table.organizationId,
       table.idempotencyKey
+    ),
+  ]
+);
+
+export const mailObjectCleanup = pgTable(
+  "mailObjectCleanup",
+  {
+    bucket: text("bucket").notNull(),
+    createdAt: timestamp("createdAt").notNull(),
+    id: text("id").primaryKey(),
+    key: text("key").notNull(),
+    notBefore: timestamp("notBefore").notNull(),
+    provider: text("provider").$type<ManagedMailRawObjectProvider>().notNull(),
+  },
+  (table) => [
+    index("mail_object_cleanup_due_idx").on(table.notBefore),
+    unique("mail_object_cleanup_reference_unique").on(
+      table.provider,
+      table.bucket,
+      table.key
     ),
   ]
 );
@@ -2467,6 +2665,52 @@ export const rateLimitBucket = pgTable(
     windowStart: timestamp("windowStart").notNull(),
   },
   (table) => [index("rate_limit_bucket_expires_at_idx").on(table.expiresAt)]
+);
+
+export const organizationMailTrackingSettings = pgTable(
+  "organizationMailTrackingSettings",
+  {
+    allowPerSendOverride: boolean("allowPerSendOverride")
+      .notNull()
+      .default(false),
+    createdAt: timestamp("createdAt").notNull(),
+    openTrackingEnabled: boolean("openTrackingEnabled")
+      .notNull()
+      .default(false),
+    organizationId: text("organizationId")
+      .primaryKey()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    updatedAt: timestamp("updatedAt").notNull(),
+  }
+);
+
+export const organizationMailOpenEvent = pgTable(
+  "organizationMailOpenEvent",
+  {
+    createdAt: timestamp("createdAt").notNull(),
+    firstOpenedAt: timestamp("firstOpenedAt").notNull(),
+    id: text("id").primaryKey(),
+    lastOpenedAt: timestamp("lastOpenedAt").notNull(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    providerMessageId: text("providerMessageId").notNull(),
+    // Bounded engagement approximation: one row per message; loads only move
+    // the capped counter and timestamps. Recipient-level opens need
+    // per-recipient sends and are intentionally not claimed.
+    recipient: text("recipient"),
+    reportedOpenCount: integer("reportedOpenCount").notNull().default(1),
+  },
+  (table) => [
+    unique("organization_mail_open_event_message_unique").on(
+      table.organizationId,
+      table.providerMessageId
+    ),
+    index("organization_mail_open_event_organization_time_idx").on(
+      table.organizationId,
+      table.firstOpenedAt
+    ),
+  ]
 );
 
 export const organizationMailUsageSettings = pgTable(
@@ -2658,6 +2902,7 @@ export const tables = {
   managedMailRule,
   managedMailRuleApplication,
   managedMailRuleBackfill,
+  managedMailRuleRun,
   managedMailSavedView,
   member,
   organization,
@@ -2667,8 +2912,11 @@ export const tables = {
   organizationDivisionMember,
   organizationMailDeliveryEvent,
   organizationMailDeliveryRecipient,
+  organizationMailOpenEvent,
   organizationMailRecipientSuppression,
   organizationMailSendIdempotency,
+  organizationMailSuppressionAudit,
+  organizationMailTrackingSettings,
   organizationMailUsageAlertEvent,
   organizationMailUsageEvent,
   organizationMailUsageSettings,
@@ -3396,6 +3644,10 @@ export const authRelations = defineRelations(tables, (r) => ({
         from: r.organization.id,
         to: r.organizationMailDeliveryRecipient.organizationId,
       }),
+    organizationMailOpenEvents: r.many.organizationMailOpenEvent({
+      from: r.organization.id,
+      to: r.organizationMailOpenEvent.organizationId,
+    }),
     organizationMailRecipientSuppressions:
       r.many.organizationMailRecipientSuppression({
         from: r.organization.id,
@@ -3404,6 +3656,15 @@ export const authRelations = defineRelations(tables, (r) => ({
     organizationMailSendIdempotency: r.many.organizationMailSendIdempotency({
       from: r.organization.id,
       to: r.organizationMailSendIdempotency.organizationId,
+    }),
+    organizationMailSuppressionAudits: r.many.organizationMailSuppressionAudit({
+      from: r.organization.id,
+      to: r.organizationMailSuppressionAudit.organizationId,
+    }),
+    organizationMailTrackingSettings: r.one.organizationMailTrackingSettings({
+      from: r.organization.id,
+      optional: true,
+      to: r.organizationMailTrackingSettings.organizationId,
     }),
     organizationMailUsageAlertEvents: r.many.organizationMailUsageAlertEvent({
       from: r.organization.id,
@@ -3491,6 +3752,13 @@ export const authRelations = defineRelations(tables, (r) => ({
       to: r.organization.id,
     }),
   },
+  organizationMailOpenEvent: {
+    organization: r.one.organization({
+      from: r.organizationMailOpenEvent.organizationId,
+      optional: false,
+      to: r.organization.id,
+    }),
+  },
   organizationMailRecipientSuppression: {
     organization: r.one.organization({
       from: r.organizationMailRecipientSuppression.organizationId,
@@ -3501,6 +3769,20 @@ export const authRelations = defineRelations(tables, (r) => ({
   organizationMailSendIdempotency: {
     organization: r.one.organization({
       from: r.organizationMailSendIdempotency.organizationId,
+      optional: false,
+      to: r.organization.id,
+    }),
+  },
+  organizationMailSuppressionAudit: {
+    organization: r.one.organization({
+      from: r.organizationMailSuppressionAudit.organizationId,
+      optional: false,
+      to: r.organization.id,
+    }),
+  },
+  organizationMailTrackingSettings: {
+    organization: r.one.organization({
+      from: r.organizationMailTrackingSettings.organizationId,
       optional: false,
       to: r.organization.id,
     }),

@@ -1,10 +1,8 @@
+import { brand } from "@quieter/ui/brand-geometry";
 import { cn } from "@quieter/ui/cn";
 import type { ComponentPropsWithoutRef } from "react";
 
 type LoadingSpinnerProps = ComponentPropsWithoutRef<"svg">;
-
-const logoOutlinePath =
-  "M84 50C84 56.44 79.2 62.5 70.8 70.8C62.5 79.2 56.44 84 50 84C43.56 84 37.5 79.2 29.2 70.8C20.8 62.5 16 56.44 16 50C16 43.56 20.8 37.5 29.2 29.2C37.5 20.8 43.56 16 50 16C56.44 16 62.5 20.8 70.8 29.2C79.2 37.5 84 43.56 84 50Z";
 
 const trailOpacities = [
   0.02, 0.03, 0.045, 0.06, 0.08, 0.105, 0.135, 0.17, 0.21, 0.255, 0.305, 0.36,
@@ -21,25 +19,26 @@ export const LoadingSpinner = ({
     className={cn("size-20 overflow-visible text-primary", className)}
     fill="none"
     focusable="false"
-    viewBox="0 0 100 100"
+    viewBox="0 0 1000 1000"
   >
     <path
-      d={logoOutlinePath}
+      d={brand.mark.path}
       opacity="0.12"
       pathLength="100"
       stroke="currentColor"
-      strokeWidth="2.25"
+      strokeWidth="22.5"
     />
     {trailOpacities.map((opacity, index) => (
       <path
         className="loading-spinner-segment"
-        d={logoOutlinePath}
+        d={brand.mark.path}
         key={opacity}
         opacity={opacity}
+        pathLength="100"
         stroke="currentColor"
         strokeLinecap="butt"
         strokeLinejoin="round"
-        strokeWidth="2.5"
+        strokeWidth="25"
         style={{ animationDelay: `${index * -12}ms` }}
       />
     ))}

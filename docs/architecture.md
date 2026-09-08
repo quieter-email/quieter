@@ -34,6 +34,8 @@ TanStack Start application containing:
 - TanStack Query configuration and persisted caches
 - consent-gated browser analytics
 
+Mailbox organization separates state, saved-view actions, rule actions and editors. Message cards and inspection, domain DNS and mail routing, and connector settings live beside their page controllers in feature-owned modules. Shared types describe their boundaries without importing page rendering at runtime.
+
 API handlers remain under `apps/web/src/routes/api/**`. Request-scoped auth and SSR data use route loaders or TanStack Start server functions.
 
 ### `packages/orpc`
@@ -50,15 +52,27 @@ The application and database boundary. It owns:
 
 No application module should bypass this package to query PostgreSQL.
 
+The mail router contains procedure registration, transport schemas and route metadata. Services under `packages/orpc/src/mail/` own queries, compose, labels and mutations, including provider selection and authorization. Shared Gmail request handling lives in `gmail-request.ts`; service modules do not import router bootstrapping. Feedback writes finish before request completion, with Gmail metadata reads processed in batches of four.
+
+`vp run check:boundaries` checks imports with Oxc, including dynamic imports, re-exports, and type imports. It enforces package/application separation, application database and UI boundaries, and the AWS oRPC entrypoint allowlist. Computed dynamic imports are rejected because their targets cannot be checked. The only application database import allowed is `withRequestDatabaseClient` in the request bootstrap. CI runs this check alongside the AWS and Cloudflare handler bundles.
+
 ### `packages/database`
 
 Owns the Drizzle schema, client, migrations, schema-drift checks, and migration safety tooling.
 
+Every Worker invocation uses `withRequestDatabaseClient`; unscoped Worker database access throws. The same client remains available to nested calls and streamed response work. Cloudflare closes invocation sockets automatically, including Hyperdrive connections. Node processes reuse a bounded pool, with one connection in local development and five elsewhere; idle connections close after 20 seconds. See Cloudflare's [connection lifecycle](https://developers.cloudflare.com/hyperdrive/concepts/connection-lifecycle/) and documented [runtime detection](https://developers.cloudflare.com/workers/runtime-apis/web-standards/#navigatoruseragent).
+
+Interactive write requests use database-backed rate limits. The per-minute mail maintenance worker deletes up to 5,000 expired IP buckets per run, using the expiry index and skipping locked rows. The local `mail-recovery` trigger performs the same cleanup. During database failure, each isolate retains at most 1,000 fallback identities and rejects new identities at capacity until entries expire. Signed billing webhooks bypass the interactive login bucket and remain subject to their own signature validation. Read-only requests do not advertise a measured remaining allowance.
+
 ### `packages/mail` and `packages/gmail`
 
-`packages/mail` contains provider-independent mail behavior: schemas, MIME construction, raw parsing, content extraction, draft anchors, and avatar derivation.
+`packages/mail` owns shared message, attachment, label, category, and pagination contracts, along with MIME construction, raw parsing, content extraction, draft anchors, and avatar derivation. Both provider adapters return these contracts. The browser's mail helpers live in `apps/web/src/lib/mail.ts`; the web and AI packages have no direct Gmail-package dependency.
+
+Managed saved views and rule conditions store stable label IDs. Definition writes hold shared locks on referenced labels until commit. Renaming or deleting a label locks it before repairing legacy name references and updating dependent definitions in the same transaction. Deletion disables affected views and rules without removing predicates or actions; the organizer explains the missing reference, and saving a repaired definition clears that reason. The nullable rule reason column is an additive migration and must precede the application release.
 
 `packages/gmail` contains Gmail REST calls and Gmail-specific draft parsing. It does not own encrypted credential storage or token refresh.
+
+The public SDK derives send inputs from `@quieter/mail/send` and validates responses with the shared delivery schemas. Its build bundles these contracts and permits only Zod and the optional React dependencies in emitted imports. `tsconfig.sdk.json` gives declaration generation a workspace-wide root so the published types include the shared contracts. React rendering lives in `quieter/react`; the core package has no React requirement.
 
 ### Other Packages
 
@@ -69,7 +83,8 @@ Owns the Drizzle schema, client, migrations, schema-drift checks, and migration 
 - `packages/cloudflare`: Gmail notification ingress, queued synchronization, scheduled maintenance, and mailbox live synchronization
 - `packages/billing`: plans, Polar checkout/webhooks, entitlements, and usage pricing
 - `packages/env`: typed environment schemas and normalization
-- `packages/deployment`: deployment helper scripts
+- `scripts`: SST deployment, local startup, environment checks, and release helpers
+- `packages/deployment`: residual SST-generated binding declarations and their TypeScript configuration; no runtime or deployment scripts
 
 ## Identity and Mailboxes
 
@@ -81,7 +96,11 @@ Google sign-in and Gmail authorization are separate:
 Every connected Gmail account and managed address is a persisted mailbox with a stable generated ID.
 
 - Gmail mailboxes remain private to their owner, even when placed in an organization.
-- Managed mailboxes are organization-owned and visible only through explicit mailbox grants.
+- Shared managed mailboxes are organization-owned and visible only through explicit mailbox grants.
+- Private managed mailboxes stay organization-owned for billing and domains but belong to one person: only the owner plus explicit member grants can access them, and division grants never apply.
+- Private managed owners must remain team members. Offboarding revokes content and grant-management access; team admins can transfer ownership without reading mail.
+- Creating a private mailbox, converting to private, or transferring its owner gives only the selected owner access. Conversion and transfer clear existing direct and division grants. Returning to shared preserves explicit member grants and never restores division access automatically. Configuration writes serialize with mode changes on the mailbox row.
+- Account deletion requires transferring private managed mailboxes first. A separate restrictive `managedOwnerUserId` foreign key protects organization-owned mail; Gmail retains its existing account-deletion behavior.
 - Personal is always available but is not a Better Auth organization.
 - `user.defaultMailboxId` is the global fallback across Personal and organizations.
 
@@ -99,7 +118,7 @@ For Pro mailboxes:
 2. The ingress validates the Google identity, notifies the mailbox Durable Object, and enqueues a mailbox job in Cloudflare Queues.
 3. A Cloudflare queue consumer reconciles Gmail history through Hyperdrive and updates persisted state.
 4. Focused browser tabs receive mailbox-dirty signals from the mailbox Durable Object and refresh immediately.
-5. Scheduled maintenance on Cloudflare selects only mailboxes with due work: watch renewal (heartbeat plus expiry lookahead), first-time setup, or stale reconciliation for mailboxes with enabled automations.
+5. Scheduled maintenance on Cloudflare selects only mailboxes with due work: watch renewal (heartbeat plus expiry lookahead), first-time setup, or stale reconciliation for mailboxes with auto-labeling or useful-detail extraction enabled.
 
 The notification is a wake-up signal, not the source of truth.
 
@@ -155,6 +174,12 @@ For private production testing, a 100% subscription discount must cover every in
 
 ## Infrastructure Ownership
 
+Managed mail rules store the matching decision, definition, and completed actions before forwarding. Forwarding uses the send coordinator outside the rule transaction, with a stable identity per action. Ingestion retries resume the stored definition even after a rule edit; explicitly applying an edited rule to existing messages creates a new revision. Historical attempts with uncertain delivery require review.
+
+Historical rule runs advance through the per-minute mail maintenance worker, independently of status polling. Each job stores its definition and checks its lease and running status before updating progress. Cancellation prevents further messages and progress writes; an already executing message can finish. A failure retains the cursor and diagnostic. Running the same rule revision again resumes the failed job. Local execution uses `vp run dev:trigger mail-recovery`.
+
+Apply the consolidated migration `20260907233131_melodic_blacklash` before releasing these changes. Drain older ingestion and rule workers before enabling the new execution path because they do not understand the stored action decisions. Keep the historical application table during this transition.
+
 SST provisions both providers. AWS owns the SES receipt bucket, receipt topic and role, and mail-processing functions. Cloudflare owns Gmail notification ingress, queueing, scheduled maintenance, and live-sync Durable Objects.
 
 Cloudflare Workers hosts the web application. SST builds and publishes production and binds deployment outputs directly.
@@ -168,9 +193,23 @@ The root [`sst.config.ts`](../sst.config.ts) owns only app-wide SST settings and
 - `secrets.ts` declares stage-aware `sst.Secret` resources and Cloudflare secret bindings.
 - `database.ts` owns the Cloudflare Hyperdrive binding.
 - `web.ts` owns the TanStack Start Worker and its common bindings.
-- Mailbox actions execute asynchronously from their persisted runs: Gmail sync and maintenance dispatch new runs straight onto Cloudflare Queues, while a per-minute fallback cron atomically claims SES-ingested, lost, or crashed runs before dispatching them. Transient execution failures stay retryable until the queue's final delivery settles the run as failed.
+- `mail-maintenance.ts` owns the per-minute `MailMaintenance` cron. `packages/cloudflare/src/mail-maintenance-worker.ts` runs send recovery, storage cleanup, expired rate-limit bucket cleanup, and managed rule backfills.
 - `mail.ts` owns SES receipt storage, processing, ingress, and send permissions.
 - `gmail.ts` owns Gmail live-sync and Pub/Sub resources on Cloudflare.
 - `app.ts` is the small stage-aware composition entry point; `types.ts` contains shared infra boundary types.
 
 SST is the runtime source of truth for application credentials and tokens; their canonical names live in `packages/env/src/sst-secrets.ts`. Cloudflare receives them as secret-text bindings, while AWS functions receive values derived from SST secret outputs. Deployment environment variables are reserved for non-secret configuration such as feature switches, resource identifiers, domains, and provider deployment credentials.
+
+## Custom action removal and release
+
+Custom actions, their settings UI, graph execution, queue, dispatcher, and action-specific credit reservations are removed. Connectors remain available to chat, and managed inbox rules remain supported. The new application does not enqueue custom action runs.
+
+Existing action tables and records remain untouched for an expand/contract release. Before rollout, pause old action dispatch and quiesce old producers, then drain in-flight action workers and account for queued retries. Confirm that old consumers cannot resume before removing their infrastructure. Removing code does not stop an already deployed worker. Review uncertain external effects instead of replaying them automatically. Table deletion belongs in a later, separately reviewed contract migration after the rollback window.
+
+Deploy `MailMaintenance` with the application so send recovery, object cleanup, rate-limit cleanup, and managed rule backfills continue every minute. Drain older send, ingestion, and rule workers before enabling the revised recovery paths. No production deployment or migration was performed for this cleanup.
+
+## Migration workflow
+
+Use `vp run db:generate` after a coherent schema change and `vp run db:check` before release. Drizzle generates a full schema snapshot beside each SQL migration and compares snapshots to derive later changes. Keep both files in version control. Large snapshots are expected, even when the SQL is short. See [Drizzle generation](https://orm.drizzle.team/docs/drizzle-kit-generate).
+
+Seven unpublished feature migrations were consolidated into `packages/database/drizzle/20260907233131_melodic_blacklash`. A read-only check of the development ledger confirmed that none of the seven had been applied there. Main-branch migration history is unchanged. Consolidate only unapplied feature migrations, regenerate against the unchanged baseline, and review the SQL and migration checks. Never rewrite applied migration history or reset a persistent database to accommodate consolidation. The consolidated migration must pass the protected release workflow before deployment.

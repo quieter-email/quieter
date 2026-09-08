@@ -1,6 +1,5 @@
 import type { AutomationMailMessage } from "@quieter/ai/classify-gmail-message";
 
-import { hasText } from "../text";
 import { getMailPlainText } from "./message-text";
 import { getSenderServiceName } from "./sender";
 
@@ -746,7 +745,7 @@ export const extractVerificationCode = (
   message: AutomationMailMessage
 ): VerificationCodeExtraction | null => {
   const { body, subject } = getMailPlainText(message);
-  if (!hasText(body) && !hasText(subject)) {
+  if (!body && !subject) {
     return null;
   }
 

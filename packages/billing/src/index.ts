@@ -17,6 +17,7 @@ import {
   isLocalDevelopmentBillingEntitlementEnabled,
 } from "./entitlements.ts";
 import type { BillingProductId } from "./plans.ts";
+import { getBillingExternalIdentity } from "./polar-config.ts";
 import { getPolarApiOrganizationId, getPolarClient } from "./polar.ts";
 import {
   BILLING_METADATA_ORGANIZATION_ID,
@@ -39,10 +40,12 @@ export const createBillingCheckoutMetadata = (input: {
   userId: string;
 }) => ({
   customerMetadata: {
+    quieterEnvironment: serverEnv.QUIETER_DEPLOYMENT_ENV,
     [BILLING_METADATA_ORGANIZATION_ID]: input.organizationId,
     [BILLING_METADATA_USER_ID]: input.userId,
   },
   metadata: {
+    quieterEnvironment: serverEnv.QUIETER_DEPLOYMENT_ENV,
     [BILLING_METADATA_ORGANIZATION_ID]: input.organizationId,
     [BILLING_METADATA_PRODUCT]: input.product,
     [BILLING_METADATA_USER_ID]: input.userId,
@@ -54,8 +57,11 @@ export const createBillingPortalSession = (input: {
   returnUrl: string;
   userId: string;
 }) => ({
-  externalCustomerId: `organization:${input.organizationId}`,
-  externalMemberId: input.userId,
+  externalCustomerId: getBillingExternalIdentity(
+    "organization",
+    input.organizationId
+  ),
+  externalMemberId: getBillingExternalIdentity("user", input.userId),
   returnUrl: input.returnUrl,
 });
 
@@ -214,7 +220,10 @@ export const createBillingCheckout = async (input: {
     userId: input.userId,
   });
   const polar = await getPolarClient();
-  const externalCustomerId = `organization:${input.organizationId}`;
+  const externalCustomerId = getBillingExternalIdentity(
+    "organization",
+    input.organizationId
+  );
   let teamCustomerId: string | undefined;
 
   try {
@@ -237,7 +246,7 @@ export const createBillingCheckout = async (input: {
       organizationId: getPolarApiOrganizationId(),
       owner: {
         email: input.customerEmail,
-        externalId: input.userId,
+        externalId: getBillingExternalIdentity("user", input.userId),
         name: input.customerName,
       },
       type: "team",

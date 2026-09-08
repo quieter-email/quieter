@@ -1,6 +1,6 @@
 import { withRequestDatabaseClient } from "@quieter/database/client";
 import { serverEnv } from "@quieter/env/server";
-import { consumeRateLimit } from "@quieter/orpc/abuse-protection";
+import { checkDeploymentDatabase } from "@quieter/orpc/deployment-health";
 import {
   sentryGlobalFunctionMiddleware,
   sentryGlobalRequestMiddleware,
@@ -11,6 +11,7 @@ import {
   createStart,
 } from "@tanstack/react-start";
 
+import { getRequestRateLimit } from "#/lib/abuse-protection.server";
 import { isAiCrawlerRequest, prefersMarkdown } from "#/lib/agent-access.server";
 import {
   agentNotFoundMarkdown,
@@ -29,6 +30,8 @@ import {
   isValidSitePasswordToken,
   sitePasswordCookieName,
 } from "#/lib/site-password.server";
+
+import { getSafeAuthReturnTo } from "./lib/return-to";
 
 const sitePasswordPaths = new Set([
   "/api/auth/polar/webhooks",
@@ -49,140 +52,94 @@ const publicLegalPaths = new Set([
 const sitePasswordPagePath = "/site-password";
 const homePagePath = "/home";
 const publicPathPrefixes = ["/_build/", "/assets/"];
+/** Open-tracking markers are fetched by mail clients without cookies. */
+const openTrackingPrefix = "/api/v1/o/";
 const isSentryEnabled =
   import.meta.env.SSR &&
-  serverEnv.NODE_ENV !== "development" &&
+  (serverEnv.NODE_ENV !== "development" ||
+    serverEnv.VITE_QUIETER_LOCAL_TELEMETRY === true) &&
   serverEnv.SENTRY_DSN !== undefined;
-const fallbackRateLimitBuckets = new Map<
-  string,
-  { count: number; expiresAt: number }
->();
-
 const csrfMiddleware = createCsrfMiddleware({
   filter: (ctx) => ctx.handlerType === "serverFn",
 });
 
 const databaseMiddleware = createMiddleware().server(
-  async ({ next }) => await withRequestDatabaseClient(next)
+  async ({ next }) => await withRequestDatabaseClient(async () => await next())
 );
 
-const getRateLimitPolicy = (pathname: string) => {
-  if (pathname.startsWith("/api/auth")) {
-    return { group: "auth", limit: 20, windowMs: 60_000 };
+let databaseHealthyUntil = 0;
+let databaseCheckRunning = false;
+const deploymentHealthMiddleware = createMiddleware().server(
+  async ({ next, request }) => {
+    if (new URL(request.url).pathname !== "/api/health") {
+      return await next();
+    }
+    const headers = { "cache-control": "no-store" };
+    if (request.method !== "GET") {
+      return new Response(null, {
+        headers: { ...headers, allow: "GET" },
+        status: 405,
+      });
+    }
+    if (databaseHealthyUntil <= Date.now()) {
+      if (databaseCheckRunning) {
+        return new Response(null, { headers, status: 503 });
+      }
+      databaseCheckRunning = true;
+      try {
+        await checkDeploymentDatabase();
+        databaseHealthyUntil = Date.now() + 30_000;
+      } catch (error) {
+        reportServerError(error, "deployment-health");
+        return new Response(null, { headers, status: 503 });
+      } finally {
+        databaseCheckRunning = false;
+      }
+    }
+    return Response.json(
+      { buildId: __QUIETER_BUILD_ID__, healthy: true },
+      { headers }
+    );
   }
-  if (pathname === "/api/waitlist") {
-    return { group: "waitlist", limit: 5, windowMs: 60 * 60_000 };
-  }
-  if (pathname === "/api/v1/send") {
-    return { group: "send", limit: 60, windowMs: 60_000 };
-  }
-  if (pathname.includes("/chat")) {
-    return { group: "chat", limit: 120, windowMs: 60_000 };
-  }
-  return { group: "default", limit: 600, windowMs: 60_000 };
-};
+);
 
 const abuseProtectionMiddleware = createMiddleware().server(
   async ({ next, request }) => {
-    const requestUrl = new URL(request.url);
-    const policy = getRateLimitPolicy(requestUrl.pathname);
-
-    // Read-only requests are not quota tracked, but API responses still
-    // advertise the policy so agents can self-throttle writes.
-    if (["GET", "HEAD", "OPTIONS"].includes(request.method.toUpperCase())) {
-      const downstream = await next();
-
-      if (!requestUrl.pathname.startsWith("/api/")) {
-        return downstream;
-      }
-
-      return {
-        ...downstream,
-        response: withApiRateLimitHeaders(downstream.response, policy, {
-          remaining: policy.limit,
-          resetAt: new Date(Date.now() + policy.windowMs),
-        }),
-      };
+    const limited = await getRequestRateLimit(request);
+    if (limited === null) {
+      return await next();
     }
-
-    const clientAddress =
-      [
-        request.headers.get("cf-connecting-ip")?.trim(),
-        request.headers.get("x-real-ip")?.trim(),
-        serverEnv.NODE_ENV === "development"
-          ? request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
-          : undefined,
-      ].find((value) => value !== undefined && value !== "") ?? "unknown";
-    const key = `${policy.group}:${clientAddress}`;
-    const result = await consumeRateLimit({
-      key,
-      limit: policy.limit,
-      windowMs: policy.windowMs,
-    }).catch((error: unknown) => {
-      reportServerError(error, "rate-limit");
-
-      return consumeFallbackRateLimit({
-        key,
-        limit: policy.limit,
-        windowMs: policy.windowMs,
-      });
-    });
-
+    const { policy, result } = limited;
     if (!result.allowed) {
-      return new Response("Too many requests", {
-        headers: {
-          "Retry-After": String(
-            Math.max(
-              1,
-              Math.ceil((result.resetAt.getTime() - Date.now()) / 1000)
-            )
-          ),
-        },
-        status: 429,
-      });
+      return withApiRateLimitHeaders(
+        new Response("Too many requests", {
+          headers: {
+            "Retry-After": String(
+              Math.max(
+                1,
+                Math.ceil((result.resetAt.getTime() - Date.now()) / 1000)
+              )
+            ),
+          },
+          status: 429,
+        }),
+        policy,
+        result
+      );
     }
-
     const downstream = await next();
-
-    if (requestUrl.pathname.startsWith("/api/")) {
-      return {
-        ...downstream,
-        response: withApiRateLimitHeaders(downstream.response, policy, result),
-      };
-    }
-
-    return downstream;
+    return new URL(request.url).pathname.startsWith("/api/")
+      ? {
+          ...downstream,
+          response: withApiRateLimitHeaders(
+            downstream.response,
+            policy,
+            result
+          ),
+        }
+      : downstream;
   }
 );
-
-const consumeFallbackRateLimit = (input: {
-  key: string;
-  limit: number;
-  windowMs: number;
-}) => {
-  const now = Date.now();
-  const existing = fallbackRateLimitBuckets.get(input.key);
-  const bucket =
-    !existing || existing.expiresAt <= now
-      ? { count: 1, expiresAt: now + input.windowMs }
-      : { count: existing.count + 1, expiresAt: existing.expiresAt };
-
-  fallbackRateLimitBuckets.set(input.key, bucket);
-
-  if (fallbackRateLimitBuckets.size > 1000) {
-    for (const [key, candidate] of fallbackRateLimitBuckets) {
-      if (candidate.expiresAt <= now) {
-        fallbackRateLimitBuckets.delete(key);
-      }
-    }
-  }
-
-  return {
-    allowed: bucket.count <= input.limit,
-    remaining: Math.max(0, input.limit - bucket.count),
-    resetAt: new Date(bucket.expiresAt),
-  };
-};
 
 const securityHeadersMiddleware = createMiddleware().server(
   async ({ next }) => {
@@ -322,7 +279,13 @@ const sitePasswordMiddleware = createMiddleware().server(
       requestUrl.pathname === sitePasswordPagePath &&
       (hasValidSitePassword || hasValidSession)
     ) {
-      return Response.redirect(getSafeReturnToUrl(requestUrl), 302);
+      return Response.redirect(
+        new URL(
+          getSafeAuthReturnTo(requestUrl.searchParams.get("returnTo")) ?? "/",
+          requestUrl
+        ),
+        302
+      );
     }
 
     if (!shouldGatePath(requestUrl.pathname)) {
@@ -389,9 +352,10 @@ export const startInstance = createStart(() => ({
     securityHeadersMiddleware,
     wellKnownAgentSurfaceMiddleware,
     markdownNegotiationMiddleware,
+    databaseMiddleware,
+    deploymentHealthMiddleware,
     abuseProtectionMiddleware,
     sitePasswordMiddleware,
-    databaseMiddleware,
     csrfMiddleware,
   ],
 }));
@@ -427,6 +391,10 @@ const shouldGatePath = (pathname: string) => {
   }
 
   if (publicLegalPaths.has(normalizedPath)) {
+    return false;
+  }
+
+  if (normalizedPath.startsWith(openTrackingPrefix)) {
     return false;
   }
 
@@ -491,19 +459,4 @@ const getHomePageUrl = (request: Request) => {
   const homePageUrl = new URL(homePagePath, requestUrl);
 
   return homePageUrl;
-};
-
-const getSafeReturnToUrl = (requestUrl: URL) => {
-  const returnTo = requestUrl.searchParams.get("returnTo");
-
-  if (
-    returnTo === null ||
-    returnTo === "" ||
-    !returnTo.startsWith("/") ||
-    returnTo.startsWith("//")
-  ) {
-    return new URL("/", requestUrl);
-  }
-
-  return new URL(returnTo, requestUrl);
 };

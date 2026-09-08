@@ -68,8 +68,8 @@ jobs:
           vp run check:cloudflare
           vp run @quieter/cloudflare#cf-typecheck
 
-      - name: Check backend import boundaries
-        run: vp run @quieter/aws#check:boundaries
+      - name: Check package import boundaries
+        run: vp run check:boundaries
 
       - name: Bundle AWS handlers
         run: vp run @quieter/aws#check:bundles
@@ -92,7 +92,7 @@ jobs:
       - name: Build runtime dependencies
         run: |
           vp run @quieter/observability#build
-          vp run @quieter/sdk#build
+          vp run quieter#build
 
       - name: Build web worker
         env:
@@ -164,3 +164,6 @@ jobs:
 
       - name: Test committed database migrations
         run: vp run @quieter/database#db:test-migrations
+
+      - name: Test database behavior against migrated PostgreSQL
+        run: vp test integration.test.ts

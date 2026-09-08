@@ -113,6 +113,16 @@ export const OrganizationSettingsPanel = () => {
     });
   };
 
+  const navigateToDelivery = () => {
+    void navigate({
+      search: (previous) => ({
+        ...previous,
+        organizationView: "delivery",
+      }),
+      to: ".",
+    });
+  };
+
   const navigateToBilling = () => {
     void navigate({
       search: (previous) => ({
@@ -192,6 +202,7 @@ export const OrganizationSettingsPanel = () => {
         onOpenDomain={navigateToDomain}
         onOpenMembers={navigateToMembers}
         onOpenSuppressions={navigateToSuppressions}
+        onOpenDelivery={navigateToDelivery}
         organization={selectedOrganization}
         userId={userId}
         view={organizationView}

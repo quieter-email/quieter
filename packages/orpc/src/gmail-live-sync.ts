@@ -6,13 +6,12 @@ import { serverEnv } from "@quieter/env/server";
 import { and, eq } from "drizzle-orm";
 
 import { createGmailLiveSyncToken } from "./gmail-live-sync-token";
-import { hasText } from "./text";
 
 const getLiveSyncConfiguration = () => {
   const secret = serverEnv.GMAIL_LIVE_SYNC_TOKEN_SECRET;
   const url = serverEnv.GMAIL_LIVE_SYNC_URL;
-  const hasSecret = hasText(secret);
-  const hasUrl = hasText(url);
+  const hasSecret = !!secret;
+  const hasUrl = !!url;
 
   if (!hasSecret && !hasUrl) {
     return null;
@@ -29,7 +28,11 @@ const getLiveSyncConfiguration = () => {
   }
 
   const parsedUrl = new URL(url);
-  if (parsedUrl.protocol !== "wss:") {
+  const localWebSocket =
+    serverEnv.QUIETER_DEPLOYMENT_ENV === "local" &&
+    parsedUrl.protocol === "ws:" &&
+    ["localhost", "127.0.0.1", "[::1]"].includes(parsedUrl.hostname);
+  if (parsedUrl.protocol !== "wss:" && !localWebSocket) {
     throw new Error("GMAIL_LIVE_SYNC_URL must use wss.");
   }
 

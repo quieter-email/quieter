@@ -71,6 +71,15 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED:
         runtimeEnv.QUIETER_GMAIL_AI_AUTOMATION_ENABLED,
       QUIETER_LOCAL_BILLING_BYPASS: runtimeEnv.QUIETER_LOCAL_BILLING_BYPASS,
+      QUIETER_LOCAL_CALENDAR_WRITE_ACCOUNTS:
+        runtimeEnv.QUIETER_LOCAL_CALENDAR_WRITE_ACCOUNTS,
+      QUIETER_LOCAL_GMAIL_WATCH_OWNER:
+        runtimeEnv.QUIETER_LOCAL_GMAIL_WATCH_OWNER,
+      QUIETER_LOCAL_GMAIL_WRITE_ACCOUNTS:
+        runtimeEnv.QUIETER_LOCAL_GMAIL_WRITE_ACCOUNTS,
+      QUIETER_LOCAL_LINEAR_WRITES: runtimeEnv.QUIETER_LOCAL_LINEAR_WRITES,
+      QUIETER_LOCAL_PROVIDER_MODE: runtimeEnv.QUIETER_LOCAL_PROVIDER_MODE,
+      QUIETER_LOCAL_WORKER_TOKEN: runtimeEnv.QUIETER_LOCAL_WORKER_TOKEN,
       QUIETER_MAIL_API_KEY: runtimeEnv.QUIETER_MAIL_API_KEY,
       QUIETER_MAIL_API_URL: runtimeEnv.QUIETER_MAIL_API_URL,
       QUIETER_PREVIEW_PERSONAS_ENABLED:
@@ -88,13 +97,19 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       SES_CONFIGURATION_SET_NAME: runtimeEnv.SES_CONFIGURATION_SET_NAME,
       SES_FEEDBACK_TOPIC_ARN: runtimeEnv.SES_FEEDBACK_TOPIC_ARN,
       VITE_LOGO_DEV_PUBLISHABLE_KEY: runtimeEnv.VITE_LOGO_DEV_PUBLISHABLE_KEY,
+      VITE_QUIETER_LOCAL_TELEMETRY: runtimeEnv.VITE_QUIETER_LOCAL_TELEMETRY,
     },
     server: {
       APP_SITE_PASSWORD: optionalString,
       AWS_DEFAULT_REGION: optionalString,
       AWS_REGION: optionalString,
-      BACKFILL_BATCH_SIZE: optionalString,
-      BACKFILL_CONCURRENCY: optionalString,
+      BACKFILL_BATCH_SIZE: z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(1000)
+        .default(100),
+      BACKFILL_CONCURRENCY: z.coerce.number().int().min(1).max(10).default(5),
       BETTER_AUTH_APP_NAME: z.string().trim().min(1).default("quieter"),
       BETTER_AUTH_SECRET: optionalString,
       BETTER_AUTH_TRUSTED_ORIGINS: optionalString,
@@ -140,6 +155,16 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       QUIETER_DEPLOYMENT_ENV: z.enum(["local", "production"]).default("local"),
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED: optionalBooleanString,
       QUIETER_LOCAL_BILLING_BYPASS: optionalBooleanString,
+      QUIETER_LOCAL_CALENDAR_WRITE_ACCOUNTS: optionalString,
+      QUIETER_LOCAL_GMAIL_WATCH_OWNER: z
+        .enum(["production", "local"])
+        .default("production"),
+      QUIETER_LOCAL_GMAIL_WRITE_ACCOUNTS: optionalString,
+      QUIETER_LOCAL_LINEAR_WRITES: optionalBooleanString,
+      QUIETER_LOCAL_PROVIDER_MODE: z
+        .enum(["observe", "write"])
+        .default("observe"),
+      QUIETER_LOCAL_WORKER_TOKEN: z.string().min(32).optional(),
       QUIETER_MAIL_API_KEY: optionalString,
       QUIETER_MAIL_API_URL: optionalHttpUrl,
       QUIETER_PREVIEW_PERSONAS_ENABLED: optionalBooleanString,
@@ -156,6 +181,7 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       SES_CONFIGURATION_SET_NAME: optionalString,
       SES_FEEDBACK_TOPIC_ARN: optionalString,
       VITE_LOGO_DEV_PUBLISHABLE_KEY: optionalString,
+      VITE_QUIETER_LOCAL_TELEMETRY: optionalBooleanString,
     },
   });
 

@@ -7,6 +7,7 @@ import { z } from "zod";
 import { syncBillingSubscription } from "../src/subscription-sync";
 
 const mocks = vi.hoisted(() => ({
+  deploymentEnvironment: "production" as "production" | "local",
   upsert: vi.fn<() => Promise<void>>(),
   values: vi.fn<
     (input: typeof billingSubscription.$inferInsert) => {
@@ -15,11 +16,26 @@ const mocks = vi.hoisted(() => ({
   >(),
 }));
 
-vi.mock(import("@quieter/database/client"), async (importOriginal) => {
+vi.mock(import("@quieter/env/server"), async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    serverEnv: {
+      ...actual.serverEnv,
+      get QUIETER_DEPLOYMENT_ENV() {
+        return mocks.deploymentEnvironment;
+      },
+    },
+  };
+});
+
+// This fake implements only the database operations exercised by the test.
+// oxlint-disable-next-line vitest/prefer-import-in-mock
+vi.mock("@quieter/database/client", async (importOriginal) => {
   const actual = await importOriginal<typeof DatabaseClientModule>();
   return {
     ...actual,
-    db: Object.assign(actual.db, { insert: () => ({ values: mocks.values }) }),
+    db: { insert: () => ({ values: mocks.values }) },
   };
 });
 
@@ -48,8 +64,39 @@ const subscription = subscriptionSchema.parse({
 
 describe("subscription synchronization", () => {
   beforeEach(() => {
+    mocks.deploymentEnvironment = "production";
     vi.clearAllMocks();
     mocks.values.mockReturnValue({ onConflictDoUpdate: mocks.upsert });
+  });
+
+  test("ignores development subscriptions in a deployed environment", async () => {
+    await expect(
+      syncBillingSubscription({
+        ...subscription,
+        metadata: { ...subscription.metadata, quieterEnvironment: "local" },
+      })
+    ).resolves.toMatchObject({ ignored: true, synced: true });
+    expect(mocks.values).not.toHaveBeenCalled();
+  });
+
+  test("ignores another deployment's subscription in local development", async () => {
+    mocks.deploymentEnvironment = "local";
+    await expect(syncBillingSubscription(subscription)).resolves.toMatchObject({
+      ignored: true,
+      synced: true,
+    });
+    expect(mocks.values).not.toHaveBeenCalled();
+  });
+
+  test("applies a subscription explicitly created by local development", async () => {
+    mocks.deploymentEnvironment = "local";
+    await expect(
+      syncBillingSubscription({
+        ...subscription,
+        metadata: { ...subscription.metadata, quieterEnvironment: "local" },
+      })
+    ).resolves.toStrictEqual({ synced: true });
+    expect(mocks.values).toHaveBeenCalledOnce();
   });
 
   test("renews the billing period for a zero-amount subscription", async () => {

@@ -1,12 +1,9 @@
 import { createMCPClient } from "@ai-sdk/mcp";
 import type { MCPClient } from "@ai-sdk/mcp";
+import { serverEnv } from "@quieter/env/server";
 import { z } from "zod";
 
-import {
-  getLinearAccessTokenForCredential,
-  getLinearAccessTokenForUser,
-  LINEAR_MCP_URL,
-} from "./runtime";
+import { getLinearAccessTokenForUser, LINEAR_MCP_URL } from "./runtime";
 
 const LINEAR_MCP_READ_PREFIXES = ["get_", "list_", "search_"];
 const MCP_REQUEST_TIMEOUT_MS = 20_000;
@@ -60,28 +57,18 @@ const createBoundedFetch = (signal?: AbortSignal): typeof fetch =>
     },
     { preconnect: workersFetch.preconnect }
   );
-/**
- * Connect to a Linear workspace over MCP. The AI SDK MCP client wraps tool
- * schemas without compiling them, so no evaluator has to run in Workers.
- */
-const connectLinearMcpClient = async (
-  accessToken: string,
-  signal?: AbortSignal
-): Promise<MCPClient> =>
-  await createMCPClient({
-    transport: {
-      fetch: createBoundedFetch(signal),
-      headers: { Authorization: `Bearer ${accessToken}` },
-      type: "http",
-      url: LINEAR_MCP_URL,
-    },
-  });
-
 const withLinearMcpClient = async <TValue>(
   input: { accessToken: string; signal?: AbortSignal },
   run: (client: MCPClient) => Promise<TValue>
 ) => {
-  const client = await connectLinearMcpClient(input.accessToken, input.signal);
+  const client = await createMCPClient({
+    transport: {
+      fetch: createBoundedFetch(input.signal),
+      headers: { Authorization: `Bearer ${input.accessToken}` },
+      type: "http",
+      url: LINEAR_MCP_URL,
+    },
+  });
 
   try {
     return await run(client);
@@ -144,6 +131,16 @@ const callTool = async (input: {
   };
 
   try {
+    if (
+      serverEnv.QUIETER_DEPLOYMENT_ENV === "local" &&
+      (serverEnv.QUIETER_LOCAL_PROVIDER_MODE !== "write" ||
+        serverEnv.QUIETER_LOCAL_LINEAR_WRITES !== true) &&
+      isMutatingLinearMcpTool({ name: input.call.toolName })
+    ) {
+      throw new Error(
+        "This development environment can read connected accounts, but cannot change them."
+      );
+    }
     const output: unknown = await input.client.callTool({
       arguments: input.call.arguments ?? {},
       name: input.call.toolName,
@@ -190,79 +187,6 @@ const callTool = async (input: {
   }
 };
 
-/**
- * One at a time on purpose: the calls a model batches usually build on each other,
- * and one workspace should not field a burst of parallel writes.
- */
-const callToolsSequentially = async (input: {
-  calls: LinearMcpToolCallInput[];
-  client: MCPClient;
-  maxOutputBytes: number;
-}): Promise<LinearMcpToolCallResult[]> => {
-  const [call, ...remaining] = input.calls;
-  if (call === undefined) {
-    return [];
-  }
-
-  const result = await callTool({ ...input, call });
-  return [
-    result,
-    ...(await callToolsSequentially({ ...input, calls: remaining })),
-  ];
-};
-
-const runLinearMcpToolCalls = async (input: {
-  accessToken: string;
-  calls: LinearMcpToolCallInput[];
-  maxCalls?: number;
-  maxOutputBytes?: number;
-  signal?: AbortSignal;
-}): Promise<LinearMcpToolCallResult[]> =>
-  await withLinearMcpClient(
-    input,
-    async (client) =>
-      await callToolsSequentially({
-        calls: input.calls.slice(0, input.maxCalls ?? DEFAULT_MAX_CALLS),
-        client,
-        maxOutputBytes: input.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES,
-      })
-  );
-
-export const listLinearMcpToolsForCredential = async (input: {
-  credentialId: string;
-  signal?: AbortSignal;
-  userId?: string;
-}): Promise<LinearMcpToolDescriptor[]> => {
-  const accessToken = await getLinearAccessTokenForCredential(input);
-  return await withLinearMcpClient(
-    { accessToken, signal: input.signal },
-    async (client) => {
-      const { tools } = await client.listTools();
-      return tools.map((tool) => ({
-        ...(tool.description === undefined
-          ? {}
-          : { description: tool.description }),
-        ...(tool.inputSchema === undefined
-          ? {}
-          : { inputSchema: tool.inputSchema }),
-        name: tool.name,
-      }));
-    }
-  );
-};
-
-export const runLinearMcpToolCallsForCredential = async (input: {
-  calls: LinearMcpToolCallInput[];
-  credentialId: string;
-  maxCalls?: number;
-  maxOutputBytes?: number;
-  signal?: AbortSignal;
-  userId?: string;
-}): Promise<LinearMcpToolCallResult[]> => {
-  const accessToken = await getLinearAccessTokenForCredential(input);
-  return await runLinearMcpToolCalls({ ...input, accessToken });
-};
-
 export const listLinearMcpToolsForUser = async (input: {
   signal?: AbortSignal;
   userId: string;
@@ -293,5 +217,23 @@ export const runLinearMcpToolCallsForUser = async (input: {
   userId: string;
 }): Promise<LinearMcpToolCallResult[]> => {
   const accessToken = await getLinearAccessTokenForUser(input);
-  return await runLinearMcpToolCalls({ ...input, accessToken });
+  return await withLinearMcpClient(
+    { ...input, accessToken },
+    async (client) => {
+      const results: LinearMcpToolCallResult[] = [];
+      for (const call of input.calls.slice(
+        0,
+        input.maxCalls ?? DEFAULT_MAX_CALLS
+      )) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Tool calls may depend on earlier results or mutate the same workspace.
+        const result = await callTool({
+          call,
+          client,
+          maxOutputBytes: input.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES,
+        });
+        results.push(result);
+      }
+      return results;
+    }
+  );
 };

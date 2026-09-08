@@ -133,11 +133,14 @@ export const SettingsSearch = ({
                   )}
                   id={`settings-search-${entry.tab}`}
                   key={entry.tab}
-                  // Blur fires before click, so commit on mousedown instead.
+                  // Preserve input focus while pointer activation reaches click.
                   onMouseDown={(event) => {
                     event.preventDefault();
+                  }}
+                  onClick={() => {
                     selectTab(entry.tab);
                   }}
+                  tabIndex={-1}
                   onMouseEnter={() => {
                     setActiveIndex(index);
                     onPrefetchTab(entry.tab);

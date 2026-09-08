@@ -19,10 +19,9 @@ import {
 } from "vite-plus/test";
 
 import { enqueueGmailMaintenanceJobs } from "../src/gmail-maintenance-worker";
-import { dispatchPendingMailboxActionRuns } from "../src/mailbox-action-dispatch-worker";
-import { processMailboxActionMessage } from "../src/mailbox-action-worker";
 import { processGmailQueueMessage } from "../src/queue-worker";
 import worker, { signaturesMatch } from "../src/worker";
+import { handlePubSub, requestErrorResponse } from "../src/worker-utils";
 
 const serviceAccount = "gmail-push@example.invalid";
 const subscription = "projects/example/subscriptions/gmail";
@@ -37,22 +36,6 @@ const encodeJson = (value: unknown) =>
     .replaceAll("+", "-")
     .replaceAll("/", "_")
     .replaceAll("=", "");
-
-const createClaimRuns = (runs: { runId: string }[]) =>
-  vi.fn<() => Promise<{ runId: string }[]>>().mockResolvedValue(runs);
-
-const createReleaseClaims = () =>
-  vi.fn<(runIds: string[]) => Promise<void>>().mockResolvedValue();
-
-const createExecuteRun = () =>
-  vi
-    .fn<
-      (
-        runId: string,
-        options?: { finalAttempt?: boolean }
-      ) => Promise<{ status: "succeeded" }>
-    >()
-    .mockResolvedValue({ status: "succeeded" });
 
 const liveSyncToken = async (
   overrides: Partial<{ expiresAt: number; issuedAt: number }> = {}
@@ -249,29 +232,97 @@ describe("Cloudflare worker runtime", () => {
       expect(response.status).toBe(403);
     });
 
-    test("broadcasts and enqueues an authenticated notification", async () => {
+    test("processes authenticated notifications before acknowledging without queueing", async () => {
       installFetchMock();
-      const send = vi.spyOn(env.GmailPsQueue, "send").mockResolvedValue({
-        metadata: { metrics: { backlogBytes: 0, backlogCount: 1 } },
+      const token = await liveSyncToken();
+      const stub = env.GmailLiveSyncMailbox.get(
+        env.GmailLiveSyncMailbox.idFromName(emailAddress)
+      );
+      const socketResponse = await stub.fetch(
+        new Request(`https://worker.invalid/gmail/live?token=${token}`, {
+          headers: { upgrade: "websocket" },
+        })
+      );
+      const socket = socketResponse.webSocket;
+      if (socket === null) {
+        throw new Error("Expected WebSocket upgrade.");
+      }
+      socket.accept();
+      const events: unknown[] = [];
+      socket.addEventListener("message", (event) => {
+        events.push(JSON.parse(String(event.data)));
       });
-      const response = await worker.fetch(await pubSubRequest(envelope()), env);
+      const send = vi.spyOn(env.GmailPsQueue, "send");
+      const { promise: pending, resolve: finish } =
+        Promise.withResolvers<null>();
+      const processNotification = vi.fn<
+        (message: unknown, bindings: Env) => Promise<void>
+      >(async () => {
+        await pending;
+      });
+      let acknowledged = false;
+      const responsePromise = handlePubSub(
+        await pubSubRequest(envelope()),
+        env,
+        processNotification
+      ).then((response) => {
+        acknowledged = true;
+        return response;
+      });
+      await vi.waitFor(() => {
+        expect(processNotification).toHaveBeenCalledOnce();
+      });
+      expect(acknowledged).toBeFalsy();
+      expect(processNotification.mock.calls[0]).toStrictEqual([
+        {
+          emailAddress,
+          historyId: "123",
+          pubSubMessageId: "message-1",
+          type: "notification",
+        },
+        env,
+      ]);
+      finish(null);
+      const response = await responsePromise;
       expect(response.status).toBe(204);
-      expect(send).toHaveBeenCalledOnce();
-      expect(send.mock.calls[0]?.[0]).toStrictEqual({
-        emailAddress,
-        historyId: "123",
-        pubSubMessageId: "message-1",
-        type: "notification",
+      expect(send).not.toHaveBeenCalled();
+      await vi.waitFor(() => {
+        expect(events).toHaveLength(3);
       });
+      expect(events.slice(1)).toStrictEqual(
+        expect.arrayContaining([
+          { mailboxId, type: "mailbox-dirty" },
+          { mailboxId, type: "mailbox-details-dirty" },
+        ])
+      );
+      socket.close(1000, "done");
     });
 
-    test("returns 5xx when enqueueing transiently fails", async () => {
+    test("returns 5xx when direct processing transiently fails", async () => {
       installFetchMock();
-      vi.spyOn(env.GmailPsQueue, "send").mockRejectedValueOnce(
-        new Error("temporary")
-      );
-      const response = await worker.fetch(await pubSubRequest(envelope()), env);
+      const processNotification = vi
+        .fn<(message: unknown, bindings: Env) => Promise<void>>()
+        .mockRejectedValue(new Error("temporary"));
+      const response = await handlePubSub(
+        await pubSubRequest(envelope()),
+        env,
+        processNotification
+      ).catch((error: unknown) => requestErrorResponse(error, "/gmail/pubsub"));
       expect(response.status).toBe(500);
+    });
+
+    test("does not process a notification with an invalid subscription", async () => {
+      installFetchMock();
+      const processNotification =
+        vi.fn<(message: unknown, bindings: Env) => Promise<void>>();
+      await expect(
+        handlePubSub(
+          await pubSubRequest(envelope({ subscription: "other" })),
+          env,
+          processNotification
+        )
+      ).rejects.toThrow("subscription");
+      expect(processNotification).not.toHaveBeenCalled();
     });
   });
 
@@ -349,6 +400,33 @@ describe("Cloudflare worker runtime", () => {
       );
     });
 
+    test("retries a notification when the mailbox is busy", async () => {
+      const processNotification = vi
+        .fn<typeof processGmailPubSubNotification>()
+        .mockResolvedValue({
+          busy: true,
+          ignored: false,
+          mailboxId,
+          pubSubMessageId: body.pubSubMessageId,
+        });
+      await expect(
+        processGmailQueueMessage(body, env, { processNotification })
+      ).resolves.toStrictEqual({ retry: true });
+    });
+
+    test("retries maintenance while the mailbox is busy", async () => {
+      const maintainMailbox = vi
+        .fn<typeof maintainGmailPubSubMailbox>()
+        .mockResolvedValue({ status: "busy" });
+      await expect(
+        processGmailQueueMessage(
+          { emailAddress, mailboxId, type: "maintenance" },
+          env,
+          { maintainMailbox }
+        )
+      ).resolves.toStrictEqual({ retry: true });
+    });
+
     test("processes maintenance jobs with the configured topic", async () => {
       const maintainMailbox = vi.fn<typeof maintainGmailPubSubMailbox>(
         // oxlint-disable-next-line eslint/require-await -- The production dependency has an async contract.
@@ -369,9 +447,6 @@ describe("Cloudflare worker runtime", () => {
         mailboxId,
         topicName: "projects/example/topics/gmail",
       });
-      expect(maintainMailbox.mock.calls[0]?.[1]?.onRunsEnqueued).toBeTypeOf(
-        "function"
-      );
     });
 
     test("rejects invalid queue messages", async () => {
@@ -403,92 +478,5 @@ describe("Cloudflare worker runtime", () => {
     expect(sendBatch).toHaveBeenCalledTimes(2);
     expect([...(sendBatch.mock.calls[0]?.[0] ?? [])]).toHaveLength(100);
     expect([...(sendBatch.mock.calls[1]?.[0] ?? [])]).toHaveLength(1);
-  });
-
-  describe("Mailbox action dispatch", () => {
-    const sendBatchResult = {
-      metadata: { metrics: { backlogBytes: 0, backlogCount: 0 } },
-    };
-
-    test("dispatches claimed runs and keeps claims on success", async () => {
-      const claimRuns = createClaimRuns([
-        { runId: "run-1" },
-        { runId: "run-2" },
-      ]);
-      const releaseClaims = createReleaseClaims();
-      const sendBatch = vi
-        .spyOn(env.MailboxActionQueue, "sendBatch")
-        .mockResolvedValue(sendBatchResult);
-
-      await expect(
-        dispatchPendingMailboxActionRuns(env, { claimRuns, releaseClaims })
-      ).resolves.toStrictEqual({ dispatched: 2 });
-
-      expect(sendBatch).toHaveBeenCalledOnce();
-      expect([...(sendBatch.mock.calls[0]?.[0] ?? [])]).toStrictEqual([
-        { body: { runId: "run-1" }, contentType: "json" },
-        { body: { runId: "run-2" }, contentType: "json" },
-      ]);
-      expect(releaseClaims).not.toHaveBeenCalled();
-    });
-
-    test("releases the dispatch claim when a batch send fails", async () => {
-      const firstBatch = Array.from({ length: 100 }, (_, index) => ({
-        runId: `run-${index}`,
-      }));
-      const secondBatch = [{ runId: "run-final" }];
-      const claimRuns = createClaimRuns([...firstBatch, ...secondBatch]);
-      const releaseClaims = createReleaseClaims();
-      const sendBatch = vi
-        .spyOn(env.MailboxActionQueue, "sendBatch")
-        .mockRejectedValueOnce(new Error("queue unavailable"))
-        .mockResolvedValueOnce(sendBatchResult);
-
-      await expect(
-        dispatchPendingMailboxActionRuns(env, { claimRuns, releaseClaims })
-      ).resolves.toStrictEqual({ dispatched: 1 });
-
-      expect(sendBatch).toHaveBeenCalledTimes(2);
-      expect(releaseClaims).toHaveBeenCalledOnce();
-      expect(releaseClaims.mock.calls[0]?.[0]).toStrictEqual(
-        firstBatch.map(({ runId }) => runId)
-      );
-    });
-  });
-
-  describe("Mailbox action messages", () => {
-    test("marks intermediate delivery attempts as retryable", async () => {
-      const executeRun = createExecuteRun();
-
-      await processMailboxActionMessage(
-        { runId: mailboxId },
-        { attempt: 1, executeRun }
-      );
-
-      expect(executeRun.mock.calls[0]).toStrictEqual([
-        mailboxId,
-        { finalAttempt: false },
-      ]);
-    });
-
-    test("flags the final queue delivery so failures settle the run", async () => {
-      const executeRun = createExecuteRun();
-
-      await processMailboxActionMessage(
-        { runId: mailboxId },
-        { attempt: 6, executeRun }
-      );
-
-      expect(executeRun.mock.calls[0]).toStrictEqual([
-        mailboxId,
-        { finalAttempt: true },
-      ]);
-    });
-
-    test("rejects invalid messages before claiming a run", async () => {
-      await expect(
-        processMailboxActionMessage({}, { attempt: 1 })
-      ).rejects.toThrow("Invalid input");
-    });
   });
 });

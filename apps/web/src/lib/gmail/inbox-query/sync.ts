@@ -1,6 +1,16 @@
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 import type { QueryClient, QueryPersister } from "@tanstack/react-query";
 
+import {
+  GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS,
+  GMAIL_QUERY_STALE_TIME_MS,
+} from "#/lib/mail";
+import type {
+  ListMessagesPageResult,
+  MailboxCategory,
+  MessageListItem,
+  ThreadMessagesResult,
+} from "#/lib/mail";
 import { listManagedDemoMessages } from "#/lib/managed-mail/demo-managed-mail";
 import { rpc } from "#/lib/orpc";
 import { shouldRetryOrpcError } from "#/lib/orpc-errors";
@@ -11,16 +21,6 @@ import {
 } from "#/lib/sandbox-mailbox";
 
 import { LANDING_DEMO_MAILBOX_ID, listDemoMessages } from "../demo-mail";
-import {
-  GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS,
-  GMAIL_QUERY_STALE_TIME_MS,
-} from "../gmail";
-import type {
-  ListMessagesPageResult,
-  MailboxCategory,
-  MessageListItem,
-  ThreadMessagesResult,
-} from "../gmail";
 import { getThreadQueryKey } from "../thread-query";
 import {
   applySyncDeltaToQueryData,
@@ -36,9 +36,6 @@ import {
   parsePageToken,
 } from "./keys";
 import { getCachedMessagesQueries } from "./query-cache";
-
-const hasText = (value: string | null | undefined): value is string =>
-  typeof value === "string" && value.length > 0;
 
 // Keep full-refresh fallbacks bounded after an infinite query restores a deep persisted list.
 const GMAIL_MAILBOX_REFRESH_PAGE_LIMIT = 3;
@@ -137,7 +134,7 @@ export const refreshLoadedMessagesPages = async (
     );
 
     refreshedPages.push(refreshedPage);
-    if (!hasText(refreshedPage.nextPageToken)) {
+    if (!refreshedPage.nextPageToken) {
       return;
     }
     await refreshNextPage(pageIndex + 1, refreshedPage.nextPageToken);
@@ -203,7 +200,7 @@ export const applyMailboxSyncDelta = async (
     );
   }
 
-  if (hasText(nextHistoryId) && nextHistoryId !== startHistoryId) {
+  if (nextHistoryId && nextHistoryId !== startHistoryId) {
     queryClient.setQueryData<MessagesQueryData>(messagesQueryKey, (data) =>
       updateFirstPageHistoryId(data, nextHistoryId)
     );
@@ -255,7 +252,7 @@ export const syncMessages = async (
     );
   }
 
-  if (mailbox === "drafts" || hasText(normalizeSearchQuery(searchQuery))) {
+  if (mailbox === "drafts" || normalizeSearchQuery(searchQuery)) {
     return await refreshLoadedMessagesPages(
       queryClient,
       mailboxId,
@@ -275,7 +272,7 @@ export const syncMessages = async (
   if (
     currentMessages === undefined ||
     currentMessages.pages.length === 0 ||
-    !hasText(startHistoryId)
+    !startHistoryId
   ) {
     return await refreshLoadedMessagesPages(
       queryClient,
@@ -359,7 +356,7 @@ export const messagesQueryOptions = (
           ],
         }
       : undefined;
-  const persister = hasText(normalizeSearchQuery(searchQuery))
+  const persister = normalizeSearchQuery(searchQuery)
     ? undefined
     : messagesQueryPersister;
 

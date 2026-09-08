@@ -2,12 +2,13 @@ import { db } from "@quieter/database/client";
 import {
   account,
   mailbox,
+  mailboxGrant,
   mailDomain,
   member,
   organization,
   user,
 } from "@quieter/database/schema";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, exists, or } from "drizzle-orm";
 
 import {
   MAILBOX_PROVIDER_GMAIL,
@@ -67,7 +68,22 @@ const getSetupState = async (organizationId: string | null, userId: string) => {
       .where(
         and(
           eq(mailbox.organizationId, organizationId),
-          eq(mailbox.provider, MAILBOX_PROVIDER_MANAGED)
+          eq(mailbox.provider, MAILBOX_PROVIDER_MANAGED),
+          or(
+            eq(mailbox.accessMode, "shared"),
+            eq(mailbox.managedOwnerUserId, userId),
+            exists(
+              db
+                .select({ id: mailboxGrant.id })
+                .from(mailboxGrant)
+                .where(
+                  and(
+                    eq(mailboxGrant.mailboxId, mailbox.id),
+                    eq(mailboxGrant.userId, userId)
+                  )
+                )
+            )
+          )
         )
       )
       .orderBy(asc(mailbox.createdAt)),
@@ -85,9 +101,6 @@ const getSetupState = async (organizationId: string | null, userId: string) => {
 
   return { domains, gmailMailboxes, managedMailboxes };
 };
-
-const hasText = (value: string | null | undefined): value is string =>
-  value !== null && value !== undefined && value.trim() !== "";
 
 /**
  * The address to offer as a one-click Gmail connection.
@@ -193,7 +206,7 @@ export const completeOnboarding = async (input: {
     })
     .where(eq(user.id, input.userId));
 
-  if (hasText(trimmedTeamName)) {
+  if (trimmedTeamName?.trim()) {
     const organizations = await listUserOrganizations(input.userId);
     const [defaultOrganization] = organizations;
 

@@ -2,6 +2,7 @@
 
 import { Key02Icon, Mail01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { Brand } from "@quieter/ui/brand";
 import { Button } from "@quieter/ui/button";
 import { FieldLabel } from "@quieter/ui/field";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
@@ -29,11 +30,8 @@ const authRouteApi = getRouteApi("/auth");
 const AUTHENTICATION_ERROR_MESSAGE =
   "Unable to authenticate. Please check your credentials or try again.";
 
-const hasText = (value: string | null | undefined): value is string =>
-  value !== null && value !== undefined && value !== "";
-
 const normalizeAuthReturnTo = (returnTo?: string) => {
-  if (!hasText(returnTo)) {
+  if (!returnTo) {
     return "/";
   }
 
@@ -368,7 +366,7 @@ const AuthCredentials = ({
         Continue with passkey
       </Button>
 
-      {hasText(errors.google) ? (
+      {errors.google ? (
         <output
           aria-live="assertive"
           className="mt-4 text-body text-destructive"
@@ -376,7 +374,7 @@ const AuthCredentials = ({
           {errors.google}
         </output>
       ) : null}
-      {hasText(errors.passkey) ? (
+      {errors.passkey ? (
         <output
           aria-live="assertive"
           className="mt-4 text-body text-destructive"
@@ -454,7 +452,7 @@ const PreviewPersonaPicker = ({ navigate }: { navigate: AuthNavigate }) => {
           </Button>
         ))}
       </div>
-      {hasText(error) ? (
+      {error ? (
         <output aria-live="assertive" className="text-body text-destructive">
           {error}
         </output>
@@ -466,20 +464,18 @@ const PreviewPersonaPicker = ({ navigate }: { navigate: AuthNavigate }) => {
 export const AuthScreen = () => {
   const { error, returnTo } = authRouteApi.useSearch();
   const navigate = authRouteApi.useNavigate();
-  const authError = hasText(error) ? AUTHENTICATION_ERROR_MESSAGE : null;
+  const authError = error ? AUTHENTICATION_ERROR_MESSAGE : null;
 
   return (
-    <div className="grid h-dvh max-h-dvh w-full overflow-hidden md:grid-cols-2">
+    <div className="auth-scene relative isolate grid h-dvh max-h-dvh w-full overflow-hidden md:grid-cols-[3fr_2fr]">
       {/* Form first, in DOM and on screen: it is the task, the atmosphere is
           not. The visual sits second and is ordered right on wide viewports. */}
-      <div className="flex size-full min-h-0 items-center justify-center px-6">
+      <div className="relative z-10 flex size-full min-h-0 items-center justify-center px-6">
         <div className="w-full max-w-md">
+          <Brand className="mb-8 h-8 w-32 text-fg" variant="combination" />
           <h1 className="text-title-md font-medium tracking-tight text-fg">
             Continue to Quieter
           </h1>
-          <p className="mt-2 text-body text-muted-fg">
-            Sign in, or create an account with the same address.
-          </p>
 
           <AuthCredentials
             key={returnTo ?? ""}
@@ -489,7 +485,7 @@ export const AuthScreen = () => {
 
           <PreviewPersonaPicker navigate={navigate} />
 
-          {hasText(authError) ? (
+          {authError ? (
             <output
               aria-live="assertive"
               className="mt-4 text-body text-destructive"
@@ -499,7 +495,7 @@ export const AuthScreen = () => {
           ) : null}
         </div>
       </div>
-      <div className="size-full min-h-0 border-l bg-bg-surface max-md:hidden">
+      <div className="dark relative size-full min-h-0 border-l bg-brand-bg max-md:hidden">
         <AuthVisual />
       </div>
     </div>

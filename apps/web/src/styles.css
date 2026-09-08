@@ -26,7 +26,11 @@
 
 .loading-spinner-segment {
   animation: loading-spinner-segment 1.1s linear infinite;
-  stroke-dasharray: 2.5 199.494;
+  stroke-dasharray: 1.25 98.75;
+}
+
+.auth-scene {
+  background: var(--bg);
 }
 
 @keyframes loading-spinner-segment {
@@ -35,7 +39,7 @@
   }
 
   to {
-    stroke-dashoffset: -201.994;
+    stroke-dashoffset: -100;
   }
 }
 

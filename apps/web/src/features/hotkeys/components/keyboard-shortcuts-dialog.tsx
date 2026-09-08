@@ -11,6 +11,7 @@ import {
   FullPageDialogHeader,
   FullPageDialogTitle,
 } from "@quieter/ui/full-page-dialog";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { formatForDisplay } from "@tanstack/react-hotkeys";
 import type { Hotkey, RegisterableHotkey } from "@tanstack/react-hotkeys";
 
@@ -184,9 +185,11 @@ export const KeyboardShortcutsDialog = ({
   <FullPageDialog onOpenChange={onOpenChange} open={open}>
     <FullPageDialogContent data-keyboard-shortcuts-dialog>
       <FullPageDialogHeader>
-        <FullPageDialogClose aria-label="Close keyboard shortcuts">
-          <HugeiconsIcon aria-hidden icon={Cancel01Icon} />
-        </FullPageDialogClose>
+        <IconButtonTooltip label="Close keyboard shortcuts">
+          <FullPageDialogClose aria-label="Close keyboard shortcuts">
+            <HugeiconsIcon aria-hidden icon={Cancel01Icon} />
+          </FullPageDialogClose>
+        </IconButtonTooltip>
         <div className="min-w-0">
           <FullPageDialogTitle>Keyboard shortcuts</FullPageDialogTitle>
         </div>

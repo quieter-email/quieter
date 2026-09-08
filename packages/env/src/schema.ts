@@ -20,12 +20,6 @@ export const httpUrl = z
   .refine((value) => ["http:", "https:"].includes(new URL(value).protocol), {
     message: "URL must use HTTP or HTTPS.",
   });
-export const httpsUrl = httpUrl.refine(
-  (value) => new URL(value).protocol === "https:",
-  {
-    message: "URL must use HTTPS.",
-  }
-);
 export const optionalHttpUrl = httpUrl.optional();
 export const webSocketUrl = z
   .string()

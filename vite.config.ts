@@ -45,11 +45,28 @@ export default defineConfig({
     },
     overrides: [
       {
+        files: ["**/*.test.{ts,tsx}"],
+        plugins: ["vitest"],
+        rules: {
+          "vitest/max-expects": "off",
+          "unicorn/text-encoding-identifier-case": "off",
+        },
+      },
+      {
         // Linear control flow reads better than artificial helper extraction;
         // the complexity gate pushed code into worse shapes to satisfy a number.
         files: ["**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}"],
         rules: {
           complexity: "off",
+          "typescript/prefer-nullish-coalescing": [
+            "error",
+            { ignorePrimitives: { string: true } },
+          ],
+          // Empty, null, and undefined strings all mean "absent" at these guards.
+          "typescript/strict-boolean-expressions": [
+            "error",
+            { allowNullableString: true },
+          ],
         },
       },
       {
@@ -75,7 +92,6 @@ export default defineConfig({
           "packages/orpc/src/client.ts",
           "packages/orpc/src/context.ts",
           "packages/orpc/src/routers/**/*.ts",
-          "packages/orpc/src/server-client.ts",
           "packages/orpc/src/server.ts",
         ],
         rules: {
@@ -84,7 +100,6 @@ export default defineConfig({
       },
       {
         files: [
-          "apps/web/src/env.ts",
           "apps/web/vite.config.ts",
           "packages/aws/scripts/**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}",
           "packages/billing/scripts/**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}",
@@ -178,7 +193,6 @@ export default defineConfig({
         files: [
           "apps/web/src/components/atmospheric-background.tsx",
           "apps/web/src/components/auth-visual.tsx",
-          "apps/web/src/components/contour-lines.tsx",
           "apps/web/src/components/workspace-dither-background.tsx",
           "apps/web/src/features/chat/components/chat-transcript.tsx",
           "apps/web/src/features/message-thread/components/message-body.tsx",
@@ -257,7 +271,6 @@ export default defineConfig({
         // terms cookie predates Cookie Store support, and the test fixture
         // verifies javascript URLs are rejected by the mail parser.
         files: [
-          "apps/web/src/lib/terms-acceptance.ts",
           "apps/web/src/features/message-thread/domain/mail-html.test.ts",
         ],
         rules: {
@@ -273,17 +286,7 @@ export default defineConfig({
           "react/no-react-children": "off",
         },
       },
-      {
-        // These components intentionally create the dynamic Motion element
-        // at render time because `as` is a caller-selected element type.
-        files: [
-          "apps/web/src/features/home/components/reveal.tsx",
-          "apps/web/src/features/message-search/components/message-list-search/use-message-list-search-controller.ts",
-        ],
-        rules: {
-          "react/react-compiler": "off",
-        },
-      },
+
       {
         // The token field is an ARIA combobox over a contenteditable region
         // with an aria-activedescendant listbox. Neither select nor datalist
@@ -316,28 +319,6 @@ export default defineConfig({
         rules: {
           "node/callback-return": "off",
           "promise/prefer-await-to-callbacks": "off",
-        },
-      },
-      {
-        // These loops preserve ordering or bounded concurrency across remote
-        // mail operations; parallelizing them would change mailbox semantics.
-        files: [
-          "apps/web/scripts/check-worker-deployment-boundaries.ts",
-          "packages/orpc/src/ai-memory.ts",
-          "packages/orpc/src/gmail-sync/service.ts",
-          "packages/orpc/src/mailbox-actions/executor.ts",
-          "packages/orpc/src/managed-mail/rules/service.ts",
-          "packages/orpc/src/organization-api-mail.ts",
-        ],
-        rules: {
-          "eslint/no-await-in-loop": "off",
-        },
-      },
-      {
-        // Request-body streams must be consumed and cancelled in order.
-        files: ["apps/web/src/routes/api/v1/send.ts"],
-        rules: {
-          "eslint/no-await-in-loop": "off",
         },
       },
       {
@@ -384,6 +365,8 @@ export default defineConfig({
       },
     ],
     rules: {
+      // Ordering and bounded concurrency are deliberate choices, not lint failures.
+      "eslint/no-await-in-loop": "off",
       "import/no-commonjs": "error",
       "jsx-a11y/no-autofocus": "error",
       "no-console": "error",

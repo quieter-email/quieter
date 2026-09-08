@@ -1,5 +1,15 @@
 import { serverEnv } from "@quieter/env/server";
 
+export const getBillingExternalIdentity = (
+  kind: "organization" | "user",
+  id: string
+) => {
+  if (serverEnv.QUIETER_DEPLOYMENT_ENV === "local") {
+    return `local:${kind}:${id}`;
+  }
+  return kind === "organization" ? `organization:${id}` : id;
+};
+
 export const resolvePolarServer = (input: {
   deploymentEnvironment?: "local" | "production";
   nodeEnvironment: "development" | "production" | "test";

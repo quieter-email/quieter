@@ -6,9 +6,9 @@ import {
 } from "@quieter/mail/compose/schema";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useBlocker } from "@tanstack/react-router";
+import { useRef, useState } from "react";
 
-import { scheduleFireAndForget } from "#/lib/delay";
 import { toastError } from "#/lib/error-toast";
 import {
   deleteDemoDraft,
@@ -31,7 +31,6 @@ import {
   composeFormValuesToDraft,
   draftToComposeFormValues,
   shouldPersistComposeDraft,
-  writeComposeFormValues,
 } from "../domain/compose-form";
 import type { ComposeFormValues } from "../domain/compose-form";
 import {
@@ -42,6 +41,7 @@ import {
   createComposeInlineImagesFromFiles,
   createEmptyComposeDraft,
   deleteComposeDraft,
+  hasComposeDraftContent,
   saveComposeDraft,
   sendComposeMessage,
 } from "../domain/draft";
@@ -51,31 +51,8 @@ type ComposeDraftUpdate =
   | ComposeDraftState
   | ((current: ComposeDraftState) => ComposeDraftState);
 
-const ignoreBackgroundFailure = (): void => undefined;
-
 const SUPPRESSED_RECIPIENT_MESSAGE =
   "This message includes a recipient that can no longer receive mail from this team.";
-
-const getErrorMessage = (error: unknown, fallback: string): string => {
-  if (error instanceof Error && (error.message ?? "") !== "") {
-    return error.message;
-  }
-  return fallback;
-};
-
-const chainSaveQueue = (
-  saveQueueRef: { current: Promise<unknown> },
-  task: Promise<ComposeDraftState>
-) => {
-  const runChain = async () => {
-    try {
-      await task;
-    } catch {
-      ignoreBackgroundFailure();
-    }
-  };
-  saveQueueRef.current = runChain();
-};
 
 export const getDraftStatusMessage = (
   draft: ComposeDraftState,
@@ -107,7 +84,6 @@ export const useComposeDialogController = ({
   onClose,
   onRecipientProblem,
   persistDrafts = true,
-  saveOnUnmount = false,
   signature,
 }: {
   demoMode?: boolean;
@@ -117,7 +93,6 @@ export const useComposeDialogController = ({
   onClose?: () => void;
   onRecipientProblem?: () => void;
   persistDrafts?: boolean;
-  saveOnUnmount?: boolean;
   signature?: { html: string | null; text: string | null };
 }) => {
   const queryClient = useQueryClient();
@@ -141,16 +116,6 @@ export const useComposeDialogController = ({
   });
   const activeDraftRef = useRef(state.draft);
   const draftClosedRef = useRef(false);
-  const onCloseRef = useRef(onClose);
-  const openIdRef = useRef(0);
-  // react-doctor-disable-next-line react-doctor/rerender-lazy-ref-init -- The queue promise is a stable mutable workflow primitive.
-  const saveQueueRef = useRef(Promise.resolve());
-  const savedDraftByLocalIdRef = useRef(new Map<string, ComposeDraftState>());
-
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
-
   const setDraft = (update: ComposeDraftUpdate) => {
     const draft =
       typeof update === "function" ? update(activeDraftRef.current) : update;
@@ -179,7 +144,7 @@ export const useComposeDialogController = ({
   const closeDialog = (afterClose?: () => void) => {
     draftClosedRef.current = true;
     setState((current) => ({ ...current, open: false }));
-    const closeHandler = afterClose ?? onCloseRef.current;
+    const closeHandler = afterClose ?? onClose;
     if (closeHandler !== undefined) {
       closeHandler();
     }
@@ -207,8 +172,12 @@ export const useComposeDialogController = ({
       ...activeDraftRef.current,
       errorMessage: isRecipientProblem
         ? SUPPRESSED_RECIPIENT_MESSAGE
-        : getErrorMessage(error, "Could not send message."),
+        : "Could not send message. Please try again.",
       saveStatus: "error",
+    });
+    toastError(error, {
+      boundary: "compose-send",
+      fallback: "Could not send message. Please try again.",
     });
     if (isRecipientProblem) {
       onRecipientProblem?.();
@@ -216,20 +185,28 @@ export const useComposeDialogController = ({
   };
 
   const submitComposeForm = async (values: ComposeFormValues) => {
-    if ((mailboxId ?? "") === "") {
+    if (
+      mailboxId === null ||
+      mailboxId === "" ||
+      activeDraftRef.current.saveStatus === "saving" ||
+      activeDraftRef.current.saveStatus === "sending"
+    ) {
       return;
     }
 
     const message = buildDraftFromForm(values);
     setDraft(() => ({ ...message, errorMessage: null, saveStatus: "sending" }));
 
+    let draftCleanupHandled = false;
     try {
       if (demoMode) {
         sendDemoDraft(message);
       } else if (managedDemoMode) {
         sendManagedDemoDraft(message);
       } else {
-        await sendComposeMessage(mailboxId ?? "", message);
+        const sent = await sendComposeMessage(mailboxId ?? "", message);
+        draftCleanupHandled =
+          "draftCleanupHandled" in sent && sent.draftCleanupHandled;
       }
     } catch (error) {
       handleSendFailure(error);
@@ -238,37 +215,39 @@ export const useComposeDialogController = ({
 
     closeDialog();
 
-    try {
-      await saveQueueRef.current;
-    } catch {
-      ignoreBackgroundFailure();
-    }
-    const savedDraft =
-      savedDraftByLocalIdRef.current.get(message.localId) ?? message;
-
-    if ((savedDraft.draftId ?? "") !== "") {
+    if (
+      !draftCleanupHandled &&
+      message.draftId !== undefined &&
+      message.draftId !== ""
+    ) {
       try {
         if (demoMode) {
-          deleteDemoDraft(savedDraft);
+          deleteDemoDraft(message);
         } else if (managedDemoMode) {
-          deleteManagedDemoDraft(savedDraft);
+          deleteManagedDemoDraft(message);
         } else {
-          await deleteComposeDraft(mailboxId ?? "", savedDraft);
+          await deleteComposeDraft(mailboxId, message);
         }
-      } catch {
-        ignoreBackgroundFailure();
+      } catch (error) {
+        toastError(error, {
+          boundary: "compose-sent-draft-cleanup",
+          fallback:
+            "Message sent, but its draft could not be removed. Please try deleting it again.",
+        });
       }
     }
 
-    savedDraftByLocalIdRef.current.delete(message.localId);
     try {
       await Promise.all([
         refreshCachedMailboxQueries(queryClient, mailboxId ?? "", "drafts"),
         refreshCachedMailboxQueries(queryClient, mailboxId ?? "", "sent"),
         refreshThread(message),
       ]);
-    } catch {
-      ignoreBackgroundFailure();
+    } catch (error) {
+      toastError(error, {
+        boundary: "compose-sent-refresh",
+        fallback: "Message sent. Refresh to update your mailbox.",
+      });
     }
     clearComposeDraftRuntimeFiles(message);
   };
@@ -285,115 +264,99 @@ export const useComposeDialogController = ({
     },
   });
 
-  const openDraftInDialog = (draft: ComposeDraftState) => {
-    draftClosedRef.current = false;
-    activeDraftRef.current = draft;
-
-    writeComposeFormValues(form, draftToComposeFormValues(draft));
-
-    setState({
-      draft,
-      open: true,
-      showBcc: draft.recipients.bcc.trim() !== "",
-      showCc: draft.recipients.cc.trim() !== "",
-    });
-  };
-
-  const shouldSaveDraft = (
-    draft: ComposeDraftState,
-    values: ComposeFormValues
-  ) =>
-    (mailboxId ?? "") !== "" &&
-    persistDrafts &&
-    shouldPersistComposeDraft({
-      currentDraft: activeDraftRef.current,
-      nextDraft: draft,
-      values,
-    });
-
-  const refreshDrafts = async (draft: ComposeDraftState) => {
-    if ((mailboxId ?? "") === "") {
-      return;
+  const persistCurrentDraft = async () => {
+    const { values } = form.state;
+    const draft = buildDraftFromForm(values);
+    if (
+      persistDrafts &&
+      hasComposeDraftContent(draft) &&
+      !composeDraftFormValuesSchema.safeParse(values).success
+    ) {
+      await form.validateAllFields("change");
+      setDraft({
+        ...draft,
+        errorMessage: "Check the recipient addresses before saving your draft.",
+        saveStatus: "error",
+      });
+      return false;
     }
-    await Promise.all([
-      refreshCachedMailboxQueries(queryClient, mailboxId ?? "", "drafts"),
-      refreshThread(draft),
-    ]);
-  };
-
-  const saveDraft = async (
-    draft: ComposeDraftState,
-    options?: {
-      applyToOpenDraft?: boolean;
-      openId?: number;
-      refreshAfterSave?: boolean;
+    if (
+      mailboxId === null ||
+      mailboxId === "" ||
+      !persistDrafts ||
+      !shouldPersistComposeDraft({
+        currentDraft: activeDraftRef.current,
+        nextDraft: draft,
+        values,
+      })
+    ) {
+      return true;
     }
-  ) => {
-    if ((mailboxId ?? "") === "") {
-      try {
-        await saveQueueRef.current;
-      } catch {
-        ignoreBackgroundFailure();
-      }
-      return draft;
-    }
-
-    const task = (async () => {
-      try {
-        await saveQueueRef.current;
-      } catch {
-        ignoreBackgroundFailure();
-      }
-
-      if (
-        options?.openId !== undefined &&
-        options.openId !== openIdRef.current
-      ) {
-        return draft;
-      }
-
-      if (
-        options?.applyToOpenDraft === true &&
-        activeDraftRef.current.localId === draft.localId &&
-        activeDraftRef.current.saveStatus !== "sending"
-      ) {
-        setDraft({
-          ...activeDraftRef.current,
-          errorMessage: null,
-          saveStatus: "saving",
-        });
-      }
-
-      let savedDraft: ComposeDraftState;
+    setDraft({ ...draft, saveStatus: "saving" });
+    let saved: ComposeDraftState;
+    try {
       if (demoMode) {
-        savedDraft = saveDemoDraft(draft);
+        saved = saveDemoDraft(draft);
       } else if (managedDemoMode) {
-        savedDraft = await saveManagedDemoDraft(draft);
+        saved = saveManagedDemoDraft(draft);
       } else {
-        savedDraft = await saveComposeDraft(mailboxId ?? "", draft);
+        saved = await saveComposeDraft(mailboxId, draft);
       }
-      savedDraftByLocalIdRef.current.set(draft.localId, savedDraft);
-
-      if (
-        options?.applyToOpenDraft === true &&
-        activeDraftRef.current.localId === draft.localId &&
-        activeDraftRef.current.saveStatus !== "sending" &&
-        (options.openId === undefined || options.openId === openIdRef.current)
-      ) {
-        setDraft(savedDraft);
-      }
-
-      if (options?.refreshAfterSave === true) {
-        await refreshDrafts(savedDraft);
-      }
-
-      return savedDraft;
-    })();
-
-    chainSaveQueue(saveQueueRef, task);
-
-    return await task;
+    } catch (error) {
+      setDraft({
+        ...draft,
+        errorMessage: "Your draft could not be saved. Please try again.",
+        saveStatus: "error",
+      });
+      toastError(error, {
+        boundary: "compose-save",
+        fallback: "Your draft could not be saved. Please try again.",
+      });
+      return false;
+    }
+    try {
+      await Promise.all([
+        refreshCachedMailboxQueries(queryClient, mailboxId, "drafts"),
+        refreshThread(saved),
+      ]);
+    } catch (error) {
+      toastError(error, {
+        boundary: "compose-draft-refresh",
+        fallback: "Draft saved. Refresh to update your mailbox.",
+      });
+    }
+    setDraft(saved);
+    return true;
   };
+
+  useBlocker({
+    enableBeforeUnload: () => {
+      const { values } = form.state;
+      const draft = buildDraftFromForm(values);
+      return (
+        !draftClosedRef.current &&
+        hasComposeDraftContent(draft) &&
+        (!composeDraftFormValuesSchema.safeParse(values).success ||
+          shouldPersistComposeDraft({
+            currentDraft: activeDraftRef.current,
+            nextDraft: draft,
+            values,
+          }))
+      );
+    },
+    shouldBlockFn: async () => {
+      if (draftClosedRef.current) {
+        return false;
+      }
+      if (
+        activeDraftRef.current.saveStatus === "sending" ||
+        activeDraftRef.current.saveStatus === "saving"
+      ) {
+        return true;
+      }
+      return !(await persistCurrentDraft());
+    },
+  });
 
   const clearActiveDraftError = () => {
     const draft = activeDraftRef.current;
@@ -416,130 +379,83 @@ export const useComposeDialogController = ({
     });
   };
 
-  const openComposeDraft = (nextDraft: ComposeDraftState | null) => {
-    openIdRef.current += 1;
-    const draft = nextDraft
-      ? cloneComposeDraft(nextDraft)
-      : createEmptyComposeDraft();
-    let withSignature = draft;
-    if ((nextDraft?.draftId ?? "") === "") {
-      withSignature = appendComposeSignature(
-        draft,
-        signature ?? { html: undefined, text: undefined }
-      );
-    }
-    openDraftInDialog(withSignature);
-  };
-
-  const saveDraftOnExit = () => {
-    const { values } = form.state;
-    const draft = buildDraftFromForm(values);
-    const saveOnClose = shouldSaveDraft(draft, values);
-
-    if (!saveOnClose) {
-      clearComposeDraftRuntimeFiles(draft);
+  const closeComposeDialog = async (afterClose?: () => void) => {
+    if (
+      activeDraftRef.current.saveStatus === "sending" ||
+      activeDraftRef.current.saveStatus === "saving"
+    ) {
       return;
     }
-
-    const finishClose = async () => {
-      await saveDraft(draft, { refreshAfterSave: true })
-        .catch((error: unknown) => {
-          toastError(error, {
-            boundary: "compose-save-on-exit",
-            fallback: "Your draft could not be saved. Please try again.",
-          });
-        })
-        .finally(() => {
-          savedDraftByLocalIdRef.current.delete(draft.localId);
-          clearComposeDraftRuntimeFiles(draft);
-        });
-    };
-    scheduleFireAndForget(finishClose);
-  };
-
-  const closeComposeDialog = (afterClose?: () => void) => {
-    if (activeDraftRef.current.saveStatus === "sending") {
+    if (!(await persistCurrentDraft())) {
       return;
     }
-    openIdRef.current += 1;
+    clearComposeDraftRuntimeFiles(activeDraftRef.current);
     closeDialog(afterClose);
-    saveDraftOnExit();
   };
 
   const handleDialogOpenChange = (open: boolean) => {
     if (open) {
       setState((current) => ({ ...current, open: true }));
-      return;
+    } else {
+      void closeComposeDialog();
     }
-
-    closeComposeDialog();
   };
 
-  const discardActiveDraft = () => {
-    if (activeDraftRef.current.saveStatus === "sending") {
+  const discardActiveDraft = async () => {
+    if (
+      activeDraftRef.current.saveStatus === "sending" ||
+      activeDraftRef.current.saveStatus === "saving"
+    ) {
       return;
     }
-
-    openIdRef.current += 1;
-    const draft = buildDraftFromForm(form.state.values);
-    closeDialog();
-
-    if ((mailboxId ?? "") === "") {
-      clearComposeDraftRuntimeFiles(draft);
-      return;
-    }
-
-    const deleteDraft = async () => {
-      try {
-        await saveQueueRef.current;
-      } catch {
-        ignoreBackgroundFailure();
+    const draft = activeDraftRef.current;
+    setDraft({ ...draft, saveStatus: "saving" });
+    try {
+      if (
+        mailboxId !== null &&
+        mailboxId !== "" &&
+        draft.draftId !== undefined &&
+        draft.draftId !== ""
+      ) {
+        if (demoMode) {
+          deleteDemoDraft(draft);
+        } else if (managedDemoMode) {
+          deleteManagedDemoDraft(draft);
+        } else {
+          await deleteComposeDraft(mailboxId, draft);
+        }
       }
-      const savedDraft =
-        savedDraftByLocalIdRef.current.get(draft.localId) ?? draft;
-
-      if ((savedDraft.messageId ?? "") !== "") {
+    } catch (error) {
+      setDraft({
+        ...draft,
+        errorMessage: "Your draft could not be deleted. Please try again.",
+        saveStatus: "error",
+      });
+      toastError(error, { boundary: "compose-discard" });
+      return;
+    }
+    clearComposeDraftRuntimeFiles(draft);
+    closeDialog();
+    if (mailboxId === null || mailboxId === "") {
+      return;
+    }
+    try {
+      if (draft.messageId !== undefined && draft.messageId !== "") {
         await removeDraftMessageFromCaches(
           queryClient,
-          mailboxId ?? "",
-          savedDraft.messageId ?? "",
-          savedDraft.replyContext?.threadId ??
-            savedDraft.draftAnchor?.sourceThreadId
+          mailboxId,
+          draft.messageId,
+          draft.replyContext?.threadId ?? draft.draftAnchor?.sourceThreadId
         );
+      } else {
+        await refreshCachedMailboxQueries(queryClient, mailboxId, "drafts");
       }
-
-      if ((savedDraft.draftId ?? "") !== "") {
-        if (demoMode) {
-          deleteDemoDraft(savedDraft);
-        } else if (managedDemoMode) {
-          deleteManagedDemoDraft(savedDraft);
-        } else {
-          await deleteComposeDraft(mailboxId ?? "", savedDraft);
-        }
-        if ((savedDraft.messageId ?? "") === "") {
-          await refreshCachedMailboxQueries(
-            queryClient,
-            mailboxId ?? "",
-            "drafts"
-          );
-        }
-        return;
-      }
-
-      await refreshCachedMailboxQueries(queryClient, mailboxId ?? "", "drafts");
-    };
-
-    const finishDiscard = async () => {
-      await deleteDraft()
-        .catch(() => {
-          ignoreBackgroundFailure();
-        })
-        .finally(() => {
-          savedDraftByLocalIdRef.current.delete(draft.localId);
-          clearComposeDraftRuntimeFiles(draft);
-        });
-    };
-    scheduleFireAndForget(finishDiscard);
+    } catch (error) {
+      toastError(error, {
+        boundary: "compose-discard-refresh",
+        fallback: "Draft deleted. Refresh to update your mailbox.",
+      });
+    }
   };
 
   const toggleRecipientVisibility = (field: "cc" | "bcc") => {
@@ -572,34 +488,14 @@ export const useComposeDialogController = ({
         attachInlineImagesToHtml(nextDraft, inlineImages)
       );
     } catch (error) {
+      toastError(error, { boundary: "compose-inline-images" });
       setDraft({
         ...activeDraftRef.current,
-        errorMessage: getErrorMessage(error, "Could not add those images."),
+        errorMessage: "Could not add those images.",
         saveStatus: "error",
       });
     }
   };
-
-  const disposeDraft = useEffectEvent(() => {
-    if (
-      draftClosedRef.current ||
-      activeDraftRef.current.saveStatus === "sending"
-    ) {
-      return;
-    }
-    if (saveOnUnmount) {
-      saveDraftOnExit();
-    } else {
-      clearComposeDraftRuntimeFiles(activeDraftRef.current);
-    }
-  });
-
-  useEffect(
-    () => () => {
-      disposeDraft();
-    },
-    []
-  );
 
   return {
     addInlineImageFiles,
@@ -608,7 +504,6 @@ export const useComposeDialogController = ({
     discardActiveDraft,
     form,
     handleDialogOpenChange,
-    openComposeDraft,
     setActiveDraftError,
     state,
     toggleRecipientVisibility,

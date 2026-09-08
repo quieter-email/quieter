@@ -1,5 +1,4 @@
-import { generateText, isStepCount, Output } from "ai";
-import type { ToolSet } from "ai";
+import { generateText, Output } from "ai";
 import type { z } from "zod";
 
 import { defaultChatModel } from "./chat-models";
@@ -33,6 +32,7 @@ export const runStructuredGeneration = async <TOutput>(input: {
   maxOutputTokens: number;
   model?: ChatModel;
   onUsage?: (usage: AiUsageReport) => void;
+  prioritizeLatency?: boolean;
   prompt: string;
   reasoningEffort?: "minimal" | "low" | "medium" | "high";
   schema: z.ZodType<TOutput>;
@@ -44,7 +44,9 @@ export const runStructuredGeneration = async <TOutput>(input: {
       : { abortSignal: input.abortSignal }),
     instructions: input.system,
     maxOutputTokens: input.maxOutputTokens,
-    model: createChatModel(input.model ?? defaultChatModel),
+    model: createChatModel(input.model ?? defaultChatModel, {
+      prioritizeLatency: input.prioritizeLatency,
+    }),
     ...reasoningProviderOptions(input.reasoningEffort),
     output: Output.object({ schema: input.schema }),
     prompt: input.prompt,
@@ -75,36 +77,4 @@ export const runTextGeneration = async (input: {
   });
   input.onUsage?.(summarizeAiUsage({ steps: result.steps }));
   return result.text;
-};
-
-/**
- * Agentic generation: the model may call tools for up to `maxSteps` steps and
- * must finish with a value matching the schema. Structured output counts as
- * its own step, so callers budget accordingly.
- */
-export const runStructuredAgentGeneration = async <TOutput>(input: {
-  abortSignal?: AbortSignal;
-  maxOutputTokens: number;
-  maxSteps: number;
-  model?: ChatModel;
-  onUsage?: (usage: AiUsageReport) => void;
-  prompt: string;
-  schema: z.ZodType<TOutput>;
-  system: string;
-  tools: ToolSet;
-}): Promise<TOutput> => {
-  const result = await generateText({
-    ...(input.abortSignal === undefined
-      ? {}
-      : { abortSignal: input.abortSignal }),
-    instructions: input.system,
-    maxOutputTokens: input.maxOutputTokens,
-    model: createChatModel(input.model ?? defaultChatModel),
-    output: Output.object({ schema: input.schema }),
-    prompt: input.prompt,
-    stopWhen: isStepCount(input.maxSteps),
-    tools: input.tools,
-  });
-  input.onUsage?.(summarizeAiUsage({ steps: result.steps }));
-  return result.output;
 };

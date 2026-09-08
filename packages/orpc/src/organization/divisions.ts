@@ -12,8 +12,6 @@ import {
 } from "@quieter/database/schema";
 import { and, asc, count, eq, inArray, max, ne } from "drizzle-orm";
 
-import { hasText } from "../text";
-
 const normalizeDivisionName = (name: string) =>
   name.trim().replaceAll(/\s+/gu, " ");
 const normalizeDivisionKey = (name: string) =>
@@ -48,11 +46,14 @@ const assertDivisionNameAvailable = async (input: {
   }
 };
 
-const assertOrganizationMember = async (input: {
-  organizationId: string;
-  userId: string;
-}) => {
-  const [membership] = await db
+const assertOrganizationMember = async (
+  input: {
+    organizationId: string;
+    userId: string;
+  },
+  database: Pick<typeof db, "select"> = db
+) => {
+  const [membership] = await database
     .select({ id: member.id, role: member.role })
     .from(member)
     .where(
@@ -72,11 +73,14 @@ const assertOrganizationMember = async (input: {
   return membership;
 };
 
-export const assertOrganizationManager = async (input: {
-  organizationId: string;
-  userId: string;
-}) => {
-  const membership = await assertOrganizationMember(input);
+export const assertOrganizationManager = async (
+  input: {
+    organizationId: string;
+    userId: string;
+  },
+  database: Pick<typeof db, "select"> = db
+) => {
+  const membership = await assertOrganizationMember(input, database);
 
   if (!["admin", "owner"].includes(membership.role)) {
     throw new ORPCError("FORBIDDEN", {
@@ -203,7 +207,7 @@ export const createOrganizationDivision = async (input: {
   await assertOrganizationManager(input);
 
   const name = normalizeDivisionName(input.name);
-  if (!hasText(name)) {
+  if (!name) {
     throw new ORPCError("BAD_REQUEST", {
       message: "Division name is required.",
     });
@@ -222,9 +226,7 @@ export const createOrganizationDivision = async (input: {
     .insert(organizationDivision)
     .values({
       createdAt: now,
-      description: hasText(input.description?.trim())
-        ? input.description.trim()
-        : null,
+      description: input.description?.trim() ? input.description.trim() : null,
       id: randomUUID(),
       name,
       normalizedName: normalizeDivisionKey(name),
@@ -247,7 +249,7 @@ export const updateOrganizationDivision = async (input: {
   const division = await getDivisionWithManagerAccess(input);
   const nextName =
     input.name === undefined ? undefined : normalizeDivisionName(input.name);
-  if (nextName !== undefined && !hasText(nextName)) {
+  if (nextName !== undefined && !nextName) {
     throw new ORPCError("BAD_REQUEST", {
       message: "Division name is required.",
     });
@@ -266,7 +268,7 @@ export const updateOrganizationDivision = async (input: {
       ...(input.description === undefined
         ? {}
         : {
-            description: hasText(input.description?.trim())
+            description: input.description?.trim()
               ? input.description.trim()
               : null,
           }),

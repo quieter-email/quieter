@@ -10,7 +10,6 @@ import {
   decryptGmailCredentialSecret,
   encryptGmailCredentialSecret,
 } from "./gmail-credential-crypto";
-import { hasText } from "./text";
 
 export const GMAIL_SCOPES = [
   "openid",
@@ -70,21 +69,20 @@ export const rotateGmailCredentialSecrets = async <
   if (
     serverEnv.GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT === undefined ||
     serverEnv.GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT === "" ||
-    ((!hasText(record.encryptedAccessToken) ||
+    ((!record.encryptedAccessToken ||
       !record.encryptedAccessToken.startsWith("v1.")) &&
-      (!hasText(record.encryptedRefreshToken) ||
+      (!record.encryptedRefreshToken ||
         !record.encryptedRefreshToken.startsWith("v1.")))
   ) {
     return { record, rotated: false };
   }
 
   const encryptedAccessToken =
-    hasText(record.encryptedAccessToken) &&
-    record.encryptedAccessToken.startsWith("v1.")
+    record.encryptedAccessToken && record.encryptedAccessToken.startsWith("v1.")
       ? encryptSecret(decryptSecret(record.encryptedAccessToken))
       : record.encryptedAccessToken;
   const encryptedRefreshToken =
-    hasText(record.encryptedRefreshToken) &&
+    record.encryptedRefreshToken &&
     record.encryptedRefreshToken.startsWith("v1.")
       ? encryptSecret(decryptSecret(record.encryptedRefreshToken))
       : record.encryptedRefreshToken;
@@ -146,7 +144,7 @@ const performGmailAccessTokenRefresh = async (record: {
   encryptedRefreshToken: string | null;
   id: string;
 }) => {
-  if (!hasText(record.encryptedRefreshToken)) {
+  if (!record.encryptedRefreshToken) {
     await db
       .update(mailbox)
       .set({ status: "needs_reconnect", updatedAt: new Date() })
@@ -236,7 +234,7 @@ const performGmailAccessTokenRefresh = async (record: {
     .where(eq(gmailCredential.mailboxId, record.id))
     .limit(1);
   if (
-    hasText(currentCredential?.encryptedAccessToken) &&
+    currentCredential?.encryptedAccessToken &&
     currentCredential.accessTokenExpiresAt !== null &&
     currentCredential.accessTokenExpiresAt.getTime() > Date.now()
   ) {
@@ -304,7 +302,7 @@ export const getAuthorizedGmailMailbox = async (input: {
   }
 
   if (
-    hasText(record.encryptedAccessToken) &&
+    record.encryptedAccessToken &&
     record.accessTokenExpiresAt !== null &&
     record.accessTokenExpiresAt.getTime() >
       Date.now() + GMAIL_ACCESS_TOKEN_EXPIRY_BUFFER_MS

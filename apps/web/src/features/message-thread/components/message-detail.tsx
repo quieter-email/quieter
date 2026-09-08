@@ -13,7 +13,7 @@ import type {
   MailboxPendingActions,
 } from "#/features/mailbox/components/mailbox-action-handlers";
 import { appEaseOut, appMotionDuration } from "#/features/motion/app-motion";
-import type { MailboxCategory, MessageListItem } from "#/lib/gmail/gmail";
+import type { MailboxCategory, MessageListItem } from "#/lib/mail";
 
 import { MessageDetailLoadingSkeleton } from "./message-detail-loading";
 import { MessageView } from "./message-view";

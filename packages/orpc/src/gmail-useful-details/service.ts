@@ -26,22 +26,23 @@ import type {
   GmailUsefulDetailKind,
   GmailUsefulDetailRelevanceSource,
 } from "@quieter/database/schema";
-import { MAILBOX_LABELS } from "@quieter/gmail";
+import { MAILBOX_LABELS } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
 import { and, asc, eq, gt, isNull, lte, or } from "drizzle-orm";
 
 import {
   buildMailMemoryQuery,
-  loadAiAgentContext,
+  loadAiAgentMemoryCandidates,
   loadAiConfiguration,
   loadUsefulDetailFeedbackPolicies,
+  loadAiAgentContext,
   recordAndRefreshAiMemory,
   serializeAiAgentContext,
 } from "../ai-memory";
+import type { AiAgentMemoryCandidates } from "../ai-memory";
 import { decryptSecret, encryptSecret } from "../gmail-mailbox-access";
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import { refreshUsefulDetailMemoryProfile } from "../mail-automation/memory";
-import { hasText } from "../text";
 import { getMailPlainText } from "./message-text";
 import { getSenderServiceName, getSenderSource } from "./sender";
 import { extractVerificationCode } from "./verification-code";
@@ -157,7 +158,7 @@ const serializeUsefulDetails = (
     }
 
     let code: string | null = null;
-    if (hasText(item.encryptedCode)) {
+    if (item.encryptedCode) {
       try {
         code = decryptSecret(item.encryptedCode);
       } catch (error) {
@@ -193,10 +194,8 @@ const serializeUsefulDetails = (
 };
 
 const trimText = (value: string | null, maxLength: number) => {
-  const normalized = hasText(value)
-    ? value.trim().replaceAll(/\s+/gu, " ")
-    : null;
-  if (!hasText(normalized)) {
+  const normalized = value ? value.trim().replaceAll(/\s+/gu, " ") : null;
+  if (!normalized) {
     return null;
   }
   if (normalized.length <= maxLength) {
@@ -240,7 +239,7 @@ const normalizeCode = (value: string | null) => {
 const buildUsefulDetailRejectionText = (message: AutomationMailMessage) => {
   const { body, subject } = getMailPlainText(message);
   return [message.from, subject, body]
-    .filter((part) => hasText(part))
+    .filter((part): part is string => !!part)
     .join("\n");
 };
 
@@ -268,7 +267,7 @@ const normalizeTrackingKey = (value: string) =>
   value.toUpperCase().replaceAll(/[^A-Z0-9]/gu, "");
 
 const parseExpectedAt = (value: string | null) => {
-  if (!hasText(value)) {
+  if (!value) {
     return null;
   }
   const timestamp = Date.parse(value);
@@ -276,7 +275,7 @@ const parseExpectedAt = (value: string | null) => {
 };
 
 const parseTimestamp = (value: string | null) => {
-  if (!hasText(value)) {
+  if (!value) {
     return null;
   }
   const timestamp = Date.parse(value);
@@ -408,8 +407,7 @@ const isEventKind = (kind: GmailUsefulDetailKind) =>
 
 const hasUsefulDetailRelevanceSource = (
   relevanceSource: GmailUsefulDetailRelevanceSource | null | undefined
-): relevanceSource is GmailUsefulDetailRelevanceSource =>
-  hasText(relevanceSource);
+): relevanceSource is GmailUsefulDetailRelevanceSource => !!relevanceSource;
 
 const rejectInvalidUsefulDetailWindow = ({
   expiresAt,
@@ -459,20 +457,20 @@ const rejectMissingUsefulDetailFields = ({
   }
   if (
     candidate.kind === "delivery" &&
-    !hasText(carrier) &&
-    !hasText(merchant) &&
-    !hasText(trackingNumber) &&
-    !hasText(summary)
+    !carrier &&
+    !merchant &&
+    !trackingNumber &&
+    !summary
   ) {
     return true;
   }
   return (
     candidate.kind !== "delivery" &&
     candidate.kind !== "verification_code" &&
-    !hasText(summary) &&
+    !summary &&
     eventAt === null &&
-    !hasText(reference) &&
-    !hasText(location)
+    !reference &&
+    !location
   );
 };
 
@@ -534,7 +532,7 @@ const buildMaterializedUsefulDetailFields = ({
     candidate.kind === "delivery"
       ? trimText(candidate.trackingNumber, 80)
       : null;
-  const normalizedTrackingNumber = hasText(trackingNumber)
+  const normalizedTrackingNumber = trackingNumber
     ? normalizeTrackingKey(trackingNumber)
     : "";
   const expectedAt =
@@ -571,9 +569,7 @@ const buildMaterializedUsefulDetailFields = ({
     return null;
   }
 
-  const normalizedReference = hasText(reference)
-    ? normalizeReferenceKey(reference)
-    : "";
+  const normalizedReference = reference ? normalizeReferenceKey(reference) : "";
   const dedupeKey = buildUsefulDetailDedupeKey({
     kind: candidate.kind,
     messageId: message.id,
@@ -845,9 +841,7 @@ const upsertGmailUsefulDetail = async ({
   };
 }) => {
   const now = new Date();
-  const encryptedCode = hasText(detail.code)
-    ? encryptSecret(detail.code)
-    : null;
+  const encryptedCode = detail.code ? encryptSecret(detail.code) : null;
   await db.transaction(async (tx) => {
     await tx
       .insert(gmailUsefulDetail)
@@ -918,7 +912,7 @@ const upsertGmailUsefulDetail = async ({
         updatedAt: now,
         // Cost-less AI extractions are terminal; only retryable reporting
         // failures keep usageReportedAt unset.
-        usageReportedAt: !hasText(model) || usage.costUsd === null ? now : null,
+        usageReportedAt: !model || usage.costUsd === null ? now : null,
       })
       .where(eq(gmailUsefulDetailEvent.id, event.id));
   });
@@ -932,7 +926,7 @@ const upsertGmailUsefulDetail = async ({
     processedAt: now,
     promptTokens: usage.promptTokens,
     usageReportedAt:
-      !hasText(model) || usage.costUsd === null ? now : event.usageReportedAt,
+      !model || usage.costUsd === null ? now : event.usageReportedAt,
   };
 };
 
@@ -1017,18 +1011,27 @@ export const buildGmailUsefulDetailPreferenceProfile = ({
 type UsefulDetailFeedbackPolicies = Awaited<
   ReturnType<typeof loadUsefulDetailFeedbackPolicies>
 >;
+type UsefulDetailAutomationContext = {
+  memoryCandidates: AiAgentMemoryCandidates;
+  model: ChatModel;
+};
+type MailAutomationBudgetStatus = Awaited<
+  ReturnType<typeof getMailAutomationAiBudgetStatus>
+>;
 
 /**
- * Only the model path needs this. It costs an embedding request plus memory
- * ranking, so the verification-code fast path must never wait on it.
+ * Only the model path needs this, so the verification-code fast path never
+ * waits on configuration or memory retrieval.
  */
 const getGmailUsefulDetailPreferenceProfile = async ({
   feedbackPolicies,
+  getAutomationContext,
   mailboxId,
   message,
   userId,
 }: {
   feedbackPolicies: UsefulDetailFeedbackPolicies;
+  getAutomationContext?: () => Promise<UsefulDetailAutomationContext>;
   mailboxId: string;
   message: AutomationMailMessage;
   userId: string;
@@ -1036,19 +1039,35 @@ const getGmailUsefulDetailPreferenceProfile = async ({
   model: ChatModel;
   preferences: GmailUsefulDetailPreferenceProfile;
 }> => {
-  const [aiConfiguration, memoryContext] = await Promise.all([
-    loadAiConfiguration({ userId }),
-    loadAiAgentContext({
-      agent: "useful_detail",
-      includeUserScope: false,
-      mailboxId,
-      query: buildMailMemoryQuery(message),
-      userId,
-    }),
-  ]);
+  let automationContext: UsefulDetailAutomationContext;
+  if (getAutomationContext) {
+    automationContext = await getAutomationContext();
+  } else {
+    const [aiConfiguration, memoryCandidates] = await Promise.all([
+      loadAiConfiguration({ userId }),
+      loadAiAgentMemoryCandidates({
+        includeUserScope: false,
+        mailboxId,
+        userId,
+      }),
+    ]);
+    automationContext = {
+      memoryCandidates,
+      model: aiConfiguration.usefulDetailModel,
+    };
+  }
+  const memoryContext = await loadAiAgentContext({
+    agent: "useful_detail",
+    candidates: automationContext.memoryCandidates,
+    includeUserScope: false,
+    mailboxId,
+    query: buildMailMemoryQuery(message),
+    semantic: false,
+    userId,
+  });
 
   return {
-    model: aiConfiguration.usefulDetailModel,
+    model: automationContext.model,
     preferences: {
       avoidKinds: USEFUL_DETAIL_KINDS.filter(
         (kind) => feedbackPolicies.get(kind) === "suppress"
@@ -1062,12 +1081,16 @@ const getGmailUsefulDetailPreferenceProfile = async ({
 };
 
 export const processGmailUsefulDetailMessage = async ({
+  getAutomationContext,
+  getBudgetStatus,
   gmailMessageId,
   loadMessage,
   mailboxId,
   organizationId,
   userId,
 }: {
+  getAutomationContext?: () => Promise<UsefulDetailAutomationContext>;
+  getBudgetStatus?: () => Promise<MailAutomationBudgetStatus>;
   gmailMessageId: string;
   loadMessage: () => Promise<AutomationMailMessage | null>;
   mailboxId: string;
@@ -1129,6 +1152,7 @@ export const processGmailUsefulDetailMessage = async ({
 
     const { model, preferences } = await getGmailUsefulDetailPreferenceProfile({
       feedbackPolicies,
+      getAutomationContext,
       mailboxId,
       message,
       userId,
@@ -1146,11 +1170,13 @@ export const processGmailUsefulDetailMessage = async ({
       promptTokens: 0,
     };
 
-    const budgetStatus = await getMailAutomationAiBudgetStatus({
-      organizationId:
-        organizationId ?? (await getMailboxOrganizationId(mailboxId)),
-      userId,
-    });
+    const budgetStatus = getBudgetStatus
+      ? await getBudgetStatus()
+      : await getMailAutomationAiBudgetStatus({
+          organizationId:
+            organizationId ?? (await getMailboxOrganizationId(mailboxId)),
+          userId,
+        });
     if (!budgetStatus.allowed) {
       await deferEventAutomation(event.id, budgetStatus.message);
       return;

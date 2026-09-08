@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
-import type { DatabaseClient } from "@quieter/database/client";
+import type { DatabaseExecutor } from "@quieter/database/client";
 import {
   managedMailLabel,
   managedMailMessage,
@@ -10,14 +10,10 @@ import {
 } from "@quieter/database/schema";
 import { and, eq, inArray, ne } from "drizzle-orm";
 
-type ManagedMailDatabase =
-  | DatabaseClient
-  | Parameters<Parameters<DatabaseClient["transaction"]>[0]>[0];
-
 export const assertManagedLabelsBelongToMailbox = async (
   mailboxId: string,
   labelIds: readonly string[],
-  database: ManagedMailDatabase = db
+  database: DatabaseExecutor = db
 ) => {
   const uniqueLabelIds = [...new Set(labelIds)];
   if (uniqueLabelIds.length === 0) {
@@ -32,7 +28,8 @@ export const assertManagedLabelsBelongToMailbox = async (
         eq(managedMailLabel.mailboxId, mailboxId),
         inArray(managedMailLabel.id, uniqueLabelIds)
       )
-    );
+    )
+    .for("share");
   if (labels.length !== uniqueLabelIds.length) {
     throw new ORPCError("BAD_REQUEST", {
       message: "One or more labels are unavailable.",
@@ -49,7 +46,7 @@ export const updateManagedMessageLabelAssignments = async (input: {
   source: "ai_auto_label" | "backfill" | "inherited" | "manual" | "rule";
   ruleId?: string;
   userId?: string;
-  database?: ManagedMailDatabase;
+  database?: DatabaseExecutor;
 }) => {
   const addLabelIds =
     input.addLabelIds === undefined ? [] : [...new Set(input.addLabelIds)];

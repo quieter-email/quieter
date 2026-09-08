@@ -1,8 +1,11 @@
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, test, vi } from "vite-plus/test";
 
 import {
   extractListUnsubscribeTargets,
   getGmailMessageCount,
+  getGmailMessageThreadAssociations,
+  mutateGmailMessage,
+  mutateGmailThread,
   listGmailMessageIds,
   listGmailAddedMessageHistoryPage,
   listMessagesWithDetails,
@@ -55,6 +58,141 @@ const setFetch = (
 ) => {
   Reflect.set(globalThis, "fetch", fetch);
 };
+
+describe(getGmailMessageThreadAssociations, () => {
+  test("matches reordered responses and retries only transient failures, omitting missing messages", async () => {
+    const originalFetch = globalThis.fetch;
+    const requests: string[] = [];
+    setFetch(async (_input, init) => {
+      requests.push(getRequestBody(init?.body));
+      return await resolveResponse(
+        new Response(
+          createIdentifiedBatchResponse(
+            "metadata",
+            requests.length === 1
+              ? [
+                  { body: {}, contentId: "message-2", status: 404 },
+                  {
+                    body: { id: "b", threadId: "thread-b" },
+                    contentId: "message-1",
+                  },
+                  { body: {}, contentId: "message-0", status: 503 },
+                ]
+              : [
+                  {
+                    body: { id: "a", threadId: "thread-a" },
+                    contentId: "message-0",
+                  },
+                ]
+          ),
+          { headers: { "content-type": "multipart/mixed; boundary=metadata" } }
+        )
+      );
+    });
+    try {
+      await expect(
+        getGmailMessageThreadAssociations("token", ["a", "b", "missing"])
+      ).resolves.toStrictEqual([
+        { id: "a", threadId: "thread-a" },
+        { id: "b", threadId: "thread-b" },
+      ]);
+      expect(requests).toHaveLength(2);
+      expect(requests[1]).toContain("/messages/a?");
+      expect(requests[1]).not.toContain("/messages/b?");
+      expect(requests[1]).not.toContain("/messages/missing?");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("cancels during backoff without sending another request", async () => {
+    const controller = new AbortController();
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(
+          createIdentifiedBatchResponse("metadata", [
+            { body: {}, contentId: "message-0", status: 429 },
+          ]),
+          { headers: { "content-type": "multipart/mixed; boundary=metadata" } }
+        )
+      );
+    vi.useFakeTimers();
+    try {
+      const pending = getGmailMessageThreadAssociations(
+        "token",
+        ["a"],
+        controller.signal
+      );
+      // oxlint-disable-next-line vitest/valid-expect -- Attach before aborting; awaited below to avoid an unhandled rejection.
+      const rejected = expect(pending).rejects.toMatchObject({
+        name: "AbortError",
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      controller.abort();
+      await rejected;
+      await vi.runAllTimersAsync();
+      expect(fetchMock).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+      fetchMock.mockRestore();
+    }
+  });
+});
+
+describe("Gmail metadata mutations", () => {
+  test("keeps single-message and whole-thread scope and returns every message's metadata", async () => {
+    const originalFetch = globalThis.fetch;
+    const requests: { path: string; body: string }[] = [];
+    setFetch(async (input, init) => {
+      const path = new URL(getRequestUrl(input)).pathname;
+      requests.push({ body: getRequestBody(init?.body), path });
+      return await resolveJson(
+        path.includes("/threads/")
+          ? {
+              historyId: "12",
+              id: "thread/a",
+              messages: [
+                { historyId: "11", id: "a", labelIds: ["INBOX"] },
+                {
+                  historyId: "12",
+                  id: "unloaded",
+                  labelIds: ["INBOX", "UNREAD"],
+                },
+              ],
+            }
+          : { historyId: "11", id: "a", labelIds: ["INBOX"] }
+      );
+    });
+    try {
+      await expect(
+        mutateGmailMessage("token", "a", { removeLabelIds: ["UNREAD"] })
+      ).resolves.toMatchObject({
+        id: "a",
+        isUnread: false,
+        labelIds: ["INBOX"],
+      });
+      await expect(
+        mutateGmailThread("token", "thread/a", "untrash")
+      ).resolves.toMatchObject({
+        messages: [
+          { id: "a", isUnread: false, labelIds: ["INBOX"] },
+          { id: "unloaded", isUnread: true, labelIds: ["INBOX", "UNREAD"] },
+        ],
+        threadId: "thread/a",
+      });
+      expect(requests).toStrictEqual([
+        {
+          body: JSON.stringify({ removeLabelIds: ["UNREAD"] }),
+          path: "/gmail/v1/users/me/messages/a/modify",
+        },
+        { body: "", path: "/gmail/v1/users/me/threads/thread%2Fa/untrash" },
+      ]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
 
 describe(extractListUnsubscribeTargets, () => {
   test("extracts mailto and url targets", () => {

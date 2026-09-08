@@ -13,12 +13,13 @@ import {
   CollapsibleTrigger,
 } from "@quieter/ui/collapsible";
 import { Pill } from "@quieter/ui/pill";
-import type { PillTone } from "@quieter/ui/pill";
 import { useQuery } from "@tanstack/react-query";
 
 import {
   ACCEPTED_DELIVERY_LABEL,
+  DELIVERY_PILL_TONES,
   getAggregateDeliveryStatus,
+  getDeliveryActionGuidance,
   getDeliveryStatusDescription,
   getDeliveryStatusLabel,
   getDeliveryStatusTone,
@@ -26,19 +27,11 @@ import {
   hasDeliveryDiagnostics,
 } from "../domain/delivery-status";
 import type {
-  DeliveryStatusTone,
   MessageDeliveryEvent,
   MessageDeliveryRecipient,
   MessageDeliveryResult,
 } from "../domain/delivery-status";
 import { getMessageDeliveryOptions } from "../domain/message-delivery-query";
-
-const PILL_TONES: Record<DeliveryStatusTone, PillTone> = {
-  danger: "red",
-  neutral: "gray",
-  positive: "green",
-  warning: "orange",
-};
 
 const eventTimeFormatter = new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",
@@ -115,7 +108,11 @@ const DeliveryRecipientItem = ({
             <span className="min-w-0 truncate font-normal text-fg">
               {recipient.recipient}
             </span>
-            <Pill tone={PILL_TONES[getDeliveryStatusTone(recipient.status)]}>
+            <Pill
+              tone={
+                DELIVERY_PILL_TONES[getDeliveryStatusTone(recipient.status)]
+              }
+            >
               {getDeliveryStatusLabel(recipient.status)}
             </Pill>
             <span className="text-caption font-normal text-muted-fg">
@@ -126,6 +123,11 @@ const DeliveryRecipientItem = ({
       </AccordionHeader>
 
       <AccordionPanel>
+        {getDeliveryActionGuidance(recipient.status) !== null && (
+          <p className="mb-2 text-caption text-fg">
+            {getDeliveryActionGuidance(recipient.status)}
+          </p>
+        )}
         {recipientEvents.length > 0 ? (
           <ul className="space-y-2">
             {recipientEvents.map((event) => (
@@ -213,7 +215,7 @@ export const MessageDeliverySection = ({
       {delivery === undefined ? null : (
         <>
           <div className="flex flex-wrap items-center gap-2">
-            <Pill tone={PILL_TONES[getDeliveryStatusTone(status)]}>
+            <Pill tone={DELIVERY_PILL_TONES[getDeliveryStatusTone(status)]}>
               {summaryLabel}
             </Pill>
             <span className="text-body text-muted-fg">

@@ -20,7 +20,7 @@ describe("Polar server selection", () => {
     expect(
       resolvePolarServer({
         deploymentEnvironment: "production",
-        nodeEnvironment: "production",
+        nodeEnvironment: "development",
         polarSandbox: true,
       })
     ).toBe("production");

@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 
-import { chatModelSchema } from "@quieter/ai/chat-models";
 import type { ChatModel } from "@quieter/ai/chat-models";
 import type { AiUsageReport } from "@quieter/ai/chat-usage";
 import { classifyMailMessage } from "@quieter/ai/classify-gmail-message";
@@ -8,7 +7,6 @@ import type {
   AutomationMailMessage,
   MailAutoLabelCandidate,
 } from "@quieter/ai/classify-gmail-message";
-import { reportAiUsage } from "@quieter/billing";
 import { hasUserBillingFeature } from "@quieter/billing/entitlements";
 import { db } from "@quieter/database/client";
 import {
@@ -20,7 +18,7 @@ import {
   managedMailMessage,
   organization,
 } from "@quieter/database/schema";
-import { MAILBOX_LABELS } from "@quieter/gmail";
+import { MAILBOX_LABELS } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
 import { and, eq, isNull, lte, or } from "drizzle-orm";
 
@@ -39,7 +37,7 @@ import {
 } from "../gmail-useful-details/service";
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import { deferAutoLabelAutomation } from "../mail-automation/auto-label-events";
-import { hasText } from "../text";
+import { reportAutoLabelUsage } from "../mail-automation/usage";
 import { updateManagedMessageLabelAssignments } from "./labels/repository";
 
 const AUTO_LABEL_RETRY_BASE_MS = 1000 * 60 * 5;
@@ -155,7 +153,7 @@ const getAutomationOwner = async (mailboxId: string) => {
     .where(eq(mailbox.id, mailboxId))
     .limit(1);
 
-  if (record === undefined || !hasText(record.billingOwnerUserId)) {
+  if (record === undefined || !record.billingOwnerUserId) {
     return null;
   }
   return {
@@ -220,66 +218,6 @@ const markManagedAutoLabelEventAppliedWithoutUsage = async (
     .where(eq(gmailAutoLabelEvent.id, eventId));
 };
 
-const reportManagedAutoLabelUsage = async (event: {
-  cachedTokens: number | null;
-  cacheWriteTokens: number | null;
-  completionTokens: number | null;
-  costUsd: number | null;
-  id: string;
-  mailboxId: string;
-  model: string | null;
-  promptTokens: number | null;
-  usageReportedAt: Date | null;
-  userId: string;
-}) => {
-  const model = chatModelSchema.safeParse(event.model);
-  if (
-    event.usageReportedAt ||
-    !model.success ||
-    event.promptTokens === null ||
-    event.promptTokens === undefined ||
-    event.completionTokens === null ||
-    event.completionTokens === undefined ||
-    event.costUsd === null ||
-    event.costUsd === undefined
-  ) {
-    return;
-  }
-
-  try {
-    await reportAiUsage({
-      completionTokens: event.completionTokens,
-      costUsd: event.costUsd,
-      externalId: event.id,
-      mailboxId: event.mailboxId,
-      model: model.data,
-      promptTokens: event.promptTokens,
-      promptTokensDetails: {
-        cacheWriteTokens: event.cacheWriteTokens ?? 0,
-        cachedTokens: event.cachedTokens ?? 0,
-      },
-      usageKind: "autoLabel",
-      userId: event.userId,
-    });
-    await db
-      .update(gmailAutoLabelEvent)
-      .set({
-        lastError: null,
-        updatedAt: new Date(),
-        usageReportedAt: new Date(),
-      })
-      .where(eq(gmailAutoLabelEvent.id, event.id));
-  } catch (error) {
-    await db
-      .update(gmailAutoLabelEvent)
-      .set({
-        lastError: `AI usage reporting failed: ${getErrorMessage(error)}`,
-        updatedAt: new Date(),
-      })
-      .where(eq(gmailAutoLabelEvent.id, event.id));
-  }
-};
-
 const processManagedAutoLabelMessage = async (input: {
   autoLabelContext: ManagedAutoLabelContext;
   mailboxId: string;
@@ -292,7 +230,7 @@ const processManagedAutoLabelMessage = async (input: {
     input.messageId
   );
   if (event.appliedAt) {
-    await reportManagedAutoLabelUsage({ ...event, userId: input.userId });
+    await reportAutoLabelUsage({ ...event, userId: input.userId });
     return;
   }
 
@@ -393,7 +331,7 @@ const processManagedAutoLabelMessage = async (input: {
         updatedAt: now,
       })
       .where(eq(gmailAutoLabelEvent.id, event.id));
-    await reportManagedAutoLabelUsage({ ...event, userId: input.userId });
+    await reportAutoLabelUsage({ ...event, userId: input.userId });
   } catch (error) {
     const now = new Date();
     const attemptCount = event.attemptCount + 1;
@@ -462,7 +400,7 @@ const reportPendingManagedAutoLabelUsage = async (
 
   await Promise.all(
     events.map(async (event) => {
-      await reportManagedAutoLabelUsage({ ...event, mailboxId, userId });
+      await reportAutoLabelUsage({ ...event, mailboxId, userId });
     })
   );
 };

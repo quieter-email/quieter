@@ -1,14 +1,17 @@
+import type { MailCommand } from "@quieter/mail/data-plane";
+
 import {
   addUnreadLabel,
+  MAILBOX_LABELS,
   applyLabelIdChanges,
   isMessageUnread,
   removeUnreadLabel,
-} from "../gmail";
+} from "#/lib/mail";
 import type {
   ListMessagesPageResult,
   MessageListItem,
   ThreadMessagesResult,
-} from "../gmail";
+} from "#/lib/mail";
 
 export type MessagesQueryData = {
   pages: ListMessagesPageResult[];
@@ -30,9 +33,6 @@ export type ThreadMetadataMutationResult = {
   messages: MessageMetadataMutationResult[];
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
-
 export type LabelChangeSet = {
   addLabelIds?: readonly string[];
   removeLabelIds?: readonly string[];
@@ -41,11 +41,16 @@ export type LabelChangeSet = {
 export const isMessagesQueryData = (
   value: unknown
 ): value is MessagesQueryData => {
-  if (!isRecord(value)) {
+  if (!(typeof value === "object" && value !== null)) {
     return false;
   }
 
-  return Array.isArray(value.pages) && Array.isArray(value.pageParams);
+  return (
+    "pages" in value &&
+    Array.isArray(value.pages) &&
+    "pageParams" in value &&
+    Array.isArray(value.pageParams)
+  );
 };
 
 const buildCachedMessageLookup = (
@@ -571,3 +576,51 @@ export const applySyncDeltaToQueryData = (
     pages: nextPages,
   };
 };
+
+export const getMailCommandUpdater =
+  (command: MailCommand) => (message: MessageListItem) => {
+    if (command.kind === "set-read") {
+      return command.read
+        ? markMessageReadLocally(message)
+        : markMessageUnreadLocally(message);
+    }
+    if (command.kind === "set-labels") {
+      return applyMessageLabelChangesLocally(message, {
+        addLabelIds: command.addIds,
+        removeLabelIds: command.removeIds,
+      });
+    }
+    if (command.kind === "delete-permanently") {
+      return message;
+    }
+    if (command.destination === "archive") {
+      return applyMessageLabelChangesLocally(message, {
+        removeLabelIds: [MAILBOX_LABELS.inbox],
+      });
+    }
+    if (command.destination === "spam") {
+      return applyMessageLabelChangesLocally(message, {
+        addLabelIds: [MAILBOX_LABELS.spam],
+        removeLabelIds: [MAILBOX_LABELS.inbox],
+      });
+    }
+    if (command.destination === "trash") {
+      return applyMessageLabelChangesLocally(message, {
+        addLabelIds: [MAILBOX_LABELS.trash],
+        removeLabelIds: [
+          MAILBOX_LABELS.inbox,
+          MAILBOX_LABELS.spam,
+          MAILBOX_LABELS.sent,
+          MAILBOX_LABELS.drafts,
+        ],
+      });
+    }
+    return applyMessageLabelChangesLocally(message, {
+      addLabelIds: [MAILBOX_LABELS.inbox],
+      removeLabelIds: [
+        MAILBOX_LABELS.archive,
+        MAILBOX_LABELS.spam,
+        MAILBOX_LABELS.trash,
+      ],
+    });
+  };

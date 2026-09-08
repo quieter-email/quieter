@@ -4,7 +4,8 @@ import type {
   ListMessagesPageResult,
   MessageListItem,
   ThreadMessagesResult,
-} from "../gmail";
+} from "#/lib/mail";
+
 import {
   applyMessageLabelChangesLocally,
   applyThreadLabelChangesLocally,

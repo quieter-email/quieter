@@ -177,9 +177,6 @@ const isNonemptyMailboxId = (
   mailboxId: string | null | undefined
 ): mailboxId is string => (mailboxId?.trim() ?? "") !== "";
 
-const hasText = (value: string | null | undefined): value is string =>
-  value !== null && value !== undefined && value !== "";
-
 const parseHiddenLabelStorage = (
   raw: string | null
 ): Record<string, string[]> => {
@@ -653,9 +650,9 @@ export const SidebarLabelNav = ({
       );
     }
     return visibleUserLabels.map((label, index) => {
-      const isActive = selectedLabelKeys.has(
-        normalizeLabelSelectionKey(label.name)
-      );
+      const isActive =
+        selectedLabelKeys.has(normalizeLabelSelectionKey(label.id)) ||
+        selectedLabelKeys.has(normalizeLabelSelectionKey(label.name));
       const labelHovered = isHovered(label.id);
       const labelHoverExiting = isHoverExiting(label.id);
 
@@ -683,7 +680,15 @@ export const SidebarLabelNav = ({
               clearLabelHoverIfLeavingNav(event.relatedTarget);
             }}
             onClick={() => {
-              onSearch(updateLabelFilter(searchQuery, label.name, !isActive));
+              onSearch(
+                updateLabelFilter(
+                  searchQuery,
+                  selectedLabelKeys.has(normalizeLabelSelectionKey(label.id))
+                    ? label.id
+                    : label.name,
+                  !isActive
+                )
+              );
             }}
             onFocus={() => {
               if (isActive) {
@@ -1223,7 +1228,7 @@ export const SidebarLabelNav = ({
           <AlertDialogBody>
             <p className="text-body text-fg">
               Delete{" "}
-              {hasText(deletingLabel?.name)
+              {deletingLabel?.name
                 ? `"${deletingLabel.name}"`
                 : `this ${labelNoun}`}
               ?

@@ -1,7 +1,10 @@
+import { withRequestDatabaseClient } from "@quieter/database/client";
+import { liveSyncTokenPayloadSchema } from "@quieter/mail/live-sync";
 import { createRemoteJWKSet, errors as joseErrors, jwtVerify } from "jose";
 import { z } from "zod";
 
 import { timingSafeEqual } from "./crypto-utils";
+import { processGmailQueueMessage } from "./queue-worker";
 import { RequestError } from "./request-error";
 import { readLinkedSecret, reportWorkerError } from "./worker-runtime";
 
@@ -31,16 +34,6 @@ const gmailNotificationSchema = z.object({
         .transform(String),
     ])
     .pipe(z.string().min(1)),
-});
-
-const tokenPayloadSchema = z.object({
-  emailAddress: z.email(),
-  expiresAt: z.number().int().positive(),
-  issuedAt: z.number().int().positive(),
-  mailboxId: z.string().min(1),
-  nonce: z.uuid(),
-  userId: z.string().min(1),
-  version: z.literal(1),
 });
 
 const pubSubJwtPayloadSchema = z.object({
@@ -110,7 +103,7 @@ export const verifyLiveSyncToken = async (token: string, secret: string) => {
     parsedPayload = undefined;
   }
 
-  const payload = tokenPayloadSchema.safeParse(parsedPayload);
+  const payload = liveSyncTokenPayloadSchema.safeParse(parsedPayload);
   if (!payload.success) {
     throw new RequestError(401, "live_sync_token_payload_invalid");
   }
@@ -137,27 +130,25 @@ export const readBoundedJson = async (request: Request, limit: number) => {
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
 
-  const readChunks = async (length: number): Promise<number> => {
-    const readResult = await reader.read();
-    if (readResult.done) {
-      return length;
-    }
-    const value: unknown = readResult.value;
-    if (!(value instanceof Uint8Array)) {
-      return await readChunks(length);
-    }
-    const nextLength = length + value.byteLength;
-    if (nextLength > limit) {
-      await reader.cancel();
-      throw new RequestError(413, "request_body_too_large");
-    }
-    chunks.push(value);
-    return await readChunks(nextLength);
-  };
-
   let length = 0;
   try {
-    length = await readChunks(length);
+    while (true) {
+      // Request chunks must be consumed serially to enforce the byte limit.
+      const result = await reader.read();
+      if (result.done) {
+        break;
+      }
+      const value: unknown = result.value;
+      if (!(value instanceof Uint8Array)) {
+        continue;
+      }
+      length += value.byteLength;
+      if (length > limit) {
+        await reader.cancel();
+        throw new RequestError(413, "request_body_too_large");
+      }
+      chunks.push(value);
+    }
   } finally {
     reader.releaseLock();
   }
@@ -229,6 +220,23 @@ export const mailboxObject = (env: Env, emailAddress: string) => {
   return env.GmailLiveSyncMailbox.get(id);
 };
 
+const broadcastMailboxEvent = async (
+  env: Env,
+  emailAddress: string,
+  type: "mailbox-details-dirty" | "mailbox-dirty"
+) => {
+  const response = await mailboxObject(env, emailAddress).fetch(
+    "https://internal.quieter/broadcast",
+    {
+      body: JSON.stringify({ type }),
+      method: "POST",
+    }
+  );
+  if (!response.ok) {
+    throw new RequestError(503, "broadcast_response_error");
+  }
+};
+
 export const handleLiveMailboxRequest = async (request: Request, env: Env) => {
   const token = new URL(request.url).searchParams.get("token");
   if (token === null || token === "") {
@@ -242,7 +250,15 @@ export const handleLiveMailboxRequest = async (request: Request, env: Env) => {
   return await mailboxObject(env, payload.emailAddress).fetch(request);
 };
 
-export const handlePubSub = async (request: Request, env: Env) => {
+export const handlePubSub = async (
+  request: Request,
+  env: Env,
+  processNotification = async (message: unknown, bindings: Env) => {
+    await withRequestDatabaseClient(async () => {
+      await processGmailQueueMessage(message, bindings);
+    });
+  }
+) => {
   await verifyPubSubToken(request, env);
   const envelope = pubSubEnvelopeSchema.safeParse(
     await readBoundedJson(request, PUBSUB_BODY_LIMIT)
@@ -256,24 +272,28 @@ export const handlePubSub = async (request: Request, env: Env) => {
 
   const notification = parseGmailNotification(envelope.data.message.data);
   const emailAddress = notification.emailAddress.trim().toLowerCase();
-  const broadcastResponse = await mailboxObject(env, emailAddress).fetch(
-    "https://internal.quieter/broadcast",
-    {
-      body: JSON.stringify({ type: "mailbox-dirty" }),
-      method: "POST",
-    }
-  );
-  if (!broadcastResponse.ok) {
-    throw new Error("Durable Object broadcast failed.");
-  }
-
-  const queueMessage = {
+  const processorMessage = {
     emailAddress,
     historyId: notification.historyId,
     pubSubMessageId: envelope.data.message.messageId,
     type: "notification" as const,
   };
-  await env.GmailPsQueue.send(queueMessage);
+  const [processorResult, initialBroadcastResult] = await Promise.allSettled([
+    processNotification(processorMessage, env),
+    broadcastMailboxEvent(env, emailAddress, "mailbox-dirty"),
+  ]);
+
+  if (processorResult.status === "rejected") {
+    throw processorResult.reason;
+  }
+  if (initialBroadcastResult.status === "rejected") {
+    throw initialBroadcastResult.reason;
+  }
+
+  await Promise.all([
+    broadcastMailboxEvent(env, emailAddress, "mailbox-dirty"),
+    broadcastMailboxEvent(env, emailAddress, "mailbox-details-dirty"),
+  ]);
   return new Response(null, { status: 204 });
 };
 

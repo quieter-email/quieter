@@ -12,15 +12,6 @@ import type { ComposeDraftState } from "./draft";
 
 export type ComposeFormValues = z.infer<typeof composeDraftFormValuesSchema>;
 
-export const emptyComposeFormValues: ComposeFormValues = {
-  bcc: "",
-  bodyHtml: "",
-  bodyText: "",
-  cc: "",
-  subject: "",
-  to: "",
-};
-
 type ComposeFormWriter = {
   reset: (values: ComposeFormValues) => void;
   setFieldValue: (

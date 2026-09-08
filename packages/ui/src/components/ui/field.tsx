@@ -81,7 +81,7 @@ export const FieldControl = ({
     <FieldPrimitive.Control
       className={cn(
         fieldControlVariants({ chrome, size }),
-        chrome === "ghost" && "min-w-0 flex-1",
+        { "min-w-0 flex-1": chrome === "ghost" },
         className
       )}
       {...props}

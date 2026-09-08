@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vite-plus/test";
 
-import type { MessageListItem } from "#/lib/gmail/gmail";
+import type { MessageListItem } from "#/lib/mail";
 
 import {
   buildComposeDraftFromMessageAction,

@@ -7,7 +7,6 @@ import type { ComponentProps } from "react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { LoadingPage } from "#/components/loading-page";
-import { setPendingComposeSession } from "#/features/compose/domain/compose-session";
 import type { ComposeDraftState } from "#/features/compose/domain/draft";
 import { parseMailtoComposeDraft } from "#/features/compose/domain/mailto";
 import { shouldIgnoreAppShortcut } from "#/features/hotkeys/domain/hotkey-guards";
@@ -18,8 +17,8 @@ import {
   getChatQueryKey,
   getChatsQueryKey,
 } from "#/lib/chat-query";
-import type { MailboxCategory } from "#/lib/gmail/gmail";
 import { openGoogleAccountLink } from "#/lib/google-account-link";
+import type { MailboxCategory } from "#/lib/mail";
 import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
 import { orpc } from "#/lib/orpc";
 import { getErrorMessage } from "#/lib/orpc-errors";
@@ -140,28 +139,47 @@ type MailboxProvider = "api" | "gmail" | "managed" | null;
 
 const useMailboxWorkspaceCompose = ({
   activeMailbox,
+  selectedMailboxId,
   isComposeMailbox,
   isTemplateMailbox,
   setMailboxSearch,
 }: {
   activeMailbox: MailboxCategory;
+  selectedMailboxId: string | null;
   isComposeMailbox: boolean;
   isTemplateMailbox: boolean;
   setMailboxSearch: SetMailboxSearch;
 }) => {
-  const [composeSessionKey, setComposeSessionKey] = useState(0);
+  const [composeSession, setComposeSession] = useState<{
+    key: number;
+    draft: ComposeDraftState | null;
+    mailboxId: string | null;
+  }>({ draft: null, key: 0, mailboxId: selectedMailboxId });
+  if (composeSession.mailboxId !== selectedMailboxId) {
+    setComposeSession({
+      draft: null,
+      key: composeSession.key + 1,
+      mailboxId: selectedMailboxId,
+    });
+  }
   const composeReturnMailboxRef = useRef<MailboxCategory>("inbox");
   const launchedMailtoRef = useRef<string | null>(null);
 
   const openComposeWorkspace = (draft: ComposeDraftState | null) => {
+    if (isComposeMailbox) {
+      return;
+    }
     void loadComposeWorkspace();
     const returnMailbox =
       isComposeMailbox || isTemplateMailbox
         ? composeReturnMailboxRef.current
         : activeMailbox;
     composeReturnMailboxRef.current = returnMailbox;
-    setPendingComposeSession({ draft, returnMailbox });
-    setComposeSessionKey((key) => key + 1);
+    setComposeSession((session) => ({
+      draft,
+      key: session.key + 1,
+      mailboxId: selectedMailboxId,
+    }));
     void setMailboxSearch({
       mailbox: "compose",
       messageId: null,
@@ -181,7 +199,7 @@ const useMailboxWorkspaceCompose = ({
 
   return {
     closeComposeWorkspace,
-    composeSessionKey,
+    composeSession,
     launchedMailtoRef,
     openComposeWorkspace,
   };
@@ -877,6 +895,7 @@ export const MailboxWorkspace = ({ user: _user }: MailboxWorkspaceProps) => {
     activeMailbox,
     isComposeMailbox,
     isTemplateMailbox,
+    selectedMailboxId,
     setMailboxSearch,
   });
   const chatSidebarActions = useChatSidebarActions({
@@ -962,7 +981,7 @@ export const MailboxWorkspace = ({ user: _user }: MailboxWorkspaceProps) => {
     <MailboxWorkspaceBody
       activeMailbox={activeMailbox}
       chatId={chatId ?? null}
-      composeSessionKey={composeWorkspace.composeSessionKey}
+      composeSession={composeWorkspace.composeSession}
       defaultMailboxId={defaultMailboxId}
       isComposeMailbox={isComposeMailbox}
       isConnectingGmail={isStartingGmailConnection}

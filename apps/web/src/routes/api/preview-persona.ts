@@ -1,8 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
-
 export const Route = createFileRoute("/api/preview-persona")({
   server: {
     handlers: {
@@ -33,7 +30,9 @@ export const Route = createFileRoute("/api/preview-persona")({
 
         const body: unknown = await request.json().catch(() => null);
         const persona =
-          isRecord(body) && "persona" in body ? body.persona : null;
+          typeof body === "object" && body !== null && "persona" in body
+            ? body.persona
+            : null;
 
         if (!previewPersonas.isPreviewPersona(persona)) {
           return Response.json(

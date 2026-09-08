@@ -6,7 +6,7 @@ export type SettingsMutation<TVariables> = {
   isPending: boolean;
   mutate: (
     variables: TVariables,
-    options?: { onError?: (error: unknown) => void }
+    options?: { onError?: (error: unknown) => void; onSettled?: () => void }
   ) => void;
 };
 
@@ -27,6 +27,12 @@ export type ManagedMailboxDivisionGrantInput = {
   divisionId: string;
   mailboxId: string;
   role: MailboxGrantRole;
+};
+
+export type ManagedMailboxAccessModeInput = {
+  accessMode: "private" | "shared";
+  mailboxId: string;
+  ownerUserId?: string;
 };
 
 export type ManagedMailboxToggleInput = {

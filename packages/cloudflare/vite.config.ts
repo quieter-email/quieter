@@ -7,6 +7,7 @@ export default defineConfig({
   plugins: [
     cloudflareTest({
       miniflare: {
+        r2Buckets: { LocalMailStorage: "quieter-local-mail" },
         bindings: {
           CONNECTOR_TOKEN_ENCRYPTION_KEY: "connector-token-key",
           GMAIL_TOKEN_ENCRYPTION_KEY: "gmail-token-key",

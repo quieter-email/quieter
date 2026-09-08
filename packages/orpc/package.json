@@ -3,17 +3,22 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./managed-mail/rule-backfills": "./src/managed-mail/rules/backfill.ts",
+    "./mail-send": "./src/mail-send.ts",
+    "./managed-mail/storage": "./src/managed-mail/messages/raw-object-lifecycle.ts",
+    "./deployment-health": "./src/deployment-health.ts",
     ".": "./src/client.ts",
     "./context": "./src/context.ts",
     "./abuse-protection": "./src/abuse-protection.ts",
     "./errors": "./src/errors.ts",
     "./mailbox": "./src/mailbox/service.ts",
     "./mail-domain": "./src/mail-domain/service.ts",
-    "./mailbox-actions": "./src/mailbox-actions/index.ts",
     "./managed-mail": "./src/managed-mail/messages/service.ts",
     "./managed-mail/ingestion": "./src/managed-mail/messages/ingestion.ts",
+    "./managed-mail/local-fixtures": "./src/managed-mail/local-fixtures.ts",
+    "./managed-mail/local-storage": "./src/managed-mail/local-storage.ts",
+    "./managed-mail/raw-object": "./src/managed-mail/messages/raw-object.ts",
     "./server": "./src/server.ts",
-    "./server-client": "./src/server-client.ts",
     "./organization-mail": "./src/organization-mail.ts",
     "./organization-mail-delivery": "./src/organization-mail-delivery.ts",
     "./organization-mail-policy": "./src/organization-mail-policy.ts",
@@ -26,7 +31,6 @@
     "./gmail-live-sync-token": "./src/gmail-live-sync-token.ts",
     "./gmail-credential-rotation": "./src/gmail-credential-rotation.ts",
     "./gmail-pubsub": "./src/gmail-sync/service.ts",
-    "./mailbox-actions/graph": "./src/mailbox-actions/graph.ts",
     "./waitlist": "./src/waitlist.ts"
   },
   "dependencies": {
@@ -34,8 +38,6 @@
     "@aws-sdk/client-s3": "catalog:",
     "@aws-sdk/client-ses": "catalog:",
     "@aws-sdk/client-sesv2": "catalog:",
-    "@cfworker/json-schema": "catalog:",
-    "@modelcontextprotocol/sdk": "1.30.0",
     "@quieter/ai": "workspace:*",
     "@quieter/auth": "workspace:*",
     "@quieter/billing": "workspace:*",
@@ -44,7 +46,8 @@
     "@quieter/gmail": "workspace:*",
     "@quieter/mail": "workspace:*",
     "@quieter/observability": "workspace:*",
-    "ai": "catalog:"
+    "ai": "catalog:",
+    "ical.js": "^2.2.1"
   },
   "devDependencies": {
     "@orpc/client": "catalog:",

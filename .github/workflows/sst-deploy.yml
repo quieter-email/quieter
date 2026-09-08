@@ -24,6 +24,7 @@ jobs:
   deploy:
     name: Deploy production
     needs: verify
+    if: github.ref == 'refs/heads/main'
     runs-on: blacksmith-2vcpu-ubuntu-2404
     environment: production
     permissions:
@@ -32,6 +33,36 @@ jobs:
     timeout-minutes: 35
     env:
       SST_STAGE: production
+      QUIETER_BUILD_ID: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+      BETTER_AUTH_APP_NAME: ${{ vars.BETTER_AUTH_APP_NAME }}
+      BETTER_AUTH_TRUSTED_ORIGINS: ${{ vars.BETTER_AUTH_TRUSTED_ORIGINS }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_DEFAULT_ACCOUNT_ID: ${{ vars.CLOUDFLARE_DEFAULT_ACCOUNT_ID }}
+      GMAIL_PUBSUB_PUSH_AUDIENCE: ${{ vars.GMAIL_PUBSUB_PUSH_AUDIENCE }}
+      GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT: ${{ vars.GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT }}
+      GMAIL_PUBSUB_SUBSCRIPTION: ${{ vars.GMAIL_PUBSUB_SUBSCRIPTION }}
+      GMAIL_PUBSUB_TOPIC: ${{ vars.GMAIL_PUBSUB_TOPIC }}
+      POLAR_ORGANIZATION_ID: ${{ vars.POLAR_ORGANIZATION_ID }}
+      POLAR_PRODUCT_MANAGED_ID: ${{ vars.POLAR_PRODUCT_MANAGED_ID }}
+      POLAR_PRODUCT_PRO_ID: ${{ vars.POLAR_PRODUCT_PRO_ID }}
+      POLAR_SANDBOX: ${{ vars.POLAR_SANDBOX }}
+      QUIETER_AUTH_MAIL_MODE: ${{ vars.QUIETER_AUTH_MAIL_MODE }}
+      QUIETER_AUTH_MAIL_SENDER: ${{ vars.QUIETER_AUTH_MAIL_SENDER }}
+      QUIETER_GMAIL_AI_AUTOMATION_ENABLED: ${{ vars.QUIETER_GMAIL_AI_AUTOMATION_ENABLED }}
+      QUIETER_PREVIEW_PERSONAS_ENABLED: ${{ vars.QUIETER_PREVIEW_PERSONAS_ENABLED }}
+      R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
+      R2_BUCKET: ${{ vars.R2_BUCKET }}
+      R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      SENTRY_ENVIRONMENT: ${{ vars.SENTRY_ENVIRONMENT }}
+      SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+      SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+      SENTRY_URL: ${{ vars.SENTRY_URL }}
+      VITE_LOGO_DEV_PUBLISHABLE_KEY: ${{ vars.VITE_LOGO_DEV_PUBLISHABLE_KEY }}
+      VITE_PUBLIC_POSTHOG_HOST: ${{ vars.VITE_PUBLIC_POSTHOG_HOST }}
+      VITE_PUBLIC_POSTHOG_PROJECT_TOKEN: ${{ vars.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN }}
+      VITE_QUIETER_PREVIEW_PERSONAS_ENABLED: ${{ vars.VITE_QUIETER_PREVIEW_PERSONAS_ENABLED }}
+      VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -50,63 +81,34 @@ jobs:
       - name: Build deployment configuration
         run: |
           vp run @quieter/observability#build
-          vp run @quieter/sdk#build
+          vp run quieter#build
 
-      - name: Configure production runtime secrets
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_AI_API_TOKEN: ${{ secrets.CLOUDFLARE_AI_API_TOKEN }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          POLAR_WEBHOOK_SECRET: ${{ secrets.POLAR_WEBHOOK_SECRET }}
+      - name: Refresh SST state and prepare production build
         run: |
-          node -e '
-            const databaseName = decodeURIComponent(new URL(process.env.DATABASE_URL).pathname.replace(/^\//u, ""));
-            if (databaseName !== "quieter") {
-              throw new Error(`Production DATABASE_URL must target the quieter database, received ${databaseName || "an empty database name"}.`);
-            }
-          '
-          vp exec sst secret set CloudflareAccountId "$CLOUDFLARE_ACCOUNT_ID" --stage "$SST_STAGE"
-          vp exec sst secret set CloudflareAiApiToken "$CLOUDFLARE_AI_API_TOKEN" --stage "$SST_STAGE"
-          vp exec sst secret set DatabaseUrl "$DATABASE_URL" --stage "$SST_STAGE"
-          test -n "$POLAR_WEBHOOK_SECRET"
-          vp exec sst secret set PolarWebhookSecret "$POLAR_WEBHOOK_SECRET" --stage "$SST_STAGE"
+          vp exec sst refresh --config sst.config.ts --stage "$SST_STAGE"
+          vp exec sst diff --config sst.config.ts --stage "$SST_STAGE"
+
+      - name: Record previous healthy web version
+        run: vp exec node scripts/web-recovery.ts record previous-web.json
+
+      - name: Retain web recovery record before deployment
+        uses: actions/upload-artifact@v4
+        with:
+          name: previous-web
+          path: previous-web.json
+          if-no-files-found: ignore
+          retention-days: 90
+          overwrite: true
 
       - name: Apply production database migrations
-        if: ${{ env.SST_STAGE == 'production' }}
         env:
           DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
           QUIETER_ALLOW_REMOTE_MIGRATIONS: production
         run: vp run @quieter/database#db:deploy
 
-      - name: Deploy with SST
-        env:
-          BETTER_AUTH_APP_NAME: ${{ vars.BETTER_AUTH_APP_NAME }}
-          BETTER_AUTH_TRUSTED_ORIGINS: ${{ vars.BETTER_AUTH_TRUSTED_ORIGINS }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_DEFAULT_ACCOUNT_ID: ${{ vars.CLOUDFLARE_DEFAULT_ACCOUNT_ID }}
-          GMAIL_PUBSUB_PUSH_AUDIENCE: ${{ vars.GMAIL_PUBSUB_PUSH_AUDIENCE }}
-          GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT: ${{ vars.GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT }}
-          GMAIL_PUBSUB_SUBSCRIPTION: ${{ vars.GMAIL_PUBSUB_SUBSCRIPTION }}
-          GMAIL_PUBSUB_TOPIC: ${{ vars.GMAIL_PUBSUB_TOPIC }}
-          POLAR_ORGANIZATION_ID: ${{ vars.POLAR_ORGANIZATION_ID }}
-          POLAR_PRODUCT_MANAGED_ID: ${{ vars.POLAR_PRODUCT_MANAGED_ID }}
-          POLAR_PRODUCT_PRO_ID: ${{ vars.POLAR_PRODUCT_PRO_ID }}
-          POLAR_SANDBOX: ${{ vars.POLAR_SANDBOX }}
-          QUIETER_AUTH_MAIL_MODE: ${{ vars.QUIETER_AUTH_MAIL_MODE }}
-          QUIETER_AUTH_MAIL_SENDER: ${{ vars.QUIETER_AUTH_MAIL_SENDER }}
-          QUIETER_GMAIL_AI_AUTOMATION_ENABLED: ${{ vars.QUIETER_GMAIL_AI_AUTOMATION_ENABLED }}
-          QUIETER_PREVIEW_PERSONAS_ENABLED: ${{ vars.QUIETER_PREVIEW_PERSONAS_ENABLED }}
-          R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
-          R2_BUCKET: ${{ vars.R2_BUCKET }}
-          R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          SENTRY_ENVIRONMENT: ${{ vars.SENTRY_ENVIRONMENT }}
-          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
-          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
-          VITE_LOGO_DEV_PUBLISHABLE_KEY: ${{ vars.VITE_LOGO_DEV_PUBLISHABLE_KEY }}
-          VITE_PUBLIC_POSTHOG_HOST: ${{ vars.VITE_PUBLIC_POSTHOG_HOST }}
-          VITE_PUBLIC_POSTHOG_PROJECT_TOKEN: ${{ vars.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN }}
-          VITE_QUIETER_PREVIEW_PERSONAS_ENABLED: ${{ vars.VITE_QUIETER_PREVIEW_PERSONAS_ENABLED }}
-          VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN }}
+      - name: Deploy prepared build with SST
         run: vp exec sst deploy --config sst.config.ts --stage "$SST_STAGE"
+
+      - name: Verify production release
+        timeout-minutes: 5
+        run: vp exec node scripts/check-deployment.ts https://quieter.email "$QUIETER_BUILD_ID"

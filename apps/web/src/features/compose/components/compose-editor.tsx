@@ -111,7 +111,7 @@ const ComposeEditorContext = createContext<ComposeEditorContextValue | null>(
   null
 );
 
-export const useComposeEditor = () => {
+const useComposeEditor = () => {
   const value = use(ComposeEditorContext);
   if (!value) {
     throw new Error("Compose editor components must be inside ComposeEditor.");

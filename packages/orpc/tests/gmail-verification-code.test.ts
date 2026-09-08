@@ -1,4 +1,4 @@
-import type { MessageListItem } from "@quieter/gmail";
+import type { MessageListItem } from "@quieter/mail/messages";
 import { describe, expect, test } from "vite-plus/test";
 
 import { getSenderServiceName } from "../src/gmail-useful-details/sender";

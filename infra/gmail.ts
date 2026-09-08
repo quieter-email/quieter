@@ -4,6 +4,7 @@ import type { createAppDatabase } from "./database";
 import { cloudflareWorkerObservability } from "./runtime";
 import type { DeploymentContext } from "./runtime";
 import { requireSecretBinding, requireSecretResource } from "./secrets";
+import { deploymentEnvironment } from "./stage";
 import type { SecretBindings, SecretResources } from "./types";
 
 const processingSecretNames = [
@@ -19,8 +20,7 @@ export const createGmailResources = (
   context: DeploymentContext,
   secretBindings: SecretBindings,
   secretResources: SecretResources,
-  appDatabase: ReturnType<typeof createAppDatabase>,
-  mailboxActionQueue: sst.cloudflare.Queue
+  appDatabase: ReturnType<typeof createAppDatabase>
 ) => {
   const gmailLiveSyncTokenSecret = requireSecretResource(
     secretResources,
@@ -46,6 +46,9 @@ export const createGmailResources = (
         className: "GmailLiveSyncMailbox",
       }
     );
+    const processingSecretBindings = processingSecretNames.map((name) =>
+      requireSecretBinding(secretBindings, name)
+    );
     const gmailRealtimeWorker = new sst.cloudflare.Worker(
       "GmailRealtimeWorker",
       {
@@ -60,14 +63,18 @@ export const createGmailResources = (
             context.gmailPubSubEnvironment.GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT,
           GMAIL_PUBSUB_SUBSCRIPTION:
             context.gmailPubSubEnvironment.GMAIL_PUBSUB_SUBSCRIPTION,
+          GMAIL_PUBSUB_TOPIC: context.gmailPubSubEnvironment.GMAIL_PUBSUB_TOPIC,
+          ...context.billingEnvironment,
+          QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
           SENTRY_ENVIRONMENT: context.sentryEnvironment.SENTRY_ENVIRONMENT,
         },
         handler: "packages/cloudflare/src/worker.ts",
         link: [
           gmailLiveSyncMailbox,
           gmailLiveSyncTokenSecret,
-          gmailPubSubQueue,
+          appDatabase,
           sentryDsnBinding,
+          ...processingSecretBindings,
         ],
         migrations: [
           {
@@ -77,6 +84,7 @@ export const createGmailResources = (
         ],
         transform: {
           worker(args) {
+            args.limits = { cpuMs: 300_000 };
             args.observability = cloudflareWorkerObservability;
           },
         },
@@ -84,9 +92,6 @@ export const createGmailResources = (
       }
     );
 
-    const processingSecretBindings = processingSecretNames.map((name) =>
-      requireSecretBinding(secretBindings, name)
-    );
     gmailPubSubQueue.subscribe(
       {
         compatibility: {
@@ -95,15 +100,13 @@ export const createGmailResources = (
         },
         environment: {
           GMAIL_PUBSUB_TOPIC: context.gmailPubSubEnvironment.GMAIL_PUBSUB_TOPIC,
-          POLAR_ORGANIZATION_ID: context.polarOrganizationId,
-          POLAR_SANDBOX: context.polarSandbox,
+          ...context.billingEnvironment,
           QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
           SENTRY_ENVIRONMENT: context.sentryEnvironment.SENTRY_ENVIRONMENT,
         },
         handler: "packages/cloudflare/src/queue-worker.ts",
         link: [
           appDatabase,
-          mailboxActionQueue,
           gmailLiveSyncMailbox,
           sentryDsnBinding,
           ...processingSecretBindings,
@@ -141,6 +144,7 @@ export const createGmailResources = (
             date: COMPATIBILITY_DATE,
             flags: ["nodejs_compat"],
           },
+          environment: { QUIETER_DEPLOYMENT_ENV: deploymentEnvironment },
           handler: "packages/cloudflare/src/gmail-maintenance-worker.ts",
           link: [appDatabase, gmailPubSubQueue, sentryDsnBinding],
           transform: {

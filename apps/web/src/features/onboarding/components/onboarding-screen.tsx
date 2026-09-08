@@ -80,9 +80,6 @@ const AtmosphericBackground = lazy(
 
 type OnboardingState = NonNullable<RouterOutputs["onboarding"]["getState"]>;
 
-const hasText = (value: string | null | undefined): value is string =>
-  value !== null && value !== undefined && value.trim() !== "";
-
 const ConnectedAddressList = ({
   mailboxes,
 }: {
@@ -285,9 +282,9 @@ const GmailPlaybook = ({
           variant="outline"
         >
           <GoogleLogo className="size-4" />
-          {hasText(googleEmail) ? `Add ${googleEmail}` : "Add a Gmail mailbox"}
+          {googleEmail?.trim() ? `Add ${googleEmail}` : "Add a Gmail mailbox"}
         </Button>
-        {hasText(googleEmail) ? (
+        {googleEmail?.trim() ? (
           <p className="text-micro text-muted-fg">
             Signing in only proved who you are. Google asks separately before
             Quieter can read this mailbox.

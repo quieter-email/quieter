@@ -81,12 +81,19 @@ export const normalizeSubscriptionStatus = (
 };
 
 export const syncBillingSubscription = async (subscription: Subscription) => {
+  const environment = subscription.metadata.quieterEnvironment;
+  if (
+    (serverEnv.QUIETER_DEPLOYMENT_ENV === "local" && environment !== "local") ||
+    (serverEnv.QUIETER_DEPLOYMENT_ENV !== "local" && environment === "local")
+  ) {
+    return { ignored: true, synced: true };
+  }
   const metadataUserId = subscription.metadata[BILLING_METADATA_USER_ID];
   const userId =
     typeof metadataUserId === "string" ? metadataUserId.trim() : "";
   const product = getSyncedBillingProduct(subscription);
 
-  if ((userId ?? "") === "" || product === null) {
+  if (userId === "" || product === null) {
     reportError(new Error("Billing subscription metadata is incomplete."), {
       operation: "billing:sync-subscription",
       reason: "missing-user-or-product",
@@ -101,7 +108,7 @@ export const syncBillingSubscription = async (subscription: Subscription) => {
       ? metadataOrganizationId.trim() || null
       : null;
 
-  if (typeof organizationId !== "string" || organizationId === "") {
+  if (organizationId === null) {
     reportError(new Error("Billing subscription organization is missing."), {
       operation: "billing:sync-subscription",
       reason: "missing-organization",
@@ -109,7 +116,6 @@ export const syncBillingSubscription = async (subscription: Subscription) => {
     return { synced: false };
   }
 
-  const resolvedOrganizationId = organizationId;
   const now = new Date();
   const providerModifiedAt = new Date(
     subscription.modifiedAt ?? subscription.createdAt
@@ -126,7 +132,7 @@ export const syncBillingSubscription = async (subscription: Subscription) => {
         String(value),
       ])
     ),
-    organizationId: resolvedOrganizationId,
+    organizationId,
     plan: product,
     provider: BILLING_PROVIDER,
     providerCustomerId: subscription.customerId,

@@ -49,7 +49,11 @@ import { orpc } from "#/lib/orpc";
 
 import { useAddMailboxSettingsStore } from "./add-mailbox-settings-store";
 
-export const AddMailboxSettingsView = () => {
+export const AddMailboxSettingsView = ({
+  onNavigateToMailbox,
+}: {
+  onNavigateToMailbox: (mailboxId: string) => Promise<void>;
+}) => {
   const navigate = useNavigate({ from: "/settings" });
   const queryClient = useQueryClient();
   const session = authClient.useSession().data;
@@ -61,6 +65,8 @@ export const AddMailboxSettingsView = () => {
     isSharedDetailsVisible,
     isStartingGmail,
     mailboxType,
+    managedAccessMode,
+    managedOwnerUserId,
     managedDisplayName,
     managedDivisionId,
     managedDomain,
@@ -108,30 +114,25 @@ export const AddMailboxSettingsView = () => {
     (hasOrganizationRole(createManagedMember.role, "owner") ||
       hasOrganizationRole(createManagedMember.role, "admin"));
 
-  const navigateToMailbox = async (mailboxId: string) => {
-    await navigate({
-      search: (previous) => ({
-        ...previous,
-        mailboxId,
-        mailboxView: "list",
-        tab: "mailboxes",
-      }),
-      to: ".",
-    });
-  };
   const createManagedMailboxMutation = useMutation({
     ...orpc.mail.createManagedMailbox.mutationOptions(),
     mutationKey: ["mail", "create-managed-mailbox"],
-    onSuccess: async ({ mailboxId }) => {
+    onSuccess: async ({ mailboxId }, input) => {
       await queryClient.invalidateQueries({
         queryKey: getMailboxesQueryKey(),
       });
-      toast.success(
-        receiveWholeDomain
-          ? "Whole-domain shared inbox created."
-          : "Shared inbox created."
+      let successMessage = "Shared inbox created.";
+      if (input.accessMode === "private") {
+        successMessage = "Private mailbox created.";
+      } else if (input.receiveWholeDomain === true) {
+        successMessage = "Whole-domain shared inbox created.";
+      }
+      toast.success(successMessage);
+      await onNavigateToMailbox(
+        input.accessMode === "private" && input.ownerUserId !== session?.user.id
+          ? ""
+          : mailboxId
       );
-      await navigateToMailbox(mailboxId);
     },
   });
 
@@ -381,12 +382,13 @@ export const AddMailboxSettingsView = () => {
                     managedDivisionId: null,
                     managedDomain: undefined,
                     managedOrganizationId: value ?? "",
+                    managedOwnerUserId: "",
                     receiveWholeDomain: false,
                   }));
                 }}
                 value={selectedManagedOrganizationId || null}
               >
-                <SelectTrigger aria-label="Shared inbox team" id="shared-team">
+                <SelectTrigger aria-label="Mailbox team" id="shared-team">
                   <SelectValue placeholder="Select team" />
                 </SelectTrigger>
                 <SelectContent align="start">
@@ -429,6 +431,72 @@ export const AddMailboxSettingsView = () => {
             </h1>
           </header>
           <div className="mt-6 space-y-5">
+            <Field>
+              <FieldLabel htmlFor="mailbox-access-mode">Access</FieldLabel>
+              <Select
+                items={[
+                  { label: "Shared inbox", value: "shared" },
+                  { label: "Private mailbox", value: "private" },
+                ]}
+                value={managedAccessMode}
+                onValueChange={(value) => {
+                  if (value === "private" || value === "shared") {
+                    workflowStore.setState((state) => ({
+                      ...state,
+                      managedAccessMode: value,
+                      managedDivisionId: null,
+                    }));
+                  }
+                }}
+              >
+                <SelectTrigger id="mailbox-access-mode">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="shared">Shared inbox</SelectItem>
+                  <SelectItem value="private">Private mailbox</SelectItem>
+                </SelectContent>
+              </Select>
+              <FieldDescription>
+                {managedAccessMode === "private"
+                  ? "Only the selected owner can use this mailbox initially. You can grant individual access later."
+                  : "Work together with people who have direct or division access."}
+              </FieldDescription>
+            </Field>
+            {managedAccessMode === "private" && (
+              <Field>
+                <FieldLabel htmlFor="mailbox-owner">Owner</FieldLabel>
+                <Select
+                  items={(createManagedOrganization?.members ?? []).map(
+                    (member) => ({
+                      label: member.user.name || member.user.email,
+                      value: member.userId,
+                    })
+                  )}
+                  value={managedOwnerUserId || null}
+                  onValueChange={(value) => {
+                    workflowStore.setState((state) => ({
+                      ...state,
+                      managedOwnerUserId: value ?? "",
+                    }));
+                  }}
+                >
+                  <SelectTrigger id="mailbox-owner">
+                    <SelectValue placeholder="Choose a team member" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(createManagedOrganization?.members ?? []).map(
+                      (member) => (
+                        <SelectItem key={member.userId} value={member.userId}>
+                          {member.user.name || member.user.email}
+                        </SelectItem>
+                      )
+                    )}
+                  </SelectContent>
+                </Select>
+              </Field>
+            )}
+
             <Field>
               <FieldLabel htmlFor="display-name">Display name</FieldLabel>
               <TextFieldInput
@@ -512,45 +580,47 @@ export const AddMailboxSettingsView = () => {
                 <FieldDescription>
                   Add and verify a send-and-receive domain in{" "}
                   {selectedManagedOrganization?.name ?? "team"} settings before
-                  creating a shared inbox.
+                  creating a mailbox.
                 </FieldDescription>
               ) : null}
             </Field>
 
-            <Field>
-              <FieldLabel htmlFor="division">Division</FieldLabel>
-              <Select
-                items={[
-                  { label: "No division", value: "none" },
-                  ...(managedDivisionsData?.divisions ?? []).map(
-                    (division) => ({
-                      label: division.name,
-                      value: division.id,
-                    })
-                  ),
-                ]}
-                onValueChange={(value) => {
-                  workflowStore.setState((state) => ({
-                    ...state,
-                    managedDivisionId:
-                      value === "none" ? null : (value ?? null),
-                  }));
-                }}
-                value={managedDivisionId ?? "none"}
-              >
-                <SelectTrigger id="division">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent align="start">
-                  <SelectItem value="none">No division</SelectItem>
-                  {(managedDivisionsData?.divisions ?? []).map((division) => (
-                    <SelectItem key={division.id} value={division.id}>
-                      {division.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
+            {managedAccessMode === "shared" && (
+              <Field>
+                <FieldLabel htmlFor="division">Division</FieldLabel>
+                <Select
+                  items={[
+                    { label: "No division", value: "none" },
+                    ...(managedDivisionsData?.divisions ?? []).map(
+                      (division) => ({
+                        label: division.name,
+                        value: division.id,
+                      })
+                    ),
+                  ]}
+                  onValueChange={(value) => {
+                    workflowStore.setState((state) => ({
+                      ...state,
+                      managedDivisionId:
+                        value === "none" ? null : (value ?? null),
+                    }));
+                  }}
+                  value={managedDivisionId ?? "none"}
+                >
+                  <SelectTrigger id="division">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent align="start">
+                    <SelectItem value="none">No division</SelectItem>
+                    {(managedDivisionsData?.divisions ?? []).map((division) => (
+                      <SelectItem key={division.id} value={division.id}>
+                        {division.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            )}
 
             {selectedDomain === "" ? null : (
               <label
@@ -580,27 +650,40 @@ export const AddMailboxSettingsView = () => {
             {createManagedMailboxMutation.isError ? (
               <p className="text-body text-destructive">
                 {createManagedMailboxMutation.error?.message ??
-                  "Could not create shared inbox."}
+                  "Could not create mailbox."}
               </p>
             ) : null}
           </div>
           <div className="mt-8 flex justify-end">
             <Button
-              disabled={trimmedLocalPart === "" || selectedDomain === ""}
+              disabled={
+                trimmedLocalPart === "" ||
+                selectedDomain === "" ||
+                !canCreateManagedMailbox ||
+                (managedAccessMode === "private" && managedOwnerUserId === "")
+              }
               onClick={() => {
                 createManagedMailboxMutation.mutate(
                   {
+                    accessMode: managedAccessMode,
                     displayName: managedDisplayName,
-                    divisionId: managedDivisionId,
+                    divisionId:
+                      managedAccessMode === "private"
+                        ? null
+                        : managedDivisionId,
                     emailAddress: `${trimmedLocalPart}@${selectedDomain}`,
                     organizationId: selectedManagedOrganizationId,
+                    ownerUserId:
+                      managedAccessMode === "private"
+                        ? managedOwnerUserId
+                        : null,
                     receiveWholeDomain,
                   },
                   {
                     onError: (error) => {
                       toastError(error, {
                         boundary: "mailbox-settings",
-                        fallback: "Could not create shared inbox.",
+                        fallback: "Could not create mailbox.",
                       });
                     },
                   }
@@ -609,7 +692,9 @@ export const AddMailboxSettingsView = () => {
               pending={createManagedMailboxMutation.isPending}
               pendingLabel="Creating inbox"
             >
-              Create shared inbox
+              {managedAccessMode === "private"
+                ? "Create private mailbox"
+                : "Create shared inbox"}
             </Button>
           </div>
         </div>

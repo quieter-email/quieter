@@ -1,5 +1,5 @@
-import { MAILBOX_LABELS } from "#/lib/gmail/gmail";
-import type { MessageListItem } from "#/lib/gmail/gmail";
+import { MAILBOX_LABELS } from "#/lib/mail";
+import type { MessageListItem } from "#/lib/mail";
 import { isSandboxMailboxId } from "#/lib/sandbox-mailbox";
 
 /**

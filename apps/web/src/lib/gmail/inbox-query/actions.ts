@@ -1,23 +1,24 @@
 import type { MailCommand, MailMutationTarget } from "@quieter/mail/data-plane";
 import type { QueryClient } from "@tanstack/react-query";
 
-import { rpc } from "#/lib/orpc";
-
-import { getGmailUnreadCountsQueryKey } from "../../mailboxes-query";
-import { MAILBOX_LABELS } from "../gmail";
+import { MAILBOX_LABELS } from "#/lib/mail";
 import type {
   MailboxCategory,
   MessageListItem,
   ThreadMessagesResult,
-} from "../gmail";
+} from "#/lib/mail";
+import { rpc } from "#/lib/orpc";
+
+import { getGmailUnreadCountsQueryKey } from "../../mailboxes-query";
 import { getThreadQueryKey } from "../thread-query";
 import {
   applyMessageLabelChangesLocally,
   applyMessageMetadata,
-  applyThreadLabelChangesLocally,
-  mergeMessagePreservingLoadedDetails,
   markMessageReadLocally,
   markMessageUnreadLocally,
+  getMailCommandUpdater,
+  applyThreadLabelChangesLocally,
+  mergeMessagePreservingLoadedDetails,
   removeMessagesFromThreadData,
   updateMessageInThreadData,
   updateMessagesInThreadData,
@@ -31,17 +32,14 @@ import type {
 import { getMessagesQueryKey } from "./keys";
 import {
   applyMessageToCachedMailboxQueries,
+  applyOptimisticMailboxUpdate,
   applyResolvedThreadMetadataToCaches,
   findMessageInCachedMailboxQueries,
   findMessagesInCachedMailboxQueries,
   persistQueryKeys,
   removeMessagesFromCachedMailboxQueries,
-  restoreMessagesQueries,
-  snapshotMessagesQueries,
-  snapshotThreadQuery,
   updateMessagesInCachedMailboxQueries,
 } from "./query-cache";
-import type { MessagesQuerySnapshot, ThreadQuerySnapshot } from "./query-cache";
 
 type MessageActionArgs = {
   queryClient: QueryClient;
@@ -85,47 +83,6 @@ const enqueueMailboxMutation = async <T>(
   }
 };
 
-const getOptimisticCommandUpdater =
-  (command: MailCommand) => (message: MessageListItem) => {
-    if (command.kind === "set-read") {
-      return command.read
-        ? markMessageReadLocally(message)
-        : markMessageUnreadLocally(message);
-    }
-    if (command.kind === "set-labels") {
-      return applyMessageLabelChangesLocally(message, {
-        addLabelIds: command.addIds,
-        removeLabelIds: command.removeIds,
-      });
-    }
-    if (command.kind === "delete-permanently") {
-      return message;
-    }
-    if (command.destination === "archive") {
-      return applyMessageLabelChangesLocally(message, ARCHIVE_LABEL_CHANGES);
-    }
-    if (command.destination === "spam") {
-      return applyMessageLabelChangesLocally(
-        message,
-        MARK_AS_SPAM_LABEL_CHANGES
-      );
-    }
-    if (command.destination === "trash") {
-      return applyMessageLabelChangesLocally(
-        message,
-        MOVE_TO_TRASH_LABEL_CHANGES
-      );
-    }
-    return applyMessageLabelChangesLocally(message, {
-      addLabelIds: [MAILBOX_LABELS.inbox],
-      removeLabelIds: [
-        MAILBOX_LABELS.archive,
-        MAILBOX_LABELS.spam,
-        MAILBOX_LABELS.trash,
-      ],
-    });
-  };
-
 export const applyBulkChangesInMailbox = async (
   queryClient: QueryClient,
   mailboxId: string,
@@ -133,64 +90,78 @@ export const applyBulkChangesInMailbox = async (
   command: MailCommand
 ) =>
   await enqueueMailboxMutation(mailboxId, async () => {
-    const snapshots = snapshotMessagesQueries(queryClient, mailboxId);
     const messageIds = new Set(targets.flatMap((target) => target.messageIds));
-    const updater = getOptimisticCommandUpdater(command);
-    const touchedQueryKeys = updateMessagesInCachedMailboxQueries(
+    const updater = getMailCommandUpdater(command);
+    const rollback = await applyOptimisticMailboxUpdate(
       queryClient,
       mailboxId,
-      (message) => messageIds.has(message.id),
-      updater
+      () => {
+        updateMessagesInCachedMailboxQueries(
+          queryClient,
+          mailboxId,
+          (message) => messageIds.has(message.id),
+          updater
+        );
+      }
     );
-    await persistQueryKeys(queryClient, touchedQueryKeys);
 
     try {
       return await rpc.mail.applyChanges({ command, mailboxId, targets });
     } catch (error) {
-      restoreMessagesQueries(queryClient, snapshots);
-      await persistQueryKeys(
-        queryClient,
-        snapshots.map((snapshot) => snapshot.queryKey)
-      );
+      await rollback();
       throw error;
     }
   });
 
-const MARK_AS_SPAM_LABEL_CHANGES = {
-  addLabelIds: [MAILBOX_LABELS.spam],
-  removeLabelIds: [MAILBOX_LABELS.inbox],
-} as const;
+const METADATA_LABEL_CHANGES = {
+  archive: { removeLabelIds: [MAILBOX_LABELS.inbox] },
+  read: { removeLabelIds: [MAILBOX_LABELS.unread] },
+  spam: {
+    addLabelIds: [MAILBOX_LABELS.spam],
+    removeLabelIds: [MAILBOX_LABELS.inbox],
+  },
+  trash: {
+    addLabelIds: [MAILBOX_LABELS.trash],
+    removeLabelIds: [
+      MAILBOX_LABELS.inbox,
+      MAILBOX_LABELS.spam,
+      MAILBOX_LABELS.sent,
+      MAILBOX_LABELS.drafts,
+    ],
+  },
+  unread: { addLabelIds: [MAILBOX_LABELS.unread] },
+  unspam: {
+    addLabelIds: [MAILBOX_LABELS.inbox],
+    removeLabelIds: [MAILBOX_LABELS.spam],
+  },
+  untrash: {
+    addLabelIds: [MAILBOX_LABELS.inbox],
+    removeLabelIds: [MAILBOX_LABELS.trash],
+  },
+} satisfies Record<string, LabelChangeSet>;
 
-const ARCHIVE_LABEL_CHANGES = {
-  removeLabelIds: [MAILBOX_LABELS.inbox],
-} as const;
+export type MailMetadataOperation =
+  | keyof typeof METADATA_LABEL_CHANGES
+  | LabelChangeSet;
 
-const UNMARK_AS_SPAM_LABEL_CHANGES = {
-  addLabelIds: [MAILBOX_LABELS.inbox],
-  removeLabelIds: [MAILBOX_LABELS.spam],
-} as const;
-
-const MOVE_TO_TRASH_LABEL_CHANGES = {
-  addLabelIds: [MAILBOX_LABELS.trash],
-  removeLabelIds: [
-    MAILBOX_LABELS.inbox,
-    MAILBOX_LABELS.spam,
-    MAILBOX_LABELS.sent,
-    MAILBOX_LABELS.drafts,
-  ],
-} as const;
-
-const REMOVE_FROM_TRASH_LABEL_CHANGES = {
-  addLabelIds: [MAILBOX_LABELS.inbox],
-  removeLabelIds: [MAILBOX_LABELS.trash],
-} as const;
-
-const toRpcLabelChanges = (changes: LabelChangeSet) => ({
-  addLabelIds: changes.addLabelIds ? [...changes.addLabelIds] : undefined,
-  removeLabelIds: changes.removeLabelIds
-    ? [...changes.removeLabelIds]
-    : undefined,
-});
+const MESSAGE_METADATA_MUTATIONS = {
+  archive: rpc.mail.updateMessageLabels,
+  read: rpc.mail.markMessageAsRead,
+  spam: rpc.mail.updateMessageLabels,
+  trash: rpc.mail.moveMessageToTrash,
+  unread: rpc.mail.markMessageAsUnread,
+  unspam: rpc.mail.updateMessageLabels,
+  untrash: rpc.mail.untrashMessage,
+};
+const THREAD_METADATA_MUTATIONS = {
+  archive: rpc.mail.updateThreadLabels,
+  read: rpc.mail.markThreadAsRead,
+  spam: rpc.mail.updateThreadLabels,
+  trash: rpc.mail.moveThreadToTrash,
+  unread: rpc.mail.markThreadAsUnread,
+  unspam: rpc.mail.updateThreadLabels,
+  untrash: rpc.mail.untrashThread,
+};
 
 const findMessageForAction = (args: MessageActionArgs) => {
   const messagesQueryKey = getMessagesQueryKey(
@@ -209,22 +180,6 @@ const findMessageForAction = (args: MessageActionArgs) => {
       args.messageId
     )
   );
-};
-
-const restoreSnapshots = async (
-  queryClient: QueryClient,
-  messagesSnapshots: readonly MessagesQuerySnapshot[],
-  threadSnapshot?: ThreadQuerySnapshot
-) => {
-  restoreMessagesQueries(queryClient, messagesSnapshots);
-  if (threadSnapshot) {
-    queryClient.setQueryData(threadSnapshot.queryKey, threadSnapshot.data);
-  }
-
-  await persistQueryKeys(queryClient, [
-    ...messagesSnapshots.map((snapshot) => snapshot.queryKey),
-    ...(threadSnapshot ? [threadSnapshot.queryKey] : []),
-  ]);
 };
 
 const invalidateMailboxCounts = async (queryClient: QueryClient) => {
@@ -269,27 +224,22 @@ const runOptimisticMessageMetadataMutation = async (
     return;
   }
 
-  const previousMessagesQueries = snapshotMessagesQueries(
-    args.queryClient,
-    args.mailboxId
-  );
   const threadQueryKey = messageToUpdate.threadId
     ? getThreadQueryKey(args.mailboxId, messageToUpdate.threadId)
     : undefined;
-  const previousThreadQuery =
-    threadQueryKey === undefined
-      ? undefined
-      : snapshotThreadQuery(args.queryClient, threadQueryKey);
   const optimisticMessage = args.optimisticUpdater(messageToUpdate);
-
-  await persistQueryKeys(
+  const rollback = await applyOptimisticMailboxUpdate(
     args.queryClient,
-    applyMessageToCaches(
-      args.queryClient,
-      args.mailboxId,
-      threadQueryKey,
-      optimisticMessage
-    )
+    args.mailboxId,
+    () => {
+      applyMessageToCaches(
+        args.queryClient,
+        args.mailboxId,
+        threadQueryKey,
+        optimisticMessage
+      );
+    },
+    threadQueryKey
   );
 
   try {
@@ -310,11 +260,7 @@ const runOptimisticMessageMetadataMutation = async (
     );
     await invalidateMailboxCounts(args.queryClient);
   } catch (error) {
-    await restoreSnapshots(
-      args.queryClient,
-      previousMessagesQueries,
-      previousThreadQuery
-    );
+    await rollback();
     throw error;
   }
 };
@@ -328,35 +274,33 @@ const runOptimisticThreadMetadataMutation = async (args: {
   optimisticUpdater: (message: MessageListItem) => MessageListItem;
 }) => {
   const threadQueryKey = getThreadQueryKey(args.mailboxId, args.threadId);
-  const previousMessagesQueries = snapshotMessagesQueries(
-    args.queryClient,
-    args.mailboxId
-  );
-  const previousThreadQuery = snapshotThreadQuery(
-    args.queryClient,
-    threadQueryKey
-  );
-
-  const optimisticTouchedQueryKeys = updateMessagesInCachedMailboxQueries(
+  const rollback = await applyOptimisticMailboxUpdate(
     args.queryClient,
     args.mailboxId,
-    (message) => message.threadId === args.threadId,
-    args.optimisticUpdater
+    () => {
+      for (const message of findMessagesInCachedMailboxQueries(
+        args.queryClient,
+        args.mailboxId,
+        (candidate) => candidate.threadId === args.threadId
+      )) {
+        applyMessageToCachedMailboxQueries(
+          args.queryClient,
+          args.mailboxId,
+          args.optimisticUpdater(message)
+        );
+      }
+      args.queryClient.setQueryData(
+        threadQueryKey,
+        (currentData: ThreadMessagesResult | undefined) =>
+          updateMessagesInThreadData(
+            currentData,
+            () => true,
+            args.optimisticUpdater
+          )
+      );
+    },
+    threadQueryKey
   );
-  args.queryClient.setQueryData(
-    threadQueryKey,
-    (currentData: ThreadMessagesResult | undefined) =>
-      updateMessagesInThreadData(
-        currentData,
-        () => true,
-        args.optimisticUpdater
-      )
-  );
-
-  await persistQueryKeys(args.queryClient, [
-    ...optimisticTouchedQueryKeys,
-    threadQueryKey,
-  ]);
 
   try {
     const updatedThread = await args.mutation(args.signal);
@@ -367,73 +311,7 @@ const runOptimisticThreadMetadataMutation = async (args: {
     );
     await invalidateMailboxCounts(args.queryClient);
   } catch (error) {
-    await restoreSnapshots(
-      args.queryClient,
-      previousMessagesQueries,
-      previousThreadQuery
-    );
-    throw error;
-  }
-};
-
-const runOptimisticThreadLabelMutation = async (args: {
-  queryClient: QueryClient;
-  mailboxId: string;
-  threadId: string;
-  changes: LabelChangeSet;
-  signal?: AbortSignal;
-  mutation: (signal?: AbortSignal) => Promise<ThreadMetadataMutationResult>;
-}) => {
-  const threadQueryKey = getThreadQueryKey(args.mailboxId, args.threadId);
-  const previousMessagesQueries = snapshotMessagesQueries(
-    args.queryClient,
-    args.mailboxId
-  );
-  const previousThreadQuery = snapshotThreadQuery(
-    args.queryClient,
-    threadQueryKey
-  );
-  const optimisticMessages = findMessagesInCachedMailboxQueries(
-    args.queryClient,
-    args.mailboxId,
-    (message) => message.threadId === args.threadId
-  ).map((message) => applyThreadLabelChangesLocally(message, args.changes));
-  const optimisticTouchedQueryKeys = optimisticMessages.flatMap((message) =>
-    applyMessageToCachedMailboxQueries(
-      args.queryClient,
-      args.mailboxId,
-      message
-    )
-  );
-
-  args.queryClient.setQueryData(
-    threadQueryKey,
-    (currentData: ThreadMessagesResult | undefined) =>
-      updateMessagesInThreadData(
-        currentData,
-        () => true,
-        (message) => applyThreadLabelChangesLocally(message, args.changes)
-      )
-  );
-  await persistQueryKeys(args.queryClient, [
-    ...optimisticTouchedQueryKeys,
-    threadQueryKey,
-  ]);
-
-  try {
-    const updatedThread = await args.mutation(args.signal);
-    await applyResolvedThreadMetadataToCaches(
-      args.queryClient,
-      args.mailboxId,
-      updatedThread
-    );
-    await invalidateMailboxCounts(args.queryClient);
-  } catch (error) {
-    await restoreSnapshots(
-      args.queryClient,
-      previousMessagesQueries,
-      previousThreadQuery
-    );
+    await rollback();
     throw error;
   }
 };
@@ -449,402 +327,124 @@ const runOptimisticMessageRemoval = async (
     return;
   }
 
-  const previousMessagesQueries = snapshotMessagesQueries(
-    args.queryClient,
-    args.mailboxId
-  );
   const threadQueryKey = messageToRemove.threadId
     ? getThreadQueryKey(args.mailboxId, messageToRemove.threadId)
     : undefined;
-  const previousThreadQuery =
-    threadQueryKey === undefined
-      ? undefined
-      : snapshotThreadQuery(args.queryClient, threadQueryKey);
-  const touchedQueryKeys = removeMessagesFromCachedMailboxQueries(
+  const rollback = await applyOptimisticMailboxUpdate(
     args.queryClient,
     args.mailboxId,
-    (message) => message.id === args.messageId
-  );
+    () => {
+      removeMessagesFromCachedMailboxQueries(
+        args.queryClient,
+        args.mailboxId,
+        (message) => message.id === args.messageId
+      );
 
-  if (threadQueryKey !== undefined) {
-    args.queryClient.setQueryData(
-      threadQueryKey,
-      (currentData: ThreadMessagesResult | undefined) =>
-        removeMessagesFromThreadData(
-          currentData,
-          (message) => message.id === args.messageId
-        )
-    );
-  }
-
-  await persistQueryKeys(
-    args.queryClient,
-    threadQueryKey === undefined
-      ? touchedQueryKeys
-      : [...touchedQueryKeys, threadQueryKey]
+      if (threadQueryKey !== undefined) {
+        args.queryClient.setQueryData(
+          threadQueryKey,
+          (currentData: ThreadMessagesResult | undefined) =>
+            removeMessagesFromThreadData(
+              currentData,
+              (message) => message.id === args.messageId
+            )
+        );
+      }
+    },
+    threadQueryKey
   );
 
   try {
     await args.mutation(args.signal);
     await invalidateMailboxCounts(args.queryClient);
   } catch (error) {
-    await restoreSnapshots(
-      args.queryClient,
-      previousMessagesQueries,
-      previousThreadQuery
-    );
+    await rollback();
     throw error;
   }
 };
 
-export const markMessageAsReadInMailbox = async (
-  queryClient: QueryClient,
-  mailboxId: string,
-  mailbox: MailboxCategory,
-  searchQuery: string | null | undefined,
-  messageId: string,
-  signal?: AbortSignal
+export const updateMessageInMailbox = async (
+  args: MessageActionArgs,
+  operation: MailMetadataOperation
 ) => {
+  const changes: LabelChangeSet =
+    typeof operation === "string"
+      ? METADATA_LABEL_CHANGES[operation]
+      : operation;
+  const mutation =
+    typeof operation === "string"
+      ? MESSAGE_METADATA_MUTATIONS[operation]
+      : rpc.mail.updateMessageLabels;
   await runOptimisticMessageMetadataMutation({
-    mailbox,
-    mailboxId,
-    messageId,
-    mutation: async (mutationSignal) =>
-      await rpc.mail.markMessageAsRead(
-        { mailboxId, messageId },
-        { signal: mutationSignal }
-      ),
-    optimisticUpdater: markMessageReadLocally,
-    queryClient,
-    searchQuery,
-    signal,
-  });
-};
-
-export const markMessageAsUnreadInMailbox = async (
-  queryClient: QueryClient,
-  mailboxId: string,
-  mailbox: MailboxCategory,
-  searchQuery: string | null | undefined,
-  messageId: string,
-  signal?: AbortSignal
-) => {
-  await runOptimisticMessageMetadataMutation({
-    mailbox,
-    mailboxId,
-    messageId,
-    mutation: async (mutationSignal) =>
-      await rpc.mail.markMessageAsUnread(
-        { mailboxId, messageId },
-        { signal: mutationSignal }
-      ),
-    optimisticUpdater: markMessageUnreadLocally,
-    queryClient,
-    searchQuery,
-    signal,
-  });
-};
-
-export const markThreadAsReadInMailbox = async (
-  queryClient: QueryClient,
-  mailboxId: string,
-  _mailbox: MailboxCategory,
-  _searchQuery: string | null | undefined,
-  threadId: string,
-  signal?: AbortSignal
-) => {
-  await runOptimisticThreadMetadataMutation({
-    mailboxId,
-    mutation: async (mutationSignal) =>
-      await rpc.mail.markThreadAsRead(
-        { mailboxId, threadId },
-        { signal: mutationSignal }
-      ),
-    optimisticUpdater: markMessageReadLocally,
-    queryClient,
-    signal,
-    threadId,
-  });
-};
-
-export const markThreadAsUnreadInMailbox = async (
-  queryClient: QueryClient,
-  mailboxId: string,
-  _mailbox: MailboxCategory,
-  _searchQuery: string | null | undefined,
-  threadId: string,
-  signal?: AbortSignal
-) => {
-  await runOptimisticThreadMetadataMutation({
-    mailboxId,
-    mutation: async (mutationSignal) =>
-      await rpc.mail.markThreadAsUnread(
-        { mailboxId, threadId },
-        { signal: mutationSignal }
-      ),
-    optimisticUpdater: markMessageUnreadLocally,
-    queryClient,
-    signal,
-    threadId,
-  });
-};
-
-export const archiveMessageInMailbox = async (
-  queryClient: QueryClient,
-  mailboxId: string,
-  mailbox: MailboxCategory,
-  searchQuery: string | null | undefined,
-  messageId: string,
-  signal?: AbortSignal
-) => {
-  await updateMessageLabelsInMailbox(
-    queryClient,
-    mailboxId,
-    mailbox,
-    searchQuery,
-    messageId,
-    ARCHIVE_LABEL_CHANGES,
-    signal
-  );
-};
-
-export const archiveThreadInMailbox = async (
-  queryClient: QueryClient,
-  mailboxId: string,
-  mailbox: MailboxCategory,
-  searchQuery: string | null | undefined,
-  threadId: string,
-  signal?: AbortSignal
-) => {
-  await updateThreadLabelsInMailbox(
-    queryClient,
-    mailboxId,
-    mailbox,
-    searchQuery,
-    threadId,
-    ARCHIVE_LABEL_CHANGES,
-    signal
-  );
-};
-
-export const updateMessageLabelsInMailbox = async (
-  queryClient: QueryClient,
-  mailboxId: string,
-  mailbox: MailboxCategory,
-  searchQuery: string | null | undefined,
-  messageId: string,
-  changes: LabelChangeSet,
-  signal?: AbortSignal
-) => {
-  await runOptimisticMessageMetadataMutation({
-    mailbox,
-    mailboxId,
-    messageId,
-    mutation: async (mutationSignal) =>
-      await rpc.mail.updateMessageLabels(
+    ...args,
+    mutation: async (signal) =>
+      await mutation(
         {
-          mailboxId,
-          messageId,
-          ...toRpcLabelChanges(changes),
+          addLabelIds: changes.addLabelIds
+            ? [...changes.addLabelIds]
+            : undefined,
+          mailboxId: args.mailboxId,
+          messageId: args.messageId,
+          removeLabelIds: changes.removeLabelIds
+            ? [...changes.removeLabelIds]
+            : undefined,
         },
-        { signal: mutationSignal }
+        { signal }
       ),
-    optimisticUpdater: (message) =>
-      applyMessageLabelChangesLocally(message, changes),
-    queryClient,
-    searchQuery,
-    signal,
+    optimisticUpdater: (message) => {
+      if (operation === "read") {
+        return markMessageReadLocally(message);
+      }
+      if (operation === "unread") {
+        return markMessageUnreadLocally(message);
+      }
+      return applyMessageLabelChangesLocally(message, changes);
+    },
   });
 };
 
-export const updateThreadLabelsInMailbox = async (
-  queryClient: QueryClient,
-  mailboxId: string,
-  _mailbox: MailboxCategory,
-  _searchQuery: string | null | undefined,
-  threadId: string,
-  changes: LabelChangeSet,
-  signal?: AbortSignal
+export const updateThreadInMailbox = async (
+  args: {
+    queryClient: QueryClient;
+    mailboxId: string;
+    threadId: string;
+    signal?: AbortSignal;
+  },
+  operation: MailMetadataOperation
 ) => {
-  await runOptimisticThreadLabelMutation({
-    changes,
-    mailboxId,
-    mutation: async (mutationSignal) =>
-      await rpc.mail.updateThreadLabels(
+  const changes: LabelChangeSet =
+    typeof operation === "string"
+      ? METADATA_LABEL_CHANGES[operation]
+      : operation;
+  const mutation =
+    typeof operation === "string"
+      ? THREAD_METADATA_MUTATIONS[operation]
+      : rpc.mail.updateThreadLabels;
+  await runOptimisticThreadMetadataMutation({
+    ...args,
+    mutation: async (signal) =>
+      await mutation(
         {
-          mailboxId,
-          threadId,
-          ...toRpcLabelChanges(changes),
+          addLabelIds: changes.addLabelIds
+            ? [...changes.addLabelIds]
+            : undefined,
+          mailboxId: args.mailboxId,
+          removeLabelIds: changes.removeLabelIds
+            ? [...changes.removeLabelIds]
+            : undefined,
+          threadId: args.threadId,
         },
-        { signal: mutationSignal }
+        { signal }
       ),
-    queryClient,
-    signal,
-    threadId,
-  });
-};
-
-export const markMessageAsSpamInMailbox = async (
-  queryClient: QueryClient,
-  mailboxId: string,
-  mailbox: MailboxCategory,
-  searchQuery: string | null | undefined,
-  messageId: string,
-  signal?: AbortSignal
-) => {
-  await updateMessageLabelsInMailbox(
-    queryClient,
-    mailboxId,
-    mailbox,
-    searchQuery,
-    messageId,
-    MARK_AS_SPAM_LABEL_CHANGES,
-    signal
-  );
-};
-
-export const markThreadAsSpamInMailbox = async (
-  queryClient: QueryClient,
-  mailboxId: string,
-  mailbox: MailboxCategory,
-  searchQuery: string | null | undefined,
-  threadId: string,
-  signal?: AbortSignal
-) => {
-  await updateThreadLabelsInMailbox(
-    queryClient,
-    mailboxId,
-    mailbox,
-    searchQuery,
-    threadId,
-    MARK_AS_SPAM_LABEL_CHANGES,
-    signal
-  );
-};
-
-export const unmarkMessageAsSpamInMailbox = async (
-  queryClient: QueryClient,
-  mailboxId: string,
-  mailbox: MailboxCategory,
-  searchQuery: string | null | undefined,
-  messageId: string,
-  signal?: AbortSignal
-) => {
-  await updateMessageLabelsInMailbox(
-    queryClient,
-    mailboxId,
-    mailbox,
-    searchQuery,
-    messageId,
-    UNMARK_AS_SPAM_LABEL_CHANGES,
-    signal
-  );
-};
-
-export const unmarkThreadAsSpamInMailbox = async (
-  queryClient: QueryClient,
-  mailboxId: string,
-  mailbox: MailboxCategory,
-  searchQuery: string | null | undefined,
-  threadId: string,
-  signal?: AbortSignal
-) => {
-  await updateThreadLabelsInMailbox(
-    queryClient,
-    mailboxId,
-    mailbox,
-    searchQuery,
-    threadId,
-    UNMARK_AS_SPAM_LABEL_CHANGES,
-    signal
-  );
-};
-
-export const moveMessageToTrashInMailbox = async (
-  queryClient: QueryClient,
-  mailboxId: string,
-  mailbox: MailboxCategory,
-  searchQuery: string | null | undefined,
-  messageId: string,
-  signal?: AbortSignal
-) => {
-  await runOptimisticMessageMetadataMutation({
-    mailbox,
-    mailboxId,
-    messageId,
-    mutation: async (mutationSignal) =>
-      await rpc.mail.moveMessageToTrash(
-        { mailboxId, messageId },
-        { signal: mutationSignal }
-      ),
-    optimisticUpdater: (message) =>
-      applyMessageLabelChangesLocally(message, MOVE_TO_TRASH_LABEL_CHANGES),
-    queryClient,
-    searchQuery,
-    signal,
-  });
-};
-
-export const untrashMessageInMailbox = async (
-  queryClient: QueryClient,
-  mailboxId: string,
-  mailbox: MailboxCategory,
-  searchQuery: string | null | undefined,
-  messageId: string,
-  signal?: AbortSignal
-) => {
-  await updateMessageLabelsInMailbox(
-    queryClient,
-    mailboxId,
-    mailbox,
-    searchQuery,
-    messageId,
-    REMOVE_FROM_TRASH_LABEL_CHANGES,
-    signal
-  );
-};
-
-export const moveThreadToTrashInMailbox = async (
-  queryClient: QueryClient,
-  mailboxId: string,
-  _mailbox: MailboxCategory,
-  _searchQuery: string | null | undefined,
-  threadId: string,
-  signal?: AbortSignal
-) => {
-  await runOptimisticThreadLabelMutation({
-    changes: MOVE_TO_TRASH_LABEL_CHANGES,
-    mailboxId,
-    mutation: async (mutationSignal) =>
-      await rpc.mail.moveThreadToTrash(
-        { mailboxId, threadId },
-        { signal: mutationSignal }
-      ),
-    queryClient,
-    signal,
-    threadId,
-  });
-};
-
-export const untrashThreadInMailbox = async (
-  queryClient: QueryClient,
-  mailboxId: string,
-  _mailbox: MailboxCategory,
-  _searchQuery: string | null | undefined,
-  threadId: string,
-  signal?: AbortSignal
-) => {
-  await runOptimisticThreadLabelMutation({
-    changes: REMOVE_FROM_TRASH_LABEL_CHANGES,
-    mailboxId,
-    mutation: async (mutationSignal) =>
-      await rpc.mail.untrashThread(
-        { mailboxId, threadId },
-        { signal: mutationSignal }
-      ),
-    queryClient,
-    signal,
-    threadId,
+    optimisticUpdater: (message) => {
+      if (operation === "read") {
+        return markMessageReadLocally(message);
+      }
+      if (operation === "unread") {
+        return markMessageUnreadLocally(message);
+      }
+      return applyThreadLabelChangesLocally(message, changes);
+    },
   });
 };
 

@@ -17,6 +17,7 @@ export const reportError = (
   try {
     errorReporter?.(error, context);
   } catch {
-    errorReporter = null;
+    // oxlint-disable-next-line no-console -- Keep the original failure visible without disabling future reports.
+    console.error("Error reporting failed", error, context);
   }
 };

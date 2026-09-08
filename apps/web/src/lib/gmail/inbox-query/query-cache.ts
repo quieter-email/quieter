@@ -1,13 +1,13 @@
 import type { QueryClient } from "@tanstack/react-query";
 
-import { persistQueryByKey } from "#/lib/query-persister";
-
-import { isMessageInMailbox } from "../gmail";
+import { isMessageInMailbox } from "#/lib/mail";
 import type {
   MailboxCategory,
   MessageListItem,
   ThreadMessagesResult,
-} from "../gmail";
+} from "#/lib/mail";
+import { persistQueryByKey } from "#/lib/query-persister";
+
 import { getThreadLabelIds } from "../thread-list";
 import { getThreadQueryKey } from "../thread-query";
 import {
@@ -21,35 +21,15 @@ import {
   updateMessageInQueryData,
   updateMessagesInQueryData,
   updateMessagesInThreadData,
-  upsertMessageInThreadData,
 } from "./data";
 import type { MessagesQueryData, ThreadMetadataMutationResult } from "./data";
 import { getMessagesQueryKey, normalizeSearchQuery } from "./keys";
 
-export type MessagesQuerySnapshot = {
+type CachedMessagesQuery = {
   queryKey: ReturnType<typeof getMessagesQueryKey>;
   data: MessagesQueryData | undefined;
-};
-
-export type ThreadQuerySnapshot = {
-  queryKey: ReturnType<typeof getThreadQueryKey>;
-  data: ThreadMessagesResult | undefined;
-};
-
-type CachedMessagesQuery = MessagesQuerySnapshot & {
   mailbox: MailboxCategory;
   searchQuery?: string;
-};
-
-type VisibleMessagesRefreshArgs = {
-  mailboxId: string;
-  mailbox: MailboxCategory;
-  searchQuery?: string | null;
-};
-
-type VisibleMessagesRefreshResult = {
-  removedMessageIds: readonly string[];
-  updatedMessages: readonly MessageListItem[];
 };
 
 const isMailboxCategory = (value: unknown): value is MailboxCategory =>
@@ -91,32 +71,6 @@ export const getCachedMessagesQueries = (
       ];
     });
 
-export const snapshotMessagesQueries = (
-  queryClient: QueryClient,
-  mailboxId: string
-): MessagesQuerySnapshot[] =>
-  getCachedMessagesQueries(queryClient, mailboxId).map((cachedQuery) => ({
-    data: cachedQuery.data,
-    queryKey: cachedQuery.queryKey,
-  }));
-
-export const snapshotThreadQuery = (
-  queryClient: QueryClient,
-  threadQueryKey: ReturnType<typeof getThreadQueryKey>
-): ThreadQuerySnapshot => ({
-  data: queryClient.getQueryData<ThreadMessagesResult>(threadQueryKey),
-  queryKey: threadQueryKey,
-});
-
-export const restoreMessagesQueries = (
-  queryClient: QueryClient,
-  snapshots: readonly MessagesQuerySnapshot[]
-) => {
-  for (const snapshot of snapshots) {
-    queryClient.setQueryData(snapshot.queryKey, snapshot.data);
-  }
-};
-
 export const persistQueryKeys = async (
   queryClient: QueryClient,
   queryKeys: readonly (readonly unknown[])[]
@@ -139,6 +93,61 @@ export const persistQueryKeys = async (
       await persistQueryByKey(queryKey, queryClient);
     })
   );
+};
+
+export const applyOptimisticMailboxUpdate = async (
+  queryClient: QueryClient,
+  mailboxId: string,
+  update: () => void,
+  threadQueryKey?: ReturnType<typeof getThreadQueryKey>
+) => {
+  await Promise.all([
+    queryClient.cancelQueries({ queryKey: ["messages", mailboxId] }),
+    ...(threadQueryKey === undefined
+      ? []
+      : [queryClient.cancelQueries({ exact: true, queryKey: threadQueryKey })]),
+  ]);
+  const queryKeys: (readonly unknown[])[] = [
+    ...getCachedMessagesQueries(queryClient, mailboxId).map(
+      ({ queryKey }) => queryKey
+    ),
+    ...(threadQueryKey === undefined ? [] : [threadQueryKey]),
+  ];
+  const snapshots = queryKeys.map((queryKey) => ({
+    data: queryClient.getQueryData(queryKey),
+    queryKey,
+  }));
+  update();
+  const changes = snapshots
+    .map((snapshot) => ({
+      ...snapshot,
+      optimistic: queryClient.getQueryData(snapshot.queryKey),
+    }))
+    .filter(({ data, optimistic }) => data !== optimistic);
+  await persistQueryKeys(
+    queryClient,
+    changes.map(({ queryKey }) => queryKey)
+  );
+
+  return async () => {
+    await Promise.all(
+      changes.map(async ({ queryKey, data, optimistic }) => {
+        // A live update or another mutation owns newer data; reconcile it from the server.
+        if (
+          queryClient.getQueryData(queryKey) !== optimistic ||
+          data === undefined
+        ) {
+          await queryClient.invalidateQueries({ exact: true, queryKey });
+        } else {
+          queryClient.setQueryData(queryKey, data);
+        }
+      })
+    );
+    await persistQueryKeys(
+      queryClient,
+      changes.map(({ queryKey }) => queryKey)
+    );
+  };
 };
 
 export const findMessageInCachedMailboxQueries = (
@@ -278,56 +287,6 @@ export const removeMessagesFromCachedMailboxQueries = (
   }
 
   return touchedQueryKeys;
-};
-
-export const applyVisibleMailboxMessagesRefreshToCache = async (
-  queryClient: QueryClient,
-  args: VisibleMessagesRefreshArgs,
-  result: VisibleMessagesRefreshResult
-) => {
-  const touchedQueryKeys: (readonly unknown[])[] = [];
-
-  for (const updatedMessage of result.updatedMessages) {
-    touchedQueryKeys.push(
-      ...applyMessageToCachedMailboxQueries(
-        queryClient,
-        args.mailboxId,
-        updatedMessage
-      )
-    );
-
-    const threadQueryKey = getThreadQueryKey(
-      args.mailboxId,
-      updatedMessage.threadId
-    );
-    queryClient.setQueryData(
-      threadQueryKey,
-      (currentData: ThreadMessagesResult | undefined) =>
-        upsertMessageInThreadData(currentData, updatedMessage)
-    );
-    touchedQueryKeys.push(threadQueryKey);
-  }
-
-  if (result.removedMessageIds.length > 0) {
-    const removedMessageIds = new Set(result.removedMessageIds);
-    const messagesQueryKey = getMessagesQueryKey(
-      args.mailboxId,
-      args.mailbox,
-      args.searchQuery
-    );
-    const previousData =
-      queryClient.getQueryData<MessagesQueryData>(messagesQueryKey);
-    const nextData = removeMessagesFromQueryData(previousData, (message) =>
-      removedMessageIds.has(message.id)
-    );
-
-    if (nextData !== previousData) {
-      queryClient.setQueryData(messagesQueryKey, nextData);
-      touchedQueryKeys.push(messagesQueryKey);
-    }
-  }
-
-  await persistQueryKeys(queryClient, touchedQueryKeys);
 };
 
 export const applyResolvedThreadMetadataToCaches = async (

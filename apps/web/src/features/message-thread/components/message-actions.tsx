@@ -37,8 +37,8 @@ import type {
   MessageLabelsTarget,
   MessageLabelsUpdate,
 } from "#/features/message-labels/domain/message-label-updates";
-import { isMessageUnread } from "#/lib/gmail/gmail";
-import type { MailboxCategory, MessageListItem } from "#/lib/gmail/gmail";
+import { isMessageUnread } from "#/lib/mail";
+import type { MailboxCategory, MessageListItem } from "#/lib/mail";
 
 import type { ThreadActionHandlers } from "./message-action-handlers";
 import {

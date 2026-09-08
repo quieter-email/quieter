@@ -22,8 +22,15 @@ export const assertCanUseAi = async ({
     });
   }
 
-  if (entitlement.hasUnlimitedAccess || !entitlement.account) {
+  if (entitlement.hasUnlimitedAccess) {
     return;
+  }
+
+  if (entitlement.account === null) {
+    throw new ORPCError("FORBIDDEN", {
+      message:
+        "AI features are unavailable until team billing usage is available.",
+    });
   }
 
   const usage = await getBillingCreditUsage(entitlement.account);

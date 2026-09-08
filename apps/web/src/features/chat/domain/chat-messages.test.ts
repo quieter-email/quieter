@@ -1,4 +1,5 @@
-import type { ChatMessagePart } from "@quieter/database/schema";
+import { toCanonicalTranscript } from "@quieter/ai/chat-transcript";
+import type { RouterOutputs } from "@quieter/orpc";
 import type { UIMessage } from "ai";
 import { describe, expect, test } from "vite-plus/test";
 
@@ -6,16 +7,9 @@ import {
   getAssistantProgress,
   getChatRetryAction,
   getMessageText,
-  toInitialMessages,
 } from "./chat-messages";
 
-type StoredMessage = {
-  createdAt: Date;
-  id: string;
-  parts: ChatMessagePart[];
-  position: number;
-  role: "assistant" | "system" | "user";
-};
+type StoredMessage = RouterOutputs["chat"]["get"]["messages"][number];
 
 describe("chat message conversion", () => {
   test("does not regenerate an empty or assistant-only conversation", () => {
@@ -50,16 +44,16 @@ describe("chat message conversion", () => {
       role: "assistant",
     };
 
-    expect(toInitialMessages([storedMessage])).toStrictEqual([
+    expect(toCanonicalTranscript([storedMessage])).toStrictEqual([
       {
         id: "message-1",
-        parts: storedMessage.parts,
+        parts: storedMessage.parts.slice(0, 2),
         role: "assistant",
       },
     ]);
 
     expect(
-      toInitialMessages([
+      toCanonicalTranscript([
         {
           ...storedMessage,
           id: "system-1",
@@ -77,6 +71,41 @@ describe("chat message conversion", () => {
     ];
 
     expect(getMessageText(parts)).toBe("First\n\nSecond");
+  });
+
+  test("reloads interrupted actions as uncertain and preserves their history on retry", () => {
+    const messages = toCanonicalTranscript([
+      {
+        id: "user",
+        parts: [{ text: "Archive it", type: "text" }],
+        role: "user",
+      },
+      {
+        id: "assistant",
+        parts: [
+          {
+            approval: { approved: true, id: "approval" },
+            input: { action: "archive" },
+            state: "approval-responded",
+            toolCallId: "archive",
+            type: "tool-modify_mail",
+          },
+        ],
+        role: "assistant",
+      },
+    ]);
+
+    expect(messages[1]?.parts[0]).toMatchObject({
+      errorText:
+        "The action was submitted, but its result is not available. Check the affected item before requesting it again.",
+      state: "output-error",
+    });
+    expect(
+      getChatRetryAction(
+        [messages[0], { id: "local-partial", parts: [], role: "assistant" }],
+        messages
+      )
+    ).toStrictEqual({ type: "hydrate" });
   });
 
   test("collapses streaming work into one neutral status", () => {

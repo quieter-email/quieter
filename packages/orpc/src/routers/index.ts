@@ -41,12 +41,6 @@ export const appRouter = {
         default: mailTemplatesRouter,
       }))
   ),
-  mailboxActions: lazy(
-    async () =>
-      await import("./mailbox-actions").then(({ mailboxActionsRouter }) => ({
-        default: mailboxActionsRouter,
-      }))
-  ),
   onboarding: lazy(
     async () =>
       await import("./onboarding").then(({ onboardingRouter }) => ({

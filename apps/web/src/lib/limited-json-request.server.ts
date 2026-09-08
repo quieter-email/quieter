@@ -1,10 +1,17 @@
 export class LimitedJsonRequestError extends Error {
   readonly status: 400 | 413;
+  readonly kind: "too_large" | "invalid_encoding" | "invalid_json";
 
-  constructor(status: 400 | 413, message: string, options?: ErrorOptions) {
-    super(message, options);
+  constructor(kind: LimitedJsonRequestError["kind"], options?: ErrorOptions) {
+    super(
+      kind === "too_large"
+        ? "Request body too large."
+        : "Invalid JSON request body.",
+      options
+    );
     this.name = "LimitedJsonRequestError";
-    this.status = status;
+    this.kind = kind;
+    this.status = kind === "too_large" ? 413 : 400;
   }
 }
 
@@ -18,11 +25,11 @@ export const readLimitedJsonRequest = async (
     /^\d+$/u.test(declaredLength) &&
     Number(declaredLength) > maxBytes
   ) {
-    throw new LimitedJsonRequestError(413, "Chat request body too large.");
+    throw new LimitedJsonRequestError("too_large");
   }
 
   if (request.body === null) {
-    throw new LimitedJsonRequestError(400, "Invalid chat request body.");
+    throw new LimitedJsonRequestError("invalid_json");
   }
 
   const reader = request.body.getReader();
@@ -31,16 +38,14 @@ export const readLimitedJsonRequest = async (
   try {
     while (true) {
       // A request stream must be read serially; parallel reads are invalid.
-      // eslint-disable-next-line no-await-in-loop
       const { done, value } = await reader.read();
       if (done) {
         break;
       }
       totalBytes += value.byteLength;
       if (totalBytes > maxBytes) {
-        // eslint-disable-next-line no-await-in-loop
         await reader.cancel();
-        throw new LimitedJsonRequestError(413, "Chat request body too large.");
+        throw new LimitedJsonRequestError("too_large");
       }
       chunks.push(value);
     }
@@ -57,8 +62,11 @@ export const readLimitedJsonRequest = async (
     text += decoder.decode();
     return JSON.parse(text) as unknown;
   } catch (error) {
-    throw new LimitedJsonRequestError(400, "Invalid chat request body.", {
-      cause: error,
-    });
+    throw new LimitedJsonRequestError(
+      error instanceof SyntaxError ? "invalid_json" : "invalid_encoding",
+      {
+        cause: error,
+      }
+    );
   }
 };

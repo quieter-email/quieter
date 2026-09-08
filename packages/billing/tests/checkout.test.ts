@@ -72,13 +72,13 @@ vi.mock(import("../src/entitlements"), async (importOriginal) => {
   };
 });
 
-vi.mock(import("@quieter/database/client"), async (importOriginal) => {
+// This fake implements only the database operations exercised by the test.
+// oxlint-disable-next-line vitest/prefer-import-in-mock
+vi.mock("@quieter/database/client", async (importOriginal) => {
   const actual = await importOriginal<typeof DatabaseClientModule>();
   return {
     assertDatabaseConfigured: actual.assertDatabaseConfigured,
-    db: Object.assign(actual.db, {
-      select: checkoutMocks.select,
-    }),
+    db: { select: checkoutMocks.select },
     withRequestDatabaseClient: actual.withRequestDatabaseClient,
   };
 });

@@ -9,6 +9,7 @@ import {
 import type { MailboxGroup, MailboxListItem } from "../src/mailbox/types";
 
 const gmailMailbox = (id: string, emailAddress: string): MailboxListItem => ({
+  accessMode: null,
   autoLabelEnabled: false,
   capabilities: getMailboxCapabilities({ provider: "gmail", role: null }),
   connectionStatus: "connected",
@@ -37,6 +38,7 @@ const managedMailbox = (
   organizationId: string,
   organizationName: string
 ): MailboxListItem => ({
+  accessMode: "shared",
   autoLabelEnabled: false,
   capabilities: getMailboxCapabilities({
     provider: "managed",

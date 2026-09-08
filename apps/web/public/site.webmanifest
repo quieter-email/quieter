@@ -1,5 +1,5 @@
 {
-  "background_color": "#f7f4ee",
+  "background_color": "#0e0f10",
   "display": "standalone",
   "icons": [
     {
@@ -28,5 +28,5 @@
   ],
   "short_name": "quieter",
   "start_url": "/",
-  "theme_color": "#f7f4ee"
+  "theme_color": "#0e0f10"
 }

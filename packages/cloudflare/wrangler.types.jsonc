@@ -55,19 +55,10 @@
         "binding": "GmailPsQueue",
         "queue": "gmail-pubsub-types",
       },
-      {
-        "binding": "MailboxActionQueue",
-        "queue": "mailbox-action-types",
-      },
     ],
     "consumers": [
       {
         "queue": "gmail-pubsub-types",
-        "max_batch_size": 1,
-        "max_batch_timeout": 0,
-      },
-      {
-        "queue": "mailbox-action-types",
         "max_batch_size": 1,
         "max_batch_timeout": 0,
       },

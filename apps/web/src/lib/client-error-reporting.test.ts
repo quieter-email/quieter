@@ -6,6 +6,52 @@ import {
 } from "./client-error-reporting";
 
 describe("client error reporting", () => {
+  test.each([
+    "Failed to fetch dynamically imported module: https://quieter.email/assets/settings-old.js",
+    "error loading dynamically imported module: https://quieter.email/assets/settings-old.js",
+    "Importing a module script failed.",
+    "Unable to preload CSS for /assets/settings-old.css",
+  ])("discards asset load failures: %s", (message) => {
+    expect(shouldDiscardClientError({}, new TypeError(message))).toBeTruthy();
+    expect(
+      shouldDiscardClientError(
+        {},
+        new Error("Route failed", {
+          cause: new TypeError(message),
+        })
+      )
+    ).toBeTruthy();
+    expect(shouldDiscardClientError({ message }, null)).toBeTruthy();
+    expect(
+      shouldDiscardClientError(
+        { exception: { values: [{ value: message }] } },
+        null
+      )
+    ).toBeTruthy();
+  });
+
+  test.each([
+    "Failed to fetch",
+    "NetworkError when attempting to fetch resource.",
+    "Cannot read properties of undefined (reading 'default')",
+    "Unexpected token '<'",
+    "Could not check billing access. Please try again.",
+  ])("keeps unrelated failures: %s", (message) => {
+    expect(shouldDiscardClientError({}, new Error(message))).toBeFalsy();
+    expect(
+      shouldDiscardClientError(
+        { exception: { values: [{ value: message }] } },
+        null
+      )
+    ).toBeFalsy();
+  });
+
+  test("keeps cyclic unknown errors without looping", () => {
+    const error = new Error("Unknown failure");
+    error.cause = error;
+    expect(shouldDiscardClientError({}, error)).toBeFalsy();
+  });
+
   test("recognizes structured mailbox reauthorization errors", () => {
     expect(
       isExpectedClientError({

@@ -22,6 +22,7 @@ import {
   productHasManagedMail,
 } from "./plans.ts";
 import type { BillingFeature, BillingProductId } from "./plans.ts";
+import { getBillingExternalIdentity } from "./polar-config.ts";
 
 const ACTIVE_BILLING_STATUSES = new Set<BillingSubscriptionStatus>([
   "active",
@@ -160,7 +161,10 @@ const toBillingAccount = (
     creditAmountCents: BILLING_PRODUCTS[parsedProduct.data].creditAmountCents,
     currentPeriodEnd: row.currentPeriodEnd,
     currentPeriodStart: row.currentPeriodStart,
-    externalCustomerId: `organization:${organizationId}`,
+    externalCustomerId: getBillingExternalIdentity(
+      "organization",
+      organizationId
+    ),
     organizationId,
     product: parsedProduct.data,
   };
@@ -324,10 +328,6 @@ export const getOrganizationSubscription = async (organizationId: string) => {
     : null;
 };
 
-export const hasUnlimitedBillingAccess = async (userId: string) =>
-  isLocalDevelopmentBillingEntitlementEnabled() ||
-  (await getActiveOverride(userId)) !== null;
-
 export const getOrganizationBillingEntitlement = async (input: {
   feature: BillingFeature;
   organizationId: string;
@@ -407,24 +407,6 @@ export const hasUserBillingFeature = async (input: {
     feature: input.feature,
     organizationId: input.organizationId,
   });
-};
-
-export const assertUserBillingFeature = async (input: {
-  feature: BillingFeature;
-  organizationId: string;
-  userId: string;
-}) => {
-  const result = await hasUserBillingFeature(input);
-
-  if (!result.hasAccess) {
-    const requirement = BILLING_FEATURES[input.feature];
-
-    throw new ORPCError("FORBIDDEN", {
-      message: `${requirement.description} requires ${requirement.requirementLabel}.`,
-    });
-  }
-
-  return result;
 };
 
 export const organizationHasBillingFeature = async (input: {

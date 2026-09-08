@@ -1,5 +1,5 @@
 import type { MailboxActions } from "#/features/mailbox/components/mailbox-action-handlers";
-import type { MessageListItem } from "#/lib/gmail/gmail";
+import type { MessageListItem } from "#/lib/mail";
 
 export type LabelChanges = {
   addLabelIds?: string[];
