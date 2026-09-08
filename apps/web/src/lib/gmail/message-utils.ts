@@ -1,10 +1,7 @@
-import type { MessageListItem } from "./gmail";
+import { extractSenderEmail } from "@quieter/mail/sender-avatar";
 
-const hasText = (value: string | null | undefined): value is string =>
-  value !== null && value !== undefined && value !== "";
+import type { MessageListItem } from "#/lib/mail";
 
-const EMAIL_ADDRESS_PATTERN =
-  /(?<email>[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+)/iu;
 const compactMessageDateFormatter = new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",
   timeStyle: "short",
@@ -29,19 +26,9 @@ const messageListPreviousYearDateFormatter = new Intl.DateTimeFormat(
   }
 );
 
-const extractSenderEmail = (value: string | undefined): string | undefined => {
-  const normalized = value?.trim();
-  if (!hasText(normalized)) {
-    return undefined;
-  }
-
-  const match = EMAIL_ADDRESS_PATTERN.exec(normalized);
-  return match?.groups?.email?.trim().toLowerCase();
-};
-
 const getParsedMessageDate = (message: MessageListItem) => {
   const source = message.internalDate ?? message.date;
-  if (!hasText(source)) {
+  if (!source) {
     return null;
   }
 
@@ -95,7 +82,7 @@ export const formatMessageListDate = (
 };
 
 export const parseSender = (from?: string) => {
-  if (!hasText(from)) {
+  if (!from) {
     return { display: "", email: "", name: "" };
   }
 
@@ -106,12 +93,12 @@ export const parseSender = (from?: string) => {
   );
   const rawNameSource =
     bracketMatch?.groups?.name ??
-    (hasText(email) ? display.replace(email, "") : display);
+    (email ? display.replace(email, "") : display);
   const rawName = rawNameSource
     .replaceAll('"', "")
     .replaceAll(/[<>]/gu, "")
     .trim();
-  const name = hasText(rawName) && rawName !== email ? rawName : "";
+  const name = rawName && rawName !== email ? rawName : "";
 
   return { display, email, name };
 };

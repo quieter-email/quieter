@@ -65,7 +65,7 @@ const getConnectorDescription = (
     return "Connected.";
   }
   if (needsReconnect) {
-    return "Reconnect this service before using its actions.";
+    return "Reconnect this service to use it in chat.";
   }
   if (connector.isConfigured) {
     return connector.description;
@@ -209,7 +209,7 @@ export const ConnectorsSettingsPanel = () => {
 
   return (
     <SettingsSection
-      description="Connect outside services to add mail actions and optional chat capabilities."
+      description="Connect outside services to use them in chat."
       title="Services"
     >
       {renderContent()}

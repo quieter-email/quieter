@@ -23,7 +23,6 @@
   "queues": {
     "producers": [
       { "binding": "GmailPsQueue", "queue": "quieter-local-gmail" },
-      { "binding": "MailboxActionQueue", "queue": "quieter-local-actions" },
     ],
     "consumers": [
       {
@@ -32,13 +31,6 @@
         "max_batch_timeout": 0,
         "max_retries": 5,
         "dead_letter_queue": "quieter-local-gmail-failed",
-      },
-      {
-        "queue": "quieter-local-actions",
-        "max_batch_size": 1,
-        "max_batch_timeout": 0,
-        "max_retries": 5,
-        "dead_letter_queue": "quieter-local-actions-failed",
       },
     ],
   },

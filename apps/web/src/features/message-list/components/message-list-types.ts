@@ -12,7 +12,7 @@ import type {
   ListMessagesPageResult,
   MailboxCategory,
   MessageListItem,
-} from "#/lib/gmail/gmail";
+} from "#/lib/mail";
 
 export type ThreadPressGesture = {
   additive: boolean;

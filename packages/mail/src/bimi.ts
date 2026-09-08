@@ -156,9 +156,6 @@ const ELEMENT_ATTRIBUTES: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ["desc", new Set(["id", "xml:lang"])],
 ]);
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
-
 const getString = (value: unknown): string | undefined =>
   typeof value === "string" ? value : undefined;
 
@@ -420,6 +417,27 @@ type AssetLookup = {
   value: string | undefined;
 };
 
+const setCachedValue = <TValue>(
+  cache: Map<string, CacheEntry<TValue>>,
+  key: string,
+  entry: CacheEntry<TValue>,
+  now: number
+) => {
+  for (const [cachedKey, cached] of cache) {
+    if (cached.expiresAt <= now) {
+      cache.delete(cachedKey);
+    }
+  }
+  cache.delete(key);
+  cache.set(key, entry);
+  if (cache.size > 512) {
+    const oldestKey = cache.keys().next().value;
+    if (oldestKey !== undefined) {
+      cache.delete(oldestKey);
+    }
+  }
+};
+
 const getFreshCacheValue = <TValue>(
   cache: Map<string, CacheEntry<TValue>>,
   key: string,
@@ -447,18 +465,22 @@ const getCacheControlMaxAge = (value: string | null): number | undefined => {
 };
 
 const getDnsAnswerRecords = (body: unknown): DnsLookup => {
-  if (!isRecord(body) || !Array.isArray(body.Answer)) {
+  if (
+    !(typeof body === "object" && body !== null) ||
+    !("Answer" in body) ||
+    !Array.isArray(body.Answer)
+  ) {
     return { records: [], ttlMs: DNS_NEGATIVE_CACHE_MS };
   }
 
   const records: string[] = [];
   let ttlMs = MAX_CACHE_MS;
   for (const answer of body.Answer) {
-    if (!isRecord(answer)) {
+    if (!(typeof answer === "object" && answer !== null)) {
       continue;
     }
-    const type = getNumber(answer.type);
-    const data = getString(answer.data);
+    const type = getNumber(Reflect.get(answer, "type"));
+    const data = getString(Reflect.get(answer, "data"));
     if (type !== DNS_TXT_RECORD_TYPE || data === undefined) {
       continue;
     }
@@ -466,7 +488,7 @@ const getDnsAnswerRecords = (body: unknown): DnsLookup => {
     if (decoded !== undefined) {
       records.push(decoded);
     }
-    const ttl = getNumber(answer.TTL);
+    const ttl = getNumber(Reflect.get(answer, "TTL"));
     if (ttl !== undefined && ttl >= 0) {
       ttlMs = Math.min(ttlMs, ttl * 1000);
     }
@@ -497,14 +519,12 @@ const readResponseText = async (
   try {
     while (true) {
       // A response stream can only be consumed one chunk at a time.
-      // oxlint-disable-next-line eslint/no-await-in-loop
       const chunk = await reader.read();
       if (chunk.done) {
         break;
       }
       byteLength += chunk.value.byteLength;
       if (byteLength > maxBytes) {
-        // oxlint-disable-next-line eslint/no-await-in-loop
         await reader.cancel();
         return undefined;
       }
@@ -523,8 +543,6 @@ const hasContentLengthAboveLimit = (
   const contentLength = Number(response.headers.get("content-length"));
   return Number.isFinite(contentLength) && contentLength > maxBytes;
 };
-
-type ParsedSvgNode = Record<string, unknown>;
 
 const escapeXmlText = (value: string): string =>
   value
@@ -620,15 +638,15 @@ const validateRootViewport = (
 // BIMI's attribute allowlist is intentionally explicit and branches by element.
 // oxlint-disable-next-line eslint/complexity
 const getSvgAttributes = (
-  node: ParsedSvgNode,
+  node: object,
   elementName: string,
   isRoot: boolean
 ): ReadonlyMap<string, string> | undefined => {
-  const rawAttributes = node[":@"];
+  const rawAttributes: unknown = Reflect.get(node, ":@");
   if (rawAttributes === undefined) {
     return isRoot ? undefined : new Map();
   }
-  if (!isRecord(rawAttributes)) {
+  if (!(typeof rawAttributes === "object" && rawAttributes !== null)) {
     return undefined;
   }
 
@@ -716,12 +734,12 @@ const serializeSvgNode = (
   depth: number,
   state: SvgSanitizerState
 ): string | undefined => {
-  if (!isRecord(node)) {
+  if (!(typeof node === "object" && node !== null)) {
     return undefined;
   }
 
-  const textValue = node["#text"];
-  const elementEntries = Object.entries(node).filter(
+  const textValue: unknown = Reflect.get(node, "#text");
+  const elementEntries: [string, unknown][] = Object.entries(node).filter(
     ([name]) => name !== ":@" && name !== "#text"
   );
   if (elementEntries.length === 0) {
@@ -819,8 +837,8 @@ export const sanitizeBimiSvg = (svg: string): string | undefined => {
       return undefined;
     }
 
-    const significantNodes = parsed.filter((node) => {
-      if (!isRecord(node)) {
+    const significantNodes = parsed.filter((node: unknown) => {
+      if (!(typeof node === "object" && node !== null)) {
         return false;
       }
       return !("#text" in node && Object.keys(node).length === 1);
@@ -908,10 +926,12 @@ export const createBimiResolver = (
     dnsInflight.set(name, request);
     const result = await request;
     dnsInflight.delete(name);
-    dnsCache.set(name, {
-      expiresAt: now() + result.ttlMs,
-      value: result,
-    });
+    setCachedValue(
+      dnsCache,
+      name,
+      { expiresAt: now() + result.ttlMs, value: result },
+      now()
+    );
     return result;
   };
 
@@ -920,7 +940,6 @@ export const createBimiResolver = (
   ): Promise<{ domain: string; policy: DmarcPolicy } | undefined> => {
     for (const candidate of getDomainCandidates(domain)) {
       // Candidate lookups must remain ordered so a subdomain policy wins over its parent.
-      // oxlint-disable-next-line eslint/no-await-in-loop
       const result = await lookupDns(`_dmarc.${candidate}`);
       const policies = result.records
         .map(parseDmarcRecord)
@@ -1020,10 +1039,12 @@ export const createBimiResolver = (
     assetInflight.set(url, request);
     const result = await request;
     assetInflight.delete(url);
-    assetCache.set(url, {
-      expiresAt: now() + result.cacheDurationMs,
-      value: result.value,
-    });
+    setCachedValue(
+      assetCache,
+      url,
+      { expiresAt: now() + result.cacheDurationMs, value: result.value },
+      now()
+    );
     return result.value;
   };
 
@@ -1045,17 +1066,11 @@ export const createBimiResolver = (
 
     for (const candidateDomain of getDomainCandidates(domain)) {
       // BIMI lookup falls back from the author domain to the organizational domain.
-      // oxlint-disable-next-line eslint/no-await-in-loop
       const record = await lookupBimiRecord(selector, candidateDomain);
-      if (
-        record === undefined ||
-        // oxlint-disable-next-line eslint/no-await-in-loop
-        !(await hasEnforcedDmarc(candidateDomain))
-      ) {
+      if (record === undefined || !(await hasEnforcedDmarc(candidateDomain))) {
         continue;
       }
       // Keep the first valid assertion record's precedence over broader fallback domains.
-      // oxlint-disable-next-line eslint/no-await-in-loop
       const asset = await fetchAsset(record.logoUrl);
       if (asset !== undefined) {
         return asset;

@@ -2,7 +2,6 @@ import { z } from "zod";
 
 export const BILLING_PRODUCT_IDS = ["managed", "pro"] as const;
 export const billingProductIdSchema = z.enum(BILLING_PRODUCT_IDS);
-export const billingPlanSchema = z.enum(["free", ...BILLING_PRODUCT_IDS]);
 
 export type BillingProductId = (typeof BILLING_PRODUCT_IDS)[number];
 export type PaidBillingPlan = BillingProductId;
@@ -101,6 +100,3 @@ export const BILLING_PRODUCTS = {
 export const productHasAi = (product: BillingProductId) => product === "pro";
 
 export const productHasManagedMail = (_product: BillingProductId) => true;
-
-export const getBillingFeatureRequirement = (feature: BillingFeature) =>
-  BILLING_FEATURES[feature];

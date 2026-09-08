@@ -1,12 +1,9 @@
+import { toCanonicalTranscript } from "@quieter/ai/chat-transcript";
 import { describe, expect, test } from "vite-plus/test";
 import { z } from "zod";
 
 import { hasLinearConnectorMention } from "../src/chat/linear-tools";
-import {
-  createChatTitle,
-  toCanonicalTranscript,
-  validateChatRequest,
-} from "../src/chat/service";
+import { createChatTitle, validateChatRequest } from "../src/chat/service";
 
 const validBody = (): Record<string, unknown> => ({
   category: "inbox",

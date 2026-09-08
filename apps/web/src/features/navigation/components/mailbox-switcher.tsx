@@ -38,9 +38,6 @@ import {
 } from "#/features/motion/app-motion";
 import { SidebarSimpleHoverSurface } from "#/features/navigation/components/sidebar-surfaces";
 
-const hasText = (value: string | null | undefined): value is string =>
-  typeof value === "string" && value.length > 0;
-
 type MailboxSwitcherMailbox = {
   accessMode?: "private" | "shared" | null;
   connectionStatus: "connected" | "needs_reconnect";
@@ -103,14 +100,13 @@ const getMailboxSwitcherSummary = (
     mailboxes[0] ??
     null;
   const selectedDisplayName = selectedMailbox?.displayName?.trim() ?? null;
-  const primaryLabel = hasText(selectedDisplayName)
-    ? selectedDisplayName
-    : (selectedMailbox?.emailAddress ?? "no mailbox");
+  const primaryLabel =
+    selectedDisplayName || (selectedMailbox?.emailAddress ?? "no mailbox");
   const secondaryLabel =
     selectedMailbox === null
       ? "No team"
       : [
-          hasText(selectedDisplayName) ? selectedMailbox.emailAddress : null,
+          selectedDisplayName ? selectedMailbox.emailAddress : null,
           selectedMailbox.groupName,
         ]
           .filter((value): value is string => value !== null)
@@ -1060,18 +1056,3 @@ export const MailboxSwitcherDropdown = ({
     </Popover>
   );
 };
-
-export const MailboxSettingsRow = ({
-  action,
-  className,
-  mailbox,
-}: MailboxSummaryProps) => (
-  <div
-    className={cn("flex items-center justify-between gap-3 py-3", className)}
-  >
-    <MailboxSummary className="min-w-0 flex-1" mailbox={mailbox} />
-    {action !== null && action !== undefined && action !== false && (
-      <div className="shrink-0">{action}</div>
-    )}
-  </div>
-);

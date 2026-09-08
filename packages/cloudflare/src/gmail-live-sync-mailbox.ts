@@ -3,19 +3,13 @@ import { z } from "zod";
 
 import { RequestError } from "./request-error";
 import { readLinkedSecret, reportWorkerError } from "./worker-runtime";
-import { readBoundedJson, verifyLiveSyncToken } from "./worker-utils";
+import {
+  readBoundedJson,
+  requestErrorResponse,
+  verifyLiveSyncToken,
+} from "./worker-utils";
 
 const INTERNAL_EVENT_BODY_LIMIT = 1024;
-
-const requestErrorResponse = (error: unknown, route: string) => {
-  const status = error instanceof RequestError ? error.status : 500;
-  const category =
-    error instanceof RequestError ? error.category : "internal_error";
-  if (status >= 500) {
-    reportWorkerError(error, { category, route, status });
-  }
-  return Response.json({ error: "Request failed" }, { status });
-};
 
 export class GmailLiveSyncMailbox extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {

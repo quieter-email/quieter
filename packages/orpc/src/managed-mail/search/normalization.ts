@@ -31,7 +31,11 @@ export const parseAbsoluteDate = (value: string) => {
     Number(match.groups.month) - 1,
     Number(match.groups.day)
   );
-  return Number.isNaN(date.getTime()) ? null : date;
+  return date.getFullYear() === Number(match.groups.year) &&
+    date.getMonth() === Number(match.groups.month) - 1 &&
+    date.getDate() === Number(match.groups.day)
+    ? date
+    : null;
 };
 
 export const parseRelativeDate = (value: string, now: Date) => {

@@ -1,4 +1,5 @@
 import type { MCPClient } from "@ai-sdk/mcp";
+import type * as DatabaseClientModule from "@quieter/database/client";
 import {
   afterEach,
   beforeEach,
@@ -55,11 +56,13 @@ vi.mock(import("@ai-sdk/mcp"), () => ({
     { callTool: mocks.callTool, close: mocks.close } as unknown as MCPClient
   ),
 }));
-vi.mock(import("@quieter/database/client"), async (importOriginal) => {
-  const actual = await importOriginal();
+// This fake implements only the database operations exercised by the test.
+// oxlint-disable-next-line vitest/prefer-import-in-mock
+vi.mock("@quieter/database/client", async (importOriginal) => {
+  const actual = await importOriginal<typeof DatabaseClientModule>();
   return {
     ...actual,
-    db: Object.assign(actual.db, {
+    db: {
       select: () => ({
         from: () => ({
           where: () => ({
@@ -67,13 +70,16 @@ vi.mock(import("@quieter/database/client"), async (importOriginal) => {
               {
                 accessTokenExpiresAt: new Date(Date.now() + 3_600_000),
                 encryptedAccessToken: "encrypted-test",
+                provider: "google_calendar",
+                scopes:
+                  "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/calendar.events read write",
                 status: "connected",
               },
             ],
           }),
         }),
       }),
-    }),
+    },
   };
 });
 vi.mock(import("../src/gmail-credential-crypto"), () => ({
@@ -153,6 +159,34 @@ describe("independent local connector write controls", () => {
       arguments: {},
       name: "list_teams",
     });
+    expect(mocks.close).toHaveBeenCalledOnce();
+  });
+
+  test("Linear batches run in order, retain failures and respect the call limit", async () => {
+    let completed = 0;
+    mocks.callTool.mockImplementation(async ({ name }) => {
+      const predecessor = completed;
+      await Promise.resolve();
+      expect(completed).toBe(predecessor);
+      completed += 1;
+      if (name === "get_failure") {
+        throw new Error("Provider failed");
+      }
+      return { content: [{ text: String(completed), type: "text" }] };
+    });
+    const results = await runLinearMcpToolCallsForUser({
+      calls: ["get_first", "get_failure", "get_last", "get_excluded"].map(
+        (toolName) => ({ toolName })
+      ),
+      maxCalls: 3,
+      userId: "test",
+    });
+    expect(completed).toBe(3);
+    expect(results).toMatchObject([
+      { output: { content: [{ text: "1" }] }, toolName: "get_first" },
+      { error: "Provider failed", status: "error", toolName: "get_failure" },
+      { output: { content: [{ text: "3" }] }, toolName: "get_last" },
+    ]);
     expect(mocks.close).toHaveBeenCalledOnce();
   });
 

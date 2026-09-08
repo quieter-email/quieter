@@ -26,15 +26,12 @@ flowchart TB
         subgraph QUEUES["Cloudflare Queues"]
             PSQ["GmailPsQueue<br/>retry 10 / 30s delay<br/>maxConcurrency 20"]
             PSD["GmailPsDlq"]
-            MAQ["MailboxActionQueue<br/>retry 5 / 30s delay<br/>maxConcurrency 5"]
-            MAD["MailboxActionDeadLetterQueue"]
         end
 
         subgraph CONSUMERS["Queue consumers + crons (Workers)"]
             PSW["queue-worker.ts<br/>Gmail sync + maintenance<br/>cpu limit 5 min"]
-            MAW["mailbox-action-worker.ts<br/>runs mailbox automations<br/>cpu limit 5 min"]
+            MMAINT["Cron every minute<br/>mail-maintenance-worker.ts<br/>send recovery, cleanup, rule backfills"]
             PSMAINT["Cron */15 min<br/>gmail-maintenance-worker.ts<br/>selects only due mailboxes"]
-            MADISP["Cron every minute<br/>mailbox-action-dispatch-worker.ts"]
         end
 
         HD["Hyperdrive AppDatabaseV2<br/>connection pooling, caching off"]
@@ -62,7 +59,7 @@ flowchart TB
         GPUB["Google Pub/Sub<br/>Gmail watch push"]
         GAPI["Gmail API<br/>history, messages, labels, watch, modify"]
         GOAUTH["Google Identity OAuth<br/>sign-in only"]
-        OR["OpenRouter<br/>chat, auto-label, useful details,<br/>action conditions, titles"]
+        OR["OpenRouter<br/>chat, auto-label, useful details,<br/>titles"]
         POLAR["Polar<br/>products, checkout, webhooks, usage"]
         LINEAR["Linear<br/>OAuth + MCP"]
         GCAL["Google Calendar<br/>OAuth + events"]
@@ -75,7 +72,6 @@ flowchart TB
     GPUB -->|OIDC JWT push| GWORKER
     GWORKER -->|mailbox-dirty| LSDO
     GWORKER -->|process notification directly| HD
-    GWORKER -->|enqueue automation runs| MAQ
     LSDO -.->|refresh signal| BROWSER
     PSQ --> PSW
     PSW -->|process + maintain| HD
@@ -83,11 +79,10 @@ flowchart TB
     PSMAINT -->|list connected mailboxes| HD
     PSMAINT -->|maintenance jobs| PSQ
     PSQ --> PSD
-    MADISP -->|queued or lease-expired runs| HD
-    MADISP -->|runId| MAQ
-    MAQ --> MAW
-    MAQ --> MAD
-    MAW --> HD
+    MMAINT --> HD
+    MMAINT --> R2
+    MMAINT --> POLAR
+    MMAINT --> SENTRY
     WEB --> HD
     RECEIPT -->|canonical raw .eml| R2
     INGRESS -->|canonical raw .eml| R2
@@ -104,22 +99,16 @@ flowchart TB
     FEED --> PG
     WEB --> GAPI
     PSW --> GAPI
-    MAW --> GAPI
     BROWSER -->|Google sign-in| GOAUTH
     PSW --> OR
-    MAW --> OR
     WEB --> OR
     WEB --> POLAR
     RECEIPT --> POLAR
-    MAW --> POLAR
-    PSW --> LINEAR
-    MAW --> LINEAR
+    WEB --> LINEAR
     WEB --> GCAL
-    MAW --> GCAL
     WEB --> SENTRY
     GWORKER --> SENTRY
     PSW --> SENTRY
-    MAW --> SENTRY
     RECEIPT --> SENTRY
     FEED --> SENTRY
     BROWSER -->|after consent| PH
@@ -134,14 +123,12 @@ flowchart TB
 | Resource | SST type | Entry point | Triggered by | Talks to | Notes |
 | --- | --- | --- | --- | --- | --- |
 | `Web` | `sst.cloudflare.TanStackStart` | `apps/web` | Browser HTTPS | Hyperdrive, SESv2, Gmail API, OpenRouter, Polar, Sentry, R2 | Production domain `quieter.email` (+ `www` redirect), logs + traces on, linked scoped AWS credentials via `WebAwsPermissions` for `ses:SendEmail`/`SendRawEmail`. |
-| `GmailRealtimeWorker` | `sst.cloudflare.Worker` | `packages/cloudflare/src/worker.ts` | Google Pub/Sub push (POST `/gmail/pubsub`), browser WebSocket (`/gmail/live`) | Hyperdrive, processing secrets, `MailboxActionQueue`, `GmailLiveSyncMailbox` | Processes authenticated notifications before acknowledging. Verifies Google OIDC JWT against JWKS, checks subscription name, body limit 64 KiB. One DO per normalized email address. |
+| `GmailRealtimeWorker` | `sst.cloudflare.Worker` | `packages/cloudflare/src/worker.ts` | Google Pub/Sub push (POST `/gmail/pubsub`), browser WebSocket (`/gmail/live`) | Hyperdrive, processing secrets, `GmailLiveSyncMailbox` | Processes authenticated notifications before acknowledging. Verifies Google OIDC JWT against JWKS, checks subscription name, body limit 64 KiB. One DO per normalized email address. |
 | `GmailLiveSyncMailbox` | `sst.cloudflare.DurableObject` (SQLite, migration `v1`) | `packages/cloudflare/src/gmail-live-sync-mailbox.ts` | Worker fetch / WS upgrade | Browser sockets, workers via `/broadcast` | Hibernatable WebSockets, auto ping/pong, broadcasts `mailbox-dirty` and `mailbox-details-dirty`. |
 | `GmailPsQueue` / `GmailPsDlq` | `sst.cloudflare.Queue` | — | Producer: maintenance cron | Consumer `queue-worker.ts` | DLQ after 10 retries, 30 s retry delay, max concurrency 20, batch size 1. |
 | `queue-worker.ts` consumer | Worker (queue subscription) | `packages/cloudflare/src/queue-worker.ts` | `GmailPsQueue` messages | Hyperdrive, Gmail API, OpenRouter, Polar, DO | Handles maintenance and drains previously queued notifications; 5-minute CPU limit; per-message `retry` with exponential backoff, throws on busy mailbox lease. |
-| `GmailPubSubMaintenance` | `sst.cloudflare.Cron` | `packages/cloudflare/src/gmail-maintenance-worker.ts` | `*/15 * * * *` | Hyperdrive, `GmailPsQueue` | Due-driven selection (≤500/tick, ordered by soonest expiry): watch state missing, expiry within 72 h, renewal heartbeat overdue (36 h + hash jitter), stale reconciliation (2 h + jitter) for mailboxes with enabled automations, or recent error backoff (1 h). Mailboxes receiving pushes stay fresh via `lastReconciledAt` and are never selected. |
-| `MailboxActionQueue` / `MailboxActionDeadLetterQueue` | `sst.cloudflare.Queue` | — | Producer: dispatch cron | Consumer `mailbox-action-worker.ts` | DLQ after 5 retries, 30 s delay, max concurrency 5, batch size 1. |
-| `mailbox-action-worker.ts` consumer | Worker (queue subscription) | `packages/cloudflare/src/mailbox-action-worker.ts` | `MailboxActionQueue` messages | Hyperdrive, Gmail API, OpenRouter, Polar, Linear, Google Calendar | Executes `mailboxActionRun` by id; 5-minute CPU limit. Transient failures return the run to `queued` for the next delivery; the sixth failed delivery (queue retry limit 5) settles it as `failed` and DLQs the message. |
-| `MailboxActionDispatch` | `sst.cloudflare.Cron` | `packages/cloudflare/src/mailbox-action-dispatch-worker.ts` | every minute | Hyperdrive, `MailboxActionQueue` | Fallback dispatcher: Gmail-synced runs are enqueued directly by the sync consumer, so the cron only covers SES-ingested runs, lost messages, and crash recovery. It atomically claims runs before sending (conditional `UPDATE ... RETURNING` stamps `dispatchedAt`, valid 15 min) and releases claims when a send fails. Runs failing on queue attempt 6 are settled as `failed`. |
+| `GmailPubSubMaintenance` | `sst.cloudflare.Cron` | `packages/cloudflare/src/gmail-maintenance-worker.ts` | `*/15 * * * *` | Hyperdrive, `GmailPsQueue` | Due-driven selection (≤500/tick, ordered by soonest expiry): watch state missing, expiry within 72 h, renewal heartbeat overdue (36 h + hash jitter), stale reconciliation (2 h + jitter) for mailboxes with auto-labeling or useful-detail extraction enabled, or recent error backoff (1 h). Mailboxes receiving pushes stay fresh via `lastReconciledAt` and are never selected. |
+| `MailMaintenance` | `sst.cloudflare.Cron` | `packages/cloudflare/src/mail-maintenance-worker.ts` | every minute | Hyperdrive, R2, Polar, Sentry | Send recovery, storage cleanup, expired rate-limit cleanup, and managed rule backfills. |
 | `AppDatabaseV2` | `sst.cloudflare.Hyperdrive` | — | Worker DB access | PostgreSQL origin from `DatabaseUrl` secret | Caching disabled; production uses fixed Hyperdrive id. Workers use `withRequestDatabaseClient` per invocation. |
 | R2 bucket (external) | configured via `R2_*` env + access-key secrets, not an SST resource | — | Receipt processor, mail ingress | — | Canonical `.eml` storage under `mail/inbound/yyyy/mm/dd/uuid.eml`, read back by the web worker via S3-compatible API. |
 
@@ -164,7 +151,7 @@ flowchart TB
 
 | Store | Owner | Contents | Lifetime |
 | --- | --- | --- | --- |
-| PostgreSQL | external, via `DatabaseUrl` secret | Everything: users, orgs, mailboxes, messages metadata, chats, action graphs/runs, credentials (encrypted), watch state, entitlements, delivery feedback, suppressions | Permanent; migrations via `packages/database` |
+| PostgreSQL | external, via `DatabaseUrl` secret | Everything: users, orgs, mailboxes, messages metadata, chats, retained legacy action records, credentials (encrypted), watch state, entitlements, delivery feedback, suppressions | Permanent; migrations via `packages/database` |
 | R2 | Cloudflare, referenced not provisioned | Canonical raw `.eml` objects for managed mail | Indefinite; deleted only when untracked by the ingestion transaction |
 | S3 `MailBucket` | AWS | SES landing copies only | 1-day lifecycle + eager delete after processing |
 | Durable Object storage | `GmailLiveSyncMailbox` | Live socket tags only | Ephemeral |
@@ -193,7 +180,6 @@ sequenceDiagram
     W->>DB: billing entitlement check
     W->>A: history.list / messages.get / labels (up to 5 pages)
     W->>DB: persist messages, auto-label/useful-detail results
-    W->>DB: insert mailboxActionRun rows for triggers
     W->>D: broadcast mailbox-details-dirty
     D-->>B: refresh useful details
     W->>D: broadcast mailbox-dirty
@@ -213,7 +199,7 @@ sequenceDiagram
     participant A as Gmail API
     participant D as LiveSync DO
 
-    CR->>DB: list due mailboxes (renewal, setup, or stale+automated)
+    CR->>DB: list due mailboxes (renewal, setup, or stale with automatic AI features enabled)
     CR->>Q: sendBatch maintenance jobs (100/batch)
     Q->>C: deliver job
     C->>DB: status + entitlement re-check
@@ -249,7 +235,6 @@ sequenceDiagram
     L->>S3: HeadObject (size) + GetObject (raw)
     L->>R: PutObject canonical .eml
     L->>DB: recordInboundManagedMessage (exact recipients + catch-all)
-    L->>DB: insert mailboxActionRun rows (email_received triggers)
     L->>PO: record inbound organization mail usage
     L->>S3: delete untracked landing object
 ```
@@ -279,39 +264,9 @@ sequenceDiagram
     L--x failure: async destination -> DLQ (CloudWatch alarm, no polling)
 ```
 
-### 5. Mailbox automations
+### 5. Mail maintenance
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant GS as Gmail sync consumer
-    participant IN as SES ingestion Lambda
-    participant DB as PostgreSQL
-    participant Q as MailboxActionQueue
-    participant W as mailbox-action-worker
-    participant AI as OpenRouter
-    participant EX as Linear / Google Calendar / Gmail
-
-    GS->>DB: insert runs, stamp dispatchedAt, push runIds (instant)
-    IN->>DB: insert runs only (no queue access)
-    participant CR as Dispatch cron (1 min, fallback)
-    Note over DB,Q: cron claims atomically: queued with expired<br/>dispatch lease, or running with expired execution lease
-    CR->>DB: claim batch (conditional UPDATE sets dispatchedAt)
-    CR->>Q: sendBatch claimed runIds
-    CR->>DB: release claims for failed sends
-    Q->>W: deliver runId (attempt N of 6)
-    W->>DB: claim run (10-min execution lease)
-    W->>DB: load graph, message content, AI memory
-    W->>AI: condition / router / agent steps
-    W->>EX: connector + Gmail effects (idempotency keys)
-    W->>DB: persist frames, step runs, effects
-    alt transient failure before attempt 6
-        W->>DB: return run to queued (lastError recorded)
-        W->>Q: retry with exponential backoff
-    else failure on attempt 6
-        W->>DB: mark failed with lastError; message goes to DLQ
-    end
-```
+`infra/mail-maintenance.ts` provisions `MailMaintenance` every minute. Its handler, `packages/cloudflare/src/mail-maintenance-worker.ts`, runs send recovery, storage cleanup, rate-limit cleanup, and managed rule backfills within a request-scoped database client. The local `vp run dev:trigger mail-recovery` command invokes the same maintenance operations. Managed inbox rules remain supported; custom actions are no longer created or executed by the new application.
 
 ### 6. Chat with tools
 
@@ -334,7 +289,7 @@ flowchart LR
     SECRETS -->|value as env| AWL["AWS Lambda env"]
     SECRETS -->|secret text binding| CFW["Cloudflare Workers (only workers that link them)"]
     S1 -->|origin| HD["Hyperdrive AppDatabaseV2"]
-    ENV["Non-secret deployment env (infra/web.ts, infra/gmail.ts, infra/actions.ts): AWS_REGION, GMAIL_PUBSUB_* ids, POLAR_* ids, R2_* ids, SES_CONFIGURATION_SET_NAME, MAIL_RECEIPT_*, QUIETER_* flags, VITE_*"]
+    ENV["Non-secret deployment env (infra/web.ts, infra/gmail.ts, infra/mail-maintenance.ts): AWS_REGION, GMAIL_PUBSUB_* ids, POLAR_* ids, R2_* ids, SES_CONFIGURATION_SET_NAME, MAIL_RECEIPT_*, QUIETER_* flags, VITE_*"]
 ```
 
 Rules enforced by `AGENTS.md`: sensitive values only through SST Secrets and linked bindings; `DATABASE_URL` and `MAIL_INGEST_TOKEN` never become Cloudflare bindings; `wrangler.types.jsonc` holds test-only fixtures for type generation, never real configuration.
@@ -343,4 +298,6 @@ Rules enforced by `AGENTS.md`: sensitive values only through SST Secrets and lin
 
 Removed from the graph: AWS Gmail SQS queues + FIFO DLQ, `GmailPubSubIngress` API Gateway, `GmailPubSubProcess` Function URL, EventBridge maintenance cron, `MailboxActionQueue` SQS + consumer Lambda, DynamoDB `GmailLiveSyncConnections`, API Gateway WebSocket live-sync, outbound-feedback primary SQS queue and its age alarm, and the `@aws-sdk/client-sqs`/DynamoDB/ApigatewayManagementAPI dependencies.
 
-Because production uses `removal: "retain"`, these still exist in AWS until manually deleted: `quieter-production-GmailPubSubQueueQueue-*.fifo`, `GmailPubSubDeadLetterQueueQueue-*.fifo`, `MailboxActionQueueQueue-*`, `MailboxActionDeadLetterQueueQueue-*`, `MailOutboundFeedbackQueueQueue-*`, the old `MailOutboundFeedbackDeadLetterQueueQueue-*` (superseded by the new one only after deploy), the orphaned dev `quieter-mail-dev-ChatGenerationQueueQueue-*` with its poller (214k idle polls/month on its own), the DynamoDB table, the API Gateway WebSocket API, and the old Gmail Pub/Sub Lambdas and ingress. Drain `MailOutboundFeedbackQueue` before deleting it; delete the others only after the replacement Cloudflare queues have handled production traffic.
+Because production uses `removal: "retain"`, these still exist in AWS until manually deleted: `quieter-production-GmailPubSubQueueQueue-*.fifo`, `GmailPubSubDeadLetterQueueQueue-*.fifo`, `MailboxActionQueueQueue-*`, `MailboxActionDeadLetterQueueQueue-*`, `MailOutboundFeedbackQueueQueue-*`, the old `MailOutboundFeedbackDeadLetterQueueQueue-*` (superseded by the new one only after deploy), the orphaned dev `quieter-mail-dev-ChatGenerationQueueQueue-*` with its poller (214k idle polls/month on its own), the DynamoDB table, the API Gateway WebSocket API, and the old Gmail Pub/Sub Lambdas and ingress. Drain `MailOutboundFeedbackQueue` before deleting it; delete replaced Gmail resources only after their Cloudflare replacements have handled production traffic. Custom action resources have no replacement consumer and require the retirement procedure below.
+
+Custom action Cloudflare queues, their consumer, and the dispatcher are also removed from the infrastructure definition. This has not been deployed. Pause old dispatch and producers, drain in-flight workers, and account for queued retries before removing those resources. Confirm no retained worker can resume action execution. Keep the existing action database tables and records unchanged during the rollback window; their deletion requires a later contract migration. Connectors and chat remain active. See [release requirements](architecture.md#custom-action-removal-and-release).

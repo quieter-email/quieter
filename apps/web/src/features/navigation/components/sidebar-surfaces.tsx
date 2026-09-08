@@ -17,7 +17,7 @@ const sidebarSurfaceFadeTransition = {
   transform: { duration: 0.18, ease: [0.23, 1, 0.32, 1] as const },
 };
 
-export const sidebarSurfaceVariants = cva("squircle rounded-md", {
+const sidebarSurfaceVariants = cva("squircle rounded-md", {
   variants: {
     surface: {
       active: "pointer-events-none absolute inset-0 z-0 bg-control-active",

@@ -14,6 +14,8 @@ import {
   MAILBOX_PROVIDER_GMAIL,
   MAILBOX_PROVIDER_MANAGED,
 } from "../mailbox/access";
+import { resolveManagedSearchLabels } from "../managed-mail/labels/references";
+import { throwMailboxOrganizationNameConflict } from "../managed-mail/organization/name-conflict";
 import { normalizeManagedOrganizationName } from "../managed-mail/organization/normalize-name";
 
 type SavedViewProvider = "gmail" | "managed";
@@ -153,24 +155,35 @@ export const createSavedView = async (input: {
     definition,
     provider: context.provider,
   });
-  const now = new Date();
-  const [record] = await db
-    .insert(managedMailSavedView)
-    .values({
-      color: definition.color,
-      createdAt: now,
-      icon: definition.icon,
-      id: randomUUID(),
-      mailboxId: input.mailboxId,
-      name: definition.name,
-      normalizedName: normalizeManagedOrganizationName(definition.name),
-      ownerUserId,
-      search: definition.search,
-      sort: definition.sort,
-      updatedAt: now,
-    })
-    .returning();
-  return record;
+  return await db.transaction(async (tx) => {
+    const search =
+      context.provider === "managed"
+        ? await resolveManagedSearchLabels(
+            tx,
+            input.mailboxId,
+            definition.search
+          )
+        : definition.search;
+    const now = new Date();
+    const [record] = await tx
+      .insert(managedMailSavedView)
+      .values({
+        color: definition.color,
+        createdAt: now,
+        icon: definition.icon,
+        id: randomUUID(),
+        mailboxId: input.mailboxId,
+        name: definition.name,
+        normalizedName: normalizeManagedOrganizationName(definition.name),
+        ownerUserId,
+        search,
+        sort: definition.sort,
+        updatedAt: now,
+      })
+      .returning()
+      .catch(throwMailboxOrganizationNameConflict);
+    return record;
+  });
 };
 
 export const updateSavedView = async (input: {
@@ -203,21 +216,32 @@ export const updateSavedView = async (input: {
     definition,
     provider: context.provider,
   });
-  const [updated] = await db
-    .update(managedMailSavedView)
-    .set({
-      color: definition.color,
-      disabledReason: null,
-      icon: definition.icon,
-      name: definition.name,
-      normalizedName: normalizeManagedOrganizationName(definition.name),
-      search: definition.search,
-      sort: definition.sort,
-      updatedAt: new Date(),
-    })
-    .where(eq(managedMailSavedView.id, view.id))
-    .returning();
-  return updated;
+  return await db.transaction(async (tx) => {
+    const search =
+      context.provider === "managed"
+        ? await resolveManagedSearchLabels(
+            tx,
+            input.mailboxId,
+            definition.search
+          )
+        : definition.search;
+    const [updated] = await tx
+      .update(managedMailSavedView)
+      .set({
+        color: definition.color,
+        disabledReason: null,
+        icon: definition.icon,
+        name: definition.name,
+        normalizedName: normalizeManagedOrganizationName(definition.name),
+        search,
+        sort: definition.sort,
+        updatedAt: new Date(),
+      })
+      .where(eq(managedMailSavedView.id, view.id))
+      .returning()
+      .catch(throwMailboxOrganizationNameConflict);
+    return updated;
+  });
 };
 
 export const deleteSavedView = async (input: {

@@ -19,7 +19,6 @@ import {
 import { and, eq, isNull } from "drizzle-orm";
 
 import { assertOrganizationManager } from "../organization/divisions";
-import { hasText } from "../text";
 import {
   getAuthorizedManagedMailbox,
   MAILBOX_PROVIDER_MANAGED,
@@ -70,7 +69,7 @@ const assertDivisionBelongsToOrganization = async (
   organizationId: string,
   database: Pick<typeof db, "select"> = db
 ) => {
-  if (!hasText(divisionId)) {
+  if (!divisionId) {
     return;
   }
   const [division] = await database
@@ -108,12 +107,12 @@ export const createManagedMailbox = async (input: {
   });
   const accessMode = input.accessMode ?? "shared";
   if (accessMode === "private") {
-    if (!hasText(input.ownerUserId)) {
+    if (!input.ownerUserId) {
       throw new ORPCError("BAD_REQUEST", {
         message: "Choose a team member who owns this private mailbox.",
       });
     }
-    if (hasText(input.divisionId)) {
+    if (input.divisionId) {
       throw new ORPCError("BAD_REQUEST", {
         message: "Private mailboxes cannot belong to a division.",
       });
@@ -181,7 +180,7 @@ export const createManagedMailbox = async (input: {
     await tx.insert(mailbox).values({
       accessMode,
       createdAt: now,
-      displayName: hasText(input.displayName) ? input.displayName.trim() : null,
+      displayName: input.displayName ? input.displayName.trim() : null,
       divisionId: ownerId === null ? (input.divisionId ?? null) : null,
       emailAddress,
       id: mailboxId,
@@ -418,14 +417,14 @@ export const getManagedMailboxDetails = async (input: {
       )
       .where(eq(mailboxDivisionGrant.mailboxId, input.mailboxId)),
     selectedMailbox.ownerUserId === null
-      ? Promise.resolve([])
+      ? []
       : db
           .select({ email: user.email, name: user.name })
           .from(user)
           .where(eq(user.id, selectedMailbox.ownerUserId))
           .limit(1),
     selectedMailbox.divisionId === null
-      ? Promise.resolve([])
+      ? []
       : db
           .select({
             id: organizationDivision.id,
@@ -494,9 +493,7 @@ export const updateManagedMailbox = async (input: {
         ...(input.displayName === undefined
           ? {}
           : {
-              displayName: hasText(input.displayName)
-                ? input.displayName.trim()
-                : null,
+              displayName: input.displayName ? input.displayName.trim() : null,
             }),
         ...(input.divisionId === undefined
           ? {}
@@ -559,7 +556,7 @@ export const setManagedMailboxAccessMode = async (input: {
         },
         tx
       );
-      if (!hasText(ownerId)) {
+      if (!ownerId) {
         throw new ORPCError("BAD_REQUEST", {
           message: "Choose a team member who owns this private mailbox.",
         });

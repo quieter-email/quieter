@@ -26,14 +26,6 @@ const AccountSettingsPanel = lazy(
       })
     )
 );
-const ActionsSettingsPanel = lazy(
-  async () =>
-    await import("./actions-settings-panel").then(
-      ({ ActionsSettingsPanel: component }) => ({
-        default: component,
-      })
-    )
-);
 const AiSettingsPanel = lazy(
   async () =>
     await import("./ai-settings-panel").then(
@@ -121,9 +113,6 @@ const preloadSettingsPanel = async (tab: SettingsTab) => {
   switch (tab) {
     case "account": {
       return await import("./account-settings-panel");
-    }
-    case "actions": {
-      return await import("./actions-settings-panel");
     }
     case "ai": {
       return await import("./ai-settings-panel");
@@ -296,7 +285,7 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
                 "space-y-8": !isGuidedMailboxSetup,
               })}
             >
-              {detail && tab !== "actions" && tab !== "mailboxes" && (
+              {detail && tab !== "mailboxes" && (
                 <header>
                   <h1 className="text-title-sm font-normal tracking-tight text-fg">
                     {detail.title}
@@ -327,7 +316,6 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
                   <AccountSettingsPanel initialUser={initialUser} />
                 )}
                 {tab === "mailboxes" && <MailboxesSettingsPanel />}
-                {tab === "actions" && <ActionsSettingsPanel />}
                 {tab === "connectors" && <ConnectorsSettingsPanel />}
                 {tab === "organization" && <OrganizationSettingsPanel />}
               </Suspense>

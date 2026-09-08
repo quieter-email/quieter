@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import { parseEnv } from "node:util";
 
 const loopbackHosts = new Set(["127.0.0.1", "::1", "localhost"]);
 
@@ -26,41 +27,42 @@ export const forbiddenLocalKeys = [
   "SENTRY_PROJECT",
 ] as const;
 
-export const parseEnvFile = (path: string) => {
-  const values = new Map<string, string>();
+export const parseEnvFile = (path: string) =>
+  new Map(
+    Object.entries(parseEnv(readFileSync(path, "utf-8"))).filter(
+      (entry): entry is [string, string] =>
+        entry[1] !== undefined && entry[1] !== ""
+    )
+  );
 
-  for (const rawLine of readFileSync(path, "utf-8").split(/\r?\n/u)) {
-    const line = rawLine.trim();
-    if (line === "" || line.startsWith("#")) {
-      continue;
+export const serializeEnvFile = (values: ReadonlyMap<string, string>) => {
+  const lines = [...values].map(([key, value]) => {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/u.test(key)) {
+      throw new Error("Invalid environment variable name.");
     }
-
-    const equalsIndex = line.indexOf("=");
-    if (equalsIndex === -1) {
-      continue;
+    const quote = ["'", '"', "`"].find(
+      (candidate) => !value.includes(candidate)
+    );
+    if (quote === undefined) {
+      throw new Error(
+        "Environment value cannot be represented without changing it."
+      );
     }
-
-    const key = line.slice(0, equalsIndex).trim();
-    let value = line.slice(equalsIndex + 1).trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-    if (value !== "") {
-      values.set(key, value);
-    }
+    return `${key}=${quote}${value}${quote}`;
+  });
+  const serialized = `${lines.join("\n")}\n`;
+  const parsed = parseEnv(serialized);
+  if (
+    Object.keys(parsed).length !== values.size ||
+    [...values].some(([key, value]) => parsed[key] !== value)
+  ) {
+    throw new Error("Environment values did not survive serialization.");
   }
-
-  return values;
+  return serialized;
 };
 
 const getHostname = (value: string) =>
   new URL(value).hostname.replace(/^\[(?<host>.*)\]$/u, "$<host>");
-
-const hasText = (value: string | undefined): value is string =>
-  value !== undefined && value !== "";
 
 const isPlanetScaleHostname = (hostname: string) =>
   hostname.endsWith(".pg.psdb.cloud") ||
@@ -73,7 +75,7 @@ const isAllowlistedPlanetScaleUrl = (
 ) => {
   const url = new URL(value);
   return (
-    hasText(configuredPlanetScaleHost) &&
+    !!configuredPlanetScaleHost &&
     isPlanetScaleHostname(configuredPlanetScaleHost) &&
     getHostname(value).toLowerCase() === configuredPlanetScaleHost &&
     url.pathname.slice(1) === "quieter_dev" &&
@@ -99,7 +101,7 @@ const validateDatabaseUrls = (
 
   for (const key of ["DATABASE_URL", "DATABASE_MIGRATION_URL"] as const) {
     const value = env.get(key);
-    if (!hasText(value)) {
+    if (!value) {
       continue;
     }
 
@@ -120,11 +122,11 @@ const validateDatabaseUrls = (
   }
 
   if (
-    hasText(configuredPlanetScaleHost) &&
+    configuredPlanetScaleHost &&
     isPlanetScaleHostname(configuredPlanetScaleHost)
   ) {
     const migrationUrl = env.get("DATABASE_MIGRATION_URL");
-    if (!hasText(migrationUrl)) {
+    if (!migrationUrl) {
       errors.push(
         "DATABASE_MIGRATION_URL is required for the allowlisted local PlanetScale database and must use direct port 5432."
       );
@@ -157,7 +159,7 @@ const validateAuthAndDeployment = (env: Map<string, string>) => {
     }
   }
   const liveUrl = env.get("GMAIL_LIVE_SYNC_URL");
-  if (hasText(liveUrl)) {
+  if (liveUrl) {
     try {
       const url = new URL(liveUrl);
       if (
@@ -177,7 +179,7 @@ const validateAuthAndDeployment = (env: Map<string, string>) => {
   }
   const subscription = env.get("GMAIL_PUBSUB_SUBSCRIPTION");
   if (
-    hasText(subscription) &&
+    subscription &&
     !/^projects\/[^/]+\/subscriptions\/quieter-gmail-local-[a-z0-9-]+$/u.test(
       subscription
     )
@@ -188,7 +190,7 @@ const validateAuthAndDeployment = (env: Map<string, string>) => {
   }
   if (
     env.get("QUIETER_LOCAL_PROVIDER_MODE") === "write" &&
-    !hasText(env.get("QUIETER_LOCAL_GMAIL_WRITE_ACCOUNTS"))
+    !env.get("QUIETER_LOCAL_GMAIL_WRITE_ACCOUNTS")
   ) {
     errors.push(
       "Write tests require QUIETER_LOCAL_GMAIL_WRITE_ACCOUNTS and dedicated mailboxes or an explicit production handoff."
@@ -196,7 +198,7 @@ const validateAuthAndDeployment = (env: Map<string, string>) => {
   }
   const authUrl = env.get("BETTER_AUTH_URL");
 
-  if (hasText(authUrl)) {
+  if (authUrl) {
     try {
       if (loopbackHosts.has(getHostname(authUrl))) {
         // ok

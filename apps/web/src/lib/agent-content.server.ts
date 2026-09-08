@@ -1,10 +1,10 @@
 // Machine-readable descriptions of the public marketing surface. Copy mirrors
 // the landing page and legal documents so agents read the same story humans do.
 
-export const siteUrl = "https://quieter.email";
+const siteUrl = "https://quieter.email";
 
 // Bump when public page copy or the machine surfaces change.
-export const contentLastUpdated = "2026-08-26";
+const contentLastUpdated = "2026-08-26";
 
 const homeMarkdown = `# Quieter
 

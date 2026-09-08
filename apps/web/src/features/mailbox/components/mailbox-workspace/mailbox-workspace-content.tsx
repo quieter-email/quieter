@@ -21,7 +21,7 @@ import type { ComposeDraftState } from "#/features/compose/domain/draft";
 import type { MailboxWorkspaceView } from "#/features/mailbox/domain/mailbox-workspace-view";
 import { MailSidebar } from "#/features/navigation/components/mail-sidebar";
 import type { MailboxSwitcherOrder } from "#/features/navigation/components/mailbox-switcher";
-import type { MailboxCategory } from "#/lib/gmail/gmail";
+import type { MailboxCategory } from "#/lib/mail";
 
 import { FirstRunManagedMailSetup } from "./first-run-managed-mail-setup";
 import { MailboxMessagesPanel } from "./mailbox-messages-panel";
@@ -40,9 +40,6 @@ const TemplateWorkspace = lazy(loadTemplateWorkspace);
 type MailboxSidebarGroups = ComponentProps<typeof MailSidebar>["groups"];
 type MailboxSidebarChats = ComponentProps<typeof MailSidebar>["chats"];
 
-const hasText = (value: string | null | undefined): value is string =>
-  value !== null && value !== undefined && value !== "";
-
 type MailboxWorkspaceLayoutState = {
   isMobileSidebarOpen: boolean;
 };
@@ -56,7 +53,11 @@ type MailboxWorkspaceContentProps = {
   };
   chatId: string | null;
   chats: MailboxSidebarChats;
-  composeSessionKey: number;
+  composeSession: {
+    key: number;
+    draft: ComposeDraftState | null;
+    mailboxId: string | null;
+  };
   currentUserEmail: string | null;
   defaultMailboxId: string | null;
   draftChatKey: string;
@@ -247,7 +248,7 @@ const NoMailboxWorkspace = ({
                 Open settings
               </LinkButton>
             </div>
-            {hasText(connectError) ? (
+            {connectError ? (
               <p className="mt-3 text-body text-destructive">{connectError}</p>
             ) : null}
           </m.div>
@@ -262,7 +263,7 @@ export const MailboxWorkspaceContent = ({
   chatContext,
   chatId,
   chats,
-  composeSessionKey,
+  composeSession,
   currentUserEmail,
   defaultMailboxId,
   draftChatKey,
@@ -302,7 +303,7 @@ export const MailboxWorkspaceContent = ({
   signature,
 }: MailboxWorkspaceContentProps) => {
   let mailboxContent: ReactNode;
-  if (!hasText(selectedMailboxId)) {
+  if (!selectedMailboxId) {
     mailboxContent = (
       <NoMailboxWorkspace
         connectError={reconnectError}
@@ -317,7 +318,12 @@ export const MailboxWorkspaceContent = ({
         fallback={<ComposeWorkspaceLoading onOpenSidebar={onOpenSidebar} />}
       >
         <ComposeWorkspace
-          key={composeSessionKey}
+          key={`${selectedMailboxId}:${composeSession.key}`}
+          initialDraft={
+            composeSession.mailboxId === selectedMailboxId
+              ? composeSession.draft
+              : null
+          }
           demoMode={isDemoMode}
           managedDemoMode={isManagedDemoMode}
           mailboxId={selectedMailboxId}
@@ -396,7 +402,7 @@ export const MailboxWorkspaceContent = ({
               />
               Reconnect
             </Button>
-            {hasText(reconnectError) ? (
+            {reconnectError ? (
               <p className="mt-3 text-body text-destructive">
                 {reconnectError}
               </p>
@@ -458,7 +464,7 @@ export const MailboxWorkspaceContent = ({
     <LazyMotion features={domAnimation}>
       <main className="relative isolate flex h-dvh min-h-0 flex-col overflow-hidden pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-fg lg:p-0">
         <div className="relative z-10 flex min-h-0 flex-1 overflow-hidden">
-          {hasText(selectedMailboxId) ? (
+          {selectedMailboxId ? (
             <MailSidebar
               activeChatId={chatId}
               chats={chats}

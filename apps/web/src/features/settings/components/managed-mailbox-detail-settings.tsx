@@ -401,13 +401,17 @@ export const ManagedMailboxDetailSettings = ({
     role: MailboxGrantRole | null
   ) => void;
   onMemberGrantChange: (userId: string, role: MailboxGrantRole | null) => void;
-  onUpdateMailbox: (input: {
-    displayName?: string;
-    divisionId?: string | null;
-    includeApiSentMessages?: boolean;
-  }) => void;
+  onUpdateMailbox: (
+    input: {
+      displayName?: string;
+      divisionId?: string | null;
+      includeApiSentMessages?: boolean;
+    },
+    onSettled?: () => void
+  ) => void;
   onUsefulDetailsChange: (enabled: boolean) => void;
 }) => {
+  const [displayNameDraft, setDisplayNameDraft] = useState<string | null>(null);
   const usefulDetailsSwitchId = `managed-useful-details-${mailboxId}`;
   const autoLabelSwitchId = `managed-auto-label-${mailboxId}`;
   const isPrivate = details.mailbox.accessMode === "private";
@@ -449,10 +453,21 @@ export const ManagedMailboxDetailSettings = ({
                     : "Shared inbox display name"
                 }
                 className="max-w-64"
-                defaultValue={details.mailbox.displayName ?? ""}
+                disabled={isUpdatePending}
+                value={displayNameDraft ?? details.mailbox.displayName ?? ""}
+                onChange={(event) => {
+                  setDisplayNameDraft(event.currentTarget.value);
+                }}
                 key={`${mailboxId}-display-name`}
                 onBlur={(event) => {
-                  onUpdateMailbox({ displayName: event.currentTarget.value });
+                  const displayName = event.currentTarget.value.trim();
+                  if (displayName === (details.mailbox.displayName ?? "")) {
+                    setDisplayNameDraft(null);
+                    return;
+                  }
+                  onUpdateMailbox({ displayName }, () => {
+                    setDisplayNameDraft(null);
+                  });
                 }}
                 placeholder="Display name"
               />

@@ -710,10 +710,10 @@ export const AtmosphericBackground = ({
       )}
     >
       <canvas
-        className={cn(
-          "absolute inset-0 size-full ease-out",
-          ready ? "opacity-100" : "opacity-0"
-        )}
+        className={cn("absolute inset-0 size-full ease-out", {
+          "opacity-0": !ready,
+          "opacity-100": ready,
+        })}
         ref={canvasRef}
         style={{
           transitionDuration: `${REVEAL_MS}ms`,

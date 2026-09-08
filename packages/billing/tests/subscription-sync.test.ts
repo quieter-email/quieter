@@ -29,11 +29,13 @@ vi.mock(import("@quieter/env/server"), async (importOriginal) => {
   };
 });
 
-vi.mock(import("@quieter/database/client"), async (importOriginal) => {
+// This fake implements only the database operations exercised by the test.
+// oxlint-disable-next-line vitest/prefer-import-in-mock
+vi.mock("@quieter/database/client", async (importOriginal) => {
   const actual = await importOriginal<typeof DatabaseClientModule>();
   return {
     ...actual,
-    db: Object.assign(actual.db, { insert: () => ({ values: mocks.values }) }),
+    db: { insert: () => ({ values: mocks.values }) },
   };
 });
 

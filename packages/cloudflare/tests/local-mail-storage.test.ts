@@ -5,6 +5,7 @@ import {
 import {
   deleteRawMailObject,
   readRawMailObject,
+  writeRawMailObject,
 } from "@quieter/orpc/managed-mail/raw-object";
 import { describe, expect, test, vi } from "vite-plus/test";
 
@@ -20,6 +21,30 @@ vi.mock(import("@quieter/env/server"), async (importOriginal) => {
 });
 
 describe("native local mail storage", () => {
+  test("stores generated message bytes in the local R2 binding", async () => {
+    const raw = new TextEncoder().encode(
+      "From: sender@example.com\r\n\r\nDraft bytes"
+    );
+    const object = {
+      bucket: LOCAL_MAIL_BUCKET,
+      key: `messages/${crypto.randomUUID()}.eml`,
+      provider: "r2" as const,
+    };
+    await writeRawMailObject(object, raw);
+    expect(object.bucket).toBe(LOCAL_MAIL_BUCKET);
+    await expect(
+      readRawMailObject({
+        rawObjectBucket: object.bucket,
+        rawObjectKey: object.key,
+        rawObjectProvider: object.provider,
+        s3Bucket: null,
+        s3Key: null,
+      })
+    ).resolves.toStrictEqual(raw);
+    await deleteRawMailObject(object);
+    await expect(getLocalMailStorage().get(object.key)).resolves.toBeNull();
+  });
+
   test("reads and deletes raw MIME bytes through the real local R2 binding", async () => {
     const key = `fixtures/${crypto.randomUUID()}.eml`;
     const raw = new TextEncoder().encode(

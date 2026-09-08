@@ -6,13 +6,27 @@ import { MailboxesListSettingsView } from "#/features/settings/components/mailbo
 import { settingsRouteApi } from "#/lib/route-apis";
 
 export const MailboxesSettingsPanel = () => {
+  const navigate = settingsRouteApi.useNavigate();
   const { mailboxId, mailboxView } = settingsRouteApi.useSearch();
+  const navigateToMailbox = async (nextMailboxId: string) => {
+    await navigate({
+      search: (previous) => ({
+        ...previous,
+        mailboxId: nextMailboxId,
+        mailboxView: "list",
+        tab: "mailboxes",
+      }),
+      to: ".",
+    });
+  };
   const selectedMailboxId = mailboxId ?? "";
   if (mailboxView === "add") {
-    return <AddMailboxSettingsView />;
+    return <AddMailboxSettingsView onNavigateToMailbox={navigateToMailbox} />;
   }
   if (selectedMailboxId === "") {
-    return <MailboxesListSettingsView />;
+    return (
+      <MailboxesListSettingsView onNavigateToMailbox={navigateToMailbox} />
+    );
   }
   return <MailboxDetailSettingsView mailboxId={selectedMailboxId} />;
 };

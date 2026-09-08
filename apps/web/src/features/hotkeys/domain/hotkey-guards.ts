@@ -48,12 +48,12 @@ export const isAppShortcutSequenceContinuation = (
   return false;
 };
 
-export const isEditableShortcutTarget = (target: EventTarget | null) => {
+const isEditableShortcutTarget = (target: EventTarget | null) => {
   const element = getElementTarget(target);
   return !!element?.closest(editableSelector);
 };
 
-export const hasOpenBlockingDialog = () =>
+const hasOpenBlockingDialog = () =>
   !!document.querySelector(
     "[role='dialog']:not([data-keyboard-shortcuts-dialog]), [data-popup-open]:not([data-keyboard-shortcuts-dialog])"
   );

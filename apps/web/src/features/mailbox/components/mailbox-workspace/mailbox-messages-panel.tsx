@@ -10,7 +10,7 @@ import type { ComposeDraftState } from "#/features/compose/domain/draft";
 import { MessageList } from "#/features/message-list/components/message-list";
 import { MessageDetail } from "#/features/message-thread/components/message-detail";
 import { createDemoMailboxActions } from "#/lib/gmail/demo-mail";
-import type { MailboxCategory, MessageListItem } from "#/lib/gmail/gmail";
+import type { MailboxCategory, MessageListItem } from "#/lib/mail";
 import { createManagedDemoMailboxActions } from "#/lib/managed-mail/demo-managed-mail";
 import { orpc } from "#/lib/orpc";
 

@@ -4,8 +4,6 @@ import { hasUserBillingFeature } from "@quieter/billing/entitlements";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
 import { serverEnv } from "@quieter/env/server";
 
-import { hasText } from "../text";
-
 export const MAIL_AUTOMATION_AI_PAUSED_MESSAGE =
   "AI automation is paused until usage balance is available.";
 
@@ -82,7 +80,7 @@ export const getMailAutomationAiBudgetStatus = async (input: {
       runtimeEnabled,
     });
   }
-  if (!hasText(input.organizationId)) {
+  if (!input.organizationId) {
     return resolveMailAutomationAiBudgetStatus({
       hasAccess: false,
       hasAccount: false,

@@ -20,6 +20,16 @@ Organization admins can block an address manually or unblock it from organizatio
 
 ## Reconciliation
 
+API and managed composer sends share `organizationMailSendIdempotency`. A short transaction locks the organization row and reserves the estimated cost before any provider request. It includes other unbilled reservations when enforcing the spending limit. The request's MIME object and billing-period snapshot are stored before submission.
+
+Sends progress from `prepared` to `submitting`, then `accepted` and `completed`. A confirmed provider rejection permits a retry with the same key. Network failures and expired submission attempts become `unknown`; they never automatically resend. The provider's `quieter_send_id` message tag lets authenticated feedback confirm acceptance even when the HTTP response was lost. An unknown send without feedback requires operator investigation; changing its key can duplicate delivery. Legacy `pending` rows are also retained for investigation.
+
+The existing minute dispatcher retries accepted sends' Sent/API projections and billing reports. Each projection is idempotent. Recovery removes the original draft only if it has not changed since submission. Completed and rejected records, and unsubmitted preparations, expire after seven days. Unknown records do not expire automatically.
+
+Drafts and sends retain immutable MIME objects. A cleanup registry is written before upload; the dispatcher rechecks a bounded batch after 24 hours and deletes only objects with no draft, message, or send reference. This also reclaims objects left by failed database writes and later message deletion. Local development uses the native local R2 binding; run `vp run dev:trigger mail-recovery` to exercise recovery and due cleanup jobs without sending new mail.
+
+Deploy the additive `20260907140009_smart_gorgon` migration before the application and dispatcher. Old releases can continue using the existing columns, but do not receive the new send guarantees. No production migration is performed by local verification.
+
 Recipient projections can be recomputed atomically from the immutable event log. Reconciliation and ingestion serialize per organization/message, preventing concurrent feedback from being overwritten. Notifications that never arrived are repaired by replaying them through normal ingestion: event writes are idempotent, so replaying the same SNS envelope is safe.
 
 ## Operational response

@@ -7,6 +7,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
+import { Fieldset } from "@quieter/ui/fieldset";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import {
   NumberField,
@@ -373,139 +374,145 @@ const ManagedUsageSettingsControls = ({
   setLimitDollars: (value: number | null) => void;
   setOverageEnabled: (value: boolean) => void;
 }) => (
-  <SettingsInsetRows>
-    <SettingsInsetRow className="justify-between gap-6">
-      <SettingsRowText
-        className="max-w-xl"
-        title={<label htmlFor="managed-overage-toggle">Allow overage</label>}
-      >
-        <span>
-          When disabled, new paid usage stops after the monthly balance is used.
-        </span>
-      </SettingsRowText>
-      <Switch
-        checked={overageEnabled}
-        className="shrink-0"
-        disabled={!canManageOrganizationMailUsage}
-        id="managed-overage-toggle"
-        onCheckedChange={setOverageEnabled}
-      >
-        <SwitchThumb />
-      </Switch>
-    </SettingsInsetRow>
-
-    <SettingsInsetFieldRow>
-      <SettingsRowText className="max-w-xl" title="Monthly overage limit">
-        <span>Maximum usage billed above the monthly usage balance.</span>
-      </SettingsRowText>
-
-      <div className="flex items-center gap-2">
-        <NumberField
-          disabled={!canManageOrganizationMailUsage || !overageEnabled}
-          format={{
-            currency: "USD",
-            maximumFractionDigits: 2,
-            minimumFractionDigits: 2,
-            style: "currency",
-          }}
-          min={0}
-          onValueChange={setLimitDollars}
-          step={5}
-          value={limitDollars}
+  <Fieldset
+    disabled={isSaving}
+    className="gap-0 rounded-none border-0 bg-transparent p-0"
+  >
+    <SettingsInsetRows>
+      <SettingsInsetRow className="justify-between gap-6">
+        <SettingsRowText
+          className="max-w-xl"
+          title={<label htmlFor="managed-overage-toggle">Allow overage</label>}
         >
-          <NumberFieldGroup className="w-44">
-            <NumberFieldDecrement />
-            <NumberFieldInput
-              aria-label="Monthly overage limit"
-              className="font-mono"
-              placeholder="No limit"
-            />
-            <NumberFieldIncrement />
-          </NumberFieldGroup>
-        </NumberField>
-        <Button
-          disabled={
-            !canManageOrganizationMailUsage ||
-            !overageEnabled ||
-            limitDollars === null
-          }
-          onClick={() => {
-            setLimitDollars(null);
-          }}
-          size="sm"
-          variant="ghost"
+          <span>
+            When disabled, new paid usage stops after the monthly balance is
+            used.
+          </span>
+        </SettingsRowText>
+        <Switch
+          checked={overageEnabled}
+          className="shrink-0"
+          disabled={!canManageOrganizationMailUsage}
+          id="managed-overage-toggle"
+          onCheckedChange={setOverageEnabled}
         >
-          Clear
-        </Button>
-      </div>
-    </SettingsInsetFieldRow>
-
-    <SettingsInsetRow className="justify-between gap-4">
-      <SettingsRowText className="max-w-xl" title="Alert milestones">
-        <span>
-          Alerts are recorded once per billing period when usage crosses each
-          threshold.
-        </span>
-      </SettingsRowText>
-
-      {canManageOrganizationMailUsage && (
-        <Button
-          disabled={milestones.length >= maximumMilestones}
-          onClick={onAddMilestone}
-          size="sm"
-          variant="outline"
-        >
-          <HugeiconsIcon aria-hidden className="size-4" icon={Add01Icon} />
-          Add
-        </Button>
-      )}
-    </SettingsInsetRow>
-
-    {milestones.map((milestone) => (
-      <ManagedUsageMilestoneRow
-        canManageOrganizationMailUsage={canManageOrganizationMailUsage}
-        includedUsageCents={includedUsageCents}
-        key={milestone.id}
-        limitCents={limitCents}
-        milestone={milestone}
-        milestoneCount={milestones.length}
-        onRemove={onRemoveMilestone}
-        onUpdate={onUpdateMilestone}
-      />
-    ))}
-
-    {milestoneError !== null && milestoneError !== "" ? (
-      <SettingsInsetRow>
-        <p className="text-caption text-destructive">{milestoneError}</p>
+          <SwitchThumb />
+        </Switch>
       </SettingsInsetRow>
-    ) : null}
 
-    {canManageOrganizationMailUsage ? (
-      <SettingsInsetRow className="justify-end gap-3">
-        {hasUnsavedChanges ? (
-          <p className="text-caption text-muted-fg">Unsaved changes</p>
-        ) : null}
-        <Button
-          disabled={
-            !hasUnsavedChanges ||
-            (milestoneError !== null && milestoneError !== "") ||
-            isSaving
-          }
-          onClick={onSave}
-          size="sm"
-        >
-          {isSaving && (
-            <HugeiconsIcon
-              aria-hidden
-              className="size-4 animate-spin"
-              icon={Loading03Icon}
-            />
-          )}
-          Save changes
-        </Button>
+      <SettingsInsetFieldRow>
+        <SettingsRowText className="max-w-xl" title="Monthly overage limit">
+          <span>Maximum usage billed above the monthly usage balance.</span>
+        </SettingsRowText>
+
+        <div className="flex items-center gap-2">
+          <NumberField
+            disabled={!canManageOrganizationMailUsage || !overageEnabled}
+            format={{
+              currency: "USD",
+              maximumFractionDigits: 2,
+              minimumFractionDigits: 2,
+              style: "currency",
+            }}
+            min={0}
+            onValueChange={setLimitDollars}
+            step={5}
+            value={limitDollars}
+          >
+            <NumberFieldGroup className="w-44">
+              <NumberFieldDecrement />
+              <NumberFieldInput
+                aria-label="Monthly overage limit"
+                className="font-mono"
+                placeholder="No limit"
+              />
+              <NumberFieldIncrement />
+            </NumberFieldGroup>
+          </NumberField>
+          <Button
+            disabled={
+              !canManageOrganizationMailUsage ||
+              !overageEnabled ||
+              limitDollars === null
+            }
+            onClick={() => {
+              setLimitDollars(null);
+            }}
+            size="sm"
+            variant="ghost"
+          >
+            Clear
+          </Button>
+        </div>
+      </SettingsInsetFieldRow>
+
+      <SettingsInsetRow className="justify-between gap-4">
+        <SettingsRowText className="max-w-xl" title="Alert milestones">
+          <span>
+            Alerts are recorded once per billing period when usage crosses each
+            threshold.
+          </span>
+        </SettingsRowText>
+
+        {canManageOrganizationMailUsage && (
+          <Button
+            disabled={milestones.length >= maximumMilestones}
+            onClick={onAddMilestone}
+            size="sm"
+            variant="outline"
+          >
+            <HugeiconsIcon aria-hidden className="size-4" icon={Add01Icon} />
+            Add
+          </Button>
+        )}
       </SettingsInsetRow>
-    ) : null}
-  </SettingsInsetRows>
+
+      {milestones.map((milestone) => (
+        <ManagedUsageMilestoneRow
+          canManageOrganizationMailUsage={canManageOrganizationMailUsage}
+          includedUsageCents={includedUsageCents}
+          key={milestone.id}
+          limitCents={limitCents}
+          milestone={milestone}
+          milestoneCount={milestones.length}
+          onRemove={onRemoveMilestone}
+          onUpdate={onUpdateMilestone}
+        />
+      ))}
+
+      {milestoneError !== null && milestoneError !== "" ? (
+        <SettingsInsetRow>
+          <p className="text-caption text-destructive">{milestoneError}</p>
+        </SettingsInsetRow>
+      ) : null}
+
+      {canManageOrganizationMailUsage ? (
+        <SettingsInsetRow className="justify-end gap-3">
+          {hasUnsavedChanges ? (
+            <p className="text-caption text-muted-fg">Unsaved changes</p>
+          ) : null}
+          <Button
+            disabled={
+              !hasUnsavedChanges ||
+              (milestoneError !== null && milestoneError !== "") ||
+              isSaving
+            }
+            onClick={onSave}
+            size="sm"
+          >
+            {isSaving && (
+              <HugeiconsIcon
+                aria-hidden
+                className="size-4 animate-spin"
+                icon={Loading03Icon}
+              />
+            )}
+            Save changes
+          </Button>
+        </SettingsInsetRow>
+      ) : null}
+    </SettingsInsetRows>
+  </Fieldset>
 );
 
 const ManagedUsageSettingsForm = ({
@@ -532,7 +539,16 @@ const ManagedUsageSettingsForm = ({
   const updateMutation = useMutation({
     ...orpc.organizationMailUsage.updateSettings.mutationOptions(),
     mutationKey: ["organization-mail-usage", organizationId, "update"],
-    onSuccess: async () => {
+    onSuccess: async (saved) => {
+      setOverageEnabled(saved.settings.overageEnabled);
+      setLimitDollars(
+        saved.settings.monthlyOverageLimitCents === null
+          ? null
+          : saved.settings.monthlyOverageLimitCents / centsPerDollar
+      );
+      setMilestones(
+        createInitialMilestones(saved.settings.alertMilestonePercents)
+      );
       await queryClient.invalidateQueries({
         queryKey: getOrganizationMailUsageQueryKey(organizationId),
       });
@@ -562,14 +578,15 @@ const ManagedUsageSettingsForm = ({
     limitDollars === null ? null : Math.round(limitDollars * centsPerDollar);
   const periodStart = formatPeriodDate(overview.period.start);
   const periodEnd = formatPeriodDate(overview.period.end);
-  const savedMilestonePercents = overview.settings.alertMilestonePercents;
+  const savedMilestonePercents =
+    overview.settings.alertMilestonePercents.toSorted((a, b) => a - b);
   const hasUnsavedChanges =
     overageEnabled !== overview.settings.overageEnabled ||
     limitCents !== overview.settings.monthlyOverageLimitCents ||
     milestonePercents.length !== savedMilestonePercents.length ||
-    milestonePercents.some(
-      (percent, index) => percent !== savedMilestonePercents[index]
-    );
+    milestonePercents
+      .toSorted((a, b) => (a ?? 0) - (b ?? 0))
+      .some((percent, index) => percent !== savedMilestonePercents[index]);
 
   const updateMilestone = (id: string, percent: number | null) => {
     setMilestones((current) =>
@@ -778,11 +795,7 @@ export const OrganizationMailUsageSettings = ({
   return (
     <ManagedUsageSettingsForm
       canManageOrganizationMailUsage={canManageOrganizationMailUsage}
-      key={[
-        usage.settings.overageEnabled,
-        usage.settings.monthlyOverageLimitCents,
-        usage.settings.alertMilestonePercents.join("-"),
-      ].join(":")}
+      key={organizationId}
       organizationId={organizationId}
       overview={usage}
     />

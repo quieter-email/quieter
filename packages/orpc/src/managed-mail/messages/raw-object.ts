@@ -1,7 +1,6 @@
 import type { S3Client } from "@aws-sdk/client-s3";
 import { serverEnv } from "@quieter/env/server";
 
-import { hasText } from "../../text";
 import { assertLocalMailObject, getLocalMailStorage } from "../local-storage";
 
 export type RawMailObjectProvider = "r2" | "s3";
@@ -25,7 +24,7 @@ let s3Client: S3Client | null = null;
 
 const getS3Client = async () => {
   const region = serverEnv.AWS_REGION ?? serverEnv.AWS_DEFAULT_REGION;
-  if (!hasText(region)) {
+  if (!region) {
     throw new Error("AWS_REGION or AWS_DEFAULT_REGION is required.");
   }
   const { S3Client } = await import("@aws-sdk/client-s3");
@@ -36,14 +35,14 @@ const getS3Client = async () => {
 const getR2Client = async () => {
   const endpoint =
     serverEnv.R2_ENDPOINT ??
-    (hasText(serverEnv.R2_ACCOUNT_ID)
+    (serverEnv.R2_ACCOUNT_ID
       ? `https://${serverEnv.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`
       : null);
   if (
-    !hasText(endpoint) ||
-    !hasText(serverEnv.R2_ACCESS_KEY_ID) ||
-    !hasText(serverEnv.R2_SECRET_ACCESS_KEY) ||
-    !hasText(serverEnv.R2_BUCKET)
+    !endpoint ||
+    !serverEnv.R2_ACCESS_KEY_ID ||
+    !serverEnv.R2_SECRET_ACCESS_KEY ||
+    !serverEnv.R2_BUCKET
   ) {
     throw new Error("R2 raw mail storage is not configured.");
   }
@@ -64,9 +63,9 @@ export const getRawMailObjectReference = (
   record: RawMailObjectRecord
 ): RawMailObjectReference | null => {
   if (
-    hasText(record.rawObjectProvider) &&
-    hasText(record.rawObjectBucket) &&
-    hasText(record.rawObjectKey)
+    record.rawObjectProvider &&
+    record.rawObjectBucket &&
+    record.rawObjectKey
   ) {
     return {
       bucket: record.rawObjectBucket,
@@ -74,7 +73,7 @@ export const getRawMailObjectReference = (
       provider: record.rawObjectProvider,
     };
   }
-  if (hasText(record.s3Bucket) && hasText(record.s3Key)) {
+  if (record.s3Bucket && record.s3Key) {
     return { bucket: record.s3Bucket, key: record.s3Key, provider: "s3" };
   }
   return null;
@@ -107,6 +106,28 @@ export const readRawMailObject = async (record: RawMailObjectRecord) => {
     throw new Error("The original message is unavailable.");
   }
   return new Uint8Array(await response.Body.transformToByteArray());
+};
+
+export const writeRawMailObject = async (
+  object: RawMailObjectReference,
+  raw: Uint8Array
+) => {
+  if (serverEnv.QUIETER_DEPLOYMENT_ENV === "local") {
+    assertLocalMailObject(object);
+    await getLocalMailStorage().put(object.key, raw);
+    return;
+  }
+  const client = await getRawMailObjectClient(object.provider);
+  const { PutObjectCommand } = await import("@aws-sdk/client-s3");
+  await client.send(
+    new PutObjectCommand({
+      Body: raw,
+      Bucket: object.bucket,
+      ContentType: "message/rfc822",
+      Key: object.key,
+    }),
+    { abortSignal: AbortSignal.timeout(60_000) }
+  );
 };
 
 export const deleteRawMailObject = async (object: RawMailObjectReference) => {

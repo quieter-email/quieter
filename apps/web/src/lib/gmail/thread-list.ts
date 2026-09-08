@@ -1,5 +1,6 @@
-import { isMessageUnread } from "./gmail";
-import type { MessageListItem } from "./gmail";
+import { isMessageUnread } from "#/lib/mail";
+import type { MessageListItem } from "#/lib/mail";
+
 import { parseSender } from "./message-utils";
 
 type ThreadParticipant = {

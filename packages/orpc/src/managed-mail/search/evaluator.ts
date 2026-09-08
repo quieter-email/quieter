@@ -8,7 +8,6 @@ import type {
   StructuredMailSearch,
 } from "@quieter/mail/search";
 
-import { hasText } from "../../text";
 import {
   normalizeManagedSearchValue,
   parseAbsoluteDate,
@@ -37,7 +36,7 @@ const matchesHeaderFilter = (
   }
   const headerName = normalizeManagedSearchValue(value.slice(0, separator));
   const headerValue = value.slice(separator + 1).trim();
-  if (!hasText(headerName) || !hasText(headerValue)) {
+  if (!headerName || !headerValue) {
     return false;
   }
   return message.headers.some(
@@ -62,6 +61,9 @@ const matchesIsFilter = (
   }
   if (value === message.direction) {
     return true;
+  }
+  if (value === "archived") {
+    return message.mailboxState === "archived";
   }
   if (value === "spam") {
     return message.mailboxState === "spam";
@@ -219,8 +221,13 @@ export const matchesManagedMailRule = (input: {
     )
   );
 
-  if (hasText(search.text)) {
-    results.push(includesNormalized(input.message.searchText, search.text));
+  if (search.text) {
+    results.push(
+      includesNormalized(input.message.searchText, search.text) ||
+        input.attachments.some((attachment) =>
+          includesNormalized(attachment.normalizedFileName, search.text)
+        )
+    );
   }
   if (results.length === 0) {
     return false;

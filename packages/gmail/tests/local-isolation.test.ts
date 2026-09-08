@@ -20,7 +20,7 @@ describe("local Gmail isolation", () => {
       status: 403,
     });
     await expect(
-      gmail.updateMessageLabels("test-token", "message", {
+      gmail.mutateGmailMessage("test-token", "message", {
         addLabelIds: ["STARRED"],
       })
     ).rejects.toMatchObject({ status: 403 });

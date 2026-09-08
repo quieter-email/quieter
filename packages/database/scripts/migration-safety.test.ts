@@ -244,6 +244,62 @@ describe("migration execution boundary", () => {
 });
 
 describe("automated migration safety", () => {
+  test("ignores SQL-like text inside comments and string literals", () => {
+    expect(() => {
+      assertMigrationSqlIsDeploySafe(
+        "/* DROP TABLE users; */ CREATE TABLE notes (body text DEFAULT 'DELETE FROM users;');",
+        "new_notes"
+      );
+    }).not.toThrow();
+  });
+
+  test("allows constraints on a table created by the same migration", () => {
+    expect(() => {
+      assertMigrationSqlIsDeploySafe(
+        "CREATE TABLE notes (id text); ALTER TABLE notes ADD CONSTRAINT notes_pk PRIMARY KEY (id);",
+        "new_notes"
+      );
+    }).not.toThrow();
+  });
+
+  test("accepts an isolated concurrent index", () => {
+    expect(() => {
+      assertMigrationSqlIsDeploySafe(
+        "-- quieter:no-transaction\nCREATE INDEX CONCURRENTLY notes_idx ON notes (id);",
+        "notes_index"
+      );
+    }).not.toThrow();
+  });
+
+  test.each([
+    "ALTER TABLE mailbox DROP displayName;",
+    "ALTER TABLE mailbox DROP /* explanation */ COLUMN displayName;",
+    "ALTER TABLE mailbox RENAME TO old_mailbox;",
+    "ALTER TABLE mailbox RENAME COLUMN displayName TO name;",
+    "WITH deleted AS (DELETE FROM mailbox RETURNING *) SELECT * FROM deleted;",
+    "DO $$ BEGIN EXECUTE 'DROP TABLE mailbox'; END $$;",
+    "UPDATE mailbox SET id = 'same';",
+    "ALTER TABLE mailbox ADD COLUMN required text NOT NULL;",
+    "ALTER TABLE mailbox ADD COLUMN value integer DEFAULT destructive_function();",
+    "CREATE TABLE IF NOT EXISTS mailbox (id text); ALTER TABLE mailbox ADD CONSTRAINT mailbox_pk PRIMARY KEY (id);",
+    "CREATE TABLE child PARTITION OF mailbox DEFAULT;",
+    "CREATE OR REPLACE VIEW mail AS SELECT 1;",
+    "CREATE UNIQUE INDEX mailbox_name ON mailbox (displayName);",
+  ])("requires manual review for non-additive or opaque SQL: %s", (sql) => {
+    expect(() => {
+      assertMigrationSqlIsDeploySafe(sql, "new_migration");
+    }).toThrow("additive allowlist");
+  });
+
+  test("does not allow concurrent indexes to excuse unrelated non-transactional work", () => {
+    expect(() => {
+      assertMigrationSqlIsDeploySafe(
+        "-- quieter:no-transaction\nCREATE INDEX CONCURRENTLY notes_idx ON notes (id); CREATE TABLE extra (id text);",
+        "mixed"
+      );
+    }).toThrow("opts out of transactions");
+  });
+
   test("accepts additive migrations", () => {
     expect(() => {
       assertMigrationSqlIsDeploySafe(

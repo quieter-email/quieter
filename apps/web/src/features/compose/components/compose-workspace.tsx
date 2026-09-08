@@ -16,17 +16,17 @@ import { ToolbarButton } from "@quieter/ui/toolbar";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { MobileHeader } from "#/components/mobile-header";
 import { WorkspaceSection } from "#/components/workspace-section";
 import { USER_BILLING_QUERY_KEY } from "#/features/settings/domain/billing";
 import { useAudioRecorder } from "#/lib/audio-recorder";
-import { getTranscriptionAudioFormat } from "#/lib/audio-transcription";
+import { prepareTranscriptionRecording } from "#/lib/audio-transcription";
+import { toastError } from "#/lib/error-toast";
 import { orpc } from "#/lib/orpc";
 
 import type { ComposeFormValues } from "../domain/compose-form";
-import { takePendingComposeSession } from "../domain/compose-session";
 import {
   normalizeComposeBodyHtml,
   textToComposeBodyHtml,
@@ -73,7 +73,7 @@ export type ComposeSurfaceProps = {
 
 type ComposeWorkspaceProps = Omit<
   ComposeSurfaceProps,
-  "className" | "initialDraft" | "variant"
+  "className" | "variant"
 > & {
   onOpenSidebar: () => void;
 };
@@ -88,9 +88,6 @@ type ComposeFormFieldProps = Pick<
   name: keyof Pick<ComposeFormValues, "to" | "cc" | "bcc" | "subject">;
   placeholder?: string;
 };
-
-const hasText = (value: string | null | undefined): value is string =>
-  value !== null && value !== undefined && value !== "";
 
 /**
  * The recipient input lives inside a shared field primitive that does not take
@@ -162,6 +159,13 @@ export const ComposeSurface = ({
 }: ComposeSurfaceProps) => {
   const queryClient = useQueryClient();
   const composeEditorRef = useRef<ComposeEditorHandle | null>(null);
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   const [selectedPlaceholder, setSelectedPlaceholder] =
     useState<TemplatePlaceholderRange | null>(null);
   const [activeTemplateName, setActiveTemplateName] =
@@ -174,7 +178,6 @@ export const ComposeSurface = ({
     onClose,
     onRecipientProblem: focusComposeRecipientField,
     persistDrafts,
-    saveOnUnmount: variant === "inline",
     signature,
   });
   const {
@@ -195,10 +198,14 @@ export const ComposeSurface = ({
       await queryClient.invalidateQueries({ queryKey: USER_BILLING_QUERY_KEY });
     },
   });
-  const isTranscribingAudio = transcribeAudioMutation.isPending;
+  const [isPreparingAudio, setIsPreparingAudio] = useState(false);
+  const isTranscribingAudio =
+    isPreparingAudio || transcribeAudioMutation.isPending;
 
   const canEditBody =
-    state.draft.saveStatus !== "sending" && hasText(mailboxId);
+    state.draft.saveStatus !== "sending" &&
+    state.draft.saveStatus !== "saving" &&
+    !!mailboxId;
   const audioBusy = audioRecorder.isRecording || isTranscribingAudio;
   const canSubmitCompose = canEditBody && !audioBusy;
   const isInline = variant === "inline";
@@ -231,28 +238,28 @@ export const ComposeSurface = ({
   };
 
   const handleRecordingStop = () => {
+    setIsPreparingAudio(true);
     void (async () => {
       try {
-        const recording = await audioRecorder.stop();
-        const format = getTranscriptionAudioFormat(recording.mimeType);
-
-        if (!format) {
-          compose.setActiveDraftError("This audio format is not supported.");
+        const recording = await prepareTranscriptionRecording(
+          await audioRecorder.stop()
+        );
+        if (!mountedRef.current) {
           return;
         }
-
         if (mailboxId === null || mailboxId === undefined || mailboxId === "") {
           compose.setActiveDraftError("Select a mailbox before transcribing.");
           return;
         }
 
         const result = await transcribeAudioMutation.mutateAsync({
-          audioBase64: recording.base64,
-          durationMs: recording.durationMs,
-          format,
+          ...recording,
           mailboxId,
           mode: "email",
         });
+        if (!mountedRef.current) {
+          return;
+        }
         const currentHtml = normalizeComposeBodyHtml(
           form.state.values.bodyHtml
         );
@@ -266,11 +273,20 @@ export const ComposeSurface = ({
         form.setFieldValue("bodyHtml", nextHtml);
         form.setFieldValue("bodyText", nextText);
       } catch (error) {
+        if (!mountedRef.current) {
+          return;
+        }
+        toastError(error, {
+          boundary: "compose-transcription",
+          fallback: "Could not transcribe recording. Please try again.",
+        });
         compose.setActiveDraftError(
-          error instanceof Error && error.message
-            ? error.message
-            : "Could not transcribe recording."
+          "Could not transcribe recording. Please try again."
         );
+      } finally {
+        if (mountedRef.current) {
+          setIsPreparingAudio(false);
+        }
       }
     })();
   };
@@ -297,7 +313,7 @@ export const ComposeSurface = ({
   useHotkey(
     "Escape",
     () => {
-      closeComposeDialog();
+      void closeComposeDialog();
     },
     {
       enabled: state.draft.saveStatus !== "sending",
@@ -323,7 +339,7 @@ export const ComposeSurface = ({
       >
         <p className="sr-only">
           {getDraftStatusMessage(compose.state.draft, persistDrafts)}
-          {hasText(senderEmail) ? `, sending from ${senderEmail}` : ""}
+          {senderEmail ? `, sending from ${senderEmail}` : ""}
         </p>
 
         <form.Field name="bodyHtml">
@@ -548,13 +564,13 @@ export const ComposeSurface = ({
                     }
                     trailing={
                       <>
-                        {hasText(mailboxId) ? (
+                        {mailboxId ? (
                           <>
                             <ComposeTemplatePicker
                               disabled={!canEditBody || audioBusy}
                               mailboxId={mailboxId}
                               onManage={() => {
-                                closeComposeDialog(onManageTemplates);
+                                void closeComposeDialog(onManageTemplates);
                               }}
                               onInsert={(template) => {
                                 clearActiveDraftError();
@@ -585,21 +601,17 @@ export const ComposeSurface = ({
                         <ComposeEditorDictationButton />
                         <IconButtonTooltip
                           label={
-                            hasText(state.draft.draftId)
-                              ? "Discard draft"
-                              : "Discard"
+                            state.draft.draftId ? "Discard draft" : "Discard"
                           }
                         >
                           <ToolbarButton
                             aria-label={
-                              hasText(state.draft.draftId)
-                                ? "Discard draft"
-                                : "Discard"
+                              state.draft.draftId ? "Discard draft" : "Discard"
                             }
                             className="size-8 px-0"
                             disabled={state.draft.saveStatus === "sending"}
                             onClick={() => {
-                              discardActiveDraft();
+                              void discardActiveDraft();
                             }}
                             type="button"
                           >
@@ -612,7 +624,7 @@ export const ComposeSurface = ({
                             className="size-8 px-0"
                             disabled={state.draft.saveStatus === "sending"}
                             onClick={() => {
-                              closeComposeDialog();
+                              void closeComposeDialog();
                             }}
                             type="button"
                           >
@@ -636,7 +648,7 @@ export const ComposeSurface = ({
           )}
         </form.Field>
 
-        {hasText(state.draft.errorMessage) ? (
+        {state.draft.errorMessage ? (
           <div
             aria-live="polite"
             className="flex min-w-0 shrink-0 items-start gap-2 text-body text-destructive"
@@ -658,6 +670,7 @@ export const ComposeSurface = ({
 
 export const ComposeWorkspace = ({
   demoMode,
+  initialDraft,
   mailboxId,
   managedDemoMode,
   onClose,
@@ -666,33 +679,27 @@ export const ComposeWorkspace = ({
   persistDrafts,
   senderEmail,
   signature,
-}: ComposeWorkspaceProps) => {
-  // oxlint-disable-next-line react/hook-use-state -- This one-shot handoff has no state transitions after initialization.
-  const [session] = useState(takePendingComposeSession);
-  const initialDraft = session?.draft ?? null;
-
-  return (
-    <WorkspaceSection data-compose-workspace>
-      <div className="flex h-full min-h-0 flex-col">
-        <MobileHeader
-          className="px-4 sm:px-6"
-          leading="sidebar"
-          onLeadingClick={onOpenSidebar}
-          title="New message"
-        />
-        <ComposeSurface
-          className="flex-1"
-          demoMode={demoMode}
-          initialDraft={initialDraft}
-          mailboxId={mailboxId}
-          managedDemoMode={managedDemoMode}
-          onClose={onClose}
-          onManageTemplates={onManageTemplates}
-          persistDrafts={persistDrafts}
-          senderEmail={senderEmail}
-          signature={signature}
-        />
-      </div>
-    </WorkspaceSection>
-  );
-};
+}: ComposeWorkspaceProps) => (
+  <WorkspaceSection data-compose-workspace>
+    <div className="flex h-full min-h-0 flex-col">
+      <MobileHeader
+        className="px-4 sm:px-6"
+        leading="sidebar"
+        onLeadingClick={onOpenSidebar}
+        title="New message"
+      />
+      <ComposeSurface
+        className="flex-1"
+        demoMode={demoMode}
+        initialDraft={initialDraft}
+        mailboxId={mailboxId}
+        managedDemoMode={managedDemoMode}
+        onClose={onClose}
+        onManageTemplates={onManageTemplates}
+        persistDrafts={persistDrafts}
+        senderEmail={senderEmail}
+        signature={signature}
+      />
+    </div>
+  </WorkspaceSection>
+);

@@ -2,6 +2,7 @@ import { db } from "@quieter/database/client";
 import {
   billingCreditUsageEvent,
   billingSubscription,
+  organization,
 } from "@quieter/database/schema";
 import type { BillingUsageCategory } from "@quieter/database/schema";
 import { reportError } from "@quieter/observability";
@@ -59,9 +60,9 @@ export const createPolarCreditUsageEvent = (input: {
   timestamp: input.createdAt,
 });
 
-const getBillingCreditUsageWithClient = async (
-  client: Pick<typeof db, "select">,
-  account: BillingAccount
+export const getBillingCreditUsage = async (
+  account: BillingAccount,
+  client: Pick<typeof db, "select"> = db
 ) => {
   const periodFilter = and(
     eq(billingCreditUsageEvent.organizationId, account.organizationId),
@@ -121,21 +122,20 @@ const getBillingCreditUsageWithClient = async (
   };
 };
 
-export const getBillingCreditUsage = async (account: BillingAccount) =>
-  await getBillingCreditUsageWithClient(db, account);
-
 export const recordBillingCreditUsage = async (input: {
   account: BillingAccount;
   category: BillingUsageCategory;
   costMicroCents: number;
+  createdAt?: Date;
   dedupeKey: string;
   metadata?: Record<string, string | number | boolean>;
 }) => {
-  const lockKey = `organization:${input.account.organizationId}`;
   const result = await db.transaction(async (transaction) => {
-    await transaction.execute(
-      sql`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`
-    );
+    await transaction
+      .select({ id: organization.id })
+      .from(organization)
+      .where(eq(organization.id, input.account.organizationId))
+      .for("update");
     const [existingEvent] = await transaction
       .select({
         billableCostMicroCents: billingCreditUsageEvent.billableCostMicroCents,
@@ -162,10 +162,7 @@ export const recordBillingCreditUsage = async (input: {
       };
     }
 
-    const usage = await getBillingCreditUsageWithClient(
-      transaction,
-      input.account
-    );
+    const usage = await getBillingCreditUsage(input.account, transaction);
     const billableBefore = Math.max(
       0,
       usage.costMicroCents - usage.creditAmountMicroCents
@@ -175,7 +172,7 @@ export const recordBillingCreditUsage = async (input: {
       usage.costMicroCents + input.costMicroCents - usage.creditAmountMicroCents
     );
     const billableCostMicroCents = billableAfter - billableBefore;
-    const createdAt = new Date();
+    const createdAt = input.createdAt ?? new Date();
     const [event] = await transaction
       .insert(billingCreditUsageEvent)
       .values({

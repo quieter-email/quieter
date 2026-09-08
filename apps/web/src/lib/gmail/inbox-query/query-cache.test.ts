@@ -1,14 +1,16 @@
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, test, vi } from "vite-plus/test";
 
+import type { MessageListItem, ThreadMessagesResult } from "#/lib/mail";
+
 import { queryPersister } from "../../query-persister";
-import type { MessageListItem, ThreadMessagesResult } from "../gmail";
 import { getThreadQueryKey } from "../thread-query";
 import type { MessagesQueryData } from "./data";
 import { getMessagesQueryKey } from "./keys";
 import {
-  applyVisibleMailboxMessagesRefreshToCache,
+  applyOptimisticMailboxUpdate,
   persistQueryKeys,
+  updateMessagesInCachedMailboxQueries,
 } from "./query-cache";
 
 const message = (
@@ -23,115 +25,6 @@ const message = (
 const messagesData = (messages: MessageListItem[]): MessagesQueryData => ({
   pageParams: [undefined],
   pages: [{ messages }],
-});
-
-describe(applyVisibleMailboxMessagesRefreshToCache, () => {
-  test("removes viewed messages that left the active mailbox", async () => {
-    const queryClient = new QueryClient();
-    const inboxQueryKey = getMessagesQueryKey("mailbox-a", "inbox");
-    queryClient.setQueryData(
-      inboxQueryKey,
-      messagesData([message("a", { labelIds: ["INBOX"] })])
-    );
-
-    await applyVisibleMailboxMessagesRefreshToCache(
-      queryClient,
-      { mailbox: "inbox", mailboxId: "mailbox-a" },
-      { removedMessageIds: ["a"], updatedMessages: [] }
-    );
-
-    expect(
-      queryClient.getQueryData<MessagesQueryData>(inboxQueryKey)?.pages[0]
-        .messages
-    ).toStrictEqual([]);
-  });
-
-  test("updates visible message metadata in place", async () => {
-    const queryClient = new QueryClient();
-    const inboxQueryKey = getMessagesQueryKey("mailbox-a", "inbox");
-    queryClient.setQueryData(
-      inboxQueryKey,
-      messagesData([message("a", { isUnread: false, labelIds: ["INBOX"] })])
-    );
-
-    await applyVisibleMailboxMessagesRefreshToCache(
-      queryClient,
-      { mailbox: "inbox", mailboxId: "mailbox-a" },
-      {
-        removedMessageIds: [],
-        updatedMessages: [
-          message("a", { isUnread: true, labelIds: ["INBOX", "UNREAD"] }),
-        ],
-      }
-    );
-
-    expect(
-      queryClient.getQueryData<MessagesQueryData>(inboxQueryKey)?.pages[0]
-        .messages[0]
-    ).toMatchObject({
-      id: "a",
-      isUnread: true,
-      labelIds: ["INBOX", "UNREAD"],
-    });
-  });
-
-  test("preserves loaded details when refreshing cached message metadata", async () => {
-    const queryClient = new QueryClient();
-    const inboxQueryKey = getMessagesQueryKey("mailbox-a", "inbox");
-    const threadQueryKey = getThreadQueryKey("mailbox-a", "thread-a");
-    queryClient.setQueryData(
-      inboxQueryKey,
-      messagesData([
-        message("a", {
-          bodyHtml: "<p>loaded</p>",
-          labelIds: ["INBOX"],
-          senderAvatarUrls: { dark: "dark-avatar", light: "light-avatar" },
-          threadId: "thread-a",
-        }),
-      ])
-    );
-    queryClient.setQueryData<ThreadMessagesResult>(threadQueryKey, {
-      messages: [
-        message("a", {
-          bodyHtml: "<p>loaded</p>",
-          labelIds: ["INBOX"],
-          threadId: "thread-a",
-        }),
-      ],
-      threadId: "thread-a",
-    });
-
-    await applyVisibleMailboxMessagesRefreshToCache(
-      queryClient,
-      { mailbox: "inbox", mailboxId: "mailbox-a" },
-      {
-        removedMessageIds: [],
-        updatedMessages: [
-          message("a", {
-            isUnread: true,
-            labelIds: ["INBOX"],
-            threadId: "thread-a",
-          }),
-        ],
-      }
-    );
-
-    expect(
-      queryClient.getQueryData<MessagesQueryData>(inboxQueryKey)?.pages[0]
-        .messages[0]
-    ).toMatchObject({
-      bodyHtml: "<p>loaded</p>",
-      isUnread: true,
-      senderAvatarUrls: { dark: "dark-avatar", light: "light-avatar" },
-    });
-    expect(
-      queryClient.getQueryData<ThreadMessagesResult>(threadQueryKey)
-        ?.messages[0]
-    ).toMatchObject({
-      bodyHtml: "<p>loaded</p>",
-      isUnread: true,
-    });
-  });
 });
 
 describe(persistQueryKeys, () => {
@@ -161,5 +54,84 @@ describe(persistQueryKeys, () => {
     } finally {
       persistSpy.mockRestore();
     }
+  });
+});
+
+describe(applyOptimisticMailboxUpdate, () => {
+  test("a failed action preserves arriving mail and reconciles the changed query", async () => {
+    const queryClient = new QueryClient();
+    const queryKey = getMessagesQueryKey("mailbox-a", "inbox");
+    queryClient.setQueryData(
+      queryKey,
+      messagesData([message("a", { isUnread: true })])
+    );
+    const rollback = await applyOptimisticMailboxUpdate(
+      queryClient,
+      "mailbox-a",
+      () => {
+        updateMessagesInCachedMailboxQueries(
+          queryClient,
+          "mailbox-a",
+          (item) => item.id === "a",
+          (item) => ({ ...item, isUnread: false })
+        );
+      }
+    );
+    queryClient.setQueryData(
+      queryKey,
+      messagesData([message("new"), message("a", { isUnread: false })])
+    );
+    await rollback();
+    expect(
+      queryClient
+        .getQueryData<MessagesQueryData>(queryKey)
+        ?.pages[0].messages.map((item) => item.id)
+    ).toStrictEqual(["new", "a"]);
+    const fresh = messagesData([
+      message("new"),
+      message("a", { isUnread: true }),
+    ]);
+    await expect(
+      queryClient.fetchQuery({ queryFn: () => fresh, queryKey })
+    ).resolves.toStrictEqual(fresh);
+    queryClient.clear();
+  });
+
+  test("a failed action restores unchanged list and thread caches without touching another mailbox", async () => {
+    const queryClient = new QueryClient();
+    const queryKey = getMessagesQueryKey("mailbox-a", "inbox");
+    const otherKey = getMessagesQueryKey("mailbox-b", "inbox");
+    const threadKey = getThreadQueryKey("mailbox-a", "thread-a");
+    const original = message("a", { isUnread: true });
+    queryClient.setQueryData(queryKey, messagesData([original]));
+    queryClient.setQueryData(otherKey, messagesData([original]));
+    queryClient.setQueryData<ThreadMessagesResult>(threadKey, {
+      messages: [original],
+      threadId: "thread-a",
+    });
+    const rollback = await applyOptimisticMailboxUpdate(
+      queryClient,
+      "mailbox-a",
+      () => {
+        queryClient.setQueryData(queryKey, messagesData([]));
+        queryClient.setQueryData<ThreadMessagesResult>(threadKey, {
+          messages: [],
+          threadId: "thread-a",
+        });
+      },
+      threadKey
+    );
+    queryClient.setQueryData(otherKey, messagesData([message("other")]));
+    await rollback();
+    expect(
+      queryClient.getQueryData<MessagesQueryData>(queryKey)?.pages[0].messages
+    ).toStrictEqual([original]);
+    expect(
+      queryClient.getQueryData<ThreadMessagesResult>(threadKey)?.messages
+    ).toStrictEqual([original]);
+    expect(
+      queryClient.getQueryData<MessagesQueryData>(otherKey)?.pages[0].messages
+    ).toStrictEqual([message("other")]);
+    queryClient.clear();
   });
 });

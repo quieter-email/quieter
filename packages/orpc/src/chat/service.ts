@@ -14,6 +14,7 @@ import type {
   GmailToolsContext,
 } from "@quieter/ai/chat-agent";
 import { CHAT_TITLE_MODEL, chatModelSchema } from "@quieter/ai/chat-models";
+import { toCanonicalTranscript } from "@quieter/ai/chat-transcript";
 import { summarizeAiUsage } from "@quieter/ai/chat-usage";
 import { generateChatTitle } from "@quieter/ai/generate-chat-title";
 import { createChatModel } from "@quieter/ai/openrouter";
@@ -21,20 +22,22 @@ import { reportAiUsage } from "@quieter/billing";
 import { db } from "@quieter/database/client";
 import { chat as chatTable, chatMessage } from "@quieter/database/schema";
 import type { ChatMessagePart } from "@quieter/database/schema";
-import type { MailboxCategory } from "@quieter/gmail";
 import { mailCategorySchema } from "@quieter/mail/data-plane";
+import type { MailboxCategory } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
 import {
   convertToModelMessages,
   createUIMessageStreamResponse,
   isStepCount,
+  isToolUIPart,
   streamText,
   toUIMessageStream,
 } from "ai";
-import type { UIMessage, UIMessageChunk } from "ai";
+import type { TextStreamPart, UIMessage, UIMessageChunk } from "ai";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
+import { assertCanUseAi } from "../ai-access";
 import {
   loadAiAgentContext,
   requestAiMemoryUpdate,
@@ -56,8 +59,10 @@ import {
   searchGmailForUser,
 } from "../gmail-chat-search";
 import { assertAccessibleMailbox } from "../mailbox/service";
-import { assertAiChatCredits } from "./access";
+import { replaceChatParts } from "./continuation";
 import { createLinearChatTools } from "./linear-tools";
+
+type UIMessagePart = UIMessage["parts"][number];
 
 const CHAT_HISTORY_WINDOW_MESSAGES = 30;
 const CHAT_MAX_COMPLETION_TOKENS = 2048;
@@ -271,56 +276,6 @@ export const validateChatRequest = (body: unknown): ValidatedChatRequest => {
 };
 
 // ---------------------------------------------------------------------------
-// Stored parts → UI messages
-// ---------------------------------------------------------------------------
-
-type UIMessagePart = UIMessage["parts"][number];
-
-const isRenderablePart = (part: ChatMessagePart): boolean => {
-  if (part.type === "text") {
-    return typeof part.text === "string";
-  }
-  if (part.type === "") {
-    return false;
-  }
-  if (part.type === "step-start") {
-    return true;
-  }
-  return part.type.startsWith("tool-") && typeof part.toolCallId === "string";
-};
-
-/**
- * Maps persisted message rows onto AI SDK UI messages. Parts are stored in
- * their native UI message shape, so this only drops malformed entries.
- */
-export const toCanonicalTranscript = (
-  messages: readonly {
-    id: string;
-    parts: ChatMessagePart[];
-    role: "assistant" | "system" | "user";
-  }[]
-): UIMessage[] =>
-  messages.flatMap((message) => {
-    if (message.role !== "assistant" && message.role !== "user") {
-      return [];
-    }
-    const parts = message.parts.filter(isRenderablePart);
-    if (parts.length === 0) {
-      return [];
-    }
-    return [
-      {
-        id: message.id,
-        // Parts round-trip as opaque JSON; convertToModelMessages validates
-        // the shapes it consumes.
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-        parts: parts as UIMessagePart[],
-        role: message.role,
-      } satisfies UIMessage,
-    ];
-  });
-
-// ---------------------------------------------------------------------------
 // Tool plumbing
 // ---------------------------------------------------------------------------
 
@@ -329,7 +284,7 @@ const assertCanUseAiCredits = async (input: {
   userId: string;
 }) => {
   try {
-    await assertAiChatCredits({
+    await assertCanUseAi({
       organizationId: input.organizationId,
       userId: input.userId,
     });
@@ -602,44 +557,29 @@ const applyClientResolutions = (
 ) => ({
   ...message,
   parts: message.parts.map((part): UIMessagePart => {
-    const type: unknown = Reflect.get(part, "type");
-    if (typeof type !== "string" || !type.startsWith("tool-")) {
+    if (!isToolUIPart(part)) {
       return part;
     }
-    const toolCallId: unknown = Reflect.get(part, "toolCallId");
-    if (typeof toolCallId !== "string") {
-      return part;
-    }
-    const state: unknown = Reflect.get(part, "state");
-    const decision = resolutions.toolDecisions.get(toolCallId);
-    if (decision !== undefined && state === "approval-requested") {
-      const approvalId = readStoredApprovalId(part);
-      if (approvalId === null) {
-        // Pending ids are validated before the turn continues; this guard
-        // only satisfies the type.
-        return part;
-      }
-      // Part unions make this override awkward to express directly.
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+    const decision = resolutions.toolDecisions.get(part.toolCallId);
+    if (decision !== undefined && part.state === "approval-requested") {
       return {
         ...part,
         approval: {
           approved: decision,
-          id: approvalId,
+          id: part.approval.id,
         },
         state: "approval-responded",
-      } as unknown as UIMessagePart;
+      };
     }
     if (
-      resolutions.toolOutputs.has(toolCallId) &&
-      state === "input-available"
+      resolutions.toolOutputs.has(part.toolCallId) &&
+      part.state === "input-available"
     ) {
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion
       return {
         ...part,
-        output: resolutions.toolOutputs.get(toolCallId),
+        output: resolutions.toolOutputs.get(part.toolCallId),
         state: "output-available",
-      } as unknown as UIMessagePart;
+      };
     }
     return part;
   }),
@@ -914,6 +854,12 @@ export const createAiChatResponse = async (input: {
         "This answer is no longer waiting for a response."
       );
     }
+    if (lastRow.parts.some((part) => part.state === "approval-responded")) {
+      throw new ChatRequestError(
+        409,
+        "An action was already submitted. Wait for its result, or check the affected item and send a new message."
+      );
+    }
     for (const part of lastRow.parts) {
       if (
         Reflect.get(part, "state") === "approval-requested" &&
@@ -968,6 +914,12 @@ export const createAiChatResponse = async (input: {
       const row = rows[index];
       if (row?.role !== "assistant") {
         break;
+      }
+      if (row.parts.some((part) => part.type.startsWith("tool-"))) {
+        throw new ChatRequestError(
+          409,
+          "This answer includes tool actions. Send a new message to continue without repeating them."
+        );
       }
       if (row.id !== undefined) {
         trailingAssistantIds.push(row.id);
@@ -1066,36 +1018,50 @@ export const createAiChatResponse = async (input: {
   ].join("\n\n");
 
   const usageId = crypto.randomUUID();
+  const model = createChatModel(validated.model);
+  input.request.signal.throwIfAborted();
+  if (continuingRowId !== null && continuingOriginalParts !== null) {
+    const resolvedParts: ChatMessagePart[] = transcript.at(-1)?.parts ?? [];
+    const claimed = await replaceChatParts({
+      chatId: threadId,
+      expectedParts: continuingOriginalParts,
+      messageId: continuingRowId,
+      parts: resolvedParts,
+      userId: input.userId,
+    });
+    if (!claimed) {
+      throw new ChatRequestError(409, "This action has already been answered.");
+    }
+    continuingOriginalParts = resolvedParts;
+  }
   let generationFailed = false;
   const result = streamText({
     abortSignal: input.request.signal,
     instructions: systemPrompt,
     maxOutputTokens: CHAT_MAX_COMPLETION_TOKENS,
     messages: modelMessages,
-    model: createChatModel(validated.model),
-    onEnd: ({ steps }) => {
+    model,
+    onEnd: async ({ steps }) => {
       const usage = summarizeAiUsage({ steps });
-      void (async () => {
-        try {
-          await reportAiUsage({
-            chatId: threadId,
-            completionTokens: usage.completionTokens,
-            costUsd: usage.costUsd,
-            externalId: `${usageId}:${assistantMessageId}`,
-            mailboxId,
-            model: validated.model,
-            promptTokens: usage.promptTokens,
-            promptTokensDetails: {
-              cacheWriteTokens: usage.cacheWriteTokens,
-              cachedTokens: usage.cachedTokens,
-            },
-            usageKind: "aiChat",
-            userId: input.userId,
-          });
-        } catch (error: unknown) {
-          reportError(error, { operation: "chat:report-ai-usage" });
-        }
-      })();
+      try {
+        await reportAiUsage({
+          chatId: threadId,
+          completionTokens: usage.completionTokens,
+          costUsd: usage.costUsd,
+          externalId: `${usageId}:${assistantMessageId}`,
+          mailboxId,
+          model: validated.model,
+          promptTokens: usage.promptTokens,
+          promptTokensDetails: {
+            cacheWriteTokens: usage.cacheWriteTokens,
+            cachedTokens: usage.cachedTokens,
+          },
+          usageKind: "aiChat",
+          userId: input.userId,
+        });
+      } catch (error: unknown) {
+        reportError(error, { operation: "chat:report-ai-usage" });
+      }
     },
     onError: ({ error }) => {
       generationFailed = true;
@@ -1124,9 +1090,7 @@ export const createAiChatResponse = async (input: {
   const responseStream = toUIMessageStream({
     generateMessageId: () => assistantMessageId,
     onEnd: async ({ messages }) => {
-      // Stopping keeps whatever was generated so far; only a failed
-      // generation leaves nothing behind, since its partial output cannot
-      // be told apart from a broken answer.
+      // Tool outcomes are already durable; failed prose must not replace them.
       if (generationFailed) {
         return;
       }
@@ -1210,7 +1174,62 @@ export const createAiChatResponse = async (input: {
     },
     onError: () => "The answer could not be completed.",
     originalMessages: transcript,
-    stream: result.stream,
+    stream: result.stream.pipeThrough(
+      new TransformStream<
+        TextStreamPart<typeof tools>,
+        TextStreamPart<typeof tools>
+      >({
+        async transform(chunk, controller) {
+          if (
+            continuingRowId !== null &&
+            continuingOriginalParts !== null &&
+            (chunk.type === "tool-result" ||
+              chunk.type === "tool-error" ||
+              chunk.type === "tool-output-denied") &&
+            continuingOriginalParts.some(
+              (part) => part.toolCallId === chunk.toolCallId
+            )
+          ) {
+            const parts = continuingOriginalParts.map((part) => {
+              if (part.toolCallId !== chunk.toolCallId) {
+                return part;
+              }
+              if (chunk.type === "tool-result") {
+                const output: unknown = chunk.output;
+                return {
+                  ...part,
+                  output,
+                  state: "output-available",
+                };
+              }
+              return chunk.type === "tool-output-denied"
+                ? { ...part, state: "output-denied" }
+                : {
+                    ...part,
+                    errorText:
+                      "The action could not be confirmed. Check the affected item before trying again.",
+                    state: "output-error",
+                  };
+            });
+            const saved = await replaceChatParts({
+              chatId: threadId,
+              expectedParts: continuingOriginalParts,
+              messageId: continuingRowId,
+              parts,
+              userId: input.userId,
+            });
+            if (!saved) {
+              throw new ChatRequestError(
+                409,
+                "This chat changed while the action was being saved."
+              );
+            }
+            continuingOriginalParts = parts;
+          }
+          controller.enqueue(chunk);
+        },
+      })
+    ),
   });
   const durableStream = responseStream.pipeThrough(
     new TransformStream<UIMessageChunk, UIMessageChunk>({

@@ -4,11 +4,13 @@ import { db } from "@quieter/database/client";
 import {
   mailbox,
   managedMailMessage,
+  organization,
   organizationApiMailMessage,
   organizationMailDeliveryEvent,
   organizationMailDeliveryRecipient,
   organizationMailOpenEvent,
   organizationMailRecipientSuppression,
+  organizationMailSendIdempotency,
   organizationMailSuppressionAudit,
   organizationMailTrackingSettings,
 } from "@quieter/database/schema";
@@ -31,7 +33,6 @@ import { reportError } from "@quieter/observability";
 import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 
 import { OrganizationMailSendError } from "./organization-mail-policy";
-import { hasText } from "./text";
 
 export type OrganizationMailFeedbackRecipient = {
   diagnosticCode?: string;
@@ -41,6 +42,8 @@ export type OrganizationMailFeedbackRecipient = {
 };
 
 export type OrganizationMailFeedback = {
+  sendOperationId?: string;
+  sender?: string;
   eventType: OrganizationMailDeliveryEventType;
   occurredAt: Date;
   permanentFailure?: boolean;
@@ -353,9 +356,46 @@ const applySuppressionChange = async (
 export const recordOrganizationMailFeedback = async (
   feedback: OrganizationMailFeedback
 ) => {
-  const organizationId = await resolveOrganizationId(
-    feedback.providerMessageId
-  );
+  let recoveredOrganizationId: string | undefined;
+  if (feedback.sendOperationId !== undefined && feedback.sender !== undefined) {
+    const [operation] = await db
+      .select()
+      .from(organizationMailSendIdempotency)
+      .where(eq(organizationMailSendIdempotency.id, feedback.sendOperationId))
+      .limit(1);
+    if (
+      operation?.snapshot !== undefined &&
+      operation.snapshot !== null &&
+      normalizeRecipient(operation.snapshot.sender) ===
+        normalizeRecipient(feedback.sender)
+    ) {
+      const [accepted] = await db
+        .update(organizationMailSendIdempotency)
+        .set({
+          response: { messageId: feedback.providerMessageId, sent: true },
+          status: "accepted",
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(organizationMailSendIdempotency.id, operation.id),
+            inArray(organizationMailSendIdempotency.status, [
+              "submitting",
+              "unknown",
+              "accepted",
+            ]),
+            sql`(${organizationMailSendIdempotency.response} is null or ${organizationMailSendIdempotency.response}->>'messageId' = ${feedback.providerMessageId})`
+          )
+        )
+        .returning({
+          organizationId: organizationMailSendIdempotency.organizationId,
+        });
+      recoveredOrganizationId = accepted?.organizationId;
+    }
+  }
+  const organizationId =
+    recoveredOrganizationId ??
+    (await resolveOrganizationId(feedback.providerMessageId));
   if (organizationId === null) {
     throw new OrganizationMailFeedbackMessageNotFoundError(
       feedback.providerMessageId
@@ -372,9 +412,11 @@ export const recordOrganizationMailFeedback = async (
   const now = new Date();
 
   await db.transaction(async (transaction) => {
-    await transaction.execute(
-      sql`select pg_advisory_xact_lock(hashtextextended(${JSON.stringify([organizationId, feedback.providerMessageId])}, 0))`
-    );
+    await transaction
+      .select({ id: organization.id })
+      .from(organization)
+      .where(eq(organization.id, organizationId))
+      .for("update");
     for (const recipient of recipients.toSorted((a, b) =>
       a.emailAddress.localeCompare(b.emailAddress)
     )) {
@@ -385,7 +427,6 @@ export const recordOrganizationMailFeedback = async (
         recipient: recipient.emailAddress,
         sourceEventId: feedback.sourceEventId,
       });
-      // oxlint-disable-next-line no-await-in-loop -- Consistent recipient lock order prevents cross-message deadlocks.
       const insertedEvents = await transaction
         .insert(organizationMailDeliveryEvent)
         .values({
@@ -415,7 +456,6 @@ export const recordOrganizationMailFeedback = async (
         feedback.eventType !== "opened" &&
         feedback.eventType !== "unsubscribed"
       ) {
-        // oxlint-disable-next-line no-await-in-loop -- Preserve recipient lock order within the transaction.
         await transaction
           .insert(organizationMailDeliveryRecipient)
           .values({
@@ -443,7 +483,6 @@ export const recordOrganizationMailFeedback = async (
           });
       }
       if (suppressionReason !== null) {
-        // oxlint-disable-next-line no-await-in-loop -- Preserve recipient lock order within the transaction.
         await applySuppressionChange(transaction, {
           actorUserId: null,
           createdAt: now,
@@ -743,38 +782,6 @@ export const reconcileOrganizationMailDeliveryRecipients = async (input: {
     return { reconciled: projections.size };
   });
 
-export const summarizeOrganizationMailDeliveryEvents = async (input: {
-  from?: Date;
-  organizationId: string;
-  to?: Date;
-}) => {
-  const conditions = [
-    eq(organizationMailDeliveryEvent.organizationId, input.organizationId),
-  ];
-  if (input.from !== undefined) {
-    conditions.push(gte(organizationMailDeliveryEvent.occurredAt, input.from));
-  }
-  if (input.to !== undefined) {
-    conditions.push(lte(organizationMailDeliveryEvent.occurredAt, input.to));
-  }
-
-  const rows = await db
-    .select({
-      count: sql<number>`count(distinct (${organizationMailDeliveryEvent.providerMessageId}, ${organizationMailDeliveryEvent.recipient}))::int`,
-      eventType: organizationMailDeliveryEvent.eventType,
-    })
-    .from(organizationMailDeliveryEvent)
-    .where(and(...conditions))
-    .groupBy(organizationMailDeliveryEvent.eventType);
-
-  const summary: Partial<Record<OrganizationMailDeliveryEventType, number>> =
-    {};
-  for (const row of rows) {
-    summary[row.eventType] = row.count;
-  }
-  return summary;
-};
-
 export type OrganizationMailTrackingSettings = {
   allowPerSendOverride: boolean;
   openTrackingEnabled: boolean;
@@ -886,7 +893,7 @@ export const buildOpenTrackingHtmlTransform = (input: {
   }
   const secret = serverEnv.BETTER_AUTH_SECRET;
   const baseUrl = serverEnv.BETTER_AUTH_URL;
-  if (!hasText(secret) || !hasText(baseUrl)) {
+  if (!secret || !baseUrl) {
     reportError(
       new Error("Open tracking is enabled but signing config is missing."),
       { operation: "organization-mail:open-tracking-config" }

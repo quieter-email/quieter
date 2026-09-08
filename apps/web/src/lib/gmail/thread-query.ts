@@ -1,5 +1,7 @@
 import { queryOptions } from "@tanstack/react-query";
 
+import { hasRenderableMessageBody } from "#/lib/mail";
+import type { ThreadMessagesResult } from "#/lib/mail";
 import { rpc } from "#/lib/orpc";
 import {
   isManagedSandboxMailboxId,
@@ -8,8 +10,6 @@ import {
 
 import { getManagedDemoThread } from "../managed-mail/demo-managed-mail";
 import { getDemoThread } from "./demo-mail";
-import { hasRenderableMessageBody } from "./gmail";
-import type { ThreadMessagesResult } from "./gmail";
 import { getThreadQueryKey } from "./thread-query-keys";
 
 export { getThreadQueryKey } from "./thread-query-keys";

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { toastError } from "#/lib/error-toast";
+
 export type AudioRecorderRecording = {
-  base64: string;
   blob: Blob;
   durationMs: number;
   mimeType: string;
@@ -9,19 +10,6 @@ export type AudioRecorderRecording = {
 
 type UseAudioRecorderOptions = {
   mimeType: string;
-};
-
-const blobToBase64 = async (blob: Blob) => {
-  const buffer = await blob.arrayBuffer();
-  let binary = "";
-  const bytes = new Uint8Array(buffer);
-  const chunkSize = 0x80_00;
-  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-    binary += String.fromCodePoint(
-      ...bytes.subarray(offset, offset + chunkSize)
-    );
-  }
-  return btoa(binary);
 };
 
 const stopStreamTracks = (stream: MediaStream) => {
@@ -69,6 +57,7 @@ export const useAudioRecorder = (options: UseAudioRecorderOptions) => {
   const isSupported =
     typeof window !== "undefined" &&
     typeof MediaRecorder !== "undefined" &&
+    typeof navigator.mediaDevices?.getUserMedia === "function" &&
     MediaRecorder.isTypeSupported(mimeType);
 
   const start = useCallback(async () => {
@@ -98,6 +87,9 @@ export const useAudioRecorder = (options: UseAudioRecorderOptions) => {
         setIsRecording(false);
       };
       recorder.addEventListener("error", () => {
+        toastError(new Error("Audio recording failed."), {
+          boundary: "audio-recorder",
+        });
         stopStreamTracks(ownedStream);
         activeStreamRef.current = null;
         setIsRecording(false);
@@ -149,7 +141,7 @@ export const useAudioRecorder = (options: UseAudioRecorderOptions) => {
     recorderRef.current = null;
     await finished;
     const blob = new Blob(chunks, { type: mimeType });
-    return { base64: await blobToBase64(blob), blob, durationMs, mimeType };
+    return { blob, durationMs, mimeType };
   }, [isRecording, mimeType]);
 
   return { isRecording, isSupported, start, stop };

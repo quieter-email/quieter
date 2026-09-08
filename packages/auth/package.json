@@ -25,7 +25,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@better-auth/api-key": "1.5.0",
+    "@better-auth/api-key": "catalog:",
     "@better-auth/core": "catalog:",
     "@better-auth/passkey": "catalog:",
     "@quieter/config": "workspace:*",
@@ -38,7 +38,7 @@
     "vite-plus": "catalog:"
   },
   "peerDependencies": {
-    "@better-auth/api-key": "1.5.0",
+    "@better-auth/api-key": "catalog:",
     "@better-auth/core": "catalog:",
     "@better-auth/passkey": "catalog:",
     "better-auth": "catalog:",

@@ -23,7 +23,7 @@ import {
   openConnectorLink,
 } from "#/lib/connectors-query";
 import { downloadAttachmentFromServer } from "#/lib/gmail/attachments";
-import type { MessageAttachment } from "#/lib/gmail/gmail";
+import type { MessageAttachment } from "#/lib/mail";
 import { rpc } from "#/lib/orpc";
 import { getErrorMessage } from "#/lib/orpc-errors";
 

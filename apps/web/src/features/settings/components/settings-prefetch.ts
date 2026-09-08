@@ -1,13 +1,8 @@
-import type { RouterOutputs } from "@quieter/orpc";
 import type { QueryClient } from "@tanstack/react-query";
 
 import type { SettingsTab } from "#/features/settings/domain/settings-tab";
 import { connectorsQueryOptions } from "#/lib/connectors-query";
-import { mailboxActionsListQueryOptions } from "#/lib/mailbox-actions-query";
-import {
-  getMailboxesQueryKey,
-  mailboxesQueryOptions,
-} from "#/lib/mailboxes-query";
+import { mailboxesQueryOptions } from "#/lib/mailboxes-query";
 import { orpc } from "#/lib/orpc";
 
 import { userBillingQueryOptions } from "../domain/billing";
@@ -39,30 +34,6 @@ export const prefetchSettingsTab = async (
       await settlePrefetches([
         queryClient.prefetchQuery(mailboxesQueryOptions()),
         queryClient.prefetchQuery(userBillingQueryOptions()),
-      ]);
-      return;
-    }
-    case "actions": {
-      const mailboxes = queryClient.getQueryData<
-        RouterOutputs["mail"]["listMailboxes"]
-      >(getMailboxesQueryKey());
-      const firstActionableMailbox = mailboxes?.groups
-        .flatMap((group) => group.mailboxes)
-        .find(
-          (mailbox) =>
-            mailbox.provider === "gmail" || mailbox.provider === "managed"
-        );
-
-      await settlePrefetches([
-        queryClient.prefetchQuery(mailboxesQueryOptions()),
-        queryClient.prefetchQuery(connectorsQueryOptions()),
-        ...(firstActionableMailbox
-          ? [
-              queryClient.prefetchQuery(
-                mailboxActionsListQueryOptions(firstActionableMailbox.id)
-              ),
-            ]
-          : []),
       ]);
       return;
     }

@@ -129,7 +129,7 @@ export const SettingsOverviewPanel = ({
   );
 };
 
-export const SettingsOverviewContent = ({
+const SettingsOverviewContent = ({
   disabled = false,
   meta,
   onPrefetchTab,

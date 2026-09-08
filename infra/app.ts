@@ -1,7 +1,7 @@
-import { createMailboxActionResources } from "./actions";
 import { createAppDatabase } from "./database";
 import { createGmailResources } from "./gmail";
 import { createMailResources, mailReceiptRuleSetName } from "./mail";
+import { createMailMaintenanceResources } from "./mail-maintenance";
 import { createDeploymentContext } from "./runtime";
 import { requireSecretResource } from "./secrets";
 import type { SecretBindings, SecretResources } from "./types";
@@ -18,17 +18,12 @@ export const createInfrastructure = async (input: {
   const webSecretBindings = Object.values(secretBindings);
 
   const context = createDeploymentContext(secretResources);
-  const actions = createMailboxActionResources(
-    context,
-    secretBindings,
-    appDatabase
-  );
+  createMailMaintenanceResources(context, secretBindings, appDatabase);
   const gmail = createGmailResources(
     context,
     secretBindings,
     secretResources,
-    appDatabase,
-    actions.mailboxActionQueue
+    appDatabase
   );
   const mail = await createMailResources(context, secretResources);
   const web = createWeb(

@@ -3,7 +3,6 @@ import {
   maintainGmailPubSubMailbox,
   processGmailPubSubNotification,
 } from "@quieter/orpc/gmail-pubsub";
-import { markMailboxActionRunsDispatched } from "@quieter/orpc/mailbox-actions";
 import { z } from "zod";
 
 import { reportWorkerError, withSentryReporting } from "./worker-runtime";
@@ -42,50 +41,6 @@ const broadcastMailboxDetails = async (env: Env, emailAddress: string) => {
   }
 };
 
-const QUEUE_SEND_BATCH_SIZE = 100;
-
-const dispatchMailboxActionRuns = async (env: Env, runIds: string[]) => {
-  if (runIds.length === 0) {
-    return;
-  }
-
-  try {
-    const batches = Array.from(
-      { length: Math.ceil(runIds.length / QUEUE_SEND_BATCH_SIZE) },
-      (_, index) =>
-        runIds.slice(
-          index * QUEUE_SEND_BATCH_SIZE,
-          (index + 1) * QUEUE_SEND_BATCH_SIZE
-        )
-    );
-    await Promise.all(
-      batches.map(async (batch) => {
-        await env.MailboxActionQueue.sendBatch(
-          batch.map((runId) => ({
-            body: { runId },
-            contentType: "json" as const,
-          }))
-        );
-        try {
-          await markMailboxActionRunsDispatched(batch);
-        } catch (error) {
-          // Worst case the fallback dispatcher re-dispatches after its lease.
-          reportWorkerError(error, {
-            category: "mailbox_action_dispatch_stamp_error",
-            route: "queue",
-          });
-        }
-      })
-    );
-  } catch (error) {
-    // Run rows stay queued, so the dispatch cron picks them up.
-    reportWorkerError(error, {
-      category: "mailbox_action_dispatch_error",
-      route: "queue",
-    });
-  }
-};
-
 export const processGmailQueueMessage = async (
   body: unknown,
   env: Env,
@@ -98,17 +53,10 @@ export const processGmailQueueMessage = async (
   if (message.type === "maintenance") {
     const result = await (
       dependencies.maintainMailbox ?? maintainGmailPubSubMailbox
-    )(
-      {
-        mailboxId: message.mailboxId,
-        topicName: env.GMAIL_PUBSUB_TOPIC,
-      },
-      {
-        onRunsEnqueued: async (runIds) => {
-          await dispatchMailboxActionRuns(env, runIds);
-        },
-      }
-    );
+    )({
+      mailboxId: message.mailboxId,
+      topicName: env.GMAIL_PUBSUB_TOPIC,
+    });
     if (result.status === "busy") {
       return { retry: true };
     }
@@ -123,9 +71,6 @@ export const processGmailQueueMessage = async (
   )(message, {
     onProcessed: async () => {
       await broadcastMailboxDetails(env, message.emailAddress);
-    },
-    onRunsEnqueued: async (runIds) => {
-      await dispatchMailboxActionRuns(env, runIds);
     },
   });
   if (!result.ignored && result.busy === true) {

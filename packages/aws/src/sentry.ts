@@ -28,6 +28,7 @@ export const reportAwsError = async (error: unknown, handler: string) => {
   Sentry.withScope((scope) => {
     scope.setTag("handler", handler);
     scope.setTag("runtime", "aws-lambda");
+
     Sentry.captureException(error);
   });
   await Sentry.flush(2000);
@@ -54,6 +55,10 @@ configureErrorReporter((error, context) => {
       typeof context.handler === "string" ? context.handler : "application"
     );
     scope.setTag("runtime", "aws-lambda");
+    scope.setExtras(context);
+    if (typeof context.operation === "string") {
+      scope.setTag("operation", context.operation);
+    }
     Sentry.captureException(error);
   });
 });

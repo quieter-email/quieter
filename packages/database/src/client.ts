@@ -8,9 +8,10 @@ import { Resource } from "sst";
 import { authRelations } from "./schema.ts";
 
 export type DatabaseClient = ReturnType<typeof drizzlePostgres>;
-
-const isPresentString = (value: string | undefined): value is string =>
-  value !== undefined && value !== "";
+export type DatabaseTransaction = Parameters<
+  Parameters<DatabaseClient["transaction"]>[0]
+>[0];
+export type DatabaseExecutor = DatabaseClient | DatabaseTransaction;
 
 const getLinkedHyperdriveConnectionString = (): string | undefined => {
   try {
@@ -35,12 +36,12 @@ const getLinkedHyperdriveConnectionString = (): string | undefined => {
 const getDatabaseUrl = () => {
   const linkedConnectionString = getLinkedHyperdriveConnectionString();
 
-  if (isPresentString(linkedConnectionString)) {
+  if (linkedConnectionString) {
     return linkedConnectionString;
   }
 
   const databaseUrl = serverEnv.DATABASE_URL;
-  if (!isPresentString(databaseUrl)) {
+  if (!databaseUrl) {
     throw new Error("DATABASE_URL environment variable is missing");
   }
   return databaseUrl;
@@ -57,6 +58,7 @@ const createDatabaseClient = (
   const sql = postgres(databaseUrl, {
     connect_timeout: 10,
     fetch_types: false,
+    idle_timeout: 20,
     max: serverEnv.QUIETER_DEPLOYMENT_ENV === "local" ? 1 : 5,
     prepare: hyperdrive,
   });
@@ -67,6 +69,9 @@ const createDatabaseClient = (
 };
 
 const requestDatabaseClient = new AsyncLocalStorage<DatabaseClient>();
+const isWorker =
+  typeof navigator !== "undefined" &&
+  navigator.userAgent === "Cloudflare-Workers";
 let directDatabaseClient: DatabaseClient | undefined;
 
 const getDatabaseClient = () => {
@@ -76,69 +81,41 @@ const getDatabaseClient = () => {
     return scopedClient;
   }
 
-  const linkedConnectionString = getLinkedHyperdriveConnectionString();
-
-  if (isPresentString(linkedConnectionString)) {
-    return createDatabaseClient(linkedConnectionString);
+  if (isWorker || getLinkedHyperdriveConnectionString()) {
+    throw new Error(
+      "Worker database access requires withRequestDatabaseClient."
+    );
   }
 
   directDatabaseClient ??= createDatabaseClient();
   return directDatabaseClient;
 };
 
-type RequestDatabaseRun<Result> =
-  | ((client: DatabaseClient) => Result | Promise<Result>)
-  | (() => Result | Promise<Result>);
-
-const isClientRun = <Result>(
-  run: RequestDatabaseRun<Result>
-): run is (client: DatabaseClient) => Result | Promise<Result> =>
-  run.length > 0;
-
-const executeRequestDatabaseRun = async <Result>(
-  run: RequestDatabaseRun<Result>,
-  client: DatabaseClient
-): Promise<Result> => {
-  if (isClientRun(run)) {
-    return await run(client);
-  }
-  const runWithoutClient = run as () => Result | Promise<Result>;
-  return await runWithoutClient();
-};
-
 export const withRequestDatabaseClient = async <Result>(
-  run: RequestDatabaseRun<Result>
+  run: (client: DatabaseClient) => Result | Promise<Result>
 ): Promise<Result> => {
   const requestClient = requestDatabaseClient.getStore();
   if (requestClient) {
-    return await executeRequestDatabaseRun(run, requestClient);
+    return await run(requestClient);
   }
 
-  const client = createDatabaseClient();
-  return await requestDatabaseClient.run(
-    client,
-    async () => await executeRequestDatabaseRun(run, client)
-  );
+  // Workers own request-local sockets; Node reuses one bounded process pool.
+  const client =
+    isWorker || getLinkedHyperdriveConnectionString()
+      ? createDatabaseClient()
+      : getDatabaseClient();
+  return await requestDatabaseClient.run(client, async () => await run(client));
 };
-
-const databaseProxyOverrides = new Map<PropertyKey, unknown>();
 
 const databaseProxyHandler: ProxyHandler<DatabaseClient> = {
   get(_target, property): unknown {
-    if (databaseProxyOverrides.has(property)) {
-      return databaseProxyOverrides.get(property);
-    }
     const client = getDatabaseClient();
     const value: unknown = Reflect.get(client, property);
-    if (typeof value === "function") {
+    if (typeof value === "function" && property !== "$client") {
       return (...args: unknown[]) =>
         Reflect.apply(value, client, args) as unknown;
     }
     return value;
-  },
-  set(_target, property, value): boolean {
-    databaseProxyOverrides.set(property, value);
-    return true;
   },
 };
 

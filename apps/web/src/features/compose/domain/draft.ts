@@ -7,9 +7,6 @@ import { serializeTemplatePlaceholders } from "./template-placeholder-values";
 const MAX_TOTAL_ATTACHMENT_BYTES = 24 * 1024 * 1024;
 const CONTENT_ID_PREFIX = "quieter-inline";
 
-const hasText = (value: string | null | undefined): value is string =>
-  typeof value === "string" && value.length > 0;
-
 type ComposeSaveStatus = "idle" | "saving" | "saved" | "error" | "sending";
 
 type ComposeRecipientFields = {
@@ -280,18 +277,18 @@ export const appendComposeSignature = (
 ): ComposeDraftState => {
   const html = signature.html?.trim();
   const text = signature.text?.trim();
-  if (!hasText(html) && !hasText(text)) {
+  if (!html && !text) {
     return draft;
   }
   if (draft.bodyHtml.includes(COMPOSE_SIGNATURE_MARKER)) {
     return draft;
   }
 
-  const signatureHtml = `<div ${COMPOSE_SIGNATURE_MARKER}="true"><br>${hasText(html) ? html : textToComposeBodyHtml(text ?? "")}</div>`;
+  const signatureHtml = `<div ${COMPOSE_SIGNATURE_MARKER}="true"><br>${html || textToComposeBodyHtml(text ?? "")}</div>`;
   const nextHtml = draft.bodyHtml.trim()
     ? `${draft.bodyHtml}${signatureHtml}`
     : signatureHtml.replace("<br>", "");
-  const signatureText = hasText(text) ? text : htmlToText(html ?? "");
+  const signatureText = text || htmlToText(html ?? "");
   const nextText = draft.bodyText.trim()
     ? `${draft.bodyText.trim()}\n\n${signatureText}`
     : signatureText;
@@ -416,7 +413,7 @@ const findReferencedInlineImageIds = (html: string): Set<string> => {
     "img[data-compose-inline-id]"
   )) {
     const imageId = image.dataset.composeInlineId;
-    if (hasText(imageId)) {
+    if (imageId) {
       ids.add(imageId);
     }
   }
@@ -537,7 +534,7 @@ export const attachInlineImagesToHtml = (
     const paragraph = doc.createElement("p");
     const element = doc.createElement("img");
     const objectUrl = getComposeRuntimeObjectUrl(image.id);
-    if (!hasText(objectUrl)) {
+    if (!objectUrl) {
       continue;
     }
 

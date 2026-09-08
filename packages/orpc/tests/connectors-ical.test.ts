@@ -3,6 +3,31 @@ import { describe, expect, test } from "vite-plus/test";
 import { parseIcsToGoogleCalendarEvent } from "../src/connectors/ical";
 
 describe("ICS connector parsing", () => {
+  test("keeps alarm properties separate from the event and honors its duration", () => {
+    const event = parseIcsToGoogleCalendarEvent(
+      [
+        "BEGIN:VCALENDAR",
+        "BEGIN:VEVENT",
+        "DTSTART:20260701T090000Z",
+        "DURATION:PT90M",
+        "BEGIN:VALARM",
+        "ACTION:DISPLAY",
+        "TRIGGER:-PT15M",
+        "DESCRIPTION:Private reminder",
+        "DURATION:PT5M",
+        "REPEAT:2",
+        "END:VALARM",
+        "END:VEVENT",
+        "END:VCALENDAR",
+      ].join("\r\n")
+    );
+    expect(event).toStrictEqual({
+      end: { dateTime: "2026-07-01T10:30:00Z" },
+      start: { dateTime: "2026-07-01T09:00:00Z" },
+      summary: "Calendar event",
+    });
+  });
+
   test("parses a timed event with timezone, folded description, location, uid, and recurrence", () => {
     const event = parseIcsToGoogleCalendarEvent(
       [

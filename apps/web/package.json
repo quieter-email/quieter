@@ -16,9 +16,10 @@
     "preview": "vp preview"
   },
   "dependencies": {
+    "@ai-sdk/provider-utils": "5.0.29",
     "@ai-sdk/react": "catalog:",
     "@barkleapp/css-sanitizer": "1.0.0",
-    "@better-auth/api-key": "1.5.0",
+    "@better-auth/api-key": "catalog:",
     "@better-auth/passkey": "catalog:",
     "@c15t/react": "^2.2.1",
     "@c15t/scripts": "^2.2.0",
@@ -27,6 +28,7 @@
     "@dnd-kit/react": "^0.5.0",
     "@hugeicons/core-free-icons": "catalog:",
     "@hugeicons/react": "catalog:",
+    "@opentelemetry/core": "^2.10.0",
     "@orpc/client": "catalog:",
     "@orpc/server": "catalog:",
     "@orpc/tanstack-query": "catalog:",
@@ -35,7 +37,6 @@
     "@quieter/billing": "workspace:*",
     "@quieter/database": "workspace:*",
     "@quieter/env": "workspace:*",
-    "@quieter/gmail": "workspace:*",
     "@quieter/mail": "workspace:*",
     "@quieter/observability": "workspace:*",
     "@quieter/orpc": "workspace:*",

@@ -3,6 +3,7 @@
 import { useChat } from "@ai-sdk/react";
 import type { ComposeEmailResult } from "@quieter/ai/chat-agent";
 import type { ChatModel } from "@quieter/ai/chat-models";
+import { toCanonicalTranscript } from "@quieter/ai/chat-transcript";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
 import type { RouterOutputs } from "@quieter/orpc";
 import { Button } from "@quieter/ui/button";
@@ -28,10 +29,7 @@ import {
   userBillingQueryOptions,
 } from "#/features/settings/domain/billing";
 import { useAudioRecorder } from "#/lib/audio-recorder";
-import {
-  getTranscriptionAudioFormat,
-  normalizeTranscriptionRecording,
-} from "#/lib/audio-transcription";
+import { prepareTranscriptionRecording } from "#/lib/audio-transcription";
 import {
   chatQueryOptions,
   getChatQueryKey,
@@ -42,7 +40,7 @@ import { toastError } from "#/lib/error-toast";
 import { orpc, rpc } from "#/lib/orpc";
 import { shouldRetryOrpcError } from "#/lib/orpc-errors";
 
-import { getChatRetryAction, toInitialMessages } from "../domain/chat-messages";
+import { getChatRetryAction } from "../domain/chat-messages";
 import type { ChatToolApproval } from "../domain/chat-tools";
 import { getToolName, isChatToolPart } from "../domain/chat-tools";
 import { toChatComposeMessageInput } from "../domain/compose-proposal";
@@ -52,8 +50,6 @@ import { ChatComposer } from "./chat-composer";
 import { ChatTranscript } from "./chat-transcript";
 
 const CHAT_API_ENDPOINT = "/api/chat";
-const MAX_TRANSCRIPTION_AUDIO_DURATION_MS = 60_000;
-const MAX_TRANSCRIPTION_AUDIO_BASE64_LENGTH = 14_000_000;
 
 type ChatData = RouterOutputs["chat"]["get"];
 
@@ -185,7 +181,7 @@ const ChatSession = ({
     stop,
   } = useChat({
     id: threadId,
-    messages: toInitialMessages(chatData?.messages ?? []),
+    messages: toCanonicalTranscript(chatData?.messages ?? []),
     onFinish: () => {
       void synchronizeChat();
     },
@@ -269,7 +265,7 @@ const ChatSession = ({
       return;
     }
     reconciledChatRef.current = chatData;
-    setMessages(toInitialMessages(chatData.messages));
+    setMessages(toCanonicalTranscript(chatData.messages));
   }, [chatData, isRetrying, setMessages, status]);
 
   const resolveCompose = async (
@@ -377,7 +373,7 @@ const ChatSession = ({
           chatId: threadId,
           mailboxId,
         });
-        const persistedMessages = toInitialMessages(persistedChat.messages);
+        const persistedMessages = toCanonicalTranscript(persistedChat.messages);
         const retryAction = getChatRetryAction(messages, persistedMessages);
         if (retryAction.type === "resubmit-user") {
           clearError();
@@ -473,45 +469,23 @@ const ChatSession = ({
   const stopRecording = async () => {
     setIsPreparingTranscription(true);
     try {
-      const nativeRecording = await audioRecorder.stop();
-      if (nativeRecording.durationMs > MAX_TRANSCRIPTION_AUDIO_DURATION_MS) {
-        toast.error("Recordings must be 60 seconds or shorter.");
-        setIsPreparingTranscription(false);
-        return;
-      }
-
-      const recording = await normalizeTranscriptionRecording(nativeRecording);
-      const format = getTranscriptionAudioFormat(recording.mimeType);
-      if (!format) {
-        toast.error("This recording could not be prepared for transcription.");
-        setIsPreparingTranscription(false);
-        return;
-      }
-      if (recording.base64.length > MAX_TRANSCRIPTION_AUDIO_BASE64_LENGTH) {
-        toast.error("This recording is too large to transcribe.");
-        setIsPreparingTranscription(false);
-        return;
-      }
-
+      const recording = await prepareTranscriptionRecording(
+        await audioRecorder.stop()
+      );
       const result = await transcribeAudio.mutateAsync({
-        audioBase64: recording.base64,
+        ...recording,
         chatId: chatId ?? undefined,
-        durationMs: recording.durationMs,
-        format,
         mailboxId,
       });
       setInput((current) =>
         current.trim() ? `${current.trimEnd()}\n${result.text}` : result.text
       );
     } catch (transcriptionError) {
-      toast.error(
-        transcriptionError instanceof Error &&
-          (transcriptionError.message.startsWith("Transcription ") ||
-            transcriptionError.message.startsWith("We could not transcribe ") ||
-            transcriptionError.message === "No speech was detected.")
-          ? transcriptionError.message
-          : "We could not transcribe that recording. Try recording it again."
-      );
+      toastError(transcriptionError, {
+        boundary: "chat-transcription",
+        fallback:
+          "We could not transcribe that recording. Try recording it again.",
+      });
     }
     setIsPreparingTranscription(false);
   };

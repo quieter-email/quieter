@@ -10,8 +10,8 @@ import { reportError } from "@quieter/observability";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 
+import { assertCanUseAi } from "../ai-access";
 import { loadAiAgentContext, serializeAiAgentContext } from "../ai-memory";
-import { assertAiChatCredits } from "../chat/access";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import { mailboxIdSchema, protectedProcedure } from "./base";
 
@@ -172,7 +172,7 @@ export const chatRouter = {
         mailboxId: input.mailboxId,
         userId: context.userId,
       });
-      await assertAiChatCredits({
+      await assertCanUseAi({
         organizationId: accessibleMailbox.organizationId ?? undefined,
         userId: context.userId,
       });

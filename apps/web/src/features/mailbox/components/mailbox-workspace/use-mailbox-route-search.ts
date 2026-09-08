@@ -4,7 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useRef } from "react";
 
 import type { MailboxWorkspaceView } from "#/features/mailbox/domain/mailbox-workspace-view";
-import type { MailboxCategory } from "#/lib/gmail/gmail";
+import type { MailboxCategory } from "#/lib/mail";
 import { inboxRouteApi } from "#/lib/route-apis";
 
 const MAILBOX_ROUTE_CATEGORIES = [
