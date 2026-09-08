@@ -61,3 +61,27 @@
     transform: translateY(0);
   }
 }
+
+.home-product-stage {
+  position: relative;
+  isolation: isolate;
+}
+
+.home-product-stage::before {
+  position: absolute;
+  z-index: -1;
+  inset: 12% 6% -4%;
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse,
+    color-mix(in oklab, var(--q-blue) 12%, transparent),
+    transparent 72%
+  );
+  filter: blur(50px);
+  content: "";
+}
+
+.home-product-preview {
+  box-shadow: 0 24px 100px -40px
+    color-mix(in oklab, var(--q-blue) 18%, transparent);
+}

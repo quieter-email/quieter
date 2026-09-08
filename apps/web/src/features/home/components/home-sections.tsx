@@ -6,98 +6,44 @@ import { useState } from "react";
 import { AiSection } from "./ai-section";
 import { ConnectSection } from "./connect-section";
 import { HomeAtmosphericBackground } from "./lazy-webgl-backgrounds";
+import { WorkflowPreview } from "./product-previews";
 import { Reveal } from "./reveal";
 import { WaitlistForm } from "./waitlist-form";
 
-const experience = [
-  {
-    body: "Save a reply. Use it again.",
-    graphic: (
-      <div className="w-full max-w-80 space-y-4 rounded-xl bg-bg-raised/50 p-6 text-left text-sm text-muted-fg">
-        <p>Thanks for reaching out</p>
-        <p>Following up on our conversation</p>
-        <p>Getting started</p>
-      </div>
-    ),
-    id: "home-templates-title",
-    title: "Templates",
-  },
-  {
-    body: "Keep moving without the mouse.",
-    graphic: (
-      <div className="flex gap-3 text-sm text-fg">
-        <span className="flex h-14 w-20 items-center justify-center rounded-lg bg-bg-raised/70">
-          Ctrl
-        </span>
-        <span className="flex size-14 items-center justify-center rounded-lg bg-bg-raised/70">
-          K
-        </span>
-      </div>
-    ),
-    id: "home-shortcuts-title",
-    title: "Keyboard shortcuts",
-  },
-  {
-    body: "Work and personal, neatly separate.",
-    graphic: (
-      <div className="space-y-5 text-sm text-muted-fg">
-        <p className="flex items-center gap-4">
-          <span className="size-2 rounded-full bg-q-blue" />
-          Work
-        </p>
-        <p className="flex items-center gap-4">
-          <span className="size-2 rounded-full bg-q-pink" />
-          Personal
-        </p>
-        <p className="flex items-center gap-4">
-          <span className="size-2 rounded-full bg-q-green" />
-          Support
-        </p>
-      </div>
-    ),
-    id: "home-inboxes-title",
-    title: "Multiple inboxes",
-  },
-  {
-    body: "At your desk or on your phone.",
-    graphic: (
-      <div className="relative h-28 w-52">
-        <div className="h-28 w-44 rounded-xl border border-muted-fg/40 bg-bg-raised/30 p-3">
-          <div className="h-full w-8 rounded bg-bg-raised/60" />
-        </div>
-        <div className="absolute right-0 bottom-0 h-20 w-11 rounded-lg border border-muted-fg/40 bg-black p-2">
-          <div className="h-1 w-4 rounded bg-muted-fg/40" />
-        </div>
-      </div>
-    ),
-    id: "home-screens-title",
-    title: "Any screen",
-  },
-] as const;
-
 const ExperienceSection = () => (
-  <>
-    {experience.map((item) => (
-      <section
-        aria-labelledby={item.id}
-        className="w-full max-w-xl px-6 text-center"
-        key={item.id}
+  <section
+    aria-labelledby="home-experience-title"
+    className="w-full max-w-6xl px-6"
+  >
+    <Reveal>
+      <h2
+        className="text-center text-3xl font-medium tracking-tight text-balance text-fg sm:text-4xl"
+        id="home-experience-title"
       >
-        <Reveal>
-          <h2
-            className="text-2xl font-normal text-balance text-fg"
-            id={item.id}
-          >
-            {item.title}
-          </h2>
-          <div aria-hidden className="flex h-56 items-center justify-center">
-            {item.graphic}
-          </div>
-          <p className="text-sm leading-relaxed text-muted-fg">{item.body}</p>
-        </Reveal>
-      </section>
-    ))}
-  </>
+        Made for the way you work.
+      </h2>
+      <div aria-hidden className="home-product-stage mt-10">
+        <WorkflowPreview />
+      </div>
+      <div className="mt-8 grid gap-6 text-sm leading-relaxed text-muted-fg sm:grid-cols-3">
+        <p>
+          <span className="text-fg">Fewer repeated steps.</span>
+          <br />
+          Templates and intuitive shortcuts.
+        </p>
+        <p>
+          <span className="text-fg">Room for every inbox.</span>
+          <br />
+          Work and personal, neatly separate.
+        </p>
+        <p>
+          <span className="text-fg">Wherever you are.</span>
+          <br />
+          On your computer or your phone.
+        </p>
+      </div>
+    </Reveal>
+  </section>
 );
 const tiers = [
   {
@@ -123,12 +69,12 @@ const tiers = [
 const Pricing = () => (
   <section
     aria-labelledby="home-pricing-title"
-    className="w-full max-w-5xl scroll-mt-24 px-6"
+    className="w-full max-w-6xl scroll-mt-24 px-6"
     id="pricing"
   >
     <Reveal className="mb-10 text-center">
       <h2
-        className="text-2xl font-normal text-balance text-fg"
+        className="text-3xl font-medium tracking-tight text-balance text-fg sm:text-4xl"
         id="home-pricing-title"
       >
         Intuitive pricing
@@ -201,7 +147,7 @@ export const HomeSections = () => {
           </div>
         </div>
 
-        <div className="relative z-10 flex w-full flex-col items-center gap-20 py-20 md:gap-28 md:py-28">
+        <div className="relative z-10 flex w-full flex-col items-center gap-24 py-24 md:gap-36 md:py-36">
           <ConnectSection paused={paused} onPausedChange={setPaused} />
           <AiSection />
           <ExperienceSection />
