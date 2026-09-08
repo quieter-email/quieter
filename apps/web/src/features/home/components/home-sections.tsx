@@ -1,7 +1,6 @@
 "use client";
 
 import { BILLING_PRODUCTS } from "@quieter/billing/plans";
-import { cn } from "@quieter/ui/cn";
 import { useState } from "react";
 
 import { AiSection } from "./ai-section";
@@ -13,51 +12,79 @@ import { WaitlistForm } from "./waitlist-form";
 
 const experience = [
   {
-    body: "Save what you write, so you don't have to repeat it",
+    body: "Keep your best replies close. Save a template and skip writing the same email twice.",
     title: "Templates",
   },
   {
-    body: "Every page, dialog and feature, just one button-press away",
-    title: "Clean UI with intuitive shortcuts",
+    body: "Move between messages, start a draft, and find what you need from your keyboard.",
+    title: "A shortcut to the next thing",
   },
   {
-    body: "One for work, one for personal things, one for support, and as many more as you need",
-    title: "As many inboxes as you want",
+    body: "Work, personal, and support. Keep each inbox separate and switch without the tab shuffle.",
+    title: "Room for every inbox",
   },
   {
-    body: "Use Quieter in your browser, on your phone or computer",
+    body: "A workspace that fits your screen, from your desk to your phone.",
     title: "Mail wherever you work",
   },
 ] as const;
 
 const ExperienceSection = () => (
-  <>
-    <Reveal className="px-6">
-      <h2 className="text-center font-serif text-3xl text-balance text-fg italic md:text-5xl">
+  <section
+    aria-labelledby="home-experience-title"
+    className="grid w-full max-w-6xl gap-10 px-6 lg:grid-cols-[0.8fr_1.2fr] lg:gap-16"
+  >
+    <Reveal className="max-w-sm">
+      <p className="mb-3 text-xs font-medium tracking-widest text-muted-fg uppercase">
+        The everyday details
+      </p>
+      <h2
+        className="font-serif text-2xl leading-snug tracking-tight text-balance text-fg sm:text-3xl"
+        id="home-experience-title"
+      >
         A better email experience
       </h2>
+      <p className="mt-4 text-sm leading-relaxed text-pretty text-muted-fg">
+        Small things you notice every day. Fewer repeated steps, less switching
+        around, and a little more room to focus.
+      </p>
+      <div
+        aria-hidden
+        className="mt-8 inline-flex items-center gap-2 rounded-xl border border-border/60 bg-card/70 px-4 py-3 text-xs text-muted-fg shadow-elevation-sm"
+      >
+        <span className="mr-4">Find anything</span>
+        <span className="flex size-7 items-center justify-center rounded-md border border-border/60 bg-bg-surface font-mono text-fg shadow-xs">
+          Ctrl
+        </span>
+        <span className="flex size-7 items-center justify-center rounded-md border border-border/60 bg-bg-surface font-mono text-fg shadow-xs">
+          K
+        </span>
+      </div>
     </Reveal>
 
-    <div className="flex w-full max-w-7xl flex-col gap-12 px-6 italic md:gap-24 md:px-12">
+    <div className="grid grid-cols-1 gap-x-8 gap-y-8 sm:grid-cols-2">
       {experience.map((item, index) => (
         <Reveal
-          className={cn("flex w-full flex-col gap-3", {
-            "items-start": index % 2 === 0,
-            "md:items-end md:text-right": index % 2 !== 0,
-          })}
-          delay={0.06}
+          className="border-t border-border/70 pt-5"
+          delay={index * 0.04}
           key={item.title}
         >
-          <h3 className="font-serif text-2xl text-balance text-fg md:text-4xl">
+          <span
+            aria-hidden
+            className="mb-4 block font-mono text-[10px] text-muted-fg"
+          >
+            0{index + 1}
+          </span>
+          <h3 className="text-sm font-medium text-balance text-fg">
             {item.title}
           </h3>
-          <p className="max-w-3xl font-sans text-base text-pretty text-muted-fg md:text-2xl">
+          <p className="mt-2 text-sm leading-relaxed text-pretty text-muted-fg">
             {item.body}
           </p>
         </Reveal>
       ))}
     </div>
-  </>
+  </section>
 );
 
 const tiers = [
@@ -82,54 +109,49 @@ const tiers = [
 ] as const;
 
 const Pricing = () => (
-  <>
-    <Reveal className="scroll-mt-24 px-6" id="pricing">
-      <h2 className="text-center font-serif text-3xl text-balance text-fg italic md:text-5xl">
+  <section
+    aria-labelledby="home-pricing-title"
+    className="w-full max-w-6xl scroll-mt-24 px-6"
+    id="pricing"
+  >
+    <Reveal className="mb-10 text-center">
+      <h2
+        className="font-serif text-2xl leading-snug tracking-tight text-balance text-fg sm:text-3xl"
+        id="home-pricing-title"
+      >
         Intuitive pricing
       </h2>
     </Reveal>
-
-    <div className="flex w-full max-w-7xl flex-col px-6">
-      <div className="h-px w-full shrink-0 bg-fg/40" />
+    <div className="overflow-hidden rounded-2xl border border-border/60 bg-card/70 shadow-elevation-sm">
       {tiers.map((tier, index) => (
-        <Reveal className="w-full" delay={index * 0.07} key={tier.name}>
-          <div className="grid w-full gap-4 py-8 md:grid-cols-[1fr_2fr_1fr] md:items-center md:gap-8 md:py-12">
-            <div>
-              <h3 className="font-serif text-xl text-fg italic md:text-2xl">
-                {tier.name}
-              </h3>
+        <Reveal
+          className="border-b border-border/50 last:border-0"
+          delay={index * 0.05}
+          key={tier.name}
+        >
+          <div className="grid gap-3 px-6 py-6 sm:grid-cols-[1fr_2fr_1fr] sm:items-center sm:gap-6 sm:px-8">
+            <h3 className="text-sm font-medium text-fg">{tier.name}</h3>
+            <div className="text-sm leading-relaxed text-muted-fg">
+              <p>{tier.summary}</p>
+              {tier.credits === null ? null : (
+                <p className="mt-1 text-xs">{tier.credits}</p>
+              )}
             </div>
-            <div className="min-w-0">
-              <p className="font-serif text-fg italic md:text-center">
-                <span className="text-lg md:text-2xl">{tier.summary}</span>
-                {tier.credits === null ? null : (
-                  <>
-                    <br />
-                    <span className="text-base md:text-xl">{tier.credits}</span>
-                  </>
-                )}
-              </p>
-            </div>
-            <div>
-              <p className="font-serif text-xl text-fg italic tabular-nums md:text-right md:text-2xl">
-                {tier.price}
-              </p>
-            </div>
+            <p className="text-base font-medium text-fg tabular-nums sm:text-right">
+              {tier.price}
+            </p>
           </div>
-          <div className="h-px w-full shrink-0 bg-fg/40" />
         </Reveal>
       ))}
-
-      <Reveal className="py-6" delay={0.1}>
-        <p className="text-center font-serif text-base text-pretty text-fg italic md:text-xl">
-          Managed mail starts at $0.20 per 1,000 messages. AI usage is billed at
-          model cost plus 15%.
-        </p>
-      </Reveal>
     </div>
-  </>
+    <Reveal className="mx-auto mt-5 max-w-xl" delay={0.1}>
+      <p className="text-center text-xs leading-relaxed text-pretty text-muted-fg">
+        Managed mail starts at $0.20 per 1,000 messages. AI usage is billed at
+        model cost plus 15%.
+      </p>
+    </Reveal>
+  </section>
 );
-
 const Closing = () => (
   <section className="dark relative z-10 flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-black px-6 pt-32 pb-24 md:pt-36">
     <div className="absolute inset-0">
@@ -161,7 +183,7 @@ export const HomeSections = () => {
       >
         <SoftGradientField />
 
-        <div className="relative z-10 flex w-full flex-col items-center gap-16 py-20 md:gap-28 md:py-40">
+        <div className="relative z-10 flex w-full flex-col items-center gap-20 py-20 md:gap-28 md:py-28">
           <ConnectSection paused={paused} onPausedChange={setPaused} />
           <AiSection />
           <ExperienceSection />

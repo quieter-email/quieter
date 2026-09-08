@@ -116,85 +116,12 @@
   }
 }
 
-.home-writing-gradient {
-  background-image: linear-gradient(
-    90deg,
-    color-mix(in oklab, var(--q-pink) 42%, var(--bg-surface)),
-    color-mix(in oklab, var(--q-blue) 40%, var(--bg-surface)),
-    color-mix(in oklab, var(--q-yellow) 35%, var(--bg-surface)),
-    var(--bg-surface)
-  );
-  background-size: 180% 100%;
-  animation: home-writing-drift 5.5s var(--app-motion-ease-in-out) infinite;
-}
-
-@keyframes home-writing-drift {
-  0%,
-  100% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-}
-
-[data-home-paused="true"] .home-gradient-field,
-[data-home-paused="true"] .home-writing-gradient {
+[data-home-paused="true"] .home-gradient-field {
   animation-play-state: paused;
 }
 
-.home-branch {
-  opacity: 0;
-  filter: blur(4px);
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-size: 0% 100%;
-  mask-size: 0% 100%;
-  transform: scaleX(0.94);
-  transition:
-    -webkit-mask-size 4.6s var(--app-motion-ease-out),
-    mask-size 4.6s var(--app-motion-ease-out),
-    filter 2.8s var(--app-motion-ease-out),
-    opacity 1.2s var(--app-motion-ease-out),
-    transform 4.6s var(--app-motion-ease-out);
-}
-
-.home-branch[data-grown="true"] {
-  opacity: 0.78;
-  filter: blur(0);
-  -webkit-mask-size: 240% 100%;
-  mask-size: 240% 100%;
-  transform: scaleX(1);
-}
-
-.home-branch-left {
-  -webkit-mask-image: linear-gradient(to right, #000 0 58%, transparent 100%);
-  mask-image: linear-gradient(to right, #000 0 58%, transparent 100%);
-  -webkit-mask-position: left center;
-  mask-position: left center;
-  transform-origin: left center;
-}
-
-.home-branch-right {
-  -webkit-mask-image: linear-gradient(to left, #000 0 58%, transparent 100%);
-  mask-image: linear-gradient(to left, #000 0 58%, transparent 100%);
-  -webkit-mask-position: right center;
-  mask-position: right center;
-  transform-origin: right center;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .home-gradient-field,
-  .home-writing-gradient {
+  .home-gradient-field {
     animation: none;
-  }
-
-  .home-branch {
-    opacity: 0.78;
-    filter: blur(0);
-    -webkit-mask-size: 240% 100%;
-    mask-size: 240% 100%;
-    transform: none;
-    transition: none;
   }
 }

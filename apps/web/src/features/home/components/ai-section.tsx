@@ -1,339 +1,258 @@
 "use client";
 
+import {
+  ArrowRight01Icon,
+  SparklesIcon,
+  Tick01Icon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { cn } from "@quieter/ui/cn";
 import type { ReactNode } from "react";
 
-import { BranchArt } from "./branch-art";
-import { DesignFrame } from "./design-frame";
 import { Reveal, RevealChild } from "./reveal";
-
-const CARD_CLASS =
-  "relative size-full overflow-hidden rounded-[12px] border border-fg/10 bg-bg-raised shadow-elevation-sm";
-
-const Card = ({ children }: { children: ReactNode }) => (
-  <div className={CARD_CLASS}>{children}</div>
-);
 
 const mails = [
   {
-    address: "notifications@vercel.com",
-    iconBox: "top-[24px] left-[25px] h-[33px] w-[38px]",
-    iconSrc: "/landing/vercel-mark.svg",
-    label: "Dev",
-    labelClass: "bg-q-cyan/25 text-fg/75",
-    pill: "top-[38px] left-[411px]",
-    sender: "Vercel ",
-    subject: "Failed preview deployment on team 'quieter'",
+    icon: "/landing/vercel-mark.svg",
+    label: "Development",
+    sender: "Vercel",
+    subject: "Your deployment is ready",
+    tone: "bg-q-cyan/10 text-fg",
   },
   {
-    address: "receipts@stripe.com",
-    iconBox: "top-[24px] left-[25px] h-[33px] w-[38px]",
-    iconSrc: "/landing/stripe-mark.svg",
-    label: "Business",
-    labelClass: "bg-q-orange/25 text-fg/75",
-    pill: "top-[36px] left-[382px]",
-    sender: "Stripe ",
-    subject: "You got a new customer!",
+    icon: "/landing/stripe-mark.svg",
+    label: "Receipts",
+    sender: "Stripe",
+    subject: "Your monthly invoice",
+    tone: "bg-q-orange/10 text-fg",
   },
   {
-    address: "leander@quieter.email",
-    iconBox: "top-[21px] left-[23px] size-[40px] overflow-hidden rounded-[5px]",
-    iconSrc: "/landing/avatar-leander.png",
+    icon: "/landing/avatar-leander.png",
     label: "Personal",
-    labelClass: "bg-q-pink/25 text-fg/75",
-    pill: "top-[36px] left-[384px]",
-    sender: "Leander ",
-    subject: "Photos from my Tokyo trip",
+    sender: "Leander",
+    subject: "A few photos from Tokyo",
+    tone: "bg-q-pink/10 text-fg",
   },
 ] as const;
 
-const LabellingCard = () => (
-  <Card>
-    <p className="absolute top-[65.5px] left-[73.5px] text-[20px] whitespace-nowrap text-fg">
-      <span className="font-serif italic">AI</span>
-      <span className="font-sans">{" labels any mail, based on "}</span>
-      <span className="font-serif italic">your preferences</span>
-    </p>
-
-    <div className="absolute top-[147.5px] left-[39.5px] flex flex-col items-start gap-[10px] p-[10px]">
-      {mails.map((mail, index) => (
-        <RevealChild
-          className="relative h-[81px] w-[486px] overflow-hidden rounded-[10px] bg-bg-surface"
-          delay={0.1 + index * 0.08}
-          key={mail.address}
-        >
-          <div className={cn("absolute", mail.iconBox)}>
-            <img alt="" className="size-full object-cover" src={mail.iconSrc} />
-          </div>
-
-          <p className="absolute top-[19px] left-[90px] whitespace-nowrap text-fg">
-            <span className="font-serif text-[16px] font-bold italic">
-              {mail.sender}
-            </span>
-            <span className="font-sans text-[14px] font-light text-muted-fg italic">
-              {mail.address}
-            </span>
-          </p>
-          <p className="absolute top-[43px] left-[90px] font-sans text-[14px] font-light whitespace-nowrap text-fg italic">
-            {mail.subject}
-          </p>
-
-          <div
-            className={cn(
-              "absolute flex items-center justify-center overflow-hidden rounded-[6px] px-[18px] py-[6px]",
-              mail.labelClass,
-              mail.pill
-            )}
-          >
-            <p className="font-sans text-[12px] whitespace-nowrap">
-              {mail.label}
-            </p>
-          </div>
-        </RevealChild>
-      ))}
+const LabellingPreview = () => (
+  <div className="w-full max-w-96 overflow-hidden rounded-xl border border-border/60 bg-card shadow-elevation-sm">
+    <div className="flex items-center justify-between border-b border-border/40 px-4 py-3 text-xs">
+      <span className="font-medium text-fg">Inbox</span>
+      <span className="text-muted-fg">All caught up</span>
     </div>
-  </Card>
-);
-
-const VoiceCard = () => (
-  <Card>
-    <p className="absolute top-[386.5px] left-[88px] whitespace-nowrap text-fg">
-      <span className="font-sans text-[20px]">{"Write mails that "}</span>
-      <span className="font-serif text-[20px] italic">sound like you</span>
-      <span className="font-sans text-[20px]"> </span>
-      <span className="font-sans text-[12px]">and not some clanker</span>
-    </p>
-
-    <RevealChild
-      className="absolute top-[65.5px] left-[59px] flex w-[469px] flex-col items-center justify-center gap-[10px] rounded-[15px] bg-bg-surface px-[15px] py-[10px] text-fg italic"
-      delay={0.1}
-    >
-      <div className="flex w-full items-center gap-[10px] overflow-hidden px-[15px] py-[10px]">
-        <p className="shrink-0 font-serif text-[14px] italic">To:</p>
-        <p className="shrink-0 font-serif text-[12px] font-bold italic">
-          support@openai.com
-        </p>
-      </div>
-      <div className="flex w-full items-center gap-[10px] overflow-hidden px-[15px] py-[10px]">
-        <p className="shrink-0 font-serif text-[14px] italic">Subject:</p>
-        <p className="shrink-0 font-serif text-[12px] font-bold italic">
-          Please give me more tokens.
-        </p>
-      </div>
-    </RevealChild>
-
-    <RevealChild
-      className="absolute top-[184.5px] left-[59px] h-[149px] w-[469px] overflow-hidden rounded-[15px] bg-bg-surface"
-      delay={0.2}
-    >
-      <p className="absolute top-[27px] left-[25px] font-sans text-[10px] whitespace-pre text-fg">
-        {"Hi Tibothy!\n\nIn our last conversation we"}
-      </p>
-      <div className="home-writing-gradient absolute top-[51px] left-[154px] h-[14px] w-[192px] rounded-[5px]" />
-      <div className="absolute top-[51px] left-[25px] h-[14px] w-[127px] bg-gradient-to-r from-transparent to-bg-surface" />
-    </RevealChild>
-  </Card>
-);
-
-const DarkButton = ({
-  children,
-  struck = false,
-}: {
-  children: ReactNode;
-  struck?: boolean;
-}) => (
-  <div className="flex shrink-0 items-center justify-center overflow-hidden rounded-[5px] bg-fg px-[16px] py-[5px]">
-    <p
-      className={cn("font-sans text-[12px] whitespace-nowrap text-bg-surface", {
-        "line-through": struck,
-      })}
-    >
-      {children}
-    </p>
-  </div>
-);
-
-const TiltedArrow = () => (
-  <div className="flex size-[16.895px] shrink-0 items-center justify-center">
-    <div className="flex-none rotate-[-2.73deg]">
-      <img alt="" className="size-[16.143px]" src="/landing/arrow-right.svg" />
-    </div>
-  </div>
-);
-
-const BriefCard = () => (
-  <Card>
-    <BranchArt
-      className="top-[2px] left-[-0.5px] h-[377px] w-[302px]"
-      side="left"
-    />
-    <BranchArt
-      className="top-[63px] left-[262.5px] h-[404px] w-[323px]"
-      side="right"
-    />
-
-    <p className="absolute top-[383px] left-[106.5px] text-[20px] whitespace-nowrap text-fg">
-      <span className="font-sans">{"Your "}</span>
-      <span className="font-serif italic">daily brief</span>
-      <span className="font-sans">{" of the "}</span>
-      <span className="font-serif italic">important stuff</span>
-    </p>
-
-    <RevealChild
-      className="absolute top-[41px] left-[71.5px] flex h-[98.981px] w-[433.255px] items-center justify-center"
-      delay={0.12}
-    >
-      <div className="flex-none rotate-[1.59deg]">
-        <div className="flex flex-col items-center justify-center gap-[10px] overflow-hidden rounded-[8px] bg-bg-surface p-[16px]">
-          <div className="flex items-center gap-[10px] overflow-hidden px-[10px]">
-            <p className="shrink-0 font-serif text-[14px] whitespace-nowrap text-fg italic">
-              YCombinator rejected your application
-            </p>
-            <TiltedArrow />
-          </div>
-          <div className="flex items-center gap-[10px] overflow-hidden px-[8px]">
-            <DarkButton>Remind me to apply next year again</DarkButton>
-            <div className="flex shrink-0 items-center justify-center overflow-hidden rounded-[5px] border border-fg/20 px-[16px] py-[5px]">
-              <p className="font-sans text-[12px] whitespace-nowrap text-fg">
-                Draft a rage tweet
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </RevealChild>
-
-    <RevealChild
-      className="absolute top-[167px] left-[95.5px] flex h-[41.397px] w-[457.413px] items-center justify-center"
-      delay={0.2}
-    >
-      <div className="flex-none rotate-[-0.43deg]">
-        <div className="flex items-center justify-center gap-[10px] overflow-hidden rounded-[8px] bg-bg-surface px-[16px] py-[10px]">
-          <p className="shrink-0 font-serif text-[14px] whitespace-nowrap text-fg italic">
-            Tibothy from OpenAI told you to never message him ever again
-          </p>
+    {mails.map((mail, index) => (
+      <RevealChild
+        className="flex items-center gap-3 border-b border-border/30 px-4 py-3 last:border-0"
+        delay={0.08 + index * 0.07}
+        key={mail.sender}
+      >
+        <div className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border/40 bg-bg-raised">
           <img
             alt=""
-            className="size-[16.143px] shrink-0"
-            src="/landing/arrow-right.svg"
+            className="size-5 rounded object-contain"
+            src={mail.icon}
           />
         </div>
-      </div>
-    </RevealChild>
-
-    <RevealChild
-      className="absolute top-[237px] left-[53.5px] flex h-[100.53px] w-[428.718px] items-center justify-center"
-      delay={0.28}
-    >
-      <div className="flex-none rotate-[2.09deg]">
-        <div className="flex flex-col items-center justify-center gap-[10px] overflow-hidden rounded-[8px] bg-bg-surface p-[16px]">
-          <div className="flex items-center gap-[10px] overflow-hidden px-[10px]">
-            <p className="shrink-0 font-serif text-[14px] whitespace-nowrap text-fg italic">
-              Your mom asks when you will finally earn some money
-            </p>
-            <TiltedArrow />
-          </div>
-          <div className="flex items-center overflow-hidden px-[8px]">
-            <DarkButton struck>Tell her the truth</DarkButton>
-          </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-medium text-fg">{mail.sender}</p>
+          <p className="mt-0.5 truncate text-xs text-muted-fg">
+            {mail.subject}
+          </p>
         </div>
-      </div>
-    </RevealChild>
-  </Card>
+        <span
+          className={cn(
+            "shrink-0 rounded-md px-2 py-1 text-[10px] font-medium",
+            mail.tone
+          )}
+        >
+          {mail.label}
+        </span>
+      </RevealChild>
+    ))}
+  </div>
 );
 
-const ChatCard = () => (
-  <Card>
-    <p className="absolute top-[49px] left-[186px] text-[20px] whitespace-nowrap text-fg">
-      <span className="font-serif italic">{"Chat "}</span>
-      <span className="font-sans">with your mailbox</span>
+const VoicePreview = () => (
+  <RevealChild
+    className="w-full max-w-96 rounded-xl border border-border/60 bg-card shadow-elevation-sm"
+    delay={0.1}
+  >
+    <div className="flex items-center justify-between border-b border-border/40 px-4 py-3 text-xs">
+      <span className="font-medium text-fg">A quick follow-up</span>
+      <span className="rounded bg-bg-raised px-1.5 py-0.5 text-[10px] text-muted-fg">
+        Draft
+      </span>
+    </div>
+    <div className="space-y-3 px-4 py-4 text-xs leading-relaxed text-fg">
+      <p>Hey Alex,</p>
+      <p>
+        Really enjoyed our conversation yesterday. I pulled together a few ideas
+        for the project.
+      </p>
+      <p>
+        Have a look when you get a chance. Would love to hear what you think.
+      </p>
+    </div>
+    <div className="flex items-center gap-2 border-t border-border/40 px-4 py-2.5 text-[10px] text-muted-fg">
+      <HugeiconsIcon className="size-3.5 shrink-0" icon={SparklesIcon} />
+      Written in your voice, ready for your review
+    </div>
+  </RevealChild>
+);
+
+const BriefPreview = () => (
+  <RevealChild
+    className="w-full max-w-96 rounded-xl border border-border/60 bg-card p-4 shadow-elevation-sm"
+    delay={0.1}
+  >
+    <div className="mb-4 flex items-center gap-2 text-[10px] font-medium tracking-wider text-muted-fg uppercase">
+      <span className="size-1.5 rounded-full bg-q-green" />
+      Your morning brief
+    </div>
+    <p className="font-serif text-lg text-fg">
+      A little clarity to start your day.
     </p>
+    <div className="mt-4 space-y-3">
+      {[
+        {
+          detail: "Alex is ready for the next steps.",
+          time: "09:12",
+          title: "The proposal is approved",
+        },
+        {
+          detail: "Your itinerary is in your inbox.",
+          time: "08:45",
+          title: "Your trip is confirmed",
+        },
+      ].map((item) => (
+        <div
+          className="flex items-start gap-3 border-t border-border/40 pt-3"
+          key={item.title}
+        >
+          <span className="pt-0.5 font-mono text-[10px] text-muted-fg">
+            {item.time}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium text-fg">{item.title}</p>
+            <p className="mt-1 text-xs text-muted-fg">{item.detail}</p>
+          </div>
+          <HugeiconsIcon
+            className="mt-0.5 size-3.5 shrink-0 text-muted-fg"
+            icon={ArrowRight01Icon}
+          />
+        </div>
+      ))}
+    </div>
+  </RevealChild>
+);
 
+const ChatPreview = () => (
+  <div className="flex w-full max-w-96 flex-col gap-3 text-xs leading-relaxed">
     <RevealChild
-      className="absolute top-[136.5px] left-[287.5px] flex items-center justify-center overflow-hidden rounded-tl-[35px] rounded-tr-[10px] rounded-br-[35px] rounded-bl-[35px] bg-bg-surface px-[30px] py-[20px]"
-      delay={0.12}
+      className="ml-8 self-end rounded-2xl rounded-tr-sm border border-border/50 bg-bg-raised px-4 py-3 text-fg"
+      delay={0.08}
     >
-      <p className="shrink-0 text-center font-serif text-[16px] whitespace-nowrap text-fg italic">
-        Beg Tibothy for more tokens
-      </p>
+      What did Alex say about the proposal?
     </RevealChild>
-
     <RevealChild
-      className="absolute top-[206.5px] left-[50.5px] flex items-center justify-center overflow-hidden rounded-tl-[10px] rounded-tr-[35px] rounded-br-[35px] rounded-bl-[10px] border border-fg/10 bg-bg-raised px-[30px] py-[20px] shadow-elevation-sm"
-      delay={0.22}
+      className="mr-5 rounded-2xl rounded-tl-sm border border-border/60 bg-card p-4 shadow-elevation-sm"
+      delay={0.18}
     >
-      <p className="shrink-0 text-center font-serif text-[16px] whitespace-nowrap text-fg italic">
-        Getting desperate huh?
+      <div className="mb-2 flex items-center gap-2 text-[10px] font-medium text-muted-fg">
+        <HugeiconsIcon className="size-3.5" icon={SparklesIcon} />
+        Quieter
+      </div>
+      <p className="text-fg">
+        Alex approved the direction and asked for a timeline by Friday.
       </p>
-    </RevealChild>
-
-    <RevealChild
-      className="absolute top-[280.5px] left-[50.5px] flex h-[141px] flex-col items-start justify-center gap-[20px] overflow-hidden rounded-tl-[10px] rounded-tr-[35px] rounded-br-[35px] rounded-bl-[35px] border border-fg/10 bg-bg-raised px-[30px] py-[20px] shadow-elevation-sm"
-      delay={0.32}
-    >
-      <p className="shrink-0 text-center font-serif text-[16px] whitespace-nowrap text-fg italic">
-        Drafted another mail for you:
-      </p>
-      <div className="flex shrink-0 items-center justify-center overflow-hidden rounded-tl-[6px] rounded-tr-[25px] rounded-br-[25px] rounded-bl-[25px] bg-bg-surface px-[30px] py-[20px]">
-        <p className="shrink-0 text-center font-serif text-[16px] whitespace-nowrap text-fg italic">
-          TIBO PLEASEEEEEEEEEE
-        </p>
+      <div className="mt-3 flex items-center gap-2 rounded-lg border border-border/50 bg-bg-surface px-3 py-2 text-[10px] text-muted-fg">
+        <HugeiconsIcon className="size-3.5 shrink-0" icon={Tick01Icon} />
+        Re: Project proposal
+        <HugeiconsIcon
+          className="ml-auto size-3.5 shrink-0"
+          icon={ArrowRight01Icon}
+        />
       </div>
     </RevealChild>
-  </Card>
+  </div>
 );
 
 const FeaturePreview = ({
   children,
   title,
+  description,
+  delay = 0,
 }: {
   children: ReactNode;
   title: string;
+  description: string;
+  delay?: number;
 }) => (
-  <>
-    <h3 className="mb-4 text-center font-serif text-xl text-fg italic lg:sr-only">
-      {title}
-    </h3>
-    <DesignFrame height={494} width={592}>
-      <div aria-hidden className="h-[494px]">
-        {children}
-      </div>
-    </DesignFrame>
-  </>
+  <Reveal
+    className="overflow-hidden rounded-2xl border border-border/60 bg-card/80 shadow-elevation-sm"
+    delay={delay}
+  >
+    <div
+      aria-hidden
+      className="flex min-h-72 items-center justify-center bg-linear-to-br from-bg-raised/80 to-bg-surface/40 p-5 sm:p-7 md:h-80 lg:h-72"
+    >
+      {children}
+    </div>
+    <div className="border-t border-border/40 px-6 py-5 sm:px-7">
+      <h3 className="text-base font-medium tracking-tight text-fg">{title}</h3>
+      <p className="mt-2 max-w-96 text-sm leading-relaxed text-pretty text-muted-fg">
+        {description}
+      </p>
+    </div>
+  </Reveal>
 );
 
 export const AiSection = () => (
-  <>
-    <Reveal className="px-6">
-      <div className="text-center font-serif text-fg italic">
-        <h2 className="text-3xl text-balance md:text-5xl">
-          AI that does the annoying things
-        </h2>
-        <p className="mt-5 text-lg md:text-xl">completely optional.</p>
-      </div>
+  <section aria-labelledby="home-ai-title" className="w-full max-w-6xl px-6">
+    <Reveal className="mx-auto mb-10 max-w-xl text-center">
+      <p className="mb-3 text-xs font-medium tracking-widest text-muted-fg uppercase">
+        A helping hand
+      </p>
+      <h2
+        className="font-serif text-2xl leading-snug tracking-tight text-balance text-fg sm:text-3xl"
+        id="home-ai-title"
+      >
+        Less busywork. More breathing room.
+      </h2>
+      <p className="mt-4 text-sm leading-relaxed text-pretty text-muted-fg">
+        A little help with the repetitive parts of email. Turn on the AI
+        features you want, and leave the rest off.
+      </p>
     </Reveal>
-
-    <div className="grid w-full max-w-7xl grid-cols-1 gap-10 px-6 lg:grid-cols-2 lg:gap-12">
-      <Reveal className="min-w-0">
-        <FeaturePreview title="Labels based on your preferences">
-          <LabellingCard />
-        </FeaturePreview>
-      </Reveal>
-      <Reveal className="min-w-0" delay={0.08}>
-        <FeaturePreview title="Drafts in your voice">
-          <VoiceCard />
-        </FeaturePreview>
-      </Reveal>
-      <Reveal className="min-w-0" delay={0.16}>
-        <FeaturePreview title="Your daily brief">
-          <BriefCard />
-        </FeaturePreview>
-      </Reveal>
-      <Reveal className="min-w-0" delay={0.24}>
-        <FeaturePreview title="Chat with your mailbox">
-          <ChatCard />
-        </FeaturePreview>
-      </Reveal>
+    <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+      <FeaturePreview
+        title="An inbox that sorts itself"
+        description="Labels that follow your preferences, so the right emails find their place."
+      >
+        <LabellingPreview />
+      </FeaturePreview>
+      <FeaturePreview
+        title="Your words, with a head start"
+        description="Draft replies that sound like you. Make them yours, then send when you're ready."
+        delay={0.06}
+      >
+        <VoicePreview />
+      </FeaturePreview>
+      <FeaturePreview
+        title="The important parts, together"
+        description="Get a daily brief of what needs your attention without opening every thread."
+        delay={0.06}
+      >
+        <BriefPreview />
+      </FeaturePreview>
+      <FeaturePreview
+        title="Ask your inbox"
+        description="Find the details, catch up on a conversation, or work on a reply in chat."
+        delay={0.12}
+      >
+        <ChatPreview />
+      </FeaturePreview>
     </div>
-  </>
+  </section>
 );
