@@ -113,7 +113,11 @@ const Pricing = () => (
 const Closing = () => (
   <section className="dark relative z-10 flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-black px-6 pt-32 pb-24 md:pt-36">
     <div className="absolute inset-0">
-      <HomeAtmosphericBackground fadeBottom="black" fadeTop="black" />
+      <HomeAtmosphericBackground
+        fadeBottom="black"
+        fadeTop="black"
+        variant="closing"
+      />
     </div>
 
     <div className="relative z-10 flex w-full max-w-220 flex-col items-center text-fg">
