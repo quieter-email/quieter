@@ -164,11 +164,9 @@ These are required acceptance cases, not a claim that every row was executed dur
 | UI resilience | Mobile layouts, keyboard use, focus, stale cache, disconnect/reconnect | Multiple browsers, real device and constrained network |
 | Recovery and deployment | Clean seed/reset, migration replay, old/new schema compatibility | Deployment rollback, IAM restrictions, cloud logs and DLQ |
 
-## Custom action removal, verification pending
+## Custom action removal
 
 The current change removes custom action settings, dispatch, queue consumption, graph execution, and action-specific credit reservations. Connectors remain available to chat, and managed inbox rules remain. `MailMaintenance` replaces the retired dispatcher for send recovery, storage cleanup, expired rate-limit cleanup, and managed rule backfills every minute. Local execution uses `vp run dev:trigger mail-recovery`.
-
-The verification counts above describe the earlier service audit, not this removal. Current implementation checks are tracked in [the cleanup record](audits/2026-09-07/implementation.md).
 
 Seven unpublished migrations were consolidated into `20260907233131_melodic_blacklash`. Read-only inspection confirmed that none of the seven appeared in the development ledger; main history is unchanged. This inspection did not apply the consolidated migration. Keep Drizzle's SQL and full snapshots together, and consolidate only unapplied feature migrations as described in [the migration workflow](architecture.md#migration-workflow).
 
