@@ -7,90 +7,102 @@ import { AiSection } from "./ai-section";
 import { ConnectSection } from "./connect-section";
 import { HomeAtmosphericBackground } from "./lazy-webgl-backgrounds";
 import { Reveal } from "./reveal";
-import { SoftGradientField } from "./soft-gradient-field";
 import { WaitlistForm } from "./waitlist-form";
 
 const experience = [
   {
-    body: "Keep your best replies close. Save a template and skip writing the same email twice.",
+    body: "Save a reply. Use it again.",
+    graphic: (
+      <div className="w-full max-w-80 space-y-4 rounded-xl bg-bg-raised/50 p-6 text-left text-sm text-muted-fg">
+        <p>Thanks for reaching out</p>
+        <p>Following up on our conversation</p>
+        <p>Getting started</p>
+      </div>
+    ),
+    id: "home-templates-title",
     title: "Templates",
   },
   {
-    body: "Move between messages, start a draft, and find what you need from your keyboard.",
-    title: "A shortcut to the next thing",
+    body: "Keep moving without the mouse.",
+    graphic: (
+      <div className="flex gap-3 text-sm text-fg">
+        <span className="flex h-14 w-20 items-center justify-center rounded-lg bg-bg-raised/70">
+          Ctrl
+        </span>
+        <span className="flex size-14 items-center justify-center rounded-lg bg-bg-raised/70">
+          K
+        </span>
+      </div>
+    ),
+    id: "home-shortcuts-title",
+    title: "Keyboard shortcuts",
   },
   {
-    body: "Work, personal, and support. Keep each inbox separate and switch without the tab shuffle.",
-    title: "Room for every inbox",
+    body: "Work and personal, neatly separate.",
+    graphic: (
+      <div className="space-y-5 text-sm text-muted-fg">
+        <p className="flex items-center gap-4">
+          <span className="size-2 rounded-full bg-q-blue" />
+          Work
+        </p>
+        <p className="flex items-center gap-4">
+          <span className="size-2 rounded-full bg-q-pink" />
+          Personal
+        </p>
+        <p className="flex items-center gap-4">
+          <span className="size-2 rounded-full bg-q-green" />
+          Support
+        </p>
+      </div>
+    ),
+    id: "home-inboxes-title",
+    title: "Multiple inboxes",
   },
   {
-    body: "A workspace that fits your screen, from your desk to your phone.",
-    title: "Mail wherever you work",
+    body: "At your desk or on your phone.",
+    graphic: (
+      <div className="relative h-28 w-52">
+        <div className="h-28 w-44 rounded-xl border border-muted-fg/40 bg-bg-raised/30 p-3">
+          <div className="h-full w-8 rounded bg-bg-raised/60" />
+        </div>
+        <div className="absolute right-0 bottom-0 h-20 w-11 rounded-lg border border-muted-fg/40 bg-black p-2">
+          <div className="h-1 w-4 rounded bg-muted-fg/40" />
+        </div>
+      </div>
+    ),
+    id: "home-screens-title",
+    title: "Any screen",
   },
 ] as const;
 
 const ExperienceSection = () => (
-  <section
-    aria-labelledby="home-experience-title"
-    className="grid w-full max-w-6xl gap-10 px-6 lg:grid-cols-[0.8fr_1.2fr] lg:gap-16"
-  >
-    <Reveal className="max-w-sm">
-      <p className="mb-3 text-xs font-medium tracking-widest text-muted-fg uppercase">
-        The everyday details
-      </p>
-      <h2
-        className="font-serif text-2xl leading-snug tracking-tight text-balance text-fg sm:text-3xl"
-        id="home-experience-title"
+  <>
+    {experience.map((item) => (
+      <section
+        aria-labelledby={item.id}
+        className="w-full max-w-xl px-6 text-center"
+        key={item.id}
       >
-        A better email experience
-      </h2>
-      <p className="mt-4 text-sm leading-relaxed text-pretty text-muted-fg">
-        Small things you notice every day. Fewer repeated steps, less switching
-        around, and a little more room to focus.
-      </p>
-      <div
-        aria-hidden
-        className="mt-8 inline-flex items-center gap-2 rounded-xl border border-border/60 bg-card/70 px-4 py-3 text-xs text-muted-fg shadow-elevation-sm"
-      >
-        <span className="mr-4">Find anything</span>
-        <span className="flex size-7 items-center justify-center rounded-md border border-border/60 bg-bg-surface font-mono text-fg shadow-xs">
-          Ctrl
-        </span>
-        <span className="flex size-7 items-center justify-center rounded-md border border-border/60 bg-bg-surface font-mono text-fg shadow-xs">
-          K
-        </span>
-      </div>
-    </Reveal>
-
-    <div className="grid grid-cols-1 gap-x-8 gap-y-8 sm:grid-cols-2">
-      {experience.map((item, index) => (
-        <Reveal
-          className="border-t border-border/70 pt-5"
-          delay={index * 0.04}
-          key={item.title}
-        >
-          <span
-            aria-hidden
-            className="mb-4 block font-mono text-[10px] text-muted-fg"
+        <Reveal>
+          <h2
+            className="text-2xl font-normal text-balance text-fg"
+            id={item.id}
           >
-            0{index + 1}
-          </span>
-          <h3 className="text-sm font-medium text-balance text-fg">
             {item.title}
-          </h3>
-          <p className="mt-2 text-sm leading-relaxed text-pretty text-muted-fg">
-            {item.body}
-          </p>
+          </h2>
+          <div aria-hidden className="flex h-56 items-center justify-center">
+            {item.graphic}
+          </div>
+          <p className="text-sm leading-relaxed text-muted-fg">{item.body}</p>
         </Reveal>
-      ))}
-    </div>
-  </section>
+      </section>
+    ))}
+  </>
 );
-
 const tiers = [
   {
     credits: null,
-    name: "Free and always included",
+    name: "Free",
     price: "Included",
     summary: "Connect your Gmail accounts",
   },
@@ -111,33 +123,33 @@ const tiers = [
 const Pricing = () => (
   <section
     aria-labelledby="home-pricing-title"
-    className="w-full max-w-6xl scroll-mt-24 px-6"
+    className="w-full max-w-5xl scroll-mt-24 px-6"
     id="pricing"
   >
     <Reveal className="mb-10 text-center">
       <h2
-        className="font-serif text-2xl leading-snug tracking-tight text-balance text-fg sm:text-3xl"
+        className="text-2xl font-normal text-balance text-fg"
         id="home-pricing-title"
       >
         Intuitive pricing
       </h2>
     </Reveal>
-    <div className="overflow-hidden rounded-2xl border border-border/60 bg-card/70 shadow-elevation-sm">
+    <div className="w-full">
       {tiers.map((tier, index) => (
         <Reveal
           className="border-b border-border/50 last:border-0"
           delay={index * 0.05}
           key={tier.name}
         >
-          <div className="grid gap-3 px-6 py-6 sm:grid-cols-[1fr_2fr_1fr] sm:items-center sm:gap-6 sm:px-8">
-            <h3 className="text-sm font-medium text-fg">{tier.name}</h3>
+          <div className="grid gap-3 py-6 sm:grid-cols-[1fr_2fr_1fr] sm:items-center sm:gap-6">
+            <h3 className="text-sm font-normal text-fg">{tier.name}</h3>
             <div className="text-sm leading-relaxed text-muted-fg">
               <p>{tier.summary}</p>
               {tier.credits === null ? null : (
-                <p className="mt-1 text-xs">{tier.credits}</p>
+                <p className="mt-1 text-sm">{tier.credits}</p>
               )}
             </div>
-            <p className="text-base font-medium text-fg tabular-nums sm:text-right">
+            <p className="text-sm font-normal text-fg tabular-nums sm:text-right">
               {tier.price}
             </p>
           </div>
@@ -145,7 +157,7 @@ const Pricing = () => (
       ))}
     </div>
     <Reveal className="mx-auto mt-5 max-w-xl" delay={0.1}>
-      <p className="text-center text-xs leading-relaxed text-pretty text-muted-fg">
+      <p className="text-center text-sm leading-relaxed text-pretty text-muted-fg">
         Managed mail starts at $0.20 per 1,000 messages. AI usage is billed at
         model cost plus 15%.
       </p>
@@ -177,11 +189,17 @@ export const HomeSections = () => {
   const [paused, setPaused] = useState(false);
   return (
     <>
-      <div
-        className="theme-light relative overflow-hidden bg-bg-surface"
-        data-home-paused={paused}
-      >
-        <SoftGradientField />
+      <div className="dark relative bg-black text-fg" data-home-paused={paused}>
+        <div aria-hidden className="pointer-events-none absolute inset-0">
+          <div className="sticky top-0 h-dvh">
+            <HomeAtmosphericBackground
+              animate={!paused}
+              fadeTop="black"
+              fadeBottom="black"
+              intensity={0.5}
+            />
+          </div>
+        </div>
 
         <div className="relative z-10 flex w-full flex-col items-center gap-20 py-20 md:gap-28 md:py-28">
           <ConnectSection paused={paused} onPausedChange={setPaused} />
