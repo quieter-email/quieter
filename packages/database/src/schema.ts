@@ -760,6 +760,48 @@ export const mailSyncCommand = pgTable(
   ]
 );
 
+export const mailSyncSubmission = pgTable(
+  "mailSyncSubmission",
+  {
+    createdAt: timestamp("createdAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    kind: text("kind").$type<"draft" | "send">().notNull(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    nextAttemptAt: timestamp("nextAttemptAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    operationId: text("operationId").notNull(),
+    payloadHash: text("payloadHash").notNull(),
+    recoveryKey: text("recoveryKey").notNull(),
+    result: jsonb("result").$type<{
+      id: string;
+      threadId: string;
+      messageId?: string;
+    }>(),
+    status: text("status")
+      .$type<"unknown" | "accepted" | "rejected">()
+      .notNull()
+      .default("unknown"),
+    updatedAt: timestamp("updatedAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.mailboxId, table.operationId] }),
+    index("mail_sync_submission_recovery_idx").on(
+      table.mailboxId,
+      table.status,
+      table.nextAttemptAt
+    ),
+  ]
+);
+
 export const mailTemplate = pgTable(
   "mailTemplate",
   {

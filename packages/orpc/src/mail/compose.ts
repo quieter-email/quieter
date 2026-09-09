@@ -1,17 +1,12 @@
 import { ORPCError } from "@orpc/server";
 import {
-  createDraft,
   deleteDraft,
   extractListUnsubscribeTargets,
   getGmailMessageMetadata,
   getDraft,
-  sendDraft as sendGmailDraft,
   sendRawMessage,
 } from "@quieter/gmail";
-import {
-  buildMimeMessage,
-  buildPlainTextMessage,
-} from "@quieter/mail/compose/mime";
+import { buildPlainTextMessage } from "@quieter/mail/compose/mime";
 import { splitMailAddressList } from "@quieter/mail/compose/schema";
 import { reportError } from "@quieter/observability";
 
@@ -158,6 +153,7 @@ export const composeMailOperations = {
             const result = await saveGmailDraft(
               accessToken,
               input.draft,
+              { mailboxId: input.mailboxId, userId: context.userId },
               context.signal
             );
             return {
@@ -176,30 +172,18 @@ export const composeMailOperations = {
     input: MailInputs["sendDraft"];
   }) =>
     await callGmail(context, input.mailboxId, async (accessToken) => {
-      const raw = Buffer.from(await buildMimeMessage(input.draft)).toString(
-        "base64url"
-      );
-      let draftId = input.draft.draftId ?? null;
-      if (draftId === null || draftId.length === 0) {
-        const savedDraft = await createDraft(
-          accessToken,
-          raw,
-          input.draft.replyContext?.threadId
-        );
-        draftId = savedDraft.id;
-      }
-
-      if (draftId === null || draftId.length === 0) {
-        throw new ORPCError("INTERNAL_SERVER_ERROR", {
-          message: "Draft could not be saved before send.",
-        });
-      }
-
-      const sent = await sendGmailDraft(
+      const sent = await withGmailComposeReplication(
+        input.mailboxId,
         accessToken,
-        draftId,
-        raw,
-        input.draft.replyContext?.threadId
+        async () => {
+          const result = await sendGmailMessage(
+            accessToken,
+            input.draft,
+            { mailboxId: input.mailboxId, userId: context.userId },
+            context.signal
+          );
+          return { result, threadIds: [result.threadId] };
+        }
       );
       await learnAiMemoryFromSentMessage({
         bodyText: input.draft.bodyText,
@@ -253,10 +237,18 @@ export const composeMailOperations = {
     }
 
     return await callGmail(context, input.mailboxId, async (accessToken) => {
-      const sent = await sendGmailMessage(
+      const sent = await withGmailComposeReplication(
+        input.mailboxId,
         accessToken,
-        input.message,
-        context.signal
+        async () => {
+          const result = await sendGmailMessage(
+            accessToken,
+            input.message,
+            { mailboxId: input.mailboxId, userId: context.userId },
+            context.signal
+          );
+          return { result, threadIds: [result.threadId] };
+        }
       );
       await learnAiMemoryFromSentMessage({
         bodyText: input.message.bodyText,

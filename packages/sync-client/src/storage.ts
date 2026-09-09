@@ -64,7 +64,7 @@ const writeChanges = async (
       continue;
     }
     let threadId = previous?.threadId ?? null;
-    if (change.data?.kind === "message") {
+    if (change.data?.kind === "message" || change.data?.kind === "delivery") {
       ({ threadId } = change.data.value);
     }
     if (change.data?.kind === "thread") {

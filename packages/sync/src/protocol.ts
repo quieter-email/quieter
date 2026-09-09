@@ -1,4 +1,5 @@
 import { composeDraftAnchorSchema } from "@quieter/mail/compose/schema";
+import { messageDeliverySchema } from "@quieter/mail/delivery";
 import { mailboxSavedViewDefinitionSchema } from "@quieter/mail/mailbox-organization";
 import { z } from "zod";
 
@@ -159,7 +160,8 @@ export const syncEntityDataSchema = z.discriminatedUnion("kind", [
     kind: z.literal("delivery"),
     value: z.object({
       messageId: syncIdSchema,
-      status: z.string(),
+      recipients: messageDeliverySchema.shape.recipients,
+      threadId: syncIdSchema,
       updatedAt: z.string(),
     }),
   }),

@@ -47,6 +47,7 @@ import {
   sendComposeMessage,
 } from "../domain/draft";
 import type { ComposeDraftState } from "../domain/draft";
+import { useDraftAutosave } from "./use-draft-autosave";
 import { useDraftRecovery } from "./use-draft-recovery";
 
 type ComposeDraftUpdate =
@@ -143,6 +144,7 @@ export const useComposeDialogController = ({
       localId: draft.localId,
       messageId: draft.messageId,
       recoveryEditorId: draft.recoveryEditorId,
+      recoveryUpdatedAt: draft.recoveryUpdatedAt,
       replyContext: draft.replyContext,
       saveStatus: "idle",
       updatedAt: Date.now(),
@@ -365,6 +367,24 @@ export const useComposeDialogController = ({
     setDraft(saved);
     return true;
   };
+
+  useDraftAutosave({
+    enabled: persistDrafts && !demoMode && !managedDemoMode,
+    mailboxId,
+    save: async () => {
+      if (
+        !draftClosedRef.current &&
+        activeDraftRef.current.saveStatus !== "saving" &&
+        activeDraftRef.current.saveStatus !== "sending" &&
+        activeDraftRef.current.saveStatus !== "error" &&
+        activeDraftRef.current.conflict !== true &&
+        composeDraftFormValuesSchema.safeParse(form.state.values).success
+      ) {
+        await persistCurrentDraft();
+      }
+    },
+    subscribe: (onChange) => form.store.subscribe(onChange),
+  });
 
   useBlocker({
     enableBeforeUnload: () => {

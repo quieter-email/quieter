@@ -55,7 +55,13 @@ export const DraftRecoveryNotice = ({
         size="sm"
         onClick={() => {
           try {
-            onResume(restoreComposeDraft(record.payload, record.editorId));
+            onResume(
+              restoreComposeDraft(
+                record.payload,
+                record.editorId,
+                record.updatedAt
+              )
+            );
           } catch (error) {
             toastError(error, { boundary: "compose-recovery-open" });
           }

@@ -21,6 +21,7 @@ import { prepareSyncMessage } from "../body-store";
 import type { SyncBodyStore } from "../body-store";
 import { projectSavedViews } from "../metadata";
 import type { SyncRepository, SyncTransaction } from "../repository";
+import { confirmProjectedSubmissions } from "../submissions";
 import { assertProviderLease, withProviderLease } from "./lease";
 
 export type GmailSyncProvider = {
@@ -71,6 +72,7 @@ export const projectGmailThreads = async (
   providerGeneration?: string
 ) => {
   const { database, mailboxId, put } = context;
+  await confirmProjectedSubmissions(context, [...threads.values()].flat());
   for (const [threadId, messages] of threads) {
     const previous = await database
       .select({ id: mailSyncEntity.entityId })

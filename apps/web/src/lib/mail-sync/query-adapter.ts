@@ -24,6 +24,8 @@ import {
 } from "#/lib/mailboxes-query";
 import { getSavedViewsQueryKey } from "#/lib/saved-views-query";
 
+import { applyDeliveryChange } from "./delivery-adapter";
+
 export class MailSyncQueryAdapter {
   private readonly entities = new Map<string, Map<string, SyncChange>>();
   private readonly details = new Map<string, ThreadMessagesResult>();
@@ -209,7 +211,7 @@ export class MailSyncQueryAdapter {
     if (event.type !== "entities") {
       return;
     }
-    const previousEntities = this.entities.get(event.mailboxId);
+    let previousEntities = this.entities.get(event.mailboxId);
     if (event.reset === true && previousEntities !== undefined) {
       for (const key of this.details.keys()) {
         if (key.startsWith(`${event.mailboxId}:`)) {
@@ -222,6 +224,7 @@ export class MailSyncQueryAdapter {
       void this.queryClient.invalidateQueries({
         queryKey: ["messages", event.mailboxId],
       });
+      previousEntities = undefined;
     }
     const entities = event.replace
       ? new Map<string, SyncChange>()
@@ -235,12 +238,14 @@ export class MailSyncQueryAdapter {
       const previousEntity = previousEntities?.get(key);
       if (
         previousEntity !== undefined &&
-        BigInt(previousEntity.version) > BigInt(entity.version)
+        BigInt(previousEntity.version) >= BigInt(entity.version)
       ) {
+        entities.set(key, previousEntity);
         continue;
       }
       entities.delete(key);
       entities.set(key, entity);
+      applyDeliveryChange(this.queryClient, event.mailboxId, entity);
       if (entity.kind === "thread") {
         threads.add(entity.id);
         this.fallbackSummaries.delete(`${event.mailboxId}:${entity.id}`);

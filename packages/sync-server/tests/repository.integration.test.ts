@@ -9,9 +9,11 @@ import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
 
 import { SyncCommands } from "../src/commands";
+import { projectManagedDelivery } from "../src/delivery";
 import { synchronizeGmail } from "../src/providers/gmail";
 import type { GmailSyncProvider } from "../src/providers/gmail";
 import { SyncRepository } from "../src/repository";
+import { SyncSubmissions } from "../src/submissions";
 
 // Test bootstrap accepts only the disposable integration databases, never quieter_dev.
 const databaseUrl =
@@ -49,6 +51,17 @@ suite("transactional mail replication", () => {
       'CREATE TABLE "mailbox" (id text PRIMARY KEY); CREATE TABLE "user" (id text PRIMARY KEY);'
     );
     await connection.unsafe(`
+      ALTER TABLE mailbox ADD COLUMN "organizationId" text;
+      CREATE TABLE "managedMailMessage" (
+        id text PRIMARY KEY, "mailboxId" text, "providerMessageId" text, "threadId" text, direction text, "mailboxState" text
+      );
+      CREATE TABLE "organizationMailDeliveryRecipient" (
+        "createdAt" timestamptz, "lastEventAt" timestamptz, "organizationId" text,
+        "providerMessageId" text, recipient text, status text, "updatedAt" timestamptz
+      );
+      CREATE TABLE "organizationMailDeliveryEvent" (
+        "createdAt" timestamptz, "organizationId" text, "providerMessageId" text
+      );
       CREATE TABLE "gmailLabel" (
         "mailboxId" text, "labelId" text, name text, color text,
         description text, "inclusionCriteria" text, "createdAt" timestamp, "updatedAt" timestamp
@@ -62,6 +75,7 @@ suite("transactional mail replication", () => {
     for (const migration of [
       "20260909092211_unknown_princess_powerful",
       "20260909094318_glorious_white_queen",
+      "20260909115700_flat_speedball",
     ]) {
       const source = await readFile(
         new URL(
@@ -387,6 +401,180 @@ suite("transactional mail replication", () => {
       error: "Action unavailable",
       status: "failed",
     });
+  });
+
+  it("commits feedback and every mailbox stream atomically without crossing organization boundaries", async () => {
+    const first = crypto.randomUUID();
+    const second = crypto.randomUUID();
+    await connection`INSERT INTO mailbox (id, "organizationId") VALUES (${first}, 'first-team'), (${second}, 'second-team')`;
+    await connection`INSERT INTO "managedMailMessage" (id, "mailboxId", "providerMessageId", "threadId", direction, "mailboxState") VALUES (${first}, ${first}, 'provider', 'thread', 'outbound', 'active'), (${second}, ${second}, 'provider', 'thread', 'outbound', 'trash')`;
+    await connection`INSERT INTO "organizationMailDeliveryRecipient" ("organizationId", "providerMessageId", recipient, status, "lastEventAt", "updatedAt") VALUES ('first-team', 'provider', 'first@example.test', 'sent', now(), now()), ('second-team', 'provider', 'second@example.test', 'bounced', now(), now())`;
+    await expect(
+      repository.transactionMany(
+        [first, second],
+        async (_database, contexts) => {
+          for (const context of contexts.values()) {
+            await projectManagedDelivery(context, [context.mailboxId]);
+          }
+          throw new Error("Interrupted transaction");
+        }
+      )
+    ).rejects.toThrow("Interrupted transaction");
+    await expect(repository.head(first)).resolves.toBeNull();
+    await expect(repository.head(second)).resolves.toBeNull();
+    let deliveries = 0;
+    deliver = async () => {
+      deliveries += 1;
+      const rows =
+        await connection`SELECT "mailboxId" FROM "mailSyncChange" WHERE "mailboxId" IN (${first}, ${second})`;
+      expect(rows).toHaveLength(2);
+    };
+    await repository.transactionMany(
+      [second, first],
+      async (_database, contexts) => {
+        for (const context of contexts.values()) {
+          await projectManagedDelivery(context, [context.mailboxId]);
+        }
+      }
+    );
+    expect(deliveries).toBe(2);
+    const rows =
+      await connection`SELECT "mailboxId", data FROM "mailSyncEntity" WHERE "mailboxId" IN (${first}, ${second})`;
+    expect(rows.find((row) => row.mailboxId === first)).toMatchObject({
+      data: {
+        value: {
+          recipients: [{ recipient: "first@example.test", status: "sent" }],
+        },
+      },
+    });
+    expect(rows.find((row) => row.mailboxId === second)).toMatchObject({
+      data: {
+        value: {
+          recipients: [{ recipient: "second@example.test", status: "bounced" }],
+        },
+      },
+    });
+  });
+
+  it("records intent before an external send and makes concurrent retries observe it", async () => {
+    const mailboxId = crypto.randomUUID();
+    const userId = crypto.randomUUID();
+    await connection`INSERT INTO mailbox (id) VALUES (${mailboxId})`;
+    await connection`INSERT INTO "user" (id) VALUES (${userId})`;
+    const submissions = new SyncSubmissions(
+      drizzle({ client: connection }),
+      (error) => {
+        failures.push(error);
+      }
+    );
+    const input = {
+      kind: "send" as const,
+      mailboxId,
+      operationId: "send",
+      payloadHash: "content",
+      recoveryKey: "key",
+      userId,
+    };
+    const receipt = { id: "sent-message", threadId: "thread" };
+    const started = Promise.withResolvers<boolean>();
+    const accepted = Promise.withResolvers<typeof receipt>();
+    let calls = 0;
+    const provider = {
+      execute: async () => {
+        calls += 1;
+        const rows =
+          await connection`SELECT status FROM "mailSyncSubmission" WHERE "mailboxId"=${mailboxId}`;
+        expect(rows[0]?.status).toBe("unknown");
+        started.resolve(true);
+        return await accepted.promise;
+      },
+      isRejected: () => false,
+      reconcile: async () => {
+        await Promise.resolve();
+        return null;
+      },
+    };
+    const original = submissions.run(input, provider);
+    await started.promise;
+    await expect(submissions.run(input, provider)).rejects.toThrow(
+      "must be confirmed"
+    );
+    accepted.resolve(receipt);
+    await expect(original).resolves.toStrictEqual(receipt);
+    await expect(submissions.run(input, provider)).resolves.toStrictEqual(
+      receipt
+    );
+    await expect(
+      submissions.run({ ...input, payloadHash: "changed" }, provider)
+    ).rejects.toThrow("different content");
+    await expect(
+      submissions.run({ ...input, userId: "someone-else" }, provider)
+    ).rejects.toThrow("different content");
+    expect(calls).toBe(1);
+  });
+
+  it("recovers an unknown send without repeating it and permits retry after a definite rejection", async () => {
+    const mailboxId = crypto.randomUUID();
+    const userId = crypto.randomUUID();
+    await connection`INSERT INTO mailbox (id) VALUES (${mailboxId})`;
+    await connection`INSERT INTO "user" (id) VALUES (${userId})`;
+    const submissions = new SyncSubmissions(
+      drizzle({ client: connection }),
+      (error) => {
+        failures.push(error);
+      }
+    );
+    const input = {
+      kind: "send" as const,
+      mailboxId,
+      operationId: "send",
+      payloadHash: "content",
+      recoveryKey: "key",
+      userId,
+    };
+    const receipt = { id: "sent-message", threadId: "thread" };
+    let calls = 0;
+    let found = false;
+    let rejected = false;
+    const provider = {
+      execute: async () => {
+        calls += 1;
+        await Promise.resolve();
+        throw new Error("Response lost");
+      },
+      isRejected: () => rejected,
+      reconcile: async () => {
+        await Promise.resolve();
+        return found ? receipt : null;
+      },
+    };
+    await expect(submissions.run(input, provider)).rejects.toThrow(
+      "must be confirmed"
+    );
+    await expect(submissions.run(input, provider)).rejects.toThrow(
+      "must be confirmed"
+    );
+    found = true;
+    await expect(submissions.run(input, provider)).resolves.toStrictEqual(
+      receipt
+    );
+    expect(calls).toBe(1);
+    rejected = true;
+    const refused = { ...input, operationId: "refused" };
+    await expect(submissions.run(refused, provider)).rejects.toThrow(
+      "Response lost"
+    );
+    await expect(
+      submissions.run(refused, {
+        ...provider,
+        execute: async () => {
+          calls += 1;
+          await Promise.resolve();
+          return receipt;
+        },
+      })
+    ).resolves.toStrictEqual(receipt);
+    expect(calls).toBe(3);
   });
 
   it("imports Gmail bodies and advances paginated history after its final page commits", async () => {

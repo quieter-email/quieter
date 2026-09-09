@@ -2572,6 +2572,49 @@ export const sendRawMessage = async (
     }
   );
 
+export const findGmailSubmission = async (
+  accessToken: string,
+  recoveryKey: string,
+  kind: "draft" | "send",
+  signal?: AbortSignal
+) => {
+  if (!/^[a-f0-9]{64}$/u.test(recoveryKey)) {
+    throw new Error("Invalid submission recovery key.");
+  }
+  const query = `rfc822msgid:<quieter-${recoveryKey}@sync.quieter.email>`;
+  if (kind === "draft") {
+    const result = await listDrafts(accessToken, {
+      maxResults: 2,
+      query,
+      signal,
+    });
+    const [draft] = result.drafts;
+    return draft?.message === undefined || result.drafts.length !== 1
+      ? null
+      : {
+          id: draft.id,
+          messageId: draft.message.id,
+          threadId: draft.message.threadId,
+        };
+  }
+  const result = await requestGmail(
+    accessToken,
+    "/gmail/v1/users/me/messages",
+    listMessagesSchema,
+    {
+      query: {
+        includeSpamTrash: true,
+        labelIds: ["SENT"],
+        maxResults: 2,
+        q: query,
+      },
+      signal,
+    }
+  );
+  const [message] = result.messages;
+  return result.messages.length === 1 ? message : null;
+};
+
 export const deleteDraft = async (
   accessToken: string,
   draftId: string,

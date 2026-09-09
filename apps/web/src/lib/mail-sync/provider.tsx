@@ -30,6 +30,7 @@ export const MailSyncProvider = ({
     let unsubscribe: (() => void) | null = null;
     let lastMailboxIds = "";
     let updatingMailboxes = false;
+    let mailboxUpdatePending = false;
     const visibility = () => {
       void runMailSyncTask(
         session?.client.action({
@@ -44,9 +45,14 @@ export const MailSyncProvider = ({
       );
     };
     const updateMailboxes = async () => {
-      if (updatingMailboxes || controller.signal.aborted) {
+      if (controller.signal.aborted) {
         return;
       }
+      if (updatingMailboxes) {
+        mailboxUpdatePending = true;
+        return;
+      }
+      mailboxUpdatePending = false;
       const data = queryClient.getQueryData<
         RouterOutputs["mail"]["listMailboxes"]
       >(getMailboxesQueryKey());
@@ -71,6 +77,9 @@ export const MailSyncProvider = ({
         lastMailboxIds = identity;
       } finally {
         updatingMailboxes = false;
+        if (mailboxUpdatePending) {
+          void runMailSyncTask(updateMailboxes());
+        }
       }
     };
     const start = async () => {

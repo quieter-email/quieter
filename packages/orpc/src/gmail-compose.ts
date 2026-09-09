@@ -2,6 +2,7 @@ import { ORPCError } from "@orpc/server";
 import {
   createDraft,
   getDraft,
+  sendDraft,
   sendRawMessage,
   updateDraft,
 } from "@quieter/gmail";
@@ -14,36 +15,75 @@ import type {
 } from "@quieter/mail/compose/schema";
 import type { z } from "zod";
 
+import { isMailSyncEnabled } from "./mail-sync-runtime";
+import {
+  performGmailSubmission,
+  prepareGmailSubmission,
+} from "./mail-sync-submissions";
+
 type ComposeDraftInput = z.infer<typeof composeDraftInputSchema>;
 type ComposeMessageInput = z.infer<typeof composeMessageInputSchema>;
 
 export const saveGmailDraft = async (
   accessToken: string,
   draft: ComposeDraftInput,
+  owner: { mailboxId: string; userId: string },
   signal?: AbortSignal
 ) => {
-  if (draft.draftId && draft.baseVersion !== undefined) {
-    const current = await getDraft(accessToken, draft.draftId, signal);
-    if (current.message?.id !== draft.baseVersion) {
-      throw new ORPCError("CONFLICT", {
-        message:
-          "This draft changed elsewhere. Your edits are kept here. Save a copy to keep both versions.",
-      });
-    }
-  }
+  const submission = await prepareGmailSubmission(owner, draft, "draft");
   const raw = Buffer.from(
-    await buildMimeMessage(draft, { includeQuieterDraftHeaders: true })
+    await buildMimeMessage(draft, {
+      includeQuieterDraftHeaders: true,
+      messageId: `<quieter-${submission.recoveryKey}@sync.quieter.email>`,
+    })
   ).toString("base64url");
-  const response = draft.draftId
-    ? await updateDraft(
-        accessToken,
-        draft.draftId,
-        raw,
-        draft.replyContext?.threadId,
-        signal
-      )
-    : await createDraft(accessToken, raw, draft.replyContext?.threadId, signal);
+  const response = await performGmailSubmission(
+    submission,
+    accessToken,
+    async () => {
+      if (draft.draftId && draft.baseVersion !== undefined) {
+        const current = await getDraft(accessToken, draft.draftId, signal);
+        if (current.message?.id !== draft.baseVersion) {
+          throw new ORPCError("CONFLICT", {
+            message:
+              "This draft changed elsewhere. Your edits are kept here. Save a copy to keep both versions.",
+          });
+        }
+      }
+      const saved = draft.draftId
+        ? await updateDraft(
+            accessToken,
+            draft.draftId,
+            raw,
+            draft.replyContext?.threadId,
+            signal
+          )
+        : await createDraft(
+            accessToken,
+            raw,
+            draft.replyContext?.threadId,
+            signal
+          );
+      if (saved.message === undefined) {
+        throw new Error("Draft save returned no message receipt.");
+      }
+      return {
+        id: saved.id,
+        messageId: saved.message.id,
+        threadId: saved.message.threadId,
+      };
+    }
+  );
   const savedDraft = await getDraft(accessToken, response.id, signal);
+  if (
+    response.messageId !== undefined &&
+    savedDraft.message?.id !== response.messageId
+  ) {
+    throw new ORPCError("CONFLICT", {
+      message:
+        "This draft changed after it was saved. Your edits are kept here. Reopen the draft or save a copy.",
+    });
+  }
   const parsed = parseDraftMessage(savedDraft);
 
   return {
@@ -52,8 +92,7 @@ export const saveGmailDraft = async (
     draftAnchor: parsed.draftAnchor ?? draft.draftAnchor ?? null,
     draftId: savedDraft.id,
     draftVersion: savedDraft.message?.id,
-    messageId:
-      savedDraft.message?.id ?? response.message?.id ?? parsed.messageId,
+    messageId: savedDraft.message?.id ?? response.messageId ?? parsed.messageId,
     recipients: {
       bcc: parsed.recipients.bcc || draft.recipients.bcc,
       cc: parsed.recipients.cc || draft.recipients.cc,
@@ -68,15 +107,54 @@ export const saveGmailDraft = async (
 export const sendGmailMessage = async (
   accessToken: string,
   message: ComposeMessageInput,
+  owner: { mailboxId: string; userId: string },
   signal?: AbortSignal
-): Promise<GmailMessage> => {
-  const raw = Buffer.from(await buildMimeMessage(message)).toString(
-    "base64url"
-  );
-  return await sendRawMessage(
+): Promise<GmailMessage & { draftCleanupHandled: true }> => {
+  const submission = await prepareGmailSubmission(owner, message, "send");
+  const raw = Buffer.from(
+    await buildMimeMessage(message, {
+      messageId: `<quieter-${submission.recoveryKey}@sync.quieter.email>`,
+    })
+  ).toString("base64url");
+  const result = await performGmailSubmission(
+    submission,
     accessToken,
-    raw,
-    message.replyContext?.threadId,
-    signal
+    async () => {
+      if (
+        isMailSyncEnabled() &&
+        message.draftId &&
+        (message.baseVersion === null || message.baseVersion === undefined)
+      ) {
+        throw new ORPCError("CONFLICT", {
+          message:
+            "Reopen this draft before sending so its latest version can be checked.",
+        });
+      }
+      if (message.draftId && message.baseVersion !== undefined) {
+        const current = await getDraft(accessToken, message.draftId, signal);
+        if (current.message?.id !== message.baseVersion) {
+          throw new ORPCError("CONFLICT", {
+            message:
+              "This draft changed elsewhere. Reopen it or save a copy before sending.",
+          });
+        }
+      }
+      const sent = message.draftId
+        ? await sendDraft(
+            accessToken,
+            message.draftId,
+            raw,
+            message.replyContext?.threadId,
+            signal
+          )
+        : await sendRawMessage(
+            accessToken,
+            raw,
+            message.replyContext?.threadId,
+            signal
+          );
+      return { id: sent.id, threadId: sent.threadId };
+    }
   );
+  return { ...result, draftCleanupHandled: true };
 };

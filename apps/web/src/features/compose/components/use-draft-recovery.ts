@@ -119,7 +119,8 @@ export const useDraftRecovery = ({
             (record) =>
               record.localId === draft.localId &&
               (record.editorId === editorId.current ||
-                record.editorId === draft.recoveryEditorId)
+                (record.editorId === draft.recoveryEditorId &&
+                  record.updatedAt <= (draft.recoveryUpdatedAt ?? 0)))
           )
           .map(async (record) => await journal?.remove(record))
       );

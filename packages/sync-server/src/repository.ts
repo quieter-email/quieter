@@ -3,19 +3,13 @@ import type {
   DatabaseTransaction,
 } from "@quieter/database/client";
 import {
-  mailbox,
   mailSyncCommand,
   mailSyncChange,
   mailSyncEntity,
   mailSyncOutbox,
   mailSyncStream,
 } from "@quieter/database/schema";
-import {
-  SYNC_REPLAY_BATCHES,
-  SYNC_RETENTION_MS,
-  encodeSyncBatch,
-  syncBatchSchema,
-} from "@quieter/sync";
+import { SYNC_REPLAY_BATCHES, SYNC_RETENTION_MS } from "@quieter/sync";
 import type {
   SyncBatch,
   SyncCheckpoint,
@@ -37,7 +31,7 @@ import {
   sql,
 } from "drizzle-orm";
 
-import { persistSyncEntities } from "./projection-writer";
+import { commitSyncTransaction } from "./commit";
 
 export type SyncEntityWrite = {
   id: string;
@@ -80,81 +74,48 @@ export class SyncRepository {
     mailboxId: string,
     run: (context: SyncTransaction) => Promise<Result>
   ): Promise<Result> {
-    const committed = await this.database.transaction(async (database) => {
-      // The parent lock establishes the same order for stream creation and existing mailbox writers.
-      const [owner] = await database
-        .select({ id: mailbox.id })
-        .from(mailbox)
-        .where(eq(mailbox.id, mailboxId))
-        .for("update");
-      if (owner === undefined) {
-        throw new Error("Mailbox not found.");
+    return await this.transactionMany(
+      [mailboxId],
+      async (_database, contexts) => {
+        const context = contexts.get(mailboxId);
+        if (context === undefined) {
+          throw new Error("Mailbox stream is unavailable.");
+        }
+        return await run(context);
       }
-      await database
-        .insert(mailSyncStream)
-        .values({ epoch: crypto.randomUUID(), mailboxId })
-        .onConflictDoNothing();
-      const [stream] = await database
-        .select()
-        .from(mailSyncStream)
-        .where(eq(mailSyncStream.mailboxId, mailboxId))
-        .for("update");
-      if (stream === undefined) {
-        throw new Error("Mailbox stream is unavailable.");
-      }
-      const writes = new Map<string, SyncEntityWrite>();
-      const sequence = stream.sequence + 1n;
-      const result = await run({
-        database,
-        mailboxId,
-        put: (change) => {
-          writes.set(`${change.kind}:${change.id}`, change);
-        },
-        sequence,
-      });
-      const changes = await persistSyncEntities(database, mailboxId, sequence, [
-        ...writes.values(),
-      ]);
-      if (changes.length === 0) {
-        return { batch: null, result };
-      }
-      const batch = syncBatchSchema.parse({
-        changes,
-        epoch: stream.epoch,
-        mailboxId,
-        protocol: 1,
-        sequence: String(sequence),
-      });
-      encodeSyncBatch(batch, stream.epoch);
-      await database
-        .insert(mailSyncChange)
-        .values({ changes, epoch: stream.epoch, mailboxId, sequence });
-      await database.insert(mailSyncOutbox).values({ mailboxId, sequence });
-      await database
-        .update(mailSyncStream)
-        .set({ sequence, updatedAt: new Date() })
-        .where(eq(mailSyncStream.mailboxId, mailboxId));
-      return { batch, result };
-    });
-    if (committed.batch !== null) {
-      try {
-        await this.deliver(committed.batch);
-        await this.database
-          .delete(mailSyncOutbox)
-          .where(
-            and(
-              eq(mailSyncOutbox.mailboxId, mailboxId),
-              eq(mailSyncOutbox.sequence, BigInt(committed.batch.sequence))
-            )
-          );
-      } catch (error) {
-        // The state and outbox are already committed. Delivery failure must not invite a duplicate user operation.
-        this.reportDeliveryFailure(error);
-      }
-    }
-    return committed.result;
+    );
   }
 
+  async transactionMany<Result>(
+    mailboxIds: string[],
+    run: (
+      database: DatabaseTransaction,
+      contexts: ReadonlyMap<string, SyncTransaction>
+    ) => Promise<Result>
+  ): Promise<Result> {
+    const committed = await this.database.transaction(
+      async (database) => await commitSyncTransaction(database, mailboxIds, run)
+    );
+    await Promise.all(
+      committed.batches.map(async (batch) => {
+        try {
+          await this.deliver(batch);
+          await this.database
+            .delete(mailSyncOutbox)
+            .where(
+              and(
+                eq(mailSyncOutbox.mailboxId, batch.mailboxId),
+                eq(mailSyncOutbox.sequence, BigInt(batch.sequence))
+              )
+            );
+        } catch (error) {
+          // State and outbox are committed; delivery failure must not repeat the domain operation.
+          this.reportDeliveryFailure(error);
+        }
+      })
+    );
+    return committed.result;
+  }
   async head(mailboxId: string): Promise<SyncCheckpoint | null> {
     const [stream] = await this.database
       .select()
@@ -381,6 +342,18 @@ export class SyncRepository {
       if (stream === undefined) {
         return;
       }
+      await database
+        .delete(mailSyncCommand)
+        .where(
+          and(
+            eq(mailSyncCommand.mailboxId, mailboxId),
+            inArray(mailSyncCommand.status, ["applied", "failed"]),
+            lt(
+              mailSyncCommand.updatedAt,
+              new Date(now.getTime() - 90 * 86_400_000)
+            )
+          )
+        );
       const [pending] = await database
         .select()
         .from(mailSyncOutbox)
@@ -435,18 +408,6 @@ export class SyncRepository {
                 eq(mailSyncEntity.kind, "command"),
                 sql`${mailSyncEntity.data}->'value'->>'status' in ('applied', 'failed')`
               )
-            )
-          )
-        );
-      await database
-        .delete(mailSyncCommand)
-        .where(
-          and(
-            eq(mailSyncCommand.mailboxId, mailboxId),
-            inArray(mailSyncCommand.status, ["applied", "failed"]),
-            lt(
-              mailSyncCommand.updatedAt,
-              new Date(now.getTime() - 90 * 86_400_000)
             )
           )
         );

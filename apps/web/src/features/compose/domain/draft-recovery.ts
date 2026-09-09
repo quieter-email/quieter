@@ -42,7 +42,8 @@ export const recoverableDraftSchema = z.object({
 
 export const restoreComposeDraft = (
   payload: string,
-  editorId: string
+  editorId: string,
+  updatedAt = 0
 ): ComposeDraftState => {
   const draft = recoverableDraftSchema.parse(JSON.parse(payload));
   const missing = [...draft.attachments, ...draft.inlineImages].filter(
@@ -70,6 +71,7 @@ export const restoreComposeDraft = (
       (asset) => asset.gmailAttachmentId !== undefined
     ),
     recoveryEditorId: editorId,
+    recoveryUpdatedAt: updatedAt,
     saveStatus: "error",
   };
 };

@@ -8,6 +8,8 @@
     "./gmail": "./src/providers/gmail.ts",
     "./lease": "./src/providers/lease.ts",
     "./commands": "./src/commands.ts",
+    "./submissions": "./src/submissions.ts",
+    "./delivery": "./src/delivery.ts",
     "./metadata": "./src/metadata.ts",
     "./body-store": "./src/body-store.ts",
     "./auth": "./src/auth.ts"

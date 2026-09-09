@@ -1,5 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 
+import { MailSyncSession } from "#/lib/mail-sync/session";
 import { rpc } from "#/lib/orpc";
 
 import type { MessageDeliveryStatus } from "./delivery-status";
@@ -32,6 +33,9 @@ export const getMessageDeliveryOptions = (
       await rpc.mail.getMessageDelivery({ mailboxId, messageId }, { signal }),
     queryKey: getMessageDeliveryQueryKey(mailboxId, messageId),
     refetchInterval: (query) => {
+      if (MailSyncSession.forMailbox(mailboxId) !== null) {
+        return false;
+      }
       const delivery = query.state.data;
       if (delivery === null) {
         return false;
@@ -92,6 +96,9 @@ export const getMessageListDeliveryOptions = ({
     },
     queryKey: [...getMessageListDeliveryQueryKey(mailboxId), ids],
     refetchInterval: (query) => {
+      if (MailSyncSession.forMailbox(mailboxId) !== null) {
+        return false;
+      }
       if (query.state.data === undefined) {
         return false;
       }

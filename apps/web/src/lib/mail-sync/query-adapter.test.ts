@@ -59,6 +59,31 @@ const seed = (
 };
 
 describe("mail query adapter", () => {
+  test("accepts lower entity versions after a stream reset", () => {
+    const client = new QueryClient();
+    const adapter = new MailSyncQueryAdapter(client);
+    seed(client, "a", [message]);
+    adapter.receive({
+      entities: projection("90"),
+      mailboxId: "a",
+      replace: false,
+      type: "entities",
+    });
+    adapter.receive({
+      entities: projection("1", { ...message, subject: "New stream" }),
+      mailboxId: "a",
+      replace: true,
+      reset: true,
+      type: "entities",
+    });
+    expect(
+      client.getQueryData<MessagesQueryData>(getMessagesQueryKey("a", "inbox"))
+        ?.pages[0].messages[0].subject
+    ).toBe("New stream");
+    adapter.dispose();
+    client.clear();
+  });
+
   test("replaces a thread anchor without duplicating rows and isolates identical provider IDs", () => {
     const client = new QueryClient();
     const adapter = new MailSyncQueryAdapter(client);

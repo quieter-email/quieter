@@ -25,6 +25,7 @@ type ComposeDraftFormMeta = Pick<
   ComposeDraftState,
   | "localId"
   | "recoveryEditorId"
+  | "recoveryUpdatedAt"
   | "baseVersion"
   | "conflict"
   | "draftId"

@@ -15,6 +15,7 @@ import { z } from "zod";
 
 import { encodeSyncBody, prepareSyncMessage } from "../body-store";
 import type { SyncBodyStore } from "../body-store";
+import { projectManagedDelivery } from "../delivery";
 import { projectSavedViews } from "../metadata";
 import type { SyncRepository, SyncTransaction } from "../repository";
 import { assertProviderLease, withProviderLease } from "./lease";
@@ -148,6 +149,7 @@ export const projectManagedMailbox = async (
       )
       .orderBy(asc(managedMailMessage.sentAt), asc(managedMailMessage.id));
     const messageIds = messages.map((message) => message.id);
+    await projectManagedDelivery(context, messageIds);
     const attachments =
       messageIds.length === 0
         ? []
@@ -215,6 +217,12 @@ export const projectManagedMailbox = async (
     const currentIds = new Set(messageIds);
     for (const old of oldMessages) {
       if (!currentIds.has(old.id)) {
+        put({
+          data: null,
+          id: old.id,
+          kind: "delivery",
+          threadId: old.threadId ?? undefined,
+        });
         put({
           data: null,
           id: old.id,

@@ -322,11 +322,13 @@ export class MailboxReplica {
         const covered = new Set(snapshot.coverage.threadIds);
         for (const [key, entity] of this.entities) {
           const threadId =
-            entity.data?.kind === "message"
+            entity.data?.kind === "message" || entity.data?.kind === "delivery"
               ? entity.data.value.threadId
               : entity.id;
           if (
-            (entity.kind === "message" || entity.kind === "thread") &&
+            (entity.kind === "message" ||
+              entity.kind === "thread" ||
+              entity.kind === "delivery") &&
             covered.has(threadId) &&
             !reconciled.has(key)
           ) {

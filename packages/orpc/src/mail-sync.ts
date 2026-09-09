@@ -8,6 +8,7 @@ import {
   mailSyncStream,
   session,
 } from "@quieter/database/schema";
+import { reportError } from "@quieter/observability";
 import type { SyncCheckpoint } from "@quieter/sync";
 import { visibleSyncChanges } from "@quieter/sync";
 import { createSyncTicket } from "@quieter/sync-server/auth";
@@ -33,6 +34,7 @@ import {
   isMailSyncEnabled,
   mailSyncServices,
 } from "./mail-sync-runtime";
+import { recoverGmailSubmissions } from "./mail-sync-submissions";
 import { assertAccessibleMailbox } from "./mailbox/service";
 import { getManagedThread } from "./managed-mail/messages/service";
 
@@ -80,13 +82,22 @@ export const runMailboxSynchronization = async (mailboxId: string) => {
   }
   return await runAuthorizedGmailMailbox(
     { mailboxId, userId: selected.ownerUserId },
-    async (token) =>
-      await synchronizeGmail(
+    async (token) => {
+      const result = await synchronizeGmail(
         repository,
         bodies,
         mailboxId,
         gmailSyncProvider(token, AbortSignal.timeout(45_000))
-      )
+      );
+      if (!result.hasMore) {
+        try {
+          await recoverGmailSubmissions(mailboxId, token);
+        } catch (error) {
+          reportError(error, { operation: "mail_sync_submission_recovery" });
+        }
+      }
+      return result;
+    }
   );
 };
 

@@ -40,6 +40,7 @@ type ComposeInlineImage = ComposeAssetBase & {
 
 export type ComposeDraftState = {
   recoveryEditorId?: string;
+  recoveryUpdatedAt?: number;
   baseVersion?: string;
   conflict?: boolean;
   localId: string;
