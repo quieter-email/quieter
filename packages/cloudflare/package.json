@@ -20,6 +20,7 @@
     "@quieter/mail": "workspace:*",
     "@quieter/observability": "workspace:*",
     "@quieter/orpc": "workspace:*",
+    "@quieter/sync": "workspace:*",
     "@sentry/cloudflare": "catalog:",
     "drizzle-orm": "catalog:",
     "jose": "5.10.0",

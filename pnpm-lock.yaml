@@ -686,6 +686,9 @@ importers:
       '@quieter/orpc':
         specifier: workspace:*
         version: link:../orpc
+      '@quieter/sync':
+        specifier: workspace:*
+        version: link:../sync
       '@sentry/cloudflare':
         specifier: 'catalog:'
         version: 10.71.0(@cloudflare/workers-types@5.20260907.1)(supports-color@10.2.2)(wrangler@4.129.1(@cloudflare/workers-types@5.20260907.1))
@@ -747,6 +750,9 @@ importers:
       '@quieter/mail':
         specifier: workspace:*
         version: link:../mail
+      '@quieter/sync':
+        specifier: workspace:*
+        version: link:../sync
       drizzle-orm:
         specifier: 'catalog:'
         version: 1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260907.1)(@opentelemetry/api@1.9.1)(postgres@3.4.9)(valibot@1.4.2(typescript@7.0.2))(zod@4.5.4)
@@ -922,6 +928,12 @@ importers:
       '@quieter/observability':
         specifier: workspace:*
         version: link:../observability
+      '@quieter/sync':
+        specifier: workspace:*
+        version: link:../sync
+      '@quieter/sync-server':
+        specifier: workspace:*
+        version: link:../sync-server
       ai:
         specifier: 'catalog:'
         version: 7.0.77(zod@4.5.4)
@@ -987,6 +999,105 @@ importers:
       vite-plus:
         specifier: 'catalog:'
         version: 0.2.9(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(@voidzero-dev/vite-plus-core@0.2.9(@types/node@26.2.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(esbuild@0.28.1)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0)
+
+  packages/sync:
+    dependencies:
+      '@quieter/mail':
+        specifier: workspace:*
+        version: link:../mail
+      zod:
+        specifier: ^4.5.4
+        version: 4.5.4
+    devDependencies:
+      '@quieter/config':
+        specifier: workspace:*
+        version: link:../config
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vite-plus:
+        specifier: 'catalog:'
+        version: 0.2.9(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(@voidzero-dev/vite-plus-core@0.2.9(@types/node@26.2.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(esbuild@0.28.1)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0)
+
+  packages/sync-server:
+    dependencies:
+      '@quieter/database':
+        specifier: workspace:*
+        version: link:../database
+      '@quieter/gmail':
+        specifier: workspace:*
+        version: link:../gmail
+      '@quieter/mail':
+        specifier: workspace:*
+        version: link:../mail
+      '@quieter/sync':
+        specifier: workspace:*
+        version: link:../sync
+      drizzle-orm:
+        specifier: 'catalog:'
+        version: 1.0.0-rc.5-169397b(@cloudflare/workers-types@5.20260907.1)(@opentelemetry/api@1.9.1)(postgres@3.4.9)(valibot@1.4.2(typescript@7.0.2))(zod@4.5.4)
+      zod:
+        specifier: ^4.5.4
+        version: 4.5.4
+    devDependencies:
+      '@quieter/config':
+        specifier: workspace:*
+        version: link:../config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.2.0
+      postgres:
+        specifier: ^3.4.9
+        version: 3.4.9
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vite-plus:
+        specifier: 'catalog:'
+        version: 0.2.9(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(@voidzero-dev/vite-plus-core@0.2.9(@types/node@26.2.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(esbuild@0.28.1)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0)
+
+  packages/sync-worker:
+    dependencies:
+      '@quieter/database':
+        specifier: workspace:*
+        version: link:../database
+      '@quieter/env':
+        specifier: workspace:*
+        version: link:../env
+      '@quieter/observability':
+        specifier: workspace:*
+        version: link:../observability
+      '@quieter/orpc':
+        specifier: workspace:*
+        version: link:../orpc
+      '@quieter/sync':
+        specifier: workspace:*
+        version: link:../sync
+      '@quieter/sync-server':
+        specifier: workspace:*
+        version: link:../sync-server
+      zod:
+        specifier: ^4.5.4
+        version: 4.5.4
+    devDependencies:
+      '@cloudflare/vitest-pool-workers':
+        specifier: 'catalog:'
+        version: 0.22.0(@cloudflare/workers-types@5.20260907.1)(@vitest/runner@4.1.10)(@vitest/snapshot@4.1.10)(vitest@4.1.10)
+      '@quieter/config':
+        specifier: workspace:*
+        version: link:../config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.2.0
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vite-plus:
+        specifier: 'catalog:'
+        version: 0.2.9(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(@voidzero-dev/vite-plus-core@0.2.9(@types/node@26.2.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(esbuild@0.28.1)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0)
+      wrangler:
+        specifier: 'catalog:'
+        version: 4.129.1(@cloudflare/workers-types@5.20260907.1)
 
   packages/ui:
     dependencies:

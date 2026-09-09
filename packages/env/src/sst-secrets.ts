@@ -18,6 +18,7 @@ export const sstSecretNames = {
   LINEAR_CLIENT_ID: "LinearClientId",
   LINEAR_CLIENT_SECRET: "LinearClientSecret",
   MAIL_INGEST_TOKEN: "MailIngestToken",
+  MAIL_SYNC_SECRET: "MailSyncSecret",
   OPENROUTER_API_KEY: "OpenrouterApiKey",
   POLAR_ACCESS_TOKEN: "PolarAccessToken",
   POLAR_WEBHOOK_SECRET: "PolarWebhookSecret",

@@ -1445,6 +1445,79 @@ export const stopGmailWatch = async (
   );
 };
 
+export const listGmailSyncThreads = async (
+  accessToken: string,
+  options: {
+    pageToken?: string;
+    maxResults?: number;
+    signal?: AbortSignal;
+  } = {}
+) =>
+  await requestGmail(
+    accessToken,
+    "/gmail/v1/users/me/threads",
+    listThreadsSchema,
+    {
+      query: {
+        includeSpamTrash: true,
+        maxResults: options.maxResults ?? 10,
+        pageToken: options.pageToken,
+      },
+      signal: options.signal,
+    }
+  );
+
+export const listGmailSyncHistoryPage = async (
+  accessToken: string,
+  options: { startHistoryId: string; pageToken?: string; signal?: AbortSignal }
+) => {
+  try {
+    const response = await requestGmail(
+      accessToken,
+      "/gmail/v1/users/me/history",
+      listHistorySchema,
+      {
+        query: {
+          fields: GMAIL_HISTORY_FIELDS,
+          maxResults: 100,
+          pageToken: options.pageToken,
+          startHistoryId: options.startHistoryId,
+        },
+        signal: options.signal,
+      }
+    );
+    const threadIds = new Set<string>();
+    for (const record of response.history ?? []) {
+      for (const entry of [
+        ...(record.messagesAdded ?? []),
+        ...(record.messagesDeleted ?? []),
+        ...(record.labelsAdded ?? []),
+        ...(record.labelsRemoved ?? []),
+      ]) {
+        if (entry.message.threadId) {
+          threadIds.add(entry.message.threadId);
+        }
+      }
+    }
+    return {
+      expired: false,
+      historyId: response.historyId ?? options.startHistoryId,
+      nextPageToken: response.nextPageToken,
+      threadIds: [...threadIds],
+    };
+  } catch (error) {
+    if (isErrorWithStatus(error) && error.status === 404) {
+      return {
+        expired: true,
+        historyId: options.startHistoryId,
+        nextPageToken: undefined,
+        threadIds: [],
+      };
+    }
+    throw error;
+  }
+};
+
 export const listGmailAddedMessageHistoryPage = async (
   accessToken: string,
   options: {

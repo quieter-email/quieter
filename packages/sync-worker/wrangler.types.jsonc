@@ -1,0 +1,34 @@
+{
+  // Only local tests and binding types. Deployments use SST.
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "quieter-mail-sync-types",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-08-04",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "SST_RESOURCE_MailSyncSecret": "{\"value\":\"test-mail-sync-secret-at-least-32-bytes\"}",
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "MailboxSyncObjects", "class_name": "MailboxSync" },
+      { "name": "UserSyncObjects", "class_name": "UserSync" },
+    ],
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["MailboxSync", "UserSync"] },
+  ],
+  "r2_buckets": [
+    { "binding": "SyncBodies", "bucket_name": "quieter-sync-test" },
+  ],
+  "queues": {
+    "producers": [{ "binding": "MailSyncQueue", "queue": "quieter-sync-test" }],
+    "consumers": [
+      {
+        "queue": "quieter-sync-test",
+        "max_batch_size": 1,
+        "max_batch_timeout": 0,
+      },
+    ],
+  },
+  "triggers": { "crons": ["* * * * *"] },
+}

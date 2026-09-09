@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./mail-sync": "./src/mail-sync.ts",
     "./managed-mail/rule-backfills": "./src/managed-mail/rules/backfill.ts",
     "./mail-send": "./src/mail-send.ts",
     "./managed-mail/storage": "./src/managed-mail/messages/raw-object-lifecycle.ts",
@@ -46,6 +47,8 @@
     "@quieter/gmail": "workspace:*",
     "@quieter/mail": "workspace:*",
     "@quieter/observability": "workspace:*",
+    "@quieter/sync": "workspace:*",
+    "@quieter/sync-server": "workspace:*",
     "ai": "catalog:",
     "ical.js": "^2.2.1"
   },
