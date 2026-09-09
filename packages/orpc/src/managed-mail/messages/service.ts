@@ -469,7 +469,9 @@ export const getManagedThread = async (input: {
       attachmentsByMessageId.get(attachment.messageId) ?? [];
     messageAttachments.push({
       attachmentId: attachment.id,
+      contentId: attachment.contentId,
       fileName: attachment.fileName,
+      inline: attachment.inline,
       mimeType: attachment.mimeType,
       size: attachment.size,
     });

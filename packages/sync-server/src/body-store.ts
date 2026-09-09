@@ -5,6 +5,7 @@ import { syncBodySchema, syncMessageSchema } from "@quieter/sync";
 import type { SyncBody, SyncMessage } from "@quieter/sync";
 
 export type SyncBodyStore = {
+  has: (key: string) => Promise<boolean>;
   get: (key: string) => Promise<Uint8Array | null>;
   put: (key: string, body: Uint8Array) => Promise<void>;
   delete: (key: string) => Promise<void>;

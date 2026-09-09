@@ -1,5 +1,6 @@
 "use client";
 
+import type { ThreadMessagesResult } from "@quieter/mail/messages";
 import { toast } from "@quieter/ui/toast";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -23,6 +24,7 @@ import { toastError } from "#/lib/error-toast";
 import { labelsQueryOptions } from "#/lib/gmail/labels-query";
 import { getThreadLabelIds } from "#/lib/gmail/thread-list";
 import { getThreadWithDetailsOptions } from "#/lib/gmail/thread-query";
+import { getThreadQueryKey } from "#/lib/gmail/thread-query-keys";
 import { gmailThreadUsefulDetailsQueryOptions } from "#/lib/gmail/useful-details-query";
 import {
   hasRenderableMessageBody,
@@ -30,6 +32,7 @@ import {
   MAILBOX_LABELS,
 } from "#/lib/mail";
 import type { MailboxCategory, MessageListItem } from "#/lib/mail";
+import { useMailNavigationMeasurement } from "#/lib/mail-sync/use-navigation-measurement";
 import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
 import { orpc } from "#/lib/orpc";
 
@@ -99,6 +102,9 @@ export const useMessageViewData = ({
   pendingActions: MailboxPendingActions;
 }) => {
   const queryClient = useQueryClient();
+  const cachedThread = queryClient.getQueryData<ThreadMessagesResult>(
+    getThreadQueryKey(mailboxId, message.threadId)
+  );
   const { data: gmailLabels = [] } = useQuery(
     labelsQueryOptions(mailboxId, mailboxProvider !== "api")
   );
@@ -134,6 +140,12 @@ export const useMessageViewData = ({
       message.threadId,
       mailboxProvider === "gmail"
     )
+  );
+  useMailNavigationMeasurement(
+    mailboxId,
+    message.threadId,
+    cachedThread,
+    threadData
   );
   const createApiMailboxMutation = useMutation({
     ...orpc.mail.createManagedMailboxForApiMessage.mutationOptions(),

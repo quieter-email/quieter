@@ -37,6 +37,16 @@ const peerSchema = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("logout") }),
   z.object({ type: z.literal("mailboxes-changed") }),
+  z.object({
+    connection: z.enum([
+      "connecting",
+      "live",
+      "reconnecting",
+      "fallback",
+      "disabled",
+    ]),
+    type: z.literal("connection"),
+  }),
   z.object({ type: z.literal("cache-cleared") }),
   z.object({ persistent: z.boolean(), type: z.literal("persistence-changed") }),
   z.object({ mailboxId: z.string(), type: z.literal("revoked") }),
@@ -109,6 +119,9 @@ export class MailSyncEngine {
         }
         this.status.setState((state) => ({ ...state, connection }));
         this.notify(this.status.state);
+        if (this.leader) {
+          this.channel?.postMessage({ connection, type: "connection" });
+        }
       },
       replicas: this.replicas,
       signal: this.controller.signal,
@@ -529,6 +542,12 @@ export class MailSyncEngine {
         ownerId: this.ownerId,
         type: "interest",
       });
+      if (leader) {
+        this.channel?.postMessage({
+          connection: this.status.state.connection,
+          type: "connection",
+        });
+      }
       const interests = new Set(this.localInterests);
       for (const [ownerId, peer] of this.peerInterests) {
         if (Date.now() - peer.seenAt > 30_000) {
@@ -585,7 +604,11 @@ export class MailSyncEngine {
 
   private async trim() {
     const pins = new Set<string>();
+    const pinnedThreads = new Set<string>();
     for (const [mailboxId, threadIds] of this.pinned) {
+      for (const threadId of threadIds) {
+        pinnedThreads.add(`${mailboxId}:${threadId}`);
+      }
       const replica = this.replicas.get(mailboxId);
       if (replica === undefined) {
         continue;
@@ -619,7 +642,8 @@ export class MailSyncEngine {
     if (this.storage !== null) {
       const usage = await this.storage.enforceBudget(
         this.status.state.budgetBytes,
-        pins
+        pins,
+        pinnedThreads
       );
       this.status.setState((state) => ({ ...state, cacheBytes: usage.used }));
       for (const replica of this.replicas.values()) {
@@ -652,6 +676,16 @@ export class MailSyncEngine {
         return;
       }
       const message = parsed.data;
+      if (message.type === "connection") {
+        if (!this.leader && this.online) {
+          this.status.setState((state) => ({
+            ...state,
+            connection: message.connection,
+          }));
+          this.notify(this.status.state);
+        }
+        return;
+      }
       if (message.type === "logout") {
         this.notify({ type: "session-ended" });
         await this.stop(true, false);
@@ -678,6 +712,12 @@ export class MailSyncEngine {
           mailboxIds: message.mailboxIds,
           seenAt: Date.now(),
         });
+        if (this.leader) {
+          this.channel?.postMessage({
+            connection: this.status.state.connection,
+            type: "connection",
+          });
+        }
         return;
       }
       const replica = this.replicas.get(message.mailboxId);

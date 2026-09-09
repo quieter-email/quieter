@@ -7,8 +7,10 @@ import {
 } from "@quieter/database/schema";
 import { encodeSyncBatch, syncBatchSchema } from "@quieter/sync";
 import type { SyncBatch } from "@quieter/sync";
-import { asc, eq, inArray } from "drizzle-orm";
+import { asc, eq, inArray, sql } from "drizzle-orm";
 
+import { initializeSyncBodyReferences } from "./body-references";
+import type { SyncBodyStore } from "./body-store";
 import { persistSyncEntities } from "./projection-writer";
 import type { SyncEntityWrite, SyncTransaction } from "./repository";
 
@@ -18,7 +20,8 @@ export const commitSyncTransaction = async <Result>(
   run: (
     database: DatabaseTransaction,
     contexts: ReadonlyMap<string, SyncTransaction>
-  ) => Promise<Result>
+  ) => Promise<Result>,
+  bodies?: SyncBodyStore
 ) => {
   const ids = [...new Set(mailboxIds)].toSorted();
   const prepared = new Map<
@@ -30,6 +33,12 @@ export const commitSyncTransaction = async <Result>(
     }
   >();
   if (ids.length > 0) {
+    // The lock also fences collection after a mailbox was deleted and its row no longer exists.
+    for (const mailboxId of ids) {
+      await database.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`quieter-sync:${mailboxId}`}, 0))`
+      );
+    }
     // Every writer locks mailbox parents before streams, in database order.
     const owners = await database
       .select({ id: mailbox.id })
@@ -53,6 +62,9 @@ export const commitSyncTransaction = async <Result>(
       .orderBy(asc(mailSyncStream.mailboxId))
       .for("update");
     for (const stream of streams) {
+      if (stream.bodyReferencesInitializedAt === null) {
+        await initializeSyncBodyReferences(database, stream.mailboxId);
+      }
       const writes = new Map<string, SyncEntityWrite>();
       prepared.set(stream.mailboxId, {
         context: {
@@ -75,9 +87,13 @@ export const commitSyncTransaction = async <Result>(
   const batches: SyncBatch[] = [];
   for (const { context, epoch, writes } of prepared.values()) {
     const { mailboxId, sequence } = context;
-    const changes = await persistSyncEntities(database, mailboxId, sequence, [
-      ...writes.values(),
-    ]);
+    const changes = await persistSyncEntities(
+      database,
+      mailboxId,
+      sequence,
+      [...writes.values()],
+      bodies
+    );
     if (changes.length === 0) {
       continue;
     }

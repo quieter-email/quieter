@@ -84,6 +84,9 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       QUIETER_LOCAL_WORKER_TOKEN: runtimeEnv.QUIETER_LOCAL_WORKER_TOKEN,
       QUIETER_MAIL_API_KEY: runtimeEnv.QUIETER_MAIL_API_KEY,
       QUIETER_MAIL_API_URL: runtimeEnv.QUIETER_MAIL_API_URL,
+      QUIETER_MAIL_SYNC_CLIENT_ENABLED:
+        runtimeEnv.QUIETER_MAIL_SYNC_CLIENT_ENABLED,
+      QUIETER_MAIL_SYNC_CLIENT_USERS: runtimeEnv.QUIETER_MAIL_SYNC_CLIENT_USERS,
       QUIETER_MAIL_SYNC_ENABLED: runtimeEnv.QUIETER_MAIL_SYNC_ENABLED,
       QUIETER_PREVIEW_PERSONAS_ENABLED:
         runtimeEnv.QUIETER_PREVIEW_PERSONAS_ENABLED,
@@ -172,6 +175,8 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       QUIETER_LOCAL_WORKER_TOKEN: z.string().min(32).optional(),
       QUIETER_MAIL_API_KEY: optionalString,
       QUIETER_MAIL_API_URL: optionalHttpUrl,
+      QUIETER_MAIL_SYNC_CLIENT_ENABLED: optionalBooleanString,
+      QUIETER_MAIL_SYNC_CLIENT_USERS: optionalString,
       QUIETER_MAIL_SYNC_ENABLED: optionalBooleanString,
       QUIETER_PREVIEW_PERSONAS_ENABLED: optionalBooleanString,
       R2_ACCESS_KEY_ID: optionalString,

@@ -556,7 +556,11 @@ export class ReplicaStorage {
       .parse(await response.json());
   }
 
-  async enforceBudget(budgetBytes: number, pinnedHashes = new Set<string>()) {
+  async enforceBudget(
+    budgetBytes: number,
+    pinnedHashes = new Set<string>(),
+    pinnedThreads = new Set<string>()
+  ) {
     return await this.transact(
       ["bodies", "bodyIndex", "entities", "coverage"],
       "readwrite",
@@ -602,9 +606,8 @@ export class ReplicaStorage {
             continue;
           }
           if (
-            entry.data?.kind === "message" &&
-            entry.data.value.body !== null &&
-            pinnedHashes.has(`${entry.mailboxId}:${entry.data.value.body.hash}`)
+            entry.threadId !== null &&
+            pinnedThreads.has(`${entry.mailboxId}:${entry.threadId}`)
           ) {
             continue;
           }

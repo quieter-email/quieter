@@ -5,6 +5,7 @@ import {
   decodePartBody,
   decodeMimeHeaderValue,
   extractMessageAttachments,
+  extractInlineMessageAttachments,
   extractMessageContent,
   findRenderablePart,
 } from "@quieter/mail/message-content";
@@ -978,7 +979,14 @@ const toMessageListItem = async (
   return {
     attachments:
       includeBody || options.includeAttachmentMetadata === true
-        ? extractMessageAttachments(message.payload)
+        ? [
+            ...extractMessageAttachments(message.payload),
+            ...(labelIds?.includes("DRAFT") === true
+              ? extractInlineMessageAttachments(message.payload).map(
+                  (attachment) => ({ ...attachment, inline: true })
+                )
+              : []),
+          ]
         : undefined,
     bcc: getHeader(message, "Bcc"),
     bodyHtml: content.html,

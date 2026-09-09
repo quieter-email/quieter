@@ -105,6 +105,7 @@ export const seedLocalManagedMail = async (
       'Content-Type: text/plain; charset="utf-8"',
       "",
       "This message was created locally. It was never sent through an email provider.",
+      `Fixture: ${fixtureId}`,
       "",
       "--quieter-local-fixture",
       'Content-Type: text/plain; name="local-note.txt"',

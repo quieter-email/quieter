@@ -19,6 +19,7 @@ export const withSyncRuntime = async <Result>(
                 ? null
                 : new Uint8Array(await object.arrayBuffer());
             },
+            has: async (key) => (await env.SyncBodies.head(key)) !== null,
             put: async (key, bytes) => {
               await env.SyncBodies.put(key, bytes);
             },

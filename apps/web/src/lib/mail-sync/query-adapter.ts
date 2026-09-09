@@ -20,6 +20,7 @@ import {
   renderSyncLabels,
   renderSyncViews,
 } from "./metadata-adapter";
+import { clearPreparedMailHtml, warmPreparedMailHtml } from "./prepared-html";
 
 export class MailSyncQueryAdapter {
   private readonly entities = new Map<string, Map<string, SyncChange>>();
@@ -148,6 +149,9 @@ export class MailSyncQueryAdapter {
       }
       const summaries = new Map<string, MessageListItem>();
       for (const message of page.messages) {
+        if (entities?.get(`thread:${message.threadId}`)?.data === null) {
+          continue;
+        }
         const summary = changed.has(message.threadId)
           ? summarizeSyncThread({
               category,
@@ -193,6 +197,40 @@ export class MailSyncQueryAdapter {
     };
   }
 
+  cachedList(
+    mailboxId: string,
+    category: MailboxCategory
+  ): ListMessagesPageResult | undefined {
+    const entities = this.entities.get(mailboxId);
+    if (entities === undefined) {
+      return undefined;
+    }
+    const messages: MessageListItem[] = [];
+    for (const entity of entities.values()) {
+      if (entity.data?.kind !== "thread") {
+        continue;
+      }
+      const message = summarizeSyncThread({
+        category,
+        commands: [...this.pending.values()],
+        entities,
+        mailboxId,
+        threadId: entity.id,
+      });
+      if (message !== null) {
+        messages.push(message);
+      }
+    }
+    messages.sort(
+      (left, right) =>
+        Number(right.internalDate ?? Date.parse(right.date ?? "")) -
+        Number(left.internalDate ?? Date.parse(left.date ?? ""))
+    );
+    return messages.length === 0
+      ? undefined
+      : { messages: messages.slice(0, 15) };
+  }
+
   receive(event: SyncClientEvent) {
     if (
       event.type === "receipt" &&
@@ -232,6 +270,7 @@ export class MailSyncQueryAdapter {
       return;
     }
     if (event.type === "cache-cleared") {
+      clearPreparedMailHtml();
       this.readGeneration += 1;
       this.entities.clear();
       this.details.clear();
@@ -241,6 +280,7 @@ export class MailSyncQueryAdapter {
       return;
     }
     if (event.type === "revoked") {
+      clearPreparedMailHtml(event.mailboxId);
       this.readGeneration += 1;
       this.entities.delete(event.mailboxId);
       this.providers.delete(event.mailboxId);
@@ -262,6 +302,11 @@ export class MailSyncQueryAdapter {
       return;
     }
     if (event.type === "thread") {
+      for (const message of event.thread.messages) {
+        if (message.bodyHtml !== undefined) {
+          warmPreparedMailHtml(event.mailboxId, message.bodyHtml);
+        }
+      }
       this.details.delete(`${event.mailboxId}:${event.thread.threadId}`);
       this.details.set(
         `${event.mailboxId}:${event.thread.threadId}`,
@@ -282,6 +327,7 @@ export class MailSyncQueryAdapter {
     }
     let previousEntities = this.entities.get(event.mailboxId);
     if (event.reset === true && previousEntities !== undefined) {
+      clearPreparedMailHtml(event.mailboxId);
       this.readGeneration += 1;
       for (const key of this.details.keys()) {
         if (key.startsWith(`${event.mailboxId}:`)) {
@@ -540,6 +586,7 @@ export class MailSyncQueryAdapter {
   }
 
   dispose() {
+    clearPreparedMailHtml();
     this.readGeneration += 1;
     if (this.searchRefresh !== null) {
       clearTimeout(this.searchRefresh);

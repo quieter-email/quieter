@@ -33,6 +33,7 @@ import { mailSyncCommandService } from "./mail-sync-commands";
 import {
   getMailSyncConfiguration,
   isMailSyncEnabled,
+  isMailSyncClientEnabled,
   mailSyncServices,
 } from "./mail-sync-runtime";
 import { recoverGmailSubmissions } from "./mail-sync-submissions";
@@ -41,6 +42,7 @@ import { getManagedThread } from "./managed-mail/messages/service";
 
 export {
   getMailSyncConfiguration,
+  isMailSyncClientEnabled,
   mailSyncServices,
   withMailSyncRuntime,
 } from "./mail-sync-runtime";
@@ -229,6 +231,9 @@ export const mailSyncOperations = {
     return body;
   },
   connection: (userId: string, sessionId: string) => {
+    if (!isMailSyncClientEnabled(userId)) {
+      return { url: null };
+    }
     const configuration = getMailSyncConfiguration();
     if (configuration === null) {
       return { url: null };

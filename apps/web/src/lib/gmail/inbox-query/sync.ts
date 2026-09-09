@@ -384,6 +384,18 @@ export const messagesQueryOptions = (
     initialData,
     initialPageParam: undefined as string | undefined,
     persister,
+    placeholderData: (previous) => {
+      if (previous !== undefined || normalizeSearchQuery(searchQuery)) {
+        return previous;
+      }
+      const page = MailSyncSession.forMailbox(mailboxId)?.adapter.cachedList(
+        mailboxId,
+        mailbox
+      );
+      return page === undefined
+        ? undefined
+        : { pageParams: [undefined], pages: [page] };
+    },
     queryFn: async ({ pageParam, signal }) =>
       await fetchMessagesPage(
         mailboxId,

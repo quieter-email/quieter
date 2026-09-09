@@ -1,6 +1,7 @@
 import {
   authorizeSyncMailbox,
   authorizeSyncSession,
+  isMailSyncClientEnabled,
   mailSyncServices,
 } from "@quieter/orpc/mail-sync";
 import {
@@ -52,6 +53,9 @@ export class UserSync extends DurableObject<SyncEnv> {
       new URL(request.url).searchParams.get("ticket") ?? "",
       secret
     );
+    if (!isMailSyncClientEnabled(claims.userId)) {
+      return new Response(null, { status: 503 });
+    }
     try {
       await withSyncRuntime(this.env, async () => {
         await authorizeSyncSession(claims.sessionId, claims.userId);
@@ -104,6 +108,10 @@ export class UserSync extends DurableObject<SyncEnv> {
     }
     const frame = parsed.data;
     if (frame.type === "PING") {
+      if (!isMailSyncClientEnabled(attachment.userId)) {
+        socket.close(1012, "Reconnect required");
+        return;
+      }
       await this.refreshSubscriptions(socket);
       socket.send(JSON.stringify({ type: "PONG" } satisfies SyncServerFrame));
       return;

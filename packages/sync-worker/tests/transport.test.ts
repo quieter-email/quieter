@@ -12,6 +12,7 @@ const fixtures = vi.hoisted(() => ({
   authorize: vi.fn<() => Promise<void>>(async () => {
     await Promise.resolve();
   }),
+  clientEnabled: vi.fn<() => boolean>(() => true),
   epoch: "3595c675-0d6f-41ad-a78c-349fbd65e3c3",
   session: vi.fn<() => Promise<void>>(async () => {
     await Promise.resolve();
@@ -25,6 +26,7 @@ vi.mock("@quieter/database/client", () => ({
 vi.mock("@quieter/orpc/mail-sync", () => ({
   authorizeSyncMailbox: fixtures.authorize,
   authorizeSyncSession: fixtures.session,
+  isMailSyncClientEnabled: fixtures.clientEnabled,
   mailSyncServices: () => ({
     repository: {
       head: async () => {
@@ -66,6 +68,61 @@ const nextMessage = async (socket: WebSocket) => {
 };
 
 describe("durable mail transport", () => {
+  it("reconnects on a client rollout rollback without reporting an expired login", async () => {
+    const userId = crypto.randomUUID();
+    const socket = await connect(userId);
+    fixtures.clientEnabled.mockReturnValueOnce(false);
+    const closed = once(socket, "close", { signal: AbortSignal.timeout(5000) });
+    socket.send(JSON.stringify({ type: "PING" }));
+    const events: unknown[] = await closed;
+    expect(events[0]).toMatchObject({ code: 1012 });
+    fixtures.clientEnabled.mockReturnValueOnce(false);
+    const response = await worker.fetch(
+      new Request(
+        `https://sync.invalid/connect?ticket=${createSyncTicket(userId, "test-session", secret)}`,
+        { headers: { upgrade: "websocket" } }
+      ),
+      env
+    );
+    expect(response.status).toBe(503);
+  });
+
+  it("checks prepared body existence through authenticated native R2 requests", async () => {
+    const key = `sync/bodies/${crypto.randomUUID()}/${"a".repeat(64)}`;
+    const url = `https://sync.invalid/internal/body?key=${encodeURIComponent(key)}`;
+    const headers = { authorization: `Bearer ${secret}` };
+    const missing = await worker.fetch(
+      new Request(url, { headers, method: "HEAD" }),
+      env
+    );
+    expect(missing.status).toBe(404);
+    const saved = await worker.fetch(
+      new Request(url, { body: "{}", headers, method: "PUT" }),
+      env
+    );
+    expect(saved.status).toBe(204);
+    const present = await worker.fetch(
+      new Request(url, { headers, method: "HEAD" }),
+      env
+    );
+    expect(present.status).toBe(204);
+    const denied = await worker.fetch(
+      new Request(url, { method: "HEAD" }),
+      env
+    );
+    expect(denied.status).toBe(401);
+    const removed = await worker.fetch(
+      new Request(url, { headers, method: "DELETE" }),
+      env
+    );
+    expect(removed.status).toBe(204);
+    const expired = await worker.fetch(
+      new Request(url, { headers, method: "HEAD" }),
+      env
+    );
+    expect(expired.status).toBe(404);
+  });
+
   it("rejects a valid ticket after its login session has been revoked", async () => {
     fixtures.session.mockRejectedValueOnce(
       Object.assign(new Error("Session expired"), { code: "UNAUTHORIZED" })

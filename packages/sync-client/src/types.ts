@@ -50,6 +50,16 @@ export type SyncApi = {
 };
 
 export type SyncClientEvent =
+  | {
+      type: "measurement";
+      name:
+        | "body-memory-ms"
+        | "body-disk-ms"
+        | "body-network-ms"
+        | "reset"
+        | "replay-lag";
+      value: number;
+    }
   | { type: "mailboxes-changed" }
   | { type: "session-ended" }
   | { type: "cache-cleared" }

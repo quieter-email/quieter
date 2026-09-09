@@ -66,6 +66,8 @@ export type MessageListItem = {
 
 export type MessageAttachment = {
   attachmentId: string;
+  contentId?: string | null;
+  inline?: boolean;
   fileName: string;
   mimeType: string;
   size: number;

@@ -1,3 +1,5 @@
+import { db } from "@quieter/database/client";
+import { serverEnv } from "@quieter/env/server";
 import { reportError } from "@quieter/observability";
 import {
   maintainMailSynchronization,
@@ -8,8 +10,11 @@ import {
   verifySyncInternalRequest,
   verifySyncTicket,
 } from "@quieter/sync-server/auth";
+import { readSyncHealth } from "@quieter/sync-server/health";
 import { z } from "zod";
 
+import { maintainSyncBodies } from "./body-maintenance";
+import { recordSyncMetric } from "./metrics";
 import { withSyncReporting } from "./observability";
 import { readSyncRequest, withSyncRuntime } from "./runtime";
 
@@ -53,6 +58,15 @@ export default withSyncReporting({
         );
         await env.MailboxSyncObjects.getByName(batch.mailboxId).publish(batch);
         return new Response(null, { status: 204 });
+      }
+      if (url.pathname === "/internal/health" && request.method === "GET") {
+        const health = await withSyncRuntime(
+          env,
+          async () => await readSyncHealth(db)
+        );
+        return Response.json(health, {
+          headers: { "cache-control": "private, no-store" },
+        });
       }
       if (
         url.pathname === "/internal/synchronize" &&
@@ -125,6 +139,11 @@ export default withSyncReporting({
             status: body === null ? 404 : 200,
           });
         }
+        if (request.method === "HEAD") {
+          return new Response(null, {
+            status: (await env.SyncBodies.head(key)) === null ? 404 : 204,
+          });
+        }
       }
       return new Response(null, { status: 404 });
     } catch (error) {
@@ -137,6 +156,7 @@ export default withSyncReporting({
   },
   async queue(batch, env) {
     for (const message of batch.messages) {
+      const started = Date.now();
       try {
         const { mailboxId } = z
           .object({ mailboxId: syncIdSchema })
@@ -161,10 +181,28 @@ export default withSyncReporting({
         message.retry({
           delaySeconds: Math.min(300, 2 ** Math.min(message.attempts, 8)),
         });
+      } finally {
+        recordSyncMetric("queue", {
+          ageMs: Math.max(0, started - message.timestamp.getTime()),
+          attempts: message.attempts,
+          durationMs: Date.now() - started,
+        });
       }
     }
   },
   async scheduled(_controller, env) {
-    await withSyncRuntime(env, maintainMailSynchronization);
+    if (serverEnv.QUIETER_MAIL_SYNC_ENABLED !== true) {
+      return;
+    }
+    await withSyncRuntime(env, async () => {
+      const started = Date.now();
+      await maintainMailSynchronization();
+      const bodies = await maintainSyncBodies(env.SyncBodies);
+      recordSyncMetric("maintenance", {
+        ...bodies,
+        durationMs: Date.now() - started,
+      });
+      recordSyncMetric("health", await readSyncHealth(db));
+    });
   },
 } satisfies ExportedHandler<SyncEnv>);

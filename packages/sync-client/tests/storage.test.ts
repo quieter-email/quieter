@@ -1,7 +1,7 @@
 import "fake-indexeddb/auto";
 import { createHash } from "node:crypto";
 
-import type { SyncBatch, SyncSnapshot } from "@quieter/sync";
+import type { SyncBatch, SyncSnapshot, SyncChange } from "@quieter/sync";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { ReplicaStorage } from "../src/storage";
@@ -39,6 +39,41 @@ describe("browser mail persistence", () => {
     for (const store of openStores.splice(0)) {
       store.close();
     }
+  });
+
+  it("pins the selected thread without pinning every message that shares its body", async () => {
+    const store = await open();
+    const body = { bodyText: "Shared body" };
+    const hash = createHash("sha256")
+      .update(JSON.stringify(body))
+      .digest("hex");
+    const entities: SyncChange[] = ["selected", "other"].map((id) => ({
+      data: {
+        kind: "message",
+        value: {
+          attachments: [],
+          body: { bytes: 20, hash },
+          id,
+          isUnread: false,
+          labelIds: [],
+          threadId: id,
+        },
+      },
+      id,
+      kind: "message",
+      version: "1",
+    }));
+    await store.bootstrap({ ...snapshot("first"), entities });
+    await store.putBody("first", hash, body);
+    const result = await store.enforceBudget(
+      1,
+      new Set([`first:${hash}`]),
+      new Set(["first:selected"])
+    );
+    expect(result.evictedThreads).toStrictEqual(["first:other"]);
+    await expect(store.body("first", hash)).resolves.toStrictEqual(body);
+    await expect(store.entities("first", "selected")).resolves.toHaveLength(1);
+    await expect(store.entities("first", "other")).resolves.toHaveLength(0);
   });
 
   it("fences writes from a tab that has not received a cache-clear notification", async () => {

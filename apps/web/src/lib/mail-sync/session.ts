@@ -10,6 +10,7 @@ import { isExpectedClientError } from "#/lib/client-error-reporting";
 import { setMailReplicaPersistence } from "#/lib/query-persister";
 
 import { mailSyncApi } from "./api";
+import { recordMailSyncMeasurement } from "./measurements";
 import { MailSyncQueryAdapter } from "./query-adapter";
 
 type CacheStatus = Extract<SyncClientEvent, { type: "status" }>;
@@ -92,7 +93,11 @@ export class MailSyncSession {
           return;
         }
         this.adapter.receive(event);
+        if (event.type === "measurement") {
+          recordMailSyncMeasurement(event.name, event.value);
+        }
         if (event.type === "status") {
+          recordMailSyncMeasurement("cache-bytes", event.cacheBytes);
           mailSyncState.setState((state) => ({ ...state, status: event }));
         } else if (event.type === "revoked") {
           void runMailSyncTask(
@@ -107,6 +112,12 @@ export class MailSyncSession {
             mailboxIds: [...this.mailboxIds],
           }));
         } else if (event.type === "error") {
+          if (
+            event.error instanceof Error &&
+            event.error.name === "QuotaExceededError"
+          ) {
+            recordMailSyncMeasurement("cache-quota-error", 1);
+          }
           reportMailSyncError(event.error);
         } else if (event.type === "session-ended") {
           void runMailSyncTask(this.stop(true));

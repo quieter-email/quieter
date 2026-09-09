@@ -87,6 +87,13 @@ export const saveGmailDraft = async (
   const parsed = parseDraftMessage(savedDraft);
 
   return {
+    attachments: [
+      ...parsed.attachments,
+      ...parsed.inlineImages.map((attachment) => ({
+        ...attachment,
+        inline: true,
+      })),
+    ],
     bodyHtml: parsed.bodyHtml || draft.bodyHtml,
     bodyText: parsed.bodyText || draft.bodyText,
     draftAnchor: parsed.draftAnchor ?? draft.draftAnchor ?? null,

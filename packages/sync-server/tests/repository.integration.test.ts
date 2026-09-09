@@ -2,14 +2,17 @@ import { readFile } from "node:fs/promises";
 import { isDeepStrictEqual } from "node:util";
 
 import { mailSyncStream } from "@quieter/database/schema";
+import { syncMessageSchema } from "@quieter/sync";
 import type { SyncBatch } from "@quieter/sync";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
 
+import { collectSyncBodies } from "../src/body-collection";
 import { SyncCommands } from "../src/commands";
 import { projectManagedDelivery } from "../src/delivery";
+import { readSyncHealth } from "../src/health";
 import { synchronizeGmail } from "../src/providers/gmail";
 import type { GmailSyncProvider } from "../src/providers/gmail";
 import { SyncRepository } from "../src/repository";
@@ -76,6 +79,8 @@ suite("transactional mail replication", () => {
       "20260909092211_unknown_princess_powerful",
       "20260909094318_glorious_white_queen",
       "20260909115700_flat_speedball",
+      "20260909125850_chief_matthew_murdock",
+      "20260909130337_parallel_viper",
     ]) {
       const source = await readFile(
         new URL(
@@ -127,6 +132,10 @@ suite("transactional mail replication", () => {
       await Promise.resolve();
     });
     expect(observed).toBeTruthy();
+    await expect(readSyncHealth(repository.database)).resolves.toMatchObject({
+      oldestOutboxMs: 0,
+      pendingOutbox: 0,
+    });
     await expect(
       connection`SELECT * FROM "mailSyncOutbox" WHERE "mailboxId" = ${mailboxId}`
     ).resolves.toHaveLength(0);
@@ -202,6 +211,159 @@ suite("transactional mail replication", () => {
       "1",
       "2",
     ]);
+  });
+
+  it("collects only unreferenced bodies outside replay retention and initializes older projections", async () => {
+    const mailboxId = crypto.randomUUID();
+    await connection`INSERT INTO mailbox (id) VALUES (${mailboxId})`;
+    deliver = async () => {
+      await Promise.resolve();
+    };
+    const hash = "a".repeat(64);
+    const orphan = "b".repeat(64);
+    const stored = new Set([hash, orphan]);
+    const store = {
+      delete: async (key: string) => {
+        stored.delete(key.slice(-64));
+        await Promise.resolve();
+      },
+    };
+    const uploaded = new Date(Date.now() - 40 * 86_400_000);
+    const message = syncMessageSchema.parse({
+      attachments: [],
+      body: { bytes: 10, hash },
+      id: "message",
+      isUnread: false,
+      labelIds: [],
+      threadId: "thread",
+    });
+    await repository.transaction(mailboxId, async ({ put }) => {
+      put({
+        data: { kind: "message", value: message },
+        id: message.id,
+        kind: "message",
+      });
+      put({
+        data: { kind: "message", value: { ...message, id: "second" } },
+        id: "second",
+        kind: "message",
+      });
+      await Promise.resolve();
+    });
+    await repository.transaction(mailboxId, async ({ put }) => {
+      put({ data: null, id: message.id, kind: "message" });
+      await Promise.resolve();
+    });
+    await connection`DELETE FROM "mailSyncBody" WHERE "mailboxId"=${mailboxId}`;
+    await connection`UPDATE "mailSyncStream" SET "bodyReferencesInitializedAt"=NULL WHERE "mailboxId"=${mailboxId}`;
+    await expect(
+      collectSyncBodies(repository.database, store, [
+        { hash, mailboxId, uploaded },
+        { hash: orphan, mailboxId, uploaded: new Date() },
+      ])
+    ).resolves.toMatchObject({ deleted: 0 });
+    const [reference] =
+      await connection`SELECT "references" FROM "mailSyncBody" WHERE "mailboxId"=${mailboxId} AND hash=${hash}`;
+    expect(reference.references).toBe(1);
+    await repository.transaction(mailboxId, async ({ put }) => {
+      put({ data: null, id: "second", kind: "message" });
+      await Promise.resolve();
+    });
+    await connection`DELETE FROM "mailSyncBody" WHERE "mailboxId"=${mailboxId}`;
+    await connection`UPDATE "mailSyncStream" SET "bodyReferencesInitializedAt"=NULL WHERE "mailboxId"=${mailboxId}`;
+    await expect(
+      collectSyncBodies(repository.database, store, [
+        { hash, mailboxId, uploaded },
+      ])
+    ).resolves.toMatchObject({ deleted: 0 });
+    await connection`UPDATE "mailSyncChange" SET "createdAt"=now()-interval '30 days' WHERE "mailboxId"=${mailboxId}`;
+    await repository.prune(mailboxId);
+    await expect(
+      collectSyncBodies(repository.database, store, [
+        { hash, mailboxId, uploaded },
+        { hash: orphan, mailboxId, uploaded },
+      ])
+    ).resolves.toMatchObject({ deleted: 2 });
+    expect(stored.size).toBe(0);
+  });
+
+  it("fences a prepared upload that races body collection before commit", async () => {
+    const mailboxId = crypto.randomUUID();
+    await connection`INSERT INTO mailbox (id) VALUES (${mailboxId})`;
+    const hash = "c".repeat(64);
+    const key = `sync/bodies/${mailboxId}/${hash}`;
+    const stored = new Map<string, Uint8Array>([[key, new Uint8Array([1])]]);
+    const deleting = Promise.withResolvers<boolean>();
+    const release = Promise.withResolvers<boolean>();
+    const bodies = {
+      delete: async (bodyKey: string) => {
+        deleting.resolve(true);
+        await release.promise;
+        stored.delete(bodyKey);
+      },
+      get: async (bodyKey: string) => {
+        await Promise.resolve();
+        return stored.get(bodyKey) ?? null;
+      },
+      has: async (bodyKey: string) => {
+        await Promise.resolve();
+        return stored.has(bodyKey);
+      },
+      put: async (bodyKey: string, bytes: Uint8Array) => {
+        stored.set(bodyKey, bytes);
+        await Promise.resolve();
+      },
+    };
+    const guarded = new SyncRepository(
+      repository.database,
+      async () => {
+        await Promise.resolve();
+      },
+      (error) => {
+        failures.push(error);
+      },
+      bodies
+    );
+    const collecting = collectSyncBodies(repository.database, bodies, [
+      { hash, mailboxId, uploaded: new Date(Date.now() - 40 * 86_400_000) },
+    ]);
+    await deleting.promise;
+    await bodies.put(key, new Uint8Array([2]));
+    const message = syncMessageSchema.parse({
+      attachments: [],
+      body: { bytes: 1, hash },
+      id: "message",
+      isUnread: false,
+      labelIds: [],
+      threadId: "thread",
+    });
+    const failedCommit = guarded.transaction(mailboxId, async ({ put }) => {
+      put({
+        data: { kind: "message", value: message },
+        id: message.id,
+        kind: "message",
+      });
+      await Promise.resolve();
+    });
+    release.resolve(true);
+    await Promise.all([
+      collecting,
+      expect(failedCommit).rejects.toThrow("expired before it was committed"),
+    ]);
+    await expect(guarded.head(mailboxId)).resolves.toBeNull();
+    await bodies.put(key, new Uint8Array([2]));
+    await guarded.transaction(mailboxId, async ({ put }) => {
+      put({
+        data: { kind: "message", value: message },
+        id: message.id,
+        kind: "message",
+      });
+      await Promise.resolve();
+    });
+    await expect(guarded.head(mailboxId)).resolves.toMatchObject({
+      sequence: "1",
+    });
+    expect(stored.has(key)).toBeTruthy();
   });
 
   it("retains failed delivery through pruning, then recovers and expires old checkpoints", async () => {
@@ -589,6 +751,10 @@ suite("transactional mail replication", () => {
       get: async (key: string) => {
         await Promise.resolve();
         return stored.get(key) ?? null;
+      },
+      has: async (key: string) => {
+        await Promise.resolve();
+        return stored.has(key);
       },
       put: async (key: string, bytes: Uint8Array) => {
         stored.set(key, bytes);

@@ -5,11 +5,15 @@ import { z } from "zod";
 
 // oxlint-disable-next-line promise/prefer-await-to-callbacks -- Installs a synchronous reporting hook.
 configureErrorReporter((error, context) => {
+  if (error instanceof Error && error.name === "SyncProviderBusyError") {
+    return;
+  }
   // oxlint-disable-next-line no-console -- Keep failure reporting available when local telemetry is disabled.
   console.error("Mail synchronization failed", {
     errorType: error instanceof Error ? error.name : "UnknownError",
     operation: context.operation,
-    ...(error instanceof z.ZodError
+    ...(serverEnv.QUIETER_DEPLOYMENT_ENV === "local" &&
+    error instanceof z.ZodError
       ? {
           validation: error.issues.map((issue) => ({
             code: issue.code,
@@ -48,6 +52,16 @@ export const withSyncReporting = <Handler extends ExportedHandler<SyncEnv>>(
       beforeSend(event) {
         delete event.request;
         delete event.user;
+        delete event.extra;
+        delete event.contexts;
+        delete event.transaction;
+        delete event.breadcrumbs;
+        for (const exception of event.exception?.values ?? []) {
+          exception.value = "Mail synchronization failed.";
+          for (const frame of exception.stacktrace?.frames ?? []) {
+            delete frame.vars;
+          }
+        }
         return event;
       },
       dsn:

@@ -83,6 +83,16 @@ export const saveManagedDraft = async (input: {
     })
   );
   const parsed = await parseRawMailMessage(raw);
+  const savedAttachments = parsed.attachments.map((attachment, partIndex) => ({
+    ...attachment,
+    contentId: attachment.contentId ?? null,
+    createdAt: now,
+    id: crypto.randomUUID(),
+    mailboxId,
+    messageId,
+    normalizedFileName: normalizeManagedSearchValue(attachment.fileName),
+    partIndex,
+  }));
   const object = await storeRawMailObject(raw);
   const values = {
     bcc: draft.recipients.bcc || null,
@@ -162,20 +172,7 @@ export const saveManagedDraft = async (input: {
           )
         );
       if (parsed.attachments.length > 0) {
-        await tx.insert(managedMailAttachment).values(
-          parsed.attachments.map((attachment, partIndex) => ({
-            ...attachment,
-            contentId: attachment.contentId ?? null,
-            createdAt: now,
-            id: crypto.randomUUID(),
-            mailboxId,
-            messageId,
-            normalizedFileName: normalizeManagedSearchValue(
-              attachment.fileName
-            ),
-            partIndex,
-          }))
-        );
+        await tx.insert(managedMailAttachment).values(savedAttachments);
       }
       await tx
         .update(mailbox)
@@ -198,6 +195,14 @@ export const saveManagedDraft = async (input: {
     }
   }
   return {
+    attachments: savedAttachments.map((attachment) => ({
+      attachmentId: attachment.id,
+      contentId: attachment.contentId,
+      fileName: attachment.fileName,
+      inline: attachment.inline,
+      mimeType: attachment.mimeType,
+      size: attachment.size,
+    })),
     bodyHtml: draft.bodyHtml,
     bodyText: draft.bodyText,
     draftAnchor: draft.draftAnchor ?? null,

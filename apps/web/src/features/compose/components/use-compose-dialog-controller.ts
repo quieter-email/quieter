@@ -180,11 +180,20 @@ export const useComposeDialogController = ({
 
   const handleSendFailure = (error: unknown) => {
     const isRecipientProblem = isSuppressedRecipientError(error);
+    let errorMessage = "Could not send message. Please try again.";
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "CONFLICT"
+    ) {
+      errorMessage = error.message;
+    }
+    if (isRecipientProblem) {
+      errorMessage = SUPPRESSED_RECIPIENT_MESSAGE;
+    }
     setDraft({
       ...activeDraftRef.current,
-      errorMessage: isRecipientProblem
-        ? SUPPRESSED_RECIPIENT_MESSAGE
-        : "Could not send message. Please try again.",
+      errorMessage,
       saveStatus: "error",
     });
     toastError(error, {

@@ -59,6 +59,29 @@ const seed = (
 };
 
 describe("mail query adapter", () => {
+  test("offers local folder rows and suppresses known deletions in later HTTP reads", () => {
+    const adapter = new MailSyncQueryAdapter(new QueryClient());
+    adapter.receive({
+      entities: projection("1"),
+      mailboxId: "a",
+      replace: false,
+      type: "entities",
+    });
+    expect(
+      adapter.cachedList("a", "inbox")?.messages.map((item) => item.id)
+    ).toStrictEqual(["message"]);
+    expect(adapter.cachedList("b", "inbox")).toBeUndefined();
+    expect(adapter.cachedList("a", "trash")).toBeUndefined();
+    adapter.receive({
+      entities: [{ data: null, id: "thread", kind: "thread", version: "2" }],
+      mailboxId: "a",
+      replace: false,
+      type: "entities",
+    });
+    const reconcile = adapter.beginListRead("a", "inbox", true, false);
+    expect(reconcile({ messages: [message] }).messages).toStrictEqual([]);
+  });
+
   test("rebases delayed search responses over deletions and label changes", () => {
     const client = new QueryClient();
     const adapter = new MailSyncQueryAdapter(client);

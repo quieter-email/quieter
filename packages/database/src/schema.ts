@@ -599,6 +599,9 @@ export const mailbox = pgTable(
 export const mailSyncStream = pgTable(
   "mailSyncStream",
   {
+    bodyReferencesInitializedAt: timestamp("bodyReferencesInitializedAt", {
+      withTimezone: true,
+    }),
     epoch: text("epoch").notNull(),
     initialized: boolean("initialized").notNull().default(false),
     mailboxId: text("mailboxId")
@@ -665,6 +668,24 @@ export const mailSyncChange = pgTable(
   (table) => [
     primaryKey({ columns: [table.mailboxId, table.sequence] }),
     index("mail_sync_change_retention_idx").on(table.createdAt),
+  ]
+);
+
+export const mailSyncBody = pgTable(
+  "mailSyncBody",
+  {
+    hash: text("hash").notNull(),
+    lastReferencedSequence: bigint("lastReferencedSequence", {
+      mode: "bigint",
+    }).notNull(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    references: integer("references").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.mailboxId, table.hash] }),
+    check("mail_sync_body_references_check", sql`${table.references} >= 0`),
   ]
 );
 

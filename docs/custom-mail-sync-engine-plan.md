@@ -1,6 +1,6 @@
 # Custom mail sync engine plan
 
-Status: proposed design, not implemented. Recorded on September 9, 2026.
+Status: implemented on the feature branch, with local verification complete. Recorded on September 9, 2026. See [implementation and rollout](mail-sync-implementation.md) for the delivered behavior, operating instructions, and production prerequisites.
 
 Build a custom mail sync engine using Cloudflare Workers, Durable Objects, Queues, PostgreSQL, R2, and an IndexedDB client replica.
 
@@ -474,4 +474,4 @@ This plan records the custom-engine decision. Zero and other hosted replication 
 
     The first implementation milestone should be one complete managed-mail path: receive a message, persist its body, push its changes to two open clients, open it without a fetch, disconnect one client, change the message, reconnect, and recover the correct state.
 
-This document proposes future work. Saving it does not implement the engine or authorize production migrations or deployment.
+This document records the original design and its targets. Production migrations, deployment, and provider-write canaries still require the protected rollout described in the implementation document. Performance targets are not production guarantees.

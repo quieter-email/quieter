@@ -5,13 +5,16 @@ import { mailSyncEntity } from "@quieter/database/schema";
 import type { SyncChange } from "@quieter/sync";
 import { and, eq, inArray, sql } from "drizzle-orm";
 
+import { persistSyncBodyReferences } from "./body-references";
+import type { SyncBodyStore } from "./body-store";
 import type { SyncEntityWrite } from "./repository";
 
 export const persistSyncEntities = async (
   database: DatabaseTransaction,
   mailboxId: string,
   sequence: bigint,
-  writes: SyncEntityWrite[]
+  writes: SyncEntityWrite[],
+  bodies?: SyncBodyStore
 ) => {
   const existing = new Map<string, typeof mailSyncEntity.$inferSelect>();
   for (let offset = 0; offset < writes.length; offset += 1000) {
@@ -72,6 +75,14 @@ export const persistSyncEntities = async (
       version: sequence,
     });
   }
+  await persistSyncBodyReferences(
+    database,
+    mailboxId,
+    sequence,
+    changes,
+    existing,
+    bodies
+  );
   for (let offset = 0; offset < rows.length; offset += 500) {
     await database
       .insert(mailSyncEntity)

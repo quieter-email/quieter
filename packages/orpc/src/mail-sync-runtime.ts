@@ -15,6 +15,7 @@ import {
   projectGmailLabelDetails,
   projectSavedViews,
 } from "@quieter/sync-server/metadata";
+import { isSyncClientAllowed } from "@quieter/sync-server/rollout";
 import { Resource } from "sst";
 
 type SyncRuntime = {
@@ -25,8 +26,14 @@ type SyncRuntime = {
 const syncRuntime = new AsyncLocalStorage<SyncRuntime>();
 
 export const isMailSyncEnabled = () =>
-  syncRuntime.getStore() !== undefined ||
   serverEnv.QUIETER_MAIL_SYNC_ENABLED === true;
+
+export const isMailSyncClientEnabled = (userId: string) =>
+  isSyncClientAllowed(userId, {
+    clientsEnabled: serverEnv.QUIETER_MAIL_SYNC_CLIENT_ENABLED,
+    enabled: serverEnv.QUIETER_MAIL_SYNC_ENABLED,
+    users: serverEnv.QUIETER_MAIL_SYNC_CLIENT_USERS,
+  });
 
 export const withMailSyncRuntime = async <Result>(
   runtime: SyncRuntime,
@@ -150,6 +157,13 @@ export const mailSyncServices = () => {
         ? null
         : new Uint8Array(await response.arrayBuffer());
     },
+    has: async (key) => {
+      const response = await requestSyncRuntime(
+        `/internal/body?key=${encodeURIComponent(key)}`,
+        { method: "HEAD" }
+      );
+      return response.ok;
+    },
     put: async (key, bytes) => {
       const response = await requestSyncRuntime(
         `/internal/body?key=${encodeURIComponent(key)}`,
@@ -175,9 +189,14 @@ export const mailSyncServices = () => {
   return {
     bodies,
     enqueue,
-    repository: new SyncRepository(db, deliver, (error) => {
-      reportError(error, { operation: "mail_sync_delivery" });
-    }),
+    repository: new SyncRepository(
+      db,
+      deliver,
+      (error) => {
+        reportError(error, { operation: "mail_sync_delivery" });
+      },
+      bodies
+    ),
   };
 };
 

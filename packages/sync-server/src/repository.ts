@@ -31,6 +31,7 @@ import {
   sql,
 } from "drizzle-orm";
 
+import type { SyncBodyStore } from "./body-store";
 import { commitSyncTransaction } from "./commit";
 
 export type SyncEntityWrite = {
@@ -59,15 +60,18 @@ export class SyncRepository {
   readonly database: DatabaseClient;
   private readonly deliver: SyncDelivery;
   private readonly reportDeliveryFailure: (error: unknown) => void;
+  private readonly bodies: SyncBodyStore | undefined;
 
   constructor(
     database: DatabaseClient,
     deliver: SyncDelivery,
-    reportDeliveryFailure: (error: unknown) => void
+    reportDeliveryFailure: (error: unknown) => void,
+    bodies?: SyncBodyStore
   ) {
     this.database = database;
     this.deliver = deliver;
     this.reportDeliveryFailure = reportDeliveryFailure;
+    this.bodies = bodies;
   }
 
   async transaction<Result>(
@@ -94,7 +98,8 @@ export class SyncRepository {
     ) => Promise<Result>
   ): Promise<Result> {
     const committed = await this.database.transaction(
-      async (database) => await commitSyncTransaction(database, mailboxIds, run)
+      async (database) =>
+        await commitSyncTransaction(database, mailboxIds, run, this.bodies)
     );
     await Promise.all(
       committed.batches.map(async (batch) => {

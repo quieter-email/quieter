@@ -210,3 +210,43 @@ describe("mail engine lifecycle", () => {
     delayed.resolve(null);
   });
 });
+
+describe("mail connection status", () => {
+  it("shares the elected tab's connection state without opening another connection", async () => {
+    const userId = crypto.randomUUID();
+    const api: SyncApi = {
+      body: vi.fn<SyncApi["body"]>().mockResolvedValue({}),
+      command: vi.fn<SyncApi["command"]>().mockResolvedValue(null),
+      connection: vi
+        .fn<SyncApi["connection"]>()
+        .mockResolvedValue({ url: null }),
+      hydrate: vi.fn<SyncApi["hydrate"]>().mockResolvedValue(null),
+      replay: vi.fn<SyncApi["replay"]>(),
+      snapshot: vi.fn<SyncApi["snapshot"]>().mockResolvedValue(null),
+      submit: vi.fn<SyncApi["submit"]>(),
+    };
+    const leader = await MailSyncEngine.create({
+      api,
+      onEvent: vi.fn<(event: SyncClientEvent) => void>(),
+      userId,
+    });
+    let follower: MailSyncEngine | null = null;
+    try {
+      await vi.waitFor(() => {
+        expect(leader.status.state.connection).toBe("disabled");
+      });
+      follower = await MailSyncEngine.create({
+        api,
+        onEvent: vi.fn<(event: SyncClientEvent) => void>(),
+        userId,
+      });
+      await vi.waitFor(() => {
+        expect(follower?.status.state.connection).toBe("disabled");
+      });
+      expect(api.connection).toHaveBeenCalledOnce();
+    } finally {
+      await follower?.stop();
+      await leader.stop(true);
+    }
+  });
+});

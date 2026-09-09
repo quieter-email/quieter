@@ -14,13 +14,16 @@ export const createMailSyncResources = (
   database: ReturnType<typeof createAppDatabase>
 ) => {
   const secret = requireSecretResource(secretResources, "MAIL_SYNC_SECRET");
-  if (context.env.QUIETER_MAIL_SYNC_ENABLED !== true) {
-    return {
-      environment: { MAIL_SYNC_URL: "", QUIETER_MAIL_SYNC_ENABLED: "false" },
-      secret,
-      url: null,
-    };
-  }
+  const enabled = String(context.env.QUIETER_MAIL_SYNC_ENABLED === true);
+  const environment = {
+    QUIETER_MAIL_SYNC_CLIENT_ENABLED: String(
+      context.env.QUIETER_MAIL_SYNC_CLIENT_ENABLED !== false
+    ),
+    QUIETER_MAIL_SYNC_CLIENT_USERS:
+      context.env.QUIETER_MAIL_SYNC_CLIENT_USERS ?? "",
+    QUIETER_MAIL_SYNC_ENABLED: enabled,
+  };
+  // Disabling traffic must preserve the bucket, queues, and Durable Object namespaces.
   const mailboxObjects = new sst.cloudflare.DurableObject(
     "MailboxSyncObjects",
     { className: "MailboxSync" }
@@ -37,6 +40,7 @@ export const createMailSyncResources = (
       ...context.billingEnvironment,
       QUIETER_DEPLOYMENT_ENV: deploymentEnvironment,
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED: "false",
+      ...environment,
       SENTRY_ENVIRONMENT: context.sentryEnvironment.SENTRY_ENVIRONMENT,
     },
     handler: "packages/sync-worker/src/worker.ts",
@@ -113,7 +117,7 @@ export const createMailSyncResources = (
     return value;
   });
   return {
-    environment: { MAIL_SYNC_URL: url, QUIETER_MAIL_SYNC_ENABLED: "true" },
+    environment: { MAIL_SYNC_URL: url, ...environment },
     secret,
     url,
   };

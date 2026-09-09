@@ -292,11 +292,44 @@ export const buildComposeDraftFromSavedDraftMessage = (
 
   return {
     ...draft,
+    attachments: (message.attachments ?? [])
+      .filter(
+        (attachment) => attachment.inline !== true || !attachment.contentId
+      )
+      .map((attachment) => ({
+        id: crypto.randomUUID(),
+        isInline: false,
+        mimeType: attachment.mimeType,
+        name: attachment.fileName,
+        size: attachment.size,
+        source: {
+          attachmentId: attachment.attachmentId,
+          messageId: message.id,
+        },
+      })),
     baseVersion: message.draftVersion,
     bodyHtml: message.bodyHtml ?? "",
     bodyText: message.bodyText ?? message.snippet ?? "",
     draftAnchor: message.draftAnchor ?? null,
     draftId: message.draftId,
+    inlineImages: (message.attachments ?? []).flatMap((attachment) =>
+      attachment.inline === true && attachment.contentId
+        ? [
+            {
+              contentId: attachment.contentId,
+              id: crypto.randomUUID(),
+              isInline: true as const,
+              mimeType: attachment.mimeType,
+              name: attachment.fileName,
+              size: attachment.size,
+              source: {
+                attachmentId: attachment.attachmentId,
+                messageId: message.id,
+              },
+            },
+          ]
+        : []
+    ),
     messageId: message.id,
     recipients: {
       bcc: message.bcc ?? "",

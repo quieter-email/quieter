@@ -135,6 +135,7 @@ export class MailboxReplica {
   }
 
   private async resetSnapshot() {
+    this.options.notify({ name: "reset", type: "measurement", value: 1 });
     const input = await this.options.api.snapshot(
       this.mailboxId,
       this.options.signal
@@ -237,6 +238,15 @@ export class MailboxReplica {
         checkpoint,
         this.options.signal
       );
+      if (page.checkpoint.epoch === checkpoint.epoch) {
+        this.options.notify({
+          name: "replay-lag",
+          type: "measurement",
+          value: Number(
+            BigInt(page.checkpoint.sequence) - BigInt(checkpoint.sequence)
+          ),
+        });
+      }
       if (page.reset) {
         await this.reset();
         continue;
@@ -405,10 +415,14 @@ export class MailboxReplica {
             return message;
           }
           const key = `${this.mailboxId}:${reference.hash}`;
+          const started = performance.now();
+          let source: "body-memory-ms" | "body-disk-ms" | "body-network-ms" =
+            this.options.bodyCache.has(key) ? "body-memory-ms" : "body-disk-ms";
           let body =
             this.options.bodyCache.get(key) ??
             (await this.options.storage?.body(this.mailboxId, reference.hash));
           if (body === undefined || body === null) {
+            source = "body-network-ms";
             body = await this.options.api.body(
               this.mailboxId,
               message.id,
@@ -426,6 +440,11 @@ export class MailboxReplica {
           this.options.signal.throwIfAborted();
           this.options.bodyCache.delete(key);
           this.options.bodyCache.set(key, body);
+          this.options.notify({
+            name: source,
+            type: "measurement",
+            value: performance.now() - started,
+          });
           return { ...message, ...body };
         })
       );
