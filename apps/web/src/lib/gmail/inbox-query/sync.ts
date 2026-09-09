@@ -11,6 +11,7 @@ import type {
   MessageListItem,
   ThreadMessagesResult,
 } from "#/lib/mail";
+import { MailSyncSession } from "#/lib/mail-sync/session";
 import { listManagedDemoMessages } from "#/lib/managed-mail/demo-managed-mail";
 import { rpc } from "#/lib/orpc";
 import { shouldRetryOrpcError } from "#/lib/orpc-errors";
@@ -88,7 +89,14 @@ const fetchMessagesPage = async (
     });
   }
 
-  return await rpc.mail.listThreads(
+  const sync = MailSyncSession.forMailbox(mailboxId);
+  const reconcile = sync?.adapter.beginListRead(
+    mailboxId,
+    mailbox,
+    pageToken === undefined,
+    !!normalizeSearchQuery(searchQuery)
+  );
+  const page = await rpc.mail.listThreads(
     {
       category: mailbox,
       mailboxId,
@@ -98,6 +106,8 @@ const fetchMessagesPage = async (
     },
     { signal }
   );
+  signal?.throwIfAborted();
+  return reconcile?.(page) ?? page;
 };
 
 export const refreshLoadedMessagesPages = async (

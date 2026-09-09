@@ -468,6 +468,9 @@ const mergeSyncedMessages = (
     ];
   });
   const nextMessageIds = new Set(nextMessages.map((message) => message.id));
+  const currentThreadIds = new Set(
+    currentMessages.map((message) => message.threadId)
+  );
   const oldestLoadedMessage = currentMessages.at(-1);
   const oldestLoadedTimestamp = oldestLoadedMessage
     ? getMessageSortTimestamp(oldestLoadedMessage)
@@ -477,6 +480,7 @@ const mergeSyncedMessages = (
     if (
       !nextMessageIds.has(updatedMessage.id) &&
       (!currentMessages.length ||
+        currentThreadIds.has(updatedMessage.threadId) ||
         getMessageSortTimestamp(updatedMessage) >= oldestLoadedTimestamp)
     ) {
       nextMessages.push(updatedMessage);

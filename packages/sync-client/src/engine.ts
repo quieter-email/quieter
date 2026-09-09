@@ -354,7 +354,12 @@ export class MailSyncEngine {
     threadId: string
   ): Promise<ThreadMessagesResult> {
     const replica = await this.ensureMailbox(mailboxId);
-    return await replica.thread(threadId);
+    try {
+      return await replica.thread(threadId);
+    } catch (error) {
+      this.notify({ error, operation: "mail_thread_load", type: "error" });
+      throw error;
+    }
   }
 
   async command(input: SyncCommand) {
@@ -362,7 +367,12 @@ export class MailSyncEngine {
       throw new Error("Connect to the internet to make changes.");
     }
     const command = syncCommandSchema.parse(input);
-    await this.storage?.journal(command);
+    try {
+      await this.storage?.journal(command);
+    } catch (error) {
+      this.notify({ error, operation: "mail_command_journal", type: "error" });
+      throw error;
+    }
     this.controller.signal.throwIfAborted();
     this.commands.set(`${command.mailboxId}:${command.commandId}`, command);
     try {

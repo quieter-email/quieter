@@ -3,6 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   encodeSyncBatch,
   syncBatchSchema,
+  syncMessageSchema,
   syncSequenceSchema,
 } from "../src/protocol";
 import type { SyncBatch, SyncChange, SyncSnapshot } from "../src/protocol";
@@ -31,6 +32,28 @@ const batch = (sequence: string, deleted = false): SyncBatch => ({
 });
 
 describe("mail replica ordering", () => {
+  it("accepts long opaque attachment identifiers without relaxing entity identifiers", () => {
+    const message = {
+      attachments: [
+        {
+          attachmentId: "a".repeat(768),
+          fileName: "attachment.txt",
+          mimeType: "text/plain",
+          size: 12,
+        },
+      ],
+      body: null,
+      id: "message",
+      isUnread: false,
+      labelIds: [],
+      threadId: "thread",
+    };
+    expect(syncMessageSchema.safeParse(message).success).toBeTruthy();
+    expect(
+      syncMessageSchema.safeParse({ ...message, id: "a".repeat(768) }).success
+    ).toBeFalsy();
+  });
+
   it("detects gaps and retains precision beyond JavaScript numbers", () => {
     const checkpoint = { epoch, sequence: "9007199254740992" };
     expect(classifySyncBatch(checkpoint, batch("9007199254740993"))).toBe(

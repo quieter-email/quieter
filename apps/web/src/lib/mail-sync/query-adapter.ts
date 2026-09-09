@@ -1,30 +1,25 @@
-import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
-import { mailboxLabelColorSchema } from "@quieter/mail/mailbox-organization";
 import type {
   MessageListItem,
   ThreadMessagesResult,
+  MailboxCategory,
+  ListMessagesPageResult,
 } from "@quieter/mail/messages";
-import type { RouterOutputs } from "@quieter/orpc";
 import type { SyncChange, SyncCommand } from "@quieter/sync";
 import type { SyncClientEvent } from "@quieter/sync-client/types";
 import type { QueryClient } from "@tanstack/react-query";
 
 import { toastError } from "#/lib/error-toast";
-import {
-  applySyncDeltaToQueryData,
-  getMailCommandUpdater,
-} from "#/lib/gmail/inbox-query/data";
+import { applySyncDeltaToQueryData } from "#/lib/gmail/inbox-query/data";
 import { getCachedMessagesQueries } from "#/lib/gmail/inbox-query/query-cache";
-import { getLabelsQueryKey } from "#/lib/gmail/labels-query";
 import { getThreadQueryKey } from "#/lib/gmail/thread-query-keys";
-import { isMessageInMailbox } from "#/lib/mail";
-import {
-  getGmailUnreadCountsQueryKey,
-  getMailboxesQueryKey,
-} from "#/lib/mailboxes-query";
-import { getSavedViewsQueryKey } from "#/lib/saved-views-query";
 
+import { overlaySyncMessage, summarizeSyncThread } from "./command-adapter";
 import { applyDeliveryChange } from "./delivery-adapter";
+import {
+  applySyncOverview,
+  renderSyncLabels,
+  renderSyncViews,
+} from "./metadata-adapter";
 
 export class MailSyncQueryAdapter {
   private readonly entities = new Map<string, Map<string, SyncChange>>();
@@ -35,6 +30,7 @@ export class MailSyncQueryAdapter {
   private readonly fallbackSummaries = new Map<string, MessageListItem>();
   private readonly queryClient: QueryClient;
   private searchRefresh: ReturnType<typeof setTimeout> | null = null;
+  private readGeneration = 0;
 
   constructor(queryClient: QueryClient) {
     this.queryClient = queryClient;
@@ -43,9 +39,10 @@ export class MailSyncQueryAdapter {
   projectThread(mailboxId: string, thread: ThreadMessagesResult) {
     return {
       ...thread,
-      messages: thread.messages.map((message) =>
-        this.overlay(mailboxId, message)
-      ),
+      messages: thread.messages.flatMap((message) => {
+        const projected = this.overlay(mailboxId, message);
+        return projected === null ? [] : [projected];
+      }),
     };
   }
 
@@ -108,20 +105,92 @@ export class MailSyncQueryAdapter {
     message: MessageListItem,
     summary = false
   ) {
-    let result = message;
-    for (const command of this.pending.values()) {
-      if (
-        command.mailboxId === mailboxId &&
-        command.targets.some(
-          (target) =>
-            target.threadId === message.threadId &&
-            (summary || target.messageIds.includes(message.id))
-        )
-      ) {
-        result = getMailCommandUpdater(command.command)(result);
+    return summary
+      ? summarizeSyncThread({
+          commands: [...this.pending.values()],
+          entities: this.entities.get(mailboxId),
+          fallback: message,
+          mailboxId,
+          threadId: message.threadId,
+        })
+      : overlaySyncMessage(
+          mailboxId,
+          message,
+          this.pending.values(),
+          this.entities.get(mailboxId)
+        );
+  }
+
+  beginListRead(
+    mailboxId: string,
+    category: MailboxCategory,
+    firstPage: boolean,
+    search: boolean
+  ) {
+    const generation = this.readGeneration;
+    const before = new Map(this.entities.get(mailboxId));
+    return (page: ListMessagesPageResult): ListMessagesPageResult => {
+      if (generation !== this.readGeneration) {
+        throw new DOMException(
+          "Mailbox cache changed during this request.",
+          "AbortError"
+        );
       }
-    }
-    return result;
+      const entities = this.entities.get(mailboxId);
+      const changed = new Set<string>();
+      for (const entity of entities?.values() ?? []) {
+        if (
+          entity.kind === "thread" &&
+          entity !== before.get(`thread:${entity.id}`)
+        ) {
+          changed.add(entity.id);
+        }
+      }
+      const summaries = new Map<string, MessageListItem>();
+      for (const message of page.messages) {
+        const summary = changed.has(message.threadId)
+          ? summarizeSyncThread({
+              category,
+              commands: [...this.pending.values()],
+              entities,
+              mailboxId,
+              threadId: message.threadId,
+            })
+          : summarizeSyncThread({
+              category,
+              commands: [...this.pending.values()],
+              entities: undefined,
+              fallback: message,
+              mailboxId,
+              threadId: message.threadId,
+            });
+        if (summary !== null) {
+          summaries.set(summary.threadId, summary);
+        }
+      }
+      if (firstPage && !search) {
+        for (const threadId of changed) {
+          const summary = summarizeSyncThread({
+            category,
+            commands: [...this.pending.values()],
+            entities,
+            mailboxId,
+            threadId,
+          });
+          if (summary !== null) {
+            summaries.set(threadId, summary);
+          }
+        }
+      }
+      return {
+        ...page,
+        messages: [...summaries.values()].toSorted(
+          (left, right) =>
+            Number(right.internalDate ?? Date.parse(right.date ?? "")) -
+            Number(left.internalDate ?? Date.parse(left.date ?? ""))
+        ),
+      };
+    };
   }
 
   receive(event: SyncClientEvent) {
@@ -163,6 +232,7 @@ export class MailSyncQueryAdapter {
       return;
     }
     if (event.type === "cache-cleared") {
+      this.readGeneration += 1;
       this.entities.clear();
       this.details.clear();
       this.fallbackSummaries.clear();
@@ -171,6 +241,7 @@ export class MailSyncQueryAdapter {
       return;
     }
     if (event.type === "revoked") {
+      this.readGeneration += 1;
       this.entities.delete(event.mailboxId);
       this.providers.delete(event.mailboxId);
       for (const key of this.details.keys()) {
@@ -200,9 +271,7 @@ export class MailSyncQueryAdapter {
         getThreadQueryKey(event.mailboxId, event.thread.threadId),
         {
           ...event.thread,
-          messages: event.thread.messages.map((message) =>
-            this.overlay(event.mailboxId, message)
-          ),
+          ...this.projectThread(event.mailboxId, event.thread),
         }
       );
       this.trimDetails();
@@ -213,6 +282,7 @@ export class MailSyncQueryAdapter {
     }
     let previousEntities = this.entities.get(event.mailboxId);
     if (event.reset === true && previousEntities !== undefined) {
+      this.readGeneration += 1;
       for (const key of this.details.keys()) {
         if (key.startsWith(`${event.mailboxId}:`)) {
           this.details.delete(key);
@@ -286,44 +356,12 @@ export class MailSyncQueryAdapter {
         viewsChanged = true;
       }
       if (entity.data?.kind === "overview") {
-        const { counts, status } = entity.data.value;
-        const { unreadNonSpamCount } = counts;
-        if (unreadNonSpamCount !== undefined) {
-          this.queryClient.setQueryData<RouterOutputs["mail"]["listMailboxes"]>(
-            getMailboxesQueryKey(),
-            (previous) =>
-              previous === undefined
-                ? undefined
-                : {
-                    ...previous,
-                    groups: previous.groups.map((group) => ({
-                      ...group,
-                      mailboxes: group.mailboxes.map((mailbox) =>
-                        mailbox.id === event.mailboxId
-                          ? {
-                              ...mailbox,
-                              connectionStatus:
-                                status === "needs_reconnect"
-                                  ? "needs_reconnect"
-                                  : "connected",
-                              unreadNonSpamCount,
-                            }
-                          : mailbox
-                      ),
-                    })),
-                  }
-          );
-          if (this.providers.get(event.mailboxId) === "gmail") {
-            this.queryClient.setQueryData<
-              RouterOutputs["mail"]["listGmailUnreadCounts"]
-            >(getGmailUnreadCountsQueryKey(), (previous) => [
-              ...(previous ?? []).filter(
-                (item) => item.mailboxId !== event.mailboxId
-              ),
-              { mailboxId: event.mailboxId, unreadNonSpamCount },
-            ]);
-          }
-        }
+        applySyncOverview(
+          this.queryClient,
+          event.mailboxId,
+          this.providers.get(event.mailboxId),
+          entity.data.value
+        );
       }
       if (entity.data?.kind === "command") {
         const { command, error, status } = entity.data.value;
@@ -348,25 +386,23 @@ export class MailSyncQueryAdapter {
     }
     this.render(event.mailboxId, threads);
     if (labelsChanged) {
-      this.renderLabels(event.mailboxId, entities);
+      this.render(
+        event.mailboxId,
+        new Set(
+          [...entities.values()]
+            .filter((entity) => entity.kind === "thread")
+            .map((entity) => entity.id)
+        )
+      );
+      renderSyncLabels(
+        this.queryClient,
+        event.mailboxId,
+        this.providers.get(event.mailboxId),
+        entities
+      );
     }
     if (viewsChanged || event.replace) {
-      const views: RouterOutputs["mail"]["listSavedViews"] = [];
-      for (const entity of entities.values()) {
-        if (entity.data?.kind === "saved-view") {
-          const { value } = entity.data;
-          views.push({
-            ...value,
-            createdAt: new Date(value.createdAt),
-            mailboxId: event.mailboxId,
-            updatedAt: new Date(value.updatedAt),
-          });
-        }
-      }
-      this.queryClient.setQueryData(
-        getSavedViewsQueryKey(event.mailboxId),
-        views.toSorted((a, b) => a.position - b.position)
-      );
+      renderSyncViews(this.queryClient, event.mailboxId, entities);
     }
     while (entities.size > 10_000) {
       const oldest = entities.keys().next().value;
@@ -390,7 +426,6 @@ export class MailSyncQueryAdapter {
 
   private render(mailboxId: string, threadIds: Set<string>) {
     const entities = this.entities.get(mailboxId);
-    const summaries: MessageListItem[] = [];
     for (const threadId of threadIds) {
       const entity = entities?.get(`thread:${threadId}`);
       const thread = entity?.data?.kind === "thread" ? entity.data.value : null;
@@ -425,28 +460,8 @@ export class MailSyncQueryAdapter {
         this.details.set(detailKey, next);
         this.queryClient.setQueryData(getThreadQueryKey(mailboxId, threadId), {
           ...next,
-          messages: messages.map((message) => this.overlay(mailboxId, message)),
+          ...this.projectThread(mailboxId, next),
         });
-      }
-      if (thread !== null) {
-        summaries.push(
-          this.overlay(
-            mailboxId,
-            {
-              ...thread.latest,
-              isUnread: thread.isUnread,
-              threadAttachmentCount: thread.attachmentCount,
-              threadLabelIds: thread.labelIds,
-              threadMessageCount: thread.messageCount,
-            },
-            true
-          )
-        );
-      } else if (entity === undefined) {
-        const fallback = this.fallbackSummaries.get(`${mailboxId}:${threadId}`);
-        if (fallback !== undefined) {
-          summaries.push(this.overlay(mailboxId, fallback, true));
-        }
       }
     }
     for (const cached of getCachedMessagesQueries(
@@ -457,70 +472,38 @@ export class MailSyncQueryAdapter {
         continue;
       }
       const previous = cached.data.pages.flatMap((page) => page.messages);
-      const changed = summaries.filter(
-        (message) =>
-          isMessageInMailbox(message, cached.mailbox) &&
+      const changed: MessageListItem[] = [];
+      for (const threadId of threadIds) {
+        const fallback =
+          this.fallbackSummaries.get(`${mailboxId}:${threadId}`) ??
+          previous.find((message) => message.threadId === threadId);
+        const summary = summarizeSyncThread({
+          category: cached.mailbox,
+          commands: [...this.pending.values()],
+          entities,
+          fallback,
+          mailboxId,
+          threadId,
+        });
+        if (
+          summary !== null &&
           (!cached.searchQuery ||
-            previous.some((item) => item.threadId === message.threadId))
-      );
-      const missing = previous
-        .filter(
-          (message) =>
-            threadIds.has(message.threadId) &&
-            entities?.get(`thread:${message.threadId}`) === undefined &&
-            !this.fallbackSummaries.has(`${mailboxId}:${message.threadId}`)
-        )
-        .map((message) => this.overlay(mailboxId, message, true))
-        .filter((message) => isMessageInMailbox(message, cached.mailbox));
+            previous.some((message) => message.threadId === threadId))
+        ) {
+          changed.push(summary);
+        }
+      }
       this.queryClient.setQueryData(
         cached.queryKey,
         applySyncDeltaToQueryData(
           cached.data,
-          [...changed, ...missing],
+          changed,
           previous
             .filter((message) => threadIds.has(message.threadId))
             .map((message) => message.id)
         )
       );
     }
-  }
-
-  private renderLabels(mailboxId: string, entities: Map<string, SyncChange>) {
-    const provider = this.providers.get(mailboxId);
-    if (provider === undefined) {
-      return;
-    }
-    const previous =
-      this.queryClient.getQueryData<MailboxLabel[]>(
-        getLabelsQueryKey(mailboxId)
-      ) ?? [];
-    const labels = [...entities.values()].flatMap<MailboxLabel>((entity) => {
-      if (entity.data?.kind !== "label") {
-        return [];
-      }
-      const label = entity.data.value;
-      const existing = previous.find((item) => item.id === label.id);
-      const color = mailboxLabelColorSchema
-        .nullable()
-        .safeParse(label.color ?? existing?.color);
-      return [
-        {
-          color: color.success ? color.data : null,
-          description: label.description ?? null,
-          id: label.id,
-          inclusionCriteria: label.inclusionCriteria ?? null,
-          name: label.name,
-          position: label.position ?? existing?.position ?? previous.length,
-          provider,
-          type: label.type === "system" ? "system" : "user",
-          visible: label.visible ?? existing?.visible ?? true,
-        },
-      ];
-    });
-    this.queryClient.setQueryData(
-      getLabelsQueryKey(mailboxId),
-      labels.toSorted((left, right) => left.position - right.position)
-    );
   }
 
   private trimDetails() {
@@ -557,6 +540,7 @@ export class MailSyncQueryAdapter {
   }
 
   dispose() {
+    this.readGeneration += 1;
     if (this.searchRefresh !== null) {
       clearTimeout(this.searchRefresh);
     }

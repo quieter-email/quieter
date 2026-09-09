@@ -59,6 +59,106 @@ const seed = (
 };
 
 describe("mail query adapter", () => {
+  test("rebases delayed search responses over deletions and label changes", () => {
+    const client = new QueryClient();
+    const adapter = new MailSyncQueryAdapter(client);
+    adapter.receive({
+      entities: projection("1"),
+      mailboxId: "a",
+      replace: false,
+      type: "entities",
+    });
+    const reconcile = adapter.beginListRead("a", "inbox", true, true);
+    adapter.receive({
+      entities: projection("2", { ...message, isUnread: false, labelIds: [] }),
+      mailboxId: "a",
+      replace: false,
+      type: "entities",
+    });
+    expect(reconcile({ messages: [message] }).messages).toStrictEqual([]);
+    const deleted = adapter.beginListRead("a", "inbox", true, true);
+    adapter.receive({
+      entities: [{ data: null, id: "thread", kind: "thread", version: "3" }],
+      mailboxId: "a",
+      replace: false,
+      type: "entities",
+    });
+    expect(deleted({ messages: [message] }).messages).toStrictEqual([]);
+    adapter.dispose();
+    client.clear();
+  });
+
+  test("preserves fresh HTTP data when the replica has not changed and fences reset responses", () => {
+    const client = new QueryClient();
+    const adapter = new MailSyncQueryAdapter(client);
+    adapter.receive({
+      entities: projection("1"),
+      mailboxId: "a",
+      replace: false,
+      type: "entities",
+    });
+    const reconcile = adapter.beginListRead("a", "inbox", true, false);
+    expect(
+      reconcile({ messages: [{ ...message, subject: "Fresh provider data" }] })
+        .messages[0].subject
+    ).toBe("Fresh provider data");
+    adapter.receive({ type: "cache-cleared" });
+    expect(() => reconcile({ messages: [message] })).toThrow(
+      "Mailbox cache changed"
+    );
+    adapter.dispose();
+    client.clear();
+  });
+
+  test("keeps other unread messages and inbox membership when one message is changed", () => {
+    const client = new QueryClient();
+    const adapter = new MailSyncQueryAdapter(client);
+    seed(client, "a", [message]);
+    const second = { ...message, id: "second", internalDate: "2000" };
+    const entities = projection("1", second);
+    for (const entity of entities) {
+      if (entity.data?.kind === "thread") {
+        entity.data.value.messageIds = [message.id, second.id];
+        entity.data.value.messageCount = 2;
+      }
+    }
+    entities.push({
+      data: { kind: "message", value: message },
+      id: message.id,
+      kind: "message",
+      version: "1",
+    });
+    adapter.receive({
+      entities,
+      mailboxId: "a",
+      replace: false,
+      type: "entities",
+    });
+    adapter.addCommand({
+      command: { kind: "set-read", read: true },
+      commandId: crypto.randomUUID(),
+      mailboxId: "a",
+      targets: [{ messageIds: [second.id], threadId: "thread" }],
+    });
+    adapter.addCommand({
+      command: { destination: "archive", kind: "move" },
+      commandId: crypto.randomUUID(),
+      mailboxId: "a",
+      targets: [{ messageIds: [second.id], threadId: "thread" }],
+    });
+    const inbox = client.getQueryData<MessagesQueryData>(
+      getMessagesQueryKey("a", "inbox")
+    )?.pages[0].messages;
+    expect(inbox).toHaveLength(1);
+    expect(inbox?.[0]).toMatchObject({
+      id: message.id,
+      isUnread: true,
+      threadMessageCount: 2,
+    });
+    adapter.dispose();
+    client.clear();
+  });
+
   test("accepts lower entity versions after a stream reset", () => {
     const client = new QueryClient();
     const adapter = new MailSyncQueryAdapter(client);

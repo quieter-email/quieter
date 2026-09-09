@@ -10,6 +10,7 @@ import {
   decryptGmailCredentialSecret,
   encryptGmailCredentialSecret,
 } from "./gmail-credential-crypto";
+import { markSyncMailboxNeedsReconnect } from "./mail-sync-status";
 
 export const GMAIL_SCOPES = [
   "openid",
@@ -145,10 +146,7 @@ const performGmailAccessTokenRefresh = async (record: {
   id: string;
 }) => {
   if (!record.encryptedRefreshToken) {
-    await db
-      .update(mailbox)
-      .set({ status: "needs_reconnect", updatedAt: new Date() })
-      .where(eq(mailbox.id, record.id));
+    await markSyncMailboxNeedsReconnect(record.id);
     throw getGmailRepairRequiredError(record);
   }
 
@@ -181,10 +179,7 @@ const performGmailAccessTokenRefresh = async (record: {
       (errorCode !== undefined && permanentGoogleTokenErrors.has(errorCode));
 
     if (isPermanentAuthFailure) {
-      await db
-        .update(mailbox)
-        .set({ status: "needs_reconnect", updatedAt: new Date() })
-        .where(eq(mailbox.id, record.id));
+      await markSyncMailboxNeedsReconnect(record.id);
       throw getGmailRepairRequiredError(record);
     }
 
@@ -327,12 +322,7 @@ export const refreshAuthorizedGmailAccessToken = async (input: {
   return await refreshGmailAccessToken(record);
 };
 
-export const markGmailMailboxNeedsReconnect = async (mailboxId: string) => {
-  await db
-    .update(mailbox)
-    .set({ status: "needs_reconnect", updatedAt: new Date() })
-    .where(eq(mailbox.id, mailboxId));
-};
+export const markGmailMailboxNeedsReconnect = markSyncMailboxNeedsReconnect;
 
 const isGmailAuthError = (error: unknown) =>
   isGmailServiceError(error) &&

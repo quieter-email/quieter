@@ -318,8 +318,34 @@ export const projectManagedMailbox = async (
     })
     .from(managedMailMessage)
     .where(eq(managedMailMessage.mailboxId, mailboxId));
+  const labelCounts = await database
+    .select({
+      count: sql<number>`count(distinct ${managedMailMessage.threadId})::int`,
+      id: managedMailMessageLabel.labelId,
+    })
+    .from(managedMailMessageLabel)
+    .innerJoin(
+      managedMailMessage,
+      and(
+        eq(managedMailMessage.id, managedMailMessageLabel.messageId),
+        eq(managedMailMessage.mailboxId, mailboxId)
+      )
+    )
+    .where(eq(managedMailMessageLabel.mailboxId, mailboxId))
+    .groupBy(managedMailMessageLabel.labelId);
   put({
-    data: { kind: "overview", value: { counts, status: "ready" } },
+    data: {
+      kind: "overview",
+      value: {
+        counts: {
+          ...counts,
+          ...Object.fromEntries(
+            labelCounts.map((label) => [`label:${label.id}`, label.count])
+          ),
+        },
+        status: "ready",
+      },
+    },
     id: mailboxId,
     kind: "overview",
   });

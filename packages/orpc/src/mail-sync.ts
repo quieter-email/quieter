@@ -2,6 +2,7 @@ import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import {
   mailbox,
+  gmailCredential,
   mailSyncEntity,
   mailSyncCommand,
   mailSyncProviderState,
@@ -25,7 +26,7 @@ import {
   bootstrapManagedMailbox,
   projectManagedMailbox,
 } from "@quieter/sync-server/managed";
-import { and, asc, eq, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, isNotNull, lte, or, sql } from "drizzle-orm";
 
 import { runAuthorizedGmailMailbox } from "./gmail-mailbox-access";
 import { mailSyncCommandService } from "./mail-sync-commands";
@@ -71,34 +72,48 @@ export const runMailboxSynchronization = async (mailboxId: string) => {
     return { hasMore: false };
   }
   const { bodies, repository } = mailSyncServices();
-  if (await mailSyncCommandService().process(mailboxId)) {
-    return { hasMore: true };
-  }
+  const processedCommand = await mailSyncCommandService().process(mailboxId);
   if (selected.provider === "managed") {
-    return await bootstrapManagedMailbox(repository, bodies, mailboxId);
+    const result = await bootstrapManagedMailbox(repository, bodies, mailboxId);
+    return { hasMore: processedCommand || result.hasMore };
   }
   if (!selected.ownerUserId) {
     throw new Error("Mailbox ownership is missing.");
   }
-  return await runAuthorizedGmailMailbox(
-    { mailboxId, userId: selected.ownerUserId },
-    async (token) => {
-      const result = await synchronizeGmail(
-        repository,
-        bodies,
-        mailboxId,
-        gmailSyncProvider(token, AbortSignal.timeout(45_000))
-      );
-      if (!result.hasMore) {
-        try {
-          await recoverGmailSubmissions(mailboxId, token);
-        } catch (error) {
-          reportError(error, { operation: "mail_sync_submission_recovery" });
+  try {
+    return await runAuthorizedGmailMailbox(
+      { mailboxId, userId: selected.ownerUserId },
+      async (token) => {
+        const result = await synchronizeGmail(
+          repository,
+          bodies,
+          mailboxId,
+          gmailSyncProvider(token, AbortSignal.timeout(45_000))
+        );
+        if (!result.hasMore) {
+          try {
+            await recoverGmailSubmissions(mailboxId, token);
+          } catch (error) {
+            reportError(error, { operation: "mail_sync_submission_recovery" });
+          }
         }
+        return { hasMore: processedCommand || result.hasMore };
       }
-      return result;
+    );
+  } catch (error) {
+    if (
+      error instanceof ORPCError &&
+      [
+        "NOT_FOUND",
+        "UNAUTHORIZED",
+        "FORBIDDEN",
+        "MAILBOX_SCOPE_REPAIR_REQUIRED",
+      ].includes(String(error.code))
+    ) {
+      return { hasMore: false };
     }
-  );
+    throw error;
+  }
 };
 
 export const maintainMailSynchronization = async () => {
@@ -127,6 +142,7 @@ export const maintainMailSynchronization = async () => {
     .select({ id: mailbox.id })
     .from(mailbox)
     .leftJoin(mailSyncStream, eq(mailSyncStream.mailboxId, mailbox.id))
+    .leftJoin(gmailCredential, eq(gmailCredential.mailboxId, mailbox.id))
     .leftJoin(
       mailSyncProviderState,
       eq(mailSyncProviderState.mailboxId, mailbox.id)
@@ -134,6 +150,10 @@ export const maintainMailSynchronization = async () => {
     .where(
       and(
         eq(mailbox.status, "connected"),
+        or(
+          eq(mailbox.provider, "managed"),
+          isNotNull(gmailCredential.mailboxId)
+        ),
         or(
           isNull(mailSyncStream.mailboxId),
           and(

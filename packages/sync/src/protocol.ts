@@ -38,7 +38,7 @@ export const syncBodyReferenceSchema = z.object({
 export const syncMessageSchema = z.object({
   attachments: z.array(
     z.object({
-      attachmentId: syncIdSchema,
+      attachmentId: z.string().min(1).max(8192),
       fileName: z.string(),
       mimeType: z.string(),
       size: z.number().nonnegative(),
