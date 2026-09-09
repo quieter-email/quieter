@@ -7,8 +7,10 @@ import { protectedProcedure } from "./base";
 import { mailboxProcedures } from "./mail/mailboxes";
 import { managedOrganizationMailRouter } from "./mail/managed-organization";
 import { mailboxSavedViewRouter } from "./mail/saved-views";
+import { mailSyncRouter } from "./mail/sync";
 
 export const mailRouter = {
+  ...mailSyncRouter,
   ...mailboxProcedures,
   ...mailboxSavedViewRouter,
   ...managedOrganizationMailRouter,

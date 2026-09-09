@@ -12,6 +12,10 @@ import { reportError } from "@quieter/observability";
 import { and, eq, sql } from "drizzle-orm";
 import type { z } from "zod";
 
+import {
+  storeManagedSyncBody,
+  withManagedSyncTransaction,
+} from "../../mail-sync-runtime";
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
 import {
   createManagedMessageSearchText,
@@ -101,66 +105,76 @@ export const saveManagedDraft = async (input: {
     toNormalized: normalizeManagedSearchValue(draft.recipients.to),
     updatedAt: now,
   };
-  await db.transaction(async (tx) => {
-    if (existing === undefined) {
-      await tx.insert(managedMailMessage).values({
-        ...values,
-        createdAt: now,
-        direction: "outbound",
-        id: messageId,
-        mailboxId,
-        providerMessageId: draftId,
-      });
-    } else {
-      const updated = await tx
-        .update(managedMailMessage)
-        .set(values)
+  await storeManagedSyncBody(mailboxId, {
+    bodyHtml: draft.bodyHtml || undefined,
+    bodyText: draft.bodyText || undefined,
+  });
+  await withManagedSyncTransaction(
+    mailboxId,
+    { threadIds: [threadId] },
+    async (tx) => {
+      if (existing === undefined) {
+        await tx.insert(managedMailMessage).values({
+          ...values,
+          createdAt: now,
+          direction: "outbound",
+          id: messageId,
+          mailboxId,
+          providerMessageId: draftId,
+        });
+      } else {
+        const updated = await tx
+          .update(managedMailMessage)
+          .set(values)
+          .where(
+            and(
+              eq(managedMailMessage.id, existing.id),
+              eq(managedMailMessage.mailboxId, mailboxId),
+              eq(managedMailMessage.mailboxState, "draft"),
+              eq(managedMailMessage.updatedAt, existing.updatedAt)
+            )
+          )
+          .returning({ id: managedMailMessage.id });
+        if (updated.length === 0) {
+          throw new ORPCError("CONFLICT", {
+            message:
+              "This draft changed elsewhere. Reopen it before saving again.",
+          });
+        }
+      }
+      await tx
+        .delete(managedMailAttachment)
         .where(
           and(
-            eq(managedMailMessage.id, existing.id),
-            eq(managedMailMessage.mailboxId, mailboxId),
-            eq(managedMailMessage.mailboxState, "draft"),
-            eq(managedMailMessage.updatedAt, existing.updatedAt)
+            eq(managedMailAttachment.messageId, messageId),
+            eq(managedMailAttachment.mailboxId, mailboxId)
           )
-        )
-        .returning({ id: managedMailMessage.id });
-      if (updated.length === 0) {
-        throw new ORPCError("CONFLICT", {
-          message:
-            "This draft changed elsewhere. Reopen it before saving again.",
-        });
+        );
+      if (parsed.attachments.length > 0) {
+        await tx.insert(managedMailAttachment).values(
+          parsed.attachments.map((attachment, partIndex) => ({
+            ...attachment,
+            contentId: attachment.contentId ?? null,
+            createdAt: now,
+            id: crypto.randomUUID(),
+            mailboxId,
+            messageId,
+            normalizedFileName: normalizeManagedSearchValue(
+              attachment.fileName
+            ),
+            partIndex,
+          }))
+        );
       }
+      await tx
+        .update(mailbox)
+        .set({
+          contentRevision: sql`${mailbox.contentRevision} + 1`,
+          updatedAt: now,
+        })
+        .where(eq(mailbox.id, mailboxId));
     }
-    await tx
-      .delete(managedMailAttachment)
-      .where(
-        and(
-          eq(managedMailAttachment.messageId, messageId),
-          eq(managedMailAttachment.mailboxId, mailboxId)
-        )
-      );
-    if (parsed.attachments.length > 0) {
-      await tx.insert(managedMailAttachment).values(
-        parsed.attachments.map((attachment, partIndex) => ({
-          ...attachment,
-          contentId: attachment.contentId ?? null,
-          createdAt: now,
-          id: crypto.randomUUID(),
-          mailboxId,
-          messageId,
-          normalizedFileName: normalizeManagedSearchValue(attachment.fileName),
-          partIndex,
-        }))
-      );
-    }
-    await tx
-      .update(mailbox)
-      .set({
-        contentRevision: sql`${mailbox.contentRevision} + 1`,
-        updatedAt: now,
-      })
-      .where(eq(mailbox.id, mailboxId));
-  });
+  );
   const previousObject =
     existing === undefined ? null : getRawMailObjectReference(existing);
   if (previousObject) {
@@ -193,28 +207,34 @@ export const deleteManagedDraft = async (input: {
     ...input,
     requiredRoles: ["responder", "manager"],
   });
-  const deleted = await db.transaction(async (tx) => {
-    const records = await tx
-      .delete(managedMailMessage)
-      .where(
-        and(
-          eq(managedMailMessage.mailboxId, input.mailboxId),
-          eq(managedMailMessage.providerMessageId, input.draftId),
-          eq(managedMailMessage.mailboxState, "draft")
+  const deleted = await withManagedSyncTransaction<
+    typeof managedMailMessage.$inferSelect | undefined
+  >(
+    input.mailboxId,
+    (result) => ({ threadIds: result === undefined ? [] : [result.threadId] }),
+    async (tx) => {
+      const records = await tx
+        .delete(managedMailMessage)
+        .where(
+          and(
+            eq(managedMailMessage.mailboxId, input.mailboxId),
+            eq(managedMailMessage.providerMessageId, input.draftId),
+            eq(managedMailMessage.mailboxState, "draft")
+          )
         )
-      )
-      .returning();
-    if (records.length > 0) {
-      await tx
-        .update(mailbox)
-        .set({
-          contentRevision: sql`${mailbox.contentRevision} + 1`,
-          updatedAt: new Date(),
-        })
-        .where(eq(mailbox.id, input.mailboxId));
+        .returning();
+      if (records.length > 0) {
+        await tx
+          .update(mailbox)
+          .set({
+            contentRevision: sql`${mailbox.contentRevision} + 1`,
+            updatedAt: new Date(),
+          })
+          .where(eq(mailbox.id, input.mailboxId));
+      }
+      return records[0];
     }
-    return records[0];
-  });
+  );
   if (deleted !== undefined) {
     const object = getRawMailObjectReference(deleted);
     if (object) {

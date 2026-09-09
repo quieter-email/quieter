@@ -8,6 +8,9 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
 
+import { SyncCommands } from "../src/commands";
+import { synchronizeGmail } from "../src/providers/gmail";
+import type { GmailSyncProvider } from "../src/providers/gmail";
 import { SyncRepository } from "../src/repository";
 
 // Test bootstrap accepts only the disposable integration databases, never quieter_dev.
@@ -45,7 +48,10 @@ suite("transactional mail replication", () => {
     await connection.unsafe(
       'CREATE TABLE "mailbox" (id text PRIMARY KEY); CREATE TABLE "user" (id text PRIMARY KEY);'
     );
-    for (const migration of ["20260909092211_unknown_princess_powerful"]) {
+    for (const migration of [
+      "20260909092211_unknown_princess_powerful",
+      "20260909094318_glorious_white_queen",
+    ]) {
       const source = await readFile(
         new URL(
           `../../database/drizzle/${migration}/migration.sql`,
@@ -239,5 +245,167 @@ suite("transactional mail replication", () => {
     ).toBeTruthy();
     const emptySnapshot = await repository.snapshot(mailboxId, []);
     expect(emptySnapshot?.entities).toStrictEqual([]);
+  });
+
+  it("accepts an action once and executes concurrent actions in commit order", async () => {
+    const mailboxId = crypto.randomUUID();
+    const userId = crypto.randomUUID();
+    await connection`INSERT INTO mailbox (id) VALUES (${mailboxId})`;
+    await connection`INSERT INTO "user" (id) VALUES (${userId})`;
+    const executed: string[] = [];
+    const commands = new SyncCommands(repository, {
+      classifyError: () => ({ message: "Retry", permanent: false }),
+      execute: async (command) => {
+        executed.push(command.commandId);
+        await Promise.resolve();
+        return {};
+      },
+      reportError: (error) => {
+        failures.push(error);
+      },
+    });
+    const first = {
+      command: { kind: "set-read" as const, read: true },
+      commandId: crypto.randomUUID(),
+      mailboxId,
+      targets: [{ messageIds: ["message"], threadId: "thread" }],
+    };
+    const second = {
+      ...first,
+      command: { kind: "set-read" as const, read: false },
+      commandId: crypto.randomUUID(),
+    };
+    await commands.submit(userId, first);
+    const checkpoint = await repository.head(mailboxId);
+    await commands.submit(userId, first);
+    await expect(repository.head(mailboxId)).resolves.toStrictEqual(checkpoint);
+    await expect(
+      commands.submit(userId, { ...first, command: second.command })
+    ).rejects.toThrow("already used");
+    await commands.submit(userId, second);
+    await commands.process(mailboxId);
+    await commands.process(mailboxId);
+    expect(executed).toStrictEqual([first.commandId, second.commandId]);
+    await expect(commands.process(mailboxId)).resolves.toBeFalsy();
+    const rows = await connection<
+      { status: string }[]
+    >`SELECT status FROM "mailSyncCommand" WHERE "mailboxId"=${mailboxId}`;
+    expect(rows.map((row) => row.status)).toStrictEqual(["applied", "applied"]);
+  });
+
+  it("blocks later actions behind a retry and publishes a terminal failure", async () => {
+    const mailboxId = crypto.randomUUID();
+    const userId = crypto.randomUUID();
+    await connection`INSERT INTO mailbox (id) VALUES (${mailboxId})`;
+    await connection`INSERT INTO "user" (id) VALUES (${userId})`;
+    let permanent = false;
+    const commands = new SyncCommands(repository, {
+      classifyError: () => ({ message: "Action unavailable", permanent }),
+      execute: async () => {
+        await Promise.resolve();
+        throw new Error("Unavailable");
+      },
+      reportError: (error) => {
+        failures.push(error);
+      },
+    });
+    const command = {
+      command: { kind: "set-read" as const, read: true },
+      commandId: crypto.randomUUID(),
+      mailboxId,
+      targets: [{ messageIds: ["message"], threadId: "thread" }],
+    };
+    await commands.submit(userId, command);
+    await commands.process(mailboxId);
+    await expect(commands.process(mailboxId)).rejects.toThrow(
+      "already running"
+    );
+    permanent = true;
+    await connection`UPDATE "mailSyncCommand" SET "nextAttemptAt"=now() - interval '1 second' WHERE "mailboxId"=${mailboxId}`;
+    await commands.process(mailboxId);
+    const rows =
+      await connection`SELECT status, error, attempts FROM "mailSyncCommand" WHERE "mailboxId"=${mailboxId}`;
+    expect(rows[0]).toMatchObject({
+      attempts: 2,
+      error: "Action unavailable",
+      status: "failed",
+    });
+  });
+
+  it("imports Gmail bodies and advances paginated history after its final page commits", async () => {
+    const mailboxId = crypto.randomUUID();
+    await connection`INSERT INTO mailbox (id) VALUES (${mailboxId})`;
+    const stored = new Map<string, Uint8Array>();
+    const bodies = {
+      delete: async (key: string) => {
+        stored.delete(key);
+        await Promise.resolve();
+      },
+      get: async (key: string) => {
+        await Promise.resolve();
+        return stored.get(key) ?? null;
+      },
+      put: async (key: string, bytes: Uint8Array) => {
+        stored.set(key, bytes);
+        await Promise.resolve();
+      },
+    };
+    let paginated = false;
+    const observed: string[] = [];
+    const provider: GmailSyncProvider = {
+      history: async (cursor, pageToken) => {
+        observed.push(`${cursor}:${pageToken ?? "first"}`);
+        await Promise.resolve();
+        return {
+          expired: false,
+          historyId: paginated ? "30" : "20",
+          nextPageToken:
+            paginated && pageToken === undefined ? "next" : undefined,
+          threadIds: ["thread"],
+        };
+      },
+      labels: async () => {
+        await Promise.resolve();
+        return [{ id: "INBOX", name: "Inbox" }];
+      },
+      profile: async () => {
+        await Promise.resolve();
+        return { emailAddress: "fixture@example.invalid", historyId: "10" };
+      },
+      thread: async () => {
+        await Promise.resolve();
+        return {
+          messages: [
+            {
+              bodyText: "Already stored before notification",
+              id: "message",
+              internalDate: "1000",
+              labelIds: ["INBOX"],
+              threadId: "thread",
+            },
+          ],
+          threadId: "thread",
+        };
+      },
+      threads: async () => {
+        await Promise.resolve();
+        return { resultSizeEstimate: 1, threads: [{ id: "thread" }] };
+      },
+    };
+    await synchronizeGmail(repository, bodies, mailboxId, provider);
+    expect(stored.size).toBe(1);
+    paginated = true;
+    await synchronizeGmail(repository, bodies, mailboxId, provider);
+    const [unfinished] =
+      await connection`SELECT cursor, "historyPageToken" FROM "mailSyncProviderState" WHERE "mailboxId"=${mailboxId}`;
+    expect(unfinished).toMatchObject({
+      cursor: "20",
+      historyPageToken: "next",
+    });
+    await synchronizeGmail(repository, bodies, mailboxId, provider);
+    expect(observed).toStrictEqual(["10:first", "20:first", "20:next"]);
+    const [finished] =
+      await connection`SELECT cursor, "historyPageToken" FROM "mailSyncProviderState" WHERE "mailboxId"=${mailboxId}`;
+    expect(finished).toMatchObject({ cursor: "30", historyPageToken: null });
   });
 });

@@ -47,6 +47,10 @@ import {
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import { deferAutoLabelAutomation } from "../mail-automation/auto-label-events";
 import { reportAutoLabelUsage } from "../mail-automation/usage";
+import {
+  getMailSyncConfiguration,
+  mailSyncServices,
+} from "../mail-sync-runtime";
 
 const WATCH_RENEWAL_INTERVAL_MS = 1000 * 60 * 60 * 20;
 const WATCH_EXPIRATION_BUFFER_MS = 1000 * 60 * 60 * 48;
@@ -991,7 +995,7 @@ export const listGmailPubSubMaintenanceJobs = async (limit = 500) =>
           ),
           lte(
             gmailWatchState.watchRenewedAt,
-            sql`now() - interval '36 hours' - make_interval(secs => ((('x' || md5(${mailbox.id}))::bit(32)::int & 2147483647) % 7200))`
+            sql`now() - interval '20 hours' - make_interval(secs => ((('x' || md5(${mailbox.id}))::bit(32)::int & 2147483647) % 7200))`
           )
         ),
         or(
@@ -1032,7 +1036,8 @@ export const maintainGmailPubSubMailbox = async (input: {
       organizationId: gmailMailbox.organizationId ?? undefined,
       userId: gmailMailbox.ownerUserId,
     });
-    if (!entitlement.hasAccess) {
+    const syncEnabled = getMailSyncConfiguration() !== null;
+    if (!entitlement.hasAccess && !syncEnabled) {
       await disableMailboxWatch(gmailMailbox.id, gmailMailbox.ownerUserId);
       return { status: "ineligible" as const };
     }
@@ -1042,6 +1047,12 @@ export const maintainGmailPubSubMailbox = async (input: {
       topicName: input.topicName,
       userId: gmailMailbox.ownerUserId,
     });
+    if (syncEnabled) {
+      await mailSyncServices().enqueue(gmailMailbox.id);
+    }
+    if (!entitlement.hasAccess) {
+      return { status: "maintained" as const };
+    }
     const result = await processMailboxHistory({
       mailboxId: gmailMailbox.id,
       maxHistoryPages: 2,
@@ -1088,6 +1099,10 @@ export const processGmailPubSubNotification = async (
 
   if (!gmailMailbox?.ownerUserId || gmailMailbox.status !== "connected") {
     return { ignored: true, reason: "mailbox_not_connected" as const };
+  }
+
+  if (getMailSyncConfiguration() !== null) {
+    await mailSyncServices().enqueue(gmailMailbox.id);
   }
 
   await ensureWatchState(gmailMailbox.id);

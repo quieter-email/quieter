@@ -6,6 +6,8 @@
     ".": "./src/repository.ts",
     "./managed": "./src/providers/managed.ts",
     "./gmail": "./src/providers/gmail.ts",
+    "./lease": "./src/providers/lease.ts",
+    "./commands": "./src/commands.ts",
     "./body-store": "./src/body-store.ts",
     "./auth": "./src/auth.ts"
   },

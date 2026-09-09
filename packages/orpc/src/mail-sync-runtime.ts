@@ -4,8 +4,10 @@ import { db } from "@quieter/database/client";
 import type { DatabaseTransaction } from "@quieter/database/client";
 import { serverEnv } from "@quieter/env/server";
 import { reportError } from "@quieter/observability";
+import type { SyncBody } from "@quieter/sync";
 import { SyncRepository } from "@quieter/sync-server";
 import type { SyncDelivery } from "@quieter/sync-server";
+import { encodeSyncBody } from "@quieter/sync-server/body-store";
 import type { SyncBodyStore } from "@quieter/sync-server/body-store";
 import { projectManagedMailbox } from "@quieter/sync-server/managed";
 import type { ManagedSyncSelection } from "@quieter/sync-server/managed";
@@ -125,7 +127,9 @@ export const mailSyncServices = () => {
 
 export const withManagedSyncTransaction = async <Result>(
   mailboxId: string,
-  selection: ManagedSyncSelection,
+  selection:
+    | ManagedSyncSelection
+    | ((result: NoInfer<Result>) => ManagedSyncSelection),
   run: (database: DatabaseTransaction) => Promise<Result>
 ): Promise<Result> => {
   if (getMailSyncConfiguration() === null) {
@@ -134,7 +138,24 @@ export const withManagedSyncTransaction = async <Result>(
   const { repository } = mailSyncServices();
   return await repository.transaction(mailboxId, async (context) => {
     const result = await run(context.database);
-    await projectManagedMailbox(context, selection);
+    await projectManagedMailbox(
+      context,
+      typeof selection === "function" ? selection(result) : selection
+    );
     return result;
   });
+};
+
+export const storeManagedSyncBody = async (
+  mailboxId: string,
+  body: SyncBody
+) => {
+  if (getMailSyncConfiguration() === null) {
+    return;
+  }
+  const encoded = encodeSyncBody(body);
+  await mailSyncServices().bodies.put(
+    `sync/bodies/${encodeURIComponent(mailboxId)}/${encoded.hash}`,
+    encoded.payload
+  );
 };

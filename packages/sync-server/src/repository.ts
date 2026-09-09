@@ -50,6 +50,7 @@ export type SyncEntityWrite = {
 export type SyncTransaction = {
   database: DatabaseTransaction;
   mailboxId: string;
+  sequence: bigint;
   put: (change: SyncEntityWrite) => void;
 };
 export type SyncDelivery = (batch: SyncBatch) => Promise<void>;
@@ -102,14 +103,15 @@ export class SyncRepository {
         throw new Error("Mailbox stream is unavailable.");
       }
       const writes = new Map<string, SyncEntityWrite>();
+      const sequence = stream.sequence + 1n;
       const result = await run({
         database,
         mailboxId,
         put: (change) => {
           writes.set(`${change.kind}:${change.id}`, change);
         },
+        sequence,
       });
-      const sequence = stream.sequence + 1n;
       const changes: SyncChange[] = [];
       for (const write of writes.values()) {
         const [existing] = await database
@@ -283,6 +285,7 @@ export class SyncRepository {
                         ? inArray(mailSyncEntity.kind, [
                             "label",
                             "overview",
+                            "command",
                             "saved-view",
                           ])
                         : undefined

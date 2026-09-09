@@ -11,6 +11,10 @@ import { parseRawMailMessage } from "@quieter/mail/raw-message";
 import type { ParsedRawMailMessage } from "@quieter/mail/raw-message";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
+import {
+  storeManagedSyncBody,
+  withManagedSyncTransaction,
+} from "../../mail-sync-runtime";
 import { processManagedMailAutomation } from "../automation";
 import { inheritManagedThreadLabels } from "../labels/repository";
 import { applyManagedRulesToMessage } from "../rules/evaluator";
@@ -109,94 +113,104 @@ const ingestManagedMessageForMailbox = async (input: {
     input.parsed,
     deriveThreadId(input.targetMailboxId, canonicalRef)
   );
-  const inserted = await db.transaction(async (tx) => {
-    const [message] = await tx
-      .insert(managedMailMessage)
-      .values({
-        bcc: input.parsed.bcc ?? null,
-        bccNormalized: normalizeManagedSearchValue(input.parsed.bcc),
-        bodyHtml: input.parsed.bodyHtml ?? null,
-        bodyText: input.parsed.bodyText ?? null,
-        cc: input.parsed.cc ?? null,
-        ccNormalized: normalizeManagedSearchValue(input.parsed.cc),
-        createdAt: new Date(),
-        direction: "inbound",
-        from: input.parsed.from,
-        fromNormalized: normalizeManagedSearchValue(input.parsed.from),
-        headers: input.parsed.headers,
-        id,
-        inReplyTo: input.parsed.inReplyTo ?? null,
-        isRead: false,
-        mailboxId: input.targetMailboxId,
-        messageHeaderId: input.parsed.messageHeaderId ?? null,
-        providerMessageId: input.providerMessageId,
-        rawObjectBucket: input.rawObjectBucket,
-        rawObjectKey: input.rawObjectKey,
-        rawObjectProvider: input.rawObjectProvider,
-        rawSizeBytes: input.rawSizeBytes,
-        references: input.parsed.references ?? null,
-        replyTo: input.parsed.replyTo ?? null,
-        s3Bucket:
-          input.rawObjectProvider === "s3"
-            ? input.rawObjectBucket
-            : (input.s3Bucket ?? null),
-        s3Key:
-          input.rawObjectProvider === "s3"
-            ? input.rawObjectKey
-            : (input.s3Key ?? null),
-        searchText: createManagedMessageSearchText(input.parsed),
-        sentAt,
-        snippet: input.parsed.snippet ?? null,
-        subject: input.parsed.subject ?? null,
-        threadId,
-        to: input.parsed.to ?? input.recipients.join(", "),
-        toNormalized: normalizeManagedSearchValue(
-          input.parsed.to ?? input.recipients.join(", ")
-        ),
-        updatedAt: new Date(),
-      })
-      .onConflictDoNothing({
-        target: [
-          managedMailMessage.mailboxId,
-          managedMailMessage.providerMessageId,
-        ],
-      })
-      .returning({
-        id: managedMailMessage.id,
-        mailboxId: managedMailMessage.mailboxId,
-        threadId: managedMailMessage.threadId,
-      });
-
-    if (message !== undefined && input.parsed.attachments.length > 0) {
-      await tx.insert(managedMailAttachment).values(
-        input.parsed.attachments.map((attachment, partIndex) => ({
-          contentId: attachment.contentId ?? null,
+  await storeManagedSyncBody(input.targetMailboxId, {
+    bodyHtml: input.parsed.bodyHtml,
+    bodyText: input.parsed.bodyText,
+  });
+  const inserted = await withManagedSyncTransaction(
+    input.targetMailboxId,
+    { threadIds: [threadId] },
+    async (tx) => {
+      const [message] = await tx
+        .insert(managedMailMessage)
+        .values({
+          bcc: input.parsed.bcc ?? null,
+          bccNormalized: normalizeManagedSearchValue(input.parsed.bcc),
+          bodyHtml: input.parsed.bodyHtml ?? null,
+          bodyText: input.parsed.bodyText ?? null,
+          cc: input.parsed.cc ?? null,
+          ccNormalized: normalizeManagedSearchValue(input.parsed.cc),
           createdAt: new Date(),
-          fileName: attachment.fileName,
-          id: randomUUID(),
-          inline: attachment.inline,
-          mailboxId: message.mailboxId,
-          messageId: message.id,
-          mimeType: attachment.mimeType,
-          normalizedFileName: normalizeManagedSearchValue(attachment.fileName),
-          partIndex,
-          size: attachment.size,
-        }))
-      );
-    }
-
-    if (message !== undefined) {
-      await tx
-        .update(mailbox)
-        .set({
-          contentRevision: sql`${mailbox.contentRevision} + 1`,
+          direction: "inbound",
+          from: input.parsed.from,
+          fromNormalized: normalizeManagedSearchValue(input.parsed.from),
+          headers: input.parsed.headers,
+          id,
+          inReplyTo: input.parsed.inReplyTo ?? null,
+          isRead: false,
+          mailboxId: input.targetMailboxId,
+          messageHeaderId: input.parsed.messageHeaderId ?? null,
+          providerMessageId: input.providerMessageId,
+          rawObjectBucket: input.rawObjectBucket,
+          rawObjectKey: input.rawObjectKey,
+          rawObjectProvider: input.rawObjectProvider,
+          rawSizeBytes: input.rawSizeBytes,
+          references: input.parsed.references ?? null,
+          replyTo: input.parsed.replyTo ?? null,
+          s3Bucket:
+            input.rawObjectProvider === "s3"
+              ? input.rawObjectBucket
+              : (input.s3Bucket ?? null),
+          s3Key:
+            input.rawObjectProvider === "s3"
+              ? input.rawObjectKey
+              : (input.s3Key ?? null),
+          searchText: createManagedMessageSearchText(input.parsed),
+          sentAt,
+          snippet: input.parsed.snippet ?? null,
+          subject: input.parsed.subject ?? null,
+          threadId,
+          to: input.parsed.to ?? input.recipients.join(", "),
+          toNormalized: normalizeManagedSearchValue(
+            input.parsed.to ?? input.recipients.join(", ")
+          ),
           updatedAt: new Date(),
         })
-        .where(eq(mailbox.id, input.targetMailboxId));
-    }
+        .onConflictDoNothing({
+          target: [
+            managedMailMessage.mailboxId,
+            managedMailMessage.providerMessageId,
+          ],
+        })
+        .returning({
+          id: managedMailMessage.id,
+          mailboxId: managedMailMessage.mailboxId,
+          threadId: managedMailMessage.threadId,
+        });
 
-    return message;
-  });
+      if (message !== undefined && input.parsed.attachments.length > 0) {
+        await tx.insert(managedMailAttachment).values(
+          input.parsed.attachments.map((attachment, partIndex) => ({
+            contentId: attachment.contentId ?? null,
+            createdAt: new Date(),
+            fileName: attachment.fileName,
+            id: randomUUID(),
+            inline: attachment.inline,
+            mailboxId: message.mailboxId,
+            messageId: message.id,
+            mimeType: attachment.mimeType,
+            normalizedFileName: normalizeManagedSearchValue(
+              attachment.fileName
+            ),
+            partIndex,
+            size: attachment.size,
+          }))
+        );
+      }
+
+      if (message !== undefined) {
+        await tx
+          .update(mailbox)
+          .set({
+            contentRevision: sql`${mailbox.contentRevision} + 1`,
+            updatedAt: new Date(),
+          })
+          .where(eq(mailbox.id, input.targetMailboxId));
+      }
+
+      return message;
+    }
+  );
 
   if (inserted !== undefined) {
     await runPostIngestionOrganization({

@@ -3,6 +3,7 @@ import { db } from "@quieter/database/client";
 import {
   mailbox,
   mailSyncEntity,
+  mailSyncCommand,
   mailSyncProviderState,
   mailSyncStream,
 } from "@quieter/database/schema";
@@ -13,9 +14,8 @@ import {
   readSyncBody,
 } from "@quieter/sync-server/body-store";
 import {
-  fetchGmailSyncThreads,
+  hydrateGmailThreads,
   gmailSyncProvider,
-  projectGmailThreads,
   synchronizeGmail,
 } from "@quieter/sync-server/gmail";
 import {
@@ -25,6 +25,7 @@ import {
 import { and, asc, eq, isNull, lte, or, sql } from "drizzle-orm";
 
 import { runAuthorizedGmailMailbox } from "./gmail-mailbox-access";
+import { mailSyncCommandService } from "./mail-sync-commands";
 import {
   getMailSyncConfiguration,
   mailSyncServices,
@@ -52,9 +53,11 @@ export const runMailboxSynchronization = async (mailboxId: string) => {
     return { hasMore: false };
   }
   const { bodies, repository } = mailSyncServices();
+  if (await mailSyncCommandService().process(mailboxId)) {
+    return { hasMore: true };
+  }
   if (selected.provider === "managed") {
-    await bootstrapManagedMailbox(repository, bodies, mailboxId);
-    return { hasMore: false };
+    return await bootstrapManagedMailbox(repository, bodies, mailboxId);
   }
   if (!selected.ownerUserId) {
     throw new Error("Mailbox ownership is missing.");
@@ -77,6 +80,22 @@ export const maintainMailSynchronization = async () => {
   }
   const { repository, enqueue } = mailSyncServices();
   await repository.recoverOutbox();
+  const pendingCommands = await db
+    .selectDistinct({ mailboxId: mailSyncCommand.mailboxId })
+    .from(mailSyncCommand)
+    .where(
+      and(
+        or(
+          eq(mailSyncCommand.status, "accepted"),
+          eq(mailSyncCommand.status, "running")
+        ),
+        lte(mailSyncCommand.nextAttemptAt, new Date())
+      )
+    )
+    .limit(50);
+  for (const command of pendingCommands) {
+    await enqueue(command.mailboxId);
+  }
   const due = await db
     .select({ id: mailbox.id })
     .from(mailbox)
@@ -200,15 +219,13 @@ export const mailSyncOperations = {
       await runAuthorizedGmailMailbox(
         { mailboxId: input.mailboxId, userId: input.userId },
         async (token) => {
-          const threads = await fetchGmailSyncThreads(
-            gmailSyncProvider(token, AbortSignal.timeout(45_000)),
+          await hydrateGmailThreads(
+            repository,
             bodies,
             input.mailboxId,
+            gmailSyncProvider(token, AbortSignal.timeout(45_000)),
             input.threadIds
           );
-          await repository.transaction(input.mailboxId, async (context) => {
-            await projectGmailThreads(context, threads);
-          });
         }
       );
     }

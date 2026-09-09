@@ -710,7 +710,7 @@ export const mailSyncProviderState = pgTable("mailSyncProviderState", {
     .defaultNow(),
   pageToken: text("pageToken"),
   phase: text("phase")
-    .$type<"bootstrap" | "history" | "repair" | "ready">()
+    .$type<"bootstrap" | "history" | "repair" | "sweep" | "ready">()
     .notNull()
     .default("bootstrap"),
   updatedAt: timestamp("updatedAt", { withTimezone: true })
@@ -736,6 +736,7 @@ export const mailSyncCommand = pgTable(
       .defaultNow(),
     payload: jsonb("payload").$type<SyncCommand>().notNull(),
     payloadHash: text("payloadHash").notNull(),
+    sequence: bigint("sequence", { mode: "bigint" }),
     status: text("status")
       .$type<"accepted" | "running" | "applied" | "failed">()
       .notNull()
@@ -750,6 +751,7 @@ export const mailSyncCommand = pgTable(
   (table) => [
     primaryKey({ columns: [table.mailboxId, table.commandId] }),
     index("mail_sync_command_due_idx").on(table.status, table.nextAttemptAt),
+    index("mail_sync_command_order_idx").on(table.mailboxId, table.sequence),
     index("mail_sync_command_user_idx").on(
       table.userId,
       table.mailboxId,

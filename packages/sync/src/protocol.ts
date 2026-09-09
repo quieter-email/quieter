@@ -69,7 +69,44 @@ export const syncMessageSchema = z.object({
 });
 export type SyncMessage = z.infer<typeof syncMessageSchema>;
 
+export const syncCommandSchema = z.object({
+  command: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("set-read"), read: z.boolean() }),
+    z.object({
+      destination: z.enum(["archive", "inbox", "spam", "trash"]),
+      kind: z.literal("move"),
+    }),
+    z.object({
+      addIds: z.array(syncIdSchema).max(100),
+      kind: z.literal("set-labels"),
+      removeIds: z.array(syncIdSchema).max(100),
+    }),
+    z.object({ kind: z.literal("delete-permanently") }),
+  ]),
+  commandId: z.uuid(),
+  mailboxId: syncIdSchema,
+  targets: z
+    .array(
+      z.object({
+        messageIds: z.array(syncIdSchema).min(1).max(100),
+        threadId: syncIdSchema,
+      })
+    )
+    .min(1)
+    .max(100),
+});
+export type SyncCommand = z.infer<typeof syncCommandSchema>;
+
 export const syncEntityDataSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("command"),
+    value: z.object({
+      command: syncCommandSchema,
+      error: z.string().nullable(),
+      status: z.enum(["accepted", "running", "applied", "failed"]),
+      updatedAt: z.string(),
+    }),
+  }),
   z.object({ kind: z.literal("message"), value: syncMessageSchema }),
   z.object({
     kind: z.literal("thread"),
@@ -120,6 +157,7 @@ export const syncEntityDataSchema = z.discriminatedUnion("kind", [
 ]);
 export type SyncEntityData = z.infer<typeof syncEntityDataSchema>;
 export const syncEntityKindSchema = z.enum([
+  "command",
   "message",
   "thread",
   "label",
@@ -162,34 +200,6 @@ export const syncSnapshotSchema = z.object({
   mailboxId: syncIdSchema,
 });
 export type SyncSnapshot = z.infer<typeof syncSnapshotSchema>;
-
-export const syncCommandSchema = z.object({
-  command: z.discriminatedUnion("kind", [
-    z.object({ kind: z.literal("set-read"), read: z.boolean() }),
-    z.object({
-      destination: z.enum(["archive", "inbox", "spam", "trash"]),
-      kind: z.literal("move"),
-    }),
-    z.object({
-      addIds: z.array(syncIdSchema).max(100),
-      kind: z.literal("set-labels"),
-      removeIds: z.array(syncIdSchema).max(100),
-    }),
-    z.object({ kind: z.literal("delete-permanently") }),
-  ]),
-  commandId: z.uuid(),
-  mailboxId: syncIdSchema,
-  targets: z
-    .array(
-      z.object({
-        messageIds: z.array(syncIdSchema).min(1).max(100),
-        threadId: syncIdSchema,
-      })
-    )
-    .min(1)
-    .max(100),
-});
-export type SyncCommand = z.infer<typeof syncCommandSchema>;
 
 export const syncClientFrameSchema = z.discriminatedUnion("type", [
   z.object({

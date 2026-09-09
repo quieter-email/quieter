@@ -13,11 +13,12 @@ import {
 } from "@quieter/gmail";
 import type { MailLabelListItem } from "@quieter/mail/messages";
 import type { SyncMessage } from "@quieter/sync";
-import { and, eq, inArray, isNull, lt, ne, or } from "drizzle-orm";
+import { and, eq, inArray, isNull, isNotNull, ne, or } from "drizzle-orm";
 
 import { prepareSyncMessage } from "../body-store";
 import type { SyncBodyStore } from "../body-store";
 import type { SyncRepository, SyncTransaction } from "../repository";
+import { assertProviderLease, withProviderLease } from "./lease";
 
 export type GmailSyncProvider = {
   profile: () => ReturnType<typeof getGmailProfile>;
@@ -160,33 +161,9 @@ export const synchronizeGmail = async (
   store: SyncBodyStore,
   mailboxId: string,
   provider: GmailSyncProvider
-) => {
-  await repository.database
-    .insert(mailSyncProviderState)
-    .values({ mailboxId })
-    .onConflictDoNothing();
-  const leaseId = crypto.randomUUID();
-  const [state] = await repository.database
-    .update(mailSyncProviderState)
-    .set({
-      leaseExpiresAt: new Date(Date.now() + 60_000),
-      leaseId,
-    })
-    .where(
-      and(
-        eq(mailSyncProviderState.mailboxId, mailboxId),
-        or(
-          isNull(mailSyncProviderState.leaseExpiresAt),
-          lt(mailSyncProviderState.leaseExpiresAt, new Date())
-        )
-      )
-    )
-    .returning();
-  if (state === undefined) {
-    return { busy: true, hasMore: true };
-  }
-  const generation = state.inventoryGeneration ?? crypto.randomUUID();
-  try {
+) =>
+  await withProviderLease(repository, mailboxId, async (state, leaseId) => {
+    const generation = state.inventoryGeneration ?? crypto.randomUUID();
     const initialProfile =
       state.cursor === null ? await provider.profile() : null;
     const cursor = state.cursor ?? initialProfile?.historyId;
@@ -223,7 +200,9 @@ export const synchronizeGmail = async (
       return { busy: false, hasMore: true };
     }
     const page =
-      state.phase === "ready" || history.nextPageToken
+      state.phase === "ready" ||
+      state.phase === "sweep" ||
+      history.nextPageToken
         ? null
         : await provider.threads(state.pageToken ?? undefined);
     const threadIds = [
@@ -242,20 +221,12 @@ export const synchronizeGmail = async (
         ? await provider.labels()
         : null;
     const importComplete =
-      state.phase === "ready" || (page !== null && !page.nextPageToken);
+      state.phase === "ready" ||
+      state.phase === "sweep" ||
+      (page !== null && !page.nextPageToken);
+    let sweepComplete = state.phase !== "repair" && state.phase !== "sweep";
     await repository.transaction(mailboxId, async (context) => {
-      const [fence] = await context.database
-        .select()
-        .from(mailSyncProviderState)
-        .where(eq(mailSyncProviderState.mailboxId, mailboxId))
-        .for("update");
-      if (
-        fence?.leaseId !== leaseId ||
-        fence.leaseExpiresAt === null ||
-        fence.leaseExpiresAt.getTime() <= Date.now()
-      ) {
-        throw new Error("Mailbox processing ownership expired.");
-      }
+      await assertProviderLease(context, leaseId);
       await projectGmailThreads(context, threads, generation);
       if (labels !== null) {
         const previous = await context.database
@@ -281,7 +252,10 @@ export const synchronizeGmail = async (
           }
         }
       }
-      if (importComplete && state.phase === "repair") {
+      if (
+        importComplete &&
+        (state.phase === "repair" || state.phase === "sweep")
+      ) {
         const obsolete = await context.database
           .select()
           .from(mailSyncEntity)
@@ -289,12 +263,15 @@ export const synchronizeGmail = async (
             and(
               eq(mailSyncEntity.mailboxId, mailboxId),
               inArray(mailSyncEntity.kind, ["message", "thread"]),
+              isNotNull(mailSyncEntity.data),
               or(
                 isNull(mailSyncEntity.providerGeneration),
                 ne(mailSyncEntity.providerGeneration, generation)
               )
             )
-          );
+          )
+          .limit(500);
+        sweepComplete = obsolete.length < 500;
         // Writes prepared in this transaction have not reached the projection table yet.
         const refreshed = new Set(threadIds);
         for (const entity of obsolete) {
@@ -307,6 +284,10 @@ export const synchronizeGmail = async (
             });
           }
         }
+      }
+      let { phase } = state;
+      if (importComplete) {
+        phase = sweepComplete ? "ready" : "sweep";
       }
       await context.database
         .update(mailSyncProviderState)
@@ -322,7 +303,7 @@ export const synchronizeGmail = async (
           ),
           pageToken:
             page === null ? state.pageToken : (page.nextPageToken ?? null),
-          phase: importComplete ? "ready" : state.phase,
+          phase,
           updatedAt: new Date(),
         })
         .where(eq(mailSyncProviderState.mailboxId, mailboxId));
@@ -333,17 +314,32 @@ export const synchronizeGmail = async (
     });
     return {
       busy: false,
-      hasMore: !importComplete || Boolean(history.nextPageToken),
+      hasMore:
+        !importComplete || !sweepComplete || Boolean(history.nextPageToken),
     };
-  } finally {
-    await repository.database
-      .update(mailSyncProviderState)
-      .set({ leaseExpiresAt: null, leaseId: null })
-      .where(
-        and(
-          eq(mailSyncProviderState.mailboxId, mailboxId),
-          eq(mailSyncProviderState.leaseId, leaseId)
-        )
+  });
+
+export const hydrateGmailThreads = async (
+  repository: SyncRepository,
+  store: SyncBodyStore,
+  mailboxId: string,
+  provider: GmailSyncProvider,
+  threadIds: string[]
+) => {
+  await withProviderLease(repository, mailboxId, async (state, leaseId) => {
+    const threads = await fetchGmailSyncThreads(
+      provider,
+      store,
+      mailboxId,
+      threadIds
+    );
+    await repository.transaction(mailboxId, async (context) => {
+      await assertProviderLease(context, leaseId);
+      await projectGmailThreads(
+        context,
+        threads,
+        state.inventoryGeneration ?? undefined
       );
-  }
+    });
+  });
 };

@@ -1,5 +1,6 @@
 import {
   mailSyncEntity,
+  mailSyncProviderState,
   mailSyncStream,
   managedMailAttachment,
   managedMailLabel,
@@ -9,11 +10,13 @@ import {
 import { parseDraftAnchorFromHeaderReader } from "@quieter/mail/compose/draft-anchor";
 import type { MessageListItem } from "@quieter/mail/messages";
 import type { SyncMessage } from "@quieter/sync";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lt, or, sql } from "drizzle-orm";
+import { z } from "zod";
 
 import { encodeSyncBody, prepareSyncMessage } from "../body-store";
 import type { SyncBodyStore } from "../body-store";
 import type { SyncRepository, SyncTransaction } from "../repository";
+import { assertProviderLease, withProviderLease } from "./lease";
 
 type ManagedMessage = typeof managedMailMessage.$inferSelect;
 export type ManagedSyncSelection = {
@@ -332,28 +335,82 @@ export const bootstrapManagedMailbox = async (
   repository: SyncRepository,
   store: SyncBodyStore,
   mailboxId: string
-) => {
-  const messages = await repository.database
-    .select()
-    .from(managedMailMessage)
-    .where(eq(managedMailMessage.mailboxId, mailboxId))
-    .orderBy(desc(managedMailMessage.sentAt))
-    .limit(200);
-  for (const message of messages) {
-    await prepareSyncMessage(store, mailboxId, {
-      ...managedSyncMessage(message, [], []),
-      bodyHtml: message.bodyHtml ?? undefined,
-      bodyText: message.bodyText ?? undefined,
+) =>
+  await withProviderLease(repository, mailboxId, async (state, leaseId) => {
+    if (state.phase === "ready") {
+      return { hasMore: false };
+    }
+    const cursor =
+      state.pageToken === null
+        ? null
+        : z
+            .object({ sentAt: z.string(), threadId: z.string() })
+            .parse(JSON.parse(state.pageToken));
+    const threads = await repository.database
+      .select({
+        sentAt: sql<string>`max(${managedMailMessage.sentAt})::text`,
+        threadId: managedMailMessage.threadId,
+      })
+      .from(managedMailMessage)
+      .where(eq(managedMailMessage.mailboxId, mailboxId))
+      .groupBy(managedMailMessage.threadId)
+      .having(
+        cursor === null
+          ? undefined
+          : or(
+              sql`max(${managedMailMessage.sentAt}) < ${cursor.sentAt}::timestamp`,
+              and(
+                sql`max(${managedMailMessage.sentAt}) = ${cursor.sentAt}::timestamp`,
+                lt(managedMailMessage.threadId, cursor.threadId)
+              )
+            )
+      )
+      .orderBy(
+        desc(sql`max(${managedMailMessage.sentAt})`),
+        desc(managedMailMessage.threadId)
+      )
+      .limit(25);
+    const threadIds = threads.map((thread) => thread.threadId);
+    const messages =
+      threadIds.length === 0
+        ? []
+        : await repository.database
+            .select()
+            .from(managedMailMessage)
+            .where(
+              and(
+                eq(managedMailMessage.mailboxId, mailboxId),
+                inArray(managedMailMessage.threadId, threadIds)
+              )
+            );
+    for (let offset = 0; offset < messages.length; offset += 4) {
+      await Promise.all(
+        messages.slice(offset, offset + 4).map(async (message) => {
+          await prepareSyncMessage(store, mailboxId, {
+            ...managedSyncMessage(message, [], []),
+            bodyHtml: message.bodyHtml ?? undefined,
+            bodyText: message.bodyText ?? undefined,
+          });
+        })
+      );
+    }
+    const hasMore = threads.length === 25;
+    await repository.transaction(mailboxId, async (context) => {
+      await assertProviderLease(context, leaseId);
+      await projectManagedMailbox(context, { labels: true, threadIds });
+      await context.database
+        .update(mailSyncProviderState)
+        .set({
+          lastSyncedAt: new Date(),
+          pageToken: hasMore ? JSON.stringify(threads.at(-1)) : null,
+          phase: hasMore ? "bootstrap" : "ready",
+          updatedAt: new Date(),
+        })
+        .where(eq(mailSyncProviderState.mailboxId, mailboxId));
+      await context.database
+        .update(mailSyncStream)
+        .set({ initialized: true })
+        .where(eq(mailSyncStream.mailboxId, mailboxId));
     });
-  }
-  await repository.transaction(mailboxId, async (context) => {
-    await projectManagedMailbox(context, {
-      labels: true,
-      threadIds: messages.map((message) => message.threadId),
-    });
-    await context.database
-      .update(mailSyncStream)
-      .set({ initialized: true })
-      .where(eq(mailSyncStream.mailboxId, mailboxId));
+    return { hasMore };
   });
-};
