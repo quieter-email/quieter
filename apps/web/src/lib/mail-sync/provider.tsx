@@ -18,6 +18,7 @@ export const MailSyncProvider = ({
   userId: string | undefined;
 }) => {
   const queryClient = useQueryClient();
+  // react-doctor-disable-next-line react-doctor/effect-needs-cleanup -- The cleanup aborts startup, removes listeners, unsubscribes the query observer, and stops the worker.
   useEffect((): (() => void) | undefined => {
     if (userId === undefined) {
       return undefined;

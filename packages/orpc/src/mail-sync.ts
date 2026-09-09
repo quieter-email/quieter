@@ -6,8 +6,10 @@ import {
   mailSyncCommand,
   mailSyncProviderState,
   mailSyncStream,
+  session,
 } from "@quieter/database/schema";
 import type { SyncCheckpoint } from "@quieter/sync";
+import { visibleSyncChanges } from "@quieter/sync";
 import { createSyncTicket } from "@quieter/sync-server/auth";
 import {
   prepareSyncMessage,
@@ -41,6 +43,19 @@ export {
 } from "./mail-sync-runtime";
 export const authorizeSyncMailbox = async (mailboxId: string, userId: string) =>
   await assertAccessibleMailbox({ mailboxId, userId });
+
+export const authorizeSyncSession = async (
+  sessionId: string,
+  userId: string
+) => {
+  const [active] = await db
+    .select({ expiresAt: session.expiresAt })
+    .from(session)
+    .where(and(eq(session.id, sessionId), eq(session.userId, userId)));
+  if (active === undefined || active.expiresAt.getTime() <= Date.now()) {
+    throw new ORPCError("UNAUTHORIZED", { message: "Sign in to continue." });
+  }
+};
 
 export const runMailboxSynchronization = async (mailboxId: string) => {
   if (!isMailSyncEnabled()) {
@@ -182,7 +197,7 @@ export const mailSyncOperations = {
     }
     return body;
   },
-  connection: (userId: string) => {
+  connection: (userId: string, sessionId: string) => {
     const configuration = getMailSyncConfiguration();
     if (configuration === null) {
       return { url: null };
@@ -191,7 +206,7 @@ export const mailSyncOperations = {
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
     url.searchParams.set(
       "ticket",
-      createSyncTicket(userId, configuration.secret)
+      createSyncTicket(userId, sessionId, configuration.secret)
     );
     return { url: url.toString() };
   },
@@ -230,7 +245,16 @@ export const mailSyncOperations = {
         }
       );
     }
-    return await repository.snapshot(input.mailboxId, input.threadIds);
+    const snapshot = await repository.snapshot(
+      input.mailboxId,
+      input.threadIds
+    );
+    return snapshot === null
+      ? null
+      : {
+          ...snapshot,
+          entities: visibleSyncChanges(snapshot.entities, input.userId),
+        };
   },
   replay: async (input: {
     mailboxId: string;
@@ -238,10 +262,17 @@ export const mailSyncOperations = {
     checkpoint: SyncCheckpoint;
   }) => {
     await authorizeSyncMailbox(input.mailboxId, input.userId);
-    return await mailSyncServices().repository.replay(
+    const replay = await mailSyncServices().repository.replay(
       input.mailboxId,
       input.checkpoint
     );
+    return {
+      ...replay,
+      batches: replay.batches.map((batch) => ({
+        ...batch,
+        changes: visibleSyncChanges(batch.changes, input.userId),
+      })),
+    };
   },
   snapshot: async (input: {
     mailboxId: string;
@@ -263,6 +294,15 @@ export const mailSyncOperations = {
         await enqueue(input.mailboxId);
       }
     }
-    return await repository.snapshot(input.mailboxId, input.threadIds);
+    const snapshot = await repository.snapshot(
+      input.mailboxId,
+      input.threadIds
+    );
+    return snapshot === null
+      ? null
+      : {
+          ...snapshot,
+          entities: visibleSyncChanges(snapshot.entities, input.userId),
+        };
   },
 };

@@ -34,6 +34,7 @@ import {
   GMAIL_SCOPES,
   runAuthorizedGmailMailbox,
 } from "../gmail-mailbox-access";
+import { notifyMailboxAccessChanged } from "../mail-sync-runtime";
 import { getOrganizationApiMailboxId } from "../organization-api-mail";
 import {
   assertOwnedGmailMailbox,
@@ -1256,6 +1257,7 @@ export const disconnectGmailMailbox = async (input: {
     .where(
       and(eq(user.id, input.userId), eq(user.defaultMailboxId, input.mailboxId))
     );
+  await notifyMailboxAccessChanged(input.mailboxId, [input.userId]);
   return { disconnected: true, mailboxId: input.mailboxId };
 };
 

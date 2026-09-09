@@ -1,8 +1,13 @@
 import {
   authorizeSyncMailbox,
+  authorizeSyncSession,
   mailSyncServices,
 } from "@quieter/orpc/mail-sync";
-import { encodeSyncBatch, syncClientFrameSchema } from "@quieter/sync";
+import {
+  encodeSyncBatch,
+  syncClientFrameSchema,
+  visibleSyncChanges,
+} from "@quieter/sync";
 import type { SyncBatch, SyncServerFrame } from "@quieter/sync";
 import { verifySyncTicket } from "@quieter/sync-server/auth";
 import { DurableObject } from "cloudflare:workers";
@@ -13,6 +18,7 @@ import { withSyncRuntime } from "./runtime";
 const attachmentSchema = z.object({
   createdAt: z.number(),
   id: z.uuid(),
+  sessionId: z.string(),
   userId: z.string(),
 });
 type Subscription = {
@@ -35,7 +41,7 @@ export class UserSync extends DurableObject<SyncEnv> {
     );
   }
 
-  fetch(request: Request) {
+  async fetch(request: Request) {
     if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
       return new Response(null, { status: 426 });
     }
@@ -46,6 +52,19 @@ export class UserSync extends DurableObject<SyncEnv> {
       new URL(request.url).searchParams.get("ticket") ?? "",
       secret
     );
+    try {
+      await withSyncRuntime(this.env, async () => {
+        await authorizeSyncSession(claims.sessionId, claims.userId);
+      });
+    } catch (error) {
+      const parsed = z
+        .object({ code: z.literal("UNAUTHORIZED") })
+        .safeParse(error);
+      if (parsed.success) {
+        return new Response(null, { status: 401 });
+      }
+      throw error;
+    }
     const sockets = this.ctx.getWebSockets();
     if (sockets.length >= 6) {
       sockets[0].close(1008, "Connection limit reached");
@@ -54,6 +73,7 @@ export class UserSync extends DurableObject<SyncEnv> {
     server.serializeAttachment({
       createdAt: Date.now(),
       id: crypto.randomUUID(),
+      sessionId: claims.sessionId,
       userId: claims.userId,
     });
     this.ctx.acceptWebSocket(server);
@@ -70,7 +90,14 @@ export class UserSync extends DurableObject<SyncEnv> {
       socket.close(1000, "Reconnect required");
       return;
     }
-    const parsed = syncClientFrameSchema.safeParse(JSON.parse(message));
+    let raw: unknown;
+    try {
+      raw = JSON.parse(message);
+    } catch {
+      socket.close(1008, "Invalid message");
+      return;
+    }
+    const parsed = syncClientFrameSchema.safeParse(raw);
     if (!parsed.success) {
       socket.close(1008, "Invalid message");
       return;
@@ -202,6 +229,7 @@ export class UserSync extends DurableObject<SyncEnv> {
     const attachment = attachmentSchema.parse(socket.deserializeAttachment());
     try {
       await withSyncRuntime(this.env, async () => {
+        await authorizeSyncSession(attachment.sessionId, attachment.userId);
         await authorizeSyncMailbox(mailboxId, attachment.userId);
       });
       return true;
@@ -301,7 +329,13 @@ export class UserSync extends DurableObject<SyncEnv> {
       if (current?.generation !== subscription.generation) {
         continue;
       }
-      const frames = encodeSyncBatch(batch, subscription.generation);
+      const frames = encodeSyncBatch(
+        {
+          ...batch,
+          changes: visibleSyncChanges(batch.changes, attachment.userId),
+        },
+        subscription.generation
+      );
       const bytes = frames.reduce(
         (sum, frame) => sum + new TextEncoder().encode(frame).byteLength,
         0
@@ -347,6 +381,15 @@ export class UserSync extends DurableObject<SyncEnv> {
       for (const frame of frames) {
         socket.send(frame);
       }
+    }
+  }
+
+  async accessChanged() {
+    for (const socket of this.ctx.getWebSockets()) {
+      await this.refreshSubscriptions(socket);
+      socket.send(
+        JSON.stringify({ type: "MAILBOXES_CHANGED" } satisfies SyncServerFrame)
+      );
     }
   }
 

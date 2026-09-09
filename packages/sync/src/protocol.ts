@@ -1,4 +1,5 @@
 import { composeDraftAnchorSchema } from "@quieter/mail/compose/schema";
+import { mailboxSavedViewDefinitionSchema } from "@quieter/mail/mailbox-organization";
 import { z } from "zod";
 
 export const SYNC_PROTOCOL_VERSION = 1;
@@ -105,6 +106,7 @@ export const syncEntityDataSchema = z.discriminatedUnion("kind", [
       error: z.string().nullable(),
       status: z.enum(["accepted", "running", "applied", "failed"]),
       updatedAt: z.string(),
+      userId: syncIdSchema,
     }),
   }),
   z.object({ kind: z.literal("message"), value: syncMessageSchema }),
@@ -126,8 +128,11 @@ export const syncEntityDataSchema = z.discriminatedUnion("kind", [
       color: z.string().nullable().optional(),
       description: z.string().nullable().optional(),
       id: syncIdSchema,
+      inclusionCriteria: z.string().nullable().optional(),
       name: z.string(),
+      position: z.number().optional(),
       type: z.string().optional(),
+      visible: z.boolean().optional(),
     }),
   }),
   z.object({
@@ -139,11 +144,14 @@ export const syncEntityDataSchema = z.discriminatedUnion("kind", [
   }),
   z.object({
     kind: z.literal("saved-view"),
-    value: z.object({
+    value: mailboxSavedViewDefinitionSchema.extend({
+      createdAt: z.string(),
+      disabledReason: z.string().nullable(),
       id: syncIdSchema,
-      name: z.string(),
+      normalizedName: z.string(),
+      ownerUserId: syncIdSchema.nullable(),
       position: z.number(),
-      query: z.string(),
+      updatedAt: z.string(),
     }),
   }),
   z.object({
@@ -175,6 +183,19 @@ export const syncChangeSchema = z
   })
   .refine((value) => value.data === null || value.data.kind === value.kind);
 export type SyncChange = z.infer<typeof syncChangeSchema>;
+
+export const visibleSyncChanges = (changes: SyncChange[], userId: string) =>
+  changes.filter(({ data }) => {
+    if (data?.kind === "command") {
+      return data.value.userId === userId;
+    }
+    if (data?.kind === "saved-view") {
+      return (
+        data.value.ownerUserId === null || data.value.ownerUserId === userId
+      );
+    }
+    return true;
+  });
 
 export const syncBatchSchema = z
   .object({
@@ -224,6 +245,7 @@ export const syncClientFrameSchema = z.discriminatedUnion("type", [
 ]);
 export type SyncClientFrame = z.infer<typeof syncClientFrameSchema>;
 export const syncServerFrameSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("MAILBOXES_CHANGED") }),
   z.object({
     batch: syncBatchSchema,
     generation: z.uuid(),
@@ -271,6 +293,9 @@ export const encodeSyncBatch = (
     return [frame];
   }
   const payload = JSON.stringify(batch);
+  if (new TextEncoder().encode(payload).byteLength > 12 * 1024 * 1024) {
+    throw new Error("Sync batch exceeds the transport limit.");
+  }
   // JSON escaping and UTF-8 can each expand a slice; leave room for both and the envelope.
   const sliceSize = Math.floor((SYNC_FRAME_BYTES - 2048) / 6);
   const total = Math.ceil(payload.length / sliceSize);

@@ -6,8 +6,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@quieter/ui/select";
+import { useMutation } from "@tanstack/react-query";
 import { useSelector } from "@tanstack/react-store";
-import { useState } from "react";
 
 import { toastError } from "#/lib/error-toast";
 import { MailSyncSession, mailSyncState } from "#/lib/mail-sync/session";
@@ -18,7 +18,26 @@ const limits = [50, 75, 100, 200, 250];
 
 export const MailCacheSettings = () => {
   const { mailboxIds, status } = useSelector(mailSyncState, (state) => state);
-  const [busy, setBusy] = useState(false);
+  // oxlint-disable-next-line react-doctor/query-mutation-missing-invalidation -- Worker events update the status store and query cache before completion.
+  const { isPending: busy, mutate: changeCache } = useMutation({
+    mutationFn: async (limit: number | null) => {
+      const selected = MailSyncSession.forMailbox(mailboxIds[0] ?? "");
+      if (selected === null) {
+        return;
+      }
+      if (limit === null) {
+        await selected.client.action({ input: null, method: "clear-cache" });
+      } else {
+        await selected.client.action({
+          input: limit * 1024 * 1024,
+          method: "budget",
+        });
+      }
+    },
+    onError: (error) => {
+      toastError(error, { boundary: "mail_cache_settings" });
+    },
+  });
   if (status === null || status.connection === "disabled") {
     return null;
   }
@@ -27,26 +46,6 @@ export const MailCacheSettings = () => {
   const options = [...new Set([...limits, budget])].toSorted(
     (left, right) => left - right
   );
-  const changeCache = async (limit: number | null) => {
-    if (session === null) {
-      return;
-    }
-    setBusy(true);
-    try {
-      if (limit === null) {
-        await session.client.action({ input: null, method: "clear-cache" });
-      } else {
-        await session.client.action({
-          input: limit * 1024 * 1024,
-          method: "budget",
-        });
-      }
-    } catch (error) {
-      toastError(error, { boundary: "mail_cache_settings" });
-    } finally {
-      setBusy(false);
-    }
-  };
   return (
     <SettingsSection title="Mail on this device">
       <SettingsRows>
@@ -56,7 +55,7 @@ export const MailCacheSettings = () => {
             <Button
               disabled={busy || session === null}
               onClick={() => {
-                void changeCache(null);
+                changeCache(null);
               }}
               size="sm"
               variant="outline"
@@ -82,7 +81,7 @@ export const MailCacheSettings = () => {
               }))}
               onValueChange={(value) => {
                 if (value !== null) {
-                  void changeCache(Number(value));
+                  changeCache(Number(value));
                 }
               }}
               value={String(budget)}

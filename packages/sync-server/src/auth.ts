@@ -7,11 +7,13 @@ const ticketSchema = z.object({
   issuedAt: z.number().int(),
   nonce: z.uuid(),
   purpose: z.literal("mail-sync-connect"),
+  sessionId: z.string().min(1).max(256),
   userId: z.string().min(1).max(256),
 });
 
 export const createSyncTicket = (
   userId: string,
+  sessionId: string,
   secret: string,
   now = Date.now()
 ) => {
@@ -24,6 +26,7 @@ export const createSyncTicket = (
       issuedAt: now,
       nonce: crypto.randomUUID(),
       purpose: "mail-sync-connect",
+      sessionId,
       userId,
     })
   ).toString("base64url");

@@ -1,8 +1,10 @@
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
+import { mailboxLabelColorSchema } from "@quieter/mail/mailbox-organization";
 import type {
   MessageListItem,
   ThreadMessagesResult,
 } from "@quieter/mail/messages";
+import type { RouterOutputs } from "@quieter/orpc";
 import type { SyncChange, SyncCommand } from "@quieter/sync";
 import type { SyncClientEvent } from "@quieter/sync-client/types";
 import type { QueryClient } from "@tanstack/react-query";
@@ -16,6 +18,11 @@ import { getCachedMessagesQueries } from "#/lib/gmail/inbox-query/query-cache";
 import { getLabelsQueryKey } from "#/lib/gmail/labels-query";
 import { getThreadQueryKey } from "#/lib/gmail/thread-query-keys";
 import { isMessageInMailbox } from "#/lib/mail";
+import {
+  getGmailUnreadCountsQueryKey,
+  getMailboxesQueryKey,
+} from "#/lib/mailboxes-query";
+import { getSavedViewsQueryKey } from "#/lib/saved-views-query";
 
 export class MailSyncQueryAdapter {
   private readonly entities = new Map<string, Map<string, SyncChange>>();
@@ -116,6 +123,15 @@ export class MailSyncQueryAdapter {
   }
 
   receive(event: SyncClientEvent) {
+    if (event.type === "mailboxes-changed") {
+      void this.queryClient.invalidateQueries({ queryKey: ["mailboxes"] });
+      return;
+    }
+    if (event.type === "session-ended") {
+      this.dispose();
+      this.queryClient.clear();
+      return;
+    }
     if (event.type === "cache-cleared") {
       this.entities.clear();
       this.details.clear();
@@ -172,12 +188,13 @@ export class MailSyncQueryAdapter {
     this.entities.set(event.mailboxId, entities);
     const threads = new Set<string>();
     let labelsChanged = false;
+    let viewsChanged = false;
     for (const entity of event.entities) {
       const key = `${entity.kind}:${entity.id}`;
-      const previous = previousEntities?.get(key);
+      const previousEntity = previousEntities?.get(key);
       if (
-        previous !== undefined &&
-        BigInt(previous.version) > BigInt(entity.version)
+        previousEntity !== undefined &&
+        BigInt(previousEntity.version) > BigInt(entity.version)
       ) {
         continue;
       }
@@ -191,7 +208,9 @@ export class MailSyncQueryAdapter {
         const message =
           entity.data?.kind === "message" ? entity.data.value : null;
         const previousMessage =
-          previous?.data?.kind === "message" ? previous.data.value : null;
+          previousEntity?.data?.kind === "message"
+            ? previousEntity.data.value
+            : null;
         const threadId = message?.threadId ?? previousMessage?.threadId;
         if (threadId !== undefined) {
           threads.add(threadId);
@@ -217,6 +236,49 @@ export class MailSyncQueryAdapter {
       if (entity.kind === "label") {
         labelsChanged = true;
       }
+      if (entity.kind === "saved-view") {
+        viewsChanged = true;
+      }
+      if (entity.data?.kind === "overview") {
+        const { counts, status } = entity.data.value;
+        const { unreadNonSpamCount } = counts;
+        if (unreadNonSpamCount !== undefined) {
+          this.queryClient.setQueryData<RouterOutputs["mail"]["listMailboxes"]>(
+            getMailboxesQueryKey(),
+            (previous) =>
+              previous === undefined
+                ? undefined
+                : {
+                    ...previous,
+                    groups: previous.groups.map((group) => ({
+                      ...group,
+                      mailboxes: group.mailboxes.map((mailbox) =>
+                        mailbox.id === event.mailboxId
+                          ? {
+                              ...mailbox,
+                              connectionStatus:
+                                status === "needs_reconnect"
+                                  ? "needs_reconnect"
+                                  : "connected",
+                              unreadNonSpamCount,
+                            }
+                          : mailbox
+                      ),
+                    })),
+                  }
+          );
+          if (this.providers.get(event.mailboxId) === "gmail") {
+            this.queryClient.setQueryData<
+              RouterOutputs["mail"]["listGmailUnreadCounts"]
+            >(getGmailUnreadCountsQueryKey(), (previous) => [
+              ...(previous ?? []).filter(
+                (item) => item.mailboxId !== event.mailboxId
+              ),
+              { mailboxId: event.mailboxId, unreadNonSpamCount },
+            ]);
+          }
+        }
+      }
       if (entity.data?.kind === "command") {
         const { command, error, status } = entity.data.value;
         for (const target of command.targets) {
@@ -241,6 +303,24 @@ export class MailSyncQueryAdapter {
     this.render(event.mailboxId, threads);
     if (labelsChanged) {
       this.renderLabels(event.mailboxId, entities);
+    }
+    if (viewsChanged || event.replace) {
+      const views: RouterOutputs["mail"]["listSavedViews"] = [];
+      for (const entity of entities.values()) {
+        if (entity.data?.kind === "saved-view") {
+          const { value } = entity.data;
+          views.push({
+            ...value,
+            createdAt: new Date(value.createdAt),
+            mailboxId: event.mailboxId,
+            updatedAt: new Date(value.updatedAt),
+          });
+        }
+      }
+      this.queryClient.setQueryData(
+        getSavedViewsQueryKey(event.mailboxId),
+        views.toSorted((a, b) => a.position - b.position)
+      );
     }
     while (entities.size > 10_000) {
       const oldest = entities.keys().next().value;
@@ -374,17 +454,20 @@ export class MailSyncQueryAdapter {
       }
       const label = entity.data.value;
       const existing = previous.find((item) => item.id === label.id);
+      const color = mailboxLabelColorSchema
+        .nullable()
+        .safeParse(label.color ?? existing?.color);
       return [
         {
-          color: existing?.color ?? null,
+          color: color.success ? color.data : null,
           description: label.description ?? null,
           id: label.id,
-          inclusionCriteria: existing?.inclusionCriteria ?? null,
+          inclusionCriteria: label.inclusionCriteria ?? null,
           name: label.name,
-          position: existing?.position ?? previous.length,
+          position: label.position ?? existing?.position ?? previous.length,
           provider,
           type: label.type === "system" ? "system" : "user",
-          visible: existing?.visible ?? true,
+          visible: label.visible ?? existing?.visible ?? true,
         },
       ];
     });

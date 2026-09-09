@@ -51,6 +51,22 @@ export class MailboxSync extends DurableObject<SyncEnv> {
     }
   }
 
+  async accessChanged() {
+    const subscribers = this.ctx.storage.sql
+      .exec<Subscriber>(
+        "SELECT * FROM subscribers WHERE expiresAt > ?",
+        Date.now()
+      )
+      .toArray();
+    for (let offset = 0; offset < subscribers.length; offset += 16) {
+      await Promise.all(
+        subscribers.slice(offset, offset + 16).map(async ({ userId }) => {
+          await this.env.UserSyncObjects.getByName(userId).accessChanged();
+        })
+      );
+    }
+  }
+
   async wake(mailboxId: string) {
     this.ctx.storage.sql.exec(
       "INSERT INTO work VALUES (1, ?, 1, 0) ON CONFLICT(id) DO UPDATE SET generation=generation+1",

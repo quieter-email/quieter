@@ -18,6 +18,7 @@ type ConnectionOptions = {
   onStatus: (status: ConnectionStatus) => void;
   onError: (error: unknown) => void;
   onRevoke: (mailboxId: string) => Promise<void>;
+  onMailboxesChanged: () => void;
 };
 
 export class SyncConnection {
@@ -111,6 +112,7 @@ export class SyncConnection {
           socket.close();
           return;
         }
+        this.options.onMailboxesChanged();
         for (const replica of this.options.replicas.values()) {
           this.resume(replica);
         }
@@ -189,6 +191,10 @@ export class SyncConnection {
       const frame = this.assembler.accept(raw);
       this.lastActivity = Date.now();
       if (frame === null || frame.type === "PONG") {
+        return;
+      }
+      if (frame.type === "MAILBOXES_CHANGED") {
+        this.options.onMailboxesChanged();
         return;
       }
       const mailboxId =

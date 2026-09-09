@@ -50,6 +50,8 @@ export type SyncApi = {
 };
 
 export type SyncClientEvent =
+  | { type: "mailboxes-changed" }
+  | { type: "session-ended" }
   | { type: "cache-cleared" }
   | {
       type: "entities";

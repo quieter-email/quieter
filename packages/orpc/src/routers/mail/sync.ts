@@ -17,7 +17,7 @@ const mailboxInput = z.object({ mailboxId: syncIdSchema });
 export const mailSyncRouter = {
   createSyncConnection: protectedProcedure.handler(
     ({ context }): ReturnType<typeof mailSyncOperations.connection> =>
-      mailSyncOperations.connection(context.userId)
+      mailSyncOperations.connection(context.userId, context.sessionId)
   ),
   getSyncBody: protectedProcedure
     .input(

@@ -48,6 +48,17 @@ suite("transactional mail replication", () => {
     await connection.unsafe(
       'CREATE TABLE "mailbox" (id text PRIMARY KEY); CREATE TABLE "user" (id text PRIMARY KEY);'
     );
+    await connection.unsafe(`
+      CREATE TABLE "gmailLabel" (
+        "mailboxId" text, "labelId" text, name text, color text,
+        description text, "inclusionCriteria" text, "createdAt" timestamp, "updatedAt" timestamp
+      );
+      CREATE TABLE "managedMailSavedView" (
+        id text, "mailboxId" text, "ownerUserId" text, name text, "normalizedName" text,
+        color text, icon text, search jsonb, sort text, position integer,
+        "disabledReason" text, "createdAt" timestamp, "updatedAt" timestamp
+      );
+    `);
     for (const migration of [
       "20260909092211_unknown_princess_powerful",
       "20260909094318_glorious_white_queen",
@@ -390,6 +401,10 @@ suite("transactional mail replication", () => {
       threads: async () => {
         await Promise.resolve();
         return { resultSizeEstimate: 1, threads: [{ id: "thread" }] };
+      },
+      unreadCount: async () => {
+        await Promise.resolve();
+        return 1;
       },
     };
     await synchronizeGmail(repository, bodies, mailboxId, provider);

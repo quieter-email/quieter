@@ -13,6 +13,9 @@ const fixtures = vi.hoisted(() => ({
     await Promise.resolve();
   }),
   epoch: "3595c675-0d6f-41ad-a78c-349fbd65e3c3",
+  session: vi.fn<() => Promise<void>>(async () => {
+    await Promise.resolve();
+  }),
 }));
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- Partial adapter replacement avoids loading unrelated application services in workerd.
 vi.mock("@quieter/database/client", () => ({
@@ -21,6 +24,7 @@ vi.mock("@quieter/database/client", () => ({
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- Only the transport-facing application adapter is exercised here.
 vi.mock("@quieter/orpc/mail-sync", () => ({
   authorizeSyncMailbox: fixtures.authorize,
+  authorizeSyncSession: fixtures.session,
   mailSyncServices: () => ({
     repository: {
       head: async () => {
@@ -39,7 +43,7 @@ const secret = "test-mail-sync-secret-at-least-32-bytes";
 const connect = async (userId: string) => {
   const response = await worker.fetch(
     new Request(
-      `https://sync.invalid/connect?ticket=${createSyncTicket(userId, secret)}`,
+      `https://sync.invalid/connect?ticket=${createSyncTicket(userId, "test-session", secret)}`,
       { headers: { upgrade: "websocket" } }
     ),
     env
@@ -62,6 +66,58 @@ const nextMessage = async (socket: WebSocket) => {
 };
 
 describe("durable mail transport", () => {
+  it("rejects a valid ticket after its login session has been revoked", async () => {
+    fixtures.session.mockRejectedValueOnce(
+      Object.assign(new Error("Session expired"), { code: "UNAUTHORIZED" })
+    );
+    const response = await worker.fetch(
+      new Request(
+        `https://sync.invalid/connect?ticket=${createSyncTicket(crypto.randomUUID(), "revoked-session", secret)}`,
+        { headers: { upgrade: "websocket" } }
+      ),
+      env
+    );
+    expect(response.status).toBe(401);
+  });
+
+  it("closes malformed client frames without exposing application failures", async () => {
+    const socket = await connect(crypto.randomUUID());
+    const closed = once(socket, "close", { signal: AbortSignal.timeout(5000) });
+    socket.send("{");
+    const events: unknown[] = await closed;
+    const [event] = events;
+    expect(event).toMatchObject({ code: 1008 });
+  });
+
+  it("rechecks revoked grants immediately on a control notification", async () => {
+    const userId = crypto.randomUUID();
+    const mailboxId = crypto.randomUUID();
+    const generation = crypto.randomUUID();
+    const socket = await connect(userId);
+    const resumed = nextMessage(socket);
+    socket.send(
+      JSON.stringify({
+        checkpoint: { epoch: fixtures.epoch, sequence: "0" },
+        generation,
+        mailboxId,
+        protocol: 1,
+        type: "RESUME",
+      })
+    );
+    await resumed;
+    fixtures.authorize.mockRejectedValueOnce(
+      Object.assign(new Error("Access removed"), { code: "FORBIDDEN" })
+    );
+    const revoked = nextMessage(socket);
+    await env.MailboxSyncObjects.getByName(mailboxId).accessChanged();
+    await expect(revoked).resolves.toMatchObject({
+      generation,
+      mailboxId,
+      type: "REVOKED",
+    });
+    socket.close();
+  });
+
   it("rejects missing tickets and unauthenticated internal delivery", async () => {
     const connectResponse = await worker.fetch(
       new Request("https://sync.invalid/connect"),

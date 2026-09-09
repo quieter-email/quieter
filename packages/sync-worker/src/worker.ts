@@ -68,6 +68,23 @@ export default withSyncReporting({
         await env.MailboxSyncObjects.getByName(mailboxId).wake(mailboxId);
         return new Response(null, { status: 204 });
       }
+      if (url.pathname === "/internal/access" && request.method === "POST") {
+        const { mailboxId, userIds } = z
+          .object({
+            mailboxId: syncIdSchema,
+            userIds: z.array(syncIdSchema).max(100).default([]),
+          })
+          .parse(
+            JSON.parse(
+              new TextDecoder().decode(await readSyncRequest(request, 32_768))
+            )
+          );
+        await env.MailboxSyncObjects.getByName(mailboxId).accessChanged();
+        for (const userId of userIds) {
+          await env.UserSyncObjects.getByName(userId).accessChanged();
+        }
+        return new Response(null, { status: 204 });
+      }
       if (url.pathname === "/internal/revoke" && request.method === "POST") {
         const payload = z
           .object({ mailboxId: syncIdSchema.optional(), userId: syncIdSchema })

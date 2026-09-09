@@ -23,6 +23,13 @@ bindings.NODE_ENV = "development";
 bindings.SST_RESOURCE_GmailLiveSyncTokenSecret = JSON.stringify({
   value: values.get("GMAIL_LIVE_SYNC_TOKEN_SECRET"),
 });
+if (values.get("QUIETER_MAIL_SYNC_ENABLED") === "true") {
+  const secret = values.get("MAIL_SYNC_SECRET");
+  if (secret === undefined || secret.length < 32) {
+    throw new Error("Local mail sync secret is missing. Run dev:setup first.");
+  }
+  bindings.SST_RESOURCE_MailSyncSecret = JSON.stringify({ value: secret });
+}
 await writeFile(
   ".dev.vars",
   `${Object.entries(bindings)

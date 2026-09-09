@@ -1,10 +1,12 @@
 import {
+  gmailLabel,
   mailSyncEntity,
   mailSyncProviderState,
   mailSyncStream,
 } from "@quieter/database/schema";
 import {
   getGmailProfile,
+  getGmailMessageCount,
   getThreadWithDetails,
   isGmailServiceError,
   listGmailSyncHistoryPage,
@@ -17,6 +19,7 @@ import { and, eq, inArray, isNull, isNotNull, ne, or } from "drizzle-orm";
 
 import { prepareSyncMessage } from "../body-store";
 import type { SyncBodyStore } from "../body-store";
+import { projectSavedViews } from "../metadata";
 import type { SyncRepository, SyncTransaction } from "../repository";
 import { assertProviderLease, withProviderLease } from "./lease";
 
@@ -29,6 +32,7 @@ export type GmailSyncProvider = {
   threads: (pageToken?: string) => ReturnType<typeof listGmailSyncThreads>;
   thread: (threadId: string) => ReturnType<typeof getThreadWithDetails>;
   labels: () => Promise<MailLabelListItem[]>;
+  unreadCount: () => Promise<number>;
 };
 
 export const gmailSyncProvider = (
@@ -51,6 +55,14 @@ export const gmailSyncProvider = (
       pageToken,
       signal,
     }),
+  unreadCount: async () =>
+    (await getGmailMessageCount(accessToken, {
+      accurateUpTo: 99,
+      countBy: "threads",
+      mailbox: "unread",
+      query: "-in:spam -in:trash",
+      signal,
+    })) ?? 0,
 });
 
 export const projectGmailThreads = async (
@@ -220,6 +232,10 @@ export const synchronizeGmail = async (
       Date.now() - state.labelsSyncedAt.getTime() > 5 * 60_000
         ? await provider.labels()
         : null;
+    const unreadNonSpamCount =
+      labels !== null || history.threadIds.length > 0
+        ? await provider.unreadCount()
+        : null;
     const importComplete =
       state.phase === "ready" ||
       state.phase === "sweep" ||
@@ -229,6 +245,11 @@ export const synchronizeGmail = async (
       await assertProviderLease(context, leaseId);
       await projectGmailThreads(context, threads, generation);
       if (labels !== null) {
+        const details = await context.database
+          .select()
+          .from(gmailLabel)
+          .where(eq(gmailLabel.mailboxId, mailboxId));
+        const byId = new Map(details.map((detail) => [detail.labelId, detail]));
         const previous = await context.database
           .select({ id: mailSyncEntity.entityId })
           .from(mailSyncEntity)
@@ -239,9 +260,20 @@ export const synchronizeGmail = async (
             )
           );
         const ids = new Set(labels.map((label) => label.id));
-        for (const label of labels) {
+        for (const [position, label] of labels.entries()) {
+          const detail = byId.get(label.id);
           context.put({
-            data: { kind: "label", value: label },
+            data: {
+              kind: "label",
+              value: {
+                ...label,
+                color: detail?.color ?? "gray",
+                description: detail?.description ?? null,
+                inclusionCriteria: detail?.inclusionCriteria ?? null,
+                position,
+                visible: true,
+              },
+            },
             id: label.id,
             kind: "label",
           });
@@ -251,6 +283,7 @@ export const synchronizeGmail = async (
             context.put({ data: null, id: label.id, kind: "label" });
           }
         }
+        await projectSavedViews(context);
       }
       if (
         importComplete &&
@@ -288,6 +321,19 @@ export const synchronizeGmail = async (
       let { phase } = state;
       if (importComplete) {
         phase = sweepComplete ? "ready" : "sweep";
+      }
+      if (unreadNonSpamCount !== null) {
+        context.put({
+          data: {
+            kind: "overview",
+            value: {
+              counts: { unreadNonSpamCount },
+              status: phase === "ready" ? "ready" : "importing",
+            },
+          },
+          id: mailboxId,
+          kind: "overview",
+        });
       }
       await context.database
         .update(mailSyncProviderState)

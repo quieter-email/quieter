@@ -11,6 +11,10 @@ import { encodeSyncBody } from "@quieter/sync-server/body-store";
 import type { SyncBodyStore } from "@quieter/sync-server/body-store";
 import { projectManagedMailbox } from "@quieter/sync-server/managed";
 import type { ManagedSyncSelection } from "@quieter/sync-server/managed";
+import {
+  projectGmailLabelDetails,
+  projectSavedViews,
+} from "@quieter/sync-server/metadata";
 import { Resource } from "sst";
 
 type SyncRuntime = {
@@ -83,6 +87,38 @@ const requestSyncRuntime = async (path: string, init: RequestInit = {}) => {
     throw new Error("Mail sync delivery is temporarily unavailable.");
   }
   return response;
+};
+
+export const notifyMailboxAccessChanged = async (
+  mailboxId: string,
+  userIds: string[] = []
+) => {
+  if (!isMailSyncEnabled()) {
+    return;
+  }
+  try {
+    const response = await requestSyncRuntime("/internal/access", {
+      body: JSON.stringify({ mailboxId, userIds }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+    if (!response.ok) {
+      throw new Error("Mailbox access notification is unavailable.");
+    }
+  } catch (error) {
+    // Connected sessions reauthorize on their heartbeat if direct notification fails.
+    reportError(error, { operation: "mail_sync_access_notification" });
+  }
+};
+
+export const withMailboxAccessTransaction = async <Result>(
+  mailboxId: string,
+  run: (database: DatabaseTransaction) => Promise<Result>,
+  userIds: string[] = []
+) => {
+  const result = await db.transaction(run);
+  await notifyMailboxAccessChanged(mailboxId, userIds);
+  return result;
 };
 
 export const mailSyncServices = () => {
@@ -164,6 +200,41 @@ export const withManagedSyncTransaction = async <Result>(
     );
     return result;
   });
+};
+
+export const withSavedViewsSyncTransaction = async <Result>(
+  mailboxId: string,
+  run: (database: DatabaseTransaction) => Promise<Result>
+) => {
+  if (!isMailSyncEnabled()) {
+    return await db.transaction(run);
+  }
+  return await mailSyncServices().repository.transaction(
+    mailboxId,
+    async (context) => {
+      const result = await run(context.database);
+      await projectSavedViews(context);
+      return result;
+    }
+  );
+};
+
+export const withGmailLabelSyncTransaction = async <Result>(
+  mailboxId: string,
+  labelId: string,
+  run: (database: DatabaseTransaction) => Promise<Result>
+) => {
+  if (!isMailSyncEnabled()) {
+    return await db.transaction(run);
+  }
+  return await mailSyncServices().repository.transaction(
+    mailboxId,
+    async (context) => {
+      const result = await run(context.database);
+      await projectGmailLabelDetails(context, labelId);
+      return result;
+    }
+  );
 };
 
 export const storeManagedSyncBody = async (

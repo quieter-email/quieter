@@ -15,6 +15,7 @@ import { z } from "zod";
 
 import { encodeSyncBody, prepareSyncMessage } from "../body-store";
 import type { SyncBodyStore } from "../body-store";
+import { projectSavedViews } from "../metadata";
 import type { SyncRepository, SyncTransaction } from "../repository";
 import { assertProviderLease, withProviderLease } from "./lease";
 
@@ -278,7 +279,9 @@ export const projectManagedMailbox = async (
             description: label.description,
             id: label.id,
             name: label.name,
+            position: label.position,
             type: "user",
+            visible: label.visible,
           },
         },
         id: label.id,
@@ -290,40 +293,21 @@ export const projectManagedMailbox = async (
         put({ data: null, id: old.id, kind: "label" });
       }
     }
+    await projectSavedViews(context);
   }
-  const grouped = await database
+  const [counts] = await database
     .select({
-      count: sql<number>`count(distinct ${managedMailMessage.threadId})::int`,
-      direction: managedMailMessage.direction,
-      state: managedMailMessage.mailboxState,
-      unread: sql<number>`count(distinct ${managedMailMessage.threadId}) filter (where not ${managedMailMessage.isRead})::int`,
+      archive: sql<number>`count(distinct ${managedMailMessage.threadId}) filter (where ${managedMailMessage.mailboxState} = 'archived')::int`,
+      drafts: sql<number>`count(distinct ${managedMailMessage.threadId}) filter (where ${managedMailMessage.mailboxState} = 'draft')::int`,
+      inbox: sql<number>`count(distinct ${managedMailMessage.threadId}) filter (where ${managedMailMessage.mailboxState} = 'active' and ${managedMailMessage.direction} = 'inbound')::int`,
+      sent: sql<number>`count(distinct ${managedMailMessage.threadId}) filter (where ${managedMailMessage.mailboxState} = 'active' and ${managedMailMessage.direction} = 'outbound')::int`,
+      spam: sql<number>`count(distinct ${managedMailMessage.threadId}) filter (where ${managedMailMessage.mailboxState} = 'spam')::int`,
+      trash: sql<number>`count(distinct ${managedMailMessage.threadId}) filter (where ${managedMailMessage.mailboxState} = 'trash')::int`,
+      unread: sql<number>`count(distinct ${managedMailMessage.threadId}) filter (where not ${managedMailMessage.isRead} and ${managedMailMessage.mailboxState} not in ('spam', 'trash', 'draft'))::int`,
+      unreadNonSpamCount: sql<number>`count(*) filter (where not ${managedMailMessage.isRead} and ${managedMailMessage.mailboxState} = 'active' and ${managedMailMessage.direction} = 'inbound')::int`,
     })
     .from(managedMailMessage)
-    .where(eq(managedMailMessage.mailboxId, mailboxId))
-    .groupBy(managedMailMessage.direction, managedMailMessage.mailboxState);
-  const counts: Record<string, number> = {
-    archive: 0,
-    drafts: 0,
-    inbox: 0,
-    sent: 0,
-    spam: 0,
-    trash: 0,
-    unread: 0,
-  };
-  for (const group of grouped) {
-    let category: string = group.state;
-    if (group.state === "active") {
-      category = group.direction === "inbound" ? "inbox" : "sent";
-    } else if (group.state === "archived") {
-      category = "archive";
-    } else if (group.state === "draft") {
-      category = "drafts";
-    }
-    counts[category] += group.count;
-    if (category === "inbox") {
-      counts.unread += group.unread;
-    }
-  }
+    .where(eq(managedMailMessage.mailboxId, mailboxId));
   put({
     data: { kind: "overview", value: { counts, status: "ready" } },
     id: mailboxId,

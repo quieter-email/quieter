@@ -35,6 +35,7 @@ const peerSchema = z.discriminatedUnion("type", [
     type: z.literal("entities"),
   }),
   z.object({ type: z.literal("logout") }),
+  z.object({ type: z.literal("mailboxes-changed") }),
   z.object({ type: z.literal("cache-cleared") }),
   z.object({ mailboxId: z.string(), type: z.literal("revoked") }),
 ]);
@@ -91,6 +92,10 @@ export class MailSyncEngine {
           operation: "mail_sync_connection",
           type: "error",
         });
+      },
+      onMailboxesChanged: () => {
+        this.notify({ type: "mailboxes-changed" });
+        this.channel?.postMessage({ type: "mailboxes-changed" });
       },
       onRevoke: async (mailboxId) => {
         await this.revoke(mailboxId);
@@ -551,7 +556,12 @@ export class MailSyncEngine {
       }
       const message = parsed.data;
       if (message.type === "logout") {
+        this.notify({ type: "session-ended" });
         await this.stop(true, false);
+        return;
+      }
+      if (message.type === "mailboxes-changed") {
+        this.notify({ type: "mailboxes-changed" });
         return;
       }
       if (message.type === "cache-cleared") {
