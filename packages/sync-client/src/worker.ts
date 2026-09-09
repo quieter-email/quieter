@@ -218,6 +218,10 @@ const receive = async (raw: unknown) => {
           await engine.clearCache();
           break;
         }
+        case "persistence": {
+          await engine.setPersistence(action.input);
+          break;
+        }
         case "revoke": {
           await engine.revoke(action.input.mailboxId);
           break;

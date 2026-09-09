@@ -6,6 +6,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@quieter/ui/select";
+import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { useMutation } from "@tanstack/react-query";
 import { useSelector } from "@tanstack/react-store";
 
@@ -20,13 +21,15 @@ export const MailCacheSettings = () => {
   const { mailboxIds, status } = useSelector(mailSyncState, (state) => state);
   // oxlint-disable-next-line react-doctor/query-mutation-missing-invalidation -- Worker events update the status store and query cache before completion.
   const { isPending: busy, mutate: changeCache } = useMutation({
-    mutationFn: async (limit: number | null) => {
+    mutationFn: async (limit: number | boolean | null) => {
       const selected = MailSyncSession.forMailbox(mailboxIds[0] ?? "");
       if (selected === null) {
         return;
       }
       if (limit === null) {
         await selected.client.action({ input: null, method: "clear-cache" });
+      } else if (typeof limit === "boolean") {
+        await selected.setPersistence(limit);
       } else {
         await selected.client.action({
           input: limit * 1024 * 1024,
@@ -49,6 +52,25 @@ export const MailCacheSettings = () => {
   return (
     <SettingsSection title="Mail on this device">
       <SettingsRows>
+        <SettingsRow
+          title="Keep mail between visits"
+          action={
+            <Switch
+              aria-label="Keep mail between visits"
+              checked={status.persistent}
+              disabled={busy || session === null}
+              onCheckedChange={(checked) => {
+                changeCache(checked);
+              }}
+            >
+              <SwitchThumb />
+            </Switch>
+          }
+        >
+          Turn this off on a shared device. Mail will stay in memory only, and
+          previously cached mail will be removed from this browser. Drafts you
+          are editing are kept separately until you save or discard them.
+        </SettingsRow>
         <SettingsRow
           title="Cached mail"
           action={

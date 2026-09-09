@@ -41,6 +41,21 @@ describe("browser mail persistence", () => {
     }
   });
 
+  it("fences writes from a tab that has not received a cache-clear notification", async () => {
+    const userId = crypto.randomUUID();
+    const first = await ReplicaStorage.open(userId);
+    const second = await ReplicaStorage.open(userId);
+    openStores.push(first, second);
+    await first.bootstrap(snapshot("mailbox"));
+    await first.clearCache();
+    await expect(second.bootstrap(snapshot("mailbox"))).rejects.toThrow(
+      "cleared in another tab"
+    );
+    await expect(first.checkpoint("mailbox")).resolves.toBeNull();
+    await second.refreshGeneration();
+    await expect(second.bootstrap(snapshot("mailbox"))).resolves.toBeTruthy();
+  });
+
   it("commits the cursor with its entities and rejects duplicates and gaps", async () => {
     const store = await open();
     await store.bootstrap(snapshot("first"));

@@ -65,7 +65,8 @@ export class MailboxReplica {
   async acceptPeer(
     checkpoint: SyncCheckpoint,
     entities: SyncChange[],
-    replace: boolean
+    replace: boolean,
+    reset?: boolean
   ) {
     await this.update(async () => {
       if (
@@ -94,6 +95,7 @@ export class MailboxReplica {
         entities,
         mailboxId: this.mailboxId,
         replace,
+        reset,
         type: "entities",
       });
       await Promise.resolve();
@@ -166,6 +168,7 @@ export class MailboxReplica {
         entities: snapshot.entities,
         mailboxId: this.mailboxId,
         replace: true,
+        reset: true,
         type: "entities",
       });
     });
@@ -276,6 +279,8 @@ export class MailboxReplica {
       const intervening: SyncBatch[] = [];
       let cursor = snapshot.checkpoint;
       while (BigInt(cursor.sequence) < BigInt(through.sequence)) {
+        this.options.signal.throwIfAborted();
+        const previous = cursor.sequence;
         const page = await this.options.api.replay(
           this.mailboxId,
           cursor,
@@ -290,6 +295,9 @@ export class MailboxReplica {
           }
           intervening.push(batch);
           cursor = { epoch: batch.epoch, sequence: batch.sequence };
+        }
+        if (BigInt(cursor.sequence) <= BigInt(previous)) {
+          throw new Error("Mailbox range replay did not advance.");
         }
       }
       const reconciled = reconcileSyncRange(snapshot, through, intervening);

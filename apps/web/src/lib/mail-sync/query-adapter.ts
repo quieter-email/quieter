@@ -123,6 +123,34 @@ export class MailSyncQueryAdapter {
   }
 
   receive(event: SyncClientEvent) {
+    if (
+      event.type === "receipt" &&
+      (event.receipt.status === "failed" || event.receipt.status === "applied")
+    ) {
+      const command = this.pending.get(event.receipt.commandId);
+      if (command !== undefined) {
+        this.pending.delete(command.commandId);
+        this.render(
+          event.mailboxId,
+          new Set(command.targets.map((target) => target.threadId))
+        );
+        if (
+          this.owned.delete(command.commandId) &&
+          event.receipt.status === "failed"
+        ) {
+          toastError(
+            Object.assign(
+              new Error(
+                event.receipt.error ?? "This change could not be applied."
+              ),
+              { status: 400 }
+            ),
+            { boundary: "mail_sync_command" }
+          );
+        }
+      }
+      return;
+    }
     if (event.type === "mailboxes-changed") {
       void this.queryClient.invalidateQueries({ queryKey: ["mailboxes"] });
       return;
@@ -182,6 +210,19 @@ export class MailSyncQueryAdapter {
       return;
     }
     const previousEntities = this.entities.get(event.mailboxId);
+    if (event.reset === true && previousEntities !== undefined) {
+      for (const key of this.details.keys()) {
+        if (key.startsWith(`${event.mailboxId}:`)) {
+          this.details.delete(key);
+        }
+      }
+      this.queryClient.removeQueries({
+        queryKey: ["message-thread", event.mailboxId],
+      });
+      void this.queryClient.invalidateQueries({
+        queryKey: ["messages", event.mailboxId],
+      });
+    }
     const entities = event.replace
       ? new Map<string, SyncChange>()
       : (previousEntities ?? new Map<string, SyncChange>());

@@ -6,6 +6,7 @@ import {
   getMailboxesQueryKey,
   mailboxesQueryOptions,
 } from "#/lib/mailboxes-query";
+import { usePreviewPersona } from "#/lib/preview-personas";
 
 import { mailSyncApi } from "./api";
 import { MailSyncSession, runMailSyncTask } from "./session";
@@ -18,15 +19,17 @@ export const MailSyncProvider = ({
   userId: string | undefined;
 }) => {
   const queryClient = useQueryClient();
+  const previewPersona = usePreviewPersona();
   // react-doctor-disable-next-line react-doctor/effect-needs-cleanup -- The cleanup aborts startup, removes listeners, unsubscribes the query observer, and stops the worker.
   useEffect((): (() => void) | undefined => {
-    if (userId === undefined) {
+    if (userId === undefined || previewPersona !== null) {
       return undefined;
     }
     const controller = new AbortController();
     let session: MailSyncSession | null = null;
     let unsubscribe: (() => void) | null = null;
     let lastMailboxIds = "";
+    let updatingMailboxes = false;
     const visibility = () => {
       void runMailSyncTask(
         session?.client.action({
@@ -40,7 +43,10 @@ export const MailSyncProvider = ({
         session?.client.action({ input: navigator.onLine, method: "online" })
       );
     };
-    const updateMailboxes = () => {
+    const updateMailboxes = async () => {
+      if (updatingMailboxes || controller.signal.aborted) {
+        return;
+      }
       const data = queryClient.getQueryData<
         RouterOutputs["mail"]["listMailboxes"]
       >(getMailboxesQueryKey());
@@ -59,8 +65,13 @@ export const MailSyncProvider = ({
       if (identity === lastMailboxIds) {
         return;
       }
-      lastMailboxIds = identity;
-      void runMailSyncTask(session.subscribe(mailboxes));
+      updatingMailboxes = true;
+      try {
+        await session.subscribe(mailboxes);
+        lastMailboxIds = identity;
+      } finally {
+        updatingMailboxes = false;
+      }
     };
     const start = async () => {
       await previousStop;
@@ -81,11 +92,11 @@ export const MailSyncProvider = ({
           event.type === "updated" &&
           event.query.queryHash === JSON.stringify(getMailboxesQueryKey())
         ) {
-          updateMailboxes();
+          void runMailSyncTask(updateMailboxes());
         }
       });
       await queryClient.ensureQueryData(mailboxesQueryOptions());
-      updateMailboxes();
+      await updateMailboxes();
     };
     void runMailSyncTask(start());
     document.addEventListener("visibilitychange", visibility);
@@ -100,6 +111,6 @@ export const MailSyncProvider = ({
       previousStop =
         session === null ? previousStop : runMailSyncTask(session.stop(true));
     };
-  }, [queryClient, userId]);
+  }, [previewPersona, queryClient, userId]);
   return null;
 };

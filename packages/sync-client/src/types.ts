@@ -58,6 +58,7 @@ export type SyncClientEvent =
       mailboxId: string;
       entities: SyncChange[];
       replace: boolean;
+      reset?: boolean;
     }
   | { type: "thread"; mailboxId: string; thread: ThreadMessagesResult }
   | { type: "revoked"; mailboxId: string }
@@ -82,5 +83,6 @@ export type SyncClientOptions = {
   onEvent: (event: SyncClientEvent) => void;
   mobile?: boolean;
   reducedData?: boolean;
+  persistent?: boolean;
   createSocket?: (url: string) => WebSocket;
 };

@@ -17,6 +17,15 @@ export const mailSyncState = new Store<{
   status: CacheStatus | null;
 }>({ mailboxIds: [], status: null });
 let current: MailSyncSession | null = null;
+const MAIL_CACHE_PREFERENCE = "quieter:mail-cache:persistent";
+
+const shouldPersistMail = () => {
+  try {
+    return localStorage.getItem(MAIL_CACHE_PREFERENCE) !== "false";
+  } catch {
+    return false;
+  }
+};
 
 export const reportMailSyncError = (error: unknown) => {
   if (
@@ -59,6 +68,7 @@ export class MailSyncSession {
       mailSyncApi,
       {
         mobile: matchMedia("(pointer: coarse)").matches,
+        persistent: shouldPersistMail(),
         reducedData:
           "connection" in navigator &&
           typeof navigator.connection === "object" &&
@@ -82,6 +92,9 @@ export class MailSyncSession {
           }));
         } else if (event.type === "error") {
           reportMailSyncError(event.error);
+        } else if (event.type === "session-ended") {
+          void runMailSyncTask(this.stop(true));
+          window.location.reload();
         }
       }
     );
@@ -92,6 +105,11 @@ export class MailSyncSession {
     current = session;
     setMailReplicaPersistence(true);
     return session;
+  }
+
+  async setPersistence(persistent: boolean) {
+    await this.client.action({ input: persistent, method: "persistence" });
+    localStorage.setItem(MAIL_CACHE_PREFERENCE, String(persistent));
   }
 
   async subscribe(mailboxes: { id: string; provider: "gmail" | "managed" }[]) {

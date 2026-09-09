@@ -157,12 +157,28 @@ const writeChanges = async (
 export class ReplicaStorage {
   private readonly database: IDBDatabase;
   private closed = false;
+  private generation: string | null = null;
   private constructor(database: IDBDatabase) {
     this.database = database;
   }
 
   static async open(userId: string, factory: IDBFactory = indexedDB) {
     const request = factory.open(`quieter-mail-v1:${userId}`, 1);
+    let abandoned = false;
+    const unavailable = Promise.withResolvers<never>();
+    const timeout = setTimeout(() => {
+      unavailable.reject(new Error("Local mail storage did not open in time."));
+    }, 5000);
+    request.onblocked = () => {
+      unavailable.reject(
+        new Error("Another tab is blocking the mail cache upgrade.")
+      );
+    };
+    request.addEventListener("success", () => {
+      if (abandoned) {
+        request.result.close();
+      }
+    });
     request.onupgradeneeded = () => {
       const database = request.result;
       const entities = database.createObjectStore("entities", {
@@ -186,11 +202,23 @@ export class ReplicaStorage {
         .createIndex("mailbox", "mailboxId");
       database.createObjectStore("settings");
     };
-    const result = await requestResult(request);
+    let result: unknown;
+    try {
+      result = await Promise.race([
+        requestResult(request),
+        unavailable.promise,
+      ]);
+    } catch (error) {
+      abandoned = true;
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
     if (!(result instanceof IDBDatabase)) {
       throw new Error("Local mail storage could not be opened.");
     }
     const storage = new ReplicaStorage(result);
+    await storage.refreshGeneration();
     result.onversionchange = () => {
       storage.close();
     };
@@ -210,7 +238,38 @@ export class ReplicaStorage {
     if (this.closed) {
       throw new Error("Mail storage was closed.");
     }
-    return await runTransaction(this.database, names, mode, run);
+    const cacheWrite =
+      mode === "readwrite" &&
+      names.some((name) => !["commands", "settings"].includes(name));
+    return await runTransaction(
+      this.database,
+      cacheWrite ? [...new Set([...names, "settings"])] : names,
+      mode,
+      async (transaction) => {
+        if (cacheWrite) {
+          const current = await requestResult(
+            transaction.objectStore("settings").get("cache-generation")
+          );
+          if ((current ?? null) !== this.generation) {
+            throw Object.assign(
+              new Error("The mail cache was cleared in another tab."),
+              { name: "SyncCacheResetError" }
+            );
+          }
+        }
+        return await run(transaction);
+      }
+    );
+  }
+
+  async refreshGeneration() {
+    const current = await requestResult(
+      this.database
+        .transaction("settings")
+        .objectStore("settings")
+        .get("cache-generation")
+    );
+    this.generation = current === undefined ? null : z.string().parse(current);
   }
 
   async shutdownAndPurge() {
@@ -258,13 +317,12 @@ export class ReplicaStorage {
     return raw !== undefined;
   }
 
-  async pendingCommands(mailboxId: string) {
+  async pendingCommands(mailboxId?: string) {
+    const store = this.database.transaction("commands").objectStore("commands");
     const raw = await requestResult(
-      this.database
-        .transaction("commands")
-        .objectStore("commands")
-        .index("mailbox")
-        .getAll(mailboxId)
+      mailboxId === undefined
+        ? store.getAll()
+        : store.index("mailbox").getAll(mailboxId)
     );
     return z
       .array(syncCommandSchema.extend({ localSequence: z.number() }))
@@ -674,6 +732,7 @@ export class ReplicaStorage {
   }
 
   async purge(mailboxId?: string) {
+    const generation = crypto.randomUUID();
     await runTransaction(
       this.database,
       stores,
@@ -683,6 +742,9 @@ export class ReplicaStorage {
           for (const name of stores) {
             transaction.objectStore(name).clear();
           }
+          transaction
+            .objectStore("settings")
+            .put(generation, "cache-generation");
           return;
         }
         const bodyKeys = z
@@ -714,13 +776,24 @@ export class ReplicaStorage {
           }
         }
         transaction.objectStore("checkpoints").delete(mailboxId);
+        transaction.objectStore("settings").put(generation, "cache-generation");
       }
     );
+    this.generation = generation;
   }
 
   async clearCache() {
-    await this.transact(
-      ["entities", "coverage", "checkpoints", "bodies", "bodyIndex"],
+    const generation = crypto.randomUUID();
+    await runTransaction(
+      this.database,
+      [
+        "entities",
+        "coverage",
+        "checkpoints",
+        "bodies",
+        "bodyIndex",
+        "settings",
+      ],
       "readwrite",
       async (transaction) => {
         for (const name of [
@@ -732,8 +805,10 @@ export class ReplicaStorage {
         ]) {
           transaction.objectStore(name).clear();
         }
+        transaction.objectStore("settings").put(generation, "cache-generation");
         await Promise.resolve();
       }
     );
+    this.generation = generation;
   }
 }

@@ -25,6 +25,7 @@ export class MailSyncWorkerClient {
   private readonly requests = new Map<number, AbortController>();
   private nextId = 0;
   private stopping = false;
+  private failed = false;
   readonly ready: Promise<unknown>;
   private readonly worker: Worker;
   private readonly api: SyncApi;
@@ -65,6 +66,11 @@ export class MailSyncWorkerClient {
       }
     });
     worker.addEventListener("error", () => {
+      this.failed = true;
+      for (const controller of this.requests.values()) {
+        controller.abort();
+      }
+      this.requests.clear();
       const error = new Error(
         "The background mail cache stopped unexpectedly."
       );
@@ -80,6 +86,9 @@ export class MailSyncWorkerClient {
   }
 
   private async dispatch(action: SyncWorkerAction) {
+    if (this.failed) {
+      throw new Error("The background mail cache stopped unexpectedly.");
+    }
     const id = this.nextId;
     this.nextId += 1;
     const pending = Promise.withResolvers<unknown>();

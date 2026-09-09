@@ -44,6 +44,7 @@ export const syncWorkerActionSchema = z.discriminatedUnion("method", [
   z.object({
     input: z.object({
       mobile: z.boolean(),
+      persistent: z.boolean().default(true),
       reducedData: z.boolean(),
       userId: z.string(),
     }),
@@ -76,6 +77,7 @@ export const syncWorkerActionSchema = z.discriminatedUnion("method", [
   z.object({ input: z.boolean(), method: z.literal("visible") }),
   z.object({ input: z.boolean(), method: z.literal("online") }),
   z.object({ input: z.number().positive(), method: z.literal("budget") }),
+  z.object({ input: z.boolean(), method: z.literal("persistence") }),
   z.object({ input: z.null(), method: z.literal("clear-cache") }),
   z.object({
     input: z.object({ mailboxId: syncIdSchema }),
