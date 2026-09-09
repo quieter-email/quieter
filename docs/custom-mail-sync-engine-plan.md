@@ -59,8 +59,9 @@ This plan records the custom-engine decision. Zero and other hosted replication 
        C --> P[(PostgreSQL: mail state, change log, outbox)]
        C --> R[(R2: message bodies)]
 
-       P --> D[Outbox delivery]
-       D --> MD[MailboxSync Durable Object]
+       C -->|Committed change batch after commit succeeds| MD[MailboxSync Durable Object]
+       P --> D[Outbox recovery and replay]
+       D -->|Retry or missing batches| MD
        MD --> UD[UserSync Durable Object]
        UD <-->|WebSocket| W[Browser sync worker]
 
@@ -139,7 +140,11 @@ This plan records the custom-engine decision. Zero and other hosted replication 
 
 6. Use immediate notification backed by durable recovery.
 
-   After committing, the request immediately wakes the relevant `MailboxSync` object. That is the normal delivery path.
+   After PostgreSQL confirms the commit, the request immediately sends the exact committed change batch, including its stream epoch and sequence, to the relevant `MailboxSync` object. The application already has this payload from the write path. The DO forwards it without another PostgreSQL read on the normal delivery path.
+
+   Persist the batch in the change log and send that same batch to the DO. Do not construct a different event from pre-commit input or announce it before the transaction succeeds. A failed transaction must never produce a committed incoming-mail event in the browser.
+
+   Concurrent requests can commit in order but reach the DO out of order. The DO tracks sequence progress, ignores duplicates, and buffers later batches within a bounded window. It retrieves missing batches from the durable log when needed before delivering them in order. PostgreSQL reads remain necessary for gaps, recovery, cold state restoration, and client catch-up.
 
    The outbox remains pending until the Durable Object has durably accepted responsibility. If the request crashes after committing, an outbox recovery worker performs the missing notification.
 
@@ -147,7 +152,7 @@ This plan records the custom-engine decision. Zero and other hosted replication 
 
    Three mechanisms cover different situations:
 
-   - Immediate calls provide normal low latency.
+   - Immediate calls carry committed change batches directly to the DO for normal low latency.
    - Queues and Durable Object alarms retry known pending work.
    - A bounded maintenance sweep discovers abandoned work and repairs failed scheduling.
 
