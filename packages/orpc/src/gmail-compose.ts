@@ -1,3 +1,4 @@
+import { ORPCError } from "@orpc/server";
 import {
   createDraft,
   getDraft,
@@ -21,6 +22,15 @@ export const saveGmailDraft = async (
   draft: ComposeDraftInput,
   signal?: AbortSignal
 ) => {
+  if (draft.draftId && draft.baseVersion !== undefined) {
+    const current = await getDraft(accessToken, draft.draftId, signal);
+    if (current.message?.id !== draft.baseVersion) {
+      throw new ORPCError("CONFLICT", {
+        message:
+          "This draft changed elsewhere. Your edits are kept here. Save a copy to keep both versions.",
+      });
+    }
+  }
   const raw = Buffer.from(
     await buildMimeMessage(draft, { includeQuieterDraftHeaders: true })
   ).toString("base64url");
@@ -41,6 +51,7 @@ export const saveGmailDraft = async (
     bodyText: parsed.bodyText || draft.bodyText,
     draftAnchor: parsed.draftAnchor ?? draft.draftAnchor ?? null,
     draftId: savedDraft.id,
+    draftVersion: savedDraft.message?.id,
     messageId:
       savedDraft.message?.id ?? response.message?.id ?? parsed.messageId,
     recipients: {
@@ -50,6 +61,7 @@ export const saveGmailDraft = async (
     },
     replyContext: parsed.replyContext ?? draft.replyContext ?? null,
     subject: parsed.subject || draft.subject,
+    threadId: savedDraft.message?.threadId,
   };
 };
 

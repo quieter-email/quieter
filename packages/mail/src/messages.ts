@@ -32,6 +32,7 @@ export type MessageListItem = {
   threadMessageCount?: number;
   threadAttachmentCount?: number;
   draftId?: string;
+  draftVersion?: string;
   draftAnchor?: ComposeDraftAnchor;
   snippet?: string;
   subject?: string;

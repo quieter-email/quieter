@@ -53,6 +53,7 @@ export const mailInputSchemas = {
     name: z.string().trim().min(1).max(225),
   }),
   deleteDraft: z.object({
+    baseVersion: z.string().max(256).optional(),
     draftId: z.string(),
     mailboxId: z.string().trim().min(1),
   }),

@@ -17,6 +17,7 @@ import {
   WorkspaceSection,
   workspaceSectionVariants,
 } from "#/components/workspace-section";
+import { DraftRecoveryNotice } from "#/features/compose/components/draft-recovery-notice";
 import type { ComposeDraftState } from "#/features/compose/domain/draft";
 import type { MailboxWorkspaceView } from "#/features/mailbox/domain/mailbox-workspace-view";
 import { MailSidebar } from "#/features/navigation/components/mail-sidebar";
@@ -495,6 +496,15 @@ export const MailboxWorkspaceContent = ({
 
           <div className="relative min-h-0 flex-1 overflow-hidden bg-transparent">
             {mailboxContent}
+            {!isComposeMailbox &&
+            !isDemoMode &&
+            !isManagedDemoMode &&
+            selectedMailboxId !== null ? (
+              <DraftRecoveryNotice
+                mailboxId={selectedMailboxId}
+                onResume={onComposeDraftRequested}
+              />
+            ) : null}
           </div>
         </div>
       </main>

@@ -1,4 +1,5 @@
 import type { MailCommand, MailMutationTarget } from "@quieter/mail/data-plane";
+import { DraftJournal } from "@quieter/sync-client/draft-journal";
 import type { SyncClientEvent } from "@quieter/sync-client/types";
 import { MailSyncWorkerClient } from "@quieter/sync-client/worker-client";
 import * as Sentry from "@sentry/tanstackstart-react";
@@ -59,9 +60,18 @@ export const runMailSyncTask = async (task: Promise<unknown> | undefined) => {
 export class MailSyncSession {
   readonly client: MailSyncWorkerClient;
   readonly adapter: MailSyncQueryAdapter;
+  readonly drafts: Promise<DraftJournal | null>;
   private mailboxIds = new Set<string>();
 
   private constructor(userId: string, queryClient: QueryClient) {
+    this.drafts = (async () => {
+      try {
+        return await DraftJournal.open(userId);
+      } catch (error) {
+        reportMailSyncError(error);
+        return null;
+      }
+    })();
     this.adapter = new MailSyncQueryAdapter(queryClient);
     this.client = new MailSyncWorkerClient(
       new Worker(new URL("worker.ts", import.meta.url), { type: "module" }),
@@ -85,6 +95,12 @@ export class MailSyncSession {
         if (event.type === "status") {
           mailSyncState.setState((state) => ({ ...state, status: event }));
         } else if (event.type === "revoked") {
+          void runMailSyncTask(
+            (async () => {
+              const journal = await this.drafts;
+              await journal?.revoke(event.mailboxId);
+            })()
+          );
           this.mailboxIds.delete(event.mailboxId);
           mailSyncState.setState((state) => ({
             ...state,
@@ -114,12 +130,19 @@ export class MailSyncSession {
 
   async subscribe(mailboxes: { id: string; provider: "gmail" | "managed" }[]) {
     const next = new Set(mailboxes.map((mailbox) => mailbox.id));
+    const journal = await this.drafts;
     for (const mailboxId of this.mailboxIds) {
       if (!next.has(mailboxId)) {
+        await journal?.revoke(mailboxId);
         await this.client.action({ input: { mailboxId }, method: "revoke" });
       }
     }
     this.mailboxIds = next;
+    await Promise.all(
+      [...next].map(async (mailboxId) => {
+        await journal?.authorize(mailboxId);
+      })
+    );
     this.adapter.setMailboxes(mailboxes);
     await this.client.action({
       input: { mailboxIds: [...next] },
@@ -215,6 +238,16 @@ export class MailSyncSession {
       mailSyncState.setState(() => ({ mailboxIds: [], status: null }));
     }
     this.adapter.dispose();
-    await this.client.stop(purge);
+    await Promise.all([
+      this.client.stop(purge),
+      (async () => {
+        const journal = await this.drafts;
+        if (purge) {
+          await journal?.purge();
+        } else {
+          journal?.close();
+        }
+      })(),
+    ]);
   }
 }

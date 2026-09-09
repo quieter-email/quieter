@@ -13,6 +13,7 @@ import { and, eq, sql } from "drizzle-orm";
 import type { z } from "zod";
 
 import {
+  isMailSyncEnabled,
   storeManagedSyncBody,
   withManagedSyncTransaction,
 } from "../../mail-sync-runtime";
@@ -50,6 +51,16 @@ export const saveManagedDraft = async (input: {
   if ((draft.draftId ?? "") !== "" && existing === undefined) {
     throw new ORPCError("NOT_FOUND", {
       message: "This draft is no longer available.",
+    });
+  }
+  if (
+    existing !== undefined &&
+    (draft.baseVersion !== undefined || isMailSyncEnabled()) &&
+    draft.baseVersion !== existing.sentAt.toISOString()
+  ) {
+    throw new ORPCError("CONFLICT", {
+      message:
+        "This draft changed elsewhere. Your edits are kept here. Save a copy to keep both versions.",
     });
   }
   const messageId = existing?.id ?? crypto.randomUUID();
@@ -191,6 +202,7 @@ export const saveManagedDraft = async (input: {
     bodyText: draft.bodyText,
     draftAnchor: draft.draftAnchor ?? null,
     draftId,
+    draftVersion: now.toISOString(),
     messageId,
     recipients: draft.recipients,
     replyContext: draft.replyContext ?? null,
@@ -199,6 +211,7 @@ export const saveManagedDraft = async (input: {
 };
 
 export const deleteManagedDraft = async (input: {
+  baseVersion?: string;
   draftId: string;
   mailboxId: string;
   userId: string;
@@ -213,6 +226,28 @@ export const deleteManagedDraft = async (input: {
     input.mailboxId,
     (result) => ({ threadIds: result === undefined ? [] : [result.threadId] }),
     async (tx) => {
+      if (input.baseVersion !== undefined) {
+        const [current] = await tx
+          .select({ sentAt: managedMailMessage.sentAt })
+          .from(managedMailMessage)
+          .where(
+            and(
+              eq(managedMailMessage.mailboxId, input.mailboxId),
+              eq(managedMailMessage.providerMessageId, input.draftId),
+              eq(managedMailMessage.mailboxState, "draft")
+            )
+          )
+          .for("update");
+        if (
+          current !== undefined &&
+          current.sentAt.toISOString() !== input.baseVersion
+        ) {
+          throw new ORPCError("CONFLICT", {
+            message:
+              "This draft changed elsewhere and was kept. Reopen it before deleting it.",
+          });
+        }
+      }
       const records = await tx
         .delete(managedMailMessage)
         .where(

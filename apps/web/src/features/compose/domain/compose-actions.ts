@@ -292,6 +292,7 @@ export const buildComposeDraftFromSavedDraftMessage = (
 
   return {
     ...draft,
+    baseVersion: message.draftVersion,
     bodyHtml: message.bodyHtml ?? "",
     bodyText: message.bodyText ?? message.snippet ?? "",
     draftAnchor: message.draftAnchor ?? null,

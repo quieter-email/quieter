@@ -75,6 +75,8 @@ export const managedSyncMessage = (
     ),
     draftId:
       record.mailboxState === "draft" ? record.providerMessageId : undefined,
+    draftVersion:
+      record.mailboxState === "draft" ? record.sentAt.toISOString() : undefined,
     from: record.from,
     id: record.id,
     inReplyTo: record.inReplyTo ?? undefined,

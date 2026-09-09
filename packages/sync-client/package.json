@@ -4,6 +4,7 @@
   "type": "module",
   "exports": {
     ".": "./src/engine.ts",
+    "./draft-journal": "./src/draft-journal.ts",
     "./storage": "./src/storage.ts",
     "./types": "./src/types.ts",
     "./worker": "./src/worker.ts",

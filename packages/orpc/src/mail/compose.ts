@@ -4,6 +4,7 @@ import {
   deleteDraft,
   extractListUnsubscribeTargets,
   getGmailMessageMetadata,
+  getDraft,
   sendDraft as sendGmailDraft,
   sendRawMessage,
 } from "@quieter/gmail";
@@ -17,6 +18,8 @@ import { reportError } from "@quieter/observability";
 import { saveGmailDraft, sendGmailMessage } from "../gmail-compose";
 import { callGmail } from "../gmail-request";
 import type { MailRequestContext } from "../gmail-request";
+import { withGmailComposeReplication } from "../mail-sync-compose";
+import { isMailSyncEnabled } from "../mail-sync-runtime";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import {
   saveManagedDraft,
@@ -82,10 +85,38 @@ export const composeMailOperations = {
       });
     }
 
-    return await callGmail(context, input.mailboxId, async (accessToken) => {
-      await deleteDraft(accessToken, input.draftId);
-      return { deleted: true };
-    });
+    return await callGmail(
+      context,
+      input.mailboxId,
+      async (accessToken) =>
+        await withGmailComposeReplication(
+          input.mailboxId,
+          accessToken,
+          async () => {
+            const draft = await getDraft(
+              accessToken,
+              input.draftId,
+              context.signal
+            );
+            if (
+              input.baseVersion !== undefined &&
+              draft.message?.id !== input.baseVersion
+            ) {
+              throw new ORPCError("CONFLICT", {
+                message:
+                  "This draft changed elsewhere and was kept. Reopen it before deleting it.",
+              });
+            }
+            await deleteDraft(accessToken, input.draftId);
+            return {
+              result: { deleted: true },
+              threadIds: draft.message?.threadId
+                ? [draft.message.threadId]
+                : [],
+            };
+          }
+        )
+    );
   },
   saveDraft: async ({
     context,
@@ -109,7 +140,32 @@ export const composeMailOperations = {
       context,
       input.mailboxId,
       async (accessToken) =>
-        await saveGmailDraft(accessToken, input.draft, context.signal)
+        await withGmailComposeReplication(
+          input.mailboxId,
+          accessToken,
+          async () => {
+            if (
+              isMailSyncEnabled() &&
+              input.draft.draftId &&
+              (input.draft.baseVersion === null ||
+                input.draft.baseVersion === undefined)
+            ) {
+              throw new ORPCError("CONFLICT", {
+                message:
+                  "Reopen this draft before saving. Your edits are kept here, or you can save a copy.",
+              });
+            }
+            const result = await saveGmailDraft(
+              accessToken,
+              input.draft,
+              context.signal
+            );
+            return {
+              result,
+              threadIds: result.threadId ? [result.threadId] : [],
+            };
+          }
+        )
     );
   },
   sendDraft: async ({

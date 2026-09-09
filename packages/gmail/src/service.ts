@@ -1973,6 +1973,7 @@ export const getThreadWithDetails = async (
       ? {
           ...message,
           draftId: draftIdsByMessageId.get(message.id),
+          draftVersion: message.id,
         }
       : message
   );

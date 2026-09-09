@@ -39,6 +39,9 @@ type ComposeInlineImage = ComposeAssetBase & {
 };
 
 export type ComposeDraftState = {
+  recoveryEditorId?: string;
+  baseVersion?: string;
+  conflict?: boolean;
   localId: string;
   draftId?: string;
   messageId?: string;
@@ -472,8 +475,10 @@ export const saveComposeDraft = async (
 
   return {
     ...draft,
+    baseVersion: response.draftVersion,
     bodyHtml,
     bodyText: response.bodyText || htmlToText(bodyHtml),
+    conflict: false,
     draftAnchor: response.draftAnchor ?? null,
     draftId: response.draftId,
     errorMessage: null,
@@ -509,7 +514,10 @@ export const deleteComposeDraft = async (
   ) {
     return;
   }
-  await rpc.mail.deleteDraft({ draftId: draft.draftId, mailboxId }, { signal });
+  await rpc.mail.deleteDraft(
+    { baseVersion: draft.baseVersion, draftId: draft.draftId, mailboxId },
+    { signal }
+  );
 };
 
 export const attachInlineImagesToHtml = (

@@ -20,6 +20,7 @@ import {
   removeDraftMessageFromCaches,
 } from "#/lib/gmail/inbox-query";
 import { getThreadQueryKey } from "#/lib/gmail/thread-query-keys";
+import { runMailSyncTask } from "#/lib/mail-sync/session";
 import {
   deleteManagedDemoDraft,
   saveManagedDemoDraft,
@@ -46,6 +47,7 @@ import {
   sendComposeMessage,
 } from "../domain/draft";
 import type { ComposeDraftState } from "../domain/draft";
+import { useDraftRecovery } from "./use-draft-recovery";
 
 type ComposeDraftUpdate =
   | ComposeDraftState
@@ -101,7 +103,10 @@ export const useComposeDialogController = ({
       ? cloneComposeDraft(initialDraft)
       : createEmptyComposeDraft();
     let resolved = draft;
-    if ((initialDraft?.draftId ?? "") === "") {
+    if (
+      (initialDraft?.draftId ?? "") === "" &&
+      initialDraft?.recoveryEditorId === undefined
+    ) {
       resolved = appendComposeSignature(
         draft,
         signature ?? { html: undefined, text: undefined }
@@ -128,6 +133,8 @@ export const useComposeDialogController = ({
 
     return composeFormValuesToDraft(values, {
       attachments: draft.attachments,
+      baseVersion: draft.baseVersion,
+      conflict: draft.conflict,
       draftAnchor: draft.draftAnchor,
       draftId: draft.draftId,
       errorMessage: null,
@@ -135,6 +142,7 @@ export const useComposeDialogController = ({
       lastSavedAt: draft.lastSavedAt,
       localId: draft.localId,
       messageId: draft.messageId,
+      recoveryEditorId: draft.recoveryEditorId,
       replyContext: draft.replyContext,
       saveStatus: "idle",
       updatedAt: Date.now(),
@@ -142,6 +150,8 @@ export const useComposeDialogController = ({
   };
 
   const closeDialog = (afterClose?: () => void) => {
+    // oxlint-disable-next-line no-use-before-define -- This handler runs after the form and recovery hooks initialize.
+    void runMailSyncTask(recovery.complete(activeDraftRef.current));
     draftClosedRef.current = true;
     setState((current) => ({ ...current, open: false }));
     const closeHandler = afterClose ?? onClose;
@@ -189,13 +199,16 @@ export const useComposeDialogController = ({
       mailboxId === null ||
       mailboxId === "" ||
       activeDraftRef.current.saveStatus === "saving" ||
-      activeDraftRef.current.saveStatus === "sending"
+      activeDraftRef.current.saveStatus === "sending" ||
+      activeDraftRef.current.conflict === true
     ) {
       return;
     }
 
     const message = buildDraftFromForm(values);
     setDraft(() => ({ ...message, errorMessage: null, saveStatus: "sending" }));
+    // oxlint-disable-next-line no-use-before-define -- The form invokes this handler after recovery initializes.
+    await recovery.checkpoint();
 
     let draftCleanupHandled = false;
     try {
@@ -264,6 +277,18 @@ export const useComposeDialogController = ({
     },
   });
 
+  const recovery = useDraftRecovery({
+    enabled: persistDrafts && !demoMode && !managedDemoMode,
+    getDraft: () => ({
+      ...buildDraftFromForm(form.state.values),
+      errorMessage: activeDraftRef.current.errorMessage,
+      saveStatus: activeDraftRef.current.saveStatus,
+    }),
+    mailboxId,
+    queryClient,
+    subscribe: (onChange) => form.store.subscribe(onChange),
+  });
+
   const persistCurrentDraft = async () => {
     const { values } = form.state;
     const draft = buildDraftFromForm(values);
@@ -292,7 +317,11 @@ export const useComposeDialogController = ({
     ) {
       return true;
     }
+    if (draft.conflict === true) {
+      return false;
+    }
     setDraft({ ...draft, saveStatus: "saving" });
+    await recovery.checkpoint();
     let saved: ComposeDraftState;
     try {
       if (demoMode) {
@@ -305,7 +334,15 @@ export const useComposeDialogController = ({
     } catch (error) {
       setDraft({
         ...draft,
-        errorMessage: "Your draft could not be saved. Please try again.",
+        conflict:
+          typeof error === "object" &&
+          error !== null &&
+          "code" in error &&
+          error.code === "CONFLICT",
+        errorMessage:
+          error instanceof Error && "code" in error && error.code === "CONFLICT"
+            ? error.message
+            : "Your draft could not be saved. Please try again.",
         saveStatus: "error",
       });
       toastError(error, {
@@ -504,6 +541,20 @@ export const useComposeDialogController = ({
     discardActiveDraft,
     form,
     handleDialogOpenChange,
+    saveConflictCopy: async () => {
+      const draft = buildDraftFromForm(form.state.values);
+      setDraft({
+        ...draft,
+        baseVersion: undefined,
+        conflict: false,
+        draftId: undefined,
+        errorMessage: null,
+        localId: crypto.randomUUID(),
+        messageId: undefined,
+        saveStatus: "idle",
+      });
+      await persistCurrentDraft();
+    },
     setActiveDraftError,
     state,
     toggleRecipientVisibility,

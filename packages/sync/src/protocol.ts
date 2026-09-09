@@ -49,6 +49,7 @@ export const syncMessageSchema = z.object({
   date: z.string().optional(),
   draftAnchor: composeDraftAnchorSchema.optional(),
   draftId: syncIdSchema.optional(),
+  draftVersion: z.string().max(256).optional(),
   from: z.string().optional(),
   id: syncIdSchema,
   inReplyTo: z.string().optional(),
