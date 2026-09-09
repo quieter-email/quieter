@@ -3,6 +3,7 @@
 - [Development](development.md)
 - [Development integration plan](development-integrations.md)
 - [Architecture](architecture.md)
+- [Custom mail sync engine plan](custom-mail-sync-engine-plan.md)
 - [Responsive mail baseline](responsive-mail.md)
 - [Database safety](database-safety.md)
 - [Outbound mail feedback](outbound-mail-feedback.md)
