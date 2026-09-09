@@ -322,12 +322,30 @@ export const synchronizeGmail = async (
       if (importComplete) {
         phase = sweepComplete ? "ready" : "sweep";
       }
-      if (unreadNonSpamCount !== null) {
+      if (unreadNonSpamCount !== null || phase !== state.phase) {
+        const [previousOverview] =
+          unreadNonSpamCount === null
+            ? await context.database
+                .select({ data: mailSyncEntity.data })
+                .from(mailSyncEntity)
+                .where(
+                  and(
+                    eq(mailSyncEntity.mailboxId, mailboxId),
+                    eq(mailSyncEntity.kind, "overview"),
+                    eq(mailSyncEntity.entityId, mailboxId)
+                  )
+                )
+            : [];
+        const counts =
+          previousOverview?.data?.kind === "overview"
+            ? previousOverview.data.value.counts
+            : {};
         context.put({
           data: {
             kind: "overview",
             value: {
-              counts: { unreadNonSpamCount },
+              counts:
+                unreadNonSpamCount === null ? counts : { unreadNonSpamCount },
               status: phase === "ready" ? "ready" : "importing",
             },
           },

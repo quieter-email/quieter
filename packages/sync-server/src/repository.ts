@@ -1,11 +1,10 @@
-import { isDeepStrictEqual } from "node:util";
-
 import type {
   DatabaseClient,
   DatabaseTransaction,
 } from "@quieter/database/client";
 import {
   mailbox,
+  mailSyncCommand,
   mailSyncChange,
   mailSyncEntity,
   mailSyncOutbox,
@@ -19,7 +18,6 @@ import {
 } from "@quieter/sync";
 import type {
   SyncBatch,
-  SyncChange,
   SyncCheckpoint,
   SyncEntityData,
   SyncEntityKind,
@@ -38,6 +36,8 @@ import {
   or,
   sql,
 } from "drizzle-orm";
+
+import { persistSyncEntities } from "./projection-writer";
 
 export type SyncEntityWrite = {
   id: string;
@@ -112,79 +112,9 @@ export class SyncRepository {
         },
         sequence,
       });
-      const changes: SyncChange[] = [];
-      for (const write of writes.values()) {
-        const [existing] = await database
-          .select({
-            data: mailSyncEntity.data,
-            providerGeneration: mailSyncEntity.providerGeneration,
-          })
-          .from(mailSyncEntity)
-          .where(
-            and(
-              eq(mailSyncEntity.mailboxId, mailboxId),
-              eq(mailSyncEntity.kind, write.kind),
-              eq(mailSyncEntity.entityId, write.id)
-            )
-          );
-        if (
-          (existing !== undefined &&
-            isDeepStrictEqual(existing.data, write.data)) ||
-          (existing === undefined && write.data === null)
-        ) {
-          if (
-            existing !== undefined &&
-            write.providerGeneration !== undefined &&
-            existing.providerGeneration !== write.providerGeneration
-          ) {
-            await database
-              .update(mailSyncEntity)
-              .set({ providerGeneration: write.providerGeneration })
-              .where(
-                and(
-                  eq(mailSyncEntity.mailboxId, mailboxId),
-                  eq(mailSyncEntity.kind, write.kind),
-                  eq(mailSyncEntity.entityId, write.id)
-                )
-              );
-          }
-          continue;
-        }
-        const change: SyncChange = {
-          data: write.data,
-          id: write.id,
-          kind: write.kind,
-          version: String(sequence),
-        };
-        changes.push(change);
-        await database
-          .insert(mailSyncEntity)
-          .values({
-            data: write.data,
-            entityId: write.id,
-            kind: write.kind,
-            mailboxId,
-            providerGeneration: write.providerGeneration,
-            sortAt: write.sortAt ?? new Date(),
-            threadId: write.threadId ?? null,
-            version: sequence,
-          })
-          .onConflictDoUpdate({
-            set: {
-              data: write.data,
-              providerGeneration: write.providerGeneration,
-              sortAt: write.sortAt ?? new Date(),
-              threadId: write.threadId ?? null,
-              updatedAt: new Date(),
-              version: sequence,
-            },
-            target: [
-              mailSyncEntity.mailboxId,
-              mailSyncEntity.kind,
-              mailSyncEntity.entityId,
-            ],
-          });
-      }
+      const changes = await persistSyncEntities(database, mailboxId, sequence, [
+        ...writes.values(),
+      ]);
       if (changes.length === 0) {
         return { batch: null, result };
       }
@@ -475,11 +405,15 @@ export class SyncRepository {
         .orderBy(desc(mailSyncChange.sequence))
         .limit(1);
       if (last === undefined) {
+        await database
+          .update(mailSyncStream)
+          .set({ updatedAt: now })
+          .where(eq(mailSyncStream.mailboxId, mailboxId));
         return;
       }
       await database
         .update(mailSyncStream)
-        .set({ replayFloor: last.sequence })
+        .set({ replayFloor: last.sequence, updatedAt: now })
         .where(eq(mailSyncStream.mailboxId, mailboxId));
       await database
         .delete(mailSyncChange)
@@ -495,7 +429,25 @@ export class SyncRepository {
           and(
             eq(mailSyncEntity.mailboxId, mailboxId),
             lte(mailSyncEntity.version, last.sequence),
-            sql`${mailSyncEntity.data} is null`
+            or(
+              sql`${mailSyncEntity.data} is null`,
+              and(
+                eq(mailSyncEntity.kind, "command"),
+                sql`${mailSyncEntity.data}->'value'->>'status' in ('applied', 'failed')`
+              )
+            )
+          )
+        );
+      await database
+        .delete(mailSyncCommand)
+        .where(
+          and(
+            eq(mailSyncCommand.mailboxId, mailboxId),
+            inArray(mailSyncCommand.status, ["applied", "failed"]),
+            lt(
+              mailSyncCommand.updatedAt,
+              new Date(now.getTime() - 90 * 86_400_000)
+            )
           )
         );
     });

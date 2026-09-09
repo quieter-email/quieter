@@ -6,11 +6,7 @@ import type { SyncCommand } from "@quieter/sync";
 import { and, asc, eq, inArray } from "drizzle-orm";
 
 import { SyncCommandConflictError } from "./command-conflict";
-import {
-  assertProviderLease,
-  SyncProviderBusyError,
-  withProviderLease,
-} from "./providers/lease";
+import { assertProviderLease, withProviderLease } from "./providers/lease";
 import type { SyncRepository, SyncTransaction } from "./repository";
 
 export { SyncCommandConflictError } from "./command-conflict";
@@ -115,7 +111,7 @@ export class SyncCommands {
           return false;
         }
         if (pending.nextAttemptAt.getTime() > Date.now()) {
-          throw new SyncProviderBusyError();
+          return false;
         }
         await this.repository.database
           .update(mailSyncCommand)

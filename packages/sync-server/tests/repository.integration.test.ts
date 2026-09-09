@@ -258,6 +258,54 @@ suite("transactional mail replication", () => {
     expect(emptySnapshot?.entities).toStrictEqual([]);
   });
 
+  it("batches a large projection and refreshes inventory generations without advancing versions", async () => {
+    const mailboxId = crypto.randomUUID();
+    await connection`INSERT INTO mailbox (id) VALUES (${mailboxId})`;
+    let queries = 0;
+    const bulkRepository = new SyncRepository(
+      drizzle({
+        client: connection,
+        logger: {
+          logQuery: () => {
+            queries += 1;
+          },
+        },
+      }),
+      async () => {
+        await Promise.resolve();
+      },
+      (error) => {
+        failures.push(error);
+      }
+    );
+    const write = async (generation: string) => {
+      await bulkRepository.transaction(mailboxId, async ({ put }) => {
+        for (let index = 0; index < 1001; index += 1) {
+          const id = `label-${index}`;
+          put({
+            data: { kind: "label", value: { id, name: id } },
+            id,
+            kind: "label",
+            providerGeneration: generation,
+          });
+        }
+        await Promise.resolve();
+      });
+    };
+    await write("first");
+    expect(queries).toBeLessThan(20);
+    const head = await bulkRepository.head(mailboxId);
+    await write("second");
+    await expect(bulkRepository.head(mailboxId)).resolves.toStrictEqual(head);
+    const rows =
+      await connection`SELECT DISTINCT "providerGeneration", version FROM "mailSyncEntity" WHERE "mailboxId"=${mailboxId}`;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      providerGeneration: "second",
+      version: "1",
+    });
+  });
+
   it("accepts an action once and executes concurrent actions in commit order", async () => {
     const mailboxId = crypto.randomUUID();
     const userId = crypto.randomUUID();
@@ -328,9 +376,7 @@ suite("transactional mail replication", () => {
     };
     await commands.submit(userId, command);
     await commands.process(mailboxId);
-    await expect(commands.process(mailboxId)).rejects.toThrow(
-      "already running"
-    );
+    await expect(commands.process(mailboxId)).resolves.toBeFalsy();
     permanent = true;
     await connection`UPDATE "mailSyncCommand" SET "nextAttemptAt"=now() - interval '1 second' WHERE "mailboxId"=${mailboxId}`;
     await commands.process(mailboxId);
