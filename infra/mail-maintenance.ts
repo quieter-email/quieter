@@ -4,12 +4,14 @@ import type { createAppDatabase } from "./database";
 import { cloudflareWorkerObservability } from "./runtime";
 import type { DeploymentContext } from "./runtime";
 import { requireSecretBinding } from "./secrets";
+import type { createMailSyncResources } from "./sync";
 import type { SecretBindings } from "./types";
 
 export const createMailMaintenanceResources = (
   context: DeploymentContext,
   secretBindings: SecretBindings,
-  appDatabase: ReturnType<typeof createAppDatabase>
+  appDatabase: ReturnType<typeof createAppDatabase>,
+  sync: ReturnType<typeof createMailSyncResources>
 ) => {
   const sentryDsnBinding = requireSecretBinding(secretBindings, "SENTRY_DSN");
   return new sst.cloudflare.Cron("MailMaintenance", {
@@ -20,6 +22,7 @@ export const createMailMaintenanceResources = (
         flags: ["nodejs_compat"],
       },
       environment: {
+        ...sync.environment,
         ...context.billingEnvironment,
         R2_ACCOUNT_ID: context.env.R2_ACCOUNT_ID ?? "",
         R2_BUCKET: context.env.R2_BUCKET ?? "",
@@ -27,6 +30,7 @@ export const createMailMaintenanceResources = (
       },
       handler: "packages/cloudflare/src/mail-maintenance-worker.ts",
       link: [
+        sync.secret,
         appDatabase,
         sentryDsnBinding,
         ...(

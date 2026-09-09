@@ -28,6 +28,7 @@ import { runAuthorizedGmailMailbox } from "./gmail-mailbox-access";
 import { mailSyncCommandService } from "./mail-sync-commands";
 import {
   getMailSyncConfiguration,
+  isMailSyncEnabled,
   mailSyncServices,
 } from "./mail-sync-runtime";
 import { assertAccessibleMailbox } from "./mailbox/service";
@@ -42,7 +43,7 @@ export const authorizeSyncMailbox = async (mailboxId: string, userId: string) =>
   await assertAccessibleMailbox({ mailboxId, userId });
 
 export const runMailboxSynchronization = async (mailboxId: string) => {
-  if (getMailSyncConfiguration() === null) {
+  if (!isMailSyncEnabled()) {
     return { hasMore: false };
   }
   const [selected] = await db
@@ -75,7 +76,7 @@ export const runMailboxSynchronization = async (mailboxId: string) => {
 };
 
 export const maintainMailSynchronization = async () => {
-  if (getMailSyncConfiguration() === null) {
+  if (!isMailSyncEnabled()) {
     return;
   }
   const { repository, enqueue } = mailSyncServices();

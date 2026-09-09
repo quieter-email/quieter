@@ -4,6 +4,7 @@ import { createMailResources, mailReceiptRuleSetName } from "./mail";
 import { createMailMaintenanceResources } from "./mail-maintenance";
 import { createDeploymentContext } from "./runtime";
 import { requireSecretResource } from "./secrets";
+import { createMailSyncResources } from "./sync";
 import type { SecretBindings, SecretResources } from "./types";
 import { createWeb } from "./web";
 
@@ -18,19 +19,27 @@ export const createInfrastructure = async (input: {
   const webSecretBindings = Object.values(secretBindings);
 
   const context = createDeploymentContext(secretResources);
-  createMailMaintenanceResources(context, secretBindings, appDatabase);
-  const gmail = createGmailResources(
+  const sync = createMailSyncResources(
     context,
     secretBindings,
     secretResources,
     appDatabase
   );
-  const mail = await createMailResources(context, secretResources);
+  createMailMaintenanceResources(context, secretBindings, appDatabase, sync);
+  const gmail = createGmailResources(
+    context,
+    secretBindings,
+    secretResources,
+    appDatabase,
+    sync
+  );
+  const mail = await createMailResources(context, secretResources, sync);
   const web = createWeb(
     appDatabase,
     webSecretBindings,
     {
       GMAIL_LIVE_SYNC_URL: gmail.gmailLiveSyncUrl,
+      ...sync.environment,
       MAIL_BUCKET: mail.mailBucket.name,
       MAIL_RECEIPT_ROLE_ARN: mail.mailReceiptRole.arn,
       MAIL_RECEIPT_RULE_SET_NAME: mailReceiptRuleSetName,
@@ -66,6 +75,7 @@ export const createInfrastructure = async (input: {
     mailReceiptRoleArn: mail.mailReceiptRole.arn,
     mailReceiptRuleSetName,
     mailReceiptTopicArn: mail.mailReceiptTopic.arn,
+    mailSyncUrl: sync.url,
     stage: $app.stage,
     webUrl: web.url,
   };

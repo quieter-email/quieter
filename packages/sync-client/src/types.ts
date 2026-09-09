@@ -50,6 +50,7 @@ export type SyncApi = {
 };
 
 export type SyncClientEvent =
+  | { type: "cache-cleared" }
   | {
       type: "entities";
       mailboxId: string;

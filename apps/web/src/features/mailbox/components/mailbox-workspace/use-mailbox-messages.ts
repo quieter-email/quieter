@@ -16,6 +16,7 @@ import {
 import { getThreadWithDetailsOptions } from "#/lib/gmail/thread-query";
 import { useMailboxLiveSync } from "#/lib/gmail/use-gmail-live-sync";
 import type { ListMessagesPageResult, MailboxCategory } from "#/lib/mail";
+import { useMailSyncEnabled, useWarmMailThreads } from "#/lib/mail-sync/hooks";
 import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
 import { isMailboxScopeRepairRequiredError } from "#/lib/orpc-errors";
 
@@ -198,6 +199,7 @@ export const useMailboxMessages = ({
   selectedMailboxId,
 }: UseMailboxMessagesOptions) => {
   const isWindowActive = useWindowActive();
+  const hasSyncEngine = useMailSyncEnabled(selectedMailboxId ?? "");
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const normalizedQuery = searchQuery.trim();
   const {
@@ -236,17 +238,22 @@ export const useMailboxMessages = ({
       selectedMailboxId ?? "",
       activeMailbox,
       normalizedQuery,
-      isLiveSyncEnabled
+      isLiveSyncEnabled && !hasSyncEngine
     )
   );
   useMailboxLiveSync({
-    enabled: isLiveSyncEnabled && mailboxProvider === "gmail",
+    enabled: isLiveSyncEnabled && !hasSyncEngine && mailboxProvider === "gmail",
     mailboxId: selectedMailboxId ?? "",
     queryClient,
   });
   const flattenedMessages = useMemo(
     () => messages.flatMap((page) => page.messages),
     [messages]
+  );
+  useWarmMailThreads(
+    selectedMailboxId ?? "",
+    flattenedMessages.map((message) => message.threadId),
+    2
   );
   const cachedSelectedMessage = getCachedSelectedMessage(
     activeMailbox,

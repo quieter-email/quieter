@@ -717,4 +717,23 @@ export class ReplicaStorage {
       }
     );
   }
+
+  async clearCache() {
+    await this.transact(
+      ["entities", "coverage", "checkpoints", "bodies", "bodyIndex"],
+      "readwrite",
+      async (transaction) => {
+        for (const name of [
+          "entities",
+          "coverage",
+          "checkpoints",
+          "bodies",
+          "bodyIndex",
+        ]) {
+          transaction.objectStore(name).clear();
+        }
+        await Promise.resolve();
+      }
+    );
+  }
 }

@@ -45,9 +45,28 @@ const PERSISTED_QUERY_MAX_AGE_MS = 1000 * 60 * 60 * 24;
 let persistenceUserId = "anonymous";
 let persistenceUserInitialized = false;
 let persistenceDisabled = false;
+let replicaOwnsMailCache = false;
 const CACHE_NAMESPACE = "quieter-cache:v7";
 const getStorageKey = (key: string) =>
   `${CACHE_NAMESPACE}:${persistenceUserId}:${key}`;
+
+export const setMailReplicaPersistence = (enabled: boolean) => {
+  replicaOwnsMailCache = enabled;
+  if (!enabled || typeof window === "undefined") {
+    return;
+  }
+  try {
+    const prefix = `${CACHE_NAMESPACE}:${persistenceUserId}:`;
+    for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
+      const key = window.localStorage.key(index);
+      if (key?.startsWith(prefix) === true) {
+        window.localStorage.removeItem(key);
+      }
+    }
+  } catch {
+    persistenceDisabled = true;
+  }
+};
 
 export const setQueryPersistenceUser = (userId: string | null | undefined) => {
   const trimmedUserId = userId?.trim();
@@ -85,7 +104,7 @@ const queryStorage =
     ? undefined
     : {
         entries: (): [string, string][] => {
-          if (persistenceDisabled) {
+          if (persistenceDisabled || replicaOwnsMailCache) {
             return [];
           }
           try {
@@ -103,7 +122,7 @@ const queryStorage =
           }
         },
         getItem: (key: string) => {
-          if (persistenceDisabled) {
+          if (persistenceDisabled || replicaOwnsMailCache) {
             return null;
           }
           try {
@@ -121,7 +140,7 @@ const queryStorage =
           }
         },
         setItem: (key: string, value: string) => {
-          if (persistenceDisabled) {
+          if (persistenceDisabled || replicaOwnsMailCache) {
             return;
           }
           try {
@@ -163,6 +182,9 @@ export const queryPersister = experimental_createQueryPersister({
 });
 
 export const shouldPersistQueryKey = (queryKey: readonly unknown[]) => {
+  if (replicaOwnsMailCache) {
+    return false;
+  }
   if (queryKey.length === 2) {
     return (
       (queryKey[0] === "gmail-labels" ||

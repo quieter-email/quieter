@@ -18,6 +18,7 @@
     "@quieter/orpc": "workspace:*",
     "@quieter/sync": "workspace:*",
     "@quieter/sync-server": "workspace:*",
+    "@sentry/cloudflare": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

@@ -35,6 +35,7 @@ const peerSchema = z.discriminatedUnion("type", [
     type: z.literal("entities"),
   }),
   z.object({ type: z.literal("logout") }),
+  z.object({ type: z.literal("cache-cleared") }),
   z.object({ mailboxId: z.string(), type: z.literal("revoked") }),
 ]);
 type Status = Extract<SyncClientEvent, { type: "status" }>;
@@ -66,6 +67,8 @@ export class MailSyncEngine {
   private maintenance: ReturnType<typeof setInterval> | null = null;
   private maintaining = false;
   private lastEviction = 0;
+  private clearing = false;
+  private readonly revoked = new Set<string>();
 
   private constructor(options: SyncClientOptions) {
     this.options = options;
@@ -202,6 +205,10 @@ export class MailSyncEngine {
   }
 
   private async ensureMailbox(mailboxId: string) {
+    this.controller.signal.throwIfAborted();
+    if (this.clearing || this.revoked.has(mailboxId)) {
+      throw new DOMException("The mailbox cache is unavailable.", "AbortError");
+    }
     const current = this.loading.get(mailboxId);
     if (current !== undefined) {
       return await current;
@@ -241,6 +248,7 @@ export class MailSyncEngine {
   async subscribe(mailboxIds: string[]) {
     this.localInterests.clear();
     for (const mailboxId of mailboxIds.slice(0, 32)) {
+      this.revoked.delete(mailboxId);
       this.localInterests.add(mailboxId);
       await this.ensureMailbox(mailboxId);
     }
@@ -270,6 +278,9 @@ export class MailSyncEngine {
   warmThreads(mailboxId: string, threadIds: string[], priority = 1) {
     if (
       !this.online ||
+      !this.enabled ||
+      this.clearing ||
+      this.revoked.has(mailboxId) ||
       this.controller.signal.aborted ||
       (this.options.reducedData === true && priority > 0)
     ) {
@@ -280,6 +291,14 @@ export class MailSyncEngine {
         key: `${mailboxId}:${threadId}`,
         priority,
         run: async () => {
+          if (
+            !this.localInterests.has(mailboxId) &&
+            ![...this.peerInterests.values()].some((peer) =>
+              peer.mailboxIds.includes(mailboxId)
+            )
+          ) {
+            return;
+          }
           const replica = await this.ensureMailbox(mailboxId);
           await replica.thread(threadId);
         },
@@ -389,7 +408,12 @@ export class MailSyncEngine {
   }
 
   private async tick() {
-    if (this.maintaining || this.controller.signal.aborted || !this.enabled) {
+    if (
+      this.maintaining ||
+      this.clearing ||
+      this.controller.signal.aborted ||
+      !this.enabled
+    ) {
       return;
     }
     this.maintaining = true;
@@ -416,7 +440,9 @@ export class MailSyncEngine {
           this.peerInterests.delete(ownerId);
         } else if (leader) {
           for (const mailboxId of peer.mailboxIds) {
-            interests.add(mailboxId);
+            if (!this.revoked.has(mailboxId)) {
+              interests.add(mailboxId);
+            }
           }
         }
       }
@@ -427,6 +453,7 @@ export class MailSyncEngine {
         if (!interests.has(mailboxId)) {
           this.connection.unsubscribe(replica);
           this.mailboxControllers.get(mailboxId)?.abort();
+          this.scheduler.cancel(mailboxId);
           this.replicas.delete(mailboxId);
         }
       }
@@ -527,6 +554,10 @@ export class MailSyncEngine {
         await this.stop(true, false);
         return;
       }
+      if (message.type === "cache-cleared") {
+        await this.clearCache(false);
+        return;
+      }
       if (message.type === "revoked") {
         await this.revoke(message.mailboxId, false);
         return;
@@ -552,6 +583,12 @@ export class MailSyncEngine {
   }
 
   async revoke(mailboxId: string, broadcast = true) {
+    this.revoked.add(mailboxId);
+    this.scheduler.cancel(mailboxId);
+    const replica = this.replicas.get(mailboxId);
+    if (replica !== undefined) {
+      this.connection.unsubscribe(replica);
+    }
     this.mailboxControllers.get(mailboxId)?.abort();
     this.replicas.delete(mailboxId);
     this.localInterests.delete(mailboxId);
@@ -591,5 +628,30 @@ export class MailSyncEngine {
     } else {
       this.storage?.close();
     }
+  }
+
+  async clearCache(broadcast = true) {
+    if (this.clearing || this.controller.signal.aborted) {
+      return;
+    }
+    this.clearing = true;
+    this.connection.stop();
+    this.scheduler.cancel();
+    for (const controller of this.mailboxControllers.values()) {
+      controller.abort();
+    }
+    this.replicas.clear();
+    this.loading.clear();
+    this.bodyCache.clear();
+    try {
+      await this.storage?.clearCache();
+      this.notify({ type: "cache-cleared" });
+      if (broadcast) {
+        this.channel?.postMessage({ type: "cache-cleared" });
+      }
+    } finally {
+      this.clearing = false;
+    }
+    await this.tick();
   }
 }

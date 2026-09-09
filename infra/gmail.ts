@@ -5,6 +5,7 @@ import { cloudflareWorkerObservability } from "./runtime";
 import type { DeploymentContext } from "./runtime";
 import { requireSecretBinding, requireSecretResource } from "./secrets";
 import { deploymentEnvironment } from "./stage";
+import type { createMailSyncResources } from "./sync";
 import type { SecretBindings, SecretResources } from "./types";
 
 const processingSecretNames = [
@@ -20,7 +21,8 @@ export const createGmailResources = (
   context: DeploymentContext,
   secretBindings: SecretBindings,
   secretResources: SecretResources,
-  appDatabase: ReturnType<typeof createAppDatabase>
+  appDatabase: ReturnType<typeof createAppDatabase>,
+  sync: ReturnType<typeof createMailSyncResources>
 ) => {
   const gmailLiveSyncTokenSecret = requireSecretResource(
     secretResources,
@@ -57,6 +59,7 @@ export const createGmailResources = (
           flags: ["nodejs_compat"],
         },
         environment: {
+          ...sync.environment,
           GMAIL_PUBSUB_PUSH_AUDIENCE:
             context.gmailPubSubEnvironment.GMAIL_PUBSUB_PUSH_AUDIENCE,
           GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT:
@@ -70,6 +73,7 @@ export const createGmailResources = (
         },
         handler: "packages/cloudflare/src/worker.ts",
         link: [
+          sync.secret,
           gmailLiveSyncMailbox,
           gmailLiveSyncTokenSecret,
           appDatabase,
@@ -99,6 +103,7 @@ export const createGmailResources = (
           flags: ["nodejs_compat"],
         },
         environment: {
+          ...sync.environment,
           GMAIL_PUBSUB_TOPIC: context.gmailPubSubEnvironment.GMAIL_PUBSUB_TOPIC,
           ...context.billingEnvironment,
           QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
@@ -106,6 +111,7 @@ export const createGmailResources = (
         },
         handler: "packages/cloudflare/src/queue-worker.ts",
         link: [
+          sync.secret,
           appDatabase,
           gmailLiveSyncMailbox,
           sentryDsnBinding,

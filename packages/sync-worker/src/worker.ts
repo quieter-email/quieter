@@ -10,12 +10,13 @@ import {
 } from "@quieter/sync-server/auth";
 import { z } from "zod";
 
+import { withSyncReporting } from "./observability";
 import { readSyncRequest, withSyncRuntime } from "./runtime";
 
 export { MailboxSync } from "./mailbox-sync";
 export { UserSync } from "./user-sync";
 
-export default {
+export default withSyncReporting({
   async fetch(request, env) {
     const url = new URL(request.url);
     try {
@@ -149,4 +150,4 @@ export default {
   async scheduled(_controller, env) {
     await withSyncRuntime(env, maintainMailSynchronization);
   },
-} satisfies ExportedHandler<SyncEnv>;
+} satisfies ExportedHandler<SyncEnv>);

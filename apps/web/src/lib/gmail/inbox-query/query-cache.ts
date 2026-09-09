@@ -9,7 +9,7 @@ import type {
 import { persistQueryByKey } from "#/lib/query-persister";
 
 import { getThreadLabelIds } from "../thread-list";
-import { getThreadQueryKey } from "../thread-query";
+import { getThreadQueryKey } from "../thread-query-keys";
 import {
   applyMessageMetadata,
   applySyncDeltaToQueryData,

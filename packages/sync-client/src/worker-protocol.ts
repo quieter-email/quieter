@@ -76,6 +76,7 @@ export const syncWorkerActionSchema = z.discriminatedUnion("method", [
   z.object({ input: z.boolean(), method: z.literal("visible") }),
   z.object({ input: z.boolean(), method: z.literal("online") }),
   z.object({ input: z.number().positive(), method: z.literal("budget") }),
+  z.object({ input: z.null(), method: z.literal("clear-cache") }),
   z.object({
     input: z.object({ mailboxId: syncIdSchema }),
     method: z.literal("revoke"),

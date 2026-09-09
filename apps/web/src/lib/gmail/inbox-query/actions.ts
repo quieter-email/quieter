@@ -7,6 +7,7 @@ import type {
   MessageListItem,
   ThreadMessagesResult,
 } from "#/lib/mail";
+import { MailSyncSession } from "#/lib/mail-sync/session";
 import { rpc } from "#/lib/orpc";
 
 import { getGmailUnreadCountsQueryKey } from "../../mailboxes-query";
@@ -90,6 +91,10 @@ export const applyBulkChangesInMailbox = async (
   command: MailCommand
 ) =>
   await enqueueMailboxMutation(mailboxId, async () => {
+    const sync = MailSyncSession.forMailbox(mailboxId);
+    if (sync !== null) {
+      return await sync.command(mailboxId, targets, command);
+    }
     const messageIds = new Set(targets.flatMap((target) => target.messageIds));
     const updater = getMailCommandUpdater(command);
     const rollback = await applyOptimisticMailboxUpdate(
@@ -371,6 +376,22 @@ export const updateMessageInMailbox = async (
     typeof operation === "string"
       ? METADATA_LABEL_CHANGES[operation]
       : operation;
+  const sync = MailSyncSession.forMailbox(args.mailboxId);
+  const cachedMessage = findMessageForAction(args);
+  if (sync !== null && cachedMessage !== undefined) {
+    await sync.command(
+      args.mailboxId,
+      [{ messageIds: [args.messageId], threadId: cachedMessage.threadId }],
+      operation === "read" || operation === "unread"
+        ? { kind: "set-read", read: operation === "read" }
+        : {
+            addIds: [...(changes.addLabelIds ?? [])],
+            kind: "set-labels",
+            removeIds: [...(changes.removeLabelIds ?? [])],
+          }
+    );
+    return;
+  }
   const mutation =
     typeof operation === "string"
       ? MESSAGE_METADATA_MUTATIONS[operation]
@@ -416,6 +437,30 @@ export const updateThreadInMailbox = async (
     typeof operation === "string"
       ? METADATA_LABEL_CHANGES[operation]
       : operation;
+  const sync = MailSyncSession.forMailbox(args.mailboxId);
+  if (sync !== null) {
+    const thread = await sync.client.thread(args.mailboxId, args.threadId);
+    if (thread.messages.length === 0) {
+      return;
+    }
+    await sync.command(
+      args.mailboxId,
+      [
+        {
+          messageIds: thread.messages.map((message) => message.id),
+          threadId: args.threadId,
+        },
+      ],
+      operation === "read" || operation === "unread"
+        ? { kind: "set-read", read: operation === "read" }
+        : {
+            addIds: [...(changes.addLabelIds ?? [])],
+            kind: "set-labels",
+            removeIds: [...(changes.removeLabelIds ?? [])],
+          }
+    );
+    return;
+  }
   const mutation =
     typeof operation === "string"
       ? THREAD_METADATA_MUTATIONS[operation]

@@ -11,6 +11,7 @@ import { encodeSyncBody } from "@quieter/sync-server/body-store";
 import type { SyncBodyStore } from "@quieter/sync-server/body-store";
 import { projectManagedMailbox } from "@quieter/sync-server/managed";
 import type { ManagedSyncSelection } from "@quieter/sync-server/managed";
+import { Resource } from "sst";
 
 type SyncRuntime = {
   deliver: SyncDelivery;
@@ -18,6 +19,10 @@ type SyncRuntime = {
   enqueue: (mailboxId: string) => Promise<void>;
 };
 const syncRuntime = new AsyncLocalStorage<SyncRuntime>();
+
+export const isMailSyncEnabled = () =>
+  syncRuntime.getStore() !== undefined ||
+  serverEnv.QUIETER_MAIL_SYNC_ENABLED === true;
 
 export const withMailSyncRuntime = async <Result>(
   runtime: SyncRuntime,
@@ -29,7 +34,22 @@ export const getMailSyncConfiguration = () => {
     return null;
   }
   const url = serverEnv.MAIL_SYNC_URL;
-  const secret = serverEnv.MAIL_SYNC_SECRET;
+  let secret = serverEnv.MAIL_SYNC_SECRET;
+  if (secret === undefined) {
+    try {
+      const linked: unknown = Reflect.get(Resource, "MailSyncSecret");
+      if (
+        typeof linked === "object" &&
+        linked !== null &&
+        "value" in linked &&
+        typeof linked.value === "string"
+      ) {
+        secret = linked.value;
+      }
+    } catch {
+      // Unlinked local runtimes use their development secret binding.
+    }
+  }
   if (!url || !secret || secret.length < 32) {
     throw new Error("Mail sync URL and signing secret must be configured.");
   }
@@ -132,7 +152,7 @@ export const withManagedSyncTransaction = async <Result>(
     | ((result: NoInfer<Result>) => ManagedSyncSelection),
   run: (database: DatabaseTransaction) => Promise<Result>
 ): Promise<Result> => {
-  if (getMailSyncConfiguration() === null) {
+  if (!isMailSyncEnabled()) {
     return await db.transaction(run);
   }
   const { repository } = mailSyncServices();
@@ -150,7 +170,7 @@ export const storeManagedSyncBody = async (
   mailboxId: string,
   body: SyncBody
 ) => {
-  if (getMailSyncConfiguration() === null) {
+  if (!isMailSyncEnabled()) {
     return;
   }
   const encoded = encodeSyncBody(body);

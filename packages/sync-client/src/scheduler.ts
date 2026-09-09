@@ -31,6 +31,14 @@ export class WarmScheduler {
     this.queued.clear();
   }
 
+  cancel(mailboxId?: string) {
+    for (const key of this.queued.keys()) {
+      if (mailboxId === undefined || key.startsWith(`${mailboxId}:`)) {
+        this.queued.delete(key);
+      }
+    }
+  }
+
   private pump() {
     if (this.stopped) {
       return;

@@ -5,7 +5,9 @@
   "exports": {
     ".": "./src/engine.ts",
     "./storage": "./src/storage.ts",
+    "./types": "./src/types.ts",
     "./worker": "./src/worker.ts",
+    "./worker-client": "./src/worker-client.ts",
     "./worker-protocol": "./src/worker-protocol.ts"
   },
   "dependencies": {

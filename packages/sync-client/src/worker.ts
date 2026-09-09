@@ -214,6 +214,10 @@ const receive = async (raw: unknown) => {
           await engine.setBudget(action.input);
           break;
         }
+        case "clear-cache": {
+          await engine.clearCache();
+          break;
+        }
         case "revoke": {
           await engine.revoke(action.input.mailboxId);
           break;
