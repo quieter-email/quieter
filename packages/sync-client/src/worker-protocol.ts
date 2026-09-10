@@ -78,6 +78,10 @@ export const syncWorkerActionSchema = z.discriminatedUnion("method", [
   }),
   z.object({ input: syncCommandSchema, method: z.literal("command") }),
   z.object({
+    input: z.object({ mailboxId: syncIdSchema, threadId: syncIdSchema }),
+    method: z.literal("message-ids"),
+  }),
+  z.object({
     input: z.object({ mailboxId: syncIdSchema }),
     method: z.literal("catch-up"),
   }),

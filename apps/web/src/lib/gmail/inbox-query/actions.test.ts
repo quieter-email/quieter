@@ -1,5 +1,4 @@
 import type { MailCommand, MailMutationTarget } from "@quieter/mail/data-plane";
-import type { ThreadMessagesResult } from "@quieter/mail/messages";
 import { QueryClient } from "@tanstack/react-query";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
@@ -20,18 +19,19 @@ const engine = vi.hoisted(() => ({
         command: MailCommand
       ) => Promise<void>
     >(),
+  messageIds:
+    vi.fn<(mailboxId: string, threadId: string) => Promise<string[]>>(),
   ready: Promise.resolve<null>(null),
-  thread:
-    vi.fn<
-      (mailboxId: string, threadId: string) => Promise<ThreadMessagesResult>
-    >(),
 }));
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- Exercise the UI boundary while controlling engine startup and command outcomes.
 vi.mock("#/lib/mail-sync/session", () => ({
   MailSyncSession: {
     waitForMailbox: async () => {
       await engine.ready;
-      return { client: { thread: engine.thread }, command: engine.command };
+      return {
+        client: { messageIds: engine.messageIds },
+        command: engine.command,
+      };
     },
   },
 }));
@@ -71,15 +71,9 @@ describe("mail actions through the sync engine", () => {
     queryClient.clear();
   });
 
-  test("uses the engine's complete thread membership for a thread action", async () => {
+  test("marks a thread using metadata without requesting its bodies", async () => {
     const queryClient = new QueryClient();
-    engine.thread.mockResolvedValue({
-      messages: [
-        { id: "a", threadId: "thread" },
-        { id: "b", threadId: "thread" },
-      ],
-      threadId: "thread",
-    });
+    engine.messageIds.mockResolvedValue(["a", "b"]);
     await updateThreadInMailbox(
       { mailboxId: "mailbox", queryClient, threadId: "thread" },
       "unread"

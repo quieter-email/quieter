@@ -16,6 +16,7 @@ import {
 
 import { enqueueGmailMaintenanceJobs } from "../src/gmail-maintenance-worker";
 import { processGmailQueueMessage } from "../src/queue-worker";
+import { RequestError } from "../src/request-error";
 import worker from "../src/worker";
 import { handlePubSub, requestErrorResponse } from "../src/worker-utils";
 
@@ -100,6 +101,20 @@ describe("Cloudflare worker runtime", () => {
   });
 
   describe("Pub/Sub ingress", () => {
+    test("retries lease contention without reporting it as a server failure", () => {
+      const report = vi.fn<(error: unknown) => void>();
+      vi.stubGlobal("reportError", report);
+      expect(
+        requestErrorResponse(
+          new RequestError(503, "mailbox_busy"),
+          "/gmail/pubsub"
+        ).status
+      ).toBe(503);
+      expect(report).not.toHaveBeenCalled();
+      const failure = new Error("Unexpected provider failure");
+      expect(requestErrorResponse(failure, "/gmail/pubsub").status).toBe(500);
+      expect(report).toHaveBeenCalledWith(failure);
+    });
     const installFetchMock = (processorStatus = 204) =>
       vi.stubGlobal(
         "fetch",

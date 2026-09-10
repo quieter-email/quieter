@@ -131,6 +131,15 @@ export class MailSyncWorkerClient {
     );
   }
 
+  async messageIds(mailboxId: string, threadId: string) {
+    return z.array(z.string()).parse(
+      await this.action({
+        input: { mailboxId, threadId },
+        method: "message-ids",
+      })
+    );
+  }
+
   async stop(purge: boolean) {
     this.stopping = true;
     for (const controller of this.requests.values()) {
