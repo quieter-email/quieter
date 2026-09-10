@@ -41,6 +41,8 @@ export const reportMailSyncError = (error: unknown) => {
           "NOT_FOUND",
           "CONFLICT",
           "SYNC_NOT_READY",
+          // Server-side failures are already reported by the failing runtime.
+          "INTERNAL_SERVER_ERROR",
         ].includes(String(error.code))))
   ) {
     return;

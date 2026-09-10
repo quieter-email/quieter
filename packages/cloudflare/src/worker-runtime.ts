@@ -1,4 +1,7 @@
-import { configureErrorReporter } from "@quieter/observability";
+import {
+  configureErrorReporter,
+  prepareReportedEvent,
+} from "@quieter/observability";
 import * as Sentry from "@sentry/cloudflare";
 import { z } from "zod";
 
@@ -34,6 +37,8 @@ export const withSentryReporting = <Handler extends ExportedHandler<Env>>(
 ): Handler =>
   Sentry.withSentry(
     (env) => ({
+      beforeSend: (event, hint) =>
+        prepareReportedEvent(event, hint.originalException),
       dsn: readOptionalLinkedSecret(env.SST_RESOURCE_SentryDsn),
       environment: env.SENTRY_ENVIRONMENT,
       tracesSampleRate: 0,
