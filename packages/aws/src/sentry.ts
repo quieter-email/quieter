@@ -1,5 +1,8 @@
 import { serverEnv } from "@quieter/env/server";
-import { configureErrorReporter } from "@quieter/observability";
+import {
+  configureErrorReporter,
+  prepareReportedEvent,
+} from "@quieter/observability";
 import * as Sentry from "@sentry/node";
 
 const enabled =
@@ -10,6 +13,8 @@ const enabled =
 
 if (enabled) {
   Sentry.init({
+    beforeSend: (event, hint) =>
+      prepareReportedEvent(event, hint.originalException),
     dsn: serverEnv.SENTRY_DSN,
     enableLogs: false,
     environment:

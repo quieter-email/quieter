@@ -84,6 +84,13 @@ export class MailSyncWorkerClient {
       }
     });
     this.ready = this.dispatch({ input: initialize, method: "initialize" });
+    // Initialization failures surface through action() and stop(). Observing
+    // the rejection here keeps them from becoming unhandled rejections when no
+    // caller has awaited the session yet.
+    // oxlint-disable-next-line promise/prefer-await-to-then -- The rejection is intentionally observed without blocking initialization.
+    void this.ready.catch(() => {
+      // Reported by the callers that await this session's actions.
+    });
   }
 
   private async dispatch(action: SyncWorkerAction) {

@@ -24,6 +24,8 @@ import type { SyncRepository, SyncTransaction } from "../repository";
 import { confirmProjectedSubmissions } from "../submissions";
 import { assertProviderLease, withProviderLease } from "./lease";
 
+export { isGmailRateLimitedError } from "@quieter/gmail";
+
 export type GmailSyncProvider = {
   profile: () => ReturnType<typeof getGmailProfile>;
   history: (
