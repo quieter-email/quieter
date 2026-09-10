@@ -343,7 +343,7 @@ const ThreadMessageBody = ({
     <div className="min-h-0 overflow-hidden">
       <div
         className={cn(
-          "max-w-[68ch] px-4 pb-4 transition-[opacity,transform] duration-(--app-motion-duration-enter) ease-(--app-motion-ease-out) motion-reduce:transition-none @sm:px-5 @sm:pb-5",
+          "mx-auto w-full max-w-3xl px-4 pb-4 transition-[opacity,transform] duration-(--app-motion-duration-enter) ease-(--app-motion-ease-out) motion-reduce:transition-none @sm:px-5 @sm:pb-5",
           {
             "-translate-y-1 opacity-0": !expanded,
             "translate-y-0 opacity-100": expanded,
@@ -584,7 +584,7 @@ export const SingleMessageCard = ({
         </div>
       )}
 
-      <div className="max-w-[68ch] px-4 pb-4 @sm:px-5 @sm:pb-5">
+      <div className="mx-auto w-full max-w-3xl px-4 pb-4 @sm:px-5 @sm:pb-5">
         <MessageBody
           html={message.bodyHtml}
           isLoading={isLoading}

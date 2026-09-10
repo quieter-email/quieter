@@ -10,13 +10,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
-import {
-  AnimatePresence,
-  LayoutGroup,
-  LazyMotion,
-  domMax,
-  m,
-} from "motion/react";
+import { AnimatePresence, LazyMotion, domMax, m } from "motion/react";
 import { lazy, Suspense, useRef, useState } from "react";
 
 import {
@@ -47,18 +41,19 @@ const InlineComposeSurface = lazy(
     )
 );
 
-const inlineComposeLayoutTransition = {
+const inlineComposeTransition = {
   damping: 34,
   mass: 0.7,
   stiffness: 420,
   type: "spring",
 } as const;
 
-const inlineComposeTransition = {
-  ...inlineComposeLayoutTransition,
-  layout: inlineComposeLayoutTransition,
-  opacity: { duration: 0.12, ease: "easeOut" },
+const inlineComposeFadeTransition = {
+  duration: 0.12,
+  ease: "easeOut",
 } as const;
+
+const INLINE_REPLY_BAR_HEIGHT = 48;
 
 type MessageViewContentProps = MessageViewProps &
   ReturnType<typeof useMessageViewData> & {
@@ -123,11 +118,6 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     hotkeyMessage,
     currentUserEmail
   );
-  // Keep the shared-layout morph between the reply bar and the inline composer
-  // scoped to one message so switching mail never animates a panel across the
-  // screen.
-  const inlineComposeLayoutId = `inline-compose-${message.threadId}:${message.id}`;
-
   useMessageViewHotkeys({
     activeMailbox,
     canComposeFromMailbox,
@@ -257,121 +247,100 @@ const MessageViewContent = (props: MessageViewContentProps) => {
       {showInlineCompose ? (
         <div className="border-t px-4 py-4 @sm:px-5 @sm:py-5">
           <LazyMotion features={domMax}>
-            <LayoutGroup id="inline-compose">
-              <AnimatePresence initial={false} mode="popLayout">
-                {inlineDraft ? (
-                  <m.div
-                    animate={{ opacity: 1 }}
-                    data-inline-compose-host
-                    exit={{ opacity: 0 }}
-                    initial={{ opacity: 0 }}
-                    key="inline-compose"
-                    layoutId={inlineComposeLayoutId}
-                    ref={inlineComposerRef}
-                    transition={inlineComposeTransition}
+            <AnimatePresence initial={false} mode="popLayout">
+              {inlineDraft ? (
+                <m.div
+                  animate={{ height: "auto", opacity: 1 }}
+                  className="overflow-hidden"
+                  data-inline-compose-host
+                  exit={{ height: 0, opacity: 0 }}
+                  initial={{ height: INLINE_REPLY_BAR_HEIGHT, opacity: 0 }}
+                  key="inline-compose"
+                  ref={inlineComposerRef}
+                  transition={{
+                    ...inlineComposeTransition,
+                    opacity: inlineComposeFadeTransition,
+                  }}
+                >
+                  <Suspense
+                    fallback={
+                      <output
+                        aria-label="Loading inline composer"
+                        aria-live="polite"
+                        className="grid min-h-64 place-items-center rounded-xl border border-border bg-control text-body text-muted-fg"
+                      >
+                        <HugeiconsIcon
+                          aria-hidden
+                          className="size-5 animate-spin"
+                          icon={Loading03Icon}
+                        />
+                      </output>
+                    }
                   >
-                    <Suspense
-                      fallback={
-                        <output
-                          aria-label="Loading inline composer"
-                          aria-live="polite"
-                          className="grid min-h-64 place-items-center rounded-xl border border-border bg-control text-body text-muted-fg"
-                        >
-                          <HugeiconsIcon
-                            aria-hidden
-                            className="size-5 animate-spin"
-                            icon={Loading03Icon}
-                          />
-                        </output>
-                      }
-                    >
-                      <InlineComposeSurface
-                        demoMode={composeDemoMode}
-                        initialDraft={inlineDraft}
-                        key={inlineDraft.localId}
-                        mailboxId={mailboxId}
-                        managedDemoMode={composeManagedDemoMode}
-                        onClose={() => {
-                          setInlineDraft(null);
-                        }}
-                        onManageTemplates={onManageTemplates}
-                        persistDrafts={composePersistDrafts}
-                        senderEmail={currentUserEmail}
-                        signature={composeSignature}
-                        variant="inline"
-                      />
-                    </Suspense>
-                  </m.div>
-                ) : (
-                  <m.div
-                    animate={{ opacity: 1 }}
-                    className="squircle flex min-w-0 flex-wrap items-center gap-1 rounded-xl border border-border bg-control p-1.5"
-                    exit={{ opacity: 0 }}
-                    initial={{ opacity: 0 }}
-                    key="inline-reply-bar"
-                    layoutId={inlineComposeLayoutId}
-                    transition={inlineComposeTransition}
-                  >
-                    <Button
-                      className="min-w-44 flex-1 justify-start px-3 text-muted-fg hover:text-fg"
-                      onClick={() => {
-                        openInlineCompose(
-                          hotkeyLinkedDraftMessage
-                            ? buildComposeDraftFromSavedDraftMessage(
-                                hotkeyLinkedDraftMessage
-                              )
-                            : buildComposeDraftFromMessageAction({
-                                action: "reply",
-                                currentUserEmail,
-                                existingDraftMessage: hotkeyLinkedDraftMessage,
-                                message: hotkeyMessage,
-                              })
-                        );
+                    <InlineComposeSurface
+                      demoMode={composeDemoMode}
+                      initialDraft={inlineDraft}
+                      key={inlineDraft.localId}
+                      mailboxId={mailboxId}
+                      managedDemoMode={composeManagedDemoMode}
+                      onClose={() => {
+                        setInlineDraft(null);
                       }}
-                      type="button"
-                      variant="ghost"
-                    >
-                      <HugeiconsIcon
-                        aria-hidden
-                        icon={
-                          hotkeyLinkedDraftMessage
-                            ? Edit01Icon
-                            : MailReply02Icon
-                        }
-                      />
-                      {hotkeyLinkedDraftMessage
-                        ? "Continue draft"
-                        : `Reply to ${replyTargetLabel}`}
-                    </Button>
-                    {showReplyAll ? (
-                      <Button
-                        aria-label="Reply all"
-                        onClick={() => {
-                          openInlineCompose(
-                            buildComposeDraftFromMessageAction({
-                              action: "reply-all",
+                      onManageTemplates={onManageTemplates}
+                      persistDrafts={composePersistDrafts}
+                      senderEmail={currentUserEmail}
+                      signature={composeSignature}
+                      variant="inline"
+                    />
+                  </Suspense>
+                </m.div>
+              ) : (
+                <m.div
+                  animate={{ opacity: 1 }}
+                  className="squircle flex min-w-0 flex-wrap items-center gap-1 rounded-xl border border-border bg-control p-1.5"
+                  exit={{ opacity: 0 }}
+                  initial={{ opacity: 0 }}
+                  key="inline-reply-bar"
+                  transition={inlineComposeFadeTransition}
+                >
+                  <Button
+                    className="min-w-44 flex-1 justify-start px-3 text-muted-fg hover:text-fg"
+                    onClick={() => {
+                      openInlineCompose(
+                        hotkeyLinkedDraftMessage
+                          ? buildComposeDraftFromSavedDraftMessage(
+                              hotkeyLinkedDraftMessage
+                            )
+                          : buildComposeDraftFromMessageAction({
+                              action: "reply",
                               currentUserEmail,
                               existingDraftMessage: hotkeyLinkedDraftMessage,
                               message: hotkeyMessage,
                             })
-                          );
-                        }}
-                        size="sm"
-                        type="button"
-                        variant="ghost"
-                      >
-                        <HugeiconsIcon aria-hidden icon={MailReplyAll02Icon} />
-                        <span className="hidden @sm:inline">Reply all</span>
-                      </Button>
-                    ) : null}
+                      );
+                    }}
+                    type="button"
+                    variant="ghost"
+                  >
+                    <HugeiconsIcon
+                      aria-hidden
+                      icon={
+                        hotkeyLinkedDraftMessage ? Edit01Icon : MailReply02Icon
+                      }
+                    />
+                    {hotkeyLinkedDraftMessage
+                      ? "Continue draft"
+                      : `Reply to ${replyTargetLabel}`}
+                  </Button>
+                  {showReplyAll ? (
                     <Button
-                      aria-label="Forward"
+                      aria-label="Reply all"
                       onClick={() => {
                         openInlineCompose(
                           buildComposeDraftFromMessageAction({
-                            action: "forward",
+                            action: "reply-all",
                             currentUserEmail,
-                            existingDraftMessage: null,
+                            existingDraftMessage: hotkeyLinkedDraftMessage,
                             message: hotkeyMessage,
                           })
                         );
@@ -380,13 +349,32 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                       type="button"
                       variant="ghost"
                     >
-                      <HugeiconsIcon aria-hidden icon={ArrowRightDoubleIcon} />
-                      <span className="hidden @sm:inline">Forward</span>
+                      <HugeiconsIcon aria-hidden icon={MailReplyAll02Icon} />
+                      <span className="hidden @sm:inline">Reply all</span>
                     </Button>
-                  </m.div>
-                )}
-              </AnimatePresence>
-            </LayoutGroup>
+                  ) : null}
+                  <Button
+                    aria-label="Forward"
+                    onClick={() => {
+                      openInlineCompose(
+                        buildComposeDraftFromMessageAction({
+                          action: "forward",
+                          currentUserEmail,
+                          existingDraftMessage: null,
+                          message: hotkeyMessage,
+                        })
+                      );
+                    }}
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    <HugeiconsIcon aria-hidden icon={ArrowRightDoubleIcon} />
+                    <span className="hidden @sm:inline">Forward</span>
+                  </Button>
+                </m.div>
+              )}
+            </AnimatePresence>
           </LazyMotion>
         </div>
       ) : null}
