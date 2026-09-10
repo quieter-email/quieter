@@ -51,6 +51,12 @@ import { ChatTranscript } from "./chat-transcript";
 
 const CHAT_API_ENDPOINT = "/api/chat";
 
+const CHAT_PROMPT_SUGGESTIONS = [
+  "Summarize today's mail",
+  "Find last month's invoices",
+  "Draft a follow-up to Marta",
+] as const;
+
 type ChatData = RouterOutputs["chat"]["get"];
 
 const PlanRequired = ({
@@ -360,6 +366,21 @@ const ChatSession = ({
     submitPendingRef.current = false;
   };
 
+  const submitSuggestion = async (text: string) => {
+    if (disabled || submitPendingRef.current) {
+      return;
+    }
+
+    submitPendingRef.current = true;
+    try {
+      clearError();
+      await sendMessage({ text });
+    } catch (sendError) {
+      toastError(sendError, { boundary: "chat-submit" });
+    }
+    submitPendingRef.current = false;
+  };
+
   const retryLastTurn = async () => {
     if (isRetrying || isStreaming || retryPendingRef.current) {
       return;
@@ -544,7 +565,7 @@ const ChatSession = ({
       chatData?.title !== undefined &&
       chatData.title !== "" ? (
         <header className="hidden shrink-0 border-b border-border px-5 py-3 lg:block">
-          <h1 className="truncate text-body font-medium tracking-tight">
+          <h1 className="truncate font-sans text-body-lg font-normal tracking-tight">
             {chatData.title}
           </h1>
         </header>
@@ -572,8 +593,26 @@ const ChatSession = ({
         </>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-4 pb-12 sm:px-6">
-          <p className="mb-5 text-body text-muted-fg">Ask about your mail</p>
+          <p className="mb-5 font-sans text-body-lg text-muted-fg">
+            Ask about your mail
+          </p>
           {composer}
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+            {CHAT_PROMPT_SUGGESTIONS.map((suggestion) => (
+              <Button
+                disabled={disabled}
+                key={suggestion}
+                onClick={() => {
+                  void submitSuggestion(suggestion);
+                }}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                {suggestion}
+              </Button>
+            ))}
+          </div>
         </div>
       )}
     </section>

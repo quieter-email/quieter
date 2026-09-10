@@ -13,7 +13,7 @@ export const ComposerFrame = ({
 }: ComponentPropsWithoutRef<"div">) => (
   <div
     className={cn(
-      "mx-auto my-auto flex min-h-0 w-full max-w-4xl flex-1 flex-col gap-2 md:max-h-[28rem]",
+      "mx-auto my-auto flex min-h-0 w-full max-w-[58rem] flex-1 flex-col gap-2 md:max-h-[28rem]",
       className
     )}
     {...props}
@@ -44,10 +44,10 @@ export const ComposerFieldGroup = ({
  * the group reading as one surface while still marking where the caret is.
  */
 export const composerFieldControlClassName =
-  "h-10 min-w-0 flex-1 rounded-none border-0 bg-transparent px-0 text-body shadow-none read-only:bg-transparent focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-none";
+  "h-11 min-w-0 flex-1 rounded-none border-0 bg-transparent px-0 text-body shadow-none read-only:bg-transparent focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-none";
 
 const composerFieldRowClassName =
-  "flex items-center gap-2.5 px-3.5 transition-colors duration-150 ease-out focus-within:bg-bg-surface";
+  "flex items-center gap-2.5 px-5 transition-colors duration-150 ease-out focus-within:bg-bg-surface";
 
 export const ComposerFieldRow = ({
   children,

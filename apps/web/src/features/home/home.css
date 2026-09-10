@@ -91,7 +91,7 @@
 .home-closing-heading {
   width: 100%;
   max-width: 820px;
-  font-family: var(--font-serif);
+  font-family: var(--font-sans);
   font-style: normal;
   font-weight: 400;
   letter-spacing: -0.014em;

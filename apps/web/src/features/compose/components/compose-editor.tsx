@@ -6,11 +6,11 @@ import {
   ArrowTurnForwardIcon,
   LeftToRightListBulletIcon,
   LeftToRightListNumberIcon,
-  MoreHorizontalIcon,
   QuoteUpIcon,
   StopIcon,
   TextBoldIcon,
   TextItalicIcon,
+  TextStrikethroughIcon,
   TextUnderlineIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -36,7 +36,6 @@ import {
   useEffect,
   useImperativeHandle,
   useMemo,
-  useState,
 } from "react";
 import type { ReactNode, Ref } from "react";
 
@@ -379,19 +378,16 @@ export const ComposeEditorBody = ({
 export const ComposeEditorToolbar = ({
   chrome = "default",
   className,
-  compact = false,
   leading,
   trailing,
 }: {
   /** `footer` seats the toolbar as the composer sheet's own band, not a floating bar. */
   chrome?: "default" | "footer";
   className?: string;
-  compact?: boolean;
   leading?: ReactNode;
   trailing?: ReactNode;
 }) => {
   const { disabled, editor } = useComposeEditor();
-  const [showFormatting, setShowFormatting] = useState(false);
   const toolbarState = useEditorState({
     editor,
     selector: ({ editor: currentEditor }) => ({
@@ -408,11 +404,14 @@ export const ComposeEditorToolbar = ({
       canOrderedList:
         currentEditor?.can().chain().focus().toggleOrderedList().run() === true,
       canRedo: currentEditor?.can().chain().focus().redo().run() === true,
+      canStrike:
+        currentEditor?.can().chain().focus().toggleStrike().run() === true,
       canUnderline:
         currentEditor?.can().chain().focus().toggleUnderline().run() === true,
       canUndo: currentEditor?.can().chain().focus().undo().run() === true,
       italicActive: currentEditor?.isActive("italic") === true,
       orderedListActive: currentEditor?.isActive("orderedList") === true,
+      strikeActive: currentEditor?.isActive("strike") === true,
       underlineActive: currentEditor?.isActive("underline") === true,
     }),
   });
@@ -441,6 +440,14 @@ export const ComposeEditorToolbar = ({
       id: "underline",
       label: "Underline",
       onClick: () => editor?.chain().focus().toggleUnderline().run(),
+    },
+    {
+      active: toolbarState?.strikeActive === true,
+      disabled: toolbarState?.canStrike !== true,
+      icon: TextStrikethroughIcon,
+      id: "strike",
+      label: "Strikethrough",
+      onClick: () => editor?.chain().focus().toggleStrike().run(),
     },
     {
       active: toolbarState?.bulletListActive === true,
@@ -475,10 +482,8 @@ export const ComposeEditorToolbar = ({
           <ToolbarButton
             aria-label={action.label}
             aria-pressed={action.active}
-            className={cn("px-0", {
-              "bg-control-active text-fg shadow-sm": action.active,
-              "size-7": compact,
-              "size-8": !compact,
+            className={cn("size-8 px-0", {
+              "bg-control-active text-fg": action.active,
             })}
             disabled={disabled || action.disabled}
             onClick={() => {
@@ -489,13 +494,7 @@ export const ComposeEditorToolbar = ({
             }}
             type="button"
           >
-            <HugeiconsIcon
-              className={cn({
-                "size-3.5": compact,
-                "size-4": !compact,
-              })}
-              icon={action.icon}
-            />
+            <HugeiconsIcon className="size-4" icon={action.icon} />
           </ToolbarButton>
         </IconButtonTooltip>
       ))}
@@ -544,9 +543,8 @@ export const ComposeEditorToolbar = ({
       className={cn(
         "w-full min-w-0 shrink-0 rounded-md border-border bg-control",
         {
-          "gap-1.5 rounded-none border-0 border-t border-border bg-bg px-2 py-1.5 shadow-none":
+          "min-h-12 gap-1.5 rounded-none border-0 border-t border-border bg-control px-3 py-2 shadow-none":
             chrome === "footer",
-          "min-h-12 bg-control px-3 py-2": chrome === "footer" && compact,
         },
         className
       )}
@@ -554,41 +552,13 @@ export const ComposeEditorToolbar = ({
       {leading === undefined ? null : (
         <div className="flex shrink-0 items-center">{leading}</div>
       )}
-      {compact ? (
-        <div className="ml-auto flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-          {showFormatting ? formattingControls : trailing}
-          <IconButtonTooltip
-            label={showFormatting ? "Hide formatting" : "Formatting"}
-          >
-            <ToolbarButton
-              aria-label={
-                showFormatting ? "Hide formatting" : "Show formatting"
-              }
-              aria-pressed={showFormatting}
-              className={cn("size-7 shrink-0 px-0", {
-                "bg-control-active text-fg": showFormatting,
-              })}
-              disabled={disabled}
-              onClick={() => {
-                setShowFormatting((current) => !current);
-              }}
-              type="button"
-            >
-              <HugeiconsIcon className="size-4" icon={MoreHorizontalIcon} />
-            </ToolbarButton>
-          </IconButtonTooltip>
+      {formattingControls}
+      <ToolbarSeparator />
+      {historyControls}
+      {trailing === undefined ? null : (
+        <div className="ml-auto flex min-w-0 items-center gap-1">
+          {trailing}
         </div>
-      ) : (
-        <>
-          {formattingControls}
-          <ToolbarSeparator />
-          {historyControls}
-          {trailing === undefined ? null : (
-            <div className="ml-auto flex min-w-0 items-center gap-1">
-              {trailing}
-            </div>
-          )}
-        </>
       )}
     </Toolbar>
   );

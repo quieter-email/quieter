@@ -12,11 +12,9 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { IconSvgElement } from "@hugeicons/react";
 import { cn } from "@quieter/ui/cn";
-import { LayoutGroup } from "motion/react";
 
 import { SidebarNavItem } from "#/features/navigation/components/sidebar-nav-item";
 import { SidebarEntrance } from "#/features/navigation/components/sidebar-surfaces";
-import { useSidebarNavHover } from "#/features/navigation/hooks/use-sidebar-nav-hover";
 import type { MailboxCategory } from "#/lib/mail";
 
 const SIDEBAR_MAILBOX_ITEMS: readonly {
@@ -48,86 +46,44 @@ export const SidebarMailboxNav = ({
   mailboxProvider,
   onSelectMailbox,
   selectedMailbox,
-}: SidebarMailboxNavProps) => {
-  const {
-    clearHover,
-    clearHoverIfLeavingNav,
-    hoverEnter,
-    hoverLayoutId,
-    isHoverExiting,
-    isHovered,
-    navRef,
-    onHoverExitComplete,
-    setHover,
-  } = useSidebarNavHover<MailboxCategory>("mailbox-sidebar-hover");
+}: SidebarMailboxNavProps) => (
+  <nav aria-label="Mailboxes" className="flex flex-col">
+    {(mailboxProvider === "api"
+      ? API_MAILBOX_ITEMS
+      : SIDEBAR_MAILBOX_ITEMS
+    ).map((item, index) => {
+      const isActive = selectedMailbox === item.id;
 
-  return (
-    <LayoutGroup id="mailbox-sidebar">
-      <nav
-        ref={navRef}
-        aria-label="Mailboxes"
-        className="flex flex-col"
-        onMouseLeave={clearHover}
-      >
-        {(mailboxProvider === "api"
-          ? API_MAILBOX_ITEMS
-          : SIDEBAR_MAILBOX_ITEMS
-        ).map((item, index) => {
-          const isActive = selectedMailbox === item.id;
-          const itemHovered = isHovered(item.id);
-
-          return (
-            <SidebarEntrance
-              key={item.id}
-              animateEntrance={animateEntrance}
-              className="w-full"
-              index={index + 3}
-            >
-              <SidebarNavItem
-                active={isActive}
-                aria-current={isActive ? "page" : undefined}
-                className={cn("w-full justify-start gap-3 px-3 text-left", {
-                  "text-fg": isActive || itemHovered,
-                  "text-muted-fg": !isActive && !itemHovered,
-                })}
-                hover={itemHovered}
-                hoverEnter={itemHovered && hoverEnter}
-                hoverExiting={isHoverExiting(item.id)}
-                hoverLayoutId={hoverLayoutId}
-                onBlur={(event) => {
-                  clearHoverIfLeavingNav(event.relatedTarget);
-                }}
-                onClick={() => {
-                  onSelectMailbox(item.id);
-                }}
-                onFocus={() => {
-                  if (!isActive) {
-                    setHover(item.id);
-                  }
-                }}
-                onHoverExitComplete={onHoverExitComplete}
-                onMouseEnter={() => {
-                  if (isActive) {
-                    clearHover();
-                    return;
-                  }
-                  setHover(item.id);
-                }}
-                size="sm"
-                type="button"
-                variant="ghost"
-              >
-                <HugeiconsIcon
-                  strokeWidth={1.5}
-                  className="shrink-0 text-fg"
-                  icon={item.icon}
-                />
-                {item.label}
-              </SidebarNavItem>
-            </SidebarEntrance>
-          );
-        })}
-      </nav>
-    </LayoutGroup>
-  );
-};
+      return (
+        <SidebarEntrance
+          key={item.id}
+          animateEntrance={animateEntrance}
+          className="w-full"
+          index={index + 3}
+        >
+          <SidebarNavItem
+            active={isActive}
+            aria-current={isActive ? "page" : undefined}
+            className={cn("w-full justify-start gap-3 px-3 text-left", {
+              "text-fg": isActive,
+              "text-muted-fg": !isActive,
+            })}
+            onClick={() => {
+              onSelectMailbox(item.id);
+            }}
+            size="sm"
+            type="button"
+            variant="ghost"
+          >
+            <HugeiconsIcon
+              strokeWidth={1.5}
+              className="shrink-0 text-fg"
+              icon={item.icon}
+            />
+            {item.label}
+          </SidebarNavItem>
+        </SidebarEntrance>
+      );
+    })}
+  </nav>
+);

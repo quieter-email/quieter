@@ -312,9 +312,8 @@ export const MessageAttachments = ({
                 <button
                   aria-busy={isCalendarPending}
                   className={cn(
-                    "squircle inline-flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md px-2 text-left text-caption text-fg",
-                    "bg-muted/25 shadow-xs ring-1 ring-border/55 ring-inset",
-                    "transition-colors hover:bg-muted/45",
+                    "squircle inline-flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md bg-muted px-2 text-left text-caption text-fg",
+                    "transition-colors hover:bg-control-active",
                     "disabled:cursor-progress disabled:opacity-65"
                   )}
                   disabled={isCalendarPending || areConnectorsLoading}
@@ -343,9 +342,8 @@ export const MessageAttachments = ({
               <button
                 aria-busy={isDownloadPending}
                 className={cn(
-                  "squircle inline-flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md px-2 text-left text-caption text-fg",
-                  "bg-muted/25 shadow-xs ring-1 ring-border/55 ring-inset",
-                  "transition-colors hover:bg-muted/45",
+                  "squircle inline-flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md bg-muted px-2 text-left text-caption text-fg",
+                  "transition-colors hover:bg-control-active",
                   "disabled:cursor-progress disabled:opacity-65"
                 )}
                 disabled={isDownloadPending}

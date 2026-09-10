@@ -69,7 +69,7 @@ export const StatusScreen = ({
     <div className="relative z-10 flex min-h-dvh flex-col items-center justify-center px-6 py-16 text-center">
       <span
         aria-hidden
-        className="status-enter pointer-events-none absolute top-1/2 left-1/2 -translate-1/2 font-serif leading-none tracking-[-0.04em] text-fg/5 select-none"
+        className="status-enter pointer-events-none absolute top-1/2 left-1/2 -translate-1/2 font-sans leading-none tracking-[-0.04em] text-fg/5 select-none"
         style={ghostStyle(ghost)}
       >
         {ghost}
@@ -77,7 +77,7 @@ export const StatusScreen = ({
 
       <div className="relative flex w-full max-w-160 flex-col items-center">
         <h1
-          className="status-enter font-serif text-title-lg leading-[1.32] font-normal tracking-[-0.014em] text-balance text-fg md:text-display-md md:leading-[1.28]"
+          className="status-enter font-sans text-title-lg leading-[1.32] font-normal tracking-[-0.014em] text-balance text-fg md:text-display-md md:leading-[1.28]"
           style={enterAfter(0.12)}
         >
           {title}

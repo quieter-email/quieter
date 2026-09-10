@@ -623,8 +623,8 @@ export const ToolActivity = ({
           )}
         </CollapsibleTrigger>
         <CollapsiblePanel>
-          <div className="min-h-0 overflow-hidden pl-6">
-            <div className="mt-1.5 rounded-lg border border-border bg-bg-surface p-3">
+          <div className="min-h-0 overflow-hidden">
+            <div className="mt-2 rounded-xl border border-border bg-control p-3 shadow-elevation-sm">
               {content}
             </div>
           </div>

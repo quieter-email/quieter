@@ -6,13 +6,36 @@ import {
   composeSendFormValuesSchema,
 } from "@quieter/mail/compose/schema";
 import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import { Input } from "@quieter/ui/input";
 import { Textarea } from "@quieter/ui/textarea";
 import { useState } from "react";
-import type { SubmitEvent } from "react";
+import type { ReactNode, SubmitEvent } from "react";
 
 import { composeBodyHtmlFromText } from "../domain/compose-proposal";
 import type { ComposeValues } from "../domain/compose-proposal";
+
+const composeFieldControlClassName =
+  "h-9 min-w-0 flex-1 rounded-none border-0 bg-transparent px-0 text-body-sm shadow-none focus-visible:ring-0";
+
+const ComposeFieldRow = ({
+  children,
+  label,
+  last = false,
+}: {
+  children: ReactNode;
+  label: string;
+  last?: boolean;
+}) => (
+  <div
+    className={cn("flex items-center gap-2.5 px-3", {
+      "border-b border-border": !last,
+    })}
+  >
+    <span className="w-14 shrink-0 text-caption text-muted-fg">{label}</span>
+    {children}
+  </div>
+);
 
 type ComposeToolApprovalProps = {
   disabled: boolean;
@@ -69,50 +92,65 @@ export const ComposeToolApproval = ({
 
   return (
     <form className="space-y-3" onSubmit={handleSubmit}>
-      <div className="grid gap-2 sm:grid-cols-2">
-        <Input
-          aria-label="To"
-          disabled={disabled}
-          onChange={(event) => {
-            setMessage((current) => ({ ...current, to: event.target.value }));
-          }}
-          placeholder="To"
-          value={message.to}
-        />
-        <Input
-          aria-label="Subject"
-          disabled={disabled}
-          onChange={(event) => {
-            setMessage((current) => ({
-              ...current,
-              subject: event.target.value,
-            }));
-          }}
-          placeholder="Subject"
-          value={message.subject}
-        />
-        <Input
-          aria-label="Cc"
-          disabled={disabled}
-          onChange={(event) => {
-            setMessage((current) => ({ ...current, cc: event.target.value }));
-          }}
-          placeholder="Cc"
-          value={message.cc}
-        />
-        <Input
-          aria-label="Bcc"
-          disabled={disabled}
-          onChange={(event) => {
-            setMessage((current) => ({ ...current, bcc: event.target.value }));
-          }}
-          placeholder="Bcc"
-          value={message.bcc}
-        />
+      <div className="flex flex-col overflow-hidden rounded-md border border-border bg-control">
+        <ComposeFieldRow label="To">
+          <Input
+            aria-label="To"
+            className={composeFieldControlClassName}
+            disabled={disabled}
+            onChange={(event) => {
+              setMessage((current) => ({ ...current, to: event.target.value }));
+            }}
+            placeholder="To"
+            value={message.to}
+          />
+        </ComposeFieldRow>
+        <ComposeFieldRow label="Subject">
+          <Input
+            aria-label="Subject"
+            className={composeFieldControlClassName}
+            disabled={disabled}
+            onChange={(event) => {
+              setMessage((current) => ({
+                ...current,
+                subject: event.target.value,
+              }));
+            }}
+            placeholder="Subject"
+            value={message.subject}
+          />
+        </ComposeFieldRow>
+        <ComposeFieldRow label="Cc">
+          <Input
+            aria-label="Cc"
+            className={composeFieldControlClassName}
+            disabled={disabled}
+            onChange={(event) => {
+              setMessage((current) => ({ ...current, cc: event.target.value }));
+            }}
+            placeholder="Cc"
+            value={message.cc}
+          />
+        </ComposeFieldRow>
+        <ComposeFieldRow label="Bcc" last>
+          <Input
+            aria-label="Bcc"
+            className={composeFieldControlClassName}
+            disabled={disabled}
+            onChange={(event) => {
+              setMessage((current) => ({
+                ...current,
+                bcc: event.target.value,
+              }));
+            }}
+            placeholder="Bcc"
+            value={message.bcc}
+          />
+        </ComposeFieldRow>
       </div>
       <Textarea
         aria-label="Message body"
-        className="min-h-40 resize-y"
+        className="min-h-24 resize-y bg-transparent shadow-none"
         disabled={disabled}
         onChange={(event) => {
           setMessage((current) => ({

@@ -1,7 +1,6 @@
 @import "tailwindcss";
 @import "./typeset.css";
 @import "@fontsource-variable/geist";
-@import "@fontsource-variable/lora";
 @import "@fontsource-variable/geist-mono";
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
@@ -11,7 +10,7 @@
 
 .typeset-docs {
   --typeset-font-body: var(--font-geist);
-  --typeset-font-heading: var(--font-lora);
+  --typeset-font-heading: var(--font-geist);
   --typeset-font-mono: var(--font-geist-mono);
   --typeset-size: 15px;
   --typeset-leading: 1.75;
@@ -23,7 +22,6 @@
   --brand-bg: rgb(238 238 240);
   --auth-particle-tint: rgb(75 99 128);
   --font-geist: "Geist Variable", sans-serif;
-  --font-lora: "Lora Variable", serif;
   --font-geist-mono: "Geist Mono Variable", monospace;
   --bg: oklch(0.91 0.002 264);
   --bg-raised: oklch(0.945 0.002 264);
@@ -75,7 +73,6 @@
   --chart-4: oklch(0.62 0.002 264);
   --chart-5: oklch(0.72 0.002 264);
   --font-sans: var(--font-geist);
-  --font-serif: var(--font-lora);
   --font-mono: var(--font-geist-mono);
   --radius: 0.625rem;
   --shadow-x: 0px;
@@ -98,6 +95,19 @@
   --shadow-2xl: 0 25px 50px -12px oklch(0 0 0 / 0.15);
   --shadow-elevation: 0 8px 24px -8px oklch(0 0 0 / 0.08);
   --shadow-elevation-sm: 0 4px 12px -4px oklch(0 0 0 / 0.06);
+  --shadow-surface:
+    0 16px 32px -20px oklch(0 0 0 / 0.18), 0 4px 10px -6px oklch(0 0 0 / 0.08);
+  --canvas-glow: radial-gradient(
+    170% 70% at 6% 110%,
+    oklch(1 0 0 / 0.4) 0%,
+    oklch(1 0 0 / 0.18) 48%,
+    transparent 88%
+  );
+  --panel-gradient: linear-gradient(
+    180deg,
+    oklch(0.975 0.002 264),
+    oklch(0.945 0.002 264)
+  );
   --tracking-normal: 0em;
   --spacing: 0.25rem;
 }
@@ -175,6 +185,20 @@
   --shadow-2xl: 0 25px 50px -12px oklch(0 0 0 / 0.4);
   --shadow-elevation: 0 8px 24px -8px oklch(0 0 0 / 0.25);
   --shadow-elevation-sm: 0 4px 12px -4px oklch(0 0 0 / 0.2);
+  --shadow-surface:
+    0 24px 48px -24px oklch(0 0 0 / 0.75), 0 6px 16px -8px oklch(0 0 0 / 0.45);
+  --canvas-glow: radial-gradient(
+    170% 60% at 6% 110%,
+    rgb(255 255 255 / 0.02) 0%,
+    rgb(255 255 255 / 0.014) 48%,
+    rgb(255 255 255 / 0.006) 72%,
+    transparent 92%
+  );
+  --panel-gradient: linear-gradient(
+    180deg,
+    oklch(0.213 0.003 264),
+    oklch(0.186 0.003 264)
+  );
 }
 
 @theme inline {
@@ -225,7 +249,6 @@
 
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
-  --font-serif: var(--font-serif);
 
   --text-display-lg: 3.5rem;
   --text-display-lg--line-height: 1;
@@ -257,15 +280,16 @@
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --ease-emphasized: cubic-bezier(0.2, 0.8, 0.2, 1);
 
-  --radius-xs: calc(var(--radius) * 1.35 - 4px * 1.35);
-  --radius-sm: calc(var(--radius) * 1.35 - 2px * 1.35);
-  --radius-md: calc(var(--radius) * 1.35);
-  --radius-lg: calc(var(--radius) * 1.35 + 2px * 1.35);
-  --radius-xl: calc(var(--radius) * 1.35 + 6px * 1.35);
-  --radius-2xl: calc(var(--radius) * 1.35 + 10px * 1.35);
-  --radius-3xl: calc(var(--radius) * 1.35 + 14px * 1.35);
-  --radius-4xl: calc(var(--radius) * 1.35 + 18px * 1.35);
-  --radius-5xl: calc(var(--radius) * 1.35 + 22px * 1.35);
+  /* Calm radius ladder: chips 10, controls 12, rows and avatars 14, panels and sheets 16. */
+  --radius-xs: 8px;
+  --radius-sm: 10px;
+  --radius-md: 12px;
+  --radius-lg: 14px;
+  --radius-xl: 16px;
+  --radius-2xl: 18px;
+  --radius-3xl: 20px;
+  --radius-4xl: 22px;
+  --radius-5xl: 24px;
   --shadow-2xs: var(--shadow-2xs);
   --shadow-xs: var(--shadow-xs);
   --shadow-sm: var(--shadow-sm);
@@ -276,6 +300,7 @@
   --shadow-2xl: var(--shadow-2xl);
   --shadow-elevation: var(--shadow-elevation);
   --shadow-elevation-sm: var(--shadow-elevation-sm);
+  --shadow-surface: var(--shadow-surface);
   --shadow-inset: var(--shadow-inset);
 }
 
@@ -306,6 +331,7 @@
 
   body {
     @apply bg-bg font-sans text-fg antialiased;
+    background-image: var(--canvas-glow);
     font-optical-sizing: auto;
   }
 }

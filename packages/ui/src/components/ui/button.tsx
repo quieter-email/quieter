@@ -37,7 +37,7 @@ const buttonVariants = cva(
         ghost:
           "bg-transparent text-muted-fg hover:bg-muted hover:text-fg active:bg-control-active active:text-fg aria-[current=page]:bg-muted aria-[current=page]:text-fg",
         outline:
-          "border-border bg-control text-fg shadow-sm hover:bg-control-hover active:bg-control-active",
+          "border-border bg-control text-fg hover:bg-control-hover active:bg-control-active",
       },
     },
   }

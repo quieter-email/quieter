@@ -2,27 +2,16 @@
 
 import { cn } from "@quieter/ui/cn";
 import { cva } from "class-variance-authority";
-import { AnimatePresence, m, useReducedMotion } from "motion/react";
+import { m, useReducedMotion } from "motion/react";
 import { useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import { appMotionDuration } from "#/features/motion/app-motion";
 
-const sidebarSurfaceSpringTransition = {
-  layout: { damping: 38, mass: 0.55, stiffness: 560, type: "spring" as const },
-};
-
-const sidebarSurfaceFadeTransition = {
-  opacity: { duration: 0.18, ease: [0.23, 1, 0.32, 1] as const },
-  transform: { duration: 0.18, ease: [0.23, 1, 0.32, 1] as const },
-};
-
 const sidebarSurfaceVariants = cva("squircle rounded-md", {
   variants: {
     surface: {
       active: "pointer-events-none absolute inset-0 z-0 bg-control-active",
-      hover: "dark:bg-muted/40 bg-muted/60",
-      hoverItem: "block size-full dark:bg-muted/40 bg-muted/60",
     },
   },
 });
@@ -104,114 +93,3 @@ export const SidebarActiveSurface = ({
     className={cn(sidebarSurfaceVariants({ surface: "active" }), className)}
   />
 );
-
-type SidebarHoverSurfaceProps = {
-  className?: string;
-  hoverEnter?: boolean;
-  hoverExiting?: boolean;
-  hoverLayoutId: string;
-  onHoverExitComplete?: () => void;
-  pressed: boolean;
-};
-
-export const SidebarHoverSurface = ({
-  className,
-  hoverEnter,
-  hoverExiting,
-  hoverLayoutId,
-  onHoverExitComplete,
-  pressed,
-}: SidebarHoverSurfaceProps) => {
-  const reducedMotion = useReducedMotion();
-  let hoverTransform = "scale(1)";
-  if (reducedMotion !== true && pressed) {
-    hoverTransform = "scale(0.98)";
-  }
-  const hoverScale = reducedMotion === true ? "scale(1)" : "scale(0.98)";
-  let hoverInitial: false | { opacity: number; transform: string } = false;
-  if (hoverEnter === true) {
-    hoverInitial = { opacity: 0, transform: hoverScale };
-  }
-
-  return (
-    <m.span
-      className="pointer-events-none absolute inset-0 z-1"
-      initial={false}
-      layout={
-        reducedMotion !== true && hoverExiting !== true ? "position" : false
-      }
-      layoutId={
-        reducedMotion !== true && hoverExiting !== true
-          ? hoverLayoutId
-          : undefined
-      }
-      transition={sidebarSurfaceSpringTransition}
-    >
-      <m.span
-        aria-hidden
-        animate={
-          hoverExiting === true
-            ? { opacity: 0, transform: hoverScale }
-            : { opacity: 1, transform: hoverTransform }
-        }
-        className={cn(
-          sidebarSurfaceVariants({ surface: "hoverItem" }),
-          className
-        )}
-        initial={hoverInitial}
-        onAnimationComplete={() => {
-          if (hoverExiting === true) {
-            onHoverExitComplete?.();
-          }
-        }}
-        transition={{
-          ...sidebarSurfaceFadeTransition,
-          transform: sidebarSurfaceFadeTransition.transform,
-        }}
-      />
-    </m.span>
-  );
-};
-
-type SidebarSimpleHoverSurfaceProps = {
-  className?: string;
-  layoutId: string;
-  visible: boolean;
-};
-
-export const SidebarSimpleHoverSurface = ({
-  className,
-  layoutId,
-  visible,
-}: SidebarSimpleHoverSurfaceProps) => {
-  const reducedMotion = useReducedMotion();
-
-  return (
-    <AnimatePresence initial={false} mode="popLayout">
-      {visible ? (
-        <m.span
-          aria-hidden
-          animate={{ opacity: 1, transform: "scale(1)" }}
-          className={cn(
-            "pointer-events-none absolute inset-0 z-0",
-            sidebarSurfaceVariants({ surface: "hover" }),
-            className
-          )}
-          exit={{
-            opacity: 0,
-            transform: reducedMotion === true ? "scale(1)" : "scale(0.98)",
-          }}
-          initial={{
-            opacity: 0,
-            transform: reducedMotion === true ? "scale(1)" : "scale(0.98)",
-          }}
-          layoutId={reducedMotion === true ? undefined : layoutId}
-          transition={{
-            ...sidebarSurfaceSpringTransition,
-            ...sidebarSurfaceFadeTransition,
-          }}
-        />
-      ) : null}
-    </AnimatePresence>
-  );
-};
