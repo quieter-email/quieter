@@ -6,7 +6,6 @@ import {
   getManagedDemoRules,
 } from "#/lib/managed-mail/demo-managed-mail";
 import { rpc } from "#/lib/orpc";
-import { queryPersister } from "#/lib/query-persister";
 import { isManagedSandboxMailboxId } from "#/lib/sandbox-mailbox";
 
 type ManagedRules = RouterOutputs["mail"]["listManagedRules"];
@@ -37,7 +36,7 @@ export const managedLabelCountsQueryOptions = (
 ) =>
   queryOptions<ManagedLabelCounts>({
     enabled: enabled && !!mailboxId,
-    persister: queryPersister.persisterFn,
+
     queryFn: async ({ signal }) => {
       if (isManagedSandboxMailboxId(mailboxId)) {
         return getManagedDemoLabelCounts();

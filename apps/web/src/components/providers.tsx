@@ -15,8 +15,8 @@ import { SiteFooter } from "#/components/site-footer";
 import { TelemetryProvider } from "#/components/telemetry-provider";
 import { KeyboardShortcutsProvider } from "#/features/hotkeys/components/keyboard-shortcuts-context";
 import { authClient } from "#/lib/auth";
+import { MailSyncProvider } from "#/lib/mail-sync/provider";
 import { shouldRetryOrpcError } from "#/lib/orpc-errors";
-import { setQueryPersistenceUser } from "#/lib/query-persister";
 
 const SessionQueryProvider = ({
   children,
@@ -38,14 +38,26 @@ const SessionQueryProvider = ({
   );
 
   useLayoutEffect(() => {
-    setQueryPersistenceUser(userId);
+    try {
+      for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+        const key = localStorage.key(index);
+        if (key?.startsWith("quieter-cache:") === true) {
+          localStorage.removeItem(key);
+        }
+      }
+    } catch {
+      // Retired mail caches may be inaccessible under browser storage restrictions.
+    }
     return () => {
       queryClient.clear();
     };
   }, [queryClient, userId]);
 
   return (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    <QueryClientProvider client={queryClient}>
+      <MailSyncProvider userId={userId} />
+      {children}
+    </QueryClientProvider>
   );
 };
 

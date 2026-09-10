@@ -3,7 +3,6 @@ import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { queryOptions } from "@tanstack/react-query";
 
 import { rpc } from "#/lib/orpc";
-import { queryPersister } from "#/lib/query-persister";
 import {
   isManagedSandboxMailboxId,
   isSandboxMailboxId,
@@ -26,7 +25,7 @@ const normalizeMailboxLabels = (value: unknown): MailboxLabel[] =>
 export const labelsQueryOptions = (mailboxId: string, enabled = true) =>
   queryOptions<MailboxLabel[]>({
     enabled,
-    persister: queryPersister.persisterFn,
+
     queryFn: async ({ signal }) => {
       if (isManagedSandboxMailboxId(mailboxId)) {
         return getManagedDemoLabels();

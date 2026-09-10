@@ -10,6 +10,8 @@ import viteReact, { reactCompilerPreset } from "@vitejs/plugin-react";
 import type { Plugin, Environment } from "vite-plus";
 import { defineConfig, lazyPlugins } from "vite-plus";
 
+import { localSyncMaintenance } from "../../scripts/vite-local-sync-maintenance.ts";
+
 const workspaceRoot = fileURLToPath(new URL("../..", import.meta.url));
 
 /**
@@ -119,6 +121,7 @@ export default defineConfig(({ command }) => {
       __QUIETER_BUILD_ID__: JSON.stringify(buildId),
     },
     envDir: workspaceRoot,
+    server: { strictPort: true },
     optimizeDeps: {
       include: [
         "@tiptap/core",
@@ -141,7 +144,9 @@ export default defineConfig(({ command }) => {
             : undefined),
         viteEnvironment: { name: "ssr" },
       }),
-      ...(isDev ? [validateLocalDevelopment()] : []),
+      ...(isDev
+        ? [validateLocalDevelopment(), localSyncMaintenance(workspaceRoot)]
+        : []),
       preferNodeAwsSdkResolution(),
       tanstackStart(),
       viteReact(),

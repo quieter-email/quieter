@@ -1,0 +1,39 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "quieter-local-mail-sync",
+  "main": "packages/sync-worker/src/worker.ts",
+  "compatibility_date": "2026-08-04",
+  "compatibility_flags": ["nodejs_compat"],
+  "dev": { "ip": "127.0.0.1", "port": 8788 },
+  "durable_objects": {
+    "bindings": [
+      { "name": "MailboxSyncObjects", "class_name": "MailboxSync" },
+      { "name": "UserSyncObjects", "class_name": "UserSync" },
+    ],
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["MailboxSync", "UserSync"] },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "SyncBodies",
+      "bucket_name": "quieter-local-sync",
+      "remote": false,
+    },
+  ],
+  "queues": {
+    "producers": [
+      { "binding": "MailSyncQueue", "queue": "quieter-local-sync" },
+    ],
+    "consumers": [
+      {
+        "queue": "quieter-local-sync",
+        "max_batch_size": 1,
+        "max_batch_timeout": 0,
+        "max_retries": 10,
+      },
+    ],
+  },
+  "triggers": { "crons": ["* * * * *"] },
+  "observability": { "enabled": false },
+}

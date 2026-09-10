@@ -1,0 +1,13 @@
+{
+  "extends": "@quieter/config/tsconfig/base.json",
+  "compilerOptions": {
+    "lib": ["ESNext"],
+    "types": ["@cloudflare/vitest-pool-workers/types", "node"]
+  },
+  "include": [
+    "src/**/*.ts",
+    "tests/**/*.ts",
+    "vite.config.ts",
+    "worker-configuration.d.ts"
+  ]
+}

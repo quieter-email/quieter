@@ -1,0 +1,27 @@
+{
+  "name": "@quieter/sync-client",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/engine.ts",
+    "./draft-journal": "./src/draft-journal.ts",
+    "./storage": "./src/storage.ts",
+    "./types": "./src/types.ts",
+    "./worker": "./src/worker.ts",
+    "./worker-client": "./src/worker-client.ts",
+    "./worker-protocol": "./src/worker-protocol.ts"
+  },
+  "dependencies": {
+    "@quieter/mail": "workspace:*",
+    "@quieter/sync": "workspace:*",
+    "@tanstack/store": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@quieter/config": "workspace:*",
+    "@types/node": "catalog:",
+    "fake-indexeddb": "^6.2.5",
+    "typescript": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}

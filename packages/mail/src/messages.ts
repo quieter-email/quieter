@@ -32,6 +32,7 @@ export type MessageListItem = {
   threadMessageCount?: number;
   threadAttachmentCount?: number;
   draftId?: string;
+  draftVersion?: string;
   draftAnchor?: ComposeDraftAnchor;
   snippet?: string;
   subject?: string;
@@ -65,6 +66,8 @@ export type MessageListItem = {
 
 export type MessageAttachment = {
   attachmentId: string;
+  contentId?: string | null;
+  inline?: boolean;
   fileName: string;
   mimeType: string;
   size: number;
@@ -104,15 +107,6 @@ export type ThreadMessagesResult = {
 };
 
 export type MailLabelListItem = { id: string; name: string; type?: string };
-
-export type MailboxSyncDelta = {
-  historyId?: string;
-  hasChanges: boolean;
-  refreshFirstPage: boolean;
-  removedMessageIds: string[];
-  requiresFullRefresh: boolean;
-  updatedMessages: MessageListItem[];
-};
 
 export const isMessageArchived = (
   labelIds: readonly string[] | undefined

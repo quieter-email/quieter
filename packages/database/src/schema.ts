@@ -3,6 +3,12 @@ import type {
   DeliveryStatus,
   RecipientSuppression,
 } from "@quieter/mail/delivery";
+import type {
+  SyncChange,
+  SyncCommand,
+  SyncEntityData,
+  SyncEntityKind,
+} from "@quieter/sync";
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -587,6 +593,233 @@ export const mailbox = pgTable(
     index("mailbox_organization_id_idx").on(table.organizationId),
     index("mailbox_division_id_idx").on(table.divisionId),
     unique("mailbox_email_address_unique").on(table.emailAddress),
+  ]
+);
+
+export const mailSyncStream = pgTable(
+  "mailSyncStream",
+  {
+    bodyReferencesInitializedAt: timestamp("bodyReferencesInitializedAt", {
+      withTimezone: true,
+    }),
+    epoch: text("epoch").notNull(),
+    initialized: boolean("initialized").notNull().default(false),
+    mailboxId: text("mailboxId")
+      .primaryKey()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    replayFloor: bigint("replayFloor", { mode: "bigint" })
+      .notNull()
+      .default(0n),
+    sequence: bigint("sequence", { mode: "bigint" }).notNull().default(0n),
+    updatedAt: timestamp("updatedAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    check(
+      "mail_sync_stream_sequence_check",
+      sql`${table.sequence} >= ${table.replayFloor} and ${table.replayFloor} >= 0`
+    ),
+  ]
+);
+
+export const mailSyncEntity = pgTable(
+  "mailSyncEntity",
+  {
+    data: jsonb("data").$type<SyncEntityData>(),
+    entityId: text("entityId").notNull(),
+    kind: text("kind").$type<SyncEntityKind>().notNull(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    providerGeneration: text("providerGeneration"),
+    sortAt: timestamp("sortAt", { withTimezone: true }).notNull().defaultNow(),
+    threadId: text("threadId"),
+    updatedAt: timestamp("updatedAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    version: bigint("version", { mode: "bigint" }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.mailboxId, table.kind, table.entityId] }),
+    index("mail_sync_entity_thread_idx").on(table.mailboxId, table.threadId),
+    index("mail_sync_entity_page_idx").on(
+      table.mailboxId,
+      table.kind,
+      table.sortAt,
+      table.entityId
+    ),
+  ]
+);
+
+export const mailSyncChange = pgTable(
+  "mailSyncChange",
+  {
+    changes: jsonb("changes").$type<SyncChange[]>().notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    epoch: text("epoch").notNull(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    sequence: bigint("sequence", { mode: "bigint" }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.mailboxId, table.sequence] }),
+    index("mail_sync_change_retention_idx").on(table.createdAt),
+  ]
+);
+
+export const mailSyncBody = pgTable(
+  "mailSyncBody",
+  {
+    hash: text("hash").notNull(),
+    lastReferencedSequence: bigint("lastReferencedSequence", {
+      mode: "bigint",
+    }).notNull(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    references: integer("references").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.mailboxId, table.hash] }),
+    check("mail_sync_body_references_check", sql`${table.references} >= 0`),
+  ]
+);
+
+export const mailSyncOutbox = pgTable(
+  "mailSyncOutbox",
+  {
+    attempts: integer("attempts").notNull().default(0),
+    createdAt: timestamp("createdAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    nextAttemptAt: timestamp("nextAttemptAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    sequence: bigint("sequence", { mode: "bigint" }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.mailboxId, table.sequence] }),
+    foreignKey({
+      columns: [table.mailboxId, table.sequence],
+      foreignColumns: [mailSyncChange.mailboxId, mailSyncChange.sequence],
+    }).onDelete("cascade"),
+    index("mail_sync_outbox_due_idx").on(table.nextAttemptAt),
+  ]
+);
+
+export const mailSyncProviderState = pgTable("mailSyncProviderState", {
+  bootstrapCursor: text("bootstrapCursor"),
+  cursor: text("cursor"),
+  historyPageToken: text("historyPageToken"),
+  inventoryGeneration: text("inventoryGeneration"),
+  labelsSyncedAt: timestamp("labelsSyncedAt", { withTimezone: true }),
+  lastSyncedAt: timestamp("lastSyncedAt", { withTimezone: true }),
+  leaseExpiresAt: timestamp("leaseExpiresAt", { withTimezone: true }),
+  leaseId: text("leaseId"),
+  mailboxId: text("mailboxId")
+    .primaryKey()
+    .references(() => mailbox.id, { onDelete: "cascade" }),
+  nextAttemptAt: timestamp("nextAttemptAt", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  pageToken: text("pageToken"),
+  phase: text("phase")
+    .$type<"bootstrap" | "history" | "repair" | "sweep" | "ready">()
+    .notNull()
+    .default("bootstrap"),
+  updatedAt: timestamp("updatedAt", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const mailSyncCommand = pgTable(
+  "mailSyncCommand",
+  {
+    attempts: integer("attempts").notNull().default(0),
+    commandId: text("commandId").notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    error: text("error"),
+    leaseId: text("leaseId"),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    nextAttemptAt: timestamp("nextAttemptAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    payload: jsonb("payload").$type<SyncCommand>().notNull(),
+    payloadHash: text("payloadHash").notNull(),
+    sequence: bigint("sequence", { mode: "bigint" }),
+    status: text("status")
+      .$type<"accepted" | "running" | "applied" | "failed">()
+      .notNull()
+      .default("accepted"),
+    updatedAt: timestamp("updatedAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.mailboxId, table.commandId] }),
+    index("mail_sync_command_due_idx").on(table.status, table.nextAttemptAt),
+    index("mail_sync_command_order_idx").on(table.mailboxId, table.sequence),
+    index("mail_sync_command_user_idx").on(
+      table.userId,
+      table.mailboxId,
+      table.createdAt
+    ),
+  ]
+);
+
+export const mailSyncSubmission = pgTable(
+  "mailSyncSubmission",
+  {
+    createdAt: timestamp("createdAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    kind: text("kind").$type<"draft" | "send">().notNull(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    nextAttemptAt: timestamp("nextAttemptAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    operationId: text("operationId").notNull(),
+    payloadHash: text("payloadHash").notNull(),
+    recoveryKey: text("recoveryKey").notNull(),
+    result: jsonb("result").$type<{
+      id: string;
+      threadId: string;
+      messageId?: string;
+    }>(),
+    status: text("status")
+      .$type<"unknown" | "accepted" | "rejected">()
+      .notNull()
+      .default("unknown"),
+    updatedAt: timestamp("updatedAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.mailboxId, table.operationId] }),
+    index("mail_sync_submission_recovery_idx").on(
+      table.mailboxId,
+      table.status,
+      table.nextAttemptAt
+    ),
   ]
 );
 

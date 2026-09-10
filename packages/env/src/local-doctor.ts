@@ -158,25 +158,6 @@ const validateAuthAndDeployment = (env: Map<string, string>) => {
       );
     }
   }
-  const liveUrl = env.get("GMAIL_LIVE_SYNC_URL");
-  if (liveUrl) {
-    try {
-      const url = new URL(liveUrl);
-      if (
-        !["ws:", "wss:"].includes(url.protocol) ||
-        !loopbackHosts.has(getHostname(liveUrl))
-      ) {
-        errors.push("GMAIL_LIVE_SYNC_URL must target a loopback Worker.");
-      }
-    } catch {
-      errors.push("GMAIL_LIVE_SYNC_URL is invalid.");
-    }
-    if ((env.get("GMAIL_LIVE_SYNC_TOKEN_SECRET")?.length ?? 0) < 32) {
-      errors.push(
-        "GMAIL_LIVE_SYNC_TOKEN_SECRET must have at least 32 characters."
-      );
-    }
-  }
   const subscription = env.get("GMAIL_PUBSUB_SUBSCRIPTION");
   if (
     subscription &&
@@ -197,6 +178,25 @@ const validateAuthAndDeployment = (env: Map<string, string>) => {
     );
   }
   const authUrl = env.get("BETTER_AUTH_URL");
+  const syncUrl = env.get("MAIL_SYNC_URL");
+  try {
+    if (
+      syncUrl === undefined ||
+      !loopbackHosts.has(getHostname(syncUrl)) ||
+      new URL(syncUrl).protocol !== "http:"
+    ) {
+      errors.push(
+        "MAIL_SYNC_URL must target the loopback mail sync Worker in local development."
+      );
+    }
+  } catch {
+    errors.push("MAIL_SYNC_URL is not a valid URL.");
+  }
+  if ((env.get("MAIL_SYNC_SECRET")?.length ?? 0) < 32) {
+    errors.push(
+      "MAIL_SYNC_SECRET must contain at least 32 characters. Run dev:setup."
+    );
+  }
 
   if (authUrl) {
     try {

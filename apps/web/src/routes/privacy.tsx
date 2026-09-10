@@ -78,9 +78,9 @@ function PrivacyPage() {
           and stable. This monitoring is not consent-gated.
         </li>
         <li>
-          Browser-local mailbox and navigation metadata, such as mailbox lists,
-          labels, and message list metadata, to make recently used mailbox views
-          faster.
+          Mail cached on your device, including message bodies, senders, labels,
+          and mailbox navigation data, to open conversations quickly.
+          Attachments are not automatically stored in this mail cache.
         </li>
         <li>
           Performance metrics and limited product analytics only when you
@@ -142,9 +142,14 @@ function PrivacyPage() {
         useful-detail items for that mailbox. Disabling a mailbox or deleting
         account data may not immediately remove backups, logs, invoices, or
         records we must keep for legal, security, or accounting reasons. The
-        browser may keep selected mailbox and navigation metadata in
-        localStorage for up to 24 hours; signing out or deleting your account
-        clears this query cache from the browser.
+        browser can keep message bodies and mailbox metadata between visits. The
+        cache has a storage limit and removes older content as space fills up.
+        You can change that limit, clear cached mail, or turn off persistent
+        mail storage in privacy settings. Clearing cached mail keeps drafts you
+        are editing and pending changes. Signing out clears the mail cache for
+        that account. When mailbox access is removed, connected clients remove
+        the affected cache; a device without a connection cannot receive that
+        instruction until it reconnects.
       </p>
 
       <h2>International transfers</h2>

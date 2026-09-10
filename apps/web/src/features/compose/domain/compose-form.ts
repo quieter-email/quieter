@@ -24,6 +24,10 @@ type ComposeFormWriter = {
 type ComposeDraftFormMeta = Pick<
   ComposeDraftState,
   | "localId"
+  | "recoveryEditorId"
+  | "recoveryUpdatedAt"
+  | "baseVersion"
+  | "conflict"
   | "draftId"
   | "messageId"
   | "draftAnchor"

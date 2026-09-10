@@ -30,6 +30,7 @@ import {
   useManagedDemoModeEnabled,
 } from "#/features/settings/domain/managed-demo-mode-setting";
 
+import { MailCacheSettings } from "./mail-cache-settings";
 import {
   SettingsCard,
   SettingsRow,
@@ -149,19 +150,22 @@ export const ShortcutsSettingsPanel = () => {
 };
 
 export const PrivacySettingsPanel = () => (
-  <SettingsSection title="Privacy preferences">
-    <SettingsRows>
-      <SettingsRow
-        action={
-          <ConsentPreferencesLink className="squircle inline-flex h-8 items-center justify-center rounded-md border border-border bg-bg-raised px-3 text-body font-medium text-fg transition-colors hover:bg-muted/60" />
-        }
-        title="Cookie and analytics preferences"
-      >
-        Choose which optional cookies and measurement tools Quieter may use in
-        this browser.
-      </SettingsRow>
-    </SettingsRows>
-  </SettingsSection>
+  <>
+    <SettingsSection title="Privacy preferences">
+      <SettingsRows>
+        <SettingsRow
+          action={
+            <ConsentPreferencesLink className="squircle inline-flex h-8 items-center justify-center rounded-md border border-border bg-bg-raised px-3 text-body font-medium text-fg transition-colors hover:bg-muted/60" />
+          }
+          title="Cookie and analytics preferences"
+        >
+          Choose which optional cookies and measurement tools Quieter may use in
+          this browser.
+        </SettingsRow>
+      </SettingsRows>
+    </SettingsSection>
+    <MailCacheSettings />
+  </>
 );
 
 export const DevelopmentSettingsPanel = () => {

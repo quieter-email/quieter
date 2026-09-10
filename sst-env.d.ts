@@ -6,23 +6,6 @@
 
 declare module "sst" {
   export interface Resource {
-    "GmailLiveSyncApi": {
-      "managementEndpoint": string
-      "type": "sst.aws.ApiGatewayWebSocket"
-      "url": string
-    }
-    "GmailLiveSyncConnections": {
-      "name": string
-      "type": "sst.aws.Dynamo"
-    }
-    "GmailLiveSyncTokenSecret": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "GmailLiveSyncWebSocketHandler": {
-      "name": string
-      "type": "sst.aws.Function"
-    }
     "MailBucket": {
       "name": string
       "type": "sst.aws.Bucket"

@@ -6,24 +6,20 @@ import type { QueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
-  getLiveSyncQueryKey,
   getMessagesQueryKey,
-  liveSyncQueryOptions,
   messagesQueryOptions,
   refreshLoadedMessagesPages,
-  syncMessages,
 } from "#/lib/gmail/inbox-query";
 import { getThreadWithDetailsOptions } from "#/lib/gmail/thread-query";
-import { useMailboxLiveSync } from "#/lib/gmail/use-gmail-live-sync";
 import type { ListMessagesPageResult, MailboxCategory } from "#/lib/mail";
+import { useWarmMailThreads } from "#/lib/mail-sync/hooks";
+import { MailSyncSession } from "#/lib/mail-sync/session";
 import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
 import { isMailboxScopeRepairRequiredError } from "#/lib/orpc-errors";
+import { isSandboxMailboxId } from "#/lib/sandbox-mailbox";
 
 type UseMailboxMessagesOptions = {
   activeMailbox: MailboxCategory;
-  isDemoMode: boolean;
-  isManagedDemoMode: boolean;
-  mailboxProvider: "api" | "gmail" | "managed";
   messageId?: string;
   threadId?: string;
   queryClient: QueryClient;
@@ -36,37 +32,6 @@ const EMPTY_MESSAGE_PAGES: ListMessagesPageResult[] = [];
 const hasLoadedMessagePages = (
   data: { pages: readonly unknown[] } | undefined
 ) => data !== undefined && data.pages.length > 0;
-
-const canUseLiveSync = ({
-  activeMailbox,
-  hasLoadedMessages,
-  isDemoMode,
-  isManagedDemoMode,
-  isManualRefreshing,
-  isWindowActive,
-  mailboxProvider,
-  normalizedQuery,
-  selectedMailboxId,
-}: {
-  activeMailbox: MailboxCategory;
-  hasLoadedMessages: boolean;
-  isDemoMode: boolean;
-  isManagedDemoMode: boolean;
-  isManualRefreshing: boolean;
-  isWindowActive: boolean;
-  mailboxProvider: "api" | "gmail" | "managed";
-  normalizedQuery: string;
-  selectedMailboxId: string | null;
-}) =>
-  !!selectedMailboxId &&
-  !isDemoMode &&
-  !isManagedDemoMode &&
-  activeMailbox !== "drafts" &&
-  normalizedQuery.length === 0 &&
-  mailboxProvider !== "api" &&
-  isWindowActive &&
-  hasLoadedMessages &&
-  !isManualRefreshing;
 
 const getCachedSelectedMessage = (
   activeMailbox: MailboxCategory,
@@ -154,50 +119,14 @@ const markMailboxNeedsReconnectInCache = (
   void queryClient.invalidateQueries({ queryKey });
 };
 
-const useWindowActive = () => {
-  const [isWindowActive, setIsWindowActive] = useState(
-    () =>
-      typeof document !== "undefined" &&
-      document.visibilityState === "visible" &&
-      document.hasFocus()
-  );
-
-  useEffect(() => {
-    const updateWindowActivity = () => {
-      const nextIsWindowActive =
-        document.visibilityState === "visible" && document.hasFocus();
-      setIsWindowActive((current) =>
-        current === nextIsWindowActive ? current : nextIsWindowActive
-      );
-    };
-
-    updateWindowActivity();
-    window.addEventListener("focus", updateWindowActivity);
-    window.addEventListener("blur", updateWindowActivity);
-    document.addEventListener("visibilitychange", updateWindowActivity);
-
-    return () => {
-      window.removeEventListener("focus", updateWindowActivity);
-      window.removeEventListener("blur", updateWindowActivity);
-      document.removeEventListener("visibilitychange", updateWindowActivity);
-    };
-  }, []);
-
-  return isWindowActive;
-};
-
 export const useMailboxMessages = ({
   activeMailbox,
-  isDemoMode,
-  isManagedDemoMode,
-  mailboxProvider,
   messageId,
   threadId,
   queryClient,
   searchQuery,
   selectedMailboxId,
 }: UseMailboxMessagesOptions) => {
-  const isWindowActive = useWindowActive();
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const normalizedQuery = searchQuery.trim();
   const {
@@ -219,34 +148,14 @@ export const useMailboxMessages = ({
   );
   const messages = messagesData?.pages ?? EMPTY_MESSAGE_PAGES;
   const hasLoadedMessages = hasLoadedMessagePages(messagesData);
-  const isLiveSyncEnabled = canUseLiveSync({
-    activeMailbox,
-    hasLoadedMessages,
-    isDemoMode,
-    isManagedDemoMode,
-    isManualRefreshing,
-    isWindowActive,
-    mailboxProvider,
-    normalizedQuery,
-    selectedMailboxId,
-  });
-  const { error: syncError, isFetching: isSyncFetching } = useQuery(
-    liveSyncQueryOptions(
-      queryClient,
-      selectedMailboxId ?? "",
-      activeMailbox,
-      normalizedQuery,
-      isLiveSyncEnabled
-    )
-  );
-  useMailboxLiveSync({
-    enabled: isLiveSyncEnabled && mailboxProvider === "gmail",
-    mailboxId: selectedMailboxId ?? "",
-    queryClient,
-  });
   const flattenedMessages = useMemo(
     () => messages.flatMap((page) => page.messages),
     [messages]
+  );
+  useWarmMailThreads(
+    selectedMailboxId ?? "",
+    flattenedMessages.map((message) => message.threadId),
+    2
   );
   const cachedSelectedMessage = getCachedSelectedMessage(
     activeMailbox,
@@ -273,38 +182,41 @@ export const useMailboxMessages = ({
   );
 
   useEffect(() => {
-    const reconnectError = [messagesError, syncError, selectedThreadError].find(
+    const reconnectError = [messagesError, selectedThreadError].find(
       isMailboxScopeRepairRequiredError
     );
     markMailboxNeedsReconnectInCache(queryClient, reconnectError);
-  }, [messagesError, queryClient, selectedThreadError, syncError]);
+  }, [messagesError, queryClient, selectedThreadError]);
 
   const refreshMessages = useCallback(async () => {
     if (!selectedMailboxId) {
       return;
     }
 
-    const liveSyncQueryKey = getLiveSyncQueryKey(
-      selectedMailboxId,
-      activeMailbox,
-      normalizedQuery
-    );
     const messagesQueryKey = getMessagesQueryKey(
       selectedMailboxId,
       activeMailbox,
       normalizedQuery
     );
 
-    await queryClient.cancelQueries({ queryKey: liveSyncQueryKey });
     await queryClient.cancelQueries({ queryKey: messagesQueryKey });
 
     setIsManualRefreshing(true);
-    const refreshError = await syncMessages(
-      queryClient,
-      selectedMailboxId,
-      activeMailbox,
-      normalizedQuery
-    )
+    const refreshError = await (async () => {
+      if (
+        !isSandboxMailboxId(selectedMailboxId) &&
+        !selectedMailboxId.startsWith("api:")
+      ) {
+        const sync = await MailSyncSession.waitForMailbox(selectedMailboxId);
+        await sync.refresh(selectedMailboxId);
+      }
+      await refreshLoadedMessagesPages(
+        queryClient,
+        selectedMailboxId,
+        activeMailbox,
+        normalizedQuery
+      );
+    })()
       .then(() => null)
       .catch((error: unknown) => error)
       .finally(() => {
@@ -338,9 +250,7 @@ export const useMailboxMessages = ({
   });
 
   const isRefreshing =
-    isManualRefreshing ||
-    isSyncFetching ||
-    (isRefetching && !isFetchingNextPage);
+    isManualRefreshing || (isRefetching && !isFetchingNextPage);
   const isLoadingEmptyMessages = !hasLoadedMessages && isPending;
 
   const loadMoreMessages = useCallback(() => {

@@ -15,6 +15,8 @@ import {
   getThreadQueryKey,
   getThreadWithDetailsOptions,
 } from "#/lib/gmail/thread-query";
+import { useWarmMailThreads } from "#/lib/mail-sync/hooks";
+import { MailSyncSession } from "#/lib/mail-sync/session";
 
 import type { MessageListProps } from "./message-list-types";
 import { MessageRow } from "./message-row";
@@ -103,6 +105,11 @@ const useThreadIntentPrefetch = (
     }
     intentThreadIdRef.current = threadId;
     if (threadId === null || threadId === "") {
+      return;
+    }
+    const sync = MailSyncSession.forMailbox(mailboxId);
+    if (sync !== null) {
+      sync.warm(mailboxId, [threadId], 0);
       return;
     }
     intentTimerRef.current = window.setTimeout(() => {
@@ -239,6 +246,19 @@ export const MessageListScrollPane = ({
     overscan: MESSAGE_LIST_OVERSCAN,
   });
   const virtualItems = messageVirtualizer.getVirtualItems();
+  useWarmMailThreads(
+    list.mailboxId,
+    [
+      ...virtualItems.flatMap(
+        (item) => threadedMessages[item.index]?.threadId ?? []
+      ),
+      ...(activeThreadId === null ? [] : [activeThreadId]),
+      ...(selection.keyboardFocusedThreadId === null
+        ? []
+        : [selection.keyboardFocusedThreadId]),
+    ],
+    0
+  );
   const hasMountedPrefetchRef = useRef(false);
 
   useLayoutEffect((): (() => void) | undefined => {

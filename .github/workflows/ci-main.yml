@@ -50,6 +50,8 @@ jobs:
 
       - name: Test Cloudflare Worker runtime
         run: vp run @quieter/cloudflare#test:workers
+      - name: Test dedicated mail synchronization Worker
+        run: vp run @quieter/sync-worker#test:workers
 
   deployment-checks:
     name: Deployment safety checks
@@ -67,6 +69,7 @@ jobs:
         run: |
           vp run check:cloudflare
           vp run @quieter/cloudflare#cf-typecheck
+          vp run @quieter/sync-worker#cf-typecheck
 
       - name: Check package import boundaries
         run: vp run check:boundaries

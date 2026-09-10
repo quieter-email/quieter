@@ -32,6 +32,7 @@ export const protectedProcedure = base.use(
     return await next({
       context: {
         ...context,
+        sessionId: session.session.id,
         user: {
           email: session.user.email,
           id: session.user.id,

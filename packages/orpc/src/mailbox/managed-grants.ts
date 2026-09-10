@@ -18,6 +18,7 @@ import {
 } from "@quieter/database/schema";
 import { and, eq, isNull } from "drizzle-orm";
 
+import { withMailboxAccessTransaction } from "../mail-sync-runtime";
 import { assertOrganizationManager } from "../organization/divisions";
 import {
   getAuthorizedManagedMailbox,
@@ -138,7 +139,7 @@ export const createManagedMailbox = async (input: {
 
   const mailboxId = randomUUID();
   const now = new Date();
-  await db.transaction(async (tx) => {
+  await withMailboxAccessTransaction(mailboxId, async (tx) => {
     const [receivingDomain] = await tx
       .select({ id: mailDomain.id })
       .from(mailDomain)
@@ -463,7 +464,7 @@ export const updateManagedMailbox = async (input: {
   mailboxId: string;
   userId: string;
 }) =>
-  await db.transaction(async (tx) => {
+  await withMailboxAccessTransaction(input.mailboxId, async (tx) => {
     await tx
       .select({ id: mailbox.id })
       .from(mailbox)
@@ -514,7 +515,7 @@ export const setManagedMailboxAccessMode = async (input: {
   ownerUserId?: string | null;
   userId: string;
 }) =>
-  await db.transaction(async (tx) => {
+  await withMailboxAccessTransaction(input.mailboxId, async (tx) => {
     await tx
       .select({ id: mailbox.id })
       .from(mailbox)
@@ -627,72 +628,76 @@ export const setManagedMailboxGrant = async (input: {
   targetUserId: string;
   userId: string;
 }) =>
-  await db.transaction(async (tx) => {
-    await tx
-      .select({ id: mailbox.id })
-      .from(mailbox)
-      .where(eq(mailbox.id, input.mailboxId))
-      .for("update");
-    const selectedMailbox = await assertManagedMailboxConfigurator(
-      input.mailboxId,
-      input.userId,
-      tx
-    );
-    if (
-      selectedMailbox.accessMode === "private" &&
-      selectedMailbox.ownerUserId === input.targetUserId
-    ) {
-      throw new ORPCError("BAD_REQUEST", {
-        message:
-          "The mailbox owner always keeps manager access to a private mailbox.",
-      });
-    }
-    const [target] = await tx
-      .select({ organizationId: mailbox.organizationId })
-      .from(mailbox)
-      .innerJoin(
-        member,
-        and(
-          eq(member.organizationId, mailbox.organizationId),
-          eq(member.userId, input.targetUserId)
+  await withMailboxAccessTransaction(
+    input.mailboxId,
+    async (tx) => {
+      await tx
+        .select({ id: mailbox.id })
+        .from(mailbox)
+        .where(eq(mailbox.id, input.mailboxId))
+        .for("update");
+      const selectedMailbox = await assertManagedMailboxConfigurator(
+        input.mailboxId,
+        input.userId,
+        tx
+      );
+      if (
+        selectedMailbox.accessMode === "private" &&
+        selectedMailbox.ownerUserId === input.targetUserId
+      ) {
+        throw new ORPCError("BAD_REQUEST", {
+          message:
+            "The mailbox owner always keeps manager access to a private mailbox.",
+        });
+      }
+      const [target] = await tx
+        .select({ organizationId: mailbox.organizationId })
+        .from(mailbox)
+        .innerJoin(
+          member,
+          and(
+            eq(member.organizationId, mailbox.organizationId),
+            eq(member.userId, input.targetUserId)
+          )
         )
-      )
-      .where(eq(mailbox.id, input.mailboxId))
-      .limit(1);
-    if (target === undefined) {
-      throw new ORPCError("BAD_REQUEST", {
-        message: "Mailbox grants can only be assigned to team members.",
-      });
-    }
+        .where(eq(mailbox.id, input.mailboxId))
+        .limit(1);
+      if (target === undefined) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: "Mailbox grants can only be assigned to team members.",
+        });
+      }
 
-    const now = new Date();
-    await tx
-      .insert(mailboxGrant)
-      .values({
-        createdAt: now,
-        id: randomUUID(),
+      const now = new Date();
+      await tx
+        .insert(mailboxGrant)
+        .values({
+          createdAt: now,
+          id: randomUUID(),
+          mailboxId: input.mailboxId,
+          role: input.role,
+          updatedAt: now,
+          userId: input.targetUserId,
+        })
+        .onConflictDoUpdate({
+          set: { role: input.role, updatedAt: now },
+          target: [mailboxGrant.mailboxId, mailboxGrant.userId],
+        });
+      return {
         mailboxId: input.mailboxId,
         role: input.role,
-        updatedAt: now,
         userId: input.targetUserId,
-      })
-      .onConflictDoUpdate({
-        set: { role: input.role, updatedAt: now },
-        target: [mailboxGrant.mailboxId, mailboxGrant.userId],
-      });
-    return {
-      mailboxId: input.mailboxId,
-      role: input.role,
-      userId: input.targetUserId,
-    };
-  });
+      };
+    },
+    [input.targetUserId]
+  );
 
 export const removeManagedMailboxGrant = async (input: {
   mailboxId: string;
   targetUserId: string;
   userId: string;
 }) =>
-  await db.transaction(async (tx) => {
+  await withMailboxAccessTransaction(input.mailboxId, async (tx) => {
     await tx
       .select({ id: mailbox.id })
       .from(mailbox)
@@ -749,7 +754,7 @@ export const setManagedMailboxDivisionGrant = async (input: {
   role: MailboxGrantRole;
   userId: string;
 }) =>
-  await db.transaction(async (tx) => {
+  await withMailboxAccessTransaction(input.mailboxId, async (tx) => {
     await tx
       .select({ id: mailbox.id })
       .from(mailbox)
@@ -800,7 +805,7 @@ export const removeManagedMailboxDivisionGrant = async (input: {
   mailboxId: string;
   userId: string;
 }) =>
-  await db.transaction(async (tx) => {
+  await withMailboxAccessTransaction(input.mailboxId, async (tx) => {
     await tx
       .select({ id: mailbox.id })
       .from(mailbox)

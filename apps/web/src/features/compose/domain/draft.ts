@@ -27,6 +27,7 @@ type ComposeAssetBase = {
   mimeType: string;
   size: number;
   gmailAttachmentId?: string;
+  source?: { messageId: string; attachmentId: string };
 };
 
 type ComposeAttachment = ComposeAssetBase & {
@@ -39,6 +40,10 @@ type ComposeInlineImage = ComposeAssetBase & {
 };
 
 export type ComposeDraftState = {
+  recoveryEditorId?: string;
+  recoveryUpdatedAt?: number;
+  baseVersion?: string;
+  conflict?: boolean;
   localId: string;
   draftId?: string;
   messageId?: string;
@@ -341,10 +346,28 @@ export const hasComposeDraftContent = (draft: ComposeDraftState): boolean =>
     draft.inlineImages.length > 0
   );
 
-const attachRuntimeFile = <T extends ComposeAttachment | ComposeInlineImage>(
+const attachRuntimeFile = async <
+  T extends ComposeAttachment | ComposeInlineImage,
+>(
+  mailboxId: string,
   asset: T
 ) => {
-  const runtimeFile = runtimeBinaryById.get(asset.id)?.file;
+  let runtimeFile = runtimeBinaryById.get(asset.id)?.file;
+  if (runtimeFile === undefined && asset.source !== undefined) {
+    const result = await rpc.mail.getAttachment({
+      ...asset.source,
+      fileName: asset.name,
+      mailboxId,
+      mimeType: asset.mimeType,
+    });
+    runtimeFile = result.file;
+    if (runtimeFile.size > MAX_TOTAL_ATTACHMENT_BYTES) {
+      throw new Error(
+        "This attachment is too large to send. Remove it before saving."
+      );
+    }
+    rememberRuntimeFile(asset.id, runtimeFile);
+  }
   if (!runtimeFile) {
     throw new Error(`Missing file payload for ${asset.name}.`);
   }
@@ -439,14 +462,16 @@ export const syncInlineImagesWithHtml = (
   };
 };
 
-const serializeDraft = (draft: ComposeDraftState) => {
+const serializeDraft = async (mailboxId: string, draft: ComposeDraftState) => {
   assertAttachmentBudget(draft);
-  const inlineImages = draft.inlineImages.map((image) =>
-    attachRuntimeFile(image)
-  );
-  const attachments = draft.attachments.map((attachment) =>
-    attachRuntimeFile(attachment)
-  );
+  const inlineImages = [];
+  for (const image of draft.inlineImages) {
+    inlineImages.push(await attachRuntimeFile(mailboxId, image));
+  }
+  const attachments = [];
+  for (const attachment of draft.attachments) {
+    attachments.push(await attachRuntimeFile(mailboxId, attachment));
+  }
 
   return {
     ...draft,
@@ -462,21 +487,49 @@ export const saveComposeDraft = async (
   signal?: AbortSignal
 ): Promise<ComposeDraftState> => {
   const response = await rpc.mail.saveDraft(
-    { draft: serializeDraft(draft), mailboxId },
+    { draft: await serializeDraft(mailboxId, draft), mailboxId },
     { signal }
   );
   const bodyHtml = getRenderableComposeBodyHtml(
     response.bodyHtml,
     response.bodyText
   );
+  const remaining = [...response.attachments];
+  const updateSource = <Asset extends ComposeAttachment | ComposeInlineImage>(
+    asset: Asset
+  ): Asset => {
+    const index = remaining.findIndex(
+      (attachment) =>
+        attachment.fileName === asset.name &&
+        attachment.mimeType === asset.mimeType &&
+        attachment.size === asset.size &&
+        (attachment.contentId ?? null) ===
+          ("contentId" in asset ? asset.contentId : null)
+    );
+    const attachment = index === -1 ? undefined : remaining.splice(index, 1)[0];
+    return {
+      ...asset,
+      source:
+        attachment === undefined || !response.messageId
+          ? undefined
+          : {
+              attachmentId: attachment.attachmentId,
+              messageId: response.messageId,
+            },
+    };
+  };
 
   return {
     ...draft,
+    attachments: draft.attachments.map(updateSource),
+    baseVersion: response.draftVersion,
     bodyHtml,
     bodyText: response.bodyText || htmlToText(bodyHtml),
+    conflict: false,
     draftAnchor: response.draftAnchor ?? null,
     draftId: response.draftId,
     errorMessage: null,
+    inlineImages: draft.inlineImages.map(updateSource),
     lastSavedAt: Date.now(),
     messageId: response.messageId ?? undefined,
     recipients: response.recipients,
@@ -493,7 +546,7 @@ export const sendComposeMessage = async (
   signal?: AbortSignal
 ) =>
   await rpc.mail.sendMessage(
-    { mailboxId, message: serializeDraft(draft) },
+    { mailboxId, message: await serializeDraft(mailboxId, draft) },
     { signal }
   );
 
@@ -509,7 +562,10 @@ export const deleteComposeDraft = async (
   ) {
     return;
   }
-  await rpc.mail.deleteDraft({ draftId: draft.draftId, mailboxId }, { signal });
+  await rpc.mail.deleteDraft(
+    { baseVersion: draft.baseVersion, draftId: draft.draftId, mailboxId },
+    { signal }
+  );
 };
 
 export const attachInlineImagesToHtml = (

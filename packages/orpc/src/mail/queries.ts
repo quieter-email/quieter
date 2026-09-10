@@ -1,6 +1,4 @@
-import { ORPCError } from "@orpc/server";
 import {
-  getMailboxSyncDelta,
   getMessageAttachment,
   getMessageInspector,
   getThreadWithDetails,
@@ -10,7 +8,6 @@ import {
 
 import { callGmail } from "../gmail-request";
 import type { MailRequestContext } from "../gmail-request";
-import { assertUserOrganizationMember } from "../mail-domain/service";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import { getManagedMessageAttachment } from "../managed-mail/messages/attachments";
 import {
@@ -27,7 +24,6 @@ import {
   isOrganizationApiMailboxId,
   listOrganizationApiMailDeliveryStatuses,
   listOrganizationApiMailMessages,
-  parseOrganizationApiMailboxId,
 } from "../organization-api-mail";
 import type { MailInputs } from "./inputs";
 
@@ -237,61 +233,6 @@ export const queriesMailOperations = {
               query: input.query?.trim() || undefined,
               signal,
             })
-    );
-  },
-  syncMailbox: async ({
-    context,
-    input,
-  }: {
-    context: MailRequestContext;
-    input: MailInputs["syncMailbox"];
-  }) => {
-    if (isOrganizationApiMailboxId(input.mailboxId)) {
-      const organizationId = parseOrganizationApiMailboxId(input.mailboxId);
-      if (organizationId === null || organizationId.length === 0) {
-        throw new ORPCError("NOT_FOUND", {
-          message: "API mailbox not found.",
-        });
-      }
-      await assertUserOrganizationMember({
-        organizationId,
-        userId: context.userId,
-      });
-      return {
-        hasChanges: true,
-        refreshFirstPage: true,
-        removedMessageIds: [],
-        requiresFullRefresh: true,
-        updatedMessages: [],
-      };
-    }
-
-    const selectedMailbox = await assertAccessibleMailbox({
-      mailboxId: input.mailboxId,
-      userId: context.userId,
-    });
-    if (selectedMailbox.provider === "managed") {
-      const historyId = String(selectedMailbox.contentRevision);
-      const hasChanges = historyId !== input.startHistoryId;
-      return {
-        hasChanges,
-        historyId,
-        refreshFirstPage: hasChanges,
-        removedMessageIds: [],
-        requiresFullRefresh: hasChanges,
-        updatedMessages: [],
-      };
-    }
-
-    return await callGmail(
-      context,
-      input.mailboxId,
-      async (accessToken, signal) =>
-        await getMailboxSyncDelta(accessToken, {
-          mailbox: input.category,
-          signal,
-          startHistoryId: input.startHistoryId,
-        })
     );
   },
 };

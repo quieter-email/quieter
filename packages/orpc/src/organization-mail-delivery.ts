@@ -32,6 +32,7 @@ import {
 import { reportError } from "@quieter/observability";
 import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 
+import { withDeliverySyncTransaction } from "./mail-sync-delivery";
 import { OrganizationMailSendError } from "./organization-mail-policy";
 
 export type OrganizationMailFeedbackRecipient = {
@@ -411,90 +412,94 @@ export const recordOrganizationMailFeedback = async (
   const suppressionReason = getSuppressionReason(feedback);
   const now = new Date();
 
-  await db.transaction(async (transaction) => {
-    await transaction
-      .select({ id: organization.id })
-      .from(organization)
-      .where(eq(organization.id, organizationId))
-      .for("update");
-    for (const recipient of recipients.toSorted((a, b) =>
-      a.emailAddress.localeCompare(b.emailAddress)
-    )) {
-      const dedupeKey = createDedupeKey({
-        eventType: feedback.eventType,
-        provider: feedback.provider,
-        providerMessageId: feedback.providerMessageId,
-        recipient: recipient.emailAddress,
-        sourceEventId: feedback.sourceEventId,
-      });
-      const insertedEvents = await transaction
-        .insert(organizationMailDeliveryEvent)
-        .values({
-          createdAt: now,
-          dedupeKey,
-          diagnosticCode: recipient.diagnosticCode,
+  await withDeliverySyncTransaction(
+    organizationId,
+    feedback.providerMessageId,
+    async (transaction) => {
+      await transaction
+        .select({ id: organization.id })
+        .from(organization)
+        .where(eq(organization.id, organizationId))
+        .for("update");
+      for (const recipient of recipients.toSorted((a, b) =>
+        a.emailAddress.localeCompare(b.emailAddress)
+      )) {
+        const dedupeKey = createDedupeKey({
           eventType: feedback.eventType,
-          id: randomUUID(),
-          occurredAt: feedback.occurredAt,
-          organizationId,
           provider: feedback.provider,
           providerMessageId: feedback.providerMessageId,
-          providerStatus: recipient.providerStatus,
-          reason: recipient.reason,
           recipient: recipient.emailAddress,
-        })
-        .onConflictDoNothing({
-          target: organizationMailDeliveryEvent.dedupeKey,
-        })
-        .returning({ id: organizationMailDeliveryEvent.id });
-
-      if (insertedEvents.length === 0) {
-        continue;
-      }
-
-      if (
-        feedback.eventType !== "opened" &&
-        feedback.eventType !== "unsubscribed"
-      ) {
-        await transaction
-          .insert(organizationMailDeliveryRecipient)
+          sourceEventId: feedback.sourceEventId,
+        });
+        const insertedEvents = await transaction
+          .insert(organizationMailDeliveryEvent)
           .values({
             createdAt: now,
-            lastEventAt: feedback.occurredAt,
+            dedupeKey,
+            diagnosticCode: recipient.diagnosticCode,
+            eventType: feedback.eventType,
+            id: randomUUID(),
+            occurredAt: feedback.occurredAt,
             organizationId,
+            provider: feedback.provider,
             providerMessageId: feedback.providerMessageId,
+            providerStatus: recipient.providerStatus,
+            reason: recipient.reason,
             recipient: recipient.emailAddress,
-            status: feedback.eventType,
-            updatedAt: now,
           })
-          .onConflictDoUpdate({
-            set: {
-              lastEventAt: sql`greatest(${organizationMailDeliveryRecipient.lastEventAt}, excluded."lastEventAt")`,
-              status: mergeDeliveryStatusSql(
-                organizationMailDeliveryRecipient.status
-              ),
+          .onConflictDoNothing({
+            target: organizationMailDeliveryEvent.dedupeKey,
+          })
+          .returning({ id: organizationMailDeliveryEvent.id });
+
+        if (insertedEvents.length === 0) {
+          continue;
+        }
+
+        if (
+          feedback.eventType !== "opened" &&
+          feedback.eventType !== "unsubscribed"
+        ) {
+          await transaction
+            .insert(organizationMailDeliveryRecipient)
+            .values({
+              createdAt: now,
+              lastEventAt: feedback.occurredAt,
+              organizationId,
+              providerMessageId: feedback.providerMessageId,
+              recipient: recipient.emailAddress,
+              status: feedback.eventType,
               updatedAt: now,
-            },
-            target: [
-              organizationMailDeliveryRecipient.organizationId,
-              organizationMailDeliveryRecipient.providerMessageId,
-              organizationMailDeliveryRecipient.recipient,
-            ],
+            })
+            .onConflictDoUpdate({
+              set: {
+                lastEventAt: sql`greatest(${organizationMailDeliveryRecipient.lastEventAt}, excluded."lastEventAt")`,
+                status: mergeDeliveryStatusSql(
+                  organizationMailDeliveryRecipient.status
+                ),
+                updatedAt: now,
+              },
+              target: [
+                organizationMailDeliveryRecipient.organizationId,
+                organizationMailDeliveryRecipient.providerMessageId,
+                organizationMailDeliveryRecipient.recipient,
+              ],
+            });
+        }
+        if (suppressionReason !== null) {
+          await applySuppressionChange(transaction, {
+            actorUserId: null,
+            createdAt: now,
+            occurredAt: feedback.occurredAt,
+            organizationId,
+            recipient: recipient.emailAddress,
+            sourceProviderMessageId: feedback.providerMessageId,
+            suppressionReason,
           });
-      }
-      if (suppressionReason !== null) {
-        await applySuppressionChange(transaction, {
-          actorUserId: null,
-          createdAt: now,
-          occurredAt: feedback.occurredAt,
-          organizationId,
-          recipient: recipient.emailAddress,
-          sourceProviderMessageId: feedback.providerMessageId,
-          suppressionReason,
-        });
+        }
       }
     }
-  });
+  );
 };
 
 export const suppressOrganizationMailRecipient = async (input: {
@@ -694,93 +699,97 @@ export const reconcileOrganizationMailDeliveryRecipients = async (input: {
   organizationId: string;
   providerMessageId: string;
 }) =>
-  await db.transaction(async (transaction) => {
-    await transaction.execute(
-      sql`select pg_advisory_xact_lock(hashtextextended(${JSON.stringify([input.organizationId, input.providerMessageId])}, 0))`
-    );
-    const events = await transaction
-      .select({
-        occurredAt: organizationMailDeliveryEvent.occurredAt,
-        recipient: organizationMailDeliveryEvent.recipient,
-        status: organizationMailDeliveryEvent.eventType,
-      })
-      .from(organizationMailDeliveryEvent)
-      .where(
-        and(
-          eq(
-            organizationMailDeliveryEvent.organizationId,
-            input.organizationId
-          ),
-          eq(
-            organizationMailDeliveryEvent.providerMessageId,
-            input.providerMessageId
+  await withDeliverySyncTransaction(
+    input.organizationId,
+    input.providerMessageId,
+    async (transaction) => {
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${JSON.stringify([input.organizationId, input.providerMessageId])}, 0))`
+      );
+      const events = await transaction
+        .select({
+          occurredAt: organizationMailDeliveryEvent.occurredAt,
+          recipient: organizationMailDeliveryEvent.recipient,
+          status: organizationMailDeliveryEvent.eventType,
+        })
+        .from(organizationMailDeliveryEvent)
+        .where(
+          and(
+            eq(
+              organizationMailDeliveryEvent.organizationId,
+              input.organizationId
+            ),
+            eq(
+              organizationMailDeliveryEvent.providerMessageId,
+              input.providerMessageId
+            )
           )
         )
-      )
-      .orderBy(
-        organizationMailDeliveryEvent.occurredAt,
-        organizationMailDeliveryEvent.createdAt
-      );
+        .orderBy(
+          organizationMailDeliveryEvent.occurredAt,
+          organizationMailDeliveryEvent.createdAt
+        );
 
-    const projections = new Map<string, DeliveryStatePoint>();
-    for (const event of events) {
-      if (event.status === "opened" || event.status === "unsubscribed") {
-        continue;
-      }
-      const merged = mergeDeliveryStatus(
-        projections.get(event.recipient) ?? null,
-        {
-          occurredAt: event.occurredAt,
-          status: event.status,
+      const projections = new Map<string, DeliveryStatePoint>();
+      for (const event of events) {
+        if (event.status === "opened" || event.status === "unsubscribed") {
+          continue;
         }
-      );
-      projections.set(event.recipient, merged);
-    }
+        const merged = mergeDeliveryStatus(
+          projections.get(event.recipient) ?? null,
+          {
+            occurredAt: event.occurredAt,
+            status: event.status,
+          }
+        );
+        projections.set(event.recipient, merged);
+      }
 
-    const now = new Date();
-    await transaction
-      .delete(organizationMailDeliveryRecipient)
-      .where(
-        and(
-          eq(
-            organizationMailDeliveryRecipient.organizationId,
-            input.organizationId
-          ),
-          eq(
-            organizationMailDeliveryRecipient.providerMessageId,
-            input.providerMessageId
+      const now = new Date();
+      await transaction
+        .delete(organizationMailDeliveryRecipient)
+        .where(
+          and(
+            eq(
+              organizationMailDeliveryRecipient.organizationId,
+              input.organizationId
+            ),
+            eq(
+              organizationMailDeliveryRecipient.providerMessageId,
+              input.providerMessageId
+            )
           )
-        )
-      );
-    await Promise.all(
-      [...projections.entries()].map(([recipient, state]) =>
-        transaction
-          .insert(organizationMailDeliveryRecipient)
-          .values({
-            createdAt: now,
-            lastEventAt: state.occurredAt,
-            organizationId: input.organizationId,
-            providerMessageId: input.providerMessageId,
-            recipient,
-            status: state.status,
-            updatedAt: now,
-          })
-          .onConflictDoUpdate({
-            set: {
+        );
+      await Promise.all(
+        [...projections.entries()].map(([recipient, state]) =>
+          transaction
+            .insert(organizationMailDeliveryRecipient)
+            .values({
+              createdAt: now,
               lastEventAt: state.occurredAt,
+              organizationId: input.organizationId,
+              providerMessageId: input.providerMessageId,
+              recipient,
               status: state.status,
               updatedAt: now,
-            },
-            target: [
-              organizationMailDeliveryRecipient.organizationId,
-              organizationMailDeliveryRecipient.providerMessageId,
-              organizationMailDeliveryRecipient.recipient,
-            ],
-          })
-      )
-    );
-    return { reconciled: projections.size };
-  });
+            })
+            .onConflictDoUpdate({
+              set: {
+                lastEventAt: state.occurredAt,
+                status: state.status,
+                updatedAt: now,
+              },
+              target: [
+                organizationMailDeliveryRecipient.organizationId,
+                organizationMailDeliveryRecipient.providerMessageId,
+                organizationMailDeliveryRecipient.recipient,
+              ],
+            })
+        )
+      );
+      return { reconciled: projections.size };
+    }
+  );
 
 export type OrganizationMailTrackingSettings = {
   allowPerSendOverride: boolean;
@@ -973,62 +982,69 @@ export const recordOrganizationMailOpenEvent = async (input: {
   const attributedRecipient = recipients.length === 1 ? recipients[0] : null;
   const now = input.occurredAt;
 
-  return await db.transaction(async (transaction) => {
-    if (attributedRecipient !== null) {
-      await transaction
-        .insert(organizationMailDeliveryEvent)
-        .values({
-          createdAt: now,
-          dedupeKey: createDedupeKey({
+  return await withDeliverySyncTransaction(
+    target.organizationId,
+    input.providerMessageId,
+    async (transaction) => {
+      if (attributedRecipient !== null) {
+        await transaction
+          .insert(organizationMailDeliveryEvent)
+          .values({
+            createdAt: now,
+            dedupeKey: createDedupeKey({
+              eventType: "opened",
+              provider: "quieter",
+              providerMessageId: input.providerMessageId,
+              recipient: attributedRecipient,
+              sourceEventId: "open-marker",
+            }),
             eventType: "opened",
+            id: randomUUID(),
+            occurredAt: now,
+            organizationId: target.organizationId,
             provider: "quieter",
             providerMessageId: input.providerMessageId,
             recipient: attributedRecipient,
-            sourceEventId: "open-marker",
-          }),
-          eventType: "opened",
+          })
+          .onConflictDoNothing({
+            target: organizationMailDeliveryEvent.dedupeKey,
+          })
+          .returning({ id: organizationMailDeliveryEvent.id });
+      }
+
+      const [openRow] = await transaction
+        .insert(organizationMailOpenEvent)
+        .values({
+          createdAt: now,
+          firstOpenedAt: now,
           id: randomUUID(),
-          occurredAt: now,
+          lastOpenedAt: now,
           organizationId: target.organizationId,
-          provider: "quieter",
           providerMessageId: input.providerMessageId,
           recipient: attributedRecipient,
+          reportedOpenCount: 1,
         })
-        .onConflictDoNothing({
-          target: organizationMailDeliveryEvent.dedupeKey,
+        .onConflictDoUpdate({
+          set: {
+            firstOpenedAt: sql`least(${organizationMailOpenEvent.firstOpenedAt}, excluded."firstOpenedAt")`,
+            lastOpenedAt: sql`greatest(${organizationMailOpenEvent.lastOpenedAt}, excluded."lastOpenedAt")`,
+            reportedOpenCount: sql`least(${organizationMailOpenEvent.reportedOpenCount} + 1, ${MAX_REPORTED_OPENS})`,
+          },
+          target: [
+            organizationMailOpenEvent.organizationId,
+            organizationMailOpenEvent.providerMessageId,
+          ],
         })
-        .returning({ id: organizationMailDeliveryEvent.id });
+        .returning({
+          reportedOpenCount: organizationMailOpenEvent.reportedOpenCount,
+        });
+
+      return {
+        attributedRecipient,
+        firstOpen: openRow?.reportedOpenCount === 1,
+      };
     }
-
-    const [openRow] = await transaction
-      .insert(organizationMailOpenEvent)
-      .values({
-        createdAt: now,
-        firstOpenedAt: now,
-        id: randomUUID(),
-        lastOpenedAt: now,
-        organizationId: target.organizationId,
-        providerMessageId: input.providerMessageId,
-        recipient: attributedRecipient,
-        reportedOpenCount: 1,
-      })
-      .onConflictDoUpdate({
-        set: {
-          firstOpenedAt: sql`least(${organizationMailOpenEvent.firstOpenedAt}, excluded."firstOpenedAt")`,
-          lastOpenedAt: sql`greatest(${organizationMailOpenEvent.lastOpenedAt}, excluded."lastOpenedAt")`,
-          reportedOpenCount: sql`least(${organizationMailOpenEvent.reportedOpenCount} + 1, ${MAX_REPORTED_OPENS})`,
-        },
-        target: [
-          organizationMailOpenEvent.organizationId,
-          organizationMailOpenEvent.providerMessageId,
-        ],
-      })
-      .returning({
-        reportedOpenCount: organizationMailOpenEvent.reportedOpenCount,
-      });
-
-    return { attributedRecipient, firstOpen: openRow?.reportedOpenCount === 1 };
-  });
+  );
 };
 
 /**

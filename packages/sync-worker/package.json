@@ -1,0 +1,32 @@
+{
+  "name": "@quieter/sync-worker",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./worker": "./src/worker.ts"
+  },
+  "scripts": {
+    "dev": "wrangler dev --config ../../local-sync-worker.jsonc --local --persist-to ../../.wrangler/state",
+    "cf-typegen": "wrangler types worker-configuration.d.ts --config wrangler.types.jsonc --env-interface SyncEnv --strict-vars false",
+    "cf-typecheck": "wrangler types worker-configuration.d.ts --config wrangler.types.jsonc --env-interface SyncEnv --strict-vars false --check",
+    "test:workers": "vp test run --config vite.config.ts"
+  },
+  "dependencies": {
+    "@quieter/database": "workspace:*",
+    "@quieter/env": "workspace:*",
+    "@quieter/observability": "workspace:*",
+    "@quieter/orpc": "workspace:*",
+    "@quieter/sync": "workspace:*",
+    "@quieter/sync-server": "workspace:*",
+    "@sentry/cloudflare": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "catalog:",
+    "@quieter/config": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vite-plus": "catalog:",
+    "wrangler": "catalog:"
+  }
+}

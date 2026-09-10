@@ -1,11 +1,9 @@
-export { getLiveSyncQueryKey, getMessagesQueryKey } from "./keys";
+export { getMessagesQueryKey } from "./keys";
 
 export {
-  liveSyncQueryOptions,
   messagesQueryOptions,
   refreshCachedMailboxQueries,
   refreshLoadedMessagesPages,
-  syncMessages,
 } from "./sync";
 
 export {

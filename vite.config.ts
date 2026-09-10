@@ -400,6 +400,7 @@ export default defineConfig({
       ...configDefaults.exclude,
       ".scratch/**",
       "packages/cloudflare/tests/**",
+      "packages/sync-worker/tests/**",
     ],
     setupFiles: ["./vitest.setup.ts"],
   },

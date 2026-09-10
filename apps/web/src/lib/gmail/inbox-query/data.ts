@@ -22,17 +22,6 @@ type MergeRefreshedMailboxPagesOptions = {
   preserveUnrefreshedPages?: boolean;
 };
 
-export type MessageMetadataMutationResult = {
-  id: string;
-  labelIds?: string[];
-  isUnread: boolean;
-};
-
-export type ThreadMetadataMutationResult = {
-  threadId: string;
-  messages: MessageMetadataMutationResult[];
-};
-
 export type LabelChangeSet = {
   addLabelIds?: readonly string[];
   removeLabelIds?: readonly string[];
@@ -144,21 +133,6 @@ export const mergeRefreshedMailboxPagesIntoQueryData = (
       ...previous.pageParams.slice(refreshedPageParams.length),
     ],
     pages: [...pages, ...preservedPages],
-  };
-};
-
-export const updateFirstPageHistoryId = (
-  data: MessagesQueryData | undefined,
-  historyId: string
-): MessagesQueryData | undefined => {
-  const firstPage = data?.pages[0];
-  if (!data || !firstPage || firstPage.historyId === historyId) {
-    return data;
-  }
-
-  return {
-    ...data,
-    pages: [{ ...firstPage, historyId }, ...data.pages.slice(1)],
   };
 };
 
@@ -400,10 +374,6 @@ export const applyMessageMetadata = (
   };
 };
 
-export const toMessageMetadataById = (
-  updates: readonly MessageMetadataMutationResult[]
-) => new Map(updates.map((update) => [update.id, update] as const));
-
 export const applyMessageLabelChangesLocally = (
   message: MessageListItem,
   changes: LabelChangeSet
@@ -468,6 +438,9 @@ const mergeSyncedMessages = (
     ];
   });
   const nextMessageIds = new Set(nextMessages.map((message) => message.id));
+  const currentThreadIds = new Set(
+    currentMessages.map((message) => message.threadId)
+  );
   const oldestLoadedMessage = currentMessages.at(-1);
   const oldestLoadedTimestamp = oldestLoadedMessage
     ? getMessageSortTimestamp(oldestLoadedMessage)
@@ -477,6 +450,7 @@ const mergeSyncedMessages = (
     if (
       !nextMessageIds.has(updatedMessage.id) &&
       (!currentMessages.length ||
+        currentThreadIds.has(updatedMessage.threadId) ||
         getMessageSortTimestamp(updatedMessage) >= oldestLoadedTimestamp)
     ) {
       nextMessages.push(updatedMessage);

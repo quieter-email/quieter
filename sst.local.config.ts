@@ -9,6 +9,7 @@ export default $config({
     return {
       home: "aws",
       name: "quieter",
+      providers: { cloudflare: "6.15.0" },
       removal: "remove",
       types: { ignore: [".", "apps", "packages"] },
     };

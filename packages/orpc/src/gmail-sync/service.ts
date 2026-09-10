@@ -21,7 +21,6 @@ import {
   listGmailAddedMessageHistoryPage,
   listGmailMessageIds,
   listLabels,
-  stopGmailWatch,
   mutateGmailMessage,
   watchGmailMailbox,
 } from "@quieter/gmail";
@@ -47,6 +46,7 @@ import {
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import { deferAutoLabelAutomation } from "../mail-automation/auto-label-events";
 import { reportAutoLabelUsage } from "../mail-automation/usage";
+import { mailSyncServices } from "../mail-sync-runtime";
 
 const WATCH_RENEWAL_INTERVAL_MS = 1000 * 60 * 60 * 20;
 const WATCH_EXPIRATION_BUFFER_MS = 1000 * 60 * 60 * 48;
@@ -934,41 +934,6 @@ const renewMailboxWatch = async ({
     .where(eq(gmailWatchState.mailboxId, mailboxId));
 };
 
-const disableMailboxWatch = async (mailboxId: string, userId: string) => {
-  if (
-    serverEnv.QUIETER_DEPLOYMENT_ENV === "local" &&
-    serverEnv.QUIETER_LOCAL_GMAIL_WATCH_OWNER !== "local"
-  ) {
-    return;
-  }
-  const [state] = await db
-    .select({
-      watchExpirationAt: gmailWatchState.watchExpirationAt,
-      watchRenewedAt: gmailWatchState.watchRenewedAt,
-    })
-    .from(gmailWatchState)
-    .where(eq(gmailWatchState.mailboxId, mailboxId))
-    .limit(1);
-  if (!state?.watchRenewedAt && !state?.watchExpirationAt) {
-    return;
-  }
-
-  await runAuthorizedGmailMailbox(
-    { mailboxId, userId },
-    async (accessToken) => {
-      await stopGmailWatch(accessToken);
-    }
-  );
-  await db
-    .update(gmailWatchState)
-    .set({
-      updatedAt: new Date(),
-      watchExpirationAt: null,
-      watchRenewedAt: null,
-    })
-    .where(eq(gmailWatchState.mailboxId, mailboxId));
-};
-
 // Renew expiring watches; each maintenance run also reconciles missed notifications.
 export const listGmailPubSubMaintenanceJobs = async (limit = 500) =>
   await db
@@ -991,7 +956,7 @@ export const listGmailPubSubMaintenanceJobs = async (limit = 500) =>
           ),
           lte(
             gmailWatchState.watchRenewedAt,
-            sql`now() - interval '36 hours' - make_interval(secs => ((('x' || md5(${mailbox.id}))::bit(32)::int & 2147483647) % 7200))`
+            sql`now() - interval '20 hours' - make_interval(secs => ((('x' || md5(${mailbox.id}))::bit(32)::int & 2147483647) % 7200))`
           )
         ),
         or(
@@ -1032,16 +997,15 @@ export const maintainGmailPubSubMailbox = async (input: {
       organizationId: gmailMailbox.organizationId ?? undefined,
       userId: gmailMailbox.ownerUserId,
     });
-    if (!entitlement.hasAccess) {
-      await disableMailboxWatch(gmailMailbox.id, gmailMailbox.ownerUserId);
-      return { status: "ineligible" as const };
-    }
-
     await renewMailboxWatch({
       mailboxId: gmailMailbox.id,
       topicName: input.topicName,
       userId: gmailMailbox.ownerUserId,
     });
+    await mailSyncServices().enqueue(gmailMailbox.id);
+    if (!entitlement.hasAccess) {
+      return { status: "maintained" as const };
+    }
     const result = await processMailboxHistory({
       mailboxId: gmailMailbox.id,
       maxHistoryPages: 2,
@@ -1064,11 +1028,7 @@ export type GmailPubSubNotificationMessage = {
 };
 
 export const processGmailPubSubNotification = async (
-  input: GmailPubSubNotificationMessage,
-  options?: {
-    onAccepted?: (input: { mailboxId: string }) => Promise<void>;
-    onProcessed?: (input: { mailboxId: string }) => Promise<void>;
-  }
+  input: GmailPubSubNotificationMessage
 ) => {
   const [gmailMailbox] = await db
     .select({
@@ -1090,6 +1050,8 @@ export const processGmailPubSubNotification = async (
     return { ignored: true, reason: "mailbox_not_connected" as const };
   }
 
+  await mailSyncServices().enqueue(gmailMailbox.id);
+
   await ensureWatchState(gmailMailbox.id);
   await db
     .update(gmailWatchState)
@@ -1105,10 +1067,13 @@ export const processGmailPubSubNotification = async (
     userId: gmailMailbox.ownerUserId,
   });
   if (!entitlement.hasAccess) {
-    return { ignored: true, reason: "plan_ineligible" as const };
+    return {
+      busy: false,
+      ignored: false,
+      mailboxId: gmailMailbox.id,
+      pubSubMessageId: input.pubSubMessageId,
+    };
   }
-
-  await options?.onAccepted?.({ mailboxId: gmailMailbox.id });
 
   const result = await processMailboxHistory({
     mailboxId: gmailMailbox.id,
@@ -1116,9 +1081,6 @@ export const processGmailPubSubNotification = async (
     organizationId: gmailMailbox.organizationId,
     userId: gmailMailbox.ownerUserId,
   });
-  if (!result.busy) {
-    await options?.onProcessed?.({ mailboxId: gmailMailbox.id });
-  }
 
   return {
     busy: result.busy,

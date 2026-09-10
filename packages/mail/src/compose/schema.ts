@@ -276,6 +276,7 @@ const composeInlineImageSchema = z.object({
 
 export const composeDraftInputSchema = z.object({
   attachments: z.array(composeAttachmentSchema),
+  baseVersion: z.string().max(256).nullable().optional(),
   bodyHtml: z.string(),
   bodyText: z.string(),
   draftAnchor: composeDraftAnchorSchema.nullable().optional(),

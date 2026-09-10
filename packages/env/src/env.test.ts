@@ -56,17 +56,6 @@ describe("server environment", () => {
     ).toThrow(/HTTP or HTTPS/u);
   });
 
-  test("accepts WebSocket live-sync URLs", () => {
-    const env = createServerEnv({
-      GMAIL_LIVE_SYNC_URL: "wss://example.com/live",
-      NODE_ENV: "test",
-    });
-
-    expect(env.GMAIL_LIVE_SYNC_URL).toBe("wss://example.com/live");
-  });
-});
-
-describe("web client environment", () => {
   test("provides public defaults", () => {
     const env = createWebClientEnv({});
 
@@ -140,6 +129,8 @@ describe("local environment doctor", () => {
     const { diagnoseLocalEnv } = await import("./local-doctor");
     const values = new Map([
       ["QUIETER_DEPLOYMENT_ENV", "local"],
+      ["MAIL_SYNC_URL", "http://127.0.0.1:8788"],
+      ["MAIL_SYNC_SECRET", "local-test-signing-secret-at-least-32-characters"],
       ["QUIETER_AUTH_MAIL_MODE", "console"],
       ["SENTRY_DSN", "https://public@o0.ingest.sentry.io/0"],
     ]);
@@ -162,6 +153,11 @@ describe("local environment doctor", () => {
         ["DATABASE_URL", "postgresql://postgres@127.0.0.1:5432/quieter"],
         ["QUIETER_AUTH_MAIL_MODE", "console"],
         ["QUIETER_DEPLOYMENT_ENV", "local"],
+        ["MAIL_SYNC_URL", "http://127.0.0.1:8788"],
+        [
+          "MAIL_SYNC_SECRET",
+          "local-test-signing-secret-at-least-32-characters",
+        ],
       ])
     );
 
@@ -183,6 +179,11 @@ describe("local environment doctor", () => {
         ],
         ["QUIETER_AUTH_MAIL_MODE", "console"],
         ["QUIETER_DEPLOYMENT_ENV", "local"],
+        ["MAIL_SYNC_URL", "http://127.0.0.1:8788"],
+        [
+          "MAIL_SYNC_SECRET",
+          "local-test-signing-secret-at-least-32-characters",
+        ],
         ["QUIETER_LOCAL_PLANETSCALE_HOST", "eu-central-1.pg.psdb.cloud"],
       ])
     );
@@ -194,7 +195,7 @@ describe("local environment doctor", () => {
     const { diagnoseLocalEnv } = await import("./local-doctor");
     const errors = diagnoseLocalEnv(
       new Map([
-        ["GMAIL_LIVE_SYNC_URL", "wss://example.com"],
+        ["MAIL_SYNC_URL", "https://example.com"],
         ["QUIETER_AUTH_MAIL_MODE", "api"],
         ["QUIETER_DEPLOYMENT_ENV", "production"],
       ])
@@ -202,7 +203,7 @@ describe("local environment doctor", () => {
 
     expect(errors).toStrictEqual(
       expect.arrayContaining([
-        expect.stringContaining("GMAIL_LIVE_SYNC_URL"),
+        expect.stringContaining("MAIL_SYNC_URL"),
         expect.stringContaining("QUIETER_DEPLOYMENT_ENV=local"),
         expect.stringContaining("QUIETER_AUTH_MAIL_MODE=console"),
       ])

@@ -12,17 +12,18 @@ import { useColorMode } from "@quieter/ui/color-mode";
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 
 import { useExternalImagesEnabled } from "#/features/settings/domain/external-images-setting";
+import { getPreparedMailHtml } from "#/lib/mail-sync/prepared-html";
 
 import {
   applyEmailPreferences,
   fixNonReadableColors,
   getCalendarLinks,
   linkifyText,
-  preprocessEmailHtml,
 } from "../domain/mail-html";
 import type { CalendarLink, ProcessedMailHtml } from "../domain/mail-html";
 
 type MessageBodyProps = {
+  mailboxId: string;
   html?: string;
   text?: string;
   isLoading?: boolean;
@@ -88,9 +89,11 @@ const CalendarLinkActions = ({ links }: { links: CalendarLink[] }) => {
 
 const HtmlMessageBodyContent = ({
   html,
+  mailboxId,
   loadExternalImages,
 }: {
   html: string;
+  mailboxId: string;
   loadExternalImages?: boolean;
 }) => {
   const { colorMode } = useColorMode();
@@ -105,11 +108,11 @@ const HtmlMessageBodyContent = ({
   const processedMail: ProcessedMailHtml = useMemo(
     () =>
       applyEmailPreferences(
-        preprocessEmailHtml(html),
+        getPreparedMailHtml(mailboxId, html),
         shouldLoadImages,
         colorMode
       ),
-    [colorMode, html, shouldLoadImages]
+    [colorMode, html, mailboxId, shouldLoadImages]
   );
   const remoteImagesPresent =
     !shouldLoadImages && processedMail.hasBlockedImages;
@@ -240,6 +243,7 @@ const HtmlMessageBodyContent = ({
 
 const HtmlMessageBody = (props: {
   html: string;
+  mailboxId: string;
   loadExternalImages?: boolean;
 }) => <HtmlMessageBodyContent key={props.html} {...props} />;
 
@@ -294,6 +298,7 @@ const PlainTextMessageBody = ({ text }: { text: string }) => {
 
 export const MessageBody = ({
   html,
+  mailboxId,
   isLoading,
   loadExternalImages,
   text,
@@ -310,6 +315,10 @@ export const MessageBody = ({
   }
 
   return (
-    <HtmlMessageBody html={htmlBody} loadExternalImages={loadExternalImages} />
+    <HtmlMessageBody
+      html={htmlBody}
+      mailboxId={mailboxId}
+      loadExternalImages={loadExternalImages}
+    />
   );
 };

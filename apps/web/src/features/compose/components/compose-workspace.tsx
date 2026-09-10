@@ -207,7 +207,8 @@ export const ComposeSurface = ({
     state.draft.saveStatus !== "saving" &&
     !!mailboxId;
   const audioBusy = audioRecorder.isRecording || isTranscribingAudio;
-  const canSubmitCompose = canEditBody && !audioBusy;
+  const canSubmitCompose =
+    canEditBody && !audioBusy && state.draft.conflict !== true;
   const isInline = variant === "inline";
   const showSubject =
     !isInline || state.draft.draftAnchor?.seededBy === "forward";
@@ -661,6 +662,17 @@ export const ComposeSurface = ({
             <span className="min-w-0 wrap-break-word">
               {state.draft.errorMessage}
             </span>
+            {state.draft.conflict === true ? (
+              <Button
+                onClick={() => {
+                  void compose.saveConflictCopy();
+                }}
+                size="sm"
+                variant="outline"
+              >
+                Save a copy
+              </Button>
+            ) : null}
           </div>
         ) : null}
       </ComposerFrame>

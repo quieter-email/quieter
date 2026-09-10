@@ -24,7 +24,6 @@ import {
   setPreviewPersona,
 } from "#/lib/preview-personas";
 import type { PreviewPersona } from "#/lib/preview-personas";
-import { queryPersister } from "#/lib/query-persister";
 
 const authRouteApi = getRouteApi("/auth");
 const AUTHENTICATION_ERROR_MESSAGE =
@@ -96,9 +95,8 @@ const AuthCredentials = ({
   }>({});
 
   const callbackUrl = normalizeAuthReturnTo(returnTo);
-  const clearCachedAccountData = async () => {
+  const clearCachedAccountData = () => {
     queryClient.clear();
-    await queryPersister.removeQueries();
   };
 
   /**
@@ -145,9 +143,8 @@ const AuthCredentials = ({
     onMutate: () => {
       setErrors((prev) => ({ ...prev, google: undefined }));
     },
-    onSuccess: async (response) => {
+    onSuccess: (response) => {
       queryClient.clear();
-      await queryPersister.removeQueries();
 
       const redirectUrl = response.data?.url;
       if (typeof redirectUrl === "string" && redirectUrl.length > 0) {
@@ -178,7 +175,6 @@ const AuthCredentials = ({
     },
     onSuccess: async () => {
       queryClient.clear();
-      await queryPersister.removeQueries();
 
       if (callbackUrl === "/") {
         await navigate({
@@ -220,7 +216,7 @@ const AuthCredentials = ({
             };
           }
 
-          await clearCachedAccountData();
+          clearCachedAccountData();
         } catch {
           return {
             form: AUTHENTICATION_ERROR_MESSAGE,

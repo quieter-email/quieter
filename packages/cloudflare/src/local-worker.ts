@@ -4,15 +4,12 @@ import { z } from "zod";
 
 import { enqueueGmailMaintenanceJobs } from "./gmail-maintenance-worker";
 import gmailWorker from "./queue-worker";
-import realtimeWorker from "./worker";
 import {
   parseGmailNotification,
   readBoundedJson,
   requestErrorResponse,
   signaturesMatch,
 } from "./worker-utils";
-
-export { GmailLiveSyncMailbox } from "./gmail-live-sync-mailbox";
 
 const deliverySchema = z.object({
   message: z.object({ data: z.string().min(1), messageId: z.string().min(1) }),
@@ -25,9 +22,6 @@ export default {
       return new Response(null, { status: 404 });
     }
     const url = new URL(request.url);
-    if (url.pathname === "/gmail/live") {
-      return await realtimeWorker.fetch(request, env);
-    }
     const token = serverEnv.QUIETER_LOCAL_WORKER_TOKEN;
     if (
       token === undefined ||
@@ -51,7 +45,10 @@ export default {
     if (url.pathname === "/__dev/mail/seed") {
       try {
         const input = z
-          .object({ ownerEmail: z.email() })
+          .object({
+            incoming: z.boolean().default(false),
+            ownerEmail: z.email(),
+          })
           .safeParse(await readBoundedJson(request, 4096));
         if (!input.success) {
           return new Response(null, { status: 400 });
@@ -60,7 +57,11 @@ export default {
           await import("@quieter/orpc/managed-mail/local-fixtures");
         return Response.json(
           await withRequestDatabaseClient(
-            async () => await seedLocalManagedMail(input.data.ownerEmail)
+            async () =>
+              await seedLocalManagedMail(
+                input.data.ownerEmail,
+                input.data.incoming
+              )
           )
         );
       } catch (error) {

@@ -34,6 +34,7 @@ import {
   GMAIL_SCOPES,
   runAuthorizedGmailMailbox,
 } from "../gmail-mailbox-access";
+import { notifyMailboxAccessChanged } from "../mail-sync-runtime";
 import { getOrganizationApiMailboxId } from "../organization-api-mail";
 import {
   assertOwnedGmailMailbox,
@@ -46,6 +47,10 @@ import {
   DEFAULT_GMAIL_MAILBOX_NAME,
   getGmailMailboxDisplayName,
 } from "./display-name";
+import {
+  getGmailMailboxCapacity,
+  withGmailMailboxCapacity,
+} from "./gmail-capacity";
 import type {
   MailboxGroup,
   MailboxGroupMetadata,
@@ -826,6 +831,15 @@ export const startGmailOAuth = async (input: {
   }
   await assertOrganizationMembership(input.userId, organizationId);
 
+  if (!input.mailboxId) {
+    const capacity = await getGmailMailboxCapacity(organizationId);
+    if (capacity.used >= capacity.limit) {
+      throw new ORPCError("FORBIDDEN", {
+        message: `This team has reached its limit of ${capacity.limit} Gmail accounts. Disconnect an account or upgrade your plan.`,
+      });
+    }
+  }
+
   const state = randomBytes(32).toString("base64url");
   const codeVerifier = createCodeVerifier();
   const now = new Date();
@@ -1014,63 +1028,74 @@ const persistGmailOAuthMailbox = async (input: {
   tokenInfo: { sub: string };
   tokenResponse: z.infer<typeof googleTokenResponseSchema>;
 }) => {
-  const now = new Date();
-  const { existingMailboxId } = input;
-  const mailboxWrite = existingMailboxId
-    ? db
-        .update(mailbox)
-        .set({
-          emailAddress: input.emailAddress,
-          organizationId: input.organizationId,
-          status: "connected",
+  await withGmailMailboxCapacity(
+    {
+      mailboxId: input.existingMailboxId,
+      organizationId: input.organizationId,
+      userId: input.ownerUserId,
+    },
+    async (database) => {
+      const now = new Date();
+      const { existingMailboxId } = input;
+      const mailboxWrite = existingMailboxId
+        ? database
+            .update(mailbox)
+            .set({
+              emailAddress: input.emailAddress,
+              organizationId: input.organizationId,
+              status: "connected",
+              updatedAt: now,
+            })
+            .where(
+              and(
+                eq(mailbox.id, existingMailboxId),
+                eq(mailbox.ownerUserId, input.ownerUserId)
+              )
+            )
+        : database.insert(mailbox).values({
+            createdAt: now,
+            displayName: DEFAULT_GMAIL_MAILBOX_NAME,
+            emailAddress: input.emailAddress,
+            id: input.mailboxId,
+            organizationId: input.organizationId,
+            ownerUserId: input.ownerUserId,
+            provider: MAILBOX_PROVIDER_GMAIL,
+            status: "connected",
+            updatedAt: now,
+          });
+      const encryptedAccessToken = encryptSecret(
+        input.tokenResponse.access_token
+      );
+      await mailboxWrite;
+      await database
+        .insert(gmailCredential)
+        .values({
+          accessTokenExpiresAt: new Date(
+            now.getTime() + input.tokenResponse.expires_in * 1000
+          ),
+          createdAt: now,
+          encryptedAccessToken,
+          encryptedRefreshToken: input.encryptedRefreshToken,
+          googleSubject: input.tokenInfo.sub,
+          mailboxId: input.mailboxId,
+          scopes: input.tokenResponse.scope,
           updatedAt: now,
         })
-        .where(
-          and(
-            eq(mailbox.id, existingMailboxId),
-            eq(mailbox.ownerUserId, input.ownerUserId)
-          )
-        )
-    : db.insert(mailbox).values({
-        createdAt: now,
-        displayName: DEFAULT_GMAIL_MAILBOX_NAME,
-        emailAddress: input.emailAddress,
-        id: input.mailboxId,
-        organizationId: input.organizationId,
-        ownerUserId: input.ownerUserId,
-        provider: MAILBOX_PROVIDER_GMAIL,
-        status: "connected",
-        updatedAt: now,
-      });
-  const encryptedAccessToken = encryptSecret(input.tokenResponse.access_token);
-  await mailboxWrite;
-  await db
-    .insert(gmailCredential)
-    .values({
-      accessTokenExpiresAt: new Date(
-        now.getTime() + input.tokenResponse.expires_in * 1000
-      ),
-      createdAt: now,
-      encryptedAccessToken,
-      encryptedRefreshToken: input.encryptedRefreshToken,
-      googleSubject: input.tokenInfo.sub,
-      mailboxId: input.mailboxId,
-      scopes: input.tokenResponse.scope,
-      updatedAt: now,
-    })
-    .onConflictDoUpdate({
-      set: {
-        accessTokenExpiresAt: new Date(
-          now.getTime() + input.tokenResponse.expires_in * 1000
-        ),
-        encryptedAccessToken,
-        encryptedRefreshToken: input.encryptedRefreshToken,
-        googleSubject: input.tokenInfo.sub,
-        scopes: input.tokenResponse.scope,
-        updatedAt: now,
-      },
-      target: gmailCredential.mailboxId,
-    });
+        .onConflictDoUpdate({
+          set: {
+            accessTokenExpiresAt: new Date(
+              now.getTime() + input.tokenResponse.expires_in * 1000
+            ),
+            encryptedAccessToken,
+            encryptedRefreshToken: input.encryptedRefreshToken,
+            googleSubject: input.tokenInfo.sub,
+            scopes: input.tokenResponse.scope,
+            updatedAt: now,
+          },
+          target: gmailCredential.mailboxId,
+        });
+    }
+  );
 };
 
 const assertGoogleGmailScopes = (scope: string) => {
@@ -1256,6 +1281,7 @@ export const disconnectGmailMailbox = async (input: {
     .where(
       and(eq(user.id, input.userId), eq(user.defaultMailboxId, input.mailboxId))
     );
+  await notifyMailboxAccessChanged(input.mailboxId, [input.userId]);
   return { disconnected: true, mailboxId: input.mailboxId };
 };
 
@@ -1266,21 +1292,25 @@ export const moveGmailMailbox = async (input: {
 }) => {
   await assertOrganizationMembership(input.userId, input.organizationId);
 
-  const [updatedMailbox] = await db
-    .update(mailbox)
-    .set({ organizationId: input.organizationId, updatedAt: new Date() })
-    .where(
-      and(
-        eq(mailbox.id, input.mailboxId),
-        eq(mailbox.ownerUserId, input.userId),
-        eq(mailbox.provider, MAILBOX_PROVIDER_GMAIL)
+  const result = await withGmailMailboxCapacity(input, async (database) => {
+    const [updatedMailbox] = await database
+      .update(mailbox)
+      .set({ organizationId: input.organizationId, updatedAt: new Date() })
+      .where(
+        and(
+          eq(mailbox.id, input.mailboxId),
+          eq(mailbox.ownerUserId, input.userId),
+          eq(mailbox.provider, MAILBOX_PROVIDER_GMAIL)
+        )
       )
-    )
-    .returning({ id: mailbox.id, organizationId: mailbox.organizationId });
-  if (updatedMailbox === undefined) {
-    throw new ORPCError("NOT_FOUND", { message: "Gmail mailbox not found." });
-  }
-  return updatedMailbox;
+      .returning({ id: mailbox.id, organizationId: mailbox.organizationId });
+    if (updatedMailbox === undefined) {
+      throw new ORPCError("NOT_FOUND", { message: "Gmail mailbox not found." });
+    }
+    return updatedMailbox;
+  });
+  await notifyMailboxAccessChanged(input.mailboxId, [input.userId]);
+  return result;
 };
 
 export const updateGmailMailboxDisplayName = async (input: {

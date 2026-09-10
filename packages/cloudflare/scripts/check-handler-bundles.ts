@@ -10,6 +10,7 @@ const entrypoints = [
   path.join(packageRoot, "src", "mail-maintenance-worker.ts"),
   path.join(packageRoot, "src", "queue-worker.ts"),
   path.join(packageRoot, "src", "worker.ts"),
+  path.join(packageRoot, "..", "sync-worker", "src", "worker.ts"),
 ];
 
 await rm(outputDirectory, { force: true, recursive: true });

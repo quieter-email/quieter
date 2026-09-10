@@ -9,6 +9,7 @@ import type { MailboxSavedViewDefinition } from "@quieter/mail/mailbox-organizat
 import { isMailSearchFilterSupported } from "@quieter/mail/search";
 import { and, asc, eq, inArray, isNull, or } from "drizzle-orm";
 
+import { withSavedViewsSyncTransaction } from "../mail-sync-runtime";
 import {
   getAuthorizedManagedMailbox,
   MAILBOX_PROVIDER_GMAIL,
@@ -155,7 +156,7 @@ export const createSavedView = async (input: {
     definition,
     provider: context.provider,
   });
-  return await db.transaction(async (tx) => {
+  return await withSavedViewsSyncTransaction(input.mailboxId, async (tx) => {
     const search =
       context.provider === "managed"
         ? await resolveManagedSearchLabels(
@@ -216,7 +217,7 @@ export const updateSavedView = async (input: {
     definition,
     provider: context.provider,
   });
-  return await db.transaction(async (tx) => {
+  return await withSavedViewsSyncTransaction(input.mailboxId, async (tx) => {
     const search =
       context.provider === "managed"
         ? await resolveManagedSearchLabels(
@@ -268,9 +269,11 @@ export const deleteSavedView = async (input: {
     userId: input.userId,
     viewOwnerUserId: view.ownerUserId,
   });
-  await db
-    .delete(managedMailSavedView)
-    .where(eq(managedMailSavedView.id, view.id));
+  await withSavedViewsSyncTransaction(input.mailboxId, async (tx) => {
+    await tx
+      .delete(managedMailSavedView)
+      .where(eq(managedMailSavedView.id, view.id));
+  });
   return { id: view.id };
 };
 
@@ -304,13 +307,13 @@ export const reorderSavedViews = async (input: {
       viewOwnerUserId: view.ownerUserId,
     });
   }
-  await Promise.all(
-    input.viewIds.map((viewId, position) =>
-      db
+  await withSavedViewsSyncTransaction(input.mailboxId, async (tx) => {
+    for (const [position, viewId] of input.viewIds.entries()) {
+      await tx
         .update(managedMailSavedView)
         .set({ position, updatedAt: new Date() })
-        .where(eq(managedMailSavedView.id, viewId))
-    )
-  );
+        .where(eq(managedMailSavedView.id, viewId));
+    }
+  });
   return { viewIds: input.viewIds };
 };
