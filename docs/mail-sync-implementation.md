@@ -26,6 +26,10 @@ Commands carry stable IDs, serialize provider work per mailbox, retain receipts,
 
 The browser engine runs in a Worker and shares leadership and updates across tabs. It fences snapshots, late HTTP responses, resets, account switches, and revoked access by mailbox and generation. The app uses explicit query and compose adapters. Healthy engine clients stop the old dirty-event connection, periodic inbox refresh, and mail-query localStorage persistence. Compatibility paths remain available for rollout.
 
+Idle WebSocket pings receive a native Cloudflare auto-response without invoking the User Durable Object handler, querying PostgreSQL, or renewing mailbox subscriptions. A separate two-minute Durable Object alarm rechecks access and renews five-minute mailbox subscriptions. Session checks are shared within each maintenance pass. Explicit access-change notifications still revalidate immediately, and delivery checks access again when its last check is older than 30 seconds. If a delayed renewal finds an expired mailbox subscription, it sends a head checkpoint so the client can recover missed changes. The alarm also enforces connection lifetime and rollout changes, and stops when connections close.
+
+When all Quieter tabs are hidden, browser synchronization pauses after a 30-second grace period. The connection and fallback polling stop, the tab releases its leadership lease, and existing cache and pending commands remain intact. A visible peer keeps the shared connection active. Returning to a tab immediately catches up from its saved checkpoint and resumes connection ownership. Visibility means the Page Visibility API, not merely losing keyboard focus. Browser suspension can delay the grace timer; the server still bounds idle connection lifetime. Background-only tabs do not receive live mail notifications while paused, and server-side ingestion continues independently.
+
 ## Storage and retention
 
 PostgreSQL keeps provider-neutral metadata, body references, mailbox checkpoints, command receipts, provider submission records, the replay log, and the delivery outbox. Bodies are immutable SHA-256-addressed HTML/text objects in private R2. Managed-mail body/search columns remain available to the existing AI and search services.
@@ -69,7 +73,7 @@ At handoff, the local runtimes have working isolated bindings. Uploading the new
 
 ## Verification
 
-The workspace suite passed 831 tests, with 62 tests skipped because their external or disposable infrastructure prerequisites were absent. Separate runs passed 15 sync-server tests with real disposable loopback PostgreSQL and eight native Worker transport/R2 tests. The database integration suite refuses shared development or production targets and creates only its own test schemas.
+The workspace suite passed 833 tests, with 62 tests skipped because their external or disposable infrastructure prerequisites were absent. Separate runs passed 15 sync-server tests with real disposable loopback PostgreSQL and 12 native Worker transport/R2 tests. The transport tests include native ping auto-responses after hibernation, idle authorization, renewal, rollout, and socket expiry; client tests include hidden-tab pause and multi-tab resume. The database integration suite refuses shared development or production targets and creates only its own test schemas.
 
 The web production build, deployment bundle checks, import boundaries, Cloudflare generated types, environment doctor, and migration consistency checks passed. React Doctor improved from 74 to 81 on changed files; its remaining compiler-syntax and advisory complexity/performance findings are not runtime test failures.
 
@@ -90,7 +94,7 @@ The staged rollout is:
 
 The cohort controls client activation. It does not limit server projection work to those users. Keep one Gmail watch/write owner across environments. Local shared accounts remain in observation mode; dedicated Gmail write canaries or an explicit ownership handoff are required to verify real external saves, sends, and mutations. Managed fixtures do not prove production SES/IAM/MX delivery.
 
-For a UI rollback, set `QUIETER_MAIL_SYNC_CLIENT_ENABLED=false` while leaving the server flag enabled. Active sockets reconnect at their heartbeat, and connection discovery selects the existing UI path without reporting a false logout or clearing draft recovery. This preserves server commands, receipts, outbox delivery, and provider reconciliation.
+For a UI rollback, set `QUIETER_MAIL_SYNC_CLIENT_ENABLED=false` while leaving the server flag enabled. Active sockets reconnect at their next maintenance alarm or delivery, normally within two minutes, and connection discovery selects the existing UI path without reporting a false logout or clearing draft recovery. Paused clients discover the change on return. This preserves server commands, receipts, outbox delivery, and provider reconciliation.
 
 Before disabling the whole server engine or restoring older writers, drain pending commands and inspect unknown provider submissions. Keep the additive schema, queues, Durable Object namespaces, and R2 bucket. Do not delete them as a recovery step. Resolve unknown sends from provider evidence before authorizing a new send.
 

@@ -17,11 +17,19 @@ export class MailboxSync extends DurableObject<SyncEnv> {
   }
 
   subscribe(userId: string) {
+    const [previous] = this.ctx.storage.sql
+      .exec<Subscriber>(
+        "SELECT userId, expiresAt FROM subscribers WHERE userId=?",
+        userId
+      )
+      .toArray();
+    const now = Date.now();
     this.ctx.storage.sql.exec(
       "INSERT INTO subscribers VALUES (?, ?) ON CONFLICT(userId) DO UPDATE SET expiresAt=excluded.expiresAt",
       userId,
-      Date.now() + 180_000
+      now + 300_000
     );
+    return previous === undefined || previous.expiresAt <= now;
   }
 
   unsubscribe(userId: string) {

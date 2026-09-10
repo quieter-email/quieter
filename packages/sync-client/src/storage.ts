@@ -233,6 +233,19 @@ export class ReplicaStorage {
     );
   }
 
+  async releaseLeadership(ownerId: string) {
+    await this.transact(["settings"], "readwrite", async (transaction) => {
+      const store = transaction.objectStore("settings");
+      const raw = await requestResult(store.get("leader"));
+      if (
+        raw !== undefined &&
+        z.object({ ownerId: z.string() }).parse(raw).ownerId === ownerId
+      ) {
+        store.delete("leader");
+      }
+    });
+  }
+
   async hasCoverage(mailboxId: string, threadId: string) {
     const raw = await requestResult(
       this.database

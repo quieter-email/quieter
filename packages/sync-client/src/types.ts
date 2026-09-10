@@ -80,6 +80,7 @@ export type SyncClientEvent =
         | "live"
         | "reconnecting"
         | "fallback"
+        | "paused"
         | "disabled";
       persistent: boolean;
       cacheBytes: number;

@@ -23,9 +23,11 @@ export type {
 
 const peerSchema = z.discriminatedUnion("type", [
   z.object({
+    hiddenAt: z.number().nullable().optional(),
     mailboxIds: z.array(z.string()).max(32),
     ownerId: z.string(),
     type: z.literal("interest"),
+    visible: z.boolean().optional(),
   }),
   z.object({
     checkpoint: syncCheckpointSchema,
@@ -44,6 +46,7 @@ const peerSchema = z.discriminatedUnion("type", [
       "reconnecting",
       "fallback",
       "disabled",
+      "paused",
     ]),
     type: z.literal("connection"),
   }),
@@ -64,7 +67,12 @@ export class MailSyncEngine {
   private readonly localInterests = new Set<string>();
   private readonly peerInterests = new Map<
     string,
-    { mailboxIds: string[]; seenAt: number }
+    {
+      mailboxIds: string[];
+      seenAt: number;
+      visible: boolean;
+      hiddenAt: number | null;
+    }
   >();
   private readonly ownerId = crypto.randomUUID();
   private readonly scheduler: WarmScheduler;
@@ -76,6 +84,9 @@ export class MailSyncEngine {
   private channel: BroadcastChannel | null = null;
   private leader = false;
   private online = true;
+  private visible = true;
+  private hiddenAt: number | null = null;
+  private backgroundTimer: ReturnType<typeof setTimeout> | null = null;
   private enabled = true;
   private maintenance: ReturnType<typeof setInterval> | null = null;
   private maintaining = false;
@@ -304,17 +315,44 @@ export class MailSyncEngine {
       await this.ensureMailbox(mailboxId);
     }
     this.channel?.postMessage({
+      hiddenAt: this.hiddenAt,
       mailboxIds: [...this.localInterests],
       ownerId: this.ownerId,
       type: "interest",
+      visible: this.visible,
     });
     await this.tick();
   }
 
-  setVisible(visible: boolean) {
+  async setVisible(visible: boolean) {
+    const returning = visible && !this.visible;
+    if (visible !== this.visible) {
+      this.hiddenAt = visible ? null : Date.now();
+    }
+    this.visible = visible;
     this.scheduler.setVisible(visible);
-    if (visible) {
-      void this.tick();
+    if (this.backgroundTimer !== null) {
+      clearTimeout(this.backgroundTimer);
+      this.backgroundTimer = null;
+    }
+    if (!visible) {
+      this.backgroundTimer = setTimeout(() => {
+        this.backgroundTimer = null;
+        void this.tick();
+      }, 30_000);
+    }
+    await this.tick();
+    if (
+      returning &&
+      this.online &&
+      this.enabled &&
+      !this.controller.signal.aborted
+    ) {
+      await Promise.all(
+        [...this.replicas.values()].map(async (replica) => {
+          await replica.catchUp();
+        })
+      );
     }
   }
   setOnline(online: boolean) {
@@ -495,7 +533,51 @@ export class MailSyncEngine {
     }
   }
 
+  private get shouldConnect() {
+    return (
+      this.visible ||
+      this.hiddenAt === null ||
+      Date.now() - this.hiddenAt < 30_000 ||
+      [...this.peerInterests.values()].some(
+        (peer) =>
+          Date.now() - peer.seenAt < 15_000 &&
+          (peer.visible ||
+            (peer.hiddenAt !== null && Date.now() - peer.hiddenAt < 30_000))
+      )
+    );
+  }
+
   private async tick() {
+    if (this.controller.signal.aborted || this.clearing || !this.enabled) {
+      return;
+    }
+    this.channel?.postMessage({
+      hiddenAt: this.hiddenAt,
+      mailboxIds: [...this.localInterests],
+      ownerId: this.ownerId,
+      type: "interest",
+      visible: this.visible,
+    });
+    if (!this.shouldConnect) {
+      this.connection.stop();
+      try {
+        if (this.leader) {
+          await this.storage?.releaseLeadership(this.ownerId);
+        }
+      } catch (error) {
+        this.notify({
+          error,
+          operation: "mail_sync_leadership",
+          type: "error",
+        });
+      }
+      this.leader = false;
+      if (this.status.state.connection !== "paused") {
+        this.status.setState((state) => ({ ...state, connection: "paused" }));
+        this.notify(this.status.state);
+      }
+      return;
+    }
     if (
       !this.renewing &&
       !this.clearing &&
@@ -508,7 +590,7 @@ export class MailSyncEngine {
           this.online &&
           (this.storage === null ||
             (await this.storage.claimLeadership(this.ownerId)));
-        if (this.leader) {
+        if (this.leader && this.shouldConnect) {
           this.connection.start();
         } else {
           this.connection.stop();
@@ -537,11 +619,6 @@ export class MailSyncEngine {
     try {
       const { leader } = this;
       this.controller.signal.throwIfAborted();
-      this.channel?.postMessage({
-        mailboxIds: [...this.localInterests],
-        ownerId: this.ownerId,
-        type: "interest",
-      });
       if (leader) {
         this.channel?.postMessage({
           connection: this.status.state.connection,
@@ -582,6 +659,7 @@ export class MailSyncEngine {
           for (const command of pending) {
             if (
               !this.leader ||
+              !this.shouldConnect ||
               this.clearing ||
               this.controller.signal.aborted
             ) {
@@ -677,7 +755,7 @@ export class MailSyncEngine {
       }
       const message = parsed.data;
       if (message.type === "connection") {
-        if (!this.leader && this.online) {
+        if (!this.leader && this.online && this.shouldConnect) {
           this.status.setState((state) => ({
             ...state,
             connection: message.connection,
@@ -708,10 +786,16 @@ export class MailSyncEngine {
         return;
       }
       if (message.type === "interest") {
+        const wasVisible = this.peerInterests.get(message.ownerId)?.visible;
         this.peerInterests.set(message.ownerId, {
+          hiddenAt: message.hiddenAt ?? null,
           mailboxIds: message.mailboxIds,
           seenAt: Date.now(),
+          visible: message.visible !== false,
         });
+        if (wasVisible !== (message.visible !== false)) {
+          await this.tick();
+        }
         if (this.leader) {
           this.channel?.postMessage({
             connection: this.status.state.connection,
@@ -766,6 +850,9 @@ export class MailSyncEngine {
     this.controller.abort();
     this.connection.stop();
     this.scheduler.stop();
+    if (this.backgroundTimer !== null) {
+      clearTimeout(this.backgroundTimer);
+    }
     if (this.maintenance !== null) {
       clearInterval(this.maintenance);
     }

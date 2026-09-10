@@ -103,7 +103,7 @@ const fixtures = () => {
       return { commandId: input.commandId, error: null, status: "accepted" };
     }),
   };
-  return { api, createSocket, events };
+  return { api, createSocket, events, socket };
 };
 const start = async (
   setup: ReturnType<typeof fixtures>,
@@ -132,6 +132,78 @@ describe("mail engine lifecycle", () => {
     }
     vi.restoreAllMocks();
     vi.useRealTimers();
+  });
+
+  it("pauses hidden tabs after a grace period and catches up on return without background polling", async () => {
+    vi.useFakeTimers({
+      toFake: [
+        "Date",
+        "setTimeout",
+        "clearTimeout",
+        "setInterval",
+        "clearInterval",
+      ],
+    });
+    const setup = fixtures();
+    const engine = await start(setup, crypto.randomUUID(), false);
+    await engine.thread("mailbox", "thread");
+    await engine.setVisible(false);
+    await vi.advanceTimersByTimeAsync(29_000);
+    expect(setup.socket.close).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(engine.status.state.connection).toBe("paused");
+    expect(setup.socket.close).toHaveBeenCalledOnce();
+    const reads = vi.mocked(setup.api.replay).mock.calls.length;
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(setup.createSocket).toHaveBeenCalledOnce();
+    expect(setup.api.replay).toHaveBeenCalledTimes(reads);
+    await engine.setVisible(true);
+    expect(setup.createSocket).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(setup.api.replay).mock.calls.length).toBeGreaterThan(
+      reads
+    );
+  });
+
+  it("keeps the shared connection while another tab is visible and releases it when all tabs hide", async () => {
+    vi.useFakeTimers({
+      toFake: [
+        "Date",
+        "setTimeout",
+        "clearTimeout",
+        "setInterval",
+        "clearInterval",
+      ],
+    });
+    const userId = crypto.randomUUID();
+    const first = fixtures();
+    first.socket.readyState = 1;
+    first.socket.send.mockImplementation((data) => {
+      if (data === '{"type":"PING"}') {
+        first.socket.dispatchEvent(
+          new MessageEvent("message", { data: '{"type":"PONG"}' })
+        );
+      }
+    });
+    const leader = await start(first, userId);
+    const second = fixtures();
+    const follower = await start(second, userId);
+    await leader.setVisible(false);
+    await vi.advanceTimersByTimeAsync(35_000);
+    expect(first.socket.close).not.toHaveBeenCalled();
+    expect(second.createSocket).not.toHaveBeenCalled();
+    await follower.setVisible(false);
+    await vi.advanceTimersByTimeAsync(35_000);
+    await vi.waitFor(() => {
+      expect(leader.status.state.connection).toBe("paused");
+      expect(follower.status.state.connection).toBe("paused");
+    });
+    await follower.setVisible(true);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(first.socket.close).toHaveBeenCalledOnce();
+    expect(
+      first.createSocket.mock.calls.length +
+        second.createSocket.mock.calls.length
+    ).toBe(2);
   });
 
   it("removes persistent mail on opt-out and preserves accepted commands in memory", async () => {

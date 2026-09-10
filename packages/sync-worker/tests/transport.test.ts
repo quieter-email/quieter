@@ -2,7 +2,11 @@ import { once } from "node:events";
 
 import type { SyncBatch } from "@quieter/sync";
 import { createSyncTicket } from "@quieter/sync-server/auth";
-import { evictDurableObject, runDurableObjectAlarm } from "cloudflare:test";
+import {
+  evictDurableObject,
+  runDurableObjectAlarm,
+  runInDurableObject,
+} from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it, vi } from "vite-plus/test";
 
@@ -68,12 +72,169 @@ const nextMessage = async (socket: WebSocket) => {
 };
 
 describe("durable mail transport", () => {
+  it("answers idle pings through the native auto-response without refreshing access or subscriptions", async () => {
+    const userId = crypto.randomUUID();
+    const mailboxId = crypto.randomUUID();
+    const socket = await connect(userId);
+    const resumed = nextMessage(socket);
+    socket.send(
+      JSON.stringify({
+        checkpoint: { epoch: fixtures.epoch, sequence: "0" },
+        generation: crypto.randomUUID(),
+        mailboxId,
+        protocol: 1,
+        type: "RESUME",
+      })
+    );
+    await resumed;
+    const object = env.UserSyncObjects.getByName(userId);
+    await runInDurableObject(object, (_instance, state) => {
+      state.storage.sql.exec("UPDATE subscriptions SET checkedAt=0");
+    });
+    fixtures.authorize.mockClear();
+    fixtures.session.mockClear();
+    await evictDurableObject(object);
+    for (let index = 0; index < 8; index += 1) {
+      const pong = nextMessage(socket);
+      socket.send('{"type":"PING"}');
+      await expect(pong).resolves.toStrictEqual({ type: "PONG" });
+    }
+    expect(fixtures.authorize).not.toHaveBeenCalled();
+    expect(fixtures.session).not.toHaveBeenCalled();
+    await runInDurableObject(object, (_instance, state) => {
+      expect(
+        state.getWebSocketAutoResponseTimestamp(state.getWebSockets()[0])
+      ).not.toBeNull();
+      expect(
+        state.storage.sql
+          .exec<{ checkedAt: number }>("SELECT checkedAt FROM subscriptions")
+          .one().checkedAt
+      ).toBe(0);
+    });
+    socket.close();
+  });
+
+  it("renews idle subscriptions on the maintenance alarm and checks a session once across mailboxes", async () => {
+    const userId = crypto.randomUUID();
+    const socket = await connect(userId);
+    const mailboxIds = [
+      crypto.randomUUID(),
+      crypto.randomUUID(),
+      crypto.randomUUID(),
+    ];
+    for (const mailboxId of mailboxIds) {
+      const resumed = nextMessage(socket);
+      socket.send(
+        JSON.stringify({
+          checkpoint: { epoch: fixtures.epoch, sequence: "0" },
+          generation: crypto.randomUUID(),
+          mailboxId,
+          protocol: 1,
+          type: "RESUME",
+        })
+      );
+      await resumed;
+      await runInDurableObject(
+        env.MailboxSyncObjects.getByName(mailboxId),
+        (_instance, state) => {
+          state.storage.sql.exec("UPDATE subscribers SET expiresAt=0");
+        }
+      );
+    }
+    fixtures.authorize.mockClear();
+    fixtures.session.mockClear();
+    const object = env.UserSyncObjects.getByName(userId);
+    const recovered: unknown[] = [];
+    socket.addEventListener("message", (event: MessageEvent) => {
+      if (typeof event.data === "string") {
+        recovered.push(JSON.parse(event.data));
+      }
+    });
+    await evictDurableObject(object);
+    await expect(runDurableObjectAlarm(object)).resolves.toBeTruthy();
+    expect(fixtures.session).toHaveBeenCalledOnce();
+    expect(fixtures.authorize).toHaveBeenCalledTimes(3);
+    await vi.waitFor(() => {
+      expect(recovered).toHaveLength(3);
+      for (const mailboxId of mailboxIds) {
+        expect(recovered).toContainEqual(
+          expect.objectContaining({ mailboxId, type: "HEAD" })
+        );
+      }
+    });
+    for (const mailboxId of mailboxIds) {
+      await runInDurableObject(
+        env.MailboxSyncObjects.getByName(mailboxId),
+        (_instance, state) => {
+          expect(
+            state.storage.sql
+              .exec<{ expiresAt: number }>("SELECT expiresAt FROM subscribers")
+              .one().expiresAt
+          ).toBeGreaterThan(Date.now() + 240_000);
+        }
+      );
+    }
+    await runInDurableObject(object, async (_instance, state) => {
+      await expect(state.storage.getAlarm()).resolves.toBeGreaterThan(
+        Date.now() + 110_000
+      );
+    });
+    socket.close();
+  });
+
+  it("revalidates idle access on the alarm even when only automatic pings arrive", async () => {
+    const userId = crypto.randomUUID();
+    const mailboxId = crypto.randomUUID();
+    const socket = await connect(userId);
+    const resumed = nextMessage(socket);
+    socket.send(
+      JSON.stringify({
+        checkpoint: { epoch: fixtures.epoch, sequence: "0" },
+        generation: crypto.randomUUID(),
+        mailboxId,
+        protocol: 1,
+        type: "RESUME",
+      })
+    );
+    await resumed;
+    fixtures.authorize.mockRejectedValueOnce(
+      Object.assign(new Error("Access removed"), { code: "FORBIDDEN" })
+    );
+    const revoked = nextMessage(socket);
+    await runDurableObjectAlarm(env.UserSyncObjects.getByName(userId));
+    await expect(revoked).resolves.toMatchObject({
+      mailboxId,
+      type: "REVOKED",
+    });
+    socket.close();
+  });
+
+  it("expires idle sockets and stops scheduling maintenance after they close", async () => {
+    const userId = crypto.randomUUID();
+    const socket = await connect(userId);
+    const object = env.UserSyncObjects.getByName(userId);
+    await runInDurableObject(object, (_instance, state) => {
+      const [server] = state.getWebSockets();
+      server.serializeAttachment({
+        createdAt: Date.now() - 16 * 60_000,
+        id: crypto.randomUUID(),
+        sessionId: "test-session",
+        userId,
+      });
+    });
+    const closed = once(socket, "close", { signal: AbortSignal.timeout(5000) });
+    await runDurableObjectAlarm(object);
+    const events: unknown[] = await closed;
+    expect(events[0]).toMatchObject({ code: 1000 });
+    await expect(runDurableObjectAlarm(object)).resolves.toBeFalsy();
+  });
+
   it("reconnects on a client rollout rollback without reporting an expired login", async () => {
     const userId = crypto.randomUUID();
     const socket = await connect(userId);
     fixtures.clientEnabled.mockReturnValueOnce(false);
     const closed = once(socket, "close", { signal: AbortSignal.timeout(5000) });
-    socket.send(JSON.stringify({ type: "PING" }));
+    await runDurableObjectAlarm(env.UserSyncObjects.getByName(userId));
     const events: unknown[] = await closed;
     expect(events[0]).toMatchObject({ code: 1012 });
     fixtures.clientEnabled.mockReturnValueOnce(false);

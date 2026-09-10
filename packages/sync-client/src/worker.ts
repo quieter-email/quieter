@@ -203,7 +203,7 @@ const receive = async (raw: unknown) => {
           break;
         }
         case "visible": {
-          engine.setVisible(action.input);
+          await engine.setVisible(action.input);
           break;
         }
         case "online": {

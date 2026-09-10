@@ -34,12 +34,25 @@ type Subscription = {
 export class UserSync extends DurableObject<SyncEnv> {
   constructor(ctx: DurableObjectState, env: SyncEnv) {
     super(ctx, env);
+    ctx.setWebSocketAutoResponse(
+      new WebSocketRequestResponsePair('{"type":"PING"}', '{"type":"PONG"}')
+    );
     ctx.storage.sql.exec(
       "CREATE TABLE IF NOT EXISTS subscriptions (socketId TEXT NOT NULL, mailboxId TEXT NOT NULL, generation TEXT NOT NULL, checkedAt INTEGER NOT NULL, epoch TEXT NOT NULL, sent TEXT NOT NULL, PRIMARY KEY(socketId, mailboxId))"
     );
     ctx.storage.sql.exec(
       "CREATE TABLE IF NOT EXISTS outstanding (socketId TEXT NOT NULL, mailboxId TEXT NOT NULL, sequence TEXT NOT NULL, bytes INTEGER NOT NULL, PRIMARY KEY(socketId, mailboxId, sequence))"
     );
+    void ctx.blockConcurrencyWhile(async () => {
+      if (
+        ctx
+          .getWebSockets()
+          .some((socket) => socket.readyState === WebSocket.OPEN) &&
+        (await ctx.storage.getAlarm()) === null
+      ) {
+        await ctx.storage.setAlarm(Date.now() + 120_000);
+      }
+    });
   }
 
   async fetch(request: Request) {
@@ -81,6 +94,9 @@ export class UserSync extends DurableObject<SyncEnv> {
       userId: claims.userId,
     });
     this.ctx.acceptWebSocket(server);
+    if ((await this.ctx.storage.getAlarm()) === null) {
+      await this.ctx.storage.setAlarm(Date.now() + 120_000);
+    }
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -108,11 +124,6 @@ export class UserSync extends DurableObject<SyncEnv> {
     }
     const frame = parsed.data;
     if (frame.type === "PING") {
-      if (!isMailSyncClientEnabled(attachment.userId)) {
-        socket.close(1012, "Reconnect required");
-        return;
-      }
-      await this.refreshSubscriptions(socket);
       socket.send(JSON.stringify({ type: "PONG" } satisfies SyncServerFrame));
       return;
     }
@@ -232,12 +243,21 @@ export class UserSync extends DurableObject<SyncEnv> {
   private async checkAccess(
     socket: WebSocket,
     mailboxId: string,
-    generation: string
+    generation: string,
+    sessions?: Map<string, Promise<void>>
   ) {
     const attachment = attachmentSchema.parse(socket.deserializeAttachment());
     try {
       await withSyncRuntime(this.env, async () => {
-        await authorizeSyncSession(attachment.sessionId, attachment.userId);
+        let authorized = sessions?.get(attachment.sessionId);
+        if (authorized === undefined) {
+          authorized = authorizeSyncSession(
+            attachment.sessionId,
+            attachment.userId
+          );
+          sessions?.set(attachment.sessionId, authorized);
+        }
+        await authorized;
         await authorizeSyncMailbox(mailboxId, attachment.userId);
       });
       return true;
@@ -266,7 +286,10 @@ export class UserSync extends DurableObject<SyncEnv> {
     }
   }
 
-  private async refreshSubscriptions(socket: WebSocket) {
+  private async refreshSubscriptions(
+    socket: WebSocket,
+    sessions = new Map<string, Promise<void>>()
+  ) {
     const attachment = attachmentSchema.parse(socket.deserializeAttachment());
     const subscriptions = this.ctx.storage.sql
       .exec<Subscription>(
@@ -279,7 +302,8 @@ export class UserSync extends DurableObject<SyncEnv> {
         await this.checkAccess(
           socket,
           subscription.mailboxId,
-          subscription.generation
+          subscription.generation,
+          sessions
         )
       ) {
         this.ctx.storage.sql.exec(
@@ -289,9 +313,61 @@ export class UserSync extends DurableObject<SyncEnv> {
           subscription.mailboxId,
           subscription.generation
         );
-        await this.env.MailboxSyncObjects.getByName(
+        const expired = await this.env.MailboxSyncObjects.getByName(
           subscription.mailboxId
         ).subscribe(attachment.userId);
+        if (expired) {
+          const head = await withSyncRuntime(
+            this.env,
+            async () =>
+              await mailSyncServices().repository.head(subscription.mailboxId)
+          );
+          if (head !== null && socket.readyState === WebSocket.OPEN) {
+            socket.send(
+              JSON.stringify({
+                checkpoint: head,
+                generation: subscription.generation,
+                mailboxId: subscription.mailboxId,
+                type: "HEAD",
+              } satisfies SyncServerFrame)
+            );
+          }
+        }
+      }
+    }
+  }
+
+  async alarm() {
+    try {
+      const sessions = new Map<string, Promise<void>>();
+      const results = await Promise.allSettled(
+        this.ctx.getWebSockets().map(async (socket) => {
+          if (socket.readyState !== WebSocket.OPEN) {
+            return;
+          }
+          const attachment = attachmentSchema.parse(
+            socket.deserializeAttachment()
+          );
+          if (!isMailSyncClientEnabled(attachment.userId)) {
+            socket.close(1012, "Reconnect required");
+          } else if (Date.now() - attachment.createdAt >= 15 * 60_000) {
+            socket.close(1000, "Reconnect required");
+          } else {
+            await this.refreshSubscriptions(socket, sessions);
+          }
+        })
+      );
+      const failure = results.find((result) => result.status === "rejected");
+      if (failure?.status === "rejected") {
+        throw failure.reason;
+      }
+    } finally {
+      if (
+        this.ctx
+          .getWebSockets()
+          .some((socket) => socket.readyState === WebSocket.OPEN)
+      ) {
+        await this.ctx.storage.setAlarm(Date.now() + 120_000);
       }
     }
   }
@@ -299,6 +375,14 @@ export class UserSync extends DurableObject<SyncEnv> {
   async publish(batch: SyncBatch) {
     for (const socket of this.ctx.getWebSockets()) {
       const attachment = attachmentSchema.parse(socket.deserializeAttachment());
+      if (!isMailSyncClientEnabled(attachment.userId)) {
+        socket.close(1012, "Reconnect required");
+        continue;
+      }
+      if (Date.now() - attachment.createdAt >= 15 * 60_000) {
+        socket.close(1000, "Reconnect required");
+        continue;
+      }
       const [subscription] = this.ctx.storage.sql
         .exec<Subscription>(
           "SELECT * FROM subscriptions WHERE socketId=? AND mailboxId=?",
@@ -476,6 +560,13 @@ export class UserSync extends DurableObject<SyncEnv> {
       );
     }
     socket.close(code === 1005 || code === 1006 ? 1000 : code, reason);
+    if (
+      !this.ctx
+        .getWebSockets()
+        .some((active) => active.readyState === WebSocket.OPEN)
+    ) {
+      await this.ctx.storage.deleteAlarm();
+    }
   }
 
   async webSocketError(socket: WebSocket) {
