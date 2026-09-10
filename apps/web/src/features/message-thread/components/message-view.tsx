@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ArrowLeft01Icon,
   ArrowRightDoubleIcon,
   Edit01Icon,
   Loading03Icon,
@@ -134,6 +135,18 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     <article ref={viewRef} tabIndex={-1} className="@container w-full">
       <header className="w-full border-b p-3 @sm:px-5 @sm:py-4">
         <div className="flex min-w-0 items-center gap-3">
+          {onBackToList ? (
+            <Button
+              aria-label="Back to list"
+              className="shrink-0 lg:hidden"
+              onClick={onBackToList}
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+            >
+              <HugeiconsIcon aria-hidden icon={ArrowLeft01Icon} />
+            </Button>
+          ) : null}
           <h1 className="min-w-0 flex-1 truncate font-serif text-body-lg leading-[22px] font-normal tracking-[-0.01em] text-fg">
             {subject}
           </h1>

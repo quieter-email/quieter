@@ -7,7 +7,6 @@ import { Suspense } from "react";
 import type { ReactNode } from "react";
 
 import { EmptyMessageState } from "#/components/empty-message-state";
-import { MobileHeader } from "#/components/mobile-header";
 import type {
   MailboxActions,
   MailboxPendingActions,
@@ -108,10 +107,6 @@ export const MessageDetail = ({
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-      {onBackToList && (
-        <MobileHeader leading="back" onLeadingClick={onBackToList} />
-      )}
-
       <div
         className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto"
         data-message-detail-scroll-container
