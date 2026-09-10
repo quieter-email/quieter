@@ -85,6 +85,7 @@ type MailSidebarProps = {
   onRenameChat: (chatId: string, title: string) => void;
   onSelectChat: (chatId: string) => void;
   onComposeNewMail: () => void;
+  onManageLabels: () => void;
   onSelectView: (view: MailboxWorkspaceView) => void;
   reconnectingMailboxId: string | null;
   searchQuery: string;
@@ -305,6 +306,7 @@ const SidebarInboxSection = ({
   embedded,
   groups,
   onComposeNewMail,
+  onManageLabels,
   onRequestClose,
   onSearch,
   onSelectMailbox,
@@ -318,6 +320,7 @@ const SidebarInboxSection = ({
   | "embedded"
   | "groups"
   | "onComposeNewMail"
+  | "onManageLabels"
   | "onRequestClose"
   | "onSearch"
   | "onSelectMailbox"
@@ -402,6 +405,7 @@ const SidebarInboxSection = ({
             }
             mailboxId={selectedMailboxId}
             mailboxProvider={selectedMailboxProvider ?? "gmail"}
+            onManageLabels={onManageLabels}
             onSearch={(query) => {
               onSearch(query);
               onRequestClose?.();
@@ -588,7 +592,8 @@ const SidebarContent = ({
   selectedView,
   switcherSide = "right",
 }: SidebarContentProps) => {
-  const isInboxView = embedded || selectedView === "inbox";
+  const isInboxView =
+    embedded || selectedView === "inbox" || selectedView === "labels";
   const isChatView = !embedded && selectedView === "chat";
   const isApiMailbox = selectedMailboxProvider === "api";
   const handleSelectMailboxId = (mailboxId: string) => {
@@ -652,6 +657,9 @@ const SidebarContent = ({
           embedded={embedded}
           groups={groups}
           onComposeNewMail={onComposeNewMail}
+          onManageLabels={() => {
+            handleSelectView("labels");
+          }}
           onRequestClose={onRequestClose}
           onSearch={onSearch}
           onSelectMailbox={onSelectMailbox}

@@ -20,6 +20,7 @@ import {
 import { DraftRecoveryNotice } from "#/features/compose/components/draft-recovery-notice";
 import type { ComposeDraftState } from "#/features/compose/domain/draft";
 import type { MailboxWorkspaceView } from "#/features/mailbox/domain/mailbox-workspace-view";
+import { LabelsWorkspacePanel } from "#/features/message-labels/components/labels-workspace-panel";
 import { MailSidebar } from "#/features/navigation/components/mail-sidebar";
 import type { MailboxSwitcherOrder } from "#/features/navigation/components/mailbox-switcher";
 import type { MailboxCategory } from "#/lib/mail";
@@ -437,6 +438,23 @@ export const MailboxWorkspaceContent = ({
         </Suspense>
       </m.div>
     );
+  } else if (selectedView === "labels") {
+    mailboxContent = (
+      <m.div
+        key="labels-panel"
+        className={workspaceSectionVariants()}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.08, ease: "linear" }}
+      >
+        <LabelsWorkspacePanel
+          mailboxId={selectedMailboxId}
+          mailboxProvider={
+            selectedMailboxProvider === "managed" ? "managed" : "gmail"
+          }
+        />
+      </m.div>
+    );
   } else {
     mailboxContent = (
       <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(20rem,405px)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:pl-4">
@@ -478,6 +496,9 @@ export const MailboxWorkspaceContent = ({
               onDeleteChat={onDeleteChat}
               onRenameChat={onRenameChat}
               onSelectChat={onSelectChat}
+              onManageLabels={() => {
+                onSelectView("labels");
+              }}
               onSelectMailbox={onSelectMailbox}
               onSelectMailboxId={onSelectMailboxId}
               onSelectView={onSelectView}
