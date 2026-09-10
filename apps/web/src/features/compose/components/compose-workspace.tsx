@@ -160,6 +160,12 @@ export const ComposeSurface = ({
   const queryClient = useQueryClient();
   const composeEditorRef = useRef<ComposeEditorHandle | null>(null);
   const mountedRef = useRef(false);
+  const [modKeyLabel, setModKeyLabel] = useState("Ctrl");
+  useEffect(() => {
+    if (/Mac|iPhone|iPad|iPod/u.test(navigator.platform)) {
+      setModKeyLabel("⌘");
+    }
+  }, []);
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -545,7 +551,6 @@ export const ComposeSurface = ({
 
                   <ComposeEditorToolbar
                     chrome="footer"
-                    compact
                     leading={
                       <ToolbarButton
                         className="bg-primary px-3 text-primary-fg shadow-sm hover:bg-primary/90 hover:text-primary-fg active:bg-primary/85 active:text-primary-fg"
@@ -561,6 +566,9 @@ export const ComposeSurface = ({
                           <HugeiconsIcon icon={MailSend02Icon} />
                         )}
                         Send
+                        <span className="text-caption text-primary-fg/60">
+                          {modKeyLabel}↵
+                        </span>
                       </ToolbarButton>
                     }
                     trailing={

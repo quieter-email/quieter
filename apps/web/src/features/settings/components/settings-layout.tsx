@@ -68,7 +68,7 @@ export const SettingsPageHeader = ({
   <div className="@container">
     <header className="flex flex-col gap-3 @md:flex-row @md:items-end @md:justify-between">
       <div className="min-w-0">
-        <h1 className="text-title-sm font-normal tracking-tight text-fg">
+        <h1 className="font-serif text-title-sm font-normal tracking-tight text-fg">
           {title}
         </h1>
         {children !== undefined && children !== null ? (
@@ -293,7 +293,7 @@ export const SettingsNavigationRow = ({
     type="button"
   >
     {icon !== undefined && icon !== null ? (
-      <div className="squircle flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/45 text-muted-fg transition-colors group-hover:bg-muted/70 group-hover:text-fg [&_svg]:size-4">
+      <div className="squircle flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-muted text-muted-fg transition-colors group-hover:text-fg [&_svg]:size-4">
         {icon}
       </div>
     ) : null}

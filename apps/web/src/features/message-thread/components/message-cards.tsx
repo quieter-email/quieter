@@ -2,10 +2,7 @@
 
 import {
   ArrowDown01Icon,
-  ArrowRightDoubleIcon,
   Edit01Icon,
-  MailReply02Icon,
-  MailReplyAll02Icon,
   NotificationOff01Icon,
   ZoomInAreaIcon,
 } from "@hugeicons/core-free-icons";
@@ -14,16 +11,14 @@ import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { TooltipGroup } from "@quieter/ui/tooltip";
-import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
+import { domAnimation, LazyMotion } from "motion/react";
 import { useState } from "react";
 import type { ReactNode } from "react";
 
 import { SenderAvatar } from "#/components/sender-avatar";
 import {
-  buildComposeDraftFromMessageAction,
   buildComposeDraftFromSavedDraftMessage,
   findLinkedDraftForMessage,
-  hasDistinctReplyAllRecipients,
 } from "#/features/compose/domain/compose-actions";
 import type { ComposeDraftState } from "#/features/compose/domain/draft";
 import { GmailUsefulDetailCard } from "#/features/gmail-useful-details/components/gmail-useful-detail-card";
@@ -269,99 +264,68 @@ const MessageHeaderActions = ({
   expanded,
   onContinueDraft,
   onDetails,
-  onForward,
-  onReply,
-  onReplyAll,
   onUnsubscribe,
   isPending,
-  showReplyAll = true,
 }: {
   className?: string;
   expanded?: boolean;
   isPending?: boolean;
   onContinueDraft?: () => void;
   onDetails: () => void;
-  onForward: () => void;
-  onReply: () => void;
-  onReplyAll: () => void;
   onUnsubscribe?: MessageUnsubscribeAction;
-  showReplyAll?: boolean;
 }) => {
   const handleUnsubscribe = () => {
     onUnsubscribe?.onClick();
   };
 
   return (
-    <AnimatePresence>
-      {expanded !== false && (
-        <m.div
-          initial={{ opacity: 0, x: 10 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: 10 }}
-          transition={{ duration: 0.2, ease: [0.2, 1, 0.4, 1] }}
-          className={cn(
-            "flex flex-wrap items-center justify-start gap-1 @md:justify-end",
-            className
-          )}
-        >
-          {onContinueDraft !== undefined && (
-            <Button
-              onClick={onContinueDraft}
-              size="sm"
-              type="button"
-              variant="ghost"
-            >
-              <HugeiconsIcon aria-hidden icon={Edit01Icon} />
-              <span>Draft</span>
-            </Button>
-          )}
-          <Button onClick={onReply} size="sm" type="button" variant="ghost">
-            <HugeiconsIcon aria-hidden icon={MailReply02Icon} />
-            <span>Reply</span>
-          </Button>
-          {showReplyAll && (
-            <Button
-              onClick={onReplyAll}
-              size="sm"
-              type="button"
-              variant="ghost"
-            >
-              <HugeiconsIcon aria-hidden icon={MailReplyAll02Icon} />
-              <span>Reply all</span>
-            </Button>
-          )}
-          <Button onClick={onForward} size="sm" type="button" variant="ghost">
-            <HugeiconsIcon aria-hidden icon={ArrowRightDoubleIcon} />
-            <span>Forward</span>
-          </Button>
-          {onUnsubscribe !== undefined && (
-            <IconButtonTooltip label="Unsubscribe">
-              <Button
-                aria-label="Unsubscribe"
-                disabled={isPending === true && onUnsubscribe.kind === "mailto"}
-                onClick={handleUnsubscribe}
-                size="icon-sm"
-                type="button"
-                variant="ghost"
-              >
-                <HugeiconsIcon aria-hidden icon={NotificationOff01Icon} />
-              </Button>
-            </IconButtonTooltip>
-          )}
-          <IconButtonTooltip label="Details">
-            <Button
-              aria-label="Details"
-              onClick={onDetails}
-              size="icon-sm"
-              type="button"
-              variant="ghost"
-            >
-              <HugeiconsIcon aria-hidden icon={ZoomInAreaIcon} />
-            </Button>
-          </IconButtonTooltip>
-        </m.div>
+    <div
+      className={cn(
+        "flex flex-wrap items-center justify-start gap-1 @md:justify-end",
+        {
+          "opacity-0 transition-opacity duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) group-hover/message:opacity-100 focus-within:opacity-100":
+            expanded === false,
+        },
+        className
       )}
-    </AnimatePresence>
+    >
+      {onContinueDraft !== undefined && (
+        <Button
+          onClick={onContinueDraft}
+          size="sm"
+          type="button"
+          variant="ghost"
+        >
+          <HugeiconsIcon aria-hidden icon={Edit01Icon} />
+          <span>Draft</span>
+        </Button>
+      )}
+      {onUnsubscribe !== undefined && (
+        <IconButtonTooltip label="Unsubscribe">
+          <Button
+            aria-label="Unsubscribe"
+            disabled={isPending === true && onUnsubscribe.kind === "mailto"}
+            onClick={handleUnsubscribe}
+            size="icon-sm"
+            type="button"
+            variant="ghost"
+          >
+            <HugeiconsIcon aria-hidden icon={NotificationOff01Icon} />
+          </Button>
+        </IconButtonTooltip>
+      )}
+      <IconButtonTooltip label="Details">
+        <Button
+          aria-label="Details"
+          onClick={onDetails}
+          size="icon-sm"
+          type="button"
+          variant="ghost"
+        >
+          <HugeiconsIcon aria-hidden icon={ZoomInAreaIcon} />
+        </Button>
+      </IconButtonTooltip>
+    </div>
   );
 };
 
@@ -387,7 +351,7 @@ const ThreadMessageBody = ({
     <div className="min-h-0 overflow-hidden">
       <div
         className={cn(
-          "px-4 pb-4 transition-[opacity,transform] duration-(--app-motion-duration-enter) ease-(--app-motion-ease-out) motion-reduce:transition-none @sm:px-5 @sm:pb-5",
+          "max-w-[68ch] px-4 pb-4 transition-[opacity,transform] duration-(--app-motion-duration-enter) ease-(--app-motion-ease-out) motion-reduce:transition-none @sm:px-5 @sm:pb-5",
           {
             "-translate-y-1 opacity-0": !expanded,
             "translate-y-0 opacity-100": expanded,
@@ -441,7 +405,6 @@ const MessageExpandButton = ({
 );
 
 const ThreadMessageCard = ({
-  currentUserEmail,
   expanded,
   isLoading,
   linkedDraftMessage,
@@ -454,7 +417,6 @@ const ThreadMessageCard = ({
   isActionPending,
   usefulDetails,
 }: {
-  currentUserEmail?: string | null;
   expanded: boolean;
   isLoading?: boolean;
   isActionPending?: boolean;
@@ -474,21 +436,6 @@ const ThreadMessageCard = ({
     message,
   });
 
-  const openComposeAction = (action: "reply" | "reply-all" | "forward") => {
-    if (!onComposeDraftRequested) {
-      return;
-    }
-
-    onComposeDraftRequested(
-      buildComposeDraftFromMessageAction({
-        action,
-        currentUserEmail,
-        existingDraftMessage: linkedDraftMessage,
-        message,
-      })
-    );
-  };
-
   const openLinkedDraft = () => {
     if (!onComposeDraftRequested || !linkedDraftMessage) {
       return;
@@ -501,7 +448,7 @@ const ThreadMessageCard = ({
 
   return (
     <LazyMotion features={domAnimation}>
-      <section className={cn("transition-colors duration-200")}>
+      <section className="group/message transition-colors duration-200">
         <MessageHeaderContent
           className="p-4 @sm:px-5 @sm:py-4"
           deliveryStatus={
@@ -519,23 +466,10 @@ const ThreadMessageCard = ({
               onDetails={() => {
                 setDetailsDialogOpen(true);
               }}
-              onForward={() => {
-                openComposeAction("forward");
-              }}
               isPending={isActionPending}
-              onReply={() => {
-                openComposeAction("reply");
-              }}
-              onReplyAll={() => {
-                openComposeAction("reply-all");
-              }}
               onUnsubscribe={getMessageUnsubscribeAction(
                 message,
                 onUnsubscribe
-              )}
-              showReplyAll={hasDistinctReplyAllRecipients(
-                message,
-                currentUserEmail
               )}
             />
           }
@@ -586,7 +520,6 @@ const ThreadMessageCard = ({
 };
 
 export const SingleMessageCard = ({
-  currentUserEmail,
   isLoading,
   linkedDraftMessage,
   mailboxId,
@@ -597,7 +530,6 @@ export const SingleMessageCard = ({
   isActionPending,
   usefulDetails,
 }: {
-  currentUserEmail?: string | null;
   isLoading?: boolean;
   isActionPending?: boolean;
   linkedDraftMessage: MessageListItem | null;
@@ -614,21 +546,6 @@ export const SingleMessageCard = ({
     mailboxProvider,
     message,
   });
-
-  const openComposeAction = (action: "reply" | "reply-all" | "forward") => {
-    if (!onComposeDraftRequested) {
-      return;
-    }
-
-    onComposeDraftRequested(
-      buildComposeDraftFromMessageAction({
-        action,
-        currentUserEmail,
-        existingDraftMessage: linkedDraftMessage,
-        message,
-      })
-    );
-  };
 
   const openLinkedDraft = () => {
     if (!onComposeDraftRequested || !linkedDraftMessage) {
@@ -658,21 +575,8 @@ export const SingleMessageCard = ({
             onDetails={() => {
               setDetailsDialogOpen(true);
             }}
-            onForward={() => {
-              openComposeAction("forward");
-            }}
             isPending={isActionPending}
-            onReply={() => {
-              openComposeAction("reply");
-            }}
-            onReplyAll={() => {
-              openComposeAction("reply-all");
-            }}
             onUnsubscribe={getMessageUnsubscribeAction(message, onUnsubscribe)}
-            showReplyAll={hasDistinctReplyAllRecipients(
-              message,
-              currentUserEmail
-            )}
           />
         }
         message={message}
@@ -691,7 +595,7 @@ export const SingleMessageCard = ({
         </div>
       )}
 
-      <div className="px-4 pb-4 @sm:px-5 @sm:pb-5">
+      <div className="max-w-[68ch] px-4 pb-4 @sm:px-5 @sm:pb-5">
         <MessageBody
           mailboxId={mailboxId}
           html={message.bodyHtml}
@@ -713,7 +617,6 @@ export const SingleMessageCard = ({
 
 export const ThreadMessageList = ({
   allThreadMessages,
-  currentUserEmail,
   isLoading,
   mailboxId,
   mailboxProvider,
@@ -724,7 +627,6 @@ export const ThreadMessageList = ({
   usefulDetails,
 }: {
   allThreadMessages: MessageListItem[];
-  currentUserEmail?: string | null;
   isLoading?: boolean;
   isActionPending?: boolean;
   mailboxId: string;
@@ -734,14 +636,61 @@ export const ThreadMessageList = ({
   onUnsubscribe?: (messageId: string) => void | Promise<void>;
   usefulDetails: GmailUsefulDetail[];
 }) => {
-  const [expandedMessageIds, setExpandedMessageIds] = useState<string[]>(
-    messages.length ? [messages[0].id] : []
-  );
+  const [showEarlier, setShowEarlier] = useState(false);
+  const [expandedMessageIds, setExpandedMessageIds] = useState<string[]>(() => {
+    const lastMessage = messages.at(-1);
+    return lastMessage ? [lastMessage.id] : [];
+  });
   const expandedMessageIdSet = new Set(expandedMessageIds);
+  const hasEarlierMessages = messages.length > 1;
+  const earlierMessages = hasEarlierMessages ? messages.slice(0, -1) : [];
+  const visibleMessages = showEarlier ? messages : messages.slice(-1);
 
   return (
     <div>
-      {messages.map((threadMessage) => {
+      {hasEarlierMessages && (
+        <button
+          aria-expanded={showEarlier}
+          className="group/stack flex w-full items-center gap-2.5 px-4 py-2 text-left @sm:px-5"
+          onClick={() => {
+            setShowEarlier((current) => !current);
+          }}
+          type="button"
+        >
+          <span className="flex shrink-0 items-center">
+            {earlierMessages.slice(0, 2).map((earlierMessage, index) => {
+              const earlierSender = parseSender(earlierMessage.from);
+              const earlierLabel =
+                earlierSender.name?.trim() ||
+                earlierSender.display?.trim() ||
+                earlierSender.email?.trim() ||
+                "?";
+              return (
+                <SenderAvatar
+                  className={cn("size-6 rounded-md", {
+                    "-ml-1.5": index > 0,
+                  })}
+                  fallbackLabel={earlierLabel.charAt(0).toUpperCase()}
+                  key={earlierMessage.id}
+                />
+              );
+            })}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-body-sm text-muted-fg">
+            {earlierMessages.length} earlier{" "}
+            {earlierMessages.length === 1 ? "message" : "messages"}
+          </span>
+          <HugeiconsIcon
+            aria-hidden
+            className={cn(
+              "size-3.5 shrink-0 text-muted-fg transition-transform duration-(--app-motion-duration-layout) ease-(--app-motion-ease-in-out) motion-reduce:transition-none",
+              { "rotate-180": showEarlier }
+            )}
+            icon={ArrowDown01Icon}
+          />
+        </button>
+      )}
+      {visibleMessages.map((threadMessage) => {
         const isExpanded = expandedMessageIdSet.has(threadMessage.id);
         const linkedDraftMessage = findLinkedDraftForMessage(
           allThreadMessages,
@@ -750,7 +699,6 @@ export const ThreadMessageList = ({
 
         return (
           <ThreadMessageCard
-            currentUserEmail={currentUserEmail}
             expanded={isExpanded}
             isLoading={isLoading}
             isActionPending={isActionPending}

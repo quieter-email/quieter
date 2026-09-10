@@ -80,8 +80,26 @@ export const ChatMessage = ({
   // every delta.
   const renderedParts: ReactNode[] = [];
   let textOrdinal = 0;
+  let toolRunIndex = 0;
+  let toolRun: ReactNode[] = [];
+  const flushToolRun = () => {
+    if (toolRun.length === 0) {
+      return;
+    }
+    renderedParts.push(
+      <div
+        className="relative flex flex-col gap-1 border-l border-border pl-4"
+        key={`${message.id}:tools:${toolRunIndex}`}
+      >
+        {toolRun}
+      </div>
+    );
+    toolRun = [];
+    toolRunIndex += 1;
+  };
   for (const part of message.parts) {
     if (part.type === "text" && part.text.trim() !== "") {
+      flushToolRun();
       textOrdinal += 1;
       renderedParts.push(
         <MarkdownContent
@@ -91,19 +109,25 @@ export const ChatMessage = ({
       );
     } else if (isChatToolPart(part)) {
       const approval = approvalsByCall.get(part.toolCallId);
-      renderedParts.push(
-        <ToolActivity
-          {...(approval === undefined ? {} : { approval })}
-          composeBusy={composeBusy}
-          isStreaming={isStreaming}
-          key={part.toolCallId}
-          onComposeDecline={onComposeDecline}
-          onComposeSubmit={onComposeSubmit}
-          part={part}
-        />
+      toolRun.push(
+        <div className="relative" key={part.toolCallId}>
+          <span
+            aria-hidden
+            className="absolute top-[11px] -left-[19px] size-1.5 rounded-full bg-muted-fg/50"
+          />
+          <ToolActivity
+            {...(approval === undefined ? {} : { approval })}
+            composeBusy={composeBusy}
+            isStreaming={isStreaming}
+            onComposeDecline={onComposeDecline}
+            onComposeSubmit={onComposeSubmit}
+            part={part}
+          />
+        </div>
       );
     }
   }
+  flushToolRun();
 
   return (
     <article className="group/message min-w-0 text-fg">

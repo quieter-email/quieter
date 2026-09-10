@@ -5,7 +5,6 @@ import {
   MessageMultiple01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import type { IconSvgElement } from "@hugeicons/react";
 import { splitMailAddressList } from "@quieter/mail/compose/schema";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { cn } from "@quieter/ui/cn";
@@ -101,6 +100,25 @@ const getMessageRowOpenAriaLabel = (
   return `${isActive ? "Close" : "Open"} conversation: ${subject}`;
 };
 
+const getMessageRowCountsTitle = (thread: ThreadListEntry) => {
+  const parts: string[] = [];
+  if (thread.attachmentCount > 0) {
+    parts.push(
+      thread.attachmentCount === 1
+        ? "1 attachment"
+        : `${thread.attachmentCount} attachments`
+    );
+  }
+  if (thread.messageCount > 1) {
+    parts.push(
+      thread.messageCount === 1
+        ? "1 message"
+        : `${thread.messageCount} messages`
+    );
+  }
+  return `This thread has ${parts.join(" and ")}.`;
+};
+
 const rowPressTransition = {
   damping: 28,
   mass: 0.7,
@@ -146,24 +164,6 @@ type MessageRowContentProps = Omit<
   MessageRowProps,
   "className" | "dataIndex" | "offsetY" | "rowRef"
 >;
-
-const MessageRowMetaBadge = ({
-  icon,
-  label,
-  title,
-}: {
-  icon: IconSvgElement;
-  label: string;
-  title: string;
-}) => (
-  <span
-    className="squircle inline-flex h-4.5 shrink-0 items-center gap-1 rounded-md border border-border bg-bg-raised/75 px-1 text-micro font-medium text-muted-fg tabular-nums shadow-xs"
-    title={title}
-  >
-    <HugeiconsIcon aria-hidden className="size-3" icon={icon} />
-    <span>{label}</span>
-  </span>
-);
 
 const MessageRowSelectionButton = ({
   isActionPending,
@@ -336,27 +336,32 @@ const MessageRowDetails = ({
               {getDeliveryStatusLabel(deliveryStatus)}
             </Pill>
           )}
-          {thread.attachmentCount > 0 && (
-            <MessageRowMetaBadge
-              icon={FileAttachmentIcon}
-              label={String(thread.attachmentCount)}
-              title={
-                thread.attachmentCount === 1
-                  ? "This thread has 1 attachment."
-                  : `This thread has ${thread.attachmentCount} attachments.`
-              }
-            />
-          )}
-          {threaded && (
-            <MessageRowMetaBadge
-              icon={MessageMultiple01Icon}
-              label={String(thread.messageCount)}
-              title={
-                thread.messageCount === 1
-                  ? "This thread has 1 message."
-                  : `This thread has ${thread.messageCount} messages.`
-              }
-            />
+          {(thread.attachmentCount > 0 || threaded) && (
+            <span
+              className="squircle inline-flex h-4.5 shrink-0 items-center gap-1.5 rounded-md border border-border bg-bg-raised/75 px-1.5 text-micro font-medium text-muted-fg tabular-nums"
+              title={getMessageRowCountsTitle(thread)}
+            >
+              {thread.attachmentCount > 0 && (
+                <span className="inline-flex items-center gap-1">
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-3"
+                    icon={FileAttachmentIcon}
+                  />
+                  <span>{thread.attachmentCount}</span>
+                </span>
+              )}
+              {threaded && (
+                <span className="inline-flex items-center gap-1">
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-3"
+                    icon={MessageMultiple01Icon}
+                  />
+                  <span>{thread.messageCount}</span>
+                </span>
+              )}
+            </span>
           )}
           <span className={metaTextClassName} suppressHydrationWarning>
             {date || "--"}
@@ -380,7 +385,14 @@ const MessageRowDetails = ({
             subject
           )}
         </p>
-        <div className="hidden shrink-0 @sm:block">
+        <div
+          className={cn(
+            "hidden shrink-0 transition-opacity duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) @sm:block",
+            {
+              "opacity-0 group-hover/row:opacity-100": !unread,
+            }
+          )}
+        >
           <MessageLabels
             compact
             labelIds={thread.threadLabelIds}
@@ -598,7 +610,7 @@ const MessageRowSurface = ({
       animate={{
         scale: reducedMotion !== false || !isPressed ? 1 : 0.97,
       }}
-      className="relative flex h-17 items-stretch rounded-lg"
+      className="group/row relative flex h-17 items-stretch rounded-lg"
       initial={false}
       onBlurCapture={handleRowBlurCapture}
       onFocusCapture={handleRowFocusCapture}
@@ -748,11 +760,14 @@ const MessageRowContent = ({
   const isActionPending =
     pendingActions.isMessageActionPending(anchorMessage.id) ||
     pendingActions.isThreadActionPending(thread.threadId);
-  const metaTextClassName = cn("text-caption tabular-nums", {
-    "font-semibold text-fg/90": unread,
-    "text-fg/75": isActive && !unread,
-    "text-muted-fg": !unread,
-  });
+  const metaTextClassName = cn(
+    "w-16 shrink-0 text-right text-caption tabular-nums",
+    {
+      "font-semibold text-fg/90": unread,
+      "text-fg/75": isActive && !unread,
+      "text-muted-fg": !unread,
+    }
+  );
   const surfaceOpacity = getMessageRowSurfaceOpacity(
     isActive,
     isHovered,
