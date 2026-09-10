@@ -68,7 +68,7 @@ export const SettingsPageHeader = ({
   <div className="@container">
     <header className="flex flex-col gap-3 @md:flex-row @md:items-end @md:justify-between">
       <div className="min-w-0">
-        <h1 className="font-serif text-title-sm font-normal tracking-tight text-fg">
+        <h1 className="font-sans text-title-sm font-normal tracking-tight text-fg">
           {title}
         </h1>
         {children !== undefined && children !== null ? (

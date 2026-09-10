@@ -147,7 +147,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
               <HugeiconsIcon aria-hidden icon={ArrowLeft01Icon} />
             </Button>
           ) : null}
-          <h1 className="min-w-0 flex-1 truncate font-serif text-body-lg leading-[22px] font-normal tracking-[-0.01em] text-fg">
+          <h1 className="min-w-0 flex-1 truncate font-sans text-body-lg leading-[22px] font-normal tracking-[-0.01em] text-fg">
             {subject}
           </h1>
           {!isSingleMessageThread && (

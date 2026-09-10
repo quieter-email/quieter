@@ -565,7 +565,7 @@ const ChatSession = ({
       chatData?.title !== undefined &&
       chatData.title !== "" ? (
         <header className="hidden shrink-0 border-b border-border px-5 py-3 lg:block">
-          <h1 className="truncate font-serif text-body-lg font-normal tracking-tight">
+          <h1 className="truncate font-sans text-body-lg font-normal tracking-tight">
             {chatData.title}
           </h1>
         </header>
@@ -593,7 +593,7 @@ const ChatSession = ({
         </>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-4 pb-12 sm:px-6">
-          <p className="mb-5 font-serif text-body-lg text-muted-fg">
+          <p className="mb-5 font-sans text-body-lg text-muted-fg">
             Ask about your mail
           </p>
           {composer}

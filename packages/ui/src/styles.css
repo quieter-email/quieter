@@ -1,7 +1,6 @@
 @import "tailwindcss";
 @import "./typeset.css";
 @import "@fontsource-variable/geist";
-@import "@fontsource-variable/lora";
 @import "@fontsource-variable/geist-mono";
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
@@ -11,7 +10,7 @@
 
 .typeset-docs {
   --typeset-font-body: var(--font-geist);
-  --typeset-font-heading: var(--font-lora);
+  --typeset-font-heading: var(--font-geist);
   --typeset-font-mono: var(--font-geist-mono);
   --typeset-size: 15px;
   --typeset-leading: 1.75;
@@ -23,7 +22,6 @@
   --brand-bg: rgb(238 238 240);
   --auth-particle-tint: rgb(75 99 128);
   --font-geist: "Geist Variable", sans-serif;
-  --font-lora: "Lora Variable", serif;
   --font-geist-mono: "Geist Mono Variable", monospace;
   --bg: oklch(0.91 0.002 264);
   --bg-raised: oklch(0.945 0.002 264);
@@ -75,7 +73,6 @@
   --chart-4: oklch(0.62 0.002 264);
   --chart-5: oklch(0.72 0.002 264);
   --font-sans: var(--font-geist);
-  --font-serif: var(--font-lora);
   --font-mono: var(--font-geist-mono);
   --radius: 0.625rem;
   --shadow-x: 0px;
@@ -239,7 +236,6 @@
 
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
-  --font-serif: var(--font-serif);
 
   --text-display-lg: 3.5rem;
   --text-display-lg--line-height: 1;
@@ -271,16 +267,16 @@
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --ease-emphasized: cubic-bezier(0.2, 0.8, 0.2, 1);
 
-  /* Calm radius ladder: chips 6, controls 8, rows and avatars 10, panels and sheets 12. */
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 10px;
-  --radius-xl: 12px;
-  --radius-2xl: 14px;
-  --radius-3xl: 16px;
-  --radius-4xl: 18px;
-  --radius-5xl: 20px;
+  /* Calm radius ladder: chips 10, controls 12, rows and avatars 14, panels and sheets 16. */
+  --radius-xs: 8px;
+  --radius-sm: 10px;
+  --radius-md: 12px;
+  --radius-lg: 14px;
+  --radius-xl: 16px;
+  --radius-2xl: 18px;
+  --radius-3xl: 20px;
+  --radius-4xl: 22px;
+  --radius-5xl: 24px;
   --shadow-2xs: var(--shadow-2xs);
   --shadow-xs: var(--shadow-xs);
   --shadow-sm: var(--shadow-sm);
