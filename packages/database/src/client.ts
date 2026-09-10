@@ -3,7 +3,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { serverEnv } from "@quieter/env/server";
 import { drizzle as drizzlePostgres } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { Resource } from "sst";
+import { Resource } from "sst/resource";
 
 import { authRelations } from "./schema.ts";
 

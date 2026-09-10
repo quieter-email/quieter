@@ -99,6 +99,7 @@ export type SyncWorkerAction = z.infer<typeof syncWorkerActionSchema>;
 export const syncWorkerErrorSchema = z.object({
   code: z.string().optional(),
   message: z.string(),
+  name: z.string().optional(),
 });
 export const syncReceiptSchema = z.object({
   commandId: z.string(),

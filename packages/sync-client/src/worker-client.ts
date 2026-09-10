@@ -3,7 +3,7 @@ import { syncBodySchema, syncMessageSchema } from "@quieter/sync";
 import { z } from "zod";
 
 import type { SyncApi, SyncClientEvent } from "./types";
-import { syncReceiptSchema } from "./worker-protocol";
+import { syncReceiptSchema, syncWorkerErrorSchema } from "./worker-protocol";
 import type { SyncApiRequest, SyncWorkerAction } from "./worker-protocol";
 
 type WorkerMessage =
@@ -14,7 +14,7 @@ type WorkerMessage =
       type: "result";
       id: number;
       result?: unknown;
-      error?: { message: string; code?: string };
+      error?: { message: string; code?: string; name?: string };
     };
 
 export class MailSyncWorkerClient {
@@ -51,6 +51,7 @@ export class MailSyncWorkerClient {
           pending?.reject(
             Object.assign(new Error(message.error.message), {
               code: message.error.code,
+              name: message.error.name ?? "Error",
             })
           );
         }
@@ -211,9 +212,7 @@ export class MailSyncWorkerClient {
       }
     } catch (error) {
       if (!signal.aborted && !this.stopping) {
-        const parsed = z
-          .object({ code: z.string().optional(), message: z.string() })
-          .safeParse(error);
+        const parsed = syncWorkerErrorSchema.safeParse(error);
         this.worker.postMessage({
           error: parsed.success
             ? parsed.data
