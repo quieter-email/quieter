@@ -33,7 +33,6 @@ import {
 import { useEffect, useEffectEvent, useState } from "react";
 import type { SubmitEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 
-import { WorkspaceDitherBackground } from "#/components/workspace-dither-background";
 import { loadComposeWorkspace } from "#/features/mailbox/components/mailbox-workspace/workspace-component-loaders";
 import type { MailboxWorkspaceView } from "#/features/mailbox/domain/mailbox-workspace-view";
 import { MailboxOrganizer } from "#/features/navigation/components/mailbox-organizer";
@@ -781,7 +780,6 @@ export const MailSidebar = ({
                     : { bounce: 0, duration: 0.24, type: "spring" }
                 }
               >
-                <WorkspaceDitherBackground />
                 <SidebarContent
                   {...sidebarProps}
                   animateEntrance={animateEntrance}

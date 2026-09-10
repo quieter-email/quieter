@@ -97,6 +97,12 @@
   --shadow-elevation-sm: 0 4px 12px -4px oklch(0 0 0 / 0.06);
   --shadow-surface:
     0 16px 32px -20px oklch(0 0 0 / 0.18), 0 4px 10px -6px oklch(0 0 0 / 0.08);
+  --canvas-glow: radial-gradient(
+    150% 100% at 12% 104%,
+    oklch(1 0 0 / 0.5) 0%,
+    oklch(1 0 0 / 0.22) 45%,
+    transparent 85%
+  );
   --panel-gradient: linear-gradient(
     180deg,
     oklch(0.975 0.002 264),
@@ -181,6 +187,14 @@
   --shadow-elevation-sm: 0 4px 12px -4px oklch(0 0 0 / 0.2);
   --shadow-surface:
     0 24px 48px -24px oklch(0 0 0 / 0.75), 0 6px 16px -8px oklch(0 0 0 / 0.45);
+  --canvas-glow: radial-gradient(
+    100% 110% at 14% 104%,
+    rgb(255 255 255 / 0.032) 0%,
+    rgb(255 255 255 / 0.028) 40%,
+    rgb(255 255 255 / 0.013) 65%,
+    rgb(255 255 255 / 0.004) 82%,
+    transparent 95%
+  );
   --panel-gradient: linear-gradient(
     180deg,
     oklch(0.213 0.003 264),
@@ -318,6 +332,7 @@
 
   body {
     @apply bg-bg font-sans text-fg antialiased;
+    background-image: var(--canvas-glow);
     font-optical-sizing: auto;
   }
 }
