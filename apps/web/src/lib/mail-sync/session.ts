@@ -35,9 +35,13 @@ export const reportMailSyncError = (error: unknown) => {
     error !== null &&
     (("name" in error && error.name === "AbortError") ||
       ("code" in error &&
-        ["UNAUTHORIZED", "FORBIDDEN", "NOT_FOUND", "CONFLICT"].includes(
-          String(error.code)
-        )))
+        [
+          "UNAUTHORIZED",
+          "FORBIDDEN",
+          "NOT_FOUND",
+          "CONFLICT",
+          "SYNC_NOT_READY",
+        ].includes(String(error.code))))
   ) {
     return;
   }
@@ -46,7 +50,22 @@ export const reportMailSyncError = (error: unknown) => {
     navigator.onLine &&
     !isExpectedClientError(error)
   ) {
-    Sentry.captureException(error, { tags: { boundary: "mail_sync_client" } });
+    const exception =
+      !(error instanceof Error) &&
+      typeof error === "object" &&
+      error !== null &&
+      "message" in error &&
+      typeof error.message === "string"
+        ? Object.assign(new Error(error.message), {
+            name:
+              "name" in error && typeof error.name === "string"
+                ? error.name
+                : "Error",
+          })
+        : error;
+    Sentry.captureException(exception, {
+      tags: { boundary: "mail_sync_client" },
+    });
   }
 };
 

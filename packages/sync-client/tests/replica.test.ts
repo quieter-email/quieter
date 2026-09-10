@@ -100,6 +100,7 @@ describe("browser replica races", () => {
     const delayed = Promise.withResolvers<SyncBody>();
     const started = Promise.withResolvers<boolean>();
     let requests = 0;
+    let snapshots = 0;
     const events: SyncClientEvent[] = [];
     const controller = new AbortController();
     const api: SyncApi = {
@@ -134,7 +135,8 @@ describe("browser replica races", () => {
       },
       snapshot: async () => {
         await Promise.resolve();
-        return initial;
+        snapshots += 1;
+        return snapshots === 1 ? null : initial;
       },
       submit: async (command) => {
         await Promise.resolve();
@@ -152,6 +154,11 @@ describe("browser replica races", () => {
       storage,
     });
     try {
+      await expect(replica.reset()).rejects.toMatchObject({
+        code: "SYNC_NOT_READY",
+      });
+      expect(replica.checkpoint).toBeNull();
+      expect(events.some((event) => event.type === "entities")).toBeFalsy();
       await replica.reset();
       const loading = replica.thread("thread");
       await started.promise;

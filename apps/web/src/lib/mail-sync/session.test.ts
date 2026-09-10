@@ -11,13 +11,18 @@ import {
   vi,
 } from "vite-plus/test";
 
-import { MailSyncSession } from "./session";
+import { MailSyncSession, reportMailSyncError } from "./session";
 
 const fixture = vi.hoisted(() => ({
   action: vi.fn<(input: unknown) => Promise<unknown>>(),
   addCommand: vi.fn<(input: SyncCommand) => void>(),
+  captureException: vi.fn<() => string>(),
   command: vi.fn<(input: SyncCommand) => Promise<SyncReceipt>>(),
   rejectCommand: vi.fn<(input: SyncCommand) => void>(),
+}));
+vi.mock(import("@sentry/tanstackstart-react"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  captureException: fixture.captureException,
 }));
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- Control worker completion while exercising the real session lifecycle.
 vi.mock("@quieter/sync-client/worker-client", () => ({
@@ -75,6 +80,21 @@ describe("mail sync session", () => {
     expect(MailSyncSession.forMailbox("other")).toBeNull();
     loaded.resolve(null);
     await subscribing;
+  });
+
+  test("skips preparation and cancellation reports but preserves unexpected errors", () => {
+    reportMailSyncError({ code: "SYNC_NOT_READY", message: "Preparing" });
+    reportMailSyncError({ message: "Stopped", name: "AbortError" });
+    expect(fixture.captureException).not.toHaveBeenCalled();
+    reportMailSyncError({ message: "Snapshot corrupt", name: "Error" });
+    expect(fixture.captureException).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "Snapshot corrupt", name: "Error" }),
+      { tags: { boundary: "mail_sync_client" } }
+    );
+    expect(fixture.captureException).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.any(Object)
+    );
   });
 
   test("cancels waiting reads on abort and account change", async () => {

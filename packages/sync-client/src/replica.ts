@@ -141,7 +141,9 @@ export class MailboxReplica {
       this.options.signal
     );
     if (input === null) {
-      throw new Error("The mailbox is still being prepared.");
+      throw Object.assign(new Error("The mailbox is still being prepared."), {
+        code: "SYNC_NOT_READY",
+      });
     }
     const snapshot = syncSnapshotSchema.parse(input);
     if (snapshot.mailboxId !== this.mailboxId) {
@@ -374,7 +376,12 @@ export class MailboxReplica {
       this.options.signal
     );
     if (raw === null) {
-      throw new Error("Message content is still being prepared.");
+      throw Object.assign(
+        new Error("Message content is still being prepared."),
+        {
+          code: "SYNC_NOT_READY",
+        }
+      );
     }
     const snapshot = syncSnapshotSchema.parse(raw);
     if (snapshot.mailboxId !== this.mailboxId) {

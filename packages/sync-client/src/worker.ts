@@ -127,6 +127,7 @@ const receive = async (raw: unknown) => {
       waiting.reject(
         Object.assign(new Error(response.data.error.message), {
           code: response.data.error.code,
+          name: response.data.error.name ?? "Error",
         })
       );
     }
