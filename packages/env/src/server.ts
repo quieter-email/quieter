@@ -8,6 +8,7 @@ import {
   optionalString,
   optionalUrl,
   throwEnvironmentValidationError,
+  webSocketUrl,
 } from "./schema";
 import type { RuntimeEnvironment } from "./schema";
 
@@ -33,6 +34,8 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       DOMAIN_CONNECT_PRIVATE_KEY_B64: runtimeEnv.DOMAIN_CONNECT_PRIVATE_KEY_B64,
       GMAIL_CREDENTIAL_ROTATION_TOKEN:
         runtimeEnv.GMAIL_CREDENTIAL_ROTATION_TOKEN,
+      GMAIL_LIVE_SYNC_TOKEN_SECRET: runtimeEnv.GMAIL_LIVE_SYNC_TOKEN_SECRET,
+      GMAIL_LIVE_SYNC_URL: runtimeEnv.GMAIL_LIVE_SYNC_URL,
       GMAIL_PUBSUB_PUSH_AUDIENCE: runtimeEnv.GMAIL_PUBSUB_PUSH_AUDIENCE,
       GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT:
         runtimeEnv.GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT,
@@ -53,8 +56,6 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       MAIL_RECEIPT_ROLE_ARN: runtimeEnv.MAIL_RECEIPT_ROLE_ARN,
       MAIL_RECEIPT_RULE_SET_NAME: runtimeEnv.MAIL_RECEIPT_RULE_SET_NAME,
       MAIL_RECEIPT_TOPIC_ARN: runtimeEnv.MAIL_RECEIPT_TOPIC_ARN,
-      MAIL_SYNC_SECRET: runtimeEnv.MAIL_SYNC_SECRET,
-      MAIL_SYNC_URL: runtimeEnv.MAIL_SYNC_URL,
       NODE_ENV: runtimeEnv.NODE_ENV,
       OPENROUTER_API_KEY: runtimeEnv.OPENROUTER_API_KEY,
       POLAR_ACCESS_TOKEN: runtimeEnv.POLAR_ACCESS_TOKEN,
@@ -120,6 +121,8 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       DATABASE_URL: optionalUrl,
       DOMAIN_CONNECT_PRIVATE_KEY_B64: optionalString,
       GMAIL_CREDENTIAL_ROTATION_TOKEN: optionalString,
+      GMAIL_LIVE_SYNC_TOKEN_SECRET: optionalString,
+      GMAIL_LIVE_SYNC_URL: webSocketUrl.optional(),
       GMAIL_PUBSUB_PUSH_AUDIENCE: optionalHttpUrl,
       GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT: z.email().optional(),
       GMAIL_PUBSUB_SUBSCRIPTION: optionalString,
@@ -138,8 +141,6 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       MAIL_RECEIPT_ROLE_ARN: optionalString,
       MAIL_RECEIPT_RULE_SET_NAME: optionalString,
       MAIL_RECEIPT_TOPIC_ARN: optionalString,
-      MAIL_SYNC_SECRET: optionalString,
-      MAIL_SYNC_URL: optionalHttpUrl,
       NODE_ENV: nodeEnvironment,
       OPENROUTER_API_KEY: optionalString,
       POLAR_ACCESS_TOKEN: optionalString,

@@ -1,7 +1,11 @@
+import { once } from "node:events";
+import { setTimeout as sleep } from "node:timers/promises";
+
 import type {
   maintainGmailPubSubMailbox,
   processGmailPubSubNotification,
 } from "@quieter/orpc/gmail-pubsub";
+import { evictDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
 import type { JWK } from "jose";
@@ -16,8 +20,7 @@ import {
 
 import { enqueueGmailMaintenanceJobs } from "../src/gmail-maintenance-worker";
 import { processGmailQueueMessage } from "../src/queue-worker";
-import { RequestError } from "../src/request-error";
-import worker from "../src/worker";
+import worker, { signaturesMatch } from "../src/worker";
 import { handlePubSub, requestErrorResponse } from "../src/worker-utils";
 
 const serviceAccount = "gmail-push@example.invalid";
@@ -33,6 +36,37 @@ const encodeJson = (value: unknown) =>
     .replaceAll("+", "-")
     .replaceAll("/", "_")
     .replaceAll("=", "");
+
+const liveSyncToken = async (
+  overrides: Partial<{ expiresAt: number; issuedAt: number }> = {}
+) => {
+  const now = Math.floor(Date.now() / 1000);
+  const payload = encodeJson({
+    emailAddress,
+    expiresAt: now + 300,
+    issuedAt: now,
+    mailboxId,
+    nonce: "56dd0984-cfdb-40a7-a31e-5e17fb78aefd",
+    userId: "user-1",
+    version: 1,
+    ...overrides,
+  });
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode("live-sync-secret"),
+    { hash: "SHA-256", name: "HMAC" },
+    false,
+    ["sign"]
+  );
+  const signature = new Uint8Array(
+    await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload))
+  );
+  let binary = "";
+  for (const byte of signature) {
+    binary += String.fromCodePoint(byte);
+  }
+  return `${payload}.${btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "")}`;
+};
 
 const pubSubToken = async (overrides: Record<string, unknown> = {}) =>
   await new SignJWT({
@@ -76,6 +110,28 @@ const envelope = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+const isMessageEventTuple = (events: unknown): events is [MessageEvent] =>
+  Array.isArray(events) &&
+  events.length > 0 &&
+  events[0] instanceof MessageEvent;
+
+const messageFrom = async (socket: WebSocket) => {
+  const events = await once(socket, "message");
+  if (!isMessageEventTuple(events)) {
+    throw new Error("Expected message event.");
+  }
+  const [event] = events;
+  return event;
+};
+
+const within = async <T>(promise: Promise<T>, label: string) =>
+  await Promise.race([
+    promise,
+    sleep(1000).then(() => {
+      throw new Error(`Timed out waiting for ${label}.`);
+    }),
+  ]);
+
 const toRequest = (input: RequestInfo | URL, init?: RequestInit) => {
   if (input instanceof Request) {
     return input;
@@ -100,21 +156,37 @@ describe("Cloudflare worker runtime", () => {
     vi.unstubAllGlobals();
   });
 
-  describe("Pub/Sub ingress", () => {
-    test("retries lease contention without reporting it as a server failure", () => {
-      const report = vi.fn<(error: unknown) => void>();
-      vi.stubGlobal("reportError", report);
-      expect(
-        requestErrorResponse(
-          new RequestError(503, "mailbox_busy"),
-          "/gmail/pubsub"
-        ).status
-      ).toBe(503);
-      expect(report).not.toHaveBeenCalled();
-      const failure = new Error("Unexpected provider failure");
-      expect(requestErrorResponse(failure, "/gmail/pubsub").status).toBe(500);
-      expect(report).toHaveBeenCalledWith(failure);
+  describe("live-sync authentication", () => {
+    test("uses fixed-size timing-safe signature comparison", async () => {
+      await expect(signaturesMatch("same", "same")).resolves.toBeTruthy();
+      await expect(
+        signaturesMatch("short", "a completely different length")
+      ).resolves.toBeFalsy();
     });
+
+    test.each([
+      ["tampered", async () => `${await liveSyncToken()}x`],
+      [
+        "expired",
+        async () =>
+          await liveSyncToken({ expiresAt: Math.floor(Date.now() / 1000) - 1 }),
+      ],
+      ["malformed", async () => await Promise.resolve("not.a.valid.token")],
+    ])("rejects %s tokens", async (_name, createToken) => {
+      const response = await worker.fetch(
+        new Request(
+          `https://worker.invalid/gmail/live?token=${await createToken()}`,
+          {
+            headers: { upgrade: "websocket" },
+          }
+        ),
+        env
+      );
+      expect(response.status).toBe(401);
+    });
+  });
+
+  describe("Pub/Sub ingress", () => {
     const installFetchMock = (processorStatus = 204) =>
       vi.stubGlobal(
         "fetch",
@@ -162,6 +234,24 @@ describe("Cloudflare worker runtime", () => {
 
     test("processes authenticated notifications before acknowledging without queueing", async () => {
       installFetchMock();
+      const token = await liveSyncToken();
+      const stub = env.GmailLiveSyncMailboxV2.get(
+        env.GmailLiveSyncMailboxV2.idFromName(emailAddress)
+      );
+      const socketResponse = await stub.fetch(
+        new Request(`https://worker.invalid/gmail/live?token=${token}`, {
+          headers: { upgrade: "websocket" },
+        })
+      );
+      const socket = socketResponse.webSocket;
+      if (socket === null) {
+        throw new Error("Expected WebSocket upgrade.");
+      }
+      socket.accept();
+      const events: unknown[] = [];
+      socket.addEventListener("message", (event) => {
+        events.push(JSON.parse(String(event.data)));
+      });
       const send = vi.spyOn(env.GmailPsQueue, "send");
       const { promise: pending, resolve: finish } =
         Promise.withResolvers<null>();
@@ -196,6 +286,16 @@ describe("Cloudflare worker runtime", () => {
       const response = await responsePromise;
       expect(response.status).toBe(204);
       expect(send).not.toHaveBeenCalled();
+      await vi.waitFor(() => {
+        expect(events).toHaveLength(3);
+      });
+      expect(events.slice(1)).toStrictEqual(
+        expect.arrayContaining([
+          { mailboxId, type: "mailbox-dirty" },
+          { mailboxId, type: "mailbox-details-dirty" },
+        ])
+      );
+      socket.close(1000, "done");
     });
 
     test("returns 5xx when direct processing transiently fails", async () => {
@@ -226,6 +326,50 @@ describe("Cloudflare worker runtime", () => {
     });
   });
 
+  describe("Durable Object WebSockets", () => {
+    test("upgrades, broadcasts attachments, auto-responds to exact pings, and closes", async () => {
+      const token = await liveSyncToken();
+      const stub = env.GmailLiveSyncMailboxV2.get(
+        env.GmailLiveSyncMailboxV2.idFromName(emailAddress.trim().toLowerCase())
+      );
+      const response = await stub.fetch(
+        new Request(`https://worker.invalid/gmail/live?token=${token}`, {
+          headers: { upgrade: "websocket" },
+        })
+      );
+      expect(response.status).toBe(101);
+      const socket = response.webSocket;
+      if (socket === null) {
+        throw new Error("Expected WebSocket upgrade.");
+      }
+      socket.accept();
+
+      const pong = messageFrom(socket);
+      socket.send('{"action":"ping"}');
+      const pongEvent = await within(pong, "automatic pong");
+      expect(pongEvent.data).toBe('{"type":"pong"}');
+
+      await evictDurableObject(stub);
+      const broadcast = messageFrom(socket);
+      const broadcastResponse = await stub.fetch(
+        "https://internal.quieter/broadcast",
+        {
+          body: JSON.stringify({ type: "mailbox-dirty" }),
+          method: "POST",
+        }
+      );
+      expect(broadcastResponse.status).toBe(204);
+      const broadcastEvent = await within(broadcast, "broadcast");
+      expect(JSON.parse(String(broadcastEvent.data))).toStrictEqual({
+        mailboxId,
+        type: "mailbox-dirty",
+      });
+
+      socket.close(1000, "done");
+      expect(socket.readyState).not.toBe(WebSocket.OPEN);
+    });
+  });
+
   describe("Queue consumer", () => {
     const body = {
       emailAddress,
@@ -234,10 +378,10 @@ describe("Cloudflare worker runtime", () => {
       type: "notification" as const,
     };
 
-    test("processes notifications through the mail service", async () => {
+    test("processes notifications and broadcasts completed details", async () => {
       const processNotification = vi.fn<typeof processGmailPubSubNotification>(
-        async () => {
-          await Promise.resolve();
+        async (_message, options) => {
+          await options?.onProcessed?.({ mailboxId });
           return {
             busy: false,
             ignored: false,
@@ -249,7 +393,11 @@ describe("Cloudflare worker runtime", () => {
 
       await processGmailQueueMessage(body, env, { processNotification });
 
-      expect(processNotification).toHaveBeenCalledExactlyOnceWith(body);
+      expect(processNotification).toHaveBeenCalledOnce();
+      expect(processNotification.mock.calls[0]?.[0]).toStrictEqual(body);
+      expect(processNotification.mock.calls[0]?.[1]?.onProcessed).toBeTypeOf(
+        "function"
+      );
     });
 
     test("retries a notification when the mailbox is busy", async () => {

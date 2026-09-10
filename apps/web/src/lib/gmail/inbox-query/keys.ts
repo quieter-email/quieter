@@ -26,6 +26,16 @@ export const getMessagesQueryKey = (
     normalizeSearchQuery(searchQuery) ?? "",
   ] as const;
 
+export const getLiveSyncQueryKey = (
+  mailboxId: string,
+  mailbox: MailboxCategory,
+  searchQuery?: string | null
+) =>
+  [
+    ...getMessagesQueryKey(mailboxId, mailbox, searchQuery),
+    "live-sync",
+  ] as const;
+
 export const parsePageToken = (value: unknown): string | undefined => {
   if (typeof value !== "string") {
     return undefined;

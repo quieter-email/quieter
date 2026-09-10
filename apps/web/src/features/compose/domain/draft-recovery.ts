@@ -9,17 +9,12 @@ const assetSchema = z.object({
   mimeType: z.string(),
   name: z.string(),
   size: z.number(),
-  source: z
-    .object({ attachmentId: z.string(), messageId: z.string() })
-    .optional(),
 });
 
 export const recoverableDraftSchema = z.object({
   attachments: z.array(assetSchema.extend({ isInline: z.literal(false) })),
-  baseVersion: z.string().optional(),
   bodyHtml: z.string(),
   bodyText: z.string(),
-  conflict: z.boolean().optional(),
   draftAnchor: composeDraftAnchorSchema.nullable().optional(),
   draftId: z.string().optional(),
   errorMessage: z.string().nullable(),
@@ -50,8 +45,7 @@ export const restoreComposeDraft = (
 ): ComposeDraftState => {
   const draft = recoverableDraftSchema.parse(JSON.parse(payload));
   const missing = [...draft.attachments, ...draft.inlineImages].filter(
-    (asset) =>
-      asset.gmailAttachmentId === undefined && asset.source === undefined
+    (asset) => asset.gmailAttachmentId === undefined
   );
   let { errorMessage } = draft;
   if (draft.saveStatus === "sending") {
@@ -64,8 +58,7 @@ export const restoreComposeDraft = (
   return {
     ...draft,
     attachments: draft.attachments.filter(
-      (asset) =>
-        asset.gmailAttachmentId !== undefined || asset.source !== undefined
+      (asset) => asset.gmailAttachmentId !== undefined
     ),
     bodyHtml: draft.bodyHtml.replaceAll(
       /<img\b[^>]*\bsrc=["']blob:[^"']*["'][^>]*>/giu,
@@ -73,8 +66,7 @@ export const restoreComposeDraft = (
     ),
     errorMessage,
     inlineImages: draft.inlineImages.filter(
-      (asset) =>
-        asset.gmailAttachmentId !== undefined || asset.source !== undefined
+      (asset) => asset.gmailAttachmentId !== undefined
     ),
     recoveryEditorId: editorId,
     recoveryUpdatedAt: updatedAt,

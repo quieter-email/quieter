@@ -329,7 +329,6 @@ describe("automated migration safety", () => {
 
   test.each([
     'DROP TABLE "user";',
-    '-- quieter:contract\nDROP TABLE "user";',
     "DROP SCHEMA public CASCADE;",
     'TRUNCATE TABLE "user";',
     'DELETE FROM "user";',
@@ -338,6 +337,24 @@ describe("automated migration safety", () => {
   ])("rejects destructive SQL: %s", (sql) => {
     expect(() => {
       assertMigrationSqlIsDeploySafe(sql, "unsafe");
+    }).toThrow("destructive SQL");
+  });
+
+  test("accepts an explicitly marked contract migration", () => {
+    expect(() => {
+      assertMigrationSqlIsDeploySafe(
+        '-- quieter:contract\nDROP TABLE "mailSyncEntity";',
+        "drop_mail_sync_entity"
+      );
+    }).not.toThrow();
+  });
+
+  test("only honors a contract marker at the top of the migration", () => {
+    expect(() => {
+      assertMigrationSqlIsDeploySafe(
+        'SELECT 1;\n-- quieter:contract\nDROP TABLE "user";',
+        "late_marker"
+      );
     }).toThrow("destructive SQL");
   });
 });

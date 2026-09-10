@@ -326,11 +326,9 @@ const MessageHeaderActions = ({
 const ThreadMessageBody = ({
   expanded,
   isLoading,
-  mailboxId,
   message,
 }: {
   expanded: boolean;
-  mailboxId: string;
   isLoading?: boolean;
   message: MessageListItem;
 }) => (
@@ -353,7 +351,6 @@ const ThreadMessageBody = ({
         )}
       >
         <MessageBody
-          mailboxId={mailboxId}
           html={message.bodyHtml}
           isLoading={isLoading}
           text={message.bodyText}
@@ -493,7 +490,6 @@ const ThreadMessageCard = ({
 
         <div id={`message-body-${message.id}`}>
           <ThreadMessageBody
-            mailboxId={mailboxId}
             expanded={expanded}
             isLoading={isLoading}
             message={message}
@@ -590,7 +586,6 @@ export const SingleMessageCard = ({
 
       <div className="max-w-[68ch] px-4 pb-4 @sm:px-5 @sm:pb-5">
         <MessageBody
-          mailboxId={mailboxId}
           html={message.bodyHtml}
           isLoading={isLoading}
           text={message.bodyText}

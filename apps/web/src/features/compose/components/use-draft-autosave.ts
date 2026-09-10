@@ -1,7 +1,5 @@
 import { useEffect, useEffectEvent } from "react";
 
-import { MailSyncSession, runMailSyncTask } from "#/lib/mail-sync/session";
-
 export const useDraftAutosave = ({
   mailboxId,
   enabled,
@@ -14,11 +12,7 @@ export const useDraftAutosave = ({
   subscribe: (changed: () => void) => { unsubscribe: () => void };
 }) => {
   const persist = useEffectEvent(async () => {
-    if (
-      mailboxId !== null &&
-      MailSyncSession.forMailbox(mailboxId) !== null &&
-      navigator.onLine
-    ) {
+    if (mailboxId !== null && navigator.onLine) {
       await save();
     }
   });
@@ -30,7 +24,7 @@ export const useDraftAutosave = ({
     const changed = () => {
       clearTimeout(timer);
       timer = setTimeout(() => {
-        void runMailSyncTask(persist());
+        void persist();
       }, 1500);
     };
     const subscription = subscribe(changed);

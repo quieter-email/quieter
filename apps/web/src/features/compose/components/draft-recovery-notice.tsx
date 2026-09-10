@@ -1,9 +1,8 @@
 import { Button } from "@quieter/ui/button";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSelector } from "@tanstack/react-store";
 
+import { draftRecoveryJournal } from "#/lib/draft-recovery-journal";
 import { toastError } from "#/lib/error-toast";
-import { MailSyncSession, mailSyncState } from "#/lib/mail-sync/session";
 
 import type { ComposeDraftState } from "../domain/draft";
 import { restoreComposeDraft } from "../domain/draft-recovery";
@@ -15,17 +14,10 @@ export const DraftRecoveryNotice = ({
   mailboxId: string;
   onResume: (draft: ComposeDraftState) => void;
 }) => {
-  const available = useSelector(mailSyncState, (state) =>
-    state.mailboxIds.includes(mailboxId)
-  );
   const queryClient = useQueryClient();
   const queryKey = ["local-draft-recovery", mailboxId];
   const { data = [] } = useQuery({
-    enabled: available,
-    queryFn: async () => {
-      const journal = await MailSyncSession.forMailbox(mailboxId)?.drafts;
-      return (await journal?.list(mailboxId)) ?? [];
-    },
+    queryFn: () => draftRecoveryJournal.list(mailboxId),
     queryKey,
     staleTime: 0,
   });
@@ -33,8 +25,7 @@ export const DraftRecoveryNotice = ({
     mutationFn: async () => {
       const [record] = data;
       if (record !== undefined) {
-        const journal = await MailSyncSession.forMailbox(mailboxId)?.drafts;
-        await journal?.remove(record);
+        draftRecoveryJournal.remove(record);
       }
       await queryClient.invalidateQueries({ queryKey });
     },

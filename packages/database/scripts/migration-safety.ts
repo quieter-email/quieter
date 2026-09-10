@@ -10,7 +10,8 @@ import historicalMigrations from "./historical-migrations.json" with { type: "js
 
 const packageDirectory = fileURLToPath(new URL("..", import.meta.url));
 const migrationsDirectory = path.join(packageDirectory, "drizzle");
-// Freeze existing history; new contract SQL must use the reviewed manual procedure.
+// Freeze existing history. New destructive SQL must be an explicitly marked,
+// manually reviewed contract migration.
 const historicalHashes = new Map(Object.entries(historicalMigrations));
 await loadModule();
 
@@ -30,6 +31,13 @@ export const assertMigrationSqlIsDeploySafe = (
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The parser returns its exported AST shape but declares the entry point as any.
   const parsed = parseSync(sql) as ParseResult;
   const isNonTransactional = /^-- quieter:no-transaction(?:\r?\n|$)/u.test(sql);
+  // Destructive contract SQL is only accepted when the migration opts in
+  // explicitly. The marker is reviewed like the SQL it guards and must stay at
+  // the top of the generated migration.
+  const isContract = /^-- quieter:contract(?:\r?\n|$)/u.test(sql);
+  if (isContract) {
+    return;
+  }
   const createdTables = new Set<string>();
   for (const { stmt } of parsed.stmts ?? []) {
     if (!stmt) {

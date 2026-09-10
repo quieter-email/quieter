@@ -1,166 +1,205 @@
-import type { MailCommand, MailMutationTarget } from "@quieter/mail/data-plane";
 import { QueryClient } from "@tanstack/react-query";
-import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
+import { afterEach, describe, expect, test, vi } from "vite-plus/test";
 
-import { getThreadQueryKey } from "../thread-query-keys";
-import {
-  applyBulkChangesInMailbox,
-  updateMessageInMailbox,
-  updateThreadInMailbox,
-} from "./actions";
+import type { MessageListItem, ThreadMessagesResult } from "#/lib/mail";
+import { rpc } from "#/lib/orpc";
+
+import { getThreadQueryKey } from "../thread-query";
+import { updateMessageInMailbox, updateThreadInMailbox } from "./actions";
+import type { MessagesQueryData } from "./data";
 import { getMessagesQueryKey } from "./keys";
 
-const engine = vi.hoisted(() => ({
-  command:
-    vi.fn<
-      (
-        mailboxId: string,
-        targets: MailMutationTarget[],
-        command: MailCommand
-      ) => Promise<void>
-    >(),
-  messageIds:
-    vi.fn<(mailboxId: string, threadId: string) => Promise<string[]>>(),
-  ready: Promise.resolve<null>(null),
-}));
-// oxlint-disable-next-line vitest/prefer-import-in-mock -- Exercise the UI boundary while controlling engine startup and command outcomes.
-vi.mock("#/lib/mail-sync/session", () => ({
-  MailSyncSession: {
-    waitForMailbox: async () => {
-      await engine.ready;
-      return {
-        client: { messageIds: engine.messageIds },
-        command: engine.command,
-      };
+// oxlint-disable-next-line vitest/prefer-import-in-mock -- Only mail mutation contracts are needed.
+vi.mock("#/lib/orpc", () => ({
+  rpc: {
+    mail: {
+      markMessageAsRead: vi.fn<typeof rpc.mail.markMessageAsRead>(),
+      markMessageAsUnread: vi.fn<typeof rpc.mail.markMessageAsUnread>(),
+      markThreadAsRead: vi.fn<typeof rpc.mail.markThreadAsRead>(),
+      markThreadAsUnread: vi.fn<typeof rpc.mail.markThreadAsUnread>(),
+      moveMessageToTrash: vi.fn<typeof rpc.mail.moveMessageToTrash>(),
+      moveThreadToTrash: vi.fn<typeof rpc.mail.moveThreadToTrash>(),
+      untrashMessage: vi.fn<typeof rpc.mail.untrashMessage>(),
+      untrashThread: vi.fn<typeof rpc.mail.untrashThread>(),
+      updateMessageLabels: vi.fn<typeof rpc.mail.updateMessageLabels>(),
+      updateThreadLabels: vi.fn<typeof rpc.mail.updateThreadLabels>(),
     },
   },
 }));
 
-describe("mail actions through the sync engine", () => {
-  beforeEach(() => {
+const setup = () => {
+  const queryClient = new QueryClient();
+  const messages: MessageListItem[] = ["a", "b"].map((id) => ({
+    bodyHtml: `<p>${id}</p>`,
+    id,
+    isUnread: true,
+    labelIds: ["INBOX", "UNREAD"],
+    threadId: "thread",
+  }));
+  const inboxKey = getMessagesQueryKey("mailbox", "inbox");
+  const unreadKey = getMessagesQueryKey("mailbox", "unread");
+  const otherMailboxKey = getMessagesQueryKey("other-mailbox", "inbox");
+  const threadKey = getThreadQueryKey("mailbox", "thread");
+  for (const key of [inboxKey, unreadKey, otherMailboxKey]) {
+    queryClient.setQueryData<MessagesQueryData>(key, {
+      pageParams: [undefined],
+      pages: [{ messages }],
+    });
+  }
+  queryClient.setQueryData<ThreadMessagesResult>(threadKey, {
+    messages,
+    threadId: "thread",
+  });
+  return {
+    inboxKey,
+    messages,
+    otherMailboxKey,
+    queryClient,
+    threadKey,
+    unreadKey,
+  };
+};
+
+describe("mail metadata cache updates", () => {
+  afterEach(() => {
     vi.resetAllMocks();
-    engine.ready = Promise.resolve(null);
   });
 
-  test("waits for startup before submitting a message action", async () => {
-    const ready = Promise.withResolvers<null>();
-    engine.ready = ready.promise;
-    const queryClient = new QueryClient();
-    queryClient.setQueryData(getMessagesQueryKey("mailbox", "inbox"), {
-      pageParams: [undefined],
-      pages: [{ messages: [{ id: "message", threadId: "thread" }] }],
+  test("reading one message updates unread views, retains loaded bodies and leaves its sibling and other mailbox alone", async () => {
+    const {
+      queryClient,
+      inboxKey,
+      unreadKey,
+      otherMailboxKey,
+      threadKey,
+      messages,
+    } = setup();
+    vi.mocked(rpc.mail.markMessageAsRead).mockResolvedValue({
+      id: "a",
+      isUnread: false,
+      labelIds: ["INBOX", "server-label"],
     });
-    const action = updateMessageInMailbox(
+
+    await updateMessageInMailbox(
       {
         mailbox: "inbox",
         mailboxId: "mailbox",
-        messageId: "message",
+        messageId: "a",
         queryClient,
         searchQuery: undefined,
       },
       "read"
     );
-    expect(engine.command).not.toHaveBeenCalled();
-    ready.resolve(null);
-    await action;
-    expect(engine.command).toHaveBeenCalledWith(
-      "mailbox",
-      [{ messageIds: ["message"], threadId: "thread" }],
-      { kind: "set-read", read: true }
-    );
-    queryClient.clear();
+
+    expect(
+      queryClient
+        .getQueryData<MessagesQueryData>(unreadKey)
+        ?.pages[0].messages.map(({ id }) => id)
+    ).toStrictEqual(["b"]);
+    expect(
+      queryClient.getQueryData<MessagesQueryData>(inboxKey)?.pages[0].messages
+    ).toMatchObject([
+      {
+        bodyHtml: "<p>a</p>",
+        id: "a",
+        isUnread: false,
+        labelIds: ["INBOX", "server-label"],
+      },
+      { id: "b", isUnread: true },
+    ]);
+    expect(
+      queryClient.getQueryData<ThreadMessagesResult>(threadKey)?.messages
+    ).toMatchObject([
+      { bodyHtml: "<p>a</p>", id: "a", isUnread: false },
+      { id: "b", isUnread: true },
+    ]);
+    expect(
+      queryClient.getQueryData<MessagesQueryData>(otherMailboxKey)?.pages[0]
+        .messages
+    ).toStrictEqual(messages);
   });
 
-  test("marks a thread using metadata without requesting its bodies", async () => {
-    const queryClient = new QueryClient();
-    engine.messageIds.mockResolvedValue(["a", "b"]);
+  test("reading a thread includes messages loaded only in the thread and reconciles their server labels", async () => {
+    const { queryClient, inboxKey, unreadKey, threadKey } = setup();
+    queryClient.setQueryData<MessagesQueryData>(inboxKey, {
+      pageParams: [undefined],
+      pages: [
+        {
+          messages: [
+            {
+              id: "a",
+              isUnread: true,
+              labelIds: ["INBOX", "UNREAD"],
+              threadId: "thread",
+            },
+          ],
+        },
+      ],
+    });
+    vi.mocked(rpc.mail.markThreadAsRead).mockResolvedValue({
+      messages: [
+        { id: "a", isUnread: false, labelIds: ["INBOX"] },
+        { id: "b", isUnread: false, labelIds: ["INBOX", "server-label"] },
+      ],
+      threadId: "thread",
+    });
+
     await updateThreadInMailbox(
       { mailboxId: "mailbox", queryClient, threadId: "thread" },
-      "unread"
+      "read"
     );
-    expect(engine.command).toHaveBeenCalledWith(
-      "mailbox",
-      [{ messageIds: ["a", "b"], threadId: "thread" }],
-      { kind: "set-read", read: false }
+
+    expect(rpc.mail.markThreadAsRead).toHaveBeenCalledWith(
+      expect.objectContaining({ mailboxId: "mailbox", threadId: "thread" }),
+      expect.anything()
     );
+    expect(rpc.mail.markMessageAsRead).not.toHaveBeenCalled();
+    expect(
+      queryClient.getQueryData<MessagesQueryData>(unreadKey)?.pages[0].messages
+    ).toStrictEqual([]);
+    expect(
+      queryClient.getQueryData<ThreadMessagesResult>(threadKey)?.messages
+    ).toMatchObject([
+      { bodyHtml: "<p>a</p>", id: "a", isUnread: false },
+      {
+        bodyHtml: "<p>b</p>",
+        id: "b",
+        isUnread: false,
+        labelIds: ["INBOX", "server-label"],
+      },
+    ]);
   });
 
-  test.each([
-    ["trash", "trash"],
-    ["untrash", "inbox"],
-    ["spam", "spam"],
-    ["unspam", "inbox"],
-    ["archive", "archive"],
-  ] as const)(
-    "maps %s to a move command using a message cached only in its thread",
-    async (operation, destination) => {
-      const queryClient = new QueryClient();
-      queryClient.setQueryData(getThreadQueryKey("mailbox", "thread"), {
-        messages: [{ id: "message", threadId: "thread" }],
-        threadId: "thread",
-      });
-      await updateMessageInMailbox(
-        {
-          mailbox: "inbox",
-          mailboxId: "mailbox",
-          messageId: "message",
-          queryClient,
-          searchQuery: undefined,
-        },
-        operation
-      );
-      expect(engine.command).toHaveBeenCalledWith(
-        "mailbox",
-        [{ messageIds: ["message"], threadId: "thread" }],
-        { destination, kind: "move" }
-      );
-    }
-  );
+  test("a failed read restores unread membership and thread metadata after the optimistic update", async () => {
+    const { queryClient, inboxKey, unreadKey, threadKey, messages } = setup();
+    const failure = new Error("offline");
+    vi.mocked(rpc.mail.markThreadAsRead).mockImplementation(() => {
+      expect(
+        queryClient.getQueryData<MessagesQueryData>(unreadKey)?.pages[0]
+          .messages
+      ).toStrictEqual([]);
+      expect(
+        queryClient
+          .getQueryData<ThreadMessagesResult>(threadKey)
+          ?.messages.every((message) => message.isUnread === false)
+      ).toBeTruthy();
+      throw failure;
+    });
 
-  test("submits repeated actions immediately to the engine", async () => {
-    const pending = Promise.withResolvers<null>();
-    engine.command.mockImplementationOnce(async () => {
-      await pending.promise;
-    });
-    const targets = [{ messageIds: ["a"], threadId: "thread" }];
-    const first = applyBulkChangesInMailbox("mailbox", targets, {
-      kind: "set-read",
-      read: true,
-    });
-    const failed = (async () => {
-      try {
-        await first;
-        return null;
-      } catch (error) {
-        return error;
-      }
-    })();
-    const second = applyBulkChangesInMailbox("mailbox", targets, {
-      kind: "set-read",
-      read: false,
-    });
-    await vi.waitFor(() => {
-      expect(engine.command).toHaveBeenCalledTimes(2);
-    });
-    pending.reject(new Error("Command failed"));
-    await expect(failed).resolves.toStrictEqual(new Error("Command failed"));
-    await second;
-    expect(engine.command).toHaveBeenCalledTimes(2);
-    expect(engine.command).toHaveBeenLastCalledWith("mailbox", targets, {
-      kind: "set-read",
-      read: false,
-    });
-  });
-
-  test("does not issue an untracked mutation when startup fails", async () => {
-    engine.ready = Promise.reject(new Error("Startup failed"));
     await expect(
-      applyBulkChangesInMailbox(
-        "mailbox",
-        [{ messageIds: ["a"], threadId: "thread" }],
-        { kind: "set-read", read: true }
+      updateThreadInMailbox(
+        { mailboxId: "mailbox", queryClient, threadId: "thread" },
+        "read"
       )
-    ).rejects.toThrow("Startup failed");
-    expect(engine.command).not.toHaveBeenCalled();
+    ).rejects.toBe(failure);
+
+    for (const key of [inboxKey, unreadKey]) {
+      expect(
+        queryClient.getQueryData<MessagesQueryData>(key)?.pages[0].messages
+      ).toStrictEqual(messages);
+    }
+    expect(
+      queryClient.getQueryData<ThreadMessagesResult>(threadKey)?.messages
+    ).toStrictEqual(messages);
   });
 });

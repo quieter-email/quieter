@@ -25,6 +25,7 @@
     "POLAR_SANDBOX": "true",
     "QUIETER_GMAIL_AI_AUTOMATION_ENABLED": "true",
     "SENTRY_ENVIRONMENT": "test",
+    "SST_RESOURCE_GmailLiveSyncTokenSecret": "{\"value\":\"live-sync-secret\"}",
     "SST_RESOURCE_SentryDsn": "{\"value\":\"https://examplePublicKey@o0.ingest.sentry.io/0\"}",
   },
   "hyperdrive": [
@@ -32,6 +33,20 @@
       "binding": "AppDatabaseV2",
       "id": "00000000000000000000000000000000",
       "localConnectionString": "postgres://test:test@localhost:5432/quieter_dev",
+    },
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "GmailLiveSyncMailboxV2",
+        "class_name": "GmailLiveSyncMailboxV2",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["GmailLiveSyncMailboxV2"],
     },
   ],
   "queues": {

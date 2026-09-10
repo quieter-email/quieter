@@ -16,18 +16,14 @@ const draft = {
 };
 
 describe("compose recovery", () => {
-  it("preserves incomplete recipients and conflict versions without validating a send", () => {
+  it("preserves incomplete recipients without validating a send", () => {
     expect(
-      restoreComposeDraft(
-        JSON.stringify({ ...draft, baseVersion: "older", conflict: true }),
-        "editor"
-      )
+      restoreComposeDraft(JSON.stringify(draft), "editor", 42)
     ).toMatchObject({
-      baseVersion: "older",
       bodyText: draft.bodyText,
-      conflict: true,
       recipients: { to: "unfinished@" },
       recoveryEditorId: "editor",
+      recoveryUpdatedAt: 42,
     });
   });
 

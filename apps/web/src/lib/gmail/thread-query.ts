@@ -2,7 +2,6 @@ import { queryOptions } from "@tanstack/react-query";
 
 import { hasRenderableMessageBody } from "#/lib/mail";
 import type { ThreadMessagesResult } from "#/lib/mail";
-import { MailSyncSession } from "#/lib/mail-sync/session";
 import { rpc } from "#/lib/orpc";
 import {
   isManagedSandboxMailboxId,
@@ -42,13 +41,7 @@ export const getThreadWithDetailsOptions = (
         return getDemoThread(mailboxId, threadId);
       }
 
-      if (mailboxId.startsWith("api:")) {
-        return await rpc.mail.getThread({ mailboxId, threadId }, { signal });
-      }
-      const sync = await MailSyncSession.waitForMailbox(mailboxId, signal);
-      const thread = await sync.thread(mailboxId, threadId);
-      signal.throwIfAborted();
-      return thread;
+      return await rpc.mail.getThread({ mailboxId, threadId }, { signal });
     },
     queryKey: getThreadQueryKey(mailboxId, threadId),
     refetchOnMount: (query) => shouldRefreshThreadContent(query.state.data),

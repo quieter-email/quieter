@@ -43,7 +43,6 @@ export const sendManagedMailboxMessage = async (input: {
   const [draft] = await db
     .select({
       id: managedMailMessage.id,
-      sentAt: managedMailMessage.sentAt,
       updatedAt: managedMailMessage.updatedAt,
     })
     .from(managedMailMessage)
@@ -55,16 +54,6 @@ export const sendManagedMailboxMessage = async (input: {
       )
     )
     .limit(1);
-  if (
-    draft !== undefined &&
-    message.baseVersion !== undefined &&
-    draft.sentAt.toISOString() !== message.baseVersion
-  ) {
-    throw new ORPCError("CONFLICT", {
-      message:
-        "This draft changed elsewhere. Reopen it or save a copy before sending.",
-    });
-  }
   const files = await Promise.all(
     [
       ...message.inlineImages,

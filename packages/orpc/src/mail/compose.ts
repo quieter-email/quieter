@@ -1,19 +1,22 @@
 import { ORPCError } from "@orpc/server";
 import {
+  createDraft,
   deleteDraft,
   extractListUnsubscribeTargets,
   getGmailMessageMetadata,
-  getDraft,
+  sendDraft as sendGmailDraft,
   sendRawMessage,
 } from "@quieter/gmail";
-import { buildPlainTextMessage } from "@quieter/mail/compose/mime";
+import {
+  buildMimeMessage,
+  buildPlainTextMessage,
+} from "@quieter/mail/compose/mime";
 import { splitMailAddressList } from "@quieter/mail/compose/schema";
 import { reportError } from "@quieter/observability";
 
 import { saveGmailDraft, sendGmailMessage } from "../gmail-compose";
 import { callGmail } from "../gmail-request";
 import type { MailRequestContext } from "../gmail-request";
-import { withGmailComposeReplication } from "../mail-sync-compose";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import {
   saveManagedDraft,
@@ -79,38 +82,10 @@ export const composeMailOperations = {
       });
     }
 
-    return await callGmail(
-      context,
-      input.mailboxId,
-      async (accessToken) =>
-        await withGmailComposeReplication(
-          input.mailboxId,
-          accessToken,
-          async () => {
-            const draft = await getDraft(
-              accessToken,
-              input.draftId,
-              context.signal
-            );
-            if (
-              input.baseVersion !== undefined &&
-              draft.message?.id !== input.baseVersion
-            ) {
-              throw new ORPCError("CONFLICT", {
-                message:
-                  "This draft changed elsewhere and was kept. Reopen it before deleting it.",
-              });
-            }
-            await deleteDraft(accessToken, input.draftId);
-            return {
-              result: { deleted: true },
-              threadIds: draft.message?.threadId
-                ? [draft.message.threadId]
-                : [],
-            };
-          }
-        )
-    );
+    return await callGmail(context, input.mailboxId, async (accessToken) => {
+      await deleteDraft(accessToken, input.draftId);
+      return { deleted: true };
+    });
   },
   saveDraft: async ({
     context,
@@ -134,32 +109,7 @@ export const composeMailOperations = {
       context,
       input.mailboxId,
       async (accessToken) =>
-        await withGmailComposeReplication(
-          input.mailboxId,
-          accessToken,
-          async () => {
-            if (
-              input.draft.draftId &&
-              (input.draft.baseVersion === null ||
-                input.draft.baseVersion === undefined)
-            ) {
-              throw new ORPCError("CONFLICT", {
-                message:
-                  "Reopen this draft before saving. Your edits are kept here, or you can save a copy.",
-              });
-            }
-            const result = await saveGmailDraft(
-              accessToken,
-              input.draft,
-              { mailboxId: input.mailboxId, userId: context.userId },
-              context.signal
-            );
-            return {
-              result,
-              threadIds: result.threadId ? [result.threadId] : [],
-            };
-          }
-        )
+        await saveGmailDraft(accessToken, input.draft, context.signal)
     );
   },
   sendDraft: async ({
@@ -170,18 +120,30 @@ export const composeMailOperations = {
     input: MailInputs["sendDraft"];
   }) =>
     await callGmail(context, input.mailboxId, async (accessToken) => {
-      const sent = await withGmailComposeReplication(
-        input.mailboxId,
+      const raw = Buffer.from(await buildMimeMessage(input.draft)).toString(
+        "base64url"
+      );
+      let draftId = input.draft.draftId ?? null;
+      if (draftId === null || draftId.length === 0) {
+        const savedDraft = await createDraft(
+          accessToken,
+          raw,
+          input.draft.replyContext?.threadId
+        );
+        draftId = savedDraft.id;
+      }
+
+      if (draftId === null || draftId.length === 0) {
+        throw new ORPCError("INTERNAL_SERVER_ERROR", {
+          message: "Draft could not be saved before send.",
+        });
+      }
+
+      const sent = await sendGmailDraft(
         accessToken,
-        async () => {
-          const result = await sendGmailMessage(
-            accessToken,
-            input.draft,
-            { mailboxId: input.mailboxId, userId: context.userId },
-            context.signal
-          );
-          return { result, threadIds: [result.threadId] };
-        }
+        draftId,
+        raw,
+        input.draft.replyContext?.threadId
       );
       await learnAiMemoryFromSentMessage({
         bodyText: input.draft.bodyText,
@@ -235,18 +197,10 @@ export const composeMailOperations = {
     }
 
     return await callGmail(context, input.mailboxId, async (accessToken) => {
-      const sent = await withGmailComposeReplication(
-        input.mailboxId,
+      const sent = await sendGmailMessage(
         accessToken,
-        async () => {
-          const result = await sendGmailMessage(
-            accessToken,
-            input.message,
-            { mailboxId: input.mailboxId, userId: context.userId },
-            context.signal
-          );
-          return { result, threadIds: [result.threadId] };
-        }
+        input.message,
+        context.signal
       );
       await learnAiMemoryFromSentMessage({
         bodyText: input.message.bodyText,

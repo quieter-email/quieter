@@ -3,6 +3,7 @@ import { queryOptions } from "@tanstack/react-query";
 
 import { getManagedDemoSavedViews } from "#/lib/managed-mail/demo-managed-mail";
 import { rpc } from "#/lib/orpc";
+import { queryPersister } from "#/lib/query-persister";
 import {
   isGmailSandboxMailboxId,
   isManagedSandboxMailboxId,
@@ -16,7 +17,7 @@ export const getSavedViewsQueryKey = (mailboxId: string) =>
 export const savedViewsQueryOptions = (mailboxId: string, enabled = true) =>
   queryOptions<SavedViews>({
     enabled: enabled && !!mailboxId,
-
+    persister: queryPersister.persisterFn,
     queryFn: async ({ signal }) => {
       if (isManagedSandboxMailboxId(mailboxId)) {
         return getManagedDemoSavedViews().map((view) => ({

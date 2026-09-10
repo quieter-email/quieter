@@ -1,5 +1,4 @@
 /* oxlint-disable vitest/no-conditional-expect -- Each parameterized delivery failure has a different recovery sequence. */
-import "./sync-runtime-fixture";
 import { SESv2Client, SESv2ServiceException } from "@aws-sdk/client-sesv2";
 import { reserveOrganizationMailSend } from "@quieter/billing/mail-send-reservation";
 import type { ingestPolarEvents } from "@quieter/billing/polar";
@@ -34,7 +33,6 @@ import {
 } from "vite-plus/test";
 
 import { recoverMailSends, sendPreparedMail } from "../src/mail-send";
-import { storeManagedSyncBody } from "../src/mail-sync-runtime";
 import {
   cleanupMailObjects,
   storeRawMailObject,
@@ -275,7 +273,6 @@ describe.skipIf(state.databaseUrl === undefined)(
         threadId: messageId,
         updatedAt: now,
       });
-      await storeManagedSyncBody(mailboxId, { bodyText: "Message" });
       const definition = managedMailboxRuleDefinitionSchema.parse({
         actions: [
           { kind: "set-read", read: true },

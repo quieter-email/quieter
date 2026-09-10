@@ -27,6 +27,9 @@ configureErrorReporter((error, context) => {
   }
 });
 
+export const readLinkedSecret = (value: string) =>
+  linkedSecretSchema.parse(JSON.parse(value)).value;
+
 export const readOptionalLinkedSecret = (value: string | undefined) =>
   value === undefined || value === ""
     ? undefined

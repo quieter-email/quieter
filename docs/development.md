@@ -94,9 +94,9 @@ To start only the web app using the existing local secret cache:
 vp run dev
 ```
 
-This starts the web app in Cloudflare's local Worker runtime on `http://localhost:3000`. Vite validates the development database destination before serving. Use `vp run dev:full` for the web app, the background Worker on port 8787, and the mail sync Worker on port 8788. Use `vp run dev:workers` to start only the existing background runtime alongside an already-running web app. See [mail sync operation and rollout](mail-sync-implementation.md) for the dedicated sync runtime, fixtures, and recovery checks.
+This starts the web app in Cloudflare's local Worker runtime on `http://localhost:3000`. Vite validates the development database destination before serving. Use `vp run dev:full` for the web app plus the background Worker on port 8787. Use `vp run dev:workers` to start only the background runtime alongside an already-running web app.
 
-`dev:prepare` generates ignored `.dev.vars` from the validated local settings. It excludes migration credentials and supplies the linked `MailSyncSecret`. Restart the web, background and sync runtimes after changing secrets or Worker bindings. A Vite hot reload alone does not refresh a separate Wrangler process.
+`dev:prepare` generates ignored `.dev.vars` from the validated local settings. It excludes migration credentials and supplies the linked live-sync signing secret. Restart both runtimes after changing secrets or Worker bindings. A Vite hot reload alone does not refresh a separate Wrangler process.
 
 ```bash
 vp run dev:setup
@@ -205,7 +205,7 @@ Application code must not access the database directly. Add or reuse an oRPC pro
    vp run db:check
    ```
 
-CI runs destructive migration integration tests only against a dedicated temporary PostgreSQL database. Automated production migrations reject destructive SQL. Use expand/contract changes for renames, required columns, type rewrites, and destructive changes.
+CI runs destructive migration integration tests only against a dedicated temporary PostgreSQL database. Automated production migrations reject destructive SQL unless the migration opts in with a top-of-file `-- quieter:contract` marker, which is reserved for reviewed contract changes. Use expand/contract changes for renames, required columns, type rewrites, and destructive changes.
 
 Read [Database safety](database-safety.md) before changing migration tooling.
 
