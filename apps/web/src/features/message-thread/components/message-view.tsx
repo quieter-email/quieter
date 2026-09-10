@@ -47,11 +47,17 @@ const InlineComposeSurface = lazy(
     )
 );
 
-const inlineComposeTransition = {
+const inlineComposeLayoutTransition = {
   damping: 34,
   mass: 0.7,
   stiffness: 420,
   type: "spring",
+} as const;
+
+const inlineComposeTransition = {
+  ...inlineComposeLayoutTransition,
+  layout: inlineComposeLayoutTransition,
+  opacity: { duration: 0.12, ease: "easeOut" },
 } as const;
 
 type MessageViewContentProps = MessageViewProps &
@@ -117,6 +123,10 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     hotkeyMessage,
     currentUserEmail
   );
+  // Keep the shared-layout morph between the reply bar and the inline composer
+  // scoped to one message so switching mail never animates a panel across the
+  // screen.
+  const inlineComposeLayoutId = `inline-compose-${message.threadId}:${message.id}`;
 
   useMessageViewHotkeys({
     activeMailbox,
@@ -256,8 +266,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                     exit={{ opacity: 0 }}
                     initial={{ opacity: 0 }}
                     key="inline-compose"
-                    layout
-                    layoutId="inline-compose"
+                    layoutId={inlineComposeLayoutId}
                     ref={inlineComposerRef}
                     transition={inlineComposeTransition}
                   >
@@ -300,8 +309,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                     exit={{ opacity: 0 }}
                     initial={{ opacity: 0 }}
                     key="inline-reply-bar"
-                    layout
-                    layoutId="inline-compose"
+                    layoutId={inlineComposeLayoutId}
                     transition={inlineComposeTransition}
                   >
                     <Button
