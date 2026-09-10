@@ -133,21 +133,23 @@ const MessageViewContent = (props: MessageViewContentProps) => {
   return (
     <article ref={viewRef} tabIndex={-1} className="@container w-full">
       <header className="w-full border-b p-3 @sm:px-5 @sm:py-4">
-        <div className="flex min-w-0 flex-col items-start gap-2 @sm:grid @sm:grid-cols-[minmax(0,1fr)_auto] @sm:items-center @sm:gap-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="min-w-0 font-serif text-body-lg font-normal tracking-tight wrap-break-word text-fg">
-              {subject}
-            </h1>
-            {!isSingleMessageThread && (
-              <p className="text-caption text-muted-fg">
-                {visibleMessages.length}{" "}
-                {visibleMessages.length === 1 ? "message" : "messages"}
-              </p>
-            )}
-          </div>
-
+        <div className="flex min-w-0 items-center gap-3">
+          <h1 className="min-w-0 flex-1 truncate font-serif text-body-lg leading-[22px] font-normal tracking-[-0.01em] text-fg">
+            {subject}
+          </h1>
+          {!isSingleMessageThread && (
+            <p className="shrink-0 text-caption text-muted-fg">
+              {visibleMessages.length}{" "}
+              {visibleMessages.length === 1 ? "message" : "messages"}
+            </p>
+          )}
+          <MessageLabels
+            className="shrink-0"
+            labelIds={threadLabelIds}
+            labels={gmailLabels}
+          />
           {mailboxProvider !== "api" && (
-            <div className="shrink-0 @sm:justify-self-end">
+            <div className="shrink-0">
               <MessageActionsDropdown
                 actions={createMailboxThreadMessageActionHandlers({
                   mailboxActions,
@@ -165,13 +167,6 @@ const MessageViewContent = (props: MessageViewContentProps) => {
             </div>
           )}
         </div>
-
-        <MessageLabels
-          className="mt-2"
-          compact
-          labelIds={threadLabelIds}
-          labels={gmailLabels}
-        />
 
         {apiSource !== null && apiSource !== undefined && (
           <div className="mt-2 flex flex-wrap items-center gap-2 text-caption">

@@ -52,9 +52,9 @@ import { ChatTranscript } from "./chat-transcript";
 const CHAT_API_ENDPOINT = "/api/chat";
 
 const CHAT_PROMPT_SUGGESTIONS = [
-  "Summarize what needs a reply",
-  "Find invoices from last month",
-  "Draft a follow-up",
+  "Summarize today's mail",
+  "Find last month's invoices",
+  "Draft a follow-up to Marta",
 ] as const;
 
 type ChatData = RouterOutputs["chat"]["get"];

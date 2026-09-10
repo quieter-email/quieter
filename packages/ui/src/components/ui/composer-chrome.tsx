@@ -13,7 +13,7 @@ export const ComposerFrame = ({
 }: ComponentPropsWithoutRef<"div">) => (
   <div
     className={cn(
-      "mx-auto my-auto flex min-h-0 w-full max-w-4xl flex-1 flex-col gap-2 md:max-h-[28rem]",
+      "mx-auto my-auto flex min-h-0 w-full max-w-[58rem] flex-1 flex-col gap-2 md:max-h-[28rem]",
       className
     )}
     {...props}

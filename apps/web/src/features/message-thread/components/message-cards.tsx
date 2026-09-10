@@ -261,14 +261,12 @@ const MessageHeaderContent = ({
 
 const MessageHeaderActions = ({
   className,
-  expanded,
   onContinueDraft,
   onDetails,
   onUnsubscribe,
   isPending,
 }: {
   className?: string;
-  expanded?: boolean;
   isPending?: boolean;
   onContinueDraft?: () => void;
   onDetails: () => void;
@@ -281,11 +279,7 @@ const MessageHeaderActions = ({
   return (
     <div
       className={cn(
-        "flex flex-wrap items-center justify-start gap-1 @md:justify-end",
-        {
-          "opacity-0 transition-opacity duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) group-hover/message:opacity-100 focus-within:opacity-100":
-            expanded === false,
-        },
+        "flex flex-wrap items-center justify-start gap-1 opacity-0 transition-opacity duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) group-hover/message:opacity-100 focus-within:opacity-100 @md:justify-end pointer-coarse:opacity-100",
         className
       )}
     >
@@ -461,7 +455,6 @@ const ThreadMessageCard = ({
           }
           headerActions={
             <MessageHeaderActions
-              expanded={expanded}
               onContinueDraft={linkedDraftMessage ? openLinkedDraft : undefined}
               onDetails={() => {
                 setDetailsDialogOpen(true);
@@ -558,7 +551,7 @@ export const SingleMessageCard = ({
   };
 
   return (
-    <section>
+    <section className="group/message">
       <MessageHeaderContent
         className="p-4 @sm:p-5"
         deliveryStatus={

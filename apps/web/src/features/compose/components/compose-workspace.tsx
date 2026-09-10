@@ -26,7 +26,6 @@ import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
 import { MobileHeader } from "#/components/mobile-header";
-import { WorkspaceSection } from "#/components/workspace-section";
 import { USER_BILLING_QUERY_KEY } from "#/features/settings/domain/billing";
 import { useAudioRecorder } from "#/lib/audio-recorder";
 import { prepareTranscriptionRecording } from "#/lib/audio-transcription";
@@ -700,26 +699,24 @@ export const ComposeWorkspace = ({
   senderEmail,
   signature,
 }: ComposeWorkspaceProps) => (
-  <WorkspaceSection data-compose-workspace>
-    <div className="flex h-full min-h-0 flex-col">
-      <MobileHeader
-        className="px-4 sm:px-6"
-        leading="sidebar"
-        onLeadingClick={onOpenSidebar}
-        title="New message"
-      />
-      <ComposeSurface
-        className="flex-1"
-        demoMode={demoMode}
-        initialDraft={initialDraft}
-        mailboxId={mailboxId}
-        managedDemoMode={managedDemoMode}
-        onClose={onClose}
-        onManageTemplates={onManageTemplates}
-        persistDrafts={persistDrafts}
-        senderEmail={senderEmail}
-        signature={signature}
-      />
-    </div>
-  </WorkspaceSection>
+  <div className="flex h-full min-h-0 flex-col" data-compose-workspace>
+    <MobileHeader
+      className="px-4 sm:px-6"
+      leading="sidebar"
+      onLeadingClick={onOpenSidebar}
+      title="New message"
+    />
+    <ComposeSurface
+      className="flex-1"
+      demoMode={demoMode}
+      initialDraft={initialDraft}
+      mailboxId={mailboxId}
+      managedDemoMode={managedDemoMode}
+      onClose={onClose}
+      onManageTemplates={onManageTemplates}
+      persistDrafts={persistDrafts}
+      senderEmail={senderEmail}
+      signature={signature}
+    />
+  </div>
 );

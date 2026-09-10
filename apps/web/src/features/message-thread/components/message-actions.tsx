@@ -397,7 +397,7 @@ export const MessageActionsDropdown = (props: MessageActionsDropdownProps) => {
         <DropdownMenuTrigger
           aria-label="Open message actions"
           aria-busy={isBusy || undefined}
-          className="squircle inline-flex size-8 items-center justify-center rounded-md border border-border bg-control text-muted-fg shadow-sm hover:bg-control-hover hover:text-fg disabled:pointer-events-none disabled:opacity-50"
+          className="squircle inline-flex size-8 items-center justify-center rounded-md text-muted-fg transition-colors hover:bg-control-hover hover:text-fg disabled:pointer-events-none disabled:opacity-50"
           disabled={isBusy}
           type="button"
         >

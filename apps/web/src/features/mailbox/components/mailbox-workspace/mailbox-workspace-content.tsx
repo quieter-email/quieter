@@ -109,28 +109,26 @@ const workspaceContentMotion = {
 const ComposeWorkspaceLoading = ({
   onOpenSidebar,
 }: Pick<MailboxWorkspaceContentProps, "onOpenSidebar">) => (
-  <WorkspaceSection aria-busy="true" data-compose-workspace>
-    <div className="flex h-full min-h-0 flex-col">
-      <MobileHeader
-        className="px-4 sm:px-6"
-        leading="sidebar"
-        onLeadingClick={onOpenSidebar}
-        title="New message"
+  <div className="flex h-full min-h-0 flex-col" data-compose-workspace>
+    <MobileHeader
+      className="px-4 sm:px-6"
+      leading="sidebar"
+      onLeadingClick={onOpenSidebar}
+      title="New message"
+    />
+    <output
+      aria-label="Loading composer"
+      aria-live="polite"
+      className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col items-center justify-center gap-3 p-6 text-body text-muted-fg sm:p-8"
+    >
+      <HugeiconsIcon
+        aria-hidden
+        className="size-5 animate-spin"
+        icon={Loading03Icon}
       />
-      <output
-        aria-label="Loading composer"
-        aria-live="polite"
-        className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col items-center justify-center gap-3 p-6 text-body text-muted-fg sm:p-8"
-      >
-        <HugeiconsIcon
-          aria-hidden
-          className="size-5 animate-spin"
-          icon={Loading03Icon}
-        />
-        Loading composer…
-      </output>
-    </div>
-  </WorkspaceSection>
+      Loading composer…
+    </output>
+  </div>
 );
 
 const NoMailboxWorkspace = ({
@@ -441,7 +439,7 @@ export const MailboxWorkspaceContent = ({
     );
   } else {
     mailboxContent = (
-      <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(20rem,34%)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
+      <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(20rem,405px)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:pl-4">
         <MailboxMessagesPanel
           activeMailbox={activeMailbox}
           currentUserEmail={currentUserEmail}

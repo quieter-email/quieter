@@ -338,7 +338,7 @@ const MessageRowDetails = ({
           )}
           {(thread.attachmentCount > 0 || threaded) && (
             <span
-              className="squircle inline-flex h-4.5 shrink-0 items-center gap-1.5 rounded-md border border-border bg-bg-raised/75 px-1.5 text-micro font-medium text-muted-fg tabular-nums"
+              className="squircle inline-flex h-4.5 shrink-0 items-center gap-1 rounded-sm border border-border bg-muted px-1 text-micro font-medium text-muted-fg tabular-nums"
               title={getMessageRowCountsTitle(thread)}
             >
               {thread.attachmentCount > 0 && (
