@@ -55,7 +55,7 @@ Normal development uses the allowlisted `quieter_dev` database and native Wrangl
 ```bash
 vp run dev:setup
 vp run db:migrate
-vp run dev:full
+vp run dev
 ```
 
 `db:migrate` runs only after the existing local destination guards accept the configured development database. The web app uses port 3000, the existing background runtime uses 8787, and the dedicated sync runtime uses 8788. The full runner requires its ports to be free. Vite triggers native Wrangler scheduled maintenance after startup and once per minute; Durable Object alarms and queue consumers run in Wrangler. All local runtimes share the ignored `.wrangler/state` directory.
@@ -71,7 +71,9 @@ vp run env:doctor
 
 The fixture creates local MIME content and attachment metadata without sending external mail. Open two tabs on its mailbox to verify delivery, background body loading, and follower updates. The maintenance trigger also exercises recovery without waiting for the schedule. See [development](development.md) and [service inspection](development-services.md) for provider setup and existing background diagnostics.
 
-`MAIL_SYNC_SECRET` is the SST `MailSyncSecret` resource. Local setup generates ignored bindings without copying migration credentials into Worker runtimes. `MAIL_SYNC_URL` is required ordinary configuration. Restart the full runner after binding changes; Vite hot reload does not restart separate Wrangler processes.
+`vp run dev` starts the complete local stack through `dev:full`. The background processes show warnings and errors without Wrangler binding dumps or interactive menus.
+
+`MAIL_SYNC_SECRET` is the SST `MailSyncSecret` resource. Local setup generates ignored bindings without copying migration credentials into Worker runtimes. `MAIL_SYNC_URL` is required ordinary configuration. Production uses `https://sync.quieter.email`, a fixed Worker custom domain so SST can resolve application build configuration before first creating the Worker. Restart the full runner after binding changes; Vite hot reload does not restart separate Wrangler processes.
 
 At handoff, the local runtimes have working isolated bindings. Uploading the new secret to the existing personal SST development stage was blocked by expired AWS SSO. After completing the AWS login, run `vp run secrets:dev push local-leander`. This step does not deploy the application. No production secret was copied locally.
 
