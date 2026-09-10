@@ -26,17 +26,12 @@ import { Link } from "@tanstack/react-router";
 import {
   AnimatePresence,
   domMax,
-  LayoutGroup,
   LazyMotion,
   m,
   useReducedMotion,
 } from "motion/react";
 import { useEffect, useEffectEvent, useState } from "react";
-import type {
-  FocusEvent as ReactFocusEvent,
-  SubmitEvent,
-  KeyboardEvent as ReactKeyboardEvent,
-} from "react";
+import type { SubmitEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 
 import { WorkspaceDitherBackground } from "#/components/workspace-dither-background";
 import { loadComposeWorkspace } from "#/features/mailbox/components/mailbox-workspace/workspace-component-loaders";
@@ -47,12 +42,8 @@ import type { MailboxSwitcherOrder } from "#/features/navigation/components/mail
 import { SidebarLabelNav } from "#/features/navigation/components/sidebar-label-nav";
 import { SidebarMailboxNav } from "#/features/navigation/components/sidebar-mailbox-nav";
 import { SidebarNavItem } from "#/features/navigation/components/sidebar-nav-item";
-import {
-  SidebarEntrance,
-  SidebarSimpleHoverSurface,
-} from "#/features/navigation/components/sidebar-surfaces";
+import { SidebarEntrance } from "#/features/navigation/components/sidebar-surfaces";
 import { SidebarWorkspaceViewSwitch } from "#/features/navigation/components/sidebar-workspace-view-switch";
-import { useSidebarNavHover } from "#/features/navigation/hooks/use-sidebar-nav-hover";
 import type { MailboxCategory } from "#/lib/mail";
 
 type MailSidebarProps = {
@@ -122,21 +113,13 @@ type SidebarChatRowProps = {
   index: number;
   isActive: boolean;
   isEditing: boolean;
-  isHoverExiting: boolean;
-  isHovered: boolean;
-  hoverEnter: boolean;
-  hoverLayoutId: string;
   onCancelRename: () => void;
   onDelete: (chatId: string) => void;
   onEditingTitleChange: (title: string) => void;
-  onHoverExitComplete: () => void;
   onRenameKeyDown: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
   onRenameSubmit: (event: SubmitEvent<HTMLFormElement>) => void;
   onSelect: (chatId: string) => void;
   onStartRename: (chat: SidebarChat) => void;
-  onBlur: (event: ReactFocusEvent<HTMLButtonElement>) => void;
-  onHover: () => void;
-  onFocus: () => void;
 };
 
 const SidebarHelpMenu = ({
@@ -145,24 +128,11 @@ const SidebarHelpMenu = ({
   onRequestClose?: () => void;
 }) => {
   const { openDialog } = useHeadlessConsentUI();
-  const [isHovered, setIsHovered] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
 
   return (
     <DropdownMenu onOpenChange={setIsOpen} open={isOpen}>
-      <div
-        className="squircle relative rounded-md"
-        onMouseEnter={() => {
-          setIsHovered(true);
-        }}
-        onMouseLeave={() => {
-          setIsHovered(false);
-        }}
-      >
-        <SidebarSimpleHoverSurface
-          layoutId="sidebar-help-hover"
-          visible={isHovered || isOpen}
-        />
+      <div className="squircle relative rounded-md hover:bg-muted/60 dark:hover:bg-muted/40">
         <IconButtonTooltip label="Help and legal">
           <DropdownMenuTrigger
             aria-label="Help and legal"
@@ -230,21 +200,13 @@ const SidebarChatRow = ({
   index,
   isActive,
   isEditing,
-  isHoverExiting,
-  isHovered,
-  hoverEnter,
-  hoverLayoutId,
   onCancelRename,
   onDelete,
   onEditingTitleChange,
-  onHoverExitComplete,
   onRenameKeyDown,
   onRenameSubmit,
   onSelect,
   onStartRename,
-  onBlur,
-  onFocus,
-  onHover,
 }: SidebarChatRowProps) => {
   const titleValue = chat.title?.trim() ?? "";
   const title = titleValue.length > 0 ? titleValue : "New chat";
@@ -277,21 +239,13 @@ const SidebarChatRow = ({
           className={cn(
             "h-8 min-w-0 flex-1 justify-start gap-3 rounded-md px-3 text-left transition-[color,transform] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) active:scale-[0.985] motion-reduce:active:scale-100",
             {
-              "text-fg": isActive || isHovered,
-              "text-muted-fg": !isActive && !isHovered,
+              "text-fg": isActive,
+              "text-muted-fg": !isActive,
             }
           )}
-          hover={isHovered}
-          hoverEnter={isHovered && hoverEnter}
-          hoverExiting={isHoverExiting}
-          hoverLayoutId={hoverLayoutId}
-          onBlur={onBlur}
           onClick={() => {
             onSelect(chat.id);
           }}
-          onFocus={onFocus}
-          onHoverExitComplete={onHoverExitComplete}
-          onMouseEnter={onHover}
           size="sm"
           trailing={
             <DropdownMenu>
@@ -484,17 +438,6 @@ const SidebarChatSection = ({
     id: string;
     title: string;
   } | null>(null);
-  const {
-    clearHover: clearChatHover,
-    clearHoverIfLeavingNav: clearChatHoverIfLeavingNav,
-    hoverEnter: chatHoverEnter,
-    hoverLayoutId: chatHoverLayoutId,
-    isHoverExiting: isChatHoverExiting,
-    isHovered: isChatHovered,
-    navRef: chatNavRef,
-    onHoverExitComplete: onChatHoverExitComplete,
-    setHover: setChatHover,
-  } = useSidebarNavHover<string>("sidebar-chat-row-hover");
   const handleSelectChat = (chatId: string) => {
     onSelectChat(chatId);
     onRequestClose?.();
@@ -547,62 +490,38 @@ const SidebarChatSection = ({
         </Button>
       </SidebarEntrance>
 
-      <LayoutGroup id="sidebar-chats">
-        <nav
-          ref={chatNavRef}
-          aria-label="Chats"
-          className="mt-2 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-1"
-          onMouseLeave={clearChatHover}
-        >
-          {chats.map((chat, index) => {
-            const isActive = chat.id === activeChatId;
-            return (
-              <SidebarChatRow
-                key={chat.id}
-                animateEntrance={animateEntrance}
-                chat={chat}
-                editingTitle={
-                  editingChat?.id === chat.id ? editingChat.title : ""
-                }
-                index={index}
-                isActive={isActive}
-                isEditing={editingChat?.id === chat.id}
-                isHoverExiting={isChatHoverExiting(chat.id)}
-                isHovered={isChatHovered(chat.id)}
-                hoverEnter={chatHoverEnter}
-                hoverLayoutId={chatHoverLayoutId}
-                onBlur={(event) => {
-                  clearChatHoverIfLeavingNav(event.relatedTarget);
-                }}
-                onCancelRename={() => {
-                  setEditingChat(null);
-                }}
-                onDelete={onDeleteChat}
-                onEditingTitleChange={(title) => {
-                  setEditingChat({ id: chat.id, title });
-                }}
-                onFocus={() => {
-                  if (!isActive) {
-                    setChatHover(chat.id);
-                  }
-                }}
-                onHover={() => {
-                  if (isActive) {
-                    clearChatHover();
-                    return;
-                  }
-                  setChatHover(chat.id);
-                }}
-                onHoverExitComplete={onChatHoverExitComplete}
-                onRenameKeyDown={handleRenameKeyDown}
-                onRenameSubmit={submitRenameChat}
-                onSelect={handleSelectChat}
-                onStartRename={startRenameChat}
-              />
-            );
-          })}
-        </nav>
-      </LayoutGroup>
+      <nav
+        aria-label="Chats"
+        className="mt-2 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-1"
+      >
+        {chats.map((chat, index) => {
+          const isActive = chat.id === activeChatId;
+          return (
+            <SidebarChatRow
+              key={chat.id}
+              animateEntrance={animateEntrance}
+              chat={chat}
+              editingTitle={
+                editingChat?.id === chat.id ? editingChat.title : ""
+              }
+              index={index}
+              isActive={isActive}
+              isEditing={editingChat?.id === chat.id}
+              onCancelRename={() => {
+                setEditingChat(null);
+              }}
+              onDelete={onDeleteChat}
+              onEditingTitleChange={(title) => {
+                setEditingChat({ id: chat.id, title });
+              }}
+              onRenameKeyDown={handleRenameKeyDown}
+              onRenameSubmit={submitRenameChat}
+              onSelect={handleSelectChat}
+              onStartRename={startRenameChat}
+            />
+          );
+        })}
+      </nav>
     </>
   );
 };
@@ -610,52 +529,36 @@ const SidebarChatSection = ({
 const SidebarFooter = ({
   animateEntrance,
   onRequestClose,
-}: Pick<SidebarContentProps, "animateEntrance" | "onRequestClose">) => {
-  const [isSettingsHovered, setIsSettingsHovered] = useState(false);
-
-  return (
-    <SidebarEntrance
-      animateEntrance={animateEntrance}
-      className="mt-auto p-2"
-      index={9}
-    >
-      <div className="flex items-center gap-1">
-        <div
-          className="squircle relative min-w-0 flex-1 rounded-md"
-          onMouseEnter={() => {
-            setIsSettingsHovered(true);
+}: Pick<SidebarContentProps, "animateEntrance" | "onRequestClose">) => (
+  <SidebarEntrance
+    animateEntrance={animateEntrance}
+    className="mt-auto p-2"
+    index={9}
+  >
+    <div className="flex items-center gap-1">
+      <div className="squircle relative min-w-0 flex-1 rounded-md hover:bg-muted/60 dark:hover:bg-muted/40">
+        <LinkButton
+          aria-label="Settings"
+          className="group relative z-10 w-full justify-start bg-transparent hover:bg-transparent active:scale-100"
+          onClick={onRequestClose}
+          search={{
+            from: "/",
           }}
-          onMouseLeave={() => {
-            setIsSettingsHovered(false);
-          }}
+          variant="ghost"
+          to="/settings"
         >
-          <SidebarSimpleHoverSurface
-            layoutId="sidebar-settings-hover"
-            visible={isSettingsHovered}
+          <HugeiconsIcon
+            className="size-4 shrink-0"
+            icon={Settings01Icon}
+            strokeWidth={1.5}
           />
-          <LinkButton
-            aria-label="Settings"
-            className="group relative z-10 w-full justify-start bg-transparent hover:bg-transparent active:scale-100"
-            onClick={onRequestClose}
-            search={{
-              from: "/",
-            }}
-            variant="ghost"
-            to="/settings"
-          >
-            <HugeiconsIcon
-              className="size-4 shrink-0"
-              icon={Settings01Icon}
-              strokeWidth={1.5}
-            />
-            Settings
-          </LinkButton>
-        </div>
-        <SidebarHelpMenu onRequestClose={onRequestClose} />
+          Settings
+        </LinkButton>
       </div>
-    </SidebarEntrance>
-  );
-};
+      <SidebarHelpMenu onRequestClose={onRequestClose} />
+    </div>
+  </SidebarEntrance>
+);
 
 const SidebarContent = ({
   activeChatId,

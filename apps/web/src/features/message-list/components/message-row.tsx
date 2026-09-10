@@ -385,14 +385,7 @@ const MessageRowDetails = ({
             subject
           )}
         </p>
-        <div
-          className={cn(
-            "hidden shrink-0 transition-opacity duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) @sm:block",
-            {
-              "opacity-0 group-hover/row:opacity-100": !unread,
-            }
-          )}
-        >
+        <div className="hidden shrink-0 @sm:block">
           <MessageLabels
             compact
             labelIds={thread.threadLabelIds}
@@ -760,14 +753,11 @@ const MessageRowContent = ({
   const isActionPending =
     pendingActions.isMessageActionPending(anchorMessage.id) ||
     pendingActions.isThreadActionPending(thread.threadId);
-  const metaTextClassName = cn(
-    "w-16 shrink-0 text-right text-caption tabular-nums",
-    {
-      "font-semibold text-fg/90": unread,
-      "text-fg/75": isActive && !unread,
-      "text-muted-fg": !unread,
-    }
-  );
+  const metaTextClassName = cn("shrink-0 text-caption tabular-nums", {
+    "font-semibold text-fg/90": unread,
+    "text-fg/75": isActive && !unread,
+    "text-muted-fg": !unread,
+  });
   const surfaceOpacity = getMessageRowSurfaceOpacity(
     isActive,
     isHovered,

@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { effect, frame, init, surface } from "vgpu";
 import type { Effect, Gpu, Surface } from "vgpu";
 
-const DITHER_STEP = 3;
+const DITHER_STEP = 4;
 const REVEAL_MS = 3000;
 /** Defer GPU work until near viewport so hero reveal isn't competing. */
 const VISIBLE_ROOT_MARGIN = "160px 0px";
@@ -134,7 +134,7 @@ export const WorkspaceDitherBackground = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [ready, setReady] = useState(false);
   const themeDotRgb = useColorModeValue("0, 0, 0", "255, 255, 255");
-  const themeStrength = useColorModeValue(2, 0.55);
+  const themeStrength = useColorModeValue(1.2, 0.25);
   const activeDotRgb = dotRgb ?? themeDotRgb;
   const activeStrength = strength ?? themeStrength;
   const gridStep = Math.max(1, step);

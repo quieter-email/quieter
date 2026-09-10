@@ -58,9 +58,8 @@ import { Input } from "@quieter/ui/input";
 import { Textarea } from "@quieter/ui/textarea";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { LayoutGroup } from "motion/react";
 import type { ReactNode } from "react";
-import { useEffect, useReducer, useState } from "react";
+import { useReducer, useState } from "react";
 
 import { MailboxColorPicker } from "#/features/message-labels/components/mailbox-color-picker";
 import { mailboxLabelDotClassNameByColor } from "#/features/message-labels/domain/mailbox-label-presentation";
@@ -72,7 +71,6 @@ import {
 } from "#/features/message-search/state/message-list-search-state";
 import { SidebarNavItem } from "#/features/navigation/components/sidebar-nav-item";
 import { SidebarEntrance } from "#/features/navigation/components/sidebar-surfaces";
-import { useSidebarNavHover } from "#/features/navigation/hooks/use-sidebar-nav-hover";
 import { toastError } from "#/lib/error-toast";
 import {
   getLabelsQueryKey,
@@ -312,17 +310,6 @@ export const SidebarLabelNav = ({
     useState<EditingLabelDetails | null>(null);
   const [deletingLabel, setDeletingLabel] = useState<MailboxLabel | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const {
-    clearHover: clearLabelHover,
-    clearHoverIfLeavingNav: clearLabelHoverIfLeavingNav,
-    hoverEnter,
-    hoverLayoutId,
-    isHoverExiting,
-    isHovered,
-    navRef: labelNavRef,
-    onHoverExitComplete,
-    setHover: setLabelHover,
-  } = useSidebarNavHover<string>("label-sidebar-hover");
   const [hiddenLabelState, updateHiddenLabelState] = useReducer(
     reduceHiddenLabelState,
     mailboxId,
@@ -596,21 +583,6 @@ export const SidebarLabelNav = ({
     }
   };
 
-  useEffect(() => {
-    const node = labelNavRef.current;
-    if (node === null || !isNonemptyMailboxId(mailboxId)) {
-      return;
-    }
-
-    const handleMouseLeave = () => {
-      clearLabelHover();
-    };
-    node.addEventListener("mouseleave", handleMouseLeave);
-    return () => {
-      node.removeEventListener("mouseleave", handleMouseLeave);
-    };
-  }, [clearLabelHover, labelNavRef, mailboxId]);
-
   if (!isNonemptyMailboxId(mailboxId)) {
     return null;
   }
@@ -653,8 +625,6 @@ export const SidebarLabelNav = ({
       const isActive =
         selectedLabelKeys.has(normalizeLabelSelectionKey(label.id)) ||
         selectedLabelKeys.has(normalizeLabelSelectionKey(label.name));
-      const labelHovered = isHovered(label.id);
-      const labelHoverExiting = isHoverExiting(label.id);
 
       return (
         <SidebarLabelEntrance
@@ -668,17 +638,10 @@ export const SidebarLabelNav = ({
             className={cn(
               "squircle h-7 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-left text-caption font-light",
               {
-                "text-fg": isActive || labelHovered,
-                "text-muted-fg": !isActive && !labelHovered,
+                "text-fg": isActive,
+                "text-muted-fg": !isActive,
               }
             )}
-            hover={labelHovered}
-            hoverEnter={labelHovered && hoverEnter}
-            hoverExiting={labelHoverExiting}
-            hoverLayoutId={hoverLayoutId}
-            onBlur={(event) => {
-              clearLabelHoverIfLeavingNav(event.relatedTarget);
-            }}
             onClick={() => {
               onSearch(
                 updateLabelFilter(
@@ -689,21 +652,6 @@ export const SidebarLabelNav = ({
                   !isActive
                 )
               );
-            }}
-            onFocus={() => {
-              if (isActive) {
-                clearLabelHover();
-                return;
-              }
-              setLabelHover(label.id);
-            }}
-            onHoverExitComplete={onHoverExitComplete}
-            onMouseEnter={() => {
-              if (isActive) {
-                clearLabelHover();
-                return;
-              }
-              setLabelHover(label.id);
             }}
             size="sm"
             type="button"
@@ -753,15 +701,9 @@ export const SidebarLabelNav = ({
         )}
       </SidebarEntrance>
 
-      <LayoutGroup id="label-sidebar">
-        <nav
-          ref={labelNavRef}
-          aria-label={labelTitle}
-          className="flex flex-col"
-        >
-          {renderLabelNavContent()}
-        </nav>
-      </LayoutGroup>
+      <nav aria-label={labelTitle} className="flex flex-col">
+        {renderLabelNavContent()}
+      </nav>
 
       <FullPageDialog
         onOpenChange={(open) => {
