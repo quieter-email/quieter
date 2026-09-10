@@ -444,6 +444,7 @@ const useMessageRowHandlers = ({
     }
 
     if (
+      !isActive &&
       !showSelectionControl &&
       unread &&
       mailboxProvider !== "api" &&
