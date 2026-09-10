@@ -33,6 +33,7 @@ import {
 } from "#/features/ai/domain/default-chat-model-setting";
 import { toastError } from "#/lib/error-toast";
 import { orpc } from "#/lib/orpc";
+import { persistQueryByKey } from "#/lib/query-persister";
 
 import { SettingsRow, SettingsRows, SettingsSection } from "./settings-layout";
 
@@ -67,6 +68,7 @@ const useAiSettingsData = () => {
     queryClient.setQueryData<AiSettings>(settingsQuery.queryKey, (current) =>
       current ? updater(current) : current
     );
+    void persistQueryByKey(settingsQuery.queryKey, queryClient);
   };
   return { isPending, settings, updateSettings };
 };

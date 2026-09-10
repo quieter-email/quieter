@@ -1,0 +1,58 @@
+import { QueryClient } from "@tanstack/react-query";
+import { describe, expect, test } from "vite-plus/test";
+
+import type { MessageListItem, ThreadMessagesResult } from "#/lib/mail";
+
+import { getThreadQueryKey } from "../thread-query";
+import type { MessagesQueryData } from "./data";
+import { getMessagesQueryKey } from "./keys";
+import { applyMailboxSyncDelta } from "./sync";
+
+const message = (
+  id: string,
+  extras: Partial<MessageListItem> = {}
+): MessageListItem => ({
+  id,
+  threadId: `thread-${id}`,
+  ...extras,
+});
+
+describe(applyMailboxSyncDelta, () => {
+  test("keeps loaded thread details when a message leaves the active mailbox view", async () => {
+    const queryClient = new QueryClient();
+    const messagesQueryKey = getMessagesQueryKey("mailbox-a", "unread");
+    const threadQueryKey = getThreadQueryKey("mailbox-a", "thread-a");
+    const selectedMessage = message("a", {
+      bodyHtml: "<p>Loaded message</p>",
+      isUnread: false,
+      threadId: "thread-a",
+    });
+
+    queryClient.setQueryData<MessagesQueryData>(messagesQueryKey, {
+      pageParams: [undefined],
+      pages: [{ historyId: "1", messages: [selectedMessage] }],
+    });
+    queryClient.setQueryData<ThreadMessagesResult>(threadQueryKey, {
+      messages: [selectedMessage],
+      threadId: "thread-a",
+    });
+
+    await applyMailboxSyncDelta(
+      queryClient,
+      "mailbox-a",
+      messagesQueryKey,
+      "1",
+      [],
+      ["a"],
+      "2"
+    );
+
+    expect(
+      queryClient.getQueryData<MessagesQueryData>(messagesQueryKey)?.pages[0]
+        .messages
+    ).toStrictEqual([]);
+    expect(
+      queryClient.getQueryData<ThreadMessagesResult>(threadQueryKey)?.messages
+    ).toStrictEqual([selectedMessage]);
+  });
+});

@@ -1,29 +1,60 @@
-import { infiniteQueryOptions } from "@tanstack/react-query";
-import type { QueryClient } from "@tanstack/react-query";
+import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
+import type { QueryClient, QueryPersister } from "@tanstack/react-query";
 
-import { GMAIL_QUERY_STALE_TIME_MS } from "#/lib/mail";
-import type { ListMessagesPageResult, MailboxCategory } from "#/lib/mail";
-import { MailSyncSession } from "#/lib/mail-sync/session";
+import {
+  GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS,
+  GMAIL_QUERY_STALE_TIME_MS,
+} from "#/lib/mail";
+import type {
+  ListMessagesPageResult,
+  MailboxCategory,
+  MessageListItem,
+  ThreadMessagesResult,
+} from "#/lib/mail";
 import { listManagedDemoMessages } from "#/lib/managed-mail/demo-managed-mail";
 import { rpc } from "#/lib/orpc";
 import { shouldRetryOrpcError } from "#/lib/orpc-errors";
+import { persistQueryByKey, queryPersister } from "#/lib/query-persister";
 import {
   isManagedSandboxMailboxId,
   isSandboxMailboxId,
 } from "#/lib/sandbox-mailbox";
 
 import { LANDING_DEMO_MAILBOX_ID, listDemoMessages } from "../demo-mail";
-import { mergeRefreshedMailboxPagesIntoQueryData } from "./data";
+import { getThreadQueryKey } from "../thread-query";
+import {
+  applySyncDeltaToQueryData,
+  mergeRefreshedMailboxPagesIntoQueryData,
+  updateFirstPageHistoryId,
+  upsertMessageInThreadData,
+} from "./data";
 import type { MessagesQueryData } from "./data";
 import {
+  getLiveSyncQueryKey,
   getMessagesQueryKey,
   normalizeSearchQuery,
   parsePageToken,
 } from "./keys";
 import { getCachedMessagesQueries } from "./query-cache";
 
-// Bound manual refresh work for deeply paginated lists.
+// Keep full-refresh fallbacks bounded after an infinite query restores a deep persisted list.
 const GMAIL_MAILBOX_REFRESH_PAGE_LIMIT = 3;
+
+type MessagesQueryKey = ReturnType<typeof getMessagesQueryKey>;
+
+const messagesQueryPersister: QueryPersister<
+  ListMessagesPageResult,
+  MessagesQueryKey,
+  string | undefined
+> =
+  // The persister's generic page-param signature is broader than the
+  // infinite-query signature, but it is the same runtime function.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+  queryPersister.persisterFn as unknown as QueryPersister<
+    ListMessagesPageResult,
+    MessagesQueryKey,
+    string | undefined
+  >;
 
 type RefreshLoadedMessagesPagesOptions = {
   maxPageCount?: number;
@@ -57,16 +88,7 @@ const fetchMessagesPage = async (
     });
   }
 
-  const sync = mailboxId.startsWith("api:")
-    ? null
-    : await MailSyncSession.waitForMailbox(mailboxId, signal);
-  const reconcile = sync?.adapter.beginListRead(
-    mailboxId,
-    mailbox,
-    pageToken === undefined,
-    !!normalizeSearchQuery(searchQuery)
-  );
-  const page = await rpc.mail.listThreads(
+  return await rpc.mail.listThreads(
     {
       category: mailbox,
       mailboxId,
@@ -76,8 +98,6 @@ const fetchMessagesPage = async (
     },
     { signal }
   );
-  signal?.throwIfAborted();
-  return reconcile?.(page) ?? page;
 };
 
 export const refreshLoadedMessagesPages = async (
@@ -134,7 +154,7 @@ export const refreshLoadedMessagesPages = async (
       }
     )
   );
-
+  await persistQueryByKey(messagesQueryKey, queryClient);
   return refreshedPages[0];
 };
 
@@ -165,6 +185,157 @@ export const refreshCachedMailboxQueries = async (
   );
 };
 
+export const applyMailboxSyncDelta = async (
+  queryClient: QueryClient,
+  mailboxId: string,
+  messagesQueryKey: ReturnType<typeof getMessagesQueryKey>,
+  startHistoryId: string,
+  updatedMessages: readonly MessageListItem[],
+  removedMessageIds: readonly string[],
+  nextHistoryId?: string
+) => {
+  if (updatedMessages.length > 0 || removedMessageIds.length > 0) {
+    queryClient.setQueryData<MessagesQueryData>(messagesQueryKey, (data) =>
+      applySyncDeltaToQueryData(data, updatedMessages, removedMessageIds)
+    );
+  }
+
+  if (nextHistoryId && nextHistoryId !== startHistoryId) {
+    queryClient.setQueryData<MessagesQueryData>(messagesQueryKey, (data) =>
+      updateFirstPageHistoryId(data, nextHistoryId)
+    );
+  }
+
+  await persistQueryByKey(messagesQueryKey, queryClient);
+
+  const touchedThreadQueryKeys = new Map<
+    string,
+    ReturnType<typeof getThreadQueryKey>
+  >();
+
+  for (const updatedMessage of updatedMessages) {
+    const threadQueryKey = getThreadQueryKey(
+      mailboxId,
+      updatedMessage.threadId
+    );
+    touchedThreadQueryKeys.set(threadQueryKey.join("::"), threadQueryKey);
+    queryClient.setQueryData(
+      threadQueryKey,
+      (currentData: ThreadMessagesResult | undefined) =>
+        upsertMessageInThreadData(currentData, updatedMessage)
+    );
+  }
+
+  await Promise.all(
+    Array.from(touchedThreadQueryKeys.values(), async (threadQueryKey) => {
+      await persistQueryByKey(threadQueryKey, queryClient);
+    })
+  );
+};
+
+export const syncMessages = async (
+  queryClient: QueryClient,
+  mailboxId: string,
+  mailbox: MailboxCategory,
+  searchQuery?: string | null,
+  signal?: AbortSignal
+) => {
+  if (isSandboxMailboxId(mailboxId)) {
+    return await refreshLoadedMessagesPages(
+      queryClient,
+      mailboxId,
+      mailbox,
+      searchQuery,
+      {
+        signal,
+      }
+    );
+  }
+
+  if (mailbox === "drafts" || normalizeSearchQuery(searchQuery)) {
+    return await refreshLoadedMessagesPages(
+      queryClient,
+      mailboxId,
+      mailbox,
+      searchQuery,
+      {
+        signal,
+      }
+    );
+  }
+
+  const messagesQueryKey = getMessagesQueryKey(mailboxId, mailbox, searchQuery);
+  const currentMessages =
+    queryClient.getQueryData<MessagesQueryData>(messagesQueryKey);
+  const startHistoryId = currentMessages?.pages[0]?.historyId;
+
+  if (
+    currentMessages === undefined ||
+    currentMessages.pages.length === 0 ||
+    !startHistoryId
+  ) {
+    return await refreshLoadedMessagesPages(
+      queryClient,
+      mailboxId,
+      mailbox,
+      searchQuery,
+      {
+        signal,
+      }
+    );
+  }
+
+  const syncDelta = await rpc.mail.syncMailbox(
+    {
+      category: mailbox,
+      mailboxId,
+      startHistoryId,
+    },
+    { signal }
+  );
+
+  if (syncDelta.requiresFullRefresh) {
+    return await refreshLoadedMessagesPages(
+      queryClient,
+      mailboxId,
+      mailbox,
+      searchQuery,
+      {
+        signal,
+      }
+    );
+  }
+
+  await applyMailboxSyncDelta(
+    queryClient,
+    mailboxId,
+    messagesQueryKey,
+    startHistoryId,
+    syncDelta.updatedMessages,
+    syncDelta.removedMessageIds,
+    syncDelta.historyId
+  );
+
+  if (syncDelta.refreshFirstPage) {
+    return await refreshLoadedMessagesPages(
+      queryClient,
+      mailboxId,
+      mailbox,
+      searchQuery,
+      {
+        maxPageCount: 1,
+        preserveUnrefreshedPages: true,
+        signal,
+      }
+    );
+  }
+
+  return (
+    queryClient.getQueryData<MessagesQueryData>(messagesQueryKey)?.pages[0] ??
+    currentMessages.pages[0]
+  );
+};
+
 export const messagesQueryOptions = (
   mailboxId: string,
   mailbox: MailboxCategory,
@@ -185,6 +356,10 @@ export const messagesQueryOptions = (
           ],
         }
       : undefined;
+  const persister = normalizeSearchQuery(searchQuery)
+    ? undefined
+    : messagesQueryPersister;
+
   return infiniteQueryOptions<
     ListMessagesPageResult,
     unknown,
@@ -198,18 +373,7 @@ export const messagesQueryOptions = (
       lastPage.nextPageToken ?? undefined,
     initialData,
     initialPageParam: undefined as string | undefined,
-    placeholderData: (previous) => {
-      if (previous !== undefined || normalizeSearchQuery(searchQuery)) {
-        return previous;
-      }
-      const page = MailSyncSession.forMailbox(mailboxId)?.adapter.cachedList(
-        mailboxId,
-        mailbox
-      );
-      return page === undefined
-        ? undefined
-        : { pageParams: [undefined], pages: [page] };
-    },
+    persister,
     queryFn: async ({ pageParam, signal }) =>
       await fetchMessagesPage(
         mailboxId,
@@ -226,3 +390,28 @@ export const messagesQueryOptions = (
     staleTime: GMAIL_QUERY_STALE_TIME_MS,
   });
 };
+
+export const liveSyncQueryOptions = (
+  queryClient: QueryClient,
+  mailboxId: string,
+  mailbox: MailboxCategory,
+  searchQuery?: string | null,
+  enabled = true
+) =>
+  queryOptions({
+    enabled,
+    initialData: () =>
+      queryClient.getQueryData<MessagesQueryData>(
+        getMessagesQueryKey(mailboxId, mailbox, searchQuery)
+      )?.pages[0],
+    queryFn: async ({ signal }) =>
+      await syncMessages(queryClient, mailboxId, mailbox, searchQuery, signal),
+    queryKey: getLiveSyncQueryKey(mailboxId, mailbox, searchQuery),
+    refetchInterval: GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS,
+    refetchIntervalInBackground: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
+    retry: shouldRetryOrpcError,
+    staleTime: 0,
+  });

@@ -1,9 +1,8 @@
-import type { LocalDraftRecord } from "@quieter/sync-client/draft-journal";
 import type { QueryClient } from "@tanstack/react-query";
 import { useEffect, useEffectEvent, useRef } from "react";
 
+import { draftRecoveryJournal } from "#/lib/draft-recovery-journal";
 import { toastError } from "#/lib/error-toast";
-import { MailSyncSession, reportMailSyncError } from "#/lib/mail-sync/session";
 
 import { hasComposeDraftContent } from "../domain/draft";
 import type { ComposeDraftState } from "../domain/draft";
@@ -24,58 +23,41 @@ export const useDraftRecovery = ({
   const editorId = useRef(crypto.randomUUID());
   const completed = useRef(false);
   const warned = useRef(false);
-  const pending = useRef(Promise.resolve());
-  const checkpoint = async () => {
-    const session =
-      mailboxId === null ? null : MailSyncSession.forMailbox(mailboxId);
-    if (
-      !enabled ||
-      completed.current ||
-      mailboxId === null ||
-      session === null
-    ) {
+
+  const checkpoint = () => {
+    if (!enabled || completed.current || mailboxId === null) {
       return;
     }
     const draft = getDraft();
-    const record: LocalDraftRecord = {
-      editorId: editorId.current,
-      localId: draft.localId,
-      mailboxId,
-      payload: JSON.stringify(draft),
-      updatedAt: Date.now(),
-    };
-    const previous = pending.current;
-    pending.current = (async () => {
-      try {
-        await previous;
-        const journal = await session.drafts;
-        if (journal === null) {
-          throw new Error("Draft recovery storage is unavailable.");
-        }
-        if (hasComposeDraftContent(draft)) {
-          await journal.save(record);
-        } else {
-          await journal.remove(record);
-        }
-      } catch (error) {
-        reportMailSyncError(error);
-        if (
-          !warned.current &&
-          !(error instanceof DOMException && error.name === "AbortError")
-        ) {
-          warned.current = true;
-          toastError(error, {
-            boundary: "compose-recovery",
-            fallback:
-              "This browser could not keep a recovery copy. Keep this draft open until it is saved.",
-          });
-        }
+    try {
+      if (hasComposeDraftContent(draft)) {
+        draftRecoveryJournal.save({
+          editorId: editorId.current,
+          localId: draft.localId,
+          mailboxId,
+          payload: JSON.stringify(draft),
+          updatedAt: Date.now(),
+        });
+      } else {
+        draftRecoveryJournal.remove({
+          editorId: editorId.current,
+          localId: draft.localId,
+          mailboxId,
+        });
       }
-    })();
-    await pending.current;
+    } catch (error) {
+      if (!warned.current) {
+        warned.current = true;
+        toastError(error, {
+          boundary: "compose-recovery",
+          fallback:
+            "This browser could not keep a recovery copy. Keep this draft open until it is saved.",
+        });
+      }
+    }
   };
   const persist = useEffectEvent(() => {
-    void checkpoint();
+    checkpoint();
   });
 
   useEffect((): (() => void) | undefined => {
@@ -107,23 +89,19 @@ export const useDraftRecovery = ({
     checkpoint,
     complete: async (draft: ComposeDraftState) => {
       completed.current = true;
-      await pending.current;
       if (mailboxId === null) {
         return;
       }
-      const journal = await MailSyncSession.forMailbox(mailboxId)?.drafts;
-      const records = (await journal?.list(mailboxId)) ?? [];
-      await Promise.all(
-        records
-          .filter(
-            (record) =>
-              record.localId === draft.localId &&
-              (record.editorId === editorId.current ||
-                (record.editorId === draft.recoveryEditorId &&
-                  record.updatedAt <= (draft.recoveryUpdatedAt ?? 0)))
-          )
-          .map(async (record) => await journal?.remove(record))
-      );
+      for (const record of draftRecoveryJournal.list(mailboxId)) {
+        if (
+          record.localId === draft.localId &&
+          (record.editorId === editorId.current ||
+            (record.editorId === draft.recoveryEditorId &&
+              record.updatedAt <= (draft.recoveryUpdatedAt ?? 0)))
+        ) {
+          draftRecoveryJournal.remove(record);
+        }
+      }
       await queryClient.invalidateQueries({
         queryKey: ["local-draft-recovery", mailboxId],
       });

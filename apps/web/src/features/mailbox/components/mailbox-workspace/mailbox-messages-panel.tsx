@@ -183,6 +183,9 @@ export const MailboxMessagesPanel = ({
     selectedMessage,
   } = useMailboxMessages({
     activeMailbox,
+    isDemoMode,
+    isManagedDemoMode,
+    mailboxProvider,
     messageId: messageId ?? undefined,
     queryClient,
     searchQuery: normalizedSearchQuery,

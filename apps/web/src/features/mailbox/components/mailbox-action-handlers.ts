@@ -203,6 +203,7 @@ export const createMailboxActionHandlers = ({
     setThreadActionsPending(threadIds, true);
     try {
       await applyBulkChangesInMailbox(
+        queryClient,
         mailboxId,
         actionableThreads.map((thread) => ({
           messageIds: thread.messages.map((message) => message.id),

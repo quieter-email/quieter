@@ -1,7 +1,6 @@
 import type { DeploymentContext } from "./runtime";
 import { requireSecretResource } from "./secrets";
 import { deploymentEnvironment } from "./stage";
-import type { createMailSyncResources } from "./sync";
 import type { SecretResources } from "./types";
 
 const mailObjectKeyPrefix = "mail/inbound/";
@@ -9,8 +8,7 @@ export const mailReceiptRuleSetName = "quieter-mail";
 
 export const createMailResources = async (
   context: DeploymentContext,
-  secretResources: SecretResources,
-  sync: ReturnType<typeof createMailSyncResources>
+  secretResources: SecretResources
 ) => {
   const callerIdentity = await aws.getCallerIdentity({});
   const region = await aws.getRegion({});
@@ -208,14 +206,13 @@ export const createMailResources = async (
     );
   mailOutboundFeedbackTopic.subscribe("MailOutboundFeedbackProcessor", {
     environment: {
-      ...sync.environment,
       DATABASE_URL: context.databaseUrl,
       QUIETER_DEPLOYMENT_ENV: deploymentEnvironment,
       SES_FEEDBACK_TOPIC_ARN: mailOutboundFeedbackTopic.arn,
       ...context.sentryEnvironment,
     },
     handler: "packages/aws/src/outbound-feedback.handler",
-    link: [mailOutboundFeedbackDeadLetterQueue, sync.secret],
+    link: [mailOutboundFeedbackDeadLetterQueue],
     retries: 2,
     timeout: "60 seconds",
     transform: {
@@ -234,7 +231,6 @@ export const createMailResources = async (
 
   mailReceiptTopic.subscribe("MailReceiptProcessor", {
     environment: {
-      ...sync.environment,
       DATABASE_URL: context.databaseUrl,
       POLAR_ACCESS_TOKEN: context.polarAccessToken,
       ...context.billingEnvironment,
@@ -243,7 +239,7 @@ export const createMailResources = async (
       ...context.sentryEnvironment,
     },
     handler: "packages/aws/src/receipt.handler",
-    link: [mailBucket, sync.secret],
+    link: [mailBucket],
     timeout: "30 seconds",
   });
 
@@ -253,7 +249,6 @@ export const createMailResources = async (
   );
   const mailIngress = new sst.aws.Function("MailIngress", {
     environment: {
-      ...sync.environment,
       DATABASE_URL: context.databaseUrl,
       QUIETER_DEPLOYMENT_ENV: deploymentEnvironment,
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
@@ -261,7 +256,7 @@ export const createMailResources = async (
       ...context.sentryEnvironment,
     },
     handler: "packages/aws/src/inbound.handler",
-    link: [mailBucket, mailIngressToken, sync.secret],
+    link: [mailBucket, mailIngressToken],
     timeout: "30 seconds",
     url: true,
   });

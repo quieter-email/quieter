@@ -4,7 +4,7 @@
 
 All plans receive Gmail live updates. Free teams can connect 5 Gmail accounts, Managed teams 25, and Pro teams 100. The allowance is shared across team members; each Gmail mailbox remains private to its owner. Managed mailboxes do not consume Gmail slots. Limits are defined in `packages/billing/src/plans.ts` and enforced at OAuth start, transactionally at OAuth completion, and when moving a mailbox into a team.
 
-Concurrent connections lock the destination team before counting and writing. Reconnecting an existing mailbox remains allowed after a downgrade; additions and incoming moves stop at the new limit without deleting existing mail. Paid Gmail AI assistance retains its separate entitlement. Watch renewal, notification ingestion and the sync engine do not require that entitlement.
+Concurrent connections lock the destination team before counting and writing. Reconnecting an existing mailbox remains allowed after a downgrade; additions and incoming moves stop at the new limit without deleting existing mail. Paid Gmail AI assistance retains its separate entitlement. Watch renewal and notification ingestion do not require that entitlement.
 
 ## Production webhook setup
 

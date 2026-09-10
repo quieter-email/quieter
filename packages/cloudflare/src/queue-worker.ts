@@ -25,6 +25,22 @@ export type GmailPubSubQueueMessage = z.infer<
   typeof gmailPubSubQueueMessageSchema
 >;
 
+const broadcastMailboxDetails = async (env: Env, emailAddress: string) => {
+  const id = env.GmailLiveSyncMailboxV2.idFromName(
+    emailAddress.trim().toLowerCase()
+  );
+  const response = await env.GmailLiveSyncMailboxV2.get(id).fetch(
+    "https://internal.quieter/broadcast",
+    {
+      body: JSON.stringify({ type: "mailbox-details-dirty" }),
+      method: "POST",
+    }
+  );
+  if (!response.ok) {
+    throw new Error("Gmail live-sync broadcast failed.");
+  }
+};
+
 export const processGmailQueueMessage = async (
   body: unknown,
   env: Env,
@@ -44,12 +60,19 @@ export const processGmailQueueMessage = async (
     if (result.status === "busy") {
       return { retry: true };
     }
+    if (result.status === "maintained") {
+      await broadcastMailboxDetails(env, message.emailAddress);
+    }
     return { retry: false };
   }
 
   const result = await (
     dependencies.processNotification ?? processGmailPubSubNotification
-  )(message);
+  )(message, {
+    onProcessed: async () => {
+      await broadcastMailboxDetails(env, message.emailAddress);
+    },
+  });
   if (!result.ignored && result.busy === true) {
     return { retry: true };
   }

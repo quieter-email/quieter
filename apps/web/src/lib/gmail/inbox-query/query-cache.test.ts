@@ -1,13 +1,15 @@
 import { QueryClient } from "@tanstack/react-query";
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, test, vi } from "vite-plus/test";
 
 import type { MessageListItem, ThreadMessagesResult } from "#/lib/mail";
 
+import { queryPersister } from "../../query-persister";
 import { getThreadQueryKey } from "../thread-query";
 import type { MessagesQueryData } from "./data";
 import { getMessagesQueryKey } from "./keys";
 import {
   applyOptimisticMailboxUpdate,
+  persistQueryKeys,
   updateMessagesInCachedMailboxQueries,
 } from "./query-cache";
 
@@ -23,6 +25,36 @@ const message = (
 const messagesData = (messages: MessageListItem[]): MessagesQueryData => ({
   pageParams: [undefined],
   pages: [{ messages }],
+});
+
+describe(persistQueryKeys, () => {
+  test("persists allowlisted message lists and skips search and thread queries", async () => {
+    const queryClient = new QueryClient();
+    const inboxQueryKey = getMessagesQueryKey("mailbox-a", "inbox");
+    const searchQueryKey = getMessagesQueryKey(
+      "mailbox-a",
+      "inbox",
+      "from:alex"
+    );
+    const threadQueryKey = getThreadQueryKey("mailbox-a", "thread-a");
+    const persistSpy = vi
+      .spyOn(queryPersister, "persistQueryByKey")
+      .mockImplementation(async () => {});
+
+    try {
+      await persistQueryKeys(queryClient, [
+        inboxQueryKey,
+        searchQueryKey,
+        threadQueryKey,
+      ]);
+
+      expect(persistSpy.mock.calls.map(([queryKey]) => queryKey)).toStrictEqual(
+        [inboxQueryKey]
+      );
+    } finally {
+      persistSpy.mockRestore();
+    }
+  });
 });
 
 describe(applyOptimisticMailboxUpdate, () => {

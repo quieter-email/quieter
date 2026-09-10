@@ -1,10 +1,20 @@
 import { withSentryReporting } from "./worker-runtime";
-import { handlePubSub, requestErrorResponse } from "./worker-utils";
+import {
+  handleLiveMailboxRequest,
+  handlePubSub,
+  requestErrorResponse,
+} from "./worker-utils";
+
+export { GmailLiveSyncMailboxV2 } from "./gmail-live-sync-mailbox";
+export { signaturesMatch } from "./worker-utils";
 
 export default withSentryReporting({
   async fetch(request: Request, env: Env) {
     const route = new URL(request.url).pathname;
     try {
+      if (route === "/gmail/live") {
+        return await handleLiveMailboxRequest(request, env);
+      }
       if (route === "/gmail/pubsub" && request.method === "POST") {
         return await handlePubSub(request, env);
       }

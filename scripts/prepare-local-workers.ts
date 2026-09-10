@@ -5,7 +5,10 @@ import { serverEnv } from "@quieter/env/server";
 
 assertLocalEnvFile(".env.local");
 const values = parseEnvFile(".env.local");
-if (!values.has("QUIETER_LOCAL_WORKER_TOKEN")) {
+if (
+  !values.has("QUIETER_LOCAL_WORKER_TOKEN") ||
+  !values.has("GMAIL_LIVE_SYNC_TOKEN_SECRET")
+) {
   throw new Error("Local Worker secrets are missing. Run dev:setup first.");
 }
 const allowed = new Set([
@@ -17,11 +20,9 @@ const bindings = Object.fromEntries(
   [...values].filter(([key]) => allowed.has(key))
 );
 bindings.NODE_ENV = "development";
-const secret = values.get("MAIL_SYNC_SECRET");
-if (secret === undefined || secret.length < 32) {
-  throw new Error("Local mail sync secret is missing. Run dev:setup first.");
-}
-bindings.SST_RESOURCE_MailSyncSecret = JSON.stringify({ value: secret });
+bindings.SST_RESOURCE_GmailLiveSyncTokenSecret = JSON.stringify({
+  value: values.get("GMAIL_LIVE_SYNC_TOKEN_SECRET"),
+});
 await writeFile(
   ".dev.vars",
   `${Object.entries(bindings)

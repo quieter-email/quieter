@@ -10,8 +10,6 @@ import {
 } from "@quieter/database/schema";
 import { and, eq, inArray, ne } from "drizzle-orm";
 
-import { withManagedSyncTransaction } from "../../mail-sync-runtime";
-
 export const assertManagedLabelsBelongToMailbox = async (
   mailboxId: string,
   labelIds: readonly string[],
@@ -49,15 +47,7 @@ export const updateManagedMessageLabelAssignments = async (input: {
   ruleId?: string;
   userId?: string;
   database?: DatabaseExecutor;
-}): Promise<{ id: string; labelIds: string[] }[]> => {
-  if (input.database === undefined) {
-    return await withManagedSyncTransaction(
-      input.mailboxId,
-      { messageIds: input.messageIds },
-      async (database) =>
-        await updateManagedMessageLabelAssignments({ ...input, database })
-    );
-  }
+}) => {
   const addLabelIds =
     input.addLabelIds === undefined ? [] : [...new Set(input.addLabelIds)];
   const removeLabelIds =

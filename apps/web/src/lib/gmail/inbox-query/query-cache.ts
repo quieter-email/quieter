@@ -1,19 +1,28 @@
 import type { QueryClient } from "@tanstack/react-query";
 
 import { isMessageInMailbox } from "#/lib/mail";
-import type { MailboxCategory, MessageListItem } from "#/lib/mail";
+import type {
+  MailboxCategory,
+  MessageListItem,
+  ThreadMessagesResult,
+} from "#/lib/mail";
+import { persistQueryByKey } from "#/lib/query-persister";
 
-import type { getThreadQueryKey } from "../thread-query-keys";
+import { getThreadLabelIds } from "../thread-list";
+import { getThreadQueryKey } from "../thread-query";
 import {
+  applyMessageMetadata,
   applySyncDeltaToQueryData,
   findMessageInQueryData,
   isMessagesQueryData,
   mergeMessagePreservingLoadedDetails,
   removeMessagesFromQueryData,
+  toMessageMetadataById,
   updateMessageInQueryData,
   updateMessagesInQueryData,
+  updateMessagesInThreadData,
 } from "./data";
-import type { MessagesQueryData } from "./data";
+import type { MessagesQueryData, ThreadMetadataMutationResult } from "./data";
 import { getMessagesQueryKey, normalizeSearchQuery } from "./keys";
 
 type CachedMessagesQuery = {
@@ -62,6 +71,30 @@ export const getCachedMessagesQueries = (
       ];
     });
 
+export const persistQueryKeys = async (
+  queryClient: QueryClient,
+  queryKeys: readonly (readonly unknown[])[]
+) => {
+  const seenQueryKeys = new Set<string>();
+  const uniqueQueryKeys: (readonly unknown[])[] = [];
+
+  for (const queryKey of queryKeys) {
+    const queryKeyId = JSON.stringify(queryKey);
+    if (seenQueryKeys.has(queryKeyId)) {
+      continue;
+    }
+
+    seenQueryKeys.add(queryKeyId);
+    uniqueQueryKeys.push(queryKey);
+  }
+
+  await Promise.all(
+    uniqueQueryKeys.map(async (queryKey) => {
+      await persistQueryByKey(queryKey, queryClient);
+    })
+  );
+};
+
 export const applyOptimisticMailboxUpdate = async (
   queryClient: QueryClient,
   mailboxId: string,
@@ -91,6 +124,10 @@ export const applyOptimisticMailboxUpdate = async (
       optimistic: queryClient.getQueryData(snapshot.queryKey),
     }))
     .filter(({ data, optimistic }) => data !== optimistic);
+  await persistQueryKeys(
+    queryClient,
+    changes.map(({ queryKey }) => queryKey)
+  );
 
   return async () => {
     await Promise.all(
@@ -105,6 +142,10 @@ export const applyOptimisticMailboxUpdate = async (
           queryClient.setQueryData(queryKey, data);
         }
       })
+    );
+    await persistQueryKeys(
+      queryClient,
+      changes.map(({ queryKey }) => queryKey)
     );
   };
 };
@@ -246,4 +287,59 @@ export const removeMessagesFromCachedMailboxQueries = (
   }
 
   return touchedQueryKeys;
+};
+
+export const applyResolvedThreadMetadataToCaches = async (
+  queryClient: QueryClient,
+  mailboxId: string,
+  updatedThread: ThreadMetadataMutationResult
+) => {
+  const threadQueryKey = getThreadQueryKey(mailboxId, updatedThread.threadId);
+  const updatesById = toMessageMetadataById(updatedThread.messages);
+  const threadLabelIds = getThreadLabelIds(updatedThread.messages);
+  const touchedQueryKeys: (readonly unknown[])[] = [];
+
+  for (const updatedMessage of updatedThread.messages) {
+    const previousMessage = findMessageInCachedMailboxQueries(
+      queryClient,
+      mailboxId,
+      updatedMessage.id
+    );
+    if (!previousMessage) {
+      continue;
+    }
+
+    touchedQueryKeys.push(
+      ...applyMessageToCachedMailboxQueries(
+        queryClient,
+        mailboxId,
+        applyMessageMetadata(previousMessage, {
+          isUnread: updatedMessage.isUnread,
+          labelIds: updatedMessage.labelIds,
+          threadLabelIds,
+        })
+      )
+    );
+  }
+
+  queryClient.setQueryData(
+    threadQueryKey,
+    (currentData: ThreadMessagesResult | undefined) =>
+      updateMessagesInThreadData(
+        currentData,
+        (message) => updatesById.has(message.id),
+        (message) => {
+          const nextMessage = updatesById.get(message.id);
+          return nextMessage
+            ? applyMessageMetadata(message, {
+                isUnread: nextMessage.isUnread,
+                labelIds: nextMessage.labelIds,
+                threadLabelIds,
+              })
+            : message;
+        }
+      )
+  );
+
+  await persistQueryKeys(queryClient, [...touchedQueryKeys, threadQueryKey]);
 };

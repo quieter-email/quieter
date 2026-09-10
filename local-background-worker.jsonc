@@ -12,6 +12,19 @@
     },
   ],
   "dev": { "ip": "127.0.0.1", "port": 8787 },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "GmailLiveSyncMailboxV2",
+        "class_name": "GmailLiveSyncMailboxV2",
+      },
+    ],
+  },
+  // The pre-revert class was deleted by production migration v2, so local
+  // development starts a fresh tag for the re-created class.
+  "migrations": [
+    { "tag": "v2", "new_sqlite_classes": ["GmailLiveSyncMailboxV2"] },
+  ],
   "queues": {
     "producers": [
       { "binding": "GmailPsQueue", "queue": "quieter-local-gmail" },

@@ -17,6 +17,7 @@ export {
 } from "@quieter/mail/messages";
 
 export const GMAIL_QUERY_STALE_TIME_MS = 1000 * 30;
+export const GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS = 1000 * 60;
 
 const normalizeLabelIds = (
   labelIds: string[] | undefined

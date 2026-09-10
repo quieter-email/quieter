@@ -8,10 +8,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { getLocalMailStorage, LOCAL_MAIL_BUCKET } from "./local-storage";
 import { recordInboundManagedMessage } from "./messages/ingestion";
 
-export const seedLocalManagedMail = async (
-  ownerEmail: string,
-  incoming = false
-) => {
+export const seedLocalManagedMail = async (ownerEmail: string) => {
   if (serverEnv.QUIETER_DEPLOYMENT_ENV !== "local") {
     throw new Error("Mail fixtures are only available in local development.");
   }
@@ -84,20 +81,14 @@ export const seedLocalManagedMail = async (
       "The existing fixture mailbox no longer matches this local account."
     );
   }
-  const fixtureId = incoming ? `incoming-${crypto.randomUUID()}` : "welcome-v1";
-  const subject = incoming
-    ? `Incoming sync fixture ${fixtureId.slice(-8)}`
-    : "Local mail fixture with attachment";
-  const key = `fixtures/${suffix}/${fixtureId}.eml`;
+  const key = `fixtures/${suffix}/welcome-v1.eml`;
   const raw = new TextEncoder().encode(
     [
       "From: Local fixture <sender@example.test>",
       `To: ${address}`,
-      `Subject: ${subject}`,
-      `Message-ID: <${fixtureId}.${suffix}@quieter.test>`,
-      incoming
-        ? `Date: ${now.toUTCString()}`
-        : "Date: Sat, 05 Sep 2026 12:00:00 +0000",
+      "Subject: Local mail fixture with attachment",
+      `Message-ID: <welcome-v1.${suffix}@quieter.test>`,
+      "Date: Sat, 05 Sep 2026 12:00:00 +0000",
       "MIME-Version: 1.0",
       'Content-Type: multipart/mixed; boundary="quieter-local-fixture"',
       "",
@@ -105,7 +96,6 @@ export const seedLocalManagedMail = async (
       'Content-Type: text/plain; charset="utf-8"',
       "",
       "This message was created locally. It was never sent through an email provider.",
-      `Fixture: ${fixtureId}`,
       "",
       "--quieter-local-fixture",
       'Content-Type: text/plain; name="local-note.txt"',
@@ -119,7 +109,7 @@ export const seedLocalManagedMail = async (
   );
   await storage.put(key, raw);
   await recordInboundManagedMessage({
-    providerMessageId: `local-${fixtureId}-${suffix}`,
+    providerMessageId: `local-welcome-v1-${suffix}`,
     rawMessage: raw,
     rawObjectBucket: LOCAL_MAIL_BUCKET,
     rawObjectKey: key,
@@ -131,7 +121,6 @@ export const seedLocalManagedMail = async (
   return {
     mailboxId,
     storage: "local",
-    subject,
     url: `http://localhost:3000/?mailboxId=${mailboxId}&mailbox=inbox&query=&view=inbox`,
   };
 };

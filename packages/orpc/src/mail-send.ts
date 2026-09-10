@@ -10,7 +10,6 @@ import {
   recordOrganizationMailUsage,
 } from "@quieter/billing/organization-mail-usage";
 import { db } from "@quieter/database/client";
-import type { DatabaseTransaction } from "@quieter/database/client";
 import {
   mailbox,
   managedMailMessage,
@@ -24,7 +23,6 @@ import { reportError } from "@quieter/observability";
 import { and, asc, eq, inArray, lt, sql } from "drizzle-orm";
 
 import { assertLocalMailSend } from "./local-managed-mail";
-import { withManagedSyncTransaction } from "./mail-sync-runtime";
 import { recordOutboundManagedMessageForSender } from "./managed-mail/messages/outbound";
 import { readRawMailObject } from "./managed-mail/messages/raw-object";
 import { storeRawMailObject } from "./managed-mail/messages/raw-object-lifecycle";
@@ -106,7 +104,7 @@ const completeMailSend = async (operation: MailSend) => {
   if (failed) {
     throw failed.reason;
   }
-  const finalize = async (tx: DatabaseTransaction) => {
+  await db.transaction(async (tx) => {
     if (
       snapshot.mailboxId !== undefined &&
       snapshot.draftId !== undefined &&
@@ -142,16 +140,7 @@ const completeMailSend = async (operation: MailSend) => {
           eq(organizationMailSendIdempotency.status, "accepted")
         )
       );
-  };
-  if (snapshot.mailboxId === undefined) {
-    await db.transaction(finalize);
-  } else {
-    await withManagedSyncTransaction(
-      snapshot.mailboxId,
-      { messageIds: snapshot.draftId === undefined ? [] : [snapshot.draftId] },
-      finalize
-    );
-  }
+  });
 };
 
 export const sendPreparedMail = async (input: {

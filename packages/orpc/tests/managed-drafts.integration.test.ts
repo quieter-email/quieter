@@ -1,4 +1,3 @@
-import "./sync-runtime-fixture";
 import { db } from "@quieter/database/client";
 import {
   mailbox,
@@ -206,12 +205,7 @@ describe.skipIf(state.databaseUrl === undefined)(
         await expect(
           saveManagedDraft({
             ...input,
-            draft: {
-              ...draft,
-              baseVersion: saved.draftVersion,
-              draftId: saved.draftId,
-              subject: "Changed",
-            },
+            draft: { ...draft, draftId: saved.draftId, subject: "Changed" },
           })
         ).rejects.toThrow("Storage unavailable");
       } finally {
@@ -358,12 +352,7 @@ describe.skipIf(state.databaseUrl === undefined)(
           async (subject) =>
             await saveManagedDraft({
               ...input,
-              draft: {
-                ...draft,
-                baseVersion: saved.draftVersion,
-                draftId: saved.draftId,
-                subject,
-              },
+              draft: { ...draft, draftId: saved.draftId, subject },
             })
         )
       );

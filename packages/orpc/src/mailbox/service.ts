@@ -34,7 +34,6 @@ import {
   GMAIL_SCOPES,
   runAuthorizedGmailMailbox,
 } from "../gmail-mailbox-access";
-import { notifyMailboxAccessChanged } from "../mail-sync-runtime";
 import { getOrganizationApiMailboxId } from "../organization-api-mail";
 import {
   assertOwnedGmailMailbox,
@@ -1281,7 +1280,6 @@ export const disconnectGmailMailbox = async (input: {
     .where(
       and(eq(user.id, input.userId), eq(user.defaultMailboxId, input.mailboxId))
     );
-  await notifyMailboxAccessChanged(input.mailboxId, [input.userId]);
   return { disconnected: true, mailboxId: input.mailboxId };
 };
 
@@ -1292,7 +1290,7 @@ export const moveGmailMailbox = async (input: {
 }) => {
   await assertOrganizationMembership(input.userId, input.organizationId);
 
-  const result = await withGmailMailboxCapacity(input, async (database) => {
+  return await withGmailMailboxCapacity(input, async (database) => {
     const [updatedMailbox] = await database
       .update(mailbox)
       .set({ organizationId: input.organizationId, updatedAt: new Date() })
@@ -1309,8 +1307,6 @@ export const moveGmailMailbox = async (input: {
     }
     return updatedMailbox;
   });
-  await notifyMailboxAccessChanged(input.mailboxId, [input.userId]);
-  return result;
 };
 
 export const updateGmailMailboxDisplayName = async (input: {

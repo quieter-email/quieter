@@ -5,7 +5,6 @@ import {
   decodePartBody,
   decodeMimeHeaderValue,
   extractMessageAttachments,
-  extractInlineMessageAttachments,
   extractMessageContent,
   findRenderablePart,
 } from "@quieter/mail/message-content";
@@ -20,6 +19,7 @@ import type {
   ListMessagesPageResult,
   ThreadMessagesResult,
   MailLabelListItem,
+  MailboxSyncDelta,
   MessagePart,
 } from "@quieter/mail/messages";
 import { getSenderAvatarUrls } from "@quieter/mail/sender-avatar";
@@ -978,14 +978,7 @@ const toMessageListItem = async (
   return {
     attachments:
       includeBody || options.includeAttachmentMetadata === true
-        ? [
-            ...extractMessageAttachments(message.payload),
-            ...(labelIds?.includes("DRAFT") === true
-              ? extractInlineMessageAttachments(message.payload).map(
-                  (attachment) => ({ ...attachment, inline: true })
-                )
-              : []),
-          ]
+        ? extractMessageAttachments(message.payload)
         : undefined,
     bcc: getHeader(message, "Bcc"),
     bodyHtml: content.html,
@@ -1452,79 +1445,6 @@ export const stopGmailWatch = async (
   );
 };
 
-export const listGmailSyncThreads = async (
-  accessToken: string,
-  options: {
-    pageToken?: string;
-    maxResults?: number;
-    signal?: AbortSignal;
-  } = {}
-) =>
-  await requestGmail(
-    accessToken,
-    "/gmail/v1/users/me/threads",
-    listThreadsSchema,
-    {
-      query: {
-        includeSpamTrash: true,
-        maxResults: options.maxResults ?? 10,
-        pageToken: options.pageToken,
-      },
-      signal: options.signal,
-    }
-  );
-
-export const listGmailSyncHistoryPage = async (
-  accessToken: string,
-  options: { startHistoryId: string; pageToken?: string; signal?: AbortSignal }
-) => {
-  try {
-    const response = await requestGmail(
-      accessToken,
-      "/gmail/v1/users/me/history",
-      listHistorySchema,
-      {
-        query: {
-          fields: GMAIL_HISTORY_FIELDS,
-          maxResults: 100,
-          pageToken: options.pageToken,
-          startHistoryId: options.startHistoryId,
-        },
-        signal: options.signal,
-      }
-    );
-    const threadIds = new Set<string>();
-    for (const record of response.history ?? []) {
-      for (const entry of [
-        ...(record.messagesAdded ?? []),
-        ...(record.messagesDeleted ?? []),
-        ...(record.labelsAdded ?? []),
-        ...(record.labelsRemoved ?? []),
-      ]) {
-        if (entry.message.threadId) {
-          threadIds.add(entry.message.threadId);
-        }
-      }
-    }
-    return {
-      expired: false,
-      historyId: response.historyId ?? options.startHistoryId,
-      nextPageToken: response.nextPageToken,
-      threadIds: [...threadIds],
-    };
-  } catch (error) {
-    if (isErrorWithStatus(error) && error.status === 404) {
-      return {
-        expired: true,
-        historyId: options.startHistoryId,
-        nextPageToken: undefined,
-        threadIds: [],
-      };
-    }
-    throw error;
-  }
-};
-
 export const listGmailAddedMessageHistoryPage = async (
   accessToken: string,
   options: {
@@ -1980,7 +1900,6 @@ export const getThreadWithDetails = async (
       ? {
           ...message,
           draftId: draftIdsByMessageId.get(message.id),
-          draftVersion: message.id,
         }
       : message
   );
@@ -2143,6 +2062,253 @@ export const deleteLabel = async (
   );
 
   return { id: labelId };
+};
+
+type MailboxSyncDeltaState = {
+  changedMessageIds: Set<string>;
+  mailboxAdditionCandidateIds: Set<string>;
+  removedMessageIds: Set<string>;
+  refreshFirstPage: boolean;
+};
+
+const applyHistoryRecordToMailboxSyncDelta = (
+  historyRecord: z.infer<typeof gmailHistoryRecordSchema>,
+  mailboxLabel: string | undefined,
+  state: MailboxSyncDeltaState
+) => {
+  for (const deleted of historyRecord.messagesDeleted ?? []) {
+    state.removedMessageIds.add(deleted.message.id);
+    state.changedMessageIds.delete(deleted.message.id);
+    state.mailboxAdditionCandidateIds.delete(deleted.message.id);
+    state.refreshFirstPage = true;
+  }
+
+  for (const labelsAdded of historyRecord.labelsAdded ?? []) {
+    const labelIds = normalizeLabelIds(labelsAdded.labelIds);
+    state.changedMessageIds.add(labelsAdded.message.id);
+
+    if (
+      mailboxLabel !== undefined &&
+      labelIds !== undefined &&
+      labelIds.includes(mailboxLabel)
+    ) {
+      state.removedMessageIds.delete(labelsAdded.message.id);
+      state.mailboxAdditionCandidateIds.add(labelsAdded.message.id);
+      state.refreshFirstPage = true;
+    }
+  }
+
+  for (const labelsRemoved of historyRecord.labelsRemoved ?? []) {
+    const labelIds = normalizeLabelIds(labelsRemoved.labelIds);
+    if (
+      mailboxLabel !== undefined &&
+      labelIds?.includes(mailboxLabel) === true
+    ) {
+      state.removedMessageIds.add(labelsRemoved.message.id);
+      state.changedMessageIds.delete(labelsRemoved.message.id);
+      state.mailboxAdditionCandidateIds.delete(labelsRemoved.message.id);
+      state.refreshFirstPage = true;
+      continue;
+    }
+
+    state.changedMessageIds.add(labelsRemoved.message.id);
+  }
+
+  for (const added of historyRecord.messagesAdded ?? []) {
+    if (state.removedMessageIds.has(added.message.id)) {
+      state.removedMessageIds.delete(added.message.id);
+    }
+
+    state.changedMessageIds.add(added.message.id);
+    state.mailboxAdditionCandidateIds.add(added.message.id);
+  }
+};
+
+const fetchMailboxHistoryPages = async (
+  accessToken: string,
+  options: {
+    startHistoryId: string;
+    signal?: AbortSignal;
+  },
+  mailboxLabel: string | undefined,
+  state: MailboxSyncDeltaState
+): Promise<string> => {
+  const fetchPage = async (
+    pageToken: string | undefined,
+    nextHistoryId: string
+  ): Promise<string> => {
+    const response = await requestGmail(
+      accessToken,
+      "/gmail/v1/users/me/history",
+      listHistorySchema,
+      {
+        query: {
+          fields: GMAIL_HISTORY_FIELDS,
+          historyTypes: [
+            "messageAdded",
+            "messageDeleted",
+            "labelAdded",
+            "labelRemoved",
+          ],
+          maxResults: 100,
+          pageToken,
+          startHistoryId: options.startHistoryId,
+        },
+        signal: options.signal,
+      }
+    );
+
+    const historyId = response.historyId ?? nextHistoryId;
+
+    for (const historyRecord of response.history ?? []) {
+      applyHistoryRecordToMailboxSyncDelta(historyRecord, mailboxLabel, state);
+    }
+
+    const { nextPageToken } = response;
+    if ((nextPageToken ?? "") === "") {
+      return historyId;
+    }
+
+    return await fetchPage(nextPageToken, historyId);
+  };
+
+  return await fetchPage(undefined, options.startHistoryId);
+};
+
+const buildMailboxSyncUpdatedMessages = async (
+  accessToken: string,
+  mailbox: MailboxCategory,
+  changedMessages: (GmailMessage | null)[],
+  mailboxAdditionCandidateIds: Set<string>,
+  removedMessageIds: Set<string>,
+  signal?: AbortSignal
+): Promise<{ messages: MessageListItem[]; refreshFirstPage: boolean }> => {
+  let refreshFirstPage = false;
+  const inMailboxMessages: GmailMessage[] = [];
+
+  for (const changedMessage of changedMessages) {
+    if (changedMessage === null) {
+      continue;
+    }
+
+    if (
+      !isMessageInMailbox(mailbox, normalizeLabelIds(changedMessage.labelIds))
+    ) {
+      removedMessageIds.add(changedMessage.id);
+      continue;
+    }
+
+    if (mailboxAdditionCandidateIds.has(changedMessage.id)) {
+      refreshFirstPage = true;
+    }
+
+    inMailboxMessages.push(changedMessage);
+  }
+
+  const updatedMessages = await Promise.all(
+    inMailboxMessages.map(
+      async (message) => await toMessageListItem(accessToken, message)
+    )
+  );
+
+  const threadSummariesById = await getThreadListSummaries(
+    accessToken,
+    updatedMessages.map((message) => message.threadId),
+    { includeDrafts: mailbox === "drafts" },
+    signal
+  );
+
+  return {
+    messages: updatedMessages.map((updatedMessage) => {
+      const threadSummary = threadSummariesById.get(updatedMessage.threadId);
+      if (threadSummary === undefined) {
+        return updatedMessage;
+      }
+
+      return {
+        ...updatedMessage,
+        threadAttachmentCount: threadSummary.attachmentCount,
+        threadMessageCount: threadSummary.messageCount,
+      };
+    }),
+    refreshFirstPage,
+  };
+};
+
+export const getMailboxSyncDelta = async (
+  accessToken: string,
+  options: {
+    mailbox: MailboxCategory;
+    startHistoryId: string;
+    signal?: AbortSignal;
+  }
+): Promise<MailboxSyncDelta> => {
+  const mailboxLabel =
+    options.mailbox === "archive" ? undefined : MAILBOX_LABELS[options.mailbox];
+  const state: MailboxSyncDeltaState = {
+    changedMessageIds: new Set<string>(),
+    mailboxAdditionCandidateIds: new Set<string>(),
+    refreshFirstPage: false,
+    removedMessageIds: new Set<string>(),
+  };
+
+  let nextHistoryId = options.startHistoryId;
+
+  try {
+    nextHistoryId = await fetchMailboxHistoryPages(
+      accessToken,
+      {
+        signal: options.signal,
+        startHistoryId: options.startHistoryId,
+      },
+      mailboxLabel,
+      state
+    );
+  } catch (error) {
+    if (isErrorWithStatus(error) && error.status === 404) {
+      return {
+        hasChanges: true,
+        historyId: undefined,
+        refreshFirstPage: false,
+        removedMessageIds: [],
+        requiresFullRefresh: true,
+        updatedMessages: [],
+      };
+    }
+
+    throw error;
+  }
+
+  let updatedMessages: MessageListItem[] = [];
+
+  if (state.changedMessageIds.size > 0) {
+    const changedMessages = await getGmailMessagesMetadata(
+      accessToken,
+      [...state.changedMessageIds],
+      options.signal
+    );
+    const builtMessages = await buildMailboxSyncUpdatedMessages(
+      accessToken,
+      options.mailbox,
+      changedMessages,
+      state.mailboxAdditionCandidateIds,
+      state.removedMessageIds,
+      options.signal
+    );
+    updatedMessages = builtMessages.messages;
+    if (builtMessages.refreshFirstPage) {
+      state.refreshFirstPage = true;
+    }
+  }
+
+  return {
+    hasChanges: nextHistoryId !== options.startHistoryId,
+    historyId: nextHistoryId,
+    refreshFirstPage: state.refreshFirstPage,
+    removedMessageIds: [...state.removedMessageIds],
+    requiresFullRefresh: false,
+    updatedMessages,
+  };
 };
 
 const toMessageMetadataUpdate = (
@@ -2331,49 +2497,6 @@ export const sendRawMessage = async (
       signal,
     }
   );
-
-export const findGmailSubmission = async (
-  accessToken: string,
-  recoveryKey: string,
-  kind: "draft" | "send",
-  signal?: AbortSignal
-) => {
-  if (!/^[a-f0-9]{64}$/u.test(recoveryKey)) {
-    throw new Error("Invalid submission recovery key.");
-  }
-  const query = `rfc822msgid:<quieter-${recoveryKey}@sync.quieter.email>`;
-  if (kind === "draft") {
-    const result = await listDrafts(accessToken, {
-      maxResults: 2,
-      query,
-      signal,
-    });
-    const [draft] = result.drafts;
-    return draft?.message === undefined || result.drafts.length !== 1
-      ? null
-      : {
-          id: draft.id,
-          messageId: draft.message.id,
-          threadId: draft.message.threadId,
-        };
-  }
-  const result = await requestGmail(
-    accessToken,
-    "/gmail/v1/users/me/messages",
-    listMessagesSchema,
-    {
-      query: {
-        includeSpamTrash: true,
-        labelIds: ["SENT"],
-        maxResults: 2,
-        q: query,
-      },
-      signal,
-    }
-  );
-  const [message] = result.messages;
-  return result.messages.length === 1 ? message : null;
-};
 
 export const deleteDraft = async (
   accessToken: string,
