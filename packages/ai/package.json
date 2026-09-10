@@ -18,7 +18,8 @@
     "./parse-mail-search": "./src/parse-mail-search.ts",
     "./suggest-template-placeholder": "./src/suggest-template-placeholder.ts",
     "./transcription-format": "./src/transcription-format.ts",
-    "./chat-transcript": "./src/chat-transcript.ts"
+    "./chat-transcript": "./src/chat-transcript.ts",
+    "./errors": "./src/errors.ts"
   },
   "dependencies": {
     "@openrouter/ai-sdk-provider": "catalog:",
