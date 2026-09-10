@@ -6,7 +6,7 @@
     "./worker": "./src/worker.ts"
   },
   "scripts": {
-    "dev": "wrangler dev --config ../../local-sync-worker.jsonc --local --persist-to ../../.wrangler/state",
+    "dev": "wrangler dev --config ../../local-sync-worker.jsonc --local --persist-to ../../.wrangler/state --log-level warn --show-interactive-dev-session false",
     "cf-typegen": "wrangler types worker-configuration.d.ts --config wrangler.types.jsonc --env-interface SyncEnv --strict-vars false",
     "cf-typecheck": "wrangler types worker-configuration.d.ts --config wrangler.types.jsonc --env-interface SyncEnv --strict-vars false --check",
     "test:workers": "vp test run --config vite.config.ts"

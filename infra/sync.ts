@@ -4,7 +4,7 @@ import type { createAppDatabase } from "./database";
 import type { DeploymentContext } from "./runtime";
 import { cloudflareWorkerObservability } from "./runtime";
 import { requireSecretBinding, requireSecretResource } from "./secrets";
-import { deploymentEnvironment } from "./stage";
+import { deploymentEnvironment, production } from "./stage";
 import type { SecretBindings, SecretResources } from "./types";
 
 export const createMailSyncResources = (
@@ -26,6 +26,7 @@ export const createMailSyncResources = (
   const queue = new sst.cloudflare.Queue("MailSyncQueue");
   const worker = new sst.cloudflare.Worker("MailSyncWorker", {
     compatibility: { date: COMPATIBILITY_DATE, flags: ["nodejs_compat"] },
+    domain: production ? "sync.quieter.email" : undefined,
     environment: {
       ...context.billingEnvironment,
       QUIETER_DEPLOYMENT_ENV: deploymentEnvironment,
@@ -99,12 +100,15 @@ export const createMailSyncResources = (
   });
   void consumer;
   void maintenance;
-  const url = worker.url.apply((value) => {
-    if (value === undefined || value === "") {
-      throw new Error("MailSyncWorker did not expose a URL.");
-    }
-    return value;
-  });
+  // Preview must resolve application configuration before the first Worker deploy.
+  const url = production
+    ? "https://sync.quieter.email"
+    : worker.url.apply((value) => {
+        if (value === undefined || value === "") {
+          throw new Error("MailSyncWorker did not expose a URL.");
+        }
+        return value;
+      });
   return {
     environment: { MAIL_SYNC_URL: url },
     secret,
