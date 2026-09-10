@@ -7,7 +7,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { Store } from "@tanstack/store";
 
 import { isExpectedClientError } from "#/lib/client-error-reporting";
-import { setMailReplicaPersistence } from "#/lib/query-persister";
+import { rpc } from "#/lib/orpc";
 
 import { mailSyncApi } from "./api";
 import { recordMailSyncMeasurement } from "./measurements";
@@ -63,6 +63,7 @@ export class MailSyncSession {
   readonly adapter: MailSyncQueryAdapter;
   readonly drafts: Promise<DraftJournal | null>;
   private mailboxIds = new Set<string>();
+  private readonly commandQueues = new Map<string, Promise<null>>();
 
   private constructor(userId: string, queryClient: QueryClient) {
     this.drafts = (async () => {
@@ -130,7 +131,7 @@ export class MailSyncSession {
   static start(userId: string, queryClient: QueryClient) {
     const session = new MailSyncSession(userId, queryClient);
     current = session;
-    setMailReplicaPersistence(true);
+
     return session;
   }
 
@@ -155,20 +156,56 @@ export class MailSyncSession {
       })
     );
     this.adapter.setMailboxes(mailboxes);
+    if (current === this) {
+      mailSyncState.setState((state) => ({ ...state, mailboxIds: [...next] }));
+    }
     await this.client.action({
       input: { mailboxIds: [...next] },
       method: "subscribe",
     });
-    if (current === this) {
-      mailSyncState.setState((state) => ({ ...state, mailboxIds: [...next] }));
-    }
   }
 
   static forMailbox(mailboxId: string) {
     return current?.mailboxIds.has(mailboxId) === true &&
-      mailSyncState.state.status?.connection !== "disabled"
+      mailSyncState.state.mailboxIds.includes(mailboxId)
       ? current
       : null;
+  }
+
+  static async waitForMailbox(mailboxId: string, signal?: AbortSignal) {
+    signal?.throwIfAborted();
+    const ready = MailSyncSession.forMailbox(mailboxId);
+    if (ready !== null) {
+      return ready;
+    }
+    const owner = current;
+    const pending = Promise.withResolvers<MailSyncSession>();
+    const abort = () => {
+      pending.reject(new DOMException("Mail request cancelled.", "AbortError"));
+    };
+    const timeout = setTimeout(() => {
+      pending.reject(
+        new Error("Mail synchronization is unavailable. Please retry.")
+      );
+    }, 20_000);
+    const subscription = mailSyncState.subscribe(() => {
+      if (owner !== null && current !== owner) {
+        pending.reject(new DOMException("Mail session ended.", "AbortError"));
+      } else {
+        const session = MailSyncSession.forMailbox(mailboxId);
+        if (session !== null) {
+          pending.resolve(session);
+        }
+      }
+    });
+    signal?.addEventListener("abort", abort, { once: true });
+    try {
+      return await pending.promise;
+    } finally {
+      clearTimeout(timeout);
+      subscription.unsubscribe();
+      signal?.removeEventListener("abort", abort);
+    }
   }
 
   async command(
@@ -189,7 +226,11 @@ export class MailSyncSession {
       targets,
     };
     this.adapter.addCommand(input);
+    const previous = this.commandQueues.get(mailboxId);
+    const completed = Promise.withResolvers<null>();
+    this.commandQueues.set(mailboxId, completed.promise);
     try {
+      await previous;
       const receipt = await this.client.command(input);
       if (receipt.status === "failed") {
         throw Object.assign(
@@ -223,7 +264,17 @@ export class MailSyncSession {
         );
       }
       throw error;
+    } finally {
+      completed.resolve(null);
+      if (this.commandQueues.get(mailboxId) === completed.promise) {
+        this.commandQueues.delete(mailboxId);
+      }
     }
+  }
+
+  async refresh(mailboxId: string) {
+    await rpc.mail.refreshSyncMailbox({ mailboxId });
+    await this.client.action({ input: { mailboxId }, method: "catch-up" });
   }
 
   warm(mailboxId: string, threadIds: string[], priority = 1) {
@@ -245,7 +296,7 @@ export class MailSyncSession {
   async stop(purge: boolean) {
     if (current === this) {
       current = null;
-      setMailReplicaPersistence(false);
+
       mailSyncState.setState(() => ({ mailboxIds: [], status: null }));
     }
     this.adapter.dispose();

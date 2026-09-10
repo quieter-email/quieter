@@ -41,7 +41,7 @@ export const MailCacheSettings = () => {
       toastError(error, { boundary: "mail_cache_settings" });
     },
   });
-  if (status === null || status.connection === "disabled") {
+  if (status === null) {
     return null;
   }
   const session = MailSyncSession.forMailbox(mailboxIds[0] ?? "");

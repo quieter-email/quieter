@@ -8,7 +8,6 @@ import {
   optionalString,
   optionalUrl,
   throwEnvironmentValidationError,
-  webSocketUrl,
 } from "./schema";
 import type { RuntimeEnvironment } from "./schema";
 
@@ -34,8 +33,6 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       DOMAIN_CONNECT_PRIVATE_KEY_B64: runtimeEnv.DOMAIN_CONNECT_PRIVATE_KEY_B64,
       GMAIL_CREDENTIAL_ROTATION_TOKEN:
         runtimeEnv.GMAIL_CREDENTIAL_ROTATION_TOKEN,
-      GMAIL_LIVE_SYNC_TOKEN_SECRET: runtimeEnv.GMAIL_LIVE_SYNC_TOKEN_SECRET,
-      GMAIL_LIVE_SYNC_URL: runtimeEnv.GMAIL_LIVE_SYNC_URL,
       GMAIL_PUBSUB_PUSH_AUDIENCE: runtimeEnv.GMAIL_PUBSUB_PUSH_AUDIENCE,
       GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT:
         runtimeEnv.GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT,
@@ -84,10 +81,6 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       QUIETER_LOCAL_WORKER_TOKEN: runtimeEnv.QUIETER_LOCAL_WORKER_TOKEN,
       QUIETER_MAIL_API_KEY: runtimeEnv.QUIETER_MAIL_API_KEY,
       QUIETER_MAIL_API_URL: runtimeEnv.QUIETER_MAIL_API_URL,
-      QUIETER_MAIL_SYNC_CLIENT_ENABLED:
-        runtimeEnv.QUIETER_MAIL_SYNC_CLIENT_ENABLED,
-      QUIETER_MAIL_SYNC_CLIENT_USERS: runtimeEnv.QUIETER_MAIL_SYNC_CLIENT_USERS,
-      QUIETER_MAIL_SYNC_ENABLED: runtimeEnv.QUIETER_MAIL_SYNC_ENABLED,
       QUIETER_PREVIEW_PERSONAS_ENABLED:
         runtimeEnv.QUIETER_PREVIEW_PERSONAS_ENABLED,
       R2_ACCESS_KEY_ID: runtimeEnv.R2_ACCESS_KEY_ID,
@@ -127,8 +120,6 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       DATABASE_URL: optionalUrl,
       DOMAIN_CONNECT_PRIVATE_KEY_B64: optionalString,
       GMAIL_CREDENTIAL_ROTATION_TOKEN: optionalString,
-      GMAIL_LIVE_SYNC_TOKEN_SECRET: optionalString,
-      GMAIL_LIVE_SYNC_URL: webSocketUrl.optional(),
       GMAIL_PUBSUB_PUSH_AUDIENCE: optionalHttpUrl,
       GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT: z.email().optional(),
       GMAIL_PUBSUB_SUBSCRIPTION: optionalString,
@@ -175,9 +166,6 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       QUIETER_LOCAL_WORKER_TOKEN: z.string().min(32).optional(),
       QUIETER_MAIL_API_KEY: optionalString,
       QUIETER_MAIL_API_URL: optionalHttpUrl,
-      QUIETER_MAIL_SYNC_CLIENT_ENABLED: optionalBooleanString,
-      QUIETER_MAIL_SYNC_CLIENT_USERS: optionalString,
-      QUIETER_MAIL_SYNC_ENABLED: optionalBooleanString,
       QUIETER_PREVIEW_PERSONAS_ENABLED: optionalBooleanString,
       R2_ACCESS_KEY_ID: optionalString,
       R2_ACCOUNT_ID: optionalString,

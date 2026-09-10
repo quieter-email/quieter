@@ -38,7 +38,6 @@ export const createInfrastructure = async (input: {
     appDatabase,
     webSecretBindings,
     {
-      GMAIL_LIVE_SYNC_URL: gmail.gmailLiveSyncUrl,
       ...sync.environment,
       MAIL_BUCKET: mail.mailBucket.name,
       MAIL_RECEIPT_ROLE_ARN: mail.mailReceiptRole.arn,
@@ -56,11 +55,6 @@ export const createInfrastructure = async (input: {
   );
 
   return {
-    gmailLiveSyncTokenSecretName: requireSecretResource(
-      secretResources,
-      "GMAIL_LIVE_SYNC_TOKEN_SECRET"
-    ).name,
-    gmailLiveSyncUrl: gmail.gmailLiveSyncUrl,
     gmailPubSubIngressUrl: gmail.gmailPubSubIngressUrl,
     gmailPubSubPushAudience:
       context.gmailPubSubEnvironment.GMAIL_PUBSUB_PUSH_AUDIENCE || null,

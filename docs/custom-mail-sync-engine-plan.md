@@ -1,6 +1,6 @@
 # Custom mail sync engine plan
 
-Status: implemented on the feature branch, with local verification complete. Recorded on September 9, 2026. See [implementation and rollout](mail-sync-implementation.md) for the delivered behavior, operating instructions, and production prerequisites.
+Status: implemented on the feature branch. Updated September 10, 2026 to use a single custom engine with no legacy runtime or activation flags. Gmail live updates are available to all plans, with 5 / 25 / 100 Gmail accounts per team on Free / Managed / Pro. See [implementation and deployment](mail-sync-implementation.md) for delivered behavior, operating instructions and production prerequisites.
 
 Build a custom mail sync engine using Cloudflare Workers, Durable Objects, Queues, PostgreSQL, R2, and an IndexedDB client replica.
 
@@ -43,7 +43,7 @@ This plan records the custom-engine decision. Zero and other hosted replication 
    | Thread bodies live mainly in the in-memory query cache | Download and persist bodies before navigation |
    | Optimistic actions use several query-cache update paths | Centralize reconciliation and command tracking |
 
-   The relevant starting points are the existing [mail contracts](../packages/mail/src/data-plane.ts), [mail queries](../packages/orpc/src/mail/queries.ts), [Gmail live connection](../packages/cloudflare/src/gmail-live-sync-mailbox.ts), and [query persister](../apps/web/src/lib/query-persister.ts).
+   The retained integration points are the [mail contracts](../packages/mail/src/data-plane.ts) and [mail queries](../packages/orpc/src/mail/queries.ts). The former Gmail dirty-event connection and localStorage query persister have been deleted. Their replacements live in `packages/sync-client` and `packages/sync-worker`.
 
    This describes the codebase inspected for the plan. It does not claim that the current production services' health was verified.
 
@@ -433,9 +433,9 @@ This plan records the custom-engine decision. Zero and other hosted replication 
 
     Shadow operation can compare results, but must not execute provider mutations, send mail, or run automation twice. Each mailbox has one explicit provider-processing owner.
 
-    During rollout, compatibility query endpoints should read the new projection where needed. A UI rollback must not reactivate a competing provider writer.
+    The final implementation uses one engine with required runtime bindings. HTTP list, snapshot, replay and body reads remain authenticated parts of it. A rollback must preserve this protocol and must not reactivate a competing provider writer.
 
-    Keep old managed body columns until search, AI, rendering, and cleanup consumers have moved. Remove transitional paths after parity is established.
+    Managed body columns remain used by search and AI. No alternate sync runtime is retained.
 
 19. Test failure behavior as thoroughly as normal delivery.
 

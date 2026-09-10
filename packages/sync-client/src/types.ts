@@ -20,7 +20,7 @@ export type SyncReplayPage = {
   hasMore: boolean;
 };
 export type SyncApi = {
-  connection: (signal: AbortSignal) => Promise<{ url: string | null }>;
+  connection: (signal: AbortSignal) => Promise<{ url: string }>;
   snapshot: (
     mailboxId: string,
     signal: AbortSignal
@@ -80,8 +80,7 @@ export type SyncClientEvent =
         | "live"
         | "reconnecting"
         | "fallback"
-        | "paused"
-        | "disabled";
+        | "paused";
       persistent: boolean;
       cacheBytes: number;
       budgetBytes: number;

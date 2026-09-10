@@ -13,7 +13,6 @@ import { and, eq, sql } from "drizzle-orm";
 import type { z } from "zod";
 
 import {
-  isMailSyncEnabled,
   storeManagedSyncBody,
   withManagedSyncTransaction,
 } from "../../mail-sync-runtime";
@@ -55,7 +54,6 @@ export const saveManagedDraft = async (input: {
   }
   if (
     existing !== undefined &&
-    (draft.baseVersion !== undefined || isMailSyncEnabled()) &&
     draft.baseVersion !== existing.sentAt.toISOString()
   ) {
     throw new ORPCError("CONFLICT", {

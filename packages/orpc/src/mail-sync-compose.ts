@@ -11,17 +11,13 @@ import {
   withProviderLease,
 } from "@quieter/sync-server/lease";
 
-import { isMailSyncEnabled, mailSyncServices } from "./mail-sync-runtime";
+import { mailSyncServices } from "./mail-sync-runtime";
 
 export const withGmailComposeReplication = async <Result>(
   mailboxId: string,
   accessToken: string,
   run: () => Promise<{ result: Result; threadIds: string[] }>
 ): Promise<Result> => {
-  if (!isMailSyncEnabled()) {
-    const { result } = await run();
-    return result;
-  }
   const { repository, bodies, enqueue } = mailSyncServices();
   try {
     return await withProviderLease(

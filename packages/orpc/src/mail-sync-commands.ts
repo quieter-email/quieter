@@ -16,10 +16,7 @@ import {
 import { and, eq } from "drizzle-orm";
 
 import { runAuthorizedGmailMailbox } from "./gmail-mailbox-access";
-import {
-  getMailSyncConfiguration,
-  mailSyncServices,
-} from "./mail-sync-runtime";
+import { mailSyncServices } from "./mail-sync-runtime";
 import { mutationsMailOperations } from "./mail/mutations";
 import { getAuthorizedManagedMailbox } from "./mailbox/access";
 import { assertAccessibleMailbox } from "./mailbox/service";
@@ -100,9 +97,6 @@ export const submitMailSyncCommand = async (
   input: SyncCommand,
   userId: string
 ) => {
-  if (getMailSyncConfiguration() === null) {
-    throw new ORPCError("NOT_FOUND");
-  }
   const selected = await assertAccessibleMailbox({
     mailboxId: input.mailboxId,
     userId,

@@ -1,5 +1,4 @@
 import { db } from "@quieter/database/client";
-import { serverEnv } from "@quieter/env/server";
 import { reportError } from "@quieter/observability";
 import {
   maintainMailSynchronization,
@@ -191,9 +190,6 @@ export default withSyncReporting({
     }
   },
   async scheduled(_controller, env) {
-    if (serverEnv.QUIETER_MAIL_SYNC_ENABLED !== true) {
-      return;
-    }
     await withSyncRuntime(env, async () => {
       const started = Date.now();
       await maintainMailSynchronization();

@@ -16,16 +16,19 @@ flowchart TB
         direction TB
         subgraph EDGE["Edge / HTTP"]
             WEB["Web Worker<br/>sst: TanStack Start<br/>quieter.email + www<br/>SSR, oRPC, /api/chat,<br/>/api/v1/send, auth, Polar webhooks"]
-            GWORKER["GmailRealtimeWorker<br/>/gmail/pubsub (POST)<br/>/gmail/live (WebSocket)"]
+            GWORKER["GmailRealtimeWorker<br/>/gmail/pubsub (POST)"]
+            SYNC["Mail sync Worker<br/>authorized WebSockets, delivery and recovery"]
         end
 
         subgraph DO["Durable Objects"]
-            LSDO["GmailLiveSyncMailbox<br/>one per email address<br/>hibernatable WebSockets + /broadcast"]
+            MDO["MailboxSync<br/>job coalescing + subscribers"]
+            UDO["UserSync<br/>one per user<br/>hibernatable multiplexed sockets"]
         end
 
         subgraph QUEUES["Cloudflare Queues"]
             PSQ["GmailPsQueue<br/>retry 10 / 30s delay<br/>maxConcurrency 20"]
             PSD["GmailPsDlq"]
+            SYNCQ["Mail sync queue + DLQ"]
         end
 
         subgraph CONSUMERS["Queue consumers + crons (Workers)"]
@@ -36,6 +39,7 @@ flowchart TB
 
         HD["Hyperdrive AppDatabaseV2<br/>connection pooling, caching off"]
         R2["R2 bucket<br/>canonical raw mail<br/>mail/inbound/**"]
+        BODIES["Mail sync R2<br/>immutable content-addressed bodies"]
         CFLOG["Workers observability<br/>logs 100% / traces 1%"]
     end
 
@@ -68,14 +72,19 @@ flowchart TB
     end
 
     BROWSER -->|HTTPS SSR / oRPC / chat stream| WEB
-    BROWSER <-.->|wss /gmail/live?token| GWORKER
+    BROWSER <-.->|authenticated WebSocket| UDO
     GPUB -->|OIDC JWT push| GWORKER
-    GWORKER -->|mailbox-dirty| LSDO
-    GWORKER -->|process notification directly| HD
-    LSDO -.->|refresh signal| BROWSER
+    GWORKER -->|enqueue ingestion| SYNC
+    GWORKER -->|AI processing| HD
+    SYNC --> MDO
+    MDO --> SYNCQ
+    SYNCQ --> SYNC
+    SYNC -->|transactional projection + log + outbox| HD
+    SYNC --> BODIES
+    MDO -->|committed batch| UDO
     PSQ --> PSW
     PSW -->|process + maintain| HD
-    PSW -->|details-dirty broadcast| LSDO
+    PSW -->|enqueue ingestion| SYNC
     PSMAINT -->|list connected mailboxes| HD
     PSMAINT -->|maintenance jobs| PSQ
     PSQ --> PSD
@@ -91,6 +100,7 @@ flowchart TB
     SESIN -->|receipt event| SNIN
     SNIN --> RECEIPT
     RECEIPT -->|DATABASE_URL direct| PG
+    RECEIPT -->|batch after commit| SYNC
     INGRESS --> PG
     SESOUT -->|delivery events| SNOUT
     SNOUT -->|direct invoke| FEED
@@ -123,11 +133,12 @@ flowchart TB
 | Resource | SST type | Entry point | Triggered by | Talks to | Notes |
 | --- | --- | --- | --- | --- | --- |
 | `Web` | `sst.cloudflare.TanStackStart` | `apps/web` | Browser HTTPS | Hyperdrive, SESv2, Gmail API, OpenRouter, Polar, Sentry, R2 | Production domain `quieter.email` (+ `www` redirect), logs + traces on, linked scoped AWS credentials via `WebAwsPermissions` for `ses:SendEmail`/`SendRawEmail`. |
-| `GmailRealtimeWorker` | `sst.cloudflare.Worker` | `packages/cloudflare/src/worker.ts` | Google Pub/Sub push (POST `/gmail/pubsub`), browser WebSocket (`/gmail/live`) | Hyperdrive, processing secrets, `GmailLiveSyncMailbox` | Processes authenticated notifications before acknowledging. Verifies Google OIDC JWT against JWKS, checks subscription name, body limit 64 KiB. One DO per normalized email address. |
-| `GmailLiveSyncMailbox` | `sst.cloudflare.DurableObject` (SQLite, migration `v1`) | `packages/cloudflare/src/gmail-live-sync-mailbox.ts` | Worker fetch / WS upgrade | Browser sockets, workers via `/broadcast` | Hibernatable WebSockets, auto ping/pong, broadcasts `mailbox-dirty` and `mailbox-details-dirty`. |
+| `GmailRealtimeWorker` | `sst.cloudflare.Worker` | `packages/cloudflare/src/worker.ts` | Google Pub/Sub push, POST `/gmail/pubsub` | Hyperdrive, processing secrets, sync runtime | Verifies Google OIDC JWT, subscription name and 64 KiB body limit. Enqueues ingestion for every plan and processes paid AI before acknowledging. Failures and busy processing return a retryable error. |
+| `MailSyncWorker` | `sst.cloudflare.Worker` | `packages/sync-worker/src/worker.ts` | WebSockets, committed batches, queue, scheduled maintenance | Hyperdrive, sync DOs, queue and R2 | Dedicated provider-neutral transport, recovery, command processing and collection. See `infra/sync.ts` for resource names and bindings. |
+| `UserSync` / `MailboxSync` | SQLite Durable Objects | `packages/sync-worker/src/user-sync.ts`, `mailbox-sync.ts` | Authorized user connections and mailbox jobs | User sockets and subscriber routing | One logical user object per user and mailbox object per mailbox. Objects hibernate; they are not permanently running processes. |
 | `GmailPsQueue` / `GmailPsDlq` | `sst.cloudflare.Queue` | — | Producer: maintenance cron | Consumer `queue-worker.ts` | DLQ after 10 retries, 30 s retry delay, max concurrency 20, batch size 1. |
-| `queue-worker.ts` consumer | Worker (queue subscription) | `packages/cloudflare/src/queue-worker.ts` | `GmailPsQueue` messages | Hyperdrive, Gmail API, OpenRouter, Polar, DO | Handles maintenance and drains previously queued notifications; 5-minute CPU limit; per-message `retry` with exponential backoff, throws on busy mailbox lease. |
-| `GmailPubSubMaintenance` | `sst.cloudflare.Cron` | `packages/cloudflare/src/gmail-maintenance-worker.ts` | `*/15 * * * *` | Hyperdrive, `GmailPsQueue` | Due-driven selection (≤500/tick, ordered by soonest expiry): watch state missing, expiry within 72 h, renewal heartbeat overdue (36 h + hash jitter), stale reconciliation (2 h + jitter) for mailboxes with auto-labeling or useful-detail extraction enabled, or recent error backoff (1 h). Mailboxes receiving pushes stay fresh via `lastReconciledAt` and are never selected. |
+| `queue-worker.ts` consumer | Worker queue subscription | `packages/cloudflare/src/queue-worker.ts` | `GmailPsQueue` messages | Hyperdrive, Gmail API, OpenRouter, Polar, sync runtime | Handles watch maintenance and notification jobs with retries on busy processing leases. |
+| `GmailPubSubMaintenance` | `sst.cloudflare.Cron` | `packages/cloudflare/src/gmail-maintenance-worker.ts` | `*/15 * * * *` | Hyperdrive, `GmailPsQueue` | Selects up to 500 connected mailboxes with missing or expiring watches, or renewal overdue at 20 hours plus hash jitter. Error backoff is one hour. Live sync is available on all plans. |
 | `MailMaintenance` | `sst.cloudflare.Cron` | `packages/cloudflare/src/mail-maintenance-worker.ts` | every minute | Hyperdrive, R2, Polar, Sentry | Send recovery, storage cleanup, expired rate-limit cleanup, and managed rule backfills. |
 | `AppDatabaseV2` | `sst.cloudflare.Hyperdrive` | — | Worker DB access | PostgreSQL origin from `DatabaseUrl` secret | Caching disabled; production uses fixed Hyperdrive id. Workers use `withRequestDatabaseClient` per invocation. |
 | R2 bucket (external) | configured via `R2_*` env + access-key secrets, not an SST resource | — | Receipt processor, mail ingress | — | Canonical `.eml` storage under `mail/inbound/yyyy/mm/dd/uuid.eml`, read back by the web worker via S3-compatible API. |
@@ -154,7 +165,9 @@ flowchart TB
 | PostgreSQL | external, via `DatabaseUrl` secret | Everything: users, orgs, mailboxes, messages metadata, chats, retained legacy action records, credentials (encrypted), watch state, entitlements, delivery feedback, suppressions | Permanent; migrations via `packages/database` |
 | R2 | Cloudflare, referenced not provisioned | Canonical raw `.eml` objects for managed mail | Indefinite; deleted only when untracked by the ingestion transaction |
 | S3 `MailBucket` | AWS | SES landing copies only | 1-day lifecycle + eager delete after processing |
-| Durable Object storage | `GmailLiveSyncMailbox` | Live socket tags only | Ephemeral |
+| Durable Object storage | `UserSync`, `MailboxSync` | Socket attachments, subscriber leases and job coalescing | Bounded operational state; durable source of mail state remains PostgreSQL |
+| R2 sync bodies | `infra/sync.ts` | Immutable HTML/text bodies addressed by SHA-256 | Collected after 30 days only when no current or retained replay references remain |
+| Browser IndexedDB | User-scoped sync engine | Metadata, checkpoints, compressed bodies, pending commands and separate draft recovery | Bounded cache, revoked access and logout purge private state |
 
 ## Key Flows
 
@@ -166,7 +179,8 @@ sequenceDiagram
     participant G as Gmail
     participant P as Google Pub/Sub
     participant W as GmailRealtimeWorker
-    participant D as GmailLiveSyncMailbox DO
+    participant S as Mail sync runtime
+    participant D as MailboxSync / UserSync DOs
     participant DB as PostgreSQL
     participant A as Gmail API
     participant B as Browser
@@ -174,16 +188,17 @@ sequenceDiagram
     G->>P: mailbox changed (watch)
     P->>W: POST /gmail/pubsub (OIDC JWT)
     W->>W: verify JWT vs Google JWKS, subscription, parse payload
-    W->>D: broadcast mailbox-dirty
-    D-->>B: invalidate message/unread queries
-    W->>DB: claim 14-min processing lease, update lastNotificationAt
-    W->>DB: billing entitlement check
-    W->>A: history.list / messages.get / labels (up to 5 pages)
-    W->>DB: persist messages, auto-label/useful-detail results
-    W->>D: broadcast mailbox-details-dirty
-    D-->>B: refresh useful details
-    W->>D: broadcast mailbox-dirty
-    D-->>B: refresh message labels
+    W->>S: enqueue mailbox ingestion for every plan
+    S->>A: history and message changes
+    S->>DB: atomic projection, ordered log and outbox commit
+    S->>D: exact committed batch
+    D-->>B: versioned changes over WebSocket
+    B->>B: update replica and cached UI
+    opt Paid AI enabled
+        W->>A: process AI history
+        W->>DB: persist AI results with sync projection
+        W->>S: deliver committed changes
+    end
     W-->>P: 204 after processing, 5xx on failure or busy lease
 ```
 
@@ -197,19 +212,16 @@ sequenceDiagram
     participant Q as GmailPsQueue
     participant C as queue-worker consumer
     participant A as Gmail API
-    participant D as LiveSync DO
+    participant S as Mail sync runtime
 
-    CR->>DB: list due mailboxes (renewal, setup, or stale with automatic AI features enabled)
+    CR->>DB: list due watches for all connected Gmail mailboxes
     CR->>Q: sendBatch maintenance jobs (100/batch)
     Q->>C: deliver job
     C->>DB: status + entitlement re-check
-    alt ineligible
-        C->>A: watch.stop
-        C->>DB: clear watch state
-    else eligible
-        C->>A: watch.renew if due (20h interval / 48h buffer)
+    C->>A: watch.renew if due (20h interval / 48h buffer)
+    C->>S: enqueue ingestion
+    opt Paid AI enabled
         C->>A: history reconcile (2 pages)
-        C->>D: broadcast details-dirty when maintained
     end
     C-->>Q: ack / retry / DLQ
 ```

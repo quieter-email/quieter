@@ -1,9 +1,7 @@
 import { ORPCError } from "@orpc/server";
-import type { GmailMetadataChange } from "@quieter/gmail";
 import {
   batchModifyMessages,
   mutateGmailMessage,
-  mutateGmailThread,
   getGmailMessageThreadAssociations,
 } from "@quieter/gmail";
 import { reportError } from "@quieter/observability";
@@ -11,161 +9,13 @@ import { reportError } from "@quieter/observability";
 import { callGmail } from "../gmail-request";
 import type { MailRequestContext } from "../gmail-request";
 import { assertAccessibleMailbox } from "../mailbox/service";
-import {
-  updateManagedThreadLabels,
-  updateSingleManagedMessageLabels,
-} from "../managed-mail/labels/service";
-import {
-  setManagedMessageMailboxState,
-  setManagedMessageReadState,
-  setManagedThreadMailboxState,
-  setManagedThreadReadState,
-  applyManagedMessageChanges,
-} from "../managed-mail/messages/service";
+import { applyManagedMessageChanges } from "../managed-mail/messages/service";
 import {
   learnAiMemoryFromMailAction,
   recordLabelFeedback,
   recordGmailLabelFeedback,
 } from "./feedback";
 import type { MailInputs } from "./inputs";
-
-type MetadataOperation =
-  | "read"
-  | "unread"
-  | "trash"
-  | "untrash"
-  | {
-      addLabelIds?: string[];
-      removeLabelIds?: string[];
-    };
-
-type MessageMutationArgs = {
-  context: MailRequestContext;
-  input: { mailboxId: string; messageId: string };
-};
-
-const mutateMessage = async (
-  { context, input }: MessageMutationArgs,
-  operation: MetadataOperation
-) => {
-  const selectedMailbox = await assertAccessibleMailbox({
-    mailboxId: input.mailboxId,
-    userId: context.userId,
-  });
-  if (selectedMailbox.provider === "managed") {
-    const authorizedInput = { ...input, userId: context.userId };
-    if (operation === "read" || operation === "unread") {
-      return await setManagedMessageReadState({
-        ...authorizedInput,
-        read: operation === "read",
-      });
-    }
-    if (operation === "trash" || operation === "untrash") {
-      return await setManagedMessageMailboxState({
-        ...authorizedInput,
-        state: operation === "trash" ? "trash" : "active",
-      });
-    }
-    const result = await updateSingleManagedMessageLabels({
-      ...authorizedInput,
-      ...operation,
-    });
-    await recordLabelFeedback({
-      ...operation,
-      mailboxId: input.mailboxId,
-      providerMessageIds: [result.id],
-      userId: context.userId,
-    });
-    return result;
-  }
-  return await callGmail(context, input.mailboxId, async (accessToken) => {
-    let change: GmailMetadataChange;
-    if (operation === "read") {
-      change = { removeLabelIds: ["UNREAD"] };
-    } else if (operation === "unread") {
-      change = { addLabelIds: ["UNREAD"] };
-    } else {
-      change = operation;
-    }
-    const result = await mutateGmailMessage(
-      accessToken,
-      input.messageId,
-      change
-    );
-    if (typeof operation !== "string") {
-      await recordGmailLabelFeedback({
-        accessToken,
-        ...operation,
-        mailboxId: input.mailboxId,
-        providerMessageIds: [result.id],
-        userId: context.userId,
-      });
-    }
-    return result;
-  });
-};
-
-type ThreadMutationArgs = {
-  context: MailRequestContext;
-  input: { mailboxId: string; threadId: string };
-};
-
-const mutateThread = async (
-  { context, input }: ThreadMutationArgs,
-  operation: MetadataOperation
-) => {
-  const selectedMailbox = await assertAccessibleMailbox({
-    mailboxId: input.mailboxId,
-    userId: context.userId,
-  });
-  if (selectedMailbox.provider === "managed") {
-    const authorizedInput = { ...input, userId: context.userId };
-    if (operation === "read" || operation === "unread") {
-      return await setManagedThreadReadState({
-        ...authorizedInput,
-        read: operation === "read",
-      });
-    }
-    if (operation === "trash" || operation === "untrash") {
-      return await setManagedThreadMailboxState({
-        ...authorizedInput,
-        state: operation === "trash" ? "trash" : "active",
-      });
-    }
-    const result = await updateManagedThreadLabels({
-      ...authorizedInput,
-      ...operation,
-    });
-    await recordLabelFeedback({
-      ...operation,
-      mailboxId: input.mailboxId,
-      providerMessageIds: result.messages.map((message) => message.id),
-      userId: context.userId,
-    });
-    return result;
-  }
-  return await callGmail(context, input.mailboxId, async (accessToken) => {
-    let change: GmailMetadataChange;
-    if (operation === "read") {
-      change = { removeLabelIds: ["UNREAD"] };
-    } else if (operation === "unread") {
-      change = { addLabelIds: ["UNREAD"] };
-    } else {
-      change = operation;
-    }
-    const result = await mutateGmailThread(accessToken, input.threadId, change);
-    if (typeof operation !== "string") {
-      await recordGmailLabelFeedback({
-        accessToken,
-        ...operation,
-        mailboxId: input.mailboxId,
-        providerMessageIds: result.messages.map((message) => message.id),
-        userId: context.userId,
-      });
-    }
-    return result;
-  });
-};
 
 export const mutationsMailOperations = {
   applyChanges: async ({
@@ -184,6 +34,22 @@ export const mutationsMailOperations = {
         ...input,
         userId: context.userId,
       });
+      if (input.command.kind === "set-labels") {
+        const applied = new Set(
+          result.targets
+            .filter((target) => target.status === "applied")
+            .map((target) => target.threadId)
+        );
+        await recordLabelFeedback({
+          addLabelIds: input.command.addIds,
+          mailboxId: input.mailboxId,
+          providerMessageIds: input.targets
+            .filter((target) => applied.has(target.threadId))
+            .flatMap((target) => target.messageIds),
+          removeLabelIds: input.command.removeIds,
+          userId: context.userId,
+        });
+      }
       if (input.command.kind === "move") {
         await learnAiMemoryFromMailAction({
           action: `move:${input.command.destination}`,
@@ -299,6 +165,16 @@ export const mutationsMailOperations = {
             signal
           );
         }
+        if (input.command.kind === "set-labels") {
+          await recordGmailLabelFeedback({
+            accessToken,
+            addLabelIds: input.command.addIds,
+            mailboxId: input.mailboxId,
+            providerMessageIds: messageIds,
+            removeLabelIds: input.command.removeIds,
+            userId: context.userId,
+          });
+        }
         if (input.command.kind === "move") {
           await learnAiMemoryFromMailAction({
             action: `move:${input.command.destination}`,
@@ -317,36 +193,4 @@ export const mutationsMailOperations = {
       }
     );
   },
-  markMessageAsRead: async (args: MessageMutationArgs) =>
-    await mutateMessage(args, "read"),
-  markMessageAsUnread: async (args: MessageMutationArgs) =>
-    await mutateMessage(args, "unread"),
-  markThreadAsRead: async (args: ThreadMutationArgs) =>
-    await mutateThread(args, "read"),
-  markThreadAsUnread: async (args: ThreadMutationArgs) =>
-    await mutateThread(args, "unread"),
-  moveMessageToTrash: async (args: MessageMutationArgs) =>
-    await mutateMessage(args, "trash"),
-  moveThreadToTrash: async (args: ThreadMutationArgs) =>
-    await mutateThread(args, "trash"),
-  untrashMessage: async (args: MessageMutationArgs) =>
-    await mutateMessage(args, "untrash"),
-  untrashThread: async (args: ThreadMutationArgs) =>
-    await mutateThread(args, "untrash"),
-  updateMessageLabels: async (args: {
-    context: MailRequestContext;
-    input: MailInputs["updateMessageLabels"];
-  }) =>
-    await mutateMessage(args, {
-      addLabelIds: args.input.addLabelIds,
-      removeLabelIds: args.input.removeLabelIds,
-    }),
-  updateThreadLabels: async (args: {
-    context: MailRequestContext;
-    input: MailInputs["updateThreadLabels"];
-  }) =>
-    await mutateThread(args, {
-      addLabelIds: args.input.addLabelIds,
-      removeLabelIds: args.input.removeLabelIds,
-    }),
 };

@@ -4,6 +4,7 @@ import { mailboxSavedViewDefinitionSchema } from "@quieter/mail/mailbox-organiza
 import { z } from "zod";
 
 export const SYNC_PROTOCOL_VERSION = 1;
+export const SYNC_MAX_MAILBOXES = 256;
 export const SYNC_FRAME_BYTES = 256 * 1024;
 export const SYNC_REPLAY_BATCHES = 100;
 export const SYNC_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;

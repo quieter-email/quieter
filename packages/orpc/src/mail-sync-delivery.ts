@@ -4,16 +4,13 @@ import { mailbox, managedMailMessage } from "@quieter/database/schema";
 import { projectManagedDelivery } from "@quieter/sync-server/delivery";
 import { and, eq } from "drizzle-orm";
 
-import { isMailSyncEnabled, mailSyncServices } from "./mail-sync-runtime";
+import { mailSyncServices } from "./mail-sync-runtime";
 
 export const withDeliverySyncTransaction = async <Result>(
   organizationId: string,
   providerMessageId: string,
   run: (database: DatabaseTransaction) => Promise<Result>
 ) => {
-  if (!isMailSyncEnabled()) {
-    return await db.transaction(run);
-  }
   const messages = await db
     .select({
       id: managedMailMessage.id,

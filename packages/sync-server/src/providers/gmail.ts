@@ -365,7 +365,7 @@ export const synchronizeGmail = async (
           labelsSyncedAt: labels === null ? state.labelsSyncedAt : new Date(),
           lastSyncedAt: new Date(),
           nextAttemptAt: new Date(
-            Date.now() + (importComplete ? 60_000 : 1000)
+            Date.now() + (importComplete ? 15 * 60_000 : 1000)
           ),
           pageToken:
             page === null ? state.pageToken : (page.nextPageToken ?? null),

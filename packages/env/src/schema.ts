@@ -21,14 +21,6 @@ export const httpUrl = z
     message: "URL must use HTTP or HTTPS.",
   });
 export const optionalHttpUrl = httpUrl.optional();
-export const webSocketUrl = z
-  .string()
-  .trim()
-  .pipe(z.url())
-  .refine((value) => ["ws:", "wss:"].includes(new URL(value).protocol), {
-    message: "URL must use WS or WSS.",
-  });
-
 export const optionalBooleanString = z
   .string()
   .trim()

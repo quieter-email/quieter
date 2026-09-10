@@ -117,7 +117,7 @@ describe("browser replica races", () => {
       },
       connection: async () => {
         await Promise.resolve();
-        return { url: null };
+        return { url: "wss://sync.invalid/connect" };
       },
       hydrate: async () => {
         await Promise.resolve();

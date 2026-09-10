@@ -9,10 +9,7 @@ export const localSyncMaintenance = (workspaceRoot: string): Plugin => ({
     const envPath = path.join(workspaceRoot, ".env.local");
     assertLocalEnvFile(envPath);
     const env = createServerEnv(Object.fromEntries(parseEnvFile(envPath)));
-    if (
-      env.QUIETER_DEPLOYMENT_ENV !== "local" ||
-      env.QUIETER_MAIL_SYNC_ENABLED !== true
-    ) {
+    if (env.QUIETER_DEPLOYMENT_ENV !== "local") {
       return;
     }
     const url = new URL(env.MAIL_SYNC_URL ?? "http://127.0.0.1:8788");

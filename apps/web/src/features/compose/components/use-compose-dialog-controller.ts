@@ -507,7 +507,7 @@ export const useComposeDialogController = ({
     }
     try {
       if (draft.messageId !== undefined && draft.messageId !== "") {
-        await removeDraftMessageFromCaches(
+        removeDraftMessageFromCaches(
           queryClient,
           mailboxId,
           draft.messageId,

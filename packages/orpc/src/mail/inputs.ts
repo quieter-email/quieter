@@ -94,30 +94,6 @@ export const mailInputSchemas = {
     pageToken: z.string().optional(),
     query: z.string().optional(),
   }),
-  markMessageAsRead: z.object({
-    mailboxId: z.string().trim().min(1),
-    messageId: z.string(),
-  }),
-  markMessageAsUnread: z.object({
-    mailboxId: z.string().trim().min(1),
-    messageId: z.string(),
-  }),
-  markThreadAsRead: z.object({
-    mailboxId: z.string().trim().min(1),
-    threadId: z.string(),
-  }),
-  markThreadAsUnread: z.object({
-    mailboxId: z.string().trim().min(1),
-    threadId: z.string(),
-  }),
-  moveMessageToTrash: z.object({
-    mailboxId: z.string().trim().min(1),
-    messageId: z.string(),
-  }),
-  moveThreadToTrash: z.object({
-    mailboxId: z.string().trim().min(1),
-    threadId: z.string(),
-  }),
   saveDraft: z.object({
     draft: composeDraftInputSchema,
     mailboxId: z.string().trim().min(1),
@@ -130,22 +106,9 @@ export const mailInputSchemas = {
     mailboxId: z.string().trim().min(1),
     message: composeMessageInputSchema,
   }),
-  syncMailbox: z.object({
-    category: z.enum(["inbox", "unread", "archive", "spam", "sent", "trash"]),
-    mailboxId: z.string().trim().min(1),
-    startHistoryId: z.string().min(1),
-  }),
   unsubscribeFromMessage: z.object({
     mailboxId: z.string().trim().min(1),
     messageId: z.string(),
-  }),
-  untrashMessage: z.object({
-    mailboxId: z.string().trim().min(1),
-    messageId: z.string(),
-  }),
-  untrashThread: z.object({
-    mailboxId: z.string().trim().min(1),
-    threadId: z.string(),
   }),
   updateLabel: z.object({
     color: mailboxLabelColorSchema.optional(),
@@ -161,18 +124,6 @@ export const mailInputSchemas = {
     inclusionCriteria: z.string().trim().max(4000).nullable(),
     labelId: z.string().trim().min(1),
     mailboxId: z.string().trim().min(1),
-  }),
-  updateMessageLabels: z.object({
-    addLabelIds: z.array(z.string()).optional(),
-    mailboxId: z.string().trim().min(1),
-    messageId: z.string(),
-    removeLabelIds: z.array(z.string()).optional(),
-  }),
-  updateThreadLabels: z.object({
-    addLabelIds: z.array(z.string()).optional(),
-    mailboxId: z.string().trim().min(1),
-    removeLabelIds: z.array(z.string()).optional(),
-    threadId: z.string(),
   }),
 };
 export type MailInputs = {

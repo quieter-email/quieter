@@ -75,6 +75,11 @@ export const mailSyncRouter = {
       }): Promise<Awaited<ReturnType<typeof mailSyncOperations.hydrate>>> =>
         await mailSyncOperations.hydrate({ ...input, userId: context.userId })
     ),
+  refreshSyncMailbox: protectedProcedure
+    .input(mailboxInput)
+    .handler(async ({ input, context }): Promise<void> => {
+      await mailSyncOperations.refresh({ ...input, userId: context.userId });
+    }),
   submitSyncCommand: protectedProcedure
     .input(syncCommandSchema)
     .handler(

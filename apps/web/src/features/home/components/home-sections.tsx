@@ -1,7 +1,7 @@
 "use client";
 
 import { AI_COST_RECOVERY_BASIS_POINTS } from "@quieter/billing/ai-pricing";
-import { BILLING_PRODUCTS } from "@quieter/billing/plans";
+import { BILLING_PRODUCTS, GMAIL_MAILBOX_LIMITS } from "@quieter/billing/plans";
 import { getManagedUsageRates } from "@quieter/billing/ses-pricing";
 
 import { AiSection } from "./ai-section";
@@ -17,19 +17,19 @@ const tiers = [
     credits: null,
     name: "Free",
     price: 0,
-    summary: "Unlimited Gmail accounts.",
+    summary: `Up to ${GMAIL_MAILBOX_LIMITS.free} Gmail accounts per team, with live updates.`,
   },
   {
     credits: BILLING_PRODUCTS.managed.creditAmountCents / 100,
     name: BILLING_PRODUCTS.managed.name,
     price: BILLING_PRODUCTS.managed.monthlyPriceCents / 100,
-    summary: "Unlimited mailboxes and custom domains.",
+    summary: `Up to ${GMAIL_MAILBOX_LIMITS.managed} Gmail accounts per team, plus managed mail and custom domains.`,
   },
   {
     credits: BILLING_PRODUCTS.pro.creditAmountCents / 100,
     name: BILLING_PRODUCTS.pro.name,
     price: BILLING_PRODUCTS.pro.monthlyPriceCents / 100,
-    summary: "Everything in Managed, plus all AI features.",
+    summary: `Up to ${GMAIL_MAILBOX_LIMITS.pro} Gmail accounts per team. Everything in Managed, plus all AI features.`,
   },
 ] as const;
 

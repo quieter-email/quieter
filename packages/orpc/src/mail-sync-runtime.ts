@@ -15,7 +15,6 @@ import {
   projectGmailLabelDetails,
   projectSavedViews,
 } from "@quieter/sync-server/metadata";
-import { isSyncClientAllowed } from "@quieter/sync-server/rollout";
 import { Resource } from "sst";
 
 type SyncRuntime = {
@@ -25,25 +24,12 @@ type SyncRuntime = {
 };
 const syncRuntime = new AsyncLocalStorage<SyncRuntime>();
 
-export const isMailSyncEnabled = () =>
-  serverEnv.QUIETER_MAIL_SYNC_ENABLED === true;
-
-export const isMailSyncClientEnabled = (userId: string) =>
-  isSyncClientAllowed(userId, {
-    clientsEnabled: serverEnv.QUIETER_MAIL_SYNC_CLIENT_ENABLED,
-    enabled: serverEnv.QUIETER_MAIL_SYNC_ENABLED,
-    users: serverEnv.QUIETER_MAIL_SYNC_CLIENT_USERS,
-  });
-
 export const withMailSyncRuntime = async <Result>(
   runtime: SyncRuntime,
   run: () => Promise<Result>
 ) => await syncRuntime.run(runtime, run);
 
 export const getMailSyncConfiguration = () => {
-  if (serverEnv.QUIETER_MAIL_SYNC_ENABLED !== true) {
-    return null;
-  }
   const url = serverEnv.MAIL_SYNC_URL;
   let secret = serverEnv.MAIL_SYNC_SECRET;
   if (secret === undefined) {
@@ -80,9 +66,6 @@ export const getMailSyncConfiguration = () => {
 
 const requestSyncRuntime = async (path: string, init: RequestInit = {}) => {
   const configuration = getMailSyncConfiguration();
-  if (configuration === null) {
-    throw new Error("Mail sync is unavailable.");
-  }
   const headers = new Headers(init.headers);
   headers.set("authorization", `Bearer ${configuration.secret}`);
   const response = await fetch(new URL(path, configuration.url), {
@@ -100,9 +83,6 @@ export const notifyMailboxAccessChanged = async (
   mailboxId: string,
   userIds: string[] = []
 ) => {
-  if (!isMailSyncEnabled()) {
-    return;
-  }
   try {
     const response = await requestSyncRuntime("/internal/access", {
       body: JSON.stringify({ mailboxId, userIds }),
@@ -207,9 +187,6 @@ export const withManagedSyncTransaction = async <Result>(
     | ((result: NoInfer<Result>) => ManagedSyncSelection),
   run: (database: DatabaseTransaction) => Promise<Result>
 ): Promise<Result> => {
-  if (!isMailSyncEnabled()) {
-    return await db.transaction(run);
-  }
   const { repository } = mailSyncServices();
   return await repository.transaction(mailboxId, async (context) => {
     const result = await run(context.database);
@@ -224,11 +201,8 @@ export const withManagedSyncTransaction = async <Result>(
 export const withSavedViewsSyncTransaction = async <Result>(
   mailboxId: string,
   run: (database: DatabaseTransaction) => Promise<Result>
-) => {
-  if (!isMailSyncEnabled()) {
-    return await db.transaction(run);
-  }
-  return await mailSyncServices().repository.transaction(
+) =>
+  await mailSyncServices().repository.transaction(
     mailboxId,
     async (context) => {
       const result = await run(context.database);
@@ -236,17 +210,13 @@ export const withSavedViewsSyncTransaction = async <Result>(
       return result;
     }
   );
-};
 
 export const withGmailLabelSyncTransaction = async <Result>(
   mailboxId: string,
   labelId: string,
   run: (database: DatabaseTransaction) => Promise<Result>
-) => {
-  if (!isMailSyncEnabled()) {
-    return await db.transaction(run);
-  }
-  return await mailSyncServices().repository.transaction(
+) =>
+  await mailSyncServices().repository.transaction(
     mailboxId,
     async (context) => {
       const result = await run(context.database);
@@ -254,15 +224,11 @@ export const withGmailLabelSyncTransaction = async <Result>(
       return result;
     }
   );
-};
 
 export const storeManagedSyncBody = async (
   mailboxId: string,
   body: SyncBody
 ) => {
-  if (!isMailSyncEnabled()) {
-    return;
-  }
   const encoded = encodeSyncBody(body);
   await mailSyncServices().bodies.put(
     `sync/bodies/${encodeURIComponent(mailboxId)}/${encoded.hash}`,

@@ -1,10 +1,10 @@
 import {
   authorizeSyncMailbox,
   authorizeSyncSession,
-  isMailSyncClientEnabled,
   mailSyncServices,
 } from "@quieter/orpc/mail-sync";
 import {
+  SYNC_MAX_MAILBOXES,
   encodeSyncBatch,
   syncClientFrameSchema,
   visibleSyncChanges,
@@ -66,9 +66,6 @@ export class UserSync extends DurableObject<SyncEnv> {
       new URL(request.url).searchParams.get("ticket") ?? "",
       secret
     );
-    if (!isMailSyncClientEnabled(claims.userId)) {
-      return new Response(null, { status: 503 });
-    }
     try {
       await withSyncRuntime(this.env, async () => {
         await authorizeSyncSession(claims.sessionId, claims.userId);
@@ -166,7 +163,7 @@ export class UserSync extends DurableObject<SyncEnv> {
         attachment.id
       )
       .one();
-    if (subscription === undefined && count >= 32) {
+    if (subscription === undefined && count >= SYNC_MAX_MAILBOXES) {
       socket.close(1008, "Subscription limit reached");
       return;
     }
@@ -348,9 +345,7 @@ export class UserSync extends DurableObject<SyncEnv> {
           const attachment = attachmentSchema.parse(
             socket.deserializeAttachment()
           );
-          if (!isMailSyncClientEnabled(attachment.userId)) {
-            socket.close(1012, "Reconnect required");
-          } else if (Date.now() - attachment.createdAt >= 15 * 60_000) {
+          if (Date.now() - attachment.createdAt >= 15 * 60_000) {
             socket.close(1000, "Reconnect required");
           } else {
             await this.refreshSubscriptions(socket, sessions);
@@ -375,10 +370,6 @@ export class UserSync extends DurableObject<SyncEnv> {
   async publish(batch: SyncBatch) {
     for (const socket of this.ctx.getWebSockets()) {
       const attachment = attachmentSchema.parse(socket.deserializeAttachment());
-      if (!isMailSyncClientEnabled(attachment.userId)) {
-        socket.close(1012, "Reconnect required");
-        continue;
-      }
       if (Date.now() - attachment.createdAt >= 15 * 60_000) {
         socket.close(1000, "Reconnect required");
         continue;

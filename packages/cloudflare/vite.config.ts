@@ -20,9 +20,6 @@ export default defineConfig({
           LINEAR_CLIENT_SECRET: "linear-client-secret",
           OPENROUTER_API_KEY: "openrouter-key",
           POLAR_ACCESS_TOKEN: "polar-access-token",
-          SST_RESOURCE_GmailLiveSyncTokenSecret: JSON.stringify({
-            value: "live-sync-secret",
-          }),
         },
       },
       wrangler: { configPath: "./wrangler.types.jsonc" },

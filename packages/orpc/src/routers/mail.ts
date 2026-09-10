@@ -1,7 +1,6 @@
 import { composeMailOperations } from "../mail/compose";
 import { mailInputSchemas } from "../mail/inputs";
 import { labelsMailOperations } from "../mail/labels";
-import { mutationsMailOperations } from "../mail/mutations";
 import { queriesMailOperations } from "../mail/queries";
 import { protectedProcedure } from "./base";
 import { mailboxProcedures } from "./mail/mailboxes";
@@ -14,9 +13,6 @@ export const mailRouter = {
   ...mailboxProcedures,
   ...mailboxSavedViewRouter,
   ...managedOrganizationMailRouter,
-  applyChanges: protectedProcedure
-    .input(mailInputSchemas.applyChanges)
-    .handler(mutationsMailOperations.applyChanges),
   createLabel: protectedProcedure
     .input(mailInputSchemas.createLabel)
     .handler(labelsMailOperations.createLabel),
@@ -54,24 +50,6 @@ export const mailRouter = {
     .route({ method: "GET" })
     .input(mailInputSchemas.listThreads)
     .handler(queriesMailOperations.listThreads),
-  markMessageAsRead: protectedProcedure
-    .input(mailInputSchemas.markMessageAsRead)
-    .handler(mutationsMailOperations.markMessageAsRead),
-  markMessageAsUnread: protectedProcedure
-    .input(mailInputSchemas.markMessageAsUnread)
-    .handler(mutationsMailOperations.markMessageAsUnread),
-  markThreadAsRead: protectedProcedure
-    .input(mailInputSchemas.markThreadAsRead)
-    .handler(mutationsMailOperations.markThreadAsRead),
-  markThreadAsUnread: protectedProcedure
-    .input(mailInputSchemas.markThreadAsUnread)
-    .handler(mutationsMailOperations.markThreadAsUnread),
-  moveMessageToTrash: protectedProcedure
-    .input(mailInputSchemas.moveMessageToTrash)
-    .handler(mutationsMailOperations.moveMessageToTrash),
-  moveThreadToTrash: protectedProcedure
-    .input(mailInputSchemas.moveThreadToTrash)
-    .handler(mutationsMailOperations.moveThreadToTrash),
   saveDraft: protectedProcedure
     .input(mailInputSchemas.saveDraft)
     .handler(composeMailOperations.saveDraft),
@@ -81,29 +59,13 @@ export const mailRouter = {
   sendMessage: protectedProcedure
     .input(mailInputSchemas.sendMessage)
     .handler(composeMailOperations.sendMessage),
-  syncMailbox: protectedProcedure
-    .route({ method: "GET" })
-    .input(mailInputSchemas.syncMailbox)
-    .handler(queriesMailOperations.syncMailbox),
   unsubscribeFromMessage: protectedProcedure
     .input(mailInputSchemas.unsubscribeFromMessage)
     .handler(composeMailOperations.unsubscribeFromMessage),
-  untrashMessage: protectedProcedure
-    .input(mailInputSchemas.untrashMessage)
-    .handler(mutationsMailOperations.untrashMessage),
-  untrashThread: protectedProcedure
-    .input(mailInputSchemas.untrashThread)
-    .handler(mutationsMailOperations.untrashThread),
   updateLabel: protectedProcedure
     .input(mailInputSchemas.updateLabel)
     .handler(labelsMailOperations.updateLabel),
   updateLabelDetails: protectedProcedure
     .input(mailInputSchemas.updateLabelDetails)
     .handler(labelsMailOperations.updateLabelDetails),
-  updateMessageLabels: protectedProcedure
-    .input(mailInputSchemas.updateMessageLabels)
-    .handler(mutationsMailOperations.updateMessageLabels),
-  updateThreadLabels: protectedProcedure
-    .input(mailInputSchemas.updateThreadLabels)
-    .handler(mutationsMailOperations.updateThreadLabels),
 };

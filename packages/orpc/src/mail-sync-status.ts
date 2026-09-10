@@ -1,17 +1,9 @@
-import { db } from "@quieter/database/client";
 import { mailbox, mailSyncEntity } from "@quieter/database/schema";
 import { and, eq } from "drizzle-orm";
 
-import { isMailSyncEnabled, mailSyncServices } from "./mail-sync-runtime";
+import { mailSyncServices } from "./mail-sync-runtime";
 
 export const markSyncMailboxNeedsReconnect = async (mailboxId: string) => {
-  if (!isMailSyncEnabled()) {
-    await db
-      .update(mailbox)
-      .set({ status: "needs_reconnect", updatedAt: new Date() })
-      .where(eq(mailbox.id, mailboxId));
-    return;
-  }
   await mailSyncServices().repository.transaction(
     mailboxId,
     async (context) => {

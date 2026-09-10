@@ -4,20 +4,15 @@ import { z } from "zod";
 
 import { MailSyncSession, mailSyncState, runMailSyncTask } from "./session";
 
-export const useMailSyncEnabled = (mailboxId: string) =>
-  useSelector(
-    mailSyncState,
-    (state) =>
-      state.mailboxIds.includes(mailboxId) &&
-      state.status?.connection !== "disabled"
-  );
+export const useMailSyncReady = (mailboxId: string) =>
+  useSelector(mailSyncState, (state) => state.mailboxIds.includes(mailboxId));
 
 export const useWarmMailThreads = (
   mailboxId: string,
   threadIds: string[],
   priority = 1
 ) => {
-  const enabled = useMailSyncEnabled(mailboxId);
+  const enabled = useMailSyncReady(mailboxId);
   const ids = JSON.stringify([...new Set(threadIds)].slice(0, 60));
   useEffect((): (() => void) | undefined => {
     const session = MailSyncSession.forMailbox(mailboxId);

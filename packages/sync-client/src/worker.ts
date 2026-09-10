@@ -68,7 +68,7 @@ const api: SyncApi = {
       ),
   connection: async (signal) =>
     z
-      .object({ url: z.string().nullable() })
+      .object({ url: z.string() })
       .parse(await request({ input: null, method: "connection" }, signal)),
   hydrate: async (mailboxId, threadIds, signal) =>
     syncSnapshotSchema
@@ -200,6 +200,10 @@ const receive = async (raw: unknown) => {
         }
         case "command": {
           result = await engine.command(action.input);
+          break;
+        }
+        case "catch-up": {
+          await engine.catchUp(action.input.mailboxId);
           break;
         }
         case "visible": {

@@ -291,7 +291,7 @@ describe("mail connection status", () => {
       command: vi.fn<SyncApi["command"]>().mockResolvedValue(null),
       connection: vi
         .fn<SyncApi["connection"]>()
-        .mockResolvedValue({ url: null }),
+        .mockRejectedValue(new Error("Connection unavailable")),
       hydrate: vi.fn<SyncApi["hydrate"]>().mockResolvedValue(null),
       replay: vi.fn<SyncApi["replay"]>(),
       snapshot: vi.fn<SyncApi["snapshot"]>().mockResolvedValue(null),
@@ -305,7 +305,7 @@ describe("mail connection status", () => {
     let follower: MailSyncEngine | null = null;
     try {
       await vi.waitFor(() => {
-        expect(leader.status.state.connection).toBe("disabled");
+        expect(leader.status.state.connection).toBe("reconnecting");
       });
       follower = await MailSyncEngine.create({
         api,
@@ -313,7 +313,7 @@ describe("mail connection status", () => {
         userId,
       });
       await vi.waitFor(() => {
-        expect(follower?.status.state.connection).toBe("disabled");
+        expect(follower?.status.state.connection).toBe("reconnecting");
       });
       expect(api.connection).toHaveBeenCalledOnce();
     } finally {

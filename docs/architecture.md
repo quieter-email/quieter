@@ -80,7 +80,8 @@ The public SDK derives send inputs from `@quieter/mail/send` and validates respo
 - `packages/ui`: reusable Base UI-backed components
 - `packages/ai`: model selection, prompts, classification, titles, and streamed generation
 - `packages/aws`: SES mail ingestion, delivery feedback, and AWS-specific handlers
-- `packages/cloudflare`: Gmail notification ingress, queued synchronization, scheduled maintenance, and mailbox live synchronization
+- `packages/cloudflare`: Gmail notification ingress, AI processing and watch maintenance
+- `packages/sync-worker`: Provider-neutral mail synchronization, resumable user sockets, mailbox job coalescing and recovery
 - `packages/billing`: plans, Polar checkout/webhooks, entitlements, and usage pricing
 - `packages/env`: typed environment schemas and normalization
 - `scripts`: SST deployment, local startup, environment checks, and release helpers
@@ -195,7 +196,8 @@ The root [`sst.config.ts`](../sst.config.ts) owns only app-wide SST settings and
 - `web.ts` owns the TanStack Start Worker and its common bindings.
 - `mail-maintenance.ts` owns the per-minute `MailMaintenance` cron. `packages/cloudflare/src/mail-maintenance-worker.ts` runs send recovery, storage cleanup, expired rate-limit bucket cleanup, and managed rule backfills.
 - `mail.ts` owns SES receipt storage, processing, ingress, and send permissions.
-- `gmail.ts` owns Gmail live-sync and Pub/Sub resources on Cloudflare.
+- `gmail.ts` owns Gmail Pub/Sub ingress and watch maintenance on Cloudflare.
+- `sync.ts` owns the custom engine's Durable Objects, queue, body bucket and required bindings.
 - `app.ts` is the small stage-aware composition entry point; `types.ts` contains shared infra boundary types.
 
 SST is the runtime source of truth for application credentials and tokens; their canonical names live in `packages/env/src/sst-secrets.ts`. Cloudflare receives them as secret-text bindings, while AWS functions receive values derived from SST secret outputs. Deployment environment variables are reserved for non-secret configuration such as feature switches, resource identifiers, domains, and provider deployment credentials.

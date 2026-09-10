@@ -1,4 +1,5 @@
 import {
+  SYNC_MAX_MAILBOXES,
   syncCheckpointSchema,
   syncCommandSchema,
   syncIdSchema,
@@ -51,7 +52,9 @@ export const syncWorkerActionSchema = z.discriminatedUnion("method", [
     method: z.literal("initialize"),
   }),
   z.object({
-    input: z.object({ mailboxIds: z.array(syncIdSchema).max(32) }),
+    input: z.object({
+      mailboxIds: z.array(syncIdSchema).max(SYNC_MAX_MAILBOXES),
+    }),
     method: z.literal("subscribe"),
   }),
   z.object({
@@ -74,6 +77,10 @@ export const syncWorkerActionSchema = z.discriminatedUnion("method", [
     method: z.literal("thread"),
   }),
   z.object({ input: syncCommandSchema, method: z.literal("command") }),
+  z.object({
+    input: z.object({ mailboxId: syncIdSchema }),
+    method: z.literal("catch-up"),
+  }),
   z.object({ input: z.boolean(), method: z.literal("visible") }),
   z.object({ input: z.boolean(), method: z.literal("online") }),
   z.object({ input: z.number().positive(), method: z.literal("budget") }),

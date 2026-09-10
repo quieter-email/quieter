@@ -14,7 +14,6 @@ import { saveGmailDraft, sendGmailMessage } from "../gmail-compose";
 import { callGmail } from "../gmail-request";
 import type { MailRequestContext } from "../gmail-request";
 import { withGmailComposeReplication } from "../mail-sync-compose";
-import { isMailSyncEnabled } from "../mail-sync-runtime";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import {
   saveManagedDraft,
@@ -140,7 +139,6 @@ export const composeMailOperations = {
           accessToken,
           async () => {
             if (
-              isMailSyncEnabled() &&
               input.draft.draftId &&
               (input.draft.baseVersion === null ||
                 input.draft.baseVersion === undefined)

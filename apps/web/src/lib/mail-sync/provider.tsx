@@ -8,7 +8,6 @@ import {
 } from "#/lib/mailboxes-query";
 import { usePreviewPersona } from "#/lib/preview-personas";
 
-import { mailSyncApi } from "./api";
 import { MailSyncSession, runMailSyncTask } from "./session";
 
 let previousStop = Promise.resolve();
@@ -65,8 +64,7 @@ export const MailSyncProvider = ({
           mailbox.provider === "gmail" || mailbox.provider === "managed"
             ? [{ id: mailbox.id, provider: mailbox.provider }]
             : []
-        )
-        .slice(0, 32);
+        );
       const identity = JSON.stringify(mailboxes);
       if (identity === lastMailboxIds) {
         return;
@@ -85,10 +83,6 @@ export const MailSyncProvider = ({
     const start = async () => {
       await previousStop;
       controller.signal.throwIfAborted();
-      const connection = await mailSyncApi.connection(controller.signal);
-      if (connection.url === null || controller.signal.aborted) {
-        return;
-      }
       session = MailSyncSession.start(userId, queryClient);
       await session.client.ready;
       if (controller.signal.aborted) {

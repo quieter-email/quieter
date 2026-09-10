@@ -1,5 +1,6 @@
 import type { ThreadMessagesResult } from "@quieter/mail/messages";
 import {
+  SYNC_MAX_MAILBOXES,
   syncChangeSchema,
   syncCheckpointSchema,
   syncCommandSchema,
@@ -23,11 +24,11 @@ export type {
 
 const peerSchema = z.discriminatedUnion("type", [
   z.object({
-    hiddenAt: z.number().nullable().optional(),
-    mailboxIds: z.array(z.string()).max(32),
+    hiddenAt: z.number().nullable(),
+    mailboxIds: z.array(z.string()).max(SYNC_MAX_MAILBOXES),
     ownerId: z.string(),
     type: z.literal("interest"),
-    visible: z.boolean().optional(),
+    visible: z.boolean(),
   }),
   z.object({
     checkpoint: syncCheckpointSchema,
@@ -45,7 +46,6 @@ const peerSchema = z.discriminatedUnion("type", [
       "live",
       "reconnecting",
       "fallback",
-      "disabled",
       "paused",
     ]),
     type: z.literal("connection"),
@@ -87,7 +87,6 @@ export class MailSyncEngine {
   private visible = true;
   private hiddenAt: number | null = null;
   private backgroundTimer: ReturnType<typeof setTimeout> | null = null;
-  private enabled = true;
   private maintenance: ReturnType<typeof setInterval> | null = null;
   private maintaining = false;
   private renewing = false;
@@ -125,9 +124,6 @@ export class MailSyncEngine {
         await this.revoke(mailboxId);
       },
       onStatus: (connection) => {
-        if (connection === "disabled") {
-          this.enabled = false;
-        }
         this.status.setState((state) => ({ ...state, connection }));
         this.notify(this.status.state);
         if (this.leader) {
@@ -308,10 +304,15 @@ export class MailSyncEngine {
   }
 
   async subscribe(mailboxIds: string[]) {
+    if (mailboxIds.length > SYNC_MAX_MAILBOXES) {
+      throw new Error("Too many mailboxes are open in this session.");
+    }
     this.localInterests.clear();
-    for (const mailboxId of mailboxIds.slice(0, 32)) {
+    for (const mailboxId of mailboxIds) {
       this.revoked.delete(mailboxId);
       this.localInterests.add(mailboxId);
+    }
+    for (const mailboxId of mailboxIds) {
       await this.ensureMailbox(mailboxId);
     }
     this.channel?.postMessage({
@@ -322,6 +323,11 @@ export class MailSyncEngine {
       visible: this.visible,
     });
     await this.tick();
+  }
+
+  async catchUp(mailboxId: string) {
+    const replica = await this.ensureMailbox(mailboxId);
+    await replica.catchUp();
   }
 
   async setVisible(visible: boolean) {
@@ -342,12 +348,7 @@ export class MailSyncEngine {
       }, 30_000);
     }
     await this.tick();
-    if (
-      returning &&
-      this.online &&
-      this.enabled &&
-      !this.controller.signal.aborted
-    ) {
+    if (returning && this.online && !this.controller.signal.aborted) {
       await Promise.all(
         [...this.replicas.values()].map(async (replica) => {
           await replica.catchUp();
@@ -367,7 +368,6 @@ export class MailSyncEngine {
   warmThreads(mailboxId: string, threadIds: string[], priority = 1) {
     if (
       !this.online ||
-      !this.enabled ||
       this.clearing ||
       this.revoked.has(mailboxId) ||
       this.controller.signal.aborted ||
@@ -548,7 +548,7 @@ export class MailSyncEngine {
   }
 
   private async tick() {
-    if (this.controller.signal.aborted || this.clearing || !this.enabled) {
+    if (this.controller.signal.aborted || this.clearing) {
       return;
     }
     this.channel?.postMessage({
@@ -578,12 +578,7 @@ export class MailSyncEngine {
       }
       return;
     }
-    if (
-      !this.renewing &&
-      !this.clearing &&
-      !this.controller.signal.aborted &&
-      this.enabled
-    ) {
+    if (!this.renewing && !this.clearing && !this.controller.signal.aborted) {
       this.renewing = true;
       try {
         this.leader =
@@ -607,12 +602,7 @@ export class MailSyncEngine {
         this.renewing = false;
       }
     }
-    if (
-      this.maintaining ||
-      this.clearing ||
-      this.controller.signal.aborted ||
-      !this.enabled
-    ) {
+    if (this.maintaining || this.clearing || this.controller.signal.aborted) {
       return;
     }
     this.maintaining = true;
@@ -788,12 +778,12 @@ export class MailSyncEngine {
       if (message.type === "interest") {
         const wasVisible = this.peerInterests.get(message.ownerId)?.visible;
         this.peerInterests.set(message.ownerId, {
-          hiddenAt: message.hiddenAt ?? null,
+          hiddenAt: message.hiddenAt,
           mailboxIds: message.mailboxIds,
           seenAt: Date.now(),
-          visible: message.visible !== false,
+          visible: message.visible,
         });
-        if (wasVisible !== (message.visible !== false)) {
+        if (wasVisible !== message.visible) {
           await this.tick();
         }
         if (this.leader) {

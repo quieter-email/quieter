@@ -121,18 +121,6 @@ export const useMessageViewData = ({
       subject: message.subject,
       threadId: message.threadId,
     },
-    refetchInterval: (query) => {
-      const thread = query.state.data;
-      const missingBodyCount =
-        thread === undefined
-          ? 0
-          : getMessagesMissingLoadedBody(thread.messages).length;
-      return thread !== undefined &&
-        query.state.dataUpdateCount < 2 &&
-        missingBodyCount > 0
-        ? 250
-        : false;
-    },
   });
   const { data: usefulDetails = [] } = useQuery(
     gmailThreadUsefulDetailsQueryOptions(

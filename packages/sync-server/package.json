@@ -14,7 +14,6 @@
     "./body-store": "./src/body-store.ts",
     "./body-collection": "./src/body-collection.ts",
     "./health": "./src/health.ts",
-    "./rollout": "./src/rollout.ts",
     "./auth": "./src/auth.ts"
   },
   "dependencies": {

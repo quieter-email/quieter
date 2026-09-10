@@ -15,7 +15,6 @@ import type {
 } from "@quieter/mail/compose/schema";
 import type { z } from "zod";
 
-import { isMailSyncEnabled } from "./mail-sync-runtime";
 import {
   performGmailSubmission,
   prepareGmailSubmission,
@@ -128,7 +127,6 @@ export const sendGmailMessage = async (
     accessToken,
     async () => {
       if (
-        isMailSyncEnabled() &&
         message.draftId &&
         (message.baseVersion === null || message.baseVersion === undefined)
       ) {

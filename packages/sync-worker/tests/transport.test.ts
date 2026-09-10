@@ -16,7 +16,6 @@ const fixtures = vi.hoisted(() => ({
   authorize: vi.fn<() => Promise<void>>(async () => {
     await Promise.resolve();
   }),
-  clientEnabled: vi.fn<() => boolean>(() => true),
   epoch: "3595c675-0d6f-41ad-a78c-349fbd65e3c3",
   session: vi.fn<() => Promise<void>>(async () => {
     await Promise.resolve();
@@ -30,7 +29,6 @@ vi.mock("@quieter/database/client", () => ({
 vi.mock("@quieter/orpc/mail-sync", () => ({
   authorizeSyncMailbox: fixtures.authorize,
   authorizeSyncSession: fixtures.session,
-  isMailSyncClientEnabled: fixtures.clientEnabled,
   mailSyncServices: () => ({
     repository: {
       head: async () => {
@@ -72,6 +70,41 @@ const nextMessage = async (socket: WebSocket) => {
 };
 
 describe("durable mail transport", () => {
+  it("keeps all 100 Gmail mailboxes subscribed on one connection", async () => {
+    const userId = crypto.randomUUID();
+    const socket = await connect(userId);
+    try {
+      for (let index = 0; index < 100; index += 1) {
+        const resumed = nextMessage(socket);
+        socket.send(
+          JSON.stringify({
+            checkpoint: { epoch: fixtures.epoch, sequence: "0" },
+            generation: crypto.randomUUID(),
+            mailboxId: `${userId}-${index}`,
+            protocol: 1,
+            type: "RESUME",
+          })
+        );
+        await resumed;
+      }
+      expect(socket.readyState).toBe(WebSocket.OPEN);
+      await runInDurableObject(
+        env.UserSyncObjects.getByName(userId),
+        (_instance, state) => {
+          expect(
+            state.storage.sql
+              .exec<{ count: number }>(
+                "SELECT count(*) AS count FROM subscriptions"
+              )
+              .one().count
+          ).toBe(100);
+        }
+      );
+    } finally {
+      socket.close();
+    }
+  });
+
   it("answers idle pings through the native auto-response without refreshing access or subscriptions", async () => {
     const userId = crypto.randomUUID();
     const mailboxId = crypto.randomUUID();
@@ -227,25 +260,6 @@ describe("durable mail transport", () => {
     const events: unknown[] = await closed;
     expect(events[0]).toMatchObject({ code: 1000 });
     await expect(runDurableObjectAlarm(object)).resolves.toBeFalsy();
-  });
-
-  it("reconnects on a client rollout rollback without reporting an expired login", async () => {
-    const userId = crypto.randomUUID();
-    const socket = await connect(userId);
-    fixtures.clientEnabled.mockReturnValueOnce(false);
-    const closed = once(socket, "close", { signal: AbortSignal.timeout(5000) });
-    await runDurableObjectAlarm(env.UserSyncObjects.getByName(userId));
-    const events: unknown[] = await closed;
-    expect(events[0]).toMatchObject({ code: 1012 });
-    fixtures.clientEnabled.mockReturnValueOnce(false);
-    const response = await worker.fetch(
-      new Request(
-        `https://sync.invalid/connect?ticket=${createSyncTicket(userId, "test-session", secret)}`,
-        { headers: { upgrade: "websocket" } }
-      ),
-      env
-    );
-    expect(response.status).toBe(503);
   });
 
   it("checks prepared body existence through authenticated native R2 requests", async () => {

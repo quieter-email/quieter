@@ -32,8 +32,6 @@ import { runAuthorizedGmailMailbox } from "./gmail-mailbox-access";
 import { mailSyncCommandService } from "./mail-sync-commands";
 import {
   getMailSyncConfiguration,
-  isMailSyncEnabled,
-  isMailSyncClientEnabled,
   mailSyncServices,
 } from "./mail-sync-runtime";
 import { recoverGmailSubmissions } from "./mail-sync-submissions";
@@ -42,7 +40,6 @@ import { getManagedThread } from "./managed-mail/messages/service";
 
 export {
   getMailSyncConfiguration,
-  isMailSyncClientEnabled,
   mailSyncServices,
   withMailSyncRuntime,
 } from "./mail-sync-runtime";
@@ -63,9 +60,6 @@ export const authorizeSyncSession = async (
 };
 
 export const runMailboxSynchronization = async (mailboxId: string) => {
-  if (!isMailSyncEnabled()) {
-    return { hasMore: false };
-  }
   const [selected] = await db
     .select()
     .from(mailbox)
@@ -119,9 +113,6 @@ export const runMailboxSynchronization = async (mailboxId: string) => {
 };
 
 export const maintainMailSynchronization = async () => {
-  if (!isMailSyncEnabled()) {
-    return;
-  }
   const { repository, enqueue } = mailSyncServices();
   await repository.recoverOutbox();
   const pendingCommands = await db
@@ -231,13 +222,7 @@ export const mailSyncOperations = {
     return body;
   },
   connection: (userId: string, sessionId: string) => {
-    if (!isMailSyncClientEnabled(userId)) {
-      return { url: null };
-    }
     const configuration = getMailSyncConfiguration();
-    if (configuration === null) {
-      return { url: null };
-    }
     const url = new URL("/connect", configuration.url);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
     url.searchParams.set(
@@ -292,6 +277,13 @@ export const mailSyncOperations = {
           entities: visibleSyncChanges(snapshot.entities, input.userId),
         };
   },
+  refresh: async (input: { mailboxId: string; userId: string }) => {
+    await authorizeSyncMailbox(input.mailboxId, input.userId);
+    const result = await runMailboxSynchronization(input.mailboxId);
+    if (result.hasMore) {
+      await mailSyncServices().enqueue(input.mailboxId);
+    }
+  },
   replay: async (input: {
     mailboxId: string;
     userId: string;
@@ -316,9 +308,6 @@ export const mailSyncOperations = {
     threadIds?: string[];
   }) => {
     await authorizeSyncMailbox(input.mailboxId, input.userId);
-    if (getMailSyncConfiguration() === null) {
-      return null;
-    }
     const { repository, enqueue } = mailSyncServices();
     const [stream] = await db
       .select()

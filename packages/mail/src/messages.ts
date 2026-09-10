@@ -108,15 +108,6 @@ export type ThreadMessagesResult = {
 
 export type MailLabelListItem = { id: string; name: string; type?: string };
 
-export type MailboxSyncDelta = {
-  historyId?: string;
-  hasChanges: boolean;
-  refreshFirstPage: boolean;
-  removedMessageIds: string[];
-  requiresFullRefresh: boolean;
-  updatedMessages: MessageListItem[];
-};
-
 export const isMessageArchived = (
   labelIds: readonly string[] | undefined
 ): boolean =>

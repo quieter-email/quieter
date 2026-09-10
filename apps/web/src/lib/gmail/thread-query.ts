@@ -42,13 +42,13 @@ export const getThreadWithDetailsOptions = (
         return getDemoThread(mailboxId, threadId);
       }
 
-      const sync = MailSyncSession.forMailbox(mailboxId);
-      if (sync !== null) {
-        const thread = await sync.thread(mailboxId, threadId);
-        signal.throwIfAborted();
-        return thread;
+      if (mailboxId.startsWith("api:")) {
+        return await rpc.mail.getThread({ mailboxId, threadId }, { signal });
       }
-      return await rpc.mail.getThread({ mailboxId, threadId }, { signal });
+      const sync = await MailSyncSession.waitForMailbox(mailboxId, signal);
+      const thread = await sync.thread(mailboxId, threadId);
+      signal.throwIfAborted();
+      return thread;
     },
     queryKey: getThreadQueryKey(mailboxId, threadId),
     refetchOnMount: (query) => shouldRefreshThreadContent(query.state.data),

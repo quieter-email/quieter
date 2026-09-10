@@ -4,12 +4,7 @@ import { SyncFrameAssembler } from "./frames";
 import type { MailboxReplica } from "./replica";
 import type { SyncApi } from "./types";
 
-type ConnectionStatus =
-  | "connecting"
-  | "live"
-  | "reconnecting"
-  | "fallback"
-  | "disabled";
+type ConnectionStatus = "connecting" | "live" | "reconnecting" | "fallback";
 type ConnectionOptions = {
   api: SyncApi;
   signal: AbortSignal;
@@ -97,11 +92,6 @@ export class SyncConnection {
       );
       const { url } = await this.options.api.connection(this.options.signal);
       if (!this.active || this.options.signal.aborted) {
-        return;
-      }
-      if (url === null) {
-        this.options.onStatus("disabled");
-        this.stop();
         return;
       }
       const socket = this.options.createSocket(url);

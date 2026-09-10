@@ -22,17 +22,6 @@ type MergeRefreshedMailboxPagesOptions = {
   preserveUnrefreshedPages?: boolean;
 };
 
-export type MessageMetadataMutationResult = {
-  id: string;
-  labelIds?: string[];
-  isUnread: boolean;
-};
-
-export type ThreadMetadataMutationResult = {
-  threadId: string;
-  messages: MessageMetadataMutationResult[];
-};
-
 export type LabelChangeSet = {
   addLabelIds?: readonly string[];
   removeLabelIds?: readonly string[];
@@ -144,21 +133,6 @@ export const mergeRefreshedMailboxPagesIntoQueryData = (
       ...previous.pageParams.slice(refreshedPageParams.length),
     ],
     pages: [...pages, ...preservedPages],
-  };
-};
-
-export const updateFirstPageHistoryId = (
-  data: MessagesQueryData | undefined,
-  historyId: string
-): MessagesQueryData | undefined => {
-  const firstPage = data?.pages[0];
-  if (!data || !firstPage || firstPage.historyId === historyId) {
-    return data;
-  }
-
-  return {
-    ...data,
-    pages: [{ ...firstPage, historyId }, ...data.pages.slice(1)],
   };
 };
 
@@ -399,10 +373,6 @@ export const applyMessageMetadata = (
     threadLabelIds,
   };
 };
-
-export const toMessageMetadataById = (
-  updates: readonly MessageMetadataMutationResult[]
-) => new Map(updates.map((update) => [update.id, update] as const));
 
 export const applyMessageLabelChangesLocally = (
   message: MessageListItem,

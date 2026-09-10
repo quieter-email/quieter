@@ -46,7 +46,6 @@
     "@sentry/tanstackstart-react": "^10.70.0",
     "@tanstack/hotkeys": "catalog:",
     "@tanstack/query-core": "catalog:",
-    "@tanstack/query-persist-client-core": "catalog:",
     "@tanstack/react-form": "catalog:",
     "@tanstack/react-hotkeys": "catalog:",
     "@tanstack/react-query": "catalog:",

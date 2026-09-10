@@ -71,10 +71,6 @@ export const createSstConfigEnv = (
       POLAR_SANDBOX: runtimeEnv.POLAR_SANDBOX,
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED:
         runtimeEnv.QUIETER_GMAIL_AI_AUTOMATION_ENABLED,
-      QUIETER_MAIL_SYNC_CLIENT_ENABLED:
-        runtimeEnv.QUIETER_MAIL_SYNC_CLIENT_ENABLED,
-      QUIETER_MAIL_SYNC_CLIENT_USERS: runtimeEnv.QUIETER_MAIL_SYNC_CLIENT_USERS,
-      QUIETER_MAIL_SYNC_ENABLED: runtimeEnv.QUIETER_MAIL_SYNC_ENABLED,
       R2_ACCOUNT_ID: runtimeEnv.R2_ACCOUNT_ID,
       R2_BUCKET: runtimeEnv.R2_BUCKET,
       R2_ENDPOINT: runtimeEnv.R2_ENDPOINT,
@@ -89,9 +85,6 @@ export const createSstConfigEnv = (
       POLAR_PRODUCT_PRO_ID: optionalString,
       POLAR_SANDBOX: optionalBooleanString,
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED: optionalBooleanString,
-      QUIETER_MAIL_SYNC_CLIENT_ENABLED: optionalBooleanString,
-      QUIETER_MAIL_SYNC_CLIENT_USERS: optionalString,
-      QUIETER_MAIL_SYNC_ENABLED: optionalBooleanString,
       R2_ACCOUNT_ID: optionalString,
       R2_BUCKET: optionalString,
       R2_ENDPOINT: optionalString,

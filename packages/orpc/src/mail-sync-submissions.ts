@@ -18,7 +18,6 @@ import type {
 import { and, asc, eq, lte } from "drizzle-orm";
 import type { z } from "zod";
 
-import { isMailSyncEnabled } from "./mail-sync-runtime";
 import { hashRequest } from "./request-hash";
 
 export const prepareGmailSubmission = async (
@@ -71,9 +70,6 @@ export const performGmailSubmission = async (
   accessToken: string,
   execute: () => Promise<SyncSubmissionResult>
 ) => {
-  if (!isMailSyncEnabled()) {
-    return await execute();
-  }
   const submissions = new SyncSubmissions(db, (error) => {
     reportError(error, { operation: "mail_sync_submission" });
   });

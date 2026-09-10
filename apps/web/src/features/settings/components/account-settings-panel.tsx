@@ -34,7 +34,6 @@ import {
   clearPreviewPersonaCookie,
   setPreviewPersona,
 } from "#/lib/preview-personas";
-import { queryPersister } from "#/lib/query-persister";
 
 import {
   SettingsCard,
@@ -721,7 +720,7 @@ const DeleteAccountDialog = () => {
     mutationKey: ["auth", "delete-user"],
     onSuccess: async () => {
       queryClient.clear();
-      await queryPersister.removeQueries();
+
       await navigate({
         to: "/home",
       });
@@ -899,7 +898,7 @@ export const AccountSettingsPanel = ({
         // Best-effort cleanup; sign-out teardown must continue.
       }
       queryClient.clear();
-      await queryPersister.removeQueries();
+
       await navigate({
         to: "/home",
       });
