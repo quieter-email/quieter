@@ -85,6 +85,7 @@ jobs:
 
       - name: Refresh SST state and prepare production build
         run: |
+          vp exec sst diff --config sst.config.ts --stage "$SST_STAGE"
           vp exec sst refresh --config sst.config.ts --stage "$SST_STAGE"
           vp exec sst diff --config sst.config.ts --stage "$SST_STAGE"
 
