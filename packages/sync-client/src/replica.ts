@@ -35,6 +35,7 @@ export class MailboxReplica {
   private updates: Promise<unknown> = Promise.resolve();
   private catchup: Promise<void> | null = null;
   private resetting: Promise<void> | null = null;
+  private readonly reading = new Map<string, Promise<ThreadMessagesResult>>();
 
   constructor(options: ReplicaOptions) {
     this.options = options;
@@ -392,7 +393,7 @@ export class MailboxReplica {
     }
   }
 
-  async thread(threadId: string, attempt = 0): Promise<ThreadMessagesResult> {
+  async messageIds(threadId: string) {
     let thread = this.entities.get(`thread:${threadId}`)?.data;
     if (
       thread?.kind !== "thread" ||
@@ -404,10 +405,32 @@ export class MailboxReplica {
       thread = this.entities.get(`thread:${threadId}`)?.data;
     }
     if (thread?.kind !== "thread") {
-      return { messages: [], threadId };
+      return [];
     }
+    return thread.value.messageIds;
+  }
+
+  async thread(threadId: string): Promise<ThreadMessagesResult> {
+    const existing = this.reading.get(threadId);
+    if (existing !== undefined) {
+      return await existing;
+    }
+    const pending = this.loadThread(threadId);
+    this.reading.set(threadId, pending);
+    try {
+      return await pending;
+    } finally {
+      this.reading.delete(threadId);
+    }
+  }
+
+  private async loadThread(
+    threadId: string,
+    attempt = 0
+  ): Promise<ThreadMessagesResult> {
+    const messageIds = await this.messageIds(threadId);
     const metadata: SyncMessage[] = [];
-    for (const id of thread.value.messageIds) {
+    for (const id of messageIds) {
       const entity = this.entities.get(`message:${id}`)?.data;
       if (entity?.kind === "message") {
         metadata.push(entity.value);
@@ -480,7 +503,7 @@ export class MailboxReplica {
     });
     if (changed) {
       if (attempt < 2) {
-        return await this.thread(threadId, attempt + 1);
+        return await this.loadThread(threadId, attempt + 1);
       }
       throw new Error("Message content changed while it was loading.");
     }

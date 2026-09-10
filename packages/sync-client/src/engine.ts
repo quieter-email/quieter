@@ -413,6 +413,11 @@ export class MailSyncEngine {
     }
   }
 
+  async messageIds(mailboxId: string, threadId: string) {
+    const replica = await this.ensureMailbox(mailboxId);
+    return await replica.messageIds(threadId);
+  }
+
   async command(input: SyncCommand) {
     if (!this.online) {
       throw new Error("Connect to the internet to make changes.");

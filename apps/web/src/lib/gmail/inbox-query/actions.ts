@@ -173,15 +173,18 @@ export const updateThreadInMailbox = async (
     args.mailboxId,
     args.signal
   );
-  const thread = await sync.client.thread(args.mailboxId, args.threadId);
-  if (thread.messages.length === 0) {
+  const messageIds = await sync.client.messageIds(
+    args.mailboxId,
+    args.threadId
+  );
+  if (messageIds.length === 0) {
     return;
   }
   await sync.command(
     args.mailboxId,
     [
       {
-        messageIds: thread.messages.map((message) => message.id),
+        messageIds,
         threadId: args.threadId,
       },
     ],

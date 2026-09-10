@@ -14,7 +14,7 @@ import {
   listLabels,
 } from "@quieter/gmail";
 import type { MailLabelListItem } from "@quieter/mail/messages";
-import type { SyncMessage } from "@quieter/sync";
+import type { SyncCheckpoint, SyncMessage } from "@quieter/sync";
 import { and, eq, inArray, isNull, isNotNull, ne, or } from "drizzle-orm";
 
 import { prepareSyncMessage } from "../body-store";
@@ -69,11 +69,51 @@ export const gmailSyncProvider = (
 export const projectGmailThreads = async (
   context: SyncTransaction,
   threads: ReadonlyMap<string, SyncMessage[]>,
-  providerGeneration?: string
+  providerGeneration?: string,
+  baseline?: SyncCheckpoint | null
 ) => {
   const { database, mailboxId, put } = context;
+  if (baseline !== undefined) {
+    const [stream] = await database
+      .select()
+      .from(mailSyncStream)
+      .where(eq(mailSyncStream.mailboxId, mailboxId));
+    if (baseline !== null && stream?.epoch !== baseline.epoch) {
+      return;
+    }
+  }
   await confirmProjectedSubmissions(context, [...threads.values()].flat());
   for (const [threadId, messages] of threads) {
+    if (baseline !== undefined) {
+      const current = await database
+        .select({ version: mailSyncEntity.version })
+        .from(mailSyncEntity)
+        .where(
+          and(
+            eq(mailSyncEntity.mailboxId, mailboxId),
+            inArray(mailSyncEntity.kind, ["message", "thread"]),
+            eq(mailSyncEntity.threadId, threadId)
+          )
+        );
+      if (
+        current.some(
+          (entity) => entity.version > BigInt(baseline?.sequence ?? "0")
+        )
+      ) {
+        if (providerGeneration !== undefined) {
+          await database
+            .update(mailSyncEntity)
+            .set({ providerGeneration })
+            .where(
+              and(
+                eq(mailSyncEntity.mailboxId, mailboxId),
+                eq(mailSyncEntity.threadId, threadId)
+              )
+            );
+        }
+        continue;
+      }
+    }
     const previous = await database
       .select({ id: mailSyncEntity.entityId })
       .from(mailSyncEntity)
@@ -177,6 +217,7 @@ export const synchronizeGmail = async (
   provider: GmailSyncProvider
 ) =>
   await withProviderLease(repository, mailboxId, async (state, leaseId) => {
+    const baseline = await repository.head(mailboxId);
     const generation = state.inventoryGeneration ?? crypto.randomUUID();
     const initialProfile =
       state.cursor === null ? await provider.profile() : null;
@@ -245,7 +286,7 @@ export const synchronizeGmail = async (
     let sweepComplete = state.phase !== "repair" && state.phase !== "sweep";
     await repository.transaction(mailboxId, async (context) => {
       await assertProviderLease(context, leaseId);
-      await projectGmailThreads(context, threads, generation);
+      await projectGmailThreads(context, threads, generation, baseline);
       if (labels !== null) {
         const details = await context.database
           .select()
@@ -392,20 +433,27 @@ export const hydrateGmailThreads = async (
   provider: GmailSyncProvider,
   threadIds: string[]
 ) => {
-  await withProviderLease(repository, mailboxId, async (state, leaseId) => {
-    const threads = await fetchGmailSyncThreads(
-      provider,
-      store,
-      mailboxId,
-      threadIds
+  const baseline = await repository.head(mailboxId);
+  const threads = await fetchGmailSyncThreads(
+    provider,
+    store,
+    mailboxId,
+    threadIds
+  );
+  await repository.transaction(mailboxId, async (context) => {
+    const [state] = await context.database
+      .select()
+      .from(mailSyncProviderState)
+      .where(eq(mailSyncProviderState.mailboxId, mailboxId));
+    await projectGmailThreads(
+      context,
+      threads,
+      state?.inventoryGeneration ?? undefined,
+      baseline
     );
-    await repository.transaction(mailboxId, async (context) => {
-      await assertProviderLease(context, leaseId);
-      await projectGmailThreads(
-        context,
-        threads,
-        state.inventoryGeneration ?? undefined
-      );
-    });
+    await context.database
+      .update(mailSyncStream)
+      .set({ initialized: true })
+      .where(eq(mailSyncStream.mailboxId, mailboxId));
   });
 };

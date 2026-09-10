@@ -203,6 +203,13 @@ const receive = async (raw: unknown) => {
           result = await engine.command(action.input);
           break;
         }
+        case "message-ids": {
+          result = await engine.messageIds(
+            action.input.mailboxId,
+            action.input.threadId
+          );
+          break;
+        }
         case "catch-up": {
           await engine.catchUp(action.input.mailboxId);
           break;

@@ -69,9 +69,12 @@ export const runMailboxSynchronization = async (mailboxId: string) => {
   }
   const { bodies, repository } = mailSyncServices();
   const processedCommand = await mailSyncCommandService().process(mailboxId);
+  if (processedCommand) {
+    return { hasMore: true };
+  }
   if (selected.provider === "managed") {
     const result = await bootstrapManagedMailbox(repository, bodies, mailboxId);
-    return { hasMore: processedCommand || result.hasMore };
+    return { hasMore: result.hasMore };
   }
   if (!selected.ownerUserId) {
     throw new Error("Mailbox ownership is missing.");
@@ -93,7 +96,7 @@ export const runMailboxSynchronization = async (mailboxId: string) => {
             reportError(error, { operation: "mail_sync_submission_recovery" });
           }
         }
-        return { hasMore: processedCommand || result.hasMore };
+        return { hasMore: result.hasMore };
       }
     );
   } catch (error) {
@@ -210,6 +213,7 @@ export const mailSyncOperations = {
     if (body === null) {
       await mailSyncOperations.hydrate({
         ...input,
+        refreshBodies: true,
         threadIds: [entity.data.value.threadId],
       });
       body = await readSyncBody(bodies, input.mailboxId, input.hash);
@@ -235,9 +239,32 @@ export const mailSyncOperations = {
     mailboxId: string;
     userId: string;
     threadIds: string[];
+    refreshBodies?: boolean;
   }) => {
     const selected = await authorizeSyncMailbox(input.mailboxId, input.userId);
     const { bodies, repository } = mailSyncServices();
+    if (input.refreshBodies !== true) {
+      const cached = await repository.snapshot(
+        input.mailboxId,
+        input.threadIds
+      );
+      if (
+        cached !== null &&
+        input.threadIds.every((id) =>
+          cached.entities.some(
+            (entity) =>
+              entity.kind === "thread" &&
+              entity.id === id &&
+              entity.data !== null
+          )
+        )
+      ) {
+        return {
+          ...cached,
+          entities: visibleSyncChanges(cached.entities, input.userId),
+        };
+      }
+    }
     if (selected.provider === "managed") {
       for (const threadId of input.threadIds) {
         const thread = await getManagedThread({
@@ -279,10 +306,7 @@ export const mailSyncOperations = {
   },
   refresh: async (input: { mailboxId: string; userId: string }) => {
     await authorizeSyncMailbox(input.mailboxId, input.userId);
-    const result = await runMailboxSynchronization(input.mailboxId);
-    if (result.hasMore) {
-      await mailSyncServices().enqueue(input.mailboxId);
-    }
+    await mailSyncServices().enqueue(input.mailboxId);
   },
   replay: async (input: {
     mailboxId: string;
@@ -314,10 +338,7 @@ export const mailSyncOperations = {
       .from(mailSyncStream)
       .where(eq(mailSyncStream.mailboxId, input.mailboxId));
     if (!stream?.initialized) {
-      const result = await runMailboxSynchronization(input.mailboxId);
-      if (result.hasMore) {
-        await enqueue(input.mailboxId);
-      }
+      await enqueue(input.mailboxId);
     }
     const snapshot = await repository.snapshot(
       input.mailboxId,

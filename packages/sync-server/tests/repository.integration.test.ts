@@ -13,8 +13,13 @@ import { collectSyncBodies } from "../src/body-collection";
 import { SyncCommands } from "../src/commands";
 import { projectManagedDelivery } from "../src/delivery";
 import { readSyncHealth } from "../src/health";
-import { synchronizeGmail } from "../src/providers/gmail";
+import {
+  hydrateGmailThreads,
+  projectGmailThreads,
+  synchronizeGmail,
+} from "../src/providers/gmail";
 import type { GmailSyncProvider } from "../src/providers/gmail";
+import { withProviderLease } from "../src/providers/lease";
 import { SyncRepository } from "../src/repository";
 import { SyncSubmissions } from "../src/submissions";
 
@@ -822,5 +827,60 @@ suite("transactional mail replication", () => {
     const [finished] =
       await connection`SELECT cursor, "historyPageToken" FROM "mailSyncProviderState" WHERE "mailboxId"=${mailboxId}`;
     expect(finished).toMatchObject({ cursor: "30", historyPageToken: null });
+
+    await withProviderLease(repository, mailboxId, async () => {
+      await hydrateGmailThreads(repository, bodies, mailboxId, provider, [
+        "thread",
+      ]);
+    });
+    const snapshot = await repository.snapshot(mailboxId, ["thread"]);
+    const entity = snapshot?.entities.find((entry) => entry.kind === "message");
+    if (entity?.data?.kind !== "message") {
+      throw new Error("Expected hydrated message metadata.");
+    }
+    const initialMessage = entity.data.value;
+    const oldThread = await provider.thread("thread");
+    const fetching = Promise.withResolvers<null>();
+    const release = Promise.withResolvers<null>();
+    const hydrating = hydrateGmailThreads(
+      repository,
+      bodies,
+      mailboxId,
+      {
+        ...provider,
+        thread: async () => {
+          fetching.resolve(null);
+          await release.promise;
+          return oldThread;
+        },
+      },
+      ["thread"]
+    );
+    await fetching.promise;
+    await repository.transaction(mailboxId, async (context) => {
+      await projectGmailThreads(
+        context,
+        new Map([
+          [
+            "thread",
+            [
+              {
+                ...initialMessage,
+                isUnread: true,
+                labelIds: ["INBOX", "UNREAD"],
+              },
+            ],
+          ],
+        ])
+      );
+    });
+    release.resolve(null);
+    await hydrating;
+    const current = await repository.snapshot(mailboxId, ["thread"]);
+    expect(
+      current?.entities.find((entry) => entry.kind === "message")?.data
+    ).toMatchObject({
+      value: { isUnread: true, labelIds: ["INBOX", "UNREAD"] },
+    });
   });
 });

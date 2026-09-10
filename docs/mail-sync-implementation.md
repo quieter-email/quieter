@@ -1,6 +1,6 @@
 # Mail sync implementation
 
-The custom engine is the only Gmail and managed-mail synchronization implementation on the feature branch. Production deployment and provider-write canaries remain separate protected operations. This document records the delivered behavior and operating instructions for [the design](custom-mail-sync-engine-plan.md).
+The custom engine is the deployed Gmail and managed-mail synchronization implementation. Production deployment and provider-write canaries remain protected operations. This document records the delivered behavior and operating instructions for [the design](custom-mail-sync-engine-plan.md).
 
 The engine lives in separate packages. Existing application code connects through explicit adapters, transaction hooks, and UI adapters. Avoid distributing protocol, persistence, and transport decisions throughout existing services.
 
@@ -23,6 +23,8 @@ Gmail import, history notifications, expired-history repair, and managed-mail tr
 Mailbox Durable Objects coalesce work and route committed batches to user Durable Objects. User sockets use hibernation, expiring signed tickets, session checks, mailbox authorization, bounded frames, acknowledgements, and replay. PostgreSQL stores the ordered log and outbox. A crash after commit is recovered from the outbox; a missed or out-of-order delivery causes replay. Snapshots and bodies use authenticated HTTPS. Polling starts only after repeated socket failures.
 
 Commands carry stable IDs, serialize provider work per mailbox, retain receipts, and retry recoverable failures. Optimistic UI state is reconciled against those receipts. Draft versions detect stale saves. A separate provider submission journal records an unknown outcome before Gmail sends or saves, then reconciles it using the stable Message-ID. An uncertain send is never blindly repeated.
+
+Foreground reads first use stored thread snapshots. Missing Gmail threads can be fetched while the import lease is held. Before projecting a response, the transaction checks the stream epoch and thread/message versions from before the fetch; a late response cannot replace newer state. Background imports use the same check and preserve inventory generation tracking when a newer projection wins. Bootstrap and refresh requests enqueue work, and queued commands run before another import page. Thread actions read message IDs without loading bodies. Simultaneous prefetch and foreground reads share one body-loading task per thread.
 
 The browser engine runs in a Worker and shares leadership and updates across tabs. It fences snapshots, late HTTP responses, resets, account switches, and revoked access by mailbox and generation. The app uses explicit query and compose adapters. The old Gmail dirty-event sockets, history-delta polling, localStorage query persistence, rollout flags, and direct metadata mutation endpoints have been removed. Startup waits for the worker and authorized mailbox inventory; reading one mailbox does not wait for every replica to bootstrap. Missing runtime configuration is an error. Authenticated HTTP snapshots, replay, list and body reads are part of this engine. Manual refresh triggers provider reconciliation and checkpoint catch-up.
 
@@ -93,7 +95,7 @@ An optional reproducible browser fixture remains available through `vp run test:
 
 ## Deployment and rollback
 
-Five additive generated migrations introduce the sync schema and body-reference registry. They were reviewed and applied only to `quieter_dev`. Production migrations and deployment were not run. Use the protected deployment workflow and its database checks; create the production `MailSyncSecret` through SST before the first deployment. Team Gmail limits need no additional schema migration.
+Five additive generated migrations introduce the sync schema and body-reference registry. They were applied to development and then production through the protected deployment workflow. The production `MailSyncSecret` is configured through SST. Continue using the protected workflow and its database checks for releases. Team Gmail limits need no additional schema migration.
 
 Deploy the additive schema before the new writers, then the dedicated sync runtime and application. There is no alternate client engine or cohort switch. Verify dedicated test mailboxes, provider writes, duplicate notifications, reconnects, delivery feedback and alerts through the protected workflow.
 

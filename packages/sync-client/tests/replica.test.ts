@@ -161,7 +161,12 @@ describe("browser replica races", () => {
       expect(events.some((event) => event.type === "entities")).toBeFalsy();
       await replica.reset();
       const loading = replica.thread("thread");
+      const concurrent = replica.thread("thread");
       await started.promise;
+      await expect(replica.messageIds("thread")).resolves.toStrictEqual([
+        "message",
+      ]);
+      expect(requests).toBe(1);
       await replica.apply({
         changes: updated.entities,
         epoch,
@@ -171,6 +176,7 @@ describe("browser replica races", () => {
       });
       delayed.resolve({ bodyText: "Old draft" });
       const loaded = await loading;
+      await expect(concurrent).resolves.toStrictEqual(loaded);
       expect(loaded.messages[0].bodyText).toBe("New draft");
       await replica.thread("thread");
       expect(requests).toBe(2);

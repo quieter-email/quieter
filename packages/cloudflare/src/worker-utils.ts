@@ -187,7 +187,7 @@ export const requestErrorResponse = (error: unknown, route: string) => {
   const status = error instanceof RequestError ? error.status : 500;
   const category =
     error instanceof RequestError ? error.category : "internal_error";
-  if (status >= 500) {
+  if (status >= 500 && category !== "mailbox_busy") {
     reportWorkerError(error, { category, route, status });
   }
   return Response.json({ error: "Request failed" }, { status });
