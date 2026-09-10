@@ -457,7 +457,7 @@ export const MailboxWorkspaceContent = ({
     );
   } else {
     mailboxContent = (
-      <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(20rem,405px)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:pl-4">
+      <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(20rem,max(34%,405px))_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:pl-4">
         <MailboxMessagesPanel
           activeMailbox={activeMailbox}
           currentUserEmail={currentUserEmail}
