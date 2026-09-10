@@ -5,6 +5,7 @@ import { chatModelSchema } from "@quieter/ai/chat-models";
 import type { ChatModel } from "@quieter/ai/chat-models";
 import type { AiUsageReport } from "@quieter/ai/chat-usage";
 import type { AutomationMailMessage } from "@quieter/ai/classify-gmail-message";
+import { shouldReportAiTaskFailure } from "@quieter/ai/errors";
 import { extractMailUsefulDetail } from "@quieter/ai/extract-gmail-useful-detail";
 import type {
   GmailUsefulDetailCandidate,
@@ -1262,7 +1263,9 @@ export const processGmailUsefulDetailMessage = async ({
         updatedAt: now,
       })
       .where(eq(gmailUsefulDetailEvent.id, event.id));
-    reportError(error, { operation: "gmail-useful-details:extract" });
+    if (shouldReportAiTaskFailure(error, attemptCount)) {
+      reportError(error, { operation: "gmail-useful-details:extract" });
+    }
   }
 };
 

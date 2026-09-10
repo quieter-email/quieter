@@ -4,6 +4,7 @@ import type { ChatModel } from "@quieter/ai/chat-models";
 import type { AiUsageReport } from "@quieter/ai/chat-usage";
 import { classifyMailMessage } from "@quieter/ai/classify-gmail-message";
 import type { MailAutoLabelCandidate } from "@quieter/ai/classify-gmail-message";
+import { shouldReportAiTaskFailure } from "@quieter/ai/errors";
 import { db } from "@quieter/database/client";
 import {
   gmailAutoLabelEvent,
@@ -438,7 +439,9 @@ const processAutoLabelMessage = async ({
         updatedAt: now,
       })
       .where(eq(gmailAutoLabelEvent.id, event.id));
-    reportError(error, { operation: "gmail-sync:auto-label-message" });
+    if (shouldReportAiTaskFailure(error, attemptCount)) {
+      reportError(error, { operation: "gmail-sync:auto-label-message" });
+    }
   }
 };
 
