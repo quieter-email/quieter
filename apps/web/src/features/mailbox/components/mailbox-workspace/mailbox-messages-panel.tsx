@@ -334,7 +334,7 @@ export const MailboxMessagesPanel = ({
       </WorkspaceSection>
 
       <WorkspaceSection
-        className={cn("lg:ml-2", {
+        className={cn({
           flex: isMessageRouteOpen,
           hidden: !isMessageRouteOpen,
         })}
