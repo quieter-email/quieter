@@ -98,10 +98,10 @@
   --shadow-surface:
     0 16px 32px -20px oklch(0 0 0 / 0.18), 0 4px 10px -6px oklch(0 0 0 / 0.08);
   --canvas-glow: radial-gradient(
-    150% 100% at 12% 104%,
-    oklch(1 0 0 / 0.5) 0%,
-    oklch(1 0 0 / 0.22) 45%,
-    transparent 85%
+    170% 70% at 6% 110%,
+    oklch(1 0 0 / 0.4) 0%,
+    oklch(1 0 0 / 0.18) 48%,
+    transparent 88%
   );
   --panel-gradient: linear-gradient(
     180deg,
@@ -188,12 +188,11 @@
   --shadow-surface:
     0 24px 48px -24px oklch(0 0 0 / 0.75), 0 6px 16px -8px oklch(0 0 0 / 0.45);
   --canvas-glow: radial-gradient(
-    100% 110% at 14% 104%,
-    rgb(255 255 255 / 0.032) 0%,
-    rgb(255 255 255 / 0.028) 40%,
-    rgb(255 255 255 / 0.013) 65%,
-    rgb(255 255 255 / 0.004) 82%,
-    transparent 95%
+    170% 60% at 6% 110%,
+    rgb(255 255 255 / 0.02) 0%,
+    rgb(255 255 255 / 0.014) 48%,
+    rgb(255 255 255 / 0.006) 72%,
+    transparent 92%
   );
   --panel-gradient: linear-gradient(
     180deg,
