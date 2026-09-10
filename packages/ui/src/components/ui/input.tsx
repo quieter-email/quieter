@@ -22,7 +22,7 @@ const inputVariants = cva(
     variants: {
       chrome: {
         default:
-          "squircle rounded-md border border-border bg-input shadow-sm read-only:cursor-default read-only:bg-input",
+          "squircle rounded-md border border-border bg-input shadow-none read-only:cursor-default read-only:bg-input",
         ghost: "border-0 bg-transparent shadow-none read-only:bg-transparent",
       },
       size: {
