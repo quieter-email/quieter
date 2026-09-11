@@ -204,6 +204,45 @@ describe.skipIf(databaseUrl === undefined)(
       ).resolves.toBeNull();
     });
 
+    test("reconciliation waits for the organization feedback lock", async () => {
+      const gate = Promise.withResolvers<boolean>();
+      const locked = Promise.withResolvers<boolean>();
+
+      const holder = db.transaction(async (transaction) => {
+        await transaction
+          .select({ id: organization.id })
+          .from(organization)
+          .where(eq(organization.id, organizationId))
+          .for("update");
+        locked.resolve(true);
+        await gate.promise;
+      });
+
+      await locked.promise;
+      const reconcile = reconcileOrganizationMailDeliveryRecipients({
+        organizationId,
+        providerMessageId,
+      });
+      const timeout = Promise.withResolvers<"blocked">();
+      const timer = setTimeout(() => {
+        timeout.resolve("blocked");
+      }, 500);
+      const waitForReconcile = async (): Promise<"completed"> => {
+        await reconcile;
+        return "completed";
+      };
+      let outcome: "blocked" | "completed" = "completed";
+      try {
+        outcome = await Promise.race([waitForReconcile(), timeout.promise]);
+      } finally {
+        clearTimeout(timer);
+        gate.resolve(true);
+        await holder;
+        await reconcile;
+      }
+      expect(outcome).toBe("blocked");
+    });
+
     test("single and multi-recipient opens never replace delivery and obey mailbox scope", async () => {
       await recordOrganizationMailMarkerLoad({
         messageHeaderId,
