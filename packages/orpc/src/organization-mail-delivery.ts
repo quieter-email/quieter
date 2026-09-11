@@ -695,6 +695,14 @@ export const reconcileOrganizationMailDeliveryRecipients = async (input: {
   providerMessageId: string;
 }) =>
   await db.transaction(async (transaction) => {
+    // Feedback ingestion serializes on the organization row. Taking the same
+    // lock keeps this read-compute-replace atomic with delivery events, so a
+    // committed event cannot be overwritten by a stale recomputation.
+    await transaction
+      .select({ id: organization.id })
+      .from(organization)
+      .where(eq(organization.id, input.organizationId))
+      .for("update");
     await transaction.execute(
       sql`select pg_advisory_xact_lock(hashtextextended(${JSON.stringify([input.organizationId, input.providerMessageId])}, 0))`
     );
@@ -767,8 +775,10 @@ export const reconcileOrganizationMailDeliveryRecipients = async (input: {
           })
           .onConflictDoUpdate({
             set: {
-              lastEventAt: state.occurredAt,
-              status: state.status,
+              lastEventAt: sql`greatest(${organizationMailDeliveryRecipient.lastEventAt}, excluded."lastEventAt")`,
+              status: mergeDeliveryStatusSql(
+                organizationMailDeliveryRecipient.status
+              ),
               updatedAt: now,
             },
             target: [
