@@ -105,7 +105,6 @@ export type ManagedMailRuleBackfillStatus =
   | "pending"
   | "running";
 export type ManagedMailRuleMatchMode = "all" | "any";
-export type ManagedMailSavedViewSort = "newest" | "oldest" | "relevance";
 export type ManagedMailHeader = {
   name: string;
   value: string;
@@ -2064,49 +2063,6 @@ export const managedMailLabel = pgTable(
   ]
 );
 
-export const managedMailSavedView = pgTable(
-  "managedMailSavedView",
-  {
-    color: text("color"),
-    createdAt: timestamp("createdAt").notNull(),
-    disabledReason: text("disabledReason"),
-    icon: text("icon"),
-    id: text("id").primaryKey(),
-    mailboxId: text("mailboxId")
-      .notNull()
-      .references(() => mailbox.id, { onDelete: "cascade" }),
-    name: text("name").notNull(),
-    normalizedName: text("normalizedName").notNull(),
-    ownerUserId: text("ownerUserId").references(() => user.id, {
-      onDelete: "cascade",
-    }),
-    position: integer("position").notNull().default(0),
-    search: jsonb("search").$type<unknown>().notNull(),
-    sort: text("sort")
-      .$type<ManagedMailSavedViewSort>()
-      .notNull()
-      .default("newest"),
-    updatedAt: timestamp("updatedAt").notNull(),
-  },
-  (table) => [
-    check(
-      "managed_mail_saved_view_sort_check",
-      sql`${table.sort} in ('newest', 'oldest', 'relevance')`
-    ),
-    index("managed_mail_saved_view_mailbox_owner_position_idx").on(
-      table.mailboxId,
-      table.ownerUserId,
-      table.position
-    ),
-    uniqueIndex("managed_mail_saved_view_shared_name_unique")
-      .on(table.mailboxId, table.normalizedName)
-      .where(sql`${table.ownerUserId} is null`),
-    uniqueIndex("managed_mail_saved_view_personal_name_unique")
-      .on(table.mailboxId, table.ownerUserId, table.normalizedName)
-      .where(sql`${table.ownerUserId} is not null`),
-  ]
-);
-
 export const managedMailRule = pgTable(
   "managedMailRule",
   {
@@ -2903,7 +2859,6 @@ export const tables = {
   managedMailRuleApplication,
   managedMailRuleBackfill,
   managedMailRuleRun,
-  managedMailSavedView,
   member,
   organization,
   organizationApiMailAttachment,
@@ -3301,10 +3256,6 @@ export const authRelations = defineRelations(tables, (r) => ({
       from: r.mailbox.id,
       to: r.managedMailRule.mailboxId,
     }),
-    managedSavedViews: r.many.managedMailSavedView({
-      from: r.mailbox.id,
-      to: r.managedMailSavedView.mailboxId,
-    }),
     organization: r.one.organization({
       from: r.mailbox.organizationId,
       optional: false,
@@ -3548,18 +3499,6 @@ export const authRelations = defineRelations(tables, (r) => ({
       from: r.managedMailRule.mailboxId,
       optional: false,
       to: r.mailbox.id,
-    }),
-  },
-  managedMailSavedView: {
-    mailbox: r.one.mailbox({
-      from: r.managedMailSavedView.mailboxId,
-      optional: false,
-      to: r.mailbox.id,
-    }),
-    owner: r.one.user({
-      from: r.managedMailSavedView.ownerUserId,
-      optional: true,
-      to: r.user.id,
     }),
   },
   member: {

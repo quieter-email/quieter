@@ -422,7 +422,7 @@ const ManagedRuleRow = (props: ManagedRuleRowProps) => {
     deleteRuleMutation,
     isRowActionPending,
     mailboxId,
-    pendingReorders,
+    pendingReorderRuleId,
     reorderRulesMutation,
     ruleConditionGroupsRef,
     ruleEnabledRef,
@@ -574,8 +574,8 @@ const ManagedRuleRow = (props: ManagedRuleRowProps) => {
       <IconButtonTooltip label={`Move ${rule.name} up`}>
         <Button
           aria-label={`Move ${rule.name} up`}
-          disabled={index === 0 || pendingReorders.rules !== undefined}
-          pending={pendingReorders.rules === rule.id}
+          disabled={index === 0 || pendingReorderRuleId !== null}
+          pending={pendingReorderRuleId === rule.id}
           onClick={() => {
             const ruleIds = rules.map((candidate) => candidate.id);
             [ruleIds[index - 1], ruleIds[index]] = [
@@ -602,10 +602,8 @@ const ManagedRuleRow = (props: ManagedRuleRowProps) => {
       <IconButtonTooltip label={`Move ${rule.name} down`}>
         <Button
           aria-label={`Move ${rule.name} down`}
-          disabled={
-            index === rules.length - 1 || pendingReorders.rules !== undefined
-          }
-          pending={pendingReorders.rules === rule.id}
+          disabled={index === rules.length - 1 || pendingReorderRuleId !== null}
+          pending={pendingReorderRuleId === rule.id}
           onClick={() => {
             const ruleIds = rules.map((candidate) => candidate.id);
             [ruleIds[index], ruleIds[index + 1]] = [
@@ -632,12 +630,11 @@ const ManagedRuleRow = (props: ManagedRuleRowProps) => {
       <IconButtonTooltip label={`Apply ${rule.name} to existing mail`}>
         <Button
           aria-label={`Apply ${rule.name} to existing mail`}
-          disabled={isRowActionPending("rule", rule.id, "backfill")}
-          pending={isRowActionPending("rule", rule.id, "backfill")}
+          disabled={isRowActionPending(rule.id, "backfill")}
+          pending={isRowActionPending(rule.id, "backfill")}
           pendingLabel="Running…"
           onClick={() => {
             void runRuleRowAction(
-              "rule",
               rule.id,
               "backfill",
               async () =>
@@ -662,11 +659,10 @@ const ManagedRuleRow = (props: ManagedRuleRowProps) => {
       <IconButtonTooltip label={`Delete ${rule.name}`}>
         <Button
           aria-label={`Delete ${rule.name}`}
-          disabled={isRowActionPending("rule", rule.id, "delete")}
-          pending={isRowActionPending("rule", rule.id, "delete")}
+          disabled={isRowActionPending(rule.id, "delete")}
+          pending={isRowActionPending(rule.id, "delete")}
           onClick={() => {
             void runRuleRowAction(
-              "rule",
               rule.id,
               "delete",
               async () =>

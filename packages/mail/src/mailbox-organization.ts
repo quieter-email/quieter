@@ -30,18 +30,6 @@ export const mailboxLabelSchema = z.object({
 
 export type MailboxLabel = z.infer<typeof mailboxLabelSchema>;
 
-export const mailboxSavedViewDefinitionSchema = z.object({
-  color: mailboxLabelColorSchema.nullable(),
-  icon: z.string().trim().max(64).nullable(),
-  name: z.string().trim().min(1).max(100),
-  search: structuredMailSearchSchema,
-  sort: z.enum(["newest", "oldest", "relevance"]).default("newest"),
-});
-
-export type MailboxSavedViewDefinition = z.infer<
-  typeof mailboxSavedViewDefinitionSchema
->;
-
 export const managedMailboxRuleActionSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("set-read"),

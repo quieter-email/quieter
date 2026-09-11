@@ -143,7 +143,7 @@ These are required acceptance cases, not a claim that every row was executed dur
 | Organizations and divisions | Owner/admin/member roles, invites, cross-org denials | Invitation delivery and membership lifecycle |
 | Mailbox ownership and grants | Two users, private Gmail, private managed mailbox, explicit grants/revocation | Provider account ownership remains separate |
 | Mail browsing | Thread grouping, unread counts, archive/trash/spam, pagination, empty/loading/error states | Gmail history and real managed-message ingestion |
-| Search and saved views | Mailbox-scoped queries, filters, saved searches, cache invalidation | Gmail search semantics and indexed DB behavior |
+| Search | Mailbox-scoped queries, filters, cache invalidation | Gmail search semantics and indexed DB behavior |
 | Compose | Draft persistence, reply/all/forward, recipients, templates, attachments, retries | Real Gmail send and SES simulator send |
 | Message rendering | MIME variants, HTML sanitization, inline images, downloads, malformed content | Large real fixture messages and private object permissions |
 | Labels and organization | CRUD, batch operations, optimistic rollback | Gmail label changes and reconciliation |

@@ -34,7 +34,7 @@ TanStack Start application containing:
 - TanStack Query configuration and persisted caches
 - consent-gated browser analytics
 
-Mailbox organization separates state, saved-view actions, rule actions and editors. Message cards and inspection, domain DNS and mail routing, and connector settings live beside their page controllers in feature-owned modules. Shared types describe their boundaries without importing page rendering at runtime.
+Mailbox organization separates state, rule actions and editors. Message cards and inspection, domain DNS and mail routing, and connector settings live beside their page controllers in feature-owned modules. Shared types describe their boundaries without importing page rendering at runtime.
 
 API handlers remain under `apps/web/src/routes/api/**`. Request-scoped auth and SSR data use route loaders or TanStack Start server functions.
 
@@ -68,7 +68,7 @@ Interactive write requests use database-backed rate limits. The per-minute mail 
 
 `packages/mail` owns shared message, attachment, label, category, and pagination contracts, along with MIME construction, raw parsing, content extraction, draft anchors, and avatar derivation. Both provider adapters return these contracts. The browser's mail helpers live in `apps/web/src/lib/mail.ts`; the web and AI packages have no direct Gmail-package dependency.
 
-Managed saved views and rule conditions store stable label IDs. Definition writes hold shared locks on referenced labels until commit. Renaming or deleting a label locks it before repairing legacy name references and updating dependent definitions in the same transaction. Deletion disables affected views and rules without removing predicates or actions; the organizer explains the missing reference, and saving a repaired definition clears that reason. The nullable rule reason column is an additive migration and must precede the application release.
+Managed rule conditions store stable label IDs. Definition writes hold shared locks on referenced labels until commit. Renaming or deleting a label locks it before repairing legacy name references and updating dependent definitions in the same transaction. Deletion disables affected rules without removing predicates or actions; the organizer explains the missing reference, and saving a repaired definition clears that reason. The nullable rule reason column is an additive migration and must precede the application release.
 
 `packages/gmail` contains Gmail REST calls and Gmail-specific draft parsing. It does not own encrypted credential storage or token refresh.
 

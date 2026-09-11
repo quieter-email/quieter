@@ -376,22 +376,11 @@ const SidebarInboxSection = ({
           onSelectMailbox={handleSelectMailbox}
           selectedMailbox={selectedMailbox}
         />
-        {selectedMailboxProvider !== null &&
-        selectedMailboxProvider !== "api" &&
-        selectedMailboxId ? (
+        {selectedMailboxProvider === "managed" && selectedMailboxId ? (
           <MailboxOrganizer
-            canManage={
-              selectedMailboxProvider === "gmail" ||
-              selectedMailboxGrantRole === "manager"
-            }
+            canManage={selectedMailboxGrantRole === "manager"}
             mailboxId={selectedMailboxId}
-            onSearch={(query) => {
-              onSearch(query);
-              onRequestClose?.();
-            }}
             searchQuery={searchQuery}
-            supportsRules={selectedMailboxProvider === "managed"}
-            supportsSharedViews={selectedMailboxProvider === "managed"}
           />
         ) : null}
         {selectedMailboxProvider !== "api" && (

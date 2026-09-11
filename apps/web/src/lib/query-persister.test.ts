@@ -9,7 +9,6 @@ import {
   managedRulesQueryOptions,
 } from "./managed-mailbox-organization-query";
 import { queryPersister, shouldPersistQueryKey } from "./query-persister";
-import { savedViewsQueryOptions } from "./saved-views-query";
 
 const getPersister = (options: { persister?: unknown }) => options.persister;
 
@@ -33,9 +32,6 @@ describe("query persistence allowlist", () => {
 
   test("persists mailbox-scoped label navigation metadata", () => {
     expect(getPersister(labelsQueryOptions("mailbox-a"))).toBe(
-      queryPersister.persisterFn
-    );
-    expect(getPersister(savedViewsQueryOptions("mailbox-a"))).toBe(
       queryPersister.persisterFn
     );
     expect(getPersister(managedLabelCountsQueryOptions("mailbox-a"))).toBe(
@@ -72,7 +68,6 @@ describe("query persistence allowlist", () => {
 
   test("persists mailbox metadata scopes", () => {
     expect(shouldPersistQueryKey(["gmail-labels", "mailbox-a"])).toBeTruthy();
-    expect(shouldPersistQueryKey(["saved-views", "mailbox-a"])).toBeTruthy();
     expect(
       shouldPersistQueryKey(["managed-label-counts", "mailbox-a"])
     ).toBeTruthy();

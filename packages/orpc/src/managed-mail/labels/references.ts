@@ -1,10 +1,6 @@
 import { ORPCError } from "@orpc/server";
 import type { DatabaseExecutor } from "@quieter/database/client";
-import {
-  managedMailLabel,
-  managedMailRule,
-  managedMailSavedView,
-} from "@quieter/database/schema";
+import { managedMailLabel, managedMailRule } from "@quieter/database/schema";
 import {
   managedMailboxRuleActionSchema,
   managedMailboxRuleConditionGroupSchema,
@@ -59,44 +55,11 @@ export const updateManagedLabelReferences = async (
   >,
   deleted: boolean
 ) => {
-  const views = await database
-    .select()
-    .from(managedMailSavedView)
-    .where(eq(managedMailSavedView.mailboxId, label.mailboxId))
-    .for("update");
   const rules = await database
     .select()
     .from(managedMailRule)
     .where(eq(managedMailRule.mailboxId, label.mailboxId))
     .for("update");
-  for (const view of views) {
-    const search = structuredMailSearchSchema.parse(view.search);
-    let affected = false;
-    const filters = search.filters.map((filter) => {
-      if (
-        filter.type !== "label" ||
-        (filter.value !== label.id &&
-          normalizeManagedOrganizationName(filter.value) !==
-            label.normalizedName)
-      ) {
-        return filter;
-      }
-      affected = true;
-      return { ...filter, value: label.id };
-    });
-    if (affected) {
-      await database
-        .update(managedMailSavedView)
-        .set({
-          disabledReason: deleted
-            ? "A label used by this view was deleted. Update its filters."
-            : view.disabledReason,
-          search: { ...search, filters },
-          updatedAt: new Date(),
-        })
-        .where(eq(managedMailSavedView.id, view.id));
-    }
-  }
   for (const rule of rules) {
     let affected =
       rule.labelIds.includes(label.id) ||

@@ -25,7 +25,7 @@ import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
 export const DEMO_MANAGED_MAILBOX_ID = "demo:managed-mailbox";
 const DEMO_MANAGED_EMAIL_ADDRESS = "support@quieter.com";
 const DEMO_MANAGED_MAIL_STORAGE_KEY = "quieter:managed-demo-mail-state";
-const DEMO_MANAGED_MAIL_STATE_VERSION = 2;
+const DEMO_MANAGED_MAIL_STATE_VERSION = 3;
 const MANAGED_DEMO_THREAD_QUERY_VERSION = 3;
 
 const DEMO_MANAGED_LABEL_IDS = {
@@ -40,7 +40,6 @@ const DEMO_MANAGED_LABEL_ID_SET = new Set<string>(
 type ManagedDemoMailState = {
   labels: ManagedDemoLabel[];
   messages: MessageListItem[];
-  savedViews: ManagedDemoSavedView[];
   version: number;
 };
 
@@ -51,20 +50,6 @@ type ManagedDemoLabel = {
   name: string;
   position: number;
   visible: boolean;
-};
-
-type ManagedDemoSavedView = {
-  color: MailboxLabelColor | null;
-  icon: string | null;
-  id: string;
-  name: string;
-  ownerUserId: string | null;
-  position: number;
-  search: {
-    filters: { type: string; value: string }[];
-    text: string;
-  };
-  sort: "newest" | "oldest" | "relevance";
 };
 
 const daysAgo = (days: number) =>
@@ -171,15 +156,14 @@ const createInitialDemoState = (): ManagedDemoMailState => ({
     }),
     createMessage("managed-demo-msg-5", {
       bodyHtml:
-        "<p>Hi,</p><p>Sharing the latest label and saved view counts from local fixtures.</p><p>This message is outbound-only for Sent view testing.</p>",
+        "<p>Hi,</p><p>Sharing the latest label counts from local fixtures.</p><p>This message is outbound-only for Sent view testing.</p>",
       bodyText:
-        "Hi,\n\nSharing the latest label and saved view counts from local fixtures.\n\nThis message is outbound-only for Sent view testing.",
+        "Hi,\n\nSharing the latest label counts from local fixtures.\n\nThis message is outbound-only for Sent view testing.",
       date: daysAgo(2),
       from: DEMO_MANAGED_EMAIL_ADDRESS,
       isUnread: false,
       labelIds: labelIds(MAILBOX_LABELS.sent),
-      snippet:
-        "Sharing the latest label and saved view counts from local fixtures.",
+      snippet: "Sharing the latest label counts from local fixtures.",
       subject: "Weekly managed mail summary",
       threadId: "managed-demo-thread-sent",
       to: "Onboarding <onboarding@quieter.com>",
@@ -209,24 +193,6 @@ const createInitialDemoState = (): ManagedDemoMailState => ({
       to: DEMO_MANAGED_EMAIL_ADDRESS,
     }),
   ],
-  savedViews: [
-    {
-      color: "orange",
-      icon: null,
-      id: "demo-managed-saved-view-unread-support",
-      name: "Unread support",
-      ownerUserId: null,
-      position: 0,
-      search: {
-        filters: [
-          { type: "is", value: "unread" },
-          { type: "label", value: "Support" },
-        ],
-        text: "",
-      },
-      sort: "newest",
-    },
-  ],
   version: DEMO_MANAGED_MAIL_STATE_VERSION,
 });
 
@@ -240,7 +206,6 @@ const isManagedDemoMailState = (
   return (
     "messages" in value &&
     "labels" in value &&
-    "savedViews" in value &&
     value.version === DEMO_MANAGED_MAIL_STATE_VERSION
   );
 };
@@ -307,9 +272,6 @@ const invalidateManagedDemoMail = async (queryClient: QueryClient) => {
     queryClient.invalidateQueries({ queryKey: getMailboxesQueryKey() }),
     queryClient.invalidateQueries({
       queryKey: ["managed-label-counts", DEMO_MANAGED_MAILBOX_ID],
-    }),
-    queryClient.invalidateQueries({
-      queryKey: ["saved-views", DEMO_MANAGED_MAILBOX_ID],
     }),
     queryClient.invalidateQueries({
       queryKey: ["gmail-labels", DEMO_MANAGED_MAILBOX_ID],
@@ -420,8 +382,6 @@ export const getManagedDemoLabelCounts = () => {
     labelId,
   }));
 };
-
-export const getManagedDemoSavedViews = () => readDemoState().savedViews;
 
 export const getManagedDemoRules = (): [] => [];
 

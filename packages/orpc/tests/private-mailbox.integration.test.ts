@@ -13,13 +13,9 @@ import {
   organizationDivision,
   organizationDivisionMember,
   user,
-  managedMailSavedView,
   managedMailRule,
 } from "@quieter/database/schema";
-import {
-  mailboxSavedViewDefinitionSchema,
-  managedMailboxRuleDefinitionSchema,
-} from "@quieter/mail/mailbox-organization";
+import { managedMailboxRuleDefinitionSchema } from "@quieter/mail/mailbox-organization";
 import { and, eq, inArray } from "drizzle-orm";
 import {
   afterAll,
@@ -48,7 +44,6 @@ import {
   updateManagedRule,
 } from "../src/managed-mail/rules/service";
 import { getOnboardingState } from "../src/onboarding/service";
-import { createSavedView, updateSavedView } from "../src/saved-views/service";
 
 const { databaseUrl } = vi.hoisted(() => ({
   databaseUrl: process.env.MIGRATION_TEST_DATABASE_URL,
@@ -179,7 +174,7 @@ describe.skipIf(databaseUrl === undefined)(
         .where(inArray(user.id, [admin, owner, other, outsider]));
     });
 
-    test("create and rename conflicts use domain errors for labels, rules and saved views", async () => {
+    test("create and rename conflicts use domain errors for labels and rules", async () => {
       const mailboxId = await create();
       const context = { mailboxId, userId: owner };
       await createManagedLabel({ ...context, color: "blue", name: "VIP" });
@@ -223,65 +218,15 @@ describe.skipIf(databaseUrl === undefined)(
           ruleId: rule.id,
         })
       ).rejects.toMatchObject({ code: "CONFLICT" });
-
-      const viewDefinition = mailboxSavedViewDefinitionSchema.parse({
-        color: null,
-        icon: null,
-        name: "VIP",
-        search: { filters: [], text: "" },
-      });
-      for (const shared of [false, true]) {
-        await createSavedView({
-          ...context,
-          definition: viewDefinition,
-          shared,
-        });
-        await expect(
-          createSavedView({
-            ...context,
-            definition: { ...viewDefinition, name: " vip " },
-            shared,
-          })
-        ).rejects.toMatchObject({ code: "CONFLICT" });
-        const view = await createSavedView({
-          ...context,
-          definition: { ...viewDefinition, name: "Other" },
-          shared,
-        });
-        await expect(
-          updateSavedView({
-            ...context,
-            definition: viewDefinition,
-            viewId: view.id,
-          })
-        ).rejects.toMatchObject({ code: "CONFLICT" });
-      }
     });
 
-    test("label rename repairs legacy references and deletion disables every affected definition", async () => {
+    test("label rename repairs legacy references and deletion disables affected rules", async () => {
       const mailboxId = await create();
       const context = { mailboxId, userId: owner };
       const label = await createManagedLabel({
         ...context,
         color: "blue",
         name: "VIP",
-      });
-      const viewDefinition = mailboxSavedViewDefinitionSchema.parse({
-        color: null,
-        icon: null,
-        name: "VIP view",
-        search: {
-          filters: [{ negated: true, type: "label", value: "VIP" }],
-          text: "",
-        },
-      });
-      const view = await createSavedView({
-        ...context,
-        definition: viewDefinition,
-        shared: false,
-      });
-      expect(view.search).toMatchObject({
-        filters: [{ negated: true, type: "label", value: label.id }],
       });
       const definition = managedMailboxRuleDefinitionSchema.parse({
         actions: [{ kind: "set-read", read: true }],
@@ -304,10 +249,6 @@ describe.skipIf(databaseUrl === undefined)(
         throw new Error("Rule creation returned no record.");
       }
       await db
-        .update(managedMailSavedView)
-        .set({ search: viewDefinition.search })
-        .where(eq(managedMailSavedView.id, view.id));
-      await db
         .update(managedMailRule)
         .set({ conditionGroups: definition.conditionGroups })
         .where(eq(managedMailRule.id, rule.id));
@@ -316,22 +257,22 @@ describe.skipIf(databaseUrl === undefined)(
         labelId: label.id,
         name: "Important",
       });
-      const [renamedView] = await db
+      const [renamedRule] = await db
         .select()
-        .from(managedMailSavedView)
-        .where(eq(managedMailSavedView.id, view.id));
-      expect(renamedView.search).toStrictEqual(view.search);
+        .from(managedMailRule)
+        .where(eq(managedMailRule.id, rule.id));
+      expect(renamedRule.search).toStrictEqual(definition.search);
+      expect(renamedRule.conditionGroups).toStrictEqual([
+        {
+          matchMode: "any",
+          search: { filters: [{ type: "label", value: label.id }], text: "" },
+        },
+      ]);
       await deleteManagedLabel({ ...context, labelId: label.id });
-      const [disabledView] = await db
-        .select()
-        .from(managedMailSavedView)
-        .where(eq(managedMailSavedView.id, view.id));
       const [disabledRule] = await db
         .select()
         .from(managedMailRule)
         .where(eq(managedMailRule.id, rule.id));
-      expect(disabledView.disabledReason).toContain("deleted");
-      expect(disabledView.search).toStrictEqual(view.search);
       expect(disabledRule).toMatchObject({
         conditionGroups: [
           {
