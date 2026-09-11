@@ -110,6 +110,58 @@ function PrivacyPage() {
         </li>
       </ul>
 
+      <h2>Google API data</h2>
+      <p>
+        Quieter connects to Google when you sign in with Google or connect a
+        Gmail mailbox. Through Google APIs we access the mailbox content needed
+        for the features you use: messages, threads, attachments, labels,
+        drafts, send and settings data, plus your basic Google profile and email
+        address. If you enable the calendar connector, we access the calendar
+        events you authorize.
+      </p>
+      <p>
+        We use Google user data only to provide and secure the features you
+        request, such as syncing, reading, searching, composing, sending, and
+        labeling mail and, when you enable them, optional AI features. We do not
+        sell Google user data, use it for advertising, or use it to train
+        generalized AI models. Optional AI features process mailbox content
+        through the processors listed above, only when you enable those features
+        for a mailbox.
+      </p>
+      <p>
+        Gmail credentials are encrypted at rest, mailbox content stays limited
+        to the mailbox you connected and to members you explicitly grant access
+        to, and we retain Google data only as described under retention. You can
+        disconnect a mailbox at any time, which stops future access, and you can
+        revoke Google access for Quieter from your{" "}
+        <a
+          className="underline hover:text-fg"
+          href="https://myaccount.google.com/permissions"
+        >
+          Google Account permissions
+        </a>
+        . You can request deletion of your Google data by deleting your account
+        or contacting{" "}
+        <a
+          className="underline hover:text-fg"
+          href="mailto:legal@quieter.email"
+        >
+          legal@quieter.email
+        </a>
+        .
+      </p>
+      <p>
+        The use and transfer to any other app of information received from
+        Google APIs by Quieter will adhere to the{" "}
+        <a
+          className="underline hover:text-fg"
+          href="https://developers.google.com/terms/api-services-user-data-policy"
+        >
+          Google API Services User Data Policy
+        </a>
+        , including the Limited Use requirements.
+      </p>
+
       <h2>Why we process data</h2>
       <ul>
         <li>To provide and secure the service you request.</li>
