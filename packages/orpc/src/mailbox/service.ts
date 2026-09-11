@@ -32,6 +32,7 @@ import {
   encryptSecret,
   getGmailOAuthConfig,
   GMAIL_SCOPES,
+  REQUIRED_GMAIL_SCOPES,
   runAuthorizedGmailMailbox,
 } from "../gmail-mailbox-access";
 import { getOrganizationApiMailboxId } from "../organization-api-mail";
@@ -1101,7 +1102,11 @@ const assertGoogleGmailScopes = (scope: string) => {
   const grantedScopes = new Set(
     scope.split(/\s+/u).filter((part) => part !== "")
   );
-  if (!GMAIL_SCOPES.every((grantedScope) => grantedScopes.has(grantedScope))) {
+  if (
+    !REQUIRED_GMAIL_SCOPES.every((grantedScope) =>
+      grantedScopes.has(grantedScope)
+    )
+  ) {
     throw new Error("Google did not grant all required Gmail permissions.");
   }
 };
