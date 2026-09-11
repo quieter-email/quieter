@@ -37,6 +37,7 @@ const sitePasswordPaths = new Set([
   "/api/auth/polar/webhooks",
   "/api/internal/gmail-credentials/rotate",
   "/api/openapi",
+  "/api/v1/mcp",
   "/api/v1/send",
   "/api/site-password",
   "/api/waitlist",

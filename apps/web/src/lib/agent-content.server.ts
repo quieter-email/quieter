@@ -4,7 +4,7 @@
 const siteUrl = "https://quieter.email";
 
 // Bump when public page copy or the machine surfaces change.
-const contentLastUpdated = "2026-08-26";
+const contentLastUpdated = "2026-09-11";
 
 const homeMarkdown = `# Quieter
 
@@ -136,7 +136,18 @@ mail; suppressed recipients and domain verification are enforced.
   delivery state and suppressions. OpenAPI specification:
   ${siteUrl}/openapi.json (base URL ${siteUrl}, endpoints /api/v1/send,
   /api/v1/messages/{messageId}, /api/v1/suppressions)
-- MCP server: coming soon; will be documented here once released.
+- MCP server (transactional sending only): ${siteUrl}/api/v1/mcp over
+  Streamable HTTP, authenticated with a team API key as
+  "Authorization: Bearer YOUR_API_KEY". One tool, \`send_email\`, runs the same
+  checks as the REST send endpoint: verified sender domains only, suppressed
+  recipients rejected, idempotency keys honored, team usage charged. Example
+  client entry: {"mcpServers":{"quieter":{"url":"${siteUrl}/api/v1/mcp","headers":{"Authorization":"Bearer YOUR_API_KEY"}}}}.
+  Example \`send_email\` arguments: {"from":"you@your-verified-domain.com","to":["customer@example.com"],"subject":"Your receipt","text":"Thanks for your order.","idempotencyKey":"order-1234"}.
+  Limits: 25 MB request payload, 60 requests per minute per IP, verified sender
+  domains, suppression enforcement. The server cannot read mailboxes, mail
+  content, or team settings; delivery status stays on the REST API at
+  GET /api/v1/messages/{messageId}. A broader management and control MCP is not
+  part of this endpoint.
 - Developer documentation: coming soon; will be linked here once released.
 - Sitemap of public pages: ${siteUrl}/sitemap.xml
 
