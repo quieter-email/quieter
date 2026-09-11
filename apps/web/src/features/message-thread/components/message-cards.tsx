@@ -624,61 +624,15 @@ export const ThreadMessageList = ({
   onUnsubscribe?: (messageId: string) => void | Promise<void>;
   usefulDetails: GmailUsefulDetail[];
 }) => {
-  const [showEarlier, setShowEarlier] = useState(false);
   const [expandedMessageIds, setExpandedMessageIds] = useState<string[]>(() => {
     const lastMessage = messages.at(-1);
     return lastMessage ? [lastMessage.id] : [];
   });
   const expandedMessageIdSet = new Set(expandedMessageIds);
-  const hasEarlierMessages = messages.length > 1;
-  const earlierMessages = hasEarlierMessages ? messages.slice(0, -1) : [];
-  const visibleMessages = showEarlier ? messages : messages.slice(-1);
 
   return (
     <div>
-      {hasEarlierMessages && (
-        <button
-          aria-expanded={showEarlier}
-          className="group/stack flex w-full items-center gap-2.5 px-4 py-2 text-left @sm:px-5"
-          onClick={() => {
-            setShowEarlier((current) => !current);
-          }}
-          type="button"
-        >
-          <span className="flex shrink-0 items-center">
-            {earlierMessages.slice(0, 2).map((earlierMessage, index) => {
-              const earlierSender = parseSender(earlierMessage.from);
-              const earlierLabel =
-                earlierSender.name?.trim() ||
-                earlierSender.display?.trim() ||
-                earlierSender.email?.trim() ||
-                "?";
-              return (
-                <SenderAvatar
-                  className={cn("size-6 rounded-md", {
-                    "-ml-1.5": index > 0,
-                  })}
-                  fallbackLabel={earlierLabel.charAt(0).toUpperCase()}
-                  key={earlierMessage.id}
-                />
-              );
-            })}
-          </span>
-          <span className="min-w-0 flex-1 truncate text-body-sm text-muted-fg">
-            {earlierMessages.length} earlier{" "}
-            {earlierMessages.length === 1 ? "message" : "messages"}
-          </span>
-          <HugeiconsIcon
-            aria-hidden
-            className={cn(
-              "size-3.5 shrink-0 text-muted-fg transition-transform duration-(--app-motion-duration-layout) ease-(--app-motion-ease-in-out) motion-reduce:transition-none",
-              { "rotate-180": showEarlier }
-            )}
-            icon={ArrowDown01Icon}
-          />
-        </button>
-      )}
-      {visibleMessages.map((threadMessage) => {
+      {messages.map((threadMessage) => {
         const isExpanded = expandedMessageIdSet.has(threadMessage.id);
         const linkedDraftMessage = findLinkedDraftForMessage(
           allThreadMessages,
