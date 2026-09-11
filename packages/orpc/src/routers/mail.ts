@@ -6,11 +6,9 @@ import { queriesMailOperations } from "../mail/queries";
 import { protectedProcedure } from "./base";
 import { mailboxProcedures } from "./mail/mailboxes";
 import { managedOrganizationMailRouter } from "./mail/managed-organization";
-import { mailboxSavedViewRouter } from "./mail/saved-views";
 
 export const mailRouter = {
   ...mailboxProcedures,
-  ...mailboxSavedViewRouter,
   ...managedOrganizationMailRouter,
   applyChanges: protectedProcedure
     .input(mailInputSchemas.applyChanges)

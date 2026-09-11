@@ -15,7 +15,6 @@ import type {
   RuleActionKind,
   RuleMatchMode,
   RuleMoveDestination,
-  PendingRowKind,
   PendingRowAction,
   MailboxOrganizerState,
 } from "./mailbox-organizer-types";
@@ -153,7 +152,6 @@ export const useManagedMailboxRuleActions = ({
   const queryClient = useQueryClient();
 
   const runRuleRowAction = async <T,>(
-    kind: PendingRowKind,
     id: string,
     action: PendingRowAction,
     operation: () => Promise<T>,
@@ -161,7 +159,7 @@ export const useManagedMailboxRuleActions = ({
     onSuccess?: (result: T) => void
   ) => {
     try {
-      const result = await runRowAction(kind, id, action, operation);
+      const result = await runRowAction(id, action, operation);
       await invalidateRules();
       onSuccess?.(result);
     } catch (error) {
@@ -212,7 +210,7 @@ export const useManagedMailboxRuleActions = ({
     fallback: string
   ) => {
     try {
-      await runReorder("rules", rowId, operation);
+      await runReorder(rowId, operation);
       await invalidateRules();
     } catch (error) {
       toastError(error, { boundary: "mailbox-organizer", fallback });
@@ -270,7 +268,6 @@ export const useManagedMailboxRuleActions = ({
     try {
       if (editingRuleId !== null && editingRuleId !== "") {
         await runRowAction(
-          "rule",
           editingRuleId,
           "update",
           async () =>

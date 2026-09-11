@@ -9,14 +9,6 @@ const messages = new Map([
     "managed_mail_rule_mailbox_normalized_name_unique",
     "A rule with this name already exists.",
   ],
-  [
-    "managed_mail_saved_view_shared_name_unique",
-    "A shared view with this name already exists.",
-  ],
-  [
-    "managed_mail_saved_view_personal_name_unique",
-    "A saved view with this name already exists.",
-  ],
 ]);
 
 export const throwMailboxOrganizationNameConflict = (error: unknown): never => {

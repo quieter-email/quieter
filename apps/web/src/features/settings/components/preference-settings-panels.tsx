@@ -207,7 +207,7 @@ export const DevelopmentSettingsPanel = () => {
           title="Managed demo mailbox"
         >
           Replace real mailbox data with local managed-mail fixtures: labels,
-          saved views, threads, and inbox states. Nothing is sent for real.
+          threads, and inbox states. Nothing is sent for real.
         </SettingsRow>
       </SettingsRows>
     </SettingsSection>

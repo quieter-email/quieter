@@ -1,7 +1,5 @@
 "use client";
 
-import type { RouterOutputs } from "@quieter/orpc";
-
 import type {
   useMailboxOrganizerState,
   useMailboxOrganizerController,
@@ -10,19 +8,10 @@ import type {
 export type MailboxOrganizerProps = {
   canManage: boolean;
   mailboxId: string;
-  onSearch: (query: string) => void;
   searchQuery: string;
-  supportsRules: boolean;
-  supportsSharedViews: boolean;
 };
 
-export type MailboxSavedView = RouterOutputs["mail"]["listSavedViews"][number];
-
-export type PendingRowKind = "rule" | "view";
-
-export type PendingRowAction = "backfill" | "delete" | "duplicate" | "update";
-
-export type ReorderScope = "rules" | "views:personal" | "views:shared";
+export type PendingRowAction = "backfill" | "delete" | "update";
 
 export type RuleActionKind = "forward" | "move" | "set-labels" | "set-read";
 

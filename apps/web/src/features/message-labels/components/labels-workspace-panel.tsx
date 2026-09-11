@@ -550,9 +550,8 @@ export const LabelsWorkspacePanel = ({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete label</AlertDialogTitle>
             <AlertDialogDescription>
-              This removes the label from conversations, saved views, and
-              automatic rules. Rules or views left without usable settings will
-              be disabled.
+              This removes the label from conversations and automatic rules.
+              Rules left without usable settings will be disabled.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogBody>

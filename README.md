@@ -18,7 +18,7 @@ Security reports are the exception. Report vulnerabilities privately through [Gi
 - A typed oRPC API boundary between the application and database
 - Better Auth identity, passkey, organization, and API-key integration
 - Gmail OAuth, synchronization, drafts, labels, live updates, and mailbox automation
-- Managed inbound and outbound email through the SST-owned mail stack, with shared labels, structured search, saved views, and automatic organization rules
+- Managed inbound and outbound email through the SST-owned mail stack, with shared labels, structured search, and automatic organization rules
 - Deployment-safe backend module boundaries with CI checks for worker imports and handler bundles
 - Mailbox-scoped chat with streamed server-side generation and Gmail tools
 - Polar SDK billing integrated with Better Auth

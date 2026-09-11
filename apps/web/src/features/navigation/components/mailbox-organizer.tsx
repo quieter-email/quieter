@@ -3,7 +3,6 @@
 import { ArrowLeft02Icon, Edit01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
-import { cn } from "@quieter/ui/cn";
 import {
   FullPageDialog,
   FullPageDialogBody,
@@ -20,62 +19,16 @@ import type {
   MailboxOrganizerProps,
 } from "./mailbox-organizer-types";
 import { ManagedMailboxRulesPanel } from "./mailbox-rules-panel";
-import {
-  SavedViewsSection,
-  MailboxSavedViewsPanel,
-  MailboxSavedViewEditDialog,
-} from "./mailbox-saved-views";
 
 const MailboxOrganizerSidebar = (props: MailboxOrganizerContentProps) => {
-  const {
-    currentSearch,
-    onSearch,
-    personalViews,
-    searchQuery,
-    setIsOpen,
-    setRuleQueryDraft,
-    sharedViews,
-    supportsRules,
-    supportsSharedViews,
-    views,
-  } = props;
+  const { searchQuery, setIsOpen, setRuleQueryDraft } = props;
 
   return (
-    <div className="flex items-center justify-between">
-      <div className="min-w-0 flex-1">
-        {supportsSharedViews ? (
-          <>
-            <SavedViewsSection
-              currentSearch={currentSearch}
-              emptyMessage="No shared views."
-              onSearch={onSearch}
-              title="Views"
-              views={sharedViews}
-            />
-            <SavedViewsSection
-              currentSearch={currentSearch}
-              emptyMessage="No personal views."
-              onSearch={onSearch}
-              title="My views"
-              views={personalViews}
-            />
-          </>
-        ) : (
-          <SavedViewsSection
-            currentSearch={currentSearch}
-            emptyMessage="No saved views yet."
-            onSearch={onSearch}
-            title="Views"
-            views={views}
-          />
-        )}
-      </div>
-      <IconButtonTooltip
-        label={supportsRules ? "Manage views and rules" : "Manage views"}
-      >
+    <div className="flex justify-end">
+      <IconButtonTooltip label="Manage rules">
         <Button
-          aria-label={supportsRules ? "Manage views and rules" : "Manage views"}
-          className="mt-4 size-6 self-start text-muted-fg hover:text-fg"
+          aria-label="Manage rules"
+          className="mt-4 size-6 text-muted-fg hover:text-fg"
           onClick={() => {
             setRuleQueryDraft(searchQuery);
             setIsOpen(true);
@@ -94,7 +47,7 @@ const MailboxOrganizerSidebar = (props: MailboxOrganizerContentProps) => {
 const MailboxOrganizerFullPageDialog = (
   props: MailboxOrganizerContentProps
 ) => {
-  const { isOpen, setIsOpen, supportsRules } = props;
+  const { isOpen, setIsOpen } = props;
 
   return (
     <FullPageDialog onOpenChange={setIsOpen} open={isOpen}>
@@ -108,13 +61,8 @@ const MailboxOrganizerFullPageDialog = (
           <FullPageDialogTitle>Organize mailbox</FullPageDialogTitle>
         </FullPageDialogHeader>
         <FullPageDialogBody>
-          <div
-            className={cn("mx-auto grid w-full max-w-4xl gap-10 px-5 py-8", {
-              "md:grid-cols-2": supportsRules,
-            })}
-          >
-            <MailboxSavedViewsPanel {...props} />
-            {supportsRules ? <ManagedMailboxRulesPanel {...props} /> : null}
+          <div className="mx-auto grid w-full max-w-2xl gap-10 px-5 py-8">
+            <ManagedMailboxRulesPanel {...props} />
           </div>
         </FullPageDialogBody>
       </FullPageDialogContent>
@@ -126,7 +74,6 @@ const MailboxOrganizerContent = (props: MailboxOrganizerContentProps) => (
   <>
     <MailboxOrganizerSidebar {...props} />
     <MailboxOrganizerFullPageDialog {...props} />
-    <MailboxSavedViewEditDialog {...props} />
   </>
 );
 
