@@ -16,6 +16,19 @@ export const GMAIL_SCOPES = [
   "https://www.googleapis.com/auth/userinfo.email",
   "https://www.googleapis.com/auth/userinfo.profile",
   "https://mail.google.com/",
+  "https://www.googleapis.com/auth/gmail.modify",
+] as const;
+
+/**
+ * The broad Gmail scope grants every Gmail API operation, so the granular
+ * gmail.modify scope is requested for clarity but not required back from
+ * Google, which may normalize overlapping scopes in its token response.
+ */
+export const REQUIRED_GMAIL_SCOPES = [
+  "openid",
+  "https://www.googleapis.com/auth/userinfo.email",
+  "https://www.googleapis.com/auth/userinfo.profile",
+  "https://mail.google.com/",
 ] as const;
 
 const GMAIL_ACCESS_TOKEN_EXPIRY_BUFFER_MS = 60 * 1000;
