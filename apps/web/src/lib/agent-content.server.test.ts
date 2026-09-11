@@ -39,15 +39,18 @@ describe("llms.txt", () => {
     expect(llmsTxt).toContain("# Quieter");
     expect(llmsTxt).toContain("## When to use Quieter");
     expect(llmsTxt).toContain("https://quieter.email/openapi.json");
-    expect(llmsTxt).toContain("coming soon");
+    expect(llmsTxt).toContain("https://quieter.email/api/v1/mcp");
+    expect(llmsTxt).toContain("send_email");
+    expect(llmsTxt).toContain("Authorization: Bearer");
     expect(llmsTxt).toContain("support@quieter.email");
   });
 
-  test("documents the deprecation policy without inventing URLs", () => {
+  test("documents the deprecation policy and the MCP boundary", () => {
     expect(llmsTxt).toContain("/api/v1");
     expect(llmsTxt).toContain("Deprecation headers");
-    expect(llmsTxt.match(/MCP server: coming soon/gu)).toHaveLength(1);
-    expect(llmsTxt).not.toContain("/mcp");
+    expect(llmsTxt).not.toContain("MCP server: coming soon");
+    expect(llmsTxt).toContain("/api/v1/messages/{messageId}");
+    expect(llmsTxt).toContain("management and control MCP");
   });
 });
 

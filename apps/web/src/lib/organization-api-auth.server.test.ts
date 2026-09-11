@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
 
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- Partial mock avoids initializing server dependencies.
 vi.mock("@quieter/auth", () => ({
-  organizationApiKeyApi: { verifyApiKey: mocks.verifyApiKey },
+  auth: { api: { verifyApiKey: mocks.verifyApiKey } },
 }));
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- Only the API authorization contract is needed here.
 vi.mock("@quieter/orpc/organization-mail", () => ({

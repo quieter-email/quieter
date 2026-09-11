@@ -137,6 +137,7 @@ Outbound:
 
 - Managed compose and replies send through server-side mail logic.
 - `POST /api/v1/send` authenticates an organization API key and requires a verified sender domain.
+- `POST /api/v1/mcp` serves the transactional-mail MCP tool `send_email` over Streamable HTTP with the same organization API key, verified-domain, suppression, idempotency, and usage rules as the REST send endpoint. It exposes sending only: no mailbox, content, or settings access.
 - Better Auth email hooks call the same endpoint.
 
 ## Chat
