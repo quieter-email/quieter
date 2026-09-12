@@ -1,7 +1,11 @@
 /* oxlint-disable eslint/no-await-in-loop -- Keep retries ordered and bound concurrent production probes. */
 import { setTimeout } from "node:timers/promises";
 
-export const checkDeployment = async (origin: string, buildId: string) => {
+export const checkDeployment = async (
+  origin: string,
+  buildId: string,
+  mailUpdatesUrl?: string
+) => {
   const base = new URL(origin);
   const options = {
     cache: "no-store",
@@ -72,16 +76,28 @@ export const checkDeployment = async (origin: string, buildId: string) => {
       );
     }
   }
+  if (mailUpdatesUrl) {
+    const response = await fetch(mailUpdatesUrl, {
+      ...options,
+      signal: AbortSignal.timeout(15_000),
+    });
+    await response.arrayBuffer();
+    if (response.status !== 426) {
+      throw new Error("The mail updates endpoint is unavailable.");
+    }
+  }
 };
 
 if (import.meta.main) {
-  const [origin, buildId] = process.argv.slice(2);
+  const [origin, buildId, mailUpdatesUrl] = process.argv.slice(2);
   if (!origin || !buildId) {
-    throw new Error("Usage: check-deployment.ts <origin> <expected-build-id>");
+    throw new Error(
+      "Usage: check-deployment.ts <origin> <expected-build-id> [mail-updates-url]"
+    );
   }
   for (let attempt = 0; ; attempt += 1) {
     try {
-      await checkDeployment(origin, buildId);
+      await checkDeployment(origin, buildId, mailUpdatesUrl);
       break;
     } catch (error) {
       if (attempt === 3) {
@@ -91,6 +107,6 @@ if (import.meta.main) {
     }
   }
   process.stdout.write(
-    `Verified server, database, SSR and assets for ${buildId}.\n`
+    `Verified server, database, SSR and assets${mailUpdatesUrl ? ", and mail updates endpoint" : ""} for ${buildId}.\n`
   );
 }

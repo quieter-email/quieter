@@ -184,20 +184,12 @@ export const createGmailResources = (
     );
     void gmailPubSubMaintenance;
 
-    gmailLiveSyncUrl = gmailRealtimeWorker.url.apply((url) => {
-      if (url === undefined || url === "") {
-        throw new Error("GmailRealtimeWorker did not expose a URL");
-      }
-
-      return `${url.replace(/^http/u, "ws")}/gmail/live`;
-    });
-    gmailPubSubIngressUrl = gmailRealtimeWorker.url.apply((url) => {
-      if (url === undefined || url === "") {
-        throw new Error("GmailRealtimeWorker did not expose a URL");
-      }
-
-      return `${url}/gmail/pubsub`;
-    });
+    gmailLiveSyncUrl = gmailRealtimeWorker.url.apply((url) =>
+      url ? `${url.replace(/^http/u, "ws")}/gmail/live` : ""
+    );
+    gmailPubSubIngressUrl = gmailRealtimeWorker.url.apply((url) =>
+      url ? `${url}/gmail/pubsub` : ""
+    );
   }
 
   return {
