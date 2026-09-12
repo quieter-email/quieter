@@ -9,6 +9,7 @@ const values = parseEnv(source);
 const additions: Record<string, string> = {
   GMAIL_LIVE_SYNC_TOKEN_SECRET: randomBytes(32).toString("base64url"),
   GMAIL_LIVE_SYNC_URL: "ws://127.0.0.1:8787/gmail/live",
+  MAIL_UPDATES_URL: "ws://127.0.0.1:8787/mail/live",
   QUIETER_LOCAL_GMAIL_WATCH_OWNER: "production",
   QUIETER_LOCAL_PROVIDER_MODE: "observe",
   QUIETER_LOCAL_WORKER_TOKEN: randomBytes(32).toString("base64url"),

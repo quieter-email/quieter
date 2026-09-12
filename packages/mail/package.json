@@ -19,7 +19,8 @@
     "./send": "./src/send.ts",
     "./sender-avatar": "./src/sender-avatar.ts",
     "./tracking": "./src/tracking.ts",
-    "./messages": "./src/messages.ts"
+    "./messages": "./src/messages.ts",
+    "./updates": "./src/updates.ts"
   },
   "dependencies": {
     "@quieter/env": "workspace:*",

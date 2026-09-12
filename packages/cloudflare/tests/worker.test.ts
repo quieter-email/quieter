@@ -23,6 +23,20 @@ import { processGmailQueueMessage } from "../src/queue-worker";
 import worker, { signaturesMatch } from "../src/worker";
 import { handlePubSub, requestErrorResponse } from "../src/worker-utils";
 
+vi.mock(import("@quieter/orpc/mail-updates"), () => ({
+  findGmailUpdateMailboxIds: async () => await Promise.resolve([]),
+  listMailUpdateRecipients: async () => await Promise.resolve([]),
+}));
+
+vi.mock(import("@quieter/database/client"), async (importOriginal) => {
+  const original = await importOriginal();
+  return {
+    ...original,
+    // oxlint-disable-next-line promise/prefer-await-to-callbacks -- Preserve the request-scope API without opening a database in transport tests.
+    withRequestDatabaseClient: async (callback) => await callback(original.db),
+  };
+});
+
 const serviceAccount = "gmail-push@example.invalid";
 const subscription = "projects/example/subscriptions/gmail";
 const mailboxId = "mailbox-1";
@@ -232,7 +246,7 @@ describe("Cloudflare worker runtime", () => {
       expect(response.status).toBe(403);
     });
 
-    test("processes authenticated notifications before acknowledging without queueing", async () => {
+    test("enqueues authenticated notifications before acknowledging", async () => {
       installFetchMock();
       const token = await liveSyncToken();
       const stub = env.GmailLiveSyncMailboxV2.get(
@@ -287,13 +301,10 @@ describe("Cloudflare worker runtime", () => {
       expect(response.status).toBe(204);
       expect(send).not.toHaveBeenCalled();
       await vi.waitFor(() => {
-        expect(events).toHaveLength(3);
+        expect(events).toHaveLength(1);
       });
-      expect(events.slice(1)).toStrictEqual(
-        expect.arrayContaining([
-          { mailboxId, type: "mailbox-dirty" },
-          { mailboxId, type: "mailbox-details-dirty" },
-        ])
+      expect(events).toStrictEqual(
+        expect.arrayContaining([{ mailboxId, type: "mailbox-dirty" }])
       );
       socket.close(1000, "done");
     });

@@ -1,12 +1,12 @@
-import { withRequestDatabaseClient } from "@quieter/database/client";
 import { liveSyncTokenPayloadSchema } from "@quieter/mail/live-sync";
 import { createRemoteJWKSet, errors as joseErrors, jwtVerify } from "jose";
 import { z } from "zod";
 
+import { readBoundedJson } from "./bounded-json";
 import { timingSafeEqual } from "./crypto-utils";
-import { processGmailQueueMessage } from "./queue-worker";
+import { broadcastGmailUpdate } from "./mail-updates";
 import { RequestError } from "./request-error";
-import { readLinkedSecret, reportWorkerError } from "./worker-runtime";
+import { readLinkedSecret } from "./worker-runtime";
 
 const GOOGLE_JWKS = createRemoteJWKSet(
   new URL("https://www.googleapis.com/oauth2/v3/certs")
@@ -118,54 +118,6 @@ export const verifyLiveSyncToken = async (token: string, secret: string) => {
   return payload.data;
 };
 
-export const readBoundedJson = async (request: Request, limit: number) => {
-  const declaredLength = Number(request.headers.get("content-length"));
-  if (Number.isFinite(declaredLength) && declaredLength > limit) {
-    throw new RequestError(413, "request_body_too_large");
-  }
-  if (request.body === null) {
-    throw new RequestError(400, "request_body_missing");
-  }
-
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-
-  let length = 0;
-  try {
-    while (true) {
-      // Request chunks must be consumed serially to enforce the byte limit.
-      const result = await reader.read();
-      if (result.done) {
-        break;
-      }
-      const value: unknown = result.value;
-      if (!(value instanceof Uint8Array)) {
-        continue;
-      }
-      length += value.byteLength;
-      if (length > limit) {
-        await reader.cancel();
-        throw new RequestError(413, "request_body_too_large");
-      }
-      chunks.push(value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-
-  const body = new Uint8Array(length);
-  let offset = 0;
-  for (const chunk of chunks) {
-    body.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  try {
-    return JSON.parse(new TextDecoder().decode(body)) as unknown;
-  } catch {
-    throw new RequestError(400, "request_json_invalid");
-  }
-};
-
 export const verifyPubSubToken = async (request: Request, env: Env) => {
   const authorization = request.headers.get("authorization");
   const token = authorization?.match(/^Bearer\s+(?<token>.+)$/iu)?.groups
@@ -254,9 +206,7 @@ export const handlePubSub = async (
   request: Request,
   env: Env,
   processNotification = async (message: unknown, bindings: Env) => {
-    await withRequestDatabaseClient(async () => {
-      await processGmailQueueMessage(message, bindings);
-    });
+    await bindings.GmailPsQueue.send(message);
   }
 ) => {
   await verifyPubSubToken(request, env);
@@ -278,31 +228,14 @@ export const handlePubSub = async (
     pubSubMessageId: envelope.data.message.messageId,
     type: "notification" as const,
   };
-  const [processorResult, initialBroadcastResult] = await Promise.allSettled([
-    processNotification(processorMessage, env),
-    broadcastMailboxEvent(env, emailAddress, "mailbox-dirty"),
-  ]);
-
-  if (processorResult.status === "rejected") {
-    throw processorResult.reason;
-  }
-  if (initialBroadcastResult.status === "rejected") {
-    throw initialBroadcastResult.reason;
-  }
-
+  await processNotification(processorMessage, env);
   await Promise.all([
     broadcastMailboxEvent(env, emailAddress, "mailbox-dirty"),
-    broadcastMailboxEvent(env, emailAddress, "mailbox-details-dirty"),
+    broadcastGmailUpdate(env, emailAddress, "mailbox.changed"),
   ]);
   return new Response(null, { status: 204 });
 };
 
-export const requestErrorResponse = (error: unknown, route: string) => {
-  const status = error instanceof RequestError ? error.status : 500;
-  const category =
-    error instanceof RequestError ? error.category : "internal_error";
-  if (status >= 500) {
-    reportWorkerError(error, { category, route, status });
-  }
-  return Response.json({ error: "Request failed" }, { status });
-};
+export { readBoundedJson } from "./bounded-json";
+
+export { requestErrorResponse } from "./request-error";

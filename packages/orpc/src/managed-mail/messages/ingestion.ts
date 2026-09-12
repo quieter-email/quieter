@@ -11,6 +11,7 @@ import { parseRawMailMessage } from "@quieter/mail/raw-message";
 import type { ParsedRawMailMessage } from "@quieter/mail/raw-message";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
+import { publishMailUpdate } from "../../mail-updates";
 import { processManagedMailAutomation } from "../automation";
 import { inheritManagedThreadLabels } from "../labels/repository";
 import { applyManagedRulesToMessage } from "../rules/evaluator";
@@ -82,10 +83,18 @@ const runPostIngestionOrganization = async (input: {
   if (rules.error !== null) {
     throw new Error(rules.error);
   }
-  await processManagedMailAutomation({
-    mailboxId: input.mailboxId,
-    messageId: input.messageId,
-  });
+  try {
+    await processManagedMailAutomation({
+      mailboxId: input.mailboxId,
+      messageId: input.messageId,
+    });
+  } finally {
+    await publishMailUpdate({
+      mailboxId: input.mailboxId,
+      threadIds: [input.threadId],
+      type: "mailbox.changed",
+    });
+  }
 };
 
 const ingestManagedMessageForMailbox = async (input: {
@@ -199,6 +208,11 @@ const ingestManagedMessageForMailbox = async (input: {
   });
 
   if (inserted !== undefined) {
+    await publishMailUpdate({
+      mailboxId: inserted.mailboxId,
+      threadIds: [inserted.threadId],
+      type: "mailbox.changed",
+    });
     await runPostIngestionOrganization({
       mailboxId: inserted.mailboxId,
       messageId: inserted.id,

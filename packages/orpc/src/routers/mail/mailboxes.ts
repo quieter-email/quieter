@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { createGmailLiveSyncConnection } from "../../gmail-live-sync";
+import { createMailUpdateConnection } from "../../mail-updates";
 import {
   createManagedMailbox,
   getManagedMailboxDetails,
@@ -83,6 +84,9 @@ export const mailboxProcedures = {
           userId: context.userId,
         })
     ),
+  createUpdateConnection: protectedProcedure.handler(
+    async ({ context }) => await createMailUpdateConnection(context.userId)
+  ),
   disconnectMailbox: protectedProcedure
     .input(z.object({ mailboxId: mailboxIdSchema }))
     .handler(

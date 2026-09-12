@@ -37,6 +37,7 @@
   ],
   "durable_objects": {
     "bindings": [
+      { "name": "MailLiveUser", "class_name": "MailLiveUser" },
       {
         "name": "GmailLiveSyncMailboxV2",
         "class_name": "GmailLiveSyncMailboxV2",
@@ -48,6 +49,7 @@
       "tag": "v2",
       "new_sqlite_classes": ["GmailLiveSyncMailboxV2"],
     },
+    { "tag": "mail-user-v1", "new_sqlite_classes": ["MailLiveUser"] },
   ],
   "queues": {
     "producers": [

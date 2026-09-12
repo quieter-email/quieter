@@ -8,7 +8,10 @@ import { and, asc, eq } from "drizzle-orm";
 import { getLocalMailStorage, LOCAL_MAIL_BUCKET } from "./local-storage";
 import { recordInboundManagedMessage } from "./messages/ingestion";
 
-export const seedLocalManagedMail = async (ownerEmail: string) => {
+export const seedLocalManagedMail = async (
+  ownerEmail: string,
+  options: { fresh?: boolean } = {}
+) => {
   if (serverEnv.QUIETER_DEPLOYMENT_ENV !== "local") {
     throw new Error("Mail fixtures are only available in local development.");
   }
@@ -81,14 +84,18 @@ export const seedLocalManagedMail = async (ownerEmail: string) => {
       "The existing fixture mailbox no longer matches this local account."
     );
   }
-  const key = `fixtures/${suffix}/welcome-v1.eml`;
+  const messageKey =
+    options.fresh === true ? crypto.randomUUID() : "welcome-v1";
+  const key = `fixtures/${suffix}/${messageKey}.eml`;
   const raw = new TextEncoder().encode(
     [
       "From: Local fixture <sender@example.test>",
       `To: ${address}`,
-      "Subject: Local mail fixture with attachment",
-      `Message-ID: <welcome-v1.${suffix}@quieter.test>`,
-      "Date: Sat, 05 Sep 2026 12:00:00 +0000",
+      options.fresh === true
+        ? `Subject: Live mail update ${now.toISOString()}`
+        : "Subject: Local mail fixture with attachment",
+      `Message-ID: <${messageKey}.${suffix}@quieter.test>`,
+      `Date: ${now.toUTCString()}`,
       "MIME-Version: 1.0",
       'Content-Type: multipart/mixed; boundary="quieter-local-fixture"',
       "",
@@ -109,7 +116,7 @@ export const seedLocalManagedMail = async (ownerEmail: string) => {
   );
   await storage.put(key, raw);
   await recordInboundManagedMessage({
-    providerMessageId: `local-welcome-v1-${suffix}`,
+    providerMessageId: `local-${messageKey}-${suffix}`,
     rawMessage: raw,
     rawObjectBucket: LOCAL_MAIL_BUCKET,
     rawObjectKey: key,

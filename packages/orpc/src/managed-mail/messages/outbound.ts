@@ -11,6 +11,7 @@ import { extractMailAddress } from "@quieter/mail/compose/schema";
 import type { SendHeader } from "@quieter/mail/send";
 import { and, eq, ne, sql } from "drizzle-orm";
 
+import { publishMailUpdate } from "../../mail-updates";
 import {
   createManagedMessageSearchText,
   normalizeManagedSearchValue,
@@ -77,7 +78,7 @@ export const recordOutboundManagedMessageForSender = async (input: {
 
   const id = input.id ?? randomUUID();
   const sentAt = input.sentAt ?? new Date();
-  return await db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const [inserted] = await tx
       .insert(managedMailMessage)
       .values({
@@ -214,4 +215,9 @@ export const recordOutboundManagedMessageForSender = async (input: {
       .where(eq(mailbox.id, senderMailbox.id));
     return inserted;
   });
+  await publishMailUpdate({
+    mailboxId: senderMailbox.id,
+    type: "mailbox.changed",
+  });
+  return result;
 };

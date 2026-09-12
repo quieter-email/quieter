@@ -5,6 +5,7 @@ import {
 } from "@quieter/orpc/gmail-pubsub";
 import { z } from "zod";
 
+import { broadcastGmailUpdate } from "./mail-updates";
 import { reportWorkerError, withSentryReporting } from "./worker-runtime";
 
 const gmailPubSubQueueMessageSchema = z.discriminatedUnion("type", [
@@ -26,6 +27,7 @@ export type GmailPubSubQueueMessage = z.infer<
 >;
 
 const broadcastMailboxDetails = async (env: Env, emailAddress: string) => {
+  await broadcastGmailUpdate(env, emailAddress, "mailbox.changed");
   const id = env.GmailLiveSyncMailboxV2.idFromName(
     emailAddress.trim().toLowerCase()
   );
@@ -66,6 +68,7 @@ export const processGmailQueueMessage = async (
     return { retry: false };
   }
 
+  await broadcastGmailUpdate(env, message.emailAddress, "mailbox.changed");
   const result = await (
     dependencies.processNotification ?? processGmailPubSubNotification
   )(message, {
