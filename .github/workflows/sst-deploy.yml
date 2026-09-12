@@ -86,18 +86,7 @@ jobs:
       - name: Refresh SST state and prepare production build
         run: |
           mkdir -p apps/web/dist/client
-          if vp exec sst refresh --config sst.config.ts --stage "$SST_STAGE"; then
-            echo "SST state refresh completed."
-          else
-            refresh_status=$?
-            if [ -f .sst/log/pulumi.err.log ]; then
-              tail -n 100 .sst/log/pulumi.err.log
-            fi
-            if [ -f .sst/log/pulumi.log ]; then
-              tail -n 100 .sst/log/pulumi.log
-            fi
-            exit "$refresh_status"
-          fi
+          vp exec sst refresh --config sst.config.ts --stage "$SST_STAGE"
           vp exec sst diff --config sst.config.ts --stage "$SST_STAGE"
 
       - name: Record previous healthy web version
@@ -123,4 +112,4 @@ jobs:
 
       - name: Verify production release
         timeout-minutes: 5
-        run: vp exec node scripts/check-deployment.ts https://quieter.email "$QUIETER_BUILD_ID" https://updates.quieter.email/mail/live
+        run: vp exec node scripts/check-deployment.ts https://quieter.email "$QUIETER_BUILD_ID"
