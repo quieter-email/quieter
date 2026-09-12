@@ -39,6 +39,10 @@ export const createMailUpdateResources = (
   return {
     url: worker.url.apply((url) => {
       if (!url) {
+        // Refresh observes existing resources; a new Worker has no URL yet.
+        if ($cli.command === "refresh") {
+          return "";
+        }
         throw new Error("Mail updates URL is missing.");
       }
       return `${url.replace(/^http/u, "ws")}/mail/live`;
