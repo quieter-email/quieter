@@ -83,11 +83,25 @@ jobs:
           vp run @quieter/observability#build
           vp run quieter#build
 
-      - name: Refresh SST state and prepare production build
+      - name: Refresh SST state
+        timeout-minutes: 20
         run: |
           mkdir -p apps/web/dist/client
           vp exec sst refresh --config sst.config.ts --stage "$SST_STAGE"
-          vp exec sst diff --config sst.config.ts --stage "$SST_STAGE"
+
+      - name: Preview production changes
+        timeout-minutes: 10
+        run: vp exec sst diff --config sst.config.ts --stage "$SST_STAGE"
+
+      - name: Upload SST logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sst-logs
+          path: .sst/log/
+          if-no-files-found: ignore
+          retention-days: 14
+          overwrite: true
 
       - name: Record previous healthy web version
         run: vp exec node scripts/web-recovery.ts record previous-web.json
@@ -112,4 +126,4 @@ jobs:
 
       - name: Verify production release
         timeout-minutes: 5
-        run: vp exec node scripts/check-deployment.ts https://quieter.email "$QUIETER_BUILD_ID"
+        run: vp exec node scripts/check-deployment.ts https://quieter.email "$QUIETER_BUILD_ID" https://updates.quieter.email/mail/live
