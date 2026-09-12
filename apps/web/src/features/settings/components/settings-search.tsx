@@ -98,6 +98,7 @@ export const SettingsSearch = ({
   const input = (
     <Input
       aria-label="Search settings"
+      className="h-8 text-body-sm"
       placeholder="Search settings"
       type="search"
       autoComplete="off"

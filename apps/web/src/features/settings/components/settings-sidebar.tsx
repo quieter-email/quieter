@@ -115,10 +115,13 @@ export const SettingsSidebar = ({
       active={selected}
       key={title}
       aria-current={selected ? "page" : undefined}
-      className={cn("w-full justify-start gap-3 px-3 text-left", {
-        "text-fg": selected,
-        "text-muted-fg": !selected,
-      })}
+      className={cn(
+        "h-8 w-full justify-start gap-2.5 px-2.5 text-left font-normal lg:h-7",
+        {
+          "text-fg": selected,
+          "text-muted-fg": !selected,
+        }
+      )}
       onClick={() => {
         open(destination);
       }}
@@ -168,12 +171,12 @@ export const SettingsSidebar = ({
           </IconButtonTooltip>
         )}
       </div>
-      <div className="mb-6 px-1">{searchInput}</div>
+      <div className="mb-4 px-1">{searchInput}</div>
       {searchResults !== undefined && searchResults !== null ? (
         <div className="px-1">{searchResults}</div>
       ) : (
-        <nav aria-label="Settings" className="space-y-5 p-1">
-          <div className="space-y-1">
+        <nav aria-label="Settings" className="space-y-4 p-1">
+          <div className="space-y-0.5">
             <p className="px-3 py-1 text-caption text-muted-fg">Personal</p>
             {PERSONAL_ITEMS.map((item) =>
               navigationButton(
@@ -193,7 +196,7 @@ export const SettingsSidebar = ({
                 tab === "development"
               )}
           </div>
-          <div className="space-y-1">
+          <div className="space-y-0.5">
             <p className="px-3 py-1 text-caption text-muted-fg">
               Team settings
             </p>
@@ -224,7 +227,12 @@ export const SettingsSidebar = ({
                 });
               }}
             >
-              <SelectTrigger aria-label="Team settings" className="mb-2 w-full">
+              <SelectTrigger
+                aria-label="Team settings"
+                className="mb-1 h-8 w-full px-2.5 text-fg lg:h-7"
+                size="sm"
+                variant="ghost"
+              >
                 <SelectValue
                   placeholder={
                     organizationsState.isPending
