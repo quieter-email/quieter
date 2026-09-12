@@ -132,9 +132,7 @@ export const PreferencesSettingsPanel = () => {
             the open message.
           </SettingsRow>
           <SettingsRow
-            action={
-              <ConsentPreferencesLink className="squircle inline-flex h-8 items-center justify-center rounded-md border border-border bg-bg-raised px-3 text-body font-medium text-fg transition-colors hover:bg-muted/60" />
-            }
+            action={<ConsentPreferencesLink variant="button" />}
             title="Cookie and analytics preferences"
           >
             Choose which optional cookies and measurement tools Quieter may use
