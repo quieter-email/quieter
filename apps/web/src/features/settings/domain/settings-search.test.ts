@@ -21,7 +21,10 @@ describe("settings search", () => {
   test("finds a destination by what a user would call it", () => {
     expect(match("dark mode")).toStrictEqual(["appearance"]);
     expect(match("hotkeys")).toStrictEqual(["shortcuts"]);
-    expect(match("billing")).toStrictEqual(["organization"]);
+    expect(
+      matchSettingsEntries("billing", { includeDevelopment: false })[0]
+        ?.organizationView
+    ).toBe("billing");
     expect(match("signature")).toStrictEqual(["mailboxes"]);
   });
 
@@ -36,5 +39,44 @@ describe("settings search", () => {
 
   test("returns nothing for a query that matches no setting", () => {
     expect(match("qwertyuiop")).toStrictEqual([]);
+  });
+
+  test("tolerates typos and matches multiple words in any order", () => {
+    expect(match("signatuer")).toStrictEqual(["mailboxes"]);
+    expect(match("images external")).toContain("reading");
+    expect(
+      matchSettingsEntries("invite teammate", { includeDevelopment: false })[0]
+        ?.organizationView
+    ).toBe("members");
+  });
+
+  test("retains exact mailbox and team destinations supplied by the accessible index", () => {
+    const results = matchSettingsEntries("support signature", {
+      entries: [
+        {
+          description: "Acme / Support",
+          id: "signature-support",
+          keywords: "footer",
+          mailboxId: "support",
+          organizationId: "acme",
+          scope: "mailbox",
+          section: "signature",
+          tab: "mailboxes",
+          title: "Signature",
+        },
+      ],
+      includeDevelopment: false,
+    });
+    expect(results[0]).toMatchObject({
+      mailboxId: "support",
+      organizationId: "acme",
+      section: "signature",
+    });
+    expect(
+      matchSettingsEntries("signature", {
+        entries: [],
+        includeDevelopment: false,
+      })
+    ).toStrictEqual([]);
   });
 });

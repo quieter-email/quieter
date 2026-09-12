@@ -16,7 +16,7 @@ import { composeBodyHtmlFromText } from "../domain/compose-proposal";
 import type { ComposeValues } from "../domain/compose-proposal";
 
 const composeFieldControlClassName =
-  "h-9 min-w-0 flex-1 rounded-none border-0 bg-transparent px-0 text-body-sm shadow-none focus-visible:ring-0";
+  "h-8 min-w-0 flex-1 rounded-none border-0 bg-transparent px-0 text-body-sm shadow-none focus-visible:ring-0";
 
 const ComposeFieldRow = ({
   children,

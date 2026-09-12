@@ -22,9 +22,9 @@ const fieldControlVariants = cva(
         ghost: "border-0 bg-transparent shadow-none read-only:bg-transparent",
       },
       size: {
-        default: "h-9 px-3 text-body",
+        default: "h-8 px-2.5 text-body-sm",
         lg: "h-10 px-4 text-body-lg",
-        sm: "h-8 px-3 text-body-sm",
+        sm: "h-7 px-2 text-body-sm",
       },
     },
   }

@@ -48,6 +48,7 @@ import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
 import { orpc } from "#/lib/orpc";
 
 import { useAddMailboxSettingsStore } from "./add-mailbox-settings-store";
+import { useSettingsTeam } from "./use-settings-team";
 
 export const AddMailboxSettingsView = ({
   onNavigateToMailbox,
@@ -58,6 +59,7 @@ export const AddMailboxSettingsView = ({
   const queryClient = useQueryClient();
   const session = authClient.useSession().data;
   const organizations = authClient.useListOrganizations().data ?? [];
+  const { teamId } = useSettingsTeam();
   const workflowStore = useAddMailboxSettingsStore();
   const {
     direction,
@@ -74,8 +76,7 @@ export const AddMailboxSettingsView = ({
     managedOrganizationId,
     receiveWholeDomain,
   } = useSelector(workflowStore, (state) => state);
-  const selectedManagedOrganizationId =
-    managedOrganizationId || organizations[0]?.id || "";
+  const selectedManagedOrganizationId = managedOrganizationId || teamId || "";
   const selectedManagedOrganization = organizations.find(
     (organization) => organization.id === selectedManagedOrganizationId
   );
@@ -143,7 +144,7 @@ export const AddMailboxSettingsView = ({
     }));
     try {
       await openGoogleAccountLink({
-        organizationId: gmailOrganizationId || organizations[0]?.id,
+        organizationId: gmailOrganizationId || teamId,
         queryClient,
         returnTo: getSettingsReturnTo(),
       });
@@ -333,7 +334,7 @@ export const AddMailboxSettingsView = ({
                     gmailOrganizationId: value ?? "",
                   }));
                 }}
-                value={gmailOrganizationId || organizations[0]?.id}
+                value={gmailOrganizationId || teamId}
               >
                 <SelectTrigger aria-label="Gmail mailbox team" id="gmail-team">
                   <SelectValue placeholder="Select team" />
@@ -514,7 +515,7 @@ export const AddMailboxSettingsView = ({
 
             <Field>
               <FieldLabel htmlFor="local-part">Email address</FieldLabel>
-              <div className="squircle flex h-9 min-w-0 items-center rounded-md border border-border bg-input shadow-sm transition-colors focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/45">
+              <div className="squircle flex h-8 min-w-0 items-center rounded-md border border-border bg-input shadow-sm transition-colors focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/45">
                 <TextFieldInput
                   aria-label="Mailbox address"
                   chrome="ghost"

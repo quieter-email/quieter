@@ -20,7 +20,6 @@ import { toastError } from "#/lib/error-toast";
 import { orpc } from "#/lib/orpc";
 
 import {
-  SettingsBackButton,
   SettingsCard,
   SettingsLoadingState,
   SettingsRow,
@@ -58,7 +57,6 @@ const ACTION_LABELS = {
 
 export const MailSuppressionsView = ({
   canViewSuppressions,
-  onBack,
   organization,
 }: {
   canViewSuppressions: boolean;
@@ -185,7 +183,7 @@ export const MailSuppressionsView = ({
               }
               aria-invalid={addressError !== null}
               chrome="ghost"
-              className="h-9 px-0"
+              className="h-8 px-0"
               name="recipient"
               onChange={(changeEvent) => {
                 setAddressError(null);
@@ -284,10 +282,6 @@ export const MailSuppressionsView = ({
 
   return (
     <div className="@container space-y-6">
-      <SettingsBackButton onClick={onBack}>
-        {organization.name}
-      </SettingsBackButton>
-
       <div>
         <h1 className="text-body-lg font-semibold text-fg">
           Blocked recipients

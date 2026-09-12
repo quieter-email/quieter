@@ -22,15 +22,9 @@ import {
 } from "@quieter/ui/dropdown-menu";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
+import { WorkspaceSidebar } from "@quieter/ui/workspace-sidebar";
 import { Link } from "@tanstack/react-router";
-import {
-  AnimatePresence,
-  domMax,
-  LazyMotion,
-  m,
-  useReducedMotion,
-} from "motion/react";
-import { useEffect, useEffectEvent, useState } from "react";
+import { useEffect, useState } from "react";
 import type { SubmitEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 
 import { loadComposeWorkspace } from "#/features/mailbox/components/mailbox-workspace/workspace-component-loaders";
@@ -136,7 +130,7 @@ const SidebarHelpMenu = ({
         <IconButtonTooltip label="Help and legal">
           <DropdownMenuTrigger
             aria-label="Help and legal"
-            className="relative z-10 inline-flex size-9 shrink-0 items-center justify-center rounded-md bg-transparent text-muted-fg hover:bg-transparent hover:text-fg focus-visible:bg-transparent focus-visible:text-fg data-popup-open:bg-transparent data-popup-open:text-fg"
+            className="relative z-10 inline-flex size-7 shrink-0 items-center justify-center rounded-md bg-transparent text-muted-fg hover:bg-transparent hover:text-fg focus-visible:bg-transparent focus-visible:text-fg data-popup-open:bg-transparent data-popup-open:text-fg"
           >
             <HugeiconsIcon
               aria-hidden
@@ -689,10 +683,6 @@ export const MailSidebar = ({
   const [animateEntrance, setAnimateEntrance] = useState(
     () => !hasPlayedSidebarEntrance
   );
-  const reducedMotion = useReducedMotion();
-  const closeMobileSidebar = useEffectEvent(() => {
-    onMobileOpenChange(false);
-  });
 
   useEffect((): (() => void) | undefined => {
     if (!animateEntrance) {
@@ -708,80 +698,20 @@ export const MailSidebar = ({
     };
   }, [animateEntrance]);
 
-  useEffect((): (() => void) | undefined => {
-    if (!isMobileOpen) {
-      return undefined;
-    }
-
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        closeMobileSidebar();
-      }
-    };
-
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [isMobileOpen]);
-
   return (
-    <LazyMotion features={domMax}>
-      <>
-        <aside
-          className="relative hidden h-full shrink-0 bg-transparent text-fg lg:flex lg:flex-col"
-          style={{ width: "272px" }}
-        >
-          <SidebarContent {...sidebarProps} animateEntrance={animateEntrance} />
-        </aside>
-
-        <AnimatePresence initial={false}>
-          {isMobileOpen && (
-            <>
-              <m.button
-                aria-label="Close sidebar"
-                className="fixed inset-0 z-40 bg-bg/50 backdrop-blur-[2px] lg:hidden"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => {
-                  onMobileOpenChange(false);
-                }}
-                type="button"
-              />
-              <m.aside
-                aria-label="Mail sidebar"
-                className="fixed inset-y-0 left-0 isolate z-50 flex w-[min(20rem,calc(100vw-2.5rem))] flex-col overflow-hidden bg-bg pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-fg shadow-2xl lg:hidden"
-                initial={
-                  reducedMotion === true
-                    ? { opacity: 0, transform: "translate3d(0, 0, 0)" }
-                    : { opacity: 1, transform: "translate3d(-100%, 0, 0)" }
-                }
-                animate={{ opacity: 1, transform: "translate3d(0, 0, 0)" }}
-                exit={
-                  reducedMotion === true
-                    ? { opacity: 0, transform: "translate3d(0, 0, 0)" }
-                    : { opacity: 1, transform: "translate3d(-100%, 0, 0)" }
-                }
-                transition={
-                  reducedMotion === true
-                    ? { duration: 0.1 }
-                    : { bounce: 0, duration: 0.24, type: "spring" }
-                }
-              >
-                <SidebarContent
-                  {...sidebarProps}
-                  animateEntrance={animateEntrance}
-                  onRequestClose={() => {
-                    onMobileOpenChange(false);
-                  }}
-                  switcherSide="bottom"
-                />
-              </m.aside>
-            </>
-          )}
-        </AnimatePresence>
-      </>
-    </LazyMotion>
+    <WorkspaceSidebar
+      isMobileOpen={isMobileOpen}
+      onMobileOpenChange={onMobileOpenChange}
+      label="Mail sidebar"
+    >
+      {(close) => (
+        <SidebarContent
+          {...sidebarProps}
+          animateEntrance={animateEntrance}
+          onRequestClose={close}
+          switcherSide={close ? "bottom" : undefined}
+        />
+      )}
+    </WorkspaceSidebar>
   );
 };

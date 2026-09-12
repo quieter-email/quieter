@@ -207,7 +207,7 @@ export const MessageListSelectionToolbar = ({
 
   return (
     <div
-      className="flex h-9 min-w-0 items-stretch justify-between gap-2"
+      className="flex h-8 min-w-0 items-stretch justify-between gap-2"
       ref={rowRef}
     >
       <div className="flex min-w-0 items-center gap-2.5">

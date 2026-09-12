@@ -13,6 +13,7 @@ import {
   SettingsSection,
   settingsSurfaceVariants,
 } from "#/features/settings/components/settings-layout";
+import { settingsRouteApi } from "#/lib/route-apis";
 
 export const GmailMailboxDetailSections = ({
   autoLabelEnabled,
@@ -38,101 +39,112 @@ export const GmailMailboxDetailSections = ({
   onUsefulDetailsChange: (enabled: boolean) => void;
   usefulDetailsEnabled: boolean;
   usefulDetailsSwitchId: string;
-}) => (
-  <>
-    <SettingsSection
-      description="Optional features that organize new Inbox mail and surface timely information."
-      title="Intelligence"
-    >
-      <SettingsCard>
-        <SettingsInsetRows>
-          <label
-            className={cn(
-              settingsSurfaceVariants({ variant: "insetRow" }),
-              "cursor-pointer gap-3"
-            )}
-            htmlFor={usefulDetailsSwitchId}
-          >
-            <span className="min-w-0 flex-1">
-              <span className="block text-body text-fg">Useful details</span>
-              <span className="mt-0.5 block text-caption/5 text-muted-fg">
-                Show codes, deliveries, and deadlines above the inbox.
-                {!hasAutomationAccess && " Requires Pro access for this team."}
-              </span>
-            </span>
-            <Switch
-              aria-label={`Find time-sensitive updates in new mail for ${emailAddress}`}
-              checked={usefulDetailsEnabled}
-              className="shrink-0"
-              size="sm"
-              disabled={
-                !hasAutomationAccess || connectionStatus !== "connected"
-              }
-              id={usefulDetailsSwitchId}
-              onCheckedChange={onUsefulDetailsChange}
-            >
-              <SwitchThumb />
-            </Switch>
-          </label>
-          <label
-            className={cn(
-              settingsSurfaceVariants({ variant: "insetRow" }),
-              "cursor-pointer gap-3"
-            )}
-            htmlFor={autoLabelSwitchId}
-          >
-            <span className="min-w-0 flex-1">
-              <span className="block text-body text-fg">Auto-label</span>
-              <span className="mt-0.5 block text-caption/5 text-muted-fg">
-                Label new Inbox mail using each label&apos;s inclusion criteria.
-                {!hasAutomationAccess && " Requires Pro access for this team."}
-              </span>
-            </span>
-            <Switch
-              aria-label={`Automatically label new mail for ${emailAddress}`}
-              checked={autoLabelEnabled}
-              className="shrink-0"
-              size="sm"
-              disabled={
-                !hasAutomationAccess || connectionStatus !== "connected"
-              }
-              id={autoLabelSwitchId}
-              onCheckedChange={onAutoLabelChange}
-            >
-              <SwitchThumb />
-            </Switch>
-          </label>
-        </SettingsInsetRows>
-      </SettingsCard>
-    </SettingsSection>
-
-    <SettingsSection title="Remove mailbox">
-      <SettingsCard>
-        <SettingsRow
-          action={
-            <Button
-              className="text-destructive hover:text-destructive"
-              disabled={disconnectPending}
-              onClick={onDisconnect}
-              pending={disconnectPending}
-              pendingLabel="Removing…"
-              size="sm"
-              type="button"
-              variant="ghost"
-            >
-              <HugeiconsIcon
-                aria-hidden
-                className="size-4"
-                icon={Delete02Icon}
-              />
-              Remove
-            </Button>
-          }
-          title="Disconnect Gmail"
+}) => {
+  const { section } = settingsRouteApi.useSearch();
+  return (
+    <>
+      {section !== "connection" && (
+        <SettingsSection
+          description="Optional features that organize new Inbox mail and surface timely information."
+          title="Intelligence"
         >
-          Remove this account and its saved credentials from Quieter.
-        </SettingsRow>
-      </SettingsCard>
-    </SettingsSection>
-  </>
-);
+          <SettingsCard>
+            <SettingsInsetRows>
+              <label
+                className={cn(
+                  settingsSurfaceVariants({ variant: "insetRow" }),
+                  "cursor-pointer gap-3"
+                )}
+                htmlFor={usefulDetailsSwitchId}
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-body text-fg">
+                    Useful details
+                  </span>
+                  <span className="mt-0.5 block text-caption/5 text-muted-fg">
+                    Show codes, deliveries, and deadlines above the inbox.
+                    {!hasAutomationAccess &&
+                      " Requires Pro access for this team."}
+                  </span>
+                </span>
+                <Switch
+                  aria-label={`Find time-sensitive updates in new mail for ${emailAddress}`}
+                  checked={usefulDetailsEnabled}
+                  className="shrink-0"
+                  size="sm"
+                  disabled={
+                    !hasAutomationAccess || connectionStatus !== "connected"
+                  }
+                  id={usefulDetailsSwitchId}
+                  onCheckedChange={onUsefulDetailsChange}
+                >
+                  <SwitchThumb />
+                </Switch>
+              </label>
+              <label
+                className={cn(
+                  settingsSurfaceVariants({ variant: "insetRow" }),
+                  "cursor-pointer gap-3"
+                )}
+                htmlFor={autoLabelSwitchId}
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-body text-fg">Auto-label</span>
+                  <span className="mt-0.5 block text-caption/5 text-muted-fg">
+                    Label new Inbox mail using each label&apos;s inclusion
+                    criteria.
+                    {!hasAutomationAccess &&
+                      " Requires Pro access for this team."}
+                  </span>
+                </span>
+                <Switch
+                  aria-label={`Automatically label new mail for ${emailAddress}`}
+                  checked={autoLabelEnabled}
+                  className="shrink-0"
+                  size="sm"
+                  disabled={
+                    !hasAutomationAccess || connectionStatus !== "connected"
+                  }
+                  id={autoLabelSwitchId}
+                  onCheckedChange={onAutoLabelChange}
+                >
+                  <SwitchThumb />
+                </Switch>
+              </label>
+            </SettingsInsetRows>
+          </SettingsCard>
+        </SettingsSection>
+      )}
+      {section === "connection" && (
+        <SettingsSection title="Remove mailbox">
+          <SettingsCard>
+            <SettingsRow
+              action={
+                <Button
+                  className="text-destructive hover:text-destructive"
+                  disabled={disconnectPending}
+                  onClick={onDisconnect}
+                  pending={disconnectPending}
+                  pendingLabel="Removing…"
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-4"
+                    icon={Delete02Icon}
+                  />
+                  Remove
+                </Button>
+              }
+              title="Disconnect Gmail"
+            >
+              Remove this account and its saved credentials from Quieter.
+            </SettingsRow>
+          </SettingsCard>
+        </SettingsSection>
+      )}
+    </>
+  );
+};

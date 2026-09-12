@@ -1,22 +1,23 @@
 "use client";
 
-import { cn } from "@quieter/ui/cn";
-import { useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
-import { lazy, Suspense } from "react";
+import { Menu01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Button } from "@quieter/ui/button";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { WorkspaceSidebar } from "@quieter/ui/workspace-sidebar";
+import { lazy, Suspense, useState } from "react";
 
+import { WorkspaceSection } from "#/components/workspace-section";
 import { isDemoModeAvailable } from "#/features/settings/domain/demo-mode-setting";
-import { SETTINGS_DETAIL_TITLES } from "#/features/settings/domain/settings-navigation";
-import type { SettingsTab } from "#/features/settings/domain/settings-tab";
+import { SETTINGS_TITLES } from "#/features/settings/domain/settings-navigation";
 import { settingsRouteApi } from "#/lib/route-apis";
 
 import { BillingCheckoutResult } from "./billing-checkout-result";
 import { ConnectorConnectionResult } from "./connector-connection-result";
 import { SettingsDataPrefetch } from "./settings-data-prefetch";
-import { SettingsBackButton, SettingsLoadingState } from "./settings-layout";
-import { SettingsOverviewPanel } from "./settings-overview-panel";
-import { prefetchSettingsTab } from "./settings-prefetch";
+import { SettingsLoadingState } from "./settings-layout";
 import { SettingsSearch } from "./settings-search";
+import { SettingsSidebar } from "./settings-sidebar";
 
 const AccountSettingsPanel = lazy(
   async () =>
@@ -60,10 +61,10 @@ const OrganizationSettingsPanel = lazy(
 );
 const preferenceSettingsPanels = async () =>
   await import("./preference-settings-panels");
-const AppearanceSettingsPanel = lazy(
+const PreferencesSettingsPanel = lazy(
   async () =>
     await preferenceSettingsPanels().then(
-      ({ AppearanceSettingsPanel: component }) => ({
+      ({ PreferencesSettingsPanel: component }) => ({
         default: component,
       })
     )
@@ -84,64 +85,6 @@ const DevelopmentSettingsUnavailable = lazy(
       })
     )
 );
-const PrivacySettingsPanel = lazy(
-  async () =>
-    await preferenceSettingsPanels().then(
-      ({ PrivacySettingsPanel: component }) => ({
-        default: component,
-      })
-    )
-);
-const ReadingSettingsPanel = lazy(
-  async () =>
-    await preferenceSettingsPanels().then(
-      ({ ReadingSettingsPanel: component }) => ({
-        default: component,
-      })
-    )
-);
-const ShortcutsSettingsPanel = lazy(
-  async () =>
-    await preferenceSettingsPanels().then(
-      ({ ShortcutsSettingsPanel: component }) => ({
-        default: component,
-      })
-    )
-);
-
-const preloadSettingsPanel = async (tab: SettingsTab) => {
-  switch (tab) {
-    case "account": {
-      return await import("./account-settings-panel");
-    }
-    case "ai": {
-      return await import("./ai-settings-panel");
-    }
-    case "connectors": {
-      return await import("./connectors-settings-panel");
-    }
-    case "mailboxes": {
-      return await import("./mailboxes-settings-panel");
-    }
-    case "organization": {
-      return await import("./organization-settings-panel");
-    }
-    case "appearance":
-    case "development":
-    case "privacy":
-    case "reading":
-    case "shortcuts": {
-      return await preferenceSettingsPanels();
-    }
-    case "overview": {
-      return null;
-    }
-    default: {
-      throw new Error("Unsupported settings tab.");
-    }
-  }
-};
-
 type SettingsUser = {
   email: string;
   emailVerified: boolean;
@@ -149,180 +92,106 @@ type SettingsUser = {
   name: string;
 };
 
-const SettingsBackNavigation = ({
-  domainId,
-  mailboxId,
-  mailboxView,
-  onBackToApp,
-  onBackToMailboxes,
-  onBackToOverview,
-  organizationId,
-  tab,
+export const SettingsScreen = ({
+  initialUser,
 }: {
-  domainId: string;
-  mailboxId: string;
-  mailboxView: "add" | "list";
-  onBackToApp: () => void;
-  onBackToMailboxes: () => void;
-  onBackToOverview: () => void;
-  organizationId: string;
-  tab: SettingsTab;
-}) => {
-  if (tab === "overview") {
-    return <SettingsBackButton onClick={onBackToApp}>Back</SettingsBackButton>;
-  }
-
-  if (tab === "mailboxes" && (mailboxId !== "" || mailboxView === "add")) {
-    return (
-      <SettingsBackButton onClick={onBackToMailboxes}>
-        Mailboxes
-      </SettingsBackButton>
-    );
-  }
-
-  if (tab === "organization" && (organizationId !== "" || domainId !== "")) {
-    return null;
-  }
-
-  return (
-    <SettingsBackButton onClick={onBackToOverview}>Settings</SettingsBackButton>
-  );
-};
-
-type SettingsScreenProps = {
   initialUser: SettingsUser;
-};
-
-export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
-  const queryClient = useQueryClient();
-  const navigate = useNavigate({
-    from: "/settings",
-  });
-  const { domainId, from, mailboxId, mailboxView, organizationId, tab } =
-    settingsRouteApi.useSearch();
-
-  const setTab = (nextTab: SettingsTab) => {
-    void navigate({
-      search: (previous) => ({
-        ...previous,
-        domainId: "",
-        mailboxId: "",
-        mailboxView: "list",
-        organizationId: "",
-        organizationView: "overview",
-        tab: nextTab,
-      }),
-      to: ".",
-    });
-  };
-  const goBackToApp = () => {
-    void navigate({
-      to: from,
-    });
-  };
-  const goBackToMailboxes = () => {
-    void navigate({
-      search: (previous) => ({
-        ...previous,
-        mailboxId: "",
-        mailboxView: "list",
-      }),
-      to: ".",
-    });
-  };
-  const detail = tab === "overview" ? null : SETTINGS_DETAIL_TITLES[tab];
-  const isGuidedMailboxSetup = tab === "mailboxes" && mailboxView === "add";
-
+}) => {
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const routeSearch = settingsRouteApi.useSearch();
+  const { tab } = routeSearch;
+  const preferences = [
+    "overview",
+    "appearance",
+    "reading",
+    "privacy",
+    "shortcuts",
+  ].includes(tab);
+  const title = SETTINGS_TITLES[tab];
   return (
-    <main className="relative isolate flex h-dvh min-h-0 flex-col overflow-hidden text-fg">
-      <SettingsDataPrefetch tab={tab} />
-      <BillingCheckoutResult />
-      <ConnectorConnectionResult />
-      {isGuidedMailboxSetup ? null : (
-        <>
-          <SettingsBackNavigation
-            domainId={domainId}
-            mailboxId={mailboxId}
-            mailboxView={mailboxView}
-            onBackToApp={goBackToApp}
-            onBackToMailboxes={goBackToMailboxes}
-            onBackToOverview={() => {
-              setTab("overview");
-            }}
-            organizationId={organizationId}
-            tab={tab}
-          />
-          <SettingsSearch
-            onPrefetchTab={(nextTab) => {
-              void prefetchSettingsTab(queryClient, nextTab);
-              void preloadSettingsPanel(nextTab);
-            }}
-            onSelectTab={setTab}
-          />
-        </>
-      )}
-      <div className="relative z-10 min-h-0 flex-1 overflow-y-auto">
-        <div
-          className={cn("w-full", {
-            "min-h-full": isGuidedMailboxSetup,
-            "mx-auto max-w-205 px-5 py-8 md:px-8 md:py-14":
-              !isGuidedMailboxSetup,
-          })}
-        >
-          {tab === "overview" ? (
-            <SettingsOverviewPanel
-              initialUser={initialUser}
-              onPrefetchTab={(nextTab) => {
-                void prefetchSettingsTab(queryClient, nextTab);
-                void preloadSettingsPanel(nextTab);
-              }}
-              onSelectTab={setTab}
-            />
-          ) : (
-            <div
-              className={cn({
-                "min-h-full": isGuidedMailboxSetup,
-                "space-y-8": !isGuidedMailboxSetup,
-              })}
-            >
-              {detail && tab !== "mailboxes" && (
-                <header>
-                  <h1 className="text-title-sm font-normal tracking-tight text-fg">
-                    {detail.title}
-                  </h1>
-                </header>
-              )}
-
-              <Suspense
-                fallback={
-                  <SettingsLoadingState
-                    className="min-h-64"
-                    label={`Loading ${detail?.title ?? "settings"}`}
-                  />
-                }
-              >
-                {tab === "appearance" && <AppearanceSettingsPanel />}
-                {tab === "ai" && <AiSettingsPanel />}
-                {tab === "reading" && <ReadingSettingsPanel />}
-                {tab === "shortcuts" && <ShortcutsSettingsPanel />}
-                {tab === "privacy" && <PrivacySettingsPanel />}
-                {tab === "development" &&
-                  (isDemoModeAvailable() ? (
-                    <DevelopmentSettingsPanel />
-                  ) : (
-                    <DevelopmentSettingsUnavailable />
-                  ))}
-                {tab === "account" && (
-                  <AccountSettingsPanel initialUser={initialUser} />
-                )}
-                {tab === "mailboxes" && <MailboxesSettingsPanel />}
-                {tab === "connectors" && <ConnectorsSettingsPanel />}
-                {tab === "organization" && <OrganizationSettingsPanel />}
-              </Suspense>
-            </div>
-          )}
+    <SettingsSearch
+      key={`${tab}-${routeSearch.organizationId}-${routeSearch.mailboxId}-${routeSearch.organizationView}`}
+      onSelect={() => {
+        setIsMobileOpen(false);
+      }}
+    >
+      {({ input, results, searching }) => (
+        <div className="relative isolate flex h-dvh min-h-0 overflow-hidden pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-fg lg:p-0">
+          <SettingsDataPrefetch tab={tab} />
+          <BillingCheckoutResult />
+          <ConnectorConnectionResult />
+          <WorkspaceSidebar
+            isMobileOpen={isMobileOpen}
+            onMobileOpenChange={setIsMobileOpen}
+            label="Settings sidebar"
+          >
+            {(close) => (
+              <SettingsSidebar
+                onRequestClose={close}
+                searchInput={input}
+                searchResults={close ? results : null}
+              />
+            )}
+          </WorkspaceSidebar>
+          <main className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+            <WorkspaceSection>
+              <div className="px-4 pt-3 lg:hidden">
+                <IconButtonTooltip label="Open settings menu">
+                  <Button
+                    aria-label="Open settings menu"
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => {
+                      setIsMobileOpen(true);
+                    }}
+                  >
+                    <HugeiconsIcon
+                      icon={Menu01Icon}
+                      className="size-4"
+                      strokeWidth={1.5}
+                    />
+                  </Button>
+                </IconButtonTooltip>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <div className="mx-auto w-full max-w-180 space-y-10 px-5 py-8 md:px-8 md:py-14">
+                  {!isMobileOpen && results}
+                  <div hidden={searching} className="space-y-10">
+                    {tab !== "organization" && tab !== "mailboxes" && (
+                      <h1 className="text-title-sm font-normal tracking-tight">
+                        {title}
+                      </h1>
+                    )}
+                    <Suspense
+                      fallback={
+                        <SettingsLoadingState
+                          className="min-h-64"
+                          label={`Loading ${title ?? "settings"}`}
+                        />
+                      }
+                    >
+                      {preferences && <PreferencesSettingsPanel />}
+                      {tab === "ai" && <AiSettingsPanel />}
+                      {tab === "development" &&
+                        (isDemoModeAvailable() ? (
+                          <DevelopmentSettingsPanel />
+                        ) : (
+                          <DevelopmentSettingsUnavailable />
+                        ))}
+                      {tab === "account" && (
+                        <AccountSettingsPanel initialUser={initialUser} />
+                      )}
+                      {tab === "mailboxes" && <MailboxesSettingsPanel />}
+                      {tab === "connectors" && <ConnectorsSettingsPanel />}
+                      {tab === "organization" && <OrganizationSettingsPanel />}
+                    </Suspense>
+                  </div>
+                </div>
+              </div>
+            </WorkspaceSection>
+          </main>
         </div>
-      </div>
-    </main>
+      )}
+    </SettingsSearch>
   );
 };

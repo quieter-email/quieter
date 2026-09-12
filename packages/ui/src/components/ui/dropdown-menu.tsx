@@ -55,7 +55,7 @@ export const DropdownMenuContent = ({
       <DropdownMenuDensityContext.Provider value={size}>
         <MenuPrimitive.Popup
           className={cn(
-            "z-50 max-h-[calc(100dvh-1rem)] max-w-[calc(100vw-1rem)] min-w-52 origin-(--transform-origin) overflow-x-hidden overflow-y-auto overscroll-contain rounded-lg border bg-popover p-1 text-body text-popover-fg shadow-md transition-[opacity,transform] duration-150 ease-out will-change-[translate,opacity,height,width] data-ending-style:scale-95 data-ending-style:opacity-0 data-instant:transition-none data-starting-style:scale-95 data-starting-style:opacity-0",
+            "z-50 max-h-[calc(100dvh-1rem)] max-w-[calc(100vw-1rem)] min-w-52 origin-(--transform-origin) overflow-x-hidden overflow-y-auto overscroll-contain rounded-lg border bg-popover p-1 text-body text-popover-fg shadow-md transition-[opacity,transform] duration-150 ease-out will-change-[translate,opacity,height,width] outline-none data-ending-style:scale-95 data-ending-style:opacity-0 data-instant:transition-none data-starting-style:scale-95 data-starting-style:opacity-0",
             { "min-w-40 p-0.5 text-caption": size === "compact" },
             className
           )}
@@ -94,7 +94,7 @@ export const DropdownMenuSubmenuContent = ({
         <DropdownMenuDensityContext.Provider value={resolvedSize}>
           <MenuPrimitive.Popup
             className={cn(
-              "z-50 max-h-[calc(100dvh-1rem)] max-w-[calc(100vw-1rem)] min-w-52 origin-(--transform-origin) overflow-x-hidden overflow-y-auto overscroll-contain rounded-lg border bg-popover p-1 text-body text-popover-fg shadow-md transition-[opacity,transform] duration-150 ease-out will-change-[opacity,transform] data-ending-style:scale-95 data-ending-style:opacity-0 data-instant:transition-none data-starting-style:scale-95 data-starting-style:opacity-0",
+              "z-50 max-h-[calc(100dvh-1rem)] max-w-[calc(100vw-1rem)] min-w-52 origin-(--transform-origin) overflow-x-hidden overflow-y-auto overscroll-contain rounded-lg border bg-popover p-1 text-body text-popover-fg shadow-md transition-[opacity,transform] duration-150 ease-out will-change-[opacity,transform] outline-none data-ending-style:scale-95 data-ending-style:opacity-0 data-instant:transition-none data-starting-style:scale-95 data-starting-style:opacity-0",
               { "min-w-40 p-0.5 text-caption": resolvedSize === "compact" },
               className
             )}
@@ -125,7 +125,7 @@ const DropdownMenuItemContent = ({
   return (
     <MenuPrimitive.Item
       className={cn(
-        "squircle relative flex min-h-9 cursor-default items-center gap-2 rounded-md px-2.5 text-body text-fg transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
+        "squircle relative flex min-h-7 cursor-default items-center gap-2 rounded-md px-2.5 text-body-sm text-fg transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
         { "min-h-7 gap-1.5 px-2 text-caption": size === "compact" },
         className
       )}
@@ -170,7 +170,7 @@ export const DropdownMenuCheckboxItem = ({
   return (
     <MenuPrimitive.CheckboxItem
       className={cn(
-        "squircle relative flex min-h-9 cursor-default items-center gap-2 rounded-md py-1.5 pr-2.5 pl-8 text-body text-fg transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
+        "squircle relative flex min-h-7 cursor-default items-center gap-2 rounded-md py-1 pr-2.5 pl-8 text-body-sm text-fg transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
         { "min-h-7 gap-1.5 py-1 pr-2 pl-7 text-caption": size === "compact" },
         className
       )}
@@ -207,7 +207,7 @@ const DropdownMenuSubmenuTriggerContent = ({
   return (
     <MenuPrimitive.SubmenuTrigger
       className={cn(
-        "squircle relative flex min-h-9 cursor-default items-center gap-2 rounded-md px-2.5 text-body text-fg transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
+        "squircle relative flex min-h-7 cursor-default items-center gap-2 rounded-md px-2.5 text-body-sm text-fg transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
         { "min-h-7 gap-1.5 px-2 text-caption": size === "compact" },
         className
       )}

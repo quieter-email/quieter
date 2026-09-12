@@ -49,6 +49,7 @@
     "./toaster": "./src/components/ui/toaster.tsx",
     "./toggle": "./src/components/ui/toggle.tsx",
     "./toolbar": "./src/components/ui/toolbar.tsx",
+    "./workspace-sidebar": "./src/components/ui/workspace-sidebar.tsx",
     "./tooltip": "./src/components/ui/tooltip.tsx"
   },
   "dependencies": {
@@ -59,6 +60,7 @@
     "@hugeicons/react": "catalog:",
     "class-variance-authority": "^0.7.1",
     "date-fns": "^4.4.0",
+    "motion": "catalog:",
     "react-day-picker": "^10.0.1",
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "catalog:",

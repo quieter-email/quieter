@@ -9,6 +9,8 @@ import type { ReactNode } from "react";
 
 import { LoadingSpinner } from "#/components/loading-spinner";
 
+import { useSettingsAnchor } from "./use-settings-anchor";
+
 export const settingsSurfaceVariants = cva("", {
   variants: {
     variant: {
@@ -43,10 +45,7 @@ export const SettingsBackButton = ({
   onClick: () => void;
 }) => (
   <Button
-    className={cn(
-      "fixed top-4 left-4 z-50 text-muted-fg hover:text-fg",
-      className
-    )}
+    className={cn("text-muted-fg hover:text-fg", className)}
     onClick={onClick}
     size="sm"
     variant="ghost"
@@ -92,24 +91,32 @@ export const SettingsSection = ({
   children: ReactNode;
   description?: ReactNode;
   title?: string;
-}) => (
-  <section className="space-y-4">
-    {((title ?? "") !== "" ||
-      (description !== undefined && description !== null)) && (
-      <div>
-        {(title ?? "") === "" ? null : (
-          <h2 className="text-body font-normal text-fg">{title}</h2>
-        )}
-        {description !== undefined && description !== null ? (
-          <div className="mt-1 max-w-3xl text-body/6 text-muted-fg">
-            {description}
-          </div>
-        ) : null}
-      </div>
-    )}
-    {children}
-  </section>
-);
+}) => {
+  const { ref, selected } = useSettingsAnchor(title ?? "");
+  return (
+    <section
+      ref={ref}
+      className={cn("space-y-4", {
+        "rounded-lg ring-2 ring-ring ring-offset-4 ring-offset-bg": selected,
+      })}
+    >
+      {((title ?? "") !== "" ||
+        (description !== undefined && description !== null)) && (
+        <div>
+          {(title ?? "") === "" ? null : (
+            <h2 className="text-body font-normal text-fg">{title}</h2>
+          )}
+          {description !== undefined && description !== null ? (
+            <div className="mt-1 max-w-3xl text-body/6 text-muted-fg">
+              {description}
+            </div>
+          ) : null}
+        </div>
+      )}
+      {children}
+    </section>
+  );
+};
 
 export const SettingsCard = ({
   children,
@@ -242,21 +249,29 @@ export const SettingsRow = ({
   children?: ReactNode;
   icon?: ReactNode;
   title: string;
-}) => (
-  <div className={settingsSurfaceVariants({ variant: "rowShell" })}>
-    {icon !== undefined && icon !== null ? (
-      <div className="squircle flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/45 text-muted-fg [&_svg]:size-4">
-        {icon}
-      </div>
-    ) : null}
-    <SettingsRowText className="flex-1" title={title}>
-      {children}
-    </SettingsRowText>
-    {action !== undefined && action !== null ? (
-      <div className="ml-auto shrink-0">{action}</div>
-    ) : null}
-  </div>
-);
+}) => {
+  const { ref, selected } = useSettingsAnchor(title ?? "");
+  return (
+    <div
+      ref={ref}
+      className={cn(settingsSurfaceVariants({ variant: "rowShell" }), {
+        "bg-accent": selected,
+      })}
+    >
+      {icon !== undefined && icon !== null ? (
+        <div className="squircle flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/45 text-muted-fg [&_svg]:size-4">
+          {icon}
+        </div>
+      ) : null}
+      <SettingsRowText className="flex-1" title={title}>
+        {children}
+      </SettingsRowText>
+      {action !== undefined && action !== null ? (
+        <div className="ml-auto shrink-0">{action}</div>
+      ) : null}
+    </div>
+  );
+};
 
 export const SettingsNavigationRow = ({
   description,

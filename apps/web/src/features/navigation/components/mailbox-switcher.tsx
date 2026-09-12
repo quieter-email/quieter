@@ -1009,7 +1009,7 @@ export const MailboxSwitcherDropdown = ({
                   {!embedded && (
                     <div className="mt-1">
                       <LinkButton
-                        className="squircle h-auto min-h-9 w-full justify-between rounded-xs px-2.5 py-2"
+                        className="squircle h-auto min-h-7 w-full justify-between rounded-xs px-2.5 py-1"
                         data-mailbox-switcher-navigation-item
                         search={{ from: "/", mailboxId: "", tab: "mailboxes" }}
                         size="sm"

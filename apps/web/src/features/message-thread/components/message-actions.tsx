@@ -409,7 +409,7 @@ export const MessageActionsDropdown = (props: MessageActionsDropdownProps) => {
         </DropdownMenuTrigger>
       </IconButtonTooltip>
 
-      <DropdownMenuContent>
+      <DropdownMenuContent align="end">
         {entries.map((entry) => renderDropdownEntry(entry))}
       </DropdownMenuContent>
     </DropdownMenu>

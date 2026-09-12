@@ -1,171 +1,192 @@
 "use client";
 
-import { Search01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
+import { Button } from "@quieter/ui/button";
+import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import { cn } from "@quieter/ui/cn";
 import { Input } from "@quieter/ui/input";
-import { useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
+import type { ReactNode } from "react";
+import { useState } from "react";
 
 import { isDemoModeAvailable } from "#/features/settings/domain/demo-mode-setting";
-import type { SettingsDetailTab } from "#/features/settings/domain/settings-navigation";
-import { matchSettingsEntries } from "#/features/settings/domain/settings-search";
+import { settingsDestinationSearch } from "#/features/settings/domain/settings-destination";
+import {
+  matchSettingsEntries,
+  SETTINGS_SEARCH_ENTRIES,
+} from "#/features/settings/domain/settings-search";
+import type { SettingsSearchEntry } from "#/features/settings/domain/settings-search";
+import { mailboxesQueryOptions } from "#/lib/mailboxes-query";
 
-/**
- * One search field, in the same place on every Settings page. It is fixed and
- * centered rather than anchored to the back button, because the back button
- * changes label and disappears entirely on team and domain detail pages.
- */
+import { useSettingsTeam } from "./use-settings-team";
+
 export const SettingsSearch = ({
-  onPrefetchTab,
-  onSelectTab,
+  children,
+  onSelect,
 }: {
-  onPrefetchTab: (tab: SettingsDetailTab) => void;
-  onSelectTab: (tab: SettingsDetailTab) => void;
+  children: (search: {
+    input: ReactNode;
+    results: ReactNode;
+    searching: boolean;
+  }) => ReactNode;
+  onSelect: () => void;
 }) => {
   const [query, setQuery] = useState("");
+  const [includeOtherTeams, setIncludeOtherTeams] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [isFocused, setIsFocused] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const navigate = useNavigate({ from: "/settings" });
+  const { teamId, organizations } = useSettingsTeam();
+  const { data } = useQuery(mailboxesQueryOptions());
+  const teams = organizations.filter(
+    (team) => includeOtherTeams || team.id === teamId
+  );
+  const entries = SETTINGS_SEARCH_ENTRIES.flatMap(
+    (entry): SettingsSearchEntry[] => {
+      if (entry.scope === "personal") {
+        return [entry];
+      }
+      if (entry.scope === "team") {
+        return teams.map((team) => ({
+          ...entry,
+          description: `${team.name} / ${entry.description}`,
+          id: `${entry.id}-${team.id}`,
+          keywords: `${entry.keywords} ${team.name}`,
+          organizationId: team.id,
+        }));
+      }
+      return (data?.groups ?? []).flatMap((group) =>
+        group.mailboxes.flatMap((mailbox) => {
+          const accessible =
+            teams.some((team) => team.id === mailbox.organizationId) &&
+            (mailbox.provider === "gmail" ||
+              (mailbox.provider === "managed" &&
+                mailbox.grantRole === "manager"));
+          if (!accessible) {
+            return [];
+          }
+          return [
+            {
+              ...entry,
+              description: `${group.name} / Mailboxes / ${mailbox.displayName || mailbox.emailAddress} / ${entry.title}`,
+              id: `${entry.id}-${mailbox.id}`,
+              keywords: `${entry.keywords} ${mailbox.displayName ?? ""} ${mailbox.emailAddress} ${group.name}`,
+              mailboxId: mailbox.id,
+              organizationId: mailbox.organizationId,
+            },
+          ];
+        })
+      );
+    }
+  );
   const results = matchSettingsEntries(query, {
+    entries,
     includeDevelopment: isDemoModeAvailable(),
   });
-  const isOpen = isFocused && query.trim() !== "";
-  const boundedIndex = Math.min(activeIndex, Math.max(results.length - 1, 0));
-
-  const selectTab = (tab: SettingsDetailTab) => {
-    onSelectTab(tab);
+  const select = (entry: SettingsSearchEntry) => {
     setQuery("");
     setActiveIndex(0);
-    inputRef.current?.blur();
+    onSelect();
+    void navigate({
+      search: (previous) => ({
+        ...previous,
+        ...settingsDestinationSearch(entry, teamId),
+      }),
+      to: ".",
+    });
   };
-
-  return (
-    // Narrow viewports cannot centre it without running into the back button,
-    // so it sits beside the button there and centres from `sm` up.
-    <div className="pointer-events-none fixed inset-x-0 top-4 z-50 flex justify-end pr-4 pl-32 sm:justify-center sm:px-16">
-      <div className="pointer-events-auto relative w-full max-w-xs">
-        <HugeiconsIcon
-          aria-hidden
-          className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-fg"
-          icon={Search01Icon}
-        />
-        <Input
-          aria-activedescendant={
-            isOpen && results[boundedIndex] !== undefined
-              ? `settings-search-${results[boundedIndex].tab}`
-              : undefined
+  const searching = query.trim().length > 0;
+  const input = (
+    <Input
+      aria-label="Search settings"
+      className="h-7 px-2.5 text-caption"
+      placeholder="Search settings"
+      type="search"
+      autoComplete="off"
+      value={query}
+      onChange={(event) => {
+        setQuery(event.target.value);
+        setActiveIndex(0);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          setQuery("");
+        }
+        if (!results.length) {
+          return;
+        }
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          setActiveIndex((index) => (index + 1) % results.length);
+        }
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          setActiveIndex(
+            (index) => (index - 1 + results.length) % results.length
+          );
+        }
+        if (event.key === "Enter") {
+          event.preventDefault();
+          const entry = results[Math.min(activeIndex, results.length - 1)];
+          if (entry !== undefined) {
+            select(entry);
           }
-          aria-autocomplete="list"
-          aria-controls="settings-search-results"
-          aria-expanded={isOpen}
-          aria-label="Search settings"
-          autoComplete="off"
-          className="h-9 pl-8 shadow-sm"
-          onBlur={() => {
-            setIsFocused(false);
-          }}
-          onChange={(event) => {
-            setQuery(event.target.value);
-            setActiveIndex(0);
-          }}
-          onFocus={() => {
-            setIsFocused(true);
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              setQuery("");
-              inputRef.current?.blur();
-              return;
-            }
-            if (results.length === 0) {
-              return;
-            }
-            if (event.key === "ArrowDown") {
-              event.preventDefault();
-              setActiveIndex((current) => (current + 1) % results.length);
-              return;
-            }
-            if (event.key === "ArrowUp") {
-              event.preventDefault();
-              setActiveIndex(
-                (current) => (current - 1 + results.length) % results.length
-              );
-              return;
-            }
-            if (event.key === "Enter") {
-              const entry = results[boundedIndex];
-              if (entry !== undefined) {
-                event.preventDefault();
-                selectTab(entry.tab);
-              }
-            }
-          }}
-          placeholder="Search settings"
-          ref={inputRef}
-          // ARIA 1.2 combobox: a native select cannot present ranked
-          // destinations, and AGENTS.md forbids native select in app code.
-          // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role
-          role="combobox"
-          type="search"
-          value={query}
-        />
-
-        {isOpen ? (
-          <div
-            className="squircle absolute inset-x-0 top-11 overflow-hidden rounded-md border border-border-strong bg-bg-surface shadow-lg"
-            id="settings-search-results"
-            // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role
-            role="listbox"
-          >
-            {results.length === 0 ? (
-              <p className="px-3 py-2.5 text-body-sm text-muted-fg">
-                No settings match that.
-              </p>
-            ) : (
-              results.map((entry, index) => (
-                <button
-                  aria-selected={index === boundedIndex}
-                  className={cn(
-                    "block w-full px-3 py-2 text-left transition-colors",
-                    {
-                      "bg-accent": index === boundedIndex,
-                    }
-                  )}
-                  id={`settings-search-${entry.tab}`}
-                  key={entry.tab}
-                  // Preserve input focus while pointer activation reaches click.
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                  }}
-                  onClick={() => {
-                    selectTab(entry.tab);
-                  }}
-                  tabIndex={-1}
-                  onMouseEnter={() => {
-                    setActiveIndex(index);
-                    onPrefetchTab(entry.tab);
-                  }}
-                  // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role
-                  role="option"
-                  type="button"
-                >
-                  <span className="flex items-baseline justify-between gap-3">
-                    <span className="truncate text-body-sm text-fg">
-                      {entry.title}
-                    </span>
-                    <span className="shrink-0 text-micro text-muted-fg">
-                      {entry.sectionLabel}
-                    </span>
-                  </span>
-                  <span className="mt-0.5 block truncate text-micro text-muted-fg">
-                    {entry.description}
-                  </span>
-                </button>
-              ))
-            )}
-          </div>
-        ) : null}
-      </div>
-    </div>
+        }
+      }}
+    />
   );
+  const resultContent = searching ? (
+    <section aria-label="Search results" className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-body-lg">Search results</h1>
+        <label
+          htmlFor="settings-search-other-teams"
+          className="flex items-center gap-2 text-caption"
+        >
+          <Checkbox
+            id="settings-search-other-teams"
+            checked={includeOtherTeams}
+            onCheckedChange={(checked) => {
+              setIncludeOtherTeams(checked);
+              setActiveIndex(0);
+            }}
+          >
+            <CheckboxIndicator />
+          </Checkbox>
+          Include other teams
+        </label>
+      </div>
+      <output className="text-caption text-muted-fg">
+        {results.length
+          ? `${results.length} results`
+          : "No settings match. Try a different word or include other teams."}
+      </output>
+      <div className="divide-y divide-border">
+        {results.map((entry, index) => (
+          <Button
+            key={entry.id}
+            variant="ghost"
+            className={cn(
+              "h-auto w-full justify-start py-4 text-left font-normal whitespace-normal",
+              {
+                "bg-accent":
+                  index === Math.min(activeIndex, results.length - 1),
+              }
+            )}
+            onClick={() => {
+              select(entry);
+            }}
+          >
+            <span>
+              <span className="block text-body">{entry.title}</span>
+              <span className="mt-1 block text-caption text-muted-fg">
+                {entry.scope === "personal" ? "Personal / " : ""}
+                {entry.description}
+              </span>
+            </span>
+          </Button>
+        ))}
+      </div>
+    </section>
+  ) : null;
+  return <>{children({ input, results: resultContent, searching })}</>;
 };
