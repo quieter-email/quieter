@@ -177,7 +177,7 @@ export const SettingsSidebar = ({
       ) : (
         <nav aria-label="Settings" className="space-y-4 p-1">
           <div className="space-y-0">
-            <p className="px-3 py-1 text-caption text-muted-fg">Personal</p>
+            <p className="px-2 py-1 text-caption text-muted-fg">Personal</p>
             {PERSONAL_ITEMS.map((item) =>
               navigationButton(
                 item.title,
@@ -197,7 +197,7 @@ export const SettingsSidebar = ({
               )}
           </div>
           <div className="space-y-0">
-            <p className="px-3 py-1 text-caption text-muted-fg">
+            <p className="px-2 py-1 text-caption text-muted-fg">
               Team settings
             </p>
             <Select
@@ -229,10 +229,14 @@ export const SettingsSidebar = ({
             >
               <SelectTrigger
                 aria-label="Team settings"
-                className="mb-1 h-6.5 w-full px-2 text-caption font-normal text-fg"
+                className="mb-2 h-7 w-full gap-2 px-2 text-caption font-normal text-fg"
                 size="sm"
-                variant="ghost"
               >
+                <HugeiconsIcon
+                  icon={UserGroupIcon}
+                  strokeWidth={1.5}
+                  className="size-3.5 shrink-0"
+                />
                 <SelectValue
                   placeholder={
                     organizationsState.isPending
