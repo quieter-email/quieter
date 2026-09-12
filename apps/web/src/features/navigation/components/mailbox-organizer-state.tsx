@@ -7,7 +7,7 @@ import type {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 
-import { labelsQueryOptions } from "#/lib/gmail/labels-query";
+import { labelsQueryOptions } from "#/lib/mail/labels-query";
 import {
   getManagedRulesQueryKey,
   managedRulesQueryOptions,

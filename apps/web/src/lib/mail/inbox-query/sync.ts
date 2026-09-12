@@ -1,16 +1,14 @@
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 import type { QueryClient, QueryPersister } from "@tanstack/react-query";
 
-import {
-  GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS,
-  GMAIL_QUERY_STALE_TIME_MS,
-} from "#/lib/mail";
+import { GMAIL_QUERY_STALE_TIME_MS } from "#/lib/mail";
 import type {
   ListMessagesPageResult,
   MailboxCategory,
   MessageListItem,
   ThreadMessagesResult,
 } from "#/lib/mail";
+import { updateMailQueryFromServer } from "#/lib/mail-mutations";
 import { listManagedDemoMessages } from "#/lib/managed-mail/demo-managed-mail";
 import { rpc } from "#/lib/orpc";
 import { shouldRetryOrpcError } from "#/lib/orpc-errors";
@@ -20,7 +18,10 @@ import {
   isSandboxMailboxId,
 } from "#/lib/sandbox-mailbox";
 
-import { LANDING_DEMO_MAILBOX_ID, listDemoMessages } from "../demo-mail";
+import {
+  LANDING_DEMO_MAILBOX_ID,
+  listDemoMessages,
+} from "../../gmail/demo-mail";
 import { getThreadQueryKey } from "../thread-query";
 import {
   applySyncDeltaToQueryData,
@@ -141,18 +142,22 @@ export const refreshLoadedMessagesPages = async (
   };
 
   await refreshNextPage(0);
+  options.signal?.throwIfAborted();
 
-  queryClient.setQueryData<MessagesQueryData>(messagesQueryKey, (data) =>
-    mergeRefreshedMailboxPagesIntoQueryData(
-      data,
-      refreshedPages,
-      refreshedPageParams,
-      {
-        preserveUnrefreshedPages:
-          options.preserveUnrefreshedPages ??
-          refreshedPageCount < loadedPageCount,
-      }
-    )
+  updateMailQueryFromServer<MessagesQueryData>(
+    queryClient,
+    messagesQueryKey,
+    (data) =>
+      mergeRefreshedMailboxPagesIntoQueryData(
+        data,
+        refreshedPages,
+        refreshedPageParams,
+        {
+          preserveUnrefreshedPages:
+            options.preserveUnrefreshedPages ??
+            refreshedPageCount < loadedPageCount,
+        }
+      )
   );
   await persistQueryByKey(messagesQueryKey, queryClient);
   return refreshedPages[0];
@@ -192,21 +197,29 @@ export const applyMailboxSyncDelta = async (
   startHistoryId: string,
   updatedMessages: readonly MessageListItem[],
   removedMessageIds: readonly string[],
-  nextHistoryId?: string
+  nextHistoryId?: string,
+  signal?: AbortSignal
 ) => {
+  signal?.throwIfAborted();
   if (updatedMessages.length > 0 || removedMessageIds.length > 0) {
-    queryClient.setQueryData<MessagesQueryData>(messagesQueryKey, (data) =>
-      applySyncDeltaToQueryData(data, updatedMessages, removedMessageIds)
+    updateMailQueryFromServer<MessagesQueryData>(
+      queryClient,
+      messagesQueryKey,
+      (data) =>
+        applySyncDeltaToQueryData(data, updatedMessages, removedMessageIds)
     );
   }
 
   if (nextHistoryId && nextHistoryId !== startHistoryId) {
-    queryClient.setQueryData<MessagesQueryData>(messagesQueryKey, (data) =>
-      updateFirstPageHistoryId(data, nextHistoryId)
+    updateMailQueryFromServer<MessagesQueryData>(
+      queryClient,
+      messagesQueryKey,
+      (data) => updateFirstPageHistoryId(data, nextHistoryId)
     );
   }
 
   await persistQueryByKey(messagesQueryKey, queryClient);
+  signal?.throwIfAborted();
 
   const touchedThreadQueryKeys = new Map<
     string,
@@ -219,7 +232,8 @@ export const applyMailboxSyncDelta = async (
       updatedMessage.threadId
     );
     touchedThreadQueryKeys.set(threadQueryKey.join("::"), threadQueryKey);
-    queryClient.setQueryData(
+    updateMailQueryFromServer(
+      queryClient,
       threadQueryKey,
       (currentData: ThreadMessagesResult | undefined) =>
         upsertMessageInThreadData(currentData, updatedMessage)
@@ -294,6 +308,7 @@ export const syncMessages = async (
     { signal }
   );
 
+  signal?.throwIfAborted();
   if (syncDelta.requiresFullRefresh) {
     return await refreshLoadedMessagesPages(
       queryClient,
@@ -313,7 +328,8 @@ export const syncMessages = async (
     startHistoryId,
     syncDelta.updatedMessages,
     syncDelta.removedMessageIds,
-    syncDelta.historyId
+    syncDelta.historyId,
+    signal
   );
 
   if (syncDelta.refreshFirstPage) {
@@ -407,7 +423,7 @@ export const liveSyncQueryOptions = (
     queryFn: async ({ signal }) =>
       await syncMessages(queryClient, mailboxId, mailbox, searchQuery, signal),
     queryKey: getLiveSyncQueryKey(mailboxId, mailbox, searchQuery),
-    refetchInterval: GMAIL_QUERY_FOREGROUND_SYNC_INTERVAL_MS,
+    refetchInterval: false,
     refetchIntervalInBackground: false,
     refetchOnMount: false,
     refetchOnReconnect: false,

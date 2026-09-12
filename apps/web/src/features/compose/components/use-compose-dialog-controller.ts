@@ -18,8 +18,8 @@ import {
 import {
   refreshCachedMailboxQueries,
   removeDraftMessageFromCaches,
-} from "#/lib/gmail/inbox-query";
-import { getThreadQueryKey } from "#/lib/gmail/thread-query-keys";
+} from "#/lib/mail/inbox-query";
+import { getThreadQueryKey } from "#/lib/mail/thread-query-keys";
 import {
   deleteManagedDemoDraft,
   saveManagedDemoDraft,

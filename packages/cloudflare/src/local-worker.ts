@@ -12,6 +12,7 @@ import {
   signaturesMatch,
 } from "./worker-utils";
 
+export { MailLiveUser } from "./mail-live-user";
 export { GmailLiveSyncMailboxV2 } from "./gmail-live-sync-mailbox";
 
 const deliverySchema = z.object({
@@ -25,7 +26,7 @@ export default {
       return new Response(null, { status: 404 });
     }
     const url = new URL(request.url);
-    if (url.pathname === "/gmail/live") {
+    if (url.pathname === "/gmail/live" || url.pathname.startsWith("/mail/")) {
       return await realtimeWorker.fetch(request, env);
     }
     const token = serverEnv.QUIETER_LOCAL_WORKER_TOKEN;
@@ -51,7 +52,7 @@ export default {
     if (url.pathname === "/__dev/mail/seed") {
       try {
         const input = z
-          .object({ ownerEmail: z.email() })
+          .object({ fresh: z.boolean().optional(), ownerEmail: z.email() })
           .safeParse(await readBoundedJson(request, 4096));
         if (!input.success) {
           return new Response(null, { status: 400 });
@@ -60,7 +61,10 @@ export default {
           await import("@quieter/orpc/managed-mail/local-fixtures");
         return Response.json(
           await withRequestDatabaseClient(
-            async () => await seedLocalManagedMail(input.data.ownerEmail)
+            async () =>
+              await seedLocalManagedMail(input.data.ownerEmail, {
+                fresh: input.data.fresh,
+              })
           )
         );
       } catch (error) {

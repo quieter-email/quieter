@@ -20,9 +20,7 @@ import type {
   MailboxPendingActions,
 } from "#/features/mailbox/components/mailbox-action-handlers";
 import { toastError } from "#/lib/error-toast";
-import { labelsQueryOptions } from "#/lib/gmail/labels-query";
 import { getThreadLabelIds } from "#/lib/gmail/thread-list";
-import { getThreadWithDetailsOptions } from "#/lib/gmail/thread-query";
 import { gmailThreadUsefulDetailsQueryOptions } from "#/lib/gmail/useful-details-query";
 import {
   hasRenderableMessageBody,
@@ -30,6 +28,8 @@ import {
   MAILBOX_LABELS,
 } from "#/lib/mail";
 import type { MailboxCategory, MessageListItem } from "#/lib/mail";
+import { labelsQueryOptions } from "#/lib/mail/labels-query";
+import { getThreadWithDetailsOptions } from "#/lib/mail/thread-query";
 import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
 import { orpc } from "#/lib/orpc";
 

@@ -17,8 +17,8 @@ import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 import { MessageDeliverySection } from "#/features/message-delivery/components/message-delivery-section";
-import { getMessageInspectorOptions } from "#/lib/gmail/message-inspector-query";
 import type { MessageListItem } from "#/lib/mail";
+import { getMessageInspectorOptions } from "#/lib/mail/message-inspector-query";
 
 export const MessageInspectorPanel = ({
   deliveryEnabled,

@@ -158,23 +158,25 @@ const validateAuthAndDeployment = (env: Map<string, string>) => {
       );
     }
   }
-  const liveUrl = env.get("GMAIL_LIVE_SYNC_URL");
-  if (liveUrl) {
-    try {
-      const url = new URL(liveUrl);
-      if (
-        !["ws:", "wss:"].includes(url.protocol) ||
-        !loopbackHosts.has(getHostname(liveUrl))
-      ) {
-        errors.push("GMAIL_LIVE_SYNC_URL must target a loopback Worker.");
+  for (const key of ["GMAIL_LIVE_SYNC_URL", "MAIL_UPDATES_URL"]) {
+    const liveUrl = env.get(key);
+    if (liveUrl) {
+      try {
+        const url = new URL(liveUrl);
+        if (
+          !["ws:", "wss:"].includes(url.protocol) ||
+          !loopbackHosts.has(getHostname(liveUrl))
+        ) {
+          errors.push(`${key} must target a loopback Worker.`);
+        }
+      } catch {
+        errors.push(`${key} is invalid.`);
       }
-    } catch {
-      errors.push("GMAIL_LIVE_SYNC_URL is invalid.");
-    }
-    if ((env.get("GMAIL_LIVE_SYNC_TOKEN_SECRET")?.length ?? 0) < 32) {
-      errors.push(
-        "GMAIL_LIVE_SYNC_TOKEN_SECRET must have at least 32 characters."
-      );
+      if ((env.get("GMAIL_LIVE_SYNC_TOKEN_SECRET")?.length ?? 0) < 32) {
+        errors.push(
+          "GMAIL_LIVE_SYNC_TOKEN_SECRET must have at least 32 characters."
+        );
+      }
     }
   }
   const subscription = env.get("GMAIL_PUBSUB_SUBSCRIPTION");

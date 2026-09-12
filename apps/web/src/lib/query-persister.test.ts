@@ -1,8 +1,8 @@
 import { describe, expect, test } from "vite-plus/test";
 
-import { messagesQueryOptions } from "./gmail/inbox-query/sync";
-import { labelsQueryOptions } from "./gmail/labels-query";
-import { getThreadWithDetailsOptions } from "./gmail/thread-query";
+import { messagesQueryOptions } from "./mail/inbox-query/sync";
+import { labelsQueryOptions } from "./mail/labels-query";
+import { getThreadWithDetailsOptions } from "./mail/thread-query";
 import { mailboxesQueryOptions } from "./mailboxes-query";
 import {
   managedLabelCountsQueryOptions,
@@ -43,10 +43,10 @@ describe("query persistence allowlist", () => {
     expect(mailboxesQueryOptions().refetchOnMount).toBeFalsy();
   });
 
-  test("does not persist opened threads or managed rules", () => {
+  test("persists opened threads but excludes managed rules", () => {
     expect(
       getPersister(getThreadWithDetailsOptions("mailbox-a", "thread-a"))
-    ).toBeUndefined();
+    ).toBe(queryPersister.persisterFn);
     expect(getPersister(managedRulesQueryOptions("mailbox-a"))).toBeUndefined();
   });
 
@@ -62,7 +62,7 @@ describe("query persistence allowlist", () => {
   test("rejects unrelated query scopes", () => {
     expect(
       shouldPersistQueryKey(["message-thread", 3, "mailbox-a", "thread-a"])
-    ).toBeFalsy();
+    ).toBeTruthy();
     expect(shouldPersistQueryKey(["mailboxes"])).toBeFalsy();
   });
 

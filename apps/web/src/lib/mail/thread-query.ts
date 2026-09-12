@@ -8,8 +8,9 @@ import {
   isSandboxMailboxId,
 } from "#/lib/sandbox-mailbox";
 
+import { getDemoThread } from "../gmail/demo-mail";
 import { getManagedDemoThread } from "../managed-mail/demo-managed-mail";
-import { getDemoThread } from "./demo-mail";
+import { queryPersister } from "../query-persister";
 import { getThreadQueryKey } from "./thread-query-keys";
 
 export { getThreadQueryKey } from "./thread-query-keys";
@@ -29,9 +30,10 @@ export const getThreadWithDetailsOptions = (
   threadId: string,
   enabled = true
 ) =>
-  queryOptions({
+  queryOptions<ThreadMessagesResult>({
     enabled,
     gcTime: 1000 * 60 * 30,
+    persister: queryPersister.persisterFn,
     queryFn: async ({ signal }) => {
       if (isManagedSandboxMailboxId(mailboxId)) {
         return getManagedDemoThread(threadId);

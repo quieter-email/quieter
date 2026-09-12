@@ -1,3 +1,4 @@
+import { withMailUpdate } from "../mail-updates";
 import { composeMailOperations } from "../mail/compose";
 import { mailInputSchemas } from "../mail/inputs";
 import { labelsMailOperations } from "../mail/labels";
@@ -12,16 +13,20 @@ export const mailRouter = {
   ...managedOrganizationMailRouter,
   applyChanges: protectedProcedure
     .input(mailInputSchemas.applyChanges)
-    .handler(mutationsMailOperations.applyChanges),
+    .handler(withMailUpdate(mutationsMailOperations.applyChanges)),
   createLabel: protectedProcedure
     .input(mailInputSchemas.createLabel)
-    .handler(labelsMailOperations.createLabel),
+    .handler(
+      withMailUpdate(labelsMailOperations.createLabel, "labels.changed")
+    ),
   deleteDraft: protectedProcedure
     .input(mailInputSchemas.deleteDraft)
-    .handler(composeMailOperations.deleteDraft),
+    .handler(withMailUpdate(composeMailOperations.deleteDraft)),
   deleteLabel: protectedProcedure
     .input(mailInputSchemas.deleteLabel)
-    .handler(labelsMailOperations.deleteLabel),
+    .handler(
+      withMailUpdate(labelsMailOperations.deleteLabel, "labels.changed")
+    ),
   getAttachment: protectedProcedure
     .route({ method: "GET" })
     .input(mailInputSchemas.getAttachment)
@@ -52,54 +57,58 @@ export const mailRouter = {
     .handler(queriesMailOperations.listThreads),
   markMessageAsRead: protectedProcedure
     .input(mailInputSchemas.markMessageAsRead)
-    .handler(mutationsMailOperations.markMessageAsRead),
+    .handler(withMailUpdate(mutationsMailOperations.markMessageAsRead)),
   markMessageAsUnread: protectedProcedure
     .input(mailInputSchemas.markMessageAsUnread)
-    .handler(mutationsMailOperations.markMessageAsUnread),
+    .handler(withMailUpdate(mutationsMailOperations.markMessageAsUnread)),
   markThreadAsRead: protectedProcedure
     .input(mailInputSchemas.markThreadAsRead)
-    .handler(mutationsMailOperations.markThreadAsRead),
+    .handler(withMailUpdate(mutationsMailOperations.markThreadAsRead)),
   markThreadAsUnread: protectedProcedure
     .input(mailInputSchemas.markThreadAsUnread)
-    .handler(mutationsMailOperations.markThreadAsUnread),
+    .handler(withMailUpdate(mutationsMailOperations.markThreadAsUnread)),
   moveMessageToTrash: protectedProcedure
     .input(mailInputSchemas.moveMessageToTrash)
-    .handler(mutationsMailOperations.moveMessageToTrash),
+    .handler(withMailUpdate(mutationsMailOperations.moveMessageToTrash)),
   moveThreadToTrash: protectedProcedure
     .input(mailInputSchemas.moveThreadToTrash)
-    .handler(mutationsMailOperations.moveThreadToTrash),
+    .handler(withMailUpdate(mutationsMailOperations.moveThreadToTrash)),
   saveDraft: protectedProcedure
     .input(mailInputSchemas.saveDraft)
-    .handler(composeMailOperations.saveDraft),
+    .handler(withMailUpdate(composeMailOperations.saveDraft)),
   sendDraft: protectedProcedure
     .input(mailInputSchemas.sendDraft)
-    .handler(composeMailOperations.sendDraft),
+    .handler(withMailUpdate(composeMailOperations.sendDraft)),
   sendMessage: protectedProcedure
     .input(mailInputSchemas.sendMessage)
-    .handler(composeMailOperations.sendMessage),
+    .handler(withMailUpdate(composeMailOperations.sendMessage)),
   syncMailbox: protectedProcedure
     .route({ method: "GET" })
     .input(mailInputSchemas.syncMailbox)
     .handler(queriesMailOperations.syncMailbox),
   unsubscribeFromMessage: protectedProcedure
     .input(mailInputSchemas.unsubscribeFromMessage)
-    .handler(composeMailOperations.unsubscribeFromMessage),
+    .handler(withMailUpdate(composeMailOperations.unsubscribeFromMessage)),
   untrashMessage: protectedProcedure
     .input(mailInputSchemas.untrashMessage)
-    .handler(mutationsMailOperations.untrashMessage),
+    .handler(withMailUpdate(mutationsMailOperations.untrashMessage)),
   untrashThread: protectedProcedure
     .input(mailInputSchemas.untrashThread)
-    .handler(mutationsMailOperations.untrashThread),
+    .handler(withMailUpdate(mutationsMailOperations.untrashThread)),
   updateLabel: protectedProcedure
     .input(mailInputSchemas.updateLabel)
-    .handler(labelsMailOperations.updateLabel),
+    .handler(
+      withMailUpdate(labelsMailOperations.updateLabel, "labels.changed")
+    ),
   updateLabelDetails: protectedProcedure
     .input(mailInputSchemas.updateLabelDetails)
-    .handler(labelsMailOperations.updateLabelDetails),
+    .handler(
+      withMailUpdate(labelsMailOperations.updateLabelDetails, "labels.changed")
+    ),
   updateMessageLabels: protectedProcedure
     .input(mailInputSchemas.updateMessageLabels)
-    .handler(mutationsMailOperations.updateMessageLabels),
+    .handler(withMailUpdate(mutationsMailOperations.updateMessageLabels)),
   updateThreadLabels: protectedProcedure
     .input(mailInputSchemas.updateThreadLabels)
-    .handler(mutationsMailOperations.updateThreadLabels),
+    .handler(withMailUpdate(mutationsMailOperations.updateThreadLabels)),
 };

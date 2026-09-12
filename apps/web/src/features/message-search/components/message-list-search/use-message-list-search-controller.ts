@@ -36,7 +36,7 @@ import type {
 } from "#/features/message-search/state/message-list-search-state";
 import { USER_BILLING_QUERY_KEY } from "#/features/settings/domain/billing";
 import { toastError } from "#/lib/error-toast";
-import { labelsQueryOptions } from "#/lib/gmail/labels-query";
+import { labelsQueryOptions } from "#/lib/mail/labels-query";
 import { orpc } from "#/lib/orpc";
 
 import { searchFilterOptions } from "../message-list-search-filter-options";

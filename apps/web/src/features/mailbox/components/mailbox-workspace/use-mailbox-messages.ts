@@ -5,6 +5,7 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import type { ListMessagesPageResult, MailboxCategory } from "#/lib/mail";
 import {
   getLiveSyncQueryKey,
   getMessagesQueryKey,
@@ -12,10 +13,8 @@ import {
   messagesQueryOptions,
   refreshLoadedMessagesPages,
   syncMessages,
-} from "#/lib/gmail/inbox-query";
-import { getThreadWithDetailsOptions } from "#/lib/gmail/thread-query";
-import { useMailboxLiveSync } from "#/lib/gmail/use-gmail-live-sync";
-import type { ListMessagesPageResult, MailboxCategory } from "#/lib/mail";
+} from "#/lib/mail/inbox-query";
+import { getThreadWithDetailsOptions } from "#/lib/mail/thread-query";
 import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
 import { isMailboxScopeRepairRequiredError } from "#/lib/orpc-errors";
 
@@ -239,11 +238,7 @@ export const useMailboxMessages = ({
       isLiveSyncEnabled
     )
   );
-  useMailboxLiveSync({
-    enabled: isLiveSyncEnabled && mailboxProvider === "gmail",
-    mailboxId: selectedMailboxId ?? "",
-    queryClient,
-  });
+
   const flattenedMessages = useMemo(
     () => messages.flatMap((page) => page.messages),
     [messages]

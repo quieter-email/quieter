@@ -8,7 +8,8 @@ export const mailReceiptRuleSetName = "quieter-mail";
 
 export const createMailResources = async (
   context: DeploymentContext,
-  secretResources: SecretResources
+  secretResources: SecretResources,
+  liveSyncUrl: $util.Input<string>
 ) => {
   const callerIdentity = await aws.getCallerIdentity({});
   const region = await aws.getRegion({});
@@ -232,6 +233,7 @@ export const createMailResources = async (
   mailReceiptTopic.subscribe("MailReceiptProcessor", {
     environment: {
       DATABASE_URL: context.databaseUrl,
+      MAIL_UPDATES_URL: liveSyncUrl,
       POLAR_ACCESS_TOKEN: context.polarAccessToken,
       ...context.billingEnvironment,
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
@@ -239,7 +241,10 @@ export const createMailResources = async (
       ...context.sentryEnvironment,
     },
     handler: "packages/aws/src/receipt.handler",
-    link: [mailBucket],
+    link: [
+      mailBucket,
+      requireSecretResource(secretResources, "GMAIL_LIVE_SYNC_TOKEN_SECRET"),
+    ],
     timeout: "30 seconds",
   });
 
@@ -250,13 +255,18 @@ export const createMailResources = async (
   const mailIngress = new sst.aws.Function("MailIngress", {
     environment: {
       DATABASE_URL: context.databaseUrl,
+      MAIL_UPDATES_URL: liveSyncUrl,
       QUIETER_DEPLOYMENT_ENV: deploymentEnvironment,
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
       ...context.r2Environment,
       ...context.sentryEnvironment,
     },
     handler: "packages/aws/src/inbound.handler",
-    link: [mailBucket, mailIngressToken],
+    link: [
+      mailBucket,
+      mailIngressToken,
+      requireSecretResource(secretResources, "GMAIL_LIVE_SYNC_TOKEN_SECRET"),
+    ],
     timeout: "30 seconds",
     url: true,
   });
