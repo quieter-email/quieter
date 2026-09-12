@@ -130,7 +130,7 @@ const SidebarHelpMenu = ({
         <IconButtonTooltip label="Help and legal">
           <DropdownMenuTrigger
             aria-label="Help and legal"
-            className="relative z-10 inline-flex size-9 shrink-0 items-center justify-center rounded-md bg-transparent text-muted-fg hover:bg-transparent hover:text-fg focus-visible:bg-transparent focus-visible:text-fg data-popup-open:bg-transparent data-popup-open:text-fg"
+            className="relative z-10 inline-flex size-7 shrink-0 items-center justify-center rounded-md bg-transparent text-muted-fg hover:bg-transparent hover:text-fg focus-visible:bg-transparent focus-visible:text-fg data-popup-open:bg-transparent data-popup-open:text-fg"
           >
             <HugeiconsIcon
               aria-hidden

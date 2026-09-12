@@ -87,7 +87,7 @@ export const MembersView = ({
             <TextFieldInput
               aria-label="Search members"
               chrome="ghost"
-              className="h-9 pl-7"
+              className="h-8 pl-7"
               onChange={(event) => {
                 setMemberSearch(event.target.value);
               }}

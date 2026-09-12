@@ -183,7 +183,7 @@ export const MailSuppressionsView = ({
               }
               aria-invalid={addressError !== null}
               chrome="ghost"
-              className="h-9 px-0"
+              className="h-8 px-0"
               name="recipient"
               onChange={(changeEvent) => {
                 setAddressError(null);

@@ -515,7 +515,7 @@ export const AddMailboxSettingsView = ({
 
             <Field>
               <FieldLabel htmlFor="local-part">Email address</FieldLabel>
-              <div className="squircle flex h-9 min-w-0 items-center rounded-md border border-border bg-input shadow-sm transition-colors focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/45">
+              <div className="squircle flex h-8 min-w-0 items-center rounded-md border border-border bg-input shadow-sm transition-colors focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/45">
                 <TextFieldInput
                   aria-label="Mailbox address"
                   chrome="ghost"

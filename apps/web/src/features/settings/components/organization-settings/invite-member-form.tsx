@@ -99,7 +99,7 @@ export const InviteMemberForm = ({
                   aria-describedby={hasErrors ? emailErrorId : undefined}
                   aria-invalid={hasErrors}
                   chrome="ghost"
-                  className="h-9 px-0"
+                  className="h-8 px-0"
                   name={field.name}
                   onBlur={() => {
                     field.handleBlur();
