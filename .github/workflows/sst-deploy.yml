@@ -123,4 +123,4 @@ jobs:
 
       - name: Verify production release
         timeout-minutes: 5
-        run: vp exec node scripts/check-deployment.ts https://quieter.email "$QUIETER_BUILD_ID"
+        run: vp exec node scripts/check-deployment.ts https://quieter.email "$QUIETER_BUILD_ID" https://updates.quieter.email/mail/live
