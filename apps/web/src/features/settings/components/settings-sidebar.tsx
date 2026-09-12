@@ -116,7 +116,7 @@ export const SettingsSidebar = ({
       key={title}
       aria-current={selected ? "page" : undefined}
       className={cn(
-        "h-8 w-full justify-start gap-2.5 px-2.5 text-left font-normal lg:h-7",
+        "h-6 w-full justify-start gap-2 px-2 text-left text-caption font-normal [&_svg]:size-3.5",
         {
           "text-fg": selected,
           "text-muted-fg": !selected,
@@ -137,10 +137,10 @@ export const SettingsSidebar = ({
     </SidebarNavItem>
   );
   return (
-    <div className="relative z-10 flex min-h-0 flex-1 flex-col overflow-y-auto p-6">
+    <div className="relative z-10 flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-6">
       <div className="mb-3 flex items-center justify-between px-1">
         <Button
-          className="justify-start gap-3"
+          className="h-7 justify-start gap-2 px-2 text-caption"
           onClick={() => {
             void navigate({ to: from });
           }}
@@ -176,7 +176,7 @@ export const SettingsSidebar = ({
         <div className="px-1">{searchResults}</div>
       ) : (
         <nav aria-label="Settings" className="space-y-4 p-1">
-          <div className="space-y-0.5">
+          <div className="space-y-0">
             <p className="px-3 py-1 text-caption text-muted-fg">Personal</p>
             {PERSONAL_ITEMS.map((item) =>
               navigationButton(
@@ -196,7 +196,7 @@ export const SettingsSidebar = ({
                 tab === "development"
               )}
           </div>
-          <div className="space-y-0.5">
+          <div className="space-y-0">
             <p className="px-3 py-1 text-caption text-muted-fg">
               Team settings
             </p>
@@ -229,7 +229,7 @@ export const SettingsSidebar = ({
             >
               <SelectTrigger
                 aria-label="Team settings"
-                className="mb-1 h-8 w-full px-2.5 text-fg lg:h-7"
+                className="mb-1 h-6.5 w-full px-2 text-caption font-normal text-fg"
                 size="sm"
                 variant="ghost"
               >

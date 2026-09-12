@@ -24,8 +24,8 @@ const selectTriggerVariants = cva(
     },
     variants: {
       size: {
-        default: "h-9 px-3.5 text-body [&_svg]:size-4",
-        sm: "h-8 px-3 text-body-sm [&_svg]:size-3.5",
+        default: "h-8 px-2.5 text-body-sm [&_svg]:size-4",
+        sm: "h-7 px-2 text-body-sm [&_svg]:size-3.5",
       },
       variant: {
         default:
@@ -199,7 +199,7 @@ export const SelectItem = ({
   return (
     <SelectPrimitive.Item
       className={cn(
-        "squircle relative flex min-h-9 cursor-default scroll-my-1 items-center gap-2 rounded-md py-2 pr-8 pl-2.5 text-body text-fg transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
+        "squircle relative flex min-h-7 cursor-default scroll-my-1 items-center gap-2 rounded-md py-1 pr-8 pl-2.5 text-body text-fg transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
         { "min-h-7 gap-1.5 py-1 pr-7 pl-2 text-caption": size === "compact" },
         className
       )}
