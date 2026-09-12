@@ -1,7 +1,24 @@
 "use client";
 
+import {
+  ArrowLeft01Icon,
+  Cancel01Icon,
+  Settings01Icon,
+  UserIcon,
+  Mail01Icon,
+  UserGroupIcon,
+  Key01Icon,
+  GlobeIcon,
+  CreditCardIcon,
+  AiChat01Icon,
+  Plug01Icon,
+  CodeIcon,
+  MailSend02Icon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import {
   Select,
   SelectContent,
@@ -11,8 +28,8 @@ import {
 } from "@quieter/ui/select";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
 
+import { SidebarNavItem } from "#/features/navigation/components/sidebar-nav-item";
 import { isDemoModeAvailable } from "#/features/settings/domain/demo-mode-setting";
 import {
   settingsDestinationSearch,
@@ -30,6 +47,22 @@ import {
 } from "./organization-settings/domain";
 import { useSettingsTeam } from "./use-settings-team";
 
+const SETTINGS_ICONS: Record<string, typeof Settings01Icon> = {
+  "AI & personalization": AiChat01Icon,
+  "API keys": Key01Icon,
+  Account: UserIcon,
+  "Billing & usage": CreditCardIcon,
+  "Connected apps": Plug01Icon,
+  Delivery: MailSend02Icon,
+  Development: CodeIcon,
+  Domains: GlobeIcon,
+  General: Settings01Icon,
+  Mailboxes: Mail01Icon,
+  "Manage teams": UserGroupIcon,
+  "Members & access": UserGroupIcon,
+  Preferences: Settings01Icon,
+};
+
 const PERSONAL_ITEMS = [
   { tab: "account", title: "Account" },
   { tab: "appearance", title: "Preferences" },
@@ -37,7 +70,11 @@ const PERSONAL_ITEMS = [
   { tab: "connectors", title: "Connected apps" },
 ] as const;
 
-export const SettingsSidebar = () => {
+export const SettingsSidebar = ({
+  onRequestClose,
+}: {
+  onRequestClose?: () => void;
+}) => {
   const navigate = useNavigate({ from: "/settings" });
   const { tab, from, organizationView, organizationId } =
     settingsRouteApi.useSearch();
@@ -54,9 +91,8 @@ export const SettingsSidebar = () => {
     member ? normalizeOrganizationRole(member.role) : null,
     { organization: ["update"] }
   );
-  const [expanded, setExpanded] = useState(false);
   const open = (destination: SettingsDestination) => {
-    setExpanded(false);
+    onRequestClose?.();
     void navigate({
       search: (previous) => ({
         ...previous,
@@ -70,11 +106,13 @@ export const SettingsSidebar = () => {
     destination: SettingsDestination,
     selected: boolean
   ) => (
-    <Button
+    <SidebarNavItem
+      active={selected}
       key={title}
       aria-current={selected ? "page" : undefined}
-      className={cn("w-full justify-start font-normal", {
-        "bg-accent text-fg": selected,
+      className={cn("w-full justify-start gap-3 px-3 text-left", {
+        "text-fg": selected,
+        "text-muted-fg": !selected,
       })}
       onClick={() => {
         open(destination);
@@ -82,39 +120,50 @@ export const SettingsSidebar = () => {
       variant="ghost"
       size="sm"
     >
+      <HugeiconsIcon
+        icon={SETTINGS_ICONS[title] ?? Settings01Icon}
+        strokeWidth={1.5}
+        className="shrink-0 text-fg"
+      />
       {title}
-    </Button>
+    </SidebarNavItem>
   );
   return (
-    <aside className="max-h-[70dvh] shrink-0 overflow-y-auto border-b border-border bg-bg-raised p-3 md:h-full md:max-h-none md:w-60 md:overflow-y-auto md:border-r md:border-b-0 md:p-4">
-      <div className="flex items-center justify-between md:mb-6">
+    <div className="relative z-10 flex min-h-0 flex-1 flex-col overflow-y-auto p-6">
+      <div className="mb-6 flex items-center justify-between px-1">
         <Button
+          className="justify-start gap-3"
           onClick={() => {
             void navigate({ to: from });
           }}
           variant="ghost"
           size="sm"
         >
-          ← Back to mail
+          <HugeiconsIcon
+            icon={ArrowLeft01Icon}
+            strokeWidth={1.5}
+            className="size-4"
+          />
+          Back to mail
         </Button>
-        <Button
-          aria-expanded={expanded}
-          aria-controls="settings-navigation"
-          className="md:hidden"
-          onClick={() => {
-            setExpanded(!expanded);
-          }}
-          variant="outline"
-          size="sm"
-        >
-          Settings menu
-        </Button>
+        {onRequestClose && (
+          <IconButtonTooltip label="Close settings menu">
+            <Button
+              aria-label="Close settings menu"
+              size="icon-sm"
+              variant="ghost"
+              onClick={onRequestClose}
+            >
+              <HugeiconsIcon
+                icon={Cancel01Icon}
+                strokeWidth={1.5}
+                className="size-4"
+              />
+            </Button>
+          </IconButtonTooltip>
+        )}
       </div>
-      <nav
-        id="settings-navigation"
-        aria-label="Settings"
-        className={cn("space-y-5 md:block", { hidden: !expanded })}
-      >
+      <nav aria-label="Settings" className="space-y-5 p-1">
         <div className="space-y-1">
           <p className="px-3 py-1 text-caption text-muted-fg">Personal</p>
           {PERSONAL_ITEMS.map((item) =>
@@ -145,7 +194,7 @@ export const SettingsSidebar = () => {
               if (!value) {
                 return;
               }
-              setExpanded(false);
+              onRequestClose?.();
               void navigate({
                 search: (previous) => ({
                   ...previous,
@@ -216,6 +265,6 @@ export const SettingsSidebar = () => {
           )}
         </div>
       </nav>
-    </aside>
+    </div>
   );
 };

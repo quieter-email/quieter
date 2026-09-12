@@ -1,7 +1,13 @@
 "use client";
 
-import { lazy, Suspense } from "react";
+import { Menu01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Button } from "@quieter/ui/button";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { WorkspaceSidebar } from "@quieter/ui/workspace-sidebar";
+import { lazy, Suspense, useState } from "react";
 
+import { WorkspaceSection } from "#/components/workspace-section";
 import { isDemoModeAvailable } from "#/features/settings/domain/demo-mode-setting";
 import { SETTINGS_TITLES } from "#/features/settings/domain/settings-navigation";
 import { settingsRouteApi } from "#/lib/route-apis";
@@ -116,6 +122,7 @@ export const SettingsScreen = ({
 }: {
   initialUser: SettingsUser;
 }) => {
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
   const routeSearch = settingsRouteApi.useSearch();
   const { tab } = routeSearch;
   const preferences = [
@@ -127,55 +134,83 @@ export const SettingsScreen = ({
   ].includes(tab);
   const title = SETTINGS_TITLES[tab];
   return (
-    <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-bg text-fg md:flex-row">
+    <div className="relative isolate flex h-dvh min-h-0 overflow-hidden pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-fg lg:p-0">
       <SettingsDataPrefetch tab={tab} />
       <BillingCheckoutResult />
       <ConnectorConnectionResult />
-      <SettingsSidebar />
-      <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-240 space-y-8 px-5 py-6 md:px-10 md:py-8">
-          <SettingsSearch
-            key={`${tab}-${routeSearch.organizationId}-${routeSearch.mailboxId}-${routeSearch.organizationView}`}
-          >
-            <div className="space-y-8">
-              {tab !== "organization" && tab !== "mailboxes" && (
-                <h1 className="text-title-sm font-normal tracking-tight">
-                  {title}
-                </h1>
-              )}
-              <Suspense
-                fallback={
-                  <SettingsLoadingState
-                    className="min-h-64"
-                    label={`Loading ${title ?? "settings"}`}
-                  />
-                }
+      <WorkspaceSidebar
+        isMobileOpen={isMobileOpen}
+        onMobileOpenChange={setIsMobileOpen}
+        label="Settings sidebar"
+      >
+        {(close) => <SettingsSidebar onRequestClose={close} />}
+      </WorkspaceSidebar>
+      <main className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+        <WorkspaceSection>
+          <div className="px-4 pt-3 lg:hidden">
+            <IconButtonTooltip label="Open settings menu">
+              <Button
+                aria-label="Open settings menu"
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => {
+                  setIsMobileOpen(true);
+                }}
               >
-                {preferences && (
-                  <>
-                    <AppearanceSettingsPanel />
-                    <ReadingSettingsPanel />
-                    <ShortcutsSettingsPanel />
-                    <PrivacySettingsPanel />
-                  </>
-                )}
-                {tab === "ai" && <AiSettingsPanel />}
-                {tab === "development" &&
-                  (isDemoModeAvailable() ? (
-                    <DevelopmentSettingsPanel />
-                  ) : (
-                    <DevelopmentSettingsUnavailable />
-                  ))}
-                {tab === "account" && (
-                  <AccountSettingsPanel initialUser={initialUser} />
-                )}
-                {tab === "mailboxes" && <MailboxesSettingsPanel />}
-                {tab === "connectors" && <ConnectorsSettingsPanel />}
-                {tab === "organization" && <OrganizationSettingsPanel />}
-              </Suspense>
+                <HugeiconsIcon
+                  icon={Menu01Icon}
+                  className="size-4"
+                  strokeWidth={1.5}
+                />
+              </Button>
+            </IconButtonTooltip>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="mx-auto w-full max-w-240 space-y-8 px-5 py-6 md:px-10 md:py-8">
+              <SettingsSearch
+                key={`${tab}-${routeSearch.organizationId}-${routeSearch.mailboxId}-${routeSearch.organizationView}`}
+              >
+                <div className="space-y-8">
+                  {tab !== "organization" && tab !== "mailboxes" && (
+                    <h1 className="text-title-sm font-normal tracking-tight">
+                      {title}
+                    </h1>
+                  )}
+                  <Suspense
+                    fallback={
+                      <SettingsLoadingState
+                        className="min-h-64"
+                        label={`Loading ${title ?? "settings"}`}
+                      />
+                    }
+                  >
+                    {preferences && (
+                      <>
+                        <AppearanceSettingsPanel />
+                        <ReadingSettingsPanel />
+                        <ShortcutsSettingsPanel />
+                        <PrivacySettingsPanel />
+                      </>
+                    )}
+                    {tab === "ai" && <AiSettingsPanel />}
+                    {tab === "development" &&
+                      (isDemoModeAvailable() ? (
+                        <DevelopmentSettingsPanel />
+                      ) : (
+                        <DevelopmentSettingsUnavailable />
+                      ))}
+                    {tab === "account" && (
+                      <AccountSettingsPanel initialUser={initialUser} />
+                    )}
+                    {tab === "mailboxes" && <MailboxesSettingsPanel />}
+                    {tab === "connectors" && <ConnectorsSettingsPanel />}
+                    {tab === "organization" && <OrganizationSettingsPanel />}
+                  </Suspense>
+                </div>
+              </SettingsSearch>
             </div>
-          </SettingsSearch>
-        </div>
+          </div>
+        </WorkspaceSection>
       </main>
     </div>
   );
