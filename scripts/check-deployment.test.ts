@@ -14,21 +14,11 @@ describe("deployment smoke checks", () => {
     "empty-html",
     "missing-chunk",
     "html-chunk",
-    "mail-unreachable",
-    "mail-wrong-route",
   ])("checks %s", async (failure) => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: URL | string) => {
         const { pathname } = new URL(input);
-        if (pathname === "/mail/live") {
-          if (failure === "mail-unreachable") {
-            throw new TypeError("fetch failed");
-          }
-          return new Response(null, {
-            status: failure === "mail-wrong-route" ? 404 : 426,
-          });
-        }
         if (pathname === "/api/health") {
           return Response.json(
             {
@@ -62,19 +52,11 @@ describe("deployment smoke checks", () => {
     );
     if (failure === "healthy") {
       await expect(
-        checkDeployment(
-          "https://example.test",
-          "new",
-          "https://updates.example.test/mail/live"
-        )
+        checkDeployment("https://example.test", "new")
       ).resolves.toBeUndefined();
     } else {
       await expect(
-        checkDeployment(
-          "https://example.test",
-          "new",
-          "https://updates.example.test/mail/live"
-        )
+        checkDeployment("https://example.test", "new")
       ).rejects.toThrow(/./u);
     }
   });
