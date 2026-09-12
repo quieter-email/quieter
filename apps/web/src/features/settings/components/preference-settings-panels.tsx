@@ -43,126 +43,108 @@ const COLOR_MODE_OPTIONS: { label: string; value: ConfigColorMode }[] = [
   { label: "System", value: "system" },
 ];
 
-export const AppearanceSettingsPanel = () => {
+export const PreferencesSettingsPanel = () => {
   const { configColorMode, isMounted, setColorMode } = useColorMode();
-
-  return (
-    <SettingsSection title="Theme">
-      <SettingsRows>
-        <SettingsRow
-          action={
-            <Select
-              items={COLOR_MODE_OPTIONS.map((option) => ({
-                label: option.label,
-                value: option.value,
-              }))}
-              onValueChange={(value) => {
-                if (
-                  value === "light" ||
-                  value === "dark" ||
-                  value === "system"
-                ) {
-                  setColorMode(value);
-                }
-              }}
-              value={isMounted ? configColorMode : null}
-            >
-              <SelectTrigger aria-label="Color mode" className="w-36" size="sm">
-                <SelectValue placeholder="Theme" />
-              </SelectTrigger>
-              <SelectContent align="end">
-                {COLOR_MODE_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          }
-          title="Color mode"
-        >
-          Choose how Quieter looks on this device.
-        </SettingsRow>
-      </SettingsRows>
-    </SettingsSection>
-  );
-};
-
-export const ReadingSettingsPanel = () => {
   const externalImagesEnabled = useExternalImagesEnabled();
-
-  return (
-    <SettingsSection title="Images">
-      <SettingsRows>
-        <SettingsRow
-          action={
-            <Switch
-              aria-label="Allow external images"
-              checked={externalImagesEnabled}
-              className="shrink-0"
-              size="sm"
-              id="external-images-toggle"
-              onCheckedChange={setExternalImagesEnabled}
-            >
-              <SwitchThumb />
-            </Switch>
-          }
-          title="Allow external images"
-        >
-          When disabled, remote images stay hidden until you allow them for the
-          open message.
-        </SettingsRow>
-      </SettingsRows>
-    </SettingsSection>
-  );
-};
-
-export const ShortcutsSettingsPanel = () => {
   const { openKeyboardShortcuts } = useKeyboardShortcuts();
-
   return (
-    <SettingsSection title="Shortcuts">
-      <SettingsRows>
-        <SettingsRow
-          action={
-            <Button
-              onClick={openKeyboardShortcuts}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              <HugeiconsIcon
-                aria-hidden
-                className="size-4 shrink-0"
-                icon={KeyboardIcon}
-              />
-              View
-            </Button>
-          }
-          title="Keyboard shortcuts"
-        >
-          Review the shortcuts for composing, navigating, and triaging mail.
-        </SettingsRow>
-      </SettingsRows>
-    </SettingsSection>
+    <div className="space-y-10">
+      <SettingsSection title="Interface">
+        <SettingsRows>
+          <SettingsRow
+            action={
+              <Select
+                items={COLOR_MODE_OPTIONS.map((option) => ({
+                  label: option.label,
+                  value: option.value,
+                }))}
+                onValueChange={(value) => {
+                  if (
+                    value === "light" ||
+                    value === "dark" ||
+                    value === "system"
+                  ) {
+                    setColorMode(value);
+                  }
+                }}
+                value={isMounted ? configColorMode : null}
+              >
+                <SelectTrigger
+                  aria-label="Color mode"
+                  className="w-36"
+                  size="sm"
+                >
+                  <SelectValue placeholder="Theme" />
+                </SelectTrigger>
+                <SelectContent align="end">
+                  {COLOR_MODE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            }
+            title="Color mode"
+          >
+            Choose how Quieter looks on this device.
+          </SettingsRow>
+          <SettingsRow
+            action={
+              <Button
+                onClick={openKeyboardShortcuts}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                <HugeiconsIcon
+                  aria-hidden
+                  className="size-4 shrink-0"
+                  icon={KeyboardIcon}
+                />
+                View
+              </Button>
+            }
+            title="Keyboard shortcuts"
+          >
+            Review the shortcuts for composing, navigating, and triaging mail.
+          </SettingsRow>
+        </SettingsRows>
+      </SettingsSection>
+      <SettingsSection title="Privacy and content">
+        <SettingsRows>
+          <SettingsRow
+            action={
+              <Switch
+                aria-label="Allow external images"
+                checked={externalImagesEnabled}
+                className="shrink-0"
+                size="sm"
+                id="external-images-toggle"
+                onCheckedChange={setExternalImagesEnabled}
+              >
+                <SwitchThumb />
+              </Switch>
+            }
+            title="Allow external images"
+          >
+            When disabled, remote images stay hidden until you allow them for
+            the open message.
+          </SettingsRow>
+          <SettingsRow
+            action={
+              <ConsentPreferencesLink className="squircle inline-flex h-8 items-center justify-center rounded-md border border-border bg-bg-raised px-3 text-body font-medium text-fg transition-colors hover:bg-muted/60" />
+            }
+            title="Cookie and analytics preferences"
+          >
+            Choose which optional cookies and measurement tools Quieter may use
+            in this browser.
+          </SettingsRow>
+        </SettingsRows>
+      </SettingsSection>
+    </div>
   );
 };
-
-export const PrivacySettingsPanel = () => (
-  <SettingsSection title="Privacy preferences">
-    <SettingsRows>
-      <SettingsRow
-        action={
-          <ConsentPreferencesLink className="squircle inline-flex h-8 items-center justify-center rounded-md border border-border bg-bg-raised px-3 text-body font-medium text-fg transition-colors hover:bg-muted/60" />
-        }
-        title="Cookie and analytics preferences"
-      >
-        Choose which optional cookies and measurement tools Quieter may use in
-        this browser.
-      </SettingsRow>
-    </SettingsRows>
-  </SettingsSection>
-);
 
 export const DevelopmentSettingsPanel = () => {
   const demoModeEnabled = useDemoModeEnabled();

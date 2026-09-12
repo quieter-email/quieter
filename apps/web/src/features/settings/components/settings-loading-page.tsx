@@ -44,8 +44,7 @@ export const SettingsLoadingPage = ({
     </aside>
     <main className="relative min-w-0 flex-1">
       <WorkspaceSection>
-        <div className="mx-auto w-full max-w-240 space-y-8 px-5 py-6 md:px-10 md:py-8">
-          <div aria-hidden className="h-9 rounded-md bg-muted" />
+        <div className="mx-auto w-full max-w-180 space-y-10 px-5 py-8 md:px-8 md:py-14">
           <h1 className="text-title-sm font-normal">{SETTINGS_TITLES[tab]}</h1>
           <output
             aria-label="Loading settings"

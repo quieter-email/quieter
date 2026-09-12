@@ -20,7 +20,17 @@ import { mailboxesQueryOptions } from "#/lib/mailboxes-query";
 
 import { useSettingsTeam } from "./use-settings-team";
 
-export const SettingsSearch = ({ children }: { children: ReactNode }) => {
+export const SettingsSearch = ({
+  children,
+  onSelect,
+}: {
+  children: (search: {
+    input: ReactNode;
+    results: ReactNode;
+    searching: boolean;
+  }) => ReactNode;
+  onSelect: () => void;
+}) => {
   const [query, setQuery] = useState("");
   const [includeOtherTeams, setIncludeOtherTeams] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -75,6 +85,7 @@ export const SettingsSearch = ({ children }: { children: ReactNode }) => {
   const select = (entry: SettingsSearchEntry) => {
     setQuery("");
     setActiveIndex(0);
+    onSelect();
     void navigate({
       search: (previous) => ({
         ...previous,
@@ -84,99 +95,97 @@ export const SettingsSearch = ({ children }: { children: ReactNode }) => {
     });
   };
   const searching = query.trim().length > 0;
-  return (
-    <>
-      <Input
-        aria-label="Search settings"
-        placeholder="Search settings"
-        type="search"
-        autoComplete="off"
-        value={query}
-        onChange={(event) => {
-          setQuery(event.target.value);
-          setActiveIndex(0);
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            setQuery("");
+  const input = (
+    <Input
+      aria-label="Search settings"
+      placeholder="Search settings"
+      type="search"
+      autoComplete="off"
+      value={query}
+      onChange={(event) => {
+        setQuery(event.target.value);
+        setActiveIndex(0);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          setQuery("");
+        }
+        if (!results.length) {
+          return;
+        }
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          setActiveIndex((index) => (index + 1) % results.length);
+        }
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          setActiveIndex(
+            (index) => (index - 1 + results.length) % results.length
+          );
+        }
+        if (event.key === "Enter") {
+          event.preventDefault();
+          const entry = results[Math.min(activeIndex, results.length - 1)];
+          if (entry !== undefined) {
+            select(entry);
           }
-          if (!results.length) {
-            return;
-          }
-          if (event.key === "ArrowDown") {
-            event.preventDefault();
-            setActiveIndex((index) => (index + 1) % results.length);
-          }
-          if (event.key === "ArrowUp") {
-            event.preventDefault();
-            setActiveIndex(
-              (index) => (index - 1 + results.length) % results.length
-            );
-          }
-          if (event.key === "Enter") {
-            event.preventDefault();
-            const entry = results[Math.min(activeIndex, results.length - 1)];
-            if (entry !== undefined) {
-              select(entry);
-            }
-          }
-        }}
-      />
-      {searching ? (
-        <section aria-label="Search results" className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h1 className="text-body-lg">Search results</h1>
-            <label
-              htmlFor="settings-search-other-teams"
-              className="flex items-center gap-2 text-caption"
-            >
-              <Checkbox
-                id="settings-search-other-teams"
-                checked={includeOtherTeams}
-                onCheckedChange={(checked) => {
-                  setIncludeOtherTeams(checked);
-                  setActiveIndex(0);
-                }}
-              >
-                <CheckboxIndicator />
-              </Checkbox>
-              Include other teams
-            </label>
-          </div>
-          <output className="text-caption text-muted-fg">
-            {results.length
-              ? `${results.length} results`
-              : "No settings match. Try a different word or include other teams."}
-          </output>
-          <div className="divide-y divide-border">
-            {results.map((entry, index) => (
-              <Button
-                key={entry.id}
-                variant="ghost"
-                className={cn(
-                  "h-auto w-full justify-start py-4 text-left font-normal whitespace-normal",
-                  {
-                    "bg-accent":
-                      index === Math.min(activeIndex, results.length - 1),
-                  }
-                )}
-                onClick={() => {
-                  select(entry);
-                }}
-              >
-                <span>
-                  <span className="block text-body">{entry.title}</span>
-                  <span className="mt-1 block text-caption text-muted-fg">
-                    {entry.scope === "personal" ? "Personal / " : ""}
-                    {entry.description}
-                  </span>
-                </span>
-              </Button>
-            ))}
-          </div>
-        </section>
-      ) : null}
-      <div hidden={searching}>{children}</div>
-    </>
+        }
+      }}
+    />
   );
+  const resultContent = searching ? (
+    <section aria-label="Search results" className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-body-lg">Search results</h1>
+        <label
+          htmlFor="settings-search-other-teams"
+          className="flex items-center gap-2 text-caption"
+        >
+          <Checkbox
+            id="settings-search-other-teams"
+            checked={includeOtherTeams}
+            onCheckedChange={(checked) => {
+              setIncludeOtherTeams(checked);
+              setActiveIndex(0);
+            }}
+          >
+            <CheckboxIndicator />
+          </Checkbox>
+          Include other teams
+        </label>
+      </div>
+      <output className="text-caption text-muted-fg">
+        {results.length
+          ? `${results.length} results`
+          : "No settings match. Try a different word or include other teams."}
+      </output>
+      <div className="divide-y divide-border">
+        {results.map((entry, index) => (
+          <Button
+            key={entry.id}
+            variant="ghost"
+            className={cn(
+              "h-auto w-full justify-start py-4 text-left font-normal whitespace-normal",
+              {
+                "bg-accent":
+                  index === Math.min(activeIndex, results.length - 1),
+              }
+            )}
+            onClick={() => {
+              select(entry);
+            }}
+          >
+            <span>
+              <span className="block text-body">{entry.title}</span>
+              <span className="mt-1 block text-caption text-muted-fg">
+                {entry.scope === "personal" ? "Personal / " : ""}
+                {entry.description}
+              </span>
+            </span>
+          </Button>
+        ))}
+      </div>
+    </section>
+  ) : null;
+  return <>{children({ input, results: resultContent, searching })}</>;
 };

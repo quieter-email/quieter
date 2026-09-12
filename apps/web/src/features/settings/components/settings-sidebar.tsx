@@ -28,6 +28,7 @@ import {
 } from "@quieter/ui/select";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import type { ReactNode } from "react";
 
 import { SidebarNavItem } from "#/features/navigation/components/sidebar-nav-item";
 import { isDemoModeAvailable } from "#/features/settings/domain/demo-mode-setting";
@@ -72,8 +73,12 @@ const PERSONAL_ITEMS = [
 
 export const SettingsSidebar = ({
   onRequestClose,
+  searchInput,
+  searchResults,
 }: {
   onRequestClose?: () => void;
+  searchInput: ReactNode;
+  searchResults?: ReactNode;
 }) => {
   const navigate = useNavigate({ from: "/settings" });
   const { tab, from, organizationView, organizationId } =
@@ -130,7 +135,7 @@ export const SettingsSidebar = ({
   );
   return (
     <div className="relative z-10 flex min-h-0 flex-1 flex-col overflow-y-auto p-6">
-      <div className="mb-6 flex items-center justify-between px-1">
+      <div className="mb-3 flex items-center justify-between px-1">
         <Button
           className="justify-start gap-3"
           onClick={() => {
@@ -163,108 +168,117 @@ export const SettingsSidebar = ({
           </IconButtonTooltip>
         )}
       </div>
-      <nav aria-label="Settings" className="space-y-5 p-1">
-        <div className="space-y-1">
-          <p className="px-3 py-1 text-caption text-muted-fg">Personal</p>
-          {PERSONAL_ITEMS.map((item) =>
-            navigationButton(
-              item.title,
-              { tab: item.tab },
-              item.tab === tab ||
-                (item.tab === "appearance" &&
-                  ["overview", "reading", "privacy", "shortcuts"].includes(tab))
-            )
-          )}
-          {isDemoModeAvailable() &&
-            navigationButton(
-              "Development",
-              { tab: "development" },
-              tab === "development"
+      <div className="mb-6 px-1">{searchInput}</div>
+      {searchResults !== undefined && searchResults !== null ? (
+        <div className="px-1">{searchResults}</div>
+      ) : (
+        <nav aria-label="Settings" className="space-y-5 p-1">
+          <div className="space-y-1">
+            <p className="px-3 py-1 text-caption text-muted-fg">Personal</p>
+            {PERSONAL_ITEMS.map((item) =>
+              navigationButton(
+                item.title,
+                { tab: item.tab },
+                item.tab === tab ||
+                  (item.tab === "appearance" &&
+                    ["overview", "reading", "privacy", "shortcuts"].includes(
+                      tab
+                    ))
+              )
             )}
-        </div>
-        <div className="space-y-1">
-          <p className="px-3 py-1 text-caption text-muted-fg">Team settings</p>
-          <Select
-            items={organizations.map((item) => ({
-              label: item.name,
-              value: item.id,
-            }))}
-            value={team?.id ?? null}
-            onValueChange={(value) => {
-              if (!value) {
-                return;
-              }
-              onRequestClose?.();
-              void navigate({
-                search: (previous) => ({
-                  ...previous,
-                  domainId: "",
-                  mailboxId: "",
-                  mailboxView: "list",
-                  organizationId: value,
-                  section:
-                    previous.mailboxId !== "" || previous.domainId !== ""
-                      ? ""
-                      : previous.section,
-                }),
-                to: ".",
-              });
-            }}
-          >
-            <SelectTrigger aria-label="Team settings" className="mb-2 w-full">
-              <SelectValue
-                placeholder={
-                  organizationsState.isPending
-                    ? "Loading teams"
-                    : "Choose a team"
-                }
-              />
-            </SelectTrigger>
-            <SelectContent>
-              {organizations.map((item) => (
-                <SelectItem key={item.id} value={item.id}>
-                  {item.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {organizationsState.error && (
-            <p role="alert" className="px-3 text-caption text-destructive">
-              Could not load teams.
-            </p>
-          )}
-          {team && (
-            <>
-              {TEAM_SETTINGS_NAV.flatMap((item) =>
-                item.view === "delivery" && !canManage ? (
-                  []
-                ) : (
-                  <div key={item.view}>
-                    {navigationButton(
-                      item.title,
-                      { organizationView: item.view, tab: "organization" },
-                      tab === "organization" &&
-                        organizationId !== "" &&
-                        settingsTeamSection(organizationView) === item.view
-                    )}
-                    {item.view === "members" &&
-                      navigationButton(
-                        "Mailboxes",
-                        { tab: "mailboxes" },
-                        tab === "mailboxes"
-                      )}
-                  </div>
-                )
+            {isDemoModeAvailable() &&
+              navigationButton(
+                "Development",
+                { tab: "development" },
+                tab === "development"
               )}
-            </>
-          )}
-          {navigationButton(
-            "Manage teams",
-            { organizationId: "", tab: "organization" },
-            tab === "organization" && organizationId === ""
-          )}
-        </div>
-      </nav>
+          </div>
+          <div className="space-y-1">
+            <p className="px-3 py-1 text-caption text-muted-fg">
+              Team settings
+            </p>
+            <Select
+              items={organizations.map((item) => ({
+                label: item.name,
+                value: item.id,
+              }))}
+              value={team?.id ?? null}
+              onValueChange={(value) => {
+                if (!value) {
+                  return;
+                }
+                onRequestClose?.();
+                void navigate({
+                  search: (previous) => ({
+                    ...previous,
+                    domainId: "",
+                    mailboxId: "",
+                    mailboxView: "list",
+                    organizationId: value,
+                    section:
+                      previous.mailboxId !== "" || previous.domainId !== ""
+                        ? ""
+                        : previous.section,
+                  }),
+                  to: ".",
+                });
+              }}
+            >
+              <SelectTrigger aria-label="Team settings" className="mb-2 w-full">
+                <SelectValue
+                  placeholder={
+                    organizationsState.isPending
+                      ? "Loading teams"
+                      : "Choose a team"
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {organizations.map((item) => (
+                  <SelectItem key={item.id} value={item.id}>
+                    {item.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {organizationsState.error && (
+              <p role="alert" className="px-3 text-caption text-destructive">
+                Could not load teams.
+              </p>
+            )}
+            {team && (
+              <>
+                {TEAM_SETTINGS_NAV.flatMap((item) =>
+                  item.view === "delivery" && !canManage ? (
+                    []
+                  ) : (
+                    <div key={item.view}>
+                      {navigationButton(
+                        item.title,
+                        { organizationView: item.view, tab: "organization" },
+                        tab === "organization" &&
+                          organizationId !== "" &&
+                          settingsTeamSection(organizationView) === item.view
+                      )}
+                      {item.view === "members" &&
+                        navigationButton(
+                          "Mailboxes",
+                          { tab: "mailboxes" },
+                          tab === "mailboxes"
+                        )}
+                    </div>
+                  )
+                )}
+              </>
+            )}
+            {navigationButton(
+              "Manage teams",
+              { organizationId: "", tab: "organization" },
+              tab === "organization" && organizationId === ""
+            )}
+          </div>
+        </nav>
+      )}
     </div>
   );
 };
