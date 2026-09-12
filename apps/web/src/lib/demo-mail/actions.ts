@@ -3,12 +3,12 @@ import type { MailCommand } from "@quieter/mail/data-plane";
 
 import type { ComposeDraftState } from "#/features/compose/domain/draft";
 import type { MailboxActions } from "#/features/mailbox/components/mailbox-action-handlers";
+import { MAILBOX_LABELS } from "#/lib/mail";
+import type { MessageListItem } from "#/lib/mail";
 import {
   applyMessageLabelChangesLocally,
   getMailCommandUpdater,
-} from "#/lib/gmail/inbox-query/data";
-import { MAILBOX_LABELS } from "#/lib/mail";
-import type { MessageListItem } from "#/lib/mail";
+} from "#/lib/mail/inbox-query/data";
 
 export type DemoMessageStore = {
   updateMessages: (

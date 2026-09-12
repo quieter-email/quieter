@@ -26,7 +26,7 @@ import {
 } from "#/features/message-search/state/message-list-search-state";
 import { SidebarNavItem } from "#/features/navigation/components/sidebar-nav-item";
 import { SidebarEntrance } from "#/features/navigation/components/sidebar-surfaces";
-import { labelsQueryOptions } from "#/lib/gmail/labels-query";
+import { labelsQueryOptions } from "#/lib/mail/labels-query";
 import { managedLabelCountsQueryOptions } from "#/lib/managed-mailbox-organization-query";
 
 type SidebarLabelNavProps = {

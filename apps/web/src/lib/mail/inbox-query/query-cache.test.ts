@@ -28,7 +28,7 @@ const messagesData = (messages: MessageListItem[]): MessagesQueryData => ({
 });
 
 describe(persistQueryKeys, () => {
-  test("persists allowlisted message lists and skips search and thread queries", async () => {
+  test("persists message lists and threads while skipping search queries", async () => {
     const queryClient = new QueryClient();
     const inboxQueryKey = getMessagesQueryKey("mailbox-a", "inbox");
     const searchQueryKey = getMessagesQueryKey(
@@ -49,7 +49,7 @@ describe(persistQueryKeys, () => {
       ]);
 
       expect(persistSpy.mock.calls.map(([queryKey]) => queryKey)).toStrictEqual(
-        [inboxQueryKey]
+        [inboxQueryKey, threadQueryKey]
       );
     } finally {
       persistSpy.mockRestore();

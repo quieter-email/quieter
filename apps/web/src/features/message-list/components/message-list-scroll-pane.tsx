@@ -14,7 +14,7 @@ import type { ThreadListEntry } from "#/lib/gmail/thread-list";
 import {
   getThreadQueryKey,
   getThreadWithDetailsOptions,
-} from "#/lib/gmail/thread-query";
+} from "#/lib/mail/thread-query";
 
 import type { MessageListProps } from "./message-list-types";
 import { MessageRow } from "./message-row";

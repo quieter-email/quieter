@@ -9,8 +9,8 @@ import {
   isSandboxMailboxId,
 } from "#/lib/sandbox-mailbox";
 
+import { getDemoLabels } from "../gmail/demo-mail";
 import { getManagedDemoLabels } from "../managed-mail/demo-managed-mail";
-import { getDemoLabels } from "./demo-mail";
 
 export const getLabelsQueryKey = (mailboxId: string) =>
   ["gmail-labels", mailboxId] as const;

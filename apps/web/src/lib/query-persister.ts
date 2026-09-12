@@ -1,5 +1,10 @@
 import { experimental_createQueryPersister } from "@tanstack/query-persist-client-core";
 import type { PersistedQuery } from "@tanstack/query-persist-client-core";
+import type { QueryClient } from "@tanstack/react-query";
+import { z } from "zod";
+
+import { mailCache, MAIL_CACHE_MAX_AGE } from "./mail-cache";
+import { pendingMailMutations } from "./mail-mutation-state";
 
 const isPersistedQuery = (value: unknown): value is PersistedQuery => {
   if (
@@ -40,129 +45,188 @@ const deserializePersistedQuery = (value: string): PersistedQuery => {
   return parsed;
 };
 
-const PERSISTED_QUERY_MAX_AGE_MS = 1000 * 60 * 60 * 24;
+let persistenceUser: string | undefined;
+let persistenceEpoch = 0;
+let persistenceInitialized = false;
+let persistenceClient: QueryClient | undefined;
 
-let persistenceUserId = "anonymous";
-let persistenceUserInitialized = false;
-let persistenceDisabled = false;
-const CACHE_NAMESPACE = "quieter-cache:v7";
-const getStorageKey = (key: string) =>
-  `${CACHE_NAMESPACE}:${persistenceUserId}:${key}`;
+const bodyCacheSchema = z.object({
+  bodyHtml: z.string().optional(),
+  bodyText: z.string().optional(),
+});
+const threadCacheSchema = z.looseObject({
+  messages: z.array(
+    z.looseObject({
+      bodyHtml: z.string().optional(),
+      bodyText: z.string().optional(),
+      id: z.string(),
+    })
+  ),
+});
 
-export const setQueryPersistenceUser = (userId: string | null | undefined) => {
-  const trimmedUserId = userId?.trim();
-  const nextUserId =
-    trimmedUserId === undefined || trimmedUserId === ""
-      ? "anonymous"
-      : trimmedUserId;
-  if (typeof window === "undefined") {
+const createPersister = (epoch: number) => {
+  const ownerClient = persistenceClient;
+  const storage = {
+    entries: async () =>
+      epoch === persistenceEpoch ? await mailCache.entries() : [],
+    getItem: async (key: string) =>
+      epoch === persistenceEpoch ? await mailCache.getItem(key) : null,
+    removeItem: async (key: string) => {
+      if (epoch === persistenceEpoch) {
+        await mailCache.removeItem(key);
+      }
+    },
+    setItem: async (key: string, value: string) => {
+      if (epoch === persistenceEpoch && value !== "") {
+        await mailCache.setItem(key, value);
+      }
+    },
+  };
+  return experimental_createQueryPersister({
+    buster: "v8",
+    deserialize: async (value) => {
+      const parsed = deserializePersistedQuery(value);
+      if (parsed.queryKey[0] === "message-thread") {
+        const detail = threadCacheSchema.parse(parsed.state.data);
+        let missingBody = false;
+        const messages = await Promise.all(
+          detail.messages.map(async (message) => {
+            const body = await storage.getItem(
+              `body-${JSON.stringify([parsed.queryKey[2], message.id])}`
+            );
+            if (!body) {
+              missingBody = true;
+            }
+            return body
+              ? { ...message, ...bodyCacheSchema.parse(JSON.parse(body)) }
+              : message;
+          })
+        );
+        return {
+          ...parsed,
+          state: {
+            ...parsed.state,
+            data: { ...detail, messages },
+            dataUpdatedAt: missingBody ? 0 : parsed.state.dataUpdatedAt,
+          },
+        };
+      }
+      return parsed;
+    },
+    maxAge: MAIL_CACHE_MAX_AGE,
+    prefix: "quieter-cache",
+    serialize: async (query) => {
+      const mailboxId =
+        query.queryKey[0] === "message-thread"
+          ? query.queryKey[2]
+          : query.queryKey[1];
+      if (
+        epoch !== persistenceEpoch ||
+        (ownerClient &&
+          typeof mailboxId === "string" &&
+          pendingMailMutations.get(ownerClient)?.has(mailboxId) === true)
+      ) {
+        return "";
+      }
+      if (query.queryKey[0] === "message-thread") {
+        const detail = threadCacheSchema.parse(query.state.data);
+        for (const message of detail.messages) {
+          if (
+            message.bodyHtml !== undefined ||
+            message.bodyText !== undefined
+          ) {
+            const key = `body-${JSON.stringify([query.queryKey[2], message.id])}`;
+            const body = JSON.stringify({
+              bodyHtml: message.bodyHtml,
+              bodyText: message.bodyText,
+            });
+            if ((await storage.getItem(key)) !== body) {
+              await storage.setItem(key, body);
+            }
+          }
+        }
+      }
+      return JSON.stringify(query, (key, value: unknown) => {
+        if (["bodyHtml", "bodyText", "headers", "raw"].includes(key)) {
+          return undefined;
+        }
+        if ((key === "pages" || key === "pageParams") && Array.isArray(value)) {
+          const pages: unknown[] = value;
+          return pages.slice(0, 5);
+        }
+        return value;
+      });
+    },
+    storage,
+  });
+};
+
+let currentPersister = createPersister(persistenceEpoch);
+
+export const queryPersister: ReturnType<
+  typeof experimental_createQueryPersister
+> = {
+  persistQuery: async (...args) => {
+    await currentPersister.persistQuery(...args);
+  },
+  persistQueryByKey: async (...args) => {
+    await currentPersister.persistQueryByKey(...args);
+  },
+  persisterFn: async (queryFn, context, query) => {
+    const delegate = currentPersister;
+    return await delegate.persisterFn(queryFn, context, query);
+  },
+  persisterGc: async (...args) => {
+    await currentPersister.persisterGc(...args);
+  },
+  removeQueries: async (...args) => {
+    await currentPersister.removeQueries(...args);
+  },
+  restoreQueries: async (...args) => {
+    await currentPersister.restoreQueries(...args);
+  },
+  retrieveQuery: async (...args) =>
+    await currentPersister.retrieveQuery(...args),
+};
+
+export const setQueryPersistenceUser = (
+  userId: string | null | undefined,
+  client?: QueryClient
+) => {
+  if (
+    typeof window === "undefined" ||
+    (persistenceInitialized &&
+      persistenceUser === (userId ?? undefined) &&
+      persistenceClient === client)
+  ) {
     return;
   }
-  if (persistenceUserInitialized && nextUserId === persistenceUserId) {
-    return;
-  }
-  persistenceUserInitialized = true;
-  persistenceUserId = nextUserId;
-  persistenceDisabled = false;
+  persistenceInitialized = true;
+  persistenceUser = userId ?? undefined;
+  persistenceClient = client;
+  persistenceEpoch += 1;
+  mailCache.setUser(persistenceUser);
+  currentPersister = createPersister(persistenceEpoch);
   try {
     for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
       const key = window.localStorage.key(index);
-      if (
-        key !== null &&
-        key.startsWith(`${CACHE_NAMESPACE}:`) &&
-        !key.startsWith(`${CACHE_NAMESPACE}:${nextUserId}:`)
-      ) {
+      if (key?.startsWith("quieter-cache:") === true) {
         window.localStorage.removeItem(key);
       }
     }
   } catch {
-    persistenceDisabled = true;
+    /* Remove obsolete metadata when browser storage is available. */
   }
 };
 
-const queryStorage =
-  typeof window === "undefined"
-    ? undefined
-    : {
-        entries: (): [string, string][] => {
-          if (persistenceDisabled) {
-            return [];
-          }
-          try {
-            const prefix = `${CACHE_NAMESPACE}:${persistenceUserId}:`;
-            return Object.entries(window.localStorage).flatMap<
-              [string, string]
-            >(([key, value]) =>
-              key.startsWith(prefix)
-                ? [[key.slice(prefix.length), String(value)]]
-                : []
-            );
-          } catch {
-            persistenceDisabled = true;
-            return [];
-          }
-        },
-        getItem: (key: string) => {
-          if (persistenceDisabled) {
-            return null;
-          }
-          try {
-            return window.localStorage.getItem(getStorageKey(key));
-          } catch {
-            persistenceDisabled = true;
-            return null;
-          }
-        },
-        removeItem: (key: string) => {
-          try {
-            window.localStorage.removeItem(getStorageKey(key));
-          } catch {
-            persistenceDisabled = true;
-          }
-        },
-        setItem: (key: string, value: string) => {
-          if (persistenceDisabled) {
-            return;
-          }
-          try {
-            window.localStorage.setItem(getStorageKey(key), value);
-          } catch {
-            persistenceDisabled = true;
-          }
-        },
-      };
-
-export const queryPersister = experimental_createQueryPersister({
-  buster: "v7",
-  deserialize: deserializePersistedQuery,
-  maxAge: PERSISTED_QUERY_MAX_AGE_MS,
-  prefix: "quieter-cache",
-  serialize: (persistedQuery) =>
-    JSON.stringify(persistedQuery, (key, value: unknown) => {
-      if (
-        key === "bodyHtml" ||
-        key === "bodyText" ||
-        key === "headers" ||
-        key === "raw"
-      ) {
-        return undefined;
-      }
-      if ((key === "pages" || key === "pageParams") && Array.isArray(value)) {
-        const firstTwo: unknown[] = [];
-        for (const item of value) {
-          if (firstTwo.length >= 2) {
-            break;
-          }
-          firstTwo.push(item);
-        }
-        return firstTwo;
-      }
-      return value;
-    }),
-  storage: queryStorage,
-});
-
 export const shouldPersistQueryKey = (queryKey: readonly unknown[]) => {
+  if (queryKey[0] === "message-thread" && queryKey.length === 4) {
+    return (
+      typeof queryKey[2] === "string" &&
+      queryKey[2].length > 0 &&
+      typeof queryKey[3] === "string"
+    );
+  }
   if (queryKey.length === 2) {
     return (
       (queryKey[0] === "gmail-labels" ||
@@ -186,13 +250,24 @@ export const persistQueryByKey = async (
   queryKey: readonly unknown[] | undefined,
   queryClient: Parameters<typeof queryPersister.persistQueryByKey>[1]
 ) => {
-  if (!queryKey || !shouldPersistQueryKey(queryKey)) {
+  if (
+    (persistenceClient && persistenceClient !== queryClient) ||
+    !queryKey ||
+    !shouldPersistQueryKey(queryKey)
+  ) {
+    return;
+  }
+  const mailboxId =
+    queryKey[0] === "message-thread" ? queryKey[2] : queryKey[1];
+  if (
+    typeof mailboxId === "string" &&
+    pendingMailMutations.get(queryClient)?.has(mailboxId) === true
+  ) {
     return;
   }
   try {
     await queryPersister.persistQueryByKey(queryKey, queryClient);
   } catch {
     // Optional cache persistence must not change a server mutation outcome.
-    persistenceDisabled = true;
   }
 };
