@@ -426,4 +426,46 @@ describe("mail metadata cache updates", () => {
       queryClient.getQueryData(getThreadQueryKey("mailbox", "reply"))
     ).toBeUndefined();
   });
+
+  test("a slow background read cannot overwrite a confirmed mutation", async () => {
+    const { queryClient, threadKey, messages } = setup();
+    const write = Promise.withResolvers<{
+      id: string;
+      isUnread: boolean;
+      labelIds: string[];
+    }>();
+    const staleRead = Promise.withResolvers<ThreadMessagesResult>();
+    vi.mocked(rpc.mail.updateMessageLabels).mockImplementationOnce(
+      async () => await write.promise
+    );
+    const mutation = updateMessageInMailbox(
+      {
+        mailbox: "inbox",
+        mailboxId: "mailbox",
+        messageId: "a",
+        queryClient,
+        searchQuery: undefined,
+      },
+      { addLabelIds: ["work"] }
+    );
+    await Promise.resolve();
+    const readOutcome = Promise.allSettled([
+      queryClient.fetchQuery({
+        queryFn: async () => await staleRead.promise,
+        queryKey: threadKey,
+      }),
+    ]);
+    write.resolve({
+      id: "a",
+      isUnread: true,
+      labelIds: ["INBOX", "UNREAD", "work"],
+    });
+    await mutation;
+    staleRead.resolve({ messages, threadId: "thread" });
+    await readOutcome;
+    expect(
+      queryClient.getQueryData<ThreadMessagesResult>(threadKey)?.messages[0]
+        .labelIds
+    ).toContain("work");
+  });
 });

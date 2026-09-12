@@ -142,6 +142,7 @@ export const refreshLoadedMessagesPages = async (
   };
 
   await refreshNextPage(0);
+  options.signal?.throwIfAborted();
 
   updateMailQueryFromServer<MessagesQueryData>(
     queryClient,
@@ -196,8 +197,10 @@ export const applyMailboxSyncDelta = async (
   startHistoryId: string,
   updatedMessages: readonly MessageListItem[],
   removedMessageIds: readonly string[],
-  nextHistoryId?: string
+  nextHistoryId?: string,
+  signal?: AbortSignal
 ) => {
+  signal?.throwIfAborted();
   if (updatedMessages.length > 0 || removedMessageIds.length > 0) {
     updateMailQueryFromServer<MessagesQueryData>(
       queryClient,
@@ -216,6 +219,7 @@ export const applyMailboxSyncDelta = async (
   }
 
   await persistQueryByKey(messagesQueryKey, queryClient);
+  signal?.throwIfAborted();
 
   const touchedThreadQueryKeys = new Map<
     string,
@@ -304,6 +308,7 @@ export const syncMessages = async (
     { signal }
   );
 
+  signal?.throwIfAborted();
   if (syncDelta.requiresFullRefresh) {
     return await refreshLoadedMessagesPages(
       queryClient,
@@ -323,7 +328,8 @@ export const syncMessages = async (
     startHistoryId,
     syncDelta.updatedMessages,
     syncDelta.removedMessageIds,
-    syncDelta.historyId
+    syncDelta.historyId,
+    signal
   );
 
   if (syncDelta.refreshFirstPage) {

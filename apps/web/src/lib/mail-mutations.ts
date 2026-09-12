@@ -110,6 +110,19 @@ const createCoordinator = (client: QueryClient) => {
         if (disposed) {
           return;
         }
+        await client.cancelQueries(
+          {
+            predicate: ({ queryKey }) =>
+              (queryKey[0] === "messages" &&
+                queryKey[1] === intent.mailboxId) ||
+              (queryKey[0] === "message-thread" &&
+                queryKey[2] === intent.mailboxId),
+          },
+          { revert: false }
+        );
+        if (disposed) {
+          return;
+        }
         state.setState((current) =>
           current.filter((entry) => entry !== intent)
         );
@@ -140,7 +153,7 @@ const createCoordinator = (client: QueryClient) => {
                   queryKey[2] === intent.mailboxId) ||
                 queryKey[0] === "gmail-unread-counts",
             },
-            { cancelRefetch: false }
+            { cancelRefetch: true }
           );
         }
         drain();

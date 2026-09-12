@@ -18,7 +18,7 @@ The two-second goal applies to delivering an observed change to a connected brow
 
 Reversible actions update visible query data immediately. A per-QueryClient coordinator serializes operations that affect the same mailbox/thread while allowing unrelated threads to proceed. It combines unsent operations with the same label-change scope. Confirmed data and pending intent are kept separately, including when mailbox deltas arrive during a write. An older response or failed write therefore cannot roll back the latest pending intent or discard newly arrived mail.
 
-AbortSignals can stop reads and mutations before dispatch. They are not treated as proof that an accepted provider write was undone. Dispatched writes settle before the next conflicting operation runs. Logout disposes the coordinator, rejects unsent work, and ignores late results. This ordering is local to a tab; separate devices and collaborators reconcile against server/provider state. There is no persisted offline mutation queue or distributed last-click-wins guarantee. Destructive actions retain their existing pending guards.
+AbortSignals can stop reads and mutations before dispatch. They are not treated as proof that an accepted provider write was undone. Dispatched writes settle before the next conflicting operation runs. Reads still in flight are cancelled before confirming a write, so an older response cannot replace it. Logout disposes the coordinator, rejects unsent work, and ignores late results. This ordering is local to a tab; separate devices and collaborators reconcile against server/provider state. There is no persisted offline mutation queue or distributed last-click-wins guarantee. Destructive actions retain their existing pending guards.
 
 ## IndexedDB cache
 
