@@ -22,6 +22,7 @@ import {
   hasOrganizationRole,
 } from "./organization-settings/domain";
 import { SettingsSection } from "./settings-layout";
+import { useSettingsTeam } from "./use-settings-team";
 
 const TeamMailboxAdministration = ({
   organizationId,
@@ -135,17 +136,21 @@ const TeamMailboxAdministration = ({
 };
 
 export const ManagedMailboxAdministrationSettings = () => {
-  const organizations = authClient.useListOrganizations().data ?? [];
+  const { organizations, teamId } = useSettingsTeam();
   const session = authClient.useSession().data;
   if (session === null || session === undefined) {
     return null;
   }
-  return organizations.map((organization) => (
-    <TeamMailboxAdministration
-      key={organization.id}
-      organizationId={organization.id}
-      organizationName={organization.name}
-      userId={session.user.id}
-    />
-  ));
+  return organizations.flatMap((organization) =>
+    organization.id === teamId ? (
+      <TeamMailboxAdministration
+        key={organization.id}
+        organizationId={organization.id}
+        organizationName={organization.name}
+        userId={session.user.id}
+      />
+    ) : (
+      []
+    )
+  );
 };

@@ -28,21 +28,14 @@ import { MailSuppressionsView } from "./mail-suppressions-view";
 import { MembersView } from "./members-view";
 import { OrganizationBillingView } from "./organization-billing-view";
 import { OrganizationDangerView } from "./organization-danger-view";
-import { OrganizationOverviewView } from "./organization-overview-view";
+import { OrganizationGeneralSettings } from "./organization-general-settings";
 
 export const OrganizationDetailView = ({
   domainId,
   onBackToList,
   onBackToOrganization,
-  onOpenApiKeys,
-  onOpenBilling,
-  onOpenDanger,
-  onOpenDelivery,
-  onOpenDivisions,
   onOpenDomains,
   onOpenDomain,
-  onOpenMembers,
-  onOpenSuppressions,
   organization,
   userId,
   view,
@@ -50,15 +43,8 @@ export const OrganizationDetailView = ({
   domainId: string;
   onBackToList: () => void;
   onBackToOrganization: () => void;
-  onOpenApiKeys: () => void;
-  onOpenBilling: () => void;
-  onOpenDanger: () => void;
-  onOpenDelivery: () => void;
-  onOpenDivisions: () => void;
   onOpenDomains: () => void;
   onOpenDomain: (domainId: string) => void;
-  onOpenMembers: () => void;
-  onOpenSuppressions: () => void;
   organization: OrganizationSummary;
   userId: string;
   view: OrganizationSettingsView;
@@ -81,10 +67,6 @@ export const OrganizationDetailView = ({
     null;
   const activeRole =
     activeMember && normalizeOrganizationRole(activeMember.role);
-  const pendingInvitations =
-    fullOrganization?.invitations.filter(
-      (invitation) => invitation.status === "pending"
-    ) ?? [];
   const canCancelInvitations = hasOrganizationPermission(activeRole, {
     invitation: ["cancel"],
   });
@@ -158,15 +140,20 @@ export const OrganizationDetailView = ({
   if (view === "domains") {
     if (domainId) {
       return (
-        <DomainDetailView
-          billingAccessUnknown={isBillingError}
-          billingPending={isBillingPending}
-          canManageDomains={canUpdateOrganization}
-          canUseOrganizationDomains={canUseTeamFeatures}
-          domainId={domainId}
-          onBack={onOpenDomains}
-          organization={fullOrganization}
-        />
+        <>
+          <SettingsBackButton onClick={onOpenDomains}>
+            Domains
+          </SettingsBackButton>
+          <DomainDetailView
+            billingAccessUnknown={isBillingError}
+            billingPending={isBillingPending}
+            canManageDomains={canUpdateOrganization}
+            canUseOrganizationDomains={canUseTeamFeatures}
+            domainId={domainId}
+            onBack={onOpenDomains}
+            organization={fullOrganization}
+          />
+        </>
       );
     }
     return (
@@ -242,8 +229,14 @@ export const OrganizationDetailView = ({
     );
   }
 
-  if (view === "danger") {
-    return (
+  return (
+    <div className="space-y-8">
+      <h1 className="text-title-sm font-normal">General</h1>
+      <OrganizationGeneralSettings
+        key={organization.id}
+        organization={organization}
+        canManage={canUpdateOrganization}
+      />
       <OrganizationDangerView
         activeRole={activeRole}
         canDeleteOrganization={canDeleteOrganization}
@@ -251,29 +244,6 @@ export const OrganizationDetailView = ({
         onBack={onBackToOrganization}
         onLeftOrDeleted={onBackToList}
       />
-    );
-  }
-
-  return (
-    <OrganizationOverviewView
-      billing={teamBilling}
-      billingAccessUnknown={isBillingError}
-      billingPending={isBillingPending}
-      canUpdateOrganization={canUpdateOrganization}
-      canUseOrganizationApiKeys={canUseTeamFeatures}
-      canUseOrganizationDomains={canUseTeamFeatures}
-      fullOrganization={fullOrganization}
-      onBackToList={onBackToList}
-      onOpenApiKeys={onOpenApiKeys}
-      onOpenBilling={onOpenBilling}
-      onOpenDanger={onOpenDanger}
-      onOpenDelivery={onOpenDelivery}
-      onOpenDivisions={onOpenDivisions}
-      onOpenDomains={onOpenDomains}
-      onOpenMembers={onOpenMembers}
-      onOpenSuppressions={onOpenSuppressions}
-      organization={organization}
-      pendingInvitationsCount={pendingInvitations.length}
-    />
+    </div>
   );
 };

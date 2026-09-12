@@ -1,22 +1,17 @@
 "use client";
 
-import { cn } from "@quieter/ui/cn";
-import { useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
 import { lazy, Suspense } from "react";
 
 import { isDemoModeAvailable } from "#/features/settings/domain/demo-mode-setting";
-import { SETTINGS_DETAIL_TITLES } from "#/features/settings/domain/settings-navigation";
-import type { SettingsTab } from "#/features/settings/domain/settings-tab";
+import { SETTINGS_TITLES } from "#/features/settings/domain/settings-navigation";
 import { settingsRouteApi } from "#/lib/route-apis";
 
 import { BillingCheckoutResult } from "./billing-checkout-result";
 import { ConnectorConnectionResult } from "./connector-connection-result";
 import { SettingsDataPrefetch } from "./settings-data-prefetch";
-import { SettingsBackButton, SettingsLoadingState } from "./settings-layout";
-import { SettingsOverviewPanel } from "./settings-overview-panel";
-import { prefetchSettingsTab } from "./settings-prefetch";
+import { SettingsLoadingState } from "./settings-layout";
 import { SettingsSearch } from "./settings-search";
+import { SettingsSidebar } from "./settings-sidebar";
 
 const AccountSettingsPanel = lazy(
   async () =>
@@ -109,39 +104,6 @@ const ShortcutsSettingsPanel = lazy(
     )
 );
 
-const preloadSettingsPanel = async (tab: SettingsTab) => {
-  switch (tab) {
-    case "account": {
-      return await import("./account-settings-panel");
-    }
-    case "ai": {
-      return await import("./ai-settings-panel");
-    }
-    case "connectors": {
-      return await import("./connectors-settings-panel");
-    }
-    case "mailboxes": {
-      return await import("./mailboxes-settings-panel");
-    }
-    case "organization": {
-      return await import("./organization-settings-panel");
-    }
-    case "appearance":
-    case "development":
-    case "privacy":
-    case "reading":
-    case "shortcuts": {
-      return await preferenceSettingsPanels();
-    }
-    case "overview": {
-      return null;
-    }
-    default: {
-      throw new Error("Unsupported settings tab.");
-    }
-  }
-};
-
 type SettingsUser = {
   email: string;
   emailVerified: boolean;
@@ -149,163 +111,55 @@ type SettingsUser = {
   name: string;
 };
 
-const SettingsBackNavigation = ({
-  domainId,
-  mailboxId,
-  mailboxView,
-  onBackToApp,
-  onBackToMailboxes,
-  onBackToOverview,
-  organizationId,
-  tab,
+export const SettingsScreen = ({
+  initialUser,
 }: {
-  domainId: string;
-  mailboxId: string;
-  mailboxView: "add" | "list";
-  onBackToApp: () => void;
-  onBackToMailboxes: () => void;
-  onBackToOverview: () => void;
-  organizationId: string;
-  tab: SettingsTab;
-}) => {
-  if (tab === "overview") {
-    return <SettingsBackButton onClick={onBackToApp}>Back</SettingsBackButton>;
-  }
-
-  if (tab === "mailboxes" && (mailboxId !== "" || mailboxView === "add")) {
-    return (
-      <SettingsBackButton onClick={onBackToMailboxes}>
-        Mailboxes
-      </SettingsBackButton>
-    );
-  }
-
-  if (tab === "organization" && (organizationId !== "" || domainId !== "")) {
-    return null;
-  }
-
-  return (
-    <SettingsBackButton onClick={onBackToOverview}>Settings</SettingsBackButton>
-  );
-};
-
-type SettingsScreenProps = {
   initialUser: SettingsUser;
-};
-
-export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
-  const queryClient = useQueryClient();
-  const navigate = useNavigate({
-    from: "/settings",
-  });
-  const { domainId, from, mailboxId, mailboxView, organizationId, tab } =
-    settingsRouteApi.useSearch();
-
-  const setTab = (nextTab: SettingsTab) => {
-    void navigate({
-      search: (previous) => ({
-        ...previous,
-        domainId: "",
-        mailboxId: "",
-        mailboxView: "list",
-        organizationId: "",
-        organizationView: "overview",
-        tab: nextTab,
-      }),
-      to: ".",
-    });
-  };
-  const goBackToApp = () => {
-    void navigate({
-      to: from,
-    });
-  };
-  const goBackToMailboxes = () => {
-    void navigate({
-      search: (previous) => ({
-        ...previous,
-        mailboxId: "",
-        mailboxView: "list",
-      }),
-      to: ".",
-    });
-  };
-  const detail = tab === "overview" ? null : SETTINGS_DETAIL_TITLES[tab];
-  const isGuidedMailboxSetup = tab === "mailboxes" && mailboxView === "add";
-
+}) => {
+  const routeSearch = settingsRouteApi.useSearch();
+  const { tab } = routeSearch;
+  const preferences = [
+    "overview",
+    "appearance",
+    "reading",
+    "privacy",
+    "shortcuts",
+  ].includes(tab);
+  const title = SETTINGS_TITLES[tab];
   return (
-    <main className="relative isolate flex h-dvh min-h-0 flex-col overflow-hidden text-fg">
+    <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-bg text-fg md:flex-row">
       <SettingsDataPrefetch tab={tab} />
       <BillingCheckoutResult />
       <ConnectorConnectionResult />
-      {isGuidedMailboxSetup ? null : (
-        <>
-          <SettingsBackNavigation
-            domainId={domainId}
-            mailboxId={mailboxId}
-            mailboxView={mailboxView}
-            onBackToApp={goBackToApp}
-            onBackToMailboxes={goBackToMailboxes}
-            onBackToOverview={() => {
-              setTab("overview");
-            }}
-            organizationId={organizationId}
-            tab={tab}
-          />
+      <SettingsSidebar />
+      <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-240 space-y-8 px-5 py-6 md:px-10 md:py-8">
           <SettingsSearch
-            onPrefetchTab={(nextTab) => {
-              void prefetchSettingsTab(queryClient, nextTab);
-              void preloadSettingsPanel(nextTab);
-            }}
-            onSelectTab={setTab}
-          />
-        </>
-      )}
-      <div className="relative z-10 min-h-0 flex-1 overflow-y-auto">
-        <div
-          className={cn("w-full", {
-            "min-h-full": isGuidedMailboxSetup,
-            "mx-auto max-w-205 px-5 py-8 md:px-8 md:py-14":
-              !isGuidedMailboxSetup,
-          })}
-        >
-          {tab === "overview" ? (
-            <SettingsOverviewPanel
-              initialUser={initialUser}
-              onPrefetchTab={(nextTab) => {
-                void prefetchSettingsTab(queryClient, nextTab);
-                void preloadSettingsPanel(nextTab);
-              }}
-              onSelectTab={setTab}
-            />
-          ) : (
-            <div
-              className={cn({
-                "min-h-full": isGuidedMailboxSetup,
-                "space-y-8": !isGuidedMailboxSetup,
-              })}
-            >
-              {detail && tab !== "mailboxes" && (
-                <header>
-                  <h1 className="text-title-sm font-normal tracking-tight text-fg">
-                    {detail.title}
-                  </h1>
-                </header>
+            key={`${tab}-${routeSearch.organizationId}-${routeSearch.mailboxId}-${routeSearch.organizationView}`}
+          >
+            <div className="space-y-8">
+              {tab !== "organization" && tab !== "mailboxes" && (
+                <h1 className="text-title-sm font-normal tracking-tight">
+                  {title}
+                </h1>
               )}
-
               <Suspense
                 fallback={
                   <SettingsLoadingState
                     className="min-h-64"
-                    label={`Loading ${detail?.title ?? "settings"}`}
+                    label={`Loading ${title ?? "settings"}`}
                   />
                 }
               >
-                {tab === "appearance" && <AppearanceSettingsPanel />}
+                {preferences && (
+                  <>
+                    <AppearanceSettingsPanel />
+                    <ReadingSettingsPanel />
+                    <ShortcutsSettingsPanel />
+                    <PrivacySettingsPanel />
+                  </>
+                )}
                 {tab === "ai" && <AiSettingsPanel />}
-                {tab === "reading" && <ReadingSettingsPanel />}
-                {tab === "shortcuts" && <ShortcutsSettingsPanel />}
-                {tab === "privacy" && <PrivacySettingsPanel />}
                 {tab === "development" &&
                   (isDemoModeAvailable() ? (
                     <DevelopmentSettingsPanel />
@@ -320,9 +174,9 @@ export const SettingsScreen = ({ initialUser }: SettingsScreenProps) => {
                 {tab === "organization" && <OrganizationSettingsPanel />}
               </Suspense>
             </div>
-          )}
+          </SettingsSearch>
         </div>
-      </div>
-    </main>
+      </main>
+    </div>
   );
 };

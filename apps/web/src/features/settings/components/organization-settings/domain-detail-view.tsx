@@ -15,7 +15,6 @@ import { orpc } from "#/lib/orpc";
 import { settingsRouteApi } from "#/lib/route-apis";
 
 import {
-  SettingsBackButton,
   SettingsCard,
   SettingsLoadingState,
   SettingsPageHeader,
@@ -178,12 +177,12 @@ const DomainHeader = ({
 );
 
 export const DomainDetailView = ({
+  onBack,
   billingAccessUnknown,
   billingPending,
   canManageDomains,
   canUseOrganizationDomains,
   domainId,
-  onBack,
   organization,
 }: {
   billingAccessUnknown: boolean;
@@ -281,21 +280,13 @@ export const DomainDetailView = ({
   });
 
   if (isPending) {
-    return (
-      <>
-        <SettingsBackButton onClick={onBack}>Domains</SettingsBackButton>
-        <SettingsLoadingState className="min-h-48" label="Loading domain" />
-      </>
-    );
+    return <SettingsLoadingState className="min-h-48" label="Loading domain" />;
   }
   if (isError || !domain) {
     return (
-      <>
-        <SettingsBackButton onClick={onBack}>Domains</SettingsBackButton>
-        <SettingsCard className="p-6 text-body text-destructive">
-          {error?.message ?? "Domain not found."}
-        </SettingsCard>
-      </>
+      <SettingsCard className="p-6 text-body text-destructive">
+        {error?.message ?? "Domain not found."}
+      </SettingsCard>
     );
   }
 
@@ -400,7 +391,6 @@ export const DomainDetailView = ({
 
   return (
     <div className="@container space-y-8">
-      <SettingsBackButton onClick={onBack}>Domains</SettingsBackButton>
       {!billingPending &&
         !billingAccessUnknown &&
         !canUseOrganizationDomains && (

@@ -5,7 +5,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 
 import { authClient } from "#/lib/auth";
 
-import { SettingsBackButton, SettingsCard } from "../settings-layout";
+import { SettingsCard } from "../settings-layout";
 import { formatRoleLabel, hasOrganizationRole } from "./domain";
 import type { FullOrganization, OrganizationRoleOption } from "./domain";
 import {
@@ -18,7 +18,6 @@ export const OrganizationDangerView = ({
   activeRole,
   canDeleteOrganization,
   fullOrganization,
-  onBack,
   onLeftOrDeleted,
 }: {
   activeRole: OrganizationRoleOption | null;
@@ -47,12 +46,8 @@ export const OrganizationDangerView = ({
 
   return (
     <section className="space-y-6">
-      <SettingsBackButton onClick={onBack}>
-        {fullOrganization.name}
-      </SettingsBackButton>
-
       <div>
-        <h1 className="text-body-lg font-semibold text-fg">Danger zone</h1>
+        <h2 className="text-body-lg font-semibold text-fg">Membership</h2>
         <p className="mt-1 text-body text-muted-fg">
           Leave this team or delete it permanently.
         </p>

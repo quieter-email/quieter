@@ -11,7 +11,6 @@ import { mailboxesQueryOptions } from "#/lib/mailboxes-query";
 import { orpc } from "#/lib/orpc";
 
 import {
-  SettingsBackButton,
   SettingsCard,
   SettingsLoadingState,
   settingsSurfaceVariants,
@@ -99,7 +98,6 @@ const RangeToggle = ({
 
 export const MailDeliveryView = ({
   canManage,
-  onBack,
   organization,
 }: {
   canManage: boolean;
@@ -315,10 +313,6 @@ export const MailDeliveryView = ({
 
   return (
     <div className="@container space-y-6">
-      <SettingsBackButton onClick={onBack}>
-        {organization.name}
-      </SettingsBackButton>
-
       <div>
         <h1 className="text-body-lg font-semibold text-fg">Delivery</h1>
         <p className="mt-1 max-w-2xl text-body text-muted-fg">

@@ -6,11 +6,7 @@ import { cn } from "@quieter/ui/cn";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { useState } from "react";
 
-import {
-  SettingsBackButton,
-  SettingsCard,
-  settingsSurfaceVariants,
-} from "../settings-layout";
+import { SettingsCard, settingsSurfaceVariants } from "../settings-layout";
 import { formatCount, formatRoleLabel } from "./domain";
 import type { FullOrganization, OrganizationMember } from "./domain";
 import { InviteMemberForm } from "./invite-member-form";
@@ -19,7 +15,6 @@ import { PendingOrganizationInvitations } from "./pending-organization-invitatio
 
 export const MembersView = ({
   activeMember,
-  onBack,
   organization,
   permissions,
 }: {
@@ -59,10 +54,6 @@ export const MembersView = ({
 
   return (
     <section className="space-y-6">
-      <SettingsBackButton onClick={onBack}>
-        {organization.name}
-      </SettingsBackButton>
-
       <div>
         <h1 className="text-body-lg font-semibold text-fg">Members</h1>
         <p className="mt-1 text-body text-muted-fg">

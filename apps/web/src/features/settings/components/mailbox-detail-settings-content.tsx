@@ -4,6 +4,7 @@ import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { RouterOutputs } from "@quieter/orpc";
 import { Button } from "@quieter/ui/button";
+import { Tabs, TabsList, TabsTab, TabsPanel } from "@quieter/ui/tabs";
 import { useNavigate } from "@tanstack/react-router";
 
 import { GmailMailboxDetailSections } from "#/features/settings/components/gmail-mailbox-detail-sections";
@@ -30,6 +31,7 @@ import {
   SettingsSection,
 } from "#/features/settings/components/settings-layout";
 import { toastError } from "#/lib/error-toast";
+import { settingsRouteApi } from "#/lib/route-apis";
 
 type Mailbox =
   RouterOutputs["mail"]["listMailboxes"]["groups"][number]["mailboxes"][number];
@@ -121,6 +123,14 @@ export const MailboxDetailSettingsContent = ({
   const isManagedNonManager =
     mailbox.provider === "managed" && mailbox.grantRole !== "manager";
   const isApi = mailbox.provider === "api";
+  const { section } = settingsRouteApi.useSearch();
+  const sections = [
+    "general",
+    ...(isGmail || isManagedManager ? ["signature", "intelligence"] : []),
+    ...(isGmail ? ["connection"] : []),
+    ...(isManagedManager ? ["access"] : []),
+  ];
+  const activeSection = sections.includes(section) ? section : "general";
 
   return (
     <div className="space-y-8">
@@ -131,144 +141,174 @@ export const MailboxDetailSettingsContent = ({
         {detailGroupName}
       </SettingsPageHeader>
 
-      <MailboxDetailGeneralSection
-        defaultMailboxId={defaultMailboxId}
-        isDefaultMailboxPending={setDefaultMailboxMutation.isPending}
-        isMovePending={moveGmailMailboxMutation.isPending}
-        isStartingGmail={isStartingGmail}
-        mailbox={mailbox}
-        moveGmailMailboxMutation={moveGmailMailboxMutation}
-        onSetDefaultMailbox={onSetDefaultMailbox}
-        onStartGmailConnection={onStartGmailConnection}
-        organizations={organizations}
-        placementItems={placementItems}
-      />
-
-      {isGmail && (
-        <GmailMailboxNameSettings key={mailbox.id} mailbox={mailbox} />
-      )}
-
-      {(isGmail || isManagedManager) && (
-        <MailboxSignatureSettings key={mailbox.id} mailbox={mailbox} />
-      )}
-
-      {isGmail && (
-        <GmailMailboxDetailSections
-          autoLabelEnabled={mailbox.autoLabelEnabled}
-          autoLabelSwitchId={autoLabelSwitchId}
-          connectionStatus={mailbox.connectionStatus}
-          disconnectPending={disconnectMailboxMutation.isPending}
-          emailAddress={mailbox.emailAddress}
-          hasAutomationAccess={hasAutomationAccess}
-          onAutoLabelChange={(enabled) => {
-            // Optimistic; the mutation owns rollback and the failure toast.
-            setGmailAutoLabelingMutation.mutate({
-              enabled,
-              mailboxId: mailbox.id,
+      <Tabs
+        value={activeSection}
+        onValueChange={(value) => {
+          if (typeof value === "string" && sections.includes(value)) {
+            void navigate({
+              search: (previous) => ({ ...previous, section: value }),
+              to: ".",
             });
-          }}
-          onDisconnect={() => {
-            disconnectMailboxMutation.mutate(
-              { mailboxId: mailbox.id },
-              {
-                onError: (error) => {
-                  toastError(error, {
-                    boundary: "mailbox-settings",
-                    fallback: "Could not remove mailbox.",
+          }
+        }}
+      >
+        <TabsList
+          aria-label="Mailbox settings sections"
+          className="h-auto flex-wrap"
+        >
+          {sections.map((value) => (
+            <TabsTab key={value} value={value}>
+              {value.charAt(0).toUpperCase() + value.slice(1)}
+            </TabsTab>
+          ))}
+        </TabsList>
+        <TabsPanel value={activeSection} className="space-y-8">
+          {activeSection === "general" && (
+            <MailboxDetailGeneralSection
+              defaultMailboxId={defaultMailboxId}
+              isDefaultMailboxPending={setDefaultMailboxMutation.isPending}
+              isMovePending={moveGmailMailboxMutation.isPending}
+              isStartingGmail={isStartingGmail}
+              mailbox={mailbox}
+              moveGmailMailboxMutation={moveGmailMailboxMutation}
+              onSetDefaultMailbox={onSetDefaultMailbox}
+              onStartGmailConnection={onStartGmailConnection}
+              organizations={organizations}
+              placementItems={placementItems}
+            />
+          )}
+
+          {isGmail && activeSection === "general" && (
+            <GmailMailboxNameSettings key={mailbox.id} mailbox={mailbox} />
+          )}
+
+          {(isGmail || isManagedManager) && activeSection === "signature" && (
+            <MailboxSignatureSettings key={mailbox.id} mailbox={mailbox} />
+          )}
+
+          {isGmail &&
+            (activeSection === "intelligence" ||
+              activeSection === "connection") && (
+              <GmailMailboxDetailSections
+                autoLabelEnabled={mailbox.autoLabelEnabled}
+                autoLabelSwitchId={autoLabelSwitchId}
+                connectionStatus={mailbox.connectionStatus}
+                disconnectPending={disconnectMailboxMutation.isPending}
+                emailAddress={mailbox.emailAddress}
+                hasAutomationAccess={hasAutomationAccess}
+                onAutoLabelChange={(enabled) => {
+                  // Optimistic; the mutation owns rollback and the failure toast.
+                  setGmailAutoLabelingMutation.mutate({
+                    enabled,
+                    mailboxId: mailbox.id,
                   });
-                },
-              }
-            );
-          }}
-          onUsefulDetailsChange={(enabled) => {
-            setGmailUsefulDetailsMutation.mutate({
-              enabled,
-              mailboxId: mailbox.id,
-            });
-          }}
-          usefulDetailsEnabled={mailbox.usefulDetailsEnabled}
-          usefulDetailsSwitchId={usefulDetailsSwitchId}
-        />
-      )}
-
-      {isManagedNonManager && (
-        <SettingsSection title="Mailbox settings">
-          <SettingsCard className="p-6">
-            <p className="text-body text-fg">Manager access required</p>
-            <p className="mt-1 max-w-2xl text-body/6 text-muted-fg">
-              A mailbox manager can change inbox features, routing, and member
-              access. Your current role still lets you use every mail action
-              included with that role.
-            </p>
-          </SettingsCard>
-        </SettingsSection>
-      )}
-
-      {isManagedManager && (
-        <ManagedMailboxManagerSettingsSection
-          canMakePrivate={canMakePrivate}
-          detailManagedDivisions={detailManagedDivisions}
-          detailManagedMembers={detailManagedMembers}
-          emailAddress={mailbox.emailAddress}
-          hasAutomationAccess={hasAutomationAccess}
-          includeApiMessagesSwitchId={includeApiMessagesSwitchId}
-          mailboxId={mailbox.id}
-          managedMailboxQuery={managedMailboxQuery}
-          removeManagedMailboxDivisionGrantMutation={
-            removeManagedMailboxDivisionGrantMutation
-          }
-          removeManagedMailboxGrantMutation={removeManagedMailboxGrantMutation}
-          setGmailAutoLabelingMutation={setGmailAutoLabelingMutation}
-          setGmailUsefulDetailsMutation={setGmailUsefulDetailsMutation}
-          setManagedMailboxAccessModeMutation={
-            setManagedMailboxAccessModeMutation
-          }
-          setManagedMailboxDivisionGrantMutation={
-            setManagedMailboxDivisionGrantMutation
-          }
-          setManagedMailboxGrantMutation={setManagedMailboxGrantMutation}
-          updateManagedMailboxMutation={updateManagedMailboxMutation}
-        />
-      )}
-
-      {isApi && (
-        <SettingsSection title="Mailbox capabilities">
-          <SettingsCard className="p-6">
-            <p className="text-body text-fg">Send-only mailbox</p>
-            <p className="mt-1 max-w-2xl text-body/6 text-muted-fg">
-              This address sends through your team API. Its domain and access
-              are managed in team settings.
-            </p>
-            <Button
-              className="mt-4"
-              onClick={() => {
-                runDetached(async () => {
-                  await navigate({
-                    search: (previous) => ({
-                      ...previous,
-                      mailboxId: "",
-                      organizationId: mailbox.organizationId,
-                      organizationView: "api-keys",
-                      tab: "organization",
-                    }),
-                    to: ".",
+                }}
+                onDisconnect={() => {
+                  disconnectMailboxMutation.mutate(
+                    { mailboxId: mailbox.id },
+                    {
+                      onError: (error) => {
+                        toastError(error, {
+                          boundary: "mailbox-settings",
+                          fallback: "Could not remove mailbox.",
+                        });
+                      },
+                    }
+                  );
+                }}
+                onUsefulDetailsChange={(enabled) => {
+                  setGmailUsefulDetailsMutation.mutate({
+                    enabled,
+                    mailboxId: mailbox.id,
                   });
-                });
-              }}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              Open team settings
-              <HugeiconsIcon
-                aria-hidden
-                className="size-4"
-                icon={ArrowRight01Icon}
+                }}
+                usefulDetailsEnabled={mailbox.usefulDetailsEnabled}
+                usefulDetailsSwitchId={usefulDetailsSwitchId}
               />
-            </Button>
-          </SettingsCard>
-        </SettingsSection>
-      )}
+            )}
+
+          {isManagedNonManager && (
+            <SettingsSection title="Mailbox settings">
+              <SettingsCard className="p-6">
+                <p className="text-body text-fg">Manager access required</p>
+                <p className="mt-1 max-w-2xl text-body/6 text-muted-fg">
+                  A mailbox manager can change inbox features, routing, and
+                  member access. Your current role still lets you use every mail
+                  action included with that role.
+                </p>
+              </SettingsCard>
+            </SettingsSection>
+          )}
+
+          {isManagedManager && activeSection !== "signature" && (
+            <ManagedMailboxManagerSettingsSection
+              canMakePrivate={canMakePrivate}
+              detailManagedDivisions={detailManagedDivisions}
+              detailManagedMembers={detailManagedMembers}
+              emailAddress={mailbox.emailAddress}
+              hasAutomationAccess={hasAutomationAccess}
+              includeApiMessagesSwitchId={includeApiMessagesSwitchId}
+              mailboxId={mailbox.id}
+              managedMailboxQuery={managedMailboxQuery}
+              removeManagedMailboxDivisionGrantMutation={
+                removeManagedMailboxDivisionGrantMutation
+              }
+              removeManagedMailboxGrantMutation={
+                removeManagedMailboxGrantMutation
+              }
+              setGmailAutoLabelingMutation={setGmailAutoLabelingMutation}
+              setGmailUsefulDetailsMutation={setGmailUsefulDetailsMutation}
+              setManagedMailboxAccessModeMutation={
+                setManagedMailboxAccessModeMutation
+              }
+              setManagedMailboxDivisionGrantMutation={
+                setManagedMailboxDivisionGrantMutation
+              }
+              setManagedMailboxGrantMutation={setManagedMailboxGrantMutation}
+              updateManagedMailboxMutation={updateManagedMailboxMutation}
+            />
+          )}
+
+          {isApi && (
+            <SettingsSection title="Mailbox capabilities">
+              <SettingsCard className="p-6">
+                <p className="text-body text-fg">Send-only mailbox</p>
+                <p className="mt-1 max-w-2xl text-body/6 text-muted-fg">
+                  This address sends through your team API. Its domain and
+                  access are managed in team settings.
+                </p>
+                <Button
+                  className="mt-4"
+                  onClick={() => {
+                    runDetached(async () => {
+                      await navigate({
+                        search: (previous) => ({
+                          ...previous,
+                          mailboxId: "",
+                          organizationId: mailbox.organizationId,
+                          organizationView: "api-keys",
+                          tab: "organization",
+                        }),
+                        to: ".",
+                      });
+                    });
+                  }}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  Open team settings
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-4"
+                    icon={ArrowRight01Icon}
+                  />
+                </Button>
+              </SettingsCard>
+            </SettingsSection>
+          )}
+        </TabsPanel>
+      </Tabs>
     </div>
   );
 };

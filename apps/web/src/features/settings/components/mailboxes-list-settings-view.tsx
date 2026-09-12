@@ -27,6 +27,7 @@ import { prefetchMailboxSettingsDetail } from "#/features/settings/components/se
 import { mailboxesQueryOptions } from "#/lib/mailboxes-query";
 
 import { ManagedMailboxAdministrationSettings } from "./managed-mailbox-administration-settings";
+import { useSettingsTeam } from "./use-settings-team";
 
 type MailboxGroup = RouterOutputs["mail"]["listMailboxes"]["groups"][number];
 
@@ -141,7 +142,13 @@ export const MailboxesListSettingsView = ({
     isPending: areMailboxesPending,
     refetch: refetchMailboxes,
   } = useQuery(mailboxesQueryOptions());
-  const groups = mailboxesData?.groups ?? [];
+  const { teamId, team } = useSettingsTeam();
+  const groups = (mailboxesData?.groups ?? []).flatMap((group) => {
+    const mailboxes = group.mailboxes.filter(
+      (mailbox) => mailbox.organizationId === teamId
+    );
+    return mailboxes.length > 0 ? [{ ...group, mailboxes }] : [];
+  });
   const defaultMailboxId = mailboxesData?.defaultMailboxId ?? null;
 
   const renderMailboxSection = () => {
@@ -183,6 +190,7 @@ export const MailboxesListSettingsView = ({
                   ...previous,
                   mailboxId: "",
                   mailboxView: "add",
+                  organizationId: teamId,
                   tab: "mailboxes",
                 }),
                 to: ".",
@@ -197,7 +205,9 @@ export const MailboxesListSettingsView = ({
         }
         title="Mailboxes"
       >
-        Connect personal mail and manage the mailboxes you can access.
+        {team
+          ? `Mailboxes in ${team.name}. Private mailboxes remain private to their owner.`
+          : "Choose a team to manage mailboxes."}
       </SettingsPageHeader>
 
       <SettingsSection title="Your mailboxes">

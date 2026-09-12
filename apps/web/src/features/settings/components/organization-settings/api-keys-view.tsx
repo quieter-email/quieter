@@ -57,7 +57,6 @@ import { toastError } from "#/lib/error-toast";
 import { rethrowClassified } from "#/lib/orpc-errors";
 
 import {
-  SettingsBackButton,
   SettingsLoadingState,
   SettingsRow,
   SettingsRows,
@@ -877,7 +876,6 @@ export const ApiKeysView = ({
   billingPending,
   canManageApiKeys,
   canUseOrganizationApiKeys,
-  onBack,
   organization,
 }: {
   billingAccessUnknown: boolean;
@@ -908,10 +906,6 @@ export const ApiKeysView = ({
 
   return (
     <div className="@container space-y-6">
-      <SettingsBackButton onClick={onBack}>
-        {organization.name}
-      </SettingsBackButton>
-
       <div className="flex flex-col gap-3 @md:flex-row @md:items-start @md:justify-between">
         <div>
           <h1 className="text-body-lg font-semibold text-fg">API keys</h1>

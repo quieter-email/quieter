@@ -43,7 +43,6 @@ import { toastError } from "#/lib/error-toast";
 import { orpc } from "#/lib/orpc";
 
 import {
-  SettingsBackButton,
   SettingsCard,
   SettingsInsetRows,
   SettingsLoadingState,
@@ -484,10 +483,10 @@ const DeleteDivisionDialog = ({
 };
 
 const DivisionDetailView = ({
+  onBack,
   canManageDivisions,
   division,
   members,
-  onBack,
   organization,
 }: {
   canManageDivisions: boolean;
@@ -512,8 +511,9 @@ const DivisionDetailView = ({
 
   return (
     <div className="space-y-6">
-      <SettingsBackButton onClick={onBack}>Divisions</SettingsBackButton>
-
+      <Button onClick={onBack} variant="ghost" size="sm">
+        ← Access groups
+      </Button>
       <div>
         <h1 className="text-body-lg font-semibold text-fg">{division.name}</h1>
         <p className="mt-1 text-body text-muted-fg">
@@ -655,7 +655,6 @@ const DivisionDetailView = ({
 export const DivisionsView = ({
   canManageDivisions,
   members,
-  onBack,
   organization,
 }: {
   canManageDivisions: boolean;
@@ -693,7 +692,7 @@ export const DivisionsView = ({
 
   let divisionsContent: ReactNode;
   if (isDivisionsPending) {
-    divisionsContent = <SettingsLoadingState label="Loading divisions" />;
+    divisionsContent = <SettingsLoadingState label="Loading access groups" />;
   } else if (isDivisionsError) {
     divisionsContent = (
       <p
@@ -729,20 +728,16 @@ export const DivisionsView = ({
           settingsSurfaceVariants({ variant: "padding" })
         )}
       >
-        No divisions yet.
+        No access groups yet.
       </p>
     );
   }
 
   return (
     <div className="@container space-y-6">
-      <SettingsBackButton onClick={onBack}>
-        {organization.name}
-      </SettingsBackButton>
-
       <div className="flex flex-col gap-3 @md:flex-row @md:items-start @md:justify-between">
         <div>
-          <h1 className="text-body-lg font-semibold text-fg">Divisions</h1>
+          <h1 className="text-body-lg font-semibold text-fg">Access groups</h1>
           <p className="mt-1 text-body text-muted-fg">
             {formatCount(divisions.length, "Division")}
           </p>

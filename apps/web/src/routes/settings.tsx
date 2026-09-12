@@ -65,6 +65,7 @@ export const Route = createFileRoute("/settings")({
         .pipe(z.enum(ORGANIZATION_SETTINGS_VIEWS))
         .catch("overview")
         .default("overview"),
+      section: z.string().trim().catch("").default(""),
       tab: z
         .string()
         .trim()
