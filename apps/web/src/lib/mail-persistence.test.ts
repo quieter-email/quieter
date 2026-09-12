@@ -11,6 +11,8 @@ import {
 
 import { mailCache } from "./mail-cache";
 import { pendingMailMutations } from "./mail-mutation-state";
+import { runMailMutation } from "./mail-mutations";
+import { persistQueryKeys } from "./mail/inbox-query/query-cache";
 import { queryPersister, setQueryPersistenceUser } from "./query-persister";
 
 describe("mail content persistence", () => {
@@ -21,6 +23,62 @@ describe("mail content persistence", () => {
     setQueryPersistenceUser(undefined);
     vi.unstubAllGlobals();
   });
+
+  test.each([false, true])(
+    "flushes retained list keys after the final mutation settles, failure: %s",
+    async (fails) => {
+      const client = new QueryClient();
+      setQueryPersistenceUser(crypto.randomUUID(), client);
+      const key = ["messages", "mailbox", "inbox", ""];
+      const before = {
+        pageParams: [null],
+        pages: [{ messages: [{ id: "message", isUnread: true }] }],
+      };
+      const after = {
+        pageParams: [null],
+        pages: [{ messages: [{ id: "message", isUnread: false }] }],
+      };
+      client.setQueryData(key, before);
+      await persistQueryKeys(client, [key]);
+      const first = runMailMutation(client, {
+        apply: () => {
+          client.setQueryData(key, after);
+        },
+        execute: async () =>
+          await Promise.resolve(() => {
+            client.setQueryData(key, after);
+          }),
+        mailboxId: "mailbox",
+        targets: ["first"],
+      });
+      const deferred = Promise.withResolvers<() => void>();
+      const last = runMailMutation(client, {
+        apply: () => {},
+        execute: async () => await deferred.promise,
+        mailboxId: "mailbox",
+        targets: ["last"],
+      });
+      const outcome = last.catch(() => {});
+      await first;
+      await persistQueryKeys(client, [key]);
+      const hash = JSON.stringify(key);
+      await expect(queryPersister.retrieveQuery(hash)).resolves.toStrictEqual(
+        before
+      );
+      if (fails) {
+        deferred.reject(new Error("rejected"));
+      } else {
+        deferred.resolve(() => {});
+      }
+      await outcome;
+      await vi.waitFor(async () => {
+        await expect(queryPersister.retrieveQuery(hash)).resolves.toStrictEqual(
+          after
+        );
+      });
+      client.clear();
+    }
+  );
 
   test("separates message bodies from thread metadata and falls back if a body was evicted", async () => {
     const client = new QueryClient();

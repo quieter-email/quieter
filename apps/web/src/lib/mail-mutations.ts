@@ -2,7 +2,11 @@ import { notifyManager } from "@tanstack/react-query";
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import { createStore } from "@tanstack/react-store";
 
-import { pendingMailMutations } from "./mail-mutation-state";
+import {
+  deferredMailPersistence,
+  pendingMailMutations,
+} from "./mail-mutation-state";
+import { flushMailPersistence } from "./query-persister";
 
 type Intent = {
   mailboxId: string;
@@ -140,6 +144,7 @@ const createCoordinator = (client: QueryClient) => {
           unsubscribe = undefined;
           base.clear();
         }
+        void flushMailPersistence(client, intent.mailboxId);
         if (failure === undefined) {
           intent.resolve();
         } else {
@@ -234,6 +239,7 @@ const createCoordinator = (client: QueryClient) => {
       state.setState(() => []);
       base.clear();
       pendingMailMutations.delete(client);
+      deferredMailPersistence.delete(client);
     },
     run,
     updateFromServer(update: () => void) {

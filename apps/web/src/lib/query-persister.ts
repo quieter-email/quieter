@@ -4,7 +4,10 @@ import type { QueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 
 import { mailCache, MAIL_CACHE_MAX_AGE } from "./mail-cache";
-import { pendingMailMutations } from "./mail-mutation-state";
+import {
+  deferredMailPersistence,
+  pendingMailMutations,
+} from "./mail-mutation-state";
 
 const isPersistedQuery = (value: unknown): value is PersistedQuery => {
   if (
@@ -202,6 +205,9 @@ export const setQueryPersistenceUser = (
     return;
   }
   persistenceInitialized = true;
+  if (persistenceClient) {
+    deferredMailPersistence.delete(persistenceClient);
+  }
   persistenceUser = userId ?? undefined;
   persistenceClient = client;
   persistenceEpoch += 1;
@@ -263,6 +269,12 @@ export const persistQueryByKey = async (
     typeof mailboxId === "string" &&
     pendingMailMutations.get(queryClient)?.has(mailboxId) === true
   ) {
+    let keys = deferredMailPersistence.get(queryClient);
+    if (!keys) {
+      keys = new Map();
+      deferredMailPersistence.set(queryClient, keys);
+    }
+    keys.set(JSON.stringify(queryKey), queryKey);
     return;
   }
   try {
@@ -270,4 +282,26 @@ export const persistQueryByKey = async (
   } catch {
     // Optional cache persistence must not change a server mutation outcome.
   }
+};
+
+export const flushMailPersistence = async (
+  client: QueryClient,
+  mailboxId: string
+) => {
+  const keys = deferredMailPersistence.get(client);
+  if (!keys || pendingMailMutations.get(client)?.has(mailboxId) === true) {
+    return;
+  }
+  const ready: (readonly unknown[])[] = [];
+  for (const [hash, key] of keys) {
+    if ((key[0] === "message-thread" ? key[2] : key[1]) === mailboxId) {
+      keys.delete(hash);
+      ready.push(key);
+    }
+  }
+  await Promise.all(
+    ready.map(async (key) => {
+      await persistQueryByKey(key, client);
+    })
+  );
 };
