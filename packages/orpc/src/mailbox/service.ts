@@ -775,7 +775,10 @@ export const assertAccessibleMailbox = async (input: {
     if (!(error instanceof ORPCError)) {
       throw error;
     }
-    throw new ORPCError("NOT_FOUND", { message: "Mailbox not found." });
+    throw new ORPCError("NOT_FOUND", {
+      data: { resource: "mailbox" },
+      message: "Mailbox not found.",
+    });
   }
 };
 
@@ -1353,7 +1356,10 @@ export const updateMailboxSignature = async (input: {
     .where(eq(mailbox.id, input.mailboxId))
     .limit(1);
   if (selectedMailbox === undefined) {
-    throw new ORPCError("NOT_FOUND", { message: "Mailbox not found." });
+    throw new ORPCError("NOT_FOUND", {
+      data: { resource: "mailbox" },
+      message: "Mailbox not found.",
+    });
   }
 
   if (selectedMailbox.provider === MAILBOX_PROVIDER_GMAIL) {
@@ -1383,7 +1389,10 @@ export const updateMailboxSignature = async (input: {
       signatureText: mailbox.signatureText,
     });
   if (updated === undefined) {
-    throw new ORPCError("NOT_FOUND", { message: "Mailbox not found." });
+    throw new ORPCError("NOT_FOUND", {
+      data: { resource: "mailbox" },
+      message: "Mailbox not found.",
+    });
   }
   return updated;
 };

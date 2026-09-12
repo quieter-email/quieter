@@ -2,6 +2,7 @@ import { createAppDatabase } from "./database";
 import { createGmailResources } from "./gmail";
 import { createMailResources, mailReceiptRuleSetName } from "./mail";
 import { createMailMaintenanceResources } from "./mail-maintenance";
+import { createMailUpdateResources } from "./mail-updates";
 import { createDeploymentContext } from "./runtime";
 import { requireSecretResource } from "./secrets";
 import type { SecretBindings, SecretResources } from "./types";
@@ -18,14 +19,25 @@ export const createInfrastructure = async (input: {
   const webSecretBindings = Object.values(secretBindings);
 
   const context = createDeploymentContext(secretResources);
-  createMailMaintenanceResources(context, secretBindings, appDatabase);
-  const gmail = createGmailResources(
-    context,
+  const updates = createMailUpdateResources(
     secretBindings,
     secretResources,
     appDatabase
   );
-  const mail = await createMailResources(context, secretResources);
+  createMailMaintenanceResources(
+    context,
+    secretBindings,
+    appDatabase,
+    updates.url
+  );
+  const gmail = createGmailResources(
+    context,
+    secretBindings,
+    secretResources,
+    appDatabase,
+    updates
+  );
+  const mail = await createMailResources(context, secretResources, updates.url);
   const web = createWeb(
     appDatabase,
     webSecretBindings,
@@ -35,6 +47,7 @@ export const createInfrastructure = async (input: {
       MAIL_RECEIPT_ROLE_ARN: mail.mailReceiptRole.arn,
       MAIL_RECEIPT_RULE_SET_NAME: mailReceiptRuleSetName,
       MAIL_RECEIPT_TOPIC_ARN: mail.mailReceiptTopic.arn,
+      MAIL_UPDATES_URL: updates.url,
       ...context.billingEnvironment,
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
       R2_ACCOUNT_ID: context.env.R2_ACCOUNT_ID ?? "",

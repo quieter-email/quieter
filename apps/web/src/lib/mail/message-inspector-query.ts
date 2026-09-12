@@ -7,8 +7,8 @@ import {
   isSandboxMailboxId,
 } from "#/lib/sandbox-mailbox";
 
+import { getDemoMessageInspector } from "../gmail/demo-mail";
 import { getManagedDemoMessageInspector } from "../managed-mail/demo-managed-mail";
-import { getDemoMessageInspector } from "./demo-mail";
 
 const MESSAGE_INSPECTOR_QUERY_VERSION = 2;
 

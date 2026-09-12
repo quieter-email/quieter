@@ -1,11 +1,26 @@
+import { serverEnv } from "@quieter/env/server";
+
 export const withSecurityHeaders = (response: Response) => {
   const headers = new Headers(response.headers);
+  const connections = ["'self'", "https:", "wss:"];
+  if (
+    serverEnv.QUIETER_DEPLOYMENT_ENV === "local" &&
+    serverEnv.MAIL_UPDATES_URL
+  ) {
+    const liveUrl = new URL(serverEnv.MAIL_UPDATES_URL);
+    if (
+      liveUrl.protocol === "ws:" &&
+      ["localhost", "127.0.0.1", "[::1]"].includes(liveUrl.hostname)
+    ) {
+      connections.push(liveUrl.origin);
+    }
+  }
   headers.set(
     "Content-Security-Policy",
     [
       "default-src 'self'",
       "base-uri 'self'",
-      "connect-src 'self' https: wss:",
+      `connect-src ${connections.join(" ")}`,
       "font-src 'self' data: https:",
       "form-action 'self'",
       "frame-ancestors 'none'",

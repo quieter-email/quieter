@@ -130,7 +130,6 @@ export default defineConfig({
       {
         files: [
           "apps/web/src/features/mailbox/components/mailbox-workspace/use-mailbox-messages.ts",
-          "apps/web/src/lib/gmail/use-gmail-live-sync.ts",
           "packages/env/src/local-doctor.ts",
         ],
         rules: {
@@ -177,9 +176,8 @@ export default defineConfig({
         files: [
           "apps/web/src/features/message-search/components/message-list-search/use-message-list-search-controller.ts",
           "apps/web/src/features/settings/components/settings-overview-panel.tsx",
-          "apps/web/src/lib/gmail/inbox-query/actions.ts",
-          "apps/web/src/lib/gmail/inbox-query/data.ts",
-          "apps/web/src/lib/gmail/use-gmail-live-sync.ts",
+          "apps/web/src/lib/mail/inbox-query/actions.ts",
+          "apps/web/src/lib/mail/inbox-query/data.ts",
           "apps/web/src/start.ts",
         ],
         rules: {
@@ -198,7 +196,6 @@ export default defineConfig({
           "apps/web/src/features/message-thread/components/message-body.tsx",
           "apps/web/src/features/message-thread/components/message-view.tsx",
           "apps/web/src/features/navigation/components/sidebar-label-nav.tsx",
-          "apps/web/src/lib/gmail/use-gmail-live-sync.ts",
         ],
         rules: {
           "typescript/consistent-return": "off",
@@ -326,8 +323,8 @@ export default defineConfig({
         // missing result or JSON-replacer omission.
         files: [
           "apps/web/src/lib/query-persister.ts",
-          "apps/web/src/lib/gmail/inbox-query/data.ts",
-          "apps/web/src/lib/gmail/inbox-query/query-cache.ts",
+          "apps/web/src/lib/mail/inbox-query/data.ts",
+          "apps/web/src/lib/mail/inbox-query/query-cache.ts",
         ],
         rules: {
           "unicorn/no-useless-undefined": "off",
@@ -336,7 +333,7 @@ export default defineConfig({
       {
         // TanStack's persister bridge still requires the deprecated direction
         // field in its query context type while page params are adapted.
-        files: ["apps/web/src/lib/gmail/inbox-query/sync.ts"],
+        files: ["apps/web/src/lib/mail/inbox-query/sync.ts"],
         rules: {
           "typescript/no-deprecated": "off",
         },

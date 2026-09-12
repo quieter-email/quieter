@@ -24,7 +24,7 @@ import {
 } from "#/features/message-labels/domain/message-label-updates";
 import { getUserLabels } from "#/features/message-search/state/message-list-search-state";
 import { toastError } from "#/lib/error-toast";
-import { labelsQueryOptions } from "#/lib/gmail/labels-query";
+import { labelsQueryOptions } from "#/lib/mail/labels-query";
 
 type MessageLabelsMenuItemsProps = {
   isPending: boolean;
@@ -35,7 +35,6 @@ type MessageLabelsMenuItemsProps = {
 };
 
 const MessageLabelsMenuItems = ({
-  isPending,
   mailboxId,
   onApply,
   open,
@@ -100,7 +99,6 @@ const MessageLabelsMenuItems = ({
         return (
           <DropdownMenuCheckboxItem
             checked={selection === "all"}
-            disabled={isPending}
             indeterminate={selection === "some"}
             key={label.id}
             onCheckedChange={(checked) => {

@@ -20,7 +20,7 @@ import type {
 } from "#/lib/mail";
 import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
 
-import { getMailboxThreadQueriesKey } from "./thread-query-keys";
+import { getMailboxThreadQueriesKey } from "../mail/thread-query-keys";
 
 export const DEMO_MAILBOX_ID = "demo:mailbox";
 export const LANDING_DEMO_MAILBOX_ID = "landing:mailbox";

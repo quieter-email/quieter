@@ -8,7 +8,7 @@ import type {
 } from "#/lib/mail";
 import { persistQueryByKey } from "#/lib/query-persister";
 
-import { getThreadLabelIds } from "../thread-list";
+import { getThreadLabelIds } from "../../gmail/thread-list";
 import { getThreadQueryKey } from "../thread-query";
 import {
   applyMessageMetadata,
@@ -289,7 +289,7 @@ export const removeMessagesFromCachedMailboxQueries = (
   return touchedQueryKeys;
 };
 
-export const applyResolvedThreadMetadataToCaches = async (
+export const applyResolvedThreadMetadataToCaches = (
   queryClient: QueryClient,
   mailboxId: string,
   updatedThread: ThreadMetadataMutationResult
@@ -341,5 +341,5 @@ export const applyResolvedThreadMetadataToCaches = async (
       )
   );
 
-  await persistQueryKeys(queryClient, [...touchedQueryKeys, threadQueryKey]);
+  return [...touchedQueryKeys, threadQueryKey];
 };

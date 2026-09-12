@@ -15,6 +15,9 @@ import { SiteFooter } from "#/components/site-footer";
 import { TelemetryProvider } from "#/components/telemetry-provider";
 import { KeyboardShortcutsProvider } from "#/features/hotkeys/components/keyboard-shortcuts-context";
 import { authClient } from "#/lib/auth";
+import { bindMailCache } from "#/lib/mail-cache-lifecycle";
+import { disposeMailMutations } from "#/lib/mail-mutations";
+import { useMailUpdates } from "#/lib/mail-updates";
 import { shouldRetryOrpcError } from "#/lib/orpc-errors";
 import { setQueryPersistenceUser } from "#/lib/query-persister";
 
@@ -37,9 +40,14 @@ const SessionQueryProvider = ({
       })
   );
 
+  useMailUpdates(queryClient, userId);
+
   useLayoutEffect(() => {
-    setQueryPersistenceUser(userId);
+    setQueryPersistenceUser(userId, queryClient);
+    const unbind = bindMailCache(queryClient);
     return () => {
+      unbind();
+      disposeMailMutations(queryClient);
       queryClient.clear();
     };
   }, [queryClient, userId]);

@@ -1,6 +1,7 @@
 import { COMPATIBILITY_DATE } from "@quieter/cloudflare/compatibility-date";
 
 import type { createAppDatabase } from "./database";
+import type { createMailUpdateResources } from "./mail-updates";
 import { cloudflareWorkerObservability } from "./runtime";
 import type { DeploymentContext } from "./runtime";
 import { requireSecretBinding, requireSecretResource } from "./secrets";
@@ -20,7 +21,8 @@ export const createGmailResources = (
   context: DeploymentContext,
   secretBindings: SecretBindings,
   secretResources: SecretResources,
-  appDatabase: ReturnType<typeof createAppDatabase>
+  appDatabase: ReturnType<typeof createAppDatabase>,
+  updates: ReturnType<typeof createMailUpdateResources>
 ) => {
   const gmailLiveSyncTokenSecret = requireSecretResource(
     secretResources,
@@ -48,6 +50,7 @@ export const createGmailResources = (
         className: "GmailLiveSyncMailboxV2",
       }
     );
+    const mailLiveUser = updates.user;
     const processingSecretBindings = processingSecretNames.map((name) =>
       requireSecretBinding(secretBindings, name)
     );
@@ -73,6 +76,8 @@ export const createGmailResources = (
         handler: "packages/cloudflare/src/worker.ts",
         link: [
           gmailLiveSyncMailbox,
+          mailLiveUser,
+          gmailPubSubQueue,
           gmailLiveSyncTokenSecret,
           appDatabase,
           sentryDsnBinding,
@@ -88,6 +93,15 @@ export const createGmailResources = (
         ],
         transform: {
           worker(args) {
+            args.bindings = $util
+              .all([args.bindings, updates.worker.nodes.worker.scriptName])
+              .apply(([bindings, scriptName]) =>
+                (bindings ?? []).map((binding) =>
+                  binding.name === "MailLiveUser"
+                    ? { ...binding, scriptName }
+                    : binding
+                )
+              );
             args.limits = { cpuMs: 300_000 };
             args.observability = cloudflareWorkerObservability;
           },
@@ -112,19 +126,28 @@ export const createGmailResources = (
         link: [
           appDatabase,
           gmailLiveSyncMailbox,
+          mailLiveUser,
           sentryDsnBinding,
           ...processingSecretBindings,
         ],
         transform: {
           worker(args) {
             args.bindings = $util
-              .all([args.bindings, gmailRealtimeWorker.nodes.worker.scriptName])
-              .apply(([bindings, scriptName]) =>
-                (bindings ?? []).map((binding) =>
-                  binding.name === "GmailLiveSyncMailboxV2"
-                    ? { ...binding, scriptName }
-                    : binding
-                )
+              .all([
+                args.bindings,
+                gmailRealtimeWorker.nodes.worker.scriptName,
+                updates.worker.nodes.worker.scriptName,
+              ])
+              .apply(([bindings, scriptName, updatesScriptName]) =>
+                (bindings ?? []).map((binding) => {
+                  if (binding.name === "MailLiveUser") {
+                    return { ...binding, scriptName: updatesScriptName };
+                  }
+                  if (binding.name === "GmailLiveSyncMailboxV2") {
+                    return { ...binding, scriptName };
+                  }
+                  return binding;
+                })
               );
             args.limits = { cpuMs: 300_000 };
             args.observability = cloudflareWorkerObservability;

@@ -9,8 +9,10 @@ import type {
 } from "#/lib/mail";
 import { rpc } from "#/lib/orpc";
 
+import { runMailMutation } from "../../mail-mutations";
 import { getGmailUnreadCountsQueryKey } from "../../mailboxes-query";
 import { getThreadQueryKey } from "../thread-query";
+import { getMailboxThreadQueriesKey } from "../thread-query-keys";
 import {
   applyMessageLabelChangesLocally,
   applyMessageMetadata,
@@ -50,68 +52,73 @@ type MessageActionArgs = {
   signal?: AbortSignal;
 };
 
-const mailboxMutationQueues = new Map<string, Promise<void>>();
-
-const enqueueMailboxMutation = async <T>(
-  mailboxId: string,
-  operation: () => Promise<T>
-) => {
-  const previous = mailboxMutationQueues.get(mailboxId) ?? Promise.resolve();
-  const current = (async () => {
-    try {
-      await previous;
-    } catch {
-      // Continue the mailbox queue after a failed mutation.
-    }
-    return await operation();
-  })();
-  const settled = (async () => {
-    try {
-      await current;
-    } catch {
-      // The operation's caller handles the failure.
-    }
-  })();
-  mailboxMutationQueues.set(mailboxId, settled);
-
-  try {
-    return await current;
-  } finally {
-    if (mailboxMutationQueues.get(mailboxId) === settled) {
-      mailboxMutationQueues.delete(mailboxId);
-    }
-  }
-};
-
 export const applyBulkChangesInMailbox = async (
   queryClient: QueryClient,
   mailboxId: string,
   targets: MailMutationTarget[],
   command: MailCommand
-) =>
-  await enqueueMailboxMutation(mailboxId, async () => {
-    const messageIds = new Set(targets.flatMap((target) => target.messageIds));
-    const updater = getMailCommandUpdater(command);
-    const rollback = await applyOptimisticMailboxUpdate(
-      queryClient,
-      mailboxId,
-      () => {
+) => {
+  let result: Awaited<ReturnType<typeof rpc.mail.applyChanges>> | undefined;
+  const messageIds = new Set(targets.flatMap((target) => target.messageIds));
+  const updater = getMailCommandUpdater(command);
+  await runMailMutation(queryClient, {
+    apply: () => {
+      updateMessagesInCachedMailboxQueries(
+        queryClient,
+        mailboxId,
+        (message) => messageIds.has(message.id),
+        updater
+      );
+      for (const target of targets) {
+        queryClient.setQueryData(
+          getThreadQueryKey(mailboxId, target.threadId),
+          (current: ThreadMessagesResult | undefined) =>
+            updateMessagesInThreadData(
+              current,
+              (message) => messageIds.has(message.id),
+              updater
+            )
+        );
+      }
+    },
+    execute: async () => {
+      result = await rpc.mail.applyChanges({ command, mailboxId, targets });
+      const applied = new Set(
+        result.targets
+          .filter((target) => target.status === "applied")
+          .map((target) => target.threadId)
+      );
+      return () => {
         updateMessagesInCachedMailboxQueries(
           queryClient,
           mailboxId,
-          (message) => messageIds.has(message.id),
+          (message) =>
+            applied.has(message.threadId) && messageIds.has(message.id),
           updater
         );
-      }
-    );
-
-    try {
-      return await rpc.mail.applyChanges({ command, mailboxId, targets });
-    } catch (error) {
-      await rollback();
-      throw error;
-    }
+        for (const target of targets.filter((item) =>
+          applied.has(item.threadId)
+        )) {
+          queryClient.setQueryData(
+            getThreadQueryKey(mailboxId, target.threadId),
+            (current: ThreadMessagesResult | undefined) =>
+              updateMessagesInThreadData(
+                current,
+                (message) => messageIds.has(message.id),
+                updater
+              )
+          );
+        }
+      };
+    },
+    mailboxId,
+    targets: targets.map((target) => target.threadId),
   });
+  if (!result) {
+    throw new Error("Mail update did not complete.");
+  }
+  return result;
+};
 
 const METADATA_LABEL_CHANGES = {
   archive: { removeLabelIds: [MAILBOX_LABELS.inbox] },
@@ -178,7 +185,13 @@ const findMessageForAction = (args: MessageActionArgs) => {
       args.queryClient,
       args.mailboxId,
       args.messageId
-    )
+    ) ??
+    args.queryClient
+      .getQueriesData<ThreadMessagesResult>({
+        queryKey: getMailboxThreadQueriesKey(args.mailboxId),
+      })
+      .flatMap(([, data]) => data?.messages ?? [])
+      .find((message) => message.id === args.messageId)
   );
 };
 
@@ -214,55 +227,50 @@ const applyMessageToCaches = (
 
 const runOptimisticMessageMetadataMutation = async (
   args: MessageActionArgs & {
+    coalesceKey?: string;
     mutation: (signal?: AbortSignal) => Promise<MessageMetadataMutationResult>;
     optimisticUpdater: (message: MessageListItem) => MessageListItem;
   }
 ) => {
-  const messageToUpdate = findMessageForAction(args);
-  if (!messageToUpdate) {
-    await args.mutation(args.signal);
-    return;
-  }
-
-  const threadQueryKey = messageToUpdate.threadId
-    ? getThreadQueryKey(args.mailboxId, messageToUpdate.threadId)
-    : undefined;
-  const optimisticMessage = args.optimisticUpdater(messageToUpdate);
-  const rollback = await applyOptimisticMailboxUpdate(
-    args.queryClient,
-    args.mailboxId,
-    () => {
-      applyMessageToCaches(
-        args.queryClient,
-        args.mailboxId,
-        threadQueryKey,
-        optimisticMessage
-      );
+  const original = findMessageForAction(args);
+  const threadId = original?.threadId ?? args.messageId;
+  const threadKey = getThreadQueryKey(args.mailboxId, threadId);
+  await runMailMutation(args.queryClient, {
+    apply: () => {
+      const current = findMessageForAction(args) ?? original;
+      if (current) {
+        applyMessageToCaches(
+          args.queryClient,
+          args.mailboxId,
+          threadKey,
+          args.optimisticUpdater(current)
+        );
+      }
     },
-    threadQueryKey
-  );
-
-  try {
-    const updatedMessage = await args.mutation(args.signal);
-    const resolvedMessage = applyMessageMetadata(optimisticMessage, {
-      isUnread: updatedMessage.isUnread,
-      labelIds: updatedMessage.labelIds,
-    });
-
-    await persistQueryKeys(
-      args.queryClient,
-      applyMessageToCaches(
-        args.queryClient,
-        args.mailboxId,
-        threadQueryKey,
-        resolvedMessage
-      )
-    );
-    await invalidateMailboxCounts(args.queryClient);
-  } catch (error) {
-    await rollback();
-    throw error;
-  }
+    coalesceKey: args.coalesceKey,
+    execute: async () => {
+      args.signal?.throwIfAborted();
+      // Once dispatched, a write finishes even if a newer intent arrives.
+      const updated = await args.mutation();
+      return () => {
+        const current = findMessageForAction(args) ?? original;
+        if (current) {
+          applyMessageToCaches(
+            args.queryClient,
+            args.mailboxId,
+            threadKey,
+            applyMessageMetadata(current, updated)
+          );
+        }
+      };
+    },
+    mailboxId: args.mailboxId,
+    targets: [threadId],
+  });
+  await persistQueryKeys(args.queryClient, [
+    threadKey,
+    getMessagesQueryKey(args.mailboxId, args.mailbox, args.searchQuery),
+  ]);
 };
 
 const runOptimisticThreadMetadataMutation = async (args: {
@@ -270,14 +278,14 @@ const runOptimisticThreadMetadataMutation = async (args: {
   mailboxId: string;
   threadId: string;
   signal?: AbortSignal;
+  coalesceKey?: string;
   mutation: (signal?: AbortSignal) => Promise<ThreadMetadataMutationResult>;
   optimisticUpdater: (message: MessageListItem) => MessageListItem;
 }) => {
   const threadQueryKey = getThreadQueryKey(args.mailboxId, args.threadId);
-  const rollback = await applyOptimisticMailboxUpdate(
-    args.queryClient,
-    args.mailboxId,
-    () => {
+  let touchedQueryKeys: (readonly unknown[])[] = [threadQueryKey];
+  await runMailMutation(args.queryClient, {
+    apply: () => {
       for (const message of findMessagesInCachedMailboxQueries(
         args.queryClient,
         args.mailboxId,
@@ -291,29 +299,30 @@ const runOptimisticThreadMetadataMutation = async (args: {
       }
       args.queryClient.setQueryData(
         threadQueryKey,
-        (currentData: ThreadMessagesResult | undefined) =>
+        (current: ThreadMessagesResult | undefined) =>
           updateMessagesInThreadData(
-            currentData,
+            current,
             () => true,
             args.optimisticUpdater
           )
       );
     },
-    threadQueryKey
-  );
-
-  try {
-    const updatedThread = await args.mutation(args.signal);
-    await applyResolvedThreadMetadataToCaches(
-      args.queryClient,
-      args.mailboxId,
-      updatedThread
-    );
-    await invalidateMailboxCounts(args.queryClient);
-  } catch (error) {
-    await rollback();
-    throw error;
-  }
+    coalesceKey: args.coalesceKey,
+    execute: async () => {
+      args.signal?.throwIfAborted();
+      const result = await args.mutation();
+      return () => {
+        touchedQueryKeys = applyResolvedThreadMetadataToCaches(
+          args.queryClient,
+          args.mailboxId,
+          result
+        );
+      };
+    },
+    mailboxId: args.mailboxId,
+    targets: [args.threadId],
+  });
+  await persistQueryKeys(args.queryClient, touchedQueryKeys);
 };
 
 const runOptimisticMessageRemoval = async (
@@ -377,6 +386,14 @@ export const updateMessageInMailbox = async (
       : rpc.mail.updateMessageLabels;
   await runOptimisticMessageMetadataMutation({
     ...args,
+    coalesceKey: JSON.stringify([
+      "message",
+      args.messageId,
+      [
+        ...(changes.addLabelIds ?? []),
+        ...(changes.removeLabelIds ?? []),
+      ].toSorted(),
+    ]),
     mutation: async (signal) =>
       await mutation(
         {
@@ -422,6 +439,14 @@ export const updateThreadInMailbox = async (
       : rpc.mail.updateThreadLabels;
   await runOptimisticThreadMetadataMutation({
     ...args,
+    coalesceKey: JSON.stringify([
+      "thread",
+      args.threadId,
+      [
+        ...(changes.addLabelIds ?? []),
+        ...(changes.removeLabelIds ?? []),
+      ].toSorted(),
+    ]),
     mutation: async (signal) =>
       await mutation(
         {

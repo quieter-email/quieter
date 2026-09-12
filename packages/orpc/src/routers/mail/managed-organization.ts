@@ -1,6 +1,7 @@
 import { managedMailboxRuleDefinitionSchema } from "@quieter/mail/mailbox-organization";
 import { z } from "zod";
 
+import { withMailUpdate } from "../../mail-updates";
 import {
   listManagedLabelCounts,
   reorderManagedLabels,
@@ -94,8 +95,11 @@ export const managedOrganizationMailRouter = {
       })
     )
     .handler(
-      async ({ context, input }) =>
-        await reorderManagedLabels({ ...input, userId: context.userId })
+      withMailUpdate(
+        async ({ context, input }) =>
+          await reorderManagedLabels({ ...input, userId: context.userId }),
+        "labels.changed"
+      )
     ),
   reorderManagedRules: protectedProcedure
     .input(
