@@ -1,12 +1,7 @@
 "use client";
 
-import {
-  AnimatePresence,
-  domMax,
-  LazyMotion,
-  m,
-  useReducedMotion,
-} from "motion/react";
+import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
+import { domMax, LazyMotion } from "motion/react";
 import { useEffect, useEffectEvent } from "react";
 import type { ReactNode } from "react";
 
@@ -23,7 +18,6 @@ export const WorkspaceSidebar = ({
   onMobileOpenChange,
   label,
 }: WorkspaceSidebarProps) => {
-  const reducedMotion = useReducedMotion();
   const closeMobileSidebar = useEffectEvent(() => {
     onMobileOpenChange(false);
   });
@@ -31,16 +25,16 @@ export const WorkspaceSidebar = ({
     if (!isMobileOpen) {
       return undefined;
     }
-
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+    const desktop = window.matchMedia("(min-width: 64rem)");
+    const closeOnDesktop = () => {
+      if (desktop.matches) {
         closeMobileSidebar();
       }
     };
-
-    document.addEventListener("keydown", closeOnEscape);
+    closeOnDesktop();
+    desktop.addEventListener("change", closeOnDesktop);
     return () => {
-      document.removeEventListener("keydown", closeOnEscape);
+      desktop.removeEventListener("change", closeOnDesktop);
     };
   }, [isMobileOpen]);
 
@@ -52,47 +46,25 @@ export const WorkspaceSidebar = ({
       >
         {children()}
       </aside>
-      <AnimatePresence initial={false}>
-        {isMobileOpen && (
-          <>
-            <m.button
-              aria-label="Close sidebar"
-              className="fixed inset-0 z-40 bg-bg/50 backdrop-blur-[2px] lg:hidden"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => {
-                onMobileOpenChange(false);
-              }}
-              type="button"
-            />
-            <m.aside
-              aria-label={label}
-              className="fixed inset-y-0 left-0 isolate z-50 flex w-[min(20rem,calc(100vw-2.5rem))] flex-col overflow-hidden bg-bg pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-fg shadow-2xl lg:hidden"
-              initial={
-                reducedMotion === true
-                  ? { opacity: 0, transform: "translate3d(0, 0, 0)" }
-                  : { opacity: 1, transform: "translate3d(-100%, 0, 0)" }
-              }
-              animate={{ opacity: 1, transform: "translate3d(0, 0, 0)" }}
-              exit={
-                reducedMotion === true
-                  ? { opacity: 0, transform: "translate3d(0, 0, 0)" }
-                  : { opacity: 1, transform: "translate3d(-100%, 0, 0)" }
-              }
-              transition={
-                reducedMotion === true
-                  ? { duration: 0.1 }
-                  : { bounce: 0, duration: 0.24, type: "spring" }
-              }
-            >
-              {children(() => {
-                onMobileOpenChange(false);
-              })}
-            </m.aside>
-          </>
-        )}
-      </AnimatePresence>
+      <DialogPrimitive.Root
+        modal
+        open={isMobileOpen}
+        onOpenChange={onMobileOpenChange}
+      >
+        <DialogPrimitive.Portal>
+          <DialogPrimitive.Backdrop className="fixed inset-0 z-40 bg-bg/50 backdrop-blur-[2px] transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:transition-none" />
+          <DialogPrimitive.Popup
+            aria-label={label}
+            initialFocus
+            finalFocus
+            className="fixed inset-y-0 left-0 isolate z-50 flex w-[min(20rem,calc(100vw-2.5rem))] flex-col overflow-hidden bg-bg pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-fg shadow-2xl transition-transform duration-200 ease-out outline-none data-ending-style:-translate-x-full data-starting-style:-translate-x-full motion-reduce:transition-none"
+          >
+            {children(() => {
+              onMobileOpenChange(false);
+            })}
+          </DialogPrimitive.Popup>
+        </DialogPrimitive.Portal>
+      </DialogPrimitive.Root>
     </LazyMotion>
   );
 };

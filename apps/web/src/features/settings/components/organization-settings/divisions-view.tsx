@@ -104,7 +104,7 @@ const CreateDivisionDialog = ({
         onCreated(result.divisionId);
       } catch (error) {
         setSubmitError(
-          getMutationErrorMessage(error, "Could not create division.")
+          getMutationErrorMessage(error, "Could not create access group.")
         );
       }
     },
@@ -141,7 +141,7 @@ const CreateDivisionDialog = ({
       >
         <DialogContent className="w-[min(92vw,28rem)]">
           <DialogHeader>
-            <DialogTitle>Add division</DialogTitle>
+            <DialogTitle>Add access group</DialogTitle>
             <DialogDescription>
               Group members who should share the same mailbox access.
             </DialogDescription>
@@ -158,7 +158,7 @@ const CreateDivisionDialog = ({
                   <TextField>
                     <TextFieldInput
                       aria-invalid={field.state.meta.errors.length > 0}
-                      aria-label="Division name"
+                      aria-label="Access group name"
                       name={field.name}
                       onBlur={() => {
                         field.handleBlur();
@@ -186,7 +186,7 @@ const CreateDivisionDialog = ({
                 {(field) => (
                   <TextField>
                     <TextFieldInput
-                      aria-label="Division description"
+                      aria-label="Access group description"
                       name={field.name}
                       onBlur={() => {
                         field.handleBlur();
@@ -275,7 +275,7 @@ const EditDivisionFieldDialog = ({
         setOpen(false);
       } catch (error) {
         setSubmitError(
-          getMutationErrorMessage(error, "Could not update division.")
+          getMutationErrorMessage(error, "Could not update access group.")
         );
       }
     },
@@ -408,7 +408,7 @@ const DeleteDivisionDialog = ({
     onError: (error) => {
       toastError(error, {
         boundary: "organization-divisions",
-        fallback: "Could not delete division.",
+        fallback: "Could not delete access group.",
       });
     },
     onSuccess: async () => {
@@ -416,7 +416,7 @@ const DeleteDivisionDialog = ({
       await queryClient.invalidateQueries({
         queryKey: getOrganizationDivisionsQueryKey(organizationId),
       });
-      toast.success("Division removed.");
+      toast.success("Access group removed.");
       onDeleted();
     },
   });
@@ -436,10 +436,10 @@ const DeleteDivisionDialog = ({
 
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete division</AlertDialogTitle>
+          <AlertDialogTitle>Delete access group</AlertDialogTitle>
           <AlertDialogDescription>
             Removes {division.name} and its member assignments. Mailbox access
-            granted through this division will no longer apply.
+            granted through this access group will no longer apply.
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -558,7 +558,7 @@ const DivisionDetailView = ({
       </SettingsSection>
 
       <SettingsSection
-        description="Members inherit mailbox roles granted to this division."
+        description="Members inherit mailbox roles granted to this access group."
         title="Members"
       >
         <SettingsCard>
@@ -642,7 +642,7 @@ const DivisionDetailView = ({
                   organizationId={organization.id}
                 />
               }
-              label="Delete division"
+              label="Delete access group"
               value="Permanent"
             />
           </SettingsCard>
@@ -701,7 +701,7 @@ export const DivisionsView = ({
           settingsSurfaceVariants({ variant: "padding" })
         )}
       >
-        {divisionsError?.message ?? "Could not load divisions."}
+        {divisionsError?.message ?? "Could not load access groups."}
       </p>
     );
   } else if (divisions.length > 0) {
@@ -739,7 +739,7 @@ export const DivisionsView = ({
         <div>
           <h1 className="text-body-lg font-semibold text-fg">Access groups</h1>
           <p className="mt-1 text-body text-muted-fg">
-            {formatCount(divisions.length, "Division")}
+            {formatCount(divisions.length, "Access group")}
           </p>
         </div>
 
