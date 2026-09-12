@@ -5,6 +5,10 @@ import type {
   maintainGmailPubSubMailbox,
   processGmailPubSubNotification,
 } from "@quieter/orpc/gmail-pubsub";
+import {
+  findGmailUpdateMailboxIds,
+  listMailUpdateRecipients,
+} from "@quieter/orpc/mail-updates";
 import { evictDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
@@ -19,13 +23,18 @@ import {
 } from "vite-plus/test";
 
 import { enqueueGmailMaintenanceJobs } from "../src/gmail-maintenance-worker";
+import { broadcastMailUpdate } from "../src/mail-updates";
 import { processGmailQueueMessage } from "../src/queue-worker";
 import worker, { signaturesMatch } from "../src/worker";
 import { handlePubSub, requestErrorResponse } from "../src/worker-utils";
 
 vi.mock(import("@quieter/orpc/mail-updates"), () => ({
-  findGmailUpdateMailboxIds: async () => await Promise.resolve([]),
-  listMailUpdateRecipients: async () => await Promise.resolve([]),
+  findGmailUpdateMailboxIds: vi.fn<typeof findGmailUpdateMailboxIds>(
+    async () => await Promise.resolve([])
+  ),
+  listMailUpdateRecipients: vi.fn<typeof listMailUpdateRecipients>(
+    async () => await Promise.resolve([])
+  ),
 }));
 
 vi.mock(import("@quieter/database/client"), async (importOriginal) => {
@@ -38,6 +47,27 @@ vi.mock(import("@quieter/database/client"), async (importOriginal) => {
 });
 
 const serviceAccount = "gmail-push@example.invalid";
+
+describe("mail update fan-out", () => {
+  test("continues to later recipient batches after a delivery failure", async () => {
+    vi.mocked(listMailUpdateRecipients).mockResolvedValueOnce(
+      Array.from({ length: 12 }, () => crypto.randomUUID())
+    );
+    const get = vi.spyOn(env.MailLiveUser, "get");
+    get.mockImplementationOnce(() => {
+      throw new Error("unavailable");
+    });
+    await expect(
+      broadcastMailUpdate(env, {
+        eventId: crypto.randomUUID(),
+        mailboxId: "mailbox",
+        type: "mailbox.changed",
+      })
+    ).rejects.toThrow("Mail broadcast failed.");
+    expect(get).toHaveBeenCalledTimes(12);
+    get.mockRestore();
+  });
+});
 const subscription = "projects/example/subscriptions/gmail";
 const mailboxId = "mailbox-1";
 const emailAddress = "mailbox@example.com";
@@ -390,6 +420,9 @@ describe("Cloudflare worker runtime", () => {
     };
 
     test("processes notifications and broadcasts completed details", async () => {
+      vi.mocked(findGmailUpdateMailboxIds).mockRejectedValueOnce(
+        new Error("lookup unavailable")
+      );
       const processNotification = vi.fn<typeof processGmailPubSubNotification>(
         async (_message, options) => {
           await options?.onProcessed?.({ mailboxId });

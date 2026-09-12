@@ -12,15 +12,16 @@ import {
 import { z } from "zod";
 
 import { readBoundedJson } from "./bounded-json";
-import { readLinkedSecret } from "./worker-runtime";
+import { readLinkedSecret, reportWorkerError } from "./worker-runtime";
 
 export const broadcastMailUpdate = async (env: Env, event: MailUpdate) => {
   const recipients = await withRequestDatabaseClient(
     async () => await listMailUpdateRecipients(event.mailboxId)
   );
   // Bounded fan-out also limits pressure from large shared mailboxes.
+  const failures: unknown[] = [];
   for (let offset = 0; offset < recipients.length; offset += 10) {
-    await Promise.all(
+    const results = await Promise.allSettled(
       recipients.slice(offset, offset + 10).map(async (userId) => {
         const stub = env.MailLiveUser.get(env.MailLiveUser.idFromName(userId));
         const response = await stub.fetch("https://internal/mail/events", {
@@ -32,6 +33,14 @@ export const broadcastMailUpdate = async (env: Env, event: MailUpdate) => {
         }
       })
     );
+    for (const result of results) {
+      if (result.status === "rejected") {
+        failures.push(result.reason);
+      }
+    }
+  }
+  if (failures.length > 0) {
+    throw new AggregateError(failures, "Mail broadcast failed.");
   }
 };
 
@@ -39,6 +48,12 @@ export const handleMailUpdates = async (request: Request, env: Env) => {
   const url = new URL(request.url);
   const secret = readLinkedSecret(env.SST_RESOURCE_GmailLiveSyncTokenSecret);
   if (url.pathname === "/mail/live") {
+    if (
+      request.method !== "GET" ||
+      request.headers.get("upgrade")?.toLowerCase() !== "websocket"
+    ) {
+      return new Response(null, { status: 426 });
+    }
     const ticket = url.searchParams.get("ticket") ?? "";
     if (
       !(await verifyMailPayload(
@@ -94,14 +109,21 @@ export const broadcastGmailUpdate = async (
   emailAddress: string,
   type: MailUpdate["type"]
 ) => {
-  const mailboxes = await withRequestDatabaseClient(
-    async () => await findGmailUpdateMailboxIds(emailAddress)
-  );
-  for (const box of mailboxes) {
-    await broadcastMailUpdate(env, {
-      eventId: crypto.randomUUID(),
-      mailboxId: box.id,
-      type,
+  try {
+    const mailboxes = await withRequestDatabaseClient(
+      async () => await findGmailUpdateMailboxIds(emailAddress)
+    );
+    for (const box of mailboxes) {
+      await broadcastMailUpdate(env, {
+        eventId: crypto.randomUUID(),
+        mailboxId: box.id,
+        type,
+      });
+    }
+  } catch (error) {
+    reportWorkerError(error, {
+      category: "mail_broadcast_error",
+      route: "mail-updates",
     });
   }
 };

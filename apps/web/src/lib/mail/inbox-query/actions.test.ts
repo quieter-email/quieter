@@ -4,6 +4,7 @@ import { afterEach, describe, expect, test, vi } from "vite-plus/test";
 import type { MessageListItem, ThreadMessagesResult } from "#/lib/mail";
 import {
   disposeMailMutations,
+  runMailMutation,
   updateMailQueryFromServer,
 } from "#/lib/mail-mutations";
 import { rpc } from "#/lib/orpc";
@@ -67,6 +68,23 @@ const setup = () => {
 describe("mail metadata cache updates", () => {
   afterEach(() => {
     vi.resetAllMocks();
+  });
+
+  test("removes optimistic data when the original query had no data", async () => {
+    const client = new QueryClient();
+    const key = getMessagesQueryKey("mailbox", "inbox");
+    client.getQueryCache().build(client, { queryKey: key });
+    const result = runMailMutation(client, {
+      apply: () => {
+        client.setQueryData(key, "optimistic");
+      },
+      execute: async () => await Promise.reject(new Error("failed")),
+      mailboxId: "mailbox",
+      targets: ["thread"],
+    });
+    await expect(result).rejects.toThrow("failed");
+    expect(client.getQueryData(key)).toBeUndefined();
+    client.clear();
   });
 
   test("reading one message updates unread views, retains loaded bodies and leaves its sibling and other mailbox alone", async () => {

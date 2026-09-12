@@ -4,6 +4,17 @@ import { describe, expect, test, vi } from "vite-plus/test";
 import { createMailCache, MAIL_CACHE_MAX_AGE } from "./mail-cache";
 
 describe("bounded mail cache", () => {
+  test("enumerates query metadata without loading bodies", async () => {
+    const cache = createMailCache({ name: crypto.randomUUID() });
+    cache.setUser("one");
+    await cache.setItem("quieter-cache-query", "metadata");
+    await cache.setItem("body-message", "body");
+    await expect(cache.entries()).resolves.toStrictEqual([
+      ["quieter-cache-query", "metadata"],
+    ]);
+    await expect(cache.getItem("body-message")).resolves.toBe("body");
+  });
+
   test("evicts the least recently opened entry and admits new mail", async () => {
     let time = 1;
     const cache = createMailCache({

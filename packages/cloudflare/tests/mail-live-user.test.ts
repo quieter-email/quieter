@@ -10,6 +10,27 @@ import { describe, expect, test } from "vite-plus/test";
 import { handleMailUpdates } from "../src/mail-updates";
 
 describe("per-user mail connections", () => {
+  test("rejects event injection through a valid connection ticket", async () => {
+    const ticket = JSON.stringify({
+      expiresAt: Date.now() + 60_000,
+      purpose: "mail-connection",
+      userId: crypto.randomUUID(),
+    });
+    const url = new URL("https://example.invalid/mail/live");
+    url.searchParams.set("ticket", ticket);
+    url.searchParams.set(
+      "signature",
+      await signMailPayload(ticket, "live-sync-secret")
+    );
+    for (const method of ["GET", "POST"]) {
+      const response = await handleMailUpdates(
+        new Request(url, { method }),
+        env
+      );
+      expect(response.status).toBe(426);
+    }
+  });
+
   test("keeps multiple tabs connected through hibernation", async () => {
     const userId = crypto.randomUUID();
     const ticket = JSON.stringify({
@@ -170,10 +191,16 @@ describe("per-user mail connections", () => {
       "signature",
       await signMailPayload(ticket, "live-sync-secret")
     );
-    const response = await handleMailUpdates(new Request(url), env);
+    const response = await handleMailUpdates(
+      new Request(url, { headers: { upgrade: "websocket" } }),
+      env
+    );
     expect(response.status).toBe(401);
     url.searchParams.set("signature", "invalid");
-    const invalid = await handleMailUpdates(new Request(url), env);
+    const invalid = await handleMailUpdates(
+      new Request(url, { headers: { upgrade: "websocket" } }),
+      env
+    );
     expect(invalid.status).toBe(401);
   });
 });

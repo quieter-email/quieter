@@ -47,7 +47,7 @@ class Socket extends EventTarget {
 describe("mail connection lifecycle", () => {
   let dispose: (() => void) | undefined;
   const page = Object.assign(new EventTarget(), {
-    hasFocus: () => true,
+    hasFocus: (): boolean => true,
     visibilityState: "visible",
   });
   const windowEvents = new EventTarget();
@@ -97,6 +97,17 @@ describe("mail connection lifecycle", () => {
     await vi.advanceTimersByTimeAsync(150);
     expect(Socket.instances).toHaveLength(2);
     expect(refresh).toHaveBeenCalledOnce();
+  });
+
+  test("keeps a visible window connected after focus moves elsewhere", async () => {
+    vi.spyOn(page, "hasFocus").mockReturnValue(false);
+    dispose = connectMailUpdates(new QueryClient());
+    await vi.advanceTimersByTimeAsync(0);
+    const [socket] = Socket.instances;
+    socket.open();
+    windowEvents.dispatchEvent(new Event("blur"));
+    await vi.advanceTimersByTimeAsync(31_000);
+    expect(socket.close).not.toHaveBeenCalled();
   });
 
   test("coalesces duplicate events and cancels a handshake when the session ends", async () => {

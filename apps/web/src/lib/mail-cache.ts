@@ -74,10 +74,12 @@ export const createMailCache = (
         const db = await open();
         const entries = await db.getAllFromIndex("entries", "userId", owner);
         const values = await Promise.all(
-          entries.map(async (entry): Promise<[string, string]> => [
-            entry.key.slice(owner.length + 1),
-            (await db.get("values", entry.key)) ?? "",
-          ])
+          entries
+            .filter((entry) => entry.key.startsWith(`${owner}:quieter-cache-`))
+            .map(async (entry): Promise<[string, string]> => [
+              entry.key.slice(owner.length + 1),
+              (await db.get("values", entry.key)) ?? "",
+            ])
         );
         return owner === userId ? values : [];
       } catch {

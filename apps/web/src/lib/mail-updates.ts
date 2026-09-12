@@ -207,8 +207,7 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
     }
   };
   const activityChanged = () => {
-    const active =
-      document.visibilityState === "visible" && document.hasFocus();
+    const active = document.visibilityState === "visible";
     if (active && navigator.onLine) {
       clearTimeout(backgroundTimer);
       backgroundTimer = undefined;
@@ -234,11 +233,7 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
   document.addEventListener("visibilitychange", activityChanged);
   activityChanged();
   const recoveryTimer = setInterval(() => {
-    if (
-      document.visibilityState === "visible" &&
-      document.hasFocus() &&
-      navigator.onLine
-    ) {
+    if (document.visibilityState === "visible" && navigator.onLine) {
       requestRefresh();
     }
   }, 60_000);

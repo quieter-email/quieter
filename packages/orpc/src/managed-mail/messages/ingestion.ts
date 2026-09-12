@@ -71,19 +71,19 @@ const runPostIngestionOrganization = async (input: {
   providerMessageId: string;
   threadId: string;
 }) => {
-  await inheritManagedThreadLabels({
-    mailboxId: input.mailboxId,
-    messageId: input.messageId,
-    threadId: input.threadId,
-  });
-  const rules = await applyManagedRulesToMessage({
-    mailboxId: input.mailboxId,
-    messageId: input.messageId,
-  });
-  if (rules.error !== null) {
-    throw new Error(rules.error);
-  }
   try {
+    await inheritManagedThreadLabels({
+      mailboxId: input.mailboxId,
+      messageId: input.messageId,
+      threadId: input.threadId,
+    });
+    const rules = await applyManagedRulesToMessage({
+      mailboxId: input.mailboxId,
+      messageId: input.messageId,
+    });
+    if (rules.error !== null) {
+      throw new Error(rules.error);
+    }
     await processManagedMailAutomation({
       mailboxId: input.mailboxId,
       messageId: input.messageId,

@@ -283,6 +283,7 @@ const runOptimisticThreadMetadataMutation = async (args: {
   optimisticUpdater: (message: MessageListItem) => MessageListItem;
 }) => {
   const threadQueryKey = getThreadQueryKey(args.mailboxId, args.threadId);
+  let touchedQueryKeys: (readonly unknown[])[] = [threadQueryKey];
   await runMailMutation(args.queryClient, {
     apply: () => {
       for (const message of findMessagesInCachedMailboxQueries(
@@ -311,7 +312,7 @@ const runOptimisticThreadMetadataMutation = async (args: {
       args.signal?.throwIfAborted();
       const result = await args.mutation();
       return () => {
-        applyResolvedThreadMetadataToCaches(
+        touchedQueryKeys = applyResolvedThreadMetadataToCaches(
           args.queryClient,
           args.mailboxId,
           result
@@ -321,7 +322,7 @@ const runOptimisticThreadMetadataMutation = async (args: {
     mailboxId: args.mailboxId,
     targets: [args.threadId],
   });
-  await persistQueryKeys(args.queryClient, [threadQueryKey]);
+  await persistQueryKeys(args.queryClient, touchedQueryKeys);
 };
 
 const runOptimisticMessageRemoval = async (

@@ -68,6 +68,9 @@ export const bindMailCache = (client: QueryClient) => {
     if (
       event.type === "updated" &&
       event.action.type === "error" &&
+      (key[0] === "message-thread" ||
+        key[0] === "messages" ||
+        key[0] === "gmail-labels") &&
       typeof mailboxId === "string"
     ) {
       const error: unknown = event.action.error;
@@ -75,9 +78,29 @@ export const bindMailCache = (client: QueryClient) => {
         typeof error === "object" &&
         error !== null &&
         "status" in error &&
-        [401, 403, 404].includes(Number(error.status))
+        ([401, 403].includes(Number(error.status)) ||
+          ("data" in error &&
+            z.object({ resource: z.literal("mailbox") }).safeParse(error.data)
+              .success))
       ) {
         void mailCache.removeMailbox(mailboxId);
+      } else if (
+        typeof error === "object" &&
+        error !== null &&
+        "status" in error &&
+        Number(error.status) === 404
+      ) {
+        void mailCache.removeItem(`quieter-cache-${event.query.queryHash}`);
+        if (key[0] === "message-thread") {
+          const thread = threadSchema.safeParse(event.query.state.data);
+          if (thread.success) {
+            for (const message of thread.data.messages) {
+              void mailCache.removeItem(
+                `body-${JSON.stringify([mailboxId, message.id])}`
+              );
+            }
+          }
+        }
       }
     }
     if (key[0] === "message-thread") {

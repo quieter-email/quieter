@@ -56,6 +56,10 @@ const createCoordinator = (client: QueryClient) => {
     try {
       notifyManager.batch(() => {
         for (const snapshot of base.values()) {
+          if (snapshot.data === undefined) {
+            client.removeQueries({ exact: true, queryKey: snapshot.key });
+            continue;
+          }
           client.setQueryData(snapshot.key, snapshot.data, {
             updatedAt: snapshot.updatedAt,
           });

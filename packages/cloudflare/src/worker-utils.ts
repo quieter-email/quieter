@@ -6,7 +6,7 @@ import { readBoundedJson } from "./bounded-json";
 import { timingSafeEqual } from "./crypto-utils";
 import { broadcastGmailUpdate } from "./mail-updates";
 import { RequestError } from "./request-error";
-import { readLinkedSecret } from "./worker-runtime";
+import { readLinkedSecret, reportWorkerError } from "./worker-runtime";
 
 const GOOGLE_JWKS = createRemoteJWKSet(
   new URL("https://www.googleapis.com/oauth2/v3/certs")
@@ -229,10 +229,18 @@ export const handlePubSub = async (
     type: "notification" as const,
   };
   await processNotification(processorMessage, env);
-  await Promise.all([
+  const broadcasts = await Promise.allSettled([
     broadcastMailboxEvent(env, emailAddress, "mailbox-dirty"),
     broadcastGmailUpdate(env, emailAddress, "mailbox.changed"),
   ]);
+  for (const result of broadcasts) {
+    if (result.status === "rejected") {
+      reportWorkerError(result.reason, {
+        category: "mail_broadcast_error",
+        route: "pubsub",
+      });
+    }
+  }
   return new Response(null, { status: 204 });
 };
 
