@@ -14,6 +14,8 @@ Gmail ingress acknowledges only after Queue acceptance. It emits a dirty hint be
 
 The two-second goal applies to delivering an observed change to a connected browser. External-provider delivery delays, dropped notifications, and outages can exceed it. Production latency and cost still need measurement after deployment.
 
+The transport uses the SST-managed custom hostname `updates.quieter.email` in production and `<stage>-updates.quieter.email` for deployed development stages. The configured URL is known before the Worker exists, so the prepared web build sees the same bindings during preview and deployment. Local development continues to use the loopback Worker URL. Do not derive build configuration from the new Worker's generated URL or bypass prepared-build verification to bootstrap it.
+
 ## Optimistic mutations
 
 Reversible actions update visible query data immediately. A per-QueryClient coordinator serializes operations that affect the same mailbox/thread while allowing unrelated threads to proceed. It combines unsent operations with the same label-change scope. Confirmed data and pending intent are kept separately, including when mailbox deltas arrive during a write. An older response or failed write therefore cannot roll back the latest pending intent or discard newly arrived mail.

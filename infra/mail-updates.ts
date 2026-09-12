@@ -3,6 +3,7 @@ import { COMPATIBILITY_DATE } from "@quieter/cloudflare/compatibility-date";
 import type { createAppDatabase } from "./database";
 import { cloudflareWorkerObservability } from "./runtime";
 import { requireSecretBinding, requireSecretResource } from "./secrets";
+import { production, stage } from "./stage";
 import type { SecretBindings, SecretResources } from "./types";
 
 export const createMailUpdateResources = (
@@ -10,11 +11,15 @@ export const createMailUpdateResources = (
   secretResources: SecretResources,
   appDatabase: ReturnType<typeof createAppDatabase>
 ) => {
+  const domain = production
+    ? "updates.quieter.email"
+    : `${stage}-updates.quieter.email`;
   const user = new sst.cloudflare.DurableObject("MailLiveUser", {
     className: "MailLiveUser",
   });
   const worker = new sst.cloudflare.Worker("MailUpdatesWorker", {
     compatibility: { date: COMPATIBILITY_DATE, flags: ["nodejs_compat"] },
+    domain,
     handler: "packages/cloudflare/src/mail-update-worker.ts",
     link: [
       user,
@@ -37,16 +42,7 @@ export const createMailUpdateResources = (
     url: true,
   });
   return {
-    url: worker.url.apply((url) => {
-      if (!url) {
-        // Refresh observes existing resources; a new Worker has no URL yet.
-        if ($cli.command === "refresh") {
-          return "";
-        }
-        throw new Error("Mail updates URL is missing.");
-      }
-      return `${url.replace(/^http/u, "ws")}/mail/live`;
-    }),
+    url: `wss://${domain}/mail/live`,
     user,
     worker,
   };
