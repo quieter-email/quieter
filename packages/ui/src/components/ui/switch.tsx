@@ -11,7 +11,7 @@ import type { ComponentPropsWithoutRef } from "react";
 import { cn } from "../../lib/cn";
 
 const switchVariants = cva(
-  "squircle inline-flex shrink-0 items-center overflow-hidden rounded-full border border-border-strong bg-control-active transition-colors duration-150 ease-out focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none data-checked:border-primary data-checked:bg-primary data-disabled:cursor-not-allowed data-disabled:opacity-50",
+  "squircle inline-flex shrink-0 items-center overflow-hidden rounded-full border border-border bg-switch-track transition-colors duration-150 ease-out focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none data-checked:border-primary data-checked:bg-primary data-disabled:cursor-not-allowed data-disabled:opacity-50",
   {
     defaultVariants: { size: "default" },
     variants: {
@@ -22,7 +22,7 @@ const switchVariants = cva(
 );
 
 const switchThumbVariants = cva(
-  "squircle block shrink-0 rounded-full bg-fg shadow-sm transition-transform duration-150 ease-out data-checked:bg-primary-fg",
+  "squircle block shrink-0 rounded-full bg-switch-thumb shadow-sm transition-transform duration-150 ease-out data-checked:bg-primary-fg",
   {
     defaultVariants: { size: "default" },
     variants: {
