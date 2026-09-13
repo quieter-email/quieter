@@ -17,10 +17,10 @@ describe("Sentry Worker lifetime", () => {
         dsn: "https://public@example.ingest.sentry.io/1",
         tracesSampleRate: 0,
         transport: () => ({
-          flush: async () => Promise.resolve(true),
+          flush: async () => await Promise.resolve(true),
           send: async (envelope) => {
             envelopes.push(envelope);
-            return Promise.resolve({ statusCode: 200 });
+            return await Promise.resolve({ statusCode: 200 });
           },
         }),
       }),
