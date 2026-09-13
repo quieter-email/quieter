@@ -15,6 +15,32 @@ vi.mock(import("@quieter/env/server"), async (original) => {
 });
 
 describe("Worker database scope", () => {
+  test("keeps the request client inside deferred stream callbacks", async () => {
+    const { promise, resolve } = Promise.withResolvers<null>();
+    const response = await withRequestDatabaseClient(async (client) => {
+      await Promise.resolve();
+      const stream = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          await promise;
+          controller.enqueue(new TextEncoder().encode("response"));
+          controller.close();
+        },
+      }).pipeThrough(
+        new TransformStream<Uint8Array, Uint8Array>({
+          async transform(chunk, controller) {
+            await Promise.resolve();
+            expect(db.$client).toBe(client.$client);
+            controller.enqueue(chunk);
+          },
+        })
+      );
+      return new Response(stream);
+    });
+    expect(() => db.$client).toThrow("requires withRequestDatabaseClient");
+    resolve(null);
+    await expect(response.text()).resolves.toBe("response");
+  });
+
   test("rejects unscoped access in the native Worker runtime", () => {
     expect(() => db.$client).toThrow("requires withRequestDatabaseClient");
   });

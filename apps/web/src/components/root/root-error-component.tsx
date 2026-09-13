@@ -1,7 +1,7 @@
 "use client";
 
 import { Button, LinkButton } from "@quieter/ui/button";
-import * as Sentry from "@sentry/tanstackstart-react";
+import * as Sentry from "@sentry/react";
 import { useEffect } from "react";
 
 import { StatusScreen } from "#/components/root/status-screen";

@@ -1391,7 +1391,12 @@ export const createAiChatResponse = async (input: {
       if (error instanceof Error && error.name === "AbortError") {
         return;
       }
-      reportError(error, { operation: "chat:generation" });
+      reportError(error, {
+        model: validated.model,
+        operation: "chat:generation",
+        phase: validated.kind,
+        provider: "openrouter",
+      });
     },
     providerOptions: {
       openrouter: {
@@ -1509,7 +1514,12 @@ export const createAiChatResponse = async (input: {
         !(error instanceof Error && error.name === "AbortError") &&
         !generationFailed
       ) {
-        reportError(error, { operation: "chat:stream" });
+        reportError(error, {
+          model: validated.model,
+          operation: "chat:stream",
+          phase: validated.kind,
+          provider: "openrouter",
+        });
       }
       return resolveChatStreamErrorMessage(error);
     },
