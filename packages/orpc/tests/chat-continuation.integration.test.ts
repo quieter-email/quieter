@@ -141,7 +141,7 @@ describe.skipIf(state.databaseUrl === undefined)(
       assistantId = crypto.randomUUID();
       foreground = {
         capabilities: ["modify_mail"],
-        exchangeId: crypto.randomUUID(),
+        exchangeId: assistantId,
         expiresAt: Date.now() + 60_000,
         generation: 1,
         policy: "ask",
