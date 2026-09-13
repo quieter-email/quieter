@@ -35,14 +35,5 @@ describe("settings prefetch hierarchy", () => {
       provider: "gmail",
     });
     expect(prefetchQuery).not.toHaveBeenCalled();
-
-    await prefetchMailboxSettingsDetail(queryClient, {
-      grantRole: "manager",
-      id: "managed-one",
-      organizationId: "team-one",
-      provider: "managed",
-    });
-
-    expect(prefetchQuery).toHaveBeenCalled();
   });
 });

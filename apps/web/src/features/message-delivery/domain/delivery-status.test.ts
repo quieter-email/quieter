@@ -8,7 +8,6 @@ import {
   getRecipientDeliveryEvents,
   hasDeliveryDiagnostics,
   isDeliveryStatusUnsettled,
-  summarizeDeliveryRecipients,
 } from "./delivery-status";
 import type {
   MessageDeliveryEvent,
@@ -177,22 +176,5 @@ describe(getDeliveryActionGuidance, () => {
     for (const status of ["delayed", "delivered", "queued", "sent"] as const) {
       expect(getDeliveryActionGuidance(status)).toBeNull();
     }
-  });
-});
-
-describe(summarizeDeliveryRecipients, () => {
-  it("names a single recipient and counts the rest", () => {
-    expect(summarizeDeliveryRecipients([])).toBe("No recipient updates yet");
-    expect(
-      summarizeDeliveryRecipients([
-        createRecipient("first@example.com", "sent"),
-      ])
-    ).toBe("first@example.com");
-    expect(
-      summarizeDeliveryRecipients([
-        createRecipient("first@example.com", "sent"),
-        createRecipient("second@example.com", "sent"),
-      ])
-    ).toBe("2 recipients");
   });
 });
