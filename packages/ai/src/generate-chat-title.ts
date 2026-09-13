@@ -1,8 +1,6 @@
-import { CHAT_TITLE_MODEL } from "./chat-models";
 import type { AiUsageReport } from "./chat-usage";
 import { runTextGeneration } from "./generation";
-
-export { CHAT_TITLE_MODEL } from "./chat-models";
+import { resolveBackgroundModel } from "./model-config";
 
 const MAX_CHAT_TITLE_LENGTH = 80;
 const NON_LATIN_LETTER = /\p{Letter}/u;
@@ -67,7 +65,7 @@ export const generateChatTitle = async ({
 }) => {
   const title = await runTextGeneration({
     maxOutputTokens: 128,
-    model: CHAT_TITLE_MODEL,
+    model: resolveBackgroundModel(),
     // Reasoning tokens are billed against this budget too. A tight cap truncates the
     // title mid-word, which is how titles end up as broken fragments.
     reasoningEffort: "minimal",

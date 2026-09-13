@@ -1,10 +1,8 @@
 import { z } from "zod";
 
-import { AI_MEMORY_MODEL } from "./chat-models";
 import type { AiUsageReport } from "./chat-usage";
 import { runStructuredGeneration } from "./generation";
-
-export { AI_MEMORY_MODEL } from "./chat-models";
+import { resolveBackgroundModel } from "./model-config";
 
 export const AI_MEMORY_CONTENT_MAX_LENGTH = 2000;
 export const AI_MEMORY_REQUEST_MAX_LENGTH = 2000;
@@ -256,7 +254,7 @@ export const planAiMemoryUpdate = async ({
     const result = await runStructuredGeneration({
       abortSignal: abortController.signal,
       maxOutputTokens: 2500,
-      model: AI_MEMORY_MODEL,
+      model: resolveBackgroundModel(),
       ...(onUsage === undefined ? {} : { onUsage }),
       prompt: JSON.stringify(
         buildAiMemoryEditorInput({

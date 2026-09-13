@@ -4,7 +4,7 @@ import { wrapLanguageModel } from "ai";
 import { z } from "zod";
 
 import type { ChatModel } from "./chat-models";
-import { chatModelSchema } from "./chat-models";
+import { chatModelSchema, resolveModelFallbacks } from "./chat-models";
 import { openRouterStreamMiddleware } from "./openrouter-stream";
 
 let cachedProvider: ReturnType<typeof createOpenRouter> | null = null;
@@ -42,7 +42,9 @@ export const readChatUsageCostUsd = (
 
 /**
  * Creates the language model for a chat model id with zero-data-retention
- * routing and OpenRouter usage accounting (token costs) always enabled.
+ * routing, big-provider failover, and OpenRouter usage accounting (token
+ * costs) always enabled. Failover stays inside the provider constraints, so
+ * every fallback serves under the same ZDR routing as the primary.
  */
 export const createChatModel = (
   model: ChatModel,
@@ -53,6 +55,7 @@ export const createChatModel = (
     middleware: openRouterStreamMiddleware,
     model: getOpenRouterProvider().chat(parsedModel, {
       extraBody: {
+        models: resolveModelFallbacks(parsedModel),
         provider: {
           ...(options?.prioritizeLatency === true ? { sort: "latency" } : {}),
           zdr: true,

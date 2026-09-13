@@ -84,7 +84,6 @@ export const BILLING_PRODUCTS = {
       "Everything in Managed",
       "Up to 100 Gmail accounts per team, with live updates",
       "AI features",
-      "AI usage at model cost plus 15%",
     ],
     highlight: true,
     monthlyPriceCents: 2500,

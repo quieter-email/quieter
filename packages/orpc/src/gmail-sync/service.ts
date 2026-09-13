@@ -713,7 +713,7 @@ const processMailboxHistory = async ({
           null;
         const getMailAutomationContext = async () => {
           mailAutomationContextPromise ??= Promise.all([
-            loadAiConfiguration({ userId }),
+            Promise.resolve(loadAiConfiguration()),
             loadAiAgentMemoryCandidates({
               includeUserScope: false,
               mailboxId,

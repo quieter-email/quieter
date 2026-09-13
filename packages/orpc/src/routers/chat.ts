@@ -1,4 +1,5 @@
 import { ORPCError } from "@orpc/server";
+import { resolveBackgroundModel } from "@quieter/ai/model-config";
 import {
   OPENROUTER_TRANSCRIPTION_MODEL,
   openRouterAudioFormatSchema,
@@ -353,7 +354,7 @@ export const chatRouter = {
       const responseText =
         input.mode === "email"
           ? await (async () => {
-              const { formatTranscribedEmail, TRANSCRIBED_EMAIL_FORMAT_MODEL } =
+              const { formatTranscribedEmail } =
                 await import("@quieter/ai/format-transcribed-email");
               const memoryContext = await loadAiAgentContext({
                 agent: "compose",
@@ -371,7 +372,7 @@ export const chatRouter = {
                       costUsd: usage.costUsd,
                       externalId: `chat-transcription-format:${crypto.randomUUID()}`,
                       mailboxId: input.mailboxId,
-                      model: TRANSCRIBED_EMAIL_FORMAT_MODEL,
+                      model: resolveBackgroundModel(),
                       promptTokens: usage.promptTokens,
                       promptTokensDetails: {
                         cacheWriteTokens: usage.cacheWriteTokens,

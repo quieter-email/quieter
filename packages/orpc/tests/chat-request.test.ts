@@ -3,7 +3,11 @@ import { describe, expect, test } from "vite-plus/test";
 import { z } from "zod";
 
 import { hasLinearConnectorMention } from "../src/chat/linear-tools";
-import { createChatTitle, validateChatRequest } from "../src/chat/service";
+import {
+  createChatTitle,
+  resolveChatValidationErrorMessage,
+  validateChatRequest,
+} from "../src/chat/service";
 
 const validBody = (): Record<string, unknown> => ({
   category: "inbox",
@@ -50,7 +54,7 @@ describe("chat request validation", () => {
       foreground: body.foreground,
       kind: "message",
       mailboxId: body.mailboxId,
-      model: body.model,
+      model: "google/gemini-3.7-flash",
       threadId: body.threadId,
       trigger: "submit-message",
       userMessage: {
@@ -87,6 +91,26 @@ describe("chat request validation", () => {
     body.threadId = "not-a-client-uuid";
 
     expect(() => validateChatRequest(body)).toThrow(/invalid UUID/iu);
+  });
+
+  test("defaults an omitted model to the configured chat model", () => {
+    const body = validBody();
+    body.model = undefined;
+
+    expect(validateChatRequest(body)).toStrictEqual({
+      category: body.category,
+      context: body.context,
+      foreground: body.foreground,
+      kind: "message",
+      mailboxId: body.mailboxId,
+      model: "google/gemini-3.7-flash",
+      threadId: body.threadId,
+      trigger: "submit-message",
+      userMessage: {
+        id: "message-1",
+        text: "Summarize this thread",
+      },
+    });
   });
 
   test("rejects expired, overlong, and regenerate foreground requests", () => {
@@ -261,6 +285,60 @@ describe("chat request validation", () => {
     };
 
     expect(() => validateChatRequest(body)).toThrow(/no client resolutions/iu);
+  });
+});
+
+const validationMessage = (body: Record<string, unknown>): string => {
+  try {
+    validateChatRequest(body);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return resolveChatValidationErrorMessage(error);
+    }
+    throw error;
+  }
+  throw new Error("Expected chat validation to fail.");
+};
+
+describe("chat validation error messages", () => {
+  test("surfaces expired exchanges with actionable text", () => {
+    const body = validBody();
+    body.foreground = {
+      ...z.record(z.string(), z.unknown()).parse(body.foreground),
+      expiresAt: Date.now() - 1,
+    };
+
+    expect(validationMessage(body)).toBe(
+      "The foreground exchange has expired."
+    );
+  });
+
+  test("surfaces stale workspace results with actionable text", () => {
+    const body = validBody();
+    body.message = {
+      id: "assistant-1",
+      parts: [
+        {
+          input: {},
+          output: { generation: 2, mailboxId: "mailbox-1" },
+          state: "output-available",
+          toolCallId: "tool-1",
+          type: "tool-get_workspace",
+        },
+      ],
+      role: "assistant",
+    };
+
+    expect(validationMessage(body)).toBe(
+      "The client result belongs to an older workspace state."
+    );
+  });
+
+  test("keeps raw schema violations generic", () => {
+    const body = validBody();
+    body.threadId = "not-a-client-uuid";
+
+    expect(validationMessage(body)).toBe("Invalid chat request.");
   });
 });
 

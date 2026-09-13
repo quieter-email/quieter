@@ -11,7 +11,7 @@ import type {
   AiMemoryToolsContext,
   GmailToolsContext,
 } from "@quieter/ai/chat-agent";
-import { CHAT_TITLE_MODEL, chatModelSchema } from "@quieter/ai/chat-models";
+import { chatModelSchema } from "@quieter/ai/chat-models";
 import {
   createForegroundClientTools,
   createForegroundServerTools,
@@ -30,6 +30,10 @@ import { toCanonicalTranscript } from "@quieter/ai/chat-transcript";
 import { summarizeAiUsage } from "@quieter/ai/chat-usage";
 import { isTransientAiProviderError } from "@quieter/ai/errors";
 import { generateChatTitle } from "@quieter/ai/generate-chat-title";
+import {
+  resolveBackgroundModel,
+  resolveChatModel,
+} from "@quieter/ai/model-config";
 import { createChatModel } from "@quieter/ai/openrouter";
 import { reportAiUsage } from "@quieter/billing";
 import { db } from "@quieter/database/client";
@@ -112,6 +116,16 @@ export const resolveChatStreamErrorMessage = (error: unknown): string => {
     : "The answer could not be completed.";
 };
 
+/**
+ * Maps request validation failures onto the user-facing response text.
+ * Curated custom issues carry actionable wording (expired exchanges, stale
+ * workspace results); raw schema violations stay generic so Sentry issues
+ * and user reports remain attributable without leaking shapes.
+ */
+export const resolveChatValidationErrorMessage = (error: z.ZodError): string =>
+  error.issues.find(({ code }) => code === "custom")?.message ??
+  "Invalid chat request.";
+
 // ---------------------------------------------------------------------------
 // Request validation
 // ---------------------------------------------------------------------------
@@ -188,7 +202,7 @@ const chatRequestBodySchema = z
     foreground: foregroundSnapshotSchema,
     mailboxId: identifierSchema,
     message: z.unknown(),
-    model: chatModelSchema,
+    model: chatModelSchema.optional(),
     threadId: z.uuid(),
     trigger: z.literal("submit-message"),
   })
@@ -234,7 +248,7 @@ export const validateChatRequest = (body: unknown): ValidatedChatRequest => {
       foreground: parsedBody.foreground,
       kind: "message",
       mailboxId: parsedBody.mailboxId,
-      model: parsedBody.model,
+      model: resolveChatModel(),
       threadId,
       trigger: parsedBody.trigger,
       userMessage: {
@@ -312,7 +326,7 @@ export const validateChatRequest = (body: unknown): ValidatedChatRequest => {
     foreground: parsedBody.foreground,
     kind: "continue",
     mailboxId: parsedBody.mailboxId,
-    model: parsedBody.model,
+    model: resolveChatModel(),
     threadId,
     toolDecisions,
     toolOutputs,
@@ -832,6 +846,7 @@ const generateChatTitleInRequest = async (input: {
   userId: string;
 }) => {
   try {
+    const titleModel = resolveBackgroundModel();
     const title = await generateChatTitle({
       onUsage: (usage) => {
         void reportAiUsage({
@@ -840,7 +855,7 @@ const generateChatTitleInRequest = async (input: {
           costUsd: usage.costUsd,
           externalId: `chat-title:${input.chatId}`,
           mailboxId: input.mailboxId,
-          model: CHAT_TITLE_MODEL,
+          model: titleModel,
           promptTokens: usage.promptTokens,
           promptTokensDetails: {
             cacheWriteTokens: usage.cacheWriteTokens,
@@ -903,9 +918,13 @@ export const createAiChatResponse = async (input: {
     validated = validateChatRequest(input.body);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      throw new ChatRequestError(400, "Invalid chat request.", {
-        cause: error,
-      });
+      throw new ChatRequestError(
+        400,
+        resolveChatValidationErrorMessage(error),
+        {
+          cause: error,
+        }
+      );
     }
     throw error;
   }
@@ -979,10 +998,35 @@ export const createAiChatResponse = async (input: {
       { text: validated.userMessage.text, type: "text" },
       { foreground: validated.foreground, type: "data-foreground" },
     ];
+    // Only marker-stamped reservations are ever dropped, so an explicit
+    // retry reuses the stored user message without ever deleting an active
+    // reservation (including a concurrent attempt's newer one).
+    const staleReservation = rows.at(-1);
     if (
-      lastRow?.role === "user" &&
-      lastRow.id === validated.userMessage.id &&
-      getStoredMessageText(lastRow.parts) === validated.userMessage.text
+      staleReservation?.role === "assistant" &&
+      staleReservation.parts.length === 1 &&
+      staleReservation.parts[0]?.type === "data-foreground-failed"
+    ) {
+      const [deleted] = await db
+        .delete(chatMessage)
+        .where(
+          and(
+            eq(chatMessage.id, staleReservation.id),
+            eq(chatMessage.chatId, threadId),
+            eq(chatMessage.userId, input.userId),
+            eq(chatMessage.parts, staleReservation.parts)
+          )
+        )
+        .returning({ id: chatMessage.id });
+      if (deleted !== undefined) {
+        rows.pop();
+      }
+    }
+    const previousRow = rows.at(-1);
+    if (
+      previousRow?.role === "user" &&
+      previousRow.id === validated.userMessage.id &&
+      getStoredMessageText(previousRow.parts) === validated.userMessage.text
     ) {
       // The previous attempt was aborted before its answer was persisted;
       // reuse the stored user message instead of duplicating it.
@@ -994,7 +1038,7 @@ export const createAiChatResponse = async (input: {
           createdAt: new Date(),
           id: assistantMessageId,
           parts: reservationParts,
-          position: lastRow.position + 1,
+          position: previousRow.position + 1,
           role: "assistant",
           userId: input.userId,
         })
@@ -1007,7 +1051,7 @@ export const createAiChatResponse = async (input: {
         );
       }
     } else {
-      if (lastRow?.role === "user") {
+      if (previousRow?.role === "user") {
         throw new ChatRequestError(
           409,
           "The previous chat turn is incomplete. Retry it before sending another message."
@@ -1386,7 +1430,7 @@ export const createAiChatResponse = async (input: {
         reportError(error, { operation: "chat:report-ai-usage" });
       }
     },
-    onError: ({ error }) => {
+    onError: async ({ error }) => {
       generationFailed = true;
       if (error instanceof Error && error.name === "AbortError") {
         return;
@@ -1397,6 +1441,24 @@ export const createAiChatResponse = async (input: {
         phase: validated.kind,
         provider: "openrouter",
       });
+      if (assistantReservationParts === null) {
+        return;
+      }
+      // Stamp this attempt's reservation as terminally failed so an explicit
+      // retry can reclaim it. The conditional update only stamps the row this
+      // request reserved; anything else, including a concurrent attempt's
+      // newer reservation, is left untouched.
+      try {
+        await replaceChatParts({
+          chatId: threadId,
+          expectedParts: assistantReservationParts,
+          messageId: assistantMessageId,
+          parts: [{ type: "data-foreground-failed" }],
+          userId: input.userId,
+        });
+      } catch (markError: unknown) {
+        reportError(markError, { operation: "chat:mark-failed-exchange" });
+      }
     },
     providerOptions: {
       openrouter: {

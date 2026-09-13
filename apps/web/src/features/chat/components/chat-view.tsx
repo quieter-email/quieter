@@ -17,7 +17,6 @@ import { useSelector } from "@tanstack/react-store";
 import { DefaultChatTransport, isToolUIPart } from "ai";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { useDefaultChatModel } from "#/features/ai/domain/default-chat-model-setting";
 import {
   hasOrganizationAiAccess,
   USER_BILLING_QUERY_KEY,
@@ -64,13 +63,12 @@ const ChatSession = ({
   const [tabId] = useState(() => crypto.randomUUID());
   const threadId = props.chatId ?? props.draftChatKey;
   const [busy, setBusy] = useState(false);
-  const model = useDefaultChatModel();
   const foregroundRef = useRef<ForegroundSnapshot | null>(null);
   const mountedRef = useRef(true);
   const appliedReceipts = useRef(new Set<string>());
-  const latestRef = useRef({ model, props });
+  const latestRef = useRef({ props });
   useLayoutEffect(() => {
-    latestRef.current = { model, props };
+    latestRef.current = { props };
   });
   const synchronizeHistory = async () => {
     try {
@@ -115,7 +113,6 @@ const ChatSession = ({
               foreground,
               mailboxId: workspace.mailboxId,
               message: messages.at(-1),
-              model: latestRef.current.model,
               threadId,
               trigger,
             },
@@ -128,9 +125,8 @@ const ChatSession = ({
     messages: cancelForegroundMessages(
       toCanonicalTranscript(chatData?.messages ?? [])
     ),
-    onError: (error) => {
+    onError: () => {
       workspace.control.finish();
-      toastError(error, { boundary: "foreground-assistant" });
     },
     onFinish: ({ messages, isAbort, isError }) => {
       for (const message of messages) {
@@ -367,8 +363,36 @@ const ChatSession = ({
       ];
     })
   );
-  const submit = async () => {
-    const text = input.trim();
+  const errorMessage = streaming ? "" : (chat.error?.message ?? "");
+  const lastUserIndex = chat.messages.findLastIndex(
+    (message) => message.role === "user"
+  );
+  const lastUserMessage =
+    lastUserIndex === -1 ? undefined : chat.messages[lastUserIndex];
+  const lastUserText =
+    lastUserMessage?.parts
+      .flatMap((part) =>
+        part.type === "text" && typeof part.text === "string" ? [part.text] : []
+      )
+      .join(" ") ?? "";
+  const retriedTurnOpen =
+    lastUserMessage !== undefined &&
+    !chat.messages
+      .slice(lastUserIndex + 1)
+      .some(
+        (message) =>
+          message.role === "assistant" &&
+          message.parts.some((part) => part.type !== "step-start")
+      );
+  const canRetry =
+    errorMessage !== "" &&
+    lastUserText.trim() !== "" &&
+    retriedTurnOpen &&
+    !streaming &&
+    approvals.length === 0 &&
+    canUseAiChat;
+  const submit = async (resubmit?: { messageId: string; text: string }) => {
+    const text = (resubmit?.text ?? input).trim();
     if (!text || streaming || busy || approvals.length > 0 || !canUseAiChat) {
       return;
     }
@@ -404,11 +428,19 @@ const ChatSession = ({
             }
           : {}),
       });
-      setInput("");
+      if (resubmit === undefined) {
+        setInput("");
+      }
       chat.clearError();
-      await chat.sendMessage({ text });
+      await chat.sendMessage(
+        resubmit === undefined
+          ? { text }
+          : { messageId: resubmit.messageId, text }
+      );
     } catch (error) {
-      setInput(text);
+      if (resubmit === undefined) {
+        setInput(text);
+      }
       workspace.control.finish();
       toastError(error, { boundary: "assistant-submit" });
     } finally {
@@ -427,12 +459,22 @@ const ChatSession = ({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {chat.messages.length > 0 ? (
+      {chat.messages.length > 0 || errorMessage !== "" ? (
         <ChatTranscript
           messages={chat.messages}
           isStreaming={streaming}
           approvals={approvals}
-          errorMessage={chat.error?.message}
+          errorMessage={errorMessage}
+          onRetry={
+            canRetry && lastUserMessage !== undefined
+              ? () => {
+                  void submit({
+                    messageId: lastUserMessage.id,
+                    text: lastUserText,
+                  });
+                }
+              : undefined
+          }
         />
       ) : null}
       {canUseAiChat ? null : (

@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 
 import { ORPCError } from "@orpc/server";
 import {
-  AI_MEMORY_MODEL,
   AI_MEMORY_REQUEST_MAX_LENGTH,
   planAiMemoryUpdate,
 } from "@quieter/ai/ai-memory";
@@ -10,12 +9,8 @@ import type {
   AiMemoryEditorMemory,
   AiMemoryUpdatePlan,
 } from "@quieter/ai/ai-memory";
-import {
-  chatModelSchema,
-  defaultAutoLabelModel,
-  defaultUsefulDetailModel,
-} from "@quieter/ai/chat-models";
 import type { AiUsageReport } from "@quieter/ai/chat-usage";
+import { resolveBackgroundModel } from "@quieter/ai/model-config";
 import { reportAiUsage } from "@quieter/billing";
 import { getBillingCreditUsage } from "@quieter/billing/credits";
 import { hasUserBillingFeature } from "@quieter/billing/entitlements";
@@ -28,7 +23,6 @@ import {
   mailAutomationMemoryProfile,
   mailAutoLabelFeedback,
   mailbox,
-  userAiContext,
   userAiContextEvent,
 } from "@quieter/database/schema";
 import type {
@@ -490,27 +484,12 @@ const formatMemoryContext = (
   return selected;
 };
 
-export const loadAiConfiguration = async ({ userId }: { userId: string }) => {
-  const [record] = await db
-    .select({
-      autoLabelModel: userAiContext.autoLabelModel,
-      usefulDetailModel: userAiContext.usefulDetailModel,
-    })
-    .from(userAiContext)
-    .where(eq(userAiContext.userId, userId))
-    .limit(1);
-  const autoLabelModel = chatModelSchema.safeParse(record?.autoLabelModel);
-  const usefulDetailModel = chatModelSchema.safeParse(
-    record?.usefulDetailModel
-  );
+export const loadAiConfiguration = () => {
+  const backgroundModel = resolveBackgroundModel();
 
   return {
-    autoLabelModel: autoLabelModel.success
-      ? autoLabelModel.data
-      : defaultAutoLabelModel,
-    usefulDetailModel: usefulDetailModel.success
-      ? usefulDetailModel.data
-      : defaultUsefulDetailModel,
+    autoLabelModel: backgroundModel,
+    usefulDetailModel: backgroundModel,
   };
 };
 
@@ -802,7 +781,7 @@ const reportMemoryUsage = async ({
       costUsd: usage.costUsd,
       externalId,
       ...(mailboxId ? { mailboxId } : {}),
-      model: AI_MEMORY_MODEL,
+      model: resolveBackgroundModel(),
       promptTokens: usage.promptTokens,
       promptTokensDetails: {
         cacheWriteTokens: usage.cacheWriteTokens,

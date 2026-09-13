@@ -1,13 +1,5 @@
 "use client";
 
-import { InformationCircleIcon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  defaultAutoLabelModel,
-  defaultSearchFilterModel,
-  defaultUsefulDetailModel,
-} from "@quieter/ai/chat-models";
-import type { ChatModel } from "@quieter/ai/chat-models";
 import type { RouterOutputs } from "@quieter/orpc";
 import {
   AlertDialog,
@@ -22,15 +14,9 @@ import {
 import { Button } from "@quieter/ui/button";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { toast } from "@quieter/ui/toast";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@quieter/ui/tooltip";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { AiModelSelect } from "#/features/ai/components/ai-model-select";
-import {
-  setDefaultChatModel,
-  useDefaultChatModel,
-} from "#/features/ai/domain/default-chat-model-setting";
 import { toastError } from "#/lib/error-toast";
 import { orpc } from "#/lib/orpc";
 import { persistQueryByKey } from "#/lib/query-persister";
@@ -38,27 +24,7 @@ import { persistQueryByKey } from "#/lib/query-persister";
 import { SettingsRow, SettingsRows, SettingsSection } from "./settings-layout";
 
 type AiSettings = RouterOutputs["ai"]["settings"];
-type CloudModelSettings = AiSettings["models"];
 type UpdateSettings = (updater: (current: AiSettings) => AiSettings) => void;
-
-const ModelCostInfo = () => (
-  <Tooltip>
-    <TooltipTrigger
-      closeOnClick={false}
-      render={<Button size="sm" type="button" variant="ghost" />}
-    >
-      <HugeiconsIcon aria-hidden icon={InformationCircleIcon} />
-      Model costs
-    </TooltipTrigger>
-    <TooltipContent className="max-w-sm p-3" side="bottom">
-      <p className="font-medium text-fg">Actual generation cost</p>
-      <p className="mt-1 text-muted-fg">
-        Team credits cover the actual generation cost, including any available
-        savings, plus a 15% processing and service fee.
-      </p>
-    </TooltipContent>
-  </Tooltip>
-);
 
 const useAiSettingsData = () => {
   const queryClient = useQueryClient();
@@ -72,140 +38,6 @@ const useAiSettingsData = () => {
   };
   return { isPending, settings, updateSettings };
 };
-
-const useAiModels = ({
-  isPending,
-  settings,
-  updateSettings,
-}: ReturnType<typeof useAiSettingsData>) => {
-  const defaultChatModel = useDefaultChatModel();
-  const [draft, setDraft] = useState<CloudModelSettings | null>(null);
-  const mutation = useMutation(orpc.ai.updateModels.mutationOptions());
-  const models = draft ??
-    settings?.models ?? {
-      autoLabel: defaultAutoLabelModel,
-      searchFilter: defaultSearchFilterModel,
-      usefulDetail: defaultUsefulDetailModel,
-    };
-  const updateModel = (key: keyof CloudModelSettings, model: ChatModel) => {
-    const next = { ...models, [key]: model };
-    setDraft(next);
-    mutation.mutate(next, {
-      onError(error) {
-        setDraft(null);
-        toastError(error, {
-          boundary: "ai-settings",
-          fallback: "Could not update AI models.",
-        });
-      },
-      onSuccess(savedModels) {
-        updateSettings((current) => ({ ...current, models: savedModels }));
-        setDraft(null);
-      },
-    });
-  };
-  return {
-    defaultChatModel,
-    disabled: isPending || mutation.isPending,
-    models,
-    updateModel,
-  };
-};
-
-const AiModelsSection = ({
-  defaultChatModel,
-  disabled,
-  models,
-  updateModel,
-}: ReturnType<typeof useAiModels>) => (
-  <SettingsSection
-    description={
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <span>
-          Set the models Quieter uses for conversations and email assistance.
-        </span>
-        <ModelCostInfo />
-      </div>
-    }
-    title="Models"
-  >
-    <SettingsRows>
-      <SettingsRow
-        action={
-          <AiModelSelect
-            align="end"
-            ariaLabel="Default chat model"
-            className="w-44 sm:w-56"
-            onValueChange={setDefaultChatModel}
-            size="sm"
-            value={defaultChatModel}
-          />
-        }
-        title="New chats"
-      >
-        The starting model for new conversations on this device. Choosing a
-        model in chat also updates this default.
-      </SettingsRow>
-      <SettingsRow
-        action={
-          <AiModelSelect
-            align="end"
-            ariaLabel="Auto-labeling model"
-            className="w-44 sm:w-56"
-            disabled={disabled}
-            onValueChange={(model) => {
-              updateModel("autoLabel", model);
-            }}
-            size="sm"
-            value={models.autoLabel}
-          />
-        }
-        title="Auto-labeling"
-      >
-        Used when newly received messages are matched to your existing labels.
-        This choice is saved to your account.
-      </SettingsRow>
-      <SettingsRow
-        action={
-          <AiModelSelect
-            align="end"
-            ariaLabel="Useful details model"
-            className="w-44 sm:w-56"
-            disabled={disabled}
-            onValueChange={(model) => {
-              updateModel("usefulDetail", model);
-            }}
-            size="sm"
-            value={models.usefulDetail}
-          />
-        }
-        title="Useful details"
-      >
-        Used to find time-sensitive details such as deliveries, reservations,
-        and verification codes. This choice is saved to your account.
-      </SettingsRow>
-      <SettingsRow
-        action={
-          <AiModelSelect
-            align="end"
-            ariaLabel="Search filters model"
-            className="w-44 sm:w-56"
-            disabled={disabled}
-            onValueChange={(model) => {
-              updateModel("searchFilter", model);
-            }}
-            size="sm"
-            value={models.searchFilter}
-          />
-        }
-        title="Search filters"
-      >
-        Used to turn a typed sentence like “unread from the last 30 days” into
-        filters. This choice is saved to your account.
-      </SettingsRow>
-    </SettingsRows>
-  </SettingsSection>
-);
 
 const AiPersonalizationSection = ({
   settings,
@@ -344,10 +176,8 @@ const AiPersonalizationSection = ({
 
 export const AiSettingsPanel = () => {
   const settingsData = useAiSettingsData();
-  const models = useAiModels(settingsData);
   return (
     <div className="flex flex-col gap-8">
-      <AiModelsSection {...models} />
       <AiPersonalizationSection {...settingsData} />
     </div>
   );

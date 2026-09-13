@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
+import { Alert02Icon, ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
@@ -15,6 +15,7 @@ type ChatTranscriptProps = {
   errorMessage?: string;
   isStreaming: boolean;
   messages: UIMessage[];
+  onRetry?: () => void;
 };
 
 const SCROLL_THRESHOLD = 120;
@@ -24,6 +25,7 @@ export const ChatTranscript = ({
   errorMessage,
   isStreaming,
   messages,
+  onRetry,
 }: ChatTranscriptProps) => {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -91,11 +93,26 @@ export const ChatTranscript = ({
             />
           ))}
           {errorMessage === undefined || errorMessage === "" ? null : (
-            <div
-              className="flex items-center gap-2 text-caption text-muted-fg"
-              role="alert"
-            >
-              <span className="min-w-0 flex-1">{errorMessage}</span>
+            <div className="flex items-start gap-2" role="alert">
+              <HugeiconsIcon
+                aria-hidden
+                className="mt-0.5 size-4 shrink-0 text-destructive"
+                icon={Alert02Icon}
+              />
+              <p className="min-w-0 flex-1 text-body-sm text-destructive">
+                {errorMessage}
+              </p>
+              {onRetry === undefined ? null : (
+                <Button
+                  className="h-7 shrink-0 px-2 text-caption font-medium"
+                  onClick={onRetry}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  Try again
+                </Button>
+              )}
             </div>
           )}
         </div>
