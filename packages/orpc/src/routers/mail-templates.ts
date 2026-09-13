@@ -1,4 +1,5 @@
 import { ORPCError } from "@orpc/server";
+import { resolveBackgroundModel } from "@quieter/ai/model-config";
 import { reportAiUsage } from "@quieter/billing";
 import { db } from "@quieter/database/client";
 import { mailTemplate, member } from "@quieter/database/schema";
@@ -209,10 +210,8 @@ export const mailTemplatesRouter = {
         organizationId: mailbox.organizationId,
         userId: context.userId,
       });
-      const {
-        suggestTemplatePlaceholder,
-        TEMPLATE_PLACEHOLDER_SUGGESTION_MODEL,
-      } = await import("@quieter/ai/suggest-template-placeholder");
+      const { suggestTemplatePlaceholder } =
+        await import("@quieter/ai/suggest-template-placeholder");
       const requestId = crypto.randomUUID();
       let value: string;
       try {
@@ -225,7 +224,7 @@ export const mailTemplatesRouter = {
               costUsd: usage.costUsd,
               externalId: `template-placeholder:${requestId}`,
               mailboxId: input.mailboxId,
-              model: TEMPLATE_PLACEHOLDER_SUGGESTION_MODEL,
+              model: resolveBackgroundModel(),
               promptTokens: usage.promptTokens,
               promptTokensDetails: {
                 cacheWriteTokens: usage.cacheWriteTokens,

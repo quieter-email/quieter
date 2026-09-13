@@ -78,7 +78,7 @@ The public SDK derives send inputs from `@quieter/mail/send` and validates respo
 
 - `packages/auth`: Better Auth setup, identity scopes, organizations, API keys, passkeys, and auth mail
 - `packages/ui`: reusable Base UI-backed components
-- `packages/ai`: model selection, prompts, classification, titles, and streamed generation
+- `packages/ai`: model configuration with provider fallbacks, prompts, classification, titles, and streamed generation
 - `packages/aws`: SES mail ingestion, delivery feedback, and AWS-specific handlers
 - `packages/cloudflare`: Gmail notification ingress, queued synchronization, scheduled maintenance, and mailbox live synchronization
 - `packages/billing`: plans, Polar checkout/webhooks, entitlements, and usage pricing

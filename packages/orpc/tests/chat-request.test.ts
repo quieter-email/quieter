@@ -89,6 +89,26 @@ describe("chat request validation", () => {
     expect(() => validateChatRequest(body)).toThrow(/invalid UUID/iu);
   });
 
+  test("defaults an omitted model to the configured chat model", () => {
+    const body = validBody();
+    body.model = undefined;
+
+    expect(validateChatRequest(body)).toStrictEqual({
+      category: body.category,
+      context: body.context,
+      foreground: body.foreground,
+      kind: "message",
+      mailboxId: body.mailboxId,
+      model: "google/gemini-3.7-flash",
+      threadId: body.threadId,
+      trigger: "submit-message",
+      userMessage: {
+        id: "message-1",
+        text: "Summarize this thread",
+      },
+    });
+  });
+
   test("rejects expired, overlong, and regenerate foreground requests", () => {
     const expired = validBody();
     expired.foreground = {

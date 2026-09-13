@@ -11,7 +11,7 @@ import type {
   AiMemoryToolsContext,
   GmailToolsContext,
 } from "@quieter/ai/chat-agent";
-import { CHAT_TITLE_MODEL, chatModelSchema } from "@quieter/ai/chat-models";
+import { chatModelSchema } from "@quieter/ai/chat-models";
 import {
   createForegroundClientTools,
   createForegroundServerTools,
@@ -30,6 +30,10 @@ import { toCanonicalTranscript } from "@quieter/ai/chat-transcript";
 import { summarizeAiUsage } from "@quieter/ai/chat-usage";
 import { isTransientAiProviderError } from "@quieter/ai/errors";
 import { generateChatTitle } from "@quieter/ai/generate-chat-title";
+import {
+  resolveBackgroundModel,
+  resolveChatModel,
+} from "@quieter/ai/model-config";
 import { createChatModel } from "@quieter/ai/openrouter";
 import { reportAiUsage } from "@quieter/billing";
 import { db } from "@quieter/database/client";
@@ -188,7 +192,7 @@ const chatRequestBodySchema = z
     foreground: foregroundSnapshotSchema,
     mailboxId: identifierSchema,
     message: z.unknown(),
-    model: chatModelSchema,
+    model: chatModelSchema.optional(),
     threadId: z.uuid(),
     trigger: z.literal("submit-message"),
   })
@@ -234,7 +238,7 @@ export const validateChatRequest = (body: unknown): ValidatedChatRequest => {
       foreground: parsedBody.foreground,
       kind: "message",
       mailboxId: parsedBody.mailboxId,
-      model: parsedBody.model,
+      model: parsedBody.model ?? resolveChatModel(),
       threadId,
       trigger: parsedBody.trigger,
       userMessage: {
@@ -312,7 +316,7 @@ export const validateChatRequest = (body: unknown): ValidatedChatRequest => {
     foreground: parsedBody.foreground,
     kind: "continue",
     mailboxId: parsedBody.mailboxId,
-    model: parsedBody.model,
+    model: parsedBody.model ?? resolveChatModel(),
     threadId,
     toolDecisions,
     toolOutputs,
@@ -832,6 +836,7 @@ const generateChatTitleInRequest = async (input: {
   userId: string;
 }) => {
   try {
+    const titleModel = resolveBackgroundModel();
     const title = await generateChatTitle({
       onUsage: (usage) => {
         void reportAiUsage({
@@ -840,7 +845,7 @@ const generateChatTitleInRequest = async (input: {
           costUsd: usage.costUsd,
           externalId: `chat-title:${input.chatId}`,
           mailboxId: input.mailboxId,
-          model: CHAT_TITLE_MODEL,
+          model: titleModel,
           promptTokens: usage.promptTokens,
           promptTokensDetails: {
             cacheWriteTokens: usage.cacheWriteTokens,

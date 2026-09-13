@@ -119,7 +119,7 @@ const getManagedAutoLabelCandidates = async (input: {
       })
       .from(managedMailLabel)
       .where(eq(managedMailLabel.mailboxId, input.mailboxId)),
-    loadAiConfiguration({ userId: input.userId }),
+    Promise.resolve(loadAiConfiguration()),
     loadAiAgentMemoryCandidates({
       includeUserScope: false,
       mailboxId: input.mailboxId,

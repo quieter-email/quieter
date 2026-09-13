@@ -20,7 +20,8 @@
     "./suggest-template-placeholder": "./src/suggest-template-placeholder.ts",
     "./transcription-format": "./src/transcription-format.ts",
     "./chat-transcript": "./src/chat-transcript.ts",
-    "./errors": "./src/errors.ts"
+    "./errors": "./src/errors.ts",
+    "./model-config": "./src/model-config.ts"
   },
   "dependencies": {
     "@openrouter/ai-sdk-provider": "catalog:",

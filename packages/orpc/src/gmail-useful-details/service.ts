@@ -1045,7 +1045,7 @@ const getGmailUsefulDetailPreferenceProfile = async ({
     automationContext = await getAutomationContext();
   } else {
     const [aiConfiguration, memoryCandidates] = await Promise.all([
-      loadAiConfiguration({ userId }),
+      Promise.resolve(loadAiConfiguration()),
       loadAiAgentMemoryCandidates({
         includeUserScope: false,
         mailboxId,

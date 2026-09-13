@@ -55,15 +55,6 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     title: "Cookie and analytics preferences",
   },
   {
-    description: "AI & personalization / Models",
-    id: "models",
-    keywords: "assistant model auto label useful details search filters",
-    scope: "personal",
-    section: "models",
-    tab: "ai",
-    title: "AI models",
-  },
-  {
     description: "AI & personalization / Personalization",
     id: "memory",
     keywords: "forget memory knowledge reset personalization",

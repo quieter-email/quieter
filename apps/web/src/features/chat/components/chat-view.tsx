@@ -17,7 +17,6 @@ import { useSelector } from "@tanstack/react-store";
 import { DefaultChatTransport, isToolUIPart } from "ai";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { useDefaultChatModel } from "#/features/ai/domain/default-chat-model-setting";
 import {
   hasOrganizationAiAccess,
   USER_BILLING_QUERY_KEY,
@@ -64,13 +63,12 @@ const ChatSession = ({
   const [tabId] = useState(() => crypto.randomUUID());
   const threadId = props.chatId ?? props.draftChatKey;
   const [busy, setBusy] = useState(false);
-  const model = useDefaultChatModel();
   const foregroundRef = useRef<ForegroundSnapshot | null>(null);
   const mountedRef = useRef(true);
   const appliedReceipts = useRef(new Set<string>());
-  const latestRef = useRef({ model, props });
+  const latestRef = useRef({ props });
   useLayoutEffect(() => {
-    latestRef.current = { model, props };
+    latestRef.current = { props };
   });
   const synchronizeHistory = async () => {
     try {
@@ -115,7 +113,6 @@ const ChatSession = ({
               foreground,
               mailboxId: workspace.mailboxId,
               message: messages.at(-1),
-              model: latestRef.current.model,
               threadId,
               trigger,
             },

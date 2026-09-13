@@ -1,11 +1,11 @@
 import { z } from "zod";
 
-import { defaultUsefulDetailModel } from "./chat-models";
 import type { ChatModel } from "./chat-models";
 import type { AiUsageReport } from "./chat-usage";
 import { AI_MEMORY_CONTEXT_MAX_LENGTH } from "./classify-gmail-message";
 import type { AutomationMailMessage } from "./classify-gmail-message";
 import { runStructuredGeneration } from "./generation";
+import { resolveBackgroundModel } from "./model-config";
 
 const deliveryStatusSchema = z.enum([
   "delayed",
@@ -73,7 +73,7 @@ const getReceivedAt = (message: AutomationMailMessage) => {
 
 export const extractMailUsefulDetail = async ({
   message,
-  model = defaultUsefulDetailModel,
+  model = resolveBackgroundModel(),
   now = new Date(),
   onUsage,
   preferences,

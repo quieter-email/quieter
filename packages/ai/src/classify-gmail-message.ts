@@ -1,9 +1,9 @@
 import { z } from "zod";
 
-import { defaultAutoLabelModel } from "./chat-models";
 import type { ChatModel } from "./chat-models";
 import type { AiUsageReport } from "./chat-usage";
 import { runStructuredGeneration } from "./generation";
+import { resolveBackgroundModel } from "./model-config";
 
 export type AutomationMailMessage = {
   attachments?: { fileName: string; mimeType: string }[];
@@ -95,7 +95,7 @@ export const classifyMailMessage = async ({
   labels,
   memoryContext,
   message,
-  model = defaultAutoLabelModel,
+  model = resolveBackgroundModel(),
   onUsage,
 }: {
   labels: MailAutoLabelCandidate[];

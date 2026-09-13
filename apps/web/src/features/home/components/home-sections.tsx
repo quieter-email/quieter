@@ -1,6 +1,5 @@
 "use client";
 
-import { AI_COST_RECOVERY_BASIS_POINTS } from "@quieter/billing/ai-pricing";
 import { BILLING_PRODUCTS, GMAIL_MAILBOX_LIMITS } from "@quieter/billing/plans";
 import { getManagedUsageRates } from "@quieter/billing/ses-pricing";
 
@@ -81,13 +80,6 @@ const Pricing = () => (
           Inbound: ${rates.messagesPerThousandUsd.toFixed(2)} per 1k messages,
           plus ${rates.inboundProcessingPerThousandUsd.toFixed(2)} per 1k 256 KB
           units of data, including attachments.
-        </RevealChild>
-        <RevealChild as="p">
-          AI usage is billed at{" "}
-          <a href="https://openrouter.ai" rel="noreferrer" target="_blank">
-            API cost
-          </a>{" "}
-          plus {AI_COST_RECOVERY_BASIS_POINTS / 100}%.
         </RevealChild>
         <RevealChild as="p">
           Usage beyond your included credits is billed separately.
