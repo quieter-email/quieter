@@ -5,6 +5,15 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      refresh_state:
+        description: Run sst refresh before planning (auto skips it unless an emergency web recovery ran since the last deploy)
+        required: false
+        default: auto
+        type: choice
+        options:
+          - auto
+          - always
 
 permissions:
   contents: read
@@ -30,6 +39,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      actions: read
     timeout-minutes: 35
     env:
       SST_STAGE: production
@@ -83,7 +93,30 @@ jobs:
           vp run @quieter/observability#build
           vp run quieter#build
 
+      # Emergency web recoveries change the live worker outside SST, so state
+      # needs a refresh afterwards. Normal deploys only go through SST, in
+      # which case the ~100s refresh is pure overhead and skipped.
+      - name: Check for recovery drift since last deploy
+        id: drift-check
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          REFRESH_STATE: ${{ inputs.refresh_state || 'auto' }}
+        run: |
+          if [[ "$REFRESH_STATE" == "always" ]]; then
+            echo "refresh=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          last_deploy="$(gh api "repos/$GH_REPO/actions/workflows/sst-deploy.yml/runs?status=success&per_page=1" --jq '.workflow_runs[0].updated_at // empty')"
+          last_recovery="$(gh api "repos/$GH_REPO/actions/workflows/web-recovery.yml/runs?status=success&per_page=1" --jq '.workflow_runs[0].updated_at // empty')"
+          if [[ -z "$last_deploy" || (-n "$last_recovery" && "$last_recovery" > "$last_deploy") ]]; then
+            echo "refresh=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "refresh=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Refresh SST state
+        if: steps.drift-check.outputs.refresh == 'true'
         timeout-minutes: 20
         run: |
           mkdir -p apps/web/dist/client

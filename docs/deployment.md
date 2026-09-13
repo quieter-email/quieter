@@ -26,7 +26,7 @@ For a compatible web-only failure, run **Recover Web Release** on `main`:
 
 The workflow uses the protected production environment and the same concurrency group as deployments. It verifies the artifact came from a completed production workflow on `main`, checks the domain's Worker and expected active version, restores the recorded version through Cloudflare, and reruns health checks. No Git history changes or database rollback occur. It is intentionally manual; smoke-test failure does not authorize an infrastructure rollback.
 
-Do not use this button after incompatible schema, binding, Durable Object, queue or background-job changes. Use a reviewed forward fix through SST. Cloudflare can refuse version rollback when dependent resources changed. If restoration succeeds but checks fail, inspect the live state before retrying. The next normal deployment always runs `sst refresh` before planning, reconciling emergency provider changes with SST state. A recovered web release does not establish that background jobs are healthy.
+Do not use this button after incompatible schema, binding, Durable Object, queue or background-job changes. Use a reviewed forward fix through SST. Cloudflare can refuse version rollback when dependent resources changed. If restoration succeeds but checks fail, inspect the live state before retrying. The next normal deployment detects the recovery and runs `sst refresh` before planning, reconciling emergency provider changes with SST state. A recovered web release does not establish that background jobs are healthy.
 
 ### Local verification
 
