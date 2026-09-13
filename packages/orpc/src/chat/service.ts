@@ -998,10 +998,35 @@ export const createAiChatResponse = async (input: {
       { text: validated.userMessage.text, type: "text" },
       { foreground: validated.foreground, type: "data-foreground" },
     ];
+    // A failed attempt leaves its user message plus an empty assistant
+    // reservation behind. Drop the reservation so an explicit retry reuses
+    // the stored user message instead of being rejected as a duplicate.
+    const staleReservation = rows.at(-1);
     if (
-      lastRow?.role === "user" &&
-      lastRow.id === validated.userMessage.id &&
-      getStoredMessageText(lastRow.parts) === validated.userMessage.text
+      staleReservation?.role === "assistant" &&
+      staleReservation.parts.length === 1 &&
+      staleReservation.parts[0]?.type === "data-foreground"
+    ) {
+      const [deleted] = await db
+        .delete(chatMessage)
+        .where(
+          and(
+            eq(chatMessage.id, staleReservation.id),
+            eq(chatMessage.chatId, threadId),
+            eq(chatMessage.userId, input.userId),
+            eq(chatMessage.parts, staleReservation.parts)
+          )
+        )
+        .returning({ id: chatMessage.id });
+      if (deleted !== undefined) {
+        rows.pop();
+      }
+    }
+    const previousRow = rows.at(-1);
+    if (
+      previousRow?.role === "user" &&
+      previousRow.id === validated.userMessage.id &&
+      getStoredMessageText(previousRow.parts) === validated.userMessage.text
     ) {
       // The previous attempt was aborted before its answer was persisted;
       // reuse the stored user message instead of duplicating it.
@@ -1013,7 +1038,7 @@ export const createAiChatResponse = async (input: {
           createdAt: new Date(),
           id: assistantMessageId,
           parts: reservationParts,
-          position: lastRow.position + 1,
+          position: previousRow.position + 1,
           role: "assistant",
           userId: input.userId,
         })
@@ -1026,7 +1051,7 @@ export const createAiChatResponse = async (input: {
         );
       }
     } else {
-      if (lastRow?.role === "user") {
+      if (previousRow?.role === "user") {
         throw new ChatRequestError(
           409,
           "The previous chat turn is incomplete. Retry it before sending another message."
