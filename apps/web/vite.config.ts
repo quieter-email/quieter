@@ -100,7 +100,9 @@ export default defineConfig(({ command }) => {
       release: { name: buildId },
       sourcemaps: {
         assets: [`./dist/${outputDirectory}/**/*.js`],
-        filesToDeleteAfterUpload: [`./dist/${outputDirectory}/**/*.map`],
+        // Wrangler still needs server maps when packaging the Worker.
+        filesToDeleteAfterUpload:
+          outputDirectory === "client" ? ["./dist/client/**/*.map"] : [],
       },
       telemetry: false,
     }).map((plugin) => ({
