@@ -28,6 +28,7 @@ import {
 import type { ForegroundSnapshot } from "@quieter/ai/chat-tools";
 import { toCanonicalTranscript } from "@quieter/ai/chat-transcript";
 import { summarizeAiUsage } from "@quieter/ai/chat-usage";
+import { isTransientAiProviderError } from "@quieter/ai/errors";
 import { generateChatTitle } from "@quieter/ai/generate-chat-title";
 import { createChatModel } from "@quieter/ai/openrouter";
 import { reportAiUsage } from "@quieter/billing";
@@ -92,6 +93,24 @@ export class ChatRequestError extends Error {
     this.status = status;
   }
 }
+
+/**
+ * Maps a stream failure onto the user-facing error text sent as the UI
+ * message stream's error chunk. Distinct texts keep Sentry issues and user
+ * reports attributable to provider throttling, client disconnects, stale
+ * foreground exchanges, and genuine generation failures.
+ */
+export const resolveChatStreamErrorMessage = (error: unknown): string => {
+  if (error instanceof ChatRequestError) {
+    return "This chat changed while the answer was being completed. Retry it.";
+  }
+  if (error instanceof Error && error.name === "AbortError") {
+    return "The request was stopped.";
+  }
+  return isTransientAiProviderError(error)
+    ? "The assistant is busy. Retry shortly."
+    : "The answer could not be completed.";
+};
 
 // ---------------------------------------------------------------------------
 // Request validation
@@ -1369,6 +1388,9 @@ export const createAiChatResponse = async (input: {
     },
     onError: ({ error }) => {
       generationFailed = true;
+      if (error instanceof Error && error.name === "AbortError") {
+        return;
+      }
       reportError(error, { operation: "chat:generation" });
     },
     providerOptions: {
@@ -1480,7 +1502,17 @@ export const createAiChatResponse = async (input: {
           "The answer could not be saved. Retry it before continuing.";
       }
     },
-    onError: () => "The answer could not be completed.",
+    onError: (error) => {
+      if (error instanceof ChatRequestError) {
+        reportError(error, { operation: "chat:stream-continuation" });
+      } else if (
+        !(error instanceof Error && error.name === "AbortError") &&
+        !generationFailed
+      ) {
+        reportError(error, { operation: "chat:stream" });
+      }
+      return resolveChatStreamErrorMessage(error);
+    },
     originalMessages: transcript,
     stream: result.stream.pipeThrough(
       new TransformStream<
