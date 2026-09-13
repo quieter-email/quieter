@@ -1,10 +1,8 @@
 "use client";
 
 import { useNavigate } from "@tanstack/react-router";
-import { useRef } from "react";
 
 import type { MailboxWorkspaceView } from "#/features/mailbox/domain/mailbox-workspace-view";
-import type { MailboxCategory } from "#/lib/mail";
 import { inboxRouteApi } from "#/lib/route-apis";
 
 const MAILBOX_ROUTE_CATEGORIES = [
@@ -21,7 +19,7 @@ const MAILBOX_ROUTE_CATEGORIES = [
 
 type MailboxRouteCategory = (typeof MAILBOX_ROUTE_CATEGORIES)[number];
 
-type MailboxSearchPatch = {
+export type MailboxSearchPatch = {
   chatId?: string | null;
   compose?: "mailto" | null;
   mailto?: string | null;
@@ -37,35 +35,16 @@ type MailboxSearchOptions = {
   replace?: boolean;
 };
 
-type InboxRouteState = {
-  compose?: "mailto";
-  mailto?: string;
-  mailbox: MailboxRouteCategory;
-  mailboxId?: string;
-  messageId?: string;
-  threadId?: string;
-  query: string;
-};
-
-type ChatRouteState = {
+export type MailboxRouteState = {
   chatId?: string;
   compose?: "mailto";
-  mailto?: string;
-  mailbox: MailboxCategory;
+  mailbox: MailboxRouteCategory;
   mailboxId?: string;
+  mailto?: string;
   messageId?: string;
   query: string;
   threadId?: string;
-};
-
-const defaultInboxRouteState: InboxRouteState = {
-  mailbox: "inbox",
-  query: "",
-};
-
-const defaultChatRouteState: ChatRouteState = {
-  mailbox: "inbox",
-  query: "",
+  view: MailboxWorkspaceView;
 };
 
 const normalizeSearchValue = (value: string | null | undefined) => {
@@ -73,10 +52,10 @@ const normalizeSearchValue = (value: string | null | undefined) => {
   return normalized === undefined || normalized === "" ? undefined : normalized;
 };
 
-const applyInboxPatch = (
-  state: InboxRouteState,
+export const applyMailboxSearchPatch = (
+  state: MailboxRouteState,
   patch: MailboxSearchPatch
-): InboxRouteState => {
+): MailboxRouteState => {
   const { threadId: currentThreadId } = state;
   let threadId: string | undefined;
   if (patch.threadId !== undefined) {
@@ -86,6 +65,10 @@ const applyInboxPatch = (
   }
 
   return {
+    chatId:
+      patch.chatId === undefined
+        ? state.chatId
+        : normalizeSearchValue(patch.chatId),
     compose:
       patch.compose === undefined
         ? state.compose
@@ -106,58 +89,12 @@ const applyInboxPatch = (
     query:
       patch.query === undefined ? state.query : (patch.query?.trim() ?? ""),
     threadId,
-  };
-};
-
-const applyChatPatch = (
-  state: ChatRouteState,
-  patch: MailboxSearchPatch
-): ChatRouteState => {
-  const { threadId: currentThreadId } = state;
-  let threadId: string | undefined;
-  if (patch.threadId !== undefined) {
-    threadId = normalizeSearchValue(patch.threadId);
-  } else if (patch.messageId === undefined) {
-    threadId = currentThreadId;
-  }
-
-  return {
-    chatId:
-      patch.chatId === undefined
-        ? state.chatId
-        : normalizeSearchValue(patch.chatId),
-    compose:
-      patch.compose === undefined
-        ? state.compose
-        : (patch.compose ?? undefined),
-    mailbox:
-      patch.mailbox === "template" || patch.mailbox === "compose"
-        ? state.mailbox
-        : (patch.mailbox ?? state.mailbox),
-    mailboxId:
-      patch.mailboxId === undefined
-        ? state.mailboxId
-        : normalizeSearchValue(patch.mailboxId),
-    mailto:
-      patch.mailto === undefined
-        ? state.mailto
-        : normalizeSearchValue(patch.mailto),
-    messageId:
-      patch.messageId === undefined
-        ? state.messageId
-        : normalizeSearchValue(patch.messageId),
-    query:
-      patch.query === undefined ? state.query : (patch.query?.trim() ?? ""),
-    threadId,
+    view: patch.view ?? state.view,
   };
 };
 
 export const useMailboxSearchActions = () => {
-  const navigate = useNavigate({
-    from: "/",
-  });
-  const inboxStateRef = useRef<InboxRouteState>(defaultInboxRouteState);
-  const chatStateRef = useRef<ChatRouteState>(defaultChatRouteState);
+  const navigate = useNavigate({ from: "/" });
 
   return async (
     patch: MailboxSearchPatch,
@@ -166,81 +103,7 @@ export const useMailboxSearchActions = () => {
     await navigate({
       replace,
       resetScroll: false,
-      search: (previous) => {
-        if (previous.view === "chat") {
-          chatStateRef.current = {
-            chatId: previous.chatId,
-            compose: previous.compose,
-            mailbox:
-              previous.mailbox === "template" || previous.mailbox === "compose"
-                ? "inbox"
-                : previous.mailbox,
-            mailboxId: previous.mailboxId,
-            mailto: previous.mailto,
-            messageId: previous.messageId,
-            query: previous.query,
-            threadId: previous.threadId,
-          };
-        } else {
-          inboxStateRef.current = {
-            compose: previous.compose,
-            mailbox: previous.mailbox,
-            mailboxId: previous.mailboxId,
-            mailto: previous.mailto,
-            messageId: previous.messageId,
-            query: previous.query,
-            threadId: previous.threadId,
-          };
-        }
-
-        const nextView = patch.view ?? previous.view;
-
-        if (nextView === "chat") {
-          const nextChatState = applyChatPatch(
-            previous.view === "chat"
-              ? chatStateRef.current
-              : {
-                  ...chatStateRef.current,
-                  mailbox:
-                    inboxStateRef.current.mailbox === "template" ||
-                    inboxStateRef.current.mailbox === "compose"
-                      ? "inbox"
-                      : inboxStateRef.current.mailbox,
-                  messageId: inboxStateRef.current.messageId,
-                  query: inboxStateRef.current.query,
-                  threadId: inboxStateRef.current.threadId,
-                },
-            patch
-          );
-          chatStateRef.current = nextChatState;
-
-          return {
-            chatId: nextChatState.chatId,
-            compose: nextChatState.compose,
-            mailbox: nextChatState.mailbox,
-            mailboxId: nextChatState.mailboxId,
-            mailto: nextChatState.mailto,
-            messageId: nextChatState.messageId,
-            query: nextChatState.query,
-            threadId: nextChatState.threadId,
-            view: "chat",
-          };
-        }
-
-        const nextInboxState = applyInboxPatch(inboxStateRef.current, patch);
-        inboxStateRef.current = nextInboxState;
-
-        return {
-          compose: nextInboxState.compose,
-          mailbox: nextInboxState.mailbox,
-          mailboxId: nextInboxState.mailboxId,
-          mailto: nextInboxState.mailto,
-          messageId: nextInboxState.messageId,
-          query: nextInboxState.query,
-          threadId: nextInboxState.threadId,
-          view: nextView,
-        };
-      },
+      search: (previous) => applyMailboxSearchPatch(previous, patch),
       to: ".",
     });
   };

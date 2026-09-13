@@ -39,6 +39,7 @@ type ComposeInlineImage = ComposeAssetBase & {
 };
 
 export type ComposeDraftState = {
+  assistantUnsaved?: boolean;
   localId: string;
   draftId?: string;
   messageId?: string;

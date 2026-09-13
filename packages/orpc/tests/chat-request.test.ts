@@ -8,6 +8,14 @@ import { createChatTitle, validateChatRequest } from "../src/chat/service";
 const validBody = (): Record<string, unknown> => ({
   category: "inbox",
   context: { threadId: "gmail-thread-1" },
+  foreground: {
+    capabilities: ["navigate"],
+    exchangeId: "d6c6b64a-1d5f-4406-9b1b-53a73ff6f41b",
+    expiresAt: Date.now() + 60_000,
+    generation: 1,
+    policy: "ask",
+    tabId: "tab-1",
+  },
   mailboxId: "mailbox-1",
   message: {
     id: "message-1",
@@ -39,6 +47,7 @@ describe("chat request validation", () => {
     expect(validateChatRequest(body)).toStrictEqual({
       category: body.category,
       context: body.context,
+      foreground: body.foreground,
       kind: "message",
       mailboxId: body.mailboxId,
       model: body.model,
@@ -78,6 +87,30 @@ describe("chat request validation", () => {
     body.threadId = "not-a-client-uuid";
 
     expect(() => validateChatRequest(body)).toThrow(/invalid UUID/iu);
+  });
+
+  test("rejects expired, overlong, and regenerate foreground requests", () => {
+    const expired = validBody();
+    expired.foreground = {
+      ...z.record(z.string(), z.unknown()).parse(expired.foreground),
+      expiresAt: Date.now() - 1,
+    };
+    expect(() => validateChatRequest(expired)).toThrow(
+      /foreground exchange has expired/iu
+    );
+
+    const overlong = validBody();
+    overlong.foreground = {
+      ...z.record(z.string(), z.unknown()).parse(overlong.foreground),
+      expiresAt: Date.now() + 5 * 60_000 + 5000,
+    };
+    expect(() => validateChatRequest(overlong)).toThrow(
+      /foreground exchange has expired/iu
+    );
+
+    const regenerate = validBody();
+    regenerate.trigger = "regenerate-message";
+    expect(() => validateChatRequest(regenerate)).toThrow(/invalid input/iu);
   });
 
   test("collects approval decisions from an assistant continuation message", () => {
@@ -147,17 +180,17 @@ describe("chat request validation", () => {
     expect(continued?.assistantMessageId).toBe("assistant-1");
   });
 
-  test("accepts a compose outcome as the only client-resolvable tool output", () => {
+  test("accepts a foreground controller result", () => {
     const body = validBody();
     body.message = {
       id: "assistant-1",
       parts: [
         {
-          input: { subject: "Hello", to: "a@example.com" },
-          output: { status: "declined" },
+          input: { view: "inbox" },
+          output: { generation: 1, mailboxId: "mailbox-1", view: "inbox" },
           state: "output-available",
           toolCallId: "tool-1",
-          type: "tool-compose_email",
+          type: "tool-navigate",
         },
       ],
       role: "assistant",
@@ -167,7 +200,9 @@ describe("chat request validation", () => {
     expect(validated.kind).toBe("continue");
     const continued = validated.kind === "continue" ? validated : undefined;
     expect(continued?.toolOutputs.get("tool-1")).toStrictEqual({
-      status: "declined",
+      generation: 1,
+      mailboxId: "mailbox-1",
+      view: "inbox",
     });
   });
 
@@ -191,17 +226,17 @@ describe("chat request validation", () => {
     );
   });
 
-  test("rejects malformed compose outcomes", () => {
+  test("rejects malformed foreground controller results", () => {
     const body = validBody();
     body.message = {
       id: "assistant-1",
       parts: [
         {
           input: {},
-          output: { status: "sent" },
+          output: { generation: 1 },
           state: "output-available",
           toolCallId: "tool-1",
-          type: "tool-compose_email",
+          type: "tool-navigate",
         },
       ],
       role: "assistant",

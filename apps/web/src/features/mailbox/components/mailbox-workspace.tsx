@@ -30,7 +30,6 @@ import { useMailboxRouteSearch } from "./mailbox-workspace/use-mailbox-route-sea
 import { useMailboxSelection } from "./mailbox-workspace/use-mailbox-selection";
 import { useWorkspaceUiState } from "./mailbox-workspace/use-workspace-ui-state";
 import {
-  loadChatView,
   loadComposeWorkspace,
   loadTemplateWorkspace,
 } from "./mailbox-workspace/workspace-component-loaders";
@@ -53,7 +52,7 @@ const isMailboxSupportedByProvider = (
   return true;
 };
 
-const useChatSidebarActions = ({
+const useChatActions = ({
   activeChatId,
   chats,
   selectedMailboxId,
@@ -111,8 +110,6 @@ const useChatSidebarActions = ({
     if (deletedChatId === activeChatId) {
       void setMailboxSearch({
         chatId: nextChatId,
-        mailboxId: selectedMailboxId,
-        view: "chat",
       });
     }
   };
@@ -207,9 +204,7 @@ const useMailboxWorkspaceCompose = ({
 
 const useMailboxWorkspaceRouteEffects = ({
   activeMailbox,
-  areChatsPending,
   chatId,
-  chats,
   compose,
   isCompletingGmailConnection,
   isComposeMailbox,
@@ -225,12 +220,9 @@ const useMailboxWorkspaceRouteEffects = ({
   selectedMailboxId,
   selectedMailboxProvider,
   setMailboxSearch,
-  view,
 }: {
   activeMailbox: MailboxCategory;
-  areChatsPending: boolean;
   chatId: string | null | undefined;
-  chats: RouterOutputs["chat"]["list"];
   compose: string | null | undefined;
   isCompletingGmailConnection: boolean;
   isComposeMailbox: boolean;
@@ -246,7 +238,6 @@ const useMailboxWorkspaceRouteEffects = ({
   selectedMailboxId: string | null;
   selectedMailboxProvider: MailboxProvider;
   setMailboxSearch: SetMailboxSearch;
-  view: MailboxWorkspaceView;
 }) => {
   useEffect((): (() => void) | undefined => {
     if (!isCompletingGmailConnection) {
@@ -285,76 +276,29 @@ const useMailboxWorkspaceRouteEffects = ({
       trimmedMailboxId === undefined || trimmedMailboxId === ""
         ? null
         : trimmedMailboxId;
-    if (
-      normalizedMailboxId === selectedMailboxId &&
-      ((selectedMailboxId !== null && selectedMailboxId !== "") ||
-        (view === "inbox" &&
-          (chatId === null || chatId === undefined || chatId === "")))
-    ) {
+    if (normalizedMailboxId === selectedMailboxId) {
       return;
     }
 
     void setMailboxSearch({
-      chatId:
-        normalizedMailboxId === selectedMailboxId &&
-        selectedMailboxId !== null &&
-        selectedMailboxId !== ""
-          ? undefined
-          : null,
+      chatId: null,
       mailboxId: selectedMailboxId,
       messageId: null,
-      view:
-        selectedMailboxId !== null && selectedMailboxId !== ""
-          ? undefined
-          : "inbox",
     });
   }, [
-    chatId,
     isCompletingGmailConnection,
     isSandboxMode,
     mailboxId,
     mailboxesPending,
     selectedMailboxId,
     setMailboxSearch,
-    view,
   ]);
 
   useLayoutEffect(() => {
-    if (
-      view !== "chat" ||
-      selectedMailboxId === null ||
-      selectedMailboxId === "" ||
-      areChatsPending
-    ) {
-      return;
+    if (selectedMailboxProvider === "api" && chatId) {
+      void setMailboxSearch({ chatId: null });
     }
-
-    if (
-      chatId !== null &&
-      chatId !== undefined &&
-      chatId !== "" &&
-      !chats.some((existingChat) => existingChat.id === chatId)
-    ) {
-      void setMailboxSearch({
-        chatId: chats[0]?.id ?? null,
-        mailboxId: selectedMailboxId,
-        view: "chat",
-      });
-    }
-  }, [
-    areChatsPending,
-    chatId,
-    chats,
-    selectedMailboxId,
-    setMailboxSearch,
-    view,
-  ]);
-
-  useLayoutEffect(() => {
-    if (selectedMailboxProvider === "api" && view === "chat") {
-      void setMailboxSearch({ chatId: null, view: "inbox" });
-    }
-  }, [selectedMailboxProvider, setMailboxSearch, view]);
+  }, [chatId, selectedMailboxProvider, setMailboxSearch]);
 
   useLayoutEffect(() => {
     if (isComposeMailbox || isTemplateMailbox) {
@@ -425,8 +369,6 @@ const useMailboxWorkspaceRouteEffects = ({
 
 const useMailboxWorkspaceActions = ({
   activeMailbox,
-  chatId,
-  chats,
   isComposeMailbox,
   isTemplateMailbox,
   mailboxes,
@@ -439,8 +381,6 @@ const useMailboxWorkspaceActions = ({
   view,
 }: {
   activeMailbox: MailboxCategory;
-  chatId: string | null | undefined;
-  chats: RouterOutputs["chat"]["list"];
   isComposeMailbox: boolean;
   isTemplateMailbox: boolean;
   mailboxes: { id: string; provider: string }[];
@@ -453,7 +393,6 @@ const useMailboxWorkspaceActions = ({
   view: MailboxWorkspaceView;
 }) => {
   const [draftChatKey, setDraftChatKey] = useState(() => crypto.randomUUID());
-  const chatViewLeftAtRef = useRef<number | null>(null);
   const [gmailReconnectError, setGmailReconnectError] = useState<string | null>(
     null
   );
@@ -493,24 +432,6 @@ const useMailboxWorkspaceActions = ({
     if (nextView === view) {
       return;
     }
-    if (nextView === "chat") {
-      void loadChatView();
-      const leftAt = chatViewLeftAtRef.current;
-      const isStale =
-        leftAt !== null && performance.now() - leftAt > 5 * 60 * 1000;
-      const nextChatId = isStale ? null : (chatId ?? chats[0]?.id);
-      if (isStale) {
-        setDraftChatKey(crypto.randomUUID());
-      }
-      void setMailboxSearch({
-        chatId: nextChatId ?? null,
-        mailboxId: selectedMailboxId,
-        view: nextView,
-      });
-      return;
-    }
-
-    chatViewLeftAtRef.current = performance.now();
     void setMailboxSearch({ view: nextView });
   };
 
@@ -564,30 +485,16 @@ const useMailboxWorkspaceActions = ({
   };
 
   const createChat = () => {
-    void loadChatView();
     setDraftChatKey(crypto.randomUUID());
-    void setMailboxSearch({
-      chatId: null,
-      mailboxId: selectedMailboxId,
-      view: "chat",
-    });
+    void setMailboxSearch({ chatId: null });
   };
 
   const selectChat = (nextChatId: string) => {
-    void loadChatView();
-    void setMailboxSearch({
-      chatId: nextChatId,
-      mailboxId: selectedMailboxId,
-      view: "chat",
-    });
+    void setMailboxSearch({ chatId: nextChatId });
   };
 
   const changeChatId = (nextChatId: string | null) => {
-    void setMailboxSearch({
-      chatId: nextChatId,
-      mailboxId: selectedMailboxId,
-      view: "chat",
-    });
+    void setMailboxSearch({ chatId: nextChatId });
   };
 
   const selectMailboxId = (nextMailboxId: string) => {
@@ -597,12 +504,9 @@ const useMailboxWorkspaceActions = ({
     const nextMailboxProvider = mailboxes.find(
       (availableMailbox) => availableMailbox.id === nextMailboxId
     )?.provider;
-    if (view === "chat") {
-      setDraftChatKey(crypto.randomUUID());
-    }
+    setDraftChatKey(crypto.randomUUID());
     void setMailboxSearch({
-      chatId:
-        view === "chat" || nextMailboxProvider === "api" ? null : undefined,
+      chatId: null,
       mailbox: nextMailboxProvider === "api" ? "sent" : undefined,
       mailboxId: nextMailboxId,
       messageId: null,
@@ -651,14 +555,12 @@ const useMailboxWorkspaceHotkeys = ({
   isWorkspaceReady,
   openComposeWorkspace,
   selectMailboxFromHotkey,
-  selectView,
   selectedMailboxId,
   selectedMailboxProvider,
 }: {
   isWorkspaceReady: boolean;
   openComposeWorkspace: (draft: ComposeDraftState | null) => void;
   selectMailboxFromHotkey: (mailbox: MailboxCategory) => void;
-  selectView: (view: MailboxWorkspaceView) => void;
   selectedMailboxId: string | null;
   selectedMailboxProvider: MailboxProvider;
 }) => {
@@ -738,15 +640,6 @@ const useMailboxWorkspaceHotkeys = ({
     (event) => {
       if (!shouldIgnoreAppShortcut(event)) {
         selectMailboxFromHotkey("trash");
-      }
-    },
-    { enabled, ignoreInputs: true }
-  );
-  useHotkeySequence(
-    ["G", "H"],
-    (event) => {
-      if (!shouldIgnoreAppShortcut(event)) {
-        selectView("chat");
       }
     },
     { enabled, ignoreInputs: true }
@@ -878,7 +771,7 @@ export const MailboxWorkspace = ({ user: _user }: MailboxWorkspaceProps) => {
     mailboxId,
     queryClient,
   });
-  const { data: chats = [], isPending: areChatsPending } = useQuery(
+  const { data: chats = [] } = useQuery(
     chatsQueryOptions(
       isSandboxMode || selectedMailboxProvider === "api"
         ? null
@@ -898,7 +791,7 @@ export const MailboxWorkspace = ({ user: _user }: MailboxWorkspaceProps) => {
     selectedMailboxId,
     setMailboxSearch,
   });
-  const chatSidebarActions = useChatSidebarActions({
+  const chatActions = useChatActions({
     activeChatId: chatId,
     chats,
     selectedMailboxId,
@@ -906,8 +799,6 @@ export const MailboxWorkspace = ({ user: _user }: MailboxWorkspaceProps) => {
   });
   const workspaceActions = useMailboxWorkspaceActions({
     activeMailbox,
-    chatId,
-    chats,
     isComposeMailbox,
     isTemplateMailbox,
     mailboxes,
@@ -922,9 +813,7 @@ export const MailboxWorkspace = ({ user: _user }: MailboxWorkspaceProps) => {
 
   useMailboxWorkspaceRouteEffects({
     activeMailbox,
-    areChatsPending,
     chatId,
-    chats,
     compose,
     isCompletingGmailConnection,
     isComposeMailbox,
@@ -940,14 +829,12 @@ export const MailboxWorkspace = ({ user: _user }: MailboxWorkspaceProps) => {
     selectedMailboxId,
     selectedMailboxProvider,
     setMailboxSearch,
-    view,
   });
 
   useMailboxWorkspaceHotkeys({
     isWorkspaceReady,
     openComposeWorkspace: composeWorkspace.openComposeWorkspace,
     selectMailboxFromHotkey: workspaceActions.selectMailboxFromHotkey,
-    selectView: workspaceActions.selectView,
     selectedMailboxId,
     selectedMailboxProvider,
   });
@@ -1010,10 +897,10 @@ export const MailboxWorkspace = ({ user: _user }: MailboxWorkspaceProps) => {
       onSearch={applySearch}
       onCreateChat={createChat}
       onDeleteChat={(deletedChatId) => {
-        void chatSidebarActions.deleteChat(deletedChatId);
+        void chatActions.deleteChat(deletedChatId);
       }}
       onRenameChat={(renamedChatId, title) => {
-        void chatSidebarActions.renameChat(renamedChatId, title);
+        void chatActions.renameChat(renamedChatId, title);
       }}
       onReconnectMailbox={(mailbox) => {
         void reconnectMailbox(mailbox);

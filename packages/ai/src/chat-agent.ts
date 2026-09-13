@@ -31,7 +31,7 @@ When uncertain, prefer a best-effort attempt with tools, then explain assumption
 Before your first tool call on a mail-related task, decide what evidence you need and in what order. Typical flows:
 - vague question about mail → search_gmail → read_gmail_thread on the best match(es) → answer
 - "what's new" / inbox status → get_mailbox_overview, optionally search_gmail for recent unread
-- summarize or reply to a thread → read_gmail_thread first, then answer or compose_email
+- summarize or reply to a thread → read_gmail_thread first, then answer or open_compose
 - find then act → search, read, then compose or recommend action
 
 Use multiple tool rounds when useful. If a search is too broad, refine the query and search again. If the first thread is not the right one, check the next candidate. If a tool errors, try an alternative query or approach before giving up.
@@ -83,8 +83,8 @@ List the user's Gmail labels, including system and custom labels. Use when the u
 ### modify_mail
 Apply a mailbox action to a message or thread: mark_read, mark_unread, star, unstar, archive, trash, or untrash. Prefer thread scope when the user is acting on a conversation. Confirm destructive actions only when intent is ambiguous.
 
-### compose_email
-Open an editable inline composer with a proposed message. Use when the user wants you to write, draft, or send mail and you have enough to propose a strong first draft. The tool never sends or saves by itself. Put the complete proposed plain-text body in bodyText. The user must explicitly Send, Save draft, or Decline; you receive that outcome before continuing.
+### open_compose and edit_compose
+Open or edit the visible unsaved compose draft when the user wants you to write mail. Use get_workspace after a user edit before proposing save_compose_draft or send_mail, so their reviewed draft is the exact payload that is saved or sent.
 
 When drafting:
 - match the user's language and tone unless they ask otherwise
@@ -226,53 +226,6 @@ export const mailboxOverviewResultSchema = z.discriminatedUnion("status", [
 ]);
 
 export type MailboxOverviewResult = z.infer<typeof mailboxOverviewResultSchema>;
-
-export const composeEmailInputSchema = z.object({
-  action: z.enum(["send", "save_draft"]).default("send").meta({
-    description:
-      "Delivery action selected by the user in the approval composer. Propose send by default.",
-  }),
-  bcc: z.string().default("").meta({
-    description: "Bcc recipients as a comma-separated email address list.",
-  }),
-  bodyText: z.string().default("").meta({
-    description: "Complete proposed plain-text email body.",
-  }),
-  cc: z.string().default("").meta({
-    description: "Cc recipients as a comma-separated email address list.",
-  }),
-  subject: z.string().default("").meta({
-    description: "Proposed email subject.",
-  }),
-  to: z.string().default("").meta({
-    description: "To recipients as a comma-separated email address list.",
-  }),
-});
-
-export const composeEmailResultSchema = z.discriminatedUnion("status", [
-  z.object({
-    messageId: z.string().optional(),
-    status: z.literal("sent"),
-    subject: z.string(),
-    threadId: z.string().optional(),
-    to: z.string(),
-  }),
-  z.object({
-    draftId: z.string(),
-    messageId: z.string().optional(),
-    status: z.literal("draft_saved"),
-    subject: z.string(),
-    to: z.string(),
-  }),
-  z.object({
-    status: z.literal("declined"),
-    subject: z.string().optional(),
-    to: z.string().optional(),
-  }),
-]);
-
-export type ComposeEmailInput = z.infer<typeof composeEmailInputSchema>;
-export type ComposeEmailResult = z.infer<typeof composeEmailResultSchema>;
 
 export const gmailMessageResultSchema = z.discriminatedUnion("status", [
   z.object({
@@ -793,21 +746,6 @@ export const createGmailChatTools = (context: GmailToolsContext): ToolSet => ({
       }),
     }),
     outputSchema: gmailSearchResultSchema,
-  }),
-});
-
-/**
- * The compose proposal is rendered and resolved entirely in the browser: the
- * user edits the draft in an inline composer and returns the chosen outcome
- * through a client tool response, so the model always sees what actually
- * happened.
- */
-export const createComposeEmailChatTool = (): ToolSet => ({
-  compose_email: tool({
-    description:
-      "Open an editable inline email composer with a proposed message. The user must explicitly send, save the draft, or decline before the assistant continues.",
-    inputSchema: composeEmailInputSchema,
-    outputSchema: composeEmailResultSchema,
   }),
 });
 
