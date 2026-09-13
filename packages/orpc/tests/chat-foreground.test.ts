@@ -177,20 +177,75 @@ describe("foreground chat requests", () => {
     ]);
   });
 
-  test("normalizes only expired foreground work on transcript loading", () => {
-    const pending = [
+  test("terminalizes pending work with missing or malformed foreground leases", () => {
+    const missing = [
       {
-        foreground: { expiresAt: 100 },
         input: {},
         state: "input-available",
         toolCallId: "tool-1",
         type: "tool-navigate",
       },
     ];
-    expect(normalizeExpiredChatParts(pending, 101)).toContainEqual(
+    const malformed = [
+      {
+        approval: { id: "approval-1" },
+        foreground: { expiresAt: 200 },
+        input: {},
+        state: "approval-requested",
+        toolCallId: "tool-2",
+        type: "tool-navigate",
+      },
+    ];
+
+    expect(normalizeExpiredChatParts(missing, 100)).toContainEqual(
       expect.objectContaining({ state: "output-error", toolCallId: "tool-1" })
     );
-    expect(normalizeExpiredChatParts(pending, 99)).toBe(pending);
+    expect(normalizeExpiredChatParts(malformed, 100)).toContainEqual(
+      expect.objectContaining({ state: "output-error", toolCallId: "tool-2" })
+    );
+  });
+
+  test("preserves pending work with a valid unexpired foreground lease", () => {
+    const pending = [
+      {
+        foreground: { ...foreground, expiresAt: 200 },
+        input: {},
+        state: "input-available",
+        toolCallId: "tool-1",
+        type: "tool-navigate",
+      },
+    ];
+
+    expect(normalizeExpiredChatParts(pending, 100)).toBe(pending);
+  });
+
+  test("terminalizes pending work with an expired foreground lease", () => {
+    const pending = [
+      {
+        foreground: { ...foreground, expiresAt: 100 },
+        input: {},
+        state: "input-available",
+        toolCallId: "tool-1",
+        type: "tool-navigate",
+      },
+    ];
+
+    expect(normalizeExpiredChatParts(pending, 100)).toContainEqual(
+      expect.objectContaining({ state: "output-error", toolCallId: "tool-1" })
+    );
+  });
+
+  test("preserves completed work without requiring a foreground lease", () => {
+    const completed = [
+      {
+        output: { status: "sent" },
+        state: "output-available",
+        toolCallId: "tool-1",
+        type: "tool-send_mail",
+      },
+    ];
+
+    expect(normalizeExpiredChatParts(completed, 100)).toBe(completed);
   });
 
   test("records cancellation after approval has already been claimed", () => {

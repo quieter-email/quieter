@@ -309,6 +309,7 @@ export const useComposeDialogController = ({
         setState((currentState) => ({ ...currentState, open: false }));
         onClose?.();
       } else {
+        assistantUnsavedRef.current = false;
         activeDraftRef.current = {
           ...activeDraftRef.current,
           draftId: receipt.providerDraftId,
@@ -518,7 +519,8 @@ export const useComposeDialogController = ({
     },
   });
 
-  const clearActiveDraftError = () => {
+  const handleUserDraftChange = () => {
+    assistantUnsavedRef.current = false;
     const draft = activeDraftRef.current;
     if ((draft.errorMessage ?? "") === "" && draft.saveStatus !== "error") {
       return;
@@ -632,7 +634,7 @@ export const useComposeDialogController = ({
     }
 
     try {
-      clearActiveDraftError();
+      handleUserDraftChange();
       const inlineImages = createComposeInlineImagesFromFiles(files);
       const nextDraft = {
         ...activeDraftRef.current,
@@ -659,11 +661,11 @@ export const useComposeDialogController = ({
 
   return {
     addInlineImageFiles,
-    clearActiveDraftError,
     closeComposeDialog,
     discardActiveDraft,
     form,
     handleDialogOpenChange,
+    handleUserDraftChange,
     setActiveDraftError,
     state,
     toggleRecipientVisibility,

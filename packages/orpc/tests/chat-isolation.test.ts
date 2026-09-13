@@ -99,4 +99,70 @@ describe("chat history isolation", () => {
       })
     ).rejects.toMatchObject({ status: 409 });
   });
+
+  test("hides a chat owned by another user during continuation", async () => {
+    mocks.query.mockResolvedValueOnce({
+      rows: [[threadId, "mailbox", "Title", "different-user"]],
+    });
+
+    await expect(
+      createAiChatResponse({
+        body: {
+          category: "inbox",
+          foreground,
+          mailboxId: "mailbox",
+          message: {
+            id: "assistant",
+            parts: [
+              {
+                approval: { approved: true, id: "approval" },
+                input: {},
+                state: "approval-responded",
+                toolCallId: "tool",
+                type: "tool-modify_mail",
+              },
+            ],
+            role: "assistant",
+          },
+          model: "openai/gpt-5.6-luna",
+          threadId,
+          trigger: "submit-message",
+        },
+        request: new Request("https://example.test/api/chat"),
+        userId: "user",
+      })
+    ).rejects.toMatchObject({ message: "Chat not found.", status: 404 });
+  });
+
+  test("returns chat not found when continuing a nonexistent chat", async () => {
+    mocks.query.mockResolvedValueOnce({ rows: [] });
+
+    await expect(
+      createAiChatResponse({
+        body: {
+          category: "inbox",
+          foreground,
+          mailboxId: "mailbox",
+          message: {
+            id: "assistant",
+            parts: [
+              {
+                approval: { approved: true, id: "approval" },
+                input: {},
+                state: "approval-responded",
+                toolCallId: "tool",
+                type: "tool-modify_mail",
+              },
+            ],
+            role: "assistant",
+          },
+          model: "openai/gpt-5.6-luna",
+          threadId,
+          trigger: "submit-message",
+        },
+        request: new Request("https://example.test/api/chat"),
+        userId: "user",
+      })
+    ).rejects.toMatchObject({ message: "Chat not found.", status: 404 });
+  });
 });

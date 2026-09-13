@@ -79,7 +79,7 @@ type ComposeWorkspaceProps = Omit<
 
 type ComposeFormFieldProps = Pick<
   ComposeDialogController,
-  "clearActiveDraftError" | "form"
+  "handleUserDraftChange" | "form"
 > & {
   disabled?: boolean;
   divided?: boolean;
@@ -106,7 +106,7 @@ const composeRecipientMotion = {
 } as const;
 
 const ComposeFormField = ({
-  clearActiveDraftError,
+  handleUserDraftChange,
   disabled,
   divided,
   form,
@@ -131,7 +131,7 @@ const ComposeFormField = ({
               field.handleBlur();
             }}
             onChange={(event) => {
-              clearActiveDraftError();
+              handleUserDraftChange();
               field.handleChange(event.currentTarget.value);
             }}
             placeholder={placeholder}
@@ -188,7 +188,7 @@ export const ComposeSurface = ({
   const {
     state,
     addInlineImageFiles,
-    clearActiveDraftError,
+    handleUserDraftChange,
     closeComposeDialog,
     discardActiveDraft,
     form,
@@ -274,7 +274,7 @@ export const ComposeSurface = ({
           : result.text;
         const nextHtml = `${currentHtml}${textToComposeBodyHtml(result.text)}`;
 
-        clearActiveDraftError();
+        handleUserDraftChange();
         form.setFieldValue("bodyHtml", nextHtml);
         form.setFieldValue("bodyText", nextText);
       } catch (error) {
@@ -363,7 +363,7 @@ export const ComposeSurface = ({
                       normalizeComposeBodyHtml(field.state.value) ||
                     text !== form.state.values.bodyText
                   ) {
-                    clearActiveDraftError();
+                    handleUserDraftChange();
                   }
                   field.handleChange(html);
                   form.setFieldValue("bodyText", text);
@@ -447,7 +447,7 @@ export const ComposeSurface = ({
                                 recipientField.handleBlur();
                               }}
                               onChange={(event) => {
-                                clearActiveDraftError();
+                                handleUserDraftChange();
                                 recipientField.handleChange(
                                   event.currentTarget.value
                                 );
@@ -469,7 +469,7 @@ export const ComposeSurface = ({
                           >
                             <div className="min-h-0 overflow-hidden">
                               <ComposeFormField
-                                clearActiveDraftError={clearActiveDraftError}
+                                handleUserDraftChange={handleUserDraftChange}
                                 disabled={!canEditBody}
                                 form={form}
                                 label="Cc"
@@ -487,7 +487,7 @@ export const ComposeSurface = ({
                           >
                             <div className="min-h-0 overflow-hidden">
                               <ComposeFormField
-                                clearActiveDraftError={clearActiveDraftError}
+                                handleUserDraftChange={handleUserDraftChange}
                                 disabled={!canEditBody}
                                 form={form}
                                 label="Bcc"
@@ -500,7 +500,7 @@ export const ComposeSurface = ({
                     </LazyMotion>
                     {showSubject ? (
                       <ComposeFormField
-                        clearActiveDraftError={clearActiveDraftError}
+                        handleUserDraftChange={handleUserDraftChange}
                         disabled={!canEditBody}
                         form={form}
                         label="Subject"
@@ -580,7 +580,7 @@ export const ComposeSurface = ({
                                 void closeComposeDialog(onManageTemplates);
                               }}
                               onInsert={(template) => {
-                                clearActiveDraftError();
+                                handleUserDraftChange();
                                 setActiveTemplateName(template.name);
                                 composeEditorRef.current?.insertHtml(
                                   template.bodyHtml

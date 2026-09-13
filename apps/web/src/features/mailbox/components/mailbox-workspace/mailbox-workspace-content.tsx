@@ -306,6 +306,7 @@ const MailboxWorkspaceContentInner = ({
   signature,
 }: MailboxWorkspaceContentProps) => {
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantOpened, setAssistantOpened] = useState(false);
   const agentWorkspace = useAgentWorkspace();
   let mailboxContent: ReactNode;
   if (!selectedMailboxId) {
@@ -523,32 +524,35 @@ const MailboxWorkspaceContentInner = ({
               setAssistantOpen(false);
             }}
             onOpen={() => {
+              setAssistantOpened(true);
               setAssistantOpen(true);
             }}
           >
-            <Suspense
-              fallback={
-                <p className="p-4 text-body-sm text-muted-fg">
-                  Loading assistant…
-                </p>
-              }
-            >
-              <ChatView
-                activeMailbox={activeMailbox ?? "inbox"}
-                mailContext={chatContext}
-                chatId={chatId}
-                draftChatKey={draftChatKey}
-                mailboxId={selectedMailboxId}
-                mailboxOrganizationId={
-                  mailboxGroups.find((group) =>
-                    group.mailboxes.some(
-                      (mailbox) => mailbox.id === selectedMailboxId
-                    )
-                  )?.id ?? ""
+            {assistantOpened ? (
+              <Suspense
+                fallback={
+                  <p className="p-4 text-body-sm text-muted-fg">
+                    Loading assistant…
+                  </p>
                 }
-                onChatIdChange={onChatIdChange}
-              />
-            </Suspense>
+              >
+                <ChatView
+                  activeMailbox={activeMailbox ?? "inbox"}
+                  mailContext={chatContext}
+                  chatId={chatId}
+                  draftChatKey={draftChatKey}
+                  mailboxId={selectedMailboxId}
+                  mailboxOrganizationId={
+                    mailboxGroups.find((group) =>
+                      group.mailboxes.some(
+                        (mailbox) => mailbox.id === selectedMailboxId
+                      )
+                    )?.id ?? ""
+                  }
+                  onChatIdChange={onChatIdChange}
+                />
+              </Suspense>
+            ) : null}
           </FloatingAssistant>
         ) : null}
       </main>

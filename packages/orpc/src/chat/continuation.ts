@@ -1,3 +1,4 @@
+import { foregroundSnapshotSchema } from "@quieter/ai/chat-tools";
 import { db } from "@quieter/database/client";
 import { chatMessage } from "@quieter/database/schema";
 import type { ChatMessagePart } from "@quieter/database/schema";
@@ -73,14 +74,8 @@ export const normalizeExpiredChatParts = (
     ) {
       return false;
     }
-    const { foreground } = part;
-    return (
-      typeof foreground === "object" &&
-      foreground !== null &&
-      "expiresAt" in foreground &&
-      typeof foreground.expiresAt === "number" &&
-      foreground.expiresAt <= now
-    );
+    const foreground = foregroundSnapshotSchema.safeParse(part.foreground);
+    return !foreground.success || foreground.data.expiresAt <= now;
   });
   return hasExpiredPendingPart ? cancelForegroundExchangeParts(parts) : parts;
 };
