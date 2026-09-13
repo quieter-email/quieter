@@ -43,6 +43,7 @@ describe("Cloudflare server Sentry options", () => {
     ).toStrictEqual({
       exception: { values: [{ value: error.message }] },
       tags: { operation: "chat:generation" },
+      type: undefined,
     });
   });
 });
