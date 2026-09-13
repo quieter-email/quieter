@@ -25,6 +25,8 @@ import {
 } from "#/features/settings/domain/billing";
 import { chatQueryOptions, getChatsQueryKey } from "#/lib/chat-query";
 import { toastError } from "#/lib/error-toast";
+import { getMessagesQueryKey } from "#/lib/mail/inbox-query";
+import { getThreadQueryKey } from "#/lib/mail/thread-query-keys";
 import { rpc } from "#/lib/orpc";
 
 import {
@@ -51,7 +53,13 @@ const ChatSession = ({
   const queryClient = useQueryClient();
   const policy = useSelector(workspace.control.state, (state) => state.policy);
   const [input, setInput] = useState("");
-  const [contextDismissed, setContextDismissed] = useState(false);
+  const contextKey = JSON.stringify([
+    props.mailContext?.messageId,
+    props.mailContext?.query,
+    props.mailContext?.threadId,
+  ]);
+  const [dismissedContext, setDismissedContext] = useState<string | null>(null);
+  const contextDismissed = dismissedContext === contextKey;
   // oxlint-disable-next-line react/hook-use-state -- The session identity is fixed until this keyed component unmounts.
   const [tabId] = useState(() => crypto.randomUUID());
   const threadId = props.chatId ?? props.draftChatKey;
@@ -74,6 +82,19 @@ const ChatSession = ({
       }
     } catch (error) {
       toastError(error, { boundary: "assistant-history" });
+    }
+  };
+  const refreshMailQueries = async (
+    queryKeys: readonly (readonly unknown[])[]
+  ) => {
+    try {
+      await Promise.all(
+        queryKeys.map(async (queryKey) => {
+          await queryClient.invalidateQueries({ queryKey });
+        })
+      );
+    } catch (error) {
+      toastError(error, { boundary: "assistant-mail-refresh" });
     }
   };
   // oxlint-disable-next-line react/hook-use-state -- useChat keeps one transport per session.
@@ -134,10 +155,24 @@ const ChatSession = ({
           if (receipt.success) {
             appliedReceipts.current.add(part.toolCallId);
             workspace.getCompose()?.applyReceipt(receipt.data);
-            void queryClient.invalidateQueries({
-              predicate: (query) =>
-                query.queryKey.includes(workspace.mailboxId),
-            });
+            const draftInput = saveComposeDraftInputSchema.safeParse(
+              part.input
+            );
+            const affectedThreadId =
+              "threadId" in receipt.data ? receipt.data.threadId : undefined;
+            const replyThreadId = draftInput.success
+              ? draftInput.data.draft.replyContext?.threadId
+              : undefined;
+            const affectedKeys = [
+              getMessagesQueryKey(workspace.mailboxId, "drafts").slice(0, 3),
+              ...(receipt.data.status === "sent"
+                ? [getMessagesQueryKey(workspace.mailboxId, "sent").slice(0, 3)]
+                : []),
+              ...[...new Set([affectedThreadId, replyThreadId])].flatMap(
+                (id) => (id ? [getThreadQueryKey(workspace.mailboxId, id)] : [])
+              ),
+            ];
+            void refreshMailQueries(affectedKeys);
           }
         }
       }
@@ -420,7 +455,7 @@ const ChatSession = ({
         }}
         contextLabel={contextLabel}
         onDismissContext={() => {
-          setContextDismissed(true);
+          setDismissedContext(contextKey);
         }}
         onInputChange={setInput}
         onInputKeyDown={(event) => {
@@ -448,10 +483,8 @@ const ChatSession = ({
 export const ChatView = (props: ChatViewProps) => {
   const { data: billing, isPending } = useQuery(userBillingQueryOptions());
   const query = useQuery(chatQueryOptions(props.mailboxId, props.chatId));
-  if (props.chatId !== null && query.isPending) {
-    return (
-      <p className="p-4 text-body-sm text-muted-fg">Loading conversation…</p>
-    );
+  if (isPending || (props.chatId !== null && query.isPending)) {
+    return <p className="p-4 text-body-sm text-muted-fg">Loading assistant…</p>;
   }
   if (props.chatId !== null && query.isError) {
     return (

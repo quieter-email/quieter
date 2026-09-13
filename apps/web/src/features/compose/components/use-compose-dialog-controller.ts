@@ -297,7 +297,8 @@ export const useComposeDialogController = ({
         NonNullable<
           ReturnType<NonNullable<typeof agentWorkspace>["getCompose"]>
         >["applyReceipt"]
-      >[0]
+      >[0],
+      matchesRevision: boolean
     ) => {
       if (receipt.draftId !== activeDraftRef.current.localId) {
         return;
@@ -309,13 +310,15 @@ export const useComposeDialogController = ({
         setState((currentState) => ({ ...currentState, open: false }));
         onClose?.();
       } else {
-        assistantUnsavedRef.current = false;
+        if (matchesRevision) {
+          assistantUnsavedRef.current = false;
+        }
         activeDraftRef.current = {
           ...activeDraftRef.current,
           draftId: receipt.providerDraftId,
           lastSavedAt: Date.now(),
           messageId: receipt.messageId,
-          saveStatus: "saved",
+          saveStatus: matchesRevision ? "saved" : "idle",
         };
         setState((currentState) => ({
           ...currentState,
@@ -345,8 +348,9 @@ export const useComposeDialogController = ({
     });
     const unregister = agentWorkspace.registerCompose({
       applyReceipt: (receipt) => {
-        if (receipt.draftRevision === revision) {
-          applyAssistantReceipt(receipt);
+        const matchesRevision = receipt.draftRevision === revision;
+        if (receipt.status === "draft_saved" || matchesRevision) {
+          applyAssistantReceipt(receipt, matchesRevision);
         }
       },
       edit: (values, expectedRevision) => {
@@ -397,7 +401,7 @@ export const useComposeDialogController = ({
         inlineImages: activeDraftRef.current.inlineImages,
         providerDraftId: activeDraftRef.current.draftId,
         replyContext: activeDraftRef.current.replyContext,
-        values: form.state.values,
+        values: { ...form.state.values },
       }),
     });
     return () => {

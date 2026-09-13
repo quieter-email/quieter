@@ -90,6 +90,31 @@ describe("foreground chat requests", () => {
     ).toThrow(/visible draft changed/u);
   });
 
+  test("does not fall back to an older workspace after a newer mismatched read", () => {
+    const transcript = transcriptWithDraft(richDraft);
+    transcript[0]?.parts.push({
+      input: {},
+      output: {
+        draft: richDraft,
+        generation: foreground.generation + 1,
+        mailboxId: "mailbox-1",
+        view: "compose",
+      },
+      state: "output-available",
+      toolCallId: "workspace-2",
+      type: "tool-get_workspace",
+    });
+
+    expect(() =>
+      resolveForegroundComposeDraftForPersistence({
+        draft: richDraft,
+        foreground,
+        mailboxId: "mailbox-1",
+        transcript,
+      })
+    ).toThrow(/Read the visible draft again/u);
+  });
+
   test("refuses to drop attachment content at the JSON approval boundary", () => {
     const attachedDraft = {
       ...richDraft,

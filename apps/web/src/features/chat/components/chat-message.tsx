@@ -7,6 +7,8 @@ import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { toast } from "@quieter/ui/toast";
 import type { UIMessage } from "ai";
 
+import { toastError } from "#/lib/error-toast";
+
 import { getAssistantProgress, getMessageText } from "../domain/chat-messages";
 import { isChatToolPart } from "../domain/chat-tools";
 import type { ChatToolApproval } from "../domain/chat-tools";
@@ -17,8 +19,11 @@ const copyMessage = async (text: string) => {
   try {
     await navigator.clipboard.writeText(text);
     toast.success("Copied to clipboard.");
-  } catch {
-    toast.error("Could not copy to clipboard.");
+  } catch (error) {
+    toastError(error, {
+      boundary: "assistant-copy",
+      fallback: "Could not copy to clipboard.",
+    });
   }
 };
 
@@ -76,7 +81,7 @@ export const ChatMessage = ({
         </p>
       )}
       {!isStreaming && text !== "" ? (
-        <div className="opacity-0 transition-opacity group-hover/message:opacity-100 focus-within:opacity-100">
+        <div className="opacity-0 transition-opacity group-hover/message:opacity-100 focus-within:opacity-100 [@media(pointer:coarse)]:opacity-100">
           <IconButtonTooltip label="Copy response">
             <Button
               aria-label="Copy response"

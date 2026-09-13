@@ -3,6 +3,21 @@ import { describe, expect, test, vi } from "vite-plus/test";
 import { createForegroundControl } from "./foreground-control";
 
 describe("foreground control", () => {
+  test("inactive cancellation does not notify subscribers or advance generation", () => {
+    const control = createForegroundControl();
+    const notify = vi.fn<() => void>();
+    const subscription = control.state.subscribe(notify);
+    control.cancel();
+    expect(notify).not.toHaveBeenCalled();
+    const generation = control.begin();
+    control.cancel();
+    notify.mockClear();
+    control.cancel();
+    expect(notify).not.toHaveBeenCalled();
+    expect(control.state.get().generation).toBe(generation + 1);
+    subscription.unsubscribe();
+  });
+
   test("cancelling invalidates the active generation", () => {
     const control = createForegroundControl();
     const generation = control.begin();

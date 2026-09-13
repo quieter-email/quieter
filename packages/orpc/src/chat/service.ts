@@ -945,12 +945,17 @@ export const createAiChatResponse = async (input: {
   const lastRow = rows.at(-1);
   let transcript: UIMessage[];
   let assistantMessageId: string;
-  let assistantPosition: number;
+  let assistantReservationParts: ChatMessagePart[] | null = null;
   let continuingRowId: string | null = null;
   let continuingOriginalParts: ChatMessagePart[] | null = null;
   let shouldGenerateTitle = false;
 
   if (validated.kind === "message") {
+    assistantMessageId = validated.foreground.exchangeId;
+    const reservationParts: ChatMessagePart[] = [
+      { foreground: validated.foreground, type: "data-foreground" },
+    ];
+    assistantReservationParts = reservationParts;
     const userParts: ChatMessagePart[] = [
       { text: validated.userMessage.text, type: "text" },
       { foreground: validated.foreground, type: "data-foreground" },
@@ -963,7 +968,25 @@ export const createAiChatResponse = async (input: {
       // The previous attempt was aborted before its answer was persisted;
       // reuse the stored user message instead of duplicating it.
       transcript = toCanonicalTranscript(rows);
-      assistantPosition = lastRow.position + 1;
+      const [reserved] = await db
+        .insert(chatMessage)
+        .values({
+          chatId: threadId,
+          createdAt: new Date(),
+          id: assistantMessageId,
+          parts: reservationParts,
+          position: lastRow.position + 1,
+          role: "assistant",
+          userId: input.userId,
+        })
+        .onConflictDoNothing()
+        .returning({ id: chatMessage.id });
+      if (reserved === undefined) {
+        throw new ChatRequestError(
+          409,
+          "This chat exchange has already been submitted."
+        );
+      }
     } else {
       if (lastRow?.role === "user") {
         throw new ChatRequestError(
@@ -1017,12 +1040,27 @@ export const createAiChatResponse = async (input: {
             role: "user",
             userId: input.userId,
           });
+          await transaction.insert(chatMessage).values({
+            chatId: threadId,
+            createdAt: now,
+            id: assistantMessageId,
+            parts: reservationParts,
+            position: userPosition + 1,
+            role: "assistant",
+            userId: input.userId,
+          });
         });
       } catch (error) {
-        const errorCode =
-          error !== null && typeof error === "object" && "code" in error
-            ? error.code
-            : undefined;
+        let errorCode: unknown;
+        if (error !== null && typeof error === "object") {
+          errorCode = Reflect.get(error, "code");
+          if (errorCode === undefined) {
+            const cause: unknown = Reflect.get(error, "cause");
+            if (cause !== null && typeof cause === "object") {
+              errorCode = Reflect.get(cause, "code");
+            }
+          }
+        }
         if (errorCode === "23505") {
           throw new ChatRequestError(
             409,
@@ -1040,9 +1078,7 @@ export const createAiChatResponse = async (input: {
           role: "user",
         } satisfies UIMessage,
       ];
-      assistantPosition = userPosition + 1;
     }
-    assistantMessageId = validated.foreground.exchangeId;
   } else if (validated.kind === "continue") {
     if (
       lastRow === undefined ||
@@ -1118,7 +1154,6 @@ export const createAiChatResponse = async (input: {
       applyClientResolutions(storedMessage, validated),
     ];
     assistantMessageId = lastRow.id;
-    assistantPosition = lastRow.position;
     continuingRowId = lastRow.id;
     continuingOriginalParts = lastRow.parts;
   } else {
@@ -1178,16 +1213,20 @@ export const createAiChatResponse = async (input: {
           mailboxId,
           transcript,
         });
-        const saved = await composeMailOperations.saveDraft({
-          context: { signal, userId: input.userId },
-          input: {
-            draft: toForegroundComposeMessage(
-              reviewedDraft,
-              `chat:${threadId}:${assistantMessageId}:${toolCallId}`
-            ),
-            mailboxId,
-          },
-        });
+        const saved = await runMailTool(
+          signal,
+          async (runSignal) =>
+            await composeMailOperations.saveDraft({
+              context: { signal: runSignal, userId: input.userId },
+              input: {
+                draft: toForegroundComposeMessage(
+                  reviewedDraft,
+                  `chat:${threadId}:${assistantMessageId}:${toolCallId}`
+                ),
+                mailboxId,
+              },
+            })
+        );
         return saveComposeDraftOutputSchema.parse({
           draftId: draft.draftId,
           draftRevision: draft.draftRevision,
@@ -1210,16 +1249,20 @@ export const createAiChatResponse = async (input: {
           mailboxId,
           transcript,
         });
-        const sent = await composeMailOperations.sendMessage({
-          context: { signal, userId: input.userId },
-          input: {
-            mailboxId,
-            message: toForegroundComposeMessage(
-              reviewedDraft,
-              `chat:${threadId}:${assistantMessageId}:${toolCallId}`
-            ),
-          },
-        });
+        const sent = await runMailTool(
+          signal,
+          async (runSignal) =>
+            await composeMailOperations.sendMessage({
+              context: { signal: runSignal, userId: input.userId },
+              input: {
+                mailboxId,
+                message: toForegroundComposeMessage(
+                  reviewedDraft,
+                  `chat:${threadId}:${assistantMessageId}:${toolCallId}`
+                ),
+              },
+            })
+        );
         return sendMailOutputSchema.parse({
           draftId: draft.draftId,
           draftRevision: draft.draftRevision,
@@ -1384,35 +1427,30 @@ export const createAiChatResponse = async (input: {
           validated.foreground
         );
         await db.transaction(async (transaction) => {
-          if (continuingRowId === null) {
-            await transaction.insert(chatMessage).values({
-              chatId: threadId,
-              createdAt: now,
-              id: assistantMessageId,
-              parts,
-              position: assistantPosition,
-              role: "assistant",
-              userId: input.userId,
-            });
-          } else {
-            const [updatedMessage] = await transaction
-              .update(chatMessage)
-              .set({ parts })
-              .where(
-                and(
-                  eq(chatMessage.id, continuingRowId),
-                  eq(chatMessage.chatId, threadId),
-                  eq(chatMessage.userId, input.userId),
-                  eq(chatMessage.parts, continuingOriginalParts ?? [])
-                )
+          const expectedParts =
+            continuingRowId === null
+              ? assistantReservationParts
+              : continuingOriginalParts;
+          if (expectedParts === null) {
+            throw new ChatRequestError(409, "This chat exchange is invalid.");
+          }
+          const [updatedMessage] = await transaction
+            .update(chatMessage)
+            .set({ parts })
+            .where(
+              and(
+                eq(chatMessage.id, continuingRowId ?? assistantMessageId),
+                eq(chatMessage.chatId, threadId),
+                eq(chatMessage.userId, input.userId),
+                eq(chatMessage.parts, expectedParts)
               )
-              .returning({ id: chatMessage.id });
-            if (updatedMessage === undefined) {
-              throw new ChatRequestError(
-                409,
-                "This chat changed while the answer was being completed. Retry it."
-              );
-            }
+            )
+            .returning({ id: chatMessage.id });
+          if (updatedMessage === undefined) {
+            throw new ChatRequestError(
+              409,
+              "This chat changed while the answer was being completed. Retry it."
+            );
           }
           await transaction
             .update(chatTable)

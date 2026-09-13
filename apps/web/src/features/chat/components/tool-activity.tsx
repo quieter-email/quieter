@@ -12,6 +12,7 @@ import {
   CollapsiblePanel,
   CollapsibleTrigger,
 } from "@quieter/ui/collapsible";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 
 import { getToolName } from "../domain/chat-tools";
 import type { ChatToolApproval, ChatToolPart } from "../domain/chat-tools";
@@ -64,14 +65,14 @@ const ToolDetails = ({ input, draft }: { input: unknown; draft: boolean }) => {
     payload = input.draft;
   }
   const fields = draft
-    ? [
+    ? ([
         ["To", "to"],
         ["Cc", "cc"],
         ["Bcc", "bcc"],
         ["Subject", "subject"],
         ["Message", "bodyText"],
-      ]
-    : [
+      ] as const)
+    : ([
         ["Search", "query"],
         ["Change", "action"],
         ["Target", "target"],
@@ -79,16 +80,14 @@ const ToolDetails = ({ input, draft }: { input: unknown; draft: boolean }) => {
         ["Message", "messageId"],
         ["Item", "id"],
         ["View", "view"],
-      ];
-  const details = fields.flatMap(([label, key]) => {
-    if (key === undefined) {
-      return [];
-    }
-    const value: unknown = Reflect.get(payload, key);
-    return typeof value === "string" && value !== ""
-      ? [{ key, label, value }]
-      : [];
-  });
+      ] as const);
+  const details: { key: string; label: string; value: string }[] =
+    fields.flatMap(([label, key]) => {
+      const value: unknown = Reflect.get(payload, key);
+      return typeof value === "string" && value !== ""
+        ? [{ key, label, value }]
+        : [];
+    });
   if (details.length === 0) {
     for (const [key, value] of Object.entries(payload)) {
       details.push({
@@ -130,11 +129,9 @@ export const ToolActivity = ({
     output.status === "error";
   const failed = part.state === "output-error" || returnedError;
   const pending =
-    !awaitingApproval &&
-    !failed &&
-    part.state !== "output-available" &&
-    part.state !== "output-denied" &&
-    isStreaming;
+    part.state === "input-streaming" ||
+    part.state === "input-available" ||
+    (part.state === "approval-responded" && part.approval.approved);
   const draft =
     name === "send_mail" ||
     name === "save_compose_draft" ||
@@ -185,7 +182,7 @@ export const ToolActivity = ({
 
   return (
     <Collapsible
-      defaultOpen={awaitingApproval && draft}
+      defaultOpen={awaitingApproval}
       key={awaitingApproval ? "approval" : "activity"}
     >
       <div className="flex min-h-7 items-center gap-2 text-caption">
@@ -234,16 +231,18 @@ export const ToolActivity = ({
             </Button>
           </>
         ) : null}
-        <CollapsibleTrigger
-          aria-label="Action details"
-          className="flex size-5 shrink-0 items-center justify-center rounded text-muted-fg hover:text-fg focus-visible:ring-1 focus-visible:ring-ring"
-        >
-          <HugeiconsIcon
-            aria-hidden
-            className="size-3"
-            icon={ArrowDown01Icon}
-          />
-        </CollapsibleTrigger>
+        <IconButtonTooltip label="Action details">
+          <CollapsibleTrigger
+            aria-label="Action details"
+            className="flex size-5 shrink-0 items-center justify-center rounded text-muted-fg hover:text-fg focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            <HugeiconsIcon
+              aria-hidden
+              className="size-3"
+              icon={ArrowDown01Icon}
+            />
+          </CollapsibleTrigger>
+        </IconButtonTooltip>
       </div>
       {failed ? (
         <output className="mt-1 block text-caption text-muted-fg">

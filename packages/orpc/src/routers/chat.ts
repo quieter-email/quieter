@@ -69,7 +69,7 @@ export const chatRouter = {
   cancel: protectedProcedure
     .input(
       z.object({
-        assistantMessageId: z.string().trim().min(1).max(128),
+        assistantMessageId: z.uuid(),
         chatId: chatIdSchema,
         mailboxId: mailboxIdSchema,
       })
@@ -124,7 +124,12 @@ export const chatRouter = {
             role: chatMessage.role,
           })
           .from(chatMessage)
-          .where(eq(chatMessage.chatId, input.chatId))
+          .where(
+            and(
+              eq(chatMessage.chatId, input.chatId),
+              eq(chatMessage.userId, context.userId)
+            )
+          )
           .orderBy(desc(chatMessage.position))
           .limit(1);
         const belongsToExchange = lastMessage?.parts.some((part) => {

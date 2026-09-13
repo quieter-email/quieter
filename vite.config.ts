@@ -240,7 +240,6 @@ export default defineConfig({
         // These containers only delegate pointer-hover cleanup or keyboard
         // navigation to their child controls; they are not themselves actions.
         files: [
-          "apps/web/src/features/navigation/components/sidebar-workspace-view-switch.tsx",
           "apps/web/src/features/navigation/components/sidebar-mailbox-nav.tsx",
           "apps/web/src/features/navigation/components/mail-sidebar.tsx",
         ],

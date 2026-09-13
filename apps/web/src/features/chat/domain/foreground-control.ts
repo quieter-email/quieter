@@ -24,6 +24,9 @@ export const createForegroundControl = () => {
       return state.get().generation;
     },
     cancel() {
+      if (!state.get().active) {
+        return;
+      }
       state.setState((current) => ({
         ...current,
         active: false,

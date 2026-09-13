@@ -50,7 +50,7 @@ export const ChatTranscript = ({
         viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <
           SCROLL_THRESHOLD
       ) {
-        scrollToLatest("smooth");
+        scrollToLatest("auto");
       }
     });
     observer.observe(content);

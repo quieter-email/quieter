@@ -89,6 +89,30 @@ describe("chat request validation", () => {
     expect(() => validateChatRequest(body)).toThrow(/invalid UUID/iu);
   });
 
+  test("rejects expired, overlong, and regenerate foreground requests", () => {
+    const expired = validBody();
+    expired.foreground = {
+      ...z.record(z.string(), z.unknown()).parse(expired.foreground),
+      expiresAt: Date.now() - 1,
+    };
+    expect(() => validateChatRequest(expired)).toThrow(
+      /foreground exchange has expired/iu
+    );
+
+    const overlong = validBody();
+    overlong.foreground = {
+      ...z.record(z.string(), z.unknown()).parse(overlong.foreground),
+      expiresAt: Date.now() + 5 * 60_000 + 5000,
+    };
+    expect(() => validateChatRequest(overlong)).toThrow(
+      /foreground exchange has expired/iu
+    );
+
+    const regenerate = validBody();
+    regenerate.trigger = "regenerate-message";
+    expect(() => validateChatRequest(regenerate)).toThrow(/invalid input/iu);
+  });
+
   test("collects approval decisions from an assistant continuation message", () => {
     const body = validBody();
     body.message = {

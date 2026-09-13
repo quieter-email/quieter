@@ -169,7 +169,9 @@ export const AgentWorkspaceProvider = ({
         throw new Error("This view is not available.");
       }
       await current.current.route.setMailboxSearch({
-        ...(view === "labels" ? { view: "labels" } : { view: "inbox" }),
+        ...(view === undefined
+          ? {}
+          : { view: view === "labels" ? "labels" : "inbox" }),
         ...(view === "inbox" ||
         view === "unread" ||
         view === "archive" ||
@@ -189,7 +191,7 @@ export const AgentWorkspaceProvider = ({
       if (!bridge.control.isCurrent(generation)) {
         throw new Error("The request was stopped.");
       }
-      if (bridge.getCompose()) {
+      if (bridge.getCompose() || current.current.route.isComposeMailbox) {
         throw new Error(
           "A draft is already open. Edit that draft or let the user close it first."
         );
@@ -255,6 +257,13 @@ export const AgentWorkspaceProvider = ({
   useEffect(() => {
     const takeOver = (event: Event) => {
       if (
+        !event.isTrusted ||
+        (event instanceof KeyboardEvent &&
+          ["Tab", "Shift", "Control", "Alt", "Meta"].includes(event.key))
+      ) {
+        return;
+      }
+      if (
         event.target instanceof Element &&
         event.target.closest(
           "[data-assistant-panel], [data-assistant-launcher]"
@@ -272,26 +281,16 @@ export const AgentWorkspaceProvider = ({
     const onBack = () => {
       bridge.control.cancel();
     };
-    const onInput = (event: Event) => {
-      if (event.isTrusted) {
-        takeOver(event);
-      }
-    };
     document.addEventListener("pointerdown", takeOver, true);
     document.addEventListener("keydown", takeOver, true);
-    document.addEventListener("input", onInput, true);
-    document.addEventListener("wheel", takeOver, {
-      capture: true,
-      passive: true,
-    });
+    document.addEventListener("input", takeOver, true);
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("popstate", onBack);
     return () => {
       bridge.control.cancel();
       document.removeEventListener("pointerdown", takeOver, true);
       document.removeEventListener("keydown", takeOver, true);
-      document.removeEventListener("input", onInput, true);
-      document.removeEventListener("wheel", takeOver, true);
+      document.removeEventListener("input", takeOver, true);
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("popstate", onBack);
     };
