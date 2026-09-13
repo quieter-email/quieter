@@ -1,22 +1,54 @@
 import { serverEnv } from "@quieter/env/server";
 import { prepareReportedEvent } from "@quieter/observability";
-import * as Sentry from "@sentry/tanstackstart-react";
+import type { CloudflareOptions } from "@sentry/cloudflare";
 
-const isSentryEnabled =
-  (serverEnv.NODE_ENV !== "development" ||
-    serverEnv.VITE_QUIETER_LOCAL_TELEMETRY === true) &&
-  (serverEnv.SENTRY_DSN ?? "") !== "";
+export const createServerSentryOptions = (
+  runtimeEnv: unknown
+): CloudflareOptions => {
+  const bindings =
+    typeof runtimeEnv === "object" && runtimeEnv !== null ? runtimeEnv : {};
+  const boundDsn =
+    "SENTRY_DSN" in bindings &&
+    typeof bindings.SENTRY_DSN === "string" &&
+    bindings.SENTRY_DSN !== ""
+      ? bindings.SENTRY_DSN
+      : undefined;
+  const dsn = boundDsn ?? serverEnv.SENTRY_DSN;
+  const environment =
+    "SENTRY_ENVIRONMENT" in bindings &&
+    typeof bindings.SENTRY_ENVIRONMENT === "string" &&
+    bindings.SENTRY_ENVIRONMENT !== ""
+      ? bindings.SENTRY_ENVIRONMENT
+      : (serverEnv.SENTRY_ENVIRONMENT ??
+        serverEnv.QUIETER_DEPLOYMENT_ENV ??
+        serverEnv.NODE_ENV);
+  const enabled =
+    (serverEnv.NODE_ENV !== "development" ||
+      serverEnv.VITE_QUIETER_LOCAL_TELEMETRY === true) &&
+    dsn !== undefined;
 
-if (isSentryEnabled) {
-  Sentry.init({
+  return {
     beforeSend: (event, hint) =>
       prepareReportedEvent(event, hint.originalException),
-    dsn: serverEnv.SENTRY_DSN,
+    dataCollection: {
+      cookies: false,
+      databaseQueryData: false,
+      genAI: { inputs: false, outputs: false },
+      graphQL: { document: false, variables: false },
+      httpBodies: [],
+      httpHeaders: { request: false, response: false },
+      stackFrameVariables: false,
+      urlQueryParams: false,
+      userInfo: false,
+    },
+    dsn,
     enableLogs: false,
-    environment:
-      serverEnv.SENTRY_ENVIRONMENT ??
-      serverEnv.QUIETER_DEPLOYMENT_ENV ??
-      serverEnv.NODE_ENV,
+    enabled,
+    environment,
+    release:
+      typeof __QUIETER_BUILD_ID__ === "string"
+        ? __QUIETER_BUILD_ID__
+        : undefined,
     tracesSampleRate: 0,
-  });
-}
+  };
+};

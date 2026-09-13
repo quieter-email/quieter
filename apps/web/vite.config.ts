@@ -88,22 +88,31 @@ const validateLocalDevelopment = (): Plugin => ({
 export default defineConfig(({ command }) => {
   const isDev = command === "serve";
   const isSentryEnabled = !isDev && !!process.env.SENTRY_AUTH_TOKEN;
+  const sentryPluginsFor = (
+    environmentName: "client" | "ssr",
+    outputDirectory: "client" | "server"
+  ) =>
+    sentryTanstackStart({
+      authToken: process.env.SENTRY_AUTH_TOKEN,
+      autoInstrumentMiddleware: false,
+      org: process.env.SENTRY_ORG,
+      project: process.env.SENTRY_PROJECT,
+      release: { name: buildId },
+      sourcemaps: {
+        assets: [`./dist/${outputDirectory}/**/*.js`],
+        filesToDeleteAfterUpload: [`./dist/${outputDirectory}/**/*.map`],
+      },
+      telemetry: false,
+    }).map((plugin) => ({
+      ...plugin,
+      applyToEnvironment: (environment: Environment) =>
+        environment.name === environmentName,
+    }));
   const sentryPlugins = isSentryEnabled
-    ? sentryTanstackStart({
-        authToken: process.env.SENTRY_AUTH_TOKEN,
-        autoInstrumentMiddleware: false,
-        org: process.env.SENTRY_ORG,
-        project: process.env.SENTRY_PROJECT,
-        sourcemaps: {
-          assets: ["./dist/client/**/*.js"],
-          filesToDeleteAfterUpload: ["./dist/client/**/*.map"],
-        },
-        telemetry: false,
-      }).map((plugin) => ({
-        ...plugin,
-        applyToEnvironment: (environment: Environment) =>
-          environment.name === "client",
-      }))
+    ? [
+        ...sentryPluginsFor("client", "client"),
+        ...sentryPluginsFor("ssr", "server"),
+      ]
     : [];
 
   return {

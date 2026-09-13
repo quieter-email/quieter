@@ -1,7 +1,7 @@
-import "../instrument.server.ts";
-import { serverEnv } from "@quieter/env/server";
-import { wrapFetchWithSentry } from "@sentry/tanstackstart-react";
+import * as Sentry from "@sentry/cloudflare";
 import handler, { createServerEntry } from "@tanstack/react-start/server-entry";
+
+import { createServerSentryOptions } from "../instrument.server";
 
 const serverEntry = {
   async fetch(request: Request) {
@@ -9,10 +9,7 @@ const serverEntry = {
   },
 };
 
-export default createServerEntry(
-  (serverEnv.NODE_ENV !== "development" ||
-    serverEnv.VITE_QUIETER_LOCAL_TELEMETRY === true) &&
-    (serverEnv.SENTRY_DSN ?? "") !== ""
-    ? wrapFetchWithSentry(serverEntry)
-    : serverEntry
+export default Sentry.withSentry(
+  (runtimeEnv) => createServerSentryOptions(runtimeEnv),
+  createServerEntry(serverEntry)
 );

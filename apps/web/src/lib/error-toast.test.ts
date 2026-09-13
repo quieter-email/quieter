@@ -1,5 +1,5 @@
 import type * as ToastModule from "@quieter/ui/toast";
-import type * as SentryModule from "@sentry/tanstackstart-react";
+import type * as SentryModule from "@sentry/react";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
 import { toastError } from "./error-toast";
@@ -22,7 +22,7 @@ vi.mock(
     ({ toast: toastMocks }) as unknown as typeof ToastModule
 );
 vi.mock(
-  import("@sentry/tanstackstart-react"),
+  import("@sentry/react"),
   () =>
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- mock shape is partial by design
     sentryMocks as unknown as typeof SentryModule

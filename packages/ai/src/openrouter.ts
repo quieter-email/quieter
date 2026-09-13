@@ -1,9 +1,11 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { serverEnv } from "@quieter/env/server";
+import { wrapLanguageModel } from "ai";
 import { z } from "zod";
 
 import type { ChatModel } from "./chat-models";
 import { chatModelSchema } from "./chat-models";
+import { openRouterStreamMiddleware } from "./openrouter-stream";
 
 let cachedProvider: ReturnType<typeof createOpenRouter> | null = null;
 
@@ -47,13 +49,16 @@ export const createChatModel = (
   options?: { prioritizeLatency?: boolean }
 ) => {
   const parsedModel = chatModelSchema.parse(model);
-  return getOpenRouterProvider().chat(parsedModel, {
-    extraBody: {
-      provider: {
-        ...(options?.prioritizeLatency === true ? { sort: "latency" } : {}),
-        zdr: true,
+  return wrapLanguageModel({
+    middleware: openRouterStreamMiddleware,
+    model: getOpenRouterProvider().chat(parsedModel, {
+      extraBody: {
+        provider: {
+          ...(options?.prioritizeLatency === true ? { sort: "latency" } : {}),
+          zdr: true,
+        },
       },
-    },
-    usage: { include: true },
+      usage: { include: true },
+    }),
   });
 };

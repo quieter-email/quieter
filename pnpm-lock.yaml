@@ -318,9 +318,12 @@ importers:
       '@quieter/ui':
         specifier: workspace:*
         version: link:../../packages/ui
-      '@sentry/tanstackstart-react':
+      '@sentry/cloudflare':
+        specifier: 'catalog:'
+        version: 10.71.0(@cloudflare/workers-types@5.20260907.1)(supports-color@10.2.2)(wrangler@4.129.1(@cloudflare/workers-types@5.20260907.1))
+      '@sentry/react':
         specifier: ^10.70.0
-        version: 10.70.0(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(react@19.2.8)(supports-color@10.2.2)
+        version: 10.70.0(react@19.2.8)
       '@tanstack/hotkeys':
         specifier: 'catalog:'
         version: 0.8.0
@@ -445,6 +448,9 @@ importers:
       '@rolldown/plugin-babel':
         specifier: ^0.2.3
         version: 0.2.3(@babel/core@8.0.1)(@babel/runtime@7.29.2)(@voidzero-dev/vite-plus-core@0.2.9(@types/node@26.2.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(rolldown@1.0.0-rc.17)
+      '@sentry/tanstackstart-react':
+        specifier: ^10.70.0
+        version: 10.70.0(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(react@19.2.8)(supports-color@10.2.2)
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(@voidzero-dev/vite-plus-core@0.2.9(@types/node@26.2.0)(esbuild@0.28.1)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))

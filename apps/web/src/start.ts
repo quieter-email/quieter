@@ -1,10 +1,5 @@
 import { withRequestDatabaseClient } from "@quieter/database/client";
-import { serverEnv } from "@quieter/env/server";
 import { checkDeploymentDatabase } from "@quieter/orpc/deployment-health";
-import {
-  sentryGlobalFunctionMiddleware,
-  sentryGlobalRequestMiddleware,
-} from "@sentry/tanstackstart-react";
 import {
   createCsrfMiddleware,
   createMiddleware,
@@ -23,6 +18,10 @@ import { openApiDocument } from "#/lib/openapi-document.server";
 import { withApiRateLimitHeaders } from "#/lib/rate-limit-headers.server";
 import { withSecurityHeaders } from "#/lib/security-headers.server";
 import { reportServerError } from "#/lib/server-error-reporting";
+import {
+  sentryFunctionErrorMiddleware,
+  sentryRequestErrorMiddleware,
+} from "#/lib/server-sentry-middleware";
 import {
   hasSitePasswordConfigured,
   hasValidAuthSessionToken,
@@ -55,11 +54,6 @@ const homePagePath = "/home";
 const publicPathPrefixes = ["/_build/", "/assets/"];
 /** Open-tracking markers are fetched by mail clients without cookies. */
 const openTrackingPrefix = "/api/v1/o/";
-const isSentryEnabled =
-  import.meta.env.SSR &&
-  (serverEnv.NODE_ENV !== "development" ||
-    serverEnv.VITE_QUIETER_LOCAL_TELEMETRY === true) &&
-  serverEnv.SENTRY_DSN !== undefined;
 const csrfMiddleware = createCsrfMiddleware({
   filter: (ctx) => ctx.handlerType === "serverFn",
 });
@@ -347,9 +341,9 @@ const sitePasswordMiddleware = createMiddleware().server(
 );
 
 export const startInstance = createStart(() => ({
-  functionMiddleware: isSentryEnabled ? [sentryGlobalFunctionMiddleware] : [],
+  functionMiddleware: [sentryFunctionErrorMiddleware],
   requestMiddleware: [
-    ...(isSentryEnabled ? [sentryGlobalRequestMiddleware] : []),
+    sentryRequestErrorMiddleware,
     securityHeadersMiddleware,
     wellKnownAgentSurfaceMiddleware,
     markdownNegotiationMiddleware,

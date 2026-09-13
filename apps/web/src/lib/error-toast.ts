@@ -1,5 +1,5 @@
 import { toast } from "@quieter/ui/toast";
-import * as Sentry from "@sentry/tanstackstart-react";
+import * as Sentry from "@sentry/react";
 
 import { isExpectedClientError } from "#/lib/client-error-reporting";
 

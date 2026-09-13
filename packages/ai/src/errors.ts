@@ -1,20 +1,27 @@
-import { NoOutputGeneratedError } from "ai";
+import { NoOutputGeneratedError, RetryError } from "ai";
 
 /**
  * Provider throttling and transient connectivity failures are handled by the
  * automation retry backoff, so they are not application failures.
  */
 export const isTransientAiProviderError = (error: unknown): boolean => {
-  if (!(error instanceof Error) || error.name !== "AI_APICallError") {
-    return false;
+  const visited = new Set<unknown>();
+  let current = error;
+  while (current instanceof Error && !visited.has(current)) {
+    visited.add(current);
+    if (
+      current.name === "AI_APICallError" &&
+      (("statusCode" in current &&
+        (current.statusCode === 429 || current.statusCode === 503)) ||
+        ("isRetryable" in current && current.isRetryable === true))
+    ) {
+      return true;
+    }
+    current = RetryError.isInstance(current)
+      ? current.lastError
+      : current.cause;
   }
-  if (
-    "statusCode" in error &&
-    (error.statusCode === 429 || error.statusCode === 503)
-  ) {
-    return true;
-  }
-  return "isRetryable" in error && error.isRetryable === true;
+  return false;
 };
 
 export const isAiEmptyOutputError = (error: unknown): boolean =>
