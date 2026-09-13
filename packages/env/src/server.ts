@@ -91,7 +91,7 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       R2_ENDPOINT: runtimeEnv.R2_ENDPOINT,
       R2_SECRET_ACCESS_KEY: runtimeEnv.R2_SECRET_ACCESS_KEY,
       SENTRY_AUTH_TOKEN: runtimeEnv.SENTRY_AUTH_TOKEN,
-      SENTRY_DSN: runtimeEnv.SENTRY_DSN,
+      SENTRY_DSN: runtimeEnv.SENTRY_DSN ?? runtimeEnv.VITE_SENTRY_DSN,
       SENTRY_ENVIRONMENT: runtimeEnv.SENTRY_ENVIRONMENT,
       SENTRY_ORG: runtimeEnv.SENTRY_ORG,
       SENTRY_PROJECT: runtimeEnv.SENTRY_PROJECT,
@@ -99,6 +99,7 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       SES_FEEDBACK_TOPIC_ARN: runtimeEnv.SES_FEEDBACK_TOPIC_ARN,
       VITE_LOGO_DEV_PUBLISHABLE_KEY: runtimeEnv.VITE_LOGO_DEV_PUBLISHABLE_KEY,
       VITE_QUIETER_LOCAL_TELEMETRY: runtimeEnv.VITE_QUIETER_LOCAL_TELEMETRY,
+      VITE_SENTRY_DSN: runtimeEnv.VITE_SENTRY_DSN,
     },
     server: {
       APP_SITE_PASSWORD: optionalString,
@@ -184,6 +185,7 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       SES_FEEDBACK_TOPIC_ARN: optionalString,
       VITE_LOGO_DEV_PUBLISHABLE_KEY: optionalString,
       VITE_QUIETER_LOCAL_TELEMETRY: optionalBooleanString,
+      VITE_SENTRY_DSN: optionalHttpUrl,
     },
   });
 
