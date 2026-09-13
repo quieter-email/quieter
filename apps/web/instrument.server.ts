@@ -1,21 +1,22 @@
+import { serverEnv } from "@quieter/env/server";
 import { prepareReportedEvent } from "@quieter/observability";
 import * as Sentry from "@sentry/tanstackstart-react";
 
 const isSentryEnabled =
-  (process.env.NODE_ENV !== "development" ||
-    process.env.VITE_QUIETER_LOCAL_TELEMETRY === "true") &&
-  (process.env.SENTRY_DSN ?? "") !== "";
+  (serverEnv.NODE_ENV !== "development" ||
+    serverEnv.VITE_QUIETER_LOCAL_TELEMETRY === true) &&
+  (serverEnv.SENTRY_DSN ?? "") !== "";
 
 if (isSentryEnabled) {
   Sentry.init({
     beforeSend: (event, hint) =>
       prepareReportedEvent(event, hint.originalException),
-    dsn: process.env.SENTRY_DSN,
+    dsn: serverEnv.SENTRY_DSN,
     enableLogs: false,
     environment:
-      process.env.SENTRY_ENVIRONMENT ??
-      process.env.QUIETER_DEPLOYMENT_ENV ??
-      process.env.NODE_ENV,
+      serverEnv.SENTRY_ENVIRONMENT ??
+      serverEnv.QUIETER_DEPLOYMENT_ENV ??
+      serverEnv.NODE_ENV,
     tracesSampleRate: 0,
   });
 }
