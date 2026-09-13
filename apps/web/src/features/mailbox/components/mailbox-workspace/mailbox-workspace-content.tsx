@@ -17,6 +17,9 @@ import {
   WorkspaceSection,
   workspaceSectionVariants,
 } from "#/components/workspace-section";
+import { AgentWorkspaceProvider } from "#/features/chat/components/agent-workspace";
+import { FloatingAssistant } from "#/features/chat/components/floating-assistant";
+import { useAgentWorkspace } from "#/features/chat/domain/workspace-context";
 import { DraftRecoveryNotice } from "#/features/compose/components/draft-recovery-notice";
 import type { ComposeDraftState } from "#/features/compose/domain/draft";
 import type { MailboxWorkspaceView } from "#/features/mailbox/domain/mailbox-workspace-view";
@@ -40,7 +43,7 @@ const ComposeWorkspace = lazy(loadComposeWorkspace);
 const TemplateWorkspace = lazy(loadTemplateWorkspace);
 
 type MailboxSidebarGroups = ComponentProps<typeof MailSidebar>["groups"];
-type MailboxSidebarChats = ComponentProps<typeof MailSidebar>["chats"];
+type MailboxSidebarChats = { id: string; title: string | null }[];
 
 type MailboxWorkspaceLayoutState = {
   isMobileSidebarOpen: boolean;
@@ -258,7 +261,7 @@ const NoMailboxWorkspace = ({
   );
 };
 
-export const MailboxWorkspaceContent = ({
+const MailboxWorkspaceContentInner = ({
   activeMailbox,
   chatContext,
   chatId,
@@ -302,6 +305,8 @@ export const MailboxWorkspaceContent = ({
   selectedView,
   signature,
 }: MailboxWorkspaceContentProps) => {
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const agentWorkspace = useAgentWorkspace();
   let mailboxContent: ReactNode;
   if (!selectedMailboxId) {
     mailboxContent = (
@@ -411,33 +416,6 @@ export const MailboxWorkspaceContent = ({
         </m.div>
       </WorkspaceSection>
     );
-  } else if (selectedView === "chat") {
-    const mailboxOrganizationId =
-      mailboxGroups.find((group) =>
-        group.mailboxes.some((mailbox) => mailbox.id === selectedMailboxId)
-      )?.id ?? "";
-    mailboxContent = (
-      <m.div
-        key={`chat-${chatId ?? draftChatKey}`}
-        className={workspaceSectionVariants()}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.08, ease: "linear" }}
-      >
-        <Suspense fallback={null}>
-          <ChatView
-            activeMailbox={activeMailbox}
-            mailContext={chatContext}
-            chatId={chatId}
-            draftChatKey={draftChatKey}
-            mailboxId={selectedMailboxId}
-            mailboxOrganizationId={mailboxOrganizationId}
-            onChatIdChange={onChatIdChange}
-            onOpenSidebar={onOpenSidebar}
-          />
-        </Suspense>
-      </m.div>
-    );
   } else if (selectedView === "labels") {
     mailboxContent = (
       <m.div
@@ -483,8 +461,6 @@ export const MailboxWorkspaceContent = ({
         <div className="relative z-10 flex min-h-0 flex-1 overflow-hidden">
           {selectedMailboxId ? (
             <MailSidebar
-              activeChatId={chatId}
-              chats={chats}
               defaultMailboxId={defaultMailboxId}
               groups={mailboxGroups}
               onComposeNewMail={onComposeNewMail}
@@ -492,10 +468,6 @@ export const MailboxWorkspaceContent = ({
               onReorderMailboxSwitcher={onReorderMailboxSwitcher}
               onReconnectMailbox={onReconnectMailbox}
               onSearch={onSearch}
-              onCreateChat={onCreateChat}
-              onDeleteChat={onDeleteChat}
-              onRenameChat={onRenameChat}
-              onSelectChat={onSelectChat}
               onManageLabels={() => {
                 onSelectView("labels");
               }}
@@ -508,7 +480,6 @@ export const MailboxWorkspaceContent = ({
               selectedMailbox={activeMailbox}
               selectedMailboxId={selectedMailboxId}
               selectedMailboxProvider={selectedMailboxProvider}
-              selectedView={selectedView}
               isMobileOpen={layoutState.isMobileSidebarOpen}
             />
           ) : null}
@@ -526,7 +497,73 @@ export const MailboxWorkspaceContent = ({
             ) : null}
           </div>
         </div>
+        {selectedMailboxId && selectedMailboxProvider !== "api" ? (
+          <FloatingAssistant
+            open={assistantOpen}
+            activeChatId={chatId}
+            chats={chats.map((chat) => ({
+              ...chat,
+              title: chat.title ?? "New chat",
+            }))}
+            onChatSelect={(id) => {
+              agentWorkspace?.control.cancel();
+              onSelectChat(id);
+            }}
+            onNewChat={() => {
+              agentWorkspace?.control.cancel();
+              onCreateChat();
+            }}
+            onDeleteChat={(deletedChatId) => {
+              agentWorkspace?.control.cancel();
+              onDeleteChat(deletedChatId);
+            }}
+            onRenameChat={onRenameChat}
+            onMinimize={() => {
+              agentWorkspace?.control.cancel();
+              setAssistantOpen(false);
+            }}
+            onOpen={() => {
+              setAssistantOpen(true);
+            }}
+          >
+            <Suspense
+              fallback={
+                <p className="p-4 text-body-sm text-muted-fg">
+                  Loading assistant…
+                </p>
+              }
+            >
+              <ChatView
+                activeMailbox={activeMailbox ?? "inbox"}
+                mailContext={chatContext}
+                chatId={chatId}
+                draftChatKey={draftChatKey}
+                mailboxId={selectedMailboxId}
+                mailboxOrganizationId={
+                  mailboxGroups.find((group) =>
+                    group.mailboxes.some(
+                      (mailbox) => mailbox.id === selectedMailboxId
+                    )
+                  )?.id ?? ""
+                }
+                onChatIdChange={onChatIdChange}
+              />
+            </Suspense>
+          </FloatingAssistant>
+        ) : null}
       </main>
     </LazyMotion>
   );
 };
+
+export const MailboxWorkspaceContent = (
+  props: MailboxWorkspaceContentProps
+) => (
+  <AgentWorkspaceProvider
+    key={props.selectedMailboxId ?? "empty"}
+    mailboxId={props.selectedMailboxId ?? ""}
+    onComposeDraftRequested={props.onComposeDraftRequested}
+  >
+    <MailboxWorkspaceContentInner {...props} />
+  </AgentWorkspaceProvider>
+);

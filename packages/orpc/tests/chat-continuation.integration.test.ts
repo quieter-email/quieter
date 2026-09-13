@@ -92,6 +92,14 @@ describe.skipIf(state.databaseUrl === undefined)(
     const userId = crypto.randomUUID();
     let threadId: string;
     let assistantId: string;
+    let foreground: {
+      capabilities: ["modify_mail"];
+      exchangeId: string;
+      expiresAt: number;
+      generation: number;
+      policy: "ask";
+      tabId: string;
+    };
     beforeAll(async () => {
       const url = new URL(state.databaseUrl ?? "");
       if (
@@ -131,6 +139,14 @@ describe.skipIf(state.databaseUrl === undefined)(
     beforeEach(async () => {
       threadId = crypto.randomUUID();
       assistantId = crypto.randomUUID();
+      foreground = {
+        capabilities: ["modify_mail"],
+        exchangeId: crypto.randomUUID(),
+        expiresAt: Date.now() + 60_000,
+        generation: 1,
+        policy: "ask",
+        tabId: "tab-1",
+      };
       const now = new Date();
       await db.insert(chat).values({
         createdAt: now,
@@ -156,6 +172,7 @@ describe.skipIf(state.databaseUrl === undefined)(
           parts: [
             {
               approval: { id: "approval" },
+              foreground,
               input: { action: "archive", id: "email", target: "message" },
               state: "approval-requested",
               toolCallId: "action",
@@ -201,6 +218,7 @@ describe.skipIf(state.databaseUrl === undefined)(
       await createAiChatResponse({
         body: {
           category: "inbox",
+          foreground,
           mailboxId: state.mailboxId,
           message: {
             id: assistantId,
@@ -244,20 +262,6 @@ describe.skipIf(state.databaseUrl === undefined)(
         { output: { status: "success" }, state: "output-available" },
       ]);
       await expect(continueAnswer()).rejects.toMatchObject({ status: 409 });
-      await expect(
-        createAiChatResponse({
-          body: {
-            category: "inbox",
-            mailboxId: state.mailboxId,
-            message: null,
-            model: "openai/gpt-5.6-luna",
-            threadId,
-            trigger: "regenerate-message",
-          },
-          request: new Request("https://example.test/api/chat"),
-          userId,
-        })
-      ).rejects.toMatchObject({ status: 409 });
     });
 
     test("an interrupted approval is not executed again when a new message loads its history", async () => {
@@ -279,6 +283,7 @@ describe.skipIf(state.databaseUrl === undefined)(
       const response = await createAiChatResponse({
         body: {
           category: "inbox",
+          foreground,
           mailboxId: state.mailboxId,
           message: {
             id: crypto.randomUUID(),
@@ -294,6 +299,39 @@ describe.skipIf(state.databaseUrl === undefined)(
       });
       await response.text();
       expect(state.modify).not.toHaveBeenCalled();
+    });
+
+    test("does not start a request after cancellation claimed the empty chat", async () => {
+      await db.delete(chatMessage).where(eq(chatMessage.chatId, threadId));
+      await db.insert(chatMessage).values({
+        chatId: threadId,
+        createdAt: new Date(),
+        id: foreground.exchangeId,
+        parts: [{ type: "data-foreground-cancelled" }],
+        position: 0,
+        role: "assistant",
+        userId,
+      });
+
+      await expect(
+        createAiChatResponse({
+          body: {
+            category: "inbox",
+            foreground,
+            mailboxId: state.mailboxId,
+            message: {
+              id: crypto.randomUUID(),
+              parts: [{ text: "Summarize my inbox", type: "text" }],
+              role: "user",
+            },
+            model: "openai/gpt-5.6-luna",
+            threadId,
+            trigger: "submit-message",
+          },
+          request: new Request("https://example.test/api/chat"),
+          userId,
+        })
+      ).rejects.toMatchObject({ status: 409 });
     });
   }
 );

@@ -1,685 +1,483 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import type { ComposeEmailResult } from "@quieter/ai/chat-agent";
-import type { ChatModel } from "@quieter/ai/chat-models";
+import {
+  foregroundSnapshotSchema,
+  isForegroundClientToolName,
+  saveComposeDraftInputSchema,
+  saveComposeDraftOutputSchema,
+  sendMailOutputSchema,
+} from "@quieter/ai/chat-tools";
+import type { ForegroundSnapshot } from "@quieter/ai/chat-tools";
 import { toCanonicalTranscript } from "@quieter/ai/chat-transcript";
-import { BILLING_FEATURES } from "@quieter/billing/plans";
 import type { RouterOutputs } from "@quieter/orpc";
 import { Button } from "@quieter/ui/button";
-import { toast } from "@quieter/ui/toast";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
-import {
-  DefaultChatTransport,
-  lastAssistantMessageIsCompleteWithApprovalResponses,
-} from "ai";
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent, SubmitEvent } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSelector } from "@tanstack/react-store";
+import { DefaultChatTransport, isToolUIPart } from "ai";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { MobileHeader } from "#/components/mobile-header";
-import { getConnectorTokens } from "#/features/ai/domain/connector-tokens";
-import {
-  setDefaultChatModel,
-  useDefaultChatModel,
-} from "#/features/ai/domain/default-chat-model-setting";
+import { useDefaultChatModel } from "#/features/ai/domain/default-chat-model-setting";
 import {
   hasOrganizationAiAccess,
   USER_BILLING_QUERY_KEY,
   userBillingQueryOptions,
 } from "#/features/settings/domain/billing";
-import { useAudioRecorder } from "#/lib/audio-recorder";
-import { prepareTranscriptionRecording } from "#/lib/audio-transcription";
-import {
-  chatQueryOptions,
-  getChatQueryKey,
-  getChatsQueryKey,
-} from "#/lib/chat-query";
-import { connectorsQueryOptions } from "#/lib/connectors-query";
+import { chatQueryOptions, getChatsQueryKey } from "#/lib/chat-query";
 import { toastError } from "#/lib/error-toast";
-import { orpc, rpc } from "#/lib/orpc";
-import { shouldRetryOrpcError } from "#/lib/orpc-errors";
+import { rpc } from "#/lib/orpc";
 
-import { getChatRetryAction } from "../domain/chat-messages";
-import type { ChatToolApproval } from "../domain/chat-tools";
-import { getToolName, isChatToolPart } from "../domain/chat-tools";
-import { toChatComposeMessageInput } from "../domain/compose-proposal";
-import type { ComposeValues } from "../domain/compose-proposal";
+import {
+  cancelForegroundMessages,
+  needsForegroundContinuation,
+} from "../domain/foreground-messages";
+import { useAgentWorkspace } from "../domain/workspace-context";
+import { executeWorkspaceTool } from "../domain/workspace-tools";
 import type { ChatViewProps } from "../types";
 import { ChatComposer } from "./chat-composer";
 import { ChatTranscript } from "./chat-transcript";
 
-const CHAT_API_ENDPOINT = "/api/chat";
-
-const CHAT_PROMPT_SUGGESTIONS = [
-  "Summarize today's mail",
-  "Find last month's invoices",
-  "Draft a follow-up to Marta",
-] as const;
-
 type ChatData = RouterOutputs["chat"]["get"];
 
-const PlanRequired = ({
-  organizationId,
-  requirementLabel,
-}: {
-  organizationId: string;
-  requirementLabel: string;
-}) => {
-  const navigate = useNavigate();
-
-  return (
-    <div className="mb-3 flex flex-wrap items-center justify-between gap-2 px-1 text-body text-muted-fg">
-      <span>
-        AI chat requires {requirementLabel} billing and available credits.
-      </span>
-      <Button
-        onClick={() => {
-          void navigate({
-            search: {
-              organizationId,
-              organizationView: "overview",
-              tab: "organization",
-            },
-            to: "/settings",
-          });
-        }}
-        size="sm"
-        type="button"
-        variant="ghost"
-      >
-        View plans
-      </Button>
-    </div>
-  );
-};
-
-// This component owns one chat session's transport, media, persistence, and composer state.
 const ChatSession = ({
-  activeMailbox,
-  canUseAiChat,
   chatData,
-  chatId,
-  draftChatKey,
-  mailContext,
-  mailboxId,
-  mailboxOrganizationId,
-  onChatIdChange,
-  onOpenSidebar,
-}: ChatViewProps & {
-  canUseAiChat: boolean;
-  chatData: ChatData | undefined;
-}) => {
+  canUseAiChat,
+  ...props
+}: ChatViewProps & { chatData?: ChatData; canUseAiChat: boolean }) => {
+  const workspace = useAgentWorkspace();
+  if (!workspace) {
+    throw new Error("The assistant needs a mail workspace.");
+  }
   const queryClient = useQueryClient();
-  const isCurrentSessionRef = useRef(true);
-  const composeResolutionRef = useRef(false);
-  const retryPendingRef = useRef(false);
-  const submitPendingRef = useRef(false);
-  const reconciledChatRef = useRef(chatData);
-  const defaultModel = useDefaultChatModel();
-  const threadId = chatId ?? draftChatKey;
+  const policy = useSelector(workspace.control.state, (state) => state.policy);
   const [input, setInput] = useState("");
-  const [selectedModel, setSelectedModel] = useState<ChatModel | null>(null);
-  const [isPreparingTranscription, setIsPreparingTranscription] =
-    useState(false);
-  const [isResolvingCompose, setIsResolvingCompose] = useState(false);
-  const [isRetrying, setIsRetrying] = useState(false);
-  const { data: connectorsData } = useQuery(connectorsQueryOptions());
-  const connectorTokens = getConnectorTokens(connectorsData);
-  const model = selectedModel ?? defaultModel;
-  const transcribeAudio = useMutation({
-    ...orpc.chat.transcribeAudio.mutationOptions(),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: USER_BILLING_QUERY_KEY });
-    },
+  const [contextDismissed, setContextDismissed] = useState(false);
+  // oxlint-disable-next-line react/hook-use-state -- The session identity is fixed until this keyed component unmounts.
+  const [tabId] = useState(() => crypto.randomUUID());
+  const threadId = props.chatId ?? props.draftChatKey;
+  const [busy, setBusy] = useState(false);
+  const model = useDefaultChatModel();
+  const foregroundRef = useRef<ForegroundSnapshot | null>(null);
+  const mountedRef = useRef(true);
+  const appliedReceipts = useRef(new Set<string>());
+  const latestRef = useRef({ model, props });
+  useLayoutEffect(() => {
+    latestRef.current = { model, props };
   });
-  const audioRecorder = useAudioRecorder({
-    mimeType: "audio/webm;codecs=opus",
-  });
-
-  const transport = useMemo(
-    () =>
-      new DefaultChatTransport({
-        api: CHAT_API_ENDPOINT,
-        prepareSendMessagesRequest: ({ messages, trigger }) => ({
-          body: {
-            category: activeMailbox,
-            ...(mailContext === undefined ? {} : { context: mailContext }),
-            mailboxId,
-            message: messages.at(-1),
-            model,
-            threadId,
-            trigger,
-          },
-        }),
-      }),
-    [activeMailbox, mailContext, mailboxId, model, threadId]
-  );
-
-  const synchronizeChat = async () => {
-    const [chatResult] = await Promise.allSettled([
-      queryClient.fetchQuery({
-        ...chatQueryOptions(mailboxId, threadId),
-        staleTime: 0,
-      }),
-      queryClient.invalidateQueries({ queryKey: USER_BILLING_QUERY_KEY }),
-      queryClient.invalidateQueries({ queryKey: getChatsQueryKey(mailboxId) }),
-    ]);
-    const shouldSelectDraft =
-      chatResult?.status === "fulfilled" ||
-      (chatResult?.status === "rejected" &&
-        shouldRetryOrpcError(0, chatResult.reason));
-    if (chatId === null && shouldSelectDraft && isCurrentSessionRef.current) {
-      onChatIdChange(threadId);
+  const synchronizeHistory = async () => {
+    try {
+      await queryClient.fetchQuery(
+        chatQueryOptions(workspace.mailboxId, threadId)
+      );
+      if (mountedRef.current) {
+        props.onChatIdChange(threadId);
+      }
+    } catch (error) {
+      toastError(error, { boundary: "assistant-history" });
     }
   };
-
-  const {
-    addToolApprovalResponse,
-    addToolOutput,
-    clearError,
-    error,
-    messages,
-    regenerate,
-    sendMessage,
-    setMessages,
-    status,
-    stop,
-  } = useChat({
+  // oxlint-disable-next-line react/hook-use-state -- useChat keeps one transport per session.
+  const [transport] = useState(
+    // oxlint-disable-next-line react/react-compiler -- The transport reads refs only when a request starts, never during render.
+    () =>
+      new DefaultChatTransport({
+        api: "/api/chat",
+        prepareSendMessagesRequest: ({ messages, trigger }) => {
+          const foreground = foregroundRef.current;
+          if (!foreground) {
+            throw new Error("Start a new request to continue.");
+          }
+          workspace.control.claimLeg(foreground.generation);
+          return {
+            body: {
+              category: latestRef.current.props.activeMailbox,
+              foreground,
+              mailboxId: workspace.mailboxId,
+              message: messages.at(-1),
+              model: latestRef.current.model,
+              threadId,
+              trigger,
+            },
+          };
+        },
+      })
+  );
+  const chat = useChat({
     id: threadId,
-    messages: toCanonicalTranscript(chatData?.messages ?? []),
-    onFinish: () => {
-      void synchronizeChat();
+    messages: cancelForegroundMessages(
+      toCanonicalTranscript(chatData?.messages ?? [])
+    ),
+    onError: (error) => {
+      workspace.control.finish();
+      toastError(error, { boundary: "foreground-assistant" });
     },
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
+    onFinish: ({ messages, isAbort, isError }) => {
+      for (const message of messages) {
+        for (const part of message.parts) {
+          if (
+            !isToolUIPart(part) ||
+            part.state !== "output-available" ||
+            appliedReceipts.current.has(part.toolCallId)
+          ) {
+            continue;
+          }
+          if (
+            part.type !== "tool-save_compose_draft" &&
+            part.type !== "tool-send_mail"
+          ) {
+            continue;
+          }
+          const receipt =
+            part.type === "tool-send_mail"
+              ? sendMailOutputSchema.safeParse(part.output)
+              : saveComposeDraftOutputSchema.safeParse(part.output);
+          if (receipt.success) {
+            appliedReceipts.current.add(part.toolCallId);
+            workspace.getCompose()?.applyReceipt(receipt.data);
+            void queryClient.invalidateQueries({
+              predicate: (query) =>
+                query.queryKey.includes(workspace.mailboxId),
+            });
+          }
+        }
+      }
+      const last = messages.at(-1);
+      const pending = last?.parts.some(
+        (part) =>
+          isToolUIPart(part) &&
+          (part.state === "input-available" ||
+            part.state === "approval-requested")
+      );
+      const terminal =
+        isAbort ||
+        isError ||
+        (pending !== true && !needsForegroundContinuation(messages));
+      if (terminal) {
+        foregroundRef.current = null;
+        workspace.control.finish();
+      }
+      void queryClient.invalidateQueries({
+        queryKey: getChatsQueryKey(workspace.mailboxId),
+      });
+      void queryClient.invalidateQueries({ queryKey: USER_BILLING_QUERY_KEY });
+      if (terminal && props.chatId === null && mountedRef.current) {
+        void synchronizeHistory();
+      }
+    },
+    onToolCall: async ({ toolCall }) => {
+      if (!isForegroundClientToolName(toolCall.toolName)) {
+        return;
+      }
+      const generation = foregroundRef.current?.generation;
+      if (
+        generation === undefined ||
+        !workspace.control.isCurrent(generation)
+      ) {
+        return;
+      }
+      try {
+        const output = await executeWorkspaceTool(
+          workspace,
+          toolCall.toolName,
+          toolCall.input,
+          generation
+        );
+        if (workspace.control.isCurrent(generation)) {
+          void chat.addToolOutput({
+            output,
+            tool: toolCall.toolName,
+            toolCallId: toolCall.toolCallId,
+          });
+        }
+      } catch (error) {
+        if (workspace.control.isCurrent(generation)) {
+          void chat.addToolOutput({
+            errorText:
+              error instanceof Error
+                ? error.message
+                : "The action could not be completed.",
+            state: "output-error",
+            tool: toolCall.toolName,
+            toolCallId: toolCall.toolCallId,
+          });
+        }
+      }
+    },
+    sendAutomaticallyWhen: ({ messages }) => {
+      const generation = foregroundRef.current?.generation;
+      return (
+        generation !== undefined &&
+        workspace.control.isCurrent(generation) &&
+        needsForegroundContinuation(messages)
+      );
+    },
     throttle: 50,
     transport,
   });
-
-  const isStreaming = status === "streaming" || status === "submitted";
-  const isTranscribing = isPreparingTranscription || transcribeAudio.isPending;
-
-  const approvals: ChatToolApproval[] = messages.flatMap((message) =>
-    message.role === "assistant"
-      ? message.parts.flatMap((part) => {
-          if (
-            !isChatToolPart(part) ||
-            part.state !== "approval-requested" ||
-            part.approval === undefined ||
-            part.approval.isAutomatic === true
-          ) {
-            return [];
-          }
-          const approvalId = part.approval.id;
-          return [
-            {
-              approve: () => {
-                void addToolApprovalResponse({
-                  approved: true,
-                  id: approvalId,
-                });
-              },
-              deny: () => {
-                void addToolApprovalResponse({
-                  approved: false,
-                  id: approvalId,
-                });
-              },
-              id: approvalId,
-              toolCallId: part.toolCallId,
-              toolName: getToolName(part.type),
-            },
-          ];
-        })
-      : []
-  );
-
-  const disabled =
-    !canUseAiChat ||
-    approvals.length > 0 ||
-    isRetrying ||
-    isResolvingCompose ||
-    isStreaming ||
-    isTranscribing ||
-    audioRecorder.isRecording;
-  const errorMessage = (() => {
-    if (isStreaming) {
-      return "";
-    }
-    if (error !== undefined && error.message !== "") {
-      return error.message;
-    }
-    return "";
-  })();
+  const chatRef = useRef(chat);
+  useLayoutEffect(() => {
+    chatRef.current = chat;
+  });
 
   useEffect(() => {
-    isCurrentSessionRef.current = true;
-    return () => {
-      isCurrentSessionRef.current = false;
-    };
-  }, []);
-
-  // Reconcile with the server copy whenever a fresh one arrives while this
-  // session is idle (after sends, retries, or external chat changes).
-  useEffect(() => {
-    if (
-      status !== "ready" ||
-      isRetrying ||
-      chatData === undefined ||
-      chatData === reconciledChatRef.current
-    ) {
-      return;
-    }
-    reconciledChatRef.current = chatData;
-    setMessages(toCanonicalTranscript(chatData.messages));
-  }, [chatData, isRetrying, setMessages, status]);
-
-  const resolveCompose = async (
-    toolCallId: string,
-    action: "decline" | "save_draft" | "send",
-    values?: ComposeValues
-  ) => {
-    if (composeResolutionRef.current) {
-      return;
-    }
-    composeResolutionRef.current = true;
-    setIsResolvingCompose(true);
-    try {
-      let output: ComposeEmailResult | undefined;
+    mountedRef.current = true;
+    const cancelServer = async (assistantMessageId: string) => {
       try {
-        if (action === "decline" || values === undefined) {
-          output = { status: "declined" };
-        } else {
-          const composeInput = toChatComposeMessageInput(values);
-          if (action === "save_draft") {
-            const draft = await rpc.mail.saveDraft({
-              draft: composeInput,
-              mailboxId,
-            });
-            output = {
-              draftId: draft.draftId,
-              ...(draft.messageId === null
-                ? {}
-                : { messageId: draft.messageId }),
-              status: "draft_saved",
-              subject: values.subject,
-              to: values.to,
-            };
-          } else {
-            const sent = await rpc.mail.sendMessage({
-              mailboxId,
-              message: composeInput,
-            });
-            output = {
-              messageId: sent.id,
-              status: "sent",
-              subject: values.subject,
-              ...(sent.threadId === undefined
-                ? {}
-                : { threadId: sent.threadId }),
-              to: values.to,
-            };
-          }
-        }
-      } catch (composeError) {
-        const errorText =
-          action === "save_draft"
-            ? "The draft could not be saved."
-            : "The email could not be sent.";
-        toastError(composeError, {
-          boundary: "chat-compose",
-          fallback: errorText,
-        });
-        addToolOutput({
-          errorText,
-          state: "output-error",
-          tool: "compose_email",
-          toolCallId,
-        });
-      }
-      if (output !== undefined) {
-        addToolOutput({ output, tool: "compose_email", toolCallId });
-      }
-      await sendMessage();
-    } catch (continuationError) {
-      toastError(continuationError, { boundary: "chat-compose-continuation" });
-    }
-    composeResolutionRef.current = false;
-    setIsResolvingCompose(false);
-  };
-
-  const submitPrompt = async () => {
-    const prompt = input.trim();
-    if (!prompt || disabled || submitPendingRef.current) {
-      return;
-    }
-
-    submitPendingRef.current = true;
-    try {
-      clearError();
-      setInput("");
-      await sendMessage({ text: prompt });
-    } catch (sendError) {
-      setInput((current) => current || prompt);
-      toastError(sendError, { boundary: "chat-submit" });
-    }
-    submitPendingRef.current = false;
-  };
-
-  const submitSuggestion = async (text: string) => {
-    if (disabled || submitPendingRef.current) {
-      return;
-    }
-
-    submitPendingRef.current = true;
-    try {
-      clearError();
-      await sendMessage({ text });
-    } catch (sendError) {
-      toastError(sendError, { boundary: "chat-submit" });
-    }
-    submitPendingRef.current = false;
-  };
-
-  const retryLastTurn = async () => {
-    if (isRetrying || isStreaming || retryPendingRef.current) {
-      return;
-    }
-    retryPendingRef.current = true;
-    setIsRetrying(true);
-    try {
-      let retryFailure: unknown;
-      try {
-        const persistedChat = await rpc.chat.get({
+        await rpc.chat.cancel({
+          assistantMessageId,
           chatId: threadId,
-          mailboxId,
+          mailboxId: workspace.mailboxId,
         });
-        const persistedMessages = toCanonicalTranscript(persistedChat.messages);
-        const retryAction = getChatRetryAction(messages, persistedMessages);
-        if (retryAction.type === "resubmit-user") {
-          clearError();
-          await sendMessage({
-            messageId: retryAction.messageId,
-            text: retryAction.text,
-          });
-        } else if (retryAction.type === "unavailable") {
-          toast.error(
-            "The answer could not be retried. Send your message again."
-          );
-        } else {
-          clearError();
-          queryClient.setQueryData(
-            getChatQueryKey(mailboxId, threadId),
-            persistedChat
-          );
-          setMessages(persistedMessages);
-          if (retryAction.type === "regenerate") {
-            await regenerate();
-          }
-        }
-      } catch (retryError) {
-        retryFailure = retryError;
+      } catch (error) {
+        toastError(error, { boundary: "assistant-cancel" });
       }
-      if (retryFailure !== undefined) {
-        const errorCode =
-          retryFailure !== null &&
-          typeof retryFailure === "object" &&
-          "code" in retryFailure
-            ? retryFailure.code
-            : undefined;
-        const errorStatus =
-          retryFailure !== null &&
-          typeof retryFailure === "object" &&
-          "status" in retryFailure
-            ? retryFailure.status
-            : undefined;
-        if (errorCode !== "NOT_FOUND" && errorStatus !== 404) {
-          toastError(retryFailure, {
-            boundary: "chat-retry",
-            fallback: "The answer could not be retried. Try again.",
-          });
-        } else {
-          const retryAction = getChatRetryAction(messages, []);
-          if (retryAction.type === "resubmit-user") {
-            clearError();
-            await sendMessage({
-              messageId: retryAction.messageId,
-              text: retryAction.text,
-            });
-          } else {
-            toast.error(
-              "The answer could not be retried. Send your message again."
-            );
-          }
-        }
+    };
+    const cancel = () => {
+      const foreground = foregroundRef.current;
+      if (!foreground || workspace.control.isCurrent(foreground.generation)) {
+        return;
       }
-    } catch (retryError) {
-      toastError(retryError, { boundary: "chat-retry" });
-    }
-    retryPendingRef.current = false;
-    setIsRetrying(false);
-  };
+      foregroundRef.current = null;
+      void chatRef.current.stop();
+      chatRef.current.setMessages(
+        cancelForegroundMessages(chatRef.current.messages)
+      );
+      void cancelServer(foreground.exchangeId);
+    };
+    const subscription = workspace.control.state.subscribe(() => {
+      if (
+        workspace.control.state.get().generation !==
+        foregroundRef.current?.generation
+      ) {
+        cancel();
+      }
+    });
+    const timeout = window.setInterval(() => {
+      const foreground = foregroundRef.current;
+      if (
+        foreground &&
+        !workspace.control.isCurrent(foreground.generation) &&
+        workspace.control.state.get().active
+      ) {
+        workspace.control.cancel();
+      }
+    }, 1000);
+    return () => {
+      mountedRef.current = false;
+      workspace.control.cancel();
+      subscription.unsubscribe();
+      window.clearInterval(timeout);
+    };
+  }, [threadId, workspace]);
 
-  const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    void submitPrompt();
-  };
-
-  const handleInputKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== "Enter" || event.shiftKey) {
+  const streaming = chat.status === "streaming" || chat.status === "submitted";
+  const approvals = chat.messages.flatMap((message) =>
+    message.parts.flatMap((part) => {
+      if (!isToolUIPart(part) || part.state !== "approval-requested") {
+        return [];
+      }
+      return [
+        {
+          approve: () => {
+            if (
+              foregroundRef.current &&
+              workspace.control.isCurrent(foregroundRef.current.generation)
+            ) {
+              if (
+                part.type === "tool-send_mail" ||
+                part.type === "tool-save_compose_draft"
+              ) {
+                const proposed = saveComposeDraftInputSchema.safeParse(
+                  part.input
+                );
+                const currentDraft = saveComposeDraftInputSchema.safeParse({
+                  draft: workspace.read().draft,
+                });
+                const matches =
+                  proposed.success &&
+                  currentDraft.success &&
+                  JSON.stringify(proposed.data) ===
+                    JSON.stringify(currentDraft.data);
+                if (!matches) {
+                  void chat.addToolApprovalResponse({
+                    approved: false,
+                    id: part.approval.id,
+                    reason:
+                      "The visible draft changed. Read the current draft and request approval again.",
+                  });
+                  return;
+                }
+              }
+              void chat.addToolApprovalResponse({
+                approved: true,
+                id: part.approval.id,
+              });
+            }
+          },
+          deny: () => {
+            if (
+              foregroundRef.current &&
+              workspace.control.isCurrent(foregroundRef.current.generation)
+            ) {
+              void chat.addToolApprovalResponse({
+                approved: false,
+                id: part.approval.id,
+              });
+            }
+          },
+          id: part.approval.id,
+          toolCallId: part.toolCallId,
+          toolName: part.type.replace("tool-", ""),
+        },
+      ];
+    })
+  );
+  const submit = async () => {
+    const text = input.trim();
+    if (!text || streaming || busy || approvals.length > 0 || !canUseAiChat) {
       return;
     }
-
-    event.preventDefault();
-    void submitPrompt();
-  };
-
-  const startRecording = async () => {
-    if (!audioRecorder.isSupported) {
-      toast.error("Audio recording is not supported in this browser.");
-      return;
-    }
-
+    setBusy(true);
+    const generation = workspace.control.begin();
+    const snapshot = workspace.read();
     try {
-      await audioRecorder.start();
-    } catch {
-      toast.error("Could not access your microphone.");
+      foregroundRef.current = foregroundSnapshotSchema.parse({
+        capabilities: [
+          "navigate",
+          "compose",
+          "edit_compose",
+          "save_draft",
+          "send_mail",
+          "modify_mail",
+        ],
+        draftId: snapshot.draftId,
+        draftRevision: snapshot.draftRevision,
+        exchangeId: crypto.randomUUID(),
+        expiresAt: Date.now() + 120_000,
+        generation,
+        policy,
+        query: snapshot.query,
+        selectedMessageId: snapshot.selectedMessageId,
+        selectedThreadId: snapshot.selectedThreadId,
+        tabId,
+        view: snapshot.view,
+        ...(contextDismissed
+          ? {
+              query: undefined,
+              selectedMessageId: undefined,
+              selectedThreadId: undefined,
+            }
+          : {}),
+      });
+      setInput("");
+      chat.clearError();
+      await chat.sendMessage({ text });
+    } catch (error) {
+      setInput(text);
+      workspace.control.finish();
+      toastError(error, { boundary: "assistant-submit" });
+    } finally {
+      setBusy(false);
     }
   };
 
-  const stopRecording = async () => {
-    setIsPreparingTranscription(true);
-    try {
-      const recording = await prepareTranscriptionRecording(
-        await audioRecorder.stop()
-      );
-      const result = await transcribeAudio.mutateAsync({
-        ...recording,
-        chatId: chatId ?? undefined,
-        mailboxId,
-      });
-      setInput((current) =>
-        current.trim() ? `${current.trimEnd()}\n${result.text}` : result.text
-      );
-    } catch (transcriptionError) {
-      toastError(transcriptionError, {
-        boundary: "chat-transcription",
-        fallback:
-          "We could not transcribe that recording. Try recording it again.",
-      });
+  let contextLabel: string | undefined;
+  if (!contextDismissed) {
+    if (props.mailContext?.threadId) {
+      contextLabel = "Current conversation";
+    } else if (props.mailContext?.query) {
+      contextLabel = `Search: ${props.mailContext.query}`;
     }
-    setIsPreparingTranscription(false);
-  };
+  }
 
-  const composer = (
-    <div className="mx-auto w-full max-w-2xl">
-      {canUseAiChat ? null : (
-        <PlanRequired
-          organizationId={mailboxOrganizationId}
-          requirementLabel={BILLING_FEATURES.aiChat.requirementLabel}
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {chat.messages.length > 0 ? (
+        <ChatTranscript
+          messages={chat.messages}
+          isStreaming={streaming}
+          approvals={approvals}
+          errorMessage={chat.error?.message}
         />
+      ) : null}
+      {canUseAiChat ? null : (
+        <p className="px-4 py-2 text-body-sm text-muted-fg">
+          Choose a plan with AI credits in settings to use Quieter.
+        </p>
       )}
       <ChatComposer
-        connectorTokens={connectorTokens}
-        disabled={disabled}
         input={input}
-        model={model}
+        disabled={!canUseAiChat || busy || streaming || approvals.length > 0}
+        streaming={streaming || approvals.length > 0}
+        submitting={chat.status === "submitted"}
+        policy={policy}
+        onPolicyChange={(nextPolicy) => {
+          workspace.control.cancel();
+          workspace.control.state.setState((state) => ({
+            ...state,
+            policy: nextPolicy,
+          }));
+        }}
+        contextLabel={contextLabel}
+        onDismissContext={() => {
+          setContextDismissed(true);
+        }}
         onInputChange={setInput}
-        onInputKeyDown={handleInputKeyDown}
-        onModelChange={(nextModel) => {
-          setDefaultChatModel(nextModel);
-          setSelectedModel(nextModel);
-        }}
-        onRecordingStart={() => {
-          void startRecording();
-        }}
-        onRecordingStop={() => {
-          void stopRecording();
+        onInputKeyDown={(event) => {
+          if (
+            event.key === "Enter" &&
+            !event.shiftKey &&
+            !event.nativeEvent.isComposing
+          ) {
+            event.preventDefault();
+            void submit();
+          }
         }}
         onStop={() => {
-          void stop();
+          workspace.control.cancel();
         }}
-        onSubmit={handleSubmit}
-        recording={audioRecorder.isRecording}
-        recordingSupported={audioRecorder.isSupported}
-        streaming={isStreaming}
-        submitting={status === "submitted"}
-        transcribing={isTranscribing}
+        onSubmit={(event) => {
+          event.preventDefault();
+          void submit();
+        }}
       />
     </div>
   );
-
-  const hasVisibleMessages = messages.some(
-    (message) => message.role !== "system"
-  );
-
-  return (
-    <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <MobileHeader
-        leading="sidebar"
-        onLeadingClick={onOpenSidebar}
-        title={hasVisibleMessages ? (chatData?.title ?? undefined) : undefined}
-      />
-      {hasVisibleMessages &&
-      chatData?.title !== null &&
-      chatData?.title !== undefined &&
-      chatData.title !== "" ? (
-        <header className="hidden shrink-0 border-b border-border px-5 py-3 lg:block">
-          <h1 className="truncate font-sans text-body-lg font-normal tracking-tight">
-            {chatData.title}
-          </h1>
-        </header>
-      ) : null}
-      {hasVisibleMessages ? (
-        <>
-          <ChatTranscript
-            approvals={approvals}
-            composeBusy={isResolvingCompose}
-            errorMessage={errorMessage}
-            isStreaming={isStreaming}
-            messages={messages}
-            onComposeDecline={(toolCallId) => {
-              void resolveCompose(toolCallId, "decline");
-            }}
-            onComposeSubmit={(toolCallId, action, values) => {
-              void resolveCompose(toolCallId, action, values);
-            }}
-            onRetry={() => {
-              void retryLastTurn();
-            }}
-            retrying={isRetrying}
-          />
-          <div className="shrink-0 px-4 pb-4 sm:px-6 lg:pb-6">{composer}</div>
-        </>
-      ) : (
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-4 pb-12 sm:px-6">
-          <p className="mb-5 font-sans text-body-lg text-muted-fg">
-            Ask about your mail
-          </p>
-          {composer}
-          <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-            {CHAT_PROMPT_SUGGESTIONS.map((suggestion) => (
-              <Button
-                disabled={disabled}
-                key={suggestion}
-                onClick={() => {
-                  void submitSuggestion(suggestion);
-                }}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                {suggestion}
-              </Button>
-            ))}
-          </div>
-        </div>
-      )}
-    </section>
-  );
 };
 
-export const ChatView = ({
-  activeMailbox,
-  chatId,
-  draftChatKey,
-  mailContext,
-  mailboxId,
-  mailboxOrganizationId,
-  onChatIdChange,
-  onOpenSidebar,
-}: ChatViewProps) => {
-  const { data: billing, isPending: isBillingPending } = useQuery(
-    userBillingQueryOptions()
-  );
-  const chatQuery = useQuery(chatQueryOptions(mailboxId, chatId));
-  const canUseAiChat = billing
-    ? hasOrganizationAiAccess(billing, mailboxOrganizationId)
-    : true;
-
-  if (chatId !== null && chatQuery.isPending) {
+export const ChatView = (props: ChatViewProps) => {
+  const { data: billing, isPending } = useQuery(userBillingQueryOptions());
+  const query = useQuery(chatQueryOptions(props.mailboxId, props.chatId));
+  if (props.chatId !== null && query.isPending) {
     return (
-      <section className="flex min-h-0 flex-1 flex-col">
-        <MobileHeader leading="sidebar" onLeadingClick={onOpenSidebar} />
-        <p className="m-auto text-body text-muted-fg">Loading conversation…</p>
-      </section>
+      <p className="p-4 text-body-sm text-muted-fg">Loading conversation…</p>
     );
   }
-
-  if (chatId !== null && chatQuery.isError) {
+  if (props.chatId !== null && query.isError) {
     return (
-      <section className="flex min-h-0 flex-1 flex-col">
-        <MobileHeader leading="sidebar" onLeadingClick={onOpenSidebar} />
-        <div className="m-auto flex items-center gap-3 text-body text-muted-fg">
-          <span>Could not load this conversation.</span>
-          <Button
-            onClick={() => {
-              void chatQuery.refetch();
-            }}
-            size="sm"
-            type="button"
-            variant="ghost"
-          >
-            Try again
-          </Button>
-        </div>
-      </section>
+      <div className="p-4 text-body-sm text-muted-fg">
+        Could not load this conversation.
+        <Button
+          variant="ghost"
+          onClick={() => {
+            void query.refetch();
+          }}
+        >
+          Try again
+        </Button>
+      </div>
     );
   }
-
   return (
     <ChatSession
-      key={`${mailboxId}:${chatId ?? draftChatKey}`}
-      activeMailbox={activeMailbox}
-      canUseAiChat={isBillingPending || canUseAiChat}
-      chatData={chatQuery.data}
-      chatId={chatId}
-      draftChatKey={draftChatKey}
-      mailContext={mailContext}
-      mailboxId={mailboxId}
-      mailboxOrganizationId={mailboxOrganizationId}
-      onChatIdChange={onChatIdChange}
-      onOpenSidebar={onOpenSidebar}
+      key={`${props.mailboxId}:${props.chatId ?? props.draftChatKey}`}
+      {...props}
+      chatData={query.data}
+      canUseAiChat={
+        !isPending &&
+        !!billing &&
+        hasOrganizationAiAccess(billing, props.mailboxOrganizationId)
+      }
     />
   );
 };

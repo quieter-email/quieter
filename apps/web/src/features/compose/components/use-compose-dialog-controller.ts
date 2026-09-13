@@ -7,8 +7,9 @@ import {
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useQueryClient } from "@tanstack/react-query";
 import { useBlocker } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 
+import { useAgentWorkspace } from "#/features/chat/domain/workspace-context";
 import { toastError } from "#/lib/error-toast";
 import {
   deleteDemoDraft,
@@ -44,6 +45,7 @@ import {
   hasComposeDraftContent,
   saveComposeDraft,
   sendComposeMessage,
+  textToComposeBodyHtml,
 } from "../domain/draft";
 import type { ComposeDraftState } from "../domain/draft";
 import { useDraftAutosave } from "./use-draft-autosave";
@@ -98,6 +100,8 @@ export const useComposeDialogController = ({
   signature?: { html: string | null; text: string | null };
 }) => {
   const queryClient = useQueryClient();
+  const agentWorkspace = useAgentWorkspace();
+  const assistantUnsavedRef = useRef(initialDraft?.assistantUnsaved === true);
   const [state, setState] = useState(() => {
     const draft = initialDraft
       ? cloneComposeDraft(initialDraft)
@@ -287,6 +291,120 @@ export const useComposeDialogController = ({
     subscribe: (onChange) => form.store.subscribe(onChange),
   });
 
+  const applyAssistantReceipt = useEffectEvent(
+    (
+      receipt: Parameters<
+        NonNullable<
+          ReturnType<NonNullable<typeof agentWorkspace>["getCompose"]>
+        >["applyReceipt"]
+      >[0]
+    ) => {
+      if (receipt.draftId !== activeDraftRef.current.localId) {
+        return;
+      }
+      if (receipt.status === "sent") {
+        draftClosedRef.current = true;
+        void recovery.complete(activeDraftRef.current);
+        clearComposeDraftRuntimeFiles(activeDraftRef.current);
+        setState((currentState) => ({ ...currentState, open: false }));
+        onClose?.();
+      } else {
+        activeDraftRef.current = {
+          ...activeDraftRef.current,
+          draftId: receipt.providerDraftId,
+          lastSavedAt: Date.now(),
+          messageId: receipt.messageId,
+          saveStatus: "saved",
+        };
+        setState((currentState) => ({
+          ...currentState,
+          draft: activeDraftRef.current,
+        }));
+      }
+    }
+  );
+
+  useEffect((): (() => void) | undefined => {
+    if (!agentWorkspace || agentWorkspace.mailboxId !== mailboxId) {
+      return undefined;
+    }
+    let revision = 0;
+    let previousValues = form.state.values;
+    const subscription = form.store.subscribe(() => {
+      if (
+        ["to", "cc", "bcc", "subject", "bodyText", "bodyHtml"].some(
+          (field) =>
+            Reflect.get(previousValues, field) !==
+            Reflect.get(form.state.values, field)
+        )
+      ) {
+        previousValues = form.state.values;
+        revision += 1;
+      }
+    });
+    const unregister = agentWorkspace.registerCompose({
+      applyReceipt: (receipt) => {
+        if (receipt.draftRevision === revision) {
+          applyAssistantReceipt(receipt);
+        }
+      },
+      edit: (values, expectedRevision) => {
+        if (
+          values.bodyText !== undefined &&
+          activeDraftRef.current.inlineImages.length > 0
+        ) {
+          throw new Error(
+            "This draft contains images. Edit its message in the composer to keep them intact."
+          );
+        }
+        if (
+          expectedRevision !== revision ||
+          activeDraftRef.current.saveStatus === "sending" ||
+          activeDraftRef.current.saveStatus === "saving"
+        ) {
+          throw new Error("The draft changed. Read it again before editing.");
+        }
+        assistantUnsavedRef.current = true;
+        for (const field of [
+          "to",
+          "cc",
+          "bcc",
+          "subject",
+          "bodyText",
+        ] as const) {
+          const value = values[field];
+          if (value !== undefined) {
+            form.setFieldValue(field, value);
+          }
+        }
+        if (values.bodyText !== undefined) {
+          form.setFieldValue(
+            "bodyHtml",
+            textToComposeBodyHtml(values.bodyText)
+          );
+        }
+        setState((currentState) => ({
+          ...currentState,
+          showBcc: form.state.values.bcc.length > 0,
+          showCc: form.state.values.cc.length > 0,
+        }));
+      },
+      read: () => ({
+        attachments: activeDraftRef.current.attachments,
+        draftId: activeDraftRef.current.localId,
+        draftRevision: revision,
+        inlineImages: activeDraftRef.current.inlineImages,
+        providerDraftId: activeDraftRef.current.draftId,
+        replyContext: activeDraftRef.current.replyContext,
+        values: form.state.values,
+      }),
+    });
+    return () => {
+      subscription.unsubscribe();
+      unregister();
+    };
+  }, [agentWorkspace, form, mailboxId]);
+
   const persistCurrentDraft = async () => {
     const { values } = form.state;
     const draft = buildDraftFromForm(values);
@@ -358,6 +476,7 @@ export const useComposeDialogController = ({
     mailboxId,
     save: async () => {
       if (
+        !assistantUnsavedRef.current &&
         !draftClosedRef.current &&
         activeDraftRef.current.saveStatus !== "saving" &&
         activeDraftRef.current.saveStatus !== "sending" &&

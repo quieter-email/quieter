@@ -6,11 +6,10 @@ import { Button } from "@quieter/ui/button";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { toast } from "@quieter/ui/toast";
 import type { UIMessage } from "ai";
-import type { ReactNode } from "react";
 
 import { getAssistantProgress, getMessageText } from "../domain/chat-messages";
-import type { ChatToolApproval } from "../domain/chat-tools";
 import { isChatToolPart } from "../domain/chat-tools";
+import type { ChatToolApproval } from "../domain/chat-tools";
 import { MarkdownContent } from "./markdown-content";
 import { ToolActivity } from "./tool-activity";
 
@@ -25,120 +24,59 @@ const copyMessage = async (text: string) => {
 
 export const ChatMessage = ({
   approvals,
-  composeBusy,
   isStreaming,
   message,
-  onComposeDecline,
-  onComposeSubmit,
 }: {
   approvals: ChatToolApproval[];
-  composeBusy: boolean;
   isStreaming: boolean;
   message: UIMessage;
-  onComposeDecline: (toolCallId: string) => void;
-  onComposeSubmit: (
-    toolCallId: string,
-    action: "send" | "save_draft",
-    values: {
-      bcc: string;
-      bodyText: string;
-      cc: string;
-      subject: string;
-      to: string;
-    }
-  ) => void;
 }) => {
   const text = getMessageText(message.parts);
 
-  if (message.role === "system" || (message.role === "user" && !text)) {
+  if (message.role === "system" || (message.role === "user" && text === "")) {
     return null;
   }
 
   if (message.role === "user") {
-    return (
-      <div className="flex justify-end">
-        <p className="max-w-[85%] rounded-2xl rounded-br-md bg-muted px-4 py-2.5 text-body/relaxed whitespace-pre-wrap text-fg sm:max-w-[75%]">
-          {text}
-        </p>
-      </div>
-    );
+    return <p className="text-body/relaxed text-muted-fg">{text}</p>;
   }
 
-  const approvalsByCall = new Map(
+  const approvalsByToolCall = new Map(
     approvals.map((approval) => [approval.toolCallId, approval] as const)
   );
-  const hasToolParts = message.parts.some((part) => isChatToolPart(part));
-  const progress = hasToolParts
-    ? null
-    : getAssistantProgress(message.parts, isStreaming);
-  if (!text && progress === null && !hasToolParts) {
-    return null;
-  }
-
-  // Parts are append-only while streaming, so a per-part ordinal plus tool
-  // call id is the only stable identity; keying on content would remount on
-  // every delta.
-  const renderedParts: ReactNode[] = [];
-  let textOrdinal = 0;
-  let toolRunIndex = 0;
-  let toolRun: ReactNode[] = [];
-  const flushToolRun = () => {
-    if (toolRun.length === 0) {
-      return;
-    }
-    renderedParts.push(
-      <div
-        className="relative flex flex-col gap-1 border-l border-border pl-4"
-        key={`${message.id}:tools:${toolRunIndex}`}
-      >
-        {toolRun}
-      </div>
-    );
-    toolRun = [];
-    toolRunIndex += 1;
-  };
-  for (const part of message.parts) {
-    if (part.type === "text" && part.text.trim() !== "") {
-      flushToolRun();
-      textOrdinal += 1;
-      renderedParts.push(
-        <MarkdownContent
-          key={`${message.id}:text:${textOrdinal}`}
-          markdown={part.text}
-        />
-      );
-    } else if (isChatToolPart(part)) {
-      const approval = approvalsByCall.get(part.toolCallId);
-      toolRun.push(
-        <div className="relative" key={part.toolCallId}>
-          <span
-            aria-hidden
-            className="absolute top-[11px] -left-[19px] size-1.5 rounded-full bg-muted-fg/50"
-          />
-          <ToolActivity
-            {...(approval === undefined ? {} : { approval })}
-            composeBusy={composeBusy}
-            isStreaming={isStreaming}
-            onComposeDecline={onComposeDecline}
-            onComposeSubmit={onComposeSubmit}
-            part={part}
-          />
-        </div>
-      );
-    }
-  }
-  flushToolRun();
+  const progress = getAssistantProgress(message.parts, isStreaming);
 
   return (
-    <article className="group/message min-w-0 text-fg">
-      <div className="space-y-2">{renderedParts}</div>
-      {progress ? (
-        <p aria-live="polite" className="mt-2 text-body text-muted-fg">
+    <article className="group/message min-w-0 space-y-1 text-body/relaxed text-fg">
+      {message.parts.map((part, index) => {
+        if (part.type === "text" && part.text.trim() !== "") {
+          return (
+            <MarkdownContent
+              // oxlint-disable-next-line react/no-array-index-key -- SDK text parts are append-only and have no IDs.
+              key={`${message.id}:text:${index}`}
+              markdown={part.text}
+            />
+          );
+        }
+        if (isChatToolPart(part)) {
+          return (
+            <ToolActivity
+              approval={approvalsByToolCall.get(part.toolCallId)}
+              isStreaming={isStreaming}
+              key={part.toolCallId}
+              part={part}
+            />
+          );
+        }
+        return null;
+      })}
+      {progress === null ? null : (
+        <p aria-live="polite" className="text-caption text-muted-fg">
           {progress}
         </p>
-      ) : null}
-      {!isStreaming && text ? (
-        <div className="mt-1 opacity-0 transition-opacity group-hover/message:opacity-100 focus-within:opacity-100">
+      )}
+      {!isStreaming && text !== "" ? (
+        <div className="opacity-0 transition-opacity group-hover/message:opacity-100 focus-within:opacity-100">
           <IconButtonTooltip label="Copy response">
             <Button
               aria-label="Copy response"
@@ -149,7 +87,11 @@ export const ChatMessage = ({
               type="button"
               variant="ghost"
             >
-              <HugeiconsIcon aria-hidden icon={Copy01Icon} />
+              <HugeiconsIcon
+                aria-hidden
+                className="size-3.5"
+                icon={Copy01Icon}
+              />
             </Button>
           </IconButtonTooltip>
         </div>

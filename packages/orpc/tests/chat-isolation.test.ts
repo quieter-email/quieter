@@ -42,55 +42,18 @@ vi.mock(import("../src/mailbox/service"), async () => {
 });
 
 const threadId = "b44942c1-aeeb-40a9-9da8-5c054e9f6030";
+const foreground = {
+  capabilities: ["navigate"],
+  exchangeId: "d6c6b64a-1d5f-4406-9b1b-53a73ff6f41b",
+  expiresAt: Date.now() + 60_000,
+  generation: 1,
+  policy: "ask",
+  tabId: "tab-1",
+};
 
 describe("chat history isolation", () => {
   beforeEach(() => {
     mocks.query.mockReset();
-  });
-
-  test.each([
-    ["another-mailbox", "user"],
-    ["mailbox", "another-user"],
-  ])(
-    "rejects retries for chat owned by %s and %s before loading messages",
-    async (mailboxId, userId) => {
-      mocks.query.mockResolvedValueOnce({
-        rows: [[threadId, mailboxId, "Private title", userId]],
-      });
-
-      await expect(
-        createAiChatResponse({
-          body: {
-            category: "inbox",
-            mailboxId: "mailbox",
-            message: null,
-            model: "openai/gpt-5.6-luna",
-            threadId,
-            trigger: "regenerate-message",
-          },
-          request: new Request("https://example.test/api/chat"),
-          userId: "user",
-        })
-      ).rejects.toMatchObject({ status: 404 });
-    }
-  );
-
-  test("rejects a retry for a nonexistent chat before loading messages", async () => {
-    mocks.query.mockResolvedValueOnce({ rows: [] });
-    await expect(
-      createAiChatResponse({
-        body: {
-          category: "inbox",
-          mailboxId: "mailbox",
-          message: null,
-          model: "openai/gpt-5.6-luna",
-          threadId,
-          trigger: "regenerate-message",
-        },
-        request: new Request("https://example.test/api/chat"),
-        userId: "user",
-      })
-    ).rejects.toMatchObject({ status: 404 });
   });
 
   test("rejects stale assistant resolutions even when tool call ids match", async () => {
@@ -114,6 +77,7 @@ describe("chat history isolation", () => {
       createAiChatResponse({
         body: {
           category: "inbox",
+          foreground,
           mailboxId: "mailbox",
           message: {
             id: "old-assistant",

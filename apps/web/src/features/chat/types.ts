@@ -12,5 +12,4 @@ export type ChatViewProps = {
   mailboxId: string;
   mailboxOrganizationId: string;
   onChatIdChange: (chatId: string) => void;
-  onOpenSidebar: () => void;
 };

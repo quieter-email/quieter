@@ -13,51 +13,6 @@ export const getMessageText = (parts: UIMessage["parts"]) =>
     )
     .join("\n\n");
 
-export const getChatRetryAction = (
-  localMessages: UIMessage[],
-  persistedMessages: UIMessage[]
-):
-  | { messageId: string; text: string; type: "resubmit-user" }
-  | { type: "hydrate" | "regenerate" | "unavailable" } => {
-  const localUserMessage = localMessages.findLast(
-    (message) => message.role === "user"
-  );
-  if (
-    localUserMessage !== undefined &&
-    !persistedMessages.some((message) => message.id === localUserMessage.id)
-  ) {
-    const text = getMessageText(localUserMessage.parts);
-    return text === ""
-      ? { type: "unavailable" }
-      : {
-          messageId: localUserMessage.id,
-          text,
-          type: "resubmit-user",
-        };
-  }
-
-  const localLastMessage = localMessages.at(-1);
-  const persistedLastMessage = persistedMessages.at(-1);
-  if (!persistedMessages.some((message) => message.role === "user")) {
-    return { type: "unavailable" };
-  }
-  if (
-    persistedLastMessage?.parts.some((part) =>
-      part.type.startsWith("tool-")
-    ) === true
-  ) {
-    return { type: "hydrate" };
-  }
-  if (
-    persistedLastMessage?.role !== "assistant" ||
-    (localLastMessage?.role === "assistant" &&
-      localLastMessage.id !== persistedLastMessage.id)
-  ) {
-    return { type: "regenerate" };
-  }
-  return { type: "hydrate" };
-};
-
 export const getAssistantProgress = (
   parts: UIMessage["parts"],
   isStreaming: boolean

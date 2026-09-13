@@ -142,15 +142,17 @@ Outbound:
 
 ## Chat
 
-Chats are mailbox-scoped. There is no cross-request resumability: each POST carries one turn. A turn that fails leaves no assistant row behind; stopping or disconnecting mid-stream persists whatever was already generated.
+The assistant floats over the mail workspace. A square launcher opens it, and conversation history stays in its header dropdown. `chatId` is independent of the selected mail route. Conversations and titles persist, but an interrupted exchange never resumes after reload.
 
-1. The AI SDK `useChat` hook posts to `POST /api/chat`, sending the mailbox context, selected model, and only the newest client message.
-2. The server authorizes the mailbox-scoped thread, persists the user message, and rebuilds the canonical transcript from PostgreSQL; client-sent history is never trusted.
-3. The AI SDK runs the model with Gmail, memory, Linear, calendar, and compose tools and streams its UI message protocol directly to the browser.
-4. Tools that change state (`modify_mail`, `memory`, `linear_write`, `create_google_calendar_event`) require explicit user approval through the AI SDK's tool approval flow; a turn that ends on an approval prompt is persisted with its pending parts, so the decision can be validated server-side against what is actually pending.
-5. `compose_email` is resolved entirely in the browser: the model proposes a draft, the user edits it in an inline composer, and the chosen Send/Save-draft/Decline outcome flows back as a client tool result.
-6. Cancelling before any content arrived leaves no row. Once content has streamed, stopping the answer or disconnecting persists the partial assistant row when the stream ends, so reloads show what was generated. Failed generations persist nothing; their truncated output is indistinguishable from a broken answer.
-7. Successful completion also refreshes billing usage and the chat title in the background. There is no streaming status column, generation lock, or cross-device polling: the composer disables itself locally while a request is in flight.
+The AI SDK `useChat` hook sends only the newest message and a foreground snapshot to `POST /api/chat`. A TanStack Store coordinates the active generation, a two-minute deadline, and a maximum of twelve HTTP legs. It does not duplicate route, query, or compose form state. The shared `@quieter/ai/chat-tools` schemas define client navigation/compose commands and server save/send operations.
+
+Client tools read the workspace, navigate the real router, or open/edit the real compose controller. Draft revisions reject stale edits. Agent edits do not trigger provider autosave. Server tools retain mailbox ownership checks, credentials, mail operations, and send idempotency. They bind save and send requests to the latest completed workspace read for the active mailbox and generation. Ask mode reviews persistent changes; Automatic permits routine mail changes and draft saves. Sending always requires review of the exact current draft. Foreground continuations use JSON, so drafts with attachments or inline images must be saved or sent from the composer, where the browser still holds the file payloads. Other connector and memory writes keep their explicit approvals.
+
+Each exchange has a stable assistant message ID and a stored lease binding its complete snapshot, policy, capabilities, browser tab, and expiry. Continuations load the server transcript and atomically resolve only the recorded pending calls. Browser tool results provide context; they never prove that mail was sent. Cancellation writes a terminal marker, including when Stop arrives before the initial chat insertion. Server mail writes check cancellation and expiry immediately before executing. A provider request already accepted cannot be recalled by Stop.
+
+Stop, minimizing, switching conversation/mailbox, browser Back, hiding the tab, and user interaction with the controlled workspace revoke the client generation. Late client results are discarded. Persisted unfinished tools become terminal results before future transcript conversion. Successful turns refresh history and usage. Title generation is awaited during response completion, with a first-prompt fallback. There is no durable run scheduler, stream resumption, or legacy regeneration path.
+
+For local verification, start `vp dev apps/web --port 3001 --configLoader native` from an isolated checkout when port 3000 is already occupied. Use the existing preview personas for layout and deterministic tool/continuation tests for the agent flow. Live provider writes require the dedicated development mailbox described in the local-development rules; previewing the panel does not require sending mail.
 
 ## Consent and Observability
 

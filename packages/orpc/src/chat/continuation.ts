@@ -24,3 +24,63 @@ export const replaceChatParts = async (input: {
     .returning({ id: chatMessage.id });
   return updated !== undefined;
 };
+
+/**
+ * Pending tool calls cannot be resumed after a foreground exchange ends. Keep
+ * a terminal model-visible result for each one so future transcript conversion
+ * remains valid and cannot replay the action.
+ */
+export const cancelPendingChatParts = (parts: ChatMessagePart[]) => {
+  let changed = false;
+  const cancelled = parts.map((part) => {
+    if (
+      (part.state !== "approval-requested" &&
+        part.state !== "input-available") ||
+      !part.type.startsWith("tool-")
+    ) {
+      return part;
+    }
+    changed = true;
+    const { approval: _approval, ...withoutApproval } = part;
+    return {
+      ...withoutApproval,
+      errorText: "This workspace action was cancelled before it ran.",
+      state: "output-error",
+    };
+  });
+  return changed ? cancelled : parts;
+};
+
+export const cancelForegroundExchangeParts = (parts: ChatMessagePart[]) => {
+  if (parts.some((part) => part.type === "data-foreground-cancelled")) {
+    return parts;
+  }
+  return [
+    ...cancelPendingChatParts(parts),
+    { type: "data-foreground-cancelled" },
+  ];
+};
+
+export const normalizeExpiredChatParts = (
+  parts: ChatMessagePart[],
+  now = Date.now()
+) => {
+  const hasExpiredPendingPart = parts.some((part) => {
+    if (
+      (part.state !== "approval-requested" &&
+        part.state !== "input-available") ||
+      !part.type.startsWith("tool-")
+    ) {
+      return false;
+    }
+    const { foreground } = part;
+    return (
+      typeof foreground === "object" &&
+      foreground !== null &&
+      "expiresAt" in foreground &&
+      typeof foreground.expiresAt === "number" &&
+      foreground.expiresAt <= now
+    );
+  });
+  return hasExpiredPendingPart ? cancelForegroundExchangeParts(parts) : parts;
+};

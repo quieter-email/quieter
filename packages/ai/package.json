@@ -5,6 +5,7 @@
   "exports": {
     "./ai-memory": "./src/ai-memory.ts",
     "./chat-agent": "./src/chat-agent.ts",
+    "./chat-tools": "./src/chat-tools.ts",
     "./chat-models": "./src/chat-models.ts",
     "./chat-usage": "./src/chat-usage.ts",
     "./classify-gmail-message": "./src/classify-gmail-message.ts",

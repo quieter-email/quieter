@@ -1,7 +1,6 @@
 import { describe, expect, test, vi } from "vite-plus/test";
 
 import {
-  createComposeEmailChatTool,
   createGmailChatTools,
   gmailSearchResultSchema,
 } from "../src/chat-agent";
@@ -140,14 +139,6 @@ describe("chat tools", () => {
 
     const parsed = gmailSearchResultSchema.safeParse(result);
     expect(parsed.success && parsed.data.status === "error").toBeTruthy();
-  });
-
-  test("compose proposals stay client-executed", () => {
-    const tools = createComposeEmailChatTool();
-    const tool = tools.compose_email;
-
-    expect(tool).toBeDefined();
-    expect(tool.execute).toBeUndefined();
   });
 
   test("uses the proven transcription model", () => {
