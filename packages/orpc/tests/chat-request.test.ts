@@ -54,7 +54,7 @@ describe("chat request validation", () => {
       foreground: body.foreground,
       kind: "message",
       mailboxId: body.mailboxId,
-      model: body.model,
+      model: "google/gemini-3.7-flash",
       threadId: body.threadId,
       trigger: "submit-message",
       userMessage: {

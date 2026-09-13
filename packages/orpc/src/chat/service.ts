@@ -248,7 +248,7 @@ export const validateChatRequest = (body: unknown): ValidatedChatRequest => {
       foreground: parsedBody.foreground,
       kind: "message",
       mailboxId: parsedBody.mailboxId,
-      model: parsedBody.model ?? resolveChatModel(),
+      model: resolveChatModel(),
       threadId,
       trigger: parsedBody.trigger,
       userMessage: {
@@ -326,7 +326,7 @@ export const validateChatRequest = (body: unknown): ValidatedChatRequest => {
     foreground: parsedBody.foreground,
     kind: "continue",
     mailboxId: parsedBody.mailboxId,
-    model: parsedBody.model ?? resolveChatModel(),
+    model: resolveChatModel(),
     threadId,
     toolDecisions,
     toolOutputs,
@@ -998,14 +998,14 @@ export const createAiChatResponse = async (input: {
       { text: validated.userMessage.text, type: "text" },
       { foreground: validated.foreground, type: "data-foreground" },
     ];
-    // A failed attempt leaves its user message plus an empty assistant
-    // reservation behind. Drop the reservation so an explicit retry reuses
-    // the stored user message instead of being rejected as a duplicate.
+    // Only marker-stamped reservations are ever dropped, so an explicit
+    // retry reuses the stored user message without ever deleting an active
+    // reservation (including a concurrent attempt's newer one).
     const staleReservation = rows.at(-1);
     if (
       staleReservation?.role === "assistant" &&
       staleReservation.parts.length === 1 &&
-      staleReservation.parts[0]?.type === "data-foreground"
+      staleReservation.parts[0]?.type === "data-foreground-failed"
     ) {
       const [deleted] = await db
         .delete(chatMessage)
@@ -1430,7 +1430,7 @@ export const createAiChatResponse = async (input: {
         reportError(error, { operation: "chat:report-ai-usage" });
       }
     },
-    onError: ({ error }) => {
+    onError: async ({ error }) => {
       generationFailed = true;
       if (error instanceof Error && error.name === "AbortError") {
         return;
@@ -1441,6 +1441,24 @@ export const createAiChatResponse = async (input: {
         phase: validated.kind,
         provider: "openrouter",
       });
+      if (assistantReservationParts === null) {
+        return;
+      }
+      // Stamp this attempt's reservation as terminally failed so an explicit
+      // retry can reclaim it. The conditional update only stamps the row this
+      // request reserved; anything else, including a concurrent attempt's
+      // newer reservation, is left untouched.
+      try {
+        await replaceChatParts({
+          chatId: threadId,
+          expectedParts: assistantReservationParts,
+          messageId: assistantMessageId,
+          parts: [{ type: "data-foreground-failed" }],
+          userId: input.userId,
+        });
+      } catch (markError: unknown) {
+        reportError(markError, { operation: "chat:mark-failed-exchange" });
+      }
     },
     providerOptions: {
       openrouter: {

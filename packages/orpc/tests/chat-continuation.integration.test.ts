@@ -348,7 +348,7 @@ describe.skipIf(state.databaseUrl === undefined)(
       expect(storedUserMessage).toBeUndefined();
     });
 
-    test("retries a failed turn by dropping its empty reservation", async () => {
+    test("retries a failed turn by dropping its marked reservation", async () => {
       const retryForeground = {
         ...foreground,
         exchangeId: crypto.randomUUID(),
@@ -369,7 +369,7 @@ describe.skipIf(state.databaseUrl === undefined)(
           chatId: threadId,
           createdAt: now,
           id: assistantId,
-          parts: [{ foreground, type: "data-foreground" }],
+          parts: [{ type: "data-foreground-failed" }],
           position: 1,
           role: "assistant",
           userId,
@@ -403,6 +403,65 @@ describe.skipIf(state.databaseUrl === undefined)(
         .where(eq(chatMessage.chatId, threadId));
       expect(rows.map(({ id }) => id).toSorted()).toStrictEqual(
         [retryForeground.exchangeId, userMessageId].toSorted()
+      );
+    });
+
+    test("refuses to drop an active reservation on retry", async () => {
+      const retryForeground = {
+        ...foreground,
+        exchangeId: crypto.randomUUID(),
+      };
+      await db.delete(chatMessage).where(eq(chatMessage.chatId, threadId));
+      const now = new Date();
+      await db.insert(chatMessage).values([
+        {
+          chatId: threadId,
+          createdAt: now,
+          id: userMessageId,
+          parts: [{ text: "Archive this email", type: "text" }],
+          position: 0,
+          role: "user",
+          userId,
+        },
+        {
+          chatId: threadId,
+          createdAt: now,
+          id: assistantId,
+          parts: [{ foreground, type: "data-foreground" }],
+          position: 1,
+          role: "assistant",
+          userId,
+        },
+      ]);
+      state.model.mockClear();
+
+      await expect(
+        createAiChatResponse({
+          body: {
+            category: "inbox",
+            foreground: retryForeground,
+            mailboxId: state.mailboxId,
+            message: {
+              id: userMessageId,
+              parts: [{ text: "Archive this email", type: "text" }],
+              role: "user",
+            },
+            model: "openai/gpt-5.6-luna",
+            threadId,
+            trigger: "submit-message",
+          },
+          request: new Request("https://example.test/api/chat"),
+          userId,
+        })
+      ).rejects.toMatchObject({ status: 409 });
+
+      expect(state.model).not.toHaveBeenCalled();
+      const rows = await db
+        .select({ id: chatMessage.id })
+        .from(chatMessage)
+        .where(eq(chatMessage.chatId, threadId));
+      expect(rows.map(({ id }) => id).toSorted()).toStrictEqual(
+        [assistantId, userMessageId].toSorted()
       );
     });
 
