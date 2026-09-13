@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import { COMPATIBILITY_DATE } from "@quieter/cloudflare/compatibility-date";
 
 import type { createAppDatabase } from "./database";
@@ -11,10 +13,25 @@ import {
 } from "./stage";
 import type { SstLinkable } from "./types";
 
+const webSitePath = "apps/web";
+
 const webDomain: string | { name: string; redirects: string[] } | undefined =
   production
     ? { name: "quieter.email", redirects: ["www.quieter.email"] }
     : undefined;
+
+/**
+ * SST hardcodes the Worker `main` to TanStack's default server entry, which
+ * skips `apps/web/src/server.ts` and therefore the `Sentry.withSentry` wrapper.
+ */
+class WebTanStackStart extends sst.cloudflare.TanStackStart {
+  // eslint-disable-next-line class-methods-use-this -- overrides an SST instance hook
+  protected override buildWrangler() {
+    return {
+      main: path.resolve(webSitePath, "src/server.ts"),
+    };
+  }
+}
 
 export const createWeb = (
   appDatabase: ReturnType<typeof createAppDatabase>,
@@ -22,7 +39,7 @@ export const createWeb = (
   runtimeEnvironment: Record<string, $util.Input<string>> = {},
   links: SstLinkable[] = []
 ) =>
-  new sst.cloudflare.TanStackStart("Web", {
+  new WebTanStackStart("Web", {
     buildCommand: production
       ? `vp exec node ../../scripts/prepared-web-build.ts ${$cli.command}`
       : "vp run build",
@@ -77,7 +94,7 @@ export const createWeb = (
       ...runtimeEnvironment,
     },
     link: [...webSecretBindings, appDatabase, ...links],
-    path: "apps/web",
+    path: webSitePath,
     transform: {
       server: {
         compatibility: {
