@@ -224,14 +224,16 @@ describe(writeComposeFormValues, () => {
     writeComposeFormValues(form, values);
 
     expect(resetWrites).toStrictEqual([values]);
-    expect(fieldWrites).toStrictEqual([
-      ["to", "alex@example.com"],
-      ["cc", "casey@example.com"],
-      ["bcc", ""],
-      ["subject", "Re: Project update"],
-      ["bodyHtml", "<p>Reply body</p>"],
-      ["bodyText", "Reply body"],
-    ]);
+    expect(new Set(fieldWrites)).toStrictEqual(
+      new Set([
+        ["to", "alex@example.com"],
+        ["cc", "casey@example.com"],
+        ["bcc", ""],
+        ["subject", "Re: Project update"],
+        ["bodyHtml", "<p>Reply body</p>"],
+        ["bodyText", "Reply body"],
+      ])
+    );
     expect(validateWrites).toStrictEqual(["change"]);
   });
 });

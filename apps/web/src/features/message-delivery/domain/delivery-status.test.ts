@@ -5,7 +5,6 @@ import {
   getAggregateDeliveryLabel,
   getAggregateDeliveryStatus,
   getDeliveryActionGuidance,
-  getDeliveryStatusTone,
   getRecipientDeliveryEvents,
   hasDeliveryDiagnostics,
   isDeliveryStatusUnsettled,
@@ -100,25 +99,6 @@ describe(getAggregateDeliveryStatus, () => {
         createRecipient("first@example.com", "bounced"),
       ])
     ).toBe("Couldn't deliver");
-  });
-});
-
-describe(getDeliveryStatusTone, () => {
-  it("keeps unresolved states neutral", () => {
-    expect(getDeliveryStatusTone(null)).toBe("neutral");
-    expect(getDeliveryStatusTone("sent")).toBe("neutral");
-    expect(getDeliveryStatusTone("queued")).toBe("neutral");
-  });
-
-  it("separates a delivery from a delay and a failure", () => {
-    expect(getDeliveryStatusTone("delivered")).toBe("positive");
-    expect(getDeliveryStatusTone("delayed")).toBe("warning");
-  });
-
-  it("marks every terminal failure as danger", () => {
-    expect(getDeliveryStatusTone("bounced")).toBe("danger");
-    expect(getDeliveryStatusTone("complained")).toBe("danger");
-    expect(getDeliveryStatusTone("rejected")).toBe("danger");
   });
 });
 

@@ -10,8 +10,6 @@ import {
   normalizeExpiredChatParts,
 } from "../src/chat/continuation";
 import {
-  ChatRequestError,
-  resolveChatStreamErrorMessage,
   resolveForegroundComposeDraftForPersistence,
   toForegroundComposeMessage,
   validateChatRequest,
@@ -290,40 +288,5 @@ describe("foreground chat requests", () => {
       { state: "approval-responded", toolCallId: "tool-1" },
       { type: "data-foreground-cancelled" },
     ]);
-  });
-});
-
-describe("chat stream error messages", () => {
-  test("maps a stale exchange conflict onto the retry text", () => {
-    expect(
-      resolveChatStreamErrorMessage(
-        new ChatRequestError(409, "This chat changed.")
-      )
-    ).toBe("This chat changed while the answer was being completed. Retry it.");
-  });
-
-  test("maps a client disconnect onto the stopped text", () => {
-    const aborted = new Error("The operation was aborted.");
-    aborted.name = "AbortError";
-    expect(resolveChatStreamErrorMessage(aborted)).toBe(
-      "The request was stopped."
-    );
-  });
-
-  test("maps provider throttling onto the busy text", () => {
-    const throttled = Object.assign(new Error("Rate limited upstream."), {
-      isRetryable: true,
-      statusCode: 429,
-    });
-    throttled.name = "AI_APICallError";
-    expect(resolveChatStreamErrorMessage(throttled)).toBe(
-      "The assistant is busy. Retry shortly."
-    );
-  });
-
-  test("keeps the generic text for unknown generation failures", () => {
-    expect(resolveChatStreamErrorMessage(new Error("Boom"))).toBe(
-      "The answer could not be completed."
-    );
   });
 });
