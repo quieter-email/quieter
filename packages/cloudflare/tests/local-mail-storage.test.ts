@@ -31,7 +31,6 @@ describe("native local mail storage", () => {
       provider: "r2" as const,
     };
     await writeRawMailObject(object, raw);
-    expect(object.bucket).toBe(LOCAL_MAIL_BUCKET);
     await expect(
       readRawMailObject({
         rawObjectBucket: object.bucket,

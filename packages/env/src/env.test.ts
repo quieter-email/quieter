@@ -120,7 +120,7 @@ describe("SST environment", () => {
 
   test("requires non-secret service configuration in production", () => {
     expect(() => createSstConfigEnv({ production: true }, {})).toThrow(
-      "Gmail Pub/Sub configuration is required in production"
+      /configuration is required in production/u
     );
   });
 
@@ -130,7 +130,7 @@ describe("SST environment", () => {
         { production: false },
         { GMAIL_PUBSUB_TOPIC: "projects/example/topics/gmail" }
       )
-    ).toThrow("Gmail Pub/Sub configuration is incomplete");
+    ).toThrow(/configuration is incomplete/u);
   });
 
   test("accepts complete production service configuration", () => {

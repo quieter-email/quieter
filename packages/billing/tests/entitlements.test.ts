@@ -21,11 +21,7 @@ import {
   shouldReconcileBillingSubscription,
   subscriptionBelongsToOrganization,
 } from "../src/entitlements";
-import {
-  BILLING_PRODUCTS,
-  productHasAi,
-  productHasManagedMail,
-} from "../src/plans";
+import { productHasAi, productHasManagedMail } from "../src/plans";
 import type * as PolarModule from "../src/polar";
 import type * as SubscriptionSyncModule from "../src/subscription-sync";
 
@@ -541,27 +537,10 @@ describe("local development billing entitlement", () => {
 });
 
 describe("billing products", () => {
-  test("exposes only organization plans", () => {
-    expect(Object.keys(BILLING_PRODUCTS)).toStrictEqual(["managed", "pro"]);
-  });
-
   test("matches product access to the purchased capability", () => {
     expect(productHasAi("managed")).toBeFalsy();
     expect(productHasAi("pro")).toBeTruthy();
     expect(productHasManagedMail("managed")).toBeTruthy();
     expect(productHasManagedMail("pro")).toBeTruthy();
-  });
-
-  test("keeps a platform fee above the included monthly usage balance", () => {
-    expect(BILLING_PRODUCTS.managed).toMatchObject({
-      creditAmountCents: 1000,
-      currency: "usd",
-      monthlyPriceCents: 1500,
-    });
-    expect(BILLING_PRODUCTS.pro).toMatchObject({
-      creditAmountCents: 2000,
-      currency: "usd",
-      monthlyPriceCents: 2500,
-    });
   });
 });

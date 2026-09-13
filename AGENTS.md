@@ -78,6 +78,10 @@
   ```
 
 - Add focused tests for deep or complex behavior changes. Do not add tests that merely restate a simple edit.
+- Default to not writing tests. Only add a test when the behavior genuinely needs a safety net: security or isolation logic, money/billing math, concurrency or idempotency, parsing or validation with edge cases, and complex state flows. Everything else ships without a test.
+- Never write tests that lock copy, constants, config defaults, prices, tuning numbers (delays, intervals, batch sizes, stagger values), visual or motion values, prompt wording, exact object shapes of generated records, mock call order, or prefetch/query-key sets. Assert behavior and outcomes, never verbatim values.
+- Do not mirror a constant back at itself (`expect(FOO).toBe("...")`), do not assert tautologies, and do not test trivial mappers, getters, or third-party behavior.
+- Prefer a few behavior assertions (`toMatchObject`, `toContain`, regex matchers) over exact snapshots (`toStrictEqual` on large objects, `toBe` on copy). Exact matching is only for wire or security contracts where an accidental change is a bug.
 - Do not automatically run full builds, full test suites, React Doctor, browser audits, or extra review tools for routine edits. This rule overrides generic skill recommendations to run those tools after every change. Existing commit hooks may run normally; do not bypass them or repeat their checks without a reason.
 - Once relevant checks pass, stop validating unless a new failure, change, or concrete concern justifies more work. Avoid repetitive status polling and unnecessary progress narration.
 - Update documentation only when architecture, tooling, or operations change, or when explicitly requested.

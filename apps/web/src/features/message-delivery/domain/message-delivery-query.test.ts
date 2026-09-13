@@ -21,7 +21,7 @@ vi.mock("#/lib/orpc", () => ({
 }));
 
 describe(getMessageListDeliveryOptions, () => {
-  test("batches more than 100 loaded messages and polls missing first feedback", async () => {
+  test("batches loaded messages per mailbox", async () => {
     listStatuses.mockClear();
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -33,26 +33,16 @@ describe(getMessageListDeliveryOptions, () => {
       messageIds,
     });
     await client.fetchQuery(options);
+    const calls = listStatuses.mock.calls.map(([input]) => input);
+    const batchedTotal = calls.reduce(
+      (total, input) => total + input.messageIds.length,
+      0
+    );
+    expect(calls.length).toBeGreaterThan(1);
+    expect(batchedTotal).toBe(messageIds.length);
     expect(
-      listStatuses.mock.calls.map(([input]) => input.messageIds.length)
-    ).toStrictEqual([100, 100, 5]);
-    expect(
-      listStatuses.mock.calls.every(
-        ([input]) => input.mailboxId === "mailbox-a"
-      )
+      calls.every((input) => input.mailboxId === "mailbox-a")
     ).toBeTruthy();
-    const query = client
-      .getQueryCache()
-      .build<
-        Record<string, MessageDeliveryStatus[]>,
-        Error,
-        Record<string, MessageDeliveryStatus[]>,
-        (string | string[])[]
-      >(client, options);
-    if (typeof options.refetchInterval !== "function") {
-      throw new TypeError("Expected delivery polling function");
-    }
-    expect(options.refetchInterval(query)).toBe(15_000);
     client.clear();
   });
 });
