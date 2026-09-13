@@ -116,6 +116,16 @@ export const resolveChatStreamErrorMessage = (error: unknown): string => {
     : "The answer could not be completed.";
 };
 
+/**
+ * Maps request validation failures onto the user-facing response text.
+ * Curated custom issues carry actionable wording (expired exchanges, stale
+ * workspace results); raw schema violations stay generic so Sentry issues
+ * and user reports remain attributable without leaking shapes.
+ */
+export const resolveChatValidationErrorMessage = (error: z.ZodError): string =>
+  error.issues.find(({ code }) => code === "custom")?.message ??
+  "Invalid chat request.";
+
 // ---------------------------------------------------------------------------
 // Request validation
 // ---------------------------------------------------------------------------
@@ -908,9 +918,13 @@ export const createAiChatResponse = async (input: {
     validated = validateChatRequest(input.body);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      throw new ChatRequestError(400, "Invalid chat request.", {
-        cause: error,
-      });
+      throw new ChatRequestError(
+        400,
+        resolveChatValidationErrorMessage(error),
+        {
+          cause: error,
+        }
+      );
     }
     throw error;
   }
