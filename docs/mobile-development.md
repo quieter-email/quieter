@@ -5,7 +5,7 @@ The native client lives in `apps/mobile` (Expo SDK 57, Expo Router, Uniwind, Tan
 ## Prerequisites
 
 - Android Studio with the SDK, an emulator image, and `adb` on the path (`%LOCALAPPDATA%\Android\Sdk`).
-- JDK 17 for the Gradle build. Expo's tooling does not work with newer JDKs:
+- For development builds only: JDK 17. Expo's Gradle tooling does not work with newer JDKs:
 
   ```powershell
   $env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-17.0.20.101-hotspot"
@@ -14,36 +14,44 @@ The native client lives in `apps/mobile` (Expo SDK 57, Expo Router, Uniwind, Tan
 
 - A running AVD (`emulator -avd <name>`). The repository default is `Track_Pixel`.
 
-## First run
+## Start the stack
 
-1. Start the web server, which provides auth and the oRPC API:
+1. Start the web server, which provides auth and the oRPC API. It binds `127.0.0.1` so the emulator can reach it through `adb reverse`:
 
    ```bash
    vp run dev
    ```
 
-2. Start the emulator and build the development client. The first build compiles native modules and takes several minutes; later runs reuse the installed app:
+2. Start the emulator, then start Metro and open the app:
 
    ```bash
-   vp run @quieter/mobile#android
+   vp run @quieter/mobile#start        # development build, if one is installed
+   vp run @quieter/mobile#start:go     # Expo Go, no native build required
    ```
 
-   The `preandroid` script forwards the emulator's `localhost:3000` to the host, which the Google sign-in callback relies on. Expo forwards its own Metro port.
+3. Forward the API port. `expo start` forwards Metro's own port; the `preandroid` script and the `mobile:android` script forward the API port as well. When starting Metro directly:
 
-3. The app opens on the emulator. Sign in with Google; the browser session returns through the `quieter://` scheme.
+   ```bash
+   adb reverse tcp:3000 tcp:3000
+   adb reverse tcp:8082 tcp:8082   # when Metro runs on 8082
+   ```
 
-## Hot reload
+## Expo Go
 
-`expo run:android` leaves Metro running. Editing a file under `apps/mobile/src` triggers Fast Refresh. Native dependency or `app.json` changes need a new build:
+Expo Go is the fastest local loop and works with every native module this app uses (`expo-secure-store`, `expo-web-browser`, `expo-network`, `react-native-webview`, `react-native-svg`, Reanimated). Start it with `vp run @quieter/mobile#start:go` and open the project on the emulator. Sign-in still returns through the `exp://` scheme, which the server trusts during development.
+
+Use a development build when you add a native module that Expo Go does not bundle, or when you need the release-like native runtime:
 
 ```bash
 vp run @quieter/mobile#android
 ```
 
-To start only Metro against an installed development build:
+## Hot reload
+
+Metro runs while the app is open. Editing a file under `apps/mobile/src` triggers Fast Refresh; screens update without a reload. Native dependency or `app.json` changes need a new build:
 
 ```bash
-vp run @quieter/mobile#start
+vp run @quieter/mobile#android
 ```
 
 ## Configuration
@@ -59,26 +67,23 @@ EXPO_PUBLIC_QUIETER_WEB_URL=http://localhost:3000
 
 ## Windows and long paths
 
-The workspace uses pnpm's `hoisted` node linker (see `pnpm-workspace.yaml`). React Native's CMake build on Windows fails with the default isolated linker because the pnpm virtual-store path (`node_modules/.pnpm/<package>@<version>_<hash>/node_modules/<package>`) pushes generated object paths past CMake's 250-character limit. The hoisted layout keeps native module paths short enough for any reasonable checkout location; Expo recommends it for native builds as well.
+The workspace uses pnpm's `hoisted` node linker (see `pnpm-workspace.yaml`). React Native's CMake builds on Windows otherwise fail because the pnpm virtual-store path pushes generated object paths past CMake's 250-character limit.
 
-If a native build still reports `CMAKE_OBJECT_PATH_MAX` or `mkdir` failures, the checkout path is unusually long. Map it to a short drive letter before building:
+Development builds still mirror the absolute source path into object file names for the app's own autolinked codegen, so an unusually deep checkout can exceed the Windows path limit (for example the agent worktree under `%LOCALAPPDATA%\opencode\worktree\...`). Two options:
 
-```powershell
-subst Q: "C:\path\to\worktree"
-cd Q:\apps\mobile
-npx expo run:android
-```
-
-The drive mapping only affects the current user's session and can be removed with `subst Q: /d`.
+- Keep the checkout at a short path such as `C:\dev\quieter` for development builds.
+- Or use Expo Go, which does not compile native code at all.
 
 ## Port conflicts
 
-Metro defaults to `8081`. If another project already uses it, build and start with an explicit port and forward it to the emulator:
+Metro defaults to `8081`. If another project already uses it, run with an explicit port and forward that port to the emulator:
 
 ```bash
-npx expo run:android --port 8082
+vp run @quieter/mobile#start:go -- --port 8082
 adb reverse tcp:8082 tcp:8082
 ```
+
+Metro warns when watching very large trees. `apps/mobile/metro.config.js` keeps the generated `android/` and `ios/` build directories out of Metro's file map; if bundling still reports `EMFILE`, lower the concurrency with `--max-workers 2`.
 
 ## Tooling notes
 

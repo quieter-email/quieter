@@ -6,6 +6,7 @@
   "scripts": {
     "android": "expo run:android",
     "start": "expo start --dev-client",
+    "start:go": "expo start --go",
     "typecheck": "tsc --noEmit",
     "preandroid": "node scripts/reverse-android.mjs"
   },
