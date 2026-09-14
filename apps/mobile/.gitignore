@@ -17,3 +17,7 @@ ios/
 
 # Uniwind generates types at Metro startup.
 src/uniwind-types.d.ts
+
+# Local export smoke tests.
+.expo-export/
+export-log.txt

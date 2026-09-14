@@ -60,6 +60,16 @@
     "@react-native/metro-config": "0.86.3",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
+    "react-dom": "catalog:",
     "typescript": "catalog:"
+  },
+  "expo": {
+    "install": {
+      "exclude": [
+        "react",
+        "react-dom",
+        "typescript"
+      ]
+    }
   }
 }

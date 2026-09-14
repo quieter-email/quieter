@@ -57,6 +57,29 @@ EXPO_PUBLIC_QUIETER_WEB_URL=http://localhost:3000
 
 `localhost` works because of the `adb reverse` port forwarding. Use the machine's LAN address for physical devices and register that origin with Google OAuth and `BETTER_AUTH_TRUSTED_ORIGINS`.
 
+## Windows and long paths
+
+The workspace uses pnpm's `hoisted` node linker (see `pnpm-workspace.yaml`). React Native's CMake build on Windows fails with the default isolated linker because the pnpm virtual-store path (`node_modules/.pnpm/<package>@<version>_<hash>/node_modules/<package>`) pushes generated object paths past CMake's 250-character limit. The hoisted layout keeps native module paths short enough for any reasonable checkout location; Expo recommends it for native builds as well.
+
+If a native build still reports `CMAKE_OBJECT_PATH_MAX` or `mkdir` failures, the checkout path is unusually long. Map it to a short drive letter before building:
+
+```powershell
+subst Q: "C:\path\to\worktree"
+cd Q:\apps\mobile
+npx expo run:android
+```
+
+The drive mapping only affects the current user's session and can be removed with `subst Q: /d`.
+
+## Port conflicts
+
+Metro defaults to `8081`. If another project already uses it, build and start with an explicit port and forward it to the emulator:
+
+```bash
+npx expo run:android --port 8082
+adb reverse tcp:8082 tcp:8082
+```
+
 ## Tooling notes
 
 - The theme in `packages/ui/src/mobile-theme.css` mirrors the web tokens in `packages/ui/src/styles.css`; `packages/ui/tests/mobile-theme.test.ts` fails when they drift.

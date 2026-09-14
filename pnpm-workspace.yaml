@@ -2,6 +2,12 @@ packages:
   - "apps/*"
   - "packages/*"
 
+# React Native's CMake builds on Windows fail with pnpm's isolated node_modules
+# because the virtual-store paths exceed the 250-character CMake object-path
+# limit. Expo recommends the hoisted layout for native builds; keep it unless
+# the mobile app leaves the monorepo.
+nodeLinker: hoisted
+
 autoInstallPeers: false
 strictPeerDependencies: true
 
