@@ -24,13 +24,17 @@ export const ComposerFrame = ({
 
 /** The one element that holds every header input, hairline-divided rather than boxed. */
 export const ComposerFieldGroup = ({
+  bare = false,
   children,
   className,
   ...props
-}: ComponentPropsWithoutRef<"div">) => (
+}: ComponentPropsWithoutRef<"div"> & {
+  bare?: boolean;
+}) => (
   <div
     className={cn(
-      "squircle w-full shrink-0 overflow-hidden rounded-lg border border-border bg-control",
+      "w-full shrink-0 overflow-hidden rounded-lg border border-border bg-control",
+      { "rounded-none border-0 bg-transparent shadow-none": bare },
       className
     )}
     {...props}

@@ -13,7 +13,7 @@ import type { ComponentRef, ReactNode, Ref } from "react";
 import { cn } from "../../lib/cn";
 
 const buttonVariants = cva(
-  "squircle inline-flex border border-transparent shrink-0 items-center justify-center gap-2 rounded-md text-body whitespace-nowrap transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/45 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "inline-flex border border-transparent shrink-0 items-center justify-center gap-2 rounded-md text-body whitespace-nowrap transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/45 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     defaultVariants: {
       size: "default",
@@ -30,6 +30,11 @@ const buttonVariants = cva(
         sm: "h-7 px-2.5 text-body-sm [&_svg]:size-3.5",
       },
       variant: {
+        // Large selectable card, e.g. the mailbox-type options.
+        card: "group h-auto min-h-32 w-full flex-col items-start justify-start rounded-lg border-border bg-bg-raised p-5 text-left text-fg whitespace-normal hover:border-border-strong hover:bg-control-hover active:bg-control-active",
+        // Compact toggle chip, e.g. the Cc/Bcc switches. The pressed look
+        // follows aria-pressed so callers only pass the state.
+        chip: "h-7 px-1.5 text-caption text-muted-fg aria-pressed:bg-control-active aria-pressed:text-fg",
         default:
           "bg-primary text-primary-fg shadow-sm hover:bg-primary/90 active:bg-primary/85",
         destructive:

@@ -54,11 +54,29 @@ export const AlertDialogHeader = ({
   <div className={cn("px-5 py-4", className)} {...props} />
 );
 
+const alertDialogBodySpacing = {
+  "3": "space-y-3",
+  "4": "space-y-4",
+  "5": "space-y-5",
+};
+
 export const AlertDialogBody = ({
   className,
+  spacing,
   ...props
-}: ComponentPropsWithoutRef<"div">) => (
-  <div className={cn("px-5 py-4", className)} {...props} />
+}: ComponentPropsWithoutRef<"div"> & {
+  spacing?: "3" | "4" | "5";
+}) => (
+  <div
+    className={cn(
+      "px-5 py-4",
+      spacing === undefined
+        ? undefined
+        : alertDialogBodySpacing[spacing],
+      className
+    )}
+    {...props}
+  />
 );
 
 export const AlertDialogFooter = ({
@@ -120,7 +138,7 @@ export const AlertDialogCloseButton = ({
   variant = "outline",
   ...props
 }: ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Close> & {
-  variant?: ButtonProps["variant"];
+  variant?: Exclude<ButtonProps["variant"], "card" | "chip">;
 }) => (
   <AlertDialogPrimitive.Close
     className={cn(alertDialogCloseButtonVariants({ variant }), className)}

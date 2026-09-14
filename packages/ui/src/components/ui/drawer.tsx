@@ -144,7 +144,7 @@ export const DrawerCloseButton = ({
   variant = "outline",
   ...props
 }: ComponentPropsWithoutRef<typeof DrawerPrimitive.Close> & {
-  variant?: ButtonProps["variant"];
+  variant?: Exclude<ButtonProps["variant"], "card" | "chip">;
 }) => (
   <DrawerPrimitive.Close
     className={cn(drawerCloseButtonVariants({ variant }), className)}

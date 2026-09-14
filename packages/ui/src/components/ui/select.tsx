@@ -28,6 +28,8 @@ const selectTriggerVariants = cva(
         sm: "h-7 px-2 text-body-sm [&_svg]:size-3.5",
       },
       variant: {
+        attached:
+          "h-full w-auto rounded-l-none bg-transparent pr-2.5 pl-1.5 text-muted-fg shadow-none hover:bg-muted hover:text-fg active:scale-100 active:bg-muted/80 active:text-fg",
         default:
           "w-full border border-border bg-control text-fg hover:bg-control-hover active:bg-control-active",
         ghost:

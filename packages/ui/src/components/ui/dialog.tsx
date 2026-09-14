@@ -54,11 +54,29 @@ export const DialogHeader = ({
   <div className={cn("px-5 py-4", className)} {...props} />
 );
 
+const dialogBodySpacing = {
+  "3": "space-y-3",
+  "4": "space-y-4",
+  "5": "space-y-5",
+};
+
 export const DialogBody = ({
   className,
+  spacing,
   ...props
-}: ComponentPropsWithoutRef<"div">) => (
-  <div className={cn("px-5 py-4", className)} {...props} />
+}: ComponentPropsWithoutRef<"div"> & {
+  spacing?: "3" | "4" | "5";
+}) => (
+  <div
+    className={cn(
+      "px-5 py-4",
+      spacing === undefined
+        ? undefined
+        : dialogBodySpacing[spacing],
+      className
+    )}
+    {...props}
+  />
 );
 
 export const DialogFooter = ({
@@ -117,7 +135,7 @@ export const DialogCloseButton = ({
   variant = "outline",
   ...props
 }: ComponentPropsWithoutRef<typeof DialogPrimitive.Close> & {
-  variant?: ButtonProps["variant"];
+  variant?: Exclude<ButtonProps["variant"], "card" | "chip">;
 }) => (
   <DialogPrimitive.Close
     className={cn(dialogCloseButtonVariants({ variant }), className)}
