@@ -1,0 +1,24 @@
+@import "tailwindcss";
+@import "uniwind";
+@import "../../../packages/ui/src/mobile-theme.css";
+
+/*
+ * Geist ships as static weights on native, so each Tailwind weight class
+ * resolves to the matching font file instead of relying on fontWeight
+ * synthesis. Web keeps the variable font; values stay in mobile-theme.css.
+ */
+@utility font-normal {
+  font-family: Geist_400Regular;
+}
+
+@utility font-medium {
+  font-family: Geist_500Medium;
+}
+
+@utility font-semibold {
+  font-family: Geist_600SemiBold;
+}
+
+@utility font-bold {
+  font-family: Geist_700Bold;
+}

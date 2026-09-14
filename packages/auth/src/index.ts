@@ -1,4 +1,5 @@
 import { apiKey } from "@better-auth/api-key";
+import { expo } from "@better-auth/expo";
 import { passkey } from "@better-auth/passkey";
 import { getOrganizationBillingEntitlement } from "@quieter/billing/entitlements";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
@@ -109,8 +110,15 @@ const memberRole = organizationAccessControl.newRole({
 });
 
 const baseURL = serverEnv.BETTER_AUTH_URL ?? "http://localhost:3000";
+const nativeSchemeOrigins = ["quieter://", "quieter://*"];
+const developmentOrigins =
+  serverEnv.NODE_ENV === "production"
+    ? []
+    : ["exp://", "exp://**", "http://localhost:8081"];
 const trustedOrigins = [
   baseURL,
+  ...nativeSchemeOrigins,
+  ...developmentOrigins,
   ...(serverEnv.BETTER_AUTH_TRUSTED_ORIGINS?.split(",")
     .map((origin) => origin.trim())
     .filter(Boolean) ?? []),
@@ -232,6 +240,7 @@ export const auth = lazyAuth(() =>
       }),
     },
     plugins: [
+      expo(),
       passkey(),
       organization({
         ac: organizationAccessControl,

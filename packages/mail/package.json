@@ -20,6 +20,7 @@
     "./sender-avatar": "./src/sender-avatar.ts",
     "./tracking": "./src/tracking.ts",
     "./messages": "./src/messages.ts",
+    "./thread-list": "./src/thread-list.ts",
     "./updates": "./src/updates.ts"
   },
   "dependencies": {

@@ -1,0 +1,14 @@
+{
+  "name": "@quieter/brand",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/geometry.ts"
+  },
+  "devDependencies": {
+    "@quieter/config": "workspace:*",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}

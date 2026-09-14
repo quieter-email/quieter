@@ -9,9 +9,13 @@ peerDependencyRules:
   allowedVersions:
     # Vite+ replaces Vite with its compatible core under a different version.
     vite: "0.2.9"
+    # Several Babel plugins still declare 7.x peer ranges while the workspace
+    # runs @babel/core 8.0.1 (the web toolchain already resolved this way).
+    "@babel/core": "8.0.1"
 
 catalog:
   "@better-auth/api-key": "1.7.3"
+  "@better-auth/expo": "1.7.3"
   "@cloudflare/vite-plugin": "1.54.5"
   "@cloudflare/vitest-pool-workers": "0.22.0"
   "@cloudflare/workers-types": "5.20260907.1"

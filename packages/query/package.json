@@ -1,0 +1,28 @@
+{
+  "name": "@quieter/query",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./retry": "./src/retry.ts",
+    "./keys": "./src/keys.ts"
+  },
+  "dependencies": {
+    "@orpc/tanstack-query": "catalog:",
+    "@tanstack/react-query": "catalog:"
+  },
+  "devDependencies": {
+    "@orpc/client": "catalog:",
+    "@quieter/config": "workspace:*",
+    "@quieter/mail": "workspace:*",
+    "@quieter/orpc": "workspace:*",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
+  },
+  "peerDependencies": {
+    "@orpc/client": "catalog:",
+    "@quieter/mail": "workspace:*",
+    "@quieter/orpc": "workspace:*"
+  }
+}

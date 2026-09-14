@@ -359,6 +359,44 @@ export default defineConfig({
           "react/jsx-handler-names": "off",
         },
       },
+      {
+        // Metro reads its config as CommonJS by design, and the mobile scripts
+        // are plain Node entry points outside the app's TypeScript project.
+        files: [
+          "apps/mobile/metro.config.js",
+          "apps/mobile/scripts/**/*.mjs",
+          "apps/mobile/scripts/**/*.js",
+        ],
+        rules: {
+          "import/no-commonjs": "off",
+          "typescript/no-unsafe-argument": "off",
+          "typescript/no-unsafe-assignment": "off",
+          "typescript/no-unsafe-call": "off",
+          "typescript/no-unsafe-member-access": "off",
+          "typescript/no-unsafe-return": "off",
+          "unicorn/prefer-module": "off",
+        },
+      },
+      {
+        // Reanimated drives these imperative shared-value lifecycles, which
+        // React Compiler cannot model.
+        files: [
+          "apps/mobile/src/features/compose/components/compose-screen.tsx",
+          "apps/mobile/src/features/navigation/components/workspace-drawer.tsx",
+        ],
+        rules: {
+          "react/react-compiler": "off",
+        },
+      },
+      {
+        // These effects warm non-fatal local preferences, and
+        // expo-status-bar's `style` prop is a string union, not a style object.
+        files: ["apps/mobile/src/app/_layout.tsx"],
+        rules: {
+          "promise/prefer-await-to-then": "off",
+          "react/style-prop-object": "off",
+        },
+      },
     ],
     rules: {
       // Ordering and bounded concurrency are deliberate choices, not lint failures.
