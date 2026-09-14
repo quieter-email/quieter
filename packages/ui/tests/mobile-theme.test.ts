@@ -1,9 +1,15 @@
-/// <reference types="vite/client" />
+/// <reference types="node" />
+
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 
 import { describe, expect, test } from "vite-plus/test";
 
-import mobileThemeCss from "../src/mobile-theme.css?raw";
-import webCss from "../src/styles.css?raw";
+const readCss = async (relativePath: string) =>
+  await readFile(
+    fileURLToPath(new URL(relativePath, import.meta.url)),
+    "utf-8"
+  );
 
 const stripComments = (css: string) => {
   const parts: string[] = [];
@@ -96,37 +102,38 @@ const resolveVariables = (declarations: Map<string, string>) => {
   return resolved;
 };
 
-const webLight = resolveVariables(
-  parseDeclarations(collectBlock(stripComments(webCss), ":root,", "}"))
-);
-const webDark = resolveVariables(
-  parseDeclarations(collectBlock(stripComments(webCss), ".dark,", "}"))
-);
-const mobileLight = parseDeclarations(
-  collectBlock(stripComments(mobileThemeCss), "@variant light {", "}")
-);
-const mobileDark = parseDeclarations(
-  collectBlock(stripComments(mobileThemeCss), "@variant dark {", "}")
-);
-
 describe("mobile theme parity", () => {
-  test("mirrors every shared color token in both themes", () => {
+  test("mirrors every shared color token in both themes", async () => {
+    const [webCss, mobileCss] = await Promise.all([
+      readCss("../src/styles.css"),
+      readCss("../src/mobile-theme.css"),
+    ]);
+
+    const webLight = resolveVariables(
+      parseDeclarations(collectBlock(stripComments(webCss), ":root,", "}"))
+    );
+    const webDark = resolveVariables(
+      parseDeclarations(collectBlock(stripComments(webCss), ".dark,", "}"))
+    );
+    const mobileLight = parseDeclarations(
+      collectBlock(stripComments(mobileCss), "@variant light {", "}")
+    );
+    const mobileDark = parseDeclarations(
+      collectBlock(stripComments(mobileCss), "@variant dark {", "}")
+    );
+
     expect(mobileLight.size).toBeGreaterThan(0);
     expect(mobileLight.size).toBe(mobileDark.size);
 
     for (const [name, value] of mobileLight) {
       const token = name.replace("--color-", "--");
-      expect(
-        webLight.get(token),
-        `${token} missing from the web light theme`
-      ).toBe(value);
+      expect(webLight.get(token), `${token} missing from web light`).toBe(
+        value
+      );
     }
     for (const [name, value] of mobileDark) {
       const token = name.replace("--color-", "--");
-      expect(
-        webDark.get(token),
-        `${token} missing from the web dark theme`
-      ).toBe(value);
+      expect(webDark.get(token), `${token} missing from web dark`).toBe(value);
     }
   });
 });
