@@ -1,3 +1,6 @@
+/* oxlint-disable eslint/require-unicode-regexp -- Expo's Metro ignore-pattern composer
+   requires every block-list pattern to share identical flags. */
+
 const { getDefaultConfig } = require("expo/metro-config");
 const { withUniwindConfig } = require("uniwind/metro");
 
@@ -6,15 +9,18 @@ const config = getDefaultConfig(__dirname);
 // Generated native project trees contain tens of thousands of build files.
 // Watching them exhausts Node's file handles on Windows, so keep them out of
 // Metro's file map.
+const existingBlockList = config.resolver.blockList;
+const existingPatterns = Array.isArray(existingBlockList)
+  ? existingBlockList.filter(Boolean)
+  : [existingBlockList].filter(Boolean);
+
 config.resolver.blockList = [
-  ...(Array.isArray(config.resolver.blockList)
-    ? config.resolver.blockList
-    : [config.resolver.blockList].filter(Boolean)),
-  /[/\\]android[/\\].*[/\\]build[/\\].*/u,
-  /[/\\]android[/\\]\.cxx[/\\].*/u,
-  /[/\\]android[/\\]\.gradle[/\\].*/u,
-  /[/\\]ios[/\\]Pods[/\\].*/u,
-  /[/\\]\.expo-export[/\\].*/u,
+  ...existingPatterns,
+  /[/\\]android[/\\].*[/\\]build[/\\].*/,
+  /[/\\]android[/\\]\.cxx[/\\].*/,
+  /[/\\]android[/\\]\.gradle[/\\].*/,
+  /[/\\]ios[/\\]Pods[/\\].*/,
+  /[/\\]\.expo-export[/\\].*/,
 ];
 
 // withUniwindConfig must stay the outermost wrapper so class scanning sees
