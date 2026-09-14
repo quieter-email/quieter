@@ -6,12 +6,18 @@
     "version": "0.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
+    "icon": "./assets/icon.png",
     "ios": {
       "bundleIdentifier": "email.quieter.app",
       "supportsTablet": true
     },
     "android": {
-      "package": "email.quieter.app"
+      "package": "email.quieter.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#0e0f10",
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "monochromeImage": "./assets/adaptive-icon-monochrome.png"
+      }
     },
     "plugins": [
       "expo-router",
@@ -20,8 +26,11 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#eeeef0",
+          "image": "./assets/splash-light.png",
+          "imageWidth": 128,
           "dark": {
-            "backgroundColor": "#0e0f10"
+            "backgroundColor": "#0e0f10",
+            "image": "./assets/splash-dark.png"
           }
         }
       ]
