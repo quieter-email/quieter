@@ -17,7 +17,7 @@
     "db:migrate": "vp run @quieter/database#db:migrate",
     "db:push": "vp run @quieter/database#db:push",
     "db:test-migrations": "vp run @quieter/database#db:test-migrations",
-    "dev": "vp dev apps/web --port 3000 --configLoader native",
+    "dev": "vp dev apps/web --port 3000 --host 127.0.0.1 --configLoader native",
     "dev:setup": "vp run @quieter/env#build && node scripts/setup-local.ts && vp run env:doctor",
     "dev:prepare": "vp run @quieter/env#build && vp run @quieter/observability#build && node --env-file=.env.local scripts/prepare-local-workers.ts",
     "dev:workers": "vp run dev:prepare && vp run @quieter/cloudflare#dev",
