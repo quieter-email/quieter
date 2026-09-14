@@ -85,7 +85,11 @@ export const TemplateWorkspace = ({
   const queryOptions = orpc.mailTemplates.list.queryOptions({
     input: { mailboxId },
   });
-  const templatesQuery = useQuery(queryOptions);
+  const {
+    data: templatesData,
+    isError: isTemplatesError,
+    isPending: isTemplatesPending,
+  } = useQuery(queryOptions);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteTemplate, setDeleteTemplate] = useState<MailTemplateItem | null>(
     null
@@ -178,7 +182,7 @@ export const TemplateWorkspace = ({
       toast.success("Template deleted.");
     },
   });
-  const templates = templatesQuery.data?.templates ?? [];
+  const templates = templatesData?.templates ?? [];
   const normalizedSearch = search.trim().toLowerCase();
   const filteredTemplates = normalizedSearch
     ? templates.filter((template) =>
@@ -190,14 +194,14 @@ export const TemplateWorkspace = ({
   const canEditCurrentTemplate = !currentTemplate || currentTemplate.canEdit;
   const isSaving = createMutation.isPending || updateMutation.isPending;
   let templateQueryState: ReactNode = null;
-  if (templatesQuery.isPending) {
+  if (isTemplatesPending) {
     templateQueryState = (
       <div className="flex items-center justify-center gap-2 px-3 py-10 text-caption text-muted-fg">
         <HugeiconsIcon className="size-3.5 animate-spin" icon={Loading03Icon} />
         Loading templates
       </div>
     );
-  } else if (templatesQuery.isError) {
+  } else if (isTemplatesError) {
     templateQueryState = (
       <p className="px-3 py-10 text-center text-caption/5 text-destructive">
         Could not load templates.
@@ -438,7 +442,7 @@ export const TemplateWorkspace = ({
                                   })}
                                   disabled={
                                     !canEditCurrentTemplate ||
-                                    templatesQuery.data
+                                    templatesData
                                       ?.canManageTeamTemplates !== true
                                   }
                                   onClick={() => {
