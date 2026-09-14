@@ -1,15 +1,15 @@
-import ultraciteFmt from "ultracite/oxfmt";
-import core from "ultracite/oxlint/core";
-import react from "ultracite/oxlint/react";
-import tanstack from "ultracite/oxlint/tanstack";
-import vitest from "ultracite/oxlint/vitest";
+import core from "./tooling/lint/core";
+import oxfmt from "./tooling/lint/oxfmt";
+import react from "./tooling/lint/react";
+import tanstack from "./tooling/lint/tanstack";
+import vitest from "./tooling/lint/vitest";
 import { configDefaults, defineConfig } from "vite-plus";
 
 export default defineConfig({
   fmt: {
-    ...ultraciteFmt,
+    ...oxfmt,
     ignorePatterns: [
-      ...(ultraciteFmt.ignorePatterns ?? []),
+      ...(oxfmt.ignorePatterns ?? []),
       ".agents/**",
       ".scratch/**",
       "**/.sst/**",
@@ -32,13 +32,21 @@ export default defineConfig({
       "sst-env.d.ts",
       "routeTree.gen.ts",
       "sst.config.ts",
+      "tooling/lint/**",
       "vite.config.ts",
     ],
     jsPlugins: [
       { name: "react-doctor", specifier: "oxlint-plugin-react-doctor" },
+      { name: "shadcn", specifier: "@shadcn/lint" },
       { name: "sonarjs", specifier: "eslint-plugin-sonarjs" },
       { name: "vite-plus", specifier: "vite-plus/oxlint-plugin" },
     ],
+    settings: {
+      shadcn: {
+        // Shared components live in packages/ui and are imported by package name.
+        ui: "@quieter/ui",
+      },
+    },
     options: {
       typeAware: true,
       typeCheck: true,
@@ -359,6 +367,24 @@ export default defineConfig({
           "react/jsx-handler-names": "off",
         },
       },
+      {
+        // Design-system components own their own styling; @shadcn/lint checks
+        // how they are used everywhere else.
+        files: ["packages/ui/src/components/ui/**"],
+        rules: {
+          "shadcn/no-arbitrary-values": "off",
+          "shadcn/no-restyle": "off",
+          "shadcn/require-static-classes": "off",
+        },
+      },
+      {
+        // TanStack Router's type inference depends on route property order
+        // (validateSearch, ssr, loader, head), which is not alphabetical.
+        files: ["apps/web/src/routes/**"],
+        rules: {
+          "eslint/sort-keys": "off",
+        },
+      },
     ],
     rules: {
       // Ordering and bounded concurrency are deliberate choices, not lint failures.
@@ -370,14 +396,70 @@ export default defineConfig({
       // Fire-and-forget event handlers need an explicit promise boundary.
       "no-void": "off",
       "react-doctor/no-secrets-in-client-code": "error",
+      "react-doctor/query-destructure-result": "error",
       "react-doctor/query-mutation-missing-invalidation": "error",
       "react-doctor/query-no-query-in-effect": "error",
+      "react-doctor/query-no-rest-destructuring": "error",
+      "react-doctor/query-no-usequery-for-mutation": "error",
+      "react-doctor/query-no-void-query-fn": "error",
       "react-doctor/query-stable-query-client": "error",
+      "react-doctor/tanstack-start-get-mutation": "error",
       "react-doctor/tanstack-start-loader-parallel-fetch": "error",
+      "react-doctor/tanstack-start-missing-head-content": "error",
+      "react-doctor/tanstack-start-no-anchor-element": "error",
+      "react-doctor/tanstack-start-no-direct-fetch-in-loader": "error",
+      "react-doctor/tanstack-start-no-dynamic-server-fn-import": "error",
+      "react-doctor/tanstack-start-no-navigate-in-render": "error",
       "react-doctor/tanstack-start-no-secrets-in-loader": "error",
+      "react-doctor/tanstack-start-no-use-server-in-handler": "error",
+      "react-doctor/tanstack-start-no-useeffect-fetch": "error",
+      "react-doctor/tanstack-start-redirect-in-try-catch": "error",
+      "react-doctor/tanstack-start-route-property-order": "error",
+      "react-doctor/tanstack-start-server-fn-method-order": "error",
       "react-doctor/tanstack-start-server-fn-validate-input": "error",
       "react/no-array-index-key": "error",
       "react/no-unknown-property": "error",
+      "shadcn/no-arbitrary-values": ["error", { allow: ["layout"] }],
+      "shadcn/no-inline-styles": "error",
+      // cn's grammar has no knowledge of the project's custom text and shadow
+      // scales, so those classes otherwise read as undeclared color tokens.
+      "shadcn/no-raw-colors": [
+        "error",
+        {
+          allow: [
+            "text-display-*",
+            "text-title-*",
+            "text-body",
+            "text-body-*",
+            "text-caption",
+            "text-caption-*",
+            "text-micro",
+            "text-micro-*",
+            "shadow-elevation",
+            "shadow-elevation-*",
+            "shadow-surface",
+            "shadow-inset",
+          ],
+          message:
+            'Use a theme color for "{{className}}". See {{file}} for the declared colors, and add --color-<name> there only if the design calls for a new one.',
+        },
+      ],
+      "shadcn/no-restyle": [
+        "error",
+        {
+          allow: ["layout"],
+          // Point agents at the component API and the file that owns it.
+          message: {
+            spacing:
+              "Use a {{component}} size ({{sizes|none defined}}), or margin and gap around it. Add a size in {{file}} only if the design calls for one.",
+            default:
+              "Use a {{component}} variant or prop ({{variants|none defined}}) instead of overriding its style. See {{file}}.",
+          },
+        },
+      ],
+      // home.css supplies plain class selectors outside the Tailwind theme graph.
+      "shadcn/no-unknown-classes": ["error", { allow: ["home-*"] }],
+      "shadcn/require-static-classes": "error",
       "sonarjs/no-clear-text-protocols": "error",
       "sonarjs/no-hardcoded-passwords": "error",
       "sonarjs/no-hardcoded-secrets": "error",
