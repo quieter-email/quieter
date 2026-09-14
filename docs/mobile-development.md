@@ -83,10 +83,11 @@ vp run @quieter/mobile#start:go -- --port 8082
 adb reverse tcp:8082 tcp:8082
 ```
 
-Metro warns when watching very large trees. `apps/mobile/metro.config.js` keeps the generated `android/` and `ios/` build directories out of Metro's file map; if bundling still reports `EMFILE`, lower the concurrency with `--max-workers 2`.
+Metro watches only `apps/mobile` and `packages/`, and `apps/mobile/metro.config.js` keeps the generated `android/` and `ios/` build trees out of its file map. Watching the hoisted `node_modules` tree exhausts Windows file handles (`EMFILE`) over time, so restart Metro after installing or changing dependencies. When bundling still reports `EMFILE`, lower the concurrency with `--max-workers 2`.
 
 ## Tooling notes
 
+- Geist ships as app assets in `apps/mobile/assets/fonts`; the theme maps Tailwind weight classes to the individual files so Android selects the right face.
 - The theme in `packages/ui/src/mobile-theme.css` mirrors the web tokens in `packages/ui/src/styles.css`; `packages/ui/tests/mobile-theme.test.ts` fails when they drift.
 - Shared query and mutation options live in `packages/query` and are consumed by the mobile app directly. Web call sites can migrate incrementally.
 - `@quieter/env` is built (`vp run @quieter/env#build`) before the web server starts; Metro resolves the built `@quieter/env/public` entry for shared packages.

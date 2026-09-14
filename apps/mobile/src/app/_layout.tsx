@@ -1,14 +1,4 @@
 import "../global.css";
-import {
-  Geist_400Regular,
-  Geist_500Medium,
-  Geist_600SemiBold,
-  Geist_700Bold,
-} from "@expo-google-fonts/geist";
-import {
-  GeistMono_400Regular,
-  GeistMono_500Medium,
-} from "@expo-google-fonts/geist-mono";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
@@ -26,6 +16,13 @@ import { authClient } from "#/lib/auth-client";
 import { queryClient } from "#/lib/query-client";
 import { hydrateThemePreference } from "#/lib/theme";
 
+import Geist400Regular from "../../assets/fonts/Geist_400Regular.ttf";
+import Geist500Medium from "../../assets/fonts/Geist_500Medium.ttf";
+import Geist600SemiBold from "../../assets/fonts/Geist_600SemiBold.ttf";
+import Geist700Bold from "../../assets/fonts/Geist_700Bold.ttf";
+import GeistMono400Regular from "../../assets/fonts/GeistMono_400Regular.ttf";
+import GeistMono500Medium from "../../assets/fonts/GeistMono_500Medium.ttf";
+
 void ignoreFailure(SplashScreen.preventAutoHideAsync());
 
 const RootLayout = () => {
@@ -33,12 +30,12 @@ const RootLayout = () => {
   const { theme } = useUniwind();
   const { backgroundColor } = useResolveClassNames("bg-bg");
   const [fontsLoaded] = useFonts({
-    GeistMono_400Regular,
-    GeistMono_500Medium,
-    Geist_400Regular,
-    Geist_500Medium,
-    Geist_600SemiBold,
-    Geist_700Bold,
+    GeistMono_400Regular: GeistMono400Regular,
+    GeistMono_500Medium: GeistMono500Medium,
+    Geist_400Regular: Geist400Regular,
+    Geist_500Medium: Geist500Medium,
+    Geist_600SemiBold: Geist600SemiBold,
+    Geist_700Bold: Geist700Bold,
   });
 
   useEffect(() => {

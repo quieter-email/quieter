@@ -12,8 +12,6 @@
   },
   "dependencies": {
     "@better-auth/expo": "1.7.3",
-    "@expo-google-fonts/geist": "^0.4.2",
-    "@expo-google-fonts/geist-mono": "^0.4.3",
     "@hugeicons/core-free-icons": "catalog:",
     "@hugeicons/react-native": "^1.0.16",
     "@orpc/client": "catalog:",
