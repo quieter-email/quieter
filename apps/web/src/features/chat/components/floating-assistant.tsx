@@ -128,8 +128,8 @@ export const FloatingAssistant = ({
         <header className="flex h-10 shrink-0 items-center gap-2 px-4">
           <DropdownMenu>
             <DropdownMenuTrigger
+              appearance="row-strong"
               aria-label="Open conversation history"
-              className="flex min-w-0 items-center gap-2 rounded-md text-left text-body-sm font-medium text-fg focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none"
               type="button"
             >
               <span className="truncate">Quieter</span>
@@ -203,10 +203,10 @@ export const FloatingAssistant = ({
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuItem
-                    className="text-destructive"
                     onSelect={() => {
                       onDeleteChat(activeChat.id);
                     }}
+                    tone="destructive"
                   >
                     <HugeiconsIcon
                       aria-hidden

@@ -153,11 +153,11 @@ const MessageListBulkOverflowMenu = ({
     <DropdownMenuContent align="end">
       {actions.map((action) => (
         <DropdownMenuItem
-          className={cn({ "text-destructive": action.destructive === true })}
           key={action.id}
           onSelect={() => {
             void action.onSelect();
           }}
+          tone={action.destructive === true ? "destructive" : undefined}
         >
           <HugeiconsIcon aria-hidden className="size-4" icon={action.icon} />
           <span>{action.label}</span>

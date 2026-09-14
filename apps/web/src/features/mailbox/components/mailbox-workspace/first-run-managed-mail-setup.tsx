@@ -370,9 +370,8 @@ const FirstRunMailboxStep = ({
             >
               <SelectTrigger
                 aria-label="Managed mailbox domain"
-                className="h-full rounded-l-none pr-2.5 pl-1.5 shadow-none active:scale-100"
                 size="sm"
-                variant="ghost"
+                variant="attached"
               >
                 <SelectValue />
               </SelectTrigger>

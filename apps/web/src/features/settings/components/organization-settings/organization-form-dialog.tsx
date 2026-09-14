@@ -158,7 +158,7 @@ export const OrganizationFormDialog = ({
               await form.handleSubmit();
             }}
           >
-            <DialogBody className="space-y-3">
+            <DialogBody spacing="3">
               <form.Field name="name">
                 {(field) => (
                   <TextField>

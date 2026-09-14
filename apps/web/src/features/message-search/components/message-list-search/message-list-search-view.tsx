@@ -435,7 +435,6 @@ export const MessageListSearchView = ({
                   >
                     <Button
                       aria-label="Convert to filters"
-                      className="size-6 shrink-0 rounded-lg text-muted-fg hover:bg-control-hover hover:text-fg"
                       onClick={(event) => {
                         event.stopPropagation();
                         interpretNaturalLanguage();
@@ -467,7 +466,6 @@ export const MessageListSearchView = ({
                   <IconButtonTooltip key="clear-search" label="Clear search">
                     <Button
                       aria-label="Clear search"
-                      className="size-6 shrink-0 rounded-lg text-muted-fg hover:bg-control-hover hover:text-fg"
                       onClick={(event) => {
                         event.stopPropagation();
                         clearSearch();
@@ -496,7 +494,6 @@ export const MessageListSearchView = ({
             <IconButtonTooltip label="Run search">
               <Button
                 aria-label="Run search"
-                className="size-6 shrink-0 rounded-lg text-muted-fg hover:bg-control-hover hover:text-fg"
                 onClick={(event) => {
                   event.stopPropagation();
                   runSearch();

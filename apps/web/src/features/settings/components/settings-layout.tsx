@@ -45,7 +45,7 @@ export const SettingsBackButton = ({
   onClick: () => void;
 }) => (
   <Button
-    className={cn("text-muted-fg hover:text-fg", className)}
+    className={className}
     onClick={onClick}
     size="sm"
     variant="ghost"

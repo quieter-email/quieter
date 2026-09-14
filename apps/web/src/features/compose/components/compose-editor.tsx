@@ -482,9 +482,6 @@ export const ComposeEditorToolbar = ({
           <ToolbarButton
             aria-label={action.label}
             aria-pressed={action.active}
-            className={cn("size-8 px-0", {
-              "bg-control-active text-fg": action.active,
-            })}
             disabled={disabled || action.disabled}
             onClick={() => {
               action.onClick();
@@ -492,7 +489,9 @@ export const ComposeEditorToolbar = ({
             onMouseDown={(event) => {
               event.preventDefault();
             }}
+            size="icon"
             type="button"
+            variant={action.active ? "selected" : undefined}
           >
             <HugeiconsIcon className="size-4" icon={action.icon} />
           </ToolbarButton>

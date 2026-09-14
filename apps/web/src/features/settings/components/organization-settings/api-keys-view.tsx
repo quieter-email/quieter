@@ -201,7 +201,7 @@ const CreatedApiKeyReveal = ({
       </DialogDescription>
     </DialogHeader>
 
-    <DialogBody className="space-y-3">
+    <DialogBody spacing="3">
       <button
         className="squircle w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-left font-mono text-caption break-all text-fg hover:bg-secondary/50"
         onClick={() => {
@@ -349,7 +349,7 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
                 </DialogDescription>
               </DialogHeader>
 
-              <DialogBody className="space-y-4">
+              <DialogBody spacing="4">
                 <form.Field name="name">
                   {(field) => (
                     <TextField>
@@ -652,7 +652,7 @@ const ResetApiKeyDialog = ({
               </AlertDialogDescription>
             </AlertDialogHeader>
 
-            <AlertDialogBody className="space-y-3">
+            <AlertDialogBody spacing="3">
               <button
                 className="squircle w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-left font-mono text-caption break-all text-fg hover:bg-secondary/50"
                 onClick={() => {

@@ -456,9 +456,8 @@ const CustomInboxPlaybook = ({
             >
               <SelectTrigger
                 aria-label="Mailbox domain"
-                className="h-full rounded-l-none pr-2.5 pl-1.5 shadow-none active:scale-100"
                 size="sm"
-                variant="ghost"
+                variant="attached"
               >
                 <SelectValue />
               </SelectTrigger>
@@ -826,7 +825,7 @@ export const OnboardingScreen = () => {
       }
       headerStart={
         <Button
-          className="-ml-2 text-muted-fg hover:text-fg"
+          className="-ml-2"
           disabled={signOutMutation.isPending}
           onClick={() => {
             signOutMutation.mutate(undefined, {
@@ -848,7 +847,6 @@ export const OnboardingScreen = () => {
       previous={
         step === 2 ? (
           <Button
-            className="text-muted-fg hover:text-fg"
             onClick={() => {
               setDirection("back");
               setStep(1);

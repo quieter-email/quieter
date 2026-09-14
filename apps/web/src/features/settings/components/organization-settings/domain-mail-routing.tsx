@@ -465,7 +465,7 @@ export const DomainCatchAllSection = ({
               recipient at {domainName}.
             </DialogDescription>
           </DialogHeader>
-          <DialogBody className="space-y-3">
+          <DialogBody spacing="3">
             <p className="text-caption/5 text-muted-fg">
               Exact shared inboxes always keep priority, and replies send from
               the chosen inbox&rsquo;s own address.

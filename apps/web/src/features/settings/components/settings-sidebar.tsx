@@ -229,7 +229,7 @@ export const SettingsSidebar = ({
             >
               <SelectTrigger
                 aria-label="Team settings"
-                className="mb-2 h-7 w-full gap-2 px-2 text-caption font-normal text-fg"
+                className="mb-2 w-full gap-2 text-caption"
                 size="sm"
               >
                 <HugeiconsIcon

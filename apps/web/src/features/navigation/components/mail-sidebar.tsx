@@ -92,8 +92,9 @@ const SidebarHelpMenu = ({
       <div className="squircle relative rounded-md hover:bg-muted/60 dark:hover:bg-muted/40">
         <IconButtonTooltip label="Help and legal">
           <DropdownMenuTrigger
+            appearance="icon-transparent"
             aria-label="Help and legal"
-            className="relative z-10 inline-flex size-7 shrink-0 items-center justify-center rounded-md bg-transparent text-muted-fg hover:bg-transparent hover:text-fg focus-visible:bg-transparent focus-visible:text-fg data-popup-open:bg-transparent data-popup-open:text-fg"
+            className="relative z-10"
           >
             <HugeiconsIcon
               aria-hidden

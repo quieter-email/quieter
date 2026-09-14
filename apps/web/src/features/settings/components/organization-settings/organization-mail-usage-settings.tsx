@@ -375,8 +375,8 @@ const ManagedUsageSettingsControls = ({
   setOverageEnabled: (value: boolean) => void;
 }) => (
   <Fieldset
+    bare
     disabled={isSaving}
-    className="gap-0 rounded-none border-0 bg-transparent p-0"
   >
     <SettingsInsetRows>
       <SettingsInsetRow className="justify-between gap-6">

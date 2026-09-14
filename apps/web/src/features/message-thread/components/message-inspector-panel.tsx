@@ -143,7 +143,7 @@ export const MessageInspectorPanel = ({
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="max-h-[70vh] space-y-5 overflow-y-auto">
+        <DialogBody className="max-h-[70vh] overflow-y-auto" spacing="5">
           <MessageDeliverySection
             enabled={deliveryEnabled && open}
             mailboxId={mailboxId}

@@ -374,7 +374,7 @@ const MessageExpandButton = ({
       aria-controls={`message-body-${messageId}`}
       aria-expanded={expanded}
       aria-label={expanded ? "Collapse message" : "Expand message"}
-      className={cn("text-muted-fg hover:text-fg", {
+      className={cn({
         "text-fg/80": expanded,
       })}
       onClick={onToggleExpanded}

@@ -126,7 +126,7 @@ export const LeaveOrganizationDialog = ({
               await form.handleSubmit();
             }}
           >
-            <DialogBody className="space-y-3">
+            <DialogBody spacing="3">
               <p className="text-body text-muted-fg">
                 Type <span className="font-medium text-fg">leave team</span>
               </p>
@@ -298,7 +298,7 @@ export const DeleteOrganizationDialog = ({
               await form.handleSubmit();
             }}
           >
-            <DialogBody className="space-y-3">
+            <DialogBody spacing="3">
               <p className="text-body text-muted-fg">
                 Type <span className="font-medium text-fg">delete team</span>
               </p>

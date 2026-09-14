@@ -683,7 +683,7 @@ const DeleteAccountDialog = () => {
               await form.handleSubmit();
             }}
           >
-            <DialogBody className="space-y-3">
+            <DialogBody spacing="3">
               <p className="text-body text-muted-fg">
                 Type{" "}
                 <span className="font-medium text-fg">delete my account</span>

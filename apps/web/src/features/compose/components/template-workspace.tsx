@@ -401,13 +401,13 @@ export const TemplateWorkspace = ({
                           <IconButtonTooltip label="Insert placeholder">
                             <ToolbarButton
                               aria-label="Insert placeholder"
-                              className="size-8 px-0"
                               disabled={!canEditCurrentTemplate}
                               onClick={() =>
                                 templateEditorRef.current?.insertPlaceholder(
                                   "Placeholder"
                                 )
                               }
+                              size="icon"
                               type="button"
                             >
                               <HugeiconsIcon icon={Add01Icon} />
@@ -420,15 +420,16 @@ export const TemplateWorkspace = ({
                                   aria-pressed={
                                     scopeField.state.value === "personal"
                                   }
-                                  className={cn({
-                                    "bg-control-active text-fg shadow-sm":
-                                      scopeField.state.value === "personal",
-                                  })}
                                   disabled={!canEditCurrentTemplate}
                                   onClick={() => {
                                     scopeField.handleChange("personal");
                                   }}
                                   type="button"
+                                  variant={
+                                    scopeField.state.value === "personal"
+                                      ? "selected"
+                                      : undefined
+                                  }
                                 >
                                   Personal
                                 </ToolbarButton>
@@ -436,10 +437,6 @@ export const TemplateWorkspace = ({
                                   aria-pressed={
                                     scopeField.state.value === "team"
                                   }
-                                  className={cn({
-                                    "bg-control-active text-fg shadow-sm":
-                                      scopeField.state.value === "team",
-                                  })}
                                   disabled={
                                     !canEditCurrentTemplate ||
                                     templatesData
@@ -449,6 +446,11 @@ export const TemplateWorkspace = ({
                                     scopeField.handleChange("team");
                                   }}
                                   type="button"
+                                  variant={
+                                    scopeField.state.value === "team"
+                                      ? "selected"
+                                      : undefined
+                                  }
                                 >
                                   Team
                                 </ToolbarButton>
@@ -469,9 +471,9 @@ export const TemplateWorkspace = ({
                           ) : null}
                           {canEditCurrentTemplate ? (
                             <ToolbarButton
-                              className="bg-primary text-primary-fg shadow-sm hover:bg-primary/90 hover:text-primary-fg active:bg-primary/85 active:text-primary-fg"
                               disabled={isSaving}
                               type="submit"
+                              variant="primary"
                             >
                               {isSaving ? (
                                 <HugeiconsIcon

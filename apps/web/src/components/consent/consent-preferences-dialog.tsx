@@ -49,7 +49,7 @@ export const ConsentPreferencesDialog = () => {
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="space-y-4 pt-0">
+        <DialogBody className="pt-0" spacing="4">
           {getDisplayedConsents().map((config) => {
             const category = config.name;
             const copy = translations.consentTypes[category];

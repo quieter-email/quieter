@@ -382,7 +382,7 @@ export const ComposeSurface = ({
                     "min-h-64 flex-none": isInline,
                   })}
                 >
-                  <ComposerFieldGroup className="rounded-none border-0 bg-transparent shadow-none">
+                  <ComposerFieldGroup bare>
                     <form.Field name="to">
                       {(recipientField) => {
                         const [error] = recipientField.state.meta.errors;
@@ -400,18 +400,11 @@ export const ComposeSurface = ({
                                   aria-controls="compose-cc-field"
                                   aria-expanded={state.showCc}
                                   aria-pressed={state.showCc}
-                                  className={cn(
-                                    "h-7 px-1.5 text-caption text-muted-fg",
-                                    {
-                                      "bg-control-active text-fg": state.showCc,
-                                    }
-                                  )}
                                   onClick={() => {
                                     toggleRecipientVisibility("cc");
                                   }}
-                                  size="sm"
                                   type="button"
-                                  variant="ghost"
+                                  variant="chip"
                                 >
                                   Cc
                                 </Button>
@@ -419,19 +412,11 @@ export const ComposeSurface = ({
                                   aria-controls="compose-bcc-field"
                                   aria-expanded={state.showBcc}
                                   aria-pressed={state.showBcc}
-                                  className={cn(
-                                    "h-7 px-1.5 text-caption text-muted-fg",
-                                    {
-                                      "bg-control-active text-fg":
-                                        state.showBcc,
-                                    }
-                                  )}
                                   onClick={() => {
                                     toggleRecipientVisibility("bcc");
                                   }}
-                                  size="sm"
                                   type="button"
-                                  variant="ghost"
+                                  variant="chip"
                                 >
                                   Bcc
                                 </Button>
@@ -551,9 +536,10 @@ export const ComposeSurface = ({
                     chrome="footer"
                     leading={
                       <ToolbarButton
-                        className="bg-primary px-3 text-primary-fg shadow-sm hover:bg-primary/90 hover:text-primary-fg active:bg-primary/85 active:text-primary-fg"
+                        className="px-3"
                         disabled={!canSubmitCompose}
                         type="submit"
+                        variant="primary"
                       >
                         {state.draft.saveStatus === "sending" ? (
                           <HugeiconsIcon
@@ -615,11 +601,11 @@ export const ComposeSurface = ({
                             aria-label={
                               state.draft.draftId ? "Discard draft" : "Discard"
                             }
-                            className="size-8 px-0"
                             disabled={state.draft.saveStatus === "sending"}
                             onClick={() => {
                               void discardActiveDraft();
                             }}
+                            size="icon"
                             type="button"
                           >
                             <HugeiconsIcon icon={Delete02Icon} />
@@ -628,11 +614,11 @@ export const ComposeSurface = ({
                         <IconButtonTooltip label="Close composer">
                           <ToolbarButton
                             aria-label="Close composer"
-                            className="size-8 px-0"
                             disabled={state.draft.saveStatus === "sending"}
                             onClick={() => {
                               void closeComposeDialog();
                             }}
+                            size="icon"
                             type="button"
                           >
                             <HugeiconsIcon icon={Cancel01Icon} />

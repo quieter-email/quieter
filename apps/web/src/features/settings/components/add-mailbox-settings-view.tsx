@@ -228,7 +228,7 @@ export const AddMailboxSettingsView = ({
       }
       headerStart={
         <Button
-          className="-ml-2 text-muted-fg hover:text-fg"
+          className="-ml-2"
           onClick={exitFlow}
           size="sm"
           variant="ghost"
@@ -240,7 +240,6 @@ export const AddMailboxSettingsView = ({
       previous={
         mailboxType === undefined ? null : (
           <Button
-            className="text-muted-fg hover:text-fg"
             onClick={goBack}
             size="sm"
             variant="ghost"
@@ -260,7 +259,6 @@ export const AddMailboxSettingsView = ({
           </header>
           <div className="mt-9 grid gap-3 sm:grid-cols-2">
             <Button
-              className="group h-auto min-h-32 w-full flex-col items-start justify-start rounded-lg border-border bg-bg-raised p-5 text-left whitespace-normal hover:border-border-strong hover:bg-control-hover"
               onClick={() => {
                 workflowStore.setState((state) => ({
                   ...state,
@@ -269,7 +267,7 @@ export const AddMailboxSettingsView = ({
                   mailboxType: "gmail",
                 }));
               }}
-              variant="outline"
+              variant="card"
             >
               <span className="text-body-sm font-medium text-fg">Gmail</span>
               <span className="mt-1 text-caption text-muted-fg">
@@ -286,7 +284,6 @@ export const AddMailboxSettingsView = ({
             </Button>
 
             <Button
-              className="group h-auto min-h-32 w-full flex-col items-start justify-start rounded-lg border-border bg-bg-raised p-5 text-left whitespace-normal hover:border-border-strong hover:bg-control-hover"
               onClick={() => {
                 workflowStore.setState((state) => ({
                   ...state,
@@ -295,7 +292,7 @@ export const AddMailboxSettingsView = ({
                   mailboxType: "shared",
                 }));
               }}
-              variant="outline"
+              variant="card"
             >
               <span className="text-body-sm font-medium text-fg">
                 Quieter managed mailbox
@@ -555,9 +552,8 @@ export const AddMailboxSettingsView = ({
                   >
                     <SelectTrigger
                       aria-label="Mailbox domain"
-                      className="h-full rounded-l-none pr-2.5 pl-1.5 shadow-none active:scale-100"
                       size="sm"
-                      variant="ghost"
+                      variant="attached"
                     >
                       <SelectValue />
                     </SelectTrigger>
