@@ -505,7 +505,6 @@ export const ComposeEditorToolbar = ({
       <IconButtonTooltip label="Undo">
         <ToolbarButton
           aria-label="Undo"
-          className="size-8 px-0"
           disabled={disabled || toolbarState?.canUndo !== true}
           onClick={() => {
             editor?.chain().focus().undo().run();
@@ -513,6 +512,7 @@ export const ComposeEditorToolbar = ({
           onMouseDown={(event) => {
             event.preventDefault();
           }}
+          size="icon"
           type="button"
         >
           <HugeiconsIcon className="size-4" icon={ArrowTurnBackwardIcon} />
@@ -521,7 +521,6 @@ export const ComposeEditorToolbar = ({
       <IconButtonTooltip label="Redo">
         <ToolbarButton
           aria-label="Redo"
-          className="size-8 px-0"
           disabled={disabled || toolbarState?.canRedo !== true}
           onClick={() => {
             editor?.chain().focus().redo().run();
@@ -529,6 +528,7 @@ export const ComposeEditorToolbar = ({
           onMouseDown={(event) => {
             event.preventDefault();
           }}
+          size="icon"
           type="button"
         >
           <HugeiconsIcon className="size-4" icon={ArrowTurnForwardIcon} />
@@ -595,12 +595,12 @@ export const ComposeEditorDictationButton = () => {
     >
       <ToolbarButton
         aria-label={recordingSupported ? "Dictate" : "Recording unavailable"}
-        className="size-8 px-0"
         disabled={disabled || transcribing || !recordingSupported}
         onClick={onRecordingStart}
         onMouseDown={(event) => {
           event.preventDefault();
         }}
+        size="icon"
         type="button"
       >
         <HugeiconsIcon className="size-4" icon={AiMicIcon} />
