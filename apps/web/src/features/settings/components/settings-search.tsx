@@ -97,6 +97,7 @@ export const SettingsSearch = ({
   const input = (
     <Input
       aria-label="Search settings"
+      // oxlint-disable-next-line shadcn/no-restyle -- Compact search keeps caption type.
       className="h-7 px-2.5 text-caption"
       placeholder="Search settings"
       type="search"

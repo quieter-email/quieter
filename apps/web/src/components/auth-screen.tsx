@@ -477,7 +477,11 @@ export const AuthScreen = () => {
           not. The visual sits second and is ordered right on wide viewports. */}
       <div className="relative z-10 flex size-full min-h-0 items-center justify-center px-6">
         <div className="w-full max-w-md">
-          <Brand className="mb-8 h-8 w-32 text-fg" variant="combination" />
+          <Brand
+            // oxlint-disable-next-line shadcn/no-restyle -- Auth lockup keeps its brand metrics.
+            className="mb-8 h-8 w-32 text-fg"
+            variant="combination"
+          />
           <h1 className="text-title-md font-medium tracking-tight text-fg">
             Continue to Quieter
           </h1>

@@ -245,7 +245,10 @@ export const RegisterDomainDialog = ({
                 <Text tone="destructive">{submitError}</Text>
               ) : null}
 
-              <DialogFooter className="px-0 pb-0">
+              <DialogFooter
+                // oxlint-disable-next-line shadcn/no-restyle -- Flush footer keeps edge-to-edge actions.
+                className="px-0 pb-0"
+              >
                 <DialogCloseButton disabled={createSetupMutation.isPending}>
                   Cancel
                 </DialogCloseButton>

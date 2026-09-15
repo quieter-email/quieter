@@ -345,6 +345,7 @@ const FirstRunMailboxStep = ({
           <TextFieldInput
             aria-label="Managed mailbox local part"
             chrome="ghost"
+            // oxlint-disable-next-line shadcn/no-restyle -- Local-part input fills its row height.
             className="h-full min-w-0 flex-1 pr-1"
             onChange={(event) => {
               onLocalPartChange(

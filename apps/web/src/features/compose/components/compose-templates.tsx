@@ -121,6 +121,7 @@ export const ComposeTemplatePicker = ({
       </PopoverTrigger>
       <PopoverContent
         align="start"
+        // oxlint-disable-next-line shadcn/no-restyle -- Template popover keeps its flush panel.
         className="w-[min(88vw,22rem)] p-0"
         side="top"
       >
@@ -136,6 +137,7 @@ export const ComposeTemplatePicker = ({
             />
             <Input
               aria-label="Search templates"
+              // oxlint-disable-next-line shadcn/no-restyle -- Search input leaves room for its leading icon.
               className="pl-8"
               id="compose-template-search"
               onChange={(event) => {

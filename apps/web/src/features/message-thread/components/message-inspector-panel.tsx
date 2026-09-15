@@ -136,10 +136,16 @@ export const MessageInspectorPanel = ({
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent className="w-[min(92vw,56rem)]">
         <DialogHeader>
-          <DialogTitle className="text-body-lg font-bold">
+          <DialogTitle
+            // oxlint-disable-next-line shadcn/no-restyle -- Inspector title keeps its large bold treatment.
+            className="text-body-lg font-bold"
+          >
             Full details
           </DialogTitle>
-          <DialogDescription className="text-fg">
+          <DialogDescription
+            // oxlint-disable-next-line shadcn/no-restyle -- Inspector description keeps foreground text.
+            className="text-fg"
+          >
             Complete information available for this message.
           </DialogDescription>
         </DialogHeader>

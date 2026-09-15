@@ -100,6 +100,7 @@ export const InviteMemberForm = ({
                   aria-describedby={hasErrors ? emailErrorId : undefined}
                   aria-invalid={hasErrors}
                   chrome="ghost"
+                  // oxlint-disable-next-line shadcn/no-restyle -- Ghost input fills its row.
                   className="h-8 px-0"
                   name={field.name}
                   onBlur={() => {

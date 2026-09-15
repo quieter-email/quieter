@@ -265,6 +265,7 @@ export const TemplateWorkspace = ({
             />
             <Input
               aria-labelledby="template-workspace-search-label"
+              // oxlint-disable-next-line shadcn/no-restyle -- Search input leaves room for its leading icon.
               className="pl-9"
               id="template-workspace-search"
               onChange={(event) => {
@@ -519,7 +520,10 @@ export const TemplateWorkspace = ({
                 : "This removes the template from your saved templates."}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogBody className="text-body text-muted-fg">
+          <AlertDialogBody
+            // oxlint-disable-next-line shadcn/no-restyle -- Danger copy keeps body text.
+            className="text-body text-muted-fg"
+          >
             Messages that already used this template will not change.
           </AlertDialogBody>
           <AlertDialogFooter>

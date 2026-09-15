@@ -162,7 +162,11 @@ export const MailboxDetailSettingsContent = ({
             </TabsTab>
           ))}
         </TabsList>
-        <TabsPanel value={activeSection} className="space-y-8">
+        <TabsPanel
+          // oxlint-disable-next-line shadcn/no-restyle -- Detail panel keeps its section stack.
+          className="space-y-8"
+          value={activeSection}
+        >
           {activeSection === "general" && (
             <MailboxDetailGeneralSection
               defaultMailboxId={defaultMailboxId}

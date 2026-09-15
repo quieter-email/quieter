@@ -163,7 +163,10 @@ const DeliveryRecipients = ({
   }
 
   return (
-    <Accordion className="space-y-2">
+    <Accordion
+      // oxlint-disable-next-line shadcn/no-restyle -- Delivery list keeps its recipient stack.
+      className="space-y-2"
+    >
       {delivery.recipients.map((recipient) => (
         <DeliveryRecipientItem
           events={delivery.events}

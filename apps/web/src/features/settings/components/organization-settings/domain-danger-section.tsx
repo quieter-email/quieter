@@ -108,7 +108,11 @@ export const DomainDangerSection = ({
             This action disconnects the domain from Quieter.
           </DialogDescription>
         </DialogHeader>
-        <DialogBody className="text-body text-muted-fg" spacing="3">
+        <DialogBody
+          // oxlint-disable-next-line shadcn/no-restyle -- Danger copy keeps body text.
+          className="text-body text-muted-fg"
+          spacing="3"
+        >
           <p>Sending and incoming mail will stop for this domain.</p>
           <p>
             Remove the DNS records at your provider after this domain is

@@ -212,12 +212,16 @@ const UsageBreakdown = ({
               <Tooltip key={item.kind}>
                 <TooltipTrigger
                   // oxlint-disable-next-line shadcn/no-arbitrary-values -- Brightness hover needs the filter property.
+                  // oxlint-disable-next-line shadcn/no-restyle -- Usage segments keep their bright treatments.
                   className={`${item.className} min-w-1 transition-[filter] hover:brightness-110`}
                   render={<span />}
                   // oxlint-disable-next-line shadcn/no-inline-styles -- Segment flex is measured from cost data.
                   style={{ flexBasis: 0, flexGrow: item.costCents }}
                 />
-                <TooltipContent className="min-w-40 px-3 py-2">
+                <TooltipContent
+                  // oxlint-disable-next-line shadcn/no-restyle -- Usage tooltip keeps its card metrics.
+                  className="min-w-40 px-3 py-2"
+                >
                   <div className="flex items-center justify-between gap-5">
                     <span>{item.label}</span>
                     <span className="font-mono font-medium">
@@ -423,6 +427,7 @@ const ManagedUsageSettingsControls = ({
               <NumberFieldDecrement />
               <NumberFieldInput
                 aria-label="Monthly overage limit"
+                // oxlint-disable-next-line shadcn/no-restyle -- Limit reads as a numeral.
                 className="font-mono"
                 placeholder="No limit"
               />

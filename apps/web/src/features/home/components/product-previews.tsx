@@ -249,8 +249,14 @@ export const ComposePreview = () => (
     className="home-panel home-panel-raised home-compose-art"
     inert
   >
-    <ComposerEditorFrame className="home-component-surface home-composer-frame">
-      <ComposerFieldGroup className="home-composer-fields">
+    <ComposerEditorFrame
+      // oxlint-disable-next-line shadcn/no-restyle -- Preview surface uses the home.css exception.
+      className="home-component-surface home-composer-frame"
+    >
+      <ComposerFieldGroup
+        // oxlint-disable-next-line shadcn/no-restyle -- Preview fields use the home.css exception.
+        className="home-composer-fields"
+      >
         <div className="home-composer-to">
           <span>To</span>
           <span>alex@example.com</span>

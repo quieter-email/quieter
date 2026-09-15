@@ -808,6 +808,7 @@ export const MailboxSwitcherDropdown = ({
       <div className="relative min-w-0 flex-1 rounded-md squircle hover:bg-muted/60 dark:hover:bg-muted/40">
         <PopoverTrigger
           aria-label="Switch mailbox"
+          // oxlint-disable-next-line shadcn/no-restyle -- Switcher trigger keeps its nav metrics.
           className="relative z-10 w-full min-w-0 rounded-md px-3 py-2 text-left squircle hover:bg-transparent hover:text-fg active:scale-100"
         >
           <AnimatePresence initial={false} mode="popLayout">
@@ -835,6 +836,7 @@ export const MailboxSwitcherDropdown = ({
 
       <PopoverContent
         align="start"
+        // oxlint-disable-next-line shadcn/no-restyle -- Switcher popover keeps its compact panel.
         className="w-[min(20rem,calc(100vw-2rem))] p-1"
         side={side}
         sideOffset={10}

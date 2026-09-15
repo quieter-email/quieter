@@ -237,6 +237,7 @@ export const DesignSystemShowcase = () => {
             <div className="w-80 rounded-md border border-border bg-input px-3 py-2 shadow-sm squircle focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/45">
               <TokenField
                 aria-label="Token field"
+                // oxlint-disable-next-line shadcn/no-restyle -- Showcase demonstrates the scrollable field.
                 className="max-h-32 min-h-16 overflow-y-auto text-body"
                 onChange={setTokenFieldValue}
                 placeholder="Type @ to mention an app…"

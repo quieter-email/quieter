@@ -338,9 +338,14 @@ export const ComposeSurface = ({
       data-compose-surface
     >
       <ComposerFrame
-        className={cn("p-4 sm:p-6", {
-          "my-0 max-w-none flex-none p-0 sm:p-0": isInline,
-        })}
+        className={cn(
+          // oxlint-disable-next-line shadcn/no-restyle -- Composer frame keeps its padded canvas.
+          "p-4 sm:p-6",
+          {
+            // oxlint-disable-next-line shadcn/no-restyle -- Inline composer collapses the frame.
+            "my-0 max-w-none flex-none p-0 sm:p-0": isInline,
+          }
+        )}
       >
         <p className="sr-only">
           {getDraftStatusMessage(compose.state.draft, persistDrafts)}

@@ -141,6 +141,7 @@ export const FloatingAssistant = ({
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="start"
+              // oxlint-disable-next-line shadcn/no-restyle -- Assistant panel keeps its menu sizing.
               className="w-72 p-1.5"
               sideOffset={8}
               data-assistant-panel
@@ -156,7 +157,9 @@ export const FloatingAssistant = ({
                 ) : (
                   chats.map((chat) => (
                     <DropdownMenuItem
+                      // oxlint-disable-next-line shadcn/no-restyle -- Active conversation keeps its highlight.
                       className={cn("w-full", {
+                        // oxlint-disable-next-line shadcn/no-restyle -- Active conversation keeps its highlight.
                         "bg-muted": chat.id === activeChatId,
                       })}
                       key={chat.id}
@@ -176,6 +179,7 @@ export const FloatingAssistant = ({
                     <form className="px-1 py-1" onSubmit={submitRename}>
                       <Input
                         aria-label="Conversation title"
+                        // oxlint-disable-next-line shadcn/no-restyle -- Rename input keeps caption type.
                         className="h-8 text-caption"
                         onChange={(event) => {
                           setRenameTitle(event.target.value);

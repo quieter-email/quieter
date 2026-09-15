@@ -195,7 +195,10 @@ export const KeyboardShortcutsDialog = ({
         </div>
       </FullPageDialogHeader>
 
-      <FullPageDialogBody className="px-4 py-5 sm:px-6">
+      <FullPageDialogBody
+        // oxlint-disable-next-line shadcn/no-restyle -- Shortcuts body keeps its content padding.
+        className="px-4 py-5 sm:px-6"
+      >
         <div className="mx-auto w-full max-w-4xl columns-1 gap-4 lg:columns-2">
           {SHORTCUT_VIEW_SECTIONS.map((section) => (
             <section

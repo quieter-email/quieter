@@ -105,6 +105,7 @@ export const WaitlistForm = ({
             autoCapitalize="none"
             autoComplete="email"
             autoCorrect="off"
+            // oxlint-disable-next-line shadcn/no-restyle -- Email input leaves room for its trailing status icon.
             className="bg-bg pr-11"
             disabled={iconState === "loading"}
             id={fieldId}

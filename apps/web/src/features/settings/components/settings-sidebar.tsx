@@ -230,6 +230,7 @@ export const SettingsSidebar = ({
             >
               <SelectTrigger
                 aria-label="Team settings"
+                // oxlint-disable-next-line shadcn/no-restyle -- Team switcher keeps its caption metrics.
                 className="mb-2 w-full gap-2 text-caption"
                 size="sm"
               >

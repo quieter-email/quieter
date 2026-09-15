@@ -9,11 +9,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import { Field, FieldDescription, FieldLabel } from "@quieter/ui/field";
-import {
-  Progress,
-  ProgressIndicator,
-  ProgressTrack,
-} from "@quieter/ui/progress";
+import { FlowProgress } from "@quieter/ui/progress";
 import {
   Select,
   SelectContent,
@@ -215,16 +211,11 @@ export const AddMailboxSettingsView = ({
             <span className="hidden sm:inline">Step </span>
             {currentStep} / {steps.length}
           </span>
-          <Progress
-            aria-label="Mailbox setup progress"
-            className="hidden w-16 gap-0 sm:grid"
+          <FlowProgress
+            label="Mailbox setup progress"
             max={steps.length}
             value={currentStep}
-          >
-            <ProgressTrack className="h-1 bg-control-hover">
-              <ProgressIndicator className="bg-fg" />
-            </ProgressTrack>
-          </Progress>
+          />
         </div>
       }
       headerStart={
@@ -508,6 +499,7 @@ export const AddMailboxSettingsView = ({
                 <TextFieldInput
                   aria-label="Mailbox address"
                   chrome="ghost"
+                  // oxlint-disable-next-line shadcn/no-restyle -- Local-part input fills its row height.
                   className="h-full min-w-0 flex-1 pr-1"
                   id="local-part"
                   onChange={(event) => {

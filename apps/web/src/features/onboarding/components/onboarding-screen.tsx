@@ -17,11 +17,7 @@ import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import { cn } from "@quieter/ui/cn";
 import { Field, FieldLabel } from "@quieter/ui/field";
 import { Input } from "@quieter/ui/input";
-import {
-  Progress,
-  ProgressIndicator,
-  ProgressTrack,
-} from "@quieter/ui/progress";
+import { FlowProgress } from "@quieter/ui/progress";
 import {
   Select,
   SelectContent,
@@ -432,6 +428,7 @@ const CustomInboxPlaybook = ({
             <TextFieldInput
               aria-label="Mailbox address"
               chrome="ghost"
+              // oxlint-disable-next-line shadcn/no-restyle -- Local-part input fills its row height.
               className="h-full min-w-0 flex-1 pr-1"
               onChange={(event) => {
                 setLocalPart(
@@ -811,16 +808,11 @@ export const OnboardingScreen = () => {
             <span className="hidden sm:inline">Step </span>
             {step} / {steps.length}
           </span>
-          <Progress
-            aria-label="Onboarding progress"
-            className="hidden w-16 gap-0 sm:grid"
+          <FlowProgress
+            label="Onboarding progress"
             max={steps.length}
             value={step}
-          >
-            <ProgressTrack className="h-1 bg-control-hover">
-              <ProgressIndicator className="bg-fg" />
-            </ProgressTrack>
-          </Progress>
+          />
         </div>
       }
       headerStart={
