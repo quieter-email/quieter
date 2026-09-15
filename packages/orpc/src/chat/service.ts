@@ -987,6 +987,7 @@ export const createAiChatResponse = async (input: {
   let continuingRowId: string | null = null;
   let continuingOriginalParts: ChatMessagePart[] | null = null;
   let shouldGenerateTitle = false;
+  let titlePrompt = "";
 
   if (validated.kind === "message") {
     assistantMessageId = validated.foreground.exchangeId;
@@ -1070,6 +1071,25 @@ export const createAiChatResponse = async (input: {
       }
       const now = new Date();
       shouldGenerateTitle = !rows.some((row) => row.role === "user");
+      titlePrompt = validated.userMessage.text;
+      if (!shouldGenerateTitle) {
+        // A failed title attempt leaves the first prompt's fallback behind and
+        // never runs again. Retry on later turns while the stored title still
+        // matches that fallback; an explicit rename always wins because the
+        // replacement only applies while the fallback is untouched.
+        const firstUserRow = rows.find((row) => row.role === "user");
+        const firstPrompt =
+          firstUserRow === undefined
+            ? ""
+            : getStoredMessageText(firstUserRow.parts);
+        if (
+          firstPrompt !== "" &&
+          existingChat?.title === createChatTitle(firstPrompt)
+        ) {
+          shouldGenerateTitle = true;
+          titlePrompt = firstPrompt;
+        }
+      }
       const userPosition = (lastRow?.position ?? -1) + 1;
       try {
         await db.transaction(async (transaction) => {
@@ -1555,9 +1575,9 @@ export const createAiChatResponse = async (input: {
         if (shouldGenerateTitle && validated.kind === "message") {
           await generateChatTitleInRequest({
             chatId: threadId,
-            fallbackTitle: createChatTitle(validated.userMessage.text),
+            fallbackTitle: createChatTitle(titlePrompt),
             mailboxId,
-            prompt: validated.userMessage.text,
+            prompt: titlePrompt,
             userId: input.userId,
           });
         }
