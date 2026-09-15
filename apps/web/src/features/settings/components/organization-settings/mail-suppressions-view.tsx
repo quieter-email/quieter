@@ -183,6 +183,7 @@ export const MailSuppressionsView = ({
               }
               aria-invalid={addressError !== null}
               chrome="ghost"
+              // oxlint-disable-next-line shadcn/no-restyle -- Ghost input fills its row.
               className="h-8 px-0"
               name="recipient"
               onChange={(changeEvent) => {

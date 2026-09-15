@@ -256,6 +256,7 @@ const MessageRowSelectionButton = ({
         >
           <span
             className={cn(
+              // oxlint-disable-next-line shadcn/no-arbitrary-values -- Bulk-select checkbox sizing with explicit transition properties.
               "flex size-4.5 items-center justify-center rounded-[5px] border bg-bg-raised text-transparent shadow-xs transition-[background-color,border-color,color] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out)",
               {
                 "border-border": !isSelected,
@@ -338,7 +339,7 @@ const MessageRowDetails = ({
           )}
           {(thread.attachmentCount > 0 || threaded) && (
             <span
-              className="squircle inline-flex h-4.5 shrink-0 items-center gap-1 rounded-sm border border-border bg-muted px-1 text-micro font-medium text-muted-fg tabular-nums"
+              className="inline-flex h-4.5 shrink-0 items-center gap-1 rounded-sm border border-border bg-muted px-1 text-micro font-medium text-muted-fg tabular-nums squircle"
               title={getMessageRowCountsTitle(thread)}
             >
               {thread.attachmentCount > 0 && (
@@ -866,6 +867,7 @@ export const MessageRow = ({
       data-thread-id={thread.threadId}
       ref={rowRef}
       style={{
+        // oxlint-disable-next-line shadcn/no-inline-styles -- Virtualized rows are positioned by measured offset.
         transform: `translateY(${offsetY}px)`,
       }}
     >

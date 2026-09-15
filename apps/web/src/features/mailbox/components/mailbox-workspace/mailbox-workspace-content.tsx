@@ -8,6 +8,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { Text } from "@quieter/ui/text";
 import { domAnimation, LazyMotion, m } from "motion/react";
 import { lazy, Suspense, useState } from "react";
 import type { ComponentProps, ReactNode } from "react";
@@ -106,6 +107,7 @@ const workspaceContentMotion = {
   animate: { filter: "blur(0px)", opacity: 1, scale: 1 },
   exit: { filter: "blur(14px)", opacity: 0, scale: 0.96 },
   initial: { filter: "blur(14px)", opacity: 0, scale: 0.96 },
+  // oxlint-disable-next-line shadcn/no-inline-styles -- Motion preset pivots around the center.
   style: { transformOrigin: "center center" },
   transition: { duration: 0.18, ease: "easeOut" },
 } as const;
@@ -252,7 +254,9 @@ const NoMailboxWorkspace = ({
               </LinkButton>
             </div>
             {connectError ? (
-              <p className="mt-3 text-body text-destructive">{connectError}</p>
+              <Text className="mt-3" tone="destructive">
+                {connectError}
+              </Text>
             ) : null}
           </m.div>
         )}
@@ -409,9 +413,9 @@ const MailboxWorkspaceContentInner = ({
               Reconnect
             </Button>
             {reconnectError ? (
-              <p className="mt-3 text-body text-destructive">
+              <Text className="mt-3" tone="destructive">
                 {reconnectError}
-              </p>
+              </Text>
             ) : null}
           </div>
         </m.div>
@@ -458,7 +462,7 @@ const MailboxWorkspaceContentInner = ({
 
   return (
     <LazyMotion features={domAnimation}>
-      <main className="relative isolate flex h-dvh min-h-0 flex-col overflow-hidden pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-fg lg:p-0">
+      <main className="pt-safe pr-safe pb-safe pl-safe relative isolate flex h-dvh min-h-0 flex-col overflow-hidden text-fg lg:p-0">
         <div className="relative z-10 flex min-h-0 flex-1 overflow-hidden">
           {selectedMailboxId ? (
             <MailSidebar

@@ -69,7 +69,9 @@ export const StatusScreen = ({
     <div className="relative z-10 flex min-h-dvh flex-col items-center justify-center px-6 py-16 text-center">
       <span
         aria-hidden
+        // oxlint-disable-next-line shadcn/no-arbitrary-values -- Ghost display type for the status backdrop.
         className="status-enter pointer-events-none absolute top-1/2 left-1/2 -translate-1/2 font-sans leading-none tracking-[-0.04em] text-fg/5 select-none"
+        // oxlint-disable-next-line shadcn/no-inline-styles -- Backdrop ghost is positioned by variant.
         style={ghostStyle(ghost)}
       >
         {ghost}
@@ -77,14 +79,18 @@ export const StatusScreen = ({
 
       <div className="relative flex w-full max-w-160 flex-col items-center">
         <h1
+          // oxlint-disable-next-line shadcn/no-arbitrary-values -- Hero display type shared with onboarding.
           className="status-enter font-sans text-title-lg leading-[1.32] font-normal tracking-[-0.014em] text-balance text-fg md:text-display-md md:leading-[1.28]"
+          // oxlint-disable-next-line shadcn/no-inline-styles -- Entrance is staged by variant.
           style={enterAfter(0.12)}
         >
           {title}
         </h1>
 
         <p
+          // oxlint-disable-next-line shadcn/no-arbitrary-values -- Comfortable reading measure for the status description.
           className="status-enter mt-6 max-w-125 text-body leading-[1.7] text-balance text-muted-fg"
+          // oxlint-disable-next-line shadcn/no-inline-styles -- Entrance is staged by variant.
           style={enterAfter(0.2)}
         >
           {description}
@@ -93,6 +99,7 @@ export const StatusScreen = ({
         {note === undefined ? null : (
           <p
             className="status-enter mt-5 max-w-125 truncate font-mono text-caption text-fg/40"
+            // oxlint-disable-next-line shadcn/no-inline-styles -- Entrance is staged by variant.
             style={enterAfter(0.26)}
           >
             {note}
@@ -101,6 +108,7 @@ export const StatusScreen = ({
 
         <div
           className="status-enter mt-10 flex flex-wrap items-center justify-center gap-3"
+          // oxlint-disable-next-line shadcn/no-inline-styles -- Entrance is staged by variant.
           style={enterAfter(0.32)}
         >
           {actions}

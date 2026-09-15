@@ -85,12 +85,7 @@ const FirstRunSetupHeader = ({
 }) => (
   <div className="flex flex-col gap-4 border-b border-border p-5 @3xl:flex-row @3xl:items-start @3xl:justify-between">
     <div>
-      <Button
-        className="mb-3 -ml-2 text-muted-fg"
-        onClick={onBack}
-        size="sm"
-        variant="ghost"
-      >
+      <Button className="mb-3 -ml-2" onClick={onBack} size="sm" variant="ghost">
         <HugeiconsIcon aria-hidden className="size-4" icon={ArrowLeft01Icon} />
         Back
       </Button>
@@ -341,10 +336,11 @@ const FirstRunMailboxStep = ({
       </p>
     ) : (
       <div className="flex flex-wrap items-center gap-3">
-        <div className="squircle flex h-8 w-full max-w-md items-center rounded-md border border-border bg-bg shadow-sm transition-colors">
+        <div className="flex h-8 w-full max-w-md items-center rounded-md border border-border bg-bg shadow-sm transition-colors squircle">
           <TextFieldInput
             aria-label="Managed mailbox local part"
             chrome="ghost"
+            // oxlint-disable-next-line shadcn/no-restyle -- Local-part input fills its row height.
             className="h-full min-w-0 flex-1 pr-1"
             onChange={(event) => {
               onLocalPartChange(
@@ -370,9 +366,8 @@ const FirstRunMailboxStep = ({
             >
               <SelectTrigger
                 aria-label="Managed mailbox domain"
-                className="h-full rounded-l-none pr-2.5 pl-1.5 shadow-none active:scale-100"
                 size="sm"
-                variant="ghost"
+                variant="attached"
               >
                 <SelectValue />
               </SelectTrigger>
@@ -457,7 +452,7 @@ const FirstRunApiKeyStep = ({
             {createdApiKey}
           </button>
           <a
-            className="squircle inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md border border-border bg-bg-surface px-3.5 text-body-sm text-fg shadow-sm transition-transform duration-100 ease-out select-none hover:bg-muted/60 active:scale-[0.97] active:bg-muted/80"
+            className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md border border-border bg-bg-surface px-3.5 text-body-sm text-fg shadow-sm transition-transform duration-100 ease-out select-none squircle hover:bg-muted/60 active:scale-[0.97] active:bg-muted/80"
             href="/api/openapi"
             rel="noreferrer"
             target="_blank"
@@ -480,7 +475,7 @@ const FirstRunApiKeyStep = ({
             This organization already has an API key.
           </p>
           <a
-            className="squircle inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md border border-border bg-bg-surface px-3.5 text-body-sm text-fg shadow-sm transition-transform duration-100 ease-out select-none hover:bg-muted/60 active:scale-[0.97] active:bg-muted/80"
+            className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md border border-border bg-bg-surface px-3.5 text-body-sm text-fg shadow-sm transition-transform duration-100 ease-out select-none squircle hover:bg-muted/60 active:scale-[0.97] active:bg-muted/80"
             href="/api/openapi"
             rel="noreferrer"
             target="_blank"
@@ -511,7 +506,7 @@ const FirstRunApiKeyStep = ({
           Create API key
         </Button>
         <a
-          className="squircle inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-transparent px-3.5 text-body-sm text-muted-fg transition-transform duration-100 ease-out select-none hover:bg-muted/60 hover:text-fg active:scale-[0.97] active:bg-muted/60 active:text-fg"
+          className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-transparent px-3.5 text-body-sm text-muted-fg transition-transform duration-100 ease-out select-none squircle hover:bg-muted/60 hover:text-fg active:scale-[0.97] active:bg-muted/60 active:text-fg"
           href="/api/openapi"
           rel="noreferrer"
           target="_blank"

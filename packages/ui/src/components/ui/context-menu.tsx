@@ -14,7 +14,7 @@ export const ContextMenuTrigger = ({
 }: ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Trigger>) => (
   <ContextMenuPrimitive.Trigger
     className={cn(
-      "squircle transition-transform duration-100 ease-out focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
+      "transition-transform duration-100 ease-out squircle focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
       className
     )}
     {...props}
@@ -58,17 +58,20 @@ type ContextMenuItemProps = Omit<
 > & {
   closeOnSelect?: boolean;
   onSelect?: (event: MouseEvent<HTMLElement>) => void;
+  tone?: "default" | "destructive";
 };
 
 export const ContextMenuItem = ({
   className,
   closeOnSelect = true,
   onSelect,
+  tone = "default",
   ...props
 }: ContextMenuItemProps) => (
   <ContextMenuPrimitive.Item
     className={cn(
-      "squircle relative flex min-h-7 cursor-default items-center gap-2 rounded-md px-2.5 text-body-sm text-fg transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
+      "relative flex min-h-7 cursor-default items-center gap-2 rounded-md px-2.5 text-body-sm text-fg transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
+      { "text-destructive": tone === "destructive" },
       className
     )}
     closeOnClick={closeOnSelect}

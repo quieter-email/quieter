@@ -80,7 +80,6 @@ export const ChatComposer = ({
     <div>
       <Textarea
         aria-label="Message"
-        className="[field-sizing:content] max-h-40 min-h-[42px] resize-none rounded-[9px] border border-border/70 bg-bg/45 px-3 py-2.5 text-body-sm leading-5 shadow-none placeholder:text-muted-fg focus-visible:ring-1"
         data-assistant-composer
         disabled={disabled}
         onChange={(event) => {
@@ -89,13 +88,14 @@ export const ChatComposer = ({
         onKeyDown={onInputKeyDown}
         placeholder="Ask Quieter…"
         value={input}
+        variant="composer"
       />
     </div>
     <div className="flex h-7 items-center gap-2">
       <DropdownMenu>
         <DropdownMenuTrigger
+          appearance="row"
           aria-label="Choose assistant change policy"
-          className="flex min-w-0 items-center gap-2 rounded-md py-1 text-caption text-muted-fg transition-colors hover:text-fg focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none"
           disabled={disabled}
           type="button"
         >
@@ -131,10 +131,10 @@ export const ChatComposer = ({
           <IconButtonTooltip label="Stop response">
             <Button
               aria-label="Stop response"
-              className="bg-muted text-fg hover:bg-control-hover"
               onClick={onStop}
               size="icon-sm"
               type="button"
+              variant="secondary"
             >
               <HugeiconsIcon aria-hidden className="size-3.5" icon={StopIcon} />
             </Button>

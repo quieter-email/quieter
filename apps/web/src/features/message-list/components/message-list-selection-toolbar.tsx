@@ -91,7 +91,9 @@ const MessageListBulkActionButton = ({
   <IconButtonTooltip label={action.label}>
     <Button
       aria-label={action.label}
+      // oxlint-disable-next-line shadcn/require-static-classes -- Shared header control scale lives in message-list-header-surfaces.
       className={cn(messageListHeaderControlVariants({ control: "toolbar" }), {
+        // oxlint-disable-next-line shadcn/no-restyle -- Destructive actions hover red.
         "hover:text-destructive": action.destructive === true,
       })}
       disabled={disabled}
@@ -120,6 +122,7 @@ const MessageListBulkLabelsMenu = ({
       <IconButtonTooltip label="Labels">
         <DropdownMenuTrigger
           aria-label="Modify labels"
+          // oxlint-disable-next-line shadcn/require-static-classes -- Shared header control scale lives in message-list-header-surfaces.
           className={messageListHeaderControlVariants({ control: "trigger" })}
           disabled={disabled}
           type="button"
@@ -142,6 +145,7 @@ const MessageListBulkOverflowMenu = ({
     <IconButtonTooltip label="More actions">
       <DropdownMenuTrigger
         aria-label="Open more actions"
+        // oxlint-disable-next-line shadcn/require-static-classes -- Shared header control scale lives in message-list-header-surfaces.
         className={messageListHeaderControlVariants({ control: "trigger" })}
         disabled={disabled}
         type="button"
@@ -153,11 +157,11 @@ const MessageListBulkOverflowMenu = ({
     <DropdownMenuContent align="end">
       {actions.map((action) => (
         <DropdownMenuItem
-          className={cn({ "text-destructive": action.destructive === true })}
           key={action.id}
           onSelect={() => {
             void action.onSelect();
           }}
+          tone={action.destructive === true ? "destructive" : undefined}
         >
           <HugeiconsIcon aria-hidden className="size-4" icon={action.icon} />
           <span>{action.label}</span>
@@ -221,6 +225,7 @@ export const MessageListSelectionToolbar = ({
                 : `Select all loaded ${itemLabelPlural}`
             }
             checked={allSelected}
+            // oxlint-disable-next-line shadcn/no-arbitrary-values, shadcn/no-restyle -- Bulk-select checkbox is deliberately larger than the base control.
             className="size-4.5 rounded-[5px]"
             disabled={disabled}
             indeterminate={indeterminate}
@@ -273,6 +278,7 @@ export const MessageListSelectionToolbar = ({
         <IconButtonTooltip label="Clear selection">
           <Button
             aria-label="Clear selection"
+            // oxlint-disable-next-line shadcn/require-static-classes -- Shared header control scale lives in message-list-header-surfaces.
             className={messageListHeaderControlVariants({ control: "toolbar" })}
             disabled={disabled}
             onClick={onClearSelection}

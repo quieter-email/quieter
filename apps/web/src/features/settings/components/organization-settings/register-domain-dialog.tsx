@@ -19,6 +19,7 @@ import {
   DialogTitle,
 } from "@quieter/ui/dialog";
 import { Radio, RadioGroup, RadioIndicator } from "@quieter/ui/radio-group";
+import { Text } from "@quieter/ui/text";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -169,12 +170,9 @@ export const RegisterDomainDialog = ({
                       value={field.state.value}
                     />
                     {field.state.meta.errors.map((error) => (
-                      <p
-                        className="text-body text-destructive"
-                        key={error?.message}
-                      >
+                      <Text key={error?.message} tone="destructive">
                         {error?.message}
-                      </p>
+                      </Text>
                     ))}
                   </TextField>
                 )}
@@ -205,7 +203,7 @@ export const RegisterDomainDialog = ({
                             <label
                               htmlFor={`domain-mode-${option.value}`}
                               className={cn(
-                                "squircle flex cursor-pointer gap-3 rounded-lg border p-4 transition-colors",
+                                "flex cursor-pointer gap-3 rounded-lg border p-4 transition-colors squircle",
                                 {
                                   "border-border hover:bg-muted/60": !selected,
                                   "border-fg/30 bg-muted/40": selected,
@@ -244,10 +242,13 @@ export const RegisterDomainDialog = ({
               {submitError !== null &&
               submitError !== undefined &&
               submitError !== "" ? (
-                <p className="text-body text-destructive">{submitError}</p>
+                <Text tone="destructive">{submitError}</Text>
               ) : null}
 
-              <DialogFooter className="px-0 pb-0">
+              <DialogFooter
+                // oxlint-disable-next-line shadcn/no-restyle -- Flush footer keeps edge-to-edge actions.
+                className="px-0 pb-0"
+              >
                 <DialogCloseButton disabled={createSetupMutation.isPending}>
                   Cancel
                 </DialogCloseButton>

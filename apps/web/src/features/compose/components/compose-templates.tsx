@@ -72,8 +72,12 @@ export const ComposeTemplatePicker = ({
   const queryOptions = orpc.mailTemplates.list.queryOptions({
     input: { mailboxId },
   });
-  const templatesQuery = useQuery(queryOptions);
-  const templates = templatesQuery.data?.templates ?? [];
+  const {
+    data: templatesData,
+    isError: isTemplatesError,
+    isPending: isTemplatesPending,
+  } = useQuery(queryOptions);
+  const templates = templatesData?.templates ?? [];
   const normalizedSearch = search.trim().toLowerCase();
   const filteredTemplates = normalizedSearch
     ? templates.filter((template) =>
@@ -81,14 +85,14 @@ export const ComposeTemplatePicker = ({
       )
     : templates;
   let templateQueryState: ReactNode = null;
-  if (templatesQuery.isPending) {
+  if (isTemplatesPending) {
     templateQueryState = (
       <div className="flex items-center justify-center gap-2 px-3 py-8 text-caption text-muted-fg">
         <HugeiconsIcon className="size-3.5 animate-spin" icon={Loading03Icon} />
         Loading templates
       </div>
     );
-  } else if (templatesQuery.isError) {
+  } else if (isTemplatesError) {
     templateQueryState = (
       <p className="px-3 py-8 text-center text-caption/5 text-destructive">
         Could not load templates.
@@ -117,6 +121,7 @@ export const ComposeTemplatePicker = ({
       </PopoverTrigger>
       <PopoverContent
         align="start"
+        // oxlint-disable-next-line shadcn/no-restyle -- Template popover keeps its flush panel.
         className="w-[min(88vw,22rem)] p-0"
         side="top"
       >
@@ -132,6 +137,7 @@ export const ComposeTemplatePicker = ({
             />
             <Input
               aria-label="Search templates"
+              // oxlint-disable-next-line shadcn/no-restyle -- Search input leaves room for its leading icon.
               className="pl-8"
               id="compose-template-search"
               onChange={(event) => {

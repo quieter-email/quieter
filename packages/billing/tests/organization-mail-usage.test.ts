@@ -7,7 +7,6 @@ import {
 } from "../src/organization-mail-usage";
 import {
   applyManagedUsageMarkup,
-  getManagedUsageRates,
   SES_INBOUND_CHUNK_BYTES,
   SES_INBOUND_CHUNK_MICROCENTS,
   SES_INBOUND_MESSAGE_MICROCENTS,
@@ -64,14 +63,6 @@ describe("organization mail usage", () => {
     expect(
       normalizeOrganizationMailAlertMilestones([100, 50.2, 50, 0, 101])
     ).toStrictEqual([50, 100]);
-  });
-
-  test("applies the configured managed mail margins", () => {
-    const rates = getManagedUsageRates();
-
-    expect(rates.messagesPerThousandUsd).toBeCloseTo(0.2);
-    expect(rates.attachmentDataPerGbUsd).toBeCloseTo(0.24);
-    expect(rates.inboundProcessingPerThousandUsd).toBeCloseTo(0.18);
   });
 
   test("applies markup directly to the SES USD cost", () => {

@@ -426,7 +426,6 @@ export const LabelsWorkspacePanel = ({
                       aria-label={
                         isShown ? "Hide from sidebar" : "Show in sidebar"
                       }
-                      className="text-muted-fg"
                       onClick={() => {
                         void toggleSidebarVisibility(label);
                       }}
@@ -443,8 +442,8 @@ export const LabelsWorkspacePanel = ({
                   </IconButtonTooltip>
                   <DropdownMenu>
                     <DropdownMenuTrigger
+                      appearance="icon"
                       aria-label={`Options for ${label.name}`}
-                      className="squircle inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-fg transition-colors hover:bg-control-hover hover:text-fg focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none"
                     >
                       <HugeiconsIcon
                         aria-hidden
@@ -466,10 +465,10 @@ export const LabelsWorkspacePanel = ({
                         Edit
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        className="text-destructive"
                         onSelect={() => {
                           setDeletingLabel(label);
                         }}
+                        tone="destructive"
                       >
                         <HugeiconsIcon
                           aria-hidden
@@ -493,7 +492,7 @@ export const LabelsWorkspacePanel = ({
     <div className="flex h-full min-h-0 flex-col overflow-y-auto">
       <div className="mx-auto w-full max-w-3xl px-6 py-12">
         <div className="mb-8">
-          <h1 className="font-sans text-[20px]/[26px] font-normal tracking-[-0.015em] text-fg">
+          <h1 className="font-sans text-title-sm font-normal text-fg">
             Labels
           </h1>
           <p className="mt-1.5 text-body text-muted-fg">

@@ -117,7 +117,7 @@ const getShortcutDisplay = (shortcut: KeyboardShortcut): string[][] => {
 };
 
 const KeyBadge = ({ value }: { value: string }) => (
-  <kbd className="squircle inline-flex h-6 min-w-6 items-center justify-center rounded-md border border-border bg-bg-surface px-1.5 font-mono text-micro font-medium text-fg shadow-xs">
+  <kbd className="inline-flex h-6 min-w-6 items-center justify-center rounded-md border border-border bg-bg-surface px-1.5 font-mono text-micro font-medium text-fg shadow-xs squircle">
     {value}
   </kbd>
 );
@@ -195,7 +195,10 @@ export const KeyboardShortcutsDialog = ({
         </div>
       </FullPageDialogHeader>
 
-      <FullPageDialogBody className="px-4 py-5 sm:px-6">
+      <FullPageDialogBody
+        // oxlint-disable-next-line shadcn/no-restyle -- Shortcuts body keeps its content padding.
+        className="px-4 py-5 sm:px-6"
+      >
         <div className="mx-auto w-full max-w-4xl columns-1 gap-4 lg:columns-2">
           {SHORTCUT_VIEW_SECTIONS.map((section) => (
             <section
@@ -205,7 +208,7 @@ export const KeyboardShortcutsDialog = ({
               <h2 className="px-1 text-body font-normal text-fg">
                 {section.title}
               </h2>
-              <div className="squircle overflow-hidden rounded-lg border border-border bg-bg-raised/58">
+              <div className="overflow-hidden rounded-lg border border-border bg-bg-raised/58 squircle">
                 {section.items.map((item) => (
                   <ShortcutRow
                     item={item}

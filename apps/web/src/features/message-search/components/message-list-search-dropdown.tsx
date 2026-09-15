@@ -302,9 +302,13 @@ export const MessageListSearchDropdown = ({
         className="pointer-events-none fixed z-50 hidden lg:block"
         data-search-dropdown-content
         style={{
+          // oxlint-disable-next-line shadcn/no-inline-styles -- Dropdown rect is measured from the anchor element.
           height: labelsLayout.coneHeight,
+          // oxlint-disable-next-line shadcn/no-inline-styles -- Dropdown rect is measured from the anchor element.
           left: labelsLayout.left - 8,
+          // oxlint-disable-next-line shadcn/no-inline-styles -- Dropdown rect is measured from the anchor element.
           top: labelsLayout.top,
+          // oxlint-disable-next-line shadcn/no-inline-styles -- Dropdown rect is measured from the anchor element.
           width: 296,
         }}
       >

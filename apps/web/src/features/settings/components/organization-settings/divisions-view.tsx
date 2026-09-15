@@ -31,6 +31,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
+import { Text } from "@quieter/ui/text";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { toast } from "@quieter/ui/toast";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
@@ -152,7 +153,7 @@ const CreateDivisionDialog = ({
               await form.handleSubmit();
             }}
           >
-            <DialogBody className="space-y-4">
+            <DialogBody spacing="4">
               <form.Field name="name">
                 {(field) => (
                   <TextField>
@@ -171,12 +172,9 @@ const CreateDivisionDialog = ({
                       value={field.state.value}
                     />
                     {field.state.meta.errors.map((error) => (
-                      <p
-                        className="text-body text-destructive"
-                        key={error?.message}
-                      >
+                      <Text key={error?.message} tone="destructive">
                         {error?.message}
-                      </p>
+                      </Text>
                     ))}
                   </TextField>
                 )}
@@ -205,7 +203,7 @@ const CreateDivisionDialog = ({
               {submitError !== null &&
               submitError !== undefined &&
               submitError !== "" ? (
-                <p className="text-body text-destructive">{submitError}</p>
+                <Text tone="destructive">{submitError}</Text>
               ) : null}
             </DialogBody>
 
@@ -325,7 +323,7 @@ const EditDivisionFieldDialog = ({
               await form.handleSubmit();
             }}
           >
-            <DialogBody className="space-y-4">
+            <DialogBody spacing="4">
               <form.Field name="value">
                 {(formField) => (
                   <TextField>
@@ -348,12 +346,9 @@ const EditDivisionFieldDialog = ({
                       value={formField.state.value}
                     />
                     {formField.state.meta.errors.map((error) => (
-                      <p
-                        className="text-body text-destructive"
-                        key={error?.message}
-                      >
+                      <Text key={error?.message} tone="destructive">
                         {error?.message}
-                      </p>
+                      </Text>
                     ))}
                   </TextField>
                 )}
@@ -362,7 +357,7 @@ const EditDivisionFieldDialog = ({
               {submitError !== null &&
               submitError !== undefined &&
               submitError !== "" ? (
-                <p className="text-body text-destructive">{submitError}</p>
+                <Text tone="destructive">{submitError}</Text>
               ) : null}
             </DialogBody>
 

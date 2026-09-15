@@ -524,18 +524,23 @@ const ChatSession = ({
 
 export const ChatView = (props: ChatViewProps) => {
   const { data: billing, isPending } = useQuery(userBillingQueryOptions());
-  const query = useQuery(chatQueryOptions(props.mailboxId, props.chatId));
-  if (isPending || (props.chatId !== null && query.isPending)) {
+  const {
+    data: chatData,
+    isError: isChatError,
+    isPending: isChatPending,
+    refetch: refetchChat,
+  } = useQuery(chatQueryOptions(props.mailboxId, props.chatId));
+  if (isPending || (props.chatId !== null && isChatPending)) {
     return <p className="p-4 text-body-sm text-muted-fg">Loading assistant…</p>;
   }
-  if (props.chatId !== null && query.isError) {
+  if (props.chatId !== null && isChatError) {
     return (
       <div className="p-4 text-body-sm text-muted-fg">
         Could not load this conversation.
         <Button
           variant="ghost"
           onClick={() => {
-            void query.refetch();
+            void refetchChat();
           }}
         >
           Try again
@@ -547,7 +552,7 @@ export const ChatView = (props: ChatViewProps) => {
     <ChatSession
       key={`${props.mailboxId}:${props.chatId ?? props.draftChatKey}`}
       {...props}
-      chatData={query.data}
+      chatData={chatData}
       canUseAiChat={
         !isPending &&
         !!billing &&

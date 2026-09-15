@@ -24,11 +24,10 @@ export const RootNotFoundComponent = () => {
           <LinkButton to="/">Back to inbox</LinkButton>
           {canGoBack ? (
             <Button
-              className="border-fg/20 bg-transparent text-fg hover:bg-fg/10"
               onClick={() => {
                 router.history.back();
               }}
-              variant="outline"
+              variant="overlay"
             >
               Go back
             </Button>

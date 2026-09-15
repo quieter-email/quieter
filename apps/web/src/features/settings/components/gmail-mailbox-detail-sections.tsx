@@ -121,6 +121,7 @@ export const GmailMailboxDetailSections = ({
             <SettingsRow
               action={
                 <Button
+                  // oxlint-disable-next-line shadcn/no-restyle -- Disconnect action keeps its destructive ghost text.
                   className="text-destructive hover:text-destructive"
                   disabled={disconnectPending}
                   onClick={onDisconnect}

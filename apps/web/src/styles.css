@@ -1,6 +1,34 @@
 @import "@quieter/ui/styles.css";
 @source "./**/*.{ts,tsx}";
 
+/* Notch and home-indicator insets for full-bleed app shells. */
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+
+@utility pr-safe {
+  padding-right: env(safe-area-inset-right);
+}
+
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+@utility pl-safe {
+  padding-left: env(safe-area-inset-left);
+}
+
+/* Rotating conic sheen behind the auth badge. Gradient stops cannot be theme tokens. */
+@utility auth-sheen {
+  background: conic-gradient(
+    from 0deg,
+    var(--border) 0deg,
+    var(--border) 270deg,
+    color-mix(in oklch, var(--primary) 100%, var(--border)) 325deg,
+    var(--border) 360deg
+  );
+}
+
 :root {
   --app-motion-duration-enter: 150ms;
   --app-motion-duration-feedback: 150ms;

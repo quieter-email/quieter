@@ -87,7 +87,7 @@ const TokenFieldSuggestions = ({
   <div
     aria-label={label}
     className={cn(
-      "squircle absolute right-0 left-0 z-50 max-h-56 overflow-y-auto overscroll-contain rounded-lg border border-border bg-popover p-1 text-popover-fg shadow-md",
+      "absolute right-0 left-0 z-50 max-h-56 overflow-y-auto overscroll-contain rounded-lg border border-border bg-popover p-1 text-popover-fg shadow-md squircle",
       { "bottom-full mb-1": side === "top", "top-full mt-1": !(side === "top") }
     )}
     id={listId}
@@ -100,7 +100,7 @@ const TokenFieldSuggestions = ({
         <button
           aria-selected={position === activeIndex}
           className={cn(
-            "squircle flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-body text-fg",
+            "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-body text-fg squircle",
             { "bg-muted": position === activeIndex }
           )}
           id={optionId(position)}

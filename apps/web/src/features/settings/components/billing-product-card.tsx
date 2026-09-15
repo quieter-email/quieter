@@ -40,7 +40,7 @@ export const BillingProductCard = ({
 
   return (
     <article
-      className={cn("squircle rounded-xl border bg-bg-raised p-5", {
+      className={cn("rounded-xl border bg-bg-raised p-5 squircle", {
         "border-border": !isCurrent,
         "border-primary/50 bg-primary/4": isCurrent,
       })}
@@ -52,7 +52,7 @@ export const BillingProductCard = ({
               {product.name}
             </h3>
             {isCurrent && (
-              <span className="squircle rounded-full border border-primary/40 px-2 py-0.5 text-micro font-medium text-primary">
+              <span className="rounded-full border border-primary/40 px-2 py-0.5 text-micro font-medium text-primary squircle">
                 Current
               </span>
             )}

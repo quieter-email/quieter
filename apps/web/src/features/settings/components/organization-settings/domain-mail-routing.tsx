@@ -341,7 +341,7 @@ const DomainCatchAllPickerBody = ({
   }
   if (candidates.length === 0) {
     return (
-      <p className="squircle rounded-md border border-border bg-muted/15 px-3 py-2 text-caption/5 text-muted-fg">
+      <p className="rounded-md border border-border bg-muted/15 px-3 py-2 text-caption/5 text-muted-fg squircle">
         Create a shared inbox on {domainName} first, then return here.
       </p>
     );
@@ -352,7 +352,7 @@ const DomainCatchAllPickerBody = ({
       {candidates.map((mailbox) => (
         <button
           className={cn(
-            "squircle flex w-full items-center justify-between gap-3 rounded-md border border-border bg-bg px-3 py-2 text-left transition-colors",
+            "flex w-full items-center justify-between gap-3 rounded-md border border-border bg-bg px-3 py-2 text-left transition-colors squircle",
             "hover:bg-muted/25",
             "active:scale-[0.99] motion-reduce:transition-none motion-reduce:active:scale-100",
             { "cursor-not-allowed opacity-50": setCatchAllMutation.isPending }
@@ -465,7 +465,7 @@ export const DomainCatchAllSection = ({
               recipient at {domainName}.
             </DialogDescription>
           </DialogHeader>
-          <DialogBody className="space-y-3">
+          <DialogBody spacing="3">
             <p className="text-caption/5 text-muted-fg">
               Exact shared inboxes always keep priority, and replies send from
               the chosen inbox&rsquo;s own address.

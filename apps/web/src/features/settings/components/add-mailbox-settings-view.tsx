@@ -9,11 +9,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import { Field, FieldDescription, FieldLabel } from "@quieter/ui/field";
-import {
-  Progress,
-  ProgressIndicator,
-  ProgressTrack,
-} from "@quieter/ui/progress";
+import { FlowProgress } from "@quieter/ui/progress";
 import {
   Select,
   SelectContent,
@@ -21,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@quieter/ui/select";
+import { Text } from "@quieter/ui/text";
 import { TextFieldInput } from "@quieter/ui/text-field";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -214,37 +211,22 @@ export const AddMailboxSettingsView = ({
             <span className="hidden sm:inline">Step </span>
             {currentStep} / {steps.length}
           </span>
-          <Progress
-            aria-label="Mailbox setup progress"
-            className="hidden w-16 gap-0 sm:grid"
+          <FlowProgress
+            label="Mailbox setup progress"
             max={steps.length}
             value={currentStep}
-          >
-            <ProgressTrack className="h-1 bg-control-hover">
-              <ProgressIndicator className="bg-fg" />
-            </ProgressTrack>
-          </Progress>
+          />
         </div>
       }
       headerStart={
-        <Button
-          className="-ml-2 text-muted-fg hover:text-fg"
-          onClick={exitFlow}
-          size="sm"
-          variant="ghost"
-        >
+        <Button className="-ml-2" onClick={exitFlow} size="sm" variant="ghost">
           <HugeiconsIcon aria-hidden icon={ArrowLeft01Icon} />
           Back to mailboxes
         </Button>
       }
       previous={
         mailboxType === undefined ? null : (
-          <Button
-            className="text-muted-fg hover:text-fg"
-            onClick={goBack}
-            size="sm"
-            variant="ghost"
-          >
+          <Button onClick={goBack} size="sm" variant="ghost">
             <HugeiconsIcon aria-hidden icon={ArrowLeft01Icon} />
             {previousLabel}
           </Button>
@@ -260,7 +242,6 @@ export const AddMailboxSettingsView = ({
           </header>
           <div className="mt-9 grid gap-3 sm:grid-cols-2">
             <Button
-              className="group h-auto min-h-32 w-full flex-col items-start justify-start rounded-lg border-border bg-bg-raised p-5 text-left whitespace-normal hover:border-border-strong hover:bg-control-hover"
               onClick={() => {
                 workflowStore.setState((state) => ({
                   ...state,
@@ -269,7 +250,7 @@ export const AddMailboxSettingsView = ({
                   mailboxType: "gmail",
                 }));
               }}
-              variant="outline"
+              variant="card"
             >
               <span className="text-body-sm font-medium text-fg">Gmail</span>
               <span className="mt-1 text-caption text-muted-fg">
@@ -286,7 +267,6 @@ export const AddMailboxSettingsView = ({
             </Button>
 
             <Button
-              className="group h-auto min-h-32 w-full flex-col items-start justify-start rounded-lg border-border bg-bg-raised p-5 text-left whitespace-normal hover:border-border-strong hover:bg-control-hover"
               onClick={() => {
                 workflowStore.setState((state) => ({
                   ...state,
@@ -295,7 +275,7 @@ export const AddMailboxSettingsView = ({
                   mailboxType: "shared",
                 }));
               }}
-              variant="outline"
+              variant="card"
             >
               <span className="text-body-sm font-medium text-fg">
                 Quieter managed mailbox
@@ -515,10 +495,11 @@ export const AddMailboxSettingsView = ({
 
             <Field>
               <FieldLabel htmlFor="local-part">Email address</FieldLabel>
-              <div className="squircle flex h-8 min-w-0 items-center rounded-md border border-border bg-input shadow-sm transition-colors focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/45">
+              <div className="flex h-8 min-w-0 items-center rounded-md border border-border bg-input shadow-sm transition-colors squircle focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/45">
                 <TextFieldInput
                   aria-label="Mailbox address"
                   chrome="ghost"
+                  // oxlint-disable-next-line shadcn/no-restyle -- Local-part input fills its row height.
                   className="h-full min-w-0 flex-1 pr-1"
                   id="local-part"
                   onChange={(event) => {
@@ -555,9 +536,8 @@ export const AddMailboxSettingsView = ({
                   >
                     <SelectTrigger
                       aria-label="Mailbox domain"
-                      className="h-full rounded-l-none pr-2.5 pl-1.5 shadow-none active:scale-100"
                       size="sm"
-                      variant="ghost"
+                      variant="attached"
                     >
                       <SelectValue />
                     </SelectTrigger>
@@ -649,10 +629,10 @@ export const AddMailboxSettingsView = ({
             )}
 
             {createManagedMailboxMutation.isError ? (
-              <p className="text-body text-destructive">
+              <Text tone="destructive">
                 {createManagedMailboxMutation.error?.message ??
                   "Could not create mailbox."}
-              </p>
+              </Text>
             ) : null}
           </div>
           <div className="mt-8 flex justify-end">

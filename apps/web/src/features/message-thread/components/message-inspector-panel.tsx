@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
+import { Text } from "@quieter/ui/text";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
@@ -58,9 +59,9 @@ export const MessageInspectorPanel = ({
     );
   } else if (isInspectorError) {
     inspectorBody = (
-      <p className="text-body text-destructive">
+      <Text tone="destructive">
         {inspectorError.message ?? "Could not load message details."}
-      </p>
+      </Text>
     );
   } else if (inspector !== undefined) {
     inspectorBody = (
@@ -135,15 +136,21 @@ export const MessageInspectorPanel = ({
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent className="w-[min(92vw,56rem)]">
         <DialogHeader>
-          <DialogTitle className="text-body-lg font-bold">
+          <DialogTitle
+            // oxlint-disable-next-line shadcn/no-restyle -- Inspector title keeps its large bold treatment.
+            className="text-body-lg font-bold"
+          >
             Full details
           </DialogTitle>
-          <DialogDescription className="text-fg">
+          <DialogDescription
+            // oxlint-disable-next-line shadcn/no-restyle -- Inspector description keeps foreground text.
+            className="text-fg"
+          >
             Complete information available for this message.
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="max-h-[70vh] space-y-5 overflow-y-auto">
+        <DialogBody className="max-h-[70vh] overflow-y-auto" spacing="5">
           <MessageDeliverySection
             enabled={deliveryEnabled && open}
             mailboxId={mailboxId}
@@ -200,7 +207,7 @@ export const ApiSourceAction = ({
     apiSource.senderMailboxId !== ""
   ) {
     return (
-      <span className="squircle rounded-md bg-muted px-2 py-1 text-caption text-muted-fg">
+      <span className="rounded-md bg-muted px-2 py-1 text-caption text-muted-fg squircle">
         {apiSource.includedInMailbox
           ? "Included in mailbox"
           : "Mailbox copy disabled"}
