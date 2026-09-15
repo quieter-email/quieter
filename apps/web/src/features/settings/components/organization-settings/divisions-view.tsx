@@ -172,10 +172,7 @@ const CreateDivisionDialog = ({
                       value={field.state.value}
                     />
                     {field.state.meta.errors.map((error) => (
-                      <Text
-                        key={error?.message}
-                        tone="destructive"
-                      >
+                      <Text key={error?.message} tone="destructive">
                         {error?.message}
                       </Text>
                     ))}
@@ -349,10 +346,7 @@ const EditDivisionFieldDialog = ({
                       value={formField.state.value}
                     />
                     {formField.state.meta.errors.map((error) => (
-                      <Text
-                        key={error?.message}
-                        tone="destructive"
-                      >
+                      <Text key={error?.message} tone="destructive">
                         {error?.message}
                       </Text>
                     ))}

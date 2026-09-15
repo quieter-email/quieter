@@ -253,7 +253,9 @@ const NoMailboxWorkspace = ({
               </LinkButton>
             </div>
             {connectError ? (
-              <Text className="mt-3" tone="destructive">{connectError}</Text>
+              <Text className="mt-3" tone="destructive">
+                {connectError}
+              </Text>
             ) : null}
           </m.div>
         )}
@@ -459,7 +461,7 @@ const MailboxWorkspaceContentInner = ({
 
   return (
     <LazyMotion features={domAnimation}>
-      <main className="relative isolate flex h-dvh min-h-0 flex-col overflow-hidden pt-safe pr-safe pb-safe pl-safe text-fg lg:p-0">
+      <main className="pt-safe pr-safe pb-safe pl-safe relative isolate flex h-dvh min-h-0 flex-col overflow-hidden text-fg lg:p-0">
         <div className="relative z-10 flex min-h-0 flex-1 overflow-hidden">
           {selectedMailboxId ? (
             <MailSidebar

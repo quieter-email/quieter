@@ -300,7 +300,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
               ) : (
                 <m.div
                   animate={{ opacity: 1 }}
-                  className="squircle flex min-w-0 flex-wrap items-center gap-1 rounded-xl border border-border bg-control p-1.5"
+                  className="flex min-w-0 flex-wrap items-center gap-1 rounded-xl border border-border bg-control p-1.5 squircle"
                   exit={{ opacity: 0 }}
                   initial={{ opacity: 0 }}
                   key="inline-reply-bar"

@@ -177,10 +177,7 @@ export const OrganizationFormDialog = ({
                       value={field.state.value}
                     />
                     {field.state.meta.errors.map((error) => (
-                      <Text
-                        key={error?.message}
-                        tone="destructive"
-                      >
+                      <Text key={error?.message} tone="destructive">
                         {error?.message}
                       </Text>
                     ))}
@@ -205,10 +202,7 @@ export const OrganizationFormDialog = ({
                       value={field.state.value}
                     />
                     {field.state.meta.errors.map((error) => (
-                      <Text
-                        key={error?.message}
-                        tone="destructive"
-                      >
+                      <Text key={error?.message} tone="destructive">
                         {error?.message}
                       </Text>
                     ))}

@@ -90,9 +90,7 @@ const TeamMailboxAdministration = ({
       description="Manage ownership without opening anyone's mail."
     >
       {isError ? (
-        <Text tone="destructive">
-          Could not load team mailboxes.
-        </Text>
+        <Text tone="destructive">Could not load team mailboxes.</Text>
       ) : (
         <Select
           items={mailboxes.map((mailbox) => ({
@@ -116,9 +114,7 @@ const TeamMailboxAdministration = ({
         </Select>
       )}
       {isDetailsError && (
-        <Text tone="destructive">
-          Could not load mailbox access.
-        </Text>
+        <Text tone="destructive">Could not load mailbox access.</Text>
       )}
       {details !== undefined && mailboxId !== null && (
         <ManagedMailboxAccessSection

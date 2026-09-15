@@ -192,7 +192,7 @@ const UsageBreakdown = ({
 
   return (
     <div className="mt-3">
-      <div className="squircle flex h-3 overflow-hidden rounded-full bg-muted shadow-inner ring-1 ring-border/60">
+      <div className="flex h-3 overflow-hidden rounded-full bg-muted shadow-inner ring-1 ring-border/60 squircle">
         <div
           className="flex h-full min-w-1 overflow-hidden"
           style={{ width: `${usedPercent}%` }}
@@ -375,10 +375,7 @@ const ManagedUsageSettingsControls = ({
   setLimitDollars: (value: number | null) => void;
   setOverageEnabled: (value: boolean) => void;
 }) => (
-  <Fieldset
-    bare
-    disabled={isSaving}
-  >
+  <Fieldset bare disabled={isSaving}>
     <SettingsInsetRows>
       <SettingsInsetRow className="justify-between gap-6">
         <SettingsRowText

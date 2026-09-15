@@ -1,9 +1,10 @@
+import { configDefaults, defineConfig } from "vite-plus";
+
 import core from "./tooling/lint/core";
 import oxfmt from "./tooling/lint/oxfmt";
 import react from "./tooling/lint/react";
 import tanstack from "./tooling/lint/tanstack";
 import vitest from "./tooling/lint/vitest";
-import { configDefaults, defineConfig } from "vite-plus";
 
 export default defineConfig({
   fmt: {

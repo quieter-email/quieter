@@ -149,10 +149,7 @@ export const LeaveOrganizationDialog = ({
                       value={field.state.value}
                     />
                     {field.state.meta.errors.map((error) => (
-                      <Text
-                        key={error?.message}
-                        tone="destructive"
-                      >
+                      <Text key={error?.message} tone="destructive">
                         {error?.message}
                       </Text>
                     ))}
@@ -321,10 +318,7 @@ export const DeleteOrganizationDialog = ({
                       value={field.state.value}
                     />
                     {field.state.meta.errors.map((error) => (
-                      <Text
-                        key={error?.message}
-                        tone="destructive"
-                      >
+                      <Text key={error?.message} tone="destructive">
                         {error?.message}
                       </Text>
                     ))}

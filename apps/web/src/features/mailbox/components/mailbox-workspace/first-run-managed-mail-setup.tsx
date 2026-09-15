@@ -341,7 +341,7 @@ const FirstRunMailboxStep = ({
       </p>
     ) : (
       <div className="flex flex-wrap items-center gap-3">
-        <div className="squircle flex h-8 w-full max-w-md items-center rounded-md border border-border bg-bg shadow-sm transition-colors">
+        <div className="flex h-8 w-full max-w-md items-center rounded-md border border-border bg-bg shadow-sm transition-colors squircle">
           <TextFieldInput
             aria-label="Managed mailbox local part"
             chrome="ghost"
@@ -456,7 +456,7 @@ const FirstRunApiKeyStep = ({
             {createdApiKey}
           </button>
           <a
-            className="squircle inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md border border-border bg-bg-surface px-3.5 text-body-sm text-fg shadow-sm transition-transform duration-100 ease-out select-none hover:bg-muted/60 active:scale-[0.97] active:bg-muted/80"
+            className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md border border-border bg-bg-surface px-3.5 text-body-sm text-fg shadow-sm transition-transform duration-100 ease-out select-none squircle hover:bg-muted/60 active:scale-[0.97] active:bg-muted/80"
             href="/api/openapi"
             rel="noreferrer"
             target="_blank"
@@ -479,7 +479,7 @@ const FirstRunApiKeyStep = ({
             This organization already has an API key.
           </p>
           <a
-            className="squircle inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md border border-border bg-bg-surface px-3.5 text-body-sm text-fg shadow-sm transition-transform duration-100 ease-out select-none hover:bg-muted/60 active:scale-[0.97] active:bg-muted/80"
+            className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md border border-border bg-bg-surface px-3.5 text-body-sm text-fg shadow-sm transition-transform duration-100 ease-out select-none squircle hover:bg-muted/60 active:scale-[0.97] active:bg-muted/80"
             href="/api/openapi"
             rel="noreferrer"
             target="_blank"
@@ -510,7 +510,7 @@ const FirstRunApiKeyStep = ({
           Create API key
         </Button>
         <a
-          className="squircle inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-transparent px-3.5 text-body-sm text-muted-fg transition-transform duration-100 ease-out select-none hover:bg-muted/60 hover:text-fg active:scale-[0.97] active:bg-muted/60 active:text-fg"
+          className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-transparent px-3.5 text-body-sm text-muted-fg transition-transform duration-100 ease-out select-none squircle hover:bg-muted/60 hover:text-fg active:scale-[0.97] active:bg-muted/60 active:text-fg"
           href="/api/openapi"
           rel="noreferrer"
           target="_blank"

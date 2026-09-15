@@ -204,7 +204,7 @@ const CreatedApiKeyReveal = ({
 
     <DialogBody spacing="3">
       <button
-        className="squircle w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-left font-mono text-caption break-all text-fg hover:bg-secondary/50"
+        className="w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-left font-mono text-caption break-all text-fg squircle hover:bg-secondary/50"
         onClick={() => {
           runDetached(async () => {
             await copyText(createdKey);
@@ -369,10 +369,7 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
                         value={field.state.value}
                       />
                       {field.state.meta.errors.map((error) => (
-                        <Text
-                          key={error?.message}
-                          tone="destructive"
-                        >
+                        <Text key={error?.message} tone="destructive">
                           {error?.message}
                         </Text>
                       ))}
@@ -422,10 +419,7 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
                         </SelectContent>
                       </Select>
                       {field.state.meta.errors.map((error) => (
-                        <Text
-                          key={error?.message}
-                          tone="destructive"
-                        >
+                        <Text key={error?.message} tone="destructive">
                           {error?.message}
                         </Text>
                       ))}
@@ -655,7 +649,7 @@ const ResetApiKeyDialog = ({
 
             <AlertDialogBody spacing="3">
               <button
-                className="squircle w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-left font-mono text-caption break-all text-fg hover:bg-secondary/50"
+                className="w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-left font-mono text-caption break-all text-fg squircle hover:bg-secondary/50"
                 onClick={() => {
                   runDetached(async () => {
                     await copyText(createdKey);

@@ -89,7 +89,7 @@ const SidebarHelpMenu = ({
 
   return (
     <DropdownMenu onOpenChange={setIsOpen} open={isOpen}>
-      <div className="squircle relative rounded-md hover:bg-muted/60 dark:hover:bg-muted/40">
+      <div className="relative rounded-md squircle hover:bg-muted/60 dark:hover:bg-muted/40">
         <IconButtonTooltip label="Help and legal">
           <DropdownMenuTrigger
             appearance="icon-transparent"
@@ -267,7 +267,7 @@ const SidebarFooter = ({
     index={9}
   >
     <div className="flex items-center gap-1">
-      <div className="squircle relative min-w-0 flex-1 rounded-md hover:bg-muted/60 dark:hover:bg-muted/40">
+      <div className="relative min-w-0 flex-1 rounded-md squircle hover:bg-muted/60 dark:hover:bg-muted/40">
         <LinkButton
           aria-label="Settings"
           className="group relative z-10 w-full justify-start bg-transparent hover:bg-transparent active:scale-100"

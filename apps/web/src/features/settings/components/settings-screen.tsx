@@ -116,7 +116,7 @@ export const SettingsScreen = ({
       }}
     >
       {({ input, results, searching }) => (
-        <div className="relative isolate flex h-dvh min-h-0 overflow-hidden pt-safe pr-safe pb-safe pl-safe text-fg lg:p-0">
+        <div className="pt-safe pr-safe pb-safe pl-safe relative isolate flex h-dvh min-h-0 overflow-hidden text-fg lg:p-0">
           <SettingsDataPrefetch tab={tab} />
           <BillingCheckoutResult />
           <ConnectorConnectionResult />

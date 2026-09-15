@@ -228,23 +228,14 @@ export const AddMailboxSettingsView = ({
         </div>
       }
       headerStart={
-        <Button
-          className="-ml-2"
-          onClick={exitFlow}
-          size="sm"
-          variant="ghost"
-        >
+        <Button className="-ml-2" onClick={exitFlow} size="sm" variant="ghost">
           <HugeiconsIcon aria-hidden icon={ArrowLeft01Icon} />
           Back to mailboxes
         </Button>
       }
       previous={
         mailboxType === undefined ? null : (
-          <Button
-            onClick={goBack}
-            size="sm"
-            variant="ghost"
-          >
+          <Button onClick={goBack} size="sm" variant="ghost">
             <HugeiconsIcon aria-hidden icon={ArrowLeft01Icon} />
             {previousLabel}
           </Button>
@@ -513,7 +504,7 @@ export const AddMailboxSettingsView = ({
 
             <Field>
               <FieldLabel htmlFor="local-part">Email address</FieldLabel>
-              <div className="squircle flex h-8 min-w-0 items-center rounded-md border border-border bg-input shadow-sm transition-colors focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/45">
+              <div className="flex h-8 min-w-0 items-center rounded-md border border-border bg-input shadow-sm transition-colors squircle focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/45">
                 <TextFieldInput
                   aria-label="Mailbox address"
                   chrome="ghost"

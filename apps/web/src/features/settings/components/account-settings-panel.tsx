@@ -211,10 +211,7 @@ const AccountNameSettings = ({
                   value={field.state.value}
                 />
                 {field.state.meta.errors.map((error) => (
-                  <Text
-                    key={error?.message}
-                    tone="destructive"
-                  >
+                  <Text key={error?.message} tone="destructive">
                     {error?.message}
                   </Text>
                 ))}
@@ -348,10 +345,7 @@ const AccountEmailSettings = ({ currentEmail }: { currentEmail: string }) => {
                   value={field.state.value}
                 />
                 {field.state.meta.errors.map((error) => (
-                  <Text
-                    key={error?.message}
-                    tone="destructive"
-                  >
+                  <Text key={error?.message} tone="destructive">
                     {error?.message}
                   </Text>
                 ))}
@@ -691,10 +685,7 @@ const DeleteAccountDialog = () => {
                       value={field.state.value}
                     />
                     {field.state.meta.errors.map((error) => (
-                      <Text
-                        key={error?.message}
-                        tone="destructive"
-                      >
+                      <Text key={error?.message} tone="destructive">
                         {error?.message}
                       </Text>
                     ))}

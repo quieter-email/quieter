@@ -115,10 +115,7 @@ export const InviteMemberForm = ({
                 {hasErrors && (
                   <div id={emailErrorId} role="alert">
                     {field.state.meta.errors.map((error) => (
-                      <Text
-                        key={error?.message}
-                        tone="destructive"
-                      >
+                      <Text key={error?.message} tone="destructive">
                         {error?.message}
                       </Text>
                     ))}

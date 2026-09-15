@@ -117,7 +117,7 @@ const getShortcutDisplay = (shortcut: KeyboardShortcut): string[][] => {
 };
 
 const KeyBadge = ({ value }: { value: string }) => (
-  <kbd className="squircle inline-flex h-6 min-w-6 items-center justify-center rounded-md border border-border bg-bg-surface px-1.5 font-mono text-micro font-medium text-fg shadow-xs">
+  <kbd className="inline-flex h-6 min-w-6 items-center justify-center rounded-md border border-border bg-bg-surface px-1.5 font-mono text-micro font-medium text-fg shadow-xs squircle">
     {value}
   </kbd>
 );
@@ -205,7 +205,7 @@ export const KeyboardShortcutsDialog = ({
               <h2 className="px-1 text-body font-normal text-fg">
                 {section.title}
               </h2>
-              <div className="squircle overflow-hidden rounded-lg border border-border bg-bg-raised/58">
+              <div className="overflow-hidden rounded-lg border border-border bg-bg-raised/58 squircle">
                 {section.items.map((item) => (
                   <ShortcutRow
                     item={item}

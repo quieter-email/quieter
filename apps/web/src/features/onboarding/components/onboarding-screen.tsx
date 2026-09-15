@@ -428,7 +428,7 @@ const CustomInboxPlaybook = ({
           {managedMailboxes.length > 0 ? (
             <ConnectedAddressList mailboxes={managedMailboxes} />
           ) : null}
-          <div className="squircle flex h-8 w-full max-w-md items-center rounded-md border border-border bg-bg shadow-sm transition-colors">
+          <div className="flex h-8 w-full max-w-md items-center rounded-md border border-border bg-bg shadow-sm transition-colors squircle">
             <TextFieldInput
               aria-label="Mailbox address"
               chrome="ghost"

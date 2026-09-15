@@ -138,7 +138,7 @@ export const DesignSystemShowcase = () => {
             {surfaceTokens.map((token) => (
               <div
                 className={cn(
-                  "squircle rounded-md border border-border p-4",
+                  "rounded-md border border-border p-4 squircle",
                   token.cls
                 )}
                 key={token.name}
@@ -152,10 +152,10 @@ export const DesignSystemShowcase = () => {
 
         <Section title="Borders">
           <div className="flex flex-wrap gap-3">
-            <div className="squircle rounded-md border border-border px-4 py-3 text-body-sm">
+            <div className="rounded-md border border-border px-4 py-3 text-body-sm squircle">
               border
             </div>
-            <div className="squircle rounded-md border border-border-strong px-4 py-3 text-body-sm">
+            <div className="rounded-md border border-border-strong px-4 py-3 text-body-sm squircle">
               border-strong
             </div>
           </div>
@@ -234,7 +234,7 @@ export const DesignSystemShowcase = () => {
             <Textarea className="w-64" placeholder="Placeholder" />
           </Row>
           <Row label="Token field">
-            <div className="squircle w-80 rounded-md border border-border bg-input px-3 py-2 shadow-sm focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/45">
+            <div className="w-80 rounded-md border border-border bg-input px-3 py-2 shadow-sm squircle focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/45">
               <TokenField
                 aria-label="Token field"
                 className="max-h-32 min-h-16 overflow-y-auto text-body"
@@ -301,7 +301,7 @@ export const DesignSystemShowcase = () => {
         </Section>
 
         <Section title="Mobile header">
-          <div className="squircle overflow-hidden rounded-md border border-border">
+          <div className="overflow-hidden rounded-md border border-border squircle">
             <MobileHeader
               className="flex"
               leading="sidebar"
@@ -327,7 +327,7 @@ export const DesignSystemShowcase = () => {
           description="One mark, one statement, one optional next action. Holds still under reduced motion."
           title="Empty state"
         >
-          <div className="squircle flex min-h-64 rounded-md border border-border">
+          <div className="flex min-h-64 rounded-md border border-border squircle">
             <EmptyMessageState
               action={
                 <Button size="sm" type="button" variant="outline">

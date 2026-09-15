@@ -438,8 +438,8 @@ export const TemplateWorkspace = ({
                                   }
                                   disabled={
                                     !canEditCurrentTemplate ||
-                                    templatesData
-                                      ?.canManageTeamTemplates !== true
+                                    templatesData?.canManageTeamTemplates !==
+                                      true
                                   }
                                   onClick={() => {
                                     scopeField.handleChange("team");

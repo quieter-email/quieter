@@ -170,10 +170,7 @@ export const RegisterDomainDialog = ({
                       value={field.state.value}
                     />
                     {field.state.meta.errors.map((error) => (
-                      <Text
-                        key={error?.message}
-                        tone="destructive"
-                      >
+                      <Text key={error?.message} tone="destructive">
                         {error?.message}
                       </Text>
                     ))}
@@ -206,7 +203,7 @@ export const RegisterDomainDialog = ({
                             <label
                               htmlFor={`domain-mode-${option.value}`}
                               className={cn(
-                                "squircle flex cursor-pointer gap-3 rounded-lg border p-4 transition-colors",
+                                "flex cursor-pointer gap-3 rounded-lg border p-4 transition-colors squircle",
                                 {
                                   "border-border hover:bg-muted/60": !selected,
                                   "border-fg/30 bg-muted/40": selected,

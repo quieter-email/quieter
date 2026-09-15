@@ -70,9 +70,7 @@ export const AlertDialogBody = ({
   <div
     className={cn(
       "px-5 py-4",
-      spacing === undefined
-        ? undefined
-        : alertDialogBodySpacing[spacing],
+      spacing === undefined ? undefined : alertDialogBodySpacing[spacing],
       className
     )}
     {...props}

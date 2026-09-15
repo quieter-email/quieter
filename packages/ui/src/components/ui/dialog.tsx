@@ -70,9 +70,7 @@ export const DialogBody = ({
   <div
     className={cn(
       "px-5 py-4",
-      spacing === undefined
-        ? undefined
-        : dialogBodySpacing[spacing],
+      spacing === undefined ? undefined : dialogBodySpacing[spacing],
       className
     )}
     {...props}

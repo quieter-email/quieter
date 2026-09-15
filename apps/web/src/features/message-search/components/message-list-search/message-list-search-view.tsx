@@ -157,7 +157,7 @@ export const MessageListSearchView = ({
           onBlur={handleSearchFieldBlur}
           ref={fieldRef}
         >
-          <div className="squircle flex min-h-8 min-w-0 items-center gap-1 rounded-xl border border-border bg-control p-0.5 shadow-xs transition-colors duration-150 ease-out has-[input[data-slot=search-input]:focus-visible]:border-ring has-[input[data-slot=search-input]:focus-visible]:ring-1 has-[input[data-slot=search-input]:focus-visible]:ring-ring/45 has-[input[data-slot=search-input]:focus-visible]:outline-none">
+          <div className="flex min-h-8 min-w-0 items-center gap-1 rounded-xl border border-border bg-control p-0.5 shadow-xs transition-colors duration-150 ease-out squircle has-[input[data-slot=search-input]:focus-visible]:border-ring has-[input[data-slot=search-input]:focus-visible]:ring-1 has-[input[data-slot=search-input]:focus-visible]:ring-ring/45 has-[input[data-slot=search-input]:focus-visible]:outline-none">
             <div
               className="flex min-w-0 flex-1 scroll-px-1 scrollbar-none items-center gap-1 overflow-x-auto overscroll-x-contain [&::-webkit-scrollbar]:hidden"
               onMouseDown={(event) => {

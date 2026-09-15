@@ -45,12 +45,7 @@ export const SettingsBackButton = ({
   className?: string;
   onClick: () => void;
 }) => (
-  <Button
-    className={className}
-    onClick={onClick}
-    size="sm"
-    variant="ghost"
-  >
+  <Button className={className} onClick={onClick} size="sm" variant="ghost">
     <HugeiconsIcon aria-hidden className="size-4" icon={ArrowLeft01Icon} />
     {children}
   </Button>
@@ -128,7 +123,7 @@ export const SettingsCard = ({
 }) => (
   <div
     className={cn(
-      "squircle @container overflow-hidden rounded-lg border border-border bg-bg-raised/60",
+      "@container overflow-hidden rounded-lg border border-border bg-bg-raised/60 squircle",
       className
     )}
   >
@@ -260,7 +255,7 @@ export const SettingsRow = ({
       })}
     >
       {icon !== undefined && icon !== null ? (
-        <div className="squircle flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/45 text-muted-fg [&_svg]:size-4">
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/45 text-muted-fg squircle [&_svg]:size-4">
           {icon}
         </div>
       ) : null}
@@ -294,7 +289,7 @@ export const SettingsNavigationRow = ({
   <button
     className={cn(
       settingsSurfaceVariants({ variant: "rowShell" }),
-      "group squircle border border-transparent text-left transition-colors first:rounded-t-lg last:rounded-b-lg hover:bg-muted/60 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none focus-visible:ring-inset",
+      "group border border-transparent text-left transition-colors squircle first:rounded-t-lg last:rounded-b-lg hover:bg-muted/60 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none focus-visible:ring-inset",
       { "pointer-events-none": disabled }
     )}
     disabled={disabled}
@@ -309,7 +304,7 @@ export const SettingsNavigationRow = ({
     type="button"
   >
     {icon !== undefined && icon !== null ? (
-      <div className="squircle flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-muted text-muted-fg transition-colors group-hover:text-fg [&_svg]:size-4">
+      <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-muted text-muted-fg transition-colors squircle group-hover:text-fg [&_svg]:size-4">
         {icon}
       </div>
     ) : null}

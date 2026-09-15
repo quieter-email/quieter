@@ -649,7 +649,7 @@ export const ComposeSurface = ({
             tone="destructive"
           >
             <HugeiconsIcon
-              className="mr-2 mt-0.5 size-4 shrink-0"
+              className="mt-0.5 mr-2 size-4 shrink-0"
               icon={AlertCircleIcon}
             />
             <span className="min-w-0 wrap-break-word">

@@ -266,7 +266,7 @@ const MailboxMenuItem = ({
 }: MailboxMenuItemProps) => (
   <div
     className={cn(
-      "group/item squircle relative isolate rounded-xs hover:bg-muted/60 dark:hover:bg-muted/40",
+      "group/item relative isolate rounded-xs squircle hover:bg-muted/60 dark:hover:bg-muted/40",
       { "bg-muted/60 dark:bg-muted/40": highlighted && !isActive }
     )}
     data-mailbox-switcher-navigation-row
@@ -436,7 +436,7 @@ const SortableGroup = ({
       >
         <div
           className={cn(
-            "group/header squircle relative isolate flex min-h-7 items-center rounded-xs hover:bg-muted/60 dark:hover:bg-muted/40",
+            "group/header relative isolate flex min-h-7 items-center rounded-xs squircle hover:bg-muted/60 dark:hover:bg-muted/40",
             { "bg-muted/60 dark:bg-muted/40": highlighted }
           )}
           data-mailbox-switcher-navigation-row
@@ -458,7 +458,7 @@ const SortableGroup = ({
         >
           <button
             aria-expanded={!collapsed}
-            className="squircle relative z-10 flex min-w-0 flex-1 items-center gap-2 rounded-xs px-2 py-1 text-left focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none"
+            className="relative z-10 flex min-w-0 flex-1 items-center gap-2 rounded-xs px-2 py-1 text-left squircle focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none"
             data-mailbox-switcher-navigation-item
             onClick={() => {
               onToggle(group.id);
@@ -799,10 +799,10 @@ export const MailboxSwitcherDropdown = ({
 
   return (
     <Popover onOpenChange={setIsOpen} open={isOpen}>
-      <div className="squircle relative min-w-0 flex-1 rounded-md hover:bg-muted/60 dark:hover:bg-muted/40">
+      <div className="relative min-w-0 flex-1 rounded-md squircle hover:bg-muted/60 dark:hover:bg-muted/40">
         <PopoverTrigger
           aria-label="Switch mailbox"
-          className="squircle relative z-10 w-full min-w-0 rounded-md px-3 py-2 text-left hover:bg-transparent hover:text-fg active:scale-100"
+          className="relative z-10 w-full min-w-0 rounded-md px-3 py-2 text-left squircle hover:bg-transparent hover:text-fg active:scale-100"
         >
           <AnimatePresence initial={false} mode="popLayout">
             <m.div
@@ -1010,7 +1010,7 @@ export const MailboxSwitcherDropdown = ({
                   {!embedded && (
                     <div className="mt-1">
                       <LinkButton
-                        className="squircle h-auto min-h-7 w-full justify-between rounded-xs px-2.5 py-1"
+                        className="h-auto min-h-7 w-full justify-between rounded-xs px-2.5 py-1 squircle"
                         data-mailbox-switcher-navigation-item
                         search={{ from: "/", mailboxId: "", tab: "mailboxes" }}
                         size="sm"

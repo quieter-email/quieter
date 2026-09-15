@@ -120,7 +120,7 @@ const ManagedRuleActionEditor = (props: MailboxOrganizerContentProps) => {
   } = props;
 
   return (
-    <div className="squircle space-y-2 rounded-lg bg-secondary/40 p-3">
+    <div className="space-y-2 rounded-lg bg-secondary/40 p-3 squircle">
       <p className="text-caption font-medium text-muted-fg">Then</p>
       <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
         {(
@@ -247,7 +247,7 @@ const ManagedRuleLabelsEditor = (props: MailboxOrganizerContentProps) => {
   } = props;
 
   return ruleActionKind === "set-labels" ? (
-    <div className="squircle space-y-2 rounded-lg bg-secondary/40 p-3">
+    <div className="space-y-2 rounded-lg bg-secondary/40 p-3 squircle">
       <p className="text-caption font-medium text-muted-fg">Labels</p>
       {(labelsData ?? []).flatMap((label) =>
         label.type === "user"

@@ -41,5 +41,8 @@ export const Text = ({
   VariantProps<typeof textVariants> & {
     as?: "div" | "p" | "span";
   }) => (
-  <Tag className={cn(textVariants({ size, tone, weight }), className)} {...props} />
+  <Tag
+    className={cn(textVariants({ size, tone, weight }), className)}
+    {...props}
+  />
 );

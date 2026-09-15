@@ -1,9 +1,9 @@
 "use client";
 
 import { Toolbar as ToolbarPrimitive } from "@base-ui/react/toolbar";
-import type { ComponentPropsWithoutRef } from "react";
 import { cva } from "class-variance-authority";
 import type { VariantProps } from "class-variance-authority";
+import type { ComponentPropsWithoutRef } from "react";
 
 import { cn } from "../../lib/cn";
 
@@ -13,7 +13,7 @@ export const Toolbar = ({
 }: ComponentPropsWithoutRef<typeof ToolbarPrimitive.Root>) => (
   <ToolbarPrimitive.Root
     className={cn(
-      "squircle inline-flex min-h-10 items-center gap-1 rounded-lg border border-border bg-bg p-1 shadow-sm",
+      "inline-flex min-h-10 items-center gap-1 rounded-lg border border-border bg-bg p-1 shadow-sm squircle",
       className
     )}
     {...props}
@@ -85,7 +85,7 @@ export const ToolbarInput = ({
 }: ComponentPropsWithoutRef<typeof ToolbarPrimitive.Input>) => (
   <ToolbarPrimitive.Input
     className={cn(
-      "squircle h-8 w-full min-w-32 rounded-md border border-border bg-bg px-3 text-body-sm text-fg shadow-sm transition-colors duration-150 ease-out placeholder:text-muted-fg read-only:cursor-default read-only:bg-bg focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:focus-visible:border-destructive aria-invalid:focus-visible:ring-destructive/45",
+      "h-8 w-full min-w-32 rounded-md border border-border bg-bg px-3 text-body-sm text-fg shadow-sm transition-colors duration-150 ease-out squircle placeholder:text-muted-fg read-only:cursor-default read-only:bg-bg focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:focus-visible:border-destructive aria-invalid:focus-visible:ring-destructive/45",
       className
     )}
     {...props}

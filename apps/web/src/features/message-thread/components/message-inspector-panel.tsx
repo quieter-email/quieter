@@ -3,7 +3,6 @@
 import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
-import { Text } from "@quieter/ui/text";
 import {
   Dialog,
   DialogBody,
@@ -14,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
+import { Text } from "@quieter/ui/text";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
@@ -201,7 +201,7 @@ export const ApiSourceAction = ({
     apiSource.senderMailboxId !== ""
   ) {
     return (
-      <span className="squircle rounded-md bg-muted px-2 py-1 text-caption text-muted-fg">
+      <span className="rounded-md bg-muted px-2 py-1 text-caption text-muted-fg squircle">
         {apiSource.includedInMailbox
           ? "Included in mailbox"
           : "Mailbox copy disabled"}
