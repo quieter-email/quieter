@@ -17,11 +17,7 @@ import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import { cn } from "@quieter/ui/cn";
 import { Field, FieldLabel } from "@quieter/ui/field";
 import { Input } from "@quieter/ui/input";
-import {
-  Progress,
-  ProgressIndicator,
-  ProgressTrack,
-} from "@quieter/ui/progress";
+import { FlowProgress } from "@quieter/ui/progress";
 import {
   Select,
   SelectContent,
@@ -428,10 +424,11 @@ const CustomInboxPlaybook = ({
           {managedMailboxes.length > 0 ? (
             <ConnectedAddressList mailboxes={managedMailboxes} />
           ) : null}
-          <div className="squircle flex h-8 w-full max-w-md items-center rounded-md border border-border bg-bg shadow-sm transition-colors">
+          <div className="flex h-8 w-full max-w-md items-center rounded-md border border-border bg-bg shadow-sm transition-colors squircle">
             <TextFieldInput
               aria-label="Mailbox address"
               chrome="ghost"
+              // oxlint-disable-next-line shadcn/no-restyle -- Local-part input fills its row height.
               className="h-full min-w-0 flex-1 pr-1"
               onChange={(event) => {
                 setLocalPart(
@@ -456,9 +453,8 @@ const CustomInboxPlaybook = ({
             >
               <SelectTrigger
                 aria-label="Mailbox domain"
-                className="h-full rounded-l-none pr-2.5 pl-1.5 shadow-none active:scale-100"
                 size="sm"
-                variant="ghost"
+                variant="attached"
               >
                 <SelectValue />
               </SelectTrigger>
@@ -812,21 +808,16 @@ export const OnboardingScreen = () => {
             <span className="hidden sm:inline">Step </span>
             {step} / {steps.length}
           </span>
-          <Progress
-            aria-label="Onboarding progress"
-            className="hidden w-16 gap-0 sm:grid"
+          <FlowProgress
+            label="Onboarding progress"
             max={steps.length}
             value={step}
-          >
-            <ProgressTrack className="h-1 bg-control-hover">
-              <ProgressIndicator className="bg-fg" />
-            </ProgressTrack>
-          </Progress>
+          />
         </div>
       }
       headerStart={
         <Button
-          className="-ml-2 text-muted-fg hover:text-fg"
+          className="-ml-2"
           disabled={signOutMutation.isPending}
           onClick={() => {
             signOutMutation.mutate(undefined, {
@@ -848,7 +839,6 @@ export const OnboardingScreen = () => {
       previous={
         step === 2 ? (
           <Button
-            className="text-muted-fg hover:text-fg"
             onClick={() => {
               setDirection("back");
               setStep(1);
@@ -868,7 +858,10 @@ export const OnboardingScreen = () => {
             className="relative text-center"
             {...getAppFlyInMotion({ animate: true, index: 0, reducedMotion })}
           >
-            <h1 className="font-sans text-title-lg leading-[1.32] font-normal tracking-[-0.014em] text-balance text-fg">
+            <h1
+              // oxlint-disable-next-line shadcn/no-arbitrary-values -- Hero display type shared with the status screen.
+              className="font-sans text-title-lg leading-[1.32] font-normal tracking-[-0.014em] text-balance text-fg"
+            >
               Welcome to Quieter
             </h1>
           </m.header>
@@ -1000,7 +993,10 @@ export const OnboardingScreen = () => {
       ) : (
         <div className="mx-auto max-w-xl">
           <header>
-            <h1 className="font-sans text-title-md leading-[1.32] font-normal tracking-[-0.014em] text-balance text-fg">
+            <h1
+              // oxlint-disable-next-line shadcn/no-arbitrary-values -- Hero display type shared with the status screen.
+              className="font-sans text-title-md leading-[1.32] font-normal tracking-[-0.014em] text-balance text-fg"
+            >
               Set up what you need
             </h1>
           </header>

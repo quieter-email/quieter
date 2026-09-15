@@ -1,3 +1,5 @@
+import { Text } from "@quieter/ui/text";
+
 export const SitePasswordRouteComponent = ({
   hasSitePasswordError,
   returnTo,
@@ -30,9 +32,7 @@ export const SitePasswordRouteComponent = ({
           type="password"
         />
         {hasSitePasswordError && (
-          <p className="text-body text-destructive">
-            That password did not work.
-          </p>
+          <Text tone="destructive">That password did not work.</Text>
         )}
         <button
           className="inline-flex h-10 items-center justify-center rounded-md border border-primary bg-primary px-4 text-body font-medium text-primary-fg shadow-sm hover:bg-primary/90"

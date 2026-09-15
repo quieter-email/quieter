@@ -13,12 +13,12 @@ import { cn } from "@quieter/ui/cn";
 import {
   ComposerEditorFrame,
   ComposerFieldGroup,
-  composerFieldControlClassName,
   ComposerFieldRow,
   ComposerFrame,
 } from "@quieter/ui/composer-chrome";
 import { FieldControl, FieldError } from "@quieter/ui/field";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { Text } from "@quieter/ui/text";
 import { ToolbarButton } from "@quieter/ui/toolbar";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -125,7 +125,7 @@ const ComposeFormField = ({
         >
           <FieldControl
             aria-invalid={!!error}
-            className={composerFieldControlClassName}
+            chrome="composer"
             disabled={disabled}
             onBlur={() => {
               field.handleBlur();
@@ -338,9 +338,14 @@ export const ComposeSurface = ({
       data-compose-surface
     >
       <ComposerFrame
-        className={cn("p-4 sm:p-6", {
-          "my-0 max-w-none flex-none p-0 sm:p-0": isInline,
-        })}
+        className={cn(
+          // oxlint-disable-next-line shadcn/no-restyle -- Composer frame keeps its padded canvas.
+          "p-4 sm:p-6",
+          {
+            // oxlint-disable-next-line shadcn/no-restyle -- Inline composer collapses the frame.
+            "my-0 max-w-none flex-none p-0 sm:p-0": isInline,
+          }
+        )}
       >
         <p className="sr-only">
           {getDraftStatusMessage(compose.state.draft, persistDrafts)}
@@ -382,7 +387,7 @@ export const ComposeSurface = ({
                     "min-h-64 flex-none": isInline,
                   })}
                 >
-                  <ComposerFieldGroup className="rounded-none border-0 bg-transparent shadow-none">
+                  <ComposerFieldGroup bare>
                     <form.Field name="to">
                       {(recipientField) => {
                         const [error] = recipientField.state.meta.errors;
@@ -400,18 +405,11 @@ export const ComposeSurface = ({
                                   aria-controls="compose-cc-field"
                                   aria-expanded={state.showCc}
                                   aria-pressed={state.showCc}
-                                  className={cn(
-                                    "h-7 px-1.5 text-caption text-muted-fg",
-                                    {
-                                      "bg-control-active text-fg": state.showCc,
-                                    }
-                                  )}
                                   onClick={() => {
                                     toggleRecipientVisibility("cc");
                                   }}
-                                  size="sm"
                                   type="button"
-                                  variant="ghost"
+                                  variant="chip"
                                 >
                                   Cc
                                 </Button>
@@ -419,19 +417,11 @@ export const ComposeSurface = ({
                                   aria-controls="compose-bcc-field"
                                   aria-expanded={state.showBcc}
                                   aria-pressed={state.showBcc}
-                                  className={cn(
-                                    "h-7 px-1.5 text-caption text-muted-fg",
-                                    {
-                                      "bg-control-active text-fg":
-                                        state.showBcc,
-                                    }
-                                  )}
                                   onClick={() => {
                                     toggleRecipientVisibility("bcc");
                                   }}
-                                  size="sm"
                                   type="button"
-                                  variant="ghost"
+                                  variant="chip"
                                 >
                                   Bcc
                                 </Button>
@@ -440,7 +430,7 @@ export const ComposeSurface = ({
                           >
                             <FieldControl
                               aria-invalid={!!error}
-                              className={composerFieldControlClassName}
+                              chrome="composer"
                               data-compose-recipient-field
                               disabled={!canEditBody}
                               onBlur={() => {
@@ -533,7 +523,6 @@ export const ComposeSurface = ({
                               ? "Hide quoted message"
                               : "Show quoted message"
                           }
-                          className="h-7 px-2 text-muted-fg"
                           onClick={() => {
                             setShowQuotedContent((current) => !current);
                           }}
@@ -551,9 +540,9 @@ export const ComposeSurface = ({
                     chrome="footer"
                     leading={
                       <ToolbarButton
-                        className="bg-primary px-3 text-primary-fg shadow-sm hover:bg-primary/90 hover:text-primary-fg active:bg-primary/85 active:text-primary-fg"
                         disabled={!canSubmitCompose}
                         type="submit"
+                        variant="primary"
                       >
                         {state.draft.saveStatus === "sending" ? (
                           <HugeiconsIcon
@@ -615,11 +604,11 @@ export const ComposeSurface = ({
                             aria-label={
                               state.draft.draftId ? "Discard draft" : "Discard"
                             }
-                            className="size-8 px-0"
                             disabled={state.draft.saveStatus === "sending"}
                             onClick={() => {
                               void discardActiveDraft();
                             }}
+                            size="icon"
                             type="button"
                           >
                             <HugeiconsIcon icon={Delete02Icon} />
@@ -628,11 +617,11 @@ export const ComposeSurface = ({
                         <IconButtonTooltip label="Close composer">
                           <ToolbarButton
                             aria-label="Close composer"
-                            className="size-8 px-0"
                             disabled={state.draft.saveStatus === "sending"}
                             onClick={() => {
                               void closeComposeDialog();
                             }}
+                            size="icon"
                             type="button"
                           >
                             <HugeiconsIcon icon={Cancel01Icon} />
@@ -656,19 +645,21 @@ export const ComposeSurface = ({
         </form.Field>
 
         {state.draft.errorMessage ? (
-          <div
+          <Text
+            as="div"
             aria-live="polite"
-            className="flex min-w-0 shrink-0 items-start gap-2 text-body text-destructive"
+            className="flex min-w-0 shrink-0 items-start"
             role="alert"
+            tone="destructive"
           >
             <HugeiconsIcon
-              className="mt-0.5 size-4 shrink-0"
+              className="mt-0.5 mr-2 size-4 shrink-0"
               icon={AlertCircleIcon}
             />
             <span className="min-w-0 wrap-break-word">
               {state.draft.errorMessage}
             </span>
-          </div>
+          </Text>
         ) : null}
       </ComposerFrame>
     </form>

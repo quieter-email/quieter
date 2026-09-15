@@ -46,7 +46,8 @@ const DnsCopyCell = ({ value }: { value: string }) => (
   <button
     aria-label={`Copy ${value}`}
     className={cn(
-      "squircle max-w-full min-w-0 rounded-md px-1.5 py-0.5 text-left font-mono text-caption text-fg",
+      "max-w-full min-w-0 rounded-md px-1.5 py-0.5 text-left font-mono text-caption text-fg squircle",
+      // oxlint-disable-next-line shadcn/no-arbitrary-values -- Explicit transition properties for the copy affordance.
       "transition-[transform,background-color] duration-100 ease-out",
       "hover:bg-muted/70",
       "active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
@@ -143,7 +144,7 @@ export const DomainStatusSummary = ({
 }) => (
   <section
     className={cn(
-      "squircle relative overflow-hidden rounded-xl border p-5",
+      "relative overflow-hidden rounded-xl border p-5 squircle",
       getStatusSectionClass(status.tone)
     )}
   >
@@ -243,7 +244,7 @@ const DomainDnsRecordsTable = ({
   dnsChecks: DomainDnsCheck[];
   records: DomainDnsRecord[];
 }) => (
-  <div className="squircle overflow-x-auto rounded-lg border border-border bg-bg-raised/58">
+  <div className="overflow-x-auto rounded-lg border border-border bg-bg-raised/58 squircle">
     <table
       aria-label="DNS records"
       className="w-full min-w-160 border-collapse p-2"

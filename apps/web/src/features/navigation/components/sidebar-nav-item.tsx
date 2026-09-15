@@ -37,7 +37,7 @@ export const SidebarNavItem = ({
 }: SidebarNavItemProps) => (
   <div
     className={cn(
-      "group squircle relative flex w-full items-center rounded-md py-px",
+      "group relative flex w-full items-center rounded-md py-px squircle",
       {
         "hover:bg-muted/60 dark:hover:bg-muted/40": active !== true,
       }
@@ -49,6 +49,7 @@ export const SidebarNavItem = ({
       <SidebarActiveSurface className={activeSurfaceClassName} />
     ) : null}
     <Button
+      // oxlint-disable-next-line shadcn/require-static-classes -- Forwards the caller's classes to the shared button.
       className={cn(sidebarNavButtonVariants(), className)}
       onBlur={onBlur}
       onFocus={onFocus}

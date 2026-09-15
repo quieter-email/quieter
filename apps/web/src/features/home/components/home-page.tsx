@@ -51,6 +51,7 @@ export const HomePage = () => (
           </RevealChild>
           <RevealChild>
             <LinkButton
+              // oxlint-disable-next-line shadcn/no-restyle -- home-access is the documented home.css exception.
               className="home-access"
               search={{ returnTo: "/auth" }}
               to="/site-password"

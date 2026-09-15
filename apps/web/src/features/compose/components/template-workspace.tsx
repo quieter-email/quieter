@@ -25,7 +25,6 @@ import { cn } from "@quieter/ui/cn";
 import {
   ComposerEditorFrame,
   ComposerFieldGroup,
-  composerFieldControlClassName,
   ComposerFieldRow,
   ComposerFrame,
 } from "@quieter/ui/composer-chrome";
@@ -85,7 +84,11 @@ export const TemplateWorkspace = ({
   const queryOptions = orpc.mailTemplates.list.queryOptions({
     input: { mailboxId },
   });
-  const templatesQuery = useQuery(queryOptions);
+  const {
+    data: templatesData,
+    isError: isTemplatesError,
+    isPending: isTemplatesPending,
+  } = useQuery(queryOptions);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteTemplate, setDeleteTemplate] = useState<MailTemplateItem | null>(
     null
@@ -178,7 +181,7 @@ export const TemplateWorkspace = ({
       toast.success("Template deleted.");
     },
   });
-  const templates = templatesQuery.data?.templates ?? [];
+  const templates = templatesData?.templates ?? [];
   const normalizedSearch = search.trim().toLowerCase();
   const filteredTemplates = normalizedSearch
     ? templates.filter((template) =>
@@ -190,14 +193,14 @@ export const TemplateWorkspace = ({
   const canEditCurrentTemplate = !currentTemplate || currentTemplate.canEdit;
   const isSaving = createMutation.isPending || updateMutation.isPending;
   let templateQueryState: ReactNode = null;
-  if (templatesQuery.isPending) {
+  if (isTemplatesPending) {
     templateQueryState = (
       <div className="flex items-center justify-center gap-2 px-3 py-10 text-caption text-muted-fg">
         <HugeiconsIcon className="size-3.5 animate-spin" icon={Loading03Icon} />
         Loading templates
       </div>
     );
-  } else if (templatesQuery.isError) {
+  } else if (isTemplatesError) {
     templateQueryState = (
       <p className="px-3 py-10 text-center text-caption/5 text-destructive">
         Could not load templates.
@@ -262,6 +265,7 @@ export const TemplateWorkspace = ({
             />
             <Input
               aria-labelledby="template-workspace-search-label"
+              // oxlint-disable-next-line shadcn/no-restyle -- Search input leaves room for its leading icon.
               className="pl-9"
               id="template-workspace-search"
               onChange={(event) => {
@@ -351,7 +355,7 @@ export const TemplateWorkspace = ({
                 {(field) => (
                   <ComposerFieldRow divided={false} label="Name">
                     <FieldControl
-                      className={composerFieldControlClassName}
+                      chrome="composer"
                       disabled={!canEditCurrentTemplate}
                       onBlur={() => {
                         field.handleBlur();
@@ -397,13 +401,13 @@ export const TemplateWorkspace = ({
                           <IconButtonTooltip label="Insert placeholder">
                             <ToolbarButton
                               aria-label="Insert placeholder"
-                              className="size-8 px-0"
                               disabled={!canEditCurrentTemplate}
                               onClick={() =>
                                 templateEditorRef.current?.insertPlaceholder(
                                   "Placeholder"
                                 )
                               }
+                              size="icon"
                               type="button"
                             >
                               <HugeiconsIcon icon={Add01Icon} />
@@ -416,15 +420,16 @@ export const TemplateWorkspace = ({
                                   aria-pressed={
                                     scopeField.state.value === "personal"
                                   }
-                                  className={cn({
-                                    "bg-control-active text-fg shadow-sm":
-                                      scopeField.state.value === "personal",
-                                  })}
                                   disabled={!canEditCurrentTemplate}
                                   onClick={() => {
                                     scopeField.handleChange("personal");
                                   }}
                                   type="button"
+                                  variant={
+                                    scopeField.state.value === "personal"
+                                      ? "selected"
+                                      : undefined
+                                  }
                                 >
                                   Personal
                                 </ToolbarButton>
@@ -432,19 +437,20 @@ export const TemplateWorkspace = ({
                                   aria-pressed={
                                     scopeField.state.value === "team"
                                   }
-                                  className={cn({
-                                    "bg-control-active text-fg shadow-sm":
-                                      scopeField.state.value === "team",
-                                  })}
                                   disabled={
                                     !canEditCurrentTemplate ||
-                                    templatesQuery.data
-                                      ?.canManageTeamTemplates !== true
+                                    templatesData?.canManageTeamTemplates !==
+                                      true
                                   }
                                   onClick={() => {
                                     scopeField.handleChange("team");
                                   }}
                                   type="button"
+                                  variant={
+                                    scopeField.state.value === "team"
+                                      ? "selected"
+                                      : undefined
+                                  }
                                 >
                                   Team
                                 </ToolbarButton>
@@ -465,9 +471,9 @@ export const TemplateWorkspace = ({
                           ) : null}
                           {canEditCurrentTemplate ? (
                             <ToolbarButton
-                              className="bg-primary text-primary-fg shadow-sm hover:bg-primary/90 hover:text-primary-fg active:bg-primary/85 active:text-primary-fg"
                               disabled={isSaving}
                               type="submit"
+                              variant="primary"
                             >
                               {isSaving ? (
                                 <HugeiconsIcon
@@ -514,7 +520,10 @@ export const TemplateWorkspace = ({
                 : "This removes the template from your saved templates."}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogBody className="text-body text-muted-fg">
+          <AlertDialogBody
+            // oxlint-disable-next-line shadcn/no-restyle -- Danger copy keeps body text.
+            className="text-body text-muted-fg"
+          >
             Messages that already used this template will not change.
           </AlertDialogBody>
           <AlertDialogFooter>

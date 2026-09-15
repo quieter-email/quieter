@@ -192,9 +192,10 @@ const UsageBreakdown = ({
 
   return (
     <div className="mt-3">
-      <div className="squircle flex h-3 overflow-hidden rounded-full bg-muted shadow-inner ring-1 ring-border/60">
+      <div className="flex h-3 overflow-hidden rounded-full bg-muted shadow-inner ring-1 ring-border/60 squircle">
         <div
           className="flex h-full min-w-1 overflow-hidden"
+          // oxlint-disable-next-line shadcn/no-inline-styles -- Bar width is measured from cost data.
           style={{ width: `${usedPercent}%` }}
         >
           {items.flatMap((item) => {
@@ -210,11 +211,16 @@ const UsageBreakdown = ({
             return [
               <Tooltip key={item.kind}>
                 <TooltipTrigger
+                  // oxlint-disable-next-line shadcn/no-arbitrary-values, shadcn/no-restyle -- Segments are measured per cost slice with a brightness hover.
                   className={`${item.className} min-w-1 transition-[filter] hover:brightness-110`}
                   render={<span />}
+                  // oxlint-disable-next-line shadcn/no-inline-styles -- Segment flex is measured from cost data.
                   style={{ flexBasis: 0, flexGrow: item.costCents }}
                 />
-                <TooltipContent className="min-w-40 px-3 py-2">
+                <TooltipContent
+                  // oxlint-disable-next-line shadcn/no-restyle -- Usage tooltip keeps its card metrics.
+                  className="min-w-40 px-3 py-2"
+                >
                   <div className="flex items-center justify-between gap-5">
                     <span>{item.label}</span>
                     <span className="font-mono font-medium">
@@ -374,10 +380,7 @@ const ManagedUsageSettingsControls = ({
   setLimitDollars: (value: number | null) => void;
   setOverageEnabled: (value: boolean) => void;
 }) => (
-  <Fieldset
-    disabled={isSaving}
-    className="gap-0 rounded-none border-0 bg-transparent p-0"
-  >
+  <Fieldset bare disabled={isSaving}>
     <SettingsInsetRows>
       <SettingsInsetRow className="justify-between gap-6">
         <SettingsRowText
@@ -423,6 +426,7 @@ const ManagedUsageSettingsControls = ({
               <NumberFieldDecrement />
               <NumberFieldInput
                 aria-label="Monthly overage limit"
+                // oxlint-disable-next-line shadcn/no-restyle -- Limit reads as a numeral.
                 className="font-mono"
                 placeholder="No limit"
               />

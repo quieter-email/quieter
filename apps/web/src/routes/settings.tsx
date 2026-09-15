@@ -12,30 +12,7 @@ const SettingsPendingPage = () => {
   return <SettingsLoadingPage tab={tab} />;
 };
 
-// react-doctor-disable-next-line react-doctor/tanstack-start-route-property-order -- The repository's TanStack Router lint rule owns this generated route property order.
 export const Route = createFileRoute("/settings")({
-  loader: async () => {
-    const user = await getSessionUser();
-
-    if (!user) {
-      throw redirect({
-        to: "/home",
-      });
-    }
-
-    if (user.needsOnboarding) {
-      throw redirect({
-        search: { returnTo: "/settings" },
-        to: "/onboarding",
-      });
-    }
-
-    return {
-      user,
-    };
-  },
-  pendingComponent: SettingsPendingPage,
-  ssr: "data-only",
   validateSearch: zodValidator(
     z.object({
       billing: z.enum(["canceled", "success"]).optional(),
@@ -74,4 +51,26 @@ export const Route = createFileRoute("/settings")({
         .default("overview"),
     })
   ),
+  ssr: "data-only",
+  loader: async () => {
+    const user = await getSessionUser();
+
+    if (!user) {
+      throw redirect({
+        to: "/home",
+      });
+    }
+
+    if (user.needsOnboarding) {
+      throw redirect({
+        search: { returnTo: "/settings" },
+        to: "/onboarding",
+      });
+    }
+
+    return {
+      user,
+    };
+  },
+  pendingComponent: SettingsPendingPage,
 });

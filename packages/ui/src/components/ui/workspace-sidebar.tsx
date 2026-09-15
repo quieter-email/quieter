@@ -40,10 +40,7 @@ export const WorkspaceSidebar = ({
 
   return (
     <LazyMotion features={domMax}>
-      <aside
-        className="relative hidden h-full shrink-0 bg-transparent text-fg lg:flex lg:flex-col"
-        style={{ width: "272px" }}
-      >
+      <aside className="relative hidden h-full w-68 shrink-0 bg-transparent text-fg lg:flex lg:flex-col">
         {children()}
       </aside>
       <DialogPrimitive.Root

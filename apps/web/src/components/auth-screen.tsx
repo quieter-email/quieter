@@ -62,19 +62,18 @@ const AuthLastUsedHint = () => (
   <LazyMotion features={domAnimation}>
     <span
       aria-hidden
-      className="squircle pointer-events-none absolute -inset-e-2.5 -top-2.5 isolate overflow-hidden rounded-md p-px shadow-sm *:pointer-events-none"
+      className="pointer-events-none absolute -inset-e-2.5 -top-2.5 isolate overflow-hidden rounded-md p-px shadow-sm squircle *:pointer-events-none"
     >
       <m.span
         animate={{ rotate: 360 }}
         aria-hidden
-        className="absolute top-1/2 left-1/2 aspect-square w-[300%] -translate-1/2"
-        style={{
-          background:
-            "conic-gradient(from 0deg, var(--border) 0deg, var(--border) 270deg, color-mix(in oklch, var(--primary) 100%, var(--border)) 325deg, var(--border) 360deg)",
-        }}
+        className="auth-sheen absolute top-1/2 left-1/2 aspect-square w-[300%] -translate-1/2"
         transition={{ duration: 5, ease: "linear", repeat: Infinity }}
       />
-      <span className="squircle relative block rounded-[inherit] bg-bg-raised px-2 py-1 text-micro font-medium tracking-wide text-muted-fg">
+      <span
+        // oxlint-disable-next-line shadcn/no-arbitrary-values -- Inherits the parent badge radius by design.
+        className="relative block rounded-[inherit] bg-bg-raised px-2 py-1 text-micro font-medium tracking-wide text-muted-fg squircle"
+      >
         Last used
       </span>
     </span>
@@ -302,11 +301,7 @@ const AuthCredentials = ({
             }
 
             return (
-              <Button
-                className="group relative w-full justify-center gap-3"
-                disabled={!canSubmit}
-                type="submit"
-              >
+              <Button disabled={!canSubmit} size="block" type="submit">
                 {authClient.isLastUsedLoginMethod("magic-link") && (
                   <AuthLastUsedHint />
                 )}
@@ -333,11 +328,12 @@ const AuthCredentials = ({
       <div className="mt-6 mb-3 h-px w-full bg-border" />
 
       <Button
-        className="group relative mt-3 w-full cursor-pointer justify-center gap-3"
+        className="mt-3"
         disabled={googleMutation.isPending}
         onClick={() => {
           googleMutation.mutate();
         }}
+        size="block"
         type="button"
         variant="outline"
       >
@@ -353,11 +349,12 @@ const AuthCredentials = ({
       </Button>
 
       <Button
-        className="group relative mt-3 w-full justify-center gap-3"
+        className="mt-3"
         disabled={passkeyMutation.isPending}
         onClick={() => {
           passkeyMutation.mutate();
         }}
+        size="block"
         type="button"
         variant="outline"
       >
@@ -472,7 +469,11 @@ export const AuthScreen = () => {
           not. The visual sits second and is ordered right on wide viewports. */}
       <div className="relative z-10 flex size-full min-h-0 items-center justify-center px-6">
         <div className="w-full max-w-md">
-          <Brand className="mb-8 h-8 w-32 text-fg" variant="combination" />
+          <Brand
+            // oxlint-disable-next-line shadcn/no-restyle -- Auth lockup keeps its brand metrics.
+            className="mb-8 h-8 w-32 text-fg"
+            variant="combination"
+          />
           <h1 className="text-title-md font-medium tracking-tight text-fg">
             Continue to Quieter
           </h1>

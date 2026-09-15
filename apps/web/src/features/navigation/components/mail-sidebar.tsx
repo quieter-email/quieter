@@ -89,11 +89,12 @@ const SidebarHelpMenu = ({
 
   return (
     <DropdownMenu onOpenChange={setIsOpen} open={isOpen}>
-      <div className="squircle relative rounded-md hover:bg-muted/60 dark:hover:bg-muted/40">
+      <div className="relative rounded-md squircle hover:bg-muted/60 dark:hover:bg-muted/40">
         <IconButtonTooltip label="Help and legal">
           <DropdownMenuTrigger
+            appearance="icon-transparent"
             aria-label="Help and legal"
-            className="relative z-10 inline-flex size-7 shrink-0 items-center justify-center rounded-md bg-transparent text-muted-fg hover:bg-transparent hover:text-fg focus-visible:bg-transparent focus-visible:text-fg data-popup-open:bg-transparent data-popup-open:text-fg"
+            className="relative z-10"
           >
             <HugeiconsIcon
               aria-hidden
@@ -198,7 +199,8 @@ const SidebarInboxSection = ({
       >
         <Button
           aria-disabled={embedded === true || selectedMailboxProvider === "api"}
-          className="w-full justify-start rounded-md px-4"
+          // oxlint-disable-next-line shadcn/no-restyle -- Compose action stays full-width and left-aligned.
+          className="w-full justify-start px-4"
           disabled={
             !selectedMailboxId ||
             embedded === true ||
@@ -266,9 +268,10 @@ const SidebarFooter = ({
     index={9}
   >
     <div className="flex items-center gap-1">
-      <div className="squircle relative min-w-0 flex-1 rounded-md hover:bg-muted/60 dark:hover:bg-muted/40">
+      <div className="relative min-w-0 flex-1 rounded-md squircle hover:bg-muted/60 dark:hover:bg-muted/40">
         <LinkButton
           aria-label="Settings"
+          // oxlint-disable-next-line shadcn/no-restyle -- Sidebar settings link keeps its row treatment.
           className="group relative z-10 w-full justify-start bg-transparent hover:bg-transparent active:scale-100"
           onClick={onRequestClose}
           search={{

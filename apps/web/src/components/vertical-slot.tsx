@@ -119,6 +119,7 @@ export const VerticalSlot = ({
       {items.map((item) => (
         <div
           className={cn(
+            // oxlint-disable-next-line shadcn/no-arbitrary-values -- Crossfade needs the exact property list.
             "absolute inset-0 transition-[translate,opacity] ease-out will-change-transform",
             {
               "-translate-y-full opacity-0": item.phase === "enter",
@@ -137,6 +138,7 @@ export const VerticalSlot = ({
               }));
             }
           }}
+          // oxlint-disable-next-line shadcn/no-inline-styles -- Slot timing comes from the transition definition.
           style={{ transitionDuration: `${duration}ms` }}
         >
           {item.children}

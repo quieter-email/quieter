@@ -1,5 +1,6 @@
 "use client";
 
+import { Text } from "@quieter/ui/text";
 import { TooltipGroup } from "@quieter/ui/tooltip";
 import { useNavigate } from "@tanstack/react-router";
 import type { ReactNode } from "react";
@@ -113,9 +114,9 @@ export const OrganizationSettingsPanel = () => {
         <SettingsBackButton onClick={navigateToOrganizationsList}>
           Teams
         </SettingsBackButton>
-        <p className="text-body text-destructive">
+        <Text tone="destructive">
           {loadError.message ?? "Could not load teams."}
-        </p>
+        </Text>
       </>
     );
   } else if (selectedOrganization) {

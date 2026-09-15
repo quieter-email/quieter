@@ -104,9 +104,8 @@ export const ChatTranscript = ({
               </p>
               {onRetry === undefined ? null : (
                 <Button
-                  className="h-7 shrink-0 px-2 text-caption font-medium"
                   onClick={onRetry}
-                  size="sm"
+                  size="compact"
                   type="button"
                   variant="ghost"
                 >
@@ -122,6 +121,7 @@ export const ChatTranscript = ({
           <IconButtonTooltip label="Scroll to latest message">
             <Button
               aria-label="Scroll to latest message"
+              // oxlint-disable-next-line shadcn/no-restyle -- Floating scroll button keeps its elevated treatment.
               className="pointer-events-auto rounded-full bg-bg-raised shadow-elevation"
               onClick={() => {
                 scrollToLatest("smooth");

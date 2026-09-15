@@ -187,6 +187,7 @@ export const GmailUsefulDetailCard = ({
         <div className="flex shrink-0 items-center gap-0.5 justify-self-end">
           {copyValue ? (
             <Button
+              // oxlint-disable-next-line shadcn/no-restyle -- Copy button keeps its secondary treatment.
               className="mr-1 h-8 gap-1.5 rounded-lg bg-secondary/65 px-2.5 text-caption hover:bg-secondary"
               onClick={() => void copyText(copyValue)}
               size="sm"

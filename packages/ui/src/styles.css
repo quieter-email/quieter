@@ -348,6 +348,15 @@
   }
 }
 
+/* The base layer already shapes every corner as a superellipse, so this
+   only re-asserts the default, e.g. under a not-squircle ancestor. It exists
+   so the intent reads at the usage site and the class resolves to real CSS. */
+@utility squircle {
+  @supports (corner-shape: squircle) {
+    corner-shape: superellipse(1.825);
+  }
+}
+
 @keyframes toast-shake-odd {
   0%,
   100% {

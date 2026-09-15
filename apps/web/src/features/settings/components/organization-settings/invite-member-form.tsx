@@ -4,6 +4,7 @@ import { Loading03Icon, UserAdd01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { Text } from "@quieter/ui/text";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -99,6 +100,7 @@ export const InviteMemberForm = ({
                   aria-describedby={hasErrors ? emailErrorId : undefined}
                   aria-invalid={hasErrors}
                   chrome="ghost"
+                  // oxlint-disable-next-line shadcn/no-restyle -- Ghost input fills its row.
                   className="h-8 px-0"
                   name={field.name}
                   onBlur={() => {
@@ -114,12 +116,9 @@ export const InviteMemberForm = ({
                 {hasErrors && (
                   <div id={emailErrorId} role="alert">
                     {field.state.meta.errors.map((error) => (
-                      <p
-                        className="text-body text-destructive"
-                        key={error?.message}
-                      >
+                      <Text key={error?.message} tone="destructive">
                         {error?.message}
-                      </p>
+                      </Text>
                     ))}
                   </div>
                 )}

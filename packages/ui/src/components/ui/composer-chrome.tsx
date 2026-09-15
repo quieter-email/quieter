@@ -24,13 +24,17 @@ export const ComposerFrame = ({
 
 /** The one element that holds every header input, hairline-divided rather than boxed. */
 export const ComposerFieldGroup = ({
+  bare = false,
   children,
   className,
   ...props
-}: ComponentPropsWithoutRef<"div">) => (
+}: ComponentPropsWithoutRef<"div"> & {
+  bare?: boolean;
+}) => (
   <div
     className={cn(
-      "squircle w-full shrink-0 overflow-hidden rounded-lg border border-border bg-control",
+      "w-full shrink-0 overflow-hidden rounded-lg border border-border bg-control",
+      { "rounded-none border-0 bg-transparent shadow-none": bare },
       className
     )}
     {...props}
@@ -38,13 +42,6 @@ export const ComposerFieldGroup = ({
     {children}
   </div>
 );
-
-/**
- * Header inputs deliberately carry no focus ring; the row tints instead, which keeps
- * the group reading as one surface while still marking where the caret is.
- */
-export const composerFieldControlClassName =
-  "h-11 min-w-0 flex-1 rounded-none border-0 bg-transparent px-0 text-body shadow-none read-only:bg-transparent focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-none";
 
 const composerFieldRowClassName =
   "flex items-center gap-2.5 px-5 transition-colors duration-150 ease-out focus-within:bg-bg-surface";
@@ -90,7 +87,7 @@ export const ComposerEditorFrame = ({
 }: ComponentPropsWithoutRef<"div">) => (
   <div
     className={cn(
-      "squircle flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-control shadow-sm transition-shadow duration-150 focus-within:shadow-md",
+      "flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-control shadow-sm transition-shadow duration-150 squircle focus-within:shadow-md",
       className
     )}
     {...props}

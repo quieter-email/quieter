@@ -321,6 +321,7 @@ export const MessageListScrollPane = ({
 
   return (
     <div
+      // oxlint-disable-next-line shadcn/no-arbitrary-values -- Floor the bottom inset at 1rem; max() cannot be a token.
       className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-2 pt-1 pb-[max(1rem,env(safe-area-inset-bottom))] contain-strict @sm:px-4"
       onScroll={() => {
         if (selection.isProgrammaticScrollToTopRef.current) {
@@ -351,6 +352,7 @@ export const MessageListScrollPane = ({
         <ul
           className="relative"
           style={{
+            // oxlint-disable-next-line shadcn/no-inline-styles -- Height is measured from the virtualizer.
             height: `${messageVirtualizer.getTotalSize()}px`,
           }}
         >

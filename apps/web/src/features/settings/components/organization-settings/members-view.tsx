@@ -74,7 +74,9 @@ export const MembersView = ({
         {showMemberSearch && (
           <TextField
             className={cn(
+              // oxlint-disable-next-line shadcn/require-static-classes -- Shared surface scale lives in settings-layout.
               settingsSurfaceVariants({ variant: "insetRow" }),
+              // oxlint-disable-next-line shadcn/require-static-classes -- Shared surface scale lives in settings-layout.
               settingsSurfaceVariants({ variant: "divider" }),
               "relative"
             )}
@@ -87,6 +89,7 @@ export const MembersView = ({
             <TextFieldInput
               aria-label="Search members"
               chrome="ghost"
+              // oxlint-disable-next-line shadcn/no-restyle -- Search input leaves room for its leading icon.
               className="h-8 pl-7"
               onChange={(event) => {
                 setMemberSearch(event.target.value);

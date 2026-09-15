@@ -1,3 +1,4 @@
+/* oxlint-disable shadcn/no-raw-colors -- Google brand mark: the gradient stops are literal brand colors, not theme tokens. */
 export const GoogleLogo = ({ className }: { className?: string }) => (
   <svg
     aria-hidden="true"

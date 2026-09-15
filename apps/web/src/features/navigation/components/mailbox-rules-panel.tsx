@@ -24,7 +24,6 @@ import {
 import type { RouterOutputs } from "@quieter/orpc";
 import { Button } from "@quieter/ui/button";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
-import { cn } from "@quieter/ui/cn";
 import { FullPageDialogDescription } from "@quieter/ui/full-page-dialog";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
@@ -120,7 +119,7 @@ const ManagedRuleActionEditor = (props: MailboxOrganizerContentProps) => {
   } = props;
 
   return (
-    <div className="squircle space-y-2 rounded-lg bg-secondary/40 p-3">
+    <div className="space-y-2 rounded-lg bg-secondary/40 p-3 squircle">
       <p className="text-caption font-medium text-muted-fg">Then</p>
       <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
         {(
@@ -133,16 +132,13 @@ const ManagedRuleActionEditor = (props: MailboxOrganizerContentProps) => {
         ).map(([kind, label]) => (
           <Button
             aria-pressed={ruleActionKind === kind}
-            className={cn({
-              "bg-bg-surface shadow-sm": ruleActionKind === kind,
-            })}
             key={kind}
             onClick={() => {
               setRuleActionKind(kind);
             }}
             size="sm"
             type="button"
-            variant="ghost"
+            variant="option"
           >
             {label}
           </Button>
@@ -153,16 +149,13 @@ const ManagedRuleActionEditor = (props: MailboxOrganizerContentProps) => {
           {[true, false].map((read) => (
             <Button
               aria-pressed={ruleReadState === read}
-              className={cn({
-                "bg-bg-surface shadow-sm": ruleReadState === read,
-              })}
               key={String(read)}
               onClick={() => {
                 setRuleReadState(read);
               }}
               size="sm"
               type="button"
-              variant="ghost"
+              variant="option"
             >
               {read ? "Mark read" : "Mark unread"}
             </Button>
@@ -175,17 +168,13 @@ const ManagedRuleActionEditor = (props: MailboxOrganizerContentProps) => {
             (destination) => (
               <Button
                 aria-pressed={ruleMoveDestination === destination}
-                className={cn({
-                  "bg-bg-surface shadow-sm":
-                    ruleMoveDestination === destination,
-                })}
                 key={destination}
                 onClick={() => {
                   setRuleMoveDestination(destination);
                 }}
                 size="sm"
                 type="button"
-                variant="ghost"
+                variant="option"
               >
                 {destination === "inbox"
                   ? "Move to Inbox"
@@ -247,7 +236,7 @@ const ManagedRuleLabelsEditor = (props: MailboxOrganizerContentProps) => {
   } = props;
 
   return ruleActionKind === "set-labels" ? (
-    <div className="squircle space-y-2 rounded-lg bg-secondary/40 p-3">
+    <div className="space-y-2 rounded-lg bg-secondary/40 p-3 squircle">
       <p className="text-caption font-medium text-muted-fg">Labels</p>
       {(labelsData ?? []).flatMap((label) =>
         label.type === "user"
@@ -386,16 +375,13 @@ const ManagedRuleBuilder = (props: MailboxOrganizerContentProps) => {
         {(["all", "any"] as const).map((mode) => (
           <Button
             aria-pressed={ruleMatchMode === mode}
-            className={cn({
-              "bg-bg-surface shadow-sm": ruleMatchMode === mode,
-            })}
             key={mode}
             onClick={() => {
               setRuleMatchMode(mode);
             }}
             size="sm"
             type="button"
-            variant="ghost"
+            variant="option"
           >
             Match {mode}
           </Button>

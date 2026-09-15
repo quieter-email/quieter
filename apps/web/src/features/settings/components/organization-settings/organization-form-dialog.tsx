@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
+import { Text } from "@quieter/ui/text";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -158,7 +159,7 @@ export const OrganizationFormDialog = ({
               await form.handleSubmit();
             }}
           >
-            <DialogBody className="space-y-3">
+            <DialogBody spacing="3">
               <form.Field name="name">
                 {(field) => (
                   <TextField>
@@ -176,12 +177,9 @@ export const OrganizationFormDialog = ({
                       value={field.state.value}
                     />
                     {field.state.meta.errors.map((error) => (
-                      <p
-                        className="text-body text-destructive"
-                        key={error?.message}
-                      >
+                      <Text key={error?.message} tone="destructive">
                         {error?.message}
-                      </p>
+                      </Text>
                     ))}
                   </TextField>
                 )}
@@ -204,19 +202,16 @@ export const OrganizationFormDialog = ({
                       value={field.state.value}
                     />
                     {field.state.meta.errors.map((error) => (
-                      <p
-                        className="text-body text-destructive"
-                        key={error?.message}
-                      >
+                      <Text key={error?.message} tone="destructive">
                         {error?.message}
-                      </p>
+                      </Text>
                     ))}
                   </TextField>
                 )}
               </form.Field>
 
               {(submitError ?? "") === "" ? null : (
-                <p className="text-body text-destructive">{submitError}</p>
+                <Text tone="destructive">{submitError}</Text>
               )}
             </DialogBody>
 

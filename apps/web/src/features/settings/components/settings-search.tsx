@@ -2,7 +2,6 @@
 
 import { Button } from "@quieter/ui/button";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
-import { cn } from "@quieter/ui/cn";
 import { Input } from "@quieter/ui/input";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -98,6 +97,7 @@ export const SettingsSearch = ({
   const input = (
     <Input
       aria-label="Search settings"
+      // oxlint-disable-next-line shadcn/no-restyle -- Compact search keeps caption type.
       className="h-7 px-2.5 text-caption"
       placeholder="Search settings"
       type="search"
@@ -163,18 +163,12 @@ export const SettingsSearch = ({
       <div className="divide-y divide-border">
         {results.map((entry, index) => (
           <Button
+            data-active={index === Math.min(activeIndex, results.length - 1)}
             key={entry.id}
-            variant="ghost"
-            className={cn(
-              "h-auto w-full justify-start py-4 text-left font-normal whitespace-normal",
-              {
-                "bg-accent":
-                  index === Math.min(activeIndex, results.length - 1),
-              }
-            )}
             onClick={() => {
               select(entry);
             }}
+            variant="result"
           >
             <span>
               <span className="block text-body">{entry.title}</span>

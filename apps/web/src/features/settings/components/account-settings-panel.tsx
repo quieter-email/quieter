@@ -5,7 +5,6 @@ import {
   Delete02Icon,
   Edit01Icon,
   Key02Icon,
-  Loading03Icon,
   Logout03Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -19,6 +18,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
+import { SpinnerIcon } from "@quieter/ui/spinner-icon";
+import { Text } from "@quieter/ui/text";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -108,11 +109,7 @@ const renderPasskeyList = (
         variant="outline"
       >
         {removingPasskeyId === passkey.id ? (
-          <HugeiconsIcon
-            aria-hidden
-            className="size-4 animate-spin"
-            icon={Loading03Icon}
-          />
+          <SpinnerIcon />
         ) : (
           <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
         )}
@@ -214,19 +211,16 @@ const AccountNameSettings = ({
                   value={field.state.value}
                 />
                 {field.state.meta.errors.map((error) => (
-                  <p
-                    className="text-body text-destructive"
-                    key={error?.message}
-                  >
+                  <Text key={error?.message} tone="destructive">
                     {error?.message}
-                  </p>
+                  </Text>
                 ))}
               </TextField>
             )}
           </form.Field>
 
           {submitError === null ? null : (
-            <p className="text-body text-destructive">{submitError}</p>
+            <Text tone="destructive">{submitError}</Text>
           )}
         </div>
 
@@ -238,11 +232,7 @@ const AccountNameSettings = ({
             type="submit"
           >
             {updateUserMutation.isPending ? (
-              <HugeiconsIcon
-                aria-hidden
-                className="size-4 animate-spin"
-                icon={Loading03Icon}
-              />
+              <SpinnerIcon />
             ) : (
               <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
             )}
@@ -355,19 +345,16 @@ const AccountEmailSettings = ({ currentEmail }: { currentEmail: string }) => {
                   value={field.state.value}
                 />
                 {field.state.meta.errors.map((error) => (
-                  <p
-                    className="text-body text-destructive"
-                    key={error?.message}
-                  >
+                  <Text key={error?.message} tone="destructive">
                     {error?.message}
-                  </p>
+                  </Text>
                 ))}
               </TextField>
             )}
           </form.Field>
 
           {submitError === null ? null : (
-            <p className="text-body text-destructive">{submitError}</p>
+            <Text tone="destructive">{submitError}</Text>
           )}
         </div>
 
@@ -379,11 +366,7 @@ const AccountEmailSettings = ({ currentEmail }: { currentEmail: string }) => {
             type="submit"
           >
             {changeEmailMutation.isPending ? (
-              <HugeiconsIcon
-                aria-hidden
-                className="size-4 animate-spin"
-                icon={Loading03Icon}
-              />
+              <SpinnerIcon />
             ) : (
               <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
             )}
@@ -561,11 +544,7 @@ const PasskeySettings = ({
             type="submit"
           >
             {addPasskeyMutation.isPending ? (
-              <HugeiconsIcon
-                aria-hidden
-                className="size-4 animate-spin"
-                icon={Loading03Icon}
-              />
+              <SpinnerIcon />
             ) : (
               <HugeiconsIcon aria-hidden className="size-4" icon={Key02Icon} />
             )}
@@ -583,7 +562,7 @@ const PasskeySettings = ({
         </div>
 
         {submitError === null ? null : (
-          <p className="text-body text-destructive">{submitError}</p>
+          <Text tone="destructive">{submitError}</Text>
         )}
       </div>
     </div>
@@ -683,7 +662,7 @@ const DeleteAccountDialog = () => {
               await form.handleSubmit();
             }}
           >
-            <DialogBody className="space-y-3">
+            <DialogBody spacing="3">
               <p className="text-body text-muted-fg">
                 Type{" "}
                 <span className="font-medium text-fg">delete my account</span>
@@ -706,19 +685,16 @@ const DeleteAccountDialog = () => {
                       value={field.state.value}
                     />
                     {field.state.meta.errors.map((error) => (
-                      <p
-                        className="text-body text-destructive"
-                        key={error?.message}
-                      >
+                      <Text key={error?.message} tone="destructive">
                         {error?.message}
-                      </p>
+                      </Text>
                     ))}
                   </TextField>
                 )}
               </form.Field>
 
               {submitError === null ? null : (
-                <p className="text-body text-destructive">{submitError}</p>
+                <Text tone="destructive">{submitError}</Text>
               )}
             </DialogBody>
 
@@ -733,11 +709,7 @@ const DeleteAccountDialog = () => {
                 variant="destructive"
               >
                 {deleteAccountMutation.isPending ? (
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4 animate-spin"
-                    icon={Loading03Icon}
-                  />
+                  <SpinnerIcon />
                 ) : (
                   <HugeiconsIcon
                     aria-hidden
@@ -849,11 +821,7 @@ export const AccountSettingsPanel = ({
                 variant="outline"
               >
                 {signOutMutation.isPending ? (
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4 animate-spin"
-                    icon={Loading03Icon}
-                  />
+                  <SpinnerIcon />
                 ) : (
                   <HugeiconsIcon
                     aria-hidden

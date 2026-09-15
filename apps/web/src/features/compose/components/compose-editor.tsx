@@ -324,7 +324,9 @@ export const ComposeEditorBody = ({
               })}
               key={bar.id}
               style={{
+                // oxlint-disable-next-line shadcn/no-inline-styles -- Bar delay and scale are computed per sample.
                 animationDelay: `${index * 70}ms`,
+                // oxlint-disable-next-line shadcn/no-inline-styles -- Bar delay and scale are computed per sample.
                 transform: `scaleY(${bar.scale})`,
               }}
             />
@@ -357,7 +359,7 @@ export const ComposeEditorBody = ({
     <div
       aria-invalid={invalid || undefined}
       className={cn(
-        "squircle relative min-h-20 w-full overflow-hidden rounded-md border border-border bg-control text-body text-fg shadow-sm transition-colors duration-150 ease-out",
+        "relative min-h-20 w-full overflow-hidden rounded-md border border-border bg-control text-body text-fg shadow-sm transition-colors duration-150 ease-out squircle",
         {
           "has-[.ProseMirror:focus-visible]:border-ring has-[.ProseMirror:focus-visible]:ring-1 has-[.ProseMirror:focus-visible]:ring-ring/45 has-[.ProseMirror:focus-visible]:outline-none aria-invalid:border-destructive aria-invalid:focus-within:border-destructive aria-invalid:focus-within:ring-destructive/45":
             chrome === "default",
@@ -482,9 +484,6 @@ export const ComposeEditorToolbar = ({
           <ToolbarButton
             aria-label={action.label}
             aria-pressed={action.active}
-            className={cn("size-8 px-0", {
-              "bg-control-active text-fg": action.active,
-            })}
             disabled={disabled || action.disabled}
             onClick={() => {
               action.onClick();
@@ -492,7 +491,9 @@ export const ComposeEditorToolbar = ({
             onMouseDown={(event) => {
               event.preventDefault();
             }}
+            size="icon"
             type="button"
+            variant={action.active ? "selected" : undefined}
           >
             <HugeiconsIcon className="size-4" icon={action.icon} />
           </ToolbarButton>
@@ -506,7 +507,6 @@ export const ComposeEditorToolbar = ({
       <IconButtonTooltip label="Undo">
         <ToolbarButton
           aria-label="Undo"
-          className="size-8 px-0"
           disabled={disabled || toolbarState?.canUndo !== true}
           onClick={() => {
             editor?.chain().focus().undo().run();
@@ -514,6 +514,7 @@ export const ComposeEditorToolbar = ({
           onMouseDown={(event) => {
             event.preventDefault();
           }}
+          size="icon"
           type="button"
         >
           <HugeiconsIcon className="size-4" icon={ArrowTurnBackwardIcon} />
@@ -522,7 +523,6 @@ export const ComposeEditorToolbar = ({
       <IconButtonTooltip label="Redo">
         <ToolbarButton
           aria-label="Redo"
-          className="size-8 px-0"
           disabled={disabled || toolbarState?.canRedo !== true}
           onClick={() => {
             editor?.chain().focus().redo().run();
@@ -530,6 +530,7 @@ export const ComposeEditorToolbar = ({
           onMouseDown={(event) => {
             event.preventDefault();
           }}
+          size="icon"
           type="button"
         >
           <HugeiconsIcon className="size-4" icon={ArrowTurnForwardIcon} />
@@ -541,8 +542,10 @@ export const ComposeEditorToolbar = ({
   return (
     <Toolbar
       className={cn(
+        // oxlint-disable-next-line shadcn/no-restyle -- Composer bar keeps its control-surface metrics.
         "w-full min-w-0 shrink-0 rounded-md border-border bg-control",
         {
+          // oxlint-disable-next-line shadcn/no-restyle -- Composer footer keeps its attached-bar metrics.
           "min-h-12 gap-1.5 rounded-none border-0 border-t border-border bg-control px-3 py-2 shadow-none":
             chrome === "footer",
         },
@@ -578,6 +581,7 @@ export const ComposeEditorDictationButton = () => {
     <IconButtonTooltip label="Stop recording">
       <ToolbarButton
         aria-label="Stop recording"
+        // oxlint-disable-next-line shadcn/no-restyle -- Recording stop keeps its primary tint.
         className="text-primary"
         disabled={disabled}
         onClick={onRecordingStop}
@@ -596,12 +600,12 @@ export const ComposeEditorDictationButton = () => {
     >
       <ToolbarButton
         aria-label={recordingSupported ? "Dictate" : "Recording unavailable"}
-        className="size-8 px-0"
         disabled={disabled || transcribing || !recordingSupported}
         onClick={onRecordingStart}
         onMouseDown={(event) => {
           event.preventDefault();
         }}
+        size="icon"
         type="button"
       >
         <HugeiconsIcon className="size-4" icon={AiMicIcon} />

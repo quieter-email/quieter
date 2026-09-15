@@ -116,10 +116,10 @@ const renderDropdownEntry = (entry: MenuEntry) => {
 
   return (
     <DropdownMenuItem
-      className={cn({ "text-destructive": entry.destructive })}
       disabled={entry.disabled}
       key={entry.id}
       onSelect={entry.onAction}
+      tone={entry.destructive === true ? "destructive" : undefined}
     >
       <HugeiconsIcon aria-hidden className="size-4" icon={entry.icon} />
       <span>{entry.label}</span>
@@ -138,10 +138,10 @@ const renderContextEntry = (entry: MenuEntry) => {
 
   return (
     <ContextMenuItem
-      className={cn({ "text-destructive": entry.destructive })}
       disabled={entry.disabled}
       key={entry.id}
       onSelect={entry.onAction}
+      tone={entry.destructive === true ? "destructive" : undefined}
     >
       <HugeiconsIcon aria-hidden className="size-4" icon={entry.icon} />
       <span>{entry.label}</span>
@@ -395,9 +395,9 @@ export const MessageActionsDropdown = (props: MessageActionsDropdownProps) => {
     <DropdownMenu>
       <IconButtonTooltip label="Message actions">
         <DropdownMenuTrigger
+          appearance="icon"
           aria-label="Open message actions"
           aria-busy={isBusy || undefined}
-          className="squircle inline-flex size-8 items-center justify-center rounded-md text-muted-fg transition-colors hover:bg-control-hover hover:text-fg disabled:pointer-events-none disabled:opacity-50"
           disabled={isBusy}
           type="button"
         >
@@ -429,7 +429,12 @@ export const MessageActionsContextMenu = ({
 
   return (
     <ContextMenu>
-      <ContextMenuTrigger className={triggerClassName} style={triggerStyle}>
+      <ContextMenuTrigger
+        // oxlint-disable-next-line shadcn/require-static-classes -- Trigger classes come from the caller.
+        className={triggerClassName}
+        // oxlint-disable-next-line shadcn/no-inline-styles -- Trigger style comes from the caller.
+        style={triggerStyle}
+      >
         {children}
       </ContextMenuTrigger>
 

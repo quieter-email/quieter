@@ -7,6 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@quieter/ui/select";
+import { Text } from "@quieter/ui/text";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -89,9 +90,7 @@ const TeamMailboxAdministration = ({
       description="Manage ownership without opening anyone's mail."
     >
       {isError ? (
-        <p className="text-body text-destructive">
-          Could not load team mailboxes.
-        </p>
+        <Text tone="destructive">Could not load team mailboxes.</Text>
       ) : (
         <Select
           items={mailboxes.map((mailbox) => ({
@@ -115,9 +114,7 @@ const TeamMailboxAdministration = ({
         </Select>
       )}
       {isDetailsError && (
-        <p className="text-body text-destructive">
-          Could not load mailbox access.
-        </p>
+        <Text tone="destructive">Could not load mailbox access.</Text>
       )}
       {details !== undefined && mailboxId !== null && (
         <ManagedMailboxAccessSection

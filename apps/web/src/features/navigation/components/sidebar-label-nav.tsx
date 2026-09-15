@@ -224,7 +224,7 @@ export const SidebarLabelNav = ({
             active={isActive}
             aria-pressed={isActive}
             className={cn(
-              "squircle h-7 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-left text-caption font-normal",
+              "h-7 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-left text-caption font-normal squircle",
               {
                 "text-fg": isActive,
                 "text-muted-fg": !isActive,
@@ -270,7 +270,7 @@ export const SidebarLabelNav = ({
           <IconButtonTooltip label={`Manage ${labelNounPlural}`}>
             <Button
               aria-label={`Manage ${labelNounPlural}`}
-              className="size-6 text-muted-fg hover:text-fg"
+              className="size-6"
               onClick={onManageLabels}
               size="icon-sm"
               type="button"

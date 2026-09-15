@@ -206,24 +206,22 @@ export const ToolActivity = ({
         {awaitingApproval && approval ? (
           <>
             <Button
-              className="h-7 px-0 text-caption font-medium"
               disabled={isStreaming}
               onClick={() => {
                 approval.approve();
               }}
-              size="sm"
+              size="compact"
               type="button"
               variant="ghost"
             >
               Apply
             </Button>
             <Button
-              className="h-7 px-0 text-caption text-muted-fg"
               disabled={isStreaming}
               onClick={() => {
                 approval.deny();
               }}
-              size="sm"
+              size="compact"
               type="button"
               variant="ghost"
             >
@@ -234,6 +232,7 @@ export const ToolActivity = ({
         <IconButtonTooltip label="Action details">
           <CollapsibleTrigger
             aria-label="Action details"
+            // oxlint-disable-next-line shadcn/no-restyle -- Details chevron keeps its compact icon treatment.
             className="flex size-5 shrink-0 items-center justify-center rounded text-muted-fg hover:text-fg focus-visible:ring-1 focus-visible:ring-ring"
           >
             <HugeiconsIcon

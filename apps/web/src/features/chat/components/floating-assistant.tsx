@@ -121,15 +121,15 @@ export const FloatingAssistant = ({
         }}
         ref={panelRef}
         className={cn(
-          "fixed top-auto right-[max(1.5rem,env(safe-area-inset-right))] bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-auto z-50 m-0 flex w-[400px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-[14px] border border-border-strong/70 bg-bg-raised/90 [background-image:linear-gradient(160deg,color-mix(in_oklab,var(--bg-raised)_88%,transparent),color-mix(in_oklab,var(--bg)_96%,transparent))] p-0 text-fg shadow-elevation backdrop-blur-2xl max-sm:right-[max(1rem,env(safe-area-inset-right))] max-sm:bottom-[max(1rem,env(safe-area-inset-bottom))] max-sm:left-[max(1rem,env(safe-area-inset-left))] max-sm:w-auto max-sm:max-w-none",
+          "fixed top-auto right-[max(1.5rem,env(safe-area-inset-right))] bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-auto z-50 m-0 flex w-[400px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-lg border border-border-strong/70 bg-bg-raised/90 [background-image:linear-gradient(160deg,color-mix(in_oklab,var(--bg-raised)_88%,transparent),color-mix(in_oklab,var(--bg)_96%,transparent))] p-0 text-fg shadow-elevation backdrop-blur-2xl max-sm:right-[max(1rem,env(safe-area-inset-right))] max-sm:bottom-[max(1rem,env(safe-area-inset-bottom))] max-sm:left-[max(1rem,env(safe-area-inset-left))] max-sm:w-auto max-sm:max-w-none",
           { hidden: !open }
         )}
       >
         <header className="flex h-10 shrink-0 items-center gap-2 px-4">
           <DropdownMenu>
             <DropdownMenuTrigger
+              appearance="row-strong"
               aria-label="Open conversation history"
-              className="flex min-w-0 items-center gap-2 rounded-md text-left text-body-sm font-medium text-fg focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none"
               type="button"
             >
               <span className="truncate">Quieter</span>
@@ -141,6 +141,7 @@ export const FloatingAssistant = ({
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="start"
+              // oxlint-disable-next-line shadcn/no-restyle -- Assistant panel keeps its menu sizing.
               className="w-72 p-1.5"
               sideOffset={8}
               data-assistant-panel
@@ -156,7 +157,9 @@ export const FloatingAssistant = ({
                 ) : (
                   chats.map((chat) => (
                     <DropdownMenuItem
+                      // oxlint-disable-next-line shadcn/no-restyle -- Active conversation keeps its highlight.
                       className={cn("w-full", {
+                        // oxlint-disable-next-line shadcn/no-restyle -- Active conversation keeps its highlight.
                         "bg-muted": chat.id === activeChatId,
                       })}
                       key={chat.id}
@@ -176,6 +179,7 @@ export const FloatingAssistant = ({
                     <form className="px-1 py-1" onSubmit={submitRename}>
                       <Input
                         aria-label="Conversation title"
+                        // oxlint-disable-next-line shadcn/no-restyle -- Rename input keeps caption type.
                         className="h-8 text-caption"
                         onChange={(event) => {
                           setRenameTitle(event.target.value);
@@ -203,10 +207,10 @@ export const FloatingAssistant = ({
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuItem
-                    className="text-destructive"
                     onSelect={() => {
                       onDeleteChat(activeChat.id);
                     }}
+                    tone="destructive"
                   >
                     <HugeiconsIcon
                       aria-hidden
@@ -250,7 +254,7 @@ export const FloatingAssistant = ({
         <IconButtonTooltip label="Open Quieter">
           <button
             aria-label="Open Quieter"
-            className="fixed right-[max(1.5rem,env(safe-area-inset-right))] bottom-[max(1.5rem,env(safe-area-inset-bottom))] z-50 flex size-12 items-center justify-center rounded-[14px] border border-border-strong/70 bg-bg-raised/90 [background-image:linear-gradient(160deg,color-mix(in_oklab,var(--bg-raised)_88%,transparent),color-mix(in_oklab,var(--bg)_96%,transparent))] text-fg shadow-elevation backdrop-blur-2xl transition-transform duration-150 hover:scale-105 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-95 motion-reduce:transition-none motion-reduce:hover:scale-100 max-sm:right-[max(1rem,env(safe-area-inset-right))] max-sm:bottom-[max(1rem,env(safe-area-inset-bottom))]"
+            className="fixed right-[max(1.5rem,env(safe-area-inset-right))] bottom-[max(1.5rem,env(safe-area-inset-bottom))] z-50 flex size-12 items-center justify-center rounded-lg border border-border-strong/70 bg-bg-raised/90 [background-image:linear-gradient(160deg,color-mix(in_oklab,var(--bg-raised)_88%,transparent),color-mix(in_oklab,var(--bg)_96%,transparent))] text-fg shadow-elevation backdrop-blur-2xl transition-transform duration-150 hover:scale-105 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-95 motion-reduce:transition-none motion-reduce:hover:scale-100 max-sm:right-[max(1rem,env(safe-area-inset-right))] max-sm:bottom-[max(1rem,env(safe-area-inset-bottom))]"
             data-assistant-launcher
             onClick={onOpen}
             type="button"

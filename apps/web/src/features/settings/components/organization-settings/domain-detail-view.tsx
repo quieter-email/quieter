@@ -158,7 +158,7 @@ const DomainHeader = ({
     {domainConnect === undefined ? null : (
       <div
         className={cn(
-          "squircle @container flex flex-col gap-3 rounded-lg border px-4 py-3 text-body @sm:flex-row @sm:items-center @sm:justify-between",
+          "@container flex flex-col gap-3 rounded-lg border px-4 py-3 text-body squircle @sm:flex-row @sm:items-center @sm:justify-between",
           getDomainConnectBannerClass(domainConnect)
         )}
       >
