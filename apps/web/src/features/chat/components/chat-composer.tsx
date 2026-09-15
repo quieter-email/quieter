@@ -50,10 +50,7 @@ export const ChatComposer = ({
   streaming,
   submitting,
 }: ChatComposerProps) => (
-  <form
-    className="flex w-full shrink-0 flex-col gap-2 px-4 pt-2 pb-3.5"
-    onSubmit={onSubmit}
-  >
+  <form className="flex w-full shrink-0 flex-col gap-4 p-4" onSubmit={onSubmit}>
     {contextLabel === undefined ? null : (
       <div className="flex h-4 items-center gap-2 text-caption text-muted-fg">
         <HugeiconsIcon
@@ -103,7 +100,9 @@ export const ChatComposer = ({
           type="button"
         >
           <HugeiconsIcon aria-hidden className="size-3.5" icon={Shield01Icon} />
-          <span>{policy === "ask" ? "Ask before changes" : "Automatic"}</span>
+          <span>
+            {policy === "ask" ? "Ask before changes" : "Auto approve"}
+          </span>
           <HugeiconsIcon
             aria-hidden
             className="size-3"
@@ -123,12 +122,8 @@ export const ChatComposer = ({
               onPolicyChange("automatic");
             }}
           >
-            Automatic
+            Auto approve
           </DropdownMenuItem>
-          <p className="max-w-56 px-2 py-1.5 text-caption text-muted-fg">
-            Automatic saves drafts and updates mail without asking. Sending
-            always asks.
-          </p>
         </DropdownMenuContent>
       </DropdownMenu>
       <div className="ml-auto">

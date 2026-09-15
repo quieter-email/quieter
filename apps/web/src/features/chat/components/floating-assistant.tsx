@@ -3,9 +3,10 @@
 import {
   Add01Icon,
   ArrowDown01Icon,
+  Cancel01Icon,
   Delete02Icon,
   Edit01Icon,
-  MinusSignIcon,
+  Tick01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Brand } from "@quieter/ui/brand";
@@ -20,8 +21,15 @@ import {
 } from "@quieter/ui/dropdown-menu";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
+import {
+  AnimatePresence,
+  motion,
+  stagger,
+  useDragControls,
+} from "motion/react";
+import type { Variants } from "motion/react";
 import { useEffect, useRef, useState } from "react";
-import type { SubmitEvent, ReactNode } from "react";
+import type { PointerEvent, ReactNode, SubmitEvent } from "react";
 
 export type FloatingAssistantChat = {
   id: string;
@@ -44,6 +52,33 @@ type FloatingAssistantProps = {
 const getChatTitle = (chat: FloatingAssistantChat) =>
   chat.title?.trim() || "New chat";
 
+const panelVariants: Variants = {
+  closed: {
+    opacity: 0,
+    scale: 0.94,
+    transition: { damping: 34, stiffness: 400, type: "spring" },
+  },
+  open: {
+    opacity: 1,
+    scale: 1,
+    transition: {
+      damping: 30,
+      delayChildren: stagger(0.07, { startDelay: 0.06 }),
+      stiffness: 380,
+      type: "spring",
+    },
+  },
+};
+
+const panelSectionVariants: Variants = {
+  closed: { opacity: 0, y: 10 },
+  open: {
+    opacity: 1,
+    transition: { damping: 32, stiffness: 420, type: "spring" },
+    y: 0,
+  },
+};
+
 export const FloatingAssistant = ({
   activeChatId,
   chats,
@@ -58,6 +93,7 @@ export const FloatingAssistant = ({
 }: FloatingAssistantProps) => {
   const panelRef = useRef<HTMLDialogElement | null>(null);
   const launcherRef = useRef<HTMLButtonElement | null>(null);
+  const dragControls = useDragControls();
   const previousOpenRef = useRef(open);
   const activeChat = chats.find((chat) => chat.id === activeChatId);
   const [renamingChat, setRenamingChat] =
@@ -106,12 +142,23 @@ export const FloatingAssistant = ({
     });
   };
 
+  const startPanelDrag = (event: PointerEvent<HTMLElement>) => {
+    if (
+      event.target instanceof Element &&
+      event.target.closest("button, a, input, textarea, select")
+    ) {
+      return;
+    }
+    dragControls.start(event);
+  };
+
   return (
     <>
-      <dialog
+      <motion.dialog
         open={open}
         aria-label="Quieter assistant"
         aria-hidden={!open}
+        inert={!open}
         data-assistant-panel
         onKeyDown={(event) => {
           if (event.key === "Escape" && !event.defaultPrevented) {
@@ -120,12 +167,26 @@ export const FloatingAssistant = ({
           }
         }}
         ref={panelRef}
+        drag
+        dragControls={dragControls}
+        dragListener={false}
+        dragMomentum={false}
+        layout="size"
+        initial={false}
+        variants={panelVariants}
+        animate={open ? "open" : "closed"}
+        transition={{ damping: 34, stiffness: 380, type: "spring" }}
         className={cn(
-          "fixed top-auto right-[max(1.5rem,env(safe-area-inset-right))] bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-auto z-50 m-0 flex w-[400px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-lg border border-border-strong/70 bg-bg-raised/90 [background-image:linear-gradient(160deg,color-mix(in_oklab,var(--bg-raised)_88%,transparent),color-mix(in_oklab,var(--bg)_96%,transparent))] p-0 text-fg shadow-elevation backdrop-blur-2xl max-sm:right-[max(1rem,env(safe-area-inset-right))] max-sm:bottom-[max(1rem,env(safe-area-inset-bottom))] max-sm:left-[max(1rem,env(safe-area-inset-left))] max-sm:w-auto max-sm:max-w-none",
-          { hidden: !open }
+          "fixed top-auto right-[max(1.5rem,env(safe-area-inset-right))] bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-auto z-50 m-0 flex w-[400px] max-w-[calc(100vw-2rem)] origin-bottom-right flex-col overflow-hidden rounded-lg border border-border-strong/70 bg-bg-raised/90 [background-image:linear-gradient(160deg,color-mix(in_oklab,var(--bg-raised)_88%,transparent),color-mix(in_oklab,var(--bg)_96%,transparent))] p-0 text-fg shadow-elevation backdrop-blur-2xl max-sm:right-[max(1rem,env(safe-area-inset-right))] max-sm:bottom-[max(1rem,env(safe-area-inset-bottom))] max-sm:left-[max(1rem,env(safe-area-inset-left))] max-sm:w-auto max-sm:max-w-none",
+          { "pointer-events-none invisible": !open }
         )}
       >
-        <header className="flex h-10 shrink-0 items-center gap-2 px-4">
+        <motion.header
+          className="flex h-10 shrink-0 cursor-grab touch-none items-center gap-2 px-4 select-none active:cursor-grabbing"
+          layout
+          onPointerDown={startPanelDrag}
+          variants={panelSectionVariants}
+        >
           <DropdownMenu>
             <DropdownMenuTrigger
               appearance="row-strong"
@@ -176,7 +237,10 @@ export const FloatingAssistant = ({
                 <>
                   <DropdownMenuSeparator />
                   {renamingChat?.id === activeChat.id ? (
-                    <form className="px-1 py-1" onSubmit={submitRename}>
+                    <form
+                      className="flex items-center gap-1 px-1 py-1"
+                      onSubmit={submitRename}
+                    >
                       <Input
                         aria-label="Conversation title"
                         // oxlint-disable-next-line shadcn/no-restyle -- Rename input keeps caption type.
@@ -192,6 +256,21 @@ export const FloatingAssistant = ({
                         }}
                         value={renameTitle}
                       />
+                      <IconButtonTooltip label="Confirm rename">
+                        <Button
+                          aria-label="Confirm rename"
+                          disabled={renameTitle.trim() === ""}
+                          size="icon-sm"
+                          type="submit"
+                          variant="ghost"
+                        >
+                          <HugeiconsIcon
+                            aria-hidden
+                            className="size-3.5"
+                            icon={Tick01Icon}
+                          />
+                        </Button>
+                      </IconButtonTooltip>
                     </form>
                   ) : (
                     <DropdownMenuItem
@@ -223,47 +302,55 @@ export const FloatingAssistant = ({
               )}
             </DropdownMenuContent>
           </DropdownMenu>
+          <IconButtonTooltip label="New conversation">
+            <Button
+              aria-label="New conversation"
+              onClick={onNewChat}
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+            >
+              <HugeiconsIcon aria-hidden icon={Add01Icon} />
+            </Button>
+          </IconButtonTooltip>
           <div className="ml-auto flex items-center gap-1">
-            <IconButtonTooltip label="New conversation">
+            <IconButtonTooltip label="Close assistant">
               <Button
-                aria-label="New conversation"
-                onClick={onNewChat}
-                size="icon-sm"
-                type="button"
-                variant="ghost"
-              >
-                <HugeiconsIcon aria-hidden icon={Add01Icon} />
-              </Button>
-            </IconButtonTooltip>
-            <IconButtonTooltip label="Minimize assistant">
-              <Button
-                aria-label="Minimize assistant"
+                aria-label="Close assistant"
                 onClick={minimize}
                 size="icon-sm"
                 type="button"
                 variant="ghost"
               >
-                <HugeiconsIcon aria-hidden icon={MinusSignIcon} />
+                <HugeiconsIcon aria-hidden icon={Cancel01Icon} />
               </Button>
             </IconButtonTooltip>
           </div>
-        </header>
-        <div className="min-h-0">{children}</div>
-      </dialog>
-      {open ? null : (
-        <IconButtonTooltip label="Open Quieter">
-          <button
-            aria-label="Open Quieter"
-            className="fixed right-[max(1.5rem,env(safe-area-inset-right))] bottom-[max(1.5rem,env(safe-area-inset-bottom))] z-50 flex size-12 items-center justify-center rounded-lg border border-border-strong/70 bg-bg-raised/90 [background-image:linear-gradient(160deg,color-mix(in_oklab,var(--bg-raised)_88%,transparent),color-mix(in_oklab,var(--bg)_96%,transparent))] text-fg shadow-elevation backdrop-blur-2xl transition-transform duration-150 hover:scale-105 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-95 motion-reduce:transition-none motion-reduce:hover:scale-100 max-sm:right-[max(1rem,env(safe-area-inset-right))] max-sm:bottom-[max(1rem,env(safe-area-inset-bottom))]"
-            data-assistant-launcher
-            onClick={onOpen}
-            type="button"
-            ref={launcherRef}
-          >
-            <Brand className="size-7" />
-          </button>
-        </IconButtonTooltip>
-      )}
+        </motion.header>
+        <motion.div className="min-h-0" layout variants={panelSectionVariants}>
+          {children}
+        </motion.div>
+      </motion.dialog>
+      <AnimatePresence>
+        {open ? null : (
+          <IconButtonTooltip label="Open Quieter">
+            <motion.button
+              aria-label="Open Quieter"
+              animate={{ opacity: 1, scale: 1 }}
+              className="fixed right-[max(1.5rem,env(safe-area-inset-right))] bottom-[max(1.5rem,env(safe-area-inset-bottom))] z-50 flex size-12 items-center justify-center rounded-lg border border-border-strong/70 bg-bg-raised/90 [background-image:linear-gradient(160deg,color-mix(in_oklab,var(--bg-raised)_88%,transparent),color-mix(in_oklab,var(--bg)_96%,transparent))] text-fg shadow-elevation backdrop-blur-2xl focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none max-sm:right-[max(1rem,env(safe-area-inset-right))] max-sm:bottom-[max(1rem,env(safe-area-inset-bottom))]"
+              data-assistant-launcher
+              exit={{ opacity: 0, scale: 0.8 }}
+              initial={{ opacity: 0, scale: 0.8 }}
+              onClick={onOpen}
+              transition={{ damping: 26, stiffness: 380, type: "spring" }}
+              type="button"
+              ref={launcherRef}
+            >
+              <Brand className="size-7" />
+            </motion.button>
+          </IconButtonTooltip>
+        )}
+      </AnimatePresence>
     </>
   );
 };

@@ -80,10 +80,7 @@ export const ChatTranscript = ({
         }}
         ref={viewportRef}
       >
-        <div
-          className="flex w-full flex-col gap-4 px-4 pt-2 pb-3"
-          ref={contentRef}
-        >
+        <div className="flex w-full flex-col gap-4 p-4" ref={contentRef}>
           {messages.map((message) => (
             <ChatMessage
               approvals={approvals}

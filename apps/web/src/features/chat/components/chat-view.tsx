@@ -478,7 +478,7 @@ const ChatSession = ({
         />
       ) : null}
       {canUseAiChat ? null : (
-        <p className="px-4 py-2 text-body-sm text-muted-fg">
+        <p className="px-4 py-4 text-body-sm text-muted-fg">
           Choose a plan with AI credits in settings to use Quieter.
         </p>
       )}
