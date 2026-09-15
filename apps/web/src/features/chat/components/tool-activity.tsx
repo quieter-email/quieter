@@ -232,6 +232,7 @@ export const ToolActivity = ({
         <IconButtonTooltip label="Action details">
           <CollapsibleTrigger
             aria-label="Action details"
+            // oxlint-disable-next-line shadcn/no-restyle -- Details chevron keeps its compact icon treatment.
             className="flex size-5 shrink-0 items-center justify-center rounded text-muted-fg hover:text-fg focus-visible:ring-1 focus-visible:ring-ring"
           >
             <HugeiconsIcon

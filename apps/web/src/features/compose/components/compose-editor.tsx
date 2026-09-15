@@ -542,8 +542,10 @@ export const ComposeEditorToolbar = ({
   return (
     <Toolbar
       className={cn(
+        // oxlint-disable-next-line shadcn/no-restyle -- Composer bar keeps its control-surface metrics.
         "w-full min-w-0 shrink-0 rounded-md border-border bg-control",
         {
+          // oxlint-disable-next-line shadcn/no-restyle -- Composer footer keeps its attached-bar metrics.
           "min-h-12 gap-1.5 rounded-none border-0 border-t border-border bg-control px-3 py-2 shadow-none":
             chrome === "footer",
         },
@@ -579,6 +581,7 @@ export const ComposeEditorDictationButton = () => {
     <IconButtonTooltip label="Stop recording">
       <ToolbarButton
         aria-label="Stop recording"
+        // oxlint-disable-next-line shadcn/no-restyle -- Recording stop keeps its primary tint.
         className="text-primary"
         disabled={disabled}
         onClick={onRecordingStop}

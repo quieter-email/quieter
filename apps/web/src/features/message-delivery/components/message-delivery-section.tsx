@@ -72,7 +72,10 @@ const DeliveryEventRow = ({ event }: { event: MessageDeliveryEvent }) => (
 
     {hasDeliveryDiagnostics(event) ? (
       <Collapsible>
-        <CollapsibleTrigger className="text-caption text-muted-fg underline underline-offset-2 hover:text-fg">
+        <CollapsibleTrigger
+          // oxlint-disable-next-line shadcn/no-restyle -- Technical details keeps its caption-link treatment.
+          className="text-caption text-muted-fg underline underline-offset-2 hover:text-fg"
+        >
           Technical details
         </CollapsibleTrigger>
         <CollapsiblePanel>

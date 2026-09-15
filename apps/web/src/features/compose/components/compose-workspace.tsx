@@ -535,7 +535,6 @@ export const ComposeSurface = ({
                     chrome="footer"
                     leading={
                       <ToolbarButton
-                        className="px-3"
                         disabled={!canSubmitCompose}
                         type="submit"
                         variant="primary"
