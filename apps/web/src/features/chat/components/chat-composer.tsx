@@ -50,7 +50,7 @@ export const ChatComposer = ({
   streaming,
   submitting,
 }: ChatComposerProps) => (
-  <form className="flex w-full shrink-0 flex-col gap-4 p-4" onSubmit={onSubmit}>
+  <form className="flex w-full shrink-0 flex-col gap-2 p-4" onSubmit={onSubmit}>
     {contextLabel === undefined ? null : (
       <div className="flex h-4 items-center gap-2 text-caption text-muted-fg">
         <HugeiconsIcon
@@ -77,7 +77,7 @@ export const ChatComposer = ({
         )}
       </div>
     )}
-    <div>
+    <div className="flex">
       <Textarea
         aria-label="Message"
         data-assistant-composer
@@ -91,7 +91,7 @@ export const ChatComposer = ({
         variant="composer"
       />
     </div>
-    <div className="flex h-7 items-center gap-2">
+    <div className="flex min-h-7 items-center gap-2">
       <DropdownMenu>
         <DropdownMenuTrigger
           appearance="row"
