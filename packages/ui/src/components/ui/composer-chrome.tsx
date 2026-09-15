@@ -43,13 +43,6 @@ export const ComposerFieldGroup = ({
   </div>
 );
 
-/**
- * Header inputs deliberately carry no focus ring; the row tints instead, which keeps
- * the group reading as one surface while still marking where the caret is.
- */
-export const composerFieldControlClassName =
-  "h-11 min-w-0 flex-1 rounded-none border-0 bg-transparent px-0 text-body shadow-none read-only:bg-transparent focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-none";
-
 const composerFieldRowClassName =
   "flex items-center gap-2.5 px-5 transition-colors duration-150 ease-out focus-within:bg-bg-surface";
 

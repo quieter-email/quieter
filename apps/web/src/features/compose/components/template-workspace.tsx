@@ -25,7 +25,6 @@ import { cn } from "@quieter/ui/cn";
 import {
   ComposerEditorFrame,
   ComposerFieldGroup,
-  composerFieldControlClassName,
   ComposerFieldRow,
   ComposerFrame,
 } from "@quieter/ui/composer-chrome";
@@ -355,7 +354,7 @@ export const TemplateWorkspace = ({
                 {(field) => (
                   <ComposerFieldRow divided={false} label="Name">
                     <FieldControl
-                      className={composerFieldControlClassName}
+                      chrome="composer"
                       disabled={!canEditCurrentTemplate}
                       onBlur={() => {
                         field.handleBlur();

@@ -13,7 +13,6 @@ import { cn } from "@quieter/ui/cn";
 import {
   ComposerEditorFrame,
   ComposerFieldGroup,
-  composerFieldControlClassName,
   ComposerFieldRow,
   ComposerFrame,
 } from "@quieter/ui/composer-chrome";
@@ -125,7 +124,7 @@ const ComposeFormField = ({
         >
           <FieldControl
             aria-invalid={!!error}
-            className={composerFieldControlClassName}
+            chrome="composer"
             disabled={disabled}
             onBlur={() => {
               field.handleBlur();
@@ -425,7 +424,7 @@ export const ComposeSurface = ({
                           >
                             <FieldControl
                               aria-invalid={!!error}
-                              className={composerFieldControlClassName}
+                              chrome="composer"
                               data-compose-recipient-field
                               disabled={!canEditBody}
                               onBlur={() => {
@@ -518,7 +517,6 @@ export const ComposeSurface = ({
                               ? "Hide quoted message"
                               : "Show quoted message"
                           }
-                          className="h-7 px-2 text-muted-fg"
                           onClick={() => {
                             setShowQuotedContent((current) => !current);
                           }}
