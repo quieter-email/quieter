@@ -225,8 +225,7 @@ export const MessageListSelectionToolbar = ({
                 : `Select all loaded ${itemLabelPlural}`
             }
             checked={allSelected}
-            // oxlint-disable-next-line shadcn/no-arbitrary-values -- Bulk-select checkbox is deliberately larger than the base control.
-            // oxlint-disable-next-line shadcn/no-restyle -- Bulk-select checkbox keeps its larger metrics.
+            // oxlint-disable-next-line shadcn/no-arbitrary-values, shadcn/no-restyle -- Bulk-select checkbox is deliberately larger than the base control.
             className="size-4.5 rounded-[5px]"
             disabled={disabled}
             indeterminate={indeterminate}

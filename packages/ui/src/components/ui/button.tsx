@@ -23,7 +23,7 @@ const buttonVariants = cva(
       size: {
         // Full-width bar action at default height, e.g. auth buttons.
         block:
-          "group relative h-8 w-full justify-center gap-3 px-3 [&_svg]:size-4",
+          "group relative h-8 w-full justify-center gap-3 px-3 text-body-sm [&_svg]:size-4",
         // Caption-height action, e.g. retry and approval buttons.
         compact: "h-7 px-2 text-caption font-medium [&_svg]:size-3.5",
         default: "h-8 px-3 text-body-sm [&_svg]:size-4",

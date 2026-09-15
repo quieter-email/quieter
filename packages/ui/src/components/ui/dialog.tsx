@@ -133,7 +133,12 @@ export const DialogCloseButton = ({
   variant = "outline",
   ...props
 }: ComponentPropsWithoutRef<typeof DialogPrimitive.Close> & {
-  variant?: Exclude<ButtonProps["variant"], "card" | "chip">;
+  // Close buttons support the core button looks; card, chip, and the other
+  // special-purpose treatments do not belong in dialog footers.
+  variant?: Exclude<
+    ButtonProps["variant"],
+    "card" | "chip" | "option" | "overlay" | "result" | "secondary"
+  >;
 }) => (
   <DialogPrimitive.Close
     className={cn(dialogCloseButtonVariants({ variant }), className)}

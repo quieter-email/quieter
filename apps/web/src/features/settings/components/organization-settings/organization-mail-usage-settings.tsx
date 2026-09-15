@@ -211,8 +211,7 @@ const UsageBreakdown = ({
             return [
               <Tooltip key={item.kind}>
                 <TooltipTrigger
-                  // oxlint-disable-next-line shadcn/no-arbitrary-values -- Brightness hover needs the filter property.
-                  // oxlint-disable-next-line shadcn/no-restyle -- Usage segments keep their bright treatments.
+                  // oxlint-disable-next-line shadcn/no-arbitrary-values, shadcn/no-restyle -- Segments are measured per cost slice with a brightness hover.
                   className={`${item.className} min-w-1 transition-[filter] hover:brightness-110`}
                   render={<span />}
                   // oxlint-disable-next-line shadcn/no-inline-styles -- Segment flex is measured from cost data.

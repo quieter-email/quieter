@@ -136,7 +136,12 @@ export const AlertDialogCloseButton = ({
   variant = "outline",
   ...props
 }: ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Close> & {
-  variant?: Exclude<ButtonProps["variant"], "card" | "chip">;
+  // Close buttons support the core button looks; card, chip, and the other
+  // special-purpose treatments do not belong in dialog footers.
+  variant?: Exclude<
+    ButtonProps["variant"],
+    "card" | "chip" | "option" | "overlay" | "result" | "secondary"
+  >;
 }) => (
   <AlertDialogPrimitive.Close
     className={cn(alertDialogCloseButtonVariants({ variant }), className)}
