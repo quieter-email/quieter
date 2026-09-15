@@ -379,6 +379,7 @@ const MessageExpandButton = ({
       aria-expanded={expanded}
       aria-label={expanded ? "Collapse message" : "Expand message"}
       className={cn({
+        // oxlint-disable-next-line shadcn/no-restyle -- Expanded state brightens the chevron.
         "text-fg/80": expanded,
       })}
       onClick={onToggleExpanded}

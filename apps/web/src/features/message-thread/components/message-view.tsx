@@ -307,7 +307,8 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                   transition={inlineComposeFadeTransition}
                 >
                   <Button
-                    className="min-w-44 flex-1 justify-start px-3 text-muted-fg hover:text-fg"
+                    // oxlint-disable-next-line shadcn/no-restyle -- Inline reply bar keeps its input-like metrics.
+                    className="min-w-44 flex-1 justify-start px-3"
                     onClick={() => {
                       openInlineCompose(
                         hotkeyLinkedDraftMessage

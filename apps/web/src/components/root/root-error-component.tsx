@@ -37,9 +37,8 @@ export const RootErrorComponent = ({
             Try again
           </Button>
           <LinkButton
-            className="border-fg/20 bg-transparent text-fg hover:bg-fg/10"
             to="/"
-            variant="outline"
+            variant="overlay"
           >
             Back to inbox
           </LinkButton>

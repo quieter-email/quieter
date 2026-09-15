@@ -206,24 +206,22 @@ export const ToolActivity = ({
         {awaitingApproval && approval ? (
           <>
             <Button
-              className="h-7 px-0 text-caption font-medium"
               disabled={isStreaming}
               onClick={() => {
                 approval.approve();
               }}
-              size="sm"
+              size="compact"
               type="button"
               variant="ghost"
             >
               Apply
             </Button>
             <Button
-              className="h-7 px-0 text-caption text-muted-fg"
               disabled={isStreaming}
               onClick={() => {
                 approval.deny();
               }}
-              size="sm"
+              size="compact"
               type="button"
               variant="ghost"
             >

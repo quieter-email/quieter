@@ -270,7 +270,7 @@ export const SidebarLabelNav = ({
           <IconButtonTooltip label={`Manage ${labelNounPlural}`}>
             <Button
               aria-label={`Manage ${labelNounPlural}`}
-              className="size-6 text-muted-fg hover:text-fg"
+              className="size-6"
               onClick={onManageLabels}
               size="icon-sm"
               type="button"

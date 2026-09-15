@@ -136,10 +136,10 @@ export const ChatComposer = ({
           <IconButtonTooltip label="Stop response">
             <Button
               aria-label="Stop response"
-              className="bg-muted text-fg hover:bg-control-hover"
               onClick={onStop}
               size="icon-sm"
               type="button"
+              variant="secondary"
             >
               <HugeiconsIcon aria-hidden className="size-3.5" icon={StopIcon} />
             </Button>

@@ -426,7 +426,6 @@ export const LabelsWorkspacePanel = ({
                       aria-label={
                         isShown ? "Hide from sidebar" : "Show in sidebar"
                       }
-                      className="text-muted-fg"
                       onClick={() => {
                         void toggleSidebarVisibility(label);
                       }}

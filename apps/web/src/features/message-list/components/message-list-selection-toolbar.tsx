@@ -93,6 +93,7 @@ const MessageListBulkActionButton = ({
       aria-label={action.label}
       // oxlint-disable-next-line shadcn/require-static-classes -- Shared header control scale lives in message-list-header-surfaces.
       className={cn(messageListHeaderControlVariants({ control: "toolbar" }), {
+        // oxlint-disable-next-line shadcn/no-restyle -- Destructive actions hover red.
         "hover:text-destructive": action.destructive === true,
       })}
       disabled={disabled}

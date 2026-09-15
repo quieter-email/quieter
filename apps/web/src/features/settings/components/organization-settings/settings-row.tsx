@@ -24,6 +24,7 @@ export const MutedActionButton = ({
         className={
           // oxlint-disable-next-line shadcn/require-static-classes -- Optional caller override with a static fallback.
           buttonClassName ??
+          // oxlint-disable-next-line shadcn/no-restyle -- Static preview keeps its inert treatment.
           "pointer-events-none bg-transparent text-muted-fg opacity-100 hover:bg-transparent hover:text-muted-fg"
         }
         disabled

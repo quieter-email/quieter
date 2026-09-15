@@ -86,7 +86,7 @@ const FirstRunSetupHeader = ({
   <div className="flex flex-col gap-4 border-b border-border p-5 @3xl:flex-row @3xl:items-start @3xl:justify-between">
     <div>
       <Button
-        className="mb-3 -ml-2 text-muted-fg"
+        className="mb-3 -ml-2"
         onClick={onBack}
         size="sm"
         variant="ghost"

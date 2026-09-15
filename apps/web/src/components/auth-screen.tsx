@@ -306,8 +306,8 @@ const AuthCredentials = ({
 
             return (
               <Button
-                className="group relative w-full justify-center gap-3"
                 disabled={!canSubmit}
+                size="block"
                 type="submit"
               >
                 {authClient.isLastUsedLoginMethod("magic-link") && (
@@ -336,11 +336,12 @@ const AuthCredentials = ({
       <div className="mt-6 mb-3 h-px w-full bg-border" />
 
       <Button
-        className="group relative mt-3 w-full cursor-pointer justify-center gap-3"
+        className="mt-3"
         disabled={googleMutation.isPending}
         onClick={() => {
           googleMutation.mutate();
         }}
+        size="block"
         type="button"
         variant="outline"
       >
@@ -356,11 +357,12 @@ const AuthCredentials = ({
       </Button>
 
       <Button
-        className="group relative mt-3 w-full justify-center gap-3"
+        className="mt-3"
         disabled={passkeyMutation.isPending}
         onClick={() => {
           passkeyMutation.mutate();
         }}
+        size="block"
         type="button"
         variant="outline"
       >

@@ -140,7 +140,8 @@ export const SettingsSidebar = ({
     <div className="relative z-10 flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-6">
       <div className="mb-3 flex items-center justify-between px-1">
         <Button
-          className="h-7 justify-start gap-2 px-2 text-caption"
+          // oxlint-disable-next-line shadcn/no-restyle -- Back link keeps its caption metrics.
+          className="justify-start gap-2 px-2 text-caption"
           onClick={() => {
             void navigate({ to: from });
           }}

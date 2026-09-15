@@ -199,7 +199,8 @@ const SidebarInboxSection = ({
       >
         <Button
           aria-disabled={embedded === true || selectedMailboxProvider === "api"}
-          className="w-full justify-start rounded-md px-4"
+          // oxlint-disable-next-line shadcn/no-restyle -- Compose action stays full-width and left-aligned.
+          className="w-full justify-start px-4"
           disabled={
             !selectedMailboxId ||
             embedded === true ||
@@ -270,6 +271,7 @@ const SidebarFooter = ({
       <div className="relative min-w-0 flex-1 rounded-md squircle hover:bg-muted/60 dark:hover:bg-muted/40">
         <LinkButton
           aria-label="Settings"
+          // oxlint-disable-next-line shadcn/no-restyle -- Sidebar settings link keeps its row treatment.
           className="group relative z-10 w-full justify-start bg-transparent hover:bg-transparent active:scale-100"
           onClick={onRequestClose}
           search={{

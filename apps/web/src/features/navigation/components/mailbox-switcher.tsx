@@ -289,7 +289,9 @@ const MailboxMenuItem = ({
     <Button
       aria-current={isActive ? "page" : undefined}
       className={cn(
+        // oxlint-disable-next-line shadcn/no-restyle -- Switcher items keep their bespoke metrics.
         "relative z-10 h-auto min-h-12 w-full justify-start rounded-xs px-2.5 py-2 pr-10 text-left hover:bg-transparent active:scale-[0.985]",
+        // oxlint-disable-next-line shadcn/no-restyle -- Active item uses semibold.
         { "font-medium": isActive }
       )}
       data-mailbox-switcher-navigation-item
@@ -375,8 +377,11 @@ const MailboxDefaultButton = ({
   <IconButtonTooltip label={defaultMailboxLabel}>
     <Button
       aria-label={defaultMailboxLabel}
+      // oxlint-disable-next-line shadcn/no-restyle -- Pin toggle keeps its compact reveal-on-hover metrics.
       className={cn("size-5 shrink-0 rounded-md p-0", {
+        // oxlint-disable-next-line shadcn/no-restyle -- Pinned state uses foreground text.
         "text-fg": isDefault,
+        // oxlint-disable-next-line shadcn/no-restyle -- Unpinned state reveals on hover.
         "text-muted-fg/50 opacity-0 group-focus-within/item:opacity-100 group-hover/item:opacity-100 hover:text-fg focus-visible:opacity-100":
           !isDefault,
       })}
@@ -492,6 +497,7 @@ const SortableGroup = ({
             <IconButtonTooltip label={`Open ${group.name} settings`}>
               <LinkButton
                 aria-label={`Open ${group.name} settings`}
+                // oxlint-disable-next-line shadcn/no-restyle -- Reveal-on-hover settings action.
                 className="pointer-events-none relative z-10 mr-0.5 size-7 opacity-0 transition-opacity group-focus-within/header:pointer-events-auto group-focus-within/header:opacity-100 group-hover/header:pointer-events-auto group-hover/header:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100"
                 data-mailbox-switcher-navigation-action
                 search={{
@@ -1010,6 +1016,7 @@ export const MailboxSwitcherDropdown = ({
                   {!embedded && (
                     <div className="mt-1">
                       <LinkButton
+                        // oxlint-disable-next-line shadcn/no-restyle -- Manage row keeps its compact nav metrics.
                         className="h-auto min-h-7 w-full justify-between rounded-xs px-2.5 py-1 squircle"
                         data-mailbox-switcher-navigation-item
                         search={{ from: "/", mailboxId: "", tab: "mailboxes" }}
