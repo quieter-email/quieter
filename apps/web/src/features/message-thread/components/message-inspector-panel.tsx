@@ -3,6 +3,7 @@
 import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
+import { Text } from "@quieter/ui/text";
 import {
   Dialog,
   DialogBody,
@@ -58,9 +59,9 @@ export const MessageInspectorPanel = ({
     );
   } else if (isInspectorError) {
     inspectorBody = (
-      <p className="text-body text-destructive">
+      <Text tone="destructive">
         {inspectorError.message ?? "Could not load message details."}
-      </p>
+      </Text>
     );
   } else if (inspector !== undefined) {
     inspectorBody = (

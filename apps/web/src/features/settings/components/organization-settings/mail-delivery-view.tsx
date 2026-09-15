@@ -2,6 +2,7 @@
 
 import { cn } from "@quieter/ui/cn";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
+import { Text } from "@quieter/ui/text";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { useState } from "react";
@@ -266,9 +267,9 @@ export const MailDeliveryView = ({
     metricsSection = null;
   } else if (isMetricsError) {
     metricsSection = (
-      <p className="text-body text-destructive" role="alert">
+      <Text role="alert" tone="destructive">
         Could not load delivery metrics.
-      </p>
+      </Text>
     );
   } else if (isMetricsPending || metrics === undefined) {
     metricsSection = <SettingsLoadingState label="Loading metrics" />;

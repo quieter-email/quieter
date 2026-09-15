@@ -19,6 +19,7 @@ import {
   DialogTitle,
 } from "@quieter/ui/dialog";
 import { Radio, RadioGroup, RadioIndicator } from "@quieter/ui/radio-group";
+import { Text } from "@quieter/ui/text";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -169,12 +170,12 @@ export const RegisterDomainDialog = ({
                       value={field.state.value}
                     />
                     {field.state.meta.errors.map((error) => (
-                      <p
-                        className="text-body text-destructive"
+                      <Text
                         key={error?.message}
+                        tone="destructive"
                       >
                         {error?.message}
-                      </p>
+                      </Text>
                     ))}
                   </TextField>
                 )}
@@ -244,7 +245,7 @@ export const RegisterDomainDialog = ({
               {submitError !== null &&
               submitError !== undefined &&
               submitError !== "" ? (
-                <p className="text-body text-destructive">{submitError}</p>
+                <Text tone="destructive">{submitError}</Text>
               ) : null}
 
               <DialogFooter className="px-0 pb-0">

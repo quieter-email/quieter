@@ -18,6 +18,7 @@ import {
 } from "@quieter/ui/composer-chrome";
 import { FieldControl, FieldError } from "@quieter/ui/field";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { Text } from "@quieter/ui/text";
 import { ToolbarButton } from "@quieter/ui/toolbar";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -640,19 +641,21 @@ export const ComposeSurface = ({
         </form.Field>
 
         {state.draft.errorMessage ? (
-          <div
+          <Text
+            as="div"
             aria-live="polite"
-            className="flex min-w-0 shrink-0 items-start gap-2 text-body text-destructive"
+            className="flex min-w-0 shrink-0 items-start"
             role="alert"
+            tone="destructive"
           >
             <HugeiconsIcon
-              className="mt-0.5 size-4 shrink-0"
+              className="mr-2 mt-0.5 size-4 shrink-0"
               icon={AlertCircleIcon}
             />
             <span className="min-w-0 wrap-break-word">
               {state.draft.errorMessage}
             </span>
-          </div>
+          </Text>
         ) : null}
       </ComposerFrame>
     </form>

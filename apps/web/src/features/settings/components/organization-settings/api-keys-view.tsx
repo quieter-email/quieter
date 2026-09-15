@@ -44,6 +44,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@quieter/ui/select";
+import { Text } from "@quieter/ui/text";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { toast } from "@quieter/ui/toast";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
@@ -368,12 +369,12 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
                         value={field.state.value}
                       />
                       {field.state.meta.errors.map((error) => (
-                        <p
-                          className="text-body text-destructive"
+                        <Text
                           key={error?.message}
+                          tone="destructive"
                         >
                           {error?.message}
-                        </p>
+                        </Text>
                       ))}
                     </TextField>
                   )}
@@ -421,19 +422,19 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
                         </SelectContent>
                       </Select>
                       {field.state.meta.errors.map((error) => (
-                        <p
-                          className="text-body text-destructive"
+                        <Text
                           key={error?.message}
+                          tone="destructive"
                         >
                           {error?.message}
-                        </p>
+                        </Text>
                       ))}
                     </TextField>
                   )}
                 </form.Field>
 
                 {submitError === null ? null : (
-                  <p className="text-body text-destructive">{submitError}</p>
+                  <Text tone="destructive">{submitError}</Text>
                 )}
               </DialogBody>
 

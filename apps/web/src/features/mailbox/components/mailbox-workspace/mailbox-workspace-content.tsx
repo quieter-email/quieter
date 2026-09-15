@@ -8,6 +8,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { Text } from "@quieter/ui/text";
 import { domAnimation, LazyMotion, m } from "motion/react";
 import { lazy, Suspense, useState } from "react";
 import type { ComponentProps, ReactNode } from "react";
@@ -252,7 +253,7 @@ const NoMailboxWorkspace = ({
               </LinkButton>
             </div>
             {connectError ? (
-              <p className="mt-3 text-body text-destructive">{connectError}</p>
+              <Text className="mt-3" tone="destructive">{connectError}</Text>
             ) : null}
           </m.div>
         )}
@@ -409,9 +410,9 @@ const MailboxWorkspaceContentInner = ({
               Reconnect
             </Button>
             {reconnectError ? (
-              <p className="mt-3 text-body text-destructive">
+              <Text className="mt-3" tone="destructive">
                 {reconnectError}
-              </p>
+              </Text>
             ) : null}
           </div>
         </m.div>

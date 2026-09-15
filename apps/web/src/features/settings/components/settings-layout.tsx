@@ -4,6 +4,7 @@ import { ArrowLeft01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { Text } from "@quieter/ui/text";
 import { cva } from "class-variance-authority";
 import type { ReactNode } from "react";
 
@@ -377,9 +378,9 @@ export const SettingsErrorState = ({
   onRetry: () => void;
 }) => (
   <SettingsCard className="flex min-h-15 items-center justify-between gap-4 px-4 py-3">
-    <p role="alert" className="text-body text-destructive">
+    <Text role="alert" tone="destructive">
       {message}
-    </p>
+    </Text>
     <Button onClick={onRetry} size="sm" type="button" variant="outline">
       Try again
     </Button>

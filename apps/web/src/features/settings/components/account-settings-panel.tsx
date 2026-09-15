@@ -19,6 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
+import { Text } from "@quieter/ui/text";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -214,19 +215,19 @@ const AccountNameSettings = ({
                   value={field.state.value}
                 />
                 {field.state.meta.errors.map((error) => (
-                  <p
-                    className="text-body text-destructive"
+                  <Text
                     key={error?.message}
+                    tone="destructive"
                   >
                     {error?.message}
-                  </p>
+                  </Text>
                 ))}
               </TextField>
             )}
           </form.Field>
 
           {submitError === null ? null : (
-            <p className="text-body text-destructive">{submitError}</p>
+            <Text tone="destructive">{submitError}</Text>
           )}
         </div>
 
@@ -355,19 +356,19 @@ const AccountEmailSettings = ({ currentEmail }: { currentEmail: string }) => {
                   value={field.state.value}
                 />
                 {field.state.meta.errors.map((error) => (
-                  <p
-                    className="text-body text-destructive"
+                  <Text
                     key={error?.message}
+                    tone="destructive"
                   >
                     {error?.message}
-                  </p>
+                  </Text>
                 ))}
               </TextField>
             )}
           </form.Field>
 
           {submitError === null ? null : (
-            <p className="text-body text-destructive">{submitError}</p>
+            <Text tone="destructive">{submitError}</Text>
           )}
         </div>
 
@@ -583,7 +584,7 @@ const PasskeySettings = ({
         </div>
 
         {submitError === null ? null : (
-          <p className="text-body text-destructive">{submitError}</p>
+          <Text tone="destructive">{submitError}</Text>
         )}
       </div>
     </div>
@@ -706,19 +707,19 @@ const DeleteAccountDialog = () => {
                       value={field.state.value}
                     />
                     {field.state.meta.errors.map((error) => (
-                      <p
-                        className="text-body text-destructive"
+                      <Text
                         key={error?.message}
+                        tone="destructive"
                       >
                         {error?.message}
-                      </p>
+                      </Text>
                     ))}
                   </TextField>
                 )}
               </form.Field>
 
               {submitError === null ? null : (
-                <p className="text-body text-destructive">{submitError}</p>
+                <Text tone="destructive">{submitError}</Text>
               )}
             </DialogBody>
 

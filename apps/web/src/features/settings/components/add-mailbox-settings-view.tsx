@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@quieter/ui/select";
+import { Text } from "@quieter/ui/text";
 import { TextFieldInput } from "@quieter/ui/text-field";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -645,10 +646,10 @@ export const AddMailboxSettingsView = ({
             )}
 
             {createManagedMailboxMutation.isError ? (
-              <p className="text-body text-destructive">
+              <Text tone="destructive">
                 {createManagedMailboxMutation.error?.message ??
                   "Could not create mailbox."}
-              </p>
+              </Text>
             ) : null}
           </div>
           <div className="mt-8 flex justify-end">

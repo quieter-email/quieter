@@ -13,6 +13,7 @@ import {
   CollapsibleTrigger,
 } from "@quieter/ui/collapsible";
 import { Pill } from "@quieter/ui/pill";
+import { Text } from "@quieter/ui/text";
 import { useQuery } from "@tanstack/react-query";
 
 import {
@@ -207,9 +208,9 @@ export const MessageDeliverySection = ({
       ) : null}
 
       {isDeliveryError ? (
-        <p className="text-body text-destructive">
+        <Text tone="destructive">
           {deliveryError.message ?? "Could not load delivery status."}
-        </p>
+        </Text>
       ) : null}
 
       {delivery === undefined ? null : (
