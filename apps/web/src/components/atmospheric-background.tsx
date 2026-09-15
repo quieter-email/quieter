@@ -723,7 +723,9 @@ export const AtmosphericBackground = ({
         })}
         ref={canvasRef}
         style={{
+          // oxlint-disable-next-line shadcn/no-inline-styles -- Reveal timing is computed from constants.
           transitionDuration: `${REVEAL_MS}ms`,
+          // oxlint-disable-next-line shadcn/no-inline-styles -- Reveal timing is computed from constants.
           transitionProperty: "opacity",
         }}
       />

@@ -49,6 +49,7 @@ export const SidebarNavItem = ({
       <SidebarActiveSurface className={activeSurfaceClassName} />
     ) : null}
     <Button
+      // oxlint-disable-next-line shadcn/require-static-classes -- Forwards the caller's classes to the shared button.
       className={cn(sidebarNavButtonVariants(), className)}
       onBlur={onBlur}
       onFocus={onFocus}

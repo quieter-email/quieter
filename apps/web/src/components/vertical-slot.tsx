@@ -138,6 +138,7 @@ export const VerticalSlot = ({
               }));
             }
           }}
+          // oxlint-disable-next-line shadcn/no-inline-styles -- Slot timing comes from the transition definition.
           style={{ transitionDuration: `${duration}ms` }}
         >
           {item.children}

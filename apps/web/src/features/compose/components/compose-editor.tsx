@@ -324,7 +324,9 @@ export const ComposeEditorBody = ({
               })}
               key={bar.id}
               style={{
+                // oxlint-disable-next-line shadcn/no-inline-styles -- Bar delay and scale are computed per sample.
                 animationDelay: `${index * 70}ms`,
+                // oxlint-disable-next-line shadcn/no-inline-styles -- Bar delay and scale are computed per sample.
                 transform: `scaleY(${bar.scale})`,
               }}
             />

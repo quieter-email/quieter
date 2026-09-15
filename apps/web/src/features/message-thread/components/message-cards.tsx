@@ -337,7 +337,9 @@ const ThreadMessageBody = ({
     // oxlint-disable-next-line shadcn/no-arbitrary-values -- Grid-rows collapse animation needs the exact property.
     className="grid overflow-hidden transition-[grid-template-rows] duration-(--app-motion-duration-layout) ease-(--app-motion-ease-in-out) motion-reduce:transition-none"
     style={{
+      // oxlint-disable-next-line shadcn/no-inline-styles -- Collapse animation is driven by measured state.
       gridTemplateRows: expanded ? "1fr" : "0fr",
+      // oxlint-disable-next-line shadcn/no-inline-styles -- Collapse animation is driven by measured state.
       pointerEvents: expanded ? "auto" : "none",
     }}
   >

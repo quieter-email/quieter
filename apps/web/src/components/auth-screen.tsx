@@ -69,6 +69,7 @@ const AuthLastUsedHint = () => (
         aria-hidden
         className="absolute top-1/2 left-1/2 aspect-square w-[300%] -translate-1/2"
         style={{
+          // oxlint-disable-next-line shadcn/no-inline-styles -- Conic sheen cannot be expressed in classes.
           background:
             "conic-gradient(from 0deg, var(--border) 0deg, var(--border) 270deg, color-mix(in oklch, var(--primary) 100%, var(--border)) 325deg, var(--border) 360deg)",
         }}

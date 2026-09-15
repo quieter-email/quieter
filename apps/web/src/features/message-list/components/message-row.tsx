@@ -867,6 +867,7 @@ export const MessageRow = ({
       data-thread-id={thread.threadId}
       ref={rowRef}
       style={{
+        // oxlint-disable-next-line shadcn/no-inline-styles -- Virtualized rows are positioned by measured offset.
         transform: `translateY(${offsetY}px)`,
       }}
     >

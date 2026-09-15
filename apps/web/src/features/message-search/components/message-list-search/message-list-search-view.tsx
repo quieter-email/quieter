@@ -137,6 +137,7 @@ export const MessageListSearchView = ({
           <IconButtonTooltip label="Refresh list">
             <Button
               aria-label="Refresh list"
+              // oxlint-disable-next-line shadcn/require-static-classes -- Shared header control scale lives in message-list-header-surfaces.
               className={messageListHeaderControlVariants({
                 control: "toolbar",
               })}
@@ -203,6 +204,7 @@ export const MessageListSearchView = ({
                         }
                       )}
                       key={filterRenderKey}
+                      // oxlint-disable-next-line shadcn/no-inline-styles -- Interleaved pills need computed flex order.
                       style={{ order: index * 2 + 1 }}
                       onClick={(event) => {
                         event.stopPropagation();
@@ -250,6 +252,7 @@ export const MessageListSearchView = ({
                         "gap-1"
                       )}
                       key={filterRenderKey}
+                      // oxlint-disable-next-line shadcn/no-inline-styles -- Interleaved pills need computed flex order.
                       style={{ order: index * 2 + 1 }}
                       onClick={(event) => {
                         event.stopPropagation();
@@ -420,6 +423,7 @@ export const MessageListSearchView = ({
                 placeholder={currentState.filters.length > 0 ? "" : "Search"}
                 ref={textInputRef}
                 spellCheck={false}
+                // oxlint-disable-next-line shadcn/no-inline-styles -- Input follows the last filter pill.
                 style={{ order: textInputIndex * 2 }}
                 type="text"
                 value={currentState.text}
@@ -516,6 +520,7 @@ export const MessageListSearchView = ({
               activeDateFilter.type === "before") && (
               <div
                 className="absolute top-full z-40 mt-2 max-h-[calc(100dvh-5rem)] max-w-[calc(100vw-1rem)] overflow-auto overscroll-contain rounded-lg bg-popover p-2 shadow-lg"
+                // oxlint-disable-next-line shadcn/no-inline-styles -- Popover anchors to measured input position.
                 style={{ left: datePopoverLeft }}
               >
                 <div className="mb-2 grid grid-cols-2 gap-1 border-b pb-2">

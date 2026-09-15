@@ -352,6 +352,7 @@ export const MessageListScrollPane = ({
         <ul
           className="relative"
           style={{
+            // oxlint-disable-next-line shadcn/no-inline-styles -- Height is measured from the virtualizer.
             height: `${messageVirtualizer.getTotalSize()}px`,
           }}
         >

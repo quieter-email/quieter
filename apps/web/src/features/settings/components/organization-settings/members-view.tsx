@@ -74,7 +74,9 @@ export const MembersView = ({
         {showMemberSearch && (
           <TextField
             className={cn(
+              // oxlint-disable-next-line shadcn/require-static-classes -- Shared surface scale lives in settings-layout.
               settingsSurfaceVariants({ variant: "insetRow" }),
+              // oxlint-disable-next-line shadcn/require-static-classes -- Shared surface scale lives in settings-layout.
               settingsSurfaceVariants({ variant: "divider" }),
               "relative"
             )}

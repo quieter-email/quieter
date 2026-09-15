@@ -195,6 +195,7 @@ const UsageBreakdown = ({
       <div className="flex h-3 overflow-hidden rounded-full bg-muted shadow-inner ring-1 ring-border/60 squircle">
         <div
           className="flex h-full min-w-1 overflow-hidden"
+          // oxlint-disable-next-line shadcn/no-inline-styles -- Bar width is measured from cost data.
           style={{ width: `${usedPercent}%` }}
         >
           {items.flatMap((item) => {
@@ -213,6 +214,7 @@ const UsageBreakdown = ({
                   // oxlint-disable-next-line shadcn/no-arbitrary-values -- Brightness hover needs the filter property.
                   className={`${item.className} min-w-1 transition-[filter] hover:brightness-110`}
                   render={<span />}
+                  // oxlint-disable-next-line shadcn/no-inline-styles -- Segment flex is measured from cost data.
                   style={{ flexBasis: 0, flexGrow: item.costCents }}
                 />
                 <TooltipContent className="min-w-40 px-3 py-2">

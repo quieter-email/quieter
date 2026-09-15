@@ -107,6 +107,7 @@ const workspaceContentMotion = {
   animate: { filter: "blur(0px)", opacity: 1, scale: 1 },
   exit: { filter: "blur(14px)", opacity: 0, scale: 0.96 },
   initial: { filter: "blur(14px)", opacity: 0, scale: 0.96 },
+  // oxlint-disable-next-line shadcn/no-inline-styles -- Motion preset pivots around the center.
   style: { transformOrigin: "center center" },
   transition: { duration: 0.18, ease: "easeOut" },
 } as const;

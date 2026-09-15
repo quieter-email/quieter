@@ -429,6 +429,8 @@ export const MessageActionsContextMenu = ({
 
   return (
     <ContextMenu>
+      // oxlint-disable-next-line shadcn/require-static-classes -- Trigger classes come from the caller.
+      // oxlint-disable-next-line shadcn/no-inline-styles -- Trigger style comes from the caller.
       <ContextMenuTrigger className={triggerClassName} style={triggerStyle}>
         {children}
       </ContextMenuTrigger>

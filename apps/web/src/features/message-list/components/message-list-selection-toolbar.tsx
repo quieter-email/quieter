@@ -91,6 +91,7 @@ const MessageListBulkActionButton = ({
   <IconButtonTooltip label={action.label}>
     <Button
       aria-label={action.label}
+      // oxlint-disable-next-line shadcn/require-static-classes -- Shared header control scale lives in message-list-header-surfaces.
       className={cn(messageListHeaderControlVariants({ control: "toolbar" }), {
         "hover:text-destructive": action.destructive === true,
       })}
@@ -120,6 +121,7 @@ const MessageListBulkLabelsMenu = ({
       <IconButtonTooltip label="Labels">
         <DropdownMenuTrigger
           aria-label="Modify labels"
+          // oxlint-disable-next-line shadcn/require-static-classes -- Shared header control scale lives in message-list-header-surfaces.
           className={messageListHeaderControlVariants({ control: "trigger" })}
           disabled={disabled}
           type="button"
@@ -142,6 +144,7 @@ const MessageListBulkOverflowMenu = ({
     <IconButtonTooltip label="More actions">
       <DropdownMenuTrigger
         aria-label="Open more actions"
+        // oxlint-disable-next-line shadcn/require-static-classes -- Shared header control scale lives in message-list-header-surfaces.
         className={messageListHeaderControlVariants({ control: "trigger" })}
         disabled={disabled}
         type="button"
@@ -274,6 +277,7 @@ export const MessageListSelectionToolbar = ({
         <IconButtonTooltip label="Clear selection">
           <Button
             aria-label="Clear selection"
+            // oxlint-disable-next-line shadcn/require-static-classes -- Shared header control scale lives in message-list-header-surfaces.
             className={messageListHeaderControlVariants({ control: "toolbar" })}
             disabled={disabled}
             onClick={onClearSelection}
