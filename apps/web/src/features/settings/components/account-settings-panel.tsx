@@ -5,7 +5,6 @@ import {
   Delete02Icon,
   Edit01Icon,
   Key02Icon,
-  Loading03Icon,
   Logout03Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -19,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
+import { SpinnerIcon } from "@quieter/ui/spinner-icon";
 import { Text } from "@quieter/ui/text";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
@@ -109,11 +109,7 @@ const renderPasskeyList = (
         variant="outline"
       >
         {removingPasskeyId === passkey.id ? (
-          <HugeiconsIcon
-            aria-hidden
-            className="size-4 animate-spin"
-            icon={Loading03Icon}
-          />
+          <SpinnerIcon />
         ) : (
           <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
         )}
@@ -239,11 +235,7 @@ const AccountNameSettings = ({
             type="submit"
           >
             {updateUserMutation.isPending ? (
-              <HugeiconsIcon
-                aria-hidden
-                className="size-4 animate-spin"
-                icon={Loading03Icon}
-              />
+              <SpinnerIcon />
             ) : (
               <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
             )}
@@ -380,11 +372,7 @@ const AccountEmailSettings = ({ currentEmail }: { currentEmail: string }) => {
             type="submit"
           >
             {changeEmailMutation.isPending ? (
-              <HugeiconsIcon
-                aria-hidden
-                className="size-4 animate-spin"
-                icon={Loading03Icon}
-              />
+              <SpinnerIcon />
             ) : (
               <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
             )}
@@ -562,11 +550,7 @@ const PasskeySettings = ({
             type="submit"
           >
             {addPasskeyMutation.isPending ? (
-              <HugeiconsIcon
-                aria-hidden
-                className="size-4 animate-spin"
-                icon={Loading03Icon}
-              />
+              <SpinnerIcon />
             ) : (
               <HugeiconsIcon aria-hidden className="size-4" icon={Key02Icon} />
             )}
@@ -734,11 +718,7 @@ const DeleteAccountDialog = () => {
                 variant="destructive"
               >
                 {deleteAccountMutation.isPending ? (
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4 animate-spin"
-                    icon={Loading03Icon}
-                  />
+                  <SpinnerIcon />
                 ) : (
                   <HugeiconsIcon
                     aria-hidden
@@ -850,11 +830,7 @@ export const AccountSettingsPanel = ({
                 variant="outline"
               >
                 {signOutMutation.isPending ? (
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4 animate-spin"
-                    icon={Loading03Icon}
-                  />
+                  <SpinnerIcon />
                 ) : (
                   <HugeiconsIcon
                     aria-hidden

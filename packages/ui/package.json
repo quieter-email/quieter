@@ -39,6 +39,7 @@
     "./select": "./src/components/ui/select.tsx",
     "./separator": "./src/components/ui/separator.tsx",
     "./slider": "./src/components/ui/slider.tsx",
+    "./spinner-icon": "./src/components/ui/spinner-icon.tsx",
     "./styles.css": "./src/styles.css",
     "./switch": "./src/components/ui/switch.tsx",
     "./tabs": "./src/components/ui/tabs.tsx",
