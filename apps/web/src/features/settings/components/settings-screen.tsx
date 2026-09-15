@@ -116,7 +116,7 @@ export const SettingsScreen = ({
       }}
     >
       {({ input, results, searching }) => (
-        <div className="relative isolate flex h-dvh min-h-0 overflow-hidden pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-fg lg:p-0">
+        <div className="relative isolate flex h-dvh min-h-0 overflow-hidden pt-safe pr-safe pb-safe pl-safe text-fg lg:p-0">
           <SettingsDataPrefetch tab={tab} />
           <BillingCheckoutResult />
           <ConnectorConnectionResult />
