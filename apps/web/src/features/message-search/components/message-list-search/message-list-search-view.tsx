@@ -306,6 +306,7 @@ export const MessageListSearchView = ({
                     ref={(node) => {
                       setDateTokenRef(index, node);
                     }}
+                    // oxlint-disable-next-line shadcn/no-inline-styles -- Interleaved pills need computed flex order.
                     style={{ order: index * 2 + 1 }}
                   >
                     <button
