@@ -383,7 +383,7 @@ export const FloatingAssistant = ({
             animate={{ opacity: open ? 0 : 1 }}
             transition={{ duration: reducedMotion ? 0 : 0.12 }}
             className={cn(
-              "absolute right-0 bottom-0 flex size-[46px] cursor-grab touch-none items-center justify-center rounded-lg focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:cursor-grabbing",
+              "absolute right-0 bottom-0 flex size-[46px] touch-none items-center justify-center rounded-lg focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none",
               { "pointer-events-none": open }
             )}
             data-assistant-launcher
