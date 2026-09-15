@@ -334,6 +334,7 @@ const ThreadMessageBody = ({
 }) => (
   <div
     aria-hidden={!expanded}
+    // oxlint-disable-next-line shadcn/no-arbitrary-values -- Grid-rows collapse animation needs the exact property.
     className="grid overflow-hidden transition-[grid-template-rows] duration-(--app-motion-duration-layout) ease-(--app-motion-ease-in-out) motion-reduce:transition-none"
     style={{
       gridTemplateRows: expanded ? "1fr" : "0fr",
@@ -343,6 +344,7 @@ const ThreadMessageBody = ({
     <div className="min-h-0 overflow-hidden">
       <div
         className={cn(
+          // oxlint-disable-next-line shadcn/no-arbitrary-values -- Enter animation needs the exact property list.
           "mx-auto w-full max-w-3xl px-4 pb-4 transition-[opacity,transform] duration-(--app-motion-duration-enter) ease-(--app-motion-ease-out) motion-reduce:transition-none @sm:px-5 @sm:pb-5",
           {
             "-translate-y-1 opacity-0": !expanded,

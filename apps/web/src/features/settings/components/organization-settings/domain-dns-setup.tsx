@@ -47,6 +47,7 @@ const DnsCopyCell = ({ value }: { value: string }) => (
     aria-label={`Copy ${value}`}
     className={cn(
       "squircle max-w-full min-w-0 rounded-md px-1.5 py-0.5 text-left font-mono text-caption text-fg",
+      // oxlint-disable-next-line shadcn/no-arbitrary-values -- Explicit transition properties for the copy affordance.
       "transition-[transform,background-color] duration-100 ease-out",
       "hover:bg-muted/70",
       "active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"

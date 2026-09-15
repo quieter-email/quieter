@@ -256,6 +256,7 @@ const MessageRowSelectionButton = ({
         >
           <span
             className={cn(
+              // oxlint-disable-next-line shadcn/no-arbitrary-values -- Bulk-select checkbox sizing with explicit transition properties.
               "flex size-4.5 items-center justify-center rounded-[5px] border bg-bg-raised text-transparent shadow-xs transition-[background-color,border-color,color] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out)",
               {
                 "border-border": !isSelected,

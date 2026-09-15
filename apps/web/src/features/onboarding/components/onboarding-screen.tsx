@@ -866,7 +866,10 @@ export const OnboardingScreen = () => {
             className="relative text-center"
             {...getAppFlyInMotion({ animate: true, index: 0, reducedMotion })}
           >
-            <h1 className="font-sans text-title-lg leading-[1.32] font-normal tracking-[-0.014em] text-balance text-fg">
+            <h1
+              // oxlint-disable-next-line shadcn/no-arbitrary-values -- Hero display type shared with the status screen.
+              className="font-sans text-title-lg leading-[1.32] font-normal tracking-[-0.014em] text-balance text-fg"
+            >
               Welcome to Quieter
             </h1>
           </m.header>
@@ -998,7 +1001,10 @@ export const OnboardingScreen = () => {
       ) : (
         <div className="mx-auto max-w-xl">
           <header>
-            <h1 className="font-sans text-title-md leading-[1.32] font-normal tracking-[-0.014em] text-balance text-fg">
+            <h1
+              // oxlint-disable-next-line shadcn/no-arbitrary-values -- Hero display type shared with the status screen.
+              className="font-sans text-title-md leading-[1.32] font-normal tracking-[-0.014em] text-balance text-fg"
+            >
               Set up what you need
             </h1>
           </header>

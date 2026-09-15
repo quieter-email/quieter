@@ -69,6 +69,7 @@ export const StatusScreen = ({
     <div className="relative z-10 flex min-h-dvh flex-col items-center justify-center px-6 py-16 text-center">
       <span
         aria-hidden
+        // oxlint-disable-next-line shadcn/no-arbitrary-values -- Ghost display type for the status backdrop.
         className="status-enter pointer-events-none absolute top-1/2 left-1/2 -translate-1/2 font-sans leading-none tracking-[-0.04em] text-fg/5 select-none"
         style={ghostStyle(ghost)}
       >
@@ -77,6 +78,7 @@ export const StatusScreen = ({
 
       <div className="relative flex w-full max-w-160 flex-col items-center">
         <h1
+          // oxlint-disable-next-line shadcn/no-arbitrary-values -- Hero display type shared with onboarding.
           className="status-enter font-sans text-title-lg leading-[1.32] font-normal tracking-[-0.014em] text-balance text-fg md:text-display-md md:leading-[1.28]"
           style={enterAfter(0.12)}
         >
@@ -84,6 +86,7 @@ export const StatusScreen = ({
         </h1>
 
         <p
+          // oxlint-disable-next-line shadcn/no-arbitrary-values -- Comfortable reading measure for the status description.
           className="status-enter mt-6 max-w-125 text-body leading-[1.7] text-balance text-muted-fg"
           style={enterAfter(0.2)}
         >

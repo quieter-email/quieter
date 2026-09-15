@@ -121,7 +121,7 @@ export const FloatingAssistant = ({
         }}
         ref={panelRef}
         className={cn(
-          "fixed top-auto right-[max(1.5rem,env(safe-area-inset-right))] bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-auto z-50 m-0 flex w-[400px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-[14px] border border-border-strong/70 bg-bg-raised/90 [background-image:linear-gradient(160deg,color-mix(in_oklab,var(--bg-raised)_88%,transparent),color-mix(in_oklab,var(--bg)_96%,transparent))] p-0 text-fg shadow-elevation backdrop-blur-2xl max-sm:right-[max(1rem,env(safe-area-inset-right))] max-sm:bottom-[max(1rem,env(safe-area-inset-bottom))] max-sm:left-[max(1rem,env(safe-area-inset-left))] max-sm:w-auto max-sm:max-w-none",
+          "fixed top-auto right-[max(1.5rem,env(safe-area-inset-right))] bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-auto z-50 m-0 flex w-[400px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-lg border border-border-strong/70 bg-bg-raised/90 [background-image:linear-gradient(160deg,color-mix(in_oklab,var(--bg-raised)_88%,transparent),color-mix(in_oklab,var(--bg)_96%,transparent))] p-0 text-fg shadow-elevation backdrop-blur-2xl max-sm:right-[max(1rem,env(safe-area-inset-right))] max-sm:bottom-[max(1rem,env(safe-area-inset-bottom))] max-sm:left-[max(1rem,env(safe-area-inset-left))] max-sm:w-auto max-sm:max-w-none",
           { hidden: !open }
         )}
       >
@@ -250,7 +250,7 @@ export const FloatingAssistant = ({
         <IconButtonTooltip label="Open Quieter">
           <button
             aria-label="Open Quieter"
-            className="fixed right-[max(1.5rem,env(safe-area-inset-right))] bottom-[max(1.5rem,env(safe-area-inset-bottom))] z-50 flex size-12 items-center justify-center rounded-[14px] border border-border-strong/70 bg-bg-raised/90 [background-image:linear-gradient(160deg,color-mix(in_oklab,var(--bg-raised)_88%,transparent),color-mix(in_oklab,var(--bg)_96%,transparent))] text-fg shadow-elevation backdrop-blur-2xl transition-transform duration-150 hover:scale-105 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-95 motion-reduce:transition-none motion-reduce:hover:scale-100 max-sm:right-[max(1rem,env(safe-area-inset-right))] max-sm:bottom-[max(1rem,env(safe-area-inset-bottom))]"
+            className="fixed right-[max(1.5rem,env(safe-area-inset-right))] bottom-[max(1.5rem,env(safe-area-inset-bottom))] z-50 flex size-12 items-center justify-center rounded-lg border border-border-strong/70 bg-bg-raised/90 [background-image:linear-gradient(160deg,color-mix(in_oklab,var(--bg-raised)_88%,transparent),color-mix(in_oklab,var(--bg)_96%,transparent))] text-fg shadow-elevation backdrop-blur-2xl transition-transform duration-150 hover:scale-105 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-95 motion-reduce:transition-none motion-reduce:hover:scale-100 max-sm:right-[max(1rem,env(safe-area-inset-right))] max-sm:bottom-[max(1rem,env(safe-area-inset-bottom))]"
             data-assistant-launcher
             onClick={onOpen}
             type="button"

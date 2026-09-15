@@ -928,6 +928,7 @@ export const MailboxSwitcherDropdown = ({
                                             {needsReconnect && (
                                               <button
                                                 aria-label={`Reconnect ${mailbox.emailAddress} through Google`}
+                                                // oxlint-disable-next-line shadcn/no-arbitrary-values -- Explicit transition properties for the reconnect affordance.
                                                 className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-destructive/20 bg-destructive/10 px-1.5 text-caption font-medium text-destructive transition-[color,transform] duration-100 hover:text-destructive/80 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-colors motion-reduce:active:scale-100"
                                                 data-mailbox-switcher-navigation-action
                                                 disabled={isReconnecting}

@@ -74,7 +74,10 @@ const AuthLastUsedHint = () => (
         }}
         transition={{ duration: 5, ease: "linear", repeat: Infinity }}
       />
-      <span className="squircle relative block rounded-[inherit] bg-bg-raised px-2 py-1 text-micro font-medium tracking-wide text-muted-fg">
+      <span
+        // oxlint-disable-next-line shadcn/no-arbitrary-values -- Inherits the parent badge radius by design.
+        className="squircle relative block rounded-[inherit] bg-bg-raised px-2 py-1 text-micro font-medium tracking-wide text-muted-fg"
+      >
         Last used
       </span>
     </span>

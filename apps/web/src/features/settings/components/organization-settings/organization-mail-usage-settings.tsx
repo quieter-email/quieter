@@ -210,6 +210,7 @@ const UsageBreakdown = ({
             return [
               <Tooltip key={item.kind}>
                 <TooltipTrigger
+                  // oxlint-disable-next-line shadcn/no-arbitrary-values -- Brightness hover needs the filter property.
                   className={`${item.className} min-w-1 transition-[filter] hover:brightness-110`}
                   render={<span />}
                   style={{ flexBasis: 0, flexGrow: item.costCents }}
