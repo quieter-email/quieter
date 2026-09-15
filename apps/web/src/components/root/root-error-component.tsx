@@ -36,10 +36,7 @@ export const RootErrorComponent = ({
           >
             Try again
           </Button>
-          <LinkButton
-            to="/"
-            variant="overlay"
-          >
+          <LinkButton to="/" variant="overlay">
             Back to inbox
           </LinkButton>
         </>
