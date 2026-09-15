@@ -12,6 +12,10 @@ peerDependencyRules:
     # Several Babel plugins still declare 7.x peer ranges while the workspace
     # runs @babel/core 8.0.1 (the web toolchain already resolved this way).
     "@babel/core": "8.0.1"
+    # @shadcn/lint pulls typescript-eslint 8.x, whose peer range caps below
+    # the workspace TypeScript. The plugin runs on Oxlint's own AST and the
+    # combination is verified working; this only silences the resolver.
+    typescript: "7.0.2"
 
 catalog:
   "@better-auth/api-key": "1.7.3"
