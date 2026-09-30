@@ -25,7 +25,7 @@ import {
 } from "@quieter/database/schema";
 import { getGmailMessageCount, getGmailProfile } from "@quieter/gmail";
 import { getMailboxCapabilities } from "@quieter/mail/data-plane";
-import { and, asc, count, eq, inArray, isNull, lt } from "drizzle-orm";
+import { and, asc, count, eq, gt, inArray, isNull, lt } from "drizzle-orm";
 import { z } from "zod";
 
 import {
@@ -1189,14 +1189,16 @@ export const completeGmailOAuth = async (input: {
 
   const [oauthState] = await db
     .delete(gmailOAuthState)
-    .where(eq(gmailOAuthState.id, input.state))
+    .where(
+      and(
+        eq(gmailOAuthState.id, input.state),
+        eq(gmailOAuthState.userId, session.user.id),
+        gt(gmailOAuthState.expiresAt, new Date())
+      )
+    )
     .returning();
 
-  if (
-    oauthState === undefined ||
-    oauthState.userId !== session.user.id ||
-    oauthState.expiresAt.getTime() <= Date.now()
-  ) {
+  if (oauthState === undefined) {
     throw new ORPCError("BAD_REQUEST", {
       message: "This Gmail connection request is invalid or expired.",
     });

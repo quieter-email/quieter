@@ -1,3 +1,4 @@
+import { ORPCError } from "@orpc/server";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { reportServerError } from "#/lib/server-error-reporting";
@@ -59,7 +60,15 @@ export const Route = createFileRoute("/api/gmail/callback")({
             result.mailboxId
           );
         } catch (error) {
-          reportServerError(error, "gmail-oauth-callback");
+          const isExpectedFailure =
+            error instanceof ORPCError &&
+            (error.code === "BAD_REQUEST" ||
+              error.code === "CONFLICT" ||
+              error.code === "FORBIDDEN" ||
+              error.code === "UNAUTHORIZED");
+          if (!isExpectedFailure) {
+            reportServerError(error, "gmail-oauth-callback");
+          }
           return redirectWithStatus(
             request.url,
             "/settings?tab=mailboxes",
