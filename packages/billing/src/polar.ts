@@ -44,8 +44,14 @@ export const getPolarClient = async () => {
 
   const accessToken = getPolarAccessToken();
   const { Polar } = await import("@polar-sh/sdk");
+  const { HTTPClient } = await import("@polar-sh/sdk/lib/http");
+  const httpClient = new HTTPClient();
+  httpClient.addHook("beforeRequest", (request) => {
+    request.headers.set("Polar-Version", "2026-04");
+  });
   polarClient ??= new Polar({
     accessToken,
+    httpClient,
     server: getPolarServer(),
   });
 
