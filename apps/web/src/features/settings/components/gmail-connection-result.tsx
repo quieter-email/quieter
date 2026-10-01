@@ -13,6 +13,7 @@ export const GmailConnectionResult = () => {
   const navigate = useNavigate({ from: "/settings" });
   const queryClient = useQueryClient();
   const { gmail } = settingsRouteApi.useSearch();
+  const { gmailError } = settingsRouteApi.useLoaderData();
 
   useEffect(() => {
     if (!gmail) {
@@ -25,7 +26,7 @@ export const GmailConnectionResult = () => {
         queryKey: getMailboxesQueryKey(),
       });
     } else {
-      toastError(undefined, {
+      toastError(gmailError, {
         boundary: "gmail-connect",
         fallback: "Gmail connection didn't finish. Choose Gmail to try again.",
         report: false,
@@ -43,7 +44,7 @@ export const GmailConnectionResult = () => {
       }),
       to: ".",
     });
-  }, [gmail, navigate, queryClient]);
+  }, [gmail, gmailError, navigate, queryClient]);
 
   return null;
 };

@@ -1171,6 +1171,28 @@ const resolveGmailOAuthMailboxIdentity = (input: {
   return { encryptedRefreshToken, existingMailboxId, mailboxId };
 };
 
+export const getGmailOAuthCallbackMailboxId = async (input: {
+  headers: Headers;
+  state: string;
+}) => {
+  const { getSessionWithOrganization } = await import("@quieter/auth/session");
+  const session = await getSessionWithOrganization(input.headers);
+  if (session?.user === undefined || session.session === undefined) {
+    return null;
+  }
+  const [context] = await db
+    .select({ mailboxId: gmailOAuthState.mailboxId })
+    .from(gmailOAuthState)
+    .where(
+      and(
+        eq(gmailOAuthState.id, input.state),
+        eq(gmailOAuthState.userId, session.user.id)
+      )
+    )
+    .limit(1);
+  return context?.mailboxId ?? null;
+};
+
 export const completeGmailOAuth = async (input: {
   code: string;
   headers: Headers;

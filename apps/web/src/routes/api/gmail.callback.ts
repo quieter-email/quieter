@@ -1,6 +1,8 @@
 import { ORPCError } from "@orpc/server";
 import { createFileRoute } from "@tanstack/react-router";
+import { deleteCookie, setCookie } from "@tanstack/react-start/server";
 
+import { getSettingsReturnTo } from "#/features/settings/components/mailboxes-settings-shared";
 import { reportServerError } from "#/lib/server-error-reporting";
 
 const redirectWithStatus = (
@@ -31,23 +33,21 @@ export const Route = createFileRoute("/api/gmail/callback")({
         const url = new URL(request.url);
         const code = url.searchParams.get("code");
         const state = url.searchParams.get("state");
-
-        if (
-          code === null ||
-          code === "" ||
-          state === null ||
-          state === "" ||
-          url.searchParams.has("error")
-        ) {
-          return redirectWithStatus(
-            request.url,
-            "/settings?tab=mailboxes",
-            "error"
-          );
-        }
-
+        let failureReturnTo = getSettingsReturnTo();
+        deleteCookie("gmail-callback-error", { path: "/" });
         try {
-          const { completeGmailOAuth } = await import("@quieter/orpc/mailbox");
+          const { completeGmailOAuth, getGmailOAuthCallbackMailboxId } =
+            await import("@quieter/orpc/mailbox");
+          if (state) {
+            const mailboxId = await getGmailOAuthCallbackMailboxId({
+              headers: request.headers,
+              state,
+            });
+            failureReturnTo = getSettingsReturnTo(mailboxId ?? "");
+          }
+          if (!code || !state || url.searchParams.has("error")) {
+            return redirectWithStatus(request.url, failureReturnTo, "error");
+          }
           const result = await completeGmailOAuth({
             code,
             headers: request.headers,
@@ -66,14 +66,25 @@ export const Route = createFileRoute("/api/gmail/callback")({
               error.code === "CONFLICT" ||
               error.code === "FORBIDDEN" ||
               error.code === "UNAUTHORIZED");
-          if (!isExpectedFailure) {
+          if (isExpectedFailure) {
+            setCookie(
+              "gmail-callback-error",
+              JSON.stringify({
+                message: error.message,
+                status: error.status,
+              }),
+              {
+                httpOnly: true,
+                maxAge: 120,
+                path: "/",
+                sameSite: "lax",
+                secure: url.protocol === "https:",
+              }
+            );
+          } else {
             reportServerError(error, "gmail-oauth-callback");
           }
-          return redirectWithStatus(
-            request.url,
-            "/settings?tab=mailboxes",
-            "error"
-          );
+          return redirectWithStatus(request.url, failureReturnTo, "error");
         }
       },
     },

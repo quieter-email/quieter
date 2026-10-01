@@ -1,7 +1,10 @@
 import type * as DatabaseClientModule from "@quieter/database/client";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
-import { completeGmailOAuth } from "../src/mailbox/service";
+import {
+  completeGmailOAuth,
+  getGmailOAuthCallbackMailboxId,
+} from "../src/mailbox/service";
 
 const mocks = vi.hoisted(() => ({
   query:
@@ -50,5 +53,31 @@ describe("Gmail OAuth state consumption", () => {
     expect(query).toContain('"gmailOAuthState"."expiresAt" > $3');
     expect(params).toContain("opaque-state");
     expect(params).toContain("owner-id");
+  });
+
+  test("reads reconnect context only from state owned by the signed-in user", async () => {
+    mocks.query.mockResolvedValueOnce({ rows: [["reconnect-mailbox"]] });
+    await expect(
+      getGmailOAuthCallbackMailboxId({
+        headers: new Headers(),
+        state: "opaque-state",
+      })
+    ).resolves.toBe("reconnect-mailbox");
+    const [query, params] = mocks.query.mock.calls[0] ?? [];
+    expect(query).toContain('"gmailOAuthState"."id" = $1');
+    expect(query).toContain('"gmailOAuthState"."userId" = $2');
+    expect(params).toContain("opaque-state");
+    expect(params).toContain("owner-id");
+  });
+
+  test("does not read reconnect context without an authenticated session", async () => {
+    mocks.session.mockResolvedValueOnce(null);
+    await expect(
+      getGmailOAuthCallbackMailboxId({
+        headers: new Headers(),
+        state: "opaque-state",
+      })
+    ).resolves.toBeNull();
+    expect(mocks.query).not.toHaveBeenCalled();
   });
 });
