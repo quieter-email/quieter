@@ -16,6 +16,11 @@ import { orpc } from "#/lib/orpc";
 
 import { createMailboxActionHandlers } from "../mailbox-action-handlers";
 import type { MailboxActions } from "../mailbox-action-handlers";
+import {
+  captureListMessage,
+  retainSelectedMessageInList,
+} from "./retained-list-message";
+import type { RetainedListMessage } from "./retained-list-message";
 import { useMailboxMessages } from "./use-mailbox-messages";
 import { useMailboxPendingActions } from "./use-mailbox-pending-actions";
 import {
@@ -158,6 +163,13 @@ export const MailboxMessagesPanel = ({
   const setMailboxSearch = useMailboxSearchActions();
   const queryClient = useQueryClient();
   const normalizedSearchQuery = searchQuery.trim();
+  const listScopeKey = JSON.stringify([
+    mailboxId,
+    activeMailbox,
+    normalizedSearchQuery,
+  ]);
+  const [retainedListMessage, setRetainedListMessage] =
+    useState<RetainedListMessage | null>(null);
   const isMessageRouteOpen =
     activeMailbox !== "drafts" && (messageId?.trim() ?? "") !== "";
   const [shouldFocusMessageView, setShouldFocusMessageView] = useState(false);
@@ -181,6 +193,7 @@ export const MailboxMessagesPanel = ({
     refreshMessages,
     refreshSearchResultsIfNeeded,
     selectedMessage,
+    selectedThreadMessages,
   } = useMailboxMessages({
     activeMailbox,
     isDemoMode,
@@ -269,6 +282,9 @@ export const MailboxMessagesPanel = ({
     const shouldPushMobileHistory =
       (messageId?.trim() ?? "") === "" &&
       window.matchMedia("(max-width: 1023.98px)").matches;
+    setRetainedListMessage(
+      captureListMessage(listState.messages, listScopeKey, nextMessageId)
+    );
     void setMailboxSearch(
       { messageId: nextMessageId, threadId: nextThreadId ?? null },
       { replace: !shouldPushMobileHistory }
@@ -279,6 +295,7 @@ export const MailboxMessagesPanel = ({
     const normalizedQuery = nextQuery.trim();
 
     if (normalizedQuery === normalizedSearchQuery) {
+      setRetainedListMessage(null);
       void setMailboxSearch({ messageId: null, threadId: null });
       void refreshMessages();
       return;
@@ -293,6 +310,7 @@ export const MailboxMessagesPanel = ({
   };
 
   const handleRefresh = () => {
+    setRetainedListMessage(null);
     void refreshMessages();
   };
 
@@ -317,7 +335,14 @@ export const MailboxMessagesPanel = ({
           isPending={listState.isPending}
           isRefreshing={listState.isRefreshing}
           mailboxActions={mailboxActions}
-          messages={listState.messages}
+          messages={retainSelectedMessageInList({
+            messageId,
+            pages: listState.messages,
+            retainedMessage: retainedListMessage,
+            scopeKey: listScopeKey,
+            selectedMessage,
+            selectedThreadMessages,
+          })}
           onActivateMessage={activateMessage}
           onDeactivateActiveMessage={backToList}
           onLoadMore={loadMoreMessages}

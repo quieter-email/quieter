@@ -32,7 +32,7 @@ export const useMessageListSelection = ({
   activeMailbox: MailboxCategory;
   activeThreadId: string | null;
   mailboxId: string;
-  onActivateMessage: (messageId: string) => void;
+  onActivateMessage: (messageId: string, threadId: string) => void;
   onDeactivateActiveMessage: () => void;
   searchQuery: string;
   threadedMessages: ThreadListEntry[];
@@ -457,7 +457,7 @@ export const useMessageListSelection = ({
         return;
       }
 
-      onActivateMessageRef.current(thread.anchorMessage.id);
+      onActivateMessageRef.current(thread.anchorMessage.id, thread.threadId);
     },
     [
       selectThreadRange,
@@ -523,7 +523,7 @@ export const useMessageListSelection = ({
     }
     focusRingRequestedRef.current = true;
     setFocusedThreadId(thread.threadId);
-    onActivateMessageRef.current(thread.anchorMessage.id);
+    onActivateMessageRef.current(thread.anchorMessage.id, thread.threadId);
   }, []);
 
   const toggleFocusedThreadSelection = useCallback(() => {

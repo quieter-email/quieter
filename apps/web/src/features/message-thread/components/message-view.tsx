@@ -169,6 +169,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
               <MessageActionsDropdown
                 actions={createMailboxThreadMessageActionHandlers({
                   mailboxActions,
+                  onBackToList,
                   supportsFolders: mailboxProvider === "gmail",
                   supportsLabels: true,
                   supportsUnsubscribe: mailboxProvider === "gmail",
