@@ -182,7 +182,7 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
   {
     description: "Mailboxes / Intelligence",
     id: "intelligence",
-    keywords: "automatic labels auto labeling useful details automation",
+    keywords: "automatic labels auto labeling automation",
     scope: "mailbox",
     section: "intelligence",
     tab: "mailboxes",

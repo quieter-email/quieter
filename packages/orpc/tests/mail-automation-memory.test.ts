@@ -1,9 +1,6 @@
 import { describe, expect, test } from "vite-plus/test";
 
-import {
-  buildAutoLabelMemoryProfile,
-  buildUsefulDetailMemoryProfile,
-} from "../src/mail-automation/memory";
+import { buildAutoLabelMemoryProfile } from "../src/mail-automation/memory";
 
 describe("mail automation memory profiles", () => {
   test("compresses auto-label corrections into durable policies", () => {
@@ -92,55 +89,6 @@ describe("mail automation memory profiles", () => {
         labelName: `Very specific label name ${index}`,
         removed: 0,
         source: `sender-${index}.example.com`,
-      }))
-    );
-
-    expect(profile.rules).toHaveLength(80);
-    expect(profile.rules.every((rule) => rule.count === 5)).toBeTruthy();
-  });
-
-  test("compresses useful-detail feedback into category policies", () => {
-    const profile = buildUsefulDetailMemoryProfile([
-      { kind: "delivery", notUseful: 1, source: null, useful: 4 },
-      { kind: "task", notUseful: 2, source: "github.com", useful: 0 },
-      { kind: "bill", notUseful: 1, source: null, useful: 0 },
-    ]);
-
-    expect(profile).toStrictEqual({
-      kind: "useful_detail",
-      rules: [
-        { count: 2, kind: "task", policy: "suppress", source: "github.com" },
-        { count: 4, kind: "delivery", policy: "prefer", source: null },
-      ],
-    });
-  });
-
-  test("drops conflicting useful-detail feedback without weakening avoid rules", () => {
-    const profile = buildUsefulDetailMemoryProfile([
-      { kind: "bill", notUseful: 2, source: null, useful: 2 },
-      { kind: "delivery", notUseful: 1, source: "shop.example", useful: 0 },
-    ]);
-
-    expect(profile).toStrictEqual({
-      kind: "useful_detail",
-      rules: [
-        {
-          count: 1,
-          kind: "delivery",
-          policy: "suppress",
-          source: "shop.example",
-        },
-      ],
-    });
-  });
-
-  test("preserves every durable useful-detail policy as a separate memory candidate", () => {
-    const profile = buildUsefulDetailMemoryProfile(
-      Array.from({ length: 80 }, (_, index) => ({
-        kind: "delivery",
-        notUseful: 0,
-        source: `sender-${index}.example.com`,
-        useful: 5,
       }))
     );
 

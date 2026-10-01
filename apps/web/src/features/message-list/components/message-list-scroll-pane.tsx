@@ -15,6 +15,7 @@ import {
   getThreadQueryKey,
   getThreadWithDetailsOptions,
 } from "#/lib/mail/thread-query";
+import { verificationCodesQueryOptions } from "#/lib/mail/verification-codes-query";
 
 import type { MessageListProps } from "./message-list-types";
 import { MessageRow } from "./message-row";
@@ -239,6 +240,26 @@ export const MessageListScrollPane = ({
     overscan: MESSAGE_LIST_OVERSCAN,
   });
   const virtualItems = messageVirtualizer.getVirtualItems();
+  const visibleThreadIds = virtualItems
+    .map((item) => threadedMessages[item.index]?.threadId)
+    .filter((threadId): threadId is string => Boolean(threadId))
+    .slice(0, 100);
+  const { data: verificationCodes } = useQuery(
+    verificationCodesQueryOptions(
+      list.mailboxId,
+      visibleThreadIds,
+      list.mailboxProvider !== "api" && list.activeMailbox !== "drafts"
+    )
+  );
+  const latestCodeByThreadId = new Map<
+    string,
+    NonNullable<typeof verificationCodes>["items"][number]
+  >();
+  for (const code of verificationCodes?.items ?? []) {
+    if (!latestCodeByThreadId.has(code.threadId)) {
+      latestCodeByThreadId.set(code.threadId, code);
+    }
+  }
   const hasMountedPrefetchRef = useRef(false);
 
   useLayoutEffect((): (() => void) | undefined => {
@@ -400,6 +421,7 @@ export const MessageListScrollPane = ({
                   selectionMode: selection.selectedThreadIds.size > 0,
                 }}
                 thread={thread}
+                verificationCode={latestCodeByThreadId.get(thread.threadId)}
               />
             );
           })}

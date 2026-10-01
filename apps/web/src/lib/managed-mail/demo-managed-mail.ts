@@ -319,7 +319,6 @@ export const getManagedDemoMailboxes = () => ({
           ownerUserId: null,
           provider: "managed" as const,
           unreadNonSpamCount: getUnreadNonSpamCount(),
-          usefulDetailsEnabled: false,
         },
       ],
       name: "Demo",

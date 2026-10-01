@@ -22,6 +22,7 @@ export const BILLING_USAGE_KINDS = [
   "aiMemory",
   "autoLabel",
   "usefulDetails",
+  "verificationCode",
   "inboundMail",
   "outboundMail",
   "other",
@@ -80,6 +81,8 @@ export const getBillingCreditUsage = async (
       and ${billingCreditUsageEvent.metadata}->>'usageKind' = 'aiMemory' then 'aiMemory'
     when ${billingCreditUsageEvent.category} = 'ai'
       and ${billingCreditUsageEvent.metadata}->>'usageKind' = 'usefulDetails' then 'usefulDetails'
+    when ${billingCreditUsageEvent.category} = 'ai'
+      and ${billingCreditUsageEvent.metadata}->>'usageKind' = 'verificationCode' then 'verificationCode'
     when ${billingCreditUsageEvent.category} = 'ai' then 'aiChat'
     else 'other'
   end`;

@@ -27,18 +27,4 @@
     { "tag": "v2", "new_sqlite_classes": ["GmailLiveSyncMailboxV2"] },
     { "tag": "mail-user-v1", "new_sqlite_classes": ["MailLiveUser"] },
   ],
-  "queues": {
-    "producers": [
-      { "binding": "GmailPsQueue", "queue": "quieter-local-gmail" },
-    ],
-    "consumers": [
-      {
-        "queue": "quieter-local-gmail",
-        "max_batch_size": 1,
-        "max_batch_timeout": 0,
-        "max_retries": 5,
-        "dead_letter_queue": "quieter-local-gmail-failed",
-      },
-    ],
-  },
 }

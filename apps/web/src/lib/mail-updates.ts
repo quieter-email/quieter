@@ -57,7 +57,7 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
                 "messages",
                 "gmail-labels",
                 "managed-label-counts",
-                "gmail-useful-details",
+                "verification-codes",
               ].includes(String(root)) &&
               (mailboxes.has("*") || mailboxes.has(String(queryKey[1])))
             );

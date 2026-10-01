@@ -23,13 +23,7 @@ flowchart TB
             LSDO["GmailLiveSyncMailboxV2<br/>one per email address<br/>hibernatable WebSockets + /broadcast"]
         end
 
-        subgraph QUEUES["Cloudflare Queues"]
-            PSQ["GmailPsQueue<br/>retry 10 / 30s delay<br/>maxConcurrency 20"]
-            PSD["GmailPsDlq"]
-        end
-
-        subgraph CONSUMERS["Queue consumers + crons (Workers)"]
-            PSW["queue-worker.ts<br/>Gmail sync + maintenance<br/>cpu limit 5 min"]
+        subgraph CONSUMERS["Scheduled Workers"]
             MMAINT["Cron every minute<br/>mail-maintenance-worker.ts<br/>send recovery, cleanup, rule backfills"]
             PSMAINT["Cron */15 min<br/>gmail-maintenance-worker.ts<br/>selects only due mailboxes"]
         end
@@ -44,8 +38,8 @@ flowchart TB
         SESIN["SES receiving<br/>receipt rule set quieter-mail"]
         S3["S3 MailBucket<br/>mail/inbound/*<br/>lifecycle: expire after 1 day"]
         SNIN["SNS MailReceiptTopic"]
-        RECEIPT["Lambda MailReceiptProcessor<br/>receipt.handler, 30s"]
-        INGRESS["Lambda MailIngress + Function URL<br/>inbound.handler, 30s, bearer token"]
+        RECEIPT["Lambda MailReceiptProcessor<br/>receipt.handler, 60s"]
+        INGRESS["Lambda MailIngress + Function URL<br/>inbound.handler, 60s, bearer token"]
         SESOUT["SES sending v2<br/>config set quieter-production-outbound"]
         SNOUT["SNS MailOutboundFeedbackTopic"]
         FEED["Lambda MailOutboundFeedbackProcessor<br/>outbound-feedback.handler, 60s<br/>async retries 2"]
@@ -59,7 +53,7 @@ flowchart TB
         GPUB["Google Pub/Sub<br/>Gmail watch push"]
         GAPI["Gmail API<br/>history, messages, labels, watch, modify"]
         GOAUTH["Google Identity OAuth<br/>sign-in only"]
-        OR["OpenRouter<br/>chat, auto-label, useful details,<br/>titles"]
+        OR["OpenRouter<br/>chat, code extraction,<br/>titles"]
         POLAR["Polar<br/>products, checkout, webhooks, usage"]
         LINEAR["Linear<br/>OAuth + MCP"]
         GCAL["Google Calendar<br/>OAuth + events"]
@@ -73,12 +67,10 @@ flowchart TB
     GWORKER -->|mailbox-dirty| LSDO
     GWORKER -->|process notification directly| HD
     LSDO -.->|refresh signal| BROWSER
-    PSQ --> PSW
-    PSW -->|process + maintain| HD
-    PSW -->|details-dirty broadcast| LSDO
+    GWORKER -->|Gmail API + AI processing| GAPI
     PSMAINT -->|list connected mailboxes| HD
-    PSMAINT -->|maintenance jobs| PSQ
-    PSQ --> PSD
+    PSMAINT -->|bounded direct maintenance| HD
+    PSMAINT --> GAPI
     MMAINT --> HD
     MMAINT --> R2
     MMAINT --> POLAR
@@ -98,9 +90,10 @@ flowchart TB
     FDLQ --> ALARM
     FEED --> PG
     WEB --> GAPI
-    PSW --> GAPI
     BROWSER -->|Google sign-in| GOAUTH
-    PSW --> OR
+    GWORKER --> OR
+    RECEIPT --> OR
+    INGRESS --> OR
     WEB --> OR
     WEB --> POLAR
     RECEIPT --> POLAR
@@ -125,10 +118,8 @@ flowchart TB
 | `Web` | `sst.cloudflare.TanStackStart` | `apps/web` | Browser HTTPS | Hyperdrive, SESv2, Gmail API, OpenRouter, Polar, Sentry, R2 | Production domain `quieter.email` (+ `www` redirect), logs + traces on, linked scoped AWS credentials via `WebAwsPermissions` for `ses:SendEmail`/`SendRawEmail`. |
 | `GmailRealtimeWorker` | `sst.cloudflare.Worker` | `packages/cloudflare/src/worker.ts` | Google Pub/Sub push (POST `/gmail/pubsub`), browser WebSocket (`/gmail/live`) | Hyperdrive, processing secrets, `GmailLiveSyncMailboxV2` | Processes authenticated notifications before acknowledging. Verifies Google OIDC JWT against JWKS, checks subscription name, body limit 64 KiB. One DO per normalized email address. |
 | `GmailLiveSyncMailboxV2` | `sst.cloudflare.DurableObject` (SQLite, migration `v3`) | `packages/cloudflare/src/gmail-live-sync-mailbox.ts` | Worker fetch / WS upgrade | Browser sockets, workers via `/broadcast` | Hibernatable WebSockets, auto ping/pong, broadcasts `mailbox-dirty` and `mailbox-details-dirty`. |
-| `GmailPsQueue` / `GmailPsDlq` | `sst.cloudflare.Queue` | — | Producer: maintenance cron | Consumer `queue-worker.ts` | DLQ after 10 retries, 30 s retry delay, max concurrency 20, batch size 1. |
-| `queue-worker.ts` consumer | Worker (queue subscription) | `packages/cloudflare/src/queue-worker.ts` | `GmailPsQueue` messages | Hyperdrive, Gmail API, OpenRouter, Polar, DO | Handles maintenance and drains previously queued notifications; 5-minute CPU limit; per-message `retry` with exponential backoff, throws on busy mailbox lease. |
-| `GmailPubSubMaintenance` | `sst.cloudflare.Cron` | `packages/cloudflare/src/gmail-maintenance-worker.ts` | `*/15 * * * *` | Hyperdrive, `GmailPsQueue` | Due-driven selection (≤500/tick, ordered by soonest expiry): watch state missing, expiry within 72 h, renewal heartbeat overdue (36 h + hash jitter), stale reconciliation (2 h + jitter) for mailboxes with auto-labeling or useful-detail extraction enabled, or recent error backoff (1 h). Mailboxes receiving pushes stay fresh via `lastReconciledAt` and are never selected. |
-| `MailMaintenance` | `sst.cloudflare.Cron` | `packages/cloudflare/src/mail-maintenance-worker.ts` | every minute | Hyperdrive, R2, Polar, Sentry | Send recovery, storage cleanup, expired rate-limit cleanup, and managed rule backfills. |
+| `GmailPubSubMaintenance` | `sst.cloudflare.Cron` | `packages/cloudflare/src/gmail-maintenance-worker.ts` | `*/15 * * * *` | Hyperdrive, Gmail API | Due mailboxes are processed directly with concurrency four, including pending code retries. |
+| `MailMaintenance` | `sst.cloudflare.Cron` | `packages/cloudflare/src/mail-maintenance-worker.ts` | every minute | Hyperdrive, R2, Polar, Sentry | Send recovery, storage cleanup, expired rate-limit cleanup, managed rule backfills, code retries, and expired code cleanup. |
 | `AppDatabaseV2` | `sst.cloudflare.Hyperdrive` | — | Worker DB access | PostgreSQL origin from `DatabaseUrl` secret | Caching disabled; production uses fixed Hyperdrive id. Workers use `withRequestDatabaseClient` per invocation. |
 | R2 bucket (external) | configured via `R2_*` env + access-key secrets, not an SST resource | — | Receipt processor, mail ingress | — | Canonical `.eml` storage under `mail/inbound/yyyy/mm/dd/uuid.eml`, read back by the web worker via S3-compatible API. |
 
@@ -179,9 +170,9 @@ sequenceDiagram
     W->>DB: claim 14-min processing lease, update lastNotificationAt
     W->>DB: billing entitlement check
     W->>A: history.list / messages.get / labels (up to 5 pages)
-    W->>DB: persist messages, auto-label/useful-detail results
+    W->>DB: persist auto-label and verification-code results
     W->>D: broadcast mailbox-details-dirty
-    D-->>B: refresh useful details
+    D-->>B: refresh message rows
     W->>D: broadcast mailbox-dirty
     D-->>B: refresh message labels
     W-->>P: 204 after processing, 5xx on failure or busy lease
@@ -194,24 +185,20 @@ sequenceDiagram
     autonumber
     participant CR as Cron */15
     participant DB as PostgreSQL
-    participant Q as GmailPsQueue
-    participant C as queue-worker consumer
     participant A as Gmail API
     participant D as LiveSync DO
 
     CR->>DB: list due mailboxes (renewal, setup, or stale with automatic AI features enabled)
-    CR->>Q: sendBatch maintenance jobs (100/batch)
-    Q->>C: deliver job
-    C->>DB: status + entitlement re-check
+    CR->>DB: process due mailboxes, up to four concurrently
+    CR->>DB: status + entitlement re-check
     alt ineligible
-        C->>A: watch.stop
-        C->>DB: clear watch state
+        CR->>A: watch.stop
+        CR->>DB: clear watch state
     else eligible
-        C->>A: watch.renew if due (20h interval / 48h buffer)
-        C->>A: history reconcile (2 pages)
-        C->>D: broadcast details-dirty when maintained
+        CR->>A: watch.renew if due (20h interval / 48h buffer)
+        CR->>A: history reconcile (2 pages)
+        CR->>D: broadcast details-dirty when maintained
     end
-    C-->>Q: ack / retry / DLQ
 ```
 
 ### 3. Inbound managed mail

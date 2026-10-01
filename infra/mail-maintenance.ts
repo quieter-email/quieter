@@ -35,6 +35,9 @@ export const createMailMaintenanceResources = (
           [
             "GMAIL_LIVE_SYNC_TOKEN_SECRET",
             "POLAR_ACCESS_TOKEN",
+            "OPENROUTER_API_KEY",
+            "GMAIL_TOKEN_ENCRYPTION_KEY",
+            "GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT",
             "R2_ACCESS_KEY_ID",
             "R2_SECRET_ACCESS_KEY",
           ] as const

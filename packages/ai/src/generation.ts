@@ -30,6 +30,8 @@ const reasoningProviderOptions = (
 export const runStructuredGeneration = async <TOutput>(input: {
   abortSignal?: AbortSignal;
   maxOutputTokens: number;
+  maxRetries?: number;
+  retryEmptyOutput?: boolean;
   model?: ChatModel;
   onUsage?: (usage: AiUsageReport) => void;
   prioritizeLatency?: boolean;
@@ -48,6 +50,9 @@ export const runStructuredGeneration = async <TOutput>(input: {
             : { abortSignal: input.abortSignal }),
           instructions: input.system,
           maxOutputTokens: input.maxOutputTokens,
+          ...(input.maxRetries === undefined
+            ? {}
+            : { maxRetries: input.maxRetries }),
           model: createChatModel(input.model ?? defaultChatModel, {
             prioritizeLatency: input.prioritizeLatency,
           }),
@@ -62,6 +67,7 @@ export const runStructuredGeneration = async <TOutput>(input: {
       } catch (error) {
         if (
           attempt > 0 ||
+          input.retryEmptyOutput === false ||
           input.abortSignal?.aborted === true ||
           !NoOutputGeneratedError.isInstance(error)
         ) {

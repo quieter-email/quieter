@@ -4,6 +4,7 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
+    "mail:benchmark": "vp run @quieter/env#build && node --env-file=.env.local scripts/run-mail-benchmark.ts",
     "agent:doctor": "node scripts/agent-tooling-doctor.ts",
     "billing:sync-credit-usage-polar": "vp run @quieter/billing#credit-usage:sync",
     "billing:sync-polar": "vp run @quieter/billing#catalog:sync",

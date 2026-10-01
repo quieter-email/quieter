@@ -21,8 +21,6 @@ import {
   findLinkedDraftForMessage,
 } from "#/features/compose/domain/compose-actions";
 import type { ComposeDraftState } from "#/features/compose/domain/draft";
-import { GmailUsefulDetailCard } from "#/features/gmail-useful-details/components/gmail-useful-detail-card";
-import type { GmailUsefulDetail } from "#/features/gmail-useful-details/components/gmail-useful-detail-card";
 import { MessageDeliveryStatus } from "#/features/message-delivery/components/message-delivery-status";
 import { supportsMessageDelivery } from "#/features/message-delivery/domain/message-delivery-support";
 import { formatMessageDate, parseSender } from "#/lib/gmail/message-utils";
@@ -411,7 +409,6 @@ const ThreadMessageCard = ({
   onUnsubscribe,
   onToggleExpanded,
   isActionPending,
-  usefulDetails,
 }: {
   expanded: boolean;
   isLoading?: boolean;
@@ -423,7 +420,6 @@ const ThreadMessageCard = ({
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
   onUnsubscribe?: (messageId: string) => void | Promise<void>;
   onToggleExpanded: () => void;
-  usefulDetails: GmailUsefulDetail[];
 }) => {
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const showsDelivery = supportsMessageDelivery({
@@ -481,18 +477,6 @@ const ThreadMessageCard = ({
           }
         />
 
-        {usefulDetails.length > 0 && (
-          <div className="space-y-1.5 px-4 pb-3 @sm:px-5">
-            {usefulDetails.map((detail) => (
-              <GmailUsefulDetailCard
-                detail={detail}
-                key={detail.id}
-                mailboxId={mailboxId}
-              />
-            ))}
-          </div>
-        )}
-
         <div id={`message-body-${message.id}`}>
           <ThreadMessageBody
             expanded={expanded}
@@ -522,7 +506,6 @@ export const SingleMessageCard = ({
   onComposeDraftRequested,
   onUnsubscribe,
   isActionPending,
-  usefulDetails,
 }: {
   isLoading?: boolean;
   isActionPending?: boolean;
@@ -532,7 +515,6 @@ export const SingleMessageCard = ({
   message: MessageListItem;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
   onUnsubscribe?: (messageId: string) => void | Promise<void>;
-  usefulDetails: GmailUsefulDetail[];
 }) => {
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const showsDelivery = supportsMessageDelivery({
@@ -577,18 +559,6 @@ export const SingleMessageCard = ({
         senderNameClassName="text-body-lg"
       />
 
-      {usefulDetails.length > 0 && (
-        <div className="space-y-1.5 px-4 pb-3 @sm:px-5">
-          {usefulDetails.map((detail) => (
-            <GmailUsefulDetailCard
-              detail={detail}
-              key={detail.id}
-              mailboxId={mailboxId}
-            />
-          ))}
-        </div>
-      )}
-
       <div className="mx-auto w-full max-w-3xl px-4 pb-4 @sm:px-5 @sm:pb-5">
         <MessageBody
           html={message.bodyHtml}
@@ -617,7 +587,6 @@ export const ThreadMessageList = ({
   onComposeDraftRequested,
   onUnsubscribe,
   isActionPending,
-  usefulDetails,
 }: {
   allThreadMessages: MessageListItem[];
   isLoading?: boolean;
@@ -627,7 +596,6 @@ export const ThreadMessageList = ({
   messages: MessageListItem[];
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
   onUnsubscribe?: (messageId: string) => void | Promise<void>;
-  usefulDetails: GmailUsefulDetail[];
 }) => {
   const [expandedMessageIds, setExpandedMessageIds] = useState<string[]>(() => {
     const lastMessage = messages.at(-1);
@@ -663,9 +631,6 @@ export const ThreadMessageList = ({
                   : [...current, threadMessage.id]
               );
             }}
-            usefulDetails={usefulDetails.filter(
-              (detail) => detail.gmailMessageId === threadMessage.id
-            )}
           />
         );
       })}

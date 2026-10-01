@@ -88,7 +88,6 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     threadIsUnread,
     threadLabelIds,
     threadMessages,
-    usefulDetails,
     viewRef,
     visibleMessages,
   } = props;
@@ -222,9 +221,6 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                 ? mailboxActions.unsubscribeFromMessage
                 : undefined
             }
-            usefulDetails={usefulDetails.filter(
-              (detail) => detail.gmailMessageId === threadMessage.id
-            )}
           />
         ))
       ) : (
@@ -244,7 +240,6 @@ const MessageViewContent = (props: MessageViewContentProps) => {
               ? mailboxActions.unsubscribeFromMessage
               : undefined
           }
-          usefulDetails={usefulDetails}
         />
       )}
 

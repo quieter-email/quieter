@@ -5,7 +5,6 @@ import type { createMailUpdateResources } from "./mail-updates";
 import { cloudflareWorkerObservability } from "./runtime";
 import type { DeploymentContext } from "./runtime";
 import { requireSecretBinding, requireSecretResource } from "./secrets";
-import { deploymentEnvironment } from "./stage";
 import type { SecretBindings, SecretResources } from "./types";
 
 const processingSecretNames = [
@@ -33,15 +32,6 @@ export const createGmailResources = (
 
   if (context.gmailPubSubEnabled) {
     const sentryDsnBinding = requireSecretBinding(secretBindings, "SENTRY_DSN");
-    const gmailPubSubDeadLetterQueue = new sst.cloudflare.Queue("GmailPsDlq");
-    const gmailPubSubQueue = new sst.cloudflare.Queue("GmailPsQueue", {
-      dlq: {
-        queue: gmailPubSubDeadLetterQueue.nodes.queue.queueName,
-        retry: 10,
-        retryDelay: "30 seconds",
-      },
-      maxConcurrency: 20,
-    });
     // Production already applied v1 (old class) and v2 (delete), so the class
     // returns under a new name in v3.
     const gmailLiveSyncMailbox = new sst.cloudflare.DurableObject(
@@ -77,7 +67,6 @@ export const createGmailResources = (
         link: [
           gmailLiveSyncMailbox,
           mailLiveUser,
-          gmailPubSubQueue,
           gmailLiveSyncTokenSecret,
           appDatabase,
           sentryDsnBinding,
@@ -110,58 +99,6 @@ export const createGmailResources = (
       }
     );
 
-    gmailPubSubQueue.subscribe(
-      {
-        compatibility: {
-          date: COMPATIBILITY_DATE,
-          flags: ["nodejs_compat"],
-        },
-        environment: {
-          GMAIL_PUBSUB_TOPIC: context.gmailPubSubEnvironment.GMAIL_PUBSUB_TOPIC,
-          ...context.billingEnvironment,
-          QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
-          SENTRY_ENVIRONMENT: context.sentryEnvironment.SENTRY_ENVIRONMENT,
-        },
-        handler: "packages/cloudflare/src/queue-worker.ts",
-        link: [
-          appDatabase,
-          gmailLiveSyncMailbox,
-          mailLiveUser,
-          sentryDsnBinding,
-          ...processingSecretBindings,
-        ],
-        transform: {
-          worker(args) {
-            args.bindings = $util
-              .all([
-                args.bindings,
-                gmailRealtimeWorker.nodes.worker.scriptName,
-                updates.worker.nodes.worker.scriptName,
-              ])
-              .apply(([bindings, scriptName, updatesScriptName]) =>
-                (bindings ?? []).map((binding) => {
-                  if (binding.name === "MailLiveUser") {
-                    return { ...binding, scriptName: updatesScriptName };
-                  }
-                  if (binding.name === "GmailLiveSyncMailboxV2") {
-                    return { ...binding, scriptName };
-                  }
-                  return binding;
-                })
-              );
-            args.limits = { cpuMs: 300_000 };
-            args.observability = cloudflareWorkerObservability;
-          },
-        },
-      },
-      {
-        batch: {
-          size: 1,
-          window: "0 seconds",
-        },
-      }
-    );
-
     const gmailPubSubMaintenance = new sst.cloudflare.Cron(
       "GmailPubSubMaintenance",
       {
@@ -171,11 +108,33 @@ export const createGmailResources = (
             date: COMPATIBILITY_DATE,
             flags: ["nodejs_compat"],
           },
-          environment: { QUIETER_DEPLOYMENT_ENV: deploymentEnvironment },
+          environment: {
+            GMAIL_PUBSUB_TOPIC:
+              context.gmailPubSubEnvironment.GMAIL_PUBSUB_TOPIC,
+            ...context.billingEnvironment,
+            QUIETER_GMAIL_AI_AUTOMATION_ENABLED:
+              context.mailAutomationAiEnabled,
+            SENTRY_ENVIRONMENT: context.sentryEnvironment.SENTRY_ENVIRONMENT,
+          },
           handler: "packages/cloudflare/src/gmail-maintenance-worker.ts",
-          link: [appDatabase, gmailPubSubQueue, sentryDsnBinding],
+          link: [
+            appDatabase,
+            mailLiveUser,
+            sentryDsnBinding,
+            ...processingSecretBindings,
+          ],
           transform: {
             worker(args) {
+              args.bindings = $util
+                .all([args.bindings, updates.worker.nodes.worker.scriptName])
+                .apply(([bindings, scriptName]) =>
+                  (bindings ?? []).map((binding) =>
+                    binding.name === "MailLiveUser"
+                      ? { ...binding, scriptName }
+                      : binding
+                  )
+                );
+              args.limits = { cpuMs: 300_000 };
               args.observability = cloudflareWorkerObservability;
             },
           },

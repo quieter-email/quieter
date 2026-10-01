@@ -1,17 +1,21 @@
 "use client";
 
 import {
+  Copy01Icon,
   FileAttachmentIcon,
   MessageMultiple01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { splitMailAddressList } from "@quieter/mail/compose/schema";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
+import type { RouterOutputs } from "@quieter/orpc";
 import { cn } from "@quieter/ui/cn";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Pill } from "@quieter/ui/pill";
+import { toast } from "@quieter/ui/toast";
 import { m, useReducedMotion } from "motion/react";
 import type { FocusEvent, KeyboardEvent, MouseEvent } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { SenderAvatar } from "#/components/sender-avatar";
 import {
@@ -28,6 +32,7 @@ import {
   appMotionDuration,
   getAppStaggerDelay,
 } from "#/features/motion/app-motion";
+import { toastError } from "#/lib/error-toast";
 import { formatMessageListDate, parseSender } from "#/lib/gmail/message-utils";
 import type { ThreadListEntry } from "#/lib/gmail/thread-list";
 
@@ -149,9 +154,73 @@ type MessageRowProps = {
   rowRef?: (element: HTMLLIElement | null) => void;
   dataIndex?: number;
   thread: ThreadListEntry;
+  verificationCode?: RouterOutputs["mail"]["listVerificationCodes"]["items"][number];
   state?: MessageRowState;
   isNew?: boolean;
   staggerIndex?: number;
+};
+
+const VerificationCodeButton = ({
+  code,
+  expiresAt,
+  service,
+}: {
+  code: string;
+  expiresAt: Date;
+  service: string | null;
+}) => {
+  const [expired, setExpired] = useState(
+    () => expiresAt.getTime() <= Date.now()
+  );
+  useEffect(() => {
+    const delay = expiresAt.getTime() - Date.now();
+    const timeout = window.setTimeout(
+      () => {
+        setExpired(true);
+      },
+      Math.max(0, delay)
+    );
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [expiresAt]);
+  const copyCode = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      toast.success("Code copied.");
+    } catch (error) {
+      toastError(error, {
+        boundary: "verification-code-copy",
+        fallback: "Could not copy code.",
+      });
+    }
+  };
+
+  if (expired) {
+    return null;
+  }
+
+  return (
+    <IconButtonTooltip
+      label={`Copy verification code${service ? ` from ${service}` : ""}`}
+    >
+      <button
+        aria-label={`Copy verification code ${code}`}
+        className="relative z-20 my-auto mr-2 inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border bg-bg-raised px-2 font-mono text-caption font-medium text-fg tabular-nums hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        onClick={(event) => {
+          event.stopPropagation();
+          void copyCode();
+        }}
+        onPointerDown={(event) => {
+          event.stopPropagation();
+        }}
+        type="button"
+      >
+        <span>{code}</span>
+        <HugeiconsIcon aria-hidden className="size-3" icon={Copy01Icon} />
+      </button>
+    </IconButtonTooltip>
+  );
 };
 
 type MessageRowState = {
@@ -539,6 +608,7 @@ type MessageRowSurfaceProps = {
   thread: ThreadListEntry;
   threaded: boolean;
   unread: boolean;
+  verificationCode?: MessageRowProps["verificationCode"];
 };
 
 const MessageRowSurface = ({
@@ -578,6 +648,7 @@ const MessageRowSurface = ({
   thread,
   threaded,
   unread,
+  verificationCode,
 }: MessageRowSurfaceProps) => {
   const {
     handleRowBlurCapture,
@@ -713,6 +784,14 @@ const MessageRowSurface = ({
           />
         </button>
       </MessageActionsContextMenu>
+      {verificationCode && (
+        <VerificationCodeButton
+          code={verificationCode.code}
+          expiresAt={verificationCode.expiresAt}
+          key={`${verificationCode.messageId}:${verificationCode.code}:${verificationCode.expiresAt.toISOString()}`}
+          service={verificationCode.service}
+        />
+      )}
     </m.div>
   );
 };
@@ -733,6 +812,7 @@ const MessageRowContent = ({
   pendingActions,
   state,
   thread,
+  verificationCode,
 }: MessageRowContentProps) => {
   const reducedMotion = useReducedMotion();
   const [isHovered, setIsHovered] = useState(false);
@@ -811,6 +891,7 @@ const MessageRowContent = ({
       thread={thread}
       threaded={threaded}
       unread={unread}
+      verificationCode={verificationCode}
     />
   );
 };
@@ -835,6 +916,7 @@ export const MessageRow = ({
   rowRef,
   state,
   thread,
+  verificationCode,
   isNew,
   staggerIndex = 0,
 }: MessageRowProps) => {
@@ -857,6 +939,7 @@ export const MessageRow = ({
       pendingActions={pendingActions}
       state={state}
       thread={thread}
+      verificationCode={verificationCode}
     />
   );
 

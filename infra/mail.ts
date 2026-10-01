@@ -234,7 +234,6 @@ export const createMailResources = async (
     environment: {
       DATABASE_URL: context.databaseUrl,
       MAIL_UPDATES_URL: liveSyncUrl,
-      POLAR_ACCESS_TOKEN: context.polarAccessToken,
       ...context.billingEnvironment,
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
       ...context.r2Environment,
@@ -244,8 +243,17 @@ export const createMailResources = async (
     link: [
       mailBucket,
       requireSecretResource(secretResources, "GMAIL_LIVE_SYNC_TOKEN_SECRET"),
+      ...(
+        [
+          "GMAIL_TOKEN_ENCRYPTION_KEY",
+          "GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT",
+          "OPENROUTER_API_KEY",
+          "POLAR_ACCESS_TOKEN",
+          "QUIETER_BACKGROUND_MODEL",
+        ] as const
+      ).map((name) => requireSecretResource(secretResources, name)),
     ],
-    timeout: "30 seconds",
+    timeout: "60 seconds",
   });
 
   const mailIngressToken = requireSecretResource(
@@ -266,8 +274,17 @@ export const createMailResources = async (
       mailBucket,
       mailIngressToken,
       requireSecretResource(secretResources, "GMAIL_LIVE_SYNC_TOKEN_SECRET"),
+      ...(
+        [
+          "GMAIL_TOKEN_ENCRYPTION_KEY",
+          "GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT",
+          "OPENROUTER_API_KEY",
+          "POLAR_ACCESS_TOKEN",
+          "QUIETER_BACKGROUND_MODEL",
+        ] as const
+      ).map((name) => requireSecretResource(secretResources, name)),
     ],
-    timeout: "30 seconds",
+    timeout: "60 seconds",
     url: true,
   });
   const webAwsPermissions = new sst.Linkable("WebAwsPermissions", {

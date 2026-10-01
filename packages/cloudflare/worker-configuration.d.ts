@@ -3,7 +3,6 @@
 // Runtime types generated with workerd@1.20260907.1 2026-08-04 nodejs_compat
 interface __BaseEnv_Env {
 	AppDatabaseV2: Hyperdrive;
-	GmailPsQueue: Queue;
 	CONNECTOR_TOKEN_ENCRYPTION_KEY: string;
 	GMAIL_TOKEN_ENCRYPTION_KEY: string;
 	GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT: string;

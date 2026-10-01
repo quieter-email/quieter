@@ -142,7 +142,12 @@ const usageBreakdownConfig = [
   {
     className: "bg-q-yellow",
     kind: "usefulDetails",
-    label: "Useful details",
+    label: "Previous inbox details",
+  },
+  {
+    className: "bg-q-pink",
+    kind: "verificationCode",
+    label: "Verification codes",
   },
   {
     className: "bg-q-purple",

@@ -506,7 +506,6 @@ export const getDemoMailboxes = () => ({
           ownerUserId: "demo-user",
           provider: "gmail" as const,
           unreadNonSpamCount: getUnreadNonSpamCount(DEMO_MAILBOX_ID),
-          usefulDetailsEnabled: false,
         },
       ],
       name: "Demo",

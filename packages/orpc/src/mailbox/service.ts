@@ -162,7 +162,6 @@ const toMailboxListItem = (
     grantRole: MailboxGrantRole | null;
     autoLabelEnabled?: boolean | null;
     gmailCredentialMailboxId?: string | null;
-    usefulDetailsEnabled?: boolean | null;
     id: string;
     includeApiSentMessages?: boolean | null;
     signatureHtml?: string | null;
@@ -210,7 +209,6 @@ const toMailboxListItem = (
   signatureHtml: record.signatureHtml ?? null,
   signatureText: record.signatureText ?? null,
   unreadNonSpamCount: record.unreadNonSpamCount ?? 0,
-  usefulDetailsEnabled: record.usefulDetailsEnabled ?? false,
 });
 
 const getGmailUnreadNonSpamCount = async (input: {
@@ -278,7 +276,6 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
         signatureHtml: mailbox.signatureHtml,
         signatureText: mailbox.signatureText,
         status: mailbox.status,
-        usefulDetailsEnabled: mailboxAutomationSettings.usefulDetailsEnabled,
       })
       .from(mailbox)
       .leftJoin(gmailCredential, eq(gmailCredential.mailboxId, mailbox.id))
@@ -315,7 +312,6 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
         signatureHtml: mailbox.signatureHtml,
         signatureText: mailbox.signatureText,
         status: mailbox.status,
-        usefulDetailsEnabled: mailboxAutomationSettings.usefulDetailsEnabled,
       })
       .from(mailboxGrant)
       .innerJoin(mailbox, eq(mailbox.id, mailboxGrant.mailboxId))
@@ -362,7 +358,6 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
         signatureHtml: mailbox.signatureHtml,
         signatureText: mailbox.signatureText,
         status: mailbox.status,
-        usefulDetailsEnabled: mailboxAutomationSettings.usefulDetailsEnabled,
       })
       .from(mailboxDivisionGrant)
       .innerJoin(mailbox, eq(mailbox.id, mailboxDivisionGrant.mailboxId))
@@ -418,7 +413,6 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
         signatureHtml: mailbox.signatureHtml,
         signatureText: mailbox.signatureText,
         status: mailbox.status,
-        usefulDetailsEnabled: mailboxAutomationSettings.usefulDetailsEnabled,
       })
       .from(mailbox)
       .innerJoin(
@@ -500,7 +494,6 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
     emailAddress: string;
     grantRole: MailboxGrantRole | null;
     autoLabelEnabled: boolean | null;
-    usefulDetailsEnabled: boolean | null;
     id: string;
     includeApiSentMessages: boolean | null;
     organizationId: string;

@@ -11,9 +11,9 @@ Agent connector readiness is tracked separately in [Agent tooling](agent-tooling
 | Database | Existing shared-cluster quieter_dev, separate app/migrator roles, verified TLS, 60 migrations, pgvector 0.8.5, backup before migration | Destructive migration tests run in disposable CI, not against this database |
 | Identity | Real localhost Google sign-in succeeds after adding its missing callback | Magic-link, passkey/device and full role lifecycle acceptance |
 | Gmail | Separate OAuth client and Pub/Sub pull subscription; observation guards; fresh consent; real inbox loads 18 conversations | Test-account passkey consent, provider writes and delivered-notification processing |
-| Cloudflare | Native web/Worker runtime; signed WebSocket smoke; native queue/DO tests; authenticated manual maintenance | Deployed concurrency, hibernation, IAM and cloud pooling |
+| Cloudflare | Native web/Worker runtime; signed WebSocket smoke; direct ingress and DO tests; authenticated manual maintenance | Deployed concurrency, hibernation, IAM and cloud pooling |
 | Secrets | 22 development SST secrets in local-leander; 21 runtime links; fresh-checkout pull verified; SST starts web and background runtimes together | No AWS managed-mail stage is required or authorized for local development |
-| OpenRouter | Separate $1-capped development key; API smoke cost $0.000002; actual app chat streamed the expected response and saved its conversation | Voice, tool use, auto-label and useful-detail quality tests |
+| OpenRouter | Separate $1-capped development key; API smoke cost $0.000002; actual app chat streamed the expected response and saved its conversation | Voice, tool use, auto-label and verification-code quality tests |
 | Workers AI | Separate AI-only token; real 1024-dimension embedding | Application memory write/search/delete lifecycle |
 | Polar | Non-expiring sandbox token, existing Managed/Pro products, official CLI 1.3.9 in WSL; six real customer/member events returned HTTP 200 | Checkout/portal/renewal/cancellation/credits with bypass off |
 | Telemetry | Explicit opt-in implemented; off by default; consent still required for PostHog | Development-project ingestion and browser privacy assertions |
@@ -44,7 +44,7 @@ Implemented: `sst.local.config.ts` uses a personal stage and native [DevCommand]
 
 ### Cloudflare Workers, Queues, Durable Objects, scheduled jobs, and Hyperdrive
 
-Cloudflare's Vite plugin runs Worker code in workerd. `auxiliaryWorkers` runs the other application Workers in the same development session. This is the native fit for the realtime ingress, Gmail queue consumer, Gmail maintenance scheduler, and per-minute mail maintenance worker. Service bindings connect entrypoints. See [multiple Workers](https://developers.cloudflare.com/workers/local-development/multi-workers/).
+Cloudflare's Vite plugin runs Worker code in workerd. `auxiliaryWorkers` runs the other application Workers in the same development session. This is the native fit for the realtime ingress, Gmail maintenance scheduler, and per-minute mail maintenance worker. Service bindings connect entrypoints. See [multiple Workers](https://developers.cloudflare.com/workers/local-development/multi-workers/).
 
 Queues have native local producers and consumers. They support testing message flow without a cloud queue, but local consumer concurrency is not supported, and Wrangler remote mode does not support Queues. Test distributed concurrency and delivery behavior in the deployed development stage. See [Queues local development](https://developers.cloudflare.com/queues/configuration/local-development/).
 
@@ -130,7 +130,7 @@ logo.dev remains an external image API. The local publishable key exists. Use st
 
 Domain Connect supplies a protocol, example service, templates, and signing examples rather than a complete local DNS-provider emulator. Test signing and callbacks locally; use a dedicated domain for actual registrar/DNS changes and SES verification. The required private signing key is consumed by code but omitted from the current SST secret registry and deployment bindings. See [Domain Connect getting started](https://www.domainconnect.org/getting-started/).
 
-GitHub Actions provides the existing CI execution environment. GitHub CLI authentication works. There is no need to run GitHub itself locally. Vercel is present in older sandbox webhook destinations, but the current app infrastructure targets Cloudflare. D1, KV, Vectorize, Cloudflare Workflows, Redis, and Neon are not prerequisites inferred from the current runtime inventory. Gmail synchronization retains its queue processing; managed rule backfills run in mail maintenance. Custom action workflows are removed.
+GitHub Actions provides the existing CI execution environment. GitHub CLI authentication works. There is no need to run GitHub itself locally. Vercel is present in older sandbox webhook destinations, but the current app infrastructure targets Cloudflare. D1, KV, Vectorize, Cloudflare Workflows, Redis, and Neon are not prerequisites inferred from the current runtime inventory. Gmail synchronization processes Pub/Sub deliveries directly; managed rule backfills run in mail maintenance. Custom action workflows are removed.
 
 ## Feature acceptance matrix
 

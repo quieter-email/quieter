@@ -3,12 +3,11 @@ import {
   HeadObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
-import { recordInboundOrganizationMailUsage } from "@quieter/billing/organization-mail-usage";
 import { serverEnv } from "@quieter/env/server";
-import { recordInboundManagedMessage } from "@quieter/orpc/managed-mail/ingestion";
 import { Resource } from "sst";
 
 import { deleteMailObjectUnlessTracked } from "./mail-object-retention";
+import { configureMailProcessingSecrets } from "./mail-processing-secrets";
 import {
   getCanonicalRawMailBucket,
   getCanonicalRawMailProvider,
@@ -221,6 +220,8 @@ const processReceiptRecord = async (record: SnsRecord) => {
 
   let mailboxIds: string[];
   try {
+    const { recordInboundManagedMessage } =
+      await import("@quieter/orpc/managed-mail/ingestion");
     mailboxIds = await recordInboundManagedMessage({
       providerMessageId: resolvedProviderMessageId,
       rawMessage,
@@ -244,6 +245,8 @@ const processReceiptRecord = async (record: SnsRecord) => {
   }
 
   if (mailboxIds.length > 0) {
+    const { recordInboundOrganizationMailUsage } =
+      await import("@quieter/billing/organization-mail-usage");
     await recordInboundOrganizationMailUsage({
       messageSizeBytes,
       providerMessageId: resolvedProviderMessageId,
@@ -265,6 +268,7 @@ const processReceiptRecord = async (record: SnsRecord) => {
 export const handler = withSentry(
   "MailReceiptProcessor",
   async (event: SnsEvent) => {
+    configureMailProcessingSecrets();
     await Promise.all(
       (event.Records ?? []).map(async (record) => {
         try {

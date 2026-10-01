@@ -1,6 +1,5 @@
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { serverEnv } from "@quieter/env/server";
-import { recordInboundManagedMessage } from "@quieter/orpc/managed-mail/ingestion";
 import { Resource } from "sst";
 import { z } from "zod";
 
@@ -15,6 +14,7 @@ import type {
   LambdaFunctionUrlResponse,
 } from "./function-url";
 import { deleteMailObjectUnlessTracked } from "./mail-object-retention";
+import { configureMailProcessingSecrets } from "./mail-processing-secrets";
 import {
   getCanonicalRawMailBucket,
   getCanonicalRawMailProvider,
@@ -69,6 +69,7 @@ export const handler = async (
   event: LambdaFunctionUrlEvent
 ): Promise<LambdaFunctionUrlResponse> => {
   try {
+    configureMailProcessingSecrets();
     const method = event.requestContext?.http?.method?.toUpperCase();
 
     if (method !== "POST") {
@@ -147,6 +148,8 @@ export const handler = async (
     ];
     let mailboxIds: string[];
     try {
+      const { recordInboundManagedMessage } =
+        await import("@quieter/orpc/managed-mail/ingestion");
       mailboxIds = await recordInboundManagedMessage({
         providerMessageId,
         rawMessage,

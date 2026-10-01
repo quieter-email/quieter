@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { ORPCError } from "@orpc/server";
 import { AI_MEMORY_REQUEST_MAX_LENGTH } from "@quieter/ai/ai-memory";
+import { AUTO_LABEL_MODEL } from "@quieter/ai/classify-gmail-message";
 import { resolveBackgroundModel } from "@quieter/ai/model-config";
 import {
   MAIL_SEARCH_QUERY_MAX_LENGTH,
@@ -60,9 +61,8 @@ type MemoryTarget = z.infer<typeof memoryTargetSchema>;
 const serializeModels = () => {
   const backgroundModel = resolveBackgroundModel();
   return {
-    autoLabel: backgroundModel,
+    autoLabel: AUTO_LABEL_MODEL,
     searchFilter: backgroundModel,
-    usefulDetail: backgroundModel,
   };
 };
 

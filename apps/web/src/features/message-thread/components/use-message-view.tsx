@@ -21,7 +21,6 @@ import type {
 } from "#/features/mailbox/components/mailbox-action-handlers";
 import { toastError } from "#/lib/error-toast";
 import { getThreadLabelIds } from "#/lib/gmail/thread-list";
-import { gmailThreadUsefulDetailsQueryOptions } from "#/lib/gmail/useful-details-query";
 import {
   hasRenderableMessageBody,
   isMessageUnread,
@@ -128,13 +127,6 @@ export const useMessageViewData = ({
         : false;
     },
   });
-  const { data: usefulDetails = [] } = useQuery(
-    gmailThreadUsefulDetailsQueryOptions(
-      mailboxId,
-      message.threadId,
-      mailboxProvider === "gmail"
-    )
-  );
   const createApiMailboxMutation = useMutation({
     ...orpc.mail.createManagedMailboxForApiMessage.mutationOptions(),
     onError: (error) => {
@@ -217,7 +209,6 @@ export const useMessageViewData = ({
     threadIsUnread,
     threadLabelIds,
     threadMessages,
-    usefulDetails,
     visibleMessages,
   };
 };

@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 
-import type { ChatModel } from "@quieter/ai/chat-models";
 import type { AiUsageReport } from "@quieter/ai/chat-usage";
 import { classifyMailMessage } from "@quieter/ai/classify-gmail-message";
 import type {
@@ -30,11 +29,6 @@ import {
   serializeAiAgentContext,
 } from "../ai-memory";
 import type { AiAgentMemoryCandidates } from "../ai-memory";
-import {
-  listPendingGmailUsefulDetailMessageIds,
-  processGmailUsefulDetailMessage,
-  reportPendingGmailUsefulDetailUsage,
-} from "../gmail-useful-details/service";
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import { deferAutoLabelAutomation } from "../mail-automation/auto-label-events";
 import { reportAutoLabelUsage } from "../mail-automation/usage";
@@ -47,35 +41,45 @@ type ManagedAutoLabelContext = {
   availableLabelIds: Set<string>;
   labels: MailAutoLabelCandidate[];
   memoryCandidates: AiAgentMemoryCandidates;
-  model: ChatModel;
+  model: string;
 };
 
 const toAutomationMessage = (
   message: typeof managedMailMessage.$inferSelect,
   attachments: { fileName: string; mimeType: string }[]
-): AutomationMailMessage => ({
-  attachments,
-  bodyHtml: message.bodyHtml,
-  bodyText: message.bodyText,
-  from: message.from,
-  id: message.id,
-  internalDate: String(message.sentAt.getTime()),
-  labelIds:
-    message.direction === "inbound" && message.mailboxState === "active"
-      ? [
-          MAILBOX_LABELS.inbox,
-          ...(message.isRead ? [] : [MAILBOX_LABELS.unread]),
-        ]
-      : [],
-  snippet: message.snippet,
-  subject: message.subject,
-  threadId: message.threadId,
-  to: message.to,
-});
+): AutomationMailMessage => {
+  const labelsByState = {
+    active: [
+      MAILBOX_LABELS.inbox,
+      ...(message.isRead ? [] : [MAILBOX_LABELS.unread]),
+    ],
+    archived: [MAILBOX_LABELS.archive],
+    draft: [MAILBOX_LABELS.drafts],
+    spam: [MAILBOX_LABELS.spam],
+    trash: [MAILBOX_LABELS.trash],
+  };
+  return {
+    attachments,
+    bodyHtml: message.bodyHtml,
+    bodyText: message.bodyText,
+    from: message.from,
+    id: message.id,
+    internalDate: String(message.createdAt.getTime()),
+    labelIds:
+      message.direction === "outbound"
+        ? [MAILBOX_LABELS.sent]
+        : labelsByState[message.mailboxState],
+    snippet: message.snippet,
+    subject: message.subject,
+    threadId: message.threadId,
+    to: message.to,
+  };
+};
 
-const loadManagedAutomationMessage = async (
+export const loadManagedAutomationMessage = async (
   mailboxId: string,
-  messageId: string
+  messageId: string,
+  options: { includeNonInbox?: boolean } = {}
 ) => {
   const [message] = await db
     .select()
@@ -90,7 +94,7 @@ const loadManagedAutomationMessage = async (
   if (
     message === undefined ||
     message.direction !== "inbound" ||
-    message.mailboxState !== "active"
+    (options.includeNonInbox !== true && message.mailboxState !== "active")
   ) {
     return null;
   }
@@ -406,56 +410,27 @@ const reportPendingManagedAutoLabelUsage = async (
 };
 
 const processManagedAutomationMessageIds = async (input: {
-  autoLabelEnabled: boolean;
   getAutoLabelContext: () => Promise<ManagedAutoLabelContext>;
   mailboxId: string;
   messageIds: string[];
   organizationId: string;
-  usefulDetailsEnabled: boolean;
   userId: string;
 }) => {
-  if (
-    (!input.autoLabelEnabled && !input.usefulDetailsEnabled) ||
-    input.messageIds.length === 0
-  ) {
+  if (input.messageIds.length === 0) {
     return;
   }
 
-  const autoLabelContext = input.autoLabelEnabled
-    ? await input.getAutoLabelContext()
-    : null;
+  const autoLabelContext = await input.getAutoLabelContext();
 
   await Promise.all(
     input.messageIds.map(async (messageId) => {
-      let messagePromise: Promise<AutomationMailMessage | null> | null = null;
-      const loadMessage = async () => {
-        messagePromise ??= loadManagedAutomationMessage(
-          input.mailboxId,
-          messageId
-        );
-        return await messagePromise;
-      };
-
-      await Promise.all([
-        autoLabelContext
-          ? processManagedAutoLabelMessage({
-              autoLabelContext,
-              mailboxId: input.mailboxId,
-              messageId,
-              organizationId: input.organizationId,
-              userId: input.userId,
-            })
-          : Promise.resolve(),
-        input.usefulDetailsEnabled
-          ? processGmailUsefulDetailMessage({
-              gmailMessageId: messageId,
-              loadMessage,
-              mailboxId: input.mailboxId,
-              organizationId: input.organizationId,
-              userId: input.userId,
-            })
-          : Promise.resolve(),
-      ]);
+      await processManagedAutoLabelMessage({
+        autoLabelContext,
+        mailboxId: input.mailboxId,
+        messageId,
+        organizationId: input.organizationId,
+        userId: input.userId,
+      });
     })
   );
 };
@@ -467,13 +442,12 @@ export const processManagedMailAutomation = async (input: {
   const [settings] = await db
     .select({
       autoLabelEnabled: mailboxAutomationSettings.autoLabelEnabled,
-      usefulDetailsEnabled: mailboxAutomationSettings.usefulDetailsEnabled,
     })
     .from(mailboxAutomationSettings)
     .where(eq(mailboxAutomationSettings.mailboxId, input.mailboxId))
     .limit(1);
 
-  if (!settings?.autoLabelEnabled && !settings?.usefulDetailsEnabled) {
+  if (!settings?.autoLabelEnabled) {
     return;
   }
 
@@ -491,14 +465,9 @@ export const processManagedMailAutomation = async (input: {
     return;
   }
 
-  const [pendingAutoLabelIds, pendingUsefulDetailIds] = await Promise.all([
-    settings.autoLabelEnabled
-      ? listPendingManagedAutoLabelMessageIds(input.mailboxId)
-      : [],
-    settings.usefulDetailsEnabled
-      ? listPendingGmailUsefulDetailMessageIds(input.mailboxId)
-      : [],
-  ]);
+  const pendingAutoLabelIds = await listPendingManagedAutoLabelMessageIds(
+    input.mailboxId
+  );
   let autoLabelContextPromise: Promise<ManagedAutoLabelContext> | null = null;
   const getAutoLabelContext = async () => {
     autoLabelContextPromise ??= getManagedAutoLabelCandidates({
@@ -509,22 +478,13 @@ export const processManagedMailAutomation = async (input: {
   };
 
   await processManagedAutomationMessageIds({
-    autoLabelEnabled: settings.autoLabelEnabled,
     getAutoLabelContext,
     mailboxId: input.mailboxId,
-    messageIds: [
-      ...new Set([
-        input.messageId,
-        ...pendingAutoLabelIds,
-        ...pendingUsefulDetailIds,
-      ]),
-    ],
+    messageIds: [...new Set([input.messageId, ...pendingAutoLabelIds])],
     organizationId: owner.organizationId,
-    usefulDetailsEnabled: settings.usefulDetailsEnabled,
     userId: owner.userId,
   });
-  await Promise.all([
-    reportPendingManagedAutoLabelUsage(input.mailboxId, owner.userId),
-    reportPendingGmailUsefulDetailUsage(input.mailboxId, owner.userId),
-  ]);
+  await reportPendingManagedAutoLabelUsage(input.mailboxId, owner.userId);
 };
+
+export const getManagedAutomationOwner = getAutomationOwner;

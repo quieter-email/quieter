@@ -483,7 +483,7 @@ export const reportAiUsage = async (input: {
   };
   usageKind: Extract<
     BillingUsageKind,
-    "aiChat" | "aiMemory" | "autoLabel" | "usefulDetails"
+    "aiChat" | "aiMemory" | "autoLabel" | "usefulDetails" | "verificationCode"
   >;
   userId: string;
 }) => {
