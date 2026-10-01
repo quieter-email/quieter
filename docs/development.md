@@ -16,7 +16,7 @@ See [Development integration plan](development-integrations.md) for the accepted
 
 ## Install
 
-Cloudflare uses the beta `cf` CLI and Vite plugin with `apps/web/cloudflare.config.ts` and `packages/cloudflare/cloudflare.config.ts`. SST remains the deployment authority. The Wrangler JSON fixture only serves Worker type generation and tests. Run `vp exec sst install` after dependency installation to generate infrastructure types. A pinned `cf` patch launches JavaScript delegates through Node on Windows. Worker tests use isolated Vitest 4 packages until Cloudflare supports Vitest 5.
+Cloudflare uses the beta `cf` CLI and Vite plugin with `apps/web/cloudflare.config.ts` and `packages/cloudflare/cloudflare.config.ts`. SST remains the deployment authority. The Wrangler JSON fixture only serves Worker type generation and tests. Type generation explicitly loads the empty `packages/cloudflare/wrangler.types.env` fixture, keeping its output independent of local `.dev.vars` files. Run `vp exec sst install` after dependency installation to generate infrastructure types. A pinned `cf` patch launches JavaScript delegates through Node on Windows. Worker tests use isolated Vitest 4 packages until Cloudflare supports Vitest 5.
 
 Dependency installation checks peers strictly and does not auto-install optional integration trees. Declare required peers in the consuming workspace. The Vite peer-version exception maps the pinned Vite+ core alias; update it with Vite+. Run `vp pm audit` when updating dependencies, and upgrade related authentication or Cloudflare packages together.
 

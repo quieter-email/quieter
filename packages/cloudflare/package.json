@@ -7,8 +7,8 @@
   },
   "scripts": {
     "dev": "cf dev --persist-to ../../.wrangler/state",
-    "cf-typecheck": "wrangler types worker-configuration.d.ts --config wrangler.types.jsonc --strict-vars false --check",
-    "cf-typegen": "wrangler types worker-configuration.d.ts --config wrangler.types.jsonc --strict-vars false",
+    "cf-typecheck": "wrangler types worker-configuration.d.ts --config wrangler.types.jsonc --env-file wrangler.types.env --strict-vars false --check",
+    "cf-typegen": "wrangler types worker-configuration.d.ts --config wrangler.types.jsonc --env-file wrangler.types.env --strict-vars false",
     "check:compatibility-date": "node scripts/sync-compatibility-date.ts --check",
     "sync:compatibility-date": "node scripts/sync-compatibility-date.ts",
     "test:workers": "vp exec vitest run --config worker-tests.config.ts",
