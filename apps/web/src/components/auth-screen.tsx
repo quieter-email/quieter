@@ -465,7 +465,7 @@ export const AuthScreen = () => {
 
   return (
     <div className="auth-scene dark relative isolate grid h-dvh max-h-dvh w-full overflow-hidden md:grid-cols-[7fr_5fr]">
-      <div className="relative z-10 flex size-full min-h-0 flex-col items-center overflow-y-auto px-6 pt-32 pb-10">
+      <div className="relative z-10 flex size-full min-h-0 flex-col items-center overflow-y-auto px-6 py-24">
         <div className="absolute top-6 left-6">
           <Brand
             // oxlint-disable-next-line shadcn/no-restyle -- Auth header keeps its brand metrics.
@@ -473,7 +473,7 @@ export const AuthScreen = () => {
             variant="combination"
           />
         </div>
-        <div className="w-full max-w-[22rem]">
+        <div className="my-auto w-full max-w-[22rem]">
           <h1 className="text-center text-title-md font-medium tracking-tight text-fg">
             Continue to Quieter
           </h1>
@@ -509,11 +509,6 @@ export const AuthScreen = () => {
       </div>
       <div className="relative size-full min-h-0 border-l bg-auth-visual-bg max-md:hidden">
         <AuthVisual />
-        <p className="pointer-events-none absolute bottom-12 left-10 text-title-lg font-medium tracking-tight text-fg lg:bottom-16 lg:left-16">
-          Your inbox,
-          <br />
-          quieter.
-        </p>
       </div>
     </div>
   );

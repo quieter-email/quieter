@@ -466,8 +466,8 @@ const appendNoiseDot = (
   const envelope =
     Math.exp(-((radialDistance / 0.62) ** 2)) *
     (1 - smoothstep(0.65, 1.05, radialDistance));
-  const logoRadius = squircleRadius(center, 0.46, width, height);
-  const outsideLogo = smoothstep(0.45, 1.55, logoRadius);
+  const logoRadius = squircleRadius(center, 0.56, width, height);
+  const outsideLogo = smoothstep(0.76, 1.24, logoRadius);
   const density =
     (0.025 + envelope * (0.32 + strand * 0.58 + fineStrand * 0.08)) *
     mix(0.2, 1, outsideLogo);
