@@ -467,13 +467,13 @@ const appendNoiseDot = (
     Math.exp(-((radialDistance / 0.62) ** 2)) *
     (1 - smoothstep(0.65, 1.05, radialDistance));
   const logoRadius = squircleRadius(center, 0.52, width, height);
-  const outsideLogo = smoothstep(0.84, 1.24, logoRadius);
-  const imprint = Math.exp(-(((logoRadius - 1.12) / 0.44) ** 2));
+  const outsideLogo = smoothstep(0.92, 1.14, logoRadius);
+  const imprint = Math.exp(-(((logoRadius - 1.14) / 0.32) ** 2));
   const density =
     mix(
       0.025 + envelope * (0.32 + strand * 0.58 + fineStrand * 0.08),
       0.95,
-      imprint * 0.3
+      imprint * 0.65
     ) * mix(0.68, 1, outsideLogo);
   if (density < hash(cellX + 719, cellY + 719)) {
     return;
@@ -489,12 +489,12 @@ const appendNoiseDot = (
           (0.18 + envelope * 0.82) *
           (0.5 + strand * 0.5),
         (0.24 + opacitySeed ** 1.3 * 0.46) * envelope,
-        imprint * 0.3
+        imprint * 0.65
       ) * mix(0.58, 1, outsideLogo),
     radius:
       (0.24 + radiusSeed ** 2.8 * 1.05) *
       radiusScale *
-      mix(0.72, 1, outsideLogo),
+      mix(0.82, 1, outsideLogo),
     vibrance: hash(cellX + 941, cellY + 941),
   });
 };
