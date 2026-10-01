@@ -13,16 +13,14 @@ import {
 } from "vgpu";
 import type { Surface } from "vgpu";
 
-import { AtmosphericBackground } from "#/components/atmospheric-background";
-
-const dotGap = 4;
+const dotGap = 2.2;
 const maxCanvasPixelCount = 2_200_000;
 const maxDevicePixelRatio = 1.5;
 const maxWaveCount = 24;
 const maxImpulseCount = maxWaveCount;
 const maxParticleCount = 108_000;
 const particleStride = 6;
-const targetParticleGridCells = 54_000;
+const targetParticleGridCells = 210_000;
 const workgroupSize = 128;
 
 type Point = {
@@ -33,6 +31,7 @@ type Point = {
 type Rgb = [number, number, number];
 
 type Dot = Point & {
+  flow: number;
   opacity: number;
   radius: number;
   vibrance: number;
@@ -76,7 +75,7 @@ struct ParticleStatic {
   radius: f32,
   opacity: f32,
   vibrance: f32,
-  padding: f32,
+  flow: f32,
 }
 
 struct ParticleState {
@@ -272,7 +271,7 @@ struct ParticleStatic {
   radius: f32,
   opacity: f32,
   vibrance: f32,
-  padding: f32,
+  flow: f32,
 }
 
 struct ParticleState {
@@ -314,12 +313,14 @@ fn vs_main(
   let particle = particleStatics[instanceIndex];
   let state = particleStates[instanceIndex];
   let energy = clamp(state.energy, 0.0, 1.0);
-  let shimmer = smoothstep(0.72, 1.0, particle.vibrance) * 0.12;
-  let radius = particle.radius + energy * 0.12 + shimmer;
-  let halfSize = radius + 0.72;
+  let radius = particle.radius + energy * 0.16;
+  let halfSize = radius + 0.5;
   let localPosition = corners[vertexIndex] * halfSize;
-  let phase = particle.base / params.resolution * 6.28318;
-  let swell = vec2f(sin(phase.y * 1.6 + params.time * 0.2), cos(phase.x * 1.4 + params.time * 0.17)) * min(params.resolution.x, params.resolution.y) * 0.0012;
+  let offset = particle.base - params.resolution * 0.5;
+  let radialDistance = length(offset) / min(params.resolution.x, params.resolution.y);
+  let angle = sin(params.time * 0.14 - radialDistance * 7.0) * 0.035 * particle.flow;
+  let rotated = vec2f(offset.x * cos(angle) - offset.y * sin(angle), offset.x * sin(angle) + offset.y * cos(angle));
+  let swell = rotated - offset;
   let center = vec2f(
     (state.position.x + swell.x) / params.resolution.x * 2.0 - 1.0,
     1.0 - (state.position.y + swell.y) / params.resolution.y * 2.0
@@ -341,11 +342,9 @@ fn vs_main(
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4f {
   let distanceValue = length(input.localPosition);
-  let core = 1.0 - smoothstep(max(input.radius - 0.72, 0.0), input.radius + 0.78, distanceValue);
-  let shimmerSeed = smoothstep(0.68, 1.0, input.vibrance);
-  let shimmer = (sin(params.time * mix(1.2, 2.8, input.vibrance) + input.vibrance * 41.0) * 0.5 + 0.5) * shimmerSeed;
-  let alpha = min(core * input.opacity * (0.94 + shimmer * 0.1 + input.energy * 0.08), 1.0);
-  let tintAmount = 0.12 + 0.14 * (sin(input.position.x / params.resolution.x * 5.0 + input.position.y / params.resolution.y * 3.0) * 0.5 + 0.5);
+  let core = 1.0 - smoothstep(max(input.radius - 0.45, 0.0), input.radius + 0.5, distanceValue);
+  let alpha = min(core * input.opacity * (1.0 + input.energy * 0.16), 1.0);
+  let tintAmount = 0.06 + input.vibrance * 0.08;
   return vec4f(mix(params.color, params.tint, tintAmount), alpha);
 }
 `;
@@ -419,7 +418,7 @@ const getCssColor = (
 
 const readColors = (canvas: HTMLCanvasElement): Colors => ({
   primary: getCssColor(canvas, "--primary", [0.25, 0.25, 0.25]),
-  tint: getCssColor(canvas, "--auth-particle-tint", [0.6, 0.72, 0.86]),
+  tint: getCssColor(canvas, "--auth-particle-tint", [0.6, 0.6, 0.6]),
 });
 
 const boundaryRadii: number[] = [];
@@ -449,29 +448,53 @@ const appendNoiseDot = (
 ) => {
   const jitterX = hash(cellX + 53, cellY + 53) - 0.5;
   const jitterY = hash(cellX + 193, cellY + 193) - 0.5;
-  const radiusScale = clamp((gap / dotGap) ** 0.42, 1, 1.42);
+  const minSide = Math.min(width, height);
+  const radiusScale = clamp((gap / dotGap) ** 0.42, 1, 1.65);
   const center = {
     x: (cellX + 0.5) * gap + jitterX * gap,
     y: (cellY + 0.5) * gap + jitterY * gap,
   };
-  const outerRadius = squircleRadius(center, 1, width, height);
-  const insideOuter = 1 - smoothstep(0.93, 1.1, outerRadius);
-  const texture =
-    0.92 +
-    Math.sin((center.x / width) * 29) *
-      Math.cos((center.y / height) * 23) *
-      0.08;
-  const density = 0.018 + insideOuter * 0.8 * texture;
+  const x = (center.x - width * 0.5) / minSide;
+  const y = (center.y - height * 0.5) / minSide;
+  const radialDistance = Math.hypot(x, y);
+  const angle = Math.atan2(y, x);
+  const spiralPhase =
+    angle * 3 + Math.log(radialDistance + 0.12) * 8 - radialDistance * 4;
+  const strand = (Math.sin(spiralPhase) * 0.5 + 0.5) ** 2;
+  const fineStrand =
+    Math.sin(spiralPhase * 3 + radialDistance * 19) * 0.5 + 0.5;
+  const envelope =
+    Math.exp(-((radialDistance / 0.62) ** 2)) *
+    (1 - smoothstep(0.65, 1.05, radialDistance));
+  const logoRadius = squircleRadius(center, 0.52, width, height);
+  const outsideLogo = smoothstep(0.92, 1.14, logoRadius);
+  const imprint = Math.exp(-(((logoRadius - 1.14) / 0.32) ** 2));
+  const density =
+    mix(
+      0.025 + envelope * (0.32 + strand * 0.58 + fineStrand * 0.08),
+      0.95,
+      imprint * 0.65
+    ) * mix(0.68, 1, outsideLogo);
   if (density < hash(cellX + 719, cellY + 719)) {
     return;
   }
   const radiusSeed = hash(cellX + 389, cellY + 389);
+  const opacitySeed = hash(cellX + 617, cellY + 617);
   dots.push({
     ...center,
-    opacity: 0.85 + radiusSeed * 0.15,
+    flow: smoothstep(1.35, 3.5, logoRadius),
+    opacity:
+      mix(
+        (0.1 + opacitySeed ** 1.6 * 0.52) *
+          (0.18 + envelope * 0.82) *
+          (0.5 + strand * 0.5),
+        (0.24 + opacitySeed ** 1.3 * 0.46) * envelope,
+        imprint * 0.65
+      ) * mix(0.58, 1, outsideLogo),
     radius:
-      mix(0.35 + radiusSeed * 0.45, 0.65 + radiusSeed * 0.55, insideOuter) *
-      radiusScale,
+      (0.24 + radiusSeed ** 2.8 * 1.05) *
+      radiusScale *
+      mix(0.82, 1, outsideLogo),
     vibrance: hash(cellX + 941, cellY + 941),
   });
 };
@@ -590,6 +613,7 @@ export const AuthVisual = () => {
           staticData[offset + 2] = dot.radius;
           staticData[offset + 3] = dot.opacity;
           staticData[offset + 4] = dot.vibrance;
+          staticData[offset + 5] = dot.flow;
           stateData[offset] = dot.x;
           stateData[offset + 1] = dot.y;
         }
@@ -1029,6 +1053,7 @@ export const AuthVisual = () => {
         }
       };
       render();
+      canvas.dataset.ready = "true";
       if (canAnimateParticles) {
         queueRender();
       }
@@ -1087,6 +1112,7 @@ export const AuthVisual = () => {
           canvas.removeEventListener("pointerdown", handlePointerDown);
         }
         canvasSurface?.dispose();
+        delete canvas.dataset.ready;
         gpu.dispose();
       };
     };
@@ -1097,7 +1123,7 @@ export const AuthVisual = () => {
       } catch {
         dispose?.();
         dispose = undefined;
-        // The themed background remains when WebGPU is unavailable.
+        // The static mark remains when WebGPU is unavailable.
       }
     };
 
@@ -1109,8 +1135,17 @@ export const AuthVisual = () => {
   }, []);
 
   return (
-    <div aria-hidden="true" className="relative size-full overflow-hidden">
-      <AtmosphericBackground grain={1.1} intensity={0.85} interactive />
+    <div
+      aria-hidden="true"
+      className="relative size-full overflow-hidden bg-auth-visual-bg [&:has(canvas[data-ready])>svg]:hidden"
+    >
+      <svg
+        className="absolute top-1/2 left-1/2 w-[23%] -translate-x-1/2 -translate-y-1/2 text-primary/20"
+        fill="currentColor"
+        viewBox="0 0 1000 1000"
+      >
+        <path d={brand.mark.path} />
+      </svg>
       <canvas
         className="relative block size-full"
         ref={canvasRef}

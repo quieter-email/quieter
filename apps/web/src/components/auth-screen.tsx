@@ -8,7 +8,7 @@ import { FieldLabel } from "@quieter/ui/field";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { getRouteApi } from "@tanstack/react-router";
+import { getRouteApi, Link } from "@tanstack/react-router";
 import { domAnimation, LazyMotion, m } from "motion/react";
 import { useState } from "react";
 import type { ReactNode } from "react";
@@ -464,17 +464,17 @@ export const AuthScreen = () => {
   const authError = error ? AUTHENTICATION_ERROR_MESSAGE : null;
 
   return (
-    <div className="auth-scene relative isolate grid h-dvh max-h-dvh w-full overflow-hidden md:grid-cols-[3fr_2fr]">
-      {/* Form first, in DOM and on screen: it is the task, the atmosphere is
-          not. The visual sits second and is ordered right on wide viewports. */}
-      <div className="relative z-10 flex size-full min-h-0 items-center justify-center px-6">
-        <div className="w-full max-w-md">
+    <div className="auth-scene dark relative isolate grid h-dvh max-h-dvh w-full overflow-hidden md:grid-cols-[7fr_5fr]">
+      <div className="relative z-10 flex size-full min-h-0 flex-col items-center overflow-y-auto px-6 py-24">
+        <div className="absolute top-6 left-6">
           <Brand
-            // oxlint-disable-next-line shadcn/no-restyle -- Auth lockup keeps its brand metrics.
-            className="mb-8 h-8 w-32 text-fg"
+            // oxlint-disable-next-line shadcn/no-restyle -- Auth header keeps its brand metrics.
+            className="h-6 w-24 text-fg"
             variant="combination"
           />
-          <h1 className="text-title-md font-medium tracking-tight text-fg">
+        </div>
+        <div className="my-auto w-full max-w-[22rem]">
+          <h1 className="text-center text-title-md font-medium tracking-tight text-fg">
             Continue to Quieter
           </h1>
 
@@ -494,9 +494,20 @@ export const AuthScreen = () => {
               {authError}
             </output>
           ) : null}
+          <nav
+            aria-label="Legal"
+            className="mt-10 flex justify-center gap-5 text-caption text-muted-fg"
+          >
+            <Link className="underline-offset-4 hover:underline" to="/terms">
+              Terms
+            </Link>
+            <Link className="underline-offset-4 hover:underline" to="/privacy">
+              Privacy
+            </Link>
+          </nav>
         </div>
       </div>
-      <div className="dark relative size-full min-h-0 border-l bg-brand-bg max-md:hidden">
+      <div className="relative size-full min-h-0 border-l border-border/30 bg-auth-visual-bg max-md:hidden">
         <AuthVisual />
       </div>
     </div>
