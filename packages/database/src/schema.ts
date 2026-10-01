@@ -1112,6 +1112,7 @@ export const gmailUsefulDetailSettings = pgTable("gmailUsefulDetailSettings", {
 export const mailboxVerificationCode = pgTable(
   "mailboxVerificationCode",
   {
+    attemptCount: integer("attemptCount"),
     cacheWriteTokens: integer("cacheWriteTokens"),
     cachedTokens: integer("cachedTokens"),
     completionTokens: integer("completionTokens"),
@@ -1127,6 +1128,7 @@ export const mailboxVerificationCode = pgTable(
       .references(() => mailbox.id, { onDelete: "cascade" }),
     messageId: text("messageId").notNull(),
     model: text("model"),
+    nextAttemptAt: timestamp("nextAttemptAt"),
     processedAt: timestamp("processedAt"),
     promptTokens: integer("promptTokens"),
     service: text("service"),
@@ -1146,6 +1148,11 @@ export const mailboxVerificationCode = pgTable(
     ),
     index("mailbox_verification_code_expires_at_idx").on(table.expiresAt),
     index("mailbox_verification_code_created_at_idx").on(table.createdAt),
+    index("mailbox_verification_code_mailbox_retry_idx").on(
+      table.mailboxId,
+      table.processedAt,
+      table.nextAttemptAt
+    ),
     unique("mailbox_verification_code_mailbox_message_unique").on(
       table.mailboxId,
       table.messageId

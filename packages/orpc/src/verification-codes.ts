@@ -40,8 +40,11 @@ import {
 } from "./verification-codes/validation";
 
 const LEASE_MS = 5 * 60_000;
+const RETRY_BASE_MS = 2 * 60_000;
+const RETRY_MAX_MS = 30 * 60_000;
 const COMBINED_CODE_MODEL = `${AUTO_LABEL_MODEL}+${VERIFICATION_CODE_MODEL}`;
 const claimSelection = {
+  attemptCount: mailboxVerificationCode.attemptCount,
   cacheWriteTokens: mailboxVerificationCode.cacheWriteTokens,
   cachedTokens: mailboxVerificationCode.cachedTokens,
   completionTokens: mailboxVerificationCode.completionTokens,
@@ -107,6 +110,10 @@ export const listPendingMailboxVerificationCodeMessageIds = async (
         or(
           isNull(mailboxVerificationCode.leaseUntil),
           lt(mailboxVerificationCode.leaseUntil, now)
+        ),
+        or(
+          isNull(mailboxVerificationCode.nextAttemptAt),
+          lte(mailboxVerificationCode.nextAttemptAt, now)
         )
       )
     )
@@ -196,8 +203,8 @@ const reportVerificationCodeUsage = async (
       .update(mailboxVerificationCode)
       .set({ updatedAt: new Date(), usageReportedAt: new Date() })
       .where(eq(mailboxVerificationCode.id, event.id));
-  } catch {
-    reportError(new Error("Verification code usage reporting failed."), {
+  } catch (error) {
+    reportError(error, {
       operation: "verification-code:report-usage",
     });
   }
@@ -293,6 +300,7 @@ export const processMailVerificationCode = async ({
   const [created] = await db
     .insert(mailboxVerificationCode)
     .values({
+      attemptCount: 0,
       createdAt: now,
       id: randomUUID(),
       leaseToken,
@@ -321,6 +329,10 @@ export const processMailVerificationCode = async ({
               or(
                 isNull(mailboxVerificationCode.leaseUntil),
                 lt(mailboxVerificationCode.leaseUntil, now)
+              ),
+              or(
+                isNull(mailboxVerificationCode.nextAttemptAt),
+                lte(mailboxVerificationCode.nextAttemptAt, now)
               )
             )
           )
@@ -406,8 +418,8 @@ export const processMailVerificationCode = async ({
           screenUsage = reported;
         },
       });
-    } catch {
-      reportError(new Error("Verification code screening failed."), {
+    } catch (error) {
+      reportError(error, {
         operation: "verification-code:screen",
       });
     }
@@ -450,6 +462,7 @@ export const processMailVerificationCode = async ({
         leaseToken: null,
         leaseUntil: null,
         model,
+        nextAttemptAt: null,
         processedAt: finishedAt,
         promptTokens: usage.promptTokens,
         service: detail?.service ?? null,
@@ -480,12 +493,17 @@ export const processMailVerificationCode = async ({
         await reportVerificationCodeUsage(event, userId);
       }
     }
-  } catch {
+  } catch (error) {
+    reportError(error, {
+      operation: "verification-code:extract",
+    });
     const usage = accumulateVerificationCodeUsage(
       claimed,
       screenUsage,
       extractionUsage
     );
+    const failedAt = new Date();
+    const attemptCount = (claimed.attemptCount ?? 0) + 1;
     await db
       .update(mailboxVerificationCode)
       .set({
@@ -499,9 +517,17 @@ export const processMailVerificationCode = async ({
                   : AUTO_LABEL_MODEL,
             }
           : {}),
+        attemptCount,
         leaseToken: null,
         leaseUntil: null,
-        updatedAt: new Date(),
+        nextAttemptAt: new Date(
+          failedAt.getTime() +
+            Math.min(
+              RETRY_MAX_MS,
+              RETRY_BASE_MS * 2 ** Math.min(attemptCount - 1, 20)
+            )
+        ),
+        updatedAt: failedAt,
       })
       .where(
         and(
@@ -509,8 +535,5 @@ export const processMailVerificationCode = async ({
           eq(mailboxVerificationCode.leaseToken, leaseToken)
         )
       );
-    reportError(new Error("Verification code extraction failed."), {
-      operation: "verification-code:extract",
-    });
   }
 };

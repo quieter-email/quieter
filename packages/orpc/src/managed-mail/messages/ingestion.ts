@@ -19,6 +19,7 @@ import {
   isNotNull,
   isNull,
   lt,
+  lte,
   or,
   sql,
 } from "drizzle-orm";
@@ -161,6 +162,10 @@ export const retryPendingManagedVerificationCodes = async () => {
         or(
           isNull(mailboxVerificationCode.leaseUntil),
           lt(mailboxVerificationCode.leaseUntil, now)
+        ),
+        or(
+          isNull(mailboxVerificationCode.nextAttemptAt),
+          lte(mailboxVerificationCode.nextAttemptAt, now)
         )
       )
     )

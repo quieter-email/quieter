@@ -209,6 +209,7 @@ const toMailboxListItem = (
   signatureHtml: record.signatureHtml ?? null,
   signatureText: record.signatureText ?? null,
   unreadNonSpamCount: record.unreadNonSpamCount ?? 0,
+  usefulDetailsEnabled: false,
 });
 
 const getGmailUnreadNonSpamCount = async (input: {

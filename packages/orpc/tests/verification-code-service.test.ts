@@ -1,10 +1,18 @@
 import type { AiUsageReport } from "@quieter/ai/chat-usage";
 import type * as databaseClient from "@quieter/database/client";
-import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+  vi,
+} from "vite-plus/test";
 
 import { processMailVerificationCode } from "../src/verification-codes";
 
 type TestRow = {
+  attemptCount: number;
   cacheWriteTokens: number | null;
   cachedTokens: number | null;
   completionTokens: number | null;
@@ -13,6 +21,7 @@ type TestRow = {
   leaseToken: string | null;
   mailboxId: string;
   model: string | null;
+  nextAttemptAt: Date | null;
   processed: boolean;
   processedAt: Date | null;
   promptTokens: number | null;
@@ -29,7 +38,7 @@ const fixtures = vi.hoisted(() => ({
       }) => Promise<{ code: string; expiresInSeconds: null; service: null }>
     >(),
   published: vi.fn<() => Promise<void>>(),
-  reported: vi.fn<() => void>(),
+  reported: vi.fn<(error: unknown) => void>(),
   rows: new Map<string, TestRow>(),
   screened:
     vi.fn<
@@ -58,6 +67,7 @@ vi.mock(
                   return [];
                 }
                 fixtures.rows.set(value.messageId, {
+                  attemptCount: 0,
                   cacheWriteTokens: null,
                   cachedTokens: null,
                   completionTokens: null,
@@ -66,6 +76,7 @@ vi.mock(
                   leaseToken: value.leaseToken,
                   mailboxId: value.mailboxId,
                   model: null,
+                  nextAttemptAt: null,
                   processed: false,
                   processedAt: null,
                   promptTokens: null,
@@ -89,12 +100,14 @@ vi.mock(
         }),
         update: () => ({
           set: (value: {
+            attemptCount?: number;
             cacheWriteTokens?: number;
             cachedTokens?: number;
             completionTokens?: number;
             costUsd?: number | null;
             leaseToken?: string | null;
             model?: string;
+            nextAttemptAt?: Date | null;
             processedAt?: Date;
             promptTokens?: number;
             usageReportedAt?: Date | null;
@@ -107,7 +120,12 @@ vi.mock(
                   return [];
                 }
                 if (typeof value.leaseToken === "string") {
-                  if (row.processed || row.leaseToken !== null) {
+                  if (
+                    row.processed ||
+                    row.leaseToken !== null ||
+                    (row.nextAttemptAt !== null &&
+                      row.nextAttemptAt.getTime() > Date.now())
+                  ) {
                     return [];
                   }
                   row.leaseToken = value.leaseToken;
@@ -124,6 +142,7 @@ vi.mock(
                   return [];
                 }
                 row.leaseToken = null;
+                row.attemptCount = value.attemptCount ?? row.attemptCount;
                 row.cacheWriteTokens =
                   value.cacheWriteTokens ?? row.cacheWriteTokens;
                 row.cachedTokens = value.cachedTokens ?? row.cachedTokens;
@@ -131,6 +150,9 @@ vi.mock(
                   value.completionTokens ?? row.completionTokens;
                 row.costUsd = value.costUsd ?? row.costUsd;
                 row.model = value.model ?? row.model;
+                if (value.nextAttemptAt !== undefined) {
+                  row.nextAttemptAt = value.nextAttemptAt;
+                }
                 row.promptTokens = value.promptTokens ?? row.promptTokens;
                 if (value.processedAt !== undefined) {
                   row.processed = true;
@@ -194,6 +216,10 @@ describe("verification code processing", () => {
     fixtures.reported.mockReset();
     fixtures.screened.mockReset().mockResolvedValue(0.8);
     fixtures.budget.mockReset().mockResolvedValue({ allowed: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   test("concurrent delivery invokes extraction once and publishes one result", async () => {
@@ -358,6 +384,7 @@ describe("verification code processing", () => {
   });
 
   test("failed extraction usage is billed with successful retry only once", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
     fixtures.screened.mockImplementation(async (input) => {
       await Promise.resolve();
       input.onUsage?.({
@@ -403,11 +430,63 @@ describe("verification code processing", () => {
     expect(fixtures.rows.get("message-1")?.costUsd).toBeCloseTo(0.001);
 
     await processMailVerificationCode(input);
+    expect(fixtures.extracted).toHaveBeenCalledOnce();
+    const retryAt = fixtures.rows.get("message-1")?.nextAttemptAt;
+    expect(retryAt).toBeInstanceOf(Date);
+    if (!retryAt) {
+      throw new Error("Expected a scheduled retry.");
+    }
+    vi.setSystemTime(new Date(retryAt.getTime() + 1));
+    await processMailVerificationCode(input);
     await processMailVerificationCode(input);
 
     expect(fixtures.rows.get("message-1")?.costUsd).toBeCloseTo(0.004);
     expect(fixtures.billed).toHaveBeenCalledOnce();
     expect(fixtures.billed.mock.calls[0]?.[0].costUsd).toBeCloseTo(0.004);
     expect(fixtures.published).toHaveBeenCalledOnce();
+  });
+
+  test("failed attempts wait longer before each retry", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const messageTime = Date.now();
+    const providerError = new Error("provider failure");
+    fixtures.extracted.mockRejectedValue(providerError);
+    const input = {
+      loadMessage: async () => {
+        await Promise.resolve();
+        return {
+          bodyText: "Your sign-in code is 482193",
+          id: "message-1",
+          internalDate: String(messageTime),
+          threadId: "thread-1",
+        };
+      },
+      mailboxId: "mailbox-1",
+      messageId: "message-1",
+      organizationId: "org-1",
+      userId: "user-1",
+    };
+
+    await processMailVerificationCode(input);
+    expect(fixtures.reported.mock.calls[0]?.[0]).toBe(providerError);
+    const firstRetryAt = fixtures.rows.get("message-1")?.nextAttemptAt;
+    expect(firstRetryAt).toBeInstanceOf(Date);
+    if (!firstRetryAt) {
+      throw new Error("Expected a scheduled retry.");
+    }
+    const firstDelay = firstRetryAt.getTime() - messageTime;
+    await processMailVerificationCode(input);
+    expect(fixtures.extracted).toHaveBeenCalledOnce();
+
+    vi.setSystemTime(new Date(firstRetryAt.getTime() + 1));
+    await processMailVerificationCode(input);
+    const secondRetryAt = fixtures.rows.get("message-1")?.nextAttemptAt;
+    expect(secondRetryAt).toBeInstanceOf(Date);
+    if (!secondRetryAt) {
+      throw new Error("Expected a later scheduled retry.");
+    }
+    expect(secondRetryAt.getTime() - Date.now()).toBeGreaterThan(firstDelay);
+    await processMailVerificationCode(input);
+    expect(fixtures.extracted).toHaveBeenCalledTimes(2);
   });
 });

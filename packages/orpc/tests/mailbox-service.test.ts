@@ -29,6 +29,7 @@ const gmailMailbox = (id: string, emailAddress: string): MailboxListItem => ({
   ownerUserId: "user_1",
   provider: "gmail",
   unreadNonSpamCount: 0,
+  usefulDetailsEnabled: false,
 });
 
 const managedMailbox = (
@@ -60,6 +61,7 @@ const managedMailbox = (
   ownerUserId: null,
   provider: "managed",
   unreadNonSpamCount: 0,
+  usefulDetailsEnabled: false,
 });
 
 const mailboxGroups: MailboxGroup[] = [

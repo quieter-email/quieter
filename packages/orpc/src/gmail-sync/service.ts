@@ -984,6 +984,10 @@ export const listGmailPubSubMaintenanceJobs = async (limit = 500) =>
                   or(
                     isNull(mailboxVerificationCode.leaseUntil),
                     lt(mailboxVerificationCode.leaseUntil, sql`now()`)
+                  ),
+                  or(
+                    isNull(mailboxVerificationCode.nextAttemptAt),
+                    lte(mailboxVerificationCode.nextAttemptAt, sql`now()`)
                   )
                 )
               )

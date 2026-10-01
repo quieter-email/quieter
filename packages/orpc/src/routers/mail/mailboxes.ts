@@ -93,6 +93,18 @@ export const mailboxProcedures = {
       async ({ context, input }) =>
         await disconnectGmailMailbox({ ...input, userId: context.userId })
     ),
+  dismissGmailUsefulDetail: protectedProcedure
+    .input(
+      z.object({ id: z.string().trim().min(1), mailboxId: mailboxIdSchema })
+    )
+    .handler(async ({ context, input }) => {
+      const { dismissGmailUsefulDetail } =
+        await import("../../gmail-useful-details/compatibility");
+      return await dismissGmailUsefulDetail({
+        ...input,
+        userId: context.userId,
+      });
+    }),
   getManagedMailboxDetails: protectedProcedure
     .route({ method: "GET" })
     .input(z.object({ mailboxId: mailboxIdSchema }))
@@ -100,12 +112,36 @@ export const mailboxProcedures = {
       async ({ context, input }) =>
         await getManagedMailboxDetails({ ...input, userId: context.userId })
     ),
+  listGmailThreadUsefulDetails: protectedProcedure
+    .route({ method: "GET" })
+    .input(
+      z.object({
+        gmailThreadId: z.string().trim().min(1),
+        mailboxId: mailboxIdSchema,
+      })
+    )
+    .handler(async ({ context, input }) => {
+      const { listGmailThreadUsefulDetails } =
+        await import("../../gmail-useful-details/compatibility");
+      return await listGmailThreadUsefulDetails({
+        ...input,
+        userId: context.userId,
+      });
+    }),
   listGmailUnreadCounts: protectedProcedure
     .route({ method: "GET" })
     .handler(
       async ({ context }) =>
         await listAccessibleGmailUnreadCounts({ userId: context.userId })
     ),
+  listGmailUsefulDetails: protectedProcedure
+    .route({ method: "GET" })
+    .input(z.object({ mailboxId: mailboxIdSchema }))
+    .handler(async ({ context, input }) => {
+      const { listGmailUsefulDetails } =
+        await import("../../gmail-useful-details/compatibility");
+      return await listGmailUsefulDetails({ ...input, userId: context.userId });
+    }),
   listMailboxes: protectedProcedure
     .route({ method: "GET" })
     .handler(async ({ context }) => {
@@ -218,6 +254,29 @@ export const mailboxProcedures = {
       const { setGmailAutoLabeling } =
         await import("../../gmail-auto-label/settings");
       return await setGmailAutoLabeling({ ...input, userId: context.userId });
+    }),
+  setGmailUsefulDetailFeedback: protectedProcedure
+    .input(
+      z.object({
+        feedback: z.enum(["not_useful", "useful"]),
+        id: z.string().trim().min(1),
+        mailboxId: mailboxIdSchema,
+      })
+    )
+    .handler(async ({ context, input }) => {
+      const { setGmailUsefulDetailFeedback } =
+        await import("../../gmail-useful-details/compatibility");
+      return await setGmailUsefulDetailFeedback({
+        ...input,
+        userId: context.userId,
+      });
+    }),
+  setGmailUsefulDetails: protectedProcedure
+    .input(z.object({ enabled: z.boolean(), mailboxId: mailboxIdSchema }))
+    .handler(async ({ context, input }) => {
+      const { setGmailUsefulDetails } =
+        await import("../../gmail-useful-details/compatibility");
+      return await setGmailUsefulDetails({ ...input, userId: context.userId });
     }),
   setManagedMailboxAccessMode: protectedProcedure
     .input(
