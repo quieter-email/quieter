@@ -1,7 +1,10 @@
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 import type { QueryClient, QueryPersister } from "@tanstack/react-query";
 
-import { GMAIL_QUERY_STALE_TIME_MS } from "#/lib/mail";
+import {
+  GMAIL_QUERY_STALE_TIME_MS,
+  hasRenderableMessageBody,
+} from "#/lib/mail";
 import type {
   ListMessagesPageResult,
   MailboxCategory,
@@ -61,6 +64,8 @@ type RefreshLoadedMessagesPagesOptions = {
   maxPageCount?: number;
   preserveUnrefreshedPages?: boolean;
   signal?: AbortSignal;
+  preserveHistoryId?: string;
+  refreshThreads?: boolean;
 };
 
 const fetchMessagesPage = async (
@@ -143,6 +148,16 @@ export const refreshLoadedMessagesPages = async (
 
   await refreshNextPage(0);
   options.signal?.throwIfAborted();
+  if (options.refreshThreads === true) {
+    await queryClient.invalidateQueries(
+      {
+        predicate: ({ queryKey }) =>
+          queryKey[0] === "message-thread" && queryKey[2] === mailboxId,
+      },
+      { cancelRefetch: true }
+    );
+    options.signal?.throwIfAborted();
+  }
 
   updateMailQueryFromServer<MessagesQueryData>(
     queryClient,
@@ -150,7 +165,13 @@ export const refreshLoadedMessagesPages = async (
     (data) =>
       mergeRefreshedMailboxPagesIntoQueryData(
         data,
-        refreshedPages,
+        options.preserveHistoryId === undefined
+          ? refreshedPages
+          : refreshedPages.map((page, index) =>
+              index === 0
+                ? { ...page, historyId: options.preserveHistoryId }
+                : page
+            ),
         refreshedPageParams,
         {
           preserveUnrefreshedPages:
@@ -194,27 +215,33 @@ export const applyMailboxSyncDelta = async (
   queryClient: QueryClient,
   mailboxId: string,
   messagesQueryKey: ReturnType<typeof getMessagesQueryKey>,
-  startHistoryId: string,
   updatedMessages: readonly MessageListItem[],
   removedMessageIds: readonly string[],
-  nextHistoryId?: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  refreshThreadIds: readonly string[] = []
 ) => {
   signal?.throwIfAborted();
+  const threadsNeedingRefresh = new Set<string>();
+  for (const [, thread] of queryClient.getQueriesData<ThreadMessagesResult>({
+    predicate: ({ queryKey }) =>
+      queryKey[0] === "message-thread" && queryKey[2] === mailboxId,
+  })) {
+    if (
+      thread !== undefined &&
+      (refreshThreadIds.includes(thread.threadId) ||
+        thread.messages.some((message) =>
+          removedMessageIds.includes(message.id)
+        ))
+    ) {
+      threadsNeedingRefresh.add(thread.threadId);
+    }
+  }
   if (updatedMessages.length > 0 || removedMessageIds.length > 0) {
     updateMailQueryFromServer<MessagesQueryData>(
       queryClient,
       messagesQueryKey,
       (data) =>
         applySyncDeltaToQueryData(data, updatedMessages, removedMessageIds)
-    );
-  }
-
-  if (nextHistoryId && nextHistoryId !== startHistoryId) {
-    updateMailQueryFromServer<MessagesQueryData>(
-      queryClient,
-      messagesQueryKey,
-      (data) => updateFirstPageHistoryId(data, nextHistoryId)
     );
   }
 
@@ -231,6 +258,18 @@ export const applyMailboxSyncDelta = async (
       mailboxId,
       updatedMessage.threadId
     );
+    const thread =
+      queryClient.getQueryData<ThreadMessagesResult>(threadQueryKey);
+    if (
+      thread !== undefined &&
+      !thread.messages.some(
+        (message) =>
+          message.id === updatedMessage.id && hasRenderableMessageBody(message)
+      ) &&
+      !hasRenderableMessageBody(updatedMessage)
+    ) {
+      threadsNeedingRefresh.add(updatedMessage.threadId);
+    }
     touchedThreadQueryKeys.set(threadQueryKey.join("::"), threadQueryKey);
     updateMailQueryFromServer(
       queryClient,
@@ -243,6 +282,15 @@ export const applyMailboxSyncDelta = async (
   await Promise.all(
     Array.from(touchedThreadQueryKeys.values(), async (threadQueryKey) => {
       await persistQueryByKey(threadQueryKey, queryClient);
+    })
+  );
+  signal?.throwIfAborted();
+  await Promise.all(
+    [...threadsNeedingRefresh].map(async (threadId) => {
+      await queryClient.invalidateQueries(
+        { exact: true, queryKey: getThreadQueryKey(mailboxId, threadId) },
+        { cancelRefetch: true }
+      );
     })
   );
 };
@@ -282,7 +330,6 @@ export const syncMessages = async (
   const currentMessages =
     queryClient.getQueryData<MessagesQueryData>(messagesQueryKey);
   const startHistoryId = currentMessages?.pages[0]?.historyId;
-
   if (
     currentMessages === undefined ||
     currentMessages.pages.length === 0 ||
@@ -294,6 +341,7 @@ export const syncMessages = async (
       mailbox,
       searchQuery,
       {
+        refreshThreads: true,
         signal,
       }
     );
@@ -316,6 +364,7 @@ export const syncMessages = async (
       mailbox,
       searchQuery,
       {
+        refreshThreads: true,
         signal,
       }
     );
@@ -325,25 +374,35 @@ export const syncMessages = async (
     queryClient,
     mailboxId,
     messagesQueryKey,
-    startHistoryId,
     syncDelta.updatedMessages,
     syncDelta.removedMessageIds,
-    syncDelta.historyId,
-    signal
+    signal,
+    syncDelta.refreshThreadIds
   );
 
   if (syncDelta.refreshFirstPage) {
-    return await refreshLoadedMessagesPages(
+    await refreshLoadedMessagesPages(
       queryClient,
       mailboxId,
       mailbox,
       searchQuery,
       {
         maxPageCount: 1,
+        preserveHistoryId: startHistoryId,
         preserveUnrefreshedPages: true,
         signal,
       }
     );
+  }
+  signal?.throwIfAborted();
+  const { historyId } = syncDelta;
+  if (historyId && historyId !== startHistoryId) {
+    updateMailQueryFromServer<MessagesQueryData>(
+      queryClient,
+      messagesQueryKey,
+      (data) => updateFirstPageHistoryId(data, historyId)
+    );
+    await persistQueryByKey(messagesQueryKey, queryClient);
   }
 
   return (
@@ -425,7 +484,7 @@ export const liveSyncQueryOptions = (
     queryKey: getLiveSyncQueryKey(mailboxId, mailbox, searchQuery),
     refetchInterval: false,
     refetchIntervalInBackground: false,
-    refetchOnMount: false,
+    refetchOnMount: true,
     refetchOnReconnect: false,
     refetchOnWindowFocus: false,
     retry: shouldRetryOrpcError,

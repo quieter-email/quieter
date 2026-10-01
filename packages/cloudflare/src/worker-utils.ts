@@ -235,7 +235,12 @@ export const handlePubSub = async (
   await processNotification(processorMessage, env);
   const broadcasts = await Promise.allSettled([
     broadcastMailboxEvent(env, emailAddress, "mailbox-dirty"),
-    broadcastGmailUpdate(env, emailAddress, "mailbox.changed"),
+    broadcastGmailUpdate(
+      env,
+      emailAddress,
+      "mailbox.changed",
+      notification.historyId
+    ),
   ]);
   for (const result of broadcasts) {
     if (result.status === "rejected") {

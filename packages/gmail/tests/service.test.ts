@@ -3,6 +3,7 @@ import { describe, expect, test, vi } from "vite-plus/test";
 import {
   extractListUnsubscribeTargets,
   getGmailMessageCount,
+  getMailboxSyncDelta,
   getGmailMessageThreadAssociations,
   mutateGmailMessage,
   mutateGmailThread,
@@ -58,6 +59,56 @@ const setFetch = (
 ) => {
   Reflect.set(globalThis, "fetch", fetch);
 };
+
+describe(getMailboxSyncDelta, () => {
+  test("preserves affected conversations when replies fall outside the active folder or messages are deleted", async () => {
+    const originalFetch = globalThis.fetch;
+    setFetch(async (input) => {
+      if (getRequestUrl(input).includes("/history?")) {
+        return await resolveJson({
+          history: [
+            {
+              messagesAdded: [
+                { message: { id: "reply", threadId: "conversation" } },
+              ],
+              messagesDeleted: [
+                { message: { id: "deleted", threadId: "other-conversation" } },
+              ],
+            },
+          ],
+          historyId: "20",
+        });
+      }
+      return await resolveResponse(
+        new Response(
+          createIdentifiedBatchResponse("metadata", [
+            {
+              body: {
+                id: "reply",
+                labelIds: ["INBOX"],
+                threadId: "conversation",
+              },
+              contentId: "message-0",
+            },
+          ]),
+          { headers: { "content-type": "multipart/mixed; boundary=metadata" } }
+        )
+      );
+    });
+    try {
+      const delta = await getMailboxSyncDelta("access-token", {
+        mailbox: "sent",
+        startHistoryId: "10",
+      });
+      expect(delta.updatedMessages).toHaveLength(0);
+      expect(delta.refreshThreadIds).toContain("conversation");
+      expect(delta.refreshThreadIds).toContain("other-conversation");
+      expect(delta.removedMessageIds).toContain("deleted");
+    } finally {
+      setFetch(originalFetch);
+    }
+  });
+});
 
 describe(getGmailMessageThreadAssociations, () => {
   test("matches reordered responses and retries only transient failures, omitting missing messages", async () => {

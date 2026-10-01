@@ -31,6 +31,7 @@ const createCoordinator = (client: QueryClient) => {
     string,
     { key: QueryKey; data: unknown; updatedAt: number }
   >();
+  const interruptedQueries = new Map<string, Set<string>>();
   let disposed = false;
   let rendering = false;
   let unsubscribe: (() => void) | undefined;
@@ -118,6 +119,18 @@ const createCoordinator = (client: QueryClient) => {
         if (disposed) {
           return;
         }
+        const interrupted =
+          interruptedQueries.get(intent.mailboxId) ?? new Set<string>();
+        for (const query of client.getQueryCache().findAll({
+          fetchStatus: "fetching",
+          predicate: ({ queryKey }) =>
+            (queryKey[0] === "messages" && queryKey[1] === intent.mailboxId) ||
+            (queryKey[0] === "message-thread" &&
+              queryKey[2] === intent.mailboxId),
+        })) {
+          interrupted.add(query.queryHash);
+        }
+        interruptedQueries.set(intent.mailboxId, interrupted);
         await client.cancelQueries(
           {
             predicate: ({ queryKey }) =>
@@ -155,15 +168,18 @@ const createCoordinator = (client: QueryClient) => {
         ) {
           void client.invalidateQueries(
             {
-              predicate: ({ queryKey }) =>
-                (queryKey[0] === "messages" &&
-                  queryKey[1] === intent.mailboxId) ||
-                (queryKey[0] === "message-thread" &&
-                  queryKey[2] === intent.mailboxId) ||
-                queryKey[0] === "gmail-unread-counts",
+              predicate: ({ queryKey, queryHash }) =>
+                ((failure !== undefined || interrupted.has(queryHash)) &&
+                  ((queryKey[0] === "messages" &&
+                    queryKey[1] === intent.mailboxId) ||
+                    (queryKey[0] === "message-thread" &&
+                      queryKey[2] === intent.mailboxId))) ||
+                queryKey[0] === "gmail-unread-counts" ||
+                queryKey[0] === "mailboxes",
             },
             { cancelRefetch: true }
           );
+          interruptedQueries.delete(intent.mailboxId);
         }
         drain();
       })();
@@ -238,6 +254,7 @@ const createCoordinator = (client: QueryClient) => {
       }
       state.setState(() => []);
       base.clear();
+      interruptedQueries.clear();
       pendingMailMutations.delete(client);
       deferredMailPersistence.delete(client);
     },

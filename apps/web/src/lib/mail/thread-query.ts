@@ -46,7 +46,8 @@ export const getThreadWithDetailsOptions = (
       return await rpc.mail.getThread({ mailboxId, threadId }, { signal });
     },
     queryKey: getThreadQueryKey(mailboxId, threadId),
-    refetchOnMount: (query) => shouldRefreshThreadContent(query.state.data),
+    refetchOnMount: (query) =>
+      query.state.isInvalidated || shouldRefreshThreadContent(query.state.data),
     refetchOnReconnect: false,
     refetchOnWindowFocus: false,
     staleTime: 1000 * 60 * 5,

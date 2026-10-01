@@ -27,7 +27,7 @@ export type GmailPubSubQueueMessage = z.infer<
 >;
 
 const broadcastMailboxDetails = async (env: Env, emailAddress: string) => {
-  await broadcastGmailUpdate(env, emailAddress, "mailbox.changed");
+  await broadcastGmailUpdate(env, emailAddress, "details.changed");
   const id = env.GmailLiveSyncMailboxV2.idFromName(
     emailAddress.trim().toLowerCase()
   );
@@ -68,7 +68,6 @@ export const processGmailQueueMessage = async (
     return { retry: false };
   }
 
-  await broadcastGmailUpdate(env, message.emailAddress, "mailbox.changed");
   const result = await (
     dependencies.processNotification ?? processGmailPubSubNotification
   )(message, {
