@@ -42,7 +42,6 @@ export const createServerSentryOptions = (
       userInfo: false,
     },
     dsn,
-    enableLogs: false,
     enabled,
     environment,
     release:

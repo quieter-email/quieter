@@ -3,6 +3,7 @@ import { z } from "zod";
 export const mailUpdateSchema = z.object({
   eventId: z.uuid(),
   mailboxId: z.string().min(1),
+  revision: z.string().regex(/^\d+$/u).optional(),
   threadIds: z.array(z.string().min(1)).max(100).optional(),
   type: z.enum(["mailbox.changed", "labels.changed", "details.changed"]),
 });

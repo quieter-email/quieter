@@ -1,13 +1,10 @@
 import { cloudflareTest } from "@cloudflare/vitest-pool-workers";
 import { defineConfig } from "vite-plus";
 
-const dependencyBuild = [{ from: "dependencies" as const, task: "build" }];
-
 export default defineConfig({
   plugins: [
     cloudflareTest({
       miniflare: {
-        r2Buckets: { LocalMailStorage: "quieter-local-mail" },
         bindings: {
           CONNECTOR_TOKEN_ENCRYPTION_KEY: "connector-token-key",
           GMAIL_TOKEN_ENCRYPTION_KEY: "gmail-token-key",
@@ -24,19 +21,11 @@ export default defineConfig({
             value: "live-sync-secret",
           }),
         },
+        r2Buckets: { LocalMailStorage: "quieter-local-mail" },
       },
       wrangler: { configPath: "./wrangler.types.jsonc" },
     }),
   ],
-  run: {
-    tasks: {
-      "check:bundles": {
-        cache: false,
-        command: "node scripts/check-handler-bundles.ts",
-        dependsOn: dependencyBuild,
-      },
-    },
-  },
   test: {
     include: ["tests/**/*.test.ts"],
   },

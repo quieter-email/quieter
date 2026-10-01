@@ -16,7 +16,6 @@ if (enabled) {
     beforeSend: (event, hint) =>
       prepareReportedEvent(event, hint.originalException),
     dsn: serverEnv.SENTRY_DSN,
-    enableLogs: false,
     environment:
       serverEnv.SENTRY_ENVIRONMENT ??
       serverEnv.QUIETER_DEPLOYMENT_ENV ??

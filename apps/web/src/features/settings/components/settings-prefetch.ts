@@ -17,32 +17,30 @@ export type MailboxSettingsPrefetchTarget = {
   provider: string;
 };
 
-const settlePrefetches = async (prefetches: Promise<void>[]) => {
-  await Promise.allSettled(prefetches);
-};
-
 export const prefetchSettingsTab = async (
   queryClient: QueryClient,
   tab: SettingsTab
 ) => {
   switch (tab) {
     case "ai": {
-      await queryClient.prefetchQuery(orpc.ai.settings.queryOptions());
+      await Promise.allSettled([
+        queryClient.query(orpc.ai.settings.queryOptions()),
+      ]);
       return;
     }
     case "mailboxes": {
-      await settlePrefetches([
-        queryClient.prefetchQuery(mailboxesQueryOptions()),
-        queryClient.prefetchQuery(userBillingQueryOptions()),
+      await Promise.allSettled([
+        queryClient.query(mailboxesQueryOptions()),
+        queryClient.query(userBillingQueryOptions()),
       ]);
       return;
     }
     case "connectors": {
-      await queryClient.prefetchQuery(connectorsQueryOptions());
+      await Promise.allSettled([queryClient.query(connectorsQueryOptions())]);
       return;
     }
     case "organization": {
-      await queryClient.prefetchQuery(userBillingQueryOptions());
+      await Promise.allSettled([queryClient.query(userBillingQueryOptions())]);
       break;
     }
     case "account":
@@ -64,16 +62,18 @@ export const prefetchOrganizationSettingsDetail = async (
   queryClient: QueryClient,
   organizationId: string
 ) => {
-  await queryClient.prefetchQuery(fullOrganizationQueryOptions(organizationId));
+  await Promise.allSettled([
+    queryClient.query(fullOrganizationQueryOptions(organizationId)),
+  ]);
 };
 
 export const prefetchOrganizationDivisions = async (
   queryClient: QueryClient,
   organizationId: string
 ) => {
-  await queryClient.prefetchQuery(
-    organizationDivisionsQueryOptions(organizationId)
-  );
+  await Promise.allSettled([
+    queryClient.query(organizationDivisionsQueryOptions(organizationId)),
+  ]);
 };
 
 export const prefetchMailboxSettingsDetail = async (
@@ -84,13 +84,11 @@ export const prefetchMailboxSettingsDetail = async (
     return;
   }
 
-  await settlePrefetches([
-    queryClient.prefetchQuery(
-      fullOrganizationQueryOptions(mailbox.organizationId)
-    ),
-    queryClient.prefetchQuery(
+  await Promise.allSettled([
+    queryClient.query(fullOrganizationQueryOptions(mailbox.organizationId)),
+    queryClient.query(
       organizationDivisionsQueryOptions(mailbox.organizationId)
     ),
-    queryClient.prefetchQuery(managedMailboxSettingsQueryOptions(mailbox.id)),
+    queryClient.query(managedMailboxSettingsQueryOptions(mailbox.id)),
   ]);
 };

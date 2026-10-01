@@ -287,8 +287,8 @@ export const getOrganizationSubscriptionRecord = async (
         ]);
       const polar = await getPolarClient();
       const subscription = await polar.subscriptions.get(
-        { id: providerSubscriptionId },
-        { signal: AbortSignal.timeout(BILLING_RECONCILIATION_TIMEOUT_MS) }
+        providerSubscriptionId,
+        { timeout: BILLING_RECONCILIATION_TIMEOUT_MS / 1000 }
       );
       const syncResult = await syncBillingSubscription(subscription);
       if (!syncResult.synced) {

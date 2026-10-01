@@ -59,7 +59,7 @@ export const sendManagedMailboxMessage = async (input: {
       ...message.inlineImages,
       ...message.attachments.filter((attachment) => !attachment.isInline),
     ].map(async (attachment) => {
-      if (attachment.file === undefined || attachment.file === null) {
+      if (!(attachment.file instanceof Blob)) {
         throw new ORPCError("BAD_REQUEST", {
           message:
             "An attachment is missing its file content. Attach the file again.",

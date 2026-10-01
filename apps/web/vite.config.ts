@@ -95,14 +95,21 @@ export default defineConfig(({ command }) => {
     sentryTanstackStart({
       authToken: process.env.SENTRY_AUTH_TOKEN,
       autoInstrumentMiddleware: false,
+      // Worker instrumentation is configured by the Cloudflare runtime wrapper.
+      buildTimeInstrumentation: false,
       org: process.env.SENTRY_ORG,
       project: process.env.SENTRY_PROJECT,
       release: { name: buildId },
       sourcemaps: {
-        assets: [`./dist/${outputDirectory}/**/*.js`],
-        // Wrangler still needs server maps when packaging the Worker.
+        assets:
+          outputDirectory === "client"
+            ? ["./.cloudflare/output/v0/workers/default/assets/**/*.js"]
+            : ["./.cloudflare/output/v0/workers/default/bundle/**/*.js"],
+        // SST still needs server maps when packaging the Worker.
         filesToDeleteAfterUpload:
-          outputDirectory === "client" ? ["./dist/client/**/*.map"] : [],
+          outputDirectory === "client"
+            ? ["./.cloudflare/output/v0/workers/default/assets/**/*.map"]
+            : [],
       },
       telemetry: false,
     }).map((plugin) => ({
@@ -143,13 +150,6 @@ export default defineConfig(({ command }) => {
       cloudflare({
         persistState: { path: `${workspaceRoot}/.wrangler/state` },
         remoteBindings: false,
-        configPath:
-          process.env.SST_WRANGLER_PATH ??
-          (isDev
-            ? fileURLToPath(
-                new URL("../../local-worker.jsonc", import.meta.url)
-              )
-            : undefined),
         viteEnvironment: { name: "ssr" },
       }),
       ...(isDev ? [validateLocalDevelopment()] : []),

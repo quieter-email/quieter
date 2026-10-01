@@ -40,7 +40,6 @@ import {
   findMessagesInCachedMailboxQueries,
   persistQueryKeys,
   removeMessagesFromCachedMailboxQueries,
-  updateMessagesInCachedMailboxQueries,
 } from "./query-cache";
 
 type MessageActionArgs = {
@@ -63,12 +62,17 @@ export const applyBulkChangesInMailbox = async (
   const updater = getMailCommandUpdater(command);
   await runMailMutation(queryClient, {
     apply: () => {
-      updateMessagesInCachedMailboxQueries(
+      for (const message of findMessagesInCachedMailboxQueries(
         queryClient,
         mailboxId,
-        (message) => messageIds.has(message.id),
-        updater
-      );
+        (candidate) => messageIds.has(candidate.id)
+      )) {
+        applyMessageToCachedMailboxQueries(
+          queryClient,
+          mailboxId,
+          updater(message)
+        );
+      }
       for (const target of targets) {
         queryClient.setQueryData(
           getThreadQueryKey(mailboxId, target.threadId),
@@ -89,13 +93,18 @@ export const applyBulkChangesInMailbox = async (
           .map((target) => target.threadId)
       );
       return () => {
-        updateMessagesInCachedMailboxQueries(
+        for (const message of findMessagesInCachedMailboxQueries(
           queryClient,
           mailboxId,
-          (message) =>
-            applied.has(message.threadId) && messageIds.has(message.id),
-          updater
-        );
+          (candidate) =>
+            applied.has(candidate.threadId) && messageIds.has(candidate.id)
+        )) {
+          applyMessageToCachedMailboxQueries(
+            queryClient,
+            mailboxId,
+            updater(message)
+          );
+        }
         for (const target of targets.filter((item) =>
           applied.has(item.threadId)
         )) {

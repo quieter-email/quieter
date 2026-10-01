@@ -58,7 +58,8 @@
 }
 
 .auth-scene {
-  background: var(--bg);
+  background: var(--auth-visual-bg);
+  color-scheme: dark;
 }
 
 @keyframes loading-spinner-segment {

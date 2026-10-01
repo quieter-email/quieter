@@ -110,6 +110,7 @@ export type MailboxSyncDelta = {
   historyId?: string;
   hasChanges: boolean;
   refreshFirstPage: boolean;
+  refreshThreadIds?: string[];
   removedMessageIds: string[];
   requiresFullRefresh: boolean;
   updatedMessages: MessageListItem[];

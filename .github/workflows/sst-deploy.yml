@@ -115,12 +115,14 @@ jobs:
             echo "refresh=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Prepare web asset directories
+        # Refresh can still read the previous release's asset path during migration.
+        run: mkdir -p apps/web/dist/client apps/web/.cloudflare/output/v0/workers/default/assets
+
       - name: Refresh SST state
         if: steps.drift-check.outputs.refresh == 'true'
         timeout-minutes: 20
-        run: |
-          mkdir -p apps/web/dist/client
-          vp exec sst refresh --config sst.config.ts --stage "$SST_STAGE"
+        run: vp exec sst refresh --config sst.config.ts --stage "$SST_STAGE"
 
       - name: Preview production changes
         timeout-minutes: 10

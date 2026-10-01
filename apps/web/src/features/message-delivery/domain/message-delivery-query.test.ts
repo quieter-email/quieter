@@ -32,7 +32,7 @@ describe(getMessageListDeliveryOptions, () => {
       mailboxId: "mailbox-a",
       messageIds,
     });
-    await client.fetchQuery(options);
+    await client.query(options);
     const calls = listStatuses.mock.calls.map(([input]) => input);
     const batchedTotal = calls.reduce(
       (total, input) => total + input.messageIds.length,

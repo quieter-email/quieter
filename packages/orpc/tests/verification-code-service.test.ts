@@ -46,138 +46,139 @@ const fixtures = vi.hoisted(() => ({
     >(),
 }));
 
-vi.mock(
-  import("@quieter/database/client"),
-  () =>
-    // The fake implements only the claim and completion operations exercised here.
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-    ({
-      db: {
-        insert: () => ({
-          values: (value: {
-            id: string;
-            leaseToken: string;
-            mailboxId: string;
-            messageId: string;
-          }) => ({
-            onConflictDoNothing: () => ({
-              returning: async () => {
-                await Promise.resolve();
-                if (fixtures.rows.has(value.messageId)) {
-                  return [];
-                }
-                fixtures.rows.set(value.messageId, {
-                  attemptCount: 0,
-                  cacheWriteTokens: null,
-                  cachedTokens: null,
-                  completionTokens: null,
-                  costUsd: null,
-                  id: value.id,
-                  leaseToken: value.leaseToken,
-                  mailboxId: value.mailboxId,
-                  model: null,
-                  nextAttemptAt: null,
-                  processed: false,
-                  processedAt: null,
-                  promptTokens: null,
-                  usageReportedAt: null,
-                });
-                return [fixtures.rows.get(value.messageId)];
-              },
-            }),
-          }),
-        }),
-        select: () => ({
-          from: () => ({
-            where: () => ({
-              limit: async () => {
-                await Promise.resolve();
-                const row = fixtures.rows.get("message-1");
-                return row === undefined ? [] : [row];
-              },
-            }),
-          }),
-        }),
-        update: () => ({
-          set: (value: {
-            attemptCount?: number;
-            cacheWriteTokens?: number;
-            cachedTokens?: number;
-            completionTokens?: number;
-            costUsd?: number | null;
-            leaseToken?: string | null;
-            model?: string;
-            nextAttemptAt?: Date | null;
-            processedAt?: Date;
-            promptTokens?: number;
-            usageReportedAt?: Date | null;
-          }) => ({
-            where: () => {
-              const execute = async () => {
-                await Promise.resolve();
-                const row = fixtures.rows.get("message-1");
-                if (row === undefined) {
-                  return [];
-                }
-                if (typeof value.leaseToken === "string") {
-                  if (
-                    row.processed ||
-                    row.leaseToken !== null ||
-                    (row.nextAttemptAt !== null &&
-                      row.nextAttemptAt.getTime() > Date.now())
-                  ) {
-                    return [];
-                  }
-                  row.leaseToken = value.leaseToken;
-                  return [row];
-                }
-                if (
-                  value.usageReportedAt !== undefined &&
-                  value.processedAt === undefined
-                ) {
-                  row.usageReportedAt = value.usageReportedAt;
-                  return [row];
-                }
-                if (row.leaseToken === null) {
-                  return [];
-                }
-                row.leaseToken = null;
-                row.attemptCount = value.attemptCount ?? row.attemptCount;
-                row.cacheWriteTokens =
-                  value.cacheWriteTokens ?? row.cacheWriteTokens;
-                row.cachedTokens = value.cachedTokens ?? row.cachedTokens;
-                row.completionTokens =
-                  value.completionTokens ?? row.completionTokens;
-                row.costUsd = value.costUsd ?? row.costUsd;
-                row.model = value.model ?? row.model;
-                if (value.nextAttemptAt !== undefined) {
-                  row.nextAttemptAt = value.nextAttemptAt;
-                }
-                row.promptTokens = value.promptTokens ?? row.promptTokens;
-                if (value.processedAt !== undefined) {
-                  row.processed = true;
-                  row.processedAt = value.processedAt;
-                  row.usageReportedAt = value.usageReportedAt ?? null;
-                }
-                return [row];
-              };
-              return {
-                returning: execute,
-                // Drizzle queries execute when awaited, even without returning rows.
-                // oxlint-disable-next-line unicorn/no-thenable
-                then: (
-                  onFulfilled: (rows: TestRow[]) => void,
-                  onRejected?: (reason: unknown) => void
-                ) => {
-                  void execute().then(onFulfilled, onRejected);
-                },
-              };
+vi.mock(import("@quieter/database/client"), () => {
+  // The fake implements only the claim and completion operations exercised here.
+  const client = {
+    db: {
+      insert: () => ({
+        values: (value: {
+          id: string;
+          leaseToken: string;
+          mailboxId: string;
+          messageId: string;
+        }) => ({
+          onConflictDoNothing: () => ({
+            returning: async () => {
+              await Promise.resolve();
+              if (fixtures.rows.has(value.messageId)) {
+                return [];
+              }
+              fixtures.rows.set(value.messageId, {
+                attemptCount: 0,
+                cacheWriteTokens: null,
+                cachedTokens: null,
+                completionTokens: null,
+                costUsd: null,
+                id: value.id,
+                leaseToken: value.leaseToken,
+                mailboxId: value.mailboxId,
+                model: null,
+                nextAttemptAt: null,
+                processed: false,
+                processedAt: null,
+                promptTokens: null,
+                usageReportedAt: null,
+              });
+              return [fixtures.rows.get(value.messageId)];
             },
           }),
         }),
-      },
-    }) as unknown as typeof databaseClient
-);
+      }),
+      select: () => ({
+        from: () => ({
+          where: () => ({
+            limit: async () => {
+              await Promise.resolve();
+              const row = fixtures.rows.get("message-1");
+              return row === undefined ? [] : [row];
+            },
+          }),
+        }),
+      }),
+      update: () => ({
+        set: (value: {
+          attemptCount?: number;
+          cacheWriteTokens?: number;
+          cachedTokens?: number;
+          completionTokens?: number;
+          costUsd?: number | null;
+          leaseToken?: string | null;
+          model?: string;
+          nextAttemptAt?: Date | null;
+          processedAt?: Date;
+          promptTokens?: number;
+          usageReportedAt?: Date | null;
+        }) => ({
+          where: () => {
+            // Captures the values for this update, despite the lint inference.
+            // oxlint-disable-next-line unicorn/consistent-function-scoping
+            const execute = async () => {
+              await Promise.resolve();
+              const row = fixtures.rows.get("message-1");
+              if (row === undefined) {
+                return [];
+              }
+              if (typeof value.leaseToken === "string") {
+                if (
+                  row.processed ||
+                  row.leaseToken !== null ||
+                  (row.nextAttemptAt !== null &&
+                    row.nextAttemptAt.getTime() > Date.now())
+                ) {
+                  return [];
+                }
+                row.leaseToken = value.leaseToken;
+                return [row];
+              }
+              if (
+                value.usageReportedAt !== undefined &&
+                value.processedAt === undefined
+              ) {
+                row.usageReportedAt = value.usageReportedAt;
+                return [row];
+              }
+              if (row.leaseToken === null) {
+                return [];
+              }
+              row.leaseToken = null;
+              row.attemptCount = value.attemptCount ?? row.attemptCount;
+              row.cacheWriteTokens =
+                value.cacheWriteTokens ?? row.cacheWriteTokens;
+              row.cachedTokens = value.cachedTokens ?? row.cachedTokens;
+              row.completionTokens =
+                value.completionTokens ?? row.completionTokens;
+              row.costUsd = value.costUsd ?? row.costUsd;
+              row.model = value.model ?? row.model;
+              if (value.nextAttemptAt !== undefined) {
+                row.nextAttemptAt = value.nextAttemptAt;
+              }
+              row.promptTokens = value.promptTokens ?? row.promptTokens;
+              if (value.processedAt !== undefined) {
+                row.processed = true;
+                row.processedAt = value.processedAt;
+                row.usageReportedAt = value.usageReportedAt ?? null;
+              }
+              return [row];
+            };
+            return {
+              returning: execute,
+              // Drizzle queries execute when awaited, even without returning rows.
+              // oxlint-disable-next-line unicorn/no-thenable
+              then: (
+                onFulfilled: (rows: TestRow[]) => void,
+                onRejected?: (reason: unknown) => void
+              ) => {
+                void execute().then(onFulfilled, onRejected);
+              },
+            };
+          },
+        }),
+      }),
+    },
+  };
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The fake implements only the query methods exercised here.
+  return client as unknown as typeof databaseClient;
+});
 vi.mock(import("@quieter/ai/extract-verification-code"), () => ({
   extractMailVerificationCode: fixtures.extracted,
 }));

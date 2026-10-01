@@ -43,7 +43,11 @@ if (mode === "diff" || mode === "refresh") {
 }
 
 const files: Record<string, string> = {};
-const entries = await readdir("dist", { recursive: true, withFileTypes: true });
+const outputDirectory = ".cloudflare/output";
+const entries = await readdir(outputDirectory, {
+  recursive: true,
+  withFileTypes: true,
+});
 for (const entry of entries.toSorted((left, right) =>
   path
     .join(left.parentPath, left.name)
@@ -54,17 +58,22 @@ for (const entry of entries.toSorted((left, right) =>
   }
   if (entry.isFile()) {
     const file = path.join(entry.parentPath, entry.name);
-    files[path.relative("dist", file).replaceAll("\\", "/")] = createHash(
-      "sha256"
-    )
-      .update(await readFile(file))
-      .digest("hex");
+    files[path.relative(outputDirectory, file).replaceAll("\\", "/")] =
+      createHash("sha256")
+        .update(await readFile(file))
+        .digest("hex");
   }
 }
-const markerText = await readFile("dist/client/assets/build-id.txt", "utf-8");
+const workerDirectory = "v0/workers/default";
+const markerPath = `${workerDirectory}/assets/assets/build-id.txt`;
+const markerText = await readFile(
+  path.join(outputDirectory, markerPath),
+  "utf-8"
+);
 if (
-  !files["server/wrangler.json"] ||
-  !files["client/assets/build-id.txt"] ||
+  !files["v0/config.json"] ||
+  !files[`${workerDirectory}/worker.config.json`] ||
+  !files[markerPath] ||
   markerText.trim() !== buildId
 ) {
   throw new Error(

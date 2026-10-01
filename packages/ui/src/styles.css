@@ -20,7 +20,8 @@
 :root,
 .theme-light {
   --brand-bg: rgb(238 238 240);
-  --auth-particle-tint: rgb(75 99 128);
+  --auth-visual-bg: rgb(238 238 238);
+  --auth-particle-tint: var(--primary);
   --font-geist: "Geist Variable", sans-serif;
   --font-geist-mono: "Geist Mono Variable", monospace;
   --bg: oklch(0.91 0.002 264);
@@ -122,7 +123,8 @@
 :root[data-theme="dark"],
 :root[data-kb-theme="dark"] {
   --brand-bg: rgb(14 15 16);
-  --auth-particle-tint: rgb(152 184 220);
+  --auth-visual-bg: rgb(10 10 10);
+  --auth-particle-tint: var(--primary);
   --bg: oklch(0.155 0.003 264);
   --bg-raised: oklch(0.24 0.003 264);
   --bg-surface: oklch(0.235 0.003 264);
@@ -207,6 +209,7 @@
 
 @theme inline {
   --color-brand-bg: var(--brand-bg);
+  --color-auth-visual-bg: var(--auth-visual-bg);
   --color-bg: var(--bg);
   --color-fg: var(--fg);
   --color-bg-raised: var(--bg-raised);

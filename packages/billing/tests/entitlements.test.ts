@@ -1,4 +1,4 @@
-import type { Subscription } from "@polar-sh/sdk/models/components/subscription.js";
+import type { models } from "@polar-sh/sdk/2026-04";
 import type * as DatabaseClientModule from "@quieter/database/client";
 import type * as ServerEnvModule from "@quieter/env/server";
 import {
@@ -26,6 +26,7 @@ import type * as PolarModule from "../src/polar";
 import type * as SubscriptionSyncModule from "../src/subscription-sync";
 
 type PolarClient = Awaited<ReturnType<typeof PolarModule.getPolarClient>>;
+type Subscription = models.Subscription;
 
 const polarSubscriptionSchema = z.custom<Subscription>(
   (value) =>
@@ -240,7 +241,7 @@ describe("organization subscription reconciliation", () => {
   beforeAll(async () => {
     // The Polar SDK ships thousands of generated modules; the first lazy load
     // inside a test can exceed the default timeout under load, so warm it here.
-    await import("@polar-sh/sdk");
+    await import("@polar-sh/sdk/2026-04");
   }, 30_000);
 
   const staleRow = {
@@ -312,9 +313,9 @@ describe("organization subscription reconciliation", () => {
       currentPeriodEnd: refreshedRow.currentPeriodEnd,
     });
     const polarCall = billingMocks.getPolarSubscription.mock.calls.at(0);
-    expect(polarCall?.[0]).toStrictEqual({ id: "polar-subscription-1" });
+    expect(polarCall?.[0]).toBe("polar-subscription-1");
     const polarOptions = polarCall?.[1];
-    expect(polarOptions?.signal).toBeInstanceOf(AbortSignal);
+    expect(polarOptions?.timeout).toBeGreaterThan(0);
     expect(billingMocks.syncBillingSubscription).toHaveBeenCalledWith(
       providerSubscription
     );

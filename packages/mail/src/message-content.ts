@@ -107,9 +107,10 @@ const repairLikelyUtf8Mojibake = (value: string): string => {
   }
   let repaired: string;
   try {
-    repaired = new TextDecoder(UTF8_CHARSET, { fatal: true }).decode(
-      new Uint8Array(bytes)
-    );
+    repaired = new TextDecoder(UTF8_CHARSET, {
+      fatal: true,
+      ignoreBOM: false,
+    }).decode(new Uint8Array(bytes));
   } catch {
     return value;
   }
