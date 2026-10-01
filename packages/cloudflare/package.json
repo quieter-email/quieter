@@ -13,7 +13,7 @@
     "sync:compatibility-date": "node scripts/sync-compatibility-date.ts",
     "test:workers": "vp exec vitest run --config worker-tests.config.ts",
     "write:build-wrangler": "node scripts/write-build-wrangler.ts",
-    "check:bundles": "node scripts/check-handler-bundles.ts"
+    "check:bundles": "vp run @quieter/env#build && vp run @quieter/observability#build && node scripts/check-handler-bundles.ts"
   },
   "dependencies": {
     "@quieter/database": "workspace:*",
