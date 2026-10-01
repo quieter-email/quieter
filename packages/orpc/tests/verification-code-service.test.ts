@@ -263,28 +263,81 @@ describe("verification code processing", () => {
     expect(fixtures.rows.get("message-1")?.processed).toBeTruthy();
   });
 
-  test("does not invoke the model when the mailbox has no AI budget", async () => {
+  test("budget denial defers work without loading mail and resumes when due", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
     fixtures.budget.mockResolvedValue({ allowed: false });
-    await processMailVerificationCode({
-      loadMessage: async () => {
-        await Promise.resolve();
-        return {
-          bodyText: "Your sign-in code is 482193",
-          id: "message-1",
-          internalDate: String(Date.now()),
-          threadId: "thread-1",
-        };
-      },
+    fixtures.extracted.mockResolvedValue({
+      code: "482193",
+      expiresInSeconds: null,
+      service: null,
+    });
+    const messageTime = Date.now();
+    const loadMessage = vi.fn<
+      () => Promise<{
+        bodyText: string;
+        id: string;
+        internalDate: string;
+        threadId: string;
+      }>
+    >(async () => {
+      await Promise.resolve();
+      return {
+        bodyText: "Your sign-in code is 482193",
+        id: "message-1",
+        internalDate: String(messageTime),
+        threadId: "thread-1",
+      };
+    });
+    const input = {
+      loadMessage,
       mailboxId: "mailbox-1",
       messageId: "message-1",
       organizationId: "org-1",
       userId: "user-1",
-    });
+    };
 
+    await processMailVerificationCode(input);
+
+    expect(loadMessage).not.toHaveBeenCalled();
     expect(fixtures.extracted).not.toHaveBeenCalled();
     expect(fixtures.screened).not.toHaveBeenCalled();
-    expect(fixtures.published).not.toHaveBeenCalled();
     expect(fixtures.rows.get("message-1")?.processed).toBeFalsy();
+    const retryAt = fixtures.rows.get("message-1")?.nextAttemptAt;
+    expect(retryAt).toBeInstanceOf(Date);
+    if (!retryAt) {
+      throw new Error("Expected a deferred retry.");
+    }
+
+    fixtures.budget.mockResolvedValue({ allowed: true });
+    await processMailVerificationCode(input);
+    expect(loadMessage).not.toHaveBeenCalled();
+
+    vi.setSystemTime(new Date(retryAt.getTime() + 1));
+    await processMailVerificationCode(input);
+    expect(loadMessage).toHaveBeenCalledOnce();
+    expect(fixtures.extracted).toHaveBeenCalledOnce();
+    expect(fixtures.rows.get("message-1")?.processed).toBeTruthy();
+  });
+
+  test("a deleted message is closed instead of retried", async () => {
+    const loadMessage = vi.fn<() => Promise<null>>(async () => {
+      await Promise.resolve();
+      return null;
+    });
+    const input = {
+      loadMessage,
+      mailboxId: "mailbox-1",
+      messageId: "message-1",
+      organizationId: "org-1",
+      userId: "user-1",
+    };
+
+    await processMailVerificationCode(input);
+    await processMailVerificationCode(input);
+
+    expect(loadMessage).toHaveBeenCalledOnce();
+    expect(fixtures.rows.get("message-1")?.processed).toBeTruthy();
+    expect(fixtures.extracted).not.toHaveBeenCalled();
   });
 
   test("a confident negative screen skips extraction", async () => {

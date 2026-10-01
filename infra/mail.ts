@@ -264,6 +264,7 @@ export const createMailResources = async (
     environment: {
       DATABASE_URL: context.databaseUrl,
       MAIL_UPDATES_URL: liveSyncUrl,
+      ...context.billingEnvironment,
       QUIETER_DEPLOYMENT_ENV: deploymentEnvironment,
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
       ...context.r2Environment,

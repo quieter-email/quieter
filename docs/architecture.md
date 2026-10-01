@@ -122,6 +122,8 @@ For Pro mailboxes:
 
 The notification is a wake-up signal, not the source of truth.
 
+Busy deliveries retain a retryable response. The active lease holder may have fetched its history page before the later notification arrived; acknowledging the busy notification would not guarantee that its changes were processed. There is no durable pending-history handoff yet. This accepts the subscription-wide push-backoff tradeoff documented by [Google Pub/Sub](https://docs.cloud.google.com/pubsub/docs/push) to preserve prompt retries for those changes.
+
 ### Incoming mail AI
 
 Verification-code screening starts as soon as the message is available, alongside labeling. Gmail messages share one server-side fetch between both tasks; managed messages start screening immediately after their ingestion transaction commits. Jev first estimates whether the message could contain a temporary access code. A permissive probability threshold of 0.2 sends possible matches to `google/gemini-2.5-flash-lite` for structured extraction; confident negatives skip extraction. Screening errors or its three-second deadline fall through to extraction. Extraction has a short response, a ten-second deadline, and no SDK or empty-response retries. Both decisions are AI-based; server validation only checks that the extracted answer appears in the message. Incoming messages older than two hours, sent mail, drafts, spam, and trash are excluded.

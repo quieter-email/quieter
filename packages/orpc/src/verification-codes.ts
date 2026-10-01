@@ -360,17 +360,43 @@ export const processMailVerificationCode = async ({
   let extractionUsage: AiUsageReport | undefined;
   let extractionAttempted = false;
   try {
-    const [message, budget] = await Promise.all([
-      loadMessage(),
-      getMailAutomationAiBudgetStatus({ organizationId, userId }),
-    ]);
+    const budget = await getMailAutomationAiBudgetStatus({
+      organizationId,
+      userId,
+    });
+    if (!budget.allowed) {
+      const deferredAt = new Date();
+      await db
+        .update(mailboxVerificationCode)
+        .set({
+          leaseToken: null,
+          leaseUntil: null,
+          nextAttemptAt: new Date(deferredAt.getTime() + RETRY_MAX_MS),
+          updatedAt: deferredAt,
+        })
+        .where(
+          and(
+            eq(mailboxVerificationCode.id, claimed.id),
+            eq(mailboxVerificationCode.leaseToken, leaseToken)
+          )
+        );
+      return;
+    }
+
+    const message = await loadMessage();
     if (message && message.id !== messageId) {
       throw new Error("Verification code message identity mismatch.");
     }
     if (!message?.threadId) {
+      const finishedAt = new Date();
       await db
         .update(mailboxVerificationCode)
-        .set({ leaseToken: null, leaseUntil: null, updatedAt: new Date() })
+        .set({
+          leaseToken: null,
+          leaseUntil: null,
+          ...(message === null ? { processedAt: finishedAt } : {}),
+          updatedAt: finishedAt,
+        })
         .where(
           and(
             eq(mailboxVerificationCode.id, claimed.id),
@@ -388,19 +414,6 @@ export const processMailVerificationCode = async ({
           processedAt: new Date(),
           updatedAt: new Date(),
         })
-        .where(
-          and(
-            eq(mailboxVerificationCode.id, claimed.id),
-            eq(mailboxVerificationCode.leaseToken, leaseToken)
-          )
-        );
-      return;
-    }
-
-    if (!budget.allowed) {
-      await db
-        .update(mailboxVerificationCode)
-        .set({ leaseToken: null, leaseUntil: null, updatedAt: new Date() })
         .where(
           and(
             eq(mailboxVerificationCode.id, claimed.id),

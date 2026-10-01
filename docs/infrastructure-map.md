@@ -101,7 +101,6 @@ flowchart TB
     WEB --> GCAL
     WEB --> SENTRY
     GWORKER --> SENTRY
-    PSW --> SENTRY
     RECEIPT --> SENTRY
     FEED --> SENTRY
     BROWSER -->|after consent| PH
@@ -165,17 +164,13 @@ sequenceDiagram
     G->>P: mailbox changed (watch)
     P->>W: POST /gmail/pubsub (OIDC JWT)
     W->>W: verify JWT vs Google JWKS, subscription, parse payload
-    W->>D: broadcast mailbox-dirty
-    D-->>B: invalidate message/unread queries
     W->>DB: claim 14-min processing lease, update lastNotificationAt
     W->>DB: billing entitlement check
     W->>A: history.list / messages.get / labels (up to 5 pages)
     W->>DB: persist auto-label and verification-code results
-    W->>D: broadcast mailbox-details-dirty
-    D-->>B: refresh message rows
-    W->>D: broadcast mailbox-dirty
-    D-->>B: refresh message labels
-    W-->>P: 204 after processing, 5xx on failure or busy lease
+    W->>D: broadcast mailbox-dirty and mailbox.changed
+    D-->>B: refresh messages, labels, unread counts, and codes
+    W-->>P: 204 after processing, 5xx on failure, busy lease, or remaining pages
 ```
 
 ### 2. Gmail scheduled maintenance (every 15 minutes)
@@ -188,16 +183,15 @@ sequenceDiagram
     participant A as Gmail API
     participant D as LiveSync DO
 
-    CR->>DB: list due mailboxes (renewal, setup, or stale with automatic AI features enabled)
+    CR->>DB: list due connected mailboxes (watch renewal, history progress, code retries, or stale sync)
     CR->>DB: process due mailboxes, up to four concurrently
-    CR->>DB: status + entitlement re-check
-    alt ineligible
-        CR->>A: watch.stop
-        CR->>DB: clear watch state
-    else eligible
+    CR->>DB: status re-check
+    alt disconnected or no owner
+        CR->>CR: skip
+    else connected
         CR->>A: watch.renew if due (20h interval / 48h buffer)
         CR->>A: history reconcile (2 pages)
-        CR->>D: broadcast details-dirty when maintained
+        CR->>D: broadcast mailbox.changed when maintained or pending
     end
 ```
 
