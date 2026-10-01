@@ -332,6 +332,7 @@ export const useMessageViewHotkeys = ({
           }
           void runHotkeyThreadAction(async () => {
             await mailboxActions.moveThreadToTrash(hotkeyMessage.threadId);
+            onBackToList?.();
           }, "Conversation moved to Trash.");
         },
         hotkey: "Shift+3",
@@ -349,6 +350,7 @@ export const useMessageViewHotkeys = ({
           }
           void runHotkeyThreadAction(async () => {
             await mailboxActions.markThreadAsSpam(hotkeyMessage.threadId);
+            onBackToList?.();
           }, "Conversation marked as Spam.");
         },
         hotkey: "Shift+1",
