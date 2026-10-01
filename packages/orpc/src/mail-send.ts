@@ -10,6 +10,7 @@ import {
   recordOrganizationMailUsage,
 } from "@quieter/billing/organization-mail-usage";
 import { db } from "@quieter/database/client";
+import { retryIdempotentDatabaseQuery } from "@quieter/database/retry";
 import {
   mailbox,
   managedMailMessage,
@@ -358,35 +359,44 @@ export const sendPreparedMail = async (input: {
 
 export const recoverMailSends = async () => {
   const now = new Date();
-  await db
-    .update(organizationMailSendIdempotency)
-    .set({ status: "unknown", updatedAt: now })
-    .where(
-      and(
-        eq(organizationMailSendIdempotency.status, "submitting"),
-        lt(
-          organizationMailSendIdempotency.updatedAt,
-          new Date(now.getTime() - 2 * 60_000)
-        )
-      )
-    );
-  const operations = await db
-    .select()
-    .from(organizationMailSendIdempotency)
-    .where(eq(organizationMailSendIdempotency.status, "accepted"))
-    .orderBy(asc(organizationMailSendIdempotency.updatedAt))
-    .limit(25);
-  const results = await Promise.allSettled(
-    operations.map(async (operation) => {
+  await retryIdempotentDatabaseQuery(
+    async () =>
       await db
         .update(organizationMailSendIdempotency)
-        .set({ updatedAt: now })
+        .set({ status: "unknown", updatedAt: now })
         .where(
           and(
-            eq(organizationMailSendIdempotency.id, operation.id),
-            eq(organizationMailSendIdempotency.status, "accepted")
+            eq(organizationMailSendIdempotency.status, "submitting"),
+            lt(
+              organizationMailSendIdempotency.updatedAt,
+              new Date(now.getTime() - 2 * 60_000)
+            )
           )
-        );
+        )
+  );
+  const operations = await retryIdempotentDatabaseQuery(
+    async () =>
+      await db
+        .select()
+        .from(organizationMailSendIdempotency)
+        .where(eq(organizationMailSendIdempotency.status, "accepted"))
+        .orderBy(asc(organizationMailSendIdempotency.updatedAt))
+        .limit(25)
+  );
+  const results = await Promise.allSettled(
+    operations.map(async (operation) => {
+      await retryIdempotentDatabaseQuery(
+        async () =>
+          await db
+            .update(organizationMailSendIdempotency)
+            .set({ updatedAt: now })
+            .where(
+              and(
+                eq(organizationMailSendIdempotency.id, operation.id),
+                eq(organizationMailSendIdempotency.status, "accepted")
+              )
+            )
+      );
       await completeMailSend(operation);
     })
   );
@@ -395,19 +405,22 @@ export const recoverMailSends = async () => {
       reportError(result.reason, { operation: "mail:recover-send" });
     }
   }
-  await db
-    .delete(organizationMailSendIdempotency)
-    .where(
-      and(
-        inArray(organizationMailSendIdempotency.status, [
-          "completed",
-          "rejected",
-          "prepared",
-        ]),
-        lt(
-          organizationMailSendIdempotency.updatedAt,
-          new Date(now.getTime() - 7 * 24 * 60 * 60_000)
+  await retryIdempotentDatabaseQuery(
+    async () =>
+      await db
+        .delete(organizationMailSendIdempotency)
+        .where(
+          and(
+            inArray(organizationMailSendIdempotency.status, [
+              "completed",
+              "rejected",
+              "prepared",
+            ]),
+            lt(
+              organizationMailSendIdempotency.updatedAt,
+              new Date(now.getTime() - 7 * 24 * 60 * 60_000)
+            )
+          )
         )
-      )
-    );
+  );
 };
