@@ -18,9 +18,30 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
   let refreshTimer: ReturnType<typeof setTimeout> | undefined;
   let reconnectDelay = 1000;
   let refreshing = false;
+  let pendingSince: number | undefined;
+  let lastUpdate = 0;
+  let nextRefreshAt = 0;
   const pending = new Set<string>();
   const seen = new Set<string>();
 
+  const scheduleRefresh = () => {
+    clearTimeout(refreshTimer);
+    refreshTimer = undefined;
+    if (refreshing || disposed || suspended || pendingSince === undefined) {
+      return;
+    }
+    const refreshAt = Math.max(
+      nextRefreshAt,
+      Math.min(lastUpdate + 2000, pendingSince + 10_000)
+    );
+    refreshTimer = setTimeout(
+      () => {
+        // oxlint-disable-next-line no-use-before-define -- The timer runs after refresh is initialized.
+        void refresh();
+      },
+      Math.max(0, refreshAt - Date.now())
+    );
+  };
   const refresh = async () => {
     refreshTimer = undefined;
     if (refreshing || disposed || suspended || pending.size === 0) {
@@ -29,6 +50,7 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
     refreshing = true;
     const mailboxes = new Set(pending);
     pending.clear();
+    pendingSince = undefined;
     try {
       await queryClient.invalidateQueries(
         {
@@ -67,20 +89,15 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
       );
     } finally {
       refreshing = false;
-      if (pending.size > 0 && !disposed) {
-        refreshTimer = setTimeout(() => {
-          void refresh();
-        }, 150);
-      }
+      nextRefreshAt = Date.now() + 5000;
+      scheduleRefresh();
     }
   };
   const requestRefresh = (mailboxId = "*") => {
     pending.add(mailboxId);
-    if (refreshTimer === undefined && !refreshing) {
-      refreshTimer = setTimeout(() => {
-        void refresh();
-      }, 150);
-    }
+    pendingSince ??= Date.now();
+    lastUpdate = Date.now();
+    scheduleRefresh();
   };
   const disconnect = () => {
     generation += 1;
@@ -207,23 +224,32 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
     }
   };
   const activityChanged = () => {
-    const active = document.visibilityState === "visible";
+    const active =
+      document.visibilityState === "visible" && document.hasFocus();
     if (active && navigator.onLine) {
       clearTimeout(backgroundTimer);
       backgroundTimer = undefined;
+      const wasSuspended = suspended;
       suspended = false;
-      requestRefresh();
+      if (wasSuspended) {
+        pendingSince = Date.now();
+        requestRefresh();
+      }
       void connect();
     } else {
+      suspended = true;
+      clearTimeout(refreshTimer);
+      refreshTimer = undefined;
       backgroundTimer ??= setTimeout(() => {
         backgroundTimer = undefined;
-        suspended = true;
         disconnect();
       }, 30_000);
     }
   };
   const offline = () => {
     suspended = true;
+    clearTimeout(refreshTimer);
+    refreshTimer = undefined;
     disconnect();
   };
   window.addEventListener("focus", activityChanged);
@@ -233,7 +259,11 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
   document.addEventListener("visibilitychange", activityChanged);
   activityChanged();
   const recoveryTimer = setInterval(() => {
-    if (document.visibilityState === "visible" && navigator.onLine) {
+    if (
+      document.visibilityState === "visible" &&
+      document.hasFocus() &&
+      navigator.onLine
+    ) {
       requestRefresh();
     }
   }, 60_000);

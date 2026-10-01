@@ -1,4 +1,4 @@
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import {
   afterEach,
   beforeEach,
@@ -42,12 +42,20 @@ class Socket extends EventTarget {
     this.readyState = 1;
     this.dispatchEvent(new Event("open"));
   }
+  notify(mailboxId = "mailbox", eventId = crypto.randomUUID()) {
+    this.dispatchEvent(
+      new MessageEvent("message", {
+        data: JSON.stringify({ eventId, mailboxId, type: "mailbox.changed" }),
+      })
+    );
+  }
 }
 
 describe("mail connection lifecycle", () => {
   let dispose: (() => void) | undefined;
+  let focused = true;
   const page = Object.assign(new EventTarget(), {
-    hasFocus: (): boolean => true,
+    hasFocus: (): boolean => focused,
     visibilityState: "visible",
   });
   const windowEvents = new EventTarget();
@@ -55,6 +63,7 @@ describe("mail connection lifecycle", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     Socket.instances = [];
+    focused = true;
     page.visibilityState = "visible";
     vi.stubGlobal("document", page);
     vi.stubGlobal("window", windowEvents);
@@ -78,14 +87,14 @@ describe("mail connection lifecycle", () => {
     await vi.advanceTimersByTimeAsync(0);
     const [socket] = Socket.instances;
     socket.open();
-    await vi.advanceTimersByTimeAsync(150);
+    await vi.advanceTimersByTimeAsync(10_000);
     page.visibilityState = "hidden";
     page.dispatchEvent(new Event("visibilitychange"));
     await vi.advanceTimersByTimeAsync(29_000);
     expect(socket.close).not.toHaveBeenCalled();
     page.visibilityState = "visible";
     page.dispatchEvent(new Event("visibilitychange"));
-    await vi.advanceTimersByTimeAsync(150);
+    await vi.advanceTimersByTimeAsync(10_000);
     expect(Socket.instances).toHaveLength(1);
     page.visibilityState = "hidden";
     page.dispatchEvent(new Event("visibilitychange"));
@@ -94,21 +103,43 @@ describe("mail connection lifecycle", () => {
     refresh.mockClear();
     page.visibilityState = "visible";
     page.dispatchEvent(new Event("visibilitychange"));
-    await vi.advanceTimersByTimeAsync(150);
+    await vi.advanceTimersByTimeAsync(10_000);
     expect(Socket.instances).toHaveLength(2);
     expect(refresh).toHaveBeenCalledOnce();
   });
 
-  test("keeps a visible window connected after focus moves elsewhere", async () => {
-    vi.spyOn(page, "hasFocus").mockReturnValue(false);
-    dispose = connectMailUpdates(new QueryClient());
-    await vi.advanceTimersByTimeAsync(0);
-    const [socket] = Socket.instances;
-    socket.open();
-    windowEvents.dispatchEvent(new Event("blur"));
-    await vi.advanceTimersByTimeAsync(31_000);
-    expect(socket.close).not.toHaveBeenCalled();
-  });
+  test.each(["blur", "hidden"])(
+    "defers notifications and recovery refreshes while inactive (%s), then reconciles once",
+    async (activity) => {
+      const client = new QueryClient();
+      const refresh = vi.spyOn(client, "invalidateQueries");
+      dispose = connectMailUpdates(client);
+      await vi.advanceTimersByTimeAsync(0);
+      const [socket] = Socket.instances;
+      socket.open();
+      await vi.advanceTimersByTimeAsync(10_000);
+      refresh.mockClear();
+      focused = activity !== "blur";
+      page.visibilityState = activity === "hidden" ? "hidden" : "visible";
+      windowEvents.dispatchEvent(new Event("blur"));
+      page.dispatchEvent(new Event("visibilitychange"));
+      for (let index = 0; index < 100; index += 1) {
+        socket.notify();
+      }
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(socket.close).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(refresh).not.toHaveBeenCalled();
+      focused = true;
+      page.visibilityState = "visible";
+      windowEvents.dispatchEvent(new Event("focus"));
+      page.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(0);
+      Socket.instances.at(-1)?.open();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(refresh).toHaveBeenCalledOnce();
+    }
+  );
 
   test("coalesces duplicate events and cancels a handshake when the session ends", async () => {
     const client = new QueryClient();
@@ -117,7 +148,7 @@ describe("mail connection lifecycle", () => {
     await vi.advanceTimersByTimeAsync(0);
     const [socket] = Socket.instances;
     socket.open();
-    await vi.advanceTimersByTimeAsync(150);
+    await vi.advanceTimersByTimeAsync(10_000);
     refresh.mockClear();
     const event = {
       eventId: crypto.randomUUID(),
@@ -130,7 +161,7 @@ describe("mail connection lifecycle", () => {
     socket.dispatchEvent(
       new MessageEvent("message", { data: JSON.stringify(event) })
     );
-    await vi.advanceTimersByTimeAsync(150);
+    await vi.advanceTimersByTimeAsync(10_000);
     expect(refresh).toHaveBeenCalledOnce();
     dispose();
     const handshake = Promise.withResolvers<{ url: string }>();
@@ -142,5 +173,75 @@ describe("mail connection lifecycle", () => {
     handshake.resolve({ url: "ws://localhost/mail/live" });
     await vi.advanceTimersByTimeAsync(1000);
     expect(Socket.instances).toHaveLength(1);
+  });
+
+  test("batches a sustained stream of distinct events without starving updates or refreshing unrelated mailboxes", async () => {
+    const client = new QueryClient();
+    let revision = 0;
+    const fetchMessages = vi.fn<() => number>(() => revision);
+    const fetchOtherMessages = vi.fn<() => number>().mockReturnValue(0);
+    const observer = new QueryObserver(client, {
+      initialData: revision,
+      queryFn: fetchMessages,
+      queryKey: ["messages", "mailbox", "inbox", ""],
+      staleTime: Infinity,
+    });
+    const otherObserver = new QueryObserver(client, {
+      initialData: 0,
+      queryFn: fetchOtherMessages,
+      queryKey: ["messages", "other-mailbox", "inbox", ""],
+      staleTime: Infinity,
+    });
+    const unsubscribe = observer.subscribe(() => {});
+    const unsubscribeOther = otherObserver.subscribe(() => {});
+    dispose = connectMailUpdates(client);
+    await vi.advanceTimersByTimeAsync(0);
+    const [socket] = Socket.instances;
+    socket.open();
+    await vi.advanceTimersByTimeAsync(10_000);
+    fetchMessages.mockClear();
+    fetchOtherMessages.mockClear();
+    for (let index = 0; index < 100; index += 1) {
+      revision += 1;
+      socket.notify();
+      await vi.advanceTimersByTimeAsync(200);
+    }
+    expect(observer.getCurrentResult().data).toBeGreaterThan(0);
+    expect(fetchMessages.mock.calls.length).toBeLessThan(10);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(observer.getCurrentResult().data).toBe(revision);
+    expect(fetchOtherMessages).not.toHaveBeenCalled();
+    const settledCount = fetchMessages.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(fetchMessages).toHaveBeenCalledTimes(settledCount);
+    unsubscribe();
+    unsubscribeOther();
+    client.clear();
+  });
+
+  test("retains changes received during an in-flight refresh for a single follow-up", async () => {
+    const client = new QueryClient();
+    const refresh = vi.spyOn(client, "invalidateQueries");
+    dispose = connectMailUpdates(client);
+    await vi.advanceTimersByTimeAsync(0);
+    const [socket] = Socket.instances;
+    socket.open();
+    await vi.advanceTimersByTimeAsync(10_000);
+    refresh.mockClear();
+    // oxlint-disable-next-line typescript/no-invalid-void-type -- Query invalidation resolves without a value.
+    const inFlight = Promise.withResolvers<void>();
+    refresh.mockReturnValueOnce(inFlight.promise);
+    socket.notify();
+    await vi.advanceTimersByTimeAsync(10_000);
+    for (let index = 0; index < 100; index += 1) {
+      socket.notify();
+    }
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(refresh).toHaveBeenCalledOnce();
+    inFlight.resolve();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(refresh).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(refresh).toHaveBeenCalledTimes(2);
   });
 });
