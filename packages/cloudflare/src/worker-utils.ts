@@ -6,6 +6,7 @@ import { readBoundedJson } from "./bounded-json";
 import { timingSafeEqual } from "./crypto-utils";
 import { broadcastGmailUpdate } from "./mail-updates";
 import { RequestError } from "./request-error";
+import { retryMailBroadcast } from "./retry-mail-broadcast";
 import { readLinkedSecret, reportWorkerError } from "./worker-runtime";
 
 const GOOGLE_JWKS = createRemoteJWKSet(
@@ -177,12 +178,15 @@ const broadcastMailboxEvent = async (
   emailAddress: string,
   type: "mailbox-details-dirty" | "mailbox-dirty"
 ) => {
-  const response = await mailboxObject(env, emailAddress).fetch(
-    "https://internal.quieter/broadcast",
-    {
-      body: JSON.stringify({ type }),
-      method: "POST",
-    }
+  const response = await retryMailBroadcast(
+    async () =>
+      await mailboxObject(env, emailAddress).fetch(
+        "https://internal.quieter/broadcast",
+        {
+          body: JSON.stringify({ type }),
+          method: "POST",
+        }
+      )
   );
   if (!response.ok) {
     throw new RequestError(503, "broadcast_response_error");

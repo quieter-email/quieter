@@ -49,6 +49,35 @@ vi.mock(import("@quieter/database/client"), async (importOriginal) => {
 const serviceAccount = "gmail-push@example.invalid";
 
 describe("mail update fan-out", () => {
+  test("recreates a failed recipient stub and delivers the update", async () => {
+    const userId = crypto.randomUUID();
+    vi.mocked(listMailUpdateRecipients).mockResolvedValueOnce([userId]);
+    const failedStub = env.MailLiveUser.get(
+      env.MailLiveUser.idFromName(userId)
+    );
+    const failedFetch = vi
+      .spyOn(failedStub, "fetch")
+      .mockRejectedValue(
+        Object.assign(new Error("internal error"), { retryable: true })
+      );
+    const get = vi
+      .spyOn(env.MailLiveUser, "get")
+      .mockReturnValueOnce(failedStub);
+
+    await expect(
+      broadcastMailUpdate(env, {
+        eventId: crypto.randomUUID(),
+        mailboxId: "mailbox",
+        type: "mailbox.changed",
+      })
+    ).resolves.toBeUndefined();
+
+    expect(failedFetch).toHaveBeenCalledOnce();
+    expect(get.mock.calls.length).toBeGreaterThan(1);
+    failedFetch.mockRestore();
+    get.mockRestore();
+  });
+
   test("continues to later recipient batches after a delivery failure", async () => {
     vi.mocked(listMailUpdateRecipients).mockResolvedValueOnce(
       Array.from({ length: 12 }, () => crypto.randomUUID())
@@ -276,7 +305,7 @@ describe("Cloudflare worker runtime", () => {
       expect(response.status).toBe(403);
     });
 
-    test("enqueues authenticated notifications before acknowledging", async () => {
+    test("enqueues notifications and recovers a transient broadcast failure", async () => {
       installFetchMock();
       const token = await liveSyncToken();
       const stub = env.GmailLiveSyncMailboxV2.get(
@@ -291,6 +320,9 @@ describe("Cloudflare worker runtime", () => {
       if (socket === null) {
         throw new Error("Expected WebSocket upgrade.");
       }
+      vi.spyOn(env.GmailLiveSyncMailboxV2, "get").mockImplementationOnce(() => {
+        throw Object.assign(new Error("internal error"), { retryable: true });
+      });
       socket.accept();
       const events: unknown[] = [];
       socket.addEventListener("message", (event) => {
