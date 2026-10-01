@@ -379,5 +379,6 @@ export const useMailboxMessages = ({
     refreshMessages,
     refreshSearchResultsIfNeeded,
     selectedMessage,
+    selectedThreadMessages: selectedThreadData?.messages,
   };
 };
