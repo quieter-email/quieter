@@ -12,6 +12,7 @@ import {
 import { z } from "zod";
 
 import { readBoundedJson } from "./bounded-json";
+import { retryMailBroadcast } from "./retry-mail-broadcast";
 import { readLinkedSecret, reportWorkerError } from "./worker-runtime";
 
 export const broadcastMailUpdate = async (env: Env, event: MailUpdate) => {
@@ -23,10 +24,14 @@ export const broadcastMailUpdate = async (env: Env, event: MailUpdate) => {
   for (let offset = 0; offset < recipients.length; offset += 10) {
     const results = await Promise.allSettled(
       recipients.slice(offset, offset + 10).map(async (userId) => {
-        const stub = env.MailLiveUser.get(env.MailLiveUser.idFromName(userId));
-        const response = await stub.fetch("https://internal/mail/events", {
-          body: JSON.stringify(event),
-          method: "POST",
+        const response = await retryMailBroadcast(async () => {
+          const stub = env.MailLiveUser.get(
+            env.MailLiveUser.idFromName(userId)
+          );
+          return await stub.fetch("https://internal/mail/events", {
+            body: JSON.stringify(event),
+            method: "POST",
+          });
         });
         if (!response.ok) {
           throw new Error("Mail broadcast failed.");

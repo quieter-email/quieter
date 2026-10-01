@@ -5,6 +5,7 @@
   "exports": {
     "./client": "./src/client.ts",
     "./local-development": "./scripts/local-development.ts",
+    "./retry": "./src/retry.ts",
     "./schema": "./src/schema.ts"
   },
   "dependencies": {

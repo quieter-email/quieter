@@ -1,4 +1,4 @@
-import { generateText, Output } from "ai";
+import { generateText, NoOutputGeneratedError, Output } from "ai";
 import type { z } from "zod";
 
 import { defaultChatModel } from "./chat-models";
@@ -23,9 +23,9 @@ const reasoningProviderOptions = (
       };
 
 /**
- * One structured generation against a chat model. The schema is enforced
- * through the AI SDK output parser, and usage is reported once with OpenRouter
- * cost accounting included.
+ * Structured generation with one retry for empty output. The schema is enforced
+ * through the AI SDK output parser, and usage across completed attempts is
+ * reported once with OpenRouter cost accounting included.
  */
 export const runStructuredGeneration = async <TOutput>(input: {
   abortSignal?: AbortSignal;
@@ -38,21 +38,42 @@ export const runStructuredGeneration = async <TOutput>(input: {
   schema: z.ZodType<TOutput>;
   system: string;
 }): Promise<TOutput> => {
-  const result = await generateText({
-    ...(input.abortSignal === undefined
-      ? {}
-      : { abortSignal: input.abortSignal }),
-    instructions: input.system,
-    maxOutputTokens: input.maxOutputTokens,
-    model: createChatModel(input.model ?? defaultChatModel, {
-      prioritizeLatency: input.prioritizeLatency,
-    }),
-    ...reasoningProviderOptions(input.reasoningEffort),
-    output: Output.object({ schema: input.schema }),
-    prompt: input.prompt,
-  });
-  input.onUsage?.(summarizeAiUsage({ steps: result.steps }));
-  return result.output;
+  const steps: Parameters<typeof summarizeAiUsage>[0]["steps"][number][] = [];
+  try {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        const result = await generateText({
+          ...(input.abortSignal === undefined
+            ? {}
+            : { abortSignal: input.abortSignal }),
+          instructions: input.system,
+          maxOutputTokens: input.maxOutputTokens,
+          model: createChatModel(input.model ?? defaultChatModel, {
+            prioritizeLatency: input.prioritizeLatency,
+          }),
+          onEnd: ({ steps: attemptSteps }) => {
+            steps.push(...attemptSteps);
+          },
+          ...reasoningProviderOptions(input.reasoningEffort),
+          output: Output.object({ schema: input.schema }),
+          prompt: input.prompt,
+        });
+        return result.output;
+      } catch (error) {
+        if (
+          attempt > 0 ||
+          input.abortSignal?.aborted === true ||
+          !NoOutputGeneratedError.isInstance(error)
+        ) {
+          throw error;
+        }
+      }
+    }
+  } finally {
+    if (steps.length > 0) {
+      input.onUsage?.(summarizeAiUsage({ steps }));
+    }
+  }
 };
 
 /** Plain-text generation variant for prompts that return prose. */
