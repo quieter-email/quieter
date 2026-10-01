@@ -29,6 +29,7 @@ import {
 import type { MailboxCategory, MessageListItem } from "#/lib/mail";
 import { labelsQueryOptions } from "#/lib/mail/labels-query";
 import { getThreadWithDetailsOptions } from "#/lib/mail/thread-query";
+import { verificationCodesQueryOptions } from "#/lib/mail/verification-codes-query";
 import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
 import { orpc } from "#/lib/orpc";
 
@@ -100,6 +101,13 @@ export const useMessageViewData = ({
   const queryClient = useQueryClient();
   const { data: gmailLabels = [] } = useQuery(
     labelsQueryOptions(mailboxId, mailboxProvider !== "api")
+  );
+  const { data: verificationCodes } = useQuery(
+    verificationCodesQueryOptions(
+      mailboxId,
+      [message.threadId],
+      mailboxProvider !== "api"
+    )
   );
   const {
     data: threadData,
@@ -209,6 +217,7 @@ export const useMessageViewData = ({
     threadIsUnread,
     threadLabelIds,
     threadMessages,
+    verificationCodes: verificationCodes?.items ?? [],
     visibleMessages,
   };
 };

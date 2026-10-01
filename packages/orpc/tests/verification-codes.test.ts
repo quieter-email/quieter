@@ -57,14 +57,14 @@ describe("AI verification code validation", () => {
     ).toBeNull();
   });
 
-  test("rejects an access code whose stated lifetime has elapsed", () => {
+  test("keeps a grounded access code after its stated lifetime", () => {
     expect(
       validateVerificationCodeCandidate({
         candidate: { code: "482193", expiresInSeconds: 60, service: null },
         message: { ...message, internalDate: String(now.getTime() - 120_000) },
         now,
       })
-    ).toBeNull();
+    ).toMatchObject({ code: "482193" });
   });
 
   test("accepts a grounded, active temporary access code", () => {

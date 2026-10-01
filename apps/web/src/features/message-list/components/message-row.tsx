@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Copy01Icon,
   FileAttachmentIcon,
   MessageMultiple01Icon,
 } from "@hugeicons/core-free-icons";
@@ -10,12 +9,10 @@ import { splitMailAddressList } from "@quieter/mail/compose/schema";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import type { RouterOutputs } from "@quieter/orpc";
 import { cn } from "@quieter/ui/cn";
-import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Pill } from "@quieter/ui/pill";
-import { toast } from "@quieter/ui/toast";
 import { m, useReducedMotion } from "motion/react";
 import type { FocusEvent, KeyboardEvent, MouseEvent } from "react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { SenderAvatar } from "#/components/sender-avatar";
 import {
@@ -32,7 +29,7 @@ import {
   appMotionDuration,
   getAppStaggerDelay,
 } from "#/features/motion/app-motion";
-import { toastError } from "#/lib/error-toast";
+import { CopyVerificationCode } from "#/features/verification-codes/components/copy-verification-code";
 import { formatMessageListDate, parseSender } from "#/lib/gmail/message-utils";
 import type { ThreadListEntry } from "#/lib/gmail/thread-list";
 
@@ -158,69 +155,6 @@ type MessageRowProps = {
   state?: MessageRowState;
   isNew?: boolean;
   staggerIndex?: number;
-};
-
-const VerificationCodeButton = ({
-  code,
-  expiresAt,
-  service,
-}: {
-  code: string;
-  expiresAt: Date;
-  service: string | null;
-}) => {
-  const [expired, setExpired] = useState(
-    () => expiresAt.getTime() <= Date.now()
-  );
-  useEffect(() => {
-    const delay = expiresAt.getTime() - Date.now();
-    const timeout = window.setTimeout(
-      () => {
-        setExpired(true);
-      },
-      Math.max(0, delay)
-    );
-    return () => {
-      window.clearTimeout(timeout);
-    };
-  }, [expiresAt]);
-  const copyCode = async () => {
-    try {
-      await navigator.clipboard.writeText(code);
-      toast.success("Code copied.");
-    } catch (error) {
-      toastError(error, {
-        boundary: "verification-code-copy",
-        fallback: "Could not copy code.",
-      });
-    }
-  };
-
-  if (expired) {
-    return null;
-  }
-
-  return (
-    <IconButtonTooltip
-      label={`Copy verification code${service ? ` from ${service}` : ""}`}
-    >
-      <button
-        aria-label={`Copy verification code ${code}`}
-        className="relative z-20 my-auto mr-2 inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border bg-bg-raised px-2 font-mono text-caption font-medium text-fg tabular-nums hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-        onClick={(event) => {
-          event.stopPropagation();
-          void copyCode();
-        }}
-        onPointerDown={(event) => {
-          event.stopPropagation();
-        }}
-        type="button"
-      >
-        <span>{code}</span>
-        <HugeiconsIcon aria-hidden className="size-3" icon={Copy01Icon} />
-      </button>
-    </IconButtonTooltip>
-  );
 };
 
 type MessageRowState = {
@@ -363,6 +297,7 @@ const MessageRowDetails = ({
   thread,
   threaded,
   unread,
+  verificationCode,
 }: {
   date: string;
   deliveryStatus?: MessageDeliveryStatus | null;
@@ -375,8 +310,9 @@ const MessageRowDetails = ({
   thread: ThreadListEntry;
   threaded: boolean;
   unread: boolean;
+  verificationCode?: string;
 }) => (
-  <div className="relative z-10 flex min-w-0 flex-1 items-center gap-2 px-2 @sm:gap-3 @sm:px-3">
+  <div className="pointer-events-none relative z-10 flex h-full min-w-0 flex-1 items-center gap-2 px-2 @sm:gap-3 @sm:px-3">
     <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 overflow-hidden">
       <div className="flex w-full min-w-0 items-center justify-between gap-2">
         <p className="min-w-0 truncate text-left text-body-sm/4.5 text-fg">
@@ -455,6 +391,7 @@ const MessageRowDetails = ({
             subject
           )}
         </p>
+        {verificationCode && <CopyVerificationCode code={verificationCode} />}
         <div className="hidden shrink-0 @sm:block">
           <MessageLabels
             compact
@@ -730,45 +667,46 @@ const MessageRowSurface = ({
         thread={thread}
       />
 
-      <MessageActionsContextMenu
-        actions={createMailboxThreadMessageActionHandlers({
-          mailboxActions,
-          onOpenDraft,
-          supportsArchive: mailboxProvider !== "api",
-          supportsFolders: mailboxProvider === "gmail",
-          supportsLabels: mailboxProvider !== "api",
-          supportsReadState: mailboxProvider !== "api",
-          supportsUnsubscribe: mailboxProvider === "gmail",
-        })}
-        isPending={isActionPending}
-        mailboxId={mailboxId}
-        mailbox={activeMailbox}
-        message={anchorMessage}
-        threadLabelIds={thread.threadLabelIds}
-        triggerClassName="flex h-full min-w-0 flex-1 active:scale-100"
-      >
-        <button
-          aria-label={openAriaLabel}
-          aria-current={isActive ? "true" : undefined}
-          className="relative z-10 flex h-full min-w-0 flex-1 items-center rounded-lg border border-transparent text-left focus-visible:z-20 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none"
-          data-message-row-trigger
-          onClick={handleRowClick}
-          onKeyDown={handleRowKeyDown}
-          onMouseDown={handleRowMouseDown}
-          onPointerCancel={() => {
-            setIsPressed(false);
-          }}
-          onPointerDown={() => {
-            setIsPressed(true);
-          }}
-          onPointerLeave={() => {
-            setIsPressed(false);
-          }}
-          onPointerUp={() => {
-            setIsPressed(false);
-          }}
-          type="button"
+      <div className="relative h-full min-w-0 flex-1">
+        <MessageActionsContextMenu
+          actions={createMailboxThreadMessageActionHandlers({
+            mailboxActions,
+            onOpenDraft,
+            supportsArchive: mailboxProvider !== "api",
+            supportsFolders: mailboxProvider === "gmail",
+            supportsLabels: mailboxProvider !== "api",
+            supportsReadState: mailboxProvider !== "api",
+            supportsUnsubscribe: mailboxProvider === "gmail",
+          })}
+          isPending={isActionPending}
+          mailboxId={mailboxId}
+          mailbox={activeMailbox}
+          message={anchorMessage}
+          threadLabelIds={thread.threadLabelIds}
+          triggerClassName="relative flex h-full min-w-0 flex-1 active:scale-100"
         >
+          <button
+            aria-label={openAriaLabel}
+            aria-current={isActive ? "true" : undefined}
+            className="absolute inset-0 z-10 rounded-lg border border-transparent text-left focus-visible:z-20 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none"
+            data-message-row-trigger
+            onClick={handleRowClick}
+            onKeyDown={handleRowKeyDown}
+            onMouseDown={handleRowMouseDown}
+            onPointerCancel={() => {
+              setIsPressed(false);
+            }}
+            onPointerDown={() => {
+              setIsPressed(true);
+            }}
+            onPointerLeave={() => {
+              setIsPressed(false);
+            }}
+            onPointerUp={() => {
+              setIsPressed(false);
+            }}
+            type="button"
+          />
           <MessageRowDetails
             date={date}
             deliveryStatus={deliveryStatus}
@@ -781,17 +719,10 @@ const MessageRowSurface = ({
             thread={thread}
             threaded={threaded}
             unread={unread}
+            verificationCode={verificationCode?.code}
           />
-        </button>
-      </MessageActionsContextMenu>
-      {verificationCode && (
-        <VerificationCodeButton
-          code={verificationCode.code}
-          expiresAt={verificationCode.expiresAt}
-          key={`${verificationCode.messageId}:${verificationCode.code}:${verificationCode.expiresAt.toISOString()}`}
-          service={verificationCode.service}
-        />
-      )}
+        </MessageActionsContextMenu>
+      </div>
     </m.div>
   );
 };

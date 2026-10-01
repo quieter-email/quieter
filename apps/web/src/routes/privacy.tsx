@@ -189,9 +189,9 @@ function PrivacyPage() {
       <p>
         We retain account and mailbox data while your account is active and as
         needed to provide the service, comply with law, prevent abuse, and
-        resolve disputes. Extracted verification codes are encrypted, stop being
-        available when they expire, and their encrypted values are cleared by
-        maintenance. Their processing records are removed after thirty days.
+        resolve disputes. Extracted verification codes are encrypted and remain
+        available with their mailbox, even after an estimated expiry time.
+        Processing records without a saved code are removed after thirty days.
         Disabling a mailbox or deleting account data may not immediately remove
         backups, logs, invoices, or records we must keep for legal, security, or
         accounting reasons. The browser may keep selected mailbox and navigation

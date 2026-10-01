@@ -88,6 +88,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     threadIsUnread,
     threadLabelIds,
     threadMessages,
+    verificationCodes,
     viewRef,
     visibleMessages,
   } = props;
@@ -221,6 +222,11 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                 ? mailboxActions.unsubscribeFromMessage
                 : undefined
             }
+            verificationCode={
+              verificationCodes.find(
+                (item) => item.messageId === threadMessage.id
+              )?.code
+            }
           />
         ))
       ) : (
@@ -240,6 +246,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
               ? mailboxActions.unsubscribeFromMessage
               : undefined
           }
+          verificationCodes={verificationCodes}
         />
       )}
 

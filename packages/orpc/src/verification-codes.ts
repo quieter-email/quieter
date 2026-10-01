@@ -3,6 +3,10 @@ import { randomUUID } from "node:crypto";
 import { chatModelSchema } from "@quieter/ai/chat-models";
 import type { AiUsageReport } from "@quieter/ai/chat-usage";
 import type { AutomationMailMessage } from "@quieter/ai/classify-gmail-message";
+import {
+  AUTO_LABEL_MODEL,
+  detectMailVerificationCode,
+} from "@quieter/ai/classify-gmail-message";
 import { extractMailVerificationCode } from "@quieter/ai/extract-verification-code";
 import { VERIFICATION_CODE_MODEL } from "@quieter/ai/model-config";
 import { reportAiUsage } from "@quieter/billing";
@@ -19,6 +23,7 @@ import {
   isNotNull,
   isNull,
   lt,
+  lte,
   or,
 } from "drizzle-orm";
 
@@ -35,6 +40,53 @@ import {
 } from "./verification-codes/validation";
 
 const LEASE_MS = 5 * 60_000;
+const COMBINED_CODE_MODEL = `${AUTO_LABEL_MODEL}+${VERIFICATION_CODE_MODEL}`;
+const claimSelection = {
+  cacheWriteTokens: mailboxVerificationCode.cacheWriteTokens,
+  cachedTokens: mailboxVerificationCode.cachedTokens,
+  completionTokens: mailboxVerificationCode.completionTokens,
+  costUsd: mailboxVerificationCode.costUsd,
+  id: mailboxVerificationCode.id,
+  model: mailboxVerificationCode.model,
+  promptTokens: mailboxVerificationCode.promptTokens,
+};
+
+const accumulateVerificationCodeUsage = (
+  previous: {
+    cacheWriteTokens: number | null;
+    cachedTokens: number | null;
+    completionTokens: number | null;
+    costUsd: number | null;
+    promptTokens: number | null;
+  },
+  screenUsage: AiUsageReport | undefined,
+  extractionUsage: AiUsageReport | undefined
+) => ({
+  cacheWriteTokens:
+    (previous.cacheWriteTokens ?? 0) +
+    (screenUsage?.cacheWriteTokens ?? 0) +
+    (extractionUsage?.cacheWriteTokens ?? 0),
+  cachedTokens:
+    (previous.cachedTokens ?? 0) +
+    (screenUsage?.cachedTokens ?? 0) +
+    (extractionUsage?.cachedTokens ?? 0),
+  completionTokens:
+    (previous.completionTokens ?? 0) +
+    (screenUsage?.completionTokens ?? 0) +
+    (extractionUsage?.completionTokens ?? 0),
+  costUsd:
+    previous.costUsd === null &&
+    screenUsage?.costUsd === undefined &&
+    extractionUsage?.costUsd === undefined
+      ? null
+      : (previous.costUsd ?? 0) +
+        (screenUsage?.costUsd ?? 0) +
+        (extractionUsage?.costUsd ?? 0),
+  promptTokens:
+    (previous.promptTokens ?? 0) +
+    (screenUsage?.promptTokens ?? 0) +
+    (extractionUsage?.promptTokens ?? 0),
+});
 
 export const listPendingMailboxVerificationCodeMessageIds = async (
   mailboxId: string,
@@ -67,19 +119,39 @@ export const cleanupMailboxVerificationCodes = async () => {
   const now = new Date();
   await db
     .update(mailboxVerificationCode)
-    .set({ encryptedCode: null, updatedAt: now })
+    .set({
+      leaseToken: null,
+      leaseUntil: null,
+      processedAt: now,
+      updatedAt: now,
+    })
     .where(
       and(
-        isNotNull(mailboxVerificationCode.encryptedCode),
-        lt(mailboxVerificationCode.expiresAt, now)
+        isNull(mailboxVerificationCode.processedAt),
+        lte(
+          mailboxVerificationCode.createdAt,
+          new Date(now.getTime() - 2 * 60 * 60_000)
+        ),
+        or(
+          isNull(mailboxVerificationCode.leaseUntil),
+          lt(mailboxVerificationCode.leaseUntil, now)
+        )
       )
     );
   await db
     .delete(mailboxVerificationCode)
     .where(
-      lt(
-        mailboxVerificationCode.createdAt,
-        new Date(now.getTime() - 30 * 24 * 60 * 60_000)
+      and(
+        isNull(mailboxVerificationCode.encryptedCode),
+        or(
+          isNull(mailboxVerificationCode.costUsd),
+          lte(mailboxVerificationCode.costUsd, 0),
+          isNotNull(mailboxVerificationCode.usageReportedAt)
+        ),
+        lt(
+          mailboxVerificationCode.createdAt,
+          new Date(now.getTime() - 30 * 24 * 60 * 60_000)
+        )
       )
     );
 };
@@ -88,11 +160,17 @@ const reportVerificationCodeUsage = async (
   event: typeof mailboxVerificationCode.$inferSelect,
   userId: string
 ) => {
-  const model = chatModelSchema.safeParse(event.model);
+  const { model } = event;
+  const extractionModel =
+    model?.startsWith(`${AUTO_LABEL_MODEL}+`) === true
+      ? model.slice(AUTO_LABEL_MODEL.length + 1)
+      : model;
   if (
     event.usageReportedAt ||
     !event.processedAt ||
-    !model.success ||
+    model === null ||
+    (model !== AUTO_LABEL_MODEL &&
+      !chatModelSchema.safeParse(extractionModel).success) ||
     event.costUsd === null ||
     event.promptTokens === null ||
     event.completionTokens === null
@@ -105,7 +183,7 @@ const reportVerificationCodeUsage = async (
       costUsd: event.costUsd,
       externalId: event.id,
       mailboxId: event.mailboxId,
-      model: model.data,
+      model,
       promptTokens: event.promptTokens,
       promptTokensDetails: {
         cacheWriteTokens: event.cacheWriteTokens ?? 0,
@@ -174,7 +252,7 @@ export const listVerificationCodes = async ({
       and(
         eq(mailboxVerificationCode.mailboxId, mailboxId),
         inArray(mailboxVerificationCode.threadId, threadIds),
-        gt(mailboxVerificationCode.expiresAt, new Date())
+        isNotNull(mailboxVerificationCode.encryptedCode)
       )
     )
     .orderBy(desc(mailboxVerificationCode.createdAt));
@@ -229,7 +307,7 @@ export const processMailVerificationCode = async ({
         mailboxVerificationCode.messageId,
       ],
     })
-    .returning({ id: mailboxVerificationCode.id });
+    .returning(claimSelection);
   const [claimed] =
     created === undefined
       ? await db
@@ -246,7 +324,7 @@ export const processMailVerificationCode = async ({
               )
             )
           )
-          .returning({ id: mailboxVerificationCode.id })
+          .returning(claimSelection)
       : [created];
   if (claimed === undefined) {
     const [pendingUsage] = await db
@@ -266,6 +344,9 @@ export const processMailVerificationCode = async ({
     return;
   }
 
+  let screenUsage: AiUsageReport | undefined;
+  let extractionUsage: AiUsageReport | undefined;
+  let extractionAttempted = false;
   try {
     const [message, budget] = await Promise.all([
       loadMessage(),
@@ -317,15 +398,40 @@ export const processMailVerificationCode = async ({
       return;
     }
 
-    const model = VERIFICATION_CODE_MODEL;
-    let usage: AiUsageReport | undefined;
-    const candidate = await extractMailVerificationCode({
-      message,
-      model,
-      onUsage: (reported) => {
-        usage = reported;
-      },
-    });
+    let probability: number | undefined;
+    try {
+      probability = await detectMailVerificationCode({
+        message,
+        onUsage: (reported) => {
+          screenUsage = reported;
+        },
+      });
+    } catch {
+      reportError(new Error("Verification code screening failed."), {
+        operation: "verification-code:screen",
+      });
+    }
+    const extractCode = probability === undefined || probability >= 0.2;
+    extractionAttempted = extractCode;
+    const model =
+      extractCode ||
+      (claimed.model !== null && claimed.model !== AUTO_LABEL_MODEL)
+        ? COMBINED_CODE_MODEL
+        : AUTO_LABEL_MODEL;
+    const candidate = extractCode
+      ? await extractMailVerificationCode({
+          message,
+          model: VERIFICATION_CODE_MODEL,
+          onUsage: (reported) => {
+            extractionUsage = reported;
+          },
+        })
+      : { code: null, expiresInSeconds: null, service: null };
+    const usage = accumulateVerificationCodeUsage(
+      claimed,
+      screenUsage,
+      extractionUsage
+    );
     const detail = validateVerificationCodeCandidate({
       candidate,
       message,
@@ -335,21 +441,21 @@ export const processMailVerificationCode = async ({
     const [saved] = await db
       .update(mailboxVerificationCode)
       .set({
-        cacheWriteTokens: usage?.cacheWriteTokens ?? null,
-        cachedTokens: usage?.cachedTokens ?? null,
-        completionTokens: usage?.completionTokens ?? null,
-        costUsd: usage?.costUsd ?? null,
+        cacheWriteTokens: usage.cacheWriteTokens,
+        cachedTokens: usage.cachedTokens,
+        completionTokens: usage.completionTokens,
+        costUsd: usage.costUsd,
         encryptedCode: detail ? encryptVerificationCode(detail.code) : null,
         expiresAt: detail?.expiresAt ?? null,
         leaseToken: null,
         leaseUntil: null,
         model,
         processedAt: finishedAt,
-        promptTokens: usage?.promptTokens ?? null,
+        promptTokens: usage.promptTokens,
         service: detail?.service ?? null,
         threadId: detail ? message.threadId : null,
         updatedAt: finishedAt,
-        usageReportedAt: usage?.costUsd === undefined ? finishedAt : null,
+        usageReportedAt: usage.costUsd === null ? finishedAt : null,
       })
       .where(
         and(
@@ -364,7 +470,7 @@ export const processMailVerificationCode = async ({
     if (detail) {
       await publishMailUpdate({ mailboxId, type: "mailbox.changed" });
     }
-    if (usage?.costUsd !== undefined) {
+    if (usage.costUsd !== null) {
       const [event] = await db
         .select()
         .from(mailboxVerificationCode)
@@ -375,9 +481,28 @@ export const processMailVerificationCode = async ({
       }
     }
   } catch {
+    const usage = accumulateVerificationCodeUsage(
+      claimed,
+      screenUsage,
+      extractionUsage
+    );
     await db
       .update(mailboxVerificationCode)
-      .set({ leaseToken: null, leaseUntil: null, updatedAt: new Date() })
+      .set({
+        ...(screenUsage !== undefined || extractionUsage !== undefined
+          ? {
+              ...usage,
+              model:
+                extractionAttempted ||
+                (claimed.model !== null && claimed.model !== AUTO_LABEL_MODEL)
+                  ? COMBINED_CODE_MODEL
+                  : AUTO_LABEL_MODEL,
+            }
+          : {}),
+        leaseToken: null,
+        leaseUntil: null,
+        updatedAt: new Date(),
+      })
       .where(
         and(
           eq(mailboxVerificationCode.id, claimed.id),

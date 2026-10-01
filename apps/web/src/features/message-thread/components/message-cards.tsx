@@ -7,6 +7,7 @@ import {
   ZoomInAreaIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import type { RouterOutputs } from "@quieter/orpc";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
@@ -23,6 +24,7 @@ import {
 import type { ComposeDraftState } from "#/features/compose/domain/draft";
 import { MessageDeliveryStatus } from "#/features/message-delivery/components/message-delivery-status";
 import { supportsMessageDelivery } from "#/features/message-delivery/domain/message-delivery-support";
+import { CopyVerificationCode } from "#/features/verification-codes/components/copy-verification-code";
 import { formatMessageDate, parseSender } from "#/lib/gmail/message-utils";
 import { isMessageUnread } from "#/lib/mail";
 import type { MessageListItem } from "#/lib/mail";
@@ -409,6 +411,7 @@ const ThreadMessageCard = ({
   onUnsubscribe,
   onToggleExpanded,
   isActionPending,
+  verificationCode,
 }: {
   expanded: boolean;
   isLoading?: boolean;
@@ -420,6 +423,7 @@ const ThreadMessageCard = ({
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
   onUnsubscribe?: (messageId: string) => void | Promise<void>;
   onToggleExpanded: () => void;
+  verificationCode?: string;
 }) => {
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const showsDelivery = supportsMessageDelivery({
@@ -478,6 +482,14 @@ const ThreadMessageCard = ({
         />
 
         <div id={`message-body-${message.id}`}>
+          {verificationCode && (
+            <div className="px-4 pb-3 @sm:px-5">
+              <CopyVerificationCode
+                className="text-body"
+                code={verificationCode}
+              />
+            </div>
+          )}
           <ThreadMessageBody
             expanded={expanded}
             isLoading={isLoading}
@@ -506,6 +518,7 @@ export const SingleMessageCard = ({
   onComposeDraftRequested,
   onUnsubscribe,
   isActionPending,
+  verificationCode,
 }: {
   isLoading?: boolean;
   isActionPending?: boolean;
@@ -515,6 +528,7 @@ export const SingleMessageCard = ({
   message: MessageListItem;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
   onUnsubscribe?: (messageId: string) => void | Promise<void>;
+  verificationCode?: string;
 }) => {
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const showsDelivery = supportsMessageDelivery({
@@ -560,6 +574,14 @@ export const SingleMessageCard = ({
       />
 
       <div className="mx-auto w-full max-w-3xl px-4 pb-4 @sm:px-5 @sm:pb-5">
+        {verificationCode && (
+          <div className="pb-3">
+            <CopyVerificationCode
+              className="text-body"
+              code={verificationCode}
+            />
+          </div>
+        )}
         <MessageBody
           html={message.bodyHtml}
           isLoading={isLoading}
@@ -587,6 +609,7 @@ export const ThreadMessageList = ({
   onComposeDraftRequested,
   onUnsubscribe,
   isActionPending,
+  verificationCodes,
 }: {
   allThreadMessages: MessageListItem[];
   isLoading?: boolean;
@@ -596,6 +619,7 @@ export const ThreadMessageList = ({
   messages: MessageListItem[];
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
   onUnsubscribe?: (messageId: string) => void | Promise<void>;
+  verificationCodes: RouterOutputs["mail"]["listVerificationCodes"]["items"];
 }) => {
   const [expandedMessageIds, setExpandedMessageIds] = useState<string[]>(() => {
     const lastMessage = messages.at(-1);
@@ -631,6 +655,11 @@ export const ThreadMessageList = ({
                   : [...current, threadMessage.id]
               );
             }}
+            verificationCode={
+              verificationCodes.find(
+                (item) => item.messageId === threadMessage.id
+              )?.code
+            }
           />
         );
       })}

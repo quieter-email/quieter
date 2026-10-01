@@ -104,7 +104,12 @@ const MODEL_FALLBACK_ORDER: readonly ChatModel[] = [
 ];
 
 export const resolveModelFallbacks = (model: ChatModel): ChatModel[] =>
-  MODEL_FALLBACK_ORDER.filter((fallback) => fallback !== model);
+  (model === "google/gemini-2.5-flash-lite"
+    ? (["google/gemini-3.1-flash-lite", ...MODEL_FALLBACK_ORDER] as const)
+    : MODEL_FALLBACK_ORDER
+  )
+    .filter((fallback) => fallback !== model)
+    .slice(0, 3);
 
 export const defaultChatModel: ChatModel = "google/gemini-3.7-flash";
 export const defaultBackgroundModel: ChatModel = "google/gemini-3.5-flash-lite";

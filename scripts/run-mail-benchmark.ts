@@ -7,6 +7,11 @@ const server = await createServer({
 });
 try {
   await server.ssrLoadModule("/scripts/benchmark-mail-ai.ts");
+} catch (error) {
+  process.stderr.write(
+    `${error instanceof Error ? error.message : "Mail AI benchmark failed."}\n`
+  );
+  process.exitCode = 1;
 } finally {
   await server.close();
 }

@@ -74,10 +74,6 @@ export const validateVerificationCodeCandidate = ({
       ? Math.min(receivedAt, now.getTime())
       : now.getTime()) + validityMs
   );
-  if (expiresAt <= now) {
-    return null;
-  }
-
   return {
     code,
     expiresAt,
