@@ -86,7 +86,9 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
           predicate: ({ queryKey }) => {
             const [root] = queryKey;
             if (root === "mailboxes") {
-              return changes.has("*");
+              return [...changes.values()].some((change) =>
+                change.types.has("mailbox.changed")
+              );
             }
             if (root === "gmail-unread-counts") {
               return [...changes.values()].some((change) =>

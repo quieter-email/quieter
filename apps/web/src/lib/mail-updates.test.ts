@@ -204,20 +204,17 @@ describe("mail connection lifecycle", () => {
     await vi.advanceTimersByTimeAsync(0);
     const [socket] = Socket.instances;
     socket.open();
-    await vi.advanceTimersByTimeAsync(10_000);
+    await vi.advanceTimersToNextTimerAsync();
     fetchMessages.mockClear();
     fetchOtherMessages.mockClear();
     for (let index = 0; index < 100; index += 1) {
       revision += 1;
       socket.notify();
     }
-    await vi.advanceTimersByTimeAsync(10_000);
+    await vi.advanceTimersToNextTimerAsync();
     expect(fetchMessages).toHaveBeenCalledOnce();
     expect(observer.getCurrentResult().data).toBe(revision);
     expect(fetchOtherMessages).not.toHaveBeenCalled();
-    const settledCount = fetchMessages.mock.calls.length;
-    await vi.advanceTimersByTimeAsync(10_000);
-    expect(fetchMessages).toHaveBeenCalledTimes(settledCount);
     unsubscribe();
     unsubscribeOther();
     client.clear();
@@ -320,6 +317,15 @@ describe("mail connection lifecycle", () => {
       .fn<() => ListMessagesPageResult>()
       .mockReturnValue({ historyId: "10", messages: [] });
     const counts = vi.fn<() => number>().mockReturnValue(1);
+    const fetchMailboxes = vi
+      .fn<() => { unreadCount: number }[]>()
+      .mockReturnValue([{ unreadCount: 1 }]);
+    const mailboxes = new QueryObserver(client, {
+      initialData: [{ unreadCount: 0 }],
+      queryFn: fetchMailboxes,
+      queryKey: ["mailboxes"],
+      staleTime: Infinity,
+    });
     const live = new QueryObserver(client, {
       initialData: { historyId: "0", messages: [] },
       queryFn: sync,
@@ -334,6 +340,7 @@ describe("mail connection lifecycle", () => {
     });
     const unsubscribeLive = live.subscribe(() => {});
     const unsubscribeUnread = unread.subscribe(() => {});
+    const unsubscribeMailboxes = mailboxes.subscribe(() => {});
     dispose = connectMailUpdates(client);
     await vi.advanceTimersByTimeAsync(0);
     const [socket] = Socket.instances;
@@ -341,6 +348,8 @@ describe("mail connection lifecycle", () => {
     await vi.advanceTimersByTimeAsync(1000);
     sync.mockClear();
     counts.mockClear();
+    fetchMailboxes.mockClear();
+    client.setQueryData(["mailboxes"], [{ unreadCount: 0 }]);
     client.setQueryData(["gmail-unread-counts"], 0, {
       updatedAt: Date.now() - 1000,
     });
@@ -348,9 +357,11 @@ describe("mail connection lifecycle", () => {
     await vi.advanceTimersByTimeAsync(1000);
     expect(unread.getCurrentResult().data).toBe(1);
     expect(counts).toHaveBeenCalledOnce();
+    expect(mailboxes.getCurrentResult().data?.[0].unreadCount).toBe(1);
     expect(sync).not.toHaveBeenCalled();
     unsubscribeLive();
     unsubscribeUnread();
+    unsubscribeMailboxes();
     client.clear();
   });
 

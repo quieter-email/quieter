@@ -1,7 +1,12 @@
+import type { MailCommand } from "@quieter/mail/data-plane";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { afterEach, describe, expect, test, vi } from "vite-plus/test";
 
-import type { MessageListItem, ThreadMessagesResult } from "#/lib/mail";
+import type {
+  MailboxCategory,
+  MessageListItem,
+  ThreadMessagesResult,
+} from "#/lib/mail";
 import {
   disposeMailMutations,
   runMailMutation,
@@ -10,7 +15,11 @@ import {
 import { rpc } from "#/lib/orpc";
 
 import { getThreadQueryKey } from "../thread-query";
-import { updateMessageInMailbox, updateThreadInMailbox } from "./actions";
+import {
+  applyBulkChangesInMailbox,
+  updateMessageInMailbox,
+  updateThreadInMailbox,
+} from "./actions";
 import type { MessagesQueryData } from "./data";
 import { getMessagesQueryKey } from "./keys";
 
@@ -18,6 +27,7 @@ import { getMessagesQueryKey } from "./keys";
 vi.mock("#/lib/orpc", () => ({
   rpc: {
     mail: {
+      applyChanges: vi.fn<typeof rpc.mail.applyChanges>(),
       markMessageAsRead: vi.fn<typeof rpc.mail.markMessageAsRead>(),
       markMessageAsUnread: vi.fn<typeof rpc.mail.markMessageAsUnread>(),
       markThreadAsRead: vi.fn<typeof rpc.mail.markThreadAsRead>(),
@@ -69,6 +79,99 @@ describe("mail metadata cache updates", () => {
   afterEach(() => {
     vi.resetAllMocks();
   });
+
+  test.each([
+    {
+      command: { kind: "set-read", read: true },
+      destination: "inbox",
+      source: "unread",
+    },
+    {
+      command: { destination: "archive", kind: "move" },
+      destination: "archive",
+      source: "inbox",
+    },
+    {
+      command: { destination: "trash", kind: "move" },
+      destination: "trash",
+      source: "inbox",
+    },
+    {
+      command: { destination: "spam", kind: "move" },
+      destination: "spam",
+      source: "inbox",
+    },
+  ] satisfies {
+    command: MailCommand;
+    source: MailboxCategory;
+    destination: MailboxCategory;
+  }[])(
+    "bulk $command reconciles folder membership and restores failed targets without list refetches",
+    async ({ command, source, destination }) => {
+      const queryClient = new QueryClient();
+      const messages = ["a", "b"].map((id) => ({
+        bodyHtml: `<p>${id}</p>`,
+        id,
+        isUnread: true,
+        labelIds: ["INBOX", "UNREAD"],
+        threadId: id,
+      }));
+      const sourceKey = getMessagesQueryKey("mailbox", source);
+      const destinationKey = getMessagesQueryKey("mailbox", destination);
+      const sourceData = { pageParams: [undefined], pages: [{ messages }] };
+      queryClient.setQueryData(sourceKey, sourceData);
+      queryClient.setQueryData(destinationKey, {
+        pageParams: [undefined],
+        pages: [{ messages: [] }],
+      });
+      const threadKey = getThreadQueryKey("mailbox", "a");
+      queryClient.setQueryData(threadKey, {
+        messages: [messages[0]],
+        threadId: "a",
+      });
+      const fetchMessages = vi
+        .fn<() => MessagesQueryData>()
+        .mockReturnValue(sourceData);
+      const list = new QueryObserver(queryClient, {
+        queryFn: fetchMessages,
+        queryKey: sourceKey,
+        staleTime: Infinity,
+      });
+      const unsubscribe = list.subscribe(() => {});
+      vi.mocked(rpc.mail.applyChanges).mockResolvedValue({
+        targets: [
+          { status: "applied", threadId: "a" },
+          { status: "failed", threadId: "b" },
+        ],
+      });
+      await applyBulkChangesInMailbox(
+        queryClient,
+        "mailbox",
+        messages.map((item) => ({
+          messageIds: [item.id],
+          threadId: item.threadId,
+        })),
+        command
+      );
+      const remainingIds = list
+        .getCurrentResult()
+        .data?.pages[0].messages.map((item) => item.id);
+      expect(remainingIds).not.toContain("a");
+      expect(remainingIds).toContain("b");
+      expect(
+        queryClient
+          .getQueryData<MessagesQueryData>(destinationKey)
+          ?.pages[0].messages.map((item) => item.id)
+      ).toContain("a");
+      expect(
+        queryClient.getQueryData<ThreadMessagesResult>(threadKey)?.messages[0]
+          .bodyHtml
+      ).toContain("a");
+      expect(fetchMessages).not.toHaveBeenCalled();
+      unsubscribe();
+      queryClient.clear();
+    }
+  );
 
   test("removes optimistic data when the original query had no data", async () => {
     const client = new QueryClient();

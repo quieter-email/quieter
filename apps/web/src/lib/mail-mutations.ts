@@ -174,7 +174,8 @@ const createCoordinator = (client: QueryClient) => {
                     queryKey[1] === intent.mailboxId) ||
                     (queryKey[0] === "message-thread" &&
                       queryKey[2] === intent.mailboxId))) ||
-                queryKey[0] === "gmail-unread-counts",
+                queryKey[0] === "gmail-unread-counts" ||
+                queryKey[0] === "mailboxes",
             },
             { cancelRefetch: true }
           );
