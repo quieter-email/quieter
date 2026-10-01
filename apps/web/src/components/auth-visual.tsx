@@ -467,10 +467,12 @@ const appendNoiseDot = (
     Math.exp(-((radialDistance / 0.62) ** 2)) *
     (1 - smoothstep(0.65, 1.05, radialDistance));
   const logoRadius = squircleRadius(center, 0.56, width, height);
-  const outsideLogo = smoothstep(0.76, 1.24, logoRadius);
-  const density =
-    (0.025 + envelope * (0.32 + strand * 0.58 + fineStrand * 0.08)) *
-    mix(0.2, 1, outsideLogo);
+  const logoWeight = 1 - smoothstep(0.86, 1.2, logoRadius);
+  const density = mix(
+    0.025 + envelope * (0.32 + strand * 0.58 + fineStrand * 0.08),
+    0.98,
+    logoWeight
+  );
   if (density < hash(cellX + 719, cellY + 719)) {
     return;
   }
@@ -479,12 +481,19 @@ const appendNoiseDot = (
   dots.push({
     ...center,
     flow: smoothstep(1.1, 3.5, logoRadius),
-    opacity:
+    opacity: mix(
       (0.1 + opacitySeed ** 1.6 * 0.52) *
-      (0.18 + envelope * 0.82) *
-      (0.5 + strand * 0.5) *
-      mix(0.12, 1, outsideLogo),
-    radius: (0.24 + radiusSeed ** 2.8 * 1.05) * radiusScale,
+        (0.18 + envelope * 0.82) *
+        (0.5 + strand * 0.5),
+      0.46 + opacitySeed * 0.5,
+      logoWeight
+    ),
+    radius:
+      mix(
+        0.24 + radiusSeed ** 2.8 * 1.05,
+        0.6 + radiusSeed ** 1.8 * 0.65,
+        logoWeight
+      ) * radiusScale,
     vibrance: hash(cellX + 941, cellY + 941),
   });
 };
