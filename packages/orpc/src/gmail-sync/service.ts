@@ -25,7 +25,18 @@ import {
 } from "@quieter/gmail";
 import { MAILBOX_LABELS } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
-import { and, eq, exists, gt, isNull, lt, lte, or, sql } from "drizzle-orm";
+import {
+  and,
+  eq,
+  exists,
+  gt,
+  isNotNull,
+  isNull,
+  lt,
+  lte,
+  or,
+  sql,
+} from "drizzle-orm";
 
 import {
   buildMailMemoryQuery,
@@ -679,11 +690,11 @@ const processMailboxHistory = async ({
 }) => {
   const leaseId = await claimMailboxProcessingLease(mailboxId);
   if (!leaseId) {
-    return { busy: true };
+    return { busy: true, needsContinuation: false };
   }
 
   try {
-    await runAuthorizedGmailMailbox(
+    const needsContinuation = await runAuthorizedGmailMailbox(
       { mailboxId, userId },
       async (accessToken) => {
         const [automationSettings] = await db
@@ -825,20 +836,37 @@ const processMailboxHistory = async ({
         });
         await reportPendingAutoLabelUsage(mailboxId, userId);
         await reportPendingMailboxVerificationCodeUsage(mailboxId, userId);
+        const [remaining] = await db
+          .select({
+            historyPageToken: gmailWatchState.historyPageToken,
+            recoveryAfter: gmailWatchState.recoveryAfter,
+            recoveryPageToken: gmailWatchState.recoveryPageToken,
+          })
+          .from(gmailWatchState)
+          .where(eq(gmailWatchState.mailboxId, mailboxId))
+          .limit(1);
+        if (remaining === undefined) {
+          throw new Error("Gmail watch state disappeared during processing.");
+        }
+        const hasRemainingPages =
+          remaining.historyPageToken !== null ||
+          remaining.recoveryAfter !== null ||
+          remaining.recoveryPageToken !== null;
         const now = new Date();
         await db
           .update(gmailWatchState)
           .set({
             lastError: null,
             lastErrorAt: null,
-            lastReconciledAt: now,
+            ...(hasRemainingPages ? {} : { lastReconciledAt: now }),
             updatedAt: now,
           })
           .where(eq(gmailWatchState.mailboxId, mailboxId));
+        return hasRemainingPages;
       }
     );
 
-    return { busy: false };
+    return { busy: false, needsContinuation };
   } catch (error) {
     await recordWatchError(mailboxId, error);
     throw error;
@@ -934,6 +962,9 @@ export const listGmailPubSubMaintenanceJobs = async (limit = 500) =>
             sql`now() - interval '36 hours' - make_interval(secs => ((('x' || md5(${mailbox.id}))::bit(32)::int & 2147483647) % 7200))`
           ),
           isNull(gmailWatchState.lastReconciledAt),
+          isNotNull(gmailWatchState.historyPageToken),
+          isNotNull(gmailWatchState.recoveryAfter),
+          isNotNull(gmailWatchState.recoveryPageToken),
           lte(
             gmailWatchState.lastReconciledAt,
             sql`now() - interval '2 hours'`
@@ -1002,8 +1033,13 @@ export const maintainGmailPubSubMailbox = async (input: {
       organizationId: gmailMailbox.organizationId,
       userId: gmailMailbox.ownerUserId,
     });
+    if (result.busy) {
+      return { status: "busy" as const };
+    }
     return {
-      status: result.busy ? ("busy" as const) : ("maintained" as const),
+      status: result.needsContinuation
+        ? ("pending" as const)
+        : ("maintained" as const),
     };
   } catch (error) {
     await recordWatchError(gmailMailbox.id, error);
@@ -1069,6 +1105,7 @@ export const processGmailPubSubNotification = async (
     busy: result.busy,
     ignored: false,
     mailboxId: gmailMailbox.id,
+    needsContinuation: result.needsContinuation,
     pubSubMessageId: input.pubSubMessageId,
   };
 };

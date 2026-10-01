@@ -209,24 +209,26 @@ export const handleLiveMailboxRequest = async (request: Request, env: Env) => {
 export const handlePubSub = async (
   request: Request,
   env: Env,
-  processNotification = async (
+  processNotification: (
     message: {
       emailAddress: string;
       historyId: string;
       pubSubMessageId: string;
     },
-    _bindings: Env
-  ) => {
+    bindings: Env
+  ) => Promise<unknown> = async (message, _bindings) => {
     const { withRequestDatabaseClient } =
       await import("@quieter/database/client");
     const { processGmailPubSubNotification } =
       await import("@quieter/orpc/gmail-pubsub");
-    await withRequestDatabaseClient(async () => {
-      const result = await processGmailPubSubNotification(message);
-      if (!result.ignored && result.busy === true) {
-        throw new RequestError(503, "gmail_mailbox_busy");
-      }
-    });
+    const result = await withRequestDatabaseClient(
+      async () => await processGmailPubSubNotification(message)
+    );
+    return {
+      retry:
+        !result.ignored &&
+        (result.busy === true || result.needsContinuation === true),
+    };
   }
 ) => {
   await verifyPubSubToken(request, env);
@@ -247,7 +249,7 @@ export const handlePubSub = async (
     historyId: notification.historyId,
     pubSubMessageId: envelope.data.message.messageId,
   };
-  await processNotification(processorMessage, env);
+  const processing = await processNotification(processorMessage, env);
   const broadcasts = await Promise.allSettled([
     broadcastMailboxEvent(env, emailAddress, "mailbox-dirty"),
     broadcastGmailUpdate(env, emailAddress, "mailbox.changed"),
@@ -259,6 +261,14 @@ export const handlePubSub = async (
         route: "pubsub",
       });
     }
+  }
+  if (
+    typeof processing === "object" &&
+    processing !== null &&
+    "retry" in processing &&
+    processing.retry === true
+  ) {
+    throw new RequestError(503, "gmail_processing_pending");
   }
   return new Response(null, { status: 204 });
 };

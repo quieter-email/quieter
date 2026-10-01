@@ -115,7 +115,7 @@ Unfiltered mailbox views can apply Gmail history updates. Filtered search and Dr
 For Pro mailboxes:
 
 1. Gmail sends an authenticated notification to the Cloudflare ingress.
-2. The ingress validates the Google identity and processes the mailbox history before acknowledging Pub/Sub. A busy mailbox or transient failure returns a retryable response to Google.
+2. The ingress validates the Google identity and processes the mailbox history before acknowledging Pub/Sub. A busy mailbox, transient failure, or remaining history page returns a retryable response to Google so backlog work continues.
 3. Up to four messages from a history page are processed concurrently; mailbox leases and history cursors keep progress ordered. The worker then sends browser refresh hints.
 4. Focused browser tabs receive mailbox-dirty signals from the mailbox Durable Object and refresh immediately.
 5. Scheduled Gmail maintenance processes due mailboxes with bounded concurrency for watch renewal and catch-up. The minute mail-maintenance worker retries managed code extraction and clears expired code data.
@@ -124,7 +124,7 @@ The notification is a wake-up signal, not the source of truth.
 
 ### Incoming mail AI
 
-Verification-code extraction starts as soon as the message is available, alongside labeling. Gmail messages share one server-side fetch between both tasks; managed messages start extraction immediately after their ingestion transaction commits. Extraction uses `google/gemini-2.5-flash-lite`, structured output, a short response, a ten-second deadline, and no immediate model retries. The AI identifies codes; server validation only checks that its answer appears in the message and has not expired. Incoming messages older than two hours, sent mail, drafts, spam, and trash are excluded.
+Verification-code extraction starts as soon as the message is available, alongside labeling. Gmail messages share one server-side fetch between both tasks; managed messages start extraction immediately after their ingestion transaction commits. Extraction uses `google/gemini-2.5-flash-lite`, structured output, a short response, a ten-second deadline, and no SDK or empty-response retries. The AI identifies codes; server validation only checks that its answer appears in the message and has not expired. Incoming messages older than two hours, sent mail, drafts, spam, and trash are excluded.
 
 Codes are encrypted at rest, returned only after mailbox authorization, and displayed as copyable controls inside message rows. They are excluded from persistent browser caching. A saved code publishes a mailbox update before usage reporting finishes. Existing maintenance retries failed extraction and billing, clears expired encrypted payloads, and removes processing records after thirty days.
 

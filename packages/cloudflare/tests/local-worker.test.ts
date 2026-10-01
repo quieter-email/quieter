@@ -24,6 +24,7 @@ vi.mock(import("@quieter/orpc/gmail-pubsub"), () => ({
         busy: false,
         ignored: false,
         mailboxId: "test-mailbox",
+        needsContinuation: false,
         pubSubMessageId: "local-test-delivery",
       })
   ),
@@ -204,6 +205,22 @@ describe("local background entrypoint", () => {
       busy: true,
       ignored: false,
       mailboxId: "test-mailbox",
+      needsContinuation: false,
+      pubSubMessageId: "local-test-delivery",
+    });
+    const response = await localWorker.fetch(
+      request(JSON.stringify(delivery)),
+      env
+    );
+    expect(response.status).toBe(503);
+  });
+
+  test("leaves a delivery unacknowledged when history has more pages", async () => {
+    vi.mocked(processGmailPubSubNotification).mockResolvedValueOnce({
+      busy: false,
+      ignored: false,
+      mailboxId: "test-mailbox",
+      needsContinuation: true,
       pubSubMessageId: "local-test-delivery",
     });
     const response = await localWorker.fetch(

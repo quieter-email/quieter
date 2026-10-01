@@ -44,7 +44,10 @@ export const runGmailMaintenance = async (
           );
           if (result.status === "busy") {
             busy += 1;
-          } else if (result.status === "maintained") {
+          } else if (
+            result.status === "maintained" ||
+            result.status === "pending"
+          ) {
             maintained += 1;
             await broadcastGmailUpdate(
               env,

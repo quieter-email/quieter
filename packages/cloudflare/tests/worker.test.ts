@@ -375,6 +375,19 @@ describe("Cloudflare worker runtime", () => {
       expect(response.status).toBe(500);
     });
 
+    test("returns a retryable status while history continuation remains", async () => {
+      installFetchMock();
+      const processNotification = vi
+        .fn<(message: unknown, bindings: Env) => Promise<{ retry: boolean }>>()
+        .mockResolvedValue({ retry: true });
+      const response = await handlePubSub(
+        await pubSubRequest(envelope()),
+        env,
+        processNotification
+      ).catch((error: unknown) => requestErrorResponse(error, "/gmail/pubsub"));
+      expect(response.status).toBe(503);
+    });
+
     test("does not process a notification with an invalid subscription", async () => {
       installFetchMock();
       const processNotification =

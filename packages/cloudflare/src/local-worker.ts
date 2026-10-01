@@ -93,9 +93,6 @@ export default {
               pubSubMessageId: delivery.data.message.messageId,
             })
         );
-        if (!result.ignored && result.busy === true) {
-          return new Response(null, { status: 503 });
-        }
         if (!result.ignored) {
           await Promise.allSettled([
             broadcastMailboxEvent(
@@ -109,6 +106,12 @@ export default {
               "mailbox.changed"
             ),
           ]);
+        }
+        if (
+          !result.ignored &&
+          (result.busy === true || result.needsContinuation === true)
+        ) {
+          return new Response(null, { status: 503 });
         }
         return new Response(null, { status: 204 });
       } catch (error) {
@@ -130,11 +133,23 @@ export default {
         await import("@quieter/orpc/managed-mail/storage");
       const { processManagedRuleBackfills } =
         await import("@quieter/orpc/managed-mail/rule-backfills");
+      const { retryPendingManagedVerificationCodes } =
+        await import("@quieter/orpc/managed-mail/ingestion");
+      const { cleanupMailboxVerificationCodes } =
+        await import("@quieter/orpc/verification-codes");
       await withRequestDatabaseClient(async () => {
-        await recoverMailSends();
-        await cleanupMailObjects();
-        await cleanupRateLimitBuckets();
-        await processManagedRuleBackfills();
+        const results = await Promise.allSettled([
+          recoverMailSends(),
+          cleanupMailObjects(),
+          cleanupRateLimitBuckets(),
+          processManagedRuleBackfills(),
+          retryPendingManagedVerificationCodes(),
+          cleanupMailboxVerificationCodes(),
+        ]);
+        const failed = results.find((result) => result.status === "rejected");
+        if (failed !== undefined) {
+          throw failed.reason;
+        }
       });
       return new Response(null, { status: 204 });
     }
