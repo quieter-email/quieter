@@ -32,7 +32,8 @@
     "./gmail-credential-rotation": "./src/gmail-credential-rotation.ts",
     "./gmail-pubsub": "./src/gmail-sync/service.ts",
     "./waitlist": "./src/waitlist.ts",
-    "./mail-updates": "./src/mail-updates.ts"
+    "./mail-updates": "./src/mail-updates.ts",
+    "./verification-codes": "./src/verification-codes.ts"
   },
   "dependencies": {
     "@ai-sdk/mcp": "catalog:",
@@ -48,12 +49,14 @@
     "@quieter/mail": "workspace:*",
     "@quieter/observability": "workspace:*",
     "ai": "catalog:",
+    "html-to-text": "9.0.5",
     "ical.js": "^2.2.1"
   },
   "devDependencies": {
     "@orpc/client": "catalog:",
     "@orpc/server": "catalog:",
     "@quieter/config": "workspace:*",
+    "@types/html-to-text": "^9.0.4",
     "@types/node": "catalog:",
     "drizzle-orm": "catalog:",
     "postgres": "^3.4.9",

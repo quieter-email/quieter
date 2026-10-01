@@ -1,0 +1,2 @@
+CREATE INDEX "mailbox_verification_code_expires_at_idx" ON "mailboxVerificationCode" ("expiresAt");--> statement-breakpoint
+CREATE INDEX "mailbox_verification_code_created_at_idx" ON "mailboxVerificationCode" ("createdAt");

@@ -9,7 +9,7 @@
     "./chat-models": "./src/chat-models.ts",
     "./chat-usage": "./src/chat-usage.ts",
     "./classify-gmail-message": "./src/classify-gmail-message.ts",
-    "./extract-gmail-useful-detail": "./src/extract-gmail-useful-detail.ts",
+    "./extract-verification-code": "./src/extract-verification-code.ts",
     "./format-transcribed-email": "./src/format-transcribed-email.ts",
     "./generate-chat-title": "./src/generate-chat-title.ts",
     "./generation": "./src/generation.ts",

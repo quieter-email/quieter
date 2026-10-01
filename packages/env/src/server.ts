@@ -193,7 +193,12 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
     },
   });
 
-export const serverEnv = createServerEnv();
+// oxlint-disable-next-line import/no-mutable-exports -- AWS linked secrets are attached at handler entry.
+export let serverEnv = createServerEnv();
+
+export const configureServerEnv = (overrides: RuntimeEnvironment) => {
+  serverEnv = createServerEnv({ ...process.env, ...overrides });
+};
 
 type ServerStringKey = {
   [Key in keyof typeof serverEnv]-?: Exclude<

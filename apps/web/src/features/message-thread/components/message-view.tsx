@@ -88,7 +88,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     threadIsUnread,
     threadLabelIds,
     threadMessages,
-    usefulDetails,
+    verificationCodes,
     viewRef,
     visibleMessages,
   } = props;
@@ -222,9 +222,11 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                 ? mailboxActions.unsubscribeFromMessage
                 : undefined
             }
-            usefulDetails={usefulDetails.filter(
-              (detail) => detail.gmailMessageId === threadMessage.id
-            )}
+            verificationCode={
+              verificationCodes.find(
+                (item) => item.messageId === threadMessage.id
+              )?.code
+            }
           />
         ))
       ) : (
@@ -244,7 +246,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
               ? mailboxActions.unsubscribeFromMessage
               : undefined
           }
-          usefulDetails={usefulDetails}
+          verificationCodes={verificationCodes}
         />
       )}
 

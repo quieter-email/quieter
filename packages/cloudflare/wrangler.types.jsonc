@@ -51,21 +51,6 @@
     },
     { "tag": "mail-user-v1", "new_sqlite_classes": ["MailLiveUser"] },
   ],
-  "queues": {
-    "producers": [
-      {
-        "binding": "GmailPsQueue",
-        "queue": "gmail-pubsub-types",
-      },
-    ],
-    "consumers": [
-      {
-        "queue": "gmail-pubsub-types",
-        "max_batch_size": 1,
-        "max_batch_timeout": 0,
-      },
-    ],
-  },
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1,

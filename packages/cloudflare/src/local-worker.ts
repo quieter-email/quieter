@@ -2,11 +2,12 @@ import { withRequestDatabaseClient } from "@quieter/database/client";
 import { serverEnv } from "@quieter/env/server";
 import { z } from "zod";
 
-import { enqueueGmailMaintenanceJobs } from "./gmail-maintenance-worker";
-import gmailWorker from "./queue-worker";
+import { runGmailMaintenance } from "./gmail-maintenance-worker";
+import { broadcastGmailUpdate } from "./mail-updates";
 import realtimeWorker from "./worker";
 import {
   parseGmailNotification,
+  broadcastMailboxEvent,
   readBoundedJson,
   requestErrorResponse,
   signaturesMatch,
@@ -83,22 +84,46 @@ export default {
           return new Response(null, { status: 403 });
         }
         const notification = parseGmailNotification(delivery.data.message.data);
-        await env.GmailPsQueue.send({
-          ...notification,
-          pubSubMessageId: delivery.data.message.messageId,
-          type: "notification",
-        });
+        const { processGmailPubSubNotification } =
+          await import("@quieter/orpc/gmail-pubsub");
+        const result = await withRequestDatabaseClient(
+          async () =>
+            await processGmailPubSubNotification({
+              ...notification,
+              pubSubMessageId: delivery.data.message.messageId,
+            })
+        );
+        if (!result.ignored) {
+          await Promise.allSettled([
+            broadcastMailboxEvent(
+              env,
+              notification.emailAddress,
+              "mailbox-dirty"
+            ),
+            broadcastGmailUpdate(
+              env,
+              notification.emailAddress,
+              "mailbox.changed"
+            ),
+          ]);
+        }
+        if (
+          !result.ignored &&
+          (result.busy === true || result.needsContinuation === true)
+        ) {
+          return new Response(null, { status: 503 });
+        }
         return new Response(null, { status: 204 });
       } catch (error) {
         return requestErrorResponse(error, "local-pubsub");
       }
     }
     if (url.pathname === "/__dev/maintenance") {
-      return Response.json(
-        await withRequestDatabaseClient(
-          async () => await enqueueGmailMaintenanceJobs(env)
-        )
-      );
+      try {
+        return Response.json(await runGmailMaintenance(env));
+      } catch (error) {
+        return requestErrorResponse(error, "local-maintenance");
+      }
     }
     if (url.pathname === "/__dev/mail-recovery") {
       const { cleanupRateLimitBuckets } =
@@ -108,24 +133,26 @@ export default {
         await import("@quieter/orpc/managed-mail/storage");
       const { processManagedRuleBackfills } =
         await import("@quieter/orpc/managed-mail/rule-backfills");
+      const { retryPendingManagedVerificationCodes } =
+        await import("@quieter/orpc/managed-mail/ingestion");
+      const { cleanupMailboxVerificationCodes } =
+        await import("@quieter/orpc/verification-codes");
       await withRequestDatabaseClient(async () => {
-        await recoverMailSends();
-        await cleanupMailObjects();
-        await cleanupRateLimitBuckets();
-        await processManagedRuleBackfills();
+        const results = await Promise.allSettled([
+          recoverMailSends(),
+          cleanupMailObjects(),
+          cleanupRateLimitBuckets(),
+          processManagedRuleBackfills(),
+          retryPendingManagedVerificationCodes(),
+          cleanupMailboxVerificationCodes(),
+        ]);
+        const failed = results.find((result) => result.status === "rejected");
+        if (failed !== undefined) {
+          throw failed.reason;
+        }
       });
       return new Response(null, { status: 204 });
     }
     return new Response(null, { status: 404 });
-  },
-  async queue(batch, env, ctx) {
-    if (serverEnv.QUIETER_DEPLOYMENT_ENV !== "local") {
-      throw new Error("Local Worker cannot run outside development.");
-    }
-    if (batch.queue === "quieter-local-gmail") {
-      await gmailWorker.queue(batch, env, ctx);
-    } else {
-      throw new Error("Unexpected local queue.");
-    }
   },
 } satisfies ExportedHandler<Env>;

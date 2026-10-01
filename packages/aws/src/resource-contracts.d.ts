@@ -7,5 +7,10 @@ declare module "sst" {
   interface Resource {
     MailBucket: { name: string; type: "sst.aws.Bucket" };
     MailIngestToken: { type: "sst.sst.Secret"; value: string };
+    GmailTokenEncryptionKey: { type: "sst.sst.Secret"; value: string };
+    GmailTokenEncryptionKeyCurrent: { type: "sst.sst.Secret"; value: string };
+    OpenrouterApiKey: { type: "sst.sst.Secret"; value: string };
+    PolarAccessToken: { type: "sst.sst.Secret"; value: string };
+    QuieterBackgroundModel: { type: "sst.sst.Secret"; value: string };
   }
 }

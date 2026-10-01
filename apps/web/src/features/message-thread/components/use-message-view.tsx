@@ -2,7 +2,12 @@
 
 import { toast } from "@quieter/ui/toast";
 import { useHotkeys } from "@tanstack/react-hotkeys";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 
 import {
@@ -21,7 +26,6 @@ import type {
 } from "#/features/mailbox/components/mailbox-action-handlers";
 import { toastError } from "#/lib/error-toast";
 import { getThreadLabelIds } from "#/lib/gmail/thread-list";
-import { gmailThreadUsefulDetailsQueryOptions } from "#/lib/gmail/useful-details-query";
 import {
   hasRenderableMessageBody,
   isMessageUnread,
@@ -30,6 +34,7 @@ import {
 import type { MailboxCategory, MessageListItem } from "#/lib/mail";
 import { labelsQueryOptions } from "#/lib/mail/labels-query";
 import { getThreadWithDetailsOptions } from "#/lib/mail/thread-query";
+import { verificationCodesQueryOptions } from "#/lib/mail/verification-codes-query";
 import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
 import { orpc } from "#/lib/orpc";
 
@@ -128,13 +133,6 @@ export const useMessageViewData = ({
         : false;
     },
   });
-  const { data: usefulDetails = [] } = useQuery(
-    gmailThreadUsefulDetailsQueryOptions(
-      mailboxId,
-      message.threadId,
-      mailboxProvider === "gmail"
-    )
-  );
   const createApiMailboxMutation = useMutation({
     ...orpc.mail.createManagedMailboxForApiMessage.mutationOptions(),
     onError: (error) => {
@@ -160,6 +158,25 @@ export const useMessageViewData = ({
     (threadMessage) => !isDraftMessage(threadMessage)
   );
   const visibleMessages = messages.length > 0 ? messages : [message];
+  const codeMessageIds = visibleMessages.map(
+    (threadMessage) => threadMessage.id
+  );
+  const codeMessageIdBuckets: string[][] = [];
+  for (let offset = 0; offset < codeMessageIds.length; offset += 100) {
+    codeMessageIdBuckets.push(codeMessageIds.slice(offset, offset + 100));
+  }
+  const codeQueries = useQueries({
+    queries: codeMessageIdBuckets.map((messageIds) =>
+      verificationCodesQueryOptions(
+        mailboxId,
+        { messageIds, mode: "messages" },
+        mailboxProvider !== "api"
+      )
+    ),
+  });
+  const verificationCodes = codeQueries.flatMap(
+    (query) => query.data?.items ?? []
+  );
   const messagesMissingLoadedBody =
     getMessagesMissingLoadedBody(visibleMessages);
   const hasMissingLoadedBody = messagesMissingLoadedBody.length > 0;
@@ -217,7 +234,7 @@ export const useMessageViewData = ({
     threadIsUnread,
     threadLabelIds,
     threadMessages,
-    usefulDetails,
+    verificationCodes,
     visibleMessages,
   };
 };

@@ -7,6 +7,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { splitMailAddressList } from "@quieter/mail/compose/schema";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
+import type { RouterOutputs } from "@quieter/orpc";
 import { cn } from "@quieter/ui/cn";
 import { Pill } from "@quieter/ui/pill";
 import { m, useReducedMotion } from "motion/react";
@@ -28,6 +29,7 @@ import {
   appMotionDuration,
   getAppStaggerDelay,
 } from "#/features/motion/app-motion";
+import { CopyVerificationCode } from "#/features/verification-codes/components/copy-verification-code";
 import { formatMessageListDate, parseSender } from "#/lib/gmail/message-utils";
 import type { ThreadListEntry } from "#/lib/gmail/thread-list";
 
@@ -149,6 +151,7 @@ type MessageRowProps = {
   rowRef?: (element: HTMLLIElement | null) => void;
   dataIndex?: number;
   thread: ThreadListEntry;
+  verificationCode?: RouterOutputs["mail"]["listVerificationCodes"]["items"][number];
   state?: MessageRowState;
   isNew?: boolean;
   staggerIndex?: number;
@@ -294,6 +297,7 @@ const MessageRowDetails = ({
   thread,
   threaded,
   unread,
+  verificationCode,
 }: {
   date: string;
   deliveryStatus?: MessageDeliveryStatus | null;
@@ -306,8 +310,9 @@ const MessageRowDetails = ({
   thread: ThreadListEntry;
   threaded: boolean;
   unread: boolean;
+  verificationCode?: string;
 }) => (
-  <div className="relative z-10 flex min-w-0 flex-1 items-center gap-2 px-2 @sm:gap-3 @sm:px-3">
+  <div className="pointer-events-none relative z-10 flex h-full min-w-0 flex-1 items-center gap-2 px-2 @sm:gap-3 @sm:px-3">
     <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 overflow-hidden">
       <div className="flex w-full min-w-0 items-center justify-between gap-2">
         <p className="min-w-0 truncate text-left text-body-sm/4.5 text-fg">
@@ -386,6 +391,7 @@ const MessageRowDetails = ({
             subject
           )}
         </p>
+        {verificationCode && <CopyVerificationCode code={verificationCode} />}
         <div className="hidden shrink-0 @sm:block">
           <MessageLabels
             compact
@@ -539,6 +545,7 @@ type MessageRowSurfaceProps = {
   thread: ThreadListEntry;
   threaded: boolean;
   unread: boolean;
+  verificationCode?: MessageRowProps["verificationCode"];
 };
 
 const MessageRowSurface = ({
@@ -578,6 +585,7 @@ const MessageRowSurface = ({
   thread,
   threaded,
   unread,
+  verificationCode,
 }: MessageRowSurfaceProps) => {
   const {
     handleRowBlurCapture,
@@ -659,45 +667,46 @@ const MessageRowSurface = ({
         thread={thread}
       />
 
-      <MessageActionsContextMenu
-        actions={createMailboxThreadMessageActionHandlers({
-          mailboxActions,
-          onOpenDraft,
-          supportsArchive: mailboxProvider !== "api",
-          supportsFolders: mailboxProvider === "gmail",
-          supportsLabels: mailboxProvider !== "api",
-          supportsReadState: mailboxProvider !== "api",
-          supportsUnsubscribe: mailboxProvider === "gmail",
-        })}
-        isPending={isActionPending}
-        mailboxId={mailboxId}
-        mailbox={activeMailbox}
-        message={anchorMessage}
-        threadLabelIds={thread.threadLabelIds}
-        triggerClassName="flex h-full min-w-0 flex-1 active:scale-100"
-      >
-        <button
-          aria-label={openAriaLabel}
-          aria-current={isActive ? "true" : undefined}
-          className="relative z-10 flex h-full min-w-0 flex-1 items-center rounded-lg border border-transparent text-left focus-visible:z-20 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none"
-          data-message-row-trigger
-          onClick={handleRowClick}
-          onKeyDown={handleRowKeyDown}
-          onMouseDown={handleRowMouseDown}
-          onPointerCancel={() => {
-            setIsPressed(false);
-          }}
-          onPointerDown={() => {
-            setIsPressed(true);
-          }}
-          onPointerLeave={() => {
-            setIsPressed(false);
-          }}
-          onPointerUp={() => {
-            setIsPressed(false);
-          }}
-          type="button"
+      <div className="relative h-full min-w-0 flex-1">
+        <MessageActionsContextMenu
+          actions={createMailboxThreadMessageActionHandlers({
+            mailboxActions,
+            onOpenDraft,
+            supportsArchive: mailboxProvider !== "api",
+            supportsFolders: mailboxProvider === "gmail",
+            supportsLabels: mailboxProvider !== "api",
+            supportsReadState: mailboxProvider !== "api",
+            supportsUnsubscribe: mailboxProvider === "gmail",
+          })}
+          isPending={isActionPending}
+          mailboxId={mailboxId}
+          mailbox={activeMailbox}
+          message={anchorMessage}
+          threadLabelIds={thread.threadLabelIds}
+          triggerClassName="relative flex h-full min-w-0 flex-1 active:scale-100"
         >
+          <button
+            aria-label={openAriaLabel}
+            aria-current={isActive ? "true" : undefined}
+            className="absolute inset-0 z-10 rounded-lg border border-transparent text-left focus-visible:z-20 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none"
+            data-message-row-trigger
+            onClick={handleRowClick}
+            onKeyDown={handleRowKeyDown}
+            onMouseDown={handleRowMouseDown}
+            onPointerCancel={() => {
+              setIsPressed(false);
+            }}
+            onPointerDown={() => {
+              setIsPressed(true);
+            }}
+            onPointerLeave={() => {
+              setIsPressed(false);
+            }}
+            onPointerUp={() => {
+              setIsPressed(false);
+            }}
+            type="button"
+          />
           <MessageRowDetails
             date={date}
             deliveryStatus={deliveryStatus}
@@ -710,9 +719,10 @@ const MessageRowSurface = ({
             thread={thread}
             threaded={threaded}
             unread={unread}
+            verificationCode={verificationCode?.code}
           />
-        </button>
-      </MessageActionsContextMenu>
+        </MessageActionsContextMenu>
+      </div>
     </m.div>
   );
 };
@@ -733,6 +743,7 @@ const MessageRowContent = ({
   pendingActions,
   state,
   thread,
+  verificationCode,
 }: MessageRowContentProps) => {
   const reducedMotion = useReducedMotion();
   const [isHovered, setIsHovered] = useState(false);
@@ -811,6 +822,7 @@ const MessageRowContent = ({
       thread={thread}
       threaded={threaded}
       unread={unread}
+      verificationCode={verificationCode}
     />
   );
 };
@@ -835,6 +847,7 @@ export const MessageRow = ({
   rowRef,
   state,
   thread,
+  verificationCode,
   isNew,
   staggerIndex = 0,
 }: MessageRowProps) => {
@@ -857,6 +870,7 @@ export const MessageRow = ({
       pendingActions={pendingActions}
       state={state}
       thread={thread}
+      verificationCode={verificationCode}
     />
   );
 

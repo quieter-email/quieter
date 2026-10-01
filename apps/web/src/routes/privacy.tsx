@@ -70,8 +70,9 @@ function PrivacyPage() {
           product availability.
         </li>
         <li>
-          AI prompts, outputs, and usage metadata when you use chat or enable
-          optional Gmail AI features.
+          AI prompts, outputs, and usage metadata for chat, enabled automatic
+          labeling, and automatic verification-code extraction in eligible
+          mailboxes.
         </li>
         <li>
           Error and reliability reports in production to keep the service secure
@@ -95,9 +96,7 @@ function PrivacyPage() {
           Polar for checkout, subscriptions, billing portal access, and usage
           metering.
         </li>
-        <li>
-          OpenRouter and selected model providers for optional AI features.
-        </li>
+        <li>OpenRouter and selected model providers for AI features.</li>
         <li>PostHog for product analytics only after measurement consent.</li>
         <li>Sentry for error and reliability monitoring in production.</li>
         <li>
@@ -122,11 +121,11 @@ function PrivacyPage() {
       <p>
         We use Google user data only to provide and secure the features you
         request, such as syncing, reading, searching, composing, sending, and
-        labeling mail and, when you enable them, optional AI features. We do not
+        labeling mail, extracting verification codes, and AI features. We do not
         sell Google user data, use it for advertising, or use it to train
-        generalized AI models. Optional AI features process mailbox content
-        through the processors listed above, only when you enable those features
-        for a mailbox.
+        generalized AI models. Automatic verification-code extraction processes
+        recent incoming messages in eligible mailboxes through the processors
+        listed above. Automatic labeling runs when enabled for a mailbox.
       </p>
       <p>
         Gmail credentials are encrypted at rest, mailbox content stays limited
@@ -190,13 +189,14 @@ function PrivacyPage() {
       <p>
         We retain account and mailbox data while your account is active and as
         needed to provide the service, comply with law, prevent abuse, and
-        resolve disputes. Turning off Gmail useful details deletes stored
-        useful-detail items for that mailbox. Disabling a mailbox or deleting
-        account data may not immediately remove backups, logs, invoices, or
-        records we must keep for legal, security, or accounting reasons. The
-        browser may keep selected mailbox and navigation metadata in
-        localStorage for up to 24 hours; signing out or deleting your account
-        clears this query cache from the browser.
+        resolve disputes. Extracted verification codes are encrypted and remain
+        available with their mailbox, even after an estimated expiry time.
+        Processing records without a saved code are removed after thirty days.
+        Disabling a mailbox or deleting account data may not immediately remove
+        backups, logs, invoices, or records we must keep for legal, security, or
+        accounting reasons. The browser may keep selected mailbox and navigation
+        metadata in localStorage for up to 24 hours; signing out or deleting
+        your account clears this query cache from the browser.
       </p>
 
       <h2>International transfers</h2>

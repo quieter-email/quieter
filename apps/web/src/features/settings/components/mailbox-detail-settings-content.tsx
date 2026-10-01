@@ -62,7 +62,6 @@ export const MailboxDetailSettingsContent = ({
   removeManagedMailboxGrantMutation,
   setDefaultMailboxMutation,
   setGmailAutoLabelingMutation,
-  setGmailUsefulDetailsMutation,
   setManagedMailboxAccessModeMutation,
   setManagedMailboxDivisionGrantMutation,
   setManagedMailboxGrantMutation,
@@ -103,7 +102,6 @@ export const MailboxDetailSettingsContent = ({
   }>;
   setDefaultMailboxMutation: SettingsMutation<{ mailboxId: string | null }>;
   setGmailAutoLabelingMutation: SettingsMutation<ManagedMailboxToggleInput>;
-  setGmailUsefulDetailsMutation: SettingsMutation<ManagedMailboxToggleInput>;
   setManagedMailboxAccessModeMutation: SettingsMutation<ManagedMailboxAccessModeInput>;
   setManagedMailboxDivisionGrantMutation: SettingsMutation<ManagedMailboxDivisionGrantInput>;
   setManagedMailboxGrantMutation: SettingsMutation<ManagedMailboxGrantInput>;
@@ -114,7 +112,6 @@ export const MailboxDetailSettingsContent = ({
     mailbox.displayName,
     mailbox.emailAddress
   );
-  const usefulDetailsSwitchId = `gmail-useful-details-${mailbox.id}`;
   const autoLabelSwitchId = `gmail-auto-label-${mailbox.id}`;
   const includeApiMessagesSwitchId = `managed-api-messages-${mailbox.id}`;
   const isGmail = mailbox.provider === "gmail";
@@ -220,14 +217,6 @@ export const MailboxDetailSettingsContent = ({
                     }
                   );
                 }}
-                onUsefulDetailsChange={(enabled) => {
-                  setGmailUsefulDetailsMutation.mutate({
-                    enabled,
-                    mailboxId: mailbox.id,
-                  });
-                }}
-                usefulDetailsEnabled={mailbox.usefulDetailsEnabled}
-                usefulDetailsSwitchId={usefulDetailsSwitchId}
               />
             )}
 
@@ -261,7 +250,6 @@ export const MailboxDetailSettingsContent = ({
                 removeManagedMailboxGrantMutation
               }
               setGmailAutoLabelingMutation={setGmailAutoLabelingMutation}
-              setGmailUsefulDetailsMutation={setGmailUsefulDetailsMutation}
               setManagedMailboxAccessModeMutation={
                 setManagedMailboxAccessModeMutation
               }

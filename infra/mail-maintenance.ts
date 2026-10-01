@@ -23,6 +23,7 @@ export const createMailMaintenanceResources = (
       environment: {
         ...context.billingEnvironment,
         MAIL_UPDATES_URL: updatesUrl,
+        QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
         R2_ACCOUNT_ID: context.env.R2_ACCOUNT_ID ?? "",
         R2_BUCKET: context.env.R2_BUCKET ?? "",
         R2_ENDPOINT: context.env.R2_ENDPOINT ?? "",
@@ -35,6 +36,9 @@ export const createMailMaintenanceResources = (
           [
             "GMAIL_LIVE_SYNC_TOKEN_SECRET",
             "POLAR_ACCESS_TOKEN",
+            "OPENROUTER_API_KEY",
+            "GMAIL_TOKEN_ENCRYPTION_KEY",
+            "GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT",
             "R2_ACCESS_KEY_ID",
             "R2_SECRET_ACCESS_KEY",
           ] as const

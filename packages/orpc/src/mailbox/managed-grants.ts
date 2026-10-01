@@ -42,7 +42,6 @@ const getManagedMailboxRecord = async (
       includeApiSentMessages: mailbox.includeApiSentMessages,
       organizationId: mailbox.organizationId,
       ownerUserId: mailbox.managedOwnerUserId,
-      usefulDetailsEnabled: mailboxAutomationSettings.usefulDetailsEnabled,
     })
     .from(mailbox)
     .leftJoin(
@@ -451,7 +450,6 @@ export const getManagedMailboxDetails = async (input: {
       includeApiSentMessages: selectedMailbox.includeApiSentMessages,
       ownerEmail: ownerProfile[0]?.email ?? null,
       ownerName: ownerProfile[0]?.name ?? null,
-      usefulDetailsEnabled: selectedMailbox.usefulDetailsEnabled ?? false,
     },
   };
 };

@@ -1,52 +1,81 @@
 import { withRequestDatabaseClient } from "@quieter/database/client";
-import { listGmailPubSubMaintenanceJobs } from "@quieter/orpc/gmail-pubsub";
+import {
+  listGmailPubSubMaintenanceJobs,
+  maintainGmailPubSubMailbox,
+} from "@quieter/orpc/gmail-pubsub";
 
-import type { GmailPubSubQueueMessage } from "./queue-worker";
+import { broadcastGmailUpdate } from "./mail-updates";
 import { reportWorkerError, withSentryReporting } from "./worker-runtime";
 
-const QUEUE_BATCH_SIZE = 100;
+const CONCURRENCY = 4;
 
-export const enqueueGmailMaintenanceJobs = async (
+export const runGmailMaintenance = async (
   env: Env,
-  listJobs: typeof listGmailPubSubMaintenanceJobs = listGmailPubSubMaintenanceJobs
+  dependencies: {
+    listJobs?: typeof listGmailPubSubMaintenanceJobs;
+    maintainMailbox?: typeof maintainGmailPubSubMailbox;
+  } = {}
 ) => {
-  const jobs = await listJobs();
-  const batches = Array.from(
-    { length: Math.ceil(jobs.length / QUEUE_BATCH_SIZE) },
-    (_, index) =>
-      jobs.slice(index * QUEUE_BATCH_SIZE, (index + 1) * QUEUE_BATCH_SIZE)
+  const jobs = await withRequestDatabaseClient(
+    async () =>
+      await (dependencies.listJobs ?? listGmailPubSubMaintenanceJobs)()
   );
-
+  let nextIndex = 0;
+  let maintained = 0;
+  let busy = 0;
+  const failures: unknown[] = [];
   await Promise.all(
-    batches.map(async (batch) => {
-      await env.GmailPsQueue.sendBatch(
-        batch.map(({ emailAddress, mailboxId }) => ({
-          body: {
-            emailAddress,
-            mailboxId,
-            type: "maintenance",
-          } satisfies GmailPubSubQueueMessage,
-          contentType: "json" as const,
-        }))
-      );
+    Array.from({ length: Math.min(CONCURRENCY, jobs.length) }, async () => {
+      while (nextIndex < jobs.length) {
+        const job = jobs[nextIndex];
+        nextIndex += 1;
+        if (job === undefined) {
+          break;
+        }
+        try {
+          const result = await withRequestDatabaseClient(
+            async () =>
+              await (
+                dependencies.maintainMailbox ?? maintainGmailPubSubMailbox
+              )({
+                mailboxId: job.mailboxId,
+                topicName: env.GMAIL_PUBSUB_TOPIC,
+              })
+          );
+          if (result.status === "busy") {
+            busy += 1;
+          } else if (
+            result.status === "maintained" ||
+            result.status === "pending"
+          ) {
+            maintained += 1;
+            await broadcastGmailUpdate(
+              env,
+              job.emailAddress,
+              "mailbox.changed"
+            );
+          }
+        } catch (error) {
+          failures.push(error);
+          reportWorkerError(error, {
+            category: "gmail_maintenance_mailbox_error",
+            route: "scheduled",
+          });
+        }
+      }
     })
   );
-
-  return { enqueued: jobs.length };
+  if (failures.length > 0) {
+    throw new AggregateError(
+      failures,
+      "Gmail maintenance failed for some mailboxes."
+    );
+  }
+  return { busy, maintained, scanned: jobs.length };
 };
 
 export default withSentryReporting({
   async scheduled(_event, env, _ctx) {
-    try {
-      await withRequestDatabaseClient(async () => {
-        await enqueueGmailMaintenanceJobs(env);
-      });
-    } catch (error) {
-      reportWorkerError(error, {
-        category: "gmail_maintenance_error",
-        route: "scheduled",
-      });
-      throw error;
-    }
+    await runGmailMaintenance(env);
   },
 } satisfies ExportedHandler<Env>);

@@ -57,7 +57,7 @@ Application secrets are cataloged in `packages/env/src/sst-secrets.ts` and decla
 
 ## Cloudflare dashboard verification
 
-Repository checks cannot validate account-level state. After changing Worker infrastructure, verify that the deployment token remains least-privilege, logs and traces have the intended retention, Queues and their dead-letter queue are healthy, Hyperdrive targets the expected database with query caching disabled, and the production custom domain still routes to its intended Worker. Treat this as verification only; SST remains the configuration authority.
+Repository checks cannot validate account-level state. After changing Worker infrastructure, verify that the deployment token remains least-privilege, logs and traces have the intended retention, Gmail Pub/Sub push delivery and retries work with the direct processing acknowledgement deadline, Hyperdrive targets the expected database with query caching disabled, and the production custom domain still routes to its intended Worker. Drain and retire the previous Gmail queue consumer during rollout. Treat this as verification only; SST remains the configuration authority.
 
 ## Database safety
 

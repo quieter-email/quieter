@@ -3,7 +3,8 @@
 import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { RouterOutputs } from "@quieter/orpc";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useLayoutEffect, useMemo, useRef } from "react";
 
@@ -15,6 +16,7 @@ import {
   getThreadQueryKey,
   getThreadWithDetailsOptions,
 } from "#/lib/mail/thread-query";
+import { verificationCodesQueryOptions } from "#/lib/mail/verification-codes-query";
 
 import type { MessageListProps } from "./message-list-types";
 import { MessageRow } from "./message-row";
@@ -239,6 +241,55 @@ export const MessageListScrollPane = ({
     overscan: MESSAGE_LIST_OVERSCAN,
   });
   const virtualItems = messageVirtualizer.getVirtualItems();
+  const codeThreadIdBuckets = useMemo(() => {
+    if (list.mailboxProvider === "api" || list.activeMailbox === "drafts") {
+      return [];
+    }
+    const threadIds = [
+      ...new Set(threadedMessages.map((thread) => thread.threadId)),
+    ];
+    const buckets: string[][] = [];
+    for (let offset = 0; offset < threadIds.length; offset += 100) {
+      buckets.push(threadIds.slice(offset, offset + 100));
+    }
+    return buckets;
+  }, [threadedMessages, list.activeMailbox, list.mailboxProvider]);
+  const codeQueries = useQueries({
+    queries: codeThreadIdBuckets.map((threadIds) => ({
+      ...verificationCodesQueryOptions(
+        list.mailboxId,
+        { mode: "threads", threadIds },
+        true
+      ),
+      placeholderData: () => {
+        const requestedThreadIds = new Set(threadIds);
+        return {
+          items: queryClient
+            .getQueriesData<RouterOutputs["mail"]["listVerificationCodes"]>({
+              queryKey: ["verification-codes", list.mailboxId, "threads"],
+            })
+            .toSorted(
+              ([leftKey], [rightKey]) =>
+                (queryClient.getQueryState(rightKey)?.dataUpdatedAt ?? 0) -
+                (queryClient.getQueryState(leftKey)?.dataUpdatedAt ?? 0)
+            )
+            .flatMap(([, data]) => data?.items ?? [])
+            .filter((item) => requestedThreadIds.has(item.threadId)),
+        };
+      },
+    })),
+  });
+  const latestCodeByThreadId = new Map<
+    string,
+    RouterOutputs["mail"]["listVerificationCodes"]["items"][number]
+  >();
+  for (const query of codeQueries) {
+    for (const code of query.data?.items ?? []) {
+      if (!latestCodeByThreadId.has(code.threadId)) {
+        latestCodeByThreadId.set(code.threadId, code);
+      }
+    }
+  }
   const hasMountedPrefetchRef = useRef(false);
 
   useLayoutEffect((): (() => void) | undefined => {
@@ -400,6 +451,7 @@ export const MessageListScrollPane = ({
                   selectionMode: selection.selectedThreadIds.size > 0,
                 }}
                 thread={thread}
+                verificationCode={latestCodeByThreadId.get(thread.threadId)}
               />
             );
           })}

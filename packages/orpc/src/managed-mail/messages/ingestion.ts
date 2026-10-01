@@ -6,13 +6,34 @@ import {
   mailDomain,
   managedMailAttachment,
   managedMailMessage,
+  mailboxVerificationCode,
 } from "@quieter/database/schema";
 import { parseRawMailMessage } from "@quieter/mail/raw-message";
 import type { ParsedRawMailMessage } from "@quieter/mail/raw-message";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  lte,
+  or,
+  sql,
+} from "drizzle-orm";
 
 import { publishMailUpdate } from "../../mail-updates";
-import { processManagedMailAutomation } from "../automation";
+import {
+  processMailVerificationCode,
+  reportPendingMailboxVerificationCodeUsage,
+} from "../../verification-codes";
+import {
+  getManagedAutomationOwner,
+  loadManagedAutomationMessage,
+  processManagedMailAutomation,
+} from "../automation";
 import { inheritManagedThreadLabels } from "../labels/repository";
 import { applyManagedRulesToMessage } from "../rules/evaluator";
 import {
@@ -65,7 +86,31 @@ const resolveManagedThreadId = async (
   );
 };
 
-const runPostIngestionOrganization = async (input: {
+const processManagedVerificationCode = async (input: {
+  mailboxId: string;
+  messageId: string;
+}) => {
+  const owner = await getManagedAutomationOwner(input.mailboxId);
+  if (!owner) {
+    return;
+  }
+  await processMailVerificationCode({
+    loadMessage: async () =>
+      await loadManagedAutomationMessage(input.mailboxId, input.messageId, {
+        includeNonInbox: true,
+      }),
+    mailboxId: input.mailboxId,
+    messageId: input.messageId,
+    organizationId: owner.organizationId,
+    userId: owner.userId,
+  });
+  await reportPendingMailboxVerificationCodeUsage(
+    input.mailboxId,
+    owner.userId
+  );
+};
+
+const runPostIngestionProcessing = async (input: {
   mailboxId: string;
   messageId: string;
   providerMessageId: string;
@@ -84,16 +129,110 @@ const runPostIngestionOrganization = async (input: {
     if (rules.error !== null) {
       throw new Error(rules.error);
     }
-    await processManagedMailAutomation({
-      mailboxId: input.mailboxId,
-      messageId: input.messageId,
-    });
+    const results = await Promise.allSettled([
+      processManagedVerificationCode(input),
+      processManagedMailAutomation({
+        mailboxId: input.mailboxId,
+        messageId: input.messageId,
+      }),
+    ]);
+    const failed = results.find((result) => result.status === "rejected");
+    if (failed) {
+      throw failed.reason;
+    }
   } finally {
     await publishMailUpdate({
       mailboxId: input.mailboxId,
       threadIds: [input.threadId],
       type: "mailbox.changed",
     });
+  }
+};
+
+export const retryPendingManagedVerificationCodes = async () => {
+  const now = new Date();
+  const pending = await db
+    .select({
+      mailboxId: mailboxVerificationCode.mailboxId,
+      messageId: mailboxVerificationCode.messageId,
+    })
+    .from(mailboxVerificationCode)
+    .innerJoin(mailbox, eq(mailbox.id, mailboxVerificationCode.mailboxId))
+    .where(
+      and(
+        eq(mailbox.provider, "managed"),
+        isNull(mailboxVerificationCode.processedAt),
+        gt(
+          mailboxVerificationCode.createdAt,
+          new Date(now.getTime() - 2 * 60 * 60_000)
+        ),
+        or(
+          isNull(mailboxVerificationCode.leaseUntil),
+          lt(mailboxVerificationCode.leaseUntil, now)
+        ),
+        or(
+          isNull(mailboxVerificationCode.nextAttemptAt),
+          lte(mailboxVerificationCode.nextAttemptAt, now)
+        )
+      )
+    )
+    .orderBy(mailboxVerificationCode.createdAt)
+    .limit(40);
+  let nextIndex = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(4, pending.length) }, async () => {
+      while (nextIndex < pending.length) {
+        const message = pending[nextIndex];
+        nextIndex += 1;
+        if (message === undefined) {
+          break;
+        }
+        await processManagedVerificationCode(message);
+      }
+    })
+  );
+  const usagePending = await db
+    .selectDistinct({ mailboxId: mailboxVerificationCode.mailboxId })
+    .from(mailboxVerificationCode)
+    .innerJoin(mailbox, eq(mailbox.id, mailboxVerificationCode.mailboxId))
+    .where(
+      and(
+        eq(mailbox.provider, "managed"),
+        isNotNull(mailboxVerificationCode.processedAt),
+        isNotNull(mailboxVerificationCode.costUsd),
+        isNull(mailboxVerificationCode.usageReportedAt)
+      )
+    )
+    .limit(40);
+  for (const item of usagePending) {
+    const owner = await getManagedAutomationOwner(item.mailboxId);
+    if (owner) {
+      await reportPendingMailboxVerificationCodeUsage(
+        item.mailboxId,
+        owner.userId
+      );
+    }
+  }
+  return pending.length;
+};
+
+const finishIngestion = async (input: {
+  mailboxId: string;
+  messageId: string;
+  providerMessageId: string;
+  threadId: string;
+}) => {
+  const results = await Promise.allSettled([
+    publishMailUpdate({
+      mailboxId: input.mailboxId,
+      threadIds: [input.threadId],
+      type: "mailbox.changed",
+    }),
+    runPostIngestionProcessing(input),
+  ]);
+  const failed = results.find((result) => result.status === "rejected");
+  if (failed) {
+    throw failed.reason;
   }
 };
 
@@ -208,12 +347,7 @@ const ingestManagedMessageForMailbox = async (input: {
   });
 
   if (inserted !== undefined) {
-    await publishMailUpdate({
-      mailboxId: inserted.mailboxId,
-      threadIds: [inserted.threadId],
-      type: "mailbox.changed",
-    });
-    await runPostIngestionOrganization({
+    await finishIngestion({
       mailboxId: inserted.mailboxId,
       messageId: inserted.id,
       providerMessageId: input.providerMessageId,
@@ -236,7 +370,7 @@ const ingestManagedMessageForMailbox = async (input: {
     )
     .limit(1);
   if (existing !== undefined) {
-    await runPostIngestionOrganization({
+    await finishIngestion({
       mailboxId: input.targetMailboxId,
       messageId: existing.id,
       providerMessageId: input.providerMessageId,

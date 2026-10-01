@@ -9,7 +9,6 @@ const entrypoints = [
   path.join(packageRoot, "src", "mail-update-worker.ts"),
   path.join(packageRoot, "src", "gmail-maintenance-worker.ts"),
   path.join(packageRoot, "src", "mail-maintenance-worker.ts"),
-  path.join(packageRoot, "src", "queue-worker.ts"),
   path.join(packageRoot, "src", "worker.ts"),
 ];
 

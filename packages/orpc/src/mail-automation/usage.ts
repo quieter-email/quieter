@@ -1,8 +1,10 @@
 import { chatModelSchema } from "@quieter/ai/chat-models";
+import { AUTO_LABEL_MODEL } from "@quieter/ai/classify-gmail-message";
 import { reportAiUsage } from "@quieter/billing";
 import { db } from "@quieter/database/client";
 import { gmailAutoLabelEvent } from "@quieter/database/schema";
 import { eq } from "drizzle-orm";
+import { z } from "zod";
 
 export const reportAutoLabelUsage = async (event: {
   cachedTokens: number | null;
@@ -16,7 +18,9 @@ export const reportAutoLabelUsage = async (event: {
   usageReportedAt: Date | null;
   userId: string;
 }) => {
-  const model = chatModelSchema.safeParse(event.model);
+  const model = chatModelSchema
+    .or(z.literal(AUTO_LABEL_MODEL))
+    .safeParse(event.model);
   if (
     event.usageReportedAt ||
     !model.success ||

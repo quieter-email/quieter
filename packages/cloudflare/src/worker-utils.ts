@@ -173,7 +173,7 @@ export const mailboxObject = (env: Env, emailAddress: string) => {
   return env.GmailLiveSyncMailboxV2.get(id);
 };
 
-const broadcastMailboxEvent = async (
+export const broadcastMailboxEvent = async (
   env: Env,
   emailAddress: string,
   type: "mailbox-details-dirty" | "mailbox-dirty"
@@ -209,8 +209,26 @@ export const handleLiveMailboxRequest = async (request: Request, env: Env) => {
 export const handlePubSub = async (
   request: Request,
   env: Env,
-  processNotification = async (message: unknown, bindings: Env) => {
-    await bindings.GmailPsQueue.send(message);
+  processNotification: (
+    message: {
+      emailAddress: string;
+      historyId: string;
+      pubSubMessageId: string;
+    },
+    bindings: Env
+  ) => Promise<unknown> = async (message, _bindings) => {
+    const { withRequestDatabaseClient } =
+      await import("@quieter/database/client");
+    const { processGmailPubSubNotification } =
+      await import("@quieter/orpc/gmail-pubsub");
+    const result = await withRequestDatabaseClient(
+      async () => await processGmailPubSubNotification(message)
+    );
+    return {
+      retry:
+        !result.ignored &&
+        (result.busy === true || result.needsContinuation === true),
+    };
   }
 ) => {
   await verifyPubSubToken(request, env);
@@ -230,9 +248,8 @@ export const handlePubSub = async (
     emailAddress,
     historyId: notification.historyId,
     pubSubMessageId: envelope.data.message.messageId,
-    type: "notification" as const,
   };
-  await processNotification(processorMessage, env);
+  const processing = await processNotification(processorMessage, env);
   const broadcasts = await Promise.allSettled([
     broadcastMailboxEvent(env, emailAddress, "mailbox-dirty"),
     broadcastGmailUpdate(
@@ -249,6 +266,14 @@ export const handlePubSub = async (
         route: "pubsub",
       });
     }
+  }
+  if (
+    typeof processing === "object" &&
+    processing !== null &&
+    "retry" in processing &&
+    processing.retry === true
+  ) {
+    throw new RequestError(503, "gmail_processing_pending");
   }
   return new Response(null, { status: 204 });
 };

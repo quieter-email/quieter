@@ -105,9 +105,6 @@ export const MailboxDetailSettingsView = ({
       setGmailAutoLabelingMutation={asSettingsMutation(
         mutations.setGmailAutoLabelingMutation
       )}
-      setGmailUsefulDetailsMutation={asSettingsMutation(
-        mutations.setGmailUsefulDetailsMutation
-      )}
       setManagedMailboxAccessModeMutation={asSettingsMutation(
         mutations.setManagedMailboxAccessModeMutation
       )}

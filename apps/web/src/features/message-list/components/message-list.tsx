@@ -27,7 +27,6 @@ import type { ThreadListEntry } from "#/lib/gmail/thread-list";
 import type { MailboxCategory, MessageListItem } from "#/lib/mail";
 import { labelsQueryOptions } from "#/lib/mail/labels-query";
 
-import { GmailUsefulDetails } from "./gmail-useful-details";
 import { MessageListHeader } from "./message-list-header";
 import { MessageListScrollPane } from "./message-list-scroll-pane";
 import { MessageListSelectionToolbar } from "./message-list-selection-toolbar";
@@ -690,15 +689,6 @@ export const MessageList = (props: MessageListProps) => {
           ) : null
         }
       />
-
-      {props.mailboxProvider === "gmail" &&
-        props.activeMailbox === "inbox" &&
-        !props.searchQuery.trim() && (
-          <GmailUsefulDetails
-            mailboxId={props.mailboxId}
-            onActivateMessage={props.onActivateMessage}
-          />
-        )}
 
       <m.div
         animate={{

@@ -41,7 +41,6 @@ type ManagedMailboxDetails = {
     ownerEmail: string | null;
     ownerName: string | null;
     ownerUserId: string | null;
-    usefulDetailsEnabled: boolean;
   };
 };
 
@@ -63,9 +62,6 @@ const ManagedMailboxIntelligenceRow = ({
   emailAddress,
   hasAutomationAccess,
   onAutoLabelChange,
-  onUsefulDetailsChange,
-  usefulDetailsEnabled,
-  usefulDetailsSwitchId,
 }: {
   autoLabelEnabled: boolean;
   autoLabelSwitchId: string;
@@ -73,42 +69,13 @@ const ManagedMailboxIntelligenceRow = ({
   emailAddress: string;
   hasAutomationAccess: boolean;
   onAutoLabelChange: (enabled: boolean) => void;
-  onUsefulDetailsChange: (enabled: boolean) => void;
-  usefulDetailsEnabled: boolean;
-  usefulDetailsSwitchId: string;
 }) => (
   <SettingsSection
-    description="Organize new messages and surface time-sensitive information for everyone using this inbox."
+    description="Organize new messages for everyone using this inbox."
     title="Intelligence"
   >
     <SettingsCard>
       <SettingsInsetRows>
-        <label
-          className={cn(
-            settingsSurfaceVariants({ variant: "insetRow" }),
-            "cursor-pointer gap-3"
-          )}
-          htmlFor={usefulDetailsSwitchId}
-        >
-          <span className="min-w-0 flex-1">
-            <span className="block text-body text-fg">Useful details</span>
-            <span className="mt-0.5 block text-caption/5 text-muted-fg">
-              Show codes, deliveries, and deadlines above the inbox.
-              {!hasAutomationAccess && " Requires Pro access for this team."}
-            </span>
-          </span>
-          <Switch
-            aria-label={`Find time-sensitive updates in new mail for ${emailAddress}`}
-            checked={usefulDetailsEnabled}
-            className="shrink-0"
-            size="sm"
-            disabled={disabled}
-            id={usefulDetailsSwitchId}
-            onCheckedChange={onUsefulDetailsChange}
-          >
-            <SwitchThumb />
-          </Switch>
-        </label>
         <label
           className={cn(
             settingsSurfaceVariants({ variant: "insetRow" }),
@@ -380,7 +347,6 @@ export const ManagedMailboxDetailSettings = ({
   onDivisionGrantChange,
   onMemberGrantChange,
   onUpdateMailbox,
-  onUsefulDetailsChange,
 }: {
   canMakePrivate: boolean;
   detailManagedDivisions: Division[];
@@ -410,13 +376,11 @@ export const ManagedMailboxDetailSettings = ({
     },
     onSettled?: () => void
   ) => void;
-  onUsefulDetailsChange: (enabled: boolean) => void;
 }) => {
   const { section } = settingsRouteApi.useSearch();
   const activeSection =
     section === "access" || section === "intelligence" ? section : "general";
   const [displayNameDraft, setDisplayNameDraft] = useState<string | null>(null);
-  const usefulDetailsSwitchId = `managed-useful-details-${mailboxId}`;
   const autoLabelSwitchId = `managed-auto-label-${mailboxId}`;
   const isPrivate = details.mailbox.accessMode === "private";
 
@@ -587,9 +551,6 @@ export const ManagedMailboxDetailSettings = ({
           emailAddress={emailAddress}
           hasAutomationAccess={hasAutomationAccess}
           onAutoLabelChange={onAutoLabelChange}
-          onUsefulDetailsChange={onUsefulDetailsChange}
-          usefulDetailsEnabled={details.mailbox.usefulDetailsEnabled}
-          usefulDetailsSwitchId={usefulDetailsSwitchId}
         />
       )}
 

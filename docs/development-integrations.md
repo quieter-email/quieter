@@ -7,7 +7,7 @@ This document records the development architecture and ownership rules. Startup 
 | System | Normal development choice | Additional testing |
 | --- | --- | --- |
 | PlanetScale | Existing `quieter_dev` logical database on the current production cluster, with separate app and migrator roles | Disposable database only for destructive migration tests, preferably the existing CI job |
-| Cloudflare | Native Vite/workerd runtime for the web app and background Workers, with local queues and Durable Objects | Cloud-specific behavior is outside local acceptance |
+| Cloudflare | Native Vite/workerd runtime for the web app and background Workers, with Durable Objects | Cloud-specific behavior is outside local acceptance |
 | SST | Development-stage Secrets, linked bindings, and native development process management | No cloud mail resources; Lambda Live is not local-only |
 | Managed mail | Private fixture mailbox, native on-disk R2 storage, MIME ingestion and attachment downloads; fixture tests for routing, API validation and feedback | Real SES/MX delivery requires a deployment and is excluded from this setup |
 | Gmail/Pub/Sub | Shared-account observation mode, own development subscription, one watch owner | Dedicated mailbox or exclusive ownership handoff for provider writes |
@@ -52,7 +52,7 @@ Controls required for this mode:
 
 - Production remains the watch owner. Development does not call Gmail watch/stop, including from maintenance, disconnect, billing changes, or error recovery.
 - The local subscriber only processes mailboxes explicitly connected and allowlisted in development. Unrelated notifications must not trigger message retrieval or AI calls.
-- Development maintains its own history cursor, deduplication, processing leases, and local queue state. It acknowledges only its own subscription.
+- Development maintains its own history cursor, deduplication, and processing leases. It acknowledges only its own subscription after direct processing.
 - Real AI may summarize, extract information, classify, and store results in `quieter_dev`. Proposed provider actions are recorded for inspection rather than executed.
 - Enforce the read-only provider boundary server-side for shared mailboxes. Include manual mail mutations, auto-label application, drafts, send, trash/delete, archive/read state, watch management, and connector tool writes. A hidden button or a disabled cron is insufficient.
 - Use development billing configuration. Development AI usage must not update production entitlements or report usage to production Polar.
@@ -82,7 +82,7 @@ Agents may read and move secrets between the approved local configuration and th
 
 ## Native tooling to wire
 
-Cloudflare's installed Vite plugin supports `auxiliaryWorkers`, persistent state, and development tunnels. Wire the realtime Worker, Gmail queue consumer, Gmail maintenance handler, and per-minute mail maintenance worker alongside the web Worker. Keep the shared-mailbox restrictions above active even when all handlers run locally. Use scheduled-event injection for tests and an explicit scheduler when continuous local maintenance is needed. See [multiple Workers](https://developers.cloudflare.com/workers/local-development/multi-workers/).
+Cloudflare's installed Vite plugin supports `auxiliaryWorkers`, persistent state, and development tunnels. Wire the realtime Worker, Gmail maintenance handler, and per-minute mail maintenance worker alongside the web Worker. Keep the shared-mailbox restrictions above active even when all handlers run locally. Use scheduled-event injection for tests and an explicit scheduler when continuous local maintenance is needed. See [multiple Workers](https://developers.cloudflare.com/workers/local-development/multi-workers/).
 
 Use Cloudflare Local Explorer and the runtime inspector for local state, requests, and errors. Its API/UI already provides inspection; avoid building a replacement developer dashboard. Keep these tools on loopback when exposing selected app routes for webhooks. See [Local Explorer](https://developers.cloudflare.com/workers/local-development/local-explorer/).
 
@@ -92,7 +92,7 @@ SST frontend startup uses Vite+ and links development secrets into the local run
 
 The database has all 59 committed migrations and pgvector 0.8.5. It was backed up before applying forward migrations; two historical checksum differences were preserved rather than rewritten. No paid branch or cluster was created.
 
-Native background queues, Durable Objects, signed realtime connections, manual scheduler triggers and the separate Pub/Sub pull bridge are implemented. The bridge uses `quieter-gmail-local-leander`; production retains its existing watch and subscription. Gmail/Calendar/Linear provider writes default to blocked. Gmail writes additionally require resolving the access token's mailbox against the explicit account allowlist.
+Direct Gmail notification processing, Durable Objects, signed realtime connections, manual scheduler triggers and the separate Pub/Sub pull bridge are implemented. The bridge uses `quieter-gmail-local-leander`; production retains its existing watch and subscription. Gmail/Calendar/Linear provider writes default to blocked. Gmail writes additionally require resolving the access token's mailbox against the explicit account allowlist.
 
 The `local-leander` SST store contains development secrets for the app, database, OAuth, encryption, AI and Polar. Real OpenRouter generation, Workers AI embeddings and native Polar CLI webhook delivery have passed connected smoke tests. Polar uses a non-expiring sandbox token. Telemetry has an explicit local opt-in and remains disabled by default.
 

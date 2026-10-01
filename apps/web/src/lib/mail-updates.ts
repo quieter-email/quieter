@@ -100,8 +100,8 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
             );
             const types =
               changes.get("*")?.types ?? changes.get(mailboxId)?.types;
-            if (root === "gmail-useful-details") {
-              return changes.has("*") || types?.has("details.changed") === true;
+            if (root === "verification-codes") {
+              return changes.has("*") || types?.has("mailbox.changed") === true;
             }
             if (
               types === undefined ||

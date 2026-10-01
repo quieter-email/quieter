@@ -1109,6 +1109,58 @@ export const gmailUsefulDetailSettings = pgTable("gmailUsefulDetailSettings", {
   updatedAt: timestamp("updatedAt").notNull(),
 });
 
+export const mailboxVerificationCode = pgTable(
+  "mailboxVerificationCode",
+  {
+    attemptCount: integer("attemptCount"),
+    cacheWriteTokens: integer("cacheWriteTokens"),
+    cachedTokens: integer("cachedTokens"),
+    completionTokens: integer("completionTokens"),
+    costUsd: doublePrecision("costUsd"),
+    createdAt: timestamp("createdAt").notNull(),
+    encryptedCode: text("encryptedCode"),
+    expiresAt: timestamp("expiresAt"),
+    id: text("id").primaryKey(),
+    leaseToken: text("leaseToken"),
+    leaseUntil: timestamp("leaseUntil"),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    messageId: text("messageId").notNull(),
+    model: text("model"),
+    nextAttemptAt: timestamp("nextAttemptAt"),
+    processedAt: timestamp("processedAt"),
+    promptTokens: integer("promptTokens"),
+    receivedAt: timestamp("receivedAt"),
+    service: text("service"),
+    threadId: text("threadId"),
+    updatedAt: timestamp("updatedAt").notNull(),
+    usageReportedAt: timestamp("usageReportedAt"),
+  },
+  (table) => [
+    check(
+      "mailbox_verification_code_payload_check",
+      sql`${table.encryptedCode} is null or (${table.expiresAt} is not null and ${table.threadId} is not null)`
+    ),
+    index("mailbox_verification_code_mailbox_thread_idx").on(
+      table.mailboxId,
+      table.threadId,
+      table.expiresAt
+    ),
+    index("mailbox_verification_code_expires_at_idx").on(table.expiresAt),
+    index("mailbox_verification_code_created_at_idx").on(table.createdAt),
+    index("mailbox_verification_code_mailbox_retry_idx").on(
+      table.mailboxId,
+      table.processedAt,
+      table.nextAttemptAt
+    ),
+    unique("mailbox_verification_code_mailbox_message_unique").on(
+      table.mailboxId,
+      table.messageId
+    ),
+  ]
+);
+
 export const gmailUsefulDetailEvent = pgTable(
   "gmailUsefulDetailEvent",
   {
@@ -2851,6 +2903,7 @@ export const tables = {
   mailboxAutomationSettings,
   mailboxDivisionGrant,
   mailboxGrant,
+  mailboxVerificationCode,
   managedMailAttachment,
   managedMailLabel,
   managedMailMessage,
@@ -3270,6 +3323,10 @@ export const authRelations = defineRelations(tables, (r) => ({
       from: r.mailbox.id,
       to: r.userAiContextEvent.mailboxId,
     }),
+    verificationCodes: r.many.mailboxVerificationCode({
+      from: r.mailbox.id,
+      to: r.mailboxVerificationCode.mailboxId,
+    }),
   },
   mailboxAction: {
     creator: r.one.user({
@@ -3429,6 +3486,13 @@ export const authRelations = defineRelations(tables, (r) => ({
       from: r.mailboxGrant.userId,
       optional: false,
       to: r.user.id,
+    }),
+  },
+  mailboxVerificationCode: {
+    mailbox: r.one.mailbox({
+      from: r.mailboxVerificationCode.mailboxId,
+      optional: false,
+      to: r.mailbox.id,
     }),
   },
   managedMailAttachment: {

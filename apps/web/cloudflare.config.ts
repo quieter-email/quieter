@@ -34,11 +34,6 @@ export default defineConfig(({ mode }) => {
         ),
         main: z.string().optional(),
         name: z.string().optional(),
-        queues: z.object({
-          producers: z.array(
-            z.object({ binding: z.string(), queue: z.string() })
-          ),
-        }),
         r2_buckets: z.array(
           z.object({ binding: z.string(), bucket_name: z.string() })
         ),
@@ -79,9 +74,6 @@ export default defineConfig(({ mode }) => {
         exportName: binding.entrypoint,
         worker: binding.service,
       });
-    }
-    for (const binding of config.queues.producers) {
-      env[binding.binding] = bindings.queue({ name: binding.queue });
     }
     return {
       worker: {

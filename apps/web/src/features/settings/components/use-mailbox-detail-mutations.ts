@@ -22,7 +22,6 @@ type MailboxFlagPatch = {
   divisionId?: string | null;
   includeApiSentMessages?: boolean;
   name?: string;
-  usefulDetailsEnabled?: boolean;
 };
 
 const getManagedDetailsQueryKey = (mailboxId: string) =>
@@ -216,23 +215,6 @@ export const useMailboxDetailMutations = (
       ]);
     },
   });
-  const setGmailUsefulDetailsMutation = useMutation({
-    ...orpc.mail.setGmailUsefulDetails.mutationOptions(),
-    ...optimisticMailboxPatch(
-      (input: { enabled: boolean; mailboxId: string }) => ({
-        usefulDetailsEnabled: input.enabled,
-      }),
-      "Could not update useful details."
-    ),
-    mutationKey: ["mail", "set-gmail-useful-details"],
-    onSettled: async () => {
-      await Promise.all([
-        invalidateMailboxes(),
-        invalidateSelectedManagedMailbox(),
-      ]);
-    },
-  });
-
   const startGmailConnection = async (input?: {
     mailboxId?: string;
     organizationId?: string;
@@ -283,7 +265,6 @@ export const useMailboxDetailMutations = (
     setDefaultMailbox,
     setDefaultMailboxMutation,
     setGmailAutoLabelingMutation,
-    setGmailUsefulDetailsMutation,
     setManagedMailboxAccessModeMutation,
     setManagedMailboxDivisionGrantMutation,
     setManagedMailboxGrantMutation,

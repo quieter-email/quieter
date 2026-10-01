@@ -24,9 +24,6 @@ export const GmailMailboxDetailSections = ({
   hasAutomationAccess,
   onAutoLabelChange,
   onDisconnect,
-  onUsefulDetailsChange,
-  usefulDetailsEnabled,
-  usefulDetailsSwitchId,
 }: {
   autoLabelEnabled: boolean;
   autoLabelSwitchId: string;
@@ -36,51 +33,17 @@ export const GmailMailboxDetailSections = ({
   hasAutomationAccess: boolean;
   onAutoLabelChange: (enabled: boolean) => void;
   onDisconnect: () => void;
-  onUsefulDetailsChange: (enabled: boolean) => void;
-  usefulDetailsEnabled: boolean;
-  usefulDetailsSwitchId: string;
 }) => {
   const { section } = settingsRouteApi.useSearch();
   return (
     <>
       {section !== "connection" && (
         <SettingsSection
-          description="Optional features that organize new Inbox mail and surface timely information."
+          description="Organize new Inbox mail with your labels."
           title="Intelligence"
         >
           <SettingsCard>
             <SettingsInsetRows>
-              <label
-                className={cn(
-                  settingsSurfaceVariants({ variant: "insetRow" }),
-                  "cursor-pointer gap-3"
-                )}
-                htmlFor={usefulDetailsSwitchId}
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block text-body text-fg">
-                    Useful details
-                  </span>
-                  <span className="mt-0.5 block text-caption/5 text-muted-fg">
-                    Show codes, deliveries, and deadlines above the inbox.
-                    {!hasAutomationAccess &&
-                      " Requires Pro access for this team."}
-                  </span>
-                </span>
-                <Switch
-                  aria-label={`Find time-sensitive updates in new mail for ${emailAddress}`}
-                  checked={usefulDetailsEnabled}
-                  className="shrink-0"
-                  size="sm"
-                  disabled={
-                    !hasAutomationAccess || connectionStatus !== "connected"
-                  }
-                  id={usefulDetailsSwitchId}
-                  onCheckedChange={onUsefulDetailsChange}
-                >
-                  <SwitchThumb />
-                </Switch>
-              </label>
               <label
                 className={cn(
                   settingsSurfaceVariants({ variant: "insetRow" }),

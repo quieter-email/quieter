@@ -277,37 +277,37 @@ describe("mail connection lifecycle", () => {
     client.clear();
   });
 
-  test("background processing details do not trigger another mail list refresh", async () => {
+  test("mailbox changes refresh verification codes only for that mailbox", async () => {
     const client = new QueryClient();
-    const fetchMessages = vi.fn<() => string>().mockReturnValue("mail");
-    const fetchDetails = vi.fn<() => string>().mockReturnValue("details");
-    const list = new QueryObserver(client, {
-      initialData: "mail",
-      queryFn: fetchMessages,
-      queryKey: ["messages", "mailbox", "inbox", ""],
+    const codeQueryKey = ["verification-codes", "mailbox", ["thread"]];
+    const otherQueryKey = ["verification-codes", "other", ["thread"]];
+    const codes = new QueryObserver(client, {
+      initialData: "previous",
+      queryFn: () => "refreshed",
+      queryKey: codeQueryKey,
       staleTime: Infinity,
     });
-    const details = new QueryObserver(client, {
-      initialData: "details",
-      queryFn: fetchDetails,
-      queryKey: ["gmail-useful-details", "mailbox"],
+    const otherCodes = new QueryObserver(client, {
+      initialData: "other previous",
+      queryFn: () => "other refreshed",
+      queryKey: otherQueryKey,
       staleTime: Infinity,
     });
-    const unsubscribeList = list.subscribe(() => {});
-    const unsubscribeDetails = details.subscribe(() => {});
+    const unsubscribeCodes = codes.subscribe(() => {});
+    const unsubscribeOtherCodes = otherCodes.subscribe(() => {});
     dispose = connectMailUpdates(client);
     await vi.advanceTimersByTimeAsync(0);
     const [socket] = Socket.instances;
     socket.open();
     await vi.advanceTimersByTimeAsync(1000);
-    fetchMessages.mockClear();
-    fetchDetails.mockClear();
-    socket.notify("mailbox", crypto.randomUUID(), undefined, "details.changed");
+    client.setQueryData(codeQueryKey, "previous");
+    client.setQueryData(otherQueryKey, "other previous");
+    socket.notify("mailbox", crypto.randomUUID(), undefined, "mailbox.changed");
     await vi.advanceTimersByTimeAsync(1000);
-    expect(fetchDetails).toHaveBeenCalledOnce();
-    expect(fetchMessages).not.toHaveBeenCalled();
-    unsubscribeList();
-    unsubscribeDetails();
+    expect(codes.getCurrentResult().data).toBe("refreshed");
+    expect(otherCodes.getCurrentResult().data).toBe("other previous");
+    unsubscribeCodes();
+    unsubscribeOtherCodes();
     client.clear();
   });
 

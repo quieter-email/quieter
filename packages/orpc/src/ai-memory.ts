@@ -10,6 +10,7 @@ import type {
   AiMemoryUpdatePlan,
 } from "@quieter/ai/ai-memory";
 import type { AiUsageReport } from "@quieter/ai/chat-usage";
+import { AUTO_LABEL_MODEL } from "@quieter/ai/classify-gmail-message";
 import { resolveBackgroundModel } from "@quieter/ai/model-config";
 import { reportAiUsage } from "@quieter/billing";
 import { getBillingCreditUsage } from "@quieter/billing/credits";
@@ -484,14 +485,9 @@ const formatMemoryContext = (
   return selected;
 };
 
-export const loadAiConfiguration = () => {
-  const backgroundModel = resolveBackgroundModel();
-
-  return {
-    autoLabelModel: backgroundModel,
-    usefulDetailModel: backgroundModel,
-  };
-};
+export const loadAiConfiguration = () => ({
+  autoLabelModel: AUTO_LABEL_MODEL,
+});
 
 export type AiAgentMemoryCandidates = MemoryRow[];
 
@@ -1545,7 +1541,7 @@ export const replaceMailboxFeedbackMemories = async ({
   mailboxId,
   userId,
 }: {
-  agent: "auto_label" | "useful_detail";
+  agent: "auto_label";
   memories: {
     confidence: number;
     content: string;
@@ -1704,7 +1700,7 @@ export const replaceMailboxFeedbackMemories = async ({
       mailboxId,
       source: "feedback",
       status: "applied",
-      summary: `Updated ${agent === "auto_label" ? "auto-labeling" : "useful details"} memory from feedback.`,
+      summary: "Updated auto-labeling memory from feedback.",
       updatedAt: now,
       userId,
     });
@@ -1716,46 +1712,6 @@ export const replaceMailboxFeedbackMemories = async ({
     )
   );
   return { changed: changes.length };
-};
-
-export const loadUsefulDetailFeedbackPolicies = async ({
-  mailboxId,
-  source,
-}: {
-  mailboxId: string;
-  source: string | null;
-}) => {
-  const memories = await db
-    .select({ metadata: aiMemory.metadata })
-    .from(aiMemory)
-    .where(
-      and(
-        eq(aiMemory.scopeKey, `mailbox:${mailboxId}`),
-        eq(aiMemory.status, "active"),
-        sql`${aiMemory.key} like 'feedback:useful_detail:%'`
-      )
-    );
-  const globalPolicies = new Map<string, "prefer" | "suppress">();
-  const sourcePolicies = new Map<string, "prefer" | "suppress">();
-
-  for (const memory of memories) {
-    const { detailKind } = memory.metadata;
-    const { policy } = memory.metadata;
-    if (
-      typeof detailKind !== "string" ||
-      (policy !== "prefer" && policy !== "suppress")
-    ) {
-      continue;
-    }
-    const sourceDomains = memory.metadata.sourceDomains ?? [];
-    if (sourceDomains.length === 0) {
-      globalPolicies.set(detailKind, policy);
-    } else if (source && sourceDomains.includes(source)) {
-      sourcePolicies.set(detailKind, policy);
-    }
-  }
-
-  return new Map([...globalPolicies, ...sourcePolicies]);
 };
 
 const buildAiMemoryScope = ({

@@ -80,7 +80,7 @@ The public SDK derives send inputs from `@quieter/mail/send` and validates respo
 - `packages/ui`: reusable Base UI-backed components
 - `packages/ai`: model configuration with provider fallbacks, prompts, classification, titles, and streamed generation
 - `packages/aws`: SES mail ingestion, delivery feedback, and AWS-specific handlers
-- `packages/cloudflare`: Gmail notification ingress, queued synchronization, scheduled maintenance, and mailbox live synchronization
+- `packages/cloudflare`: Gmail notification ingress and direct synchronization, scheduled maintenance, and mailbox live synchronization
 - `packages/billing`: plans, Polar checkout/webhooks, entitlements, and usage pricing
 - `packages/env`: typed environment schemas and normalization
 - `scripts`: SST deployment, local startup, environment checks, and release helpers
@@ -115,12 +115,28 @@ Unfiltered mailbox views can apply Gmail history updates. Filtered search and Dr
 For Pro mailboxes:
 
 1. Gmail sends an authenticated notification to the Cloudflare ingress.
-2. The ingress validates the Google identity, notifies the mailbox Durable Object, and enqueues a mailbox job in Cloudflare Queues.
-3. A Cloudflare queue consumer reconciles Gmail history through Hyperdrive and updates persisted state.
+2. The ingress validates the Google identity and processes the mailbox history before acknowledging Pub/Sub. A busy mailbox, transient failure, or remaining history page returns a retryable response to Google so backlog work continues.
+3. Up to four messages from a history page are processed concurrently; mailbox leases and history cursors keep progress ordered. The worker then sends browser refresh hints.
 4. Focused browser tabs receive mailbox-dirty signals from the mailbox Durable Object and refresh immediately.
-5. Scheduled maintenance on Cloudflare selects only mailboxes with due work: watch renewal (heartbeat plus expiry lookahead), first-time setup, or stale reconciliation for mailboxes with auto-labeling or useful-detail extraction enabled.
+5. Scheduled Gmail maintenance processes due mailboxes with bounded concurrency for watch renewal and catch-up. The minute mail-maintenance worker retries managed code extraction and removes old processing records that contain no code.
 
 The notification is a wake-up signal, not the source of truth.
+
+Busy deliveries retain a retryable response. The active lease holder may have fetched its history page before the later notification arrived; acknowledging the busy notification would not guarantee that its changes were processed. There is no durable pending-history handoff yet. This accepts the subscription-wide push-backoff tradeoff documented by [Google Pub/Sub](https://docs.cloud.google.com/pubsub/docs/push) to preserve prompt retries for those changes.
+
+### Incoming mail AI
+
+Verification-code screening starts as soon as the message is available, alongside labeling. Gmail messages share one server-side fetch between both tasks; managed messages apply inherited labels and inbox rules after their ingestion transaction commits, then start screening alongside AI labeling. Jev first estimates whether the message could contain a temporary access code. A permissive probability threshold of 0.2 sends possible matches to `google/gemini-2.5-flash-lite` for structured extraction; confident negatives skip extraction. Screening errors or its three-second deadline fall through to extraction. Extraction has a short response, a ten-second deadline, and no SDK or empty-response retries. Both decisions are AI-based; server validation normalizes grouped whitespace and checks that the extracted answer appears in the message, using visible text for HTML. Incoming messages older than two hours, sent mail, drafts, spam, and trash are excluded.
+
+Codes are encrypted at rest, returned only after mailbox authorization, and displayed as small code-only copy controls in message rows and above the matching opened message body. A code's estimated expiry remains internal metadata and does not hide or delete it. Codes are excluded from persistent browser caching. Inbox queries return only the latest code per thread by source-message received time, with processing time as a fallback for legacy rows, while opened messages request their own codes in batches of at most 100; each response is capped at 100 codes. Screen and extraction usage are combined for billing, including messages the screen rules out. A saved code publishes a mailbox update before usage reporting finishes. Failed attempts persist a failure count and next-attempt time with exponential backoff; Gmail and managed-mail selectors and claims skip attempts until they are due. First attempts remain immediate. Existing maintenance retries failed extraction and billing and removes processing records without a code after thirty days, after accounting for reported usage.
+
+Screening reduces cost when enough messages are ruled out, while adding a serial decision request to code-containing messages. At the published rates, an illustrative 1,000-input-token message with 20 extraction-output tokens costs $0.000108 to extract directly, versus $0.000042 plus the extraction cost for messages that pass. At a 10% pass rate, that is approximately 51% cheaper before prompt-length differences, caching, and fallback routing. Screening can miss codes; the threshold favors recall, and extraction remains the fallback for screening failures.
+
+OpenRouter lists [Gemini 2.5 Flash Lite retirement on October 20, 2026](https://openrouter.ai/google/gemini-2.5-flash-lite). Its first configured fallback is Gemini 3.1 Flash Lite, followed by the existing provider failovers; zero-data-retention routing applies to extraction and its fallbacks.
+
+Labels use the pinned `typesafe/jev-1.13` model through OpenRouter's Decisions API, with an independent confidence decision for each label. TypeSafe's direct API and OpenRouter both list $0.042 per million input tokens with free output, so the existing OpenRouter credentials are reused. See the [TypeSafe models](https://docs.typesafe.ai/models) and [OpenRouter integration](https://openrouter.ai/blog/tutorials/how-to-use-jev/).
+
+The useful-details feature, cards, settings, and extraction are removed. Legacy useful-detail RPCs and mailbox response fields remain for one release so existing browser tabs can finish their requests during rollout; remove them in a later contract release. Historical tables and billing categories remain for the rollback window. Deploy the additive verification-code migrations before the application and background workers. Drain the old Gmail queue and prevent its previous consumer from resuming before retiring its infrastructure. The Google push subscription must allow enough acknowledgement time for direct history processing; use its supported 600-second maximum. Mailbox leases still serialize history progress while different mailboxes and messages process concurrently.
 
 ## Managed Mail
 
@@ -185,7 +201,7 @@ Historical rule runs advance through the per-minute mail maintenance worker, ind
 
 Apply the consolidated migration `20260907233131_melodic_blacklash` before releasing these changes. Drain older ingestion and rule workers before enabling the new execution path because they do not understand the stored action decisions. Keep the historical application table during this transition.
 
-SST provisions both providers. AWS owns the SES receipt bucket, receipt topic and role, and mail-processing functions. Cloudflare owns Gmail notification ingress, queueing, scheduled maintenance, and live-sync Durable Objects.
+SST provisions both providers. AWS owns the SES receipt bucket, receipt topic and role, and mail-processing functions. Cloudflare owns Gmail notification processing, scheduled maintenance, and live-sync Durable Objects.
 
 Cloudflare Workers hosts the web application. SST builds and publishes production and binds deployment outputs directly.
 
