@@ -1,5 +1,4 @@
-import type { Checkout } from "@polar-sh/sdk/models/components/checkout.js";
-import type { Customer } from "@polar-sh/sdk/models/components/customer.js";
+import type { models } from "@polar-sh/sdk/2026-04";
 import type * as DatabaseClientModule from "@quieter/database/client";
 import type * as ServerEnvModule from "@quieter/env/server";
 import {
@@ -18,6 +17,8 @@ import type * as PolarModule from "../src/polar";
 import type * as SubscriptionSyncModule from "../src/subscription-sync";
 
 type PolarClient = Awaited<ReturnType<typeof PolarModule.getPolarClient>>;
+type Checkout = models.Checkout;
+type Customer = models.Customer;
 
 const polarCustomerSchema = z.custom<Customer>(
   (value) =>
@@ -133,7 +134,7 @@ describe("Polar checkout creation", () => {
   beforeAll(async () => {
     // The Polar SDK ships thousands of generated modules; the first lazy load
     // inside a test can exceed the default timeout under load, so warm it here.
-    await import("@polar-sh/sdk");
+    await import("@polar-sh/sdk/2026-04");
   }, 30_000);
 
   beforeEach(() => {
@@ -189,7 +190,7 @@ describe("Polar checkout creation", () => {
       checkoutUrl: "https://polar.sh/checkout/checkout-1",
     });
     const checkoutRequest = checkoutMocks.createCheckout.mock.calls.at(0)?.[0];
-    expect(checkoutRequest?.successUrl).toContain("checkoutId={CHECKOUT_ID}");
+    expect(checkoutRequest?.success_url).toContain("checkoutId={CHECKOUT_ID}");
     expect(checkoutMocks.getSubscription).toHaveBeenCalledWith(
       "organization-1",
       { forceReconcile: true }

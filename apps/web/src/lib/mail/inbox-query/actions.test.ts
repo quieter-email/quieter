@@ -468,7 +468,7 @@ describe("mail metadata cache updates", () => {
     );
     await Promise.resolve();
     const readOutcome = Promise.allSettled([
-      queryClient.fetchQuery({
+      queryClient.query({
         queryFn: async () => await staleRead.promise,
         queryKey: threadKey,
       }),

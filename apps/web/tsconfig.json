@@ -9,7 +9,8 @@
     "src/**/*.ts",
     "src/**/*.tsx",
     "scripts/**/*.ts",
-    "instrument.server.ts"
+    "instrument.server.ts",
+    "cloudflare.config.ts"
   ],
   "exclude": ["node_modules"]
 }

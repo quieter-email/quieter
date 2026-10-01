@@ -16,6 +16,8 @@ See [Development integration plan](development-integrations.md) for the accepted
 
 ## Install
 
+Cloudflare uses the beta `cf` CLI and Vite plugin with `apps/web/cloudflare.config.ts` and `packages/cloudflare/cloudflare.config.ts`. SST remains the deployment authority. The Wrangler JSON fixture only serves Worker type generation and tests. Run `vp exec sst install` after dependency installation to generate infrastructure types. A pinned `cf` patch launches JavaScript delegates through Node on Windows. Worker tests use isolated Vitest 4 packages until Cloudflare supports Vitest 5.
+
 Dependency installation checks peers strictly and does not auto-install optional integration trees. Declare required peers in the consuming workspace. The Vite peer-version exception maps the pinned Vite+ core alias; update it with Vite+. Run `vp pm audit` when updating dependencies, and upgrade related authentication or Cloudflare packages together.
 
 ```bash
@@ -96,7 +98,7 @@ vp run dev
 
 This starts the web app in Cloudflare's local Worker runtime on `http://localhost:3000`. Vite validates the development database destination before serving. Use `vp run dev:full` for the web app plus the background Worker on port 8787. Use `vp run dev:workers` to start only the background runtime alongside an already-running web app.
 
-`dev:prepare` generates ignored `.dev.vars` from the validated local settings. It excludes migration credentials and supplies the linked live-sync signing secret. Restart both runtimes after changing secrets or Worker bindings. A Vite hot reload alone does not refresh a separate Wrangler process.
+`dev:prepare` generates ignored `packages/cloudflare/.dev.vars` from the validated local settings. The web plugin reads workspace `.env.local` and resolves declared secret bindings through `@quieter/env`. It excludes migration credentials and supplies the linked live-sync signing secret. Restart both runtimes after changing secrets or Worker bindings. A Vite hot reload alone does not refresh a separate `cf dev` process.
 
 ```bash
 vp run dev:setup

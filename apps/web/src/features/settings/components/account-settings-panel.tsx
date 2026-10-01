@@ -249,7 +249,7 @@ const AccountEmailSettings = ({ currentEmail }: { currentEmail: string }) => {
   const queryClient = useQueryClient();
   const changeEmailMutation = useMutation({
     mutationFn: async (input: { callbackURL: string; newEmail: string }) => {
-      const status = await queryClient.fetchQuery(
+      const status = await queryClient.query(
         orpc.auth.getUserStatus.queryOptions({
           input: { email: input.newEmail },
           staleTime: 0,

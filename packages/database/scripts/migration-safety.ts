@@ -4,7 +4,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { loadModule, parseSync } from "libpg-query";
-import type { ParseResult } from "libpg-query";
 
 import historicalMigrations from "./historical-migrations.json" with { type: "json" };
 
@@ -28,8 +27,7 @@ export const assertMigrationSqlIsDeploySafe = (
     return;
   }
 
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The parser returns its exported AST shape but declares the entry point as any.
-  const parsed = parseSync(sql) as ParseResult;
+  const parsed = parseSync(sql);
   const isNonTransactional = /^-- quieter:no-transaction(?:\r?\n|$)/u.test(sql);
   // Destructive contract SQL is only accepted when the migration opts in
   // explicitly. The marker is reviewed like the SQL it guards and must stay at

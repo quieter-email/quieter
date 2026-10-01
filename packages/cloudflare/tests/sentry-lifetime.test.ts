@@ -12,7 +12,12 @@ describe("Sentry Worker lifetime", () => {
     const { promise: streamReady, resolve: releaseStream } =
       Promise.withResolvers<null>();
     const error = new Error("Deferred stream failure");
-    const worker = Sentry.withSentry<Env>(
+    const worker = Sentry.withSentry<
+      Env,
+      unknown,
+      unknown,
+      ExportedHandler<Env>
+    >(
       () => ({
         dsn: "https://public@example.ingest.sentry.io/1",
         tracesSampleRate: 0,

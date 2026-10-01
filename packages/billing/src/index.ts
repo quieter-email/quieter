@@ -1,5 +1,5 @@
 import { ORPCError } from "@orpc/server";
-import type { Subscription } from "@polar-sh/sdk/models/components/subscription.js";
+import type { models } from "@polar-sh/sdk/2026-04";
 import { db } from "@quieter/database/client";
 import { mailbox, member, organization } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
@@ -25,6 +25,8 @@ import {
   BILLING_METADATA_USER_ID,
   syncBillingSubscription,
 } from "./subscription-sync.ts";
+
+type Subscription = models.Subscription;
 
 export {
   AI_COST_RECOVERY_BASIS_POINTS,
@@ -201,13 +203,13 @@ export const createBillingCheckout = async (input: {
         });
       }
       const polarClient = await getPolarClient();
-      const updatedSubscription = await polarClient.subscriptions.update({
-        id: activeSubscription.providerSubscriptionId,
-        subscriptionUpdate: {
-          productId: providerProductId,
-          prorationBehavior: "invoice",
-        },
-      });
+      const updatedSubscription = await polarClient.subscriptions.update(
+        activeSubscription.providerSubscriptionId,
+        {
+          product_id: providerProductId,
+          proration_behavior: "invoice",
+        }
+      );
       await syncBillingSubscription(updatedSubscription);
     }
 
@@ -227,26 +229,24 @@ export const createBillingCheckout = async (input: {
   let teamCustomerId: string | undefined;
 
   try {
-    const externalCustomer = await polar.customers.getExternal({
-      externalId: externalCustomerId,
-    });
+    const externalCustomer =
+      await polar.customers.getExternal(externalCustomerId);
     teamCustomerId = externalCustomer.id;
   } catch (error) {
     // Resolved from the module cache: the call above already loaded the SDK.
-    const { ResourceNotFound } =
-      await import("@polar-sh/sdk/models/errors/resourcenotfound.js");
-    if (!(error instanceof ResourceNotFound)) {
+    const { errors } = await import("@polar-sh/sdk/2026-04");
+    if (!(error instanceof errors.ResourceNotFound)) {
       throw error;
     }
 
     const createdCustomer = await polar.customers.create({
-      externalId: externalCustomerId,
+      external_id: externalCustomerId,
       metadata: checkoutMetadata.customerMetadata,
       name: customerName,
-      organizationId: getPolarApiOrganizationId(),
+      organization_id: getPolarApiOrganizationId(),
       owner: {
         email: input.customerEmail,
-        externalId: getBillingExternalIdentity("user", input.userId),
+        external_id: getBillingExternalIdentity("user", input.userId),
         name: input.customerName,
       },
       type: "team",
@@ -255,12 +255,12 @@ export const createBillingCheckout = async (input: {
   }
 
   const checkout = await polar.checkouts.create({
-    allowDiscountCodes: true,
-    customerId: teamCustomerId,
+    allow_discount_codes: true,
+    customer_id: teamCustomerId,
     metadata: checkoutMetadata.metadata,
     products: [providerProductId],
-    returnUrl: cancelUrl,
-    successUrl: withCheckoutIdPlaceholder(successUrl),
+    return_url: cancelUrl,
+    success_url: withCheckoutIdPlaceholder(successUrl),
   });
 
   return { checkoutUrl: checkout.url };
@@ -280,15 +280,18 @@ export const createBillingPortal = async (input: {
   }
 
   const portalClient = await getPolarClient();
-  const session = await portalClient.customerSessions.create(
-    createBillingPortalSession({
-      organizationId: input.organizationId,
-      returnUrl,
-      userId: input.userId,
-    })
-  );
+  const portalSession = createBillingPortalSession({
+    organizationId: input.organizationId,
+    returnUrl,
+    userId: input.userId,
+  });
+  const session = await portalClient.customerSessions.create({
+    external_customer_id: portalSession.externalCustomerId,
+    external_member_id: portalSession.externalMemberId,
+    return_url: portalSession.returnUrl,
+  });
 
-  return { portalUrl: session.customerPortalUrl };
+  return { portalUrl: session.customer_portal_url };
 };
 
 const serializeEntitlement = async (
@@ -375,7 +378,7 @@ export const syncBillingCheckout = async (input: {
   }
 
   const polar = await getPolarClient();
-  const checkout = await polar.checkouts.get({ id: input.checkoutId });
+  const checkout = await polar.checkouts.get(input.checkoutId);
   const checkoutUserId = checkout.metadata[BILLING_METADATA_USER_ID];
 
   if (checkout.status !== "succeeded" || checkoutUserId !== input.userId) {
@@ -385,28 +388,26 @@ export const syncBillingCheckout = async (input: {
   }
 
   let subscription: Subscription | undefined;
-  if ((checkout.subscriptionId ?? "") !== "") {
-    const { subscriptionId } = checkout;
+  if ((checkout.subscription_id ?? "") !== "") {
+    const subscriptionId = checkout.subscription_id;
     if (typeof subscriptionId !== "string") {
       throw new ORPCError("BAD_REQUEST", {
         message: "This checkout cannot be applied to your billing account.",
       });
     }
-    subscription = await polar.subscriptions.get({
-      id: subscriptionId,
-    });
+    subscription = await polar.subscriptions.get(subscriptionId);
   } else if (
-    (checkout.customerId ?? "") !== "" &&
-    (checkout.productId ?? "") !== ""
+    (checkout.customer_id ?? "") !== "" &&
+    (checkout.product_id ?? "") !== ""
   ) {
     const subscriptions = await polar.subscriptions.list({
-      customerId: checkout.customerId,
+      customer_id: checkout.customer_id,
       limit: 10,
-      productId: checkout.productId,
+      product_id: checkout.product_id,
       sorting: ["-started_at"],
       status: ["active", "trialing"],
     });
-    subscription = subscriptions.result.items.find(
+    subscription = subscriptions.items.find(
       (candidate) =>
         candidate.metadata[BILLING_METADATA_USER_ID] === input.userId
     );

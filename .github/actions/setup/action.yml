@@ -5,7 +5,7 @@ inputs:
   vp-version:
     description: Pinned Vite+ version; must match the vite-plus catalog entry in package.json.
     required: false
-    default: 0.2.9
+    default: 1.0.0
   node-version:
     description: Node.js version provisioned through Vite+.
     required: false
@@ -31,3 +31,7 @@ runs:
     - name: Build environment package
       shell: bash
       run: vp run @quieter/env#build
+
+    - name: Install infrastructure type definitions
+      shell: bash
+      run: vp exec sst install

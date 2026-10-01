@@ -115,7 +115,6 @@ export default {
     "react/prefer-es6-class": "error",
     "react/prefer-function-component": "error",
     // Nursery, but deliberately enabled.
-    "react/react-compiler": "error",
     "react/react-in-jsx-scope": "off",
     "react/rules-of-hooks": "error",
     "react/self-closing-comp": "error",

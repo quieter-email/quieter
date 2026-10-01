@@ -114,9 +114,9 @@ const useThreadIntentPrefetch = (
       if (queryClient.isFetching({ exact: true, queryKey }) > 0) {
         return;
       }
-      void queryClient.prefetchQuery(
-        getThreadWithDetailsOptions(mailboxId, threadId)
-      );
+      void Promise.allSettled([
+        queryClient.query(getThreadWithDetailsOptions(mailboxId, threadId)),
+      ]);
     }, 200);
   };
 

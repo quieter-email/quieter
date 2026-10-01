@@ -1,4 +1,5 @@
-import { XMLParser, XMLValidator } from "fast-xml-parser";
+import { XMLParser } from "fast-xml-parser";
+import { SyntaxValidator } from "fast-xml-validator";
 
 const BIMI_VERSION = "BIMI1";
 const DNS_TXT_RECORD_TYPE = 16;
@@ -815,7 +816,7 @@ export const sanitizeBimiSvg = (svg: string): string | undefined => {
   ) {
     return undefined;
   }
-  if (XMLValidator.validate(svg, { allowBooleanAttributes: false }) !== true) {
+  if (!SyntaxValidator.validate(svg, { allowBooleanAttributes: false })) {
     return undefined;
   }
 

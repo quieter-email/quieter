@@ -20,6 +20,7 @@ coverage
 # SST
 .sst
 .wrangler
+.cloudflare
 
 
 # Build Outputs

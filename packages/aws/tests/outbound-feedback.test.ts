@@ -42,6 +42,10 @@ const mail = {
   timestamp: "2026-08-14T10:00:00.000Z",
 };
 
+const snsEvent = () => ({
+  Records: [{ Sns: createEnvelope({ eventType: "SEND", mail }) }],
+});
+
 describe(parseSesFeedbackNotification, () => {
   test("parses send events for all envelope recipients", () => {
     expect(
@@ -221,10 +225,6 @@ describe(handler, () => {
     vi.clearAllMocks();
     mocks.recordOrganizationMailFeedback.mockResolvedValue();
     mocks.reportAwsError.mockResolvedValue();
-  });
-
-  const snsEvent = () => ({
-    Records: [{ Sns: createEnvelope({ eventType: "SEND", mail }) }],
   });
 
   test("persists a valid SNS delivery", async () => {

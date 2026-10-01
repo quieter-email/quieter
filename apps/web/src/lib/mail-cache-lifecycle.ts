@@ -45,12 +45,13 @@ export const bindMailCache = (client: QueryClient) => {
         for (const [key] of batch) {
           queued.delete(key);
         }
-        await Promise.all(
-          batch.map(async ([, { mailboxId, threadId }]) => {
-            await client.prefetchQuery(
-              getThreadWithDetailsOptions(mailboxId, threadId)
-            );
-          })
+        await Promise.allSettled(
+          batch.map(
+            async ([, { mailboxId, threadId }]) =>
+              await client.query(
+                getThreadWithDetailsOptions(mailboxId, threadId)
+              )
+          )
         );
       }
     } finally {
