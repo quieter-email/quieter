@@ -25,6 +25,7 @@ type TestRow = {
   processed: boolean;
   processedAt: Date | null;
   promptTokens: number | null;
+  receivedAt: Date | null;
   usageReportedAt: Date | null;
 };
 
@@ -77,6 +78,7 @@ vi.mock(import("@quieter/database/client"), () => {
                 processed: false,
                 processedAt: null,
                 promptTokens: null,
+                receivedAt: null,
                 usageReportedAt: null,
               });
               return [fixtures.rows.get(value.messageId)];
@@ -107,6 +109,7 @@ vi.mock(import("@quieter/database/client"), () => {
           nextAttemptAt?: Date | null;
           processedAt?: Date;
           promptTokens?: number;
+          receivedAt?: Date | null;
           usageReportedAt?: Date | null;
         }) => ({
           where: () => {
@@ -153,6 +156,9 @@ vi.mock(import("@quieter/database/client"), () => {
                 row.nextAttemptAt = value.nextAttemptAt;
               }
               row.promptTokens = value.promptTokens ?? row.promptTokens;
+              if (value.receivedAt !== undefined) {
+                row.receivedAt = value.receivedAt;
+              }
               if (value.processedAt !== undefined) {
                 row.processed = true;
                 row.processedAt = value.processedAt;
@@ -435,6 +441,35 @@ describe("verification code processing", () => {
     expect(fixtures.rows.get("message-1")?.costUsd).toBeCloseTo(0.003);
     expect(fixtures.rows.get("message-1")?.model).toContain("typesafe/jev");
     expect(fixtures.published).toHaveBeenCalledOnce();
+  });
+
+  test("stores message arrival time independently of processing time", async () => {
+    const receivedAt = Date.now() - 30 * 60_000;
+    fixtures.extracted.mockResolvedValue({
+      code: "482193",
+      expiresInSeconds: null,
+      service: null,
+    });
+
+    await processMailVerificationCode({
+      loadMessage: async () => {
+        await Promise.resolve();
+        return {
+          bodyText: "Your sign-in code is 482193",
+          id: "message-1",
+          internalDate: String(receivedAt),
+          threadId: "thread-1",
+        };
+      },
+      mailboxId: "mailbox-1",
+      messageId: "message-1",
+      organizationId: "org-1",
+      userId: "user-1",
+    });
+
+    const stored = fixtures.rows.get("message-1");
+    expect(stored?.receivedAt?.getTime()).toBe(receivedAt);
+    expect(stored?.processedAt?.getTime()).toBeGreaterThan(receivedAt);
   });
 
   test("failed extraction usage is billed with successful retry only once", async () => {

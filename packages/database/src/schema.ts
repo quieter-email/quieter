@@ -1131,6 +1131,7 @@ export const mailboxVerificationCode = pgTable(
     nextAttemptAt: timestamp("nextAttemptAt"),
     processedAt: timestamp("processedAt"),
     promptTokens: integer("promptTokens"),
+    receivedAt: timestamp("receivedAt"),
     service: text("service"),
     threadId: text("threadId"),
     updatedAt: timestamp("updatedAt").notNull(),

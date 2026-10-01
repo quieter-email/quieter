@@ -25,6 +25,7 @@ import {
   lt,
   lte,
   or,
+  sql,
 } from "drizzle-orm";
 
 import { getMailAutomationAiBudgetStatus } from "./mail-automation/ai-budget";
@@ -273,7 +274,9 @@ export const listVerificationCodes = async ({
           )
           .orderBy(
             mailboxVerificationCode.threadId,
-            desc(mailboxVerificationCode.createdAt),
+            desc(
+              sql`coalesce(${mailboxVerificationCode.receivedAt}, ${mailboxVerificationCode.createdAt})`
+            ),
             desc(mailboxVerificationCode.id)
           )
           .limit(100)
@@ -487,6 +490,12 @@ export const processMailVerificationCode = async ({
       message,
       now: new Date(),
     });
+    const internalDate = Number(message.internalDate);
+    const receivedAt = new Date(
+      Number.isFinite(internalDate) && internalDate > 0
+        ? internalDate
+        : Date.parse(message.date ?? "")
+    );
     const finishedAt = new Date();
     const [saved] = await db
       .update(mailboxVerificationCode)
@@ -503,6 +512,7 @@ export const processMailVerificationCode = async ({
         nextAttemptAt: null,
         processedAt: finishedAt,
         promptTokens: usage.promptTokens,
+        receivedAt: detail ? receivedAt : null,
         service: detail?.service ?? null,
         threadId: detail ? message.threadId : null,
         updatedAt: finishedAt,
