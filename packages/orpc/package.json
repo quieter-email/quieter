@@ -49,12 +49,14 @@
     "@quieter/mail": "workspace:*",
     "@quieter/observability": "workspace:*",
     "ai": "catalog:",
+    "html-to-text": "9.0.5",
     "ical.js": "^2.2.1"
   },
   "devDependencies": {
     "@orpc/client": "catalog:",
     "@orpc/server": "catalog:",
     "@quieter/config": "workspace:*",
+    "@types/html-to-text": "^9.0.4",
     "@types/node": "catalog:",
     "drizzle-orm": "catalog:",
     "postgres": "^3.4.9",

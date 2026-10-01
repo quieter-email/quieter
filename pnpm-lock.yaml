@@ -1149,6 +1149,9 @@ importers:
       ai:
         specifier: 'catalog:'
         version: 7.0.126(zod@4.6.5)
+      html-to-text:
+        specifier: 9.0.5
+        version: 9.0.5
       ical.js:
         specifier: ^2.2.1
         version: 2.2.1
@@ -1162,6 +1165,9 @@ importers:
       '@quieter/config':
         specifier: workspace:*
         version: link:../config
+      '@types/html-to-text':
+        specifier: ^9.0.4
+        version: 9.0.4
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.3
@@ -4745,6 +4751,9 @@ packages:
 
   '@types/google.maps@3.65.3':
     resolution: {integrity: sha512-tqbbx7MUtoDk+RwpZMymPDj6Skez0FhqDZNhLhS5UDmCx4D1dgP+BJOHTebiO/rhjJLa1f8te2p6mJJeFKVFOQ==}
+
+  '@types/html-to-text@9.0.4':
+    resolution: {integrity: sha512-pUY3cKH/Nm2yYrEmDlPR1mR7yszjGx4DrwPjQ702C4/D5CwHuZTgZdIdwPkRbcuhs7BAh2L5rg3CL5cbRiGTCQ==}
 
   '@types/jsesc@2.5.1':
     resolution: {integrity: sha512-9VN+6yxLOPLOav+7PwjZbxiID2bVaeq0ED4qSQmdQTdjnXJSaCVKTR58t15oqH1H5t8Ng2ZX1SabJVoN9Q34bw==}
@@ -10878,6 +10887,8 @@ snapshots:
   '@types/gensync@1.0.5': {}
 
   '@types/google.maps@3.65.3': {}
+
+  '@types/html-to-text@9.0.4': {}
 
   '@types/jsesc@2.5.1': {}
 

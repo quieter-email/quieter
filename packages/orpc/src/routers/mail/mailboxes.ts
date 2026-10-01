@@ -177,15 +177,28 @@ export const mailboxProcedures = {
   listVerificationCodes: protectedProcedure
     .route({ method: "GET" })
     .input(
-      z.object({
-        mailboxId: mailboxIdSchema,
-        threadIds: z.array(z.string().trim().min(1)).max(100),
-      })
+      z.union([
+        z.object({
+          mailboxId: mailboxIdSchema,
+          threadIds: z.array(z.string().trim().min(1)).max(100),
+        }),
+        z.object({
+          mailboxId: mailboxIdSchema,
+          messageIds: z.array(z.string().trim().min(1)).max(100),
+        }),
+      ])
     )
     .handler(async ({ context, input }) => {
       const { listVerificationCodes } =
         await import("../../verification-codes");
-      return await listVerificationCodes({ ...input, userId: context.userId });
+      return await listVerificationCodes({
+        mailboxId: input.mailboxId,
+        scope:
+          "threadIds" in input
+            ? { mode: "threads", threadIds: input.threadIds }
+            : { messageIds: input.messageIds, mode: "messages" },
+        userId: context.userId,
+      });
     }),
   moveGmailMailbox: protectedProcedure
     .input(

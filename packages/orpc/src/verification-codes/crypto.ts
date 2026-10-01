@@ -5,13 +5,14 @@ import {
   encryptGmailCredentialSecret,
 } from "../gmail-credential-crypto";
 
-const getEncryptionKeys = () => ({
-  currentKey: serverEnv.GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT,
-  legacyKey: requireServerEnv("GMAIL_TOKEN_ENCRYPTION_KEY"),
-});
-
 export const encryptVerificationCode = (code: string) =>
-  encryptGmailCredentialSecret(code, getEncryptionKeys());
+  encryptGmailCredentialSecret(code, {
+    currentKey: serverEnv.GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT,
+    legacyKey: requireServerEnv("GMAIL_TOKEN_ENCRYPTION_KEY"),
+  });
 
 export const decryptVerificationCode = (encryptedCode: string) =>
-  decryptGmailCredentialSecret(encryptedCode, getEncryptionKeys());
+  decryptGmailCredentialSecret(encryptedCode, {
+    currentKey: serverEnv.GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT,
+    legacyKey: requireServerEnv("GMAIL_TOKEN_ENCRYPTION_KEY"),
+  });

@@ -57,6 +57,63 @@ describe("AI verification code validation", () => {
     ).toBeNull();
   });
 
+  test("normalizes whitespace in a grounded grouped code", () => {
+    expect(
+      validateVerificationCodeCandidate({
+        candidate: { code: "123 456", expiresInSeconds: null, service: null },
+        message: { ...message, bodyText: "Your code is 123 456." },
+        now,
+      })
+    ).toMatchObject({ code: "123456" });
+  });
+
+  test("grounds an HTML-only code split across adjacent inline elements", () => {
+    expect(
+      validateVerificationCodeCandidate({
+        candidate: { code: "123 456", expiresInSeconds: null, service: null },
+        message: {
+          ...message,
+          bodyHtml: "<p>Your code is <span>123</span><span>456</span>.</p>",
+          bodyText: null,
+        },
+        now,
+      })
+    ).toMatchObject({ code: "123456" });
+  });
+
+  test("does not join unrelated numbers across HTML blocks or words", () => {
+    for (const bodyHtml of [
+      "<p>Reference 123</p><p>Order 456</p>",
+      "<p>Reference 123 and 456</p>",
+    ]) {
+      expect(
+        validateVerificationCodeCandidate({
+          candidate: { code: "123456", expiresInSeconds: null, service: null },
+          message: { ...message, bodyHtml, bodyText: null },
+          now,
+        })
+      ).toBeNull();
+    }
+  });
+
+  test("does not ground a code found only in HTML attributes or hidden content", () => {
+    for (const bodyHtml of [
+      '<a href="https://example.test/123456">Open account</a>',
+      "<span hidden>123456</span><p>Open account</p>",
+      '<span style="display:none">123456</span><p>Open account</p>',
+      "<script>123456</script><p>Open account</p>",
+      "<style>.code { content: '123456' }</style><p>Open account</p>",
+    ]) {
+      expect(
+        validateVerificationCodeCandidate({
+          candidate: { code: "123456", expiresInSeconds: null, service: null },
+          message: { ...message, bodyHtml, bodyText: null },
+          now,
+        })
+      ).toBeNull();
+    }
+  });
+
   test("keeps a grounded access code after its stated lifetime", () => {
     expect(
       validateVerificationCodeCandidate({

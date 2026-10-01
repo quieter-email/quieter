@@ -4,17 +4,23 @@ import { rpc } from "#/lib/orpc";
 
 export const verificationCodesQueryOptions = (
   mailboxId: string,
-  threadIds: string[],
+  scope:
+    | { mode: "threads"; threadIds: string[] }
+    | { mode: "messages"; messageIds: string[] },
   enabled: boolean
-) =>
-  queryOptions({
-    enabled: enabled && threadIds.length > 0,
+) => {
+  const ids = scope.mode === "threads" ? scope.threadIds : scope.messageIds;
+  return queryOptions({
+    enabled: enabled && ids.length > 0,
     gcTime: 60_000,
     queryFn: async ({ signal }) =>
       await rpc.mail.listVerificationCodes(
-        { mailboxId, threadIds },
+        scope.mode === "threads"
+          ? { mailboxId, threadIds: scope.threadIds }
+          : { mailboxId, messageIds: scope.messageIds },
         { signal }
       ),
-    queryKey: ["verification-codes", mailboxId, threadIds] as const,
+    queryKey: ["verification-codes", mailboxId, scope.mode, ids] as const,
     refetchOnWindowFocus: true,
   });
+};

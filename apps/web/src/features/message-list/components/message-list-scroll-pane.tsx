@@ -256,13 +256,17 @@ export const MessageListScrollPane = ({
   }, [threadedMessages, list.activeMailbox, list.mailboxProvider]);
   const codeQueries = useQueries({
     queries: codeThreadIdBuckets.map((threadIds) => ({
-      ...verificationCodesQueryOptions(list.mailboxId, threadIds, true),
+      ...verificationCodesQueryOptions(
+        list.mailboxId,
+        { mode: "threads", threadIds },
+        true
+      ),
       placeholderData: () => {
         const requestedThreadIds = new Set(threadIds);
         return {
           items: queryClient
             .getQueriesData<RouterOutputs["mail"]["listVerificationCodes"]>({
-              queryKey: ["verification-codes", list.mailboxId],
+              queryKey: ["verification-codes", list.mailboxId, "threads"],
             })
             .toSorted(
               ([leftKey], [rightKey]) =>

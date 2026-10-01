@@ -1,10 +1,24 @@
 import type { AutomationMailMessage } from "@quieter/ai/classify-gmail-message";
 import type { VerificationCodeCandidate } from "@quieter/ai/extract-verification-code";
+import { compile } from "html-to-text";
 
 const DEFAULT_VALIDITY_MS = 30 * 60_000;
 const MAX_VALIDITY_MS = 2 * 60 * 60_000;
 const MAX_MESSAGE_AGE_MS = 2 * 60 * 60_000;
 const MAX_CLOCK_SKEW_MS = 5 * 60_000;
+const htmlToVisibleText = compile({
+  selectors: [
+    { format: "inline", selector: "a" },
+    { format: "skip", selector: "img" },
+    { format: "skip", selector: "script" },
+    { format: "skip", selector: "style" },
+    { format: "skip", selector: "[hidden]" },
+    { format: "skip", selector: "[aria-hidden=true]" },
+    { format: "skip", selector: '[style*="display:none"i]' },
+    { format: "skip", selector: '[style*="display: none"i]' },
+  ],
+  wordwrap: false,
+});
 
 export const shouldInspectIncomingVerificationCode = (
   message: AutomationMailMessage,
@@ -38,7 +52,11 @@ export const validateVerificationCodeCandidate = ({
   message: AutomationMailMessage;
   now: Date;
 }) => {
-  const code = candidate.code?.trim() ?? "";
+  const extractedCode = candidate.code?.trim() ?? "";
+  if (!/^[\p{L}\p{N}\p{Z}\s-]+$/u.test(extractedCode)) {
+    return null;
+  }
+  const code = extractedCode.replaceAll(/[\p{Z}\s]/gu, "");
   if (!/^[\p{L}\p{N}-]{4,12}$/u.test(code)) {
     return null;
   }
@@ -46,11 +64,15 @@ export const validateVerificationCodeCandidate = ({
     message.subject,
     message.snippet,
     message.bodyText,
-    message.bodyHtml,
+    message.bodyHtml ? htmlToVisibleText(message.bodyHtml) : undefined,
   ]
     .filter((part): part is string => typeof part === "string")
     .join("\n");
-  const escapedCode = code.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  // Codes contain only letters, numbers, and hyphens after validation.
+  // oxlint-disable-next-line typescript/no-misused-spread
+  const escapedCode = [...code]
+    .map((character) => character.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&"))
+    .join("[\\p{Z}\\t]*");
   if (
     !new RegExp(
       `(?<![\\p{L}\\p{N}])${escapedCode}(?![\\p{L}\\p{N}])`,

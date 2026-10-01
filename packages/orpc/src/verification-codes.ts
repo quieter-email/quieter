@@ -234,35 +234,60 @@ export const reportPendingMailboxVerificationCodeUsage = async (
 
 export const listVerificationCodes = async ({
   mailboxId,
-  threadIds,
+  scope,
   userId,
 }: {
   mailboxId: string;
-  threadIds: string[];
+  scope:
+    | { mode: "threads"; threadIds: string[] }
+    | { mode: "messages"; messageIds: string[] };
   userId: string;
 }) => {
   await assertAccessibleMailbox({ mailboxId, userId });
-  if (threadIds.length === 0) {
+  const ids = scope.mode === "threads" ? scope.threadIds : scope.messageIds;
+  if (ids.length === 0) {
     return { items: [] };
   }
+  if (ids.length > 100) {
+    throw new Error("Too many verification code identifiers.");
+  }
 
-  const rows = await db
-    .select({
-      encryptedCode: mailboxVerificationCode.encryptedCode,
-      expiresAt: mailboxVerificationCode.expiresAt,
-      messageId: mailboxVerificationCode.messageId,
-      service: mailboxVerificationCode.service,
-      threadId: mailboxVerificationCode.threadId,
-    })
-    .from(mailboxVerificationCode)
-    .where(
-      and(
-        eq(mailboxVerificationCode.mailboxId, mailboxId),
-        inArray(mailboxVerificationCode.threadId, threadIds),
-        isNotNull(mailboxVerificationCode.encryptedCode)
-      )
-    )
-    .orderBy(desc(mailboxVerificationCode.createdAt));
+  const selection = {
+    encryptedCode: mailboxVerificationCode.encryptedCode,
+    expiresAt: mailboxVerificationCode.expiresAt,
+    messageId: mailboxVerificationCode.messageId,
+    service: mailboxVerificationCode.service,
+    threadId: mailboxVerificationCode.threadId,
+  };
+  const rows =
+    scope.mode === "threads"
+      ? await db
+          .selectDistinctOn([mailboxVerificationCode.threadId], selection)
+          .from(mailboxVerificationCode)
+          .where(
+            and(
+              eq(mailboxVerificationCode.mailboxId, mailboxId),
+              inArray(mailboxVerificationCode.threadId, ids),
+              isNotNull(mailboxVerificationCode.encryptedCode)
+            )
+          )
+          .orderBy(
+            mailboxVerificationCode.threadId,
+            desc(mailboxVerificationCode.createdAt),
+            desc(mailboxVerificationCode.id)
+          )
+          .limit(100)
+      : await db
+          .select(selection)
+          .from(mailboxVerificationCode)
+          .where(
+            and(
+              eq(mailboxVerificationCode.mailboxId, mailboxId),
+              inArray(mailboxVerificationCode.messageId, ids),
+              isNotNull(mailboxVerificationCode.encryptedCode)
+            )
+          )
+          .limit(100);
 
   return {
     items: rows.flatMap((row) =>

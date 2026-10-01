@@ -86,38 +86,6 @@ const resolveManagedThreadId = async (
   );
 };
 
-const runPostIngestionOrganization = async (input: {
-  mailboxId: string;
-  messageId: string;
-  providerMessageId: string;
-  threadId: string;
-}) => {
-  try {
-    await inheritManagedThreadLabels({
-      mailboxId: input.mailboxId,
-      messageId: input.messageId,
-      threadId: input.threadId,
-    });
-    const rules = await applyManagedRulesToMessage({
-      mailboxId: input.mailboxId,
-      messageId: input.messageId,
-    });
-    if (rules.error !== null) {
-      throw new Error(rules.error);
-    }
-    await processManagedMailAutomation({
-      mailboxId: input.mailboxId,
-      messageId: input.messageId,
-    });
-  } finally {
-    await publishMailUpdate({
-      mailboxId: input.mailboxId,
-      threadIds: [input.threadId],
-      type: "mailbox.changed",
-    });
-  }
-};
-
 const processManagedVerificationCode = async (input: {
   mailboxId: string;
   messageId: string;
@@ -140,6 +108,45 @@ const processManagedVerificationCode = async (input: {
     input.mailboxId,
     owner.userId
   );
+};
+
+const runPostIngestionProcessing = async (input: {
+  mailboxId: string;
+  messageId: string;
+  providerMessageId: string;
+  threadId: string;
+}) => {
+  try {
+    await inheritManagedThreadLabels({
+      mailboxId: input.mailboxId,
+      messageId: input.messageId,
+      threadId: input.threadId,
+    });
+    const rules = await applyManagedRulesToMessage({
+      mailboxId: input.mailboxId,
+      messageId: input.messageId,
+    });
+    if (rules.error !== null) {
+      throw new Error(rules.error);
+    }
+    const results = await Promise.allSettled([
+      processManagedVerificationCode(input),
+      processManagedMailAutomation({
+        mailboxId: input.mailboxId,
+        messageId: input.messageId,
+      }),
+    ]);
+    const failed = results.find((result) => result.status === "rejected");
+    if (failed) {
+      throw failed.reason;
+    }
+  } finally {
+    await publishMailUpdate({
+      mailboxId: input.mailboxId,
+      threadIds: [input.threadId],
+      type: "mailbox.changed",
+    });
+  }
 };
 
 export const retryPendingManagedVerificationCodes = async () => {
@@ -216,13 +223,12 @@ const finishIngestion = async (input: {
   threadId: string;
 }) => {
   const results = await Promise.allSettled([
-    processManagedVerificationCode(input),
     publishMailUpdate({
       mailboxId: input.mailboxId,
       threadIds: [input.threadId],
       type: "mailbox.changed",
     }),
-    runPostIngestionOrganization(input),
+    runPostIngestionProcessing(input),
   ]);
   const failed = results.find((result) => result.status === "rejected");
   if (failed) {

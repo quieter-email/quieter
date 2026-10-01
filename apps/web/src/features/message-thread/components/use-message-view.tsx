@@ -2,7 +2,12 @@
 
 import { toast } from "@quieter/ui/toast";
 import { useHotkeys } from "@tanstack/react-hotkeys";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 
 import {
@@ -102,13 +107,6 @@ export const useMessageViewData = ({
   const { data: gmailLabels = [] } = useQuery(
     labelsQueryOptions(mailboxId, mailboxProvider !== "api")
   );
-  const { data: verificationCodes } = useQuery(
-    verificationCodesQueryOptions(
-      mailboxId,
-      [message.threadId],
-      mailboxProvider !== "api"
-    )
-  );
   const {
     data: threadData,
     isFetching: isThreadFetching,
@@ -160,6 +158,25 @@ export const useMessageViewData = ({
     (threadMessage) => !isDraftMessage(threadMessage)
   );
   const visibleMessages = messages.length > 0 ? messages : [message];
+  const codeMessageIds = visibleMessages.map(
+    (threadMessage) => threadMessage.id
+  );
+  const codeMessageIdBuckets: string[][] = [];
+  for (let offset = 0; offset < codeMessageIds.length; offset += 100) {
+    codeMessageIdBuckets.push(codeMessageIds.slice(offset, offset + 100));
+  }
+  const codeQueries = useQueries({
+    queries: codeMessageIdBuckets.map((messageIds) =>
+      verificationCodesQueryOptions(
+        mailboxId,
+        { messageIds, mode: "messages" },
+        mailboxProvider !== "api"
+      )
+    ),
+  });
+  const verificationCodes = codeQueries.flatMap(
+    (query) => query.data?.items ?? []
+  );
   const messagesMissingLoadedBody =
     getMessagesMissingLoadedBody(visibleMessages);
   const hasMissingLoadedBody = messagesMissingLoadedBody.length > 0;
@@ -217,7 +234,7 @@ export const useMessageViewData = ({
     threadIsUnread,
     threadLabelIds,
     threadMessages,
-    verificationCodes: verificationCodes?.items ?? [],
+    verificationCodes,
     visibleMessages,
   };
 };
