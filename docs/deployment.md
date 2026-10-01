@@ -2,6 +2,14 @@
 
 ## Production
 
+### Merge queue
+
+Auto-merge is enabled for the repository. The `main` ruleset requires the merge queue and the GitHub Actions checks `Lint and typecheck`, `Tests`, `Deployment safety checks`, `Web worker build`, and `Migration integration tests`. The queue uses squash merges, verifies every entry, builds one entry at a time, merges one PR at a time, and allows 30 minutes for checks to report. Existing signature, conversation-resolution, linear-history, force-push, and deletion protections still apply.
+
+The shared `Checks` workflow runs on both pull requests and `merge_group.checks_requested` for `main`, validating the queued changes against the current base branch. The PR-only migration conflict action remains advisory; migration integration tests validate the combined schema and migrations in the queue. Labeling and external review checks are not required on temporary queue commits.
+
+Use GitHub's merge queue button, or `gh pr merge <number> --auto --squash`, to request a merge after the requirements pass. Enabling auto-merge in repository settings does not enroll existing or future PRs automatically. Once a queued PR merges into `main`, the production deployment below runs through the protected workflow.
+
 Production deploys run through `.github/workflows/sst-deploy.yml` on pushes to `main` or a manual workflow dispatch. It calls `.github/workflows/ci-main.yml` as the same reusable verification workflow used by pull requests. SST is the source of truth for application runtime secrets; the protected GitHub `production` environment supplies deployment and operational credentials plus non-secret deployment configuration.
 
 The release workflow runs the existing CI checks, creates the web asset output directory, refreshes SST state, and runs `sst diff` to prepare the production web build with SST-resolved configuration. The directory must exist on fresh runners because the Cloudflare provider reads it during refresh, before SST builds the site. `sst diff` also refreshes first, so swapping these commands does not avoid that requirement. Source-map upload must succeed during preparation. Neither `diff` nor `refresh` publishes the new Worker. Deployment verifies the complete build receipt and refuses missing or changed output.
