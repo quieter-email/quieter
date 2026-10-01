@@ -8,6 +8,7 @@ import {
   vi,
 } from "vite-plus/test";
 
+import type { ListMessagesPageResult } from "./mail";
 import { connectMailUpdates } from "./mail-updates";
 import { rpc } from "./orpc";
 
@@ -42,10 +43,15 @@ class Socket extends EventTarget {
     this.readyState = 1;
     this.dispatchEvent(new Event("open"));
   }
-  notify(mailboxId = "mailbox", eventId = crypto.randomUUID()) {
+  notify(
+    mailboxId = "mailbox",
+    eventId = crypto.randomUUID(),
+    revision?: string,
+    type = "mailbox.changed"
+  ) {
     this.dispatchEvent(
       new MessageEvent("message", {
-        data: JSON.stringify({ eventId, mailboxId, type: "mailbox.changed" }),
+        data: JSON.stringify({ eventId, mailboxId, revision, type }),
       })
     );
   }
@@ -175,7 +181,7 @@ describe("mail connection lifecycle", () => {
     expect(Socket.instances).toHaveLength(1);
   });
 
-  test("batches a sustained stream of distinct events without starving updates or refreshing unrelated mailboxes", async () => {
+  test("coalesces a burst without refreshing unrelated mailboxes", async () => {
     const client = new QueryClient();
     let revision = 0;
     const fetchMessages = vi.fn<() => number>(() => revision);
@@ -204,11 +210,9 @@ describe("mail connection lifecycle", () => {
     for (let index = 0; index < 100; index += 1) {
       revision += 1;
       socket.notify();
-      await vi.advanceTimersByTimeAsync(200);
     }
-    expect(observer.getCurrentResult().data).toBeGreaterThan(0);
-    expect(fetchMessages.mock.calls.length).toBeLessThan(10);
     await vi.advanceTimersByTimeAsync(10_000);
+    expect(fetchMessages).toHaveBeenCalledOnce();
     expect(observer.getCurrentResult().data).toBe(revision);
     expect(fetchOtherMessages).not.toHaveBeenCalled();
     const settledCount = fetchMessages.mock.calls.length;
@@ -216,6 +220,137 @@ describe("mail connection lifecycle", () => {
     expect(fetchMessages).toHaveBeenCalledTimes(settledCount);
     unsubscribe();
     unsubscribeOther();
+    client.clear();
+  });
+
+  test("uses incremental sync, discards covered notifications and promptly syncs a newer revision", async () => {
+    const client = new QueryClient();
+    let revision = 0;
+    const initial = { historyId: String(revision), messages: [] };
+    const fetchMessages = vi
+      .fn<() => ListMessagesPageResult>()
+      .mockReturnValue(initial);
+    const list = new QueryObserver(client, {
+      initialData: initial,
+      queryFn: fetchMessages,
+      queryKey: ["messages", "mailbox", "inbox", ""],
+      staleTime: Infinity,
+    });
+    // oxlint-disable-next-line eslint/require-await -- The query function has a promise contract.
+    const sync = vi.fn<() => Promise<ListMessagesPageResult>>(async () => ({
+      historyId: String(revision),
+      messages: [],
+    }));
+    const live = new QueryObserver(client, {
+      initialData: initial,
+      queryFn: sync,
+      queryKey: ["messages", "mailbox", "inbox", "", "live-sync"],
+      staleTime: Infinity,
+    });
+    const unsubscribeList = list.subscribe(() => {});
+    const unsubscribeLive = live.subscribe(() => {});
+    dispose = connectMailUpdates(client);
+    await vi.advanceTimersByTimeAsync(0);
+    const [socket] = Socket.instances;
+    socket.open();
+    await vi.advanceTimersByTimeAsync(1000);
+    sync.mockClear();
+    const inFlight = Promise.withResolvers<ListMessagesPageResult>();
+    sync.mockReturnValueOnce(inFlight.promise);
+    for (let index = 0; index < 100; index += 1) {
+      revision += 1;
+      socket.notify("mailbox", crypto.randomUUID(), String(revision));
+      await vi.advanceTimersByTimeAsync(200);
+    }
+    inFlight.resolve({ historyId: String(revision), messages: [] });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(sync).toHaveBeenCalledOnce();
+    socket.notify("mailbox", crypto.randomUUID(), String(revision - 1));
+    socket.notify("mailbox", crypto.randomUUID(), String(revision));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(sync).toHaveBeenCalledOnce();
+    revision += 1;
+    socket.notify("mailbox", crypto.randomUUID(), String(revision));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(live.getCurrentResult().data?.historyId).toBe(String(revision));
+    expect(sync).toHaveBeenCalledTimes(2);
+    expect(fetchMessages).not.toHaveBeenCalled();
+    unsubscribeList();
+    unsubscribeLive();
+    client.clear();
+  });
+
+  test("background processing details do not trigger another mail list refresh", async () => {
+    const client = new QueryClient();
+    const fetchMessages = vi.fn<() => string>().mockReturnValue("mail");
+    const fetchDetails = vi.fn<() => string>().mockReturnValue("details");
+    const list = new QueryObserver(client, {
+      initialData: "mail",
+      queryFn: fetchMessages,
+      queryKey: ["messages", "mailbox", "inbox", ""],
+      staleTime: Infinity,
+    });
+    const details = new QueryObserver(client, {
+      initialData: "details",
+      queryFn: fetchDetails,
+      queryKey: ["gmail-useful-details", "mailbox"],
+      staleTime: Infinity,
+    });
+    const unsubscribeList = list.subscribe(() => {});
+    const unsubscribeDetails = details.subscribe(() => {});
+    dispose = connectMailUpdates(client);
+    await vi.advanceTimersByTimeAsync(0);
+    const [socket] = Socket.instances;
+    socket.open();
+    await vi.advanceTimersByTimeAsync(1000);
+    fetchMessages.mockClear();
+    fetchDetails.mockClear();
+    socket.notify("mailbox", crypto.randomUUID(), undefined, "details.changed");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(fetchDetails).toHaveBeenCalledOnce();
+    expect(fetchMessages).not.toHaveBeenCalled();
+    unsubscribeList();
+    unsubscribeDetails();
+    client.clear();
+  });
+
+  test("a covered message revision still updates stale unread counts", async () => {
+    const client = new QueryClient();
+    const sync = vi
+      .fn<() => ListMessagesPageResult>()
+      .mockReturnValue({ historyId: "10", messages: [] });
+    const counts = vi.fn<() => number>().mockReturnValue(1);
+    const live = new QueryObserver(client, {
+      initialData: { historyId: "0", messages: [] },
+      queryFn: sync,
+      queryKey: ["messages", "mailbox", "inbox", "", "live-sync"],
+      staleTime: Infinity,
+    });
+    const unread = new QueryObserver(client, {
+      initialData: 0,
+      queryFn: counts,
+      queryKey: ["gmail-unread-counts"],
+      staleTime: Infinity,
+    });
+    const unsubscribeLive = live.subscribe(() => {});
+    const unsubscribeUnread = unread.subscribe(() => {});
+    dispose = connectMailUpdates(client);
+    await vi.advanceTimersByTimeAsync(0);
+    const [socket] = Socket.instances;
+    socket.open();
+    await vi.advanceTimersByTimeAsync(1000);
+    sync.mockClear();
+    counts.mockClear();
+    client.setQueryData(["gmail-unread-counts"], 0, {
+      updatedAt: Date.now() - 1000,
+    });
+    socket.notify("mailbox", crypto.randomUUID(), "10");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(unread.getCurrentResult().data).toBe(1);
+    expect(counts).toHaveBeenCalledOnce();
+    expect(sync).not.toHaveBeenCalled();
+    unsubscribeLive();
+    unsubscribeUnread();
     client.clear();
   });
 

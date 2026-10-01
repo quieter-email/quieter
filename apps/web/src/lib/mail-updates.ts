@@ -1,7 +1,9 @@
 import { mailUpdateSchema } from "@quieter/mail/updates";
+import type { MailUpdate } from "@quieter/mail/updates";
 import type { QueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 
+import type { ListMessagesPageResult } from "./mail";
 import { rpc } from "./orpc";
 
 export const connectMailUpdates = (queryClient: QueryClient) => {
@@ -18,49 +20,103 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
   let refreshTimer: ReturnType<typeof setTimeout> | undefined;
   let reconnectDelay = 1000;
   let refreshing = false;
-  let pendingSince: number | undefined;
-  let lastUpdate = 0;
-  let nextRefreshAt = 0;
-  const pending = new Set<string>();
+  const pending = new Map<
+    string,
+    { types: Set<MailUpdate["type"]>; revision?: string }
+  >();
   const seen = new Set<string>();
 
+  const isRevisionSynced = (mailboxId: string, revision: string) => {
+    const queries = queryClient.getQueryCache().findAll({
+      predicate: ({ queryKey }) =>
+        queryKey[0] === "messages" &&
+        queryKey[1] === mailboxId &&
+        queryKey.at(-1) === "live-sync",
+      type: "active",
+    });
+    return (
+      queries.length > 0 &&
+      queries.every((query) => {
+        const data = queryClient.getQueryData<ListMessagesPageResult>(
+          query.queryKey
+        );
+        return (
+          data?.historyId !== undefined &&
+          /^\d+$/u.test(data.historyId) &&
+          BigInt(data.historyId) >= BigInt(revision)
+        );
+      })
+    );
+  };
   const scheduleRefresh = () => {
-    clearTimeout(refreshTimer);
-    refreshTimer = undefined;
-    if (refreshing || disposed || suspended || pendingSince === undefined) {
+    if (
+      refreshing ||
+      disposed ||
+      suspended ||
+      pending.size === 0 ||
+      refreshTimer !== undefined
+    ) {
       return;
     }
-    const refreshAt = Math.max(
-      nextRefreshAt,
-      Math.min(lastUpdate + 2000, pendingSince + 10_000)
-    );
-    refreshTimer = setTimeout(
-      () => {
-        // oxlint-disable-next-line no-use-before-define -- The timer runs after refresh is initialized.
-        void refresh();
-      },
-      Math.max(0, refreshAt - Date.now())
-    );
+    refreshTimer = setTimeout(() => {
+      // oxlint-disable-next-line no-use-before-define -- The timer runs after refresh is initialized.
+      void refresh();
+    }, 150);
   };
   const refresh = async () => {
     refreshTimer = undefined;
     if (refreshing || disposed || suspended || pending.size === 0) {
       return;
     }
-    refreshing = true;
-    const mailboxes = new Set(pending);
+    const changes = new Map(pending);
     pending.clear();
-    pendingSince = undefined;
+    const syncedRevisions = new Set<string>();
+    for (const [mailboxId, change] of changes) {
+      if (
+        change.revision !== undefined &&
+        isRevisionSynced(mailboxId, change.revision)
+      ) {
+        syncedRevisions.add(mailboxId);
+      }
+    }
+    refreshing = true;
     try {
       await queryClient.invalidateQueries(
         {
           predicate: ({ queryKey }) => {
             const [root] = queryKey;
-            if (root === "mailboxes" || root === "gmail-unread-counts") {
-              return true;
+            if (root === "mailboxes") {
+              return changes.has("*");
+            }
+            if (root === "gmail-unread-counts") {
+              return [...changes.values()].some((change) =>
+                change.types.has("mailbox.changed")
+              );
+            }
+            const mailboxId = String(
+              root === "message-thread" ? queryKey[2] : queryKey[1]
+            );
+            const types =
+              changes.get("*")?.types ?? changes.get(mailboxId)?.types;
+            if (root === "gmail-useful-details") {
+              return changes.has("*") || types?.has("details.changed") === true;
+            }
+            if (
+              types === undefined ||
+              (!types.has("mailbox.changed") && !types.has("labels.changed"))
+            ) {
+              return false;
             }
             if (root === "message-thread") {
-              return mailboxes.has("*") || mailboxes.has(String(queryKey[2]));
+              return (
+                queryClient.getQueryCache().findAll({
+                  predicate: ({ queryKey: key }) =>
+                    key[0] === "messages" &&
+                    key[1] === mailboxId &&
+                    key.at(-1) === "live-sync",
+                  type: "active",
+                }).length === 0
+              );
             }
             if (
               root === "messages" &&
@@ -74,29 +130,54 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
             ) {
               return false;
             }
-            return (
-              [
-                "messages",
-                "gmail-labels",
-                "managed-label-counts",
-                "gmail-useful-details",
-              ].includes(String(root)) &&
-              (mailboxes.has("*") || mailboxes.has(String(queryKey[1])))
-            );
+            if (
+              root === "messages" &&
+              queryKey.at(-1) === "live-sync" &&
+              syncedRevisions.has(mailboxId) &&
+              !changes.has("*")
+            ) {
+              return false;
+            }
+            if (root === "gmail-labels") {
+              return changes.has("*") || types.has("labels.changed");
+            }
+            return [
+              "messages",
+              "gmail-labels",
+              "managed-label-counts",
+            ].includes(String(root));
           },
         },
         { cancelRefetch: false }
       );
     } finally {
       refreshing = false;
-      nextRefreshAt = Date.now() + 5000;
       scheduleRefresh();
     }
   };
-  const requestRefresh = (mailboxId = "*") => {
-    pending.add(mailboxId);
-    pendingSince ??= Date.now();
-    lastUpdate = Date.now();
+  const requestRefresh = (
+    mailboxId = "*",
+    type: MailUpdate["type"] = "mailbox.changed",
+    revision?: string
+  ) => {
+    const change = pending.get(mailboxId);
+    if (change === undefined) {
+      pending.set(mailboxId, { revision, types: new Set([type]) });
+    } else {
+      if (type === "mailbox.changed") {
+        change.revision =
+          revision !== undefined &&
+          (!change.types.has(type) ||
+            (change.revision !== undefined &&
+              BigInt(revision) > BigInt(change.revision)))
+            ? revision
+            : change.revision;
+        if (revision === undefined) {
+          change.revision = undefined;
+        }
+      }
+      change.types.add(type);
+    }
     scheduleRefresh();
   };
   const disconnect = () => {
@@ -194,7 +275,11 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
           if (seen.size > 500) {
             seen.delete(seen.values().next().value ?? "");
           }
-          requestRefresh(event.data.mailboxId);
+          requestRefresh(
+            event.data.mailboxId,
+            event.data.type,
+            event.data.revision
+          );
         } catch {
           /* Ignore malformed frames. */
         }
@@ -232,7 +317,6 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
       const wasSuspended = suspended;
       suspended = false;
       if (wasSuspended) {
-        pendingSince = Date.now();
         requestRefresh();
       }
       void connect();

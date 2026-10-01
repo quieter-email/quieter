@@ -1,4 +1,4 @@
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { afterEach, describe, expect, test, vi } from "vite-plus/test";
 
 import type { MessageListItem, ThreadMessagesResult } from "#/lib/mail";
@@ -101,6 +101,26 @@ describe("mail metadata cache updates", () => {
       isUnread: false,
       labelIds: ["INBOX", "server-label"],
     });
+    const fetchInbox = vi.fn<() => MessagesQueryData>().mockReturnValue({
+      pageParams: [undefined],
+      pages: [{ messages }],
+    });
+    const fetchThread = vi.fn<() => ThreadMessagesResult>().mockReturnValue({
+      messages,
+      threadId: "thread",
+    });
+    const inbox = new QueryObserver(queryClient, {
+      queryFn: fetchInbox,
+      queryKey: inboxKey,
+      staleTime: Infinity,
+    });
+    const thread = new QueryObserver(queryClient, {
+      queryFn: fetchThread,
+      queryKey: threadKey,
+      staleTime: Infinity,
+    });
+    const unsubscribeInbox = inbox.subscribe(() => {});
+    const unsubscribeThread = thread.subscribe(() => {});
 
     await updateMessageInMailbox(
       {
@@ -112,6 +132,10 @@ describe("mail metadata cache updates", () => {
       },
       "read"
     );
+    expect(fetchInbox).not.toHaveBeenCalled();
+    expect(fetchThread).not.toHaveBeenCalled();
+    unsubscribeInbox();
+    unsubscribeThread();
 
     expect(
       queryClient
@@ -265,6 +289,63 @@ describe("mail metadata cache updates", () => {
       queryClient.getQueryData<MessagesQueryData>(inboxKey)?.pages[0]
         .messages[0].labelIds
     ).not.toContain("work");
+  });
+
+  test("resumes an interrupted read so a successful local action does not hide incoming mail", async () => {
+    const { queryClient, inboxKey, messages } = setup();
+    const pendingRead = Promise.withResolvers<MessagesQueryData>();
+    const fetchInbox = vi
+      .fn<() => Promise<MessagesQueryData>>()
+      .mockReturnValueOnce(pendingRead.promise)
+      .mockResolvedValue({
+        pageParams: [undefined],
+        pages: [
+          {
+            messages: [
+              { id: "incoming", threadId: "incoming-thread" },
+              { ...messages[0], isUnread: false, labelIds: ["INBOX"] },
+              messages[1],
+            ],
+          },
+        ],
+      });
+    const inbox = new QueryObserver(queryClient, {
+      queryFn: fetchInbox,
+      queryKey: inboxKey,
+      staleTime: Infinity,
+    });
+    const unsubscribe = inbox.subscribe(() => {});
+    const reading = inbox.refetch();
+    vi.mocked(rpc.mail.markMessageAsRead).mockResolvedValue({
+      id: "a",
+      isUnread: false,
+      labelIds: ["INBOX"],
+    });
+    await updateMessageInMailbox(
+      {
+        mailbox: "inbox",
+        mailboxId: "mailbox",
+        messageId: "a",
+        queryClient,
+        searchQuery: undefined,
+      },
+      "read"
+    );
+    await reading;
+    await vi.waitFor(() => {
+      expect(
+        inbox
+          .getCurrentResult()
+          .data?.pages[0].messages.map((message) => message.id)
+      ).toContain("incoming");
+    });
+    expect(
+      inbox
+        .getCurrentResult()
+        .data?.pages[0].messages.find((message) => message.id === "a")?.isUnread
+    ).toBeFalsy();
+    unsubscribe();
+    queryClient.clear();
   });
 
   test("coalesces unsent changes and preserves incoming mail when an earlier write fails", async () => {

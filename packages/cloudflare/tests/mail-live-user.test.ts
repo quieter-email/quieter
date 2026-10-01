@@ -66,6 +66,7 @@ describe("per-user mail connections", () => {
     const event = {
       eventId: crypto.randomUUID(),
       mailboxId: "managed-mailbox",
+      revision: "90071992547409931234",
       type: "mailbox.changed",
     };
     const messages = sockets.map(async (socket) => {

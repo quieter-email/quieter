@@ -2069,6 +2069,7 @@ type MailboxSyncDeltaState = {
   mailboxAdditionCandidateIds: Set<string>;
   removedMessageIds: Set<string>;
   refreshFirstPage: boolean;
+  refreshThreadIds: Set<string>;
 };
 
 const applyHistoryRecordToMailboxSyncDelta = (
@@ -2077,6 +2078,9 @@ const applyHistoryRecordToMailboxSyncDelta = (
   state: MailboxSyncDeltaState
 ) => {
   for (const deleted of historyRecord.messagesDeleted ?? []) {
+    if (deleted.message.threadId) {
+      state.refreshThreadIds.add(deleted.message.threadId);
+    }
     state.removedMessageIds.add(deleted.message.id);
     state.changedMessageIds.delete(deleted.message.id);
     state.mailboxAdditionCandidateIds.delete(deleted.message.id);
@@ -2105,6 +2109,9 @@ const applyHistoryRecordToMailboxSyncDelta = (
       labelIds?.includes(mailboxLabel) === true
     ) {
       state.removedMessageIds.add(labelsRemoved.message.id);
+      if (labelsRemoved.message.threadId) {
+        state.refreshThreadIds.add(labelsRemoved.message.threadId);
+      }
       state.changedMessageIds.delete(labelsRemoved.message.id);
       state.mailboxAdditionCandidateIds.delete(labelsRemoved.message.id);
       state.refreshFirstPage = true;
@@ -2182,8 +2189,13 @@ const buildMailboxSyncUpdatedMessages = async (
   mailboxAdditionCandidateIds: Set<string>,
   removedMessageIds: Set<string>,
   signal?: AbortSignal
-): Promise<{ messages: MessageListItem[]; refreshFirstPage: boolean }> => {
+): Promise<{
+  messages: MessageListItem[];
+  refreshFirstPage: boolean;
+  refreshThreadIds: string[];
+}> => {
   let refreshFirstPage = false;
+  const refreshThreadIds = new Set<string>();
   const inMailboxMessages: GmailMessage[] = [];
 
   for (const changedMessage of changedMessages) {
@@ -2195,6 +2207,7 @@ const buildMailboxSyncUpdatedMessages = async (
       !isMessageInMailbox(mailbox, normalizeLabelIds(changedMessage.labelIds))
     ) {
       removedMessageIds.add(changedMessage.id);
+      refreshThreadIds.add(changedMessage.threadId);
       continue;
     }
 
@@ -2232,6 +2245,7 @@ const buildMailboxSyncUpdatedMessages = async (
       };
     }),
     refreshFirstPage,
+    refreshThreadIds: [...refreshThreadIds],
   };
 };
 
@@ -2249,6 +2263,7 @@ export const getMailboxSyncDelta = async (
     changedMessageIds: new Set<string>(),
     mailboxAdditionCandidateIds: new Set<string>(),
     refreshFirstPage: false,
+    refreshThreadIds: new Set<string>(),
     removedMessageIds: new Set<string>(),
   };
 
@@ -2296,6 +2311,9 @@ export const getMailboxSyncDelta = async (
       options.signal
     );
     updatedMessages = builtMessages.messages;
+    for (const threadId of builtMessages.refreshThreadIds) {
+      state.refreshThreadIds.add(threadId);
+    }
     if (builtMessages.refreshFirstPage) {
       state.refreshFirstPage = true;
     }
@@ -2305,6 +2323,7 @@ export const getMailboxSyncDelta = async (
     hasChanges: nextHistoryId !== options.startHistoryId,
     historyId: nextHistoryId,
     refreshFirstPage: state.refreshFirstPage,
+    refreshThreadIds: [...state.refreshThreadIds],
     removedMessageIds: [...state.removedMessageIds],
     requiresFullRefresh: false,
     updatedMessages,

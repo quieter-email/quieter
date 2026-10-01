@@ -112,7 +112,8 @@ export const handleMailUpdates = async (request: Request, env: Env) => {
 export const broadcastGmailUpdate = async (
   env: Env,
   emailAddress: string,
-  type: MailUpdate["type"]
+  type: MailUpdate["type"],
+  revision?: string
 ) => {
   try {
     const mailboxes = await withRequestDatabaseClient(
@@ -122,6 +123,7 @@ export const broadcastGmailUpdate = async (
       await broadcastMailUpdate(env, {
         eventId: crypto.randomUUID(),
         mailboxId: box.id,
+        revision,
         type,
       });
     }
