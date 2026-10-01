@@ -507,7 +507,7 @@ export const AuthScreen = () => {
           </nav>
         </div>
       </div>
-      <div className="relative size-full min-h-0 bg-auth-visual-bg max-md:hidden">
+      <div className="relative size-full min-h-0 border-l border-border/30 bg-auth-visual-bg max-md:hidden">
         <AuthVisual />
       </div>
     </div>
