@@ -73,6 +73,13 @@ describe(toastError, () => {
     expect(hint?.tags.boundary).toBe("test-boundary");
   });
 
+  test("can skip client reporting for a redacted callback result already reported by the server", () => {
+    toastError(undefined, { report: false });
+
+    expect(toastMocks.error).toHaveBeenCalledOnce();
+    expect(sentryMocks.captureException).not.toHaveBeenCalled();
+  });
+
   test("falls back and reports for 5xx statuses", () => {
     toastError(Object.assign(new Error("Boom."), { status: 500 }));
 

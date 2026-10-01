@@ -25,7 +25,7 @@ import {
 } from "@quieter/database/schema";
 import { getGmailMessageCount, getGmailProfile } from "@quieter/gmail";
 import { getMailboxCapabilities } from "@quieter/mail/data-plane";
-import { and, asc, count, eq, inArray, isNull, lt } from "drizzle-orm";
+import { and, asc, count, eq, gt, inArray, isNull, lt } from "drizzle-orm";
 import { z } from "zod";
 
 import {
@@ -1171,6 +1171,28 @@ const resolveGmailOAuthMailboxIdentity = (input: {
   return { encryptedRefreshToken, existingMailboxId, mailboxId };
 };
 
+export const getGmailOAuthCallbackMailboxId = async (input: {
+  headers: Headers;
+  state: string;
+}) => {
+  const { getSessionWithOrganization } = await import("@quieter/auth/session");
+  const session = await getSessionWithOrganization(input.headers);
+  if (session?.user === undefined || session.session === undefined) {
+    return null;
+  }
+  const [context] = await db
+    .select({ mailboxId: gmailOAuthState.mailboxId })
+    .from(gmailOAuthState)
+    .where(
+      and(
+        eq(gmailOAuthState.id, input.state),
+        eq(gmailOAuthState.userId, session.user.id)
+      )
+    )
+    .limit(1);
+  return context?.mailboxId ?? null;
+};
+
 export const completeGmailOAuth = async (input: {
   code: string;
   headers: Headers;
@@ -1189,14 +1211,16 @@ export const completeGmailOAuth = async (input: {
 
   const [oauthState] = await db
     .delete(gmailOAuthState)
-    .where(eq(gmailOAuthState.id, input.state))
+    .where(
+      and(
+        eq(gmailOAuthState.id, input.state),
+        eq(gmailOAuthState.userId, session.user.id),
+        gt(gmailOAuthState.expiresAt, new Date())
+      )
+    )
     .returning();
 
-  if (
-    oauthState === undefined ||
-    oauthState.userId !== session.user.id ||
-    oauthState.expiresAt.getTime() <= Date.now()
-  ) {
+  if (oauthState === undefined) {
     throw new ORPCError("BAD_REQUEST", {
       message: "This Gmail connection request is invalid or expired.",
     });

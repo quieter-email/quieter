@@ -14,6 +14,7 @@ import { settingsRouteApi } from "#/lib/route-apis";
 
 import { BillingCheckoutResult } from "./billing-checkout-result";
 import { ConnectorConnectionResult } from "./connector-connection-result";
+import { GmailConnectionResult } from "./gmail-connection-result";
 import { SettingsDataPrefetch } from "./settings-data-prefetch";
 import { SettingsLoadingState } from "./settings-layout";
 import { SettingsSearch } from "./settings-search";
@@ -120,6 +121,7 @@ export const SettingsScreen = ({
           <SettingsDataPrefetch tab={tab} />
           <BillingCheckoutResult />
           <ConnectorConnectionResult />
+          <GmailConnectionResult />
           <WorkspaceSidebar
             isMobileOpen={isMobileOpen}
             onMobileOpenChange={setIsMobileOpen}
