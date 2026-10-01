@@ -1,5 +1,7 @@
-import { Subscription$inboundSchema } from "@polar-sh/sdk/models/components/subscription.js";
-import { syncBillingSubscription } from "@quieter/billing/subscription-sync";
+import {
+  billingPolarSubscriptionSchema,
+  syncBillingSubscription,
+} from "@quieter/billing/subscription-sync";
 import { serverEnv } from "@quieter/env/server";
 import { reportError } from "@quieter/observability";
 import { Webhook } from "standardwebhooks";
@@ -9,6 +11,8 @@ const subscriptionEvents = new Set([
   "subscription.active",
   "subscription.canceled",
   "subscription.created",
+  "subscription.cycled",
+  "subscription.migrated",
   "subscription.past_due",
   "subscription.paused",
   "subscription.resumed",
@@ -56,7 +60,7 @@ export const handlePolarWebhookRequest = async (request: Request) => {
   }
 
   try {
-    const subscription = Subscription$inboundSchema.parse(
+    const subscription = billingPolarSubscriptionSchema.parse(
       parsedPayload.data.data
     );
     const result = await syncBillingSubscription(subscription);

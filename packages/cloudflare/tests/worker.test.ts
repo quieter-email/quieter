@@ -213,9 +213,24 @@ const toRequest = (input: RequestInfo | URL, init?: RequestInit) => {
   return new Request(url, init);
 };
 
+const installFetchMock = (processorStatus = 204) =>
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = toRequest(input, init);
+      if (new URL(request.url).hostname === "www.googleapis.com") {
+        return Response.json(jwks);
+      }
+      if (request.url === "https://processor.invalid/process") {
+        return new Response(null, { status: processorStatus });
+      }
+      return await originalFetch(input, init);
+    })
+  );
+
 describe("Cloudflare worker runtime", () => {
   beforeAll(async () => {
-    const keyPair = await generateKeyPair<CryptoKey>("RS256");
+    const keyPair = await generateKeyPair("RS256");
     const { privateKey: generatedPrivateKey } = keyPair;
     privateKey = generatedPrivateKey;
     const publicJwk = await exportJWK(keyPair.publicKey);
@@ -260,21 +275,6 @@ describe("Cloudflare worker runtime", () => {
   });
 
   describe("Pub/Sub ingress", () => {
-    const installFetchMock = (processorStatus = 204) =>
-      vi.stubGlobal(
-        "fetch",
-        vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-          const request = toRequest(input, init);
-          if (new URL(request.url).hostname === "www.googleapis.com") {
-            return Response.json(jwks);
-          }
-          if (request.url === "https://processor.invalid/process") {
-            return new Response(null, { status: processorStatus });
-          }
-          return await originalFetch(input, init);
-        })
-      );
-
     test("requires authentication", async () => {
       const response = await worker.fetch(
         await pubSubRequest(envelope(), { authorization: "" }),

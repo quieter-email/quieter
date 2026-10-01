@@ -33,7 +33,6 @@ export const getRouter = () => {
       beforeSend: (event, hint) =>
         shouldDiscardClientError(event, hint.originalException) ? null : event,
       dsn: clientEnv.VITE_SENTRY_DSN,
-      enableLogs: false,
       environment: import.meta.env.MODE,
       tracesSampleRate: 0.05,
     });

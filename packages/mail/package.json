@@ -26,8 +26,9 @@
   "dependencies": {
     "@quieter/env": "workspace:*",
     "fast-xml-parser": "catalog:",
-    "nodemailer": "^10.0.0",
-    "postal-mime": "^3.0.0",
+    "fast-xml-validator": "1.4.2",
+    "nodemailer": "^10.0.13",
+    "postal-mime": "^4.0.2",
     "zod": "catalog:"
   },
   "devDependencies": {

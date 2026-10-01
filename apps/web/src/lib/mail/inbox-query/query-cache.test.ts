@@ -92,7 +92,7 @@ describe(applyOptimisticMailboxUpdate, () => {
       message("a", { isUnread: true }),
     ]);
     await expect(
-      queryClient.fetchQuery({ queryFn: () => fresh, queryKey })
+      queryClient.query({ queryFn: () => fresh, queryKey })
     ).resolves.toStrictEqual(fresh);
     queryClient.clear();
   });

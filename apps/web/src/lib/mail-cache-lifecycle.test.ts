@@ -25,7 +25,7 @@ describe("mail cache error eviction", () => {
       const queryKey = ["message-thread", "thread", "mailbox"];
       client.setQueryData(queryKey, { messages: [{ id: "message" }] });
       await expect(
-        client.fetchQuery({
+        client.query({
           queryFn: async () => {
             await Promise.reject(
               Object.assign(new Error("missing"), { data, status })

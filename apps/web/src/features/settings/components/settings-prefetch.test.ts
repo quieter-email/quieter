@@ -8,25 +8,23 @@ import {
 
 const createQueryClient = () => {
   const queryClient = new QueryClient();
-  const prefetchQuery = vi
-    .spyOn(queryClient, "prefetchQuery")
-    .mockResolvedValue();
-  return { prefetchQuery, queryClient };
+  const query = vi.spyOn(queryClient, "query").mockResolvedValue(null);
+  return { query, queryClient };
 };
 
 describe("settings prefetch hierarchy", () => {
   test("prefetches the team selected by navigation intent", async () => {
-    const { prefetchQuery, queryClient } = createQueryClient();
+    const { query, queryClient } = createQueryClient();
 
     await prefetchOrganizationSettingsDetail(queryClient, "team-one");
 
     expect(
-      prefetchQuery.mock.calls.map(([options]) => options.queryKey)
+      query.mock.calls.map(([options]) => options.queryKey)
     ).toContainEqual(["auth", "organization", "team-one", "full"]);
   });
 
   test("skips mailbox detail prefetch for private mailboxes", async () => {
-    const { prefetchQuery, queryClient } = createQueryClient();
+    const { query, queryClient } = createQueryClient();
 
     await prefetchMailboxSettingsDetail(queryClient, {
       grantRole: null,
@@ -34,6 +32,6 @@ describe("settings prefetch hierarchy", () => {
       organizationId: "team-one",
       provider: "gmail",
     });
-    expect(prefetchQuery).not.toHaveBeenCalled();
+    expect(query).not.toHaveBeenCalled();
   });
 });

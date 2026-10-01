@@ -33,6 +33,7 @@ export default defineConfig({
       "sst-env.d.ts",
       "routeTree.gen.ts",
       "sst.config.ts",
+      "sst.local.config.ts",
       "tooling/lint/**",
       "vite.config.ts",
     ],
@@ -223,9 +224,7 @@ export default defineConfig({
           "apps/web/src/features/navigation/components/sidebar-surfaces.tsx",
           "apps/web/src/features/mailbox/components/mailbox-workspace.tsx",
         ],
-        rules: {
-          "react/react-compiler": "off",
-        },
+        rules: {},
       },
       {
         // React 19's ReactNode includes promise-capable render children; this

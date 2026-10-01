@@ -72,9 +72,7 @@ const ChatSession = ({
   });
   const synchronizeHistory = async () => {
     try {
-      await queryClient.fetchQuery(
-        chatQueryOptions(workspace.mailboxId, threadId)
-      );
+      await queryClient.query(chatQueryOptions(workspace.mailboxId, threadId));
       if (mountedRef.current) {
         props.onChatIdChange(threadId);
       }
