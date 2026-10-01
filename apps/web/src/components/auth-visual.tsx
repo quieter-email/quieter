@@ -418,7 +418,7 @@ const getCssColor = (
 
 const readColors = (canvas: HTMLCanvasElement): Colors => ({
   primary: getCssColor(canvas, "--primary", [0.25, 0.25, 0.25]),
-  tint: getCssColor(canvas, "--auth-particle-tint", [0.6, 0.72, 0.86]),
+  tint: getCssColor(canvas, "--auth-particle-tint", [0.6, 0.6, 0.6]),
 });
 
 const boundaryRadii: number[] = [];
@@ -467,11 +467,10 @@ const appendNoiseDot = (
     Math.exp(-((radialDistance / 0.62) ** 2)) *
     (1 - smoothstep(0.65, 1.05, radialDistance));
   const logoRadius = squircleRadius(center, 0.46, width, height);
-  const outsideLogo = smoothstep(0.98, 1.06, logoRadius);
-  const rim = Math.exp(-(((logoRadius - 1.08) / 0.16) ** 2));
+  const outsideLogo = smoothstep(0.45, 1.55, logoRadius);
   const density =
     (0.025 + envelope * (0.32 + strand * 0.58 + fineStrand * 0.08)) *
-    mix(0.035, 1, outsideLogo);
+    mix(0.2, 1, outsideLogo);
   if (density < hash(cellX + 719, cellY + 719)) {
     return;
   }
@@ -481,11 +480,11 @@ const appendNoiseDot = (
     ...center,
     flow: smoothstep(1.1, 3.5, logoRadius),
     opacity:
-      (0.1 + opacitySeed ** 1.6 * 0.52 + rim * 0.22) *
+      (0.1 + opacitySeed ** 1.6 * 0.52) *
       (0.18 + envelope * 0.82) *
-      (0.5 + strand * 0.5),
-    radius:
-      (0.24 + radiusSeed ** 2.8 * 1.05 + rim * radiusSeed * 0.15) * radiusScale,
+      (0.5 + strand * 0.5) *
+      mix(0.12, 1, outsideLogo),
+    radius: (0.24 + radiusSeed ** 2.8 * 1.05) * radiusScale,
     vibrance: hash(cellX + 941, cellY + 941),
   });
 };
@@ -1128,7 +1127,7 @@ export const AuthVisual = () => {
   return (
     <div
       aria-hidden="true"
-      className="relative size-full overflow-hidden bg-brand-bg [&:has(canvas[data-ready])>svg]:hidden"
+      className="relative size-full overflow-hidden bg-auth-visual-bg [&:has(canvas[data-ready])>svg]:hidden"
     >
       <svg
         className="absolute top-1/2 left-1/2 w-[23%] -translate-x-1/2 -translate-y-1/2 text-primary/20"
