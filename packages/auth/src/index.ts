@@ -18,6 +18,7 @@ import {
   organization,
   lastLoginMethod,
 } from "better-auth/plugins";
+import { bearer } from "better-auth/plugins/bearer";
 import {
   adminAc,
   defaultStatements,
@@ -26,6 +27,7 @@ import {
 } from "better-auth/plugins/organization/access";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 
+import { desktopDeviceAuthorization } from "./desktop-device-authorization";
 import { GOOGLE_AUTH_SCOPES } from "./google-scopes";
 import { lazyAuth } from "./lazy-auth";
 import {
@@ -232,6 +234,8 @@ export const auth = lazyAuth(() =>
       }),
     },
     plugins: [
+      bearer(),
+      desktopDeviceAuthorization,
       passkey(),
       organization({
         ac: organizationAccessControl,

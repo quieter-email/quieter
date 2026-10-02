@@ -471,7 +471,7 @@ export default defineConfig({
     },
   },
   staged: {
-    "*.{js,mjs,cjs,jsx,ts,mts,cts,tsx,json,jsonc,css,md,mdx}": "vp check --fix",
+    "*.{js,mjs,cjs,jsx,ts,mts,cts,tsx,json,jsonc,css,md,mdx}": `${process.platform === "win32" ? "vp.exe" : "vp"} check --fix`,
   },
   test: {
     exclude: [
