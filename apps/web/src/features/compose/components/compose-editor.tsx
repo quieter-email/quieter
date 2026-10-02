@@ -14,6 +14,7 @@ import {
   TextUnderlineIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import type { VisualEmailDocument } from "@quieter/mail/visual-email";
 import { cn } from "@quieter/ui/cn";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import {
@@ -73,6 +74,7 @@ const audioWaveBars = [
 type ComposeEditorProps = {
   children: ReactNode;
   html: string;
+  document?: VisualEmailDocument | null;
   density?: "comfortable" | "compact";
   disabled?: boolean;
   onChange: (payload: { html: string; text: string }) => void;
@@ -90,6 +92,7 @@ type ComposeEditorProps = {
 };
 
 export type ComposeEditorHandle = {
+  getDocument: () => unknown;
   insertHtml: (html: string) => void;
   insertPlaceholder: (label: string) => void;
   replaceSelectedPlaceholder: (value: string) => boolean;
@@ -122,6 +125,7 @@ export const ComposeEditor = ({
   children,
   density = "comfortable",
   disabled,
+  document,
   html,
   onBlur,
   onChange,
@@ -136,7 +140,7 @@ export const ComposeEditor = ({
 }: ComposeEditorProps) => {
   const editor = useEditor({
     autofocus: false,
-    content: hydrateTemplatePlaceholders(html.trim()),
+    content: document?.content ?? hydrateTemplatePlaceholders(html.trim()),
     editable: disabled !== true,
     editorProps: {
       attributes: {
@@ -195,8 +199,14 @@ export const ComposeEditor = ({
   });
 
   useImperativeHandle(ref, () => ({
+    getDocument: () =>
+      editor ? { content: editor.getJSON(), version: 1 } : null,
     insertHtml: (nextHtml) => {
-      editor?.chain().focus().insertContent(nextHtml).run();
+      editor
+        ?.chain()
+        .focus()
+        .insertContent(hydrateTemplatePlaceholders(nextHtml))
+        .run();
     },
     insertPlaceholder: (label) => {
       const token = createTemplatePlaceholderToken(label);
@@ -253,10 +263,11 @@ export const ComposeEditor = ({
     if (current === next) {
       return;
     }
-    editor.commands.setContent(hydrateTemplatePlaceholders(next) || "<p></p>", {
-      emitUpdate: false,
-    });
-  }, [editor, html]);
+    editor.commands.setContent(
+      document?.content ?? (hydrateTemplatePlaceholders(next) || "<p></p>"),
+      { emitUpdate: false }
+    );
+  }, [document, editor, html]);
 
   const contextValue = useMemo(
     () => ({
