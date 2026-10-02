@@ -32,8 +32,6 @@ type PromiseOptions<T> = {
   success: PromiseMessage<T>;
 };
 
-type ManagerUpdate = Parameters<typeof toastManager.update>[1];
-
 const toastIdFor = (
   type: ToastType,
   title: ReactNode,
@@ -60,7 +58,7 @@ const toAddOptions = (
   type,
 });
 
-const toUpdateOptions = (options: string | ToastOptions): ManagerUpdate => {
+const toUpdateOptions = (options: string | ToastOptions) => {
   if (typeof options === "string") {
     return { timeout: DEFAULT_TOAST_TIMEOUT, title: options };
   }
@@ -71,9 +69,7 @@ const toUpdateOptions = (options: string | ToastOptions): ManagerUpdate => {
   };
 };
 
-const resolvePromiseMessage = <T>(
-  message: PromiseMessage<T>
-): ManagerUpdate | ((value: T) => ManagerUpdate) => {
+const resolvePromiseMessage = <T>(message: PromiseMessage<T>) => {
   if (typeof message === "function") {
     return (value: T) => toUpdateOptions(message(value));
   }

@@ -95,6 +95,26 @@ while (!stop.signal.aborted) {
       ) {
         throw new Error("Invalid Pub/Sub delivery.");
       }
+      const extended = await fetch(
+        `https://pubsub.googleapis.com/v1/${subscription}:modifyAckDeadline`,
+        {
+          body: JSON.stringify({
+            ackDeadlineSeconds: 120,
+            ackIds: [delivery.ackId],
+          }),
+          headers: {
+            authorization: `Bearer ${accessToken}`,
+            "content-type": "application/json",
+          },
+          method: "POST",
+          signal: AbortSignal.any([stop.signal, AbortSignal.timeout(15_000)]),
+        }
+      );
+      if (!extended.ok) {
+        throw new Error(
+          `Pub/Sub deadline extension returned ${extended.status}.`
+        );
+      }
       const accepted = await fetch("http://127.0.0.1:8787/__dev/pubsub", {
         body: JSON.stringify({ message: delivery.message, subscription }),
         headers: {
@@ -102,11 +122,11 @@ while (!stop.signal.aborted) {
           "content-type": "application/json",
         },
         method: "POST",
-        signal: AbortSignal.any([stop.signal, AbortSignal.timeout(15_000)]),
+        signal: AbortSignal.any([stop.signal, AbortSignal.timeout(120_000)]),
       });
       if (!accepted.ok) {
         throw new Error(
-          `Local queue handoff returned ${accepted.status}; delivery was not acknowledged.`
+          `Local mail processing returned ${accepted.status}; delivery was not acknowledged.`
         );
       }
       const ack = await fetch(
@@ -125,7 +145,7 @@ while (!stop.signal.aborted) {
         throw new Error(`Pub/Sub acknowledgement returned ${ack.status}.`);
       }
       process.stdout.write(
-        "Notification stored in the local queue and acknowledged.\n"
+        "Notification processed locally and acknowledged.\n"
       );
     }
   } catch (error) {

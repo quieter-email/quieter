@@ -123,58 +123,34 @@ export const hasOrganizationPermission = (
     ? authClient.organization.checkRolePermission({ permissions, role })
     : false;
 
-const invitationStatuses = new Set([
-  "pending",
-  "accepted",
-  "rejected",
-  "canceled",
+const invitationDateSchema = z.union([
+  z.date(),
+  z.string().refine((value) => !Number.isNaN(Date.parse(value))),
 ]);
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
-
-const isInvitationDate = (value: unknown): value is Date | string =>
-  value instanceof Date
-    ? !Number.isNaN(value.getTime())
-    : typeof value === "string" && !Number.isNaN(new Date(value).getTime());
-
-const isUserInvitation = (value: unknown): value is UserInvitation => {
-  if (!isRecord(value)) {
-    return false;
-  }
-
-  const invitation = value;
-  return (
-    typeof invitation.id === "string" &&
-    typeof invitation.email === "string" &&
-    typeof invitation.inviterId === "string" &&
-    typeof invitation.organizationId === "string" &&
-    typeof invitation.organizationName === "string" &&
-    typeof invitation.role === "string" &&
-    typeof invitation.status === "string" &&
-    invitationStatuses.has(invitation.status) &&
-    isInvitationDate(invitation.createdAt) &&
-    isInvitationDate(invitation.expiresAt)
-  );
-};
+const userInvitationSchema = z.object({
+  createdAt: invitationDateSchema,
+  email: z.string(),
+  expiresAt: invitationDateSchema,
+  id: z.string(),
+  inviterId: z.string(),
+  organizationId: z.string(),
+  organizationName: z.string(),
+  role: z.string(),
+  status: z.enum(["pending", "accepted", "rejected", "canceled"]),
+});
 
 const normalizeUserInvitations = (value: unknown): UserInvitation[] => {
-  if (Array.isArray(value)) {
-    return value.filter(isUserInvitation);
-  }
-
-  if (
-    typeof value === "object" &&
-    value !== null &&
-    "data" in value &&
-    Array.isArray(value.data)
-  ) {
-    return value.data.filter(isUserInvitation);
-  }
-
-  return [];
+  const rows =
+    typeof value === "object" && value !== null && "data" in value
+      ? value.data
+      : value;
+  return Array.isArray(rows)
+    ? rows.flatMap((row) => {
+        const parsed = userInvitationSchema.safeParse(row);
+        return parsed.success ? [parsed.data] : [];
+      })
+    : [];
 };
-
 const loadUserInvitations = async (): Promise<UserInvitation[]> => {
   const response = await authClient.organization.listUserInvitations();
   if (response.error) {

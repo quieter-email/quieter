@@ -5,7 +5,6 @@ import {
   Delete02Icon,
   Edit01Icon,
   Key02Icon,
-  Loading03Icon,
   Logout03Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -19,6 +18,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
+import { SpinnerIcon } from "@quieter/ui/spinner-icon";
+import { Text } from "@quieter/ui/text";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -108,11 +109,7 @@ const renderPasskeyList = (
         variant="outline"
       >
         {removingPasskeyId === passkey.id ? (
-          <HugeiconsIcon
-            aria-hidden
-            className="size-4 animate-spin"
-            icon={Loading03Icon}
-          />
+          <SpinnerIcon />
         ) : (
           <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
         )}
@@ -122,7 +119,7 @@ const renderPasskeyList = (
   ));
 };
 
-const EditNameDialog = ({
+const AccountNameSettings = ({
   currentName,
   handleSessionRefresh,
 }: {
@@ -130,7 +127,6 @@ const EditNameDialog = ({
   handleSessionRefresh: () => Promise<unknown>;
 }) => {
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
   const updateUserMutation = useMutation({
     mutationFn: async (input: { name: string }) => {
@@ -173,9 +169,8 @@ const EditNameDialog = ({
 
       try {
         await updateUserMutation.mutateAsync({ name: value.name.trim() });
-        setOpen(false);
         setSubmitError(null);
-        form.reset({ name: currentName });
+        form.reset({ name: value.name.trim() });
       } catch (mutationError) {
         setSubmitError(
           getMutationErrorMessage(mutationError, "Could not update name.")
@@ -189,116 +184,72 @@ const EditNameDialog = ({
       }),
     },
   });
-  const resetDialog = () => {
-    setSubmitError(null);
-    form.reset({ name: currentName });
-  };
 
   return (
-    <>
-      <Button
-        onClick={() => {
-          resetDialog();
-          setOpen(true);
+    <div className="min-w-0">
+      <form
+        className="flex flex-wrap items-start gap-2"
+        action={async () => {
+          await form.handleSubmit();
         }}
-        size="sm"
-        variant="outline"
       >
-        <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
-        Edit name
-      </Button>
+        <div className="space-y-3">
+          <form.Field name="name">
+            {(field) => (
+              <TextField>
+                <TextFieldInput
+                  aria-label="Name"
+                  aria-invalid={field.state.meta.errors.length > 0}
+                  name={field.name}
+                  onBlur={() => {
+                    field.handleBlur();
+                  }}
+                  onChange={(event) => {
+                    setSubmitError(null);
+                    field.handleChange(event.target.value);
+                  }}
+                  value={field.state.value}
+                />
+                {field.state.meta.errors.map((error) => (
+                  <Text key={error?.message} tone="destructive">
+                    {error?.message}
+                  </Text>
+                ))}
+              </TextField>
+            )}
+          </form.Field>
 
-      <Dialog
-        onOpenChange={(nextOpen) => {
-          setOpen(nextOpen);
-          if (!nextOpen) {
-            resetDialog();
-          }
-        }}
-        open={open}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit name</DialogTitle>
-          </DialogHeader>
+          {submitError === null ? null : (
+            <Text tone="destructive">{submitError}</Text>
+          )}
+        </div>
 
-          <form
-            action={async () => {
-              await form.handleSubmit();
-            }}
+        <div>
+          <Button
+            aria-label="Save name"
+            disabled={updateUserMutation.isPending}
+            size="sm"
+            type="submit"
           >
-            <DialogBody className="space-y-3">
-              <form.Field name="name">
-                {(field) => (
-                  <TextField>
-                    <TextFieldInput
-                      aria-invalid={field.state.meta.errors.length > 0}
-                      name={field.name}
-                      onBlur={() => {
-                        field.handleBlur();
-                      }}
-                      onChange={(event) => {
-                        setSubmitError(null);
-                        field.handleChange(event.target.value);
-                      }}
-                      value={field.state.value}
-                    />
-                    {field.state.meta.errors.map((error) => (
-                      <p
-                        className="text-body text-destructive"
-                        key={error?.message}
-                      >
-                        {error?.message}
-                      </p>
-                    ))}
-                  </TextField>
-                )}
-              </form.Field>
-
-              {submitError === null ? null : (
-                <p className="text-body text-destructive">{submitError}</p>
-              )}
-            </DialogBody>
-
-            <DialogFooter>
-              <DialogCloseButton disabled={updateUserMutation.isPending}>
-                Cancel
-              </DialogCloseButton>
-              <Button
-                disabled={updateUserMutation.isPending}
-                size="sm"
-                type="submit"
-              >
-                {updateUserMutation.isPending ? (
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4 animate-spin"
-                    icon={Loading03Icon}
-                  />
-                ) : (
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4"
-                    icon={Edit01Icon}
-                  />
-                )}
-                Save
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-    </>
+            {updateUserMutation.isPending ? (
+              <SpinnerIcon />
+            ) : (
+              <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
+            )}
+            Save
+          </Button>
+        </div>
+      </form>
+    </div>
   );
 };
 
-const EditEmailDialog = ({ currentEmail }: { currentEmail: string }) => {
+const AccountEmailSettings = ({ currentEmail }: { currentEmail: string }) => {
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
   const changeEmailMutation = useMutation({
     mutationFn: async (input: { callbackURL: string; newEmail: string }) => {
-      const status = await queryClient.fetchQuery(
+      const status = await queryClient.query(
         orpc.auth.getUserStatus.queryOptions({
           input: { email: input.newEmail },
           staleTime: 0,
@@ -364,113 +315,75 @@ const EditEmailDialog = ({ currentEmail }: { currentEmail: string }) => {
       }),
     },
   });
-  const resetDialog = () => {
-    setSubmitError(null);
-    form.reset({ email: currentEmail });
-  };
 
   return (
-    <>
-      <Button
-        onClick={() => {
-          resetDialog();
-          setOpen(true);
+    <div className="min-w-0">
+      <form
+        className="flex flex-wrap items-start gap-2"
+        action={async () => {
+          await form.handleSubmit();
         }}
-        size="sm"
-        variant="outline"
       >
-        <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
-        Edit mail
-      </Button>
+        <div className="space-y-3">
+          <form.Field name="email">
+            {(field) => (
+              <TextField>
+                <TextFieldInput
+                  aria-label="Email"
+                  aria-invalid={field.state.meta.errors.length > 0}
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  name={field.name}
+                  onBlur={() => {
+                    field.handleBlur();
+                  }}
+                  onChange={(event) => {
+                    setSubmitError(null);
+                    field.handleChange(event.target.value);
+                  }}
+                  type="email"
+                  value={field.state.value}
+                />
+                {field.state.meta.errors.map((error) => (
+                  <Text key={error?.message} tone="destructive">
+                    {error?.message}
+                  </Text>
+                ))}
+              </TextField>
+            )}
+          </form.Field>
 
-      <Dialog
-        onOpenChange={(nextOpen) => {
-          setOpen(nextOpen);
-          if (!nextOpen) {
-            resetDialog();
-          }
-        }}
-        open={open}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit mail</DialogTitle>
-          </DialogHeader>
+          {submitError === null ? null : (
+            <Text tone="destructive">{submitError}</Text>
+          )}
+        </div>
 
-          <form
-            action={async () => {
-              await form.handleSubmit();
-            }}
+        <div>
+          <Button
+            aria-label="Change email"
+            disabled={changeEmailMutation.isPending}
+            size="sm"
+            type="submit"
           >
-            <DialogBody className="space-y-3">
-              <form.Field name="email">
-                {(field) => (
-                  <TextField>
-                    <TextFieldInput
-                      aria-invalid={field.state.meta.errors.length > 0}
-                      autoCapitalize="none"
-                      autoCorrect="off"
-                      name={field.name}
-                      onBlur={() => {
-                        field.handleBlur();
-                      }}
-                      onChange={(event) => {
-                        setSubmitError(null);
-                        field.handleChange(event.target.value);
-                      }}
-                      type="email"
-                      value={field.state.value}
-                    />
-                    {field.state.meta.errors.map((error) => (
-                      <p
-                        className="text-body text-destructive"
-                        key={error?.message}
-                      >
-                        {error?.message}
-                      </p>
-                    ))}
-                  </TextField>
-                )}
-              </form.Field>
-
-              {submitError === null ? null : (
-                <p className="text-body text-destructive">{submitError}</p>
-              )}
-            </DialogBody>
-
-            <DialogFooter>
-              <DialogCloseButton disabled={changeEmailMutation.isPending}>
-                Cancel
-              </DialogCloseButton>
-              <Button
-                disabled={changeEmailMutation.isPending}
-                size="sm"
-                type="submit"
-              >
-                {changeEmailMutation.isPending ? (
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4 animate-spin"
-                    icon={Loading03Icon}
-                  />
-                ) : (
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4"
-                    icon={Edit01Icon}
-                  />
-                )}
-                Save
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-    </>
+            {changeEmailMutation.isPending ? (
+              <SpinnerIcon />
+            ) : (
+              <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
+            )}
+            Save
+          </Button>
+        </div>
+      </form>
+      {changeEmailMutation.isSuccess && (
+        <output className="mt-2 block text-caption text-muted-fg">
+          Check your email to confirm the change.
+        </output>
+      )}
+    </div>
   );
 };
 
-const PasskeysDialog = ({
+const PasskeySettings = ({
   isPasskeysPending,
   passkeys,
 }: {
@@ -481,7 +394,6 @@ const PasskeysDialog = ({
     null
   );
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
   const addPasskeyMutation = useMutation({
     mutationFn: async (name: string) => {
@@ -578,11 +490,6 @@ const PasskeysDialog = ({
       }),
     },
   });
-  const resetDialog = () => {
-    setSubmitError(null);
-    setRemovingPasskeyId(null);
-    form.reset({ label: "" });
-  };
 
   const handlePasskeyDelete = async (passkeyId: string) => {
     setSubmitError(null);
@@ -603,101 +510,62 @@ const PasskeysDialog = ({
   };
 
   return (
-    <>
-      <Button
-        onClick={() => {
-          resetDialog();
-          setOpen(true);
-        }}
-        size="sm"
-        variant="outline"
-      >
-        <HugeiconsIcon aria-hidden className="size-4" icon={Key02Icon} />
-        Edit passkeys
-      </Button>
-
-      <Dialog
-        onOpenChange={(nextOpen) => {
-          setOpen(nextOpen);
-          if (!nextOpen) {
-            resetDialog();
-          }
-        }}
-        open={open}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit passkeys</DialogTitle>
-          </DialogHeader>
-
-          <DialogBody className="space-y-4">
-            <form
-              className="space-y-3"
-              action={async () => {
-                await form.handleSubmit();
-              }}
-            >
-              <form.Field name="label">
-                {(field) => (
-                  <TextField>
-                    <TextFieldInput
-                      name={field.name}
-                      onBlur={() => {
-                        field.handleBlur();
-                      }}
-                      onChange={(event) => {
-                        setSubmitError(null);
-                        field.handleChange(event.target.value);
-                      }}
-                      placeholder="Passkey label"
-                      value={field.state.value}
-                    />
-                  </TextField>
-                )}
-              </form.Field>
-
-              <Button
-                disabled={addPasskeyMutation.isPending || !supportsPasskeys}
-                size="sm"
-                type="submit"
-              >
-                {addPasskeyMutation.isPending ? (
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4 animate-spin"
-                    icon={Loading03Icon}
-                  />
-                ) : (
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4"
-                    icon={Key02Icon}
-                  />
-                )}
-                Add passkey
-              </Button>
-            </form>
-
-            <div className="space-y-3">
-              {renderPasskeyList(
-                isPasskeysPending,
-                passkeys,
-                removingPasskeyId,
-                handleRemovePasskeyClick
-              )}
-            </div>
-
-            {submitError === null ? null : (
-              <p className="text-body text-destructive">{submitError}</p>
+    <div className="min-w-0 space-y-4 p-4">
+      <div className="space-y-4">
+        <form
+          className="space-y-3"
+          action={async () => {
+            await form.handleSubmit();
+          }}
+        >
+          <form.Field name="label">
+            {(field) => (
+              <TextField>
+                <TextFieldInput
+                  aria-label="Passkey label"
+                  name={field.name}
+                  onBlur={() => {
+                    field.handleBlur();
+                  }}
+                  onChange={(event) => {
+                    setSubmitError(null);
+                    field.handleChange(event.target.value);
+                  }}
+                  placeholder="Passkey label"
+                  value={field.state.value}
+                />
+              </TextField>
             )}
-          </DialogBody>
+          </form.Field>
 
-          <DialogFooter>
-            <DialogCloseButton>Close</DialogCloseButton>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+          <Button
+            disabled={addPasskeyMutation.isPending || !supportsPasskeys}
+            size="sm"
+            type="submit"
+          >
+            {addPasskeyMutation.isPending ? (
+              <SpinnerIcon />
+            ) : (
+              <HugeiconsIcon aria-hidden className="size-4" icon={Key02Icon} />
+            )}
+            Add passkey
+          </Button>
+        </form>
+
+        <div className="space-y-3">
+          {renderPasskeyList(
+            isPasskeysPending,
+            passkeys,
+            removingPasskeyId,
+            handleRemovePasskeyClick
+          )}
+        </div>
+
+        {submitError === null ? null : (
+          <Text tone="destructive">{submitError}</Text>
+        )}
+      </div>
+    </div>
   );
 };
 
@@ -794,7 +662,7 @@ const DeleteAccountDialog = () => {
               await form.handleSubmit();
             }}
           >
-            <DialogBody className="space-y-3">
+            <DialogBody spacing="3">
               <p className="text-body text-muted-fg">
                 Type{" "}
                 <span className="font-medium text-fg">delete my account</span>
@@ -817,19 +685,16 @@ const DeleteAccountDialog = () => {
                       value={field.state.value}
                     />
                     {field.state.meta.errors.map((error) => (
-                      <p
-                        className="text-body text-destructive"
-                        key={error?.message}
-                      >
+                      <Text key={error?.message} tone="destructive">
                         {error?.message}
-                      </p>
+                      </Text>
                     ))}
                   </TextField>
                 )}
               </form.Field>
 
               {submitError === null ? null : (
-                <p className="text-body text-destructive">{submitError}</p>
+                <Text tone="destructive">{submitError}</Text>
               )}
             </DialogBody>
 
@@ -844,11 +709,7 @@ const DeleteAccountDialog = () => {
                 variant="destructive"
               >
                 {deleteAccountMutation.isPending ? (
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4 animate-spin"
-                    icon={Loading03Icon}
-                  />
+                  <SpinnerIcon />
                 ) : (
                   <HugeiconsIcon
                     aria-hidden
@@ -927,38 +788,28 @@ export const AccountSettingsPanel = ({
         <SettingsCard>
           <SettingsFieldRow
             action={
-              <EditNameDialog
+              <AccountNameSettings
                 currentName={user.name}
                 handleSessionRefresh={sessionState.refetch}
               />
             }
             label="Name"
-            value={user.name}
+            value={null}
           />
 
           <SettingsFieldRow
-            action={<EditEmailDialog currentEmail={user.email} />}
-            label="Mail"
-            value={user.email}
+            action={<AccountEmailSettings currentEmail={user.email} />}
+            label="Email"
+            value={null}
           />
         </SettingsCard>
       </SettingsSection>
 
       <SettingsSection title="Security">
         <SettingsCard>
-          <SettingsFieldRow
-            action={
-              <PasskeysDialog
-                isPasskeysPending={passkeysState.isPending}
-                passkeys={passkeys}
-              />
-            }
-            label="Passkeys"
-            value={
-              passkeys.length === 1
-                ? "1 Passkey"
-                : `${passkeys.length} Passkeys`
-            }
+          <PasskeySettings
+            isPasskeysPending={passkeysState.isPending}
+            passkeys={passkeys}
           />
 
           <SettingsFieldRow
@@ -970,11 +821,7 @@ export const AccountSettingsPanel = ({
                 variant="outline"
               >
                 {signOutMutation.isPending ? (
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4 animate-spin"
-                    icon={Loading03Icon}
-                  />
+                  <SpinnerIcon />
                 ) : (
                   <HugeiconsIcon
                     aria-hidden
@@ -994,7 +841,7 @@ export const AccountSettingsPanel = ({
         )}
       </SettingsSection>
 
-      <SettingsSection title="Danger zone">
+      <SettingsSection title="Delete account">
         <SettingsCard>
           <SettingsFieldRow
             action={<DeleteAccountDialog />}

@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
-use chrono::{DateTime, Local};
+use chrono::{DateTime, Datelike, Local};
 use gpui::{
     Animation, AnimationExt as _, AnyElement, ClickEvent, Context, Entity, FocusHandle, FontWeight,
     IntoElement, KeyBinding, Render, ScrollStrategy, SharedString, Subscription,
@@ -15,12 +15,13 @@ use gpui_component::spinner::Spinner;
 use gpui_component::{Disableable as _, TitleBar};
 
 use crate::api::{ApiClient, ApiError, DeviceCode};
-use crate::auth::TokenStore;
-use crate::dither::{auth_visual, workspace_dither};
+use crate::auth::{DeviceAuthorization, TokenStore};
+use crate::dither::auth_visual;
 use crate::model::{
     MailCategory, Mailbox, MailboxGroup, MailboxLabel, MailboxRequestScope, MessageDetail,
     MessageSummary, ReplyContext, ThreadActionRollback, ThreadCommand, ThreadDetail,
-    preview_labels, preview_mailboxes, preview_thread, preview_threads,
+    ThreadReadCompletion, preview_labels, preview_mailboxes, preview_thread, preview_threads,
+    reconcile_thread_refresh,
 };
 use crate::theme::{QuieterTheme, apply_component_theme};
 
@@ -47,6 +48,7 @@ struct ToastMessage {
 
 pub struct QuieterDesktop {
     focus_handle: FocusHandle,
+    window_handle: gpui::AnyWindowHandle,
     api: ApiClient,
     phase: AppPhase,
     palette: QuieterTheme,
@@ -62,9 +64,14 @@ pub struct QuieterDesktop {
     has_more_threads: bool,
     next_page_token: Option<String>,
     list_query: String,
+    list_scope: Option<(String, MailCategory, String)>,
     loading_more: bool,
     selected_thread_id: Option<String>,
     thread_detail: Option<ThreadDetail>,
+    expanded_message_ids: HashSet<String>,
+    reading_threads: HashSet<(String, String)>,
+    mail_revision: u64,
+    refresh_pending: bool,
     loading_threads: bool,
     loading_detail: bool,
     compose_open: bool,
@@ -79,6 +86,7 @@ pub struct QuieterDesktop {
     error_banner: Option<SharedString>,
     toast: Option<ToastMessage>,
     auth_generation: u64,
+    auth_deadline: Option<Instant>,
     thread_generation: u64,
     detail_generation: u64,
     mutation_generation: u64,
@@ -151,6 +159,7 @@ impl QuieterDesktop {
 
         Self {
             focus_handle,
+            window_handle: window.window_handle(),
             api: api.with_token(token),
             phase: if is_preview {
                 AppPhase::Ready
@@ -172,9 +181,14 @@ impl QuieterDesktop {
             has_more_threads: false,
             next_page_token: None,
             list_query: String::new(),
+            list_scope: None,
             loading_more: false,
             selected_thread_id: None,
             thread_detail: None,
+            expanded_message_ids: HashSet::new(),
+            reading_threads: HashSet::new(),
+            mail_revision: 0,
+            refresh_pending: false,
             loading_threads: false,
             loading_detail: false,
             compose_open: false,
@@ -189,6 +203,7 @@ impl QuieterDesktop {
             error_banner: None,
             toast: None,
             auth_generation: 0,
+            auth_deadline: None,
             thread_generation: 0,
             detail_generation: 0,
             mutation_generation: 0,
@@ -211,14 +226,28 @@ impl QuieterDesktop {
         if let Some(first) = self.threads.first() {
             self.selected_thread_id = Some(first.thread_id.clone());
             self.thread_detail = Some(preview_thread(first));
+            self.expanded_message_ids.extend(
+                self.thread_detail
+                    .as_ref()
+                    .and_then(|thread| thread.messages.last())
+                    .map(|message| message.id.clone()),
+            );
         }
         self.phase = AppPhase::Ready;
         cx.notify();
     }
 
     fn begin_device_authorization(&mut self, cx: &mut Context<Self>) {
+        if matches!(
+            self.phase,
+            AppPhase::RequestingDevice | AppPhase::AwaitingDevice(_)
+        ) {
+            return;
+        }
         self.auth_generation = self.auth_generation.wrapping_add(1);
         let generation = self.auth_generation;
+        let started_at = Instant::now();
+        self.auth_deadline = Some(started_at + Duration::from_secs(300));
         let api = self.api.with_token(None);
         self.phase = AppPhase::RequestingDevice;
         self.error_banner = None;
@@ -235,6 +264,16 @@ impl QuieterDesktop {
                 }
                 match result {
                     Ok(code) => {
+                        let authorization =
+                            DeviceAuthorization::new(started_at, code.expires_in, code.interval);
+                        if authorization.remaining().is_none() {
+                            this.phase = AppPhase::SignedOut;
+                            this.auth_deadline = None;
+                            this.error_banner = Some("Sign-in took too long. Try again.".into());
+                            cx.notify();
+                            return;
+                        }
+                        this.auth_deadline = Some(authorization.deadline());
                         this.phase = AppPhase::AwaitingDevice(code.clone());
                         if this.open_auth_browser {
                             if let Err(error) = open::that(&code.verification_uri_complete) {
@@ -248,10 +287,11 @@ impl QuieterDesktop {
                         } else {
                             println!("{}", code.verification_uri_complete);
                         }
-                        this.poll_device_authorization(code, generation, cx);
+                        this.poll_device_authorization(code, authorization, generation, cx);
                     }
                     Err(error) => {
                         this.phase = AppPhase::SignedOut;
+                        this.auth_deadline = None;
                         this.error_banner = Some(error.to_string().into());
                     }
                 }
@@ -259,22 +299,71 @@ impl QuieterDesktop {
             });
         })
         .detach();
+
+        cx.spawn(async move |this, cx| {
+            loop {
+                let Some(wait) = this
+                    .read_with(cx, |this, _| {
+                        this.auth_deadline.map(|deadline| {
+                            deadline
+                                .saturating_duration_since(Instant::now())
+                                .min(Duration::from_secs(1))
+                        })
+                    })
+                    .ok()
+                    .flatten()
+                else {
+                    return;
+                };
+                cx.background_executor().timer(wait).await;
+                let waiting = this
+                    .update(cx, |this, cx| {
+                        if this.auth_generation != generation
+                            || !matches!(
+                                this.phase,
+                                AppPhase::RequestingDevice | AppPhase::AwaitingDevice(_)
+                            )
+                        {
+                            return false;
+                        }
+                        if this
+                            .auth_deadline
+                            .is_some_and(|deadline| Instant::now() >= deadline)
+                        {
+                            this.auth_generation = this.auth_generation.wrapping_add(1);
+                            this.auth_deadline = None;
+                            this.phase = AppPhase::SignedOut;
+                            this.error_banner = Some("Sign-in took too long. Try again.".into());
+                            cx.notify();
+                            return false;
+                        }
+                        cx.notify();
+                        true
+                    })
+                    .unwrap_or(false);
+                if !waiting {
+                    return;
+                }
+            }
+        })
+        .detach();
     }
 
     fn poll_device_authorization(
         &mut self,
         code: DeviceCode,
+        mut authorization: DeviceAuthorization,
         generation: u64,
         cx: &mut Context<Self>,
     ) {
         let api = self.api.with_token(None);
         cx.spawn(async move |this, cx| {
-            let deadline = Instant::now() + Duration::from_secs(code.expires_in);
-            let mut interval = Duration::from_secs(code.interval.max(1));
-
             loop {
-                cx.background_executor().timer(interval).await;
-                if Instant::now() >= deadline
+                let Some(wait) = authorization.next_wait() else {
+                    break;
+                };
+                cx.background_executor().timer(wait).await;
+                if authorization.remaining().is_none()
                     || !this
                         .read_with(cx, |this, _| this.auth_generation == generation)
                         .unwrap_or(false)
@@ -284,32 +373,50 @@ impl QuieterDesktop {
 
                 let poll_api = api.clone();
                 let device_code = code.device_code.clone();
+                let Some(remaining) = authorization.remaining() else {
+                    break;
+                };
                 let result = cx
                     .background_executor()
-                    .spawn(async move { poll_api.poll_device_token(&device_code) })
+                    .spawn(async move { poll_api.poll_device_token(&device_code, remaining) })
                     .await;
                 match result {
                     Err(ApiError::AuthorizationPending) => continue,
                     Err(ApiError::SlowDown) => {
-                        interval += Duration::from_secs(5);
+                        authorization.slow_down();
                         continue;
                     }
-                    Err(ApiError::Transport(_)) | Err(ApiError::Server { status: 429, .. }) => {
-                        interval = (interval * 2).min(Duration::from_secs(30));
+                    Err(ApiError::Transport(_)) | Err(ApiError::Server { status: 429 | 500..=599, .. }) => {
+                        authorization.transient_failure();
                         continue;
                     }
                     Ok(token) => {
                         let access_token = token.access_token;
-                        if !this.read_with(cx, |this, _| this.auth_generation == generation).unwrap_or(false) {
+                        if authorization.remaining().is_none()
+                            || !this.read_with(cx, |this, _| this.auth_generation == generation).unwrap_or(false) {
                             let revoke_api = api.with_token(Some(access_token));
                             let _ = cx.background_executor().spawn(async move { revoke_api.sign_out() }).await;
-                            return;
+                            break;
                         }
-                        let _ = this.update(cx, |this, cx| {
-                            if this.auth_generation != generation {
-                                return;
+                        let revoke_token = access_token.clone();
+                        let signed_in = this.update(cx, |this, cx| {
+                            if this.auth_generation != generation || authorization.remaining().is_none() {
+                                return false;
                             }
                             let stored = TokenStore::save(this.api.base_url(), &access_token);
+                            if authorization.remaining().is_none() {
+                                let cleared = TokenStore::clear(this.api.base_url());
+                                this.auth_deadline = None;
+                                this.phase = AppPhase::SignedOut;
+                                this.error_banner = Some(if cleared.is_err() {
+                                    "Sign-in took too long, and the saved session could not be removed. Check your system credential store.".into()
+                                } else {
+                                    "Sign-in took too long. Try again.".into()
+                                });
+                                cx.notify();
+                                return false;
+                            }
+                            this.auth_deadline = None;
                             this.api = this.api.with_token(Some(access_token));
                             if let Err(error) = stored {
                                 this.error_banner = Some(
@@ -323,14 +430,24 @@ impl QuieterDesktop {
                                 cx.activate(true);
                             }
                             this.load_mailboxes(cx);
-                        });
+                            true
+                        }).unwrap_or(false);
+                        if !signed_in {
+                            let revoke_api = api.with_token(Some(revoke_token));
+                            let _ = cx.background_executor().spawn(async move { revoke_api.sign_out() }).await;
+                        }
                         return;
                     }
                     Err(error) => {
                         let _ = this.update(cx, |this, cx| {
                             if this.auth_generation == generation {
                                 this.phase = AppPhase::SignedOut;
-                                this.error_banner = Some(error.to_string().into());
+                                this.auth_deadline = None;
+                                this.error_banner = Some(if matches!(error, ApiError::DeviceCodeExpired) {
+                                    "Sign-in took too long. Try again.".into()
+                                } else {
+                                    error.to_string().into()
+                                });
                                 cx.notify();
                             }
                         });
@@ -342,7 +459,8 @@ impl QuieterDesktop {
             let _ = this.update(cx, |this, cx| {
                 if this.auth_generation == generation {
                     this.phase = AppPhase::SignedOut;
-                    this.error_banner = Some("The authorization code expired. Try again.".into());
+                    this.auth_deadline = None;
+                    this.error_banner = Some("Sign-in took too long. Try again.".into());
                     cx.notify();
                 }
             });
@@ -357,6 +475,7 @@ impl QuieterDesktop {
         cx: &mut Context<Self>,
     ) {
         self.auth_generation = self.auth_generation.wrapping_add(1);
+        self.auth_deadline = None;
         self.phase = AppPhase::SignedOut;
         self.error_banner = None;
         cx.notify();
@@ -448,9 +567,14 @@ impl QuieterDesktop {
             return;
         };
         let query = self.search_input.read(cx).value().trim().to_owned();
+        let scope = (mailbox_id.clone(), self.category, query.clone());
+        let same_scope = self.list_scope.as_ref() == Some(&scope);
+        self.list_scope = Some(scope);
         self.list_query = query.clone();
-        self.thread_scroll
-            .scroll_to_item_strict(0, ScrollStrategy::Top);
+        if !same_scope {
+            self.thread_scroll
+                .scroll_to_item_strict(0, ScrollStrategy::Top);
+        }
         self.next_page_token = None;
         self.has_more_threads = false;
         self.loading_more = false;
@@ -475,23 +599,34 @@ impl QuieterDesktop {
                 .first()
                 .map(|message| message.thread_id.clone());
             self.thread_detail = self.threads.first().map(preview_thread);
+            self.expanded_message_ids.clear();
+            self.expanded_message_ids.extend(
+                self.thread_detail
+                    .as_ref()
+                    .and_then(|thread| thread.messages.last())
+                    .map(|message| message.id.clone()),
+            );
             cx.notify();
             return;
         }
 
         self.thread_generation = self.thread_generation.wrapping_add(1);
-        self.detail_generation = self.detail_generation.wrapping_add(1);
-        self.mutation_generation = self.mutation_generation.wrapping_add(1);
+        if !same_scope {
+            self.detail_generation = self.detail_generation.wrapping_add(1);
+            self.mutation_generation = self.mutation_generation.wrapping_add(1);
+            self.loading_detail = false;
+            self.mutating = false;
+            self.threads.clear();
+            self.thread_detail = None;
+            self.expanded_message_ids.clear();
+            self.selected_thread_id = None;
+        }
         let generation = self.thread_generation;
         let auth_generation = self.auth_generation;
         let category = self.category;
+        let mail_revision = self.mail_revision;
         let api = self.api.clone();
         self.loading_threads = true;
-        self.loading_detail = false;
-        self.mutating = false;
-        self.threads.clear();
-        self.thread_detail = None;
-        self.selected_thread_id = None;
         cx.notify();
 
         cx.spawn(async move |this, cx| {
@@ -511,17 +646,25 @@ impl QuieterDesktop {
                     return;
                 }
                 this.loading_threads = false;
+                if this.mail_revision != mail_revision {
+                    if this.mutating {
+                        this.refresh_pending = true;
+                        cx.notify();
+                    } else {
+                        this.load_threads(cx);
+                    }
+                    return;
+                }
                 match result {
                     Ok(list) => {
                         this.thread_result_estimate = list.result_size_estimate;
                         this.has_more_threads = list.next_page_token.is_some();
                         this.next_page_token = list.next_page_token;
-                        let mut thread_ids = HashSet::new();
-                        this.threads = list
-                            .messages
-                            .into_iter()
-                            .filter(|message| thread_ids.insert(message.thread_id.clone()))
-                            .collect();
+                        this.threads = reconcile_thread_refresh(
+                            list.messages,
+                            &this.threads,
+                            this.selected_thread_id.as_deref(),
+                        );
                     }
                     Err(ApiError::Unauthorized) => this.expire_local_session(
                         "Your desktop session expired. Continue in the browser to reconnect.",
@@ -589,6 +732,7 @@ impl QuieterDesktop {
         let category = self.category;
         let generation = self.thread_generation;
         let auth_generation = self.auth_generation;
+        let mail_revision = self.mail_revision;
         self.loading_more = true;
         cx.notify();
         cx.spawn(async move |this, cx| {
@@ -608,6 +752,10 @@ impl QuieterDesktop {
                     return;
                 }
                 this.loading_more = false;
+                if this.mail_revision != mail_revision {
+                    cx.notify();
+                    return;
+                }
                 match result {
                     Ok(page) => {
                         this.next_page_token = page.next_page_token;
@@ -636,6 +784,9 @@ impl QuieterDesktop {
     }
 
     fn refresh_threads(&mut self, cx: &mut Context<Self>) {
+        if self.loading_threads || self.mutating {
+            return;
+        }
         if self.selected_mailbox_id.is_some() {
             self.load_threads(cx);
         } else if !self.is_preview {
@@ -661,6 +812,10 @@ impl QuieterDesktop {
         if self.selected_thread_id.as_deref() == Some(&thread_id) && self.thread_detail.is_some() {
             return;
         }
+        if self.category == MailCategory::Unread {
+            self.threads
+                .retain(|message| message.is_unread || message.thread_id == thread_id);
+        }
         self.selected_thread_id = Some(thread_id.clone());
         if self.is_preview {
             if let Some(message) = self
@@ -675,6 +830,13 @@ impl QuieterDesktop {
                 .iter()
                 .find(|message| message.thread_id == thread_id)
                 .map(preview_thread);
+            self.expanded_message_ids.clear();
+            self.expanded_message_ids.extend(
+                self.thread_detail
+                    .as_ref()
+                    .and_then(|thread| thread.messages.last())
+                    .map(|message| message.id.clone()),
+            );
             cx.notify();
             return;
         }
@@ -687,6 +849,7 @@ impl QuieterDesktop {
         let auth_generation = self.auth_generation;
         let api = self.api.clone();
         self.thread_detail = None;
+        self.expanded_message_ids.clear();
         self.loading_detail = true;
         cx.notify();
 
@@ -705,7 +868,31 @@ impl QuieterDesktop {
                 this.loading_detail = false;
                 match detail {
                     Ok(thread) => {
+                        let has_unread = thread.messages.iter().any(|message| message.is_unread)
+                            || this
+                                .threads
+                                .iter()
+                                .any(|message| message.thread_id == thread_id && message.is_unread);
+                        this.expanded_message_ids.extend(
+                            thread
+                                .messages
+                                .iter()
+                                .rev()
+                                .find(|message| {
+                                    !message.label_ids.iter().any(|label| label == "DRAFT")
+                                })
+                                .map(|message| message.id.clone()),
+                        );
                         this.thread_detail = Some(thread);
+                        if !has_unread {
+                            cx.notify();
+                            return;
+                        }
+                        let read_key = (mailbox_id.clone(), thread_id.clone());
+                        if !this.reading_threads.insert(read_key.clone()) {
+                            cx.notify();
+                            return;
+                        }
                         cx.spawn(async move |this, cx| {
                             let result = cx
                                 .background_executor()
@@ -718,20 +905,30 @@ impl QuieterDesktop {
                                 })
                                 .await;
                             let _ = this.update(cx, |this, cx| {
-                                if this.auth_generation != auth_generation
-                                    || this.detail_generation != generation
-                                {
+                                if this.auth_generation != auth_generation {
                                     return;
                                 }
+                                this.reading_threads.remove(&read_key);
+                                cx.notify();
                                 match result {
                                     Ok(_) => {
-                                        if let Some(message) =
-                                            this.threads.iter_mut().find(|message| {
-                                                Some(&message.thread_id)
-                                                    == this.selected_thread_id.as_ref()
-                                            })
-                                        {
-                                            message.set_unread(false);
+                                        if (ThreadReadCompletion {
+                                            session_generation: auth_generation,
+                                            mailbox_id: read_key.0,
+                                            thread_id: read_key.1,
+                                        })
+                                        .apply(
+                                            &MailboxRequestScope {
+                                                session_generation: this.auth_generation,
+                                                view_generation: this.thread_generation,
+                                                mailbox_id: this.selected_mailbox_id.clone(),
+                                            },
+                                            this.category,
+                                            &mut this.threads,
+                                            this.selected_thread_id.as_deref(),
+                                            &mut this.thread_detail,
+                                        ) {
+                                            this.mail_revision = this.mail_revision.wrapping_add(1);
                                         }
                                     }
                                     Err(ApiError::Unauthorized) => this.expire_local_session(
@@ -739,6 +936,10 @@ impl QuieterDesktop {
                                         cx,
                                     ),
                                     Err(error) => this.set_toast(error.to_string(), true, cx),
+                                }
+                                if this.refresh_pending && !this.mutating {
+                                    this.refresh_pending = false;
+                                    this.load_threads(cx);
                                 }
                                 cx.notify();
                             });
@@ -764,6 +965,13 @@ impl QuieterDesktop {
         let Some(thread_id) = self.selected_thread_id.clone() else {
             return;
         };
+        if self.reading_threads.iter().any(|(mailbox_id, id)| {
+            Some(mailbox_id) == self.selected_mailbox_id.as_ref() && id == &thread_id
+        }) {
+            self.set_toast("Wait for this conversation to finish loading.", true, cx);
+            return;
+        }
+        self.mail_revision = self.mail_revision.wrapping_add(1);
         let remove_from_view = matches!(
             command,
             ThreadCommand::Archive
@@ -800,6 +1008,17 @@ impl QuieterDesktop {
         {
             message.set_unread(matches!(command, ThreadCommand::MarkUnread));
         }
+        if matches!(command, ThreadCommand::MarkRead | ThreadCommand::MarkUnread)
+            && let Some(detail) = self.thread_detail.as_mut()
+        {
+            for message in &mut detail.messages {
+                message.is_unread = matches!(command, ThreadCommand::MarkUnread);
+                message.label_ids.retain(|label| label != "UNREAD");
+                if message.is_unread {
+                    message.label_ids.push("UNREAD".to_owned());
+                }
+            }
+        }
 
         if self.is_preview {
             self.set_toast(command.completion_message(), false, cx);
@@ -826,12 +1045,26 @@ impl QuieterDesktop {
                     return;
                 }
                 if this.mutation_generation != generation {
+                    this.mail_revision = this.mail_revision.wrapping_add(1);
+                    if matches!(result, Err(ApiError::Unauthorized)) {
+                        this.expire_local_session(
+                            "Your desktop session expired. Sign in again.",
+                            cx,
+                        );
+                        return;
+                    }
                     if let Err(error) = result {
                         this.set_toast(error.to_string(), true, cx);
+                    }
+                    if this.mutating {
+                        this.refresh_pending = true;
+                    } else {
+                        this.load_threads(cx);
                     }
                     return;
                 }
                 this.mutating = false;
+                this.mail_revision = this.mail_revision.wrapping_add(1);
                 match result {
                     Ok(_) => this.set_toast(command.completion_message(), false, cx),
                     Err(ApiError::Unauthorized) => this.expire_local_session(
@@ -852,6 +1085,10 @@ impl QuieterDesktop {
                         );
                         this.set_toast(error.to_string(), true, cx);
                     }
+                }
+                if this.refresh_pending {
+                    this.refresh_pending = false;
+                    this.load_threads(cx);
                 }
                 cx.notify();
             });
@@ -916,6 +1153,9 @@ impl QuieterDesktop {
             self.selected_thread_id = None;
             self.thread_detail = None;
             self.loading_detail = false;
+            if self.category == MailCategory::Unread {
+                self.threads.retain(|message| message.is_unread);
+            }
             self.focus_handle.focus(window);
             cx.notify();
         } else {
@@ -1076,10 +1316,39 @@ impl QuieterDesktop {
 
     fn expire_local_session(&mut self, message: impl Into<SharedString>, cx: &mut Context<Self>) {
         self.auth_generation = self.auth_generation.wrapping_add(1);
+        self.auth_deadline = None;
         self.thread_generation = self.thread_generation.wrapping_add(1);
         self.detail_generation = self.detail_generation.wrapping_add(1);
         self.mutation_generation = self.mutation_generation.wrapping_add(1);
         self.compose_generation = self.compose_generation.wrapping_add(1);
+        self.toast_generation = self.toast_generation.wrapping_add(1);
+        self.toast = None;
+        self.hover_motion.clear();
+        self.reading_threads.clear();
+        self.expanded_message_ids.clear();
+        self.refresh_pending = false;
+        self.mail_revision = self.mail_revision.wrapping_add(1);
+        let generation = self.auth_generation;
+        let view = cx.entity().downgrade();
+        let window_handle = self.window_handle;
+        cx.defer(move |cx| {
+            let _ = cx.update_window(window_handle, |_, window, cx| {
+                let _ = view.update(cx, |this, cx| {
+                    if this.auth_generation != generation {
+                        return;
+                    }
+                    for input in [
+                        &this.search_input,
+                        &this.compose_to_input,
+                        &this.compose_subject_input,
+                        &this.compose_body_input,
+                    ] {
+                        input.update(cx, |input, cx| input.set_value("", window, cx));
+                    }
+                    this.focus_handle.focus(window);
+                });
+            });
+        });
         let cleared = if self.is_preview {
             Ok(())
         } else {
@@ -1096,6 +1365,7 @@ impl QuieterDesktop {
         self.selected_thread_id = None;
         self.next_page_token = None;
         self.list_query.clear();
+        self.list_scope = None;
         self.loading_more = false;
         self.thread_detail = None;
         self.compose_open = false;
@@ -1146,9 +1416,17 @@ impl QuieterDesktop {
     }
 
     fn render_title_bar(&self) -> AnyElement {
+        let palette = if matches!(
+            self.phase,
+            AppPhase::SignedOut | AppPhase::RequestingDevice | AppPhase::AwaitingDevice(_)
+        ) {
+            QuieterTheme::dark()
+        } else {
+            self.palette
+        };
         TitleBar::new()
-            .bg(self.palette.background)
-            .border_color(self.palette.border)
+            .bg(palette.background)
+            .border_color(palette.border)
             .child(
                 div()
                     .flex()
@@ -1156,26 +1434,32 @@ impl QuieterDesktop {
                     .gap_2()
                     .h_full()
                     .text_sm()
+                    .text_color(palette.foreground)
                     .font_weight(FontWeight::MEDIUM)
                     .child(
                         svg()
                             .path("brand/quieter-mark.svg")
                             .size(px(17.0))
-                            .text_color(self.palette.foreground),
+                            .text_color(palette.foreground),
                     )
                     .child("Quieter"),
             )
             .into_any_element()
     }
 
-    fn render_auth(&mut self, cx: &mut Context<Self>) -> AnyElement {
-        let palette = self.palette;
+    fn render_auth(&mut self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
+        let palette = QuieterTheme::dark();
+        let show_visual = f32::from(window.viewport_size().width) >= 760.0;
+        let expires_in = self.auth_deadline.map(|deadline| {
+            let minutes = (deadline.saturating_duration_since(Instant::now()).as_secs() + 59) / 60;
+            format!("Code expires in {minutes} min")
+        });
         let content = match &self.phase {
             AppPhase::RequestingDevice => div()
                 .mt_8()
-                .h(px(42.0))
+                .h(px(36.0))
                 .w_full()
-                .rounded_lg()
+                .rounded(px(12.0))
                 .bg(palette.primary)
                 .text_color(palette.primary_foreground)
                 .flex()
@@ -1190,10 +1474,10 @@ impl QuieterDesktop {
                 .w_full()
                 .child(
                     div()
-                        .rounded_lg()
+                        .rounded(px(14.0))
                         .border_1()
                         .border_color(palette.border)
-                        .bg(palette.raised)
+                        .bg(palette.control)
                         .px_5()
                         .py_4()
                         .child(
@@ -1212,27 +1496,38 @@ impl QuieterDesktop {
                         )
                         .child(
                             div()
-                                .mt_2()
-                                .text_sm()
+                                .mt_3()
+                                .text_size(px(13.0))
                                 .text_color(palette.muted)
-                                .child("Approve this desktop in the browser. This window will continue automatically."),
+                                .child(
+                                    "Enter this code in your browser to connect the desktop app.",
+                                ),
                         )
                         .child(
                             div()
-                                .mt_2()
+                                .mt_3()
                                 .truncate()
                                 .text_xs()
                                 .text_color(palette.muted)
                                 .child(code.verification_uri.clone()),
-                        ),
+                        )
+                        .when_some(expires_in, |this, expiry| {
+                            this.child(
+                                div()
+                                    .mt_3()
+                                    .text_xs()
+                                    .text_color(palette.muted)
+                                    .child(expiry),
+                            )
+                        }),
                 )
                 .child(
                     div()
                         .id("open-authorization-page")
                         .mt_3()
-                        .h(px(42.0))
+                        .h(px(36.0))
                         .w_full()
-                        .rounded_lg()
+                        .rounded(px(12.0))
                         .bg(palette.primary)
                         .text_color(palette.primary_foreground)
                         .cursor_pointer()
@@ -1240,15 +1535,15 @@ impl QuieterDesktop {
                         .items_center()
                         .justify_center()
                         .on_click(cx.listener(Self::reopen_authorization_page))
-                        .child("Open browser again"),
+                        .child("Open sign-in page"),
                 )
                 .child(
                     div()
                         .id("cancel-authorization")
                         .mt_2()
-                        .h(px(38.0))
+                        .h(px(32.0))
                         .w_full()
-                        .rounded_lg()
+                        .rounded(px(12.0))
                         .cursor_pointer()
                         .flex()
                         .items_center()
@@ -1263,9 +1558,9 @@ impl QuieterDesktop {
             _ => div()
                 .id("continue-in-browser")
                 .mt_8()
-                .h(px(42.0))
+                .h(px(36.0))
                 .w_full()
-                .rounded_lg()
+                .rounded(px(12.0))
                 .bg(palette.primary)
                 .text_color(palette.primary_foreground)
                 .cursor_pointer()
@@ -1288,37 +1583,46 @@ impl QuieterDesktop {
         div()
             .size_full()
             .flex()
-            .bg(palette.background)
+            .bg(gpui::rgb(0x0a0a0a))
             .child(
                 div()
-                    .w(relative(0.6))
+                    .id("auth-form-scroll")
+                    .relative()
+                    .w(if show_visual { relative(7.0 / 12.0) } else { relative(1.0) })
                     .h_full()
+                    .overflow_y_scroll()
                     .flex()
                     .items_center()
                     .justify_center()
-                    .px_8()
+                    .px_6()
+                    .py_8()
+                    .child(
+                        div()
+                            .absolute()
+                            .top(px(24.0))
+                            .left(px(24.0))
+                            .child(
+                                svg()
+                                    .path("brand/quieter-combination.svg")
+                                    .w(px(96.0))
+                                    .h(px(24.0))
+                                    .text_color(palette.foreground),
+                            ),
+                    )
                     .child(
                         div()
                             .w_full()
-                            .max_w(px(448.0))
-                            .child(
-                                div().flex().items_center().gap_2().mb_8().child(
-                                    svg()
-                                        .path("brand/quieter-combination.svg")
-                                        .w(px(128.0))
-                                        .h(px(32.0))
-                                        .text_color(palette.foreground),
-                                ),
-                            )
+                            .max_w(px(352.0))
                             .child(
                                 div()
-                                    .text_2xl()
+                                    .text_center()
+                                    .text_size(px(24.0))
                                     .font_weight(FontWeight::MEDIUM)
                                     .child("Continue to Quieter"),
                             )
                             .child(
-                                div().mt_2().text_sm().text_color(palette.muted).child(
-                                    "Sign in in your browser, then return to the native app.",
+                                div().mt_3().text_center().text_size(px(13.0)).text_color(palette.muted).child(
+                                    "Sign in in your browser. Quieter will continue here automatically.",
                                 ),
                             )
                             .child(content)
@@ -1326,39 +1630,66 @@ impl QuieterDesktop {
                                 this.child(
                                     div()
                                         .mt_4()
-                                        .rounded_lg()
+                                        .rounded(px(12.0))
                                         .border_1()
                                         .border_color(palette.danger)
-                                        .bg(palette.surface)
+                                        .bg(palette.control)
                                         .p_3()
-                                        .text_sm()
+                                        .text_size(px(13.0))
                                         .text_color(palette.danger)
                                         .child(error),
                                 )
                             })
-                            .child(div().mt_8().text_xs().text_color(palette.muted).child(
-                                if self.api.base_url().contains("localhost") {
-                                    "Using the local Quieter development server"
-                                } else {
-                                    "Connected securely to quieter.email"
-                                },
-                            )),
+                            .child(
+                                div()
+                                    .mt_10()
+                                    .flex()
+                                    .justify_center()
+                                    .gap_5()
+                                    .text_xs()
+                                    .text_color(palette.muted)
+                                    .child(
+                                        div()
+                                            .id("auth-terms")
+                                            .cursor_pointer()
+                                            .hover(|style| style.text_color(palette.foreground))
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                if let Err(error) = open::that("https://quieter.email/terms") {
+                                                    this.set_toast(format!("The browser could not be opened: {error}"), true, cx);
+                                                }
+                                            }))
+                                            .child("Terms"),
+                                    )
+                                    .child(
+                                        div()
+                                            .id("auth-privacy")
+                                            .cursor_pointer()
+                                            .hover(|style| style.text_color(palette.foreground))
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                if let Err(error) = open::that("https://quieter.email/privacy") {
+                                                    this.set_toast(format!("The browser could not be opened: {error}"), true, cx);
+                                                }
+                                            }))
+                                            .child("Privacy"),
+                                    ),
+                            ),
                     ),
             )
-            .child(
+            .when(show_visual, |this| this.child(
                 div()
                     .relative()
-                    .w(relative(0.4))
+                    .w(relative(5.0 / 12.0))
                     .h_full()
                     .overflow_hidden()
                     .border_l_1()
-                    .border_color(palette.border)
+                    .border_color(palette.border.opacity(0.3))
+                    .bg(gpui::rgb(0x0a0a0a))
                     .child(auth_visual(
-                        QuieterTheme::dark().primary,
+                        palette.primary,
                         true,
                         self.reduced_motion,
                     )),
-            )
+            ))
             .into_any_element()
     }
 
@@ -1376,9 +1707,17 @@ impl QuieterDesktop {
             })
             .map_or_else(|| "Mailbox".to_owned(), |group| group.name.clone());
         let secondary = mailbox.as_ref().map_or(group_name.clone(), |mailbox| {
-            format!("{} / {group_name}", mailbox.email_address)
+            if mailbox
+                .display_name
+                .as_ref()
+                .is_some_and(|name| !name.trim().is_empty())
+            {
+                format!("{}, {group_name}", mailbox.email_address)
+            } else {
+                group_name.clone()
+            }
         });
-        let mut navigation = div().mt(px(16.0)).w_full().flex().flex_col().gap(px(2.0));
+        let mut navigation = div().mt(px(8.0)).w_full().flex().flex_col().gap(px(2.0));
         for (index, category) in MailCategory::ALL.into_iter().enumerate() {
             let active = self.category == category;
             let hover_key: SharedString = format!("nav-{index}").into();
@@ -1392,7 +1731,7 @@ impl QuieterDesktop {
                     .w_full()
                     .h(px(32.0))
                     .px_3()
-                    .rounded(px(13.5))
+                    .rounded(px(12.0))
                     .flex()
                     .items_center()
                     .gap_3()
@@ -1424,7 +1763,11 @@ impl QuieterDesktop {
                     }))
                     .child(
                         svg()
-                            .path(category.icon_path())
+                            .path(if category == MailCategory::Unread {
+                                "icons/unread.svg"
+                            } else {
+                                category.icon_path()
+                            })
                             .size(px(16.0))
                             .text_color(palette.foreground),
                     )
@@ -1448,7 +1791,7 @@ impl QuieterDesktop {
                     .justify_start()
                     .px_3()
                     .py_2()
-                    .rounded(px(13.5))
+                    .rounded(px(12.0))
                     .child(
                         div()
                             .w(px(192.0))
@@ -1512,69 +1855,13 @@ impl QuieterDesktop {
             )
             .child(
                 div()
-                    .mt(px(13.0))
+                    .id("compose")
+                    .mt(px(12.0))
                     .mx_1()
                     .h(px(32.0))
                     .flex_none()
-                    .flex()
-                    .gap(px(2.0))
-                    .child(
-                        div()
-                            .id("mail-tab")
-                            .flex_1()
-                            .h_full()
-                            .rounded(px(13.5))
-                            .bg(palette.active)
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .gap_2()
-                            .text_size(px(13.0))
-                            .cursor_pointer()
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.close_compose(window, cx);
-                            }))
-                            .child(
-                                svg()
-                                    .path("icons/inbox.svg")
-                                    .size(px(14.0))
-                                    .text_color(palette.foreground),
-                            )
-                            .child("Mail"),
-                    )
-                    .child(
-                        div()
-                            .id("open-web-chat")
-                            .flex_1()
-                            .h_full()
-                            .rounded(px(13.5))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .gap_2()
-                            .text_size(px(13.0))
-                            .cursor_pointer()
-                            .text_color(palette.muted)
-                            .hover(|style| style.bg(palette.hover))
-                            .on_click(cx.listener(Self::open_web_chat))
-                            .child(
-                                svg()
-                                    .path("icons/chat.svg")
-                                    .size(px(14.0))
-                                    .text_color(palette.muted),
-                            )
-                            .child("Chat"),
-                    ),
-            )
-            .child(
-                div()
-                    .id("compose")
-                    .mt(px(21.0))
-                    .mx_1()
-                    .h(px(36.0))
-                    .flex_none()
                     .px_4()
-                    .rounded(px(13.5))
+                    .rounded(px(12.0))
                     .bg(palette.primary)
                     .text_color(palette.primary_foreground)
                     .cursor_pointer()
@@ -1599,36 +1886,6 @@ impl QuieterDesktop {
                     .flex_1()
                     .overflow_y_scroll()
                     .child(div().mx_1().child(navigation))
-                    .child(
-                        div()
-                            .mx_1()
-                            .mt_4()
-                            .px_2()
-                            .child(div().text_xs().text_color(palette.muted).child("Views"))
-                            .child(
-                                div()
-                                    .id("open-saved-views")
-                                    .cursor_pointer()
-                                    .mt_2()
-                                    .text_xs()
-                                    .text_color(palette.muted)
-                                    .hover(|style| style.text_color(palette.foreground))
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        let url = this.api.workspace_url(
-                                            "inbox",
-                                            this.selected_mailbox_id.as_deref(),
-                                        );
-                                        if let Err(error) = open::that(url.as_str()) {
-                                            this.set_toast(
-                                                format!("The browser could not be opened: {error}"),
-                                                true,
-                                                cx,
-                                            );
-                                        }
-                                    }))
-                                    .child("Open saved views in browser"),
-                            ),
-                    )
                     .child(
                         div()
                             .mx_1()
@@ -1657,7 +1914,7 @@ impl QuieterDesktop {
                                             .h(px(28.0))
                                             .mb(px(2.0))
                                             .px_3()
-                                            .rounded(px(13.5))
+                                            .rounded(px(10.0))
                                             .flex()
                                             .items_center()
                                             .gap_2()
@@ -1677,7 +1934,7 @@ impl QuieterDesktop {
                                                 div()
                                                     .size(px(12.0))
                                                     .flex_none()
-                                                    .rounded(px(4.0))
+                                                    .rounded_full()
                                                     .bg(color),
                                             )
                                             .child(
@@ -1703,7 +1960,7 @@ impl QuieterDesktop {
                             .flex_1()
                             .h(px(36.0))
                             .px_4()
-                            .rounded(px(13.5))
+                            .rounded(px(12.0))
                             .flex()
                             .items_center()
                             .gap_2()
@@ -1724,7 +1981,7 @@ impl QuieterDesktop {
                         gpui_component::button::Button::new("help-and-appearance")
                             .ghost()
                             .size(px(36.0))
-                            .rounded(px(13.5))
+                            .rounded(px(12.0))
                             .tooltip("Help and appearance")
                             .child(
                                 svg()
@@ -1737,6 +1994,19 @@ impl QuieterDesktop {
                                 let sign_out_view = view.clone();
                                 let reduced_motion = self.reduced_motion;
                                 move |mut menu, _, _| {
+                                    let chat_view = view.clone();
+                                    menu = menu.item(
+                                        gpui_component::menu::PopupMenuItem::new(
+                                            "Open Chat in browser",
+                                        )
+                                        .on_click(
+                                            move |event, window, cx| {
+                                                let _ = chat_view.update(cx, |this, cx| {
+                                                    this.open_web_chat(event, window, cx)
+                                                });
+                                            },
+                                        ),
+                                    );
                                     menu = menu.link("Help", "https://quieter.email").separator();
                                     let motion_view = view.clone();
                                     menu = menu.item(
@@ -1811,7 +2081,7 @@ impl QuieterDesktop {
             .split_once('<')
             .map_or("", |(_, address)| address.trim_end_matches('>'))
             .to_owned();
-        let date = format_mail_date(message.date.as_deref().or(message.internal_date.as_deref()));
+        let date = format_mail_date(message.internal_date.as_deref().or(message.date.as_deref()));
         let thread_id = message.thread_id.clone();
         let hover_key: SharedString = format!("row-{thread_id}").into();
         let hover = self
@@ -1823,7 +2093,7 @@ impl QuieterDesktop {
             .relative()
             .h(px(68.0))
             .w_full()
-            .rounded(px(16.2))
+            .rounded(px(14.0))
             .cursor_pointer()
             .bg(if selected {
                 palette.hover
@@ -1867,7 +2137,7 @@ impl QuieterDesktop {
                         div()
                             .size(px(38.0))
                             .flex_none()
-                            .rounded(px(10.8))
+                            .rounded(px(14.0))
                             .bg(palette.hover.opacity(0.80))
                             .flex()
                             .items_center()
@@ -1941,7 +2211,7 @@ impl QuieterDesktop {
                                                     .gap_1()
                                                     .h(px(18.0))
                                                     .px_1()
-                                                    .rounded(px(6.0))
+                                                    .rounded(px(10.0))
                                                     .border_1()
                                                     .border_color(palette.border)
                                                     .bg(palette.raised.opacity(0.75))
@@ -2020,7 +2290,7 @@ impl QuieterDesktop {
                                                     .truncate()
                                                     .px_2()
                                                     .h(px(19.0))
-                                                    .rounded(px(6.0))
+                                                    .rounded(px(10.0))
                                                     .bg(color.opacity(0.16))
                                                     .text_color(color)
                                                     .text_size(px(11.0))
@@ -2035,7 +2305,7 @@ impl QuieterDesktop {
 
     fn render_message_list(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let palette = self.palette;
-        let list_body = if self.loading_threads {
+        let list_body = if self.loading_threads && self.threads.is_empty() {
             div()
                 .flex_1()
                 .px_4()
@@ -2066,7 +2336,11 @@ impl QuieterDesktop {
                 .justify_center()
                 .text_sm()
                 .text_color(palette.muted)
-                .child("You're all caught up.")
+                .child(if self.list_query.is_empty() {
+                    "No messages."
+                } else {
+                    "No messages found."
+                })
                 .into_any_element()
         } else {
             uniform_list(
@@ -2087,23 +2361,24 @@ impl QuieterDesktop {
             .flex()
             .flex_col()
             .overflow_hidden()
-            .rounded(px(16.2))
+            .rounded(px(16.0))
             .border_1()
             .border_color(palette.border)
-            .bg(palette.raised.opacity(0.60))
+            .bg(palette.panel_background())
+            .shadow_md()
             .child(
                 div().flex_none().px_4().pt_4().pb_3().child(
                     div()
-                        .h(px(36.0))
+                        .h(px(32.0))
                         .flex()
                         .items_center()
                         .gap_2()
                         .child(
                             div()
                                 .id("refresh-threads")
-                                .size(px(36.0))
+                                .size(px(32.0))
                                 .flex_none()
-                                .rounded(px(21.6))
+                                .rounded(px(12.0))
                                 .border_1()
                                 .border_color(palette.border)
                                 .bg(palette.control)
@@ -2129,7 +2404,7 @@ impl QuieterDesktop {
                                 .min_w_0()
                                 .flex_1()
                                 .h_full()
-                                .rounded(px(21.6))
+                                .rounded(px(12.0))
                                 .border_1()
                                 .border_color(palette.border)
                                 .bg(palette.control)
@@ -2156,9 +2431,9 @@ impl QuieterDesktop {
                         .child(
                             gpui_component::button::Button::new("scroll-threads-top")
                                 .ghost()
-                                .size(px(36.0))
+                                .size(px(32.0))
                                 .flex_none()
-                                .rounded(px(13.5))
+                                .rounded(px(12.0))
                                 .border_1()
                                 .border_color(palette.border)
                                 .bg(palette.control)
@@ -2199,13 +2474,22 @@ impl QuieterDesktop {
             .into_any_element()
     }
 
-    fn render_detail_header(&mut self, cx: &mut Context<Self>) -> AnyElement {
+    fn render_detail_header(&mut self, compact: bool, cx: &mut Context<Self>) -> AnyElement {
         let palette = self.palette;
         let subject = self
             .thread_detail
             .as_ref()
             .and_then(|detail| detail.subject.clone())
             .unwrap_or_else(|| "(No subject)".to_owned());
+        let action_pending = self.mutating
+            || self
+                .selected_mailbox_id
+                .as_ref()
+                .zip(self.selected_thread_id.as_ref())
+                .is_some_and(|(mailbox_id, thread_id)| {
+                    self.reading_threads
+                        .contains(&(mailbox_id.clone(), thread_id.clone()))
+                });
         let view = cx.entity().downgrade();
         let archive = if self.category == MailCategory::Trash {
             ("Move to Inbox", ThreadCommand::MoveToInbox)
@@ -2220,23 +2504,58 @@ impl QuieterDesktop {
             .border_color(palette.border)
             .flex()
             .items_center()
-            .gap_4()
+            .gap_3()
+            .when(compact, |this| {
+                this.child(
+                    gpui_component::button::Button::new("back-to-list")
+                        .ghost()
+                        .size(px(32.0))
+                        .rounded(px(12.0))
+                        .tooltip("Back to list")
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.keyboard_escape(&DesktopEscape, window, cx);
+                        }))
+                        .child(
+                            svg()
+                                .path("icons/back.svg")
+                                .size(px(16.0))
+                                .text_color(palette.foreground),
+                        ),
+                )
+            })
             .child(
                 div()
                     .min_w_0()
                     .flex_1()
-                    .text_base()
-                    .font_weight(FontWeight::MEDIUM)
+                    .truncate()
+                    .text_size(px(16.0))
+                    .font_weight(FontWeight::NORMAL)
                     .child(subject),
             )
-            .when(self.mutating, |this| {
+            .when_some(
+                self.thread_detail
+                    .as_ref()
+                    .map(|detail| detail.messages.len())
+                    .filter(|count| *count > 1),
+                |this, count| {
+                    this.child(
+                        div()
+                            .flex_none()
+                            .text_xs()
+                            .text_color(palette.muted)
+                            .child(format!("{count} messages")),
+                    )
+                },
+            )
+            .when(action_pending, |this| {
                 this.child(Spinner::new().color(palette.muted))
             })
             .child(
                 gpui_component::button::Button::new("thread-actions")
                     .ghost()
+                    .disabled(action_pending)
                     .size(px(32.0))
-                    .rounded(px(13.5))
+                    .rounded(px(12.0))
                     .border_1()
                     .border_color(palette.border)
                     .child(
@@ -2270,8 +2589,16 @@ impl QuieterDesktop {
             .into_any_element()
     }
 
-    fn render_message_card(&self, message: &MessageDetail, index: usize) -> AnyElement {
+    fn render_message_card(
+        &self,
+        message: &MessageDetail,
+        index: usize,
+        expandable: bool,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let palette = self.palette;
+        let expanded = !expandable || self.expanded_message_ids.contains(&message.id);
+        let message_id = message.id.clone();
         let sender = sender_label(message.from.as_deref().unwrap_or("Unknown sender"));
         let initial = sender
             .chars()
@@ -2292,15 +2619,27 @@ impl QuieterDesktop {
             )))
             .child(
                 div()
-                    .p_5()
+                    .id(("message-header", index))
+                    .px_5()
+                    .py_4()
                     .flex()
                     .items_start()
                     .gap_4()
+                    .when(expandable, |this| {
+                        this.cursor_pointer()
+                            .hover(|style| style.bg(palette.hover.opacity(0.25)))
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                if !this.expanded_message_ids.remove(&message_id) {
+                                    this.expanded_message_ids.insert(message_id.clone());
+                                }
+                                cx.notify();
+                            }))
+                    })
                     .child(
                         div()
                             .size(px(40.0))
                             .flex_none()
-                            .rounded(px(10.8))
+                            .rounded(px(14.0))
                             .bg(palette.hover.opacity(0.80))
                             .flex()
                             .items_center()
@@ -2319,46 +2658,86 @@ impl QuieterDesktop {
                                     .flex_wrap()
                                     .items_center()
                                     .gap_2()
+                                    .when(message.is_unread, |this| {
+                                        this.child(
+                                            div()
+                                                .size(px(8.0))
+                                                .flex_none()
+                                                .rounded_full()
+                                                .bg(palette.foreground.opacity(0.75)),
+                                        )
+                                    })
                                     .child(
                                         div()
-                                            .text_base()
+                                            .text_size(px(14.0))
                                             .font_weight(FontWeight::MEDIUM)
                                             .child(sender),
                                     )
                                     .child(div().text_sm().text_color(palette.muted).child(address))
                                     .child(
-                                        div()
-                                            .text_sm()
-                                            .text_color(palette.muted)
-                                            .child(format_mail_date(message.date.as_deref())),
+                                        div().text_sm().text_color(palette.muted).child(
+                                            format_mail_date(
+                                                message
+                                                    .internal_date
+                                                    .as_deref()
+                                                    .or(message.date.as_deref()),
+                                            ),
+                                        ),
                                     ),
                             )
-                            .child(
-                                div()
-                                    .mt_1()
-                                    .text_sm()
-                                    .text_color(palette.muted)
-                                    .child(format!(
-                                        "To  {}",
-                                        message.to.as_deref().unwrap_or("me")
-                                    )),
-                            ),
-                    ),
+                            .when(expanded, |this| {
+                                this.child(div().mt_1().text_sm().text_color(palette.muted).child(
+                                    format!("To  {}", message.to.as_deref().unwrap_or("me")),
+                                ))
+                            })
+                            .when(!expanded, |this| {
+                                this.child(
+                                    div()
+                                        .mt_1()
+                                        .truncate()
+                                        .text_size(px(14.0))
+                                        .text_color(palette.foreground)
+                                        .child(
+                                            message
+                                                .snippet
+                                                .as_deref()
+                                                .filter(|snippet| !snippet.trim().is_empty())
+                                                .unwrap_or(message.body())
+                                                .to_owned(),
+                                        ),
+                                )
+                            }),
+                    )
+                    .when(expandable, |this| {
+                        this.child(
+                            svg()
+                                .path(if expanded {
+                                    "icons/arrow-up.svg"
+                                } else {
+                                    "icons/chevron-down.svg"
+                                })
+                                .size(px(16.0))
+                                .text_color(palette.muted),
+                        )
+                    }),
             )
-            .child(
-                div()
-                    .px_5()
-                    .pb_5()
-                    .text_base()
-                    .line_height(relative(1.5))
-                    .whitespace_normal()
-                    .child(message.body().to_owned()),
-            )
+            .when(expanded, |this| {
+                this.child(
+                    div()
+                        .px_5()
+                        .pb_5()
+                        .text_size(px(14.0))
+                        .line_height(relative(1.5))
+                        .whitespace_normal()
+                        .child(message.body().to_owned()),
+                )
+            })
             .into_any_element()
     }
 
     fn render_thread_detail(&mut self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
         let palette = self.palette;
+        let compact = f32::from(window.viewport_size().width) < 1100.0;
         let reduced_motion = self.reduced_motion || !window.is_window_active();
         let body = if self.loading_detail {
             div()
@@ -2370,11 +2749,22 @@ impl QuieterDesktop {
                 .child(Skeleton::new().mt_2().h(px(10.0)).w(relative(0.84)))
                 .into_any_element()
         } else if let Some(detail) = self.thread_detail.as_ref() {
+            let non_draft_count = detail
+                .messages
+                .iter()
+                .filter(|message| !message.label_ids.iter().any(|label| label == "DRAFT"))
+                .count();
             let messages = detail
                 .messages
                 .iter()
+                .rev()
+                .filter(|message| {
+                    non_draft_count == 0 || !message.label_ids.iter().any(|label| label == "DRAFT")
+                })
                 .enumerate()
-                .map(|(index, message)| self.render_message_card(message, index))
+                .map(|(index, message)| {
+                    self.render_message_card(message, index, non_draft_count > 1, cx)
+                })
                 .collect::<Vec<_>>();
             let sender = detail
                 .messages
@@ -2393,7 +2783,7 @@ impl QuieterDesktop {
                             .id("reply")
                             .h(px(50.0))
                             .px_5()
-                            .rounded(px(21.6))
+                            .rounded(px(16.0))
                             .border_1()
                             .border_color(palette.border)
                             .bg(palette.control)
@@ -2483,13 +2873,15 @@ impl QuieterDesktop {
             .flex()
             .flex_col()
             .overflow_hidden()
-            .rounded(px(16.2))
+            .rounded(px(16.0))
             .border_1()
             .border_color(palette.border)
-            .bg(palette.raised.opacity(0.60))
-            .when(self.thread_detail.is_some(), |this| {
-                this.child(self.render_detail_header(cx))
-            })
+            .bg(palette.panel_background())
+            .shadow_md()
+            .when(
+                self.thread_detail.is_some() || (compact && self.selected_thread_id.is_some()),
+                |this| this.child(self.render_detail_header(compact, cx)),
+            )
             .child(body)
             .into_any_element()
     }
@@ -2508,17 +2900,18 @@ impl QuieterDesktop {
             .items_center()
             .justify_center()
             .p_6()
-            .rounded(px(16.2))
+            .rounded(px(16.0))
             .border_1()
             .border_color(palette.border)
-            .bg(palette.raised.opacity(0.60))
+            .bg(palette.panel_background())
+            .shadow_md()
             .child(
                 div()
                     .w_full()
-                    .max_w(px(848.0))
-                    .h(px(400.0))
+                    .max_w(px(928.0))
+                    .h(px(448.0))
                     .max_h_full()
-                    .rounded(px(21.6))
+                    .rounded(px(16.0))
                     .border_1()
                     .border_color(palette.border)
                     .bg(palette.control)
@@ -2529,14 +2922,14 @@ impl QuieterDesktop {
                         div()
                             .h(px(41.0))
                             .flex_none()
-                            .px_3()
+                            .px_5()
                             .border_b_1()
                             .border_color(palette.border)
                             .flex()
                             .items_center()
                             .child(
                                 div()
-                                    .w(px(30.0))
+                                    .w(px(56.0))
                                     .text_sm()
                                     .text_color(palette.muted)
                                     .child("To"),
@@ -2556,20 +2949,32 @@ impl QuieterDesktop {
                         div()
                             .h(px(41.0))
                             .flex_none()
-                            .px_3()
+                            .px_5()
                             .border_b_1()
                             .border_color(palette.border)
+                            .flex()
+                            .items_center()
+                            .child(
+                                div()
+                                    .w(px(56.0))
+                                    .flex_none()
+                                    .text_sm()
+                                    .text_color(palette.muted)
+                                    .child("Subject"),
+                            )
                             .child(
                                 Input::new(&self.compose_subject_input)
                                     .disabled(self.sending)
                                     .appearance(false)
                                     .bordered(false)
                                     .focus_bordered(false)
-                                    .h_full(),
+                                    .h_full()
+                                    .min_w_0()
+                                    .flex_1(),
                             ),
                     )
                     .child(
-                        div().min_h_0().flex_1().px_3().py_2().child(
+                        div().min_h_0().flex_1().px_5().py_2().child(
                             Input::new(&self.compose_body_input)
                                 .disabled(self.sending)
                                 .appearance(false)
@@ -2582,7 +2987,7 @@ impl QuieterDesktop {
                         div()
                             .h(px(49.0))
                             .flex_none()
-                            .px_3()
+                            .px_5()
                             .border_t_1()
                             .border_color(palette.border)
                             .flex()
@@ -2593,7 +2998,7 @@ impl QuieterDesktop {
                                     .id("send-compose")
                                     .h(px(32.0))
                                     .px_3()
-                                    .rounded(px(13.5))
+                                    .rounded(px(12.0))
                                     .bg(palette.primary)
                                     .text_color(palette.primary_foreground)
                                     .cursor_pointer()
@@ -2610,7 +3015,7 @@ impl QuieterDesktop {
                                     .when(!self.sending, |this| {
                                         this.child(
                                             svg()
-                                                .path("icons/reply.svg")
+                                                .path("icons/send.svg")
                                                 .size(px(14.0))
                                                 .text_color(palette.primary_foreground),
                                         )
@@ -2630,7 +3035,7 @@ impl QuieterDesktop {
                                 div()
                                     .id("close-compose")
                                     .size(px(32.0))
-                                    .rounded(px(13.5))
+                                    .rounded(px(12.0))
                                     .cursor_pointer()
                                     .flex()
                                     .items_center()
@@ -2695,6 +3100,10 @@ impl QuieterDesktop {
 
     fn render_workspace(&mut self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
         let palette = self.palette;
+        let viewport_width = f32::from(window.viewport_size().width);
+        let compact = viewport_width < 1100.0;
+        let available_width = (viewport_width - 272.0).max(0.0);
+        let list_width = (available_width * 0.34).max(405.0).min(available_width);
         let sidebar = self.render_sidebar(cx);
         let mail_content = if self.compose_open {
             div()
@@ -2704,6 +3113,18 @@ impl QuieterDesktop {
                 .p(px(6.0))
                 .child(self.render_compose(cx))
                 .into_any_element()
+        } else if compact {
+            div()
+                .min_w_0()
+                .flex_1()
+                .h_full()
+                .p_2()
+                .child(if self.selected_thread_id.is_some() {
+                    self.render_thread_detail(window, cx)
+                } else {
+                    self.render_message_list(cx)
+                })
+                .into_any_element()
         } else {
             div()
                 .min_w_0()
@@ -2712,10 +3133,10 @@ impl QuieterDesktop {
                 .flex()
                 .child(
                     div()
-                        .w(relative(0.34))
-                        .min_w(px(320.0))
+                        .w(px(list_width))
                         .h_full()
                         .flex_none()
+                        .pl_2()
                         .pr_2()
                         .py_2()
                         .child(self.render_message_list(cx)),
@@ -2737,15 +3158,6 @@ impl QuieterDesktop {
             .size_full()
             .overflow_hidden()
             .bg(palette.background)
-            .child(
-                div()
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .right_0()
-                    .bottom_0()
-                    .child(workspace_dither(palette.foreground, palette.is_dark)),
-            )
             .child(
                 div()
                     .relative()
@@ -2791,7 +3203,7 @@ impl Render for QuieterDesktop {
             AppPhase::SignedOut | AppPhase::RequestingDevice | AppPhase::AwaitingDevice(_)
         );
         let content = if auth_visible {
-            self.render_auth(cx)
+            self.render_auth(window, cx)
         } else {
             self.render_workspace(window, cx)
         };
@@ -2829,15 +3241,27 @@ fn format_mail_date(value: Option<&str>) -> String {
     let Some(value) = value.filter(|value| !value.trim().is_empty()) else {
         return String::new();
     };
-    let parsed = DateTime::parse_from_rfc2822(value)
-        .or_else(|_| DateTime::parse_from_rfc3339(value))
-        .map(|date| date.with_timezone(&Local));
-    let Ok(date) = parsed else {
-        return value.to_owned();
+    let parsed = value
+        .trim()
+        .parse::<i64>()
+        .ok()
+        .and_then(DateTime::from_timestamp_millis)
+        .map(|date| date.with_timezone(&Local))
+        .or_else(|| {
+            DateTime::parse_from_rfc2822(value)
+                .or_else(|_| DateTime::parse_from_rfc3339(value))
+                .ok()
+                .map(|date| date.with_timezone(&Local))
+        });
+    let Some(date) = parsed else {
+        return String::new();
     };
-    if date.date_naive() == Local::now().date_naive() {
+    let now = Local::now();
+    if date.date_naive() == now.date_naive() {
         date.format("%H:%M").to_string()
+    } else if date.year() != now.year() {
+        date.format("%b %e, %Y").to_string().replace("  ", " ")
     } else {
-        date.format("%b %d").to_string().replace(" 0", " ")
+        date.format("%b %e").to_string().replace("  ", " ")
     }
 }

@@ -49,7 +49,11 @@ export const ConsentPreferencesDialog = () => {
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="space-y-4 pt-0">
+        <DialogBody
+          // oxlint-disable-next-line shadcn/no-restyle -- Consent list keeps its flush-top body.
+          className="pt-0"
+          spacing="4"
+        >
           {getDisplayedConsents().map((config) => {
             const category = config.name;
             const copy = translations.consentTypes[category];
@@ -87,7 +91,10 @@ export const ConsentPreferencesDialog = () => {
           })}
         </DialogBody>
 
-        <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
+        <DialogFooter
+          // oxlint-disable-next-line shadcn/no-restyle -- Consent footer keeps its stacked-split actions.
+          className="flex-col gap-2 sm:flex-row sm:justify-between"
+        >
           <Button
             onClick={() => {
               void performDialogAction("reject");

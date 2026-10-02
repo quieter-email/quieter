@@ -1,5 +1,5 @@
 import type { MailboxActions } from "#/features/mailbox/components/mailbox-action-handlers";
-import type { MessageListItem } from "#/lib/gmail/gmail";
+import type { MessageListItem } from "#/lib/mail";
 
 export type LabelChanges = {
   addLabelIds?: string[];
@@ -25,6 +25,7 @@ export type ThreadActionHandlers = {
 
 export const createMailboxThreadMessageActionHandlers = ({
   mailboxActions,
+  onBackToList,
   onOpenDraft,
   supportsArchive = true,
   supportsFolders = true,
@@ -33,6 +34,7 @@ export const createMailboxThreadMessageActionHandlers = ({
   supportsUnsubscribe = true,
 }: {
   mailboxActions: MailboxActions;
+  onBackToList?: () => void;
   onOpenDraft?: (message: MessageListItem) => void | Promise<void>;
   supportsArchive?: boolean;
   supportsFolders?: boolean;
@@ -44,6 +46,7 @@ export const createMailboxThreadMessageActionHandlers = ({
     ? {
         onArchive: async (threadId: string) => {
           await mailboxActions.archiveThread(threadId);
+          onBackToList?.();
         },
       }
     : {}),
@@ -65,16 +68,20 @@ export const createMailboxThreadMessageActionHandlers = ({
         onDeleteDraft: mailboxActions.deleteDraft,
         onMarkAsSpam: async (threadId: string) => {
           await mailboxActions.markThreadAsSpam(threadId);
+          onBackToList?.();
         },
         onMoveToTrash: async (threadId: string) => {
           await mailboxActions.moveThreadToTrash(threadId);
+          onBackToList?.();
         },
         onOpenDraft,
         onUnmarkAsSpam: async (threadId: string) => {
           await mailboxActions.unmarkThreadAsSpam(threadId);
+          onBackToList?.();
         },
         onUntrash: async (threadId: string) => {
           await mailboxActions.untrashThread(threadId);
+          onBackToList?.();
         },
       }
     : {}),

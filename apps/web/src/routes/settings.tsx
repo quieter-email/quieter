@@ -6,36 +6,14 @@ import { SettingsLoadingPage } from "#/features/settings/components/settings-loa
 import { ORGANIZATION_SETTINGS_VIEWS } from "#/features/settings/domain/organization-settings-view";
 import { SETTINGS_TABS } from "#/features/settings/domain/settings-tab";
 import { getSessionUser } from "#/lib/auth.functions";
+import { getGmailCallbackError } from "#/lib/gmail-callback-result.functions";
 
 const SettingsPendingPage = () => {
   const { tab } = Route.useSearch();
   return <SettingsLoadingPage tab={tab} />;
 };
 
-// react-doctor-disable-next-line react-doctor/tanstack-start-route-property-order -- The repository's TanStack Router lint rule owns this generated route property order.
 export const Route = createFileRoute("/settings")({
-  loader: async () => {
-    const user = await getSessionUser();
-
-    if (!user) {
-      throw redirect({
-        to: "/home",
-      });
-    }
-
-    if (user.needsOnboarding) {
-      throw redirect({
-        search: { returnTo: "/settings" },
-        to: "/onboarding",
-      });
-    }
-
-    return {
-      user,
-    };
-  },
-  pendingComponent: SettingsPendingPage,
-  ssr: "data-only",
   validateSearch: zodValidator(
     z.object({
       billing: z.enum(["canceled", "success"]).optional(),
@@ -65,6 +43,7 @@ export const Route = createFileRoute("/settings")({
         .pipe(z.enum(ORGANIZATION_SETTINGS_VIEWS))
         .catch("overview")
         .default("overview"),
+      section: z.string().trim().catch("").default(""),
       tab: z
         .string()
         .trim()
@@ -73,4 +52,28 @@ export const Route = createFileRoute("/settings")({
         .default("overview"),
     })
   ),
+  loaderDeps: ({ search }) => ({ gmail: search.gmail }),
+  ssr: "data-only",
+  loader: async ({ deps }) => {
+    const user = await getSessionUser();
+
+    if (!user) {
+      throw redirect({
+        to: "/home",
+      });
+    }
+
+    if (user.needsOnboarding) {
+      throw redirect({
+        search: { returnTo: "/settings" },
+        to: "/onboarding",
+      });
+    }
+
+    return {
+      gmailError: deps.gmail === "error" ? await getGmailCallbackError() : null,
+      user,
+    };
+  },
+  pendingComponent: SettingsPendingPage,
 });

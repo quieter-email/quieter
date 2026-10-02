@@ -1,4 +1,4 @@
-import type { MessageListItem } from "#/lib/gmail/gmail";
+import type { MessageListItem } from "#/lib/mail";
 
 export type MessageUnsubscribeTarget =
   | {

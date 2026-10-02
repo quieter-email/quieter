@@ -2,12 +2,8 @@ import { randomUUID } from "node:crypto";
 
 import { ORPCError } from "@orpc/server";
 import { AI_MEMORY_REQUEST_MAX_LENGTH } from "@quieter/ai/ai-memory";
-import {
-  chatModelSchema,
-  defaultAutoLabelModel,
-  defaultSearchFilterModel,
-  defaultUsefulDetailModel,
-} from "@quieter/ai/chat-models";
+import { AUTO_LABEL_MODEL } from "@quieter/ai/classify-gmail-message";
+import { resolveBackgroundModel } from "@quieter/ai/model-config";
 import {
   MAIL_SEARCH_QUERY_MAX_LENGTH,
   parseMailSearchWithAi,
@@ -15,7 +11,7 @@ import {
 import type { ParsedMailSearch } from "@quieter/ai/parse-mail-search";
 import { reportAiUsage } from "@quieter/billing";
 import { db } from "@quieter/database/client";
-import { user, userAiContext } from "@quieter/database/schema";
+import { user } from "@quieter/database/schema";
 import {
   isMailSearchFilterSupported,
   normalizeStructuredMailSearch,
@@ -62,44 +58,22 @@ const memoryTargetSchema = z
 
 type MemoryTarget = z.infer<typeof memoryTargetSchema>;
 
-const serializeModels = (
-  record: typeof userAiContext.$inferSelect | undefined
-) => {
-  const autoLabelModel = chatModelSchema.safeParse(record?.autoLabelModel);
-  const searchFilterModel = chatModelSchema.safeParse(
-    record?.searchFilterModel
-  );
-  const usefulDetailModel = chatModelSchema.safeParse(
-    record?.usefulDetailModel
-  );
+const serializeModels = () => {
+  const backgroundModel = resolveBackgroundModel();
   return {
-    autoLabel: autoLabelModel.success
-      ? autoLabelModel.data
-      : defaultAutoLabelModel,
-    searchFilter: searchFilterModel.success
-      ? searchFilterModel.data
-      : defaultSearchFilterModel,
-    usefulDetail: usefulDetailModel.success
-      ? usefulDetailModel.data
-      : defaultUsefulDetailModel,
+    autoLabel: AUTO_LABEL_MODEL,
+    searchFilter: backgroundModel,
   };
 };
 
 const loadSettings = async (userId: string) => {
-  const [[record], memoryConfig] = await Promise.all([
-    db
-      .select()
-      .from(userAiContext)
-      .where(eq(userAiContext.userId, userId))
-      .limit(1),
-    getPersonalAiMemoryScopeConfig(userId),
-  ]);
+  const memoryConfig = await getPersonalAiMemoryScopeConfig(userId);
   return {
     memory: {
       enabled: memoryConfig.activeLearningEnabled,
       revision: memoryConfig.revision,
     },
-    models: serializeModels(record),
+    models: serializeModels(),
   };
 };
 
@@ -137,15 +111,15 @@ const loadTargetMemory = async (target: MemoryTarget, userId: string) =>
     ? await listPersonalAiMemory(userId)
     : await listMailboxAiMemory(target.mailboxId ?? "", userId);
 
-const toUserMemoryError = (error: unknown) =>
-  error instanceof ORPCError
-    ? error
-    : new ORPCError("BAD_REQUEST", {
-        message:
-          error instanceof Error && error.message
-            ? error.message
-            : "Quieter could not safely update AI memory. Nothing changed.",
-      });
+const toUserMemoryError = (error: unknown) => {
+  if (error instanceof ORPCError) {
+    return error;
+  }
+  reportError(error, { operation: "ai-memory:request" });
+  return new ORPCError("INTERNAL_SERVER_ERROR", {
+    message: "Quieter could not complete the memory request. Please try again.",
+  });
+};
 
 export const aiRouter = {
   deleteMemory: protectedProcedure
@@ -206,7 +180,9 @@ export const aiRouter = {
         const billingMailboxId =
           input.mailboxId ?? (await getBillingMailboxId(context.userId));
         if (billingMailboxId === null || billingMailboxId.length === 0) {
-          throw new Error("Connect a mailbox before updating AI memory.");
+          throw new ORPCError("BAD_REQUEST", {
+            message: "Connect a mailbox before updating AI memory.",
+          });
         }
         const change = await requestAiMemoryUpdate({
           allowMutations,
@@ -247,17 +223,7 @@ export const aiRouter = {
       });
 
       const requestId = randomUUID();
-      const [modelRecord] = await db
-        .select({ searchFilterModel: userAiContext.searchFilterModel })
-        .from(userAiContext)
-        .where(eq(userAiContext.userId, context.userId))
-        .limit(1);
-      const modelPreference = chatModelSchema.safeParse(
-        modelRecord?.searchFilterModel
-      );
-      const searchModel = modelPreference.success
-        ? modelPreference.data
-        : defaultSearchFilterModel;
+      const searchModel = resolveBackgroundModel();
 
       let parsed: ParsedMailSearch;
       try {
@@ -357,42 +323,6 @@ export const aiRouter = {
       } catch (error) {
         throw toUserMemoryError(error);
       }
-    }),
-
-  updateModels: protectedProcedure
-    .input(
-      z.object({
-        autoLabel: chatModelSchema,
-        searchFilter: chatModelSchema,
-        usefulDetail: chatModelSchema,
-      })
-    )
-    .handler(async ({ context, input }) => {
-      const now = new Date();
-      const [record] = await db
-        .insert(userAiContext)
-        .values({
-          autoLabelModel: input.autoLabel,
-          createdAt: now,
-          id: randomUUID(),
-          lastEditedAt: now,
-          markdown: "",
-          searchFilterModel: input.searchFilter,
-          updatedAt: now,
-          usefulDetailModel: input.usefulDetail,
-          userId: context.userId,
-        })
-        .onConflictDoUpdate({
-          set: {
-            autoLabelModel: input.autoLabel,
-            searchFilterModel: input.searchFilter,
-            updatedAt: now,
-            usefulDetailModel: input.usefulDetail,
-          },
-          target: userAiContext.userId,
-        })
-        .returning();
-      return serializeModels(record);
     }),
 
   updatePersonalization: protectedProcedure

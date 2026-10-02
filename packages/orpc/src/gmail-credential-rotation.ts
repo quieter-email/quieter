@@ -4,10 +4,9 @@ import { serverEnv } from "@quieter/env/server";
 import { like, or } from "drizzle-orm";
 
 import { rotateGmailCredentialSecrets } from "./gmail-mailbox-access";
-import { hasText } from "./text";
 
 export const rotateLegacyGmailCredentials = async () => {
-  if (!hasText(serverEnv.GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT)) {
+  if (!serverEnv.GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT) {
     return { rotated: 0 };
   }
 

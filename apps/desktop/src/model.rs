@@ -55,6 +55,37 @@ pub struct ThreadList {
     pub result_size_estimate: Option<u32>,
 }
 
+pub fn reconcile_thread_refresh(
+    incoming: Vec<MessageSummary>,
+    previous: &[MessageSummary],
+    selected_thread_id: Option<&str>,
+) -> Vec<MessageSummary> {
+    let mut seen = std::collections::HashSet::new();
+    let mut messages: Vec<_> = incoming
+        .into_iter()
+        .filter(|message| seen.insert(message.thread_id.clone()))
+        .collect();
+    if let Some((index, selected)) = previous.iter().enumerate().find(|(_, message)| {
+        Some(message.thread_id.as_str()) == selected_thread_id && !seen.contains(&message.thread_id)
+    }) {
+        let following = previous[index + 1..].iter().find_map(|neighbor| {
+            messages
+                .iter()
+                .position(|message| message.thread_id == neighbor.thread_id)
+        });
+        let preceding = previous[..index].iter().rev().find_map(|neighbor| {
+            messages
+                .iter()
+                .position(|message| message.thread_id == neighbor.thread_id)
+        });
+        let insertion = following
+            .or_else(|| preceding.map(|position| position + 1))
+            .unwrap_or(index.min(messages.len()));
+        messages.insert(insertion, selected.clone());
+    }
+    messages
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MessageSummary {
@@ -143,6 +174,51 @@ pub struct ThreadActionRollback {
     pub detail: Option<ThreadDetail>,
     pub thread_id: String,
     pub detail_generation: u64,
+}
+
+pub struct ThreadReadCompletion {
+    pub session_generation: u64,
+    pub mailbox_id: String,
+    pub thread_id: String,
+}
+
+impl ThreadReadCompletion {
+    pub fn apply(
+        &self,
+        current_scope: &MailboxRequestScope,
+        category: MailCategory,
+        threads: &mut Vec<MessageSummary>,
+        selected_thread_id: Option<&str>,
+        detail: &mut Option<ThreadDetail>,
+    ) -> bool {
+        if current_scope.session_generation != self.session_generation
+            || current_scope.mailbox_id.as_deref() != Some(self.mailbox_id.as_str())
+        {
+            return false;
+        }
+        if let Some(message) = threads
+            .iter_mut()
+            .find(|message| message.thread_id == self.thread_id)
+        {
+            message.set_unread(false);
+        }
+        if selected_thread_id == Some(self.thread_id.as_str())
+            && let Some(detail) = detail
+                .as_mut()
+                .filter(|detail| detail.thread_id == self.thread_id)
+        {
+            for message in &mut detail.messages {
+                message.is_unread = false;
+                message.label_ids.retain(|label| label != "UNREAD");
+            }
+        }
+        if category == MailCategory::Unread {
+            threads.retain(|message| {
+                message.is_unread || Some(message.thread_id.as_str()) == selected_thread_id
+            });
+        }
+        true
+    }
 }
 
 impl ThreadActionRollback {
@@ -260,6 +336,8 @@ fn reply_addresses(header: Option<&str>, own_address: &str) -> Vec<String> {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MessageDetail {
+    #[serde(default)]
+    pub label_ids: Vec<String>,
     pub id: String,
     #[serde(default)]
     pub from: Option<String>,
@@ -267,6 +345,8 @@ pub struct MessageDetail {
     pub to: Option<String>,
     #[serde(default)]
     pub date: Option<String>,
+    #[serde(default)]
+    pub internal_date: Option<String>,
     #[serde(default)]
     pub subject: Option<String>,
     #[serde(default)]
@@ -527,15 +607,17 @@ pub fn preview_threads() -> Vec<MessageSummary> {
 }
 
 pub fn preview_thread(summary: &MessageSummary) -> ThreadDetail {
-    ThreadDetail {
+    let mut thread = ThreadDetail {
         thread_id: summary.thread_id.clone(),
         snippet: summary.snippet.clone(),
         subject: summary.subject.clone(),
         messages: vec![MessageDetail {
+            label_ids: summary.label_ids.clone(),
             id: summary.id.clone(),
             from: summary.from.clone(),
             to: summary.to.clone(),
             date: summary.date.clone(),
+            internal_date: summary.internal_date.clone(),
             subject: summary.subject.clone(),
             body_text: Some(match summary.id.as_str() {
                 "demo-stripe-1" => "Your April payout reconciliation is ready.\n\nThere are two failed transfers that need review before the end of the week. The CSV includes the payout IDs, transfer amounts, and current retry status.",
@@ -549,7 +631,29 @@ pub fn preview_thread(summary: &MessageSummary) -> ThreadDetail {
             message_header_id: None,
             references: None,
         }],
+    };
+    if summary.thread_id == "demo-thread-onboarding" {
+        let latest = thread.messages[0].clone();
+        let mut first = latest.clone();
+        first.id = "demo-thread-notion-1".to_owned();
+        first.from = Some("Mara Quill <mara@notion.so>".to_owned());
+        first.to = Some("Quieter <inbox@quieter.com>, Theo Byte <theo@figma.com>".to_owned());
+        first.date = Some((chrono::Utc::now() - chrono::Duration::hours(22)).to_rfc3339());
+        first.internal_date = None;
+        first.label_ids = vec!["INBOX".to_owned()];
+        first.body_text = Some("Hi everyone,\n\nI drafted the customer onboarding checklist in Notion. The sections that still need owner names are highlighted in yellow.".to_owned());
+        let mut reply = latest.clone();
+        reply.id = "demo-thread-notion-2".to_owned();
+        reply.from = Some("inbox@quieter.com".to_owned());
+        reply.to = Some("Mara Quill <mara@notion.so>, Theo Byte <theo@figma.com>".to_owned());
+        reply.date = Some((chrono::Utc::now() - chrono::Duration::hours(18)).to_rfc3339());
+        reply.internal_date = None;
+        reply.label_ids = vec!["SENT".to_owned()];
+        reply.subject = Some("Re: Onboarding checklist draft".to_owned());
+        reply.body_text = Some("Looks good. I added the lifecycle emails and moved the workspace invite step earlier.\n\nTheo, can you check the screenshots before we share it?".to_owned());
+        thread.messages = vec![first, reply, latest];
     }
+    thread
 }
 
 pub fn preview_labels() -> Vec<MailboxLabel> {
@@ -574,6 +678,118 @@ pub fn preview_labels() -> Vec<MailboxLabel> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn automatic_read_updates_original_row_after_selection_moves() {
+        let mut threads = preview_threads();
+        let opened_id = threads[0].thread_id.clone();
+        let selected_id = threads[1].thread_id.clone();
+        let mut detail = Some(preview_thread(&threads[1]));
+        detail.as_mut().unwrap().messages[0].is_unread = true;
+        let completion = ThreadReadCompletion {
+            session_generation: 1,
+            mailbox_id: "mailbox-a".to_owned(),
+            thread_id: opened_id.clone(),
+        };
+        let current_scope = MailboxRequestScope {
+            session_generation: 1,
+            view_generation: 5,
+            mailbox_id: Some("mailbox-a".to_owned()),
+        };
+        assert!(completion.apply(
+            &current_scope,
+            MailCategory::Inbox,
+            &mut threads,
+            Some(&selected_id),
+            &mut detail
+        ));
+        assert!(
+            !threads
+                .iter()
+                .find(|message| message.thread_id == opened_id)
+                .unwrap()
+                .is_unread
+        );
+        assert!(detail.as_ref().unwrap().messages[0].is_unread);
+        assert!(completion.apply(
+            &current_scope,
+            MailCategory::Unread,
+            &mut threads,
+            Some(&selected_id),
+            &mut detail
+        ));
+        assert!(!threads.iter().any(|message| message.thread_id == opened_id));
+    }
+
+    #[test]
+    fn automatic_read_cannot_change_another_mailbox_or_session() {
+        let mut threads = preview_threads();
+        let selected_id = threads[0].thread_id.clone();
+        let mut detail = Some(preview_thread(&threads[0]));
+        let completion = ThreadReadCompletion {
+            session_generation: 1,
+            mailbox_id: "mailbox-a".to_owned(),
+            thread_id: selected_id.clone(),
+        };
+        for (session_generation, mailbox_id) in [(2, "mailbox-a"), (1, "mailbox-b")] {
+            assert!(!completion.apply(
+                &MailboxRequestScope {
+                    session_generation,
+                    view_generation: 5,
+                    mailbox_id: Some(mailbox_id.to_owned()),
+                },
+                MailCategory::Unread,
+                &mut threads,
+                Some(&selected_id),
+                &mut detail
+            ));
+            assert!(threads[0].is_unread);
+        }
+    }
+
+    #[test]
+    fn refresh_keeps_open_read_conversation_between_neighbors_without_duplicates() {
+        let mut previous = preview_threads();
+        let selected_id = previous[1].thread_id.clone();
+        previous[1].set_unread(false);
+        let mut incoming = previous.clone();
+        incoming.remove(1);
+        incoming.push(incoming[0].clone());
+        let messages = reconcile_thread_refresh(incoming, &previous, Some(&selected_id));
+        assert_eq!(messages.len(), previous.len());
+        assert_eq!(messages[1].thread_id, selected_id);
+        assert!(!messages[1].is_unread);
+        assert!(
+            !messages[1]
+                .thread_label_ids
+                .iter()
+                .any(|label| label == "UNREAD")
+        );
+    }
+
+    #[test]
+    fn refresh_releases_closed_selection_and_uses_newest_thread_anchor() {
+        let previous = preview_threads();
+        let selected_id = &previous[1].thread_id;
+        let mut incoming = previous.clone();
+        incoming.remove(1);
+        let closed = reconcile_thread_refresh(incoming.clone(), &previous, None);
+        assert!(
+            !closed
+                .iter()
+                .any(|message| &message.thread_id == selected_id)
+        );
+        let mut updated = previous[1].clone();
+        updated.id = "new-anchor".to_owned();
+        incoming.insert(0, updated);
+        let refreshed = reconcile_thread_refresh(incoming, &previous, Some(selected_id));
+        let selected: Vec<_> = refreshed
+            .iter()
+            .filter(|message| &message.thread_id == selected_id)
+            .collect();
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].id, "new-anchor");
+    }
 
     #[test]
     fn thread_summaries_preserve_server_attachment_counts() {

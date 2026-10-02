@@ -5,10 +5,12 @@
   "exports": {
     "./client": "./src/client.ts",
     "./local-development": "./scripts/local-development.ts",
+    "./retry": "./src/retry.ts",
     "./schema": "./src/schema.ts"
   },
   "dependencies": {
     "@quieter/env": "workspace:*",
+    "@quieter/mail": "workspace:*",
     "drizzle-orm": "catalog:",
     "postgres": "^3.4.9",
     "sst": "^4.17.1"
@@ -17,6 +19,7 @@
     "@quieter/config": "workspace:*",
     "@types/node": "catalog:",
     "drizzle-kit": "catalog:",
+    "libpg-query": "^18.1.5",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:"

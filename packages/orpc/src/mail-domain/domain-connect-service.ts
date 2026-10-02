@@ -7,7 +7,6 @@ import type { MailDomainMode } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { and, eq, gt, isNull } from "drizzle-orm";
 
-import { hasText } from "../text";
 import {
   buildDomainConnectApplyUrl,
   discoverDomainConnect,
@@ -52,7 +51,7 @@ const getCachedDomainConnectDiscovery = async (input: {
 
 const getDomainConnectPrivateKey = () => {
   const encoded = serverEnv.DOMAIN_CONNECT_PRIVATE_KEY_B64;
-  if (!hasText(encoded)) {
+  if (!encoded) {
     return null;
   }
   const privateKey = Buffer.from(encoded, "base64").toString("utf-8");
@@ -104,9 +103,7 @@ export const getDomainConnectAvailability = async (input: {
   await assertUserOrganizationMember(input);
   const domain = await getDomainForConnect(input);
   return await getCachedDomainConnectDiscovery({
-    configured:
-      hasText(getDomainConnectPrivateKey()) &&
-      hasText(serverEnv.BETTER_AUTH_URL),
+    configured: !!getDomainConnectPrivateKey() && !!serverEnv.BETTER_AUTH_URL,
     domain: domain.domain,
     mode: domain.mode,
   });
@@ -121,7 +118,7 @@ export const startDomainConnect = async (input: {
   const domain = await getDomainForConnect(input);
   const privateKey = getDomainConnectPrivateKey();
   const baseUrl = serverEnv.BETTER_AUTH_URL?.replace(/\/+$/u, "");
-  if (!hasText(privateKey) || !hasText(baseUrl)) {
+  if (!privateKey || !baseUrl) {
     throw new ORPCError("BAD_REQUEST", {
       message: "One-click DNS setup is not configured in this environment.",
     });
@@ -272,7 +269,7 @@ export const completeDomainConnect = async (input: {
     attempt.organizationId,
     attempt.domainId
   );
-  if (hasText(input.error)) {
+  if (input.error) {
     return { result: callbackStatus, returnTo };
   }
 

@@ -1,5 +1,5 @@
 import { toast } from "@quieter/ui/toast";
-import * as Sentry from "@sentry/tanstackstart-react";
+import * as Sentry from "@sentry/react";
 
 import { isExpectedClientError } from "#/lib/client-error-reporting";
 
@@ -13,7 +13,8 @@ export const toastError = (
   {
     boundary,
     fallback = "Something went wrong. Please try again.",
-  }: { boundary?: string; fallback?: string } = {}
+    report = true,
+  }: { boundary?: string; fallback?: string; report?: boolean } = {}
 ) => {
   let current: unknown = error;
   const visited = new Set<unknown>();
@@ -44,7 +45,7 @@ export const toastError = (
     current = candidate.cause;
   }
 
-  if (!isExpectedClientError(error)) {
+  if (report && !isExpectedClientError(error)) {
     Sentry.captureException(
       error,
       ...(boundary === undefined ? [] : [{ tags: { boundary } }])

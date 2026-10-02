@@ -16,7 +16,7 @@ export type TemplatePlaceholderRange = {
   to: number;
 };
 
-export const findTemplatePlaceholders = (
+const findTemplatePlaceholders = (
   document: Editor["state"]["doc"]
 ): TemplatePlaceholderRange[] => {
   const placeholders: TemplatePlaceholderRange[] = [];

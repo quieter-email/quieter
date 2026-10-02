@@ -24,7 +24,7 @@ bindings.SST_RESOURCE_GmailLiveSyncTokenSecret = JSON.stringify({
   value: values.get("GMAIL_LIVE_SYNC_TOKEN_SECRET"),
 });
 await writeFile(
-  ".dev.vars",
+  "packages/cloudflare/.dev.vars",
   `${Object.entries(bindings)
     .map(([key, value]) => {
       const quote = ["'", "`"].find((candidate) => !value.includes(candidate));

@@ -1,10 +1,12 @@
-import { withRequestDatabaseClient } from "@quieter/database/client";
+import { liveSyncTokenPayloadSchema } from "@quieter/mail/live-sync";
 import { createRemoteJWKSet, errors as joseErrors, jwtVerify } from "jose";
 import { z } from "zod";
 
+import { readBoundedJson } from "./bounded-json";
 import { timingSafeEqual } from "./crypto-utils";
-import { processGmailQueueMessage } from "./queue-worker";
+import { broadcastGmailUpdate } from "./mail-updates";
 import { RequestError } from "./request-error";
+import { retryMailBroadcast } from "./retry-mail-broadcast";
 import { readLinkedSecret, reportWorkerError } from "./worker-runtime";
 
 const GOOGLE_JWKS = createRemoteJWKSet(
@@ -33,16 +35,6 @@ const gmailNotificationSchema = z.object({
         .transform(String),
     ])
     .pipe(z.string().min(1)),
-});
-
-const tokenPayloadSchema = z.object({
-  emailAddress: z.email(),
-  expiresAt: z.number().int().positive(),
-  issuedAt: z.number().int().positive(),
-  mailboxId: z.string().min(1),
-  nonce: z.uuid(),
-  userId: z.string().min(1),
-  version: z.literal(1),
 });
 
 const pubSubJwtPayloadSchema = z.object({
@@ -112,7 +104,7 @@ export const verifyLiveSyncToken = async (token: string, secret: string) => {
     parsedPayload = undefined;
   }
 
-  const payload = tokenPayloadSchema.safeParse(parsedPayload);
+  const payload = liveSyncTokenPayloadSchema.safeParse(parsedPayload);
   if (!payload.success) {
     throw new RequestError(401, "live_sync_token_payload_invalid");
   }
@@ -125,56 +117,6 @@ export const verifyLiveSyncToken = async (token: string, secret: string) => {
     throw new RequestError(401, "live_sync_token_inactive");
   }
   return payload.data;
-};
-
-export const readBoundedJson = async (request: Request, limit: number) => {
-  const declaredLength = Number(request.headers.get("content-length"));
-  if (Number.isFinite(declaredLength) && declaredLength > limit) {
-    throw new RequestError(413, "request_body_too_large");
-  }
-  if (request.body === null) {
-    throw new RequestError(400, "request_body_missing");
-  }
-
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-
-  const readChunks = async (length: number): Promise<number> => {
-    const readResult = await reader.read();
-    if (readResult.done) {
-      return length;
-    }
-    const value: unknown = readResult.value;
-    if (!(value instanceof Uint8Array)) {
-      return await readChunks(length);
-    }
-    const nextLength = length + value.byteLength;
-    if (nextLength > limit) {
-      await reader.cancel();
-      throw new RequestError(413, "request_body_too_large");
-    }
-    chunks.push(value);
-    return await readChunks(nextLength);
-  };
-
-  let length = 0;
-  try {
-    length = await readChunks(length);
-  } finally {
-    reader.releaseLock();
-  }
-
-  const body = new Uint8Array(length);
-  let offset = 0;
-  for (const chunk of chunks) {
-    body.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  try {
-    return JSON.parse(new TextDecoder().decode(body)) as unknown;
-  } catch {
-    throw new RequestError(400, "request_json_invalid");
-  }
 };
 
 export const verifyPubSubToken = async (request: Request, env: Env) => {
@@ -225,23 +167,26 @@ export const parseGmailNotification = (data: string) => {
 };
 
 export const mailboxObject = (env: Env, emailAddress: string) => {
-  const id = env.GmailLiveSyncMailbox.idFromName(
+  const id = env.GmailLiveSyncMailboxV2.idFromName(
     emailAddress.trim().toLowerCase()
   );
-  return env.GmailLiveSyncMailbox.get(id);
+  return env.GmailLiveSyncMailboxV2.get(id);
 };
 
-const broadcastMailboxEvent = async (
+export const broadcastMailboxEvent = async (
   env: Env,
   emailAddress: string,
   type: "mailbox-details-dirty" | "mailbox-dirty"
 ) => {
-  const response = await mailboxObject(env, emailAddress).fetch(
-    "https://internal.quieter/broadcast",
-    {
-      body: JSON.stringify({ type }),
-      method: "POST",
-    }
+  const response = await retryMailBroadcast(
+    async () =>
+      await mailboxObject(env, emailAddress).fetch(
+        "https://internal.quieter/broadcast",
+        {
+          body: JSON.stringify({ type }),
+          method: "POST",
+        }
+      )
   );
   if (!response.ok) {
     throw new RequestError(503, "broadcast_response_error");
@@ -264,10 +209,26 @@ export const handleLiveMailboxRequest = async (request: Request, env: Env) => {
 export const handlePubSub = async (
   request: Request,
   env: Env,
-  processNotification = async (message: unknown, bindings: Env) => {
-    await withRequestDatabaseClient(async () => {
-      await processGmailQueueMessage(message, bindings);
-    });
+  processNotification: (
+    message: {
+      emailAddress: string;
+      historyId: string;
+      pubSubMessageId: string;
+    },
+    bindings: Env
+  ) => Promise<unknown> = async (message, _bindings) => {
+    const { withRequestDatabaseClient } =
+      await import("@quieter/database/client");
+    const { processGmailPubSubNotification } =
+      await import("@quieter/orpc/gmail-pubsub");
+    const result = await withRequestDatabaseClient(
+      async () => await processGmailPubSubNotification(message)
+    );
+    return {
+      retry:
+        !result.ignored &&
+        (result.busy === true || result.needsContinuation === true),
+    };
   }
 ) => {
   await verifyPubSubToken(request, env);
@@ -287,33 +248,36 @@ export const handlePubSub = async (
     emailAddress,
     historyId: notification.historyId,
     pubSubMessageId: envelope.data.message.messageId,
-    type: "notification" as const,
   };
-  const [processorResult, initialBroadcastResult] = await Promise.allSettled([
-    processNotification(processorMessage, env),
+  const processing = await processNotification(processorMessage, env);
+  const broadcasts = await Promise.allSettled([
     broadcastMailboxEvent(env, emailAddress, "mailbox-dirty"),
+    broadcastGmailUpdate(
+      env,
+      emailAddress,
+      "mailbox.changed",
+      notification.historyId
+    ),
   ]);
-
-  if (processorResult.status === "rejected") {
-    throw processorResult.reason;
+  for (const result of broadcasts) {
+    if (result.status === "rejected") {
+      reportWorkerError(result.reason, {
+        category: "mail_broadcast_error",
+        route: "pubsub",
+      });
+    }
   }
-  if (initialBroadcastResult.status === "rejected") {
-    throw initialBroadcastResult.reason;
+  if (
+    typeof processing === "object" &&
+    processing !== null &&
+    "retry" in processing &&
+    processing.retry === true
+  ) {
+    throw new RequestError(503, "gmail_processing_pending");
   }
-
-  await Promise.all([
-    broadcastMailboxEvent(env, emailAddress, "mailbox-dirty"),
-    broadcastMailboxEvent(env, emailAddress, "mailbox-details-dirty"),
-  ]);
   return new Response(null, { status: 204 });
 };
 
-export const requestErrorResponse = (error: unknown, route: string) => {
-  const status = error instanceof RequestError ? error.status : 500;
-  const category =
-    error instanceof RequestError ? error.category : "internal_error";
-  if (status >= 500) {
-    reportWorkerError(error, { category, route, status });
-  }
-  return Response.json({ error: "Request failed" }, { status });
-};
+export { readBoundedJson } from "./bounded-json";
+
+export { requestErrorResponse } from "./request-error";

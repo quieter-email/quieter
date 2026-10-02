@@ -15,7 +15,7 @@ import postgres from "postgres";
 
 import { runKitMigrate } from "./drizzle-kit.ts";
 
-const NON_TRANSACTIONAL_MARKER = "-- quieter:no-transaction";
+const NON_TRANSACTIONAL_MARKER = /^-- quieter:no-transaction(?:\r?\n|$)/u;
 const STATEMENT_BREAKPOINT = "--> statement-breakpoint";
 
 const toMigrationMillis = (name: string) => {
@@ -28,25 +28,6 @@ const toMigrationMillis = (name: string) => {
     Number(date.slice(10, 12)),
     Number(date.slice(12, 14))
   );
-};
-
-const copyPrefixMigrations = (
-  migrations: { name: string; path: string }[],
-  migrationName: string,
-  migrationsDirectory: string,
-  prefixDirectory: string
-) => {
-  for (const prefixMigration of migrations) {
-    if (prefixMigration.name >= migrationName) {
-      continue;
-    }
-
-    cpSync(
-      path.join(migrationsDirectory, prefixMigration.name),
-      path.join(prefixDirectory, prefixMigration.name),
-      { recursive: true }
-    );
-  }
 };
 
 const applyNonTransactionalMigration = async ({
@@ -71,12 +52,16 @@ const applyNonTransactionalMigration = async ({
 
   try {
     mkdirSync(prefixDirectory, { recursive: true });
-    copyPrefixMigrations(
-      migrations,
-      migration.name,
-      input.migrationsDirectory,
-      prefixDirectory
-    );
+    for (const prefixMigration of migrations) {
+      if (prefixMigration.name >= migration.name) {
+        break;
+      }
+      cpSync(
+        path.join(input.migrationsDirectory, prefixMigration.name),
+        path.join(prefixDirectory, prefixMigration.name),
+        { recursive: true }
+      );
+    }
 
     const temporaryConfigPath = path.join(
       temporaryDirectory,
@@ -91,21 +76,13 @@ const applyNonTransactionalMigration = async ({
     rmSync(temporaryDirectory, { force: true, recursive: true });
   }
 
-  const statements = migration.sql.split(STATEMENT_BREAKPOINT);
-  const executeStatementAt = async (index: number): Promise<void> => {
-    if (index >= statements.length) {
-      return;
-    }
-
-    const executable =
-      statements[index]?.replace(NON_TRANSACTIONAL_MARKER, "").trim() ?? "";
+  for (const statement of migration.sql.split(STATEMENT_BREAKPOINT)) {
+    const executable = statement.replace(NON_TRANSACTIONAL_MARKER, "").trim();
     if (executable !== "") {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Migration statements must run sequentially.
       await sql.unsafe(executable);
     }
-
-    await executeStatementAt(index + 1);
-  };
-  await executeStatementAt(0);
+  }
 
   await sql`
     insert into drizzle.__drizzle_migrations (hash, created_at, name)
@@ -137,7 +114,7 @@ export const runForwardMigrations = async (input: {
     sql: readFileSync(migration.path, "utf-8"),
   }));
   const nonTransactionalMigrations = migrationSources.filter((migration) =>
-    migration.sql.includes(NON_TRANSACTIONAL_MARKER)
+    NON_TRANSACTIONAL_MARKER.test(migration.sql)
   );
 
   if (nonTransactionalMigrations.length === 0) {
@@ -172,21 +149,15 @@ export const runForwardMigrations = async (input: {
       return;
     }
 
-    const applyMigrationAt = async (index: number): Promise<void> => {
-      if (index >= pendingNonTransactionalMigrations.length) {
-        return;
-      }
-
-      const migration = pendingNonTransactionalMigrations[index];
+    for (const migration of pendingNonTransactionalMigrations) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Apply each historical migration before its successors.
       await applyNonTransactionalMigration({
         input,
         migration,
         migrations,
         sql,
       });
-      await applyMigrationAt(index + 1);
-    };
-    await applyMigrationAt(0);
+    }
 
     runKitMigrate();
   } finally {

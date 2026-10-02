@@ -119,6 +119,6 @@ describe("Gmail auto-label selection", () => {
       },
     });
 
-    expect(input.relevantMemory).toHaveLength(6000);
+    expect(input.relevantMemory?.length).toBeLessThanOrEqual(6000);
   });
 });

@@ -16,29 +16,19 @@ export const mailboxLabelColorSchema = z.enum([
 
 export type MailboxLabelColor = z.infer<typeof mailboxLabelColorSchema>;
 
-export type MailboxLabel = {
-  color: MailboxLabelColor | null;
-  description: string | null;
-  id: string;
-  inclusionCriteria: string | null;
-  name: string;
-  position: number;
-  provider: "gmail" | "managed";
-  type: "system" | "user";
-  visible: boolean;
-};
-
-export const mailboxSavedViewDefinitionSchema = z.object({
+export const mailboxLabelSchema = z.object({
   color: mailboxLabelColorSchema.nullable(),
-  icon: z.string().trim().max(64).nullable(),
-  name: z.string().trim().min(1).max(100),
-  search: structuredMailSearchSchema,
-  sort: z.enum(["newest", "oldest", "relevance"]).default("newest"),
+  description: z.string().nullable(),
+  id: z.string(),
+  inclusionCriteria: z.string().nullable(),
+  name: z.string(),
+  position: z.number(),
+  provider: z.enum(["gmail", "managed"]),
+  type: z.enum(["system", "user"]),
+  visible: z.boolean(),
 });
 
-export type MailboxSavedViewDefinition = z.infer<
-  typeof mailboxSavedViewDefinitionSchema
->;
+export type MailboxLabel = z.infer<typeof mailboxLabelSchema>;
 
 export const managedMailboxRuleActionSchema = z.discriminatedUnion("kind", [
   z.object({

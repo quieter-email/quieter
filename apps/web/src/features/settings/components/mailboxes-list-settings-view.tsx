@@ -27,6 +27,7 @@ import { prefetchMailboxSettingsDetail } from "#/features/settings/components/se
 import { mailboxesQueryOptions } from "#/lib/mailboxes-query";
 
 import { ManagedMailboxAdministrationSettings } from "./managed-mailbox-administration-settings";
+import { useSettingsTeam } from "./use-settings-team";
 
 type MailboxGroup = RouterOutputs["mail"]["listMailboxes"]["groups"][number];
 
@@ -127,7 +128,11 @@ const MailboxesListContent = ({
   );
 };
 
-export const MailboxesListSettingsView = () => {
+export const MailboxesListSettingsView = ({
+  onNavigateToMailbox,
+}: {
+  onNavigateToMailbox: (mailboxId: string) => Promise<void>;
+}) => {
   const navigate = useNavigate({ from: "/settings" });
   const queryClient = useQueryClient();
   const {
@@ -137,20 +142,14 @@ export const MailboxesListSettingsView = () => {
     isPending: areMailboxesPending,
     refetch: refetchMailboxes,
   } = useQuery(mailboxesQueryOptions());
-  const groups = mailboxesData?.groups ?? [];
+  const { teamId, team } = useSettingsTeam();
+  const groups = (mailboxesData?.groups ?? []).flatMap((group) => {
+    const mailboxes = group.mailboxes.filter(
+      (mailbox) => mailbox.organizationId === teamId
+    );
+    return mailboxes.length > 0 ? [{ ...group, mailboxes }] : [];
+  });
   const defaultMailboxId = mailboxesData?.defaultMailboxId ?? null;
-
-  const navigateToMailbox = async (mailboxId: string) => {
-    await navigate({
-      search: (previous) => ({
-        ...previous,
-        mailboxId,
-        mailboxView: "list",
-        tab: "mailboxes",
-      }),
-      to: ".",
-    });
-  };
 
   const renderMailboxSection = () => {
     if (isMailboxesError) {
@@ -174,7 +173,7 @@ export const MailboxesListSettingsView = () => {
       <MailboxesListContent
         defaultMailboxId={defaultMailboxId}
         groups={groups}
-        onNavigateToMailbox={navigateToMailbox}
+        onNavigateToMailbox={onNavigateToMailbox}
         queryClient={queryClient}
       />
     );
@@ -191,6 +190,7 @@ export const MailboxesListSettingsView = () => {
                   ...previous,
                   mailboxId: "",
                   mailboxView: "add",
+                  organizationId: teamId,
                   tab: "mailboxes",
                 }),
                 to: ".",
@@ -205,7 +205,9 @@ export const MailboxesListSettingsView = () => {
         }
         title="Mailboxes"
       >
-        Connect personal mail and manage the mailboxes you can access.
+        {team
+          ? `Mailboxes in ${team.name}. Private mailboxes remain private to their owner.`
+          : "Choose a team to manage mailboxes."}
       </SettingsPageHeader>
 
       <SettingsSection title="Your mailboxes">

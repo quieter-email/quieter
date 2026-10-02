@@ -1,5 +1,6 @@
 "use client";
 
+import { Text } from "@quieter/ui/text";
 import { TooltipGroup } from "@quieter/ui/tooltip";
 import { useNavigate } from "@tanstack/react-router";
 import type { ReactNode } from "react";
@@ -9,6 +10,7 @@ import { settingsRouteApi } from "#/lib/route-apis";
 
 import { SettingsBackButton, SettingsLoadingState } from "../settings-layout";
 import { OrganizationDetailView } from "./organization-detail-view";
+import { OrganizationSectionTabs } from "./organization-section-tabs";
 import { OrganizationsListView } from "./organizations-list-view";
 
 export const OrganizationSettingsPanel = () => {
@@ -51,26 +53,6 @@ export const OrganizationSettingsPanel = () => {
     });
   };
 
-  const navigateToMembers = () => {
-    void navigate({
-      search: (previous) => ({
-        ...previous,
-        organizationView: "members",
-      }),
-      to: ".",
-    });
-  };
-
-  const navigateToDivisions = () => {
-    void navigate({
-      search: (previous) => ({
-        ...previous,
-        organizationView: "divisions",
-      }),
-      to: ".",
-    });
-  };
-
   const navigateToDomains = () => {
     void navigate({
       search: (previous) => ({
@@ -88,56 +70,6 @@ export const OrganizationSettingsPanel = () => {
         ...previous,
         domainId: nextDomainId,
         organizationView: "domains",
-      }),
-      to: ".",
-    });
-  };
-
-  const navigateToApiKeys = () => {
-    void navigate({
-      search: (previous) => ({
-        ...previous,
-        organizationView: "api-keys",
-      }),
-      to: ".",
-    });
-  };
-
-  const navigateToSuppressions = () => {
-    void navigate({
-      search: (previous) => ({
-        ...previous,
-        organizationView: "suppressions",
-      }),
-      to: ".",
-    });
-  };
-
-  const navigateToDelivery = () => {
-    void navigate({
-      search: (previous) => ({
-        ...previous,
-        organizationView: "delivery",
-      }),
-      to: ".",
-    });
-  };
-
-  const navigateToBilling = () => {
-    void navigate({
-      search: (previous) => ({
-        ...previous,
-        organizationView: "billing",
-      }),
-      to: ".",
-    });
-  };
-
-  const navigateToDanger = () => {
-    void navigate({
-      search: (previous) => ({
-        ...previous,
-        organizationView: "danger",
       }),
       to: ".",
     });
@@ -182,9 +114,9 @@ export const OrganizationSettingsPanel = () => {
         <SettingsBackButton onClick={navigateToOrganizationsList}>
           Teams
         </SettingsBackButton>
-        <p className="text-body text-destructive">
+        <Text tone="destructive">
           {loadError.message ?? "Could not load teams."}
-        </p>
+        </Text>
       </>
     );
   } else if (selectedOrganization) {
@@ -192,17 +124,10 @@ export const OrganizationSettingsPanel = () => {
       <OrganizationDetailView
         key={selectedOrganization.id}
         domainId={domainId}
-        onOpenApiKeys={navigateToApiKeys}
         onBackToList={navigateToOrganizationsList}
         onBackToOrganization={navigateToOrganizationOverview}
-        onOpenBilling={navigateToBilling}
-        onOpenDanger={navigateToDanger}
-        onOpenDivisions={navigateToDivisions}
         onOpenDomains={navigateToDomains}
         onOpenDomain={navigateToDomain}
-        onOpenMembers={navigateToMembers}
-        onOpenSuppressions={navigateToSuppressions}
-        onOpenDelivery={navigateToDelivery}
         organization={selectedOrganization}
         userId={userId}
         view={organizationView}
@@ -212,7 +137,17 @@ export const OrganizationSettingsPanel = () => {
 
   return (
     <TooltipGroup>
-      <div className="space-y-6">{panelContent}</div>
+      <div className="space-y-6">
+        {selectedOrganization && (
+          <>
+            <p className="text-caption text-muted-fg">
+              {selectedOrganization.name}
+            </p>
+            <OrganizationSectionTabs />
+          </>
+        )}
+        {panelContent}
+      </div>
     </TooltipGroup>
   );
 };

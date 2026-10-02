@@ -144,7 +144,12 @@ export const DrawerCloseButton = ({
   variant = "outline",
   ...props
 }: ComponentPropsWithoutRef<typeof DrawerPrimitive.Close> & {
-  variant?: ButtonProps["variant"];
+  // Close buttons support the core button looks; card, chip, and the other
+  // special-purpose treatments do not belong in dialog footers.
+  variant?: Exclude<
+    ButtonProps["variant"],
+    "card" | "chip" | "option" | "overlay" | "result" | "secondary"
+  >;
 }) => (
   <DrawerPrimitive.Close
     className={cn(drawerCloseButtonVariants({ variant }), className)}

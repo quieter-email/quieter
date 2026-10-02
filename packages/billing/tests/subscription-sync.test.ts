@@ -1,10 +1,10 @@
-import type { Subscription } from "@polar-sh/sdk/models/components/subscription.js";
 import type * as DatabaseClientModule from "@quieter/database/client";
 import type { billingSubscription } from "@quieter/database/schema";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 
 import { syncBillingSubscription } from "../src/subscription-sync";
+import type { BillingPolarSubscription } from "../src/subscription-sync";
 
 const mocks = vi.hoisted(() => ({
   deploymentEnvironment: "production" as "production" | "local",
@@ -29,34 +29,36 @@ vi.mock(import("@quieter/env/server"), async (importOriginal) => {
   };
 });
 
-vi.mock(import("@quieter/database/client"), async (importOriginal) => {
+// This fake implements only the database operations exercised by the test.
+// oxlint-disable-next-line vitest/prefer-import-in-mock
+vi.mock("@quieter/database/client", async (importOriginal) => {
   const actual = await importOriginal<typeof DatabaseClientModule>();
   return {
     ...actual,
-    db: Object.assign(actual.db, { insert: () => ({ values: mocks.values }) }),
+    db: { insert: () => ({ values: mocks.values }) },
   };
 });
 
-const subscriptionSchema = z.custom<Subscription>(
+const subscriptionSchema = z.custom<BillingPolarSubscription>(
   (value) => typeof value === "object" && value !== null && "id" in value
 );
 
 const subscription = subscriptionSchema.parse({
   amount: 0,
-  cancelAtPeriodEnd: false,
-  createdAt: new Date("2026-08-01T00:00:00.000Z"),
-  currentPeriodEnd: new Date("2026-10-01T00:00:00.000Z"),
-  currentPeriodStart: new Date("2026-09-01T00:00:00.000Z"),
-  customerId: "customer-a",
+  cancel_at_period_end: false,
+  created_at: "2026-08-01T00:00:00.000Z",
+  current_period_end: "2026-10-01T00:00:00.000Z",
+  current_period_start: "2026-09-01T00:00:00.000Z",
+  customer_id: "customer-a",
   id: "subscription-a",
   metadata: {
     quieterOrganizationId: "team-a",
     quieterProduct: "managed",
     quieterUserId: "user-a",
   },
-  modifiedAt: new Date("2026-09-01T00:00:00.000Z"),
+  modified_at: "2026-09-01T00:00:00.000Z",
   product: { metadata: {} },
-  productId: "product-a",
+  product_id: "product-a",
   status: "active",
 });
 
@@ -103,15 +105,18 @@ describe("subscription synchronization", () => {
     });
     expect(mocks.values).toHaveBeenCalledWith(
       expect.objectContaining({
-        currentPeriodEnd: subscription.currentPeriodEnd,
-        currentPeriodStart: subscription.currentPeriodStart,
+        currentPeriodEnd: new Date(subscription.current_period_end),
+        currentPeriodStart: new Date(subscription.current_period_start),
         status: "active",
       })
     );
   });
 
   test("stores scheduled cancellation without ending access early", async () => {
-    await syncBillingSubscription({ ...subscription, cancelAtPeriodEnd: true });
+    await syncBillingSubscription({
+      ...subscription,
+      cancel_at_period_end: true,
+    });
     expect(mocks.values).toHaveBeenCalledWith(
       expect.objectContaining({ cancelAtPeriodEnd: true, status: "active" })
     );
@@ -125,9 +130,11 @@ describe("subscription synchronization", () => {
   });
 
   test("dates an unmodified creation event so it cannot overwrite a later cancellation", async () => {
-    await syncBillingSubscription({ ...subscription, modifiedAt: null });
+    await syncBillingSubscription({ ...subscription, modified_at: null });
     expect(mocks.values).toHaveBeenCalledWith(
-      expect.objectContaining({ providerModifiedAt: subscription.createdAt })
+      expect.objectContaining({
+        providerModifiedAt: new Date(subscription.created_at),
+      })
     );
   });
 

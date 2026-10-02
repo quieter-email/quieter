@@ -39,6 +39,7 @@ export const LoadingSpinner = ({
         strokeLinecap="butt"
         strokeLinejoin="round"
         strokeWidth="25"
+        // oxlint-disable-next-line shadcn/no-inline-styles -- Segments are staggered by computed delay.
         style={{ animationDelay: `${index * -12}ms` }}
       />
     ))}

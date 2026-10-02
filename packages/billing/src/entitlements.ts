@@ -287,8 +287,8 @@ export const getOrganizationSubscriptionRecord = async (
         ]);
       const polar = await getPolarClient();
       const subscription = await polar.subscriptions.get(
-        { id: providerSubscriptionId },
-        { signal: AbortSignal.timeout(BILLING_RECONCILIATION_TIMEOUT_MS) }
+        providerSubscriptionId,
+        { timeout: BILLING_RECONCILIATION_TIMEOUT_MS / 1000 }
       );
       const syncResult = await syncBillingSubscription(subscription);
       if (!syncResult.synced) {
@@ -327,10 +327,6 @@ export const getOrganizationSubscription = async (organizationId: string) => {
     ? toBillingAccount(row, organizationId)
     : null;
 };
-
-export const hasUnlimitedBillingAccess = async (userId: string) =>
-  isLocalDevelopmentBillingEntitlementEnabled() ||
-  (await getActiveOverride(userId)) !== null;
 
 export const getOrganizationBillingEntitlement = async (input: {
   feature: BillingFeature;
@@ -411,24 +407,6 @@ export const hasUserBillingFeature = async (input: {
     feature: input.feature,
     organizationId: input.organizationId,
   });
-};
-
-export const assertUserBillingFeature = async (input: {
-  feature: BillingFeature;
-  organizationId: string;
-  userId: string;
-}) => {
-  const result = await hasUserBillingFeature(input);
-
-  if (!result.hasAccess) {
-    const requirement = BILLING_FEATURES[input.feature];
-
-    throw new ORPCError("FORBIDDEN", {
-      message: `${requirement.description} requires ${requirement.requirementLabel}.`,
-    });
-  }
-
-  return result;
 };
 
 export const organizationHasBillingFeature = async (input: {

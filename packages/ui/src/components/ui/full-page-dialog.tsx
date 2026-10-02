@@ -73,7 +73,7 @@ export const FullPageDialogClose = ({
 }: ComponentPropsWithoutRef<typeof DialogPrimitive.Close>) => (
   <DialogPrimitive.Close
     className={cn(
-      "squircle inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-fg transition-colors hover:bg-muted hover:text-fg focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] [&_svg]:size-4",
+      "inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-fg transition-colors squircle hover:bg-muted hover:text-fg focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] [&_svg]:size-4",
       className
     )}
     {...props}

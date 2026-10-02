@@ -34,14 +34,10 @@ describe(normalizeMailDomain, () => {
   });
 
   test("rejects invalid domains", () => {
-    expect(() => normalizeMailDomain("localhost")).toThrow(
-      "Enter a valid domain."
-    );
-    expect(() => normalizeMailDomain("-example.com")).toThrow(
-      "Enter a valid domain."
-    );
+    expect(() => normalizeMailDomain("localhost")).toThrow(/valid domain/u);
+    expect(() => normalizeMailDomain("-example.com")).toThrow(/valid domain/u);
     expect(() => normalizeMailDomain("example.invalid-")).toThrow(
-      "Enter a valid domain."
+      /valid domain/u
     );
   });
 });

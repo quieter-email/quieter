@@ -1,36 +1,13 @@
-import type { ChatMessagePart } from "@quieter/database/schema";
+import { toCanonicalTranscript } from "@quieter/ai/chat-transcript";
+import type { RouterOutputs } from "@quieter/orpc";
 import type { UIMessage } from "ai";
 import { describe, expect, test } from "vite-plus/test";
 
-import {
-  getAssistantProgress,
-  getChatRetryAction,
-  getMessageText,
-  toInitialMessages,
-} from "./chat-messages";
+import { getAssistantProgress, getMessageText } from "./chat-messages";
 
-type StoredMessage = {
-  createdAt: Date;
-  id: string;
-  parts: ChatMessagePart[];
-  position: number;
-  role: "assistant" | "system" | "user";
-};
+type StoredMessage = RouterOutputs["chat"]["get"]["messages"][number];
 
 describe("chat message conversion", () => {
-  test("does not regenerate an empty or assistant-only conversation", () => {
-    expect(getChatRetryAction([], [])).toStrictEqual({ type: "unavailable" });
-    expect(
-      getChatRetryAction(
-        [],
-        [{ id: "assistant", parts: [], role: "assistant" }]
-      )
-    ).toStrictEqual({ type: "unavailable" });
-    expect(
-      getChatRetryAction([{ id: "user", parts: [], role: "user" }], [])
-    ).toStrictEqual({ type: "unavailable" });
-  });
-
   test("projects persisted rows onto UI messages and skips system rows", () => {
     const storedMessage: StoredMessage = {
       createdAt: new Date("2026-08-20T10:00:00.000Z"),
@@ -50,16 +27,16 @@ describe("chat message conversion", () => {
       role: "assistant",
     };
 
-    expect(toInitialMessages([storedMessage])).toStrictEqual([
+    expect(toCanonicalTranscript([storedMessage])).toStrictEqual([
       {
         id: "message-1",
-        parts: storedMessage.parts,
+        parts: storedMessage.parts.slice(0, 2),
         role: "assistant",
       },
     ]);
 
     expect(
-      toInitialMessages([
+      toCanonicalTranscript([
         {
           ...storedMessage,
           id: "system-1",
@@ -77,6 +54,35 @@ describe("chat message conversion", () => {
     ];
 
     expect(getMessageText(parts)).toBe("First\n\nSecond");
+  });
+
+  test("reloads interrupted actions as uncertain and preserves their history", () => {
+    const messages = toCanonicalTranscript([
+      {
+        id: "user",
+        parts: [{ text: "Archive it", type: "text" }],
+        role: "user",
+      },
+      {
+        id: "assistant",
+        parts: [
+          {
+            approval: { approved: true, id: "approval" },
+            input: { action: "archive" },
+            state: "approval-responded",
+            toolCallId: "archive",
+            type: "tool-modify_mail",
+          },
+        ],
+        role: "assistant",
+      },
+    ]);
+
+    expect(messages[1]?.parts[0]).toMatchObject({
+      errorText:
+        "The action was submitted, but its result is not available. Check the affected item before requesting it again.",
+      state: "output-error",
+    });
   });
 
   test("collapses streaming work into one neutral status", () => {
@@ -98,44 +104,5 @@ describe("chat message conversion", () => {
         true
       )
     ).toBeNull();
-  });
-
-  test("recovers each retry state without duplicating a persisted user turn", () => {
-    const userMessage: UIMessage = {
-      id: "user-1",
-      parts: [{ text: "Try this", type: "text" }],
-      role: "user",
-    };
-    const oldAssistant: UIMessage = {
-      id: "assistant-old",
-      parts: [{ text: "Old answer", type: "text" }],
-      role: "assistant",
-    };
-    const newAssistant: UIMessage = {
-      id: "assistant-new",
-      parts: [{ text: "New answer", type: "text" }],
-      role: "assistant",
-    };
-
-    expect(getChatRetryAction([userMessage], [])).toStrictEqual({
-      messageId: "user-1",
-      text: "Try this",
-      type: "resubmit-user",
-    });
-    expect(getChatRetryAction([userMessage], [userMessage])).toStrictEqual({
-      type: "regenerate",
-    });
-    expect(
-      getChatRetryAction(
-        [userMessage, newAssistant],
-        [userMessage, newAssistant]
-      )
-    ).toStrictEqual({ type: "hydrate" });
-    expect(
-      getChatRetryAction(
-        [userMessage, newAssistant],
-        [userMessage, oldAssistant]
-      )
-    ).toStrictEqual({ type: "regenerate" });
   });
 });

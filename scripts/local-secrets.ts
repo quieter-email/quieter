@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { parseEnv } from "node:util";
 
-import { diagnoseLocalEnv } from "@quieter/env/local-doctor";
+import { diagnoseLocalEnv, serializeEnvFile } from "@quieter/env/local-doctor";
 import { sstSecretNames } from "@quieter/env/sst-secrets";
 
 const [action, stage] = process.argv.slice(2);
@@ -36,13 +36,11 @@ if (action === "push" && errors.length > 0) {
 if (action === "push") {
   const secrets = Object.entries(mapping).flatMap(([key, name]) => {
     const value = current[key];
-    return value === undefined || value === ""
-      ? []
-      : [`${name}=${JSON.stringify(value)}`];
+    return value === undefined || value === "" ? [] : [[name, value] as const];
   });
   await mkdir(".scratch", { recursive: true });
   const file = `.scratch/local-secrets-${randomUUID()}.env`;
-  await writeFile(file, secrets.join("\n"), { mode: 0o600 });
+  await writeFile(file, serializeEnvFile(new Map(secrets)), { mode: 0o600 });
   try {
     const result = spawnSync(
       process.execPath,
@@ -102,13 +100,7 @@ if (action === "push") {
   if (failures.length > 0) {
     throw new Error(failures.join("\n"));
   }
-  await writeFile(
-    ".env.local",
-    `${[...checked]
-      .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
-      .join("\n")}\n`,
-    { mode: 0o600 }
-  );
+  await writeFile(".env.local", serializeEnvFile(checked), { mode: 0o600 });
   process.stdout.write(
     `Loaded ${count} development secrets from ${stage} into ignored local configuration. Run dev:prepare and restart development.\n`
   );

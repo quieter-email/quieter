@@ -70,8 +70,9 @@ function PrivacyPage() {
           product availability.
         </li>
         <li>
-          AI prompts, outputs, and usage metadata when you use chat or enable
-          optional Gmail AI features.
+          AI prompts, outputs, and usage metadata for chat, enabled automatic
+          labeling, and automatic verification-code extraction in eligible
+          mailboxes.
         </li>
         <li>
           Error and reliability reports in production to keep the service secure
@@ -95,9 +96,7 @@ function PrivacyPage() {
           Polar for checkout, subscriptions, billing portal access, and usage
           metering.
         </li>
-        <li>
-          OpenRouter and selected model providers for optional AI features.
-        </li>
+        <li>OpenRouter and selected model providers for AI features.</li>
         <li>PostHog for product analytics only after measurement consent.</li>
         <li>Sentry for error and reliability monitoring in production.</li>
         <li>
@@ -109,6 +108,58 @@ function PrivacyPage() {
           requested.
         </li>
       </ul>
+
+      <h2>Google API data</h2>
+      <p>
+        Quieter connects to Google when you sign in with Google or connect a
+        Gmail mailbox. Through Google APIs we access the mailbox content needed
+        for the features you use: messages, threads, attachments, labels,
+        drafts, send and settings data, plus your basic Google profile and email
+        address. If you enable the calendar connector, we access the calendar
+        events you authorize.
+      </p>
+      <p>
+        We use Google user data only to provide and secure the features you
+        request, such as syncing, reading, searching, composing, sending, and
+        labeling mail, extracting verification codes, and AI features. We do not
+        sell Google user data, use it for advertising, or use it to train
+        generalized AI models. Automatic verification-code extraction processes
+        recent incoming messages in eligible mailboxes through the processors
+        listed above. Automatic labeling runs when enabled for a mailbox.
+      </p>
+      <p>
+        Gmail credentials are encrypted at rest, mailbox content stays limited
+        to the mailbox you connected and to members you explicitly grant access
+        to, and we retain Google data only as described under retention. You can
+        disconnect a mailbox at any time, which stops future access, and you can
+        revoke Google access for Quieter from your{" "}
+        <a
+          className="underline hover:text-fg"
+          href="https://myaccount.google.com/permissions"
+        >
+          Google Account permissions
+        </a>
+        . You can request deletion of your Google data by deleting your account
+        or contacting{" "}
+        <a
+          className="underline hover:text-fg"
+          href="mailto:legal@quieter.email"
+        >
+          legal@quieter.email
+        </a>
+        .
+      </p>
+      <p>
+        The use and transfer to any other app of information received from
+        Google APIs by Quieter will adhere to the{" "}
+        <a
+          className="underline hover:text-fg"
+          href="https://developers.google.com/terms/api-services-user-data-policy"
+        >
+          Google API Services User Data Policy
+        </a>
+        , including the Limited Use requirements.
+      </p>
 
       <h2>Why we process data</h2>
       <ul>
@@ -138,13 +189,14 @@ function PrivacyPage() {
       <p>
         We retain account and mailbox data while your account is active and as
         needed to provide the service, comply with law, prevent abuse, and
-        resolve disputes. Turning off Gmail useful details deletes stored
-        useful-detail items for that mailbox. Disabling a mailbox or deleting
-        account data may not immediately remove backups, logs, invoices, or
-        records we must keep for legal, security, or accounting reasons. The
-        browser may keep selected mailbox and navigation metadata in
-        localStorage for up to 24 hours; signing out or deleting your account
-        clears this query cache from the browser.
+        resolve disputes. Extracted verification codes are encrypted and remain
+        available with their mailbox, even after an estimated expiry time.
+        Processing records without a saved code are removed after thirty days.
+        Disabling a mailbox or deleting account data may not immediately remove
+        backups, logs, invoices, or records we must keep for legal, security, or
+        accounting reasons. The browser may keep selected mailbox and navigation
+        metadata in localStorage for up to 24 hours; signing out or deleting
+        your account clears this query cache from the browser.
       </p>
 
       <h2>International transfers</h2>

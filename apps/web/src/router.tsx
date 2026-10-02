@@ -1,4 +1,4 @@
-import * as Sentry from "@sentry/tanstackstart-react";
+import * as Sentry from "@sentry/react";
 import { createRouter } from "@tanstack/react-router";
 
 import { RootErrorComponent } from "./components/root/root-error-component";
@@ -33,7 +33,6 @@ export const getRouter = () => {
       beforeSend: (event, hint) =>
         shouldDiscardClientError(event, hint.originalException) ? null : event,
       dsn: clientEnv.VITE_SENTRY_DSN,
-      enableLogs: false,
       environment: import.meta.env.MODE,
       tracesSampleRate: 0.05,
     });

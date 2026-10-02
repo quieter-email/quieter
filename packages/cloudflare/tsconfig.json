@@ -8,7 +8,9 @@
     "src/**/*.ts",
     "scripts/**/*.ts",
     "tests/**/*.ts",
-    "vite.config.ts",
-    "worker-configuration.d.ts"
+    "worker-tests.config.ts",
+    "worker-configuration.d.ts",
+    "cloudflare.config.ts",
+    "wrangler.config.ts"
   ]
 }

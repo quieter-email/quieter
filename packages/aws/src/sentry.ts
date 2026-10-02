@@ -1,5 +1,8 @@
 import { serverEnv } from "@quieter/env/server";
-import { configureErrorReporter } from "@quieter/observability";
+import {
+  configureErrorReporter,
+  prepareReportedEvent,
+} from "@quieter/observability";
 import * as Sentry from "@sentry/node";
 
 const enabled =
@@ -10,8 +13,9 @@ const enabled =
 
 if (enabled) {
   Sentry.init({
+    beforeSend: (event, hint) =>
+      prepareReportedEvent(event, hint.originalException),
     dsn: serverEnv.SENTRY_DSN,
-    enableLogs: false,
     environment:
       serverEnv.SENTRY_ENVIRONMENT ??
       serverEnv.QUIETER_DEPLOYMENT_ENV ??
@@ -28,6 +32,7 @@ export const reportAwsError = async (error: unknown, handler: string) => {
   Sentry.withScope((scope) => {
     scope.setTag("handler", handler);
     scope.setTag("runtime", "aws-lambda");
+
     Sentry.captureException(error);
   });
   await Sentry.flush(2000);
@@ -54,6 +59,10 @@ configureErrorReporter((error, context) => {
       typeof context.handler === "string" ? context.handler : "application"
     );
     scope.setTag("runtime", "aws-lambda");
+    scope.setExtras(context);
+    if (typeof context.operation === "string") {
+      scope.setTag("operation", context.operation);
+    }
     Sentry.captureException(error);
   });
 });

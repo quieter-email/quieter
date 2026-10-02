@@ -6,6 +6,6 @@ const localEnvPath = path.join(import.meta.dirname, "../../../.env.local");
 assertLocalEnvFile(localEnvPath);
 
 process.stdout.write(
-  "Local configuration is isolated. Run dev:workers for native local queues and Durable Objects; dev:pubsub consumes only the separate development subscription." +
+  "Local configuration is isolated. Run dev:workers for direct Gmail processing and Durable Objects; dev:pubsub consumes only the separate development subscription." +
     "\n"
 );

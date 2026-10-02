@@ -13,7 +13,9 @@ import {
   organizationDivision,
   organizationDivisionMember,
   user,
+  managedMailRule,
 } from "@quieter/database/schema";
+import { managedMailboxRuleDefinitionSchema } from "@quieter/mail/mailbox-organization";
 import { and, eq, inArray } from "drizzle-orm";
 import {
   afterAll,
@@ -32,6 +34,15 @@ import {
   setManagedMailboxDivisionGrant,
   removeManagedMailboxGrant,
 } from "../src/mailbox/managed-grants";
+import {
+  createManagedLabel,
+  deleteManagedLabel,
+  updateManagedLabel,
+} from "../src/managed-mail/labels/service";
+import {
+  createManagedRule,
+  updateManagedRule,
+} from "../src/managed-mail/rules/service";
 import { getOnboardingState } from "../src/onboarding/service";
 
 const { databaseUrl } = vi.hoisted(() => ({
@@ -161,6 +172,121 @@ describe.skipIf(databaseUrl === undefined)(
       await db
         .delete(user)
         .where(inArray(user.id, [admin, owner, other, outsider]));
+    });
+
+    test("create and rename conflicts use domain errors for labels and rules", async () => {
+      const mailboxId = await create();
+      const context = { mailboxId, userId: owner };
+      await createManagedLabel({ ...context, color: "blue", name: "VIP" });
+      await expect(
+        createManagedLabel({ ...context, color: "blue", name: " vip " })
+      ).rejects.toMatchObject({ code: "CONFLICT" });
+      const label = await createManagedLabel({
+        ...context,
+        color: "blue",
+        name: "Other",
+      });
+      await expect(
+        updateManagedLabel({ ...context, labelId: label.id, name: "VIP" })
+      ).rejects.toMatchObject({ code: "CONFLICT" });
+
+      const ruleDefinition = managedMailboxRuleDefinitionSchema.parse({
+        actions: [{ kind: "set-read", read: true }],
+        enabled: true,
+        matchMode: "all",
+        name: "VIP",
+        search: { filters: [], text: "" },
+      });
+      await createManagedRule({ ...context, definition: ruleDefinition });
+      await expect(
+        createManagedRule({
+          ...context,
+          definition: { ...ruleDefinition, name: " vip " },
+        })
+      ).rejects.toMatchObject({ code: "CONFLICT" });
+      const rule = await createManagedRule({
+        ...context,
+        definition: { ...ruleDefinition, name: "Other" },
+      });
+      if (rule === undefined) {
+        throw new Error("Rule creation returned no record.");
+      }
+      await expect(
+        updateManagedRule({
+          ...context,
+          definition: ruleDefinition,
+          ruleId: rule.id,
+        })
+      ).rejects.toMatchObject({ code: "CONFLICT" });
+    });
+
+    test("label rename repairs legacy references and deletion disables affected rules", async () => {
+      const mailboxId = await create();
+      const context = { mailboxId, userId: owner };
+      const label = await createManagedLabel({
+        ...context,
+        color: "blue",
+        name: "VIP",
+      });
+      const definition = managedMailboxRuleDefinitionSchema.parse({
+        actions: [{ kind: "set-read", read: true }],
+        conditionGroups: [
+          {
+            matchMode: "any",
+            search: { filters: [{ type: "label", value: "VIP" }], text: "" },
+          },
+        ],
+        enabled: true,
+        matchMode: "all",
+        name: "VIP rule",
+        search: {
+          filters: [{ negated: true, type: "label", value: label.id }],
+          text: "",
+        },
+      });
+      const rule = await createManagedRule({ ...context, definition });
+      if (rule === undefined) {
+        throw new Error("Rule creation returned no record.");
+      }
+      await db
+        .update(managedMailRule)
+        .set({ conditionGroups: definition.conditionGroups })
+        .where(eq(managedMailRule.id, rule.id));
+      await updateManagedLabel({
+        ...context,
+        labelId: label.id,
+        name: "Important",
+      });
+      const [renamedRule] = await db
+        .select()
+        .from(managedMailRule)
+        .where(eq(managedMailRule.id, rule.id));
+      expect(renamedRule.search).toStrictEqual(definition.search);
+      expect(renamedRule.conditionGroups).toStrictEqual([
+        {
+          matchMode: "any",
+          search: { filters: [{ type: "label", value: label.id }], text: "" },
+        },
+      ]);
+      await deleteManagedLabel({ ...context, labelId: label.id });
+      const [disabledRule] = await db
+        .select()
+        .from(managedMailRule)
+        .where(eq(managedMailRule.id, rule.id));
+      expect(disabledRule).toMatchObject({
+        conditionGroups: [
+          {
+            matchMode: "any",
+            search: { filters: [{ type: "label", value: label.id }], text: "" },
+          },
+        ],
+        enabled: false,
+        search: definition.search,
+      });
+      expect(disabledRule.disabledReason).toContain("deleted");
+      await expect(
+        updateManagedRule({ ...context, definition, ruleId: rule.id })
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
     });
 
     test("creates exactly one owner grant without granting the creating admin or team", async () => {

@@ -1,6 +1,7 @@
 import { publicEnv } from "@quieter/env/public";
 
 import type { createBimiResolver } from "./bimi";
+import { extractMailAddress } from "./compose/schema";
 
 const EMAIL_ADDRESS_PATTERN =
   /(?<email>[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+)/iu;
@@ -66,7 +67,7 @@ export const extractSenderEmail = (
     return undefined;
   }
 
-  const match = EMAIL_ADDRESS_PATTERN.exec(normalized);
+  const match = EMAIL_ADDRESS_PATTERN.exec(extractMailAddress(normalized));
   return match?.groups?.email?.trim().toLowerCase();
 };
 

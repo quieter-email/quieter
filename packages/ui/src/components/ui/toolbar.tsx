@@ -1,6 +1,8 @@
 "use client";
 
 import { Toolbar as ToolbarPrimitive } from "@base-ui/react/toolbar";
+import { cva } from "class-variance-authority";
+import type { VariantProps } from "class-variance-authority";
 import type { ComponentPropsWithoutRef } from "react";
 
 import { cn } from "../../lib/cn";
@@ -11,7 +13,7 @@ export const Toolbar = ({
 }: ComponentPropsWithoutRef<typeof ToolbarPrimitive.Root>) => (
   <ToolbarPrimitive.Root
     className={cn(
-      "squircle inline-flex min-h-10 items-center gap-1 rounded-lg border border-border bg-bg p-1 shadow-sm",
+      "inline-flex min-h-10 items-center gap-1 rounded-lg border border-border bg-bg p-1 shadow-sm squircle",
       className
     )}
     {...props}
@@ -28,15 +30,41 @@ export const ToolbarGroup = ({
   />
 );
 
+const toolbarButtonVariants = cva(
+  "inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-transparent px-3.5 text-body-sm font-medium whitespace-nowrap text-muted-fg transition-[background-color,color,transform] duration-150 ease-out select-none hover:bg-muted hover:text-fg focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] active:bg-muted/80 active:text-fg disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
+  {
+    defaultVariants: {
+      size: "default",
+      variant: "default",
+    },
+    variants: {
+      size: {
+        default: "",
+        icon: "size-8 p-0",
+      },
+      variant: {
+        default: "",
+        primary:
+          "bg-primary text-primary-fg shadow-sm hover:bg-primary/90 hover:text-primary-fg active:bg-primary/85 active:text-primary-fg",
+        selected: "bg-control-active text-fg shadow-sm",
+      },
+    },
+  }
+);
+
+type ToolbarButtonProps = ComponentPropsWithoutRef<
+  typeof ToolbarPrimitive.Button
+> &
+  VariantProps<typeof toolbarButtonVariants>;
+
 export const ToolbarButton = ({
   className,
+  size,
+  variant,
   ...props
-}: ComponentPropsWithoutRef<typeof ToolbarPrimitive.Button>) => (
+}: ToolbarButtonProps) => (
   <ToolbarPrimitive.Button
-    className={cn(
-      "squircle inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-transparent px-3.5 text-body-sm font-medium whitespace-nowrap text-muted-fg transition-[background-color,color,transform] duration-150 ease-out select-none hover:bg-muted hover:text-fg focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] active:bg-muted/80 active:text-fg disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
-      className
-    )}
+    className={cn(toolbarButtonVariants({ size, variant }), className)}
     {...props}
   />
 );
@@ -46,10 +74,7 @@ export const ToolbarLink = ({
   ...props
 }: ComponentPropsWithoutRef<typeof ToolbarPrimitive.Link>) => (
   <ToolbarPrimitive.Link
-    className={cn(
-      "squircle inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-transparent px-3.5 text-body-sm font-medium whitespace-nowrap text-muted-fg transition-[background-color,color,transform] duration-150 ease-out select-none hover:bg-muted hover:text-fg focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] active:bg-muted/80 active:text-fg disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
-      className
-    )}
+    className={cn(toolbarButtonVariants(), className)}
     {...props}
   />
 );
@@ -60,7 +85,7 @@ export const ToolbarInput = ({
 }: ComponentPropsWithoutRef<typeof ToolbarPrimitive.Input>) => (
   <ToolbarPrimitive.Input
     className={cn(
-      "squircle h-8 w-full min-w-32 rounded-md border border-border bg-bg px-3 text-body-sm text-fg shadow-sm transition-colors duration-150 ease-out placeholder:text-muted-fg read-only:cursor-default read-only:bg-bg focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:focus-visible:border-destructive aria-invalid:focus-visible:ring-destructive/45",
+      "h-8 w-full min-w-32 rounded-md border border-border bg-bg px-3 text-body-sm text-fg shadow-sm transition-colors duration-150 ease-out squircle placeholder:text-muted-fg read-only:cursor-default read-only:bg-bg focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:focus-visible:border-destructive aria-invalid:focus-visible:ring-destructive/45",
       className
     )}
     {...props}

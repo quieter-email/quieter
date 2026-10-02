@@ -26,7 +26,7 @@ const aiCrawlerTokens = [
 
 const aiCrawlerRegExp = new RegExp(`(?:${aiCrawlerTokens.join("|")})`, "u");
 
-export const isAiCrawlerUserAgent = (userAgent: string | null | undefined) =>
+const isAiCrawlerUserAgent = (userAgent: string | null | undefined) =>
   userAgent === null || userAgent === undefined
     ? false
     : aiCrawlerRegExp.test(userAgent.toLowerCase());

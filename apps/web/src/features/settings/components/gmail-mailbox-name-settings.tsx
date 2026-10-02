@@ -23,20 +23,16 @@ export const GmailMailboxNameSettings = ({
   };
 }) => {
   const queryClient = useQueryClient();
-  const [displayName, setDisplayName] = useState(() => {
-    const trimmed = mailbox.displayName?.trim() ?? "";
-    return trimmed === "" ? "Gmail" : trimmed;
-  });
+  const [displayName, setDisplayName] = useState(
+    mailbox.displayName?.trim() ?? ""
+  );
   const updateDisplayNameMutation = useMutation({
     ...orpc.mail.updateGmailMailboxDisplayName.mutationOptions(),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: getMailboxesQueryKey() });
     },
   });
-  const savedDisplayName = (() => {
-    const trimmed = mailbox.displayName?.trim() ?? "";
-    return trimmed === "" ? "Gmail" : trimmed;
-  })();
+  const savedDisplayName = mailbox.displayName?.trim() ?? "";
   const isDirty = displayName.trim() !== savedDisplayName;
 
   return (
@@ -71,6 +67,7 @@ export const GmailMailboxNameSettings = ({
           <TextFieldInput
             aria-label={`Name for ${mailbox.emailAddress}`}
             className="min-w-0 flex-1"
+            disabled={updateDisplayNameMutation.isPending}
             maxLength={120}
             onChange={(event) => {
               setDisplayName(event.currentTarget.value);

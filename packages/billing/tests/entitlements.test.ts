@@ -1,4 +1,4 @@
-import type { Subscription } from "@polar-sh/sdk/models/components/subscription.js";
+import type { models } from "@polar-sh/sdk/2026-04";
 import type * as DatabaseClientModule from "@quieter/database/client";
 import type * as ServerEnvModule from "@quieter/env/server";
 import {
@@ -21,15 +21,12 @@ import {
   shouldReconcileBillingSubscription,
   subscriptionBelongsToOrganization,
 } from "../src/entitlements";
-import {
-  BILLING_PRODUCTS,
-  productHasAi,
-  productHasManagedMail,
-} from "../src/plans";
+import { productHasAi, productHasManagedMail } from "../src/plans";
 import type * as PolarModule from "../src/polar";
 import type * as SubscriptionSyncModule from "../src/subscription-sync";
 
 type PolarClient = Awaited<ReturnType<typeof PolarModule.getPolarClient>>;
+type Subscription = models.Subscription;
 
 const polarSubscriptionSchema = z.custom<Subscription>(
   (value) =>
@@ -78,14 +75,16 @@ const billingMocks = vi.hoisted(() => {
   };
 });
 
-vi.mock(import("@quieter/database/client"), async (importOriginal) => {
+// This fake implements only the database operations exercised by the test.
+// oxlint-disable-next-line vitest/prefer-import-in-mock
+vi.mock("@quieter/database/client", async (importOriginal) => {
   const actual = await importOriginal<typeof DatabaseClientModule>();
   return {
     assertDatabaseConfigured: actual.assertDatabaseConfigured,
-    db: Object.assign(actual.db, {
+    db: {
       select: billingMocks.select,
       update: billingMocks.update,
-    }),
+    },
     withRequestDatabaseClient: actual.withRequestDatabaseClient,
   };
 });
@@ -242,7 +241,7 @@ describe("organization subscription reconciliation", () => {
   beforeAll(async () => {
     // The Polar SDK ships thousands of generated modules; the first lazy load
     // inside a test can exceed the default timeout under load, so warm it here.
-    await import("@polar-sh/sdk");
+    await import("@polar-sh/sdk/2026-04");
   }, 30_000);
 
   const staleRow = {
@@ -314,9 +313,9 @@ describe("organization subscription reconciliation", () => {
       currentPeriodEnd: refreshedRow.currentPeriodEnd,
     });
     const polarCall = billingMocks.getPolarSubscription.mock.calls.at(0);
-    expect(polarCall?.[0]).toStrictEqual({ id: "polar-subscription-1" });
+    expect(polarCall?.[0]).toBe("polar-subscription-1");
     const polarOptions = polarCall?.[1];
-    expect(polarOptions?.signal).toBeInstanceOf(AbortSignal);
+    expect(polarOptions?.timeout).toBeGreaterThan(0);
     expect(billingMocks.syncBillingSubscription).toHaveBeenCalledWith(
       providerSubscription
     );
@@ -539,27 +538,10 @@ describe("local development billing entitlement", () => {
 });
 
 describe("billing products", () => {
-  test("exposes only organization plans", () => {
-    expect(Object.keys(BILLING_PRODUCTS)).toStrictEqual(["managed", "pro"]);
-  });
-
   test("matches product access to the purchased capability", () => {
     expect(productHasAi("managed")).toBeFalsy();
     expect(productHasAi("pro")).toBeTruthy();
     expect(productHasManagedMail("managed")).toBeTruthy();
     expect(productHasManagedMail("pro")).toBeTruthy();
-  });
-
-  test("keeps a platform fee above the included monthly usage balance", () => {
-    expect(BILLING_PRODUCTS.managed).toMatchObject({
-      creditAmountCents: 1000,
-      currency: "usd",
-      monthlyPriceCents: 1500,
-    });
-    expect(BILLING_PRODUCTS.pro).toMatchObject({
-      creditAmountCents: 2000,
-      currency: "usd",
-      monthlyPriceCents: 2500,
-    });
   });
 });

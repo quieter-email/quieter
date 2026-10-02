@@ -1,15 +1,14 @@
 import { describe, expect, test } from "vite-plus/test";
 
-import { messagesQueryOptions } from "./gmail/inbox-query/sync";
-import { labelsQueryOptions } from "./gmail/labels-query";
-import { getThreadWithDetailsOptions } from "./gmail/thread-query";
+import { messagesQueryOptions } from "./mail/inbox-query/sync";
+import { labelsQueryOptions } from "./mail/labels-query";
+import { getThreadWithDetailsOptions } from "./mail/thread-query";
 import { mailboxesQueryOptions } from "./mailboxes-query";
 import {
   managedLabelCountsQueryOptions,
   managedRulesQueryOptions,
 } from "./managed-mailbox-organization-query";
 import { queryPersister, shouldPersistQueryKey } from "./query-persister";
-import { savedViewsQueryOptions } from "./saved-views-query";
 
 const getPersister = (options: { persister?: unknown }) => options.persister;
 
@@ -35,9 +34,6 @@ describe("query persistence allowlist", () => {
     expect(getPersister(labelsQueryOptions("mailbox-a"))).toBe(
       queryPersister.persisterFn
     );
-    expect(getPersister(savedViewsQueryOptions("mailbox-a"))).toBe(
-      queryPersister.persisterFn
-    );
     expect(getPersister(managedLabelCountsQueryOptions("mailbox-a"))).toBe(
       queryPersister.persisterFn
     );
@@ -47,10 +43,10 @@ describe("query persistence allowlist", () => {
     expect(mailboxesQueryOptions().refetchOnMount).toBeFalsy();
   });
 
-  test("does not persist opened threads or managed rules", () => {
+  test("persists opened threads but excludes managed rules", () => {
     expect(
       getPersister(getThreadWithDetailsOptions("mailbox-a", "thread-a"))
-    ).toBeUndefined();
+    ).toBe(queryPersister.persisterFn);
     expect(getPersister(managedRulesQueryOptions("mailbox-a"))).toBeUndefined();
   });
 
@@ -66,13 +62,12 @@ describe("query persistence allowlist", () => {
   test("rejects unrelated query scopes", () => {
     expect(
       shouldPersistQueryKey(["message-thread", 3, "mailbox-a", "thread-a"])
-    ).toBeFalsy();
+    ).toBeTruthy();
     expect(shouldPersistQueryKey(["mailboxes"])).toBeFalsy();
   });
 
   test("persists mailbox metadata scopes", () => {
     expect(shouldPersistQueryKey(["gmail-labels", "mailbox-a"])).toBeTruthy();
-    expect(shouldPersistQueryKey(["saved-views", "mailbox-a"])).toBeTruthy();
     expect(
       shouldPersistQueryKey(["managed-label-counts", "mailbox-a"])
     ).toBeTruthy();

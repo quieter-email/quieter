@@ -1,6 +1,8 @@
+import PostalMime from "postal-mime";
 import { describe, expect, test } from "vite-plus/test";
 
-import { buildSendMimeMessage, sendMessageInputSchema } from "../src/send";
+import { sendMessageInputSchema } from "../src/send";
+import { buildSendMimeMessage } from "../src/send-mime";
 
 describe("send message input schema", () => {
   test("accepts display-name senders and string recipients", () => {
@@ -67,8 +69,8 @@ describe("send message input schema", () => {
 });
 
 describe("build send MIME message", () => {
-  test("builds raw MIME with display sender, omitted bcc header, custom headers, and attachments", () => {
-    const built = buildSendMimeMessage(
+  test("builds raw MIME with display sender, omitted bcc header, custom headers, and attachments", async () => {
+    const built = await buildSendMimeMessage(
       {
         attachments: [
           {
@@ -93,14 +95,16 @@ describe("build send MIME message", () => {
       }
     );
 
+    const parsed = await PostalMime.parse(built.raw, {
+      attachmentEncoding: "utf8",
+    });
+    expect(parsed.attachments[0]?.filename).toBe("hello.txt");
+    expect(parsed.attachments[0]?.content).toBe("hello");
     expect({
       attachmentSizeBytes: built.attachmentSizeBytes,
       bcc: built.bcc,
       hasBccHeader: built.raw.includes("Bcc:"),
       hasCustomerHeader: built.raw.includes("X-Customer: acme"),
-      hasDisposition: built.raw.includes(
-        'Content-Disposition: attachment; filename="hello.txt"'
-      ),
       hasFrom: built.raw.includes("From: Demo <demo@example.com>"),
       hasMessageId: built.raw.includes("Message-ID: <message@example.com>"),
       to: built.to,
@@ -109,15 +113,14 @@ describe("build send MIME message", () => {
       bcc: ["hidden@example.com"],
       hasBccHeader: false,
       hasCustomerHeader: true,
-      hasDisposition: true,
       hasFrom: true,
       hasMessageId: true,
       to: ["to@example.com"],
     });
   });
 
-  test("folds long headers and wraps quoted-printable body lines", () => {
-    const built = buildSendMimeMessage(
+  test("folds long headers and wraps quoted-printable body lines", async () => {
+    const built = await buildSendMimeMessage(
       {
         attachments: [],
         from: "demo@example.com",

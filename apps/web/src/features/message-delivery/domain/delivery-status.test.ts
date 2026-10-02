@@ -5,11 +5,9 @@ import {
   getAggregateDeliveryLabel,
   getAggregateDeliveryStatus,
   getDeliveryActionGuidance,
-  getDeliveryStatusTone,
   getRecipientDeliveryEvents,
   hasDeliveryDiagnostics,
   isDeliveryStatusUnsettled,
-  summarizeDeliveryRecipients,
 } from "./delivery-status";
 import type {
   MessageDeliveryEvent,
@@ -103,25 +101,6 @@ describe(getAggregateDeliveryStatus, () => {
   });
 });
 
-describe(getDeliveryStatusTone, () => {
-  it("keeps unresolved states neutral", () => {
-    expect(getDeliveryStatusTone(null)).toBe("neutral");
-    expect(getDeliveryStatusTone("sent")).toBe("neutral");
-    expect(getDeliveryStatusTone("queued")).toBe("neutral");
-  });
-
-  it("separates a delivery from a delay and a failure", () => {
-    expect(getDeliveryStatusTone("delivered")).toBe("positive");
-    expect(getDeliveryStatusTone("delayed")).toBe("warning");
-  });
-
-  it("marks every terminal failure as danger", () => {
-    expect(getDeliveryStatusTone("bounced")).toBe("danger");
-    expect(getDeliveryStatusTone("complained")).toBe("danger");
-    expect(getDeliveryStatusTone("rejected")).toBe("danger");
-  });
-});
-
 describe(isDeliveryStatusUnsettled, () => {
   it("treats missing events, sends, queues, and delays as still moving", () => {
     expect(isDeliveryStatusUnsettled(null)).toBeTruthy();
@@ -197,22 +176,5 @@ describe(getDeliveryActionGuidance, () => {
     for (const status of ["delayed", "delivered", "queued", "sent"] as const) {
       expect(getDeliveryActionGuidance(status)).toBeNull();
     }
-  });
-});
-
-describe(summarizeDeliveryRecipients, () => {
-  it("names a single recipient and counts the rest", () => {
-    expect(summarizeDeliveryRecipients([])).toBe("No recipient updates yet");
-    expect(
-      summarizeDeliveryRecipients([
-        createRecipient("first@example.com", "sent"),
-      ])
-    ).toBe("first@example.com");
-    expect(
-      summarizeDeliveryRecipients([
-        createRecipient("first@example.com", "sent"),
-        createRecipient("second@example.com", "sent"),
-      ])
-    ).toBe("2 recipients");
   });
 });

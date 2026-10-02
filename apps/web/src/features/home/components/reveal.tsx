@@ -1,86 +1,109 @@
 "use client";
 
-import { m, useReducedMotion } from "motion/react";
-import type { ComponentPropsWithoutRef, ElementType, ReactNode } from "react";
+import { cn } from "@quieter/ui/cn";
+import { m, stagger as staggerChildren, useReducedMotion } from "motion/react";
+import type { HTMLAttributes, ReactNode } from "react";
 
-const EASE = [0.23, 1, 0.32, 1] as const;
+const motionElements = {
+  div: m.div,
+  fieldset: m.fieldset,
+  h2: m.h2,
+  header: m.header,
+  p: m.p,
+  span: m.span,
+};
 
-/**
- * Shared entrance for the landing page: a short lift out of a blur.
- *
- * Under `prefers-reduced-motion` the movement and blur are dropped and only the
- * opacity remains, so the page still resolves without anything travelling.
- */
-export const useEntrance = (reduced: boolean | null) => ({
-  hidden:
-    reduced === true
-      ? { opacity: 0 }
-      : { filter: "blur(8px)", opacity: 0, transform: "translateY(16px)" },
+const EASE = [0.215, 0.61, 0.355, 1] as const;
+
+// CSS removes blur and movement for reduced motion without changing SSR styles.
+const entranceVariants = {
+  hidden: { filter: "blur(10px)", opacity: 0, transform: "translateY(10px)" },
   visible: {
     filter: "blur(0px)",
     opacity: 1,
     transform: "translateY(0px)",
   },
-});
+};
 
-type RevealProps<T extends ElementType> = {
-  as?: T;
-  children: ReactNode;
-  /** Seconds to wait before this element starts. */
+type RevealProps = {
+  as?: keyof typeof motionElements;
+  children?: ReactNode;
+  className?: string;
+  id?: string;
   delay?: number;
-} & Omit<ComponentPropsWithoutRef<T>, "children">;
+  onMount?: boolean;
+  stagger?: number;
+} & Pick<
+  HTMLAttributes<HTMLElement>,
+  "onBlur" | "onFocus" | "onMouseEnter" | "onMouseLeave"
+>;
 
 /** Plays the entrance once, the first time the element scrolls into view. */
-export const Reveal = <T extends ElementType = "div">({
+export const Reveal = ({
   as,
   children,
+  className,
   delay = 0,
+  onMount = false,
+  stagger,
   ...props
-}: RevealProps<T>) => {
+}: RevealProps) => {
   const reduced = useReducedMotion();
-  const variants = useEntrance(reduced);
-  const Component = m.create(as ?? "div");
+  const variants =
+    stagger === undefined
+      ? entranceVariants
+      : {
+          hidden: {},
+          visible: {
+            transition: {
+              delayChildren:
+                reduced === true
+                  ? 0
+                  : staggerChildren(stagger, { startDelay: delay }),
+            },
+          },
+        };
+  const duration = onMount ? 1.4 : 1.25;
+  const Component = motionElements[as ?? "div"];
 
   return (
     <Component
       {...props}
+      animate={onMount ? "visible" : undefined}
+      className={cn("home-reveal", className)}
       initial="hidden"
       transition={{
-        delay,
-        duration: reduced === true ? 0.3 : 0.7,
+        delay: reduced === true ? 0 : delay,
+        duration: reduced === true ? 0.2 : duration,
         ease: EASE,
       }}
       variants={variants}
-      viewport={{ margin: "-80px", once: true }}
-      whileInView="visible"
+      viewport={{ margin: "-48px", once: true }}
+      whileInView={onMount ? undefined : "visible"}
     >
       {children}
     </Component>
   );
 };
 
-/** Same entrance, but on mount rather than on scroll. For above-the-fold content. */
-export const Entrance = <T extends ElementType = "div">({
+export const RevealChild = ({
   as,
   children,
-  delay = 0,
+  className,
   ...props
-}: RevealProps<T>) => {
+}: Omit<RevealProps, "delay" | "onMount" | "stagger">) => {
   const reduced = useReducedMotion();
-  const variants = useEntrance(reduced);
-  const Component = m.create(as ?? "div");
+  const Component = motionElements[as ?? "div"];
 
   return (
     <Component
       {...props}
-      animate="visible"
-      initial="hidden"
+      className={cn("home-reveal", className)}
       transition={{
-        delay,
-        duration: reduced === true ? 0.3 : 0.8,
+        duration: reduced === true ? 0.2 : 1.25,
         ease: EASE,
       }}
-      variants={variants}
+      variants={entranceVariants}
     >
       {children}
     </Component>

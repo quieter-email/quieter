@@ -88,22 +88,40 @@ const validateLocalDevelopment = (): Plugin => ({
 export default defineConfig(({ command }) => {
   const isDev = command === "serve";
   const isSentryEnabled = !isDev && !!process.env.SENTRY_AUTH_TOKEN;
+  const sentryPluginsFor = (
+    environmentName: "client" | "ssr",
+    outputDirectory: "client" | "server"
+  ) =>
+    sentryTanstackStart({
+      authToken: process.env.SENTRY_AUTH_TOKEN,
+      autoInstrumentMiddleware: false,
+      // Worker instrumentation is configured by the Cloudflare runtime wrapper.
+      buildTimeInstrumentation: false,
+      org: process.env.SENTRY_ORG,
+      project: process.env.SENTRY_PROJECT,
+      release: { name: buildId },
+      sourcemaps: {
+        assets:
+          outputDirectory === "client"
+            ? ["./.cloudflare/output/v0/workers/default/assets/**/*.js"]
+            : ["./.cloudflare/output/v0/workers/default/bundle/**/*.js"],
+        // SST still needs server maps when packaging the Worker.
+        filesToDeleteAfterUpload:
+          outputDirectory === "client"
+            ? ["./.cloudflare/output/v0/workers/default/assets/**/*.map"]
+            : [],
+      },
+      telemetry: false,
+    }).map((plugin) => ({
+      ...plugin,
+      applyToEnvironment: (environment: Environment) =>
+        environment.name === environmentName,
+    }));
   const sentryPlugins = isSentryEnabled
-    ? sentryTanstackStart({
-        authToken: process.env.SENTRY_AUTH_TOKEN,
-        autoInstrumentMiddleware: false,
-        org: process.env.SENTRY_ORG,
-        project: process.env.SENTRY_PROJECT,
-        sourcemaps: {
-          assets: ["./dist/client/**/*.js"],
-          filesToDeleteAfterUpload: ["./dist/client/**/*.map"],
-        },
-        telemetry: false,
-      }).map((plugin) => ({
-        ...plugin,
-        applyToEnvironment: (environment: Environment) =>
-          environment.name === "client",
-      }))
+    ? [
+        ...sentryPluginsFor("client", "client"),
+        ...sentryPluginsFor("ssr", "server"),
+      ]
     : [];
 
   return {
@@ -132,13 +150,6 @@ export default defineConfig(({ command }) => {
       cloudflare({
         persistState: { path: `${workspaceRoot}/.wrangler/state` },
         remoteBindings: false,
-        configPath:
-          process.env.SST_WRANGLER_PATH ??
-          (isDev
-            ? fileURLToPath(
-                new URL("../../local-worker.jsonc", import.meta.url)
-              )
-            : undefined),
         viteEnvironment: { name: "ssr" },
       }),
       ...(isDev ? [validateLocalDevelopment()] : []),

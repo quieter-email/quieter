@@ -6,33 +6,40 @@
     "./compatibility-date": "./src/compatibility-date.ts"
   },
   "scripts": {
-    "dev": "wrangler dev --config ../../local-background-worker.jsonc --local --persist-to ../../.wrangler/state",
-    "cf-typecheck": "wrangler types worker-configuration.d.ts --config wrangler.types.jsonc --strict-vars false --check",
-    "cf-typegen": "wrangler types worker-configuration.d.ts --config wrangler.types.jsonc --strict-vars false",
+    "dev": "cf dev --persist-to ../../.wrangler/state",
+    "cf-typecheck": "wrangler types worker-configuration.d.ts --config wrangler.types.jsonc --env-file wrangler.types.env --strict-vars false --check",
+    "cf-typegen": "wrangler types worker-configuration.d.ts --config wrangler.types.jsonc --env-file wrangler.types.env --strict-vars false",
     "check:compatibility-date": "node scripts/sync-compatibility-date.ts --check",
     "sync:compatibility-date": "node scripts/sync-compatibility-date.ts",
-    "test:workers": "vp test run --config vite.config.ts",
-    "write:build-wrangler": "node scripts/write-build-wrangler.ts"
+    "test:workers": "vp exec vitest run --config worker-tests.config.ts",
+    "write:build-wrangler": "node scripts/write-build-wrangler.ts",
+    "check:bundles": "vp run @quieter/env#build && vp run @quieter/observability#build && node scripts/check-handler-bundles.ts"
   },
   "dependencies": {
     "@quieter/database": "workspace:*",
     "@quieter/env": "workspace:*",
+    "@quieter/mail": "workspace:*",
     "@quieter/observability": "workspace:*",
     "@quieter/orpc": "workspace:*",
     "@sentry/cloudflare": "catalog:",
     "drizzle-orm": "catalog:",
-    "jose": "5.10.0",
+    "jose": "6.2.12",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "catalog:",
     "@quieter/config": "workspace:*",
     "@types/node": "catalog:",
+    "@vitest/browser-preview": "4.1.11",
+    "@vitest/runner": "4.1.11",
+    "@vitest/snapshot": "4.1.11",
+    "@vitest/ui": "4.1.11",
+    "@vitest/utils": "4.1.11",
+    "cf": "1.0.0-beta.10",
     "rolldown": "catalog:",
     "typescript": "catalog:",
-    "vite": "catalog:",
     "vite-plus": "catalog:",
-    "vitest": "catalog:",
+    "vitest": "4.1.11",
     "wrangler": "catalog:"
   }
 }

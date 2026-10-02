@@ -1,4 +1,8 @@
+import { readFile, stat } from "node:fs/promises";
+import path from "node:path";
+
 import { COMPATIBILITY_DATE } from "@quieter/cloudflare/compatibility-date";
+import { z } from "zod";
 
 import type { createAppDatabase } from "./database";
 import { cloudflareWorkerObservability } from "./runtime";
@@ -11,10 +15,73 @@ import {
 } from "./stage";
 import type { SstLinkable } from "./types";
 
+const webSitePath = "apps/web";
+
 const webDomain: string | { name: string; redirects: string[] } | undefined =
   production
     ? { name: "quieter.email", redirects: ["www.quieter.email"] }
     : undefined;
+
+/**
+ * SST hardcodes the Worker `main` to TanStack's default server entry, which
+ * skips `apps/web/src/server.ts` and therefore the `Sentry.withSentry` wrapper.
+ */
+class WebTanStackStart extends sst.cloudflare.TanStackStart {
+  // eslint-disable-next-line class-methods-use-this -- overrides an SST instance hook
+  protected override buildPlan(outputPath: $util.Output<string>) {
+    return outputPath.apply(async (directory) => {
+      const workerDirectory = ".cloudflare/output/v0/workers/default";
+      const config = z
+        .object({ manifest: z.object({ mainModule: z.string().min(1) }) })
+        .parse(
+          JSON.parse(
+            await readFile(
+              path.join(directory, workerDirectory, "worker.config.json"),
+              "utf-8"
+            )
+          )
+        );
+      const bundleDirectory = path.resolve(
+        directory,
+        workerDirectory,
+        "bundle"
+      );
+      const serverPath = path.resolve(
+        bundleDirectory,
+        config.manifest.mainModule
+      );
+      const relativePath = path.relative(bundleDirectory, serverPath);
+      if (
+        relativePath === ".." ||
+        relativePath.startsWith(`..${path.sep}`) ||
+        path.isAbsolute(relativePath)
+      ) {
+        throw new Error(
+          "The Cloudflare Worker entry must be inside its bundle."
+        );
+      }
+      const assets = `${workerDirectory}/assets`;
+      const [serverStats, assetStats] = await Promise.all([
+        stat(serverPath),
+        stat(path.join(directory, assets)),
+      ]);
+      if (!serverStats.isFile() || !assetStats.isDirectory()) {
+        throw new Error("The Cloudflare web build is incomplete.");
+      }
+      return {
+        assets,
+        server: path.relative(directory, serverPath).replaceAll("\\", "/"),
+      };
+    });
+  }
+
+  // eslint-disable-next-line class-methods-use-this -- overrides an SST instance hook
+  protected override buildWrangler() {
+    return {
+      main: path.resolve(webSitePath, "src/server.ts"),
+    };
+  }
+}
 
 export const createWeb = (
   appDatabase: ReturnType<typeof createAppDatabase>,
@@ -22,7 +89,7 @@ export const createWeb = (
   runtimeEnvironment: Record<string, $util.Input<string>> = {},
   links: SstLinkable[] = []
 ) =>
-  new sst.cloudflare.TanStackStart("Web", {
+  new WebTanStackStart("Web", {
     buildCommand: production
       ? `vp exec node ../../scripts/prepared-web-build.ts ${$cli.command}`
       : "vp run build",
@@ -77,7 +144,7 @@ export const createWeb = (
       ...runtimeEnvironment,
     },
     link: [...webSecretBindings, appDatabase, ...links],
-    path: "apps/web",
+    path: webSitePath,
     transform: {
       server: {
         compatibility: {

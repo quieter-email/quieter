@@ -4,10 +4,13 @@ import { ArrowLeft01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { Text } from "@quieter/ui/text";
 import { cva } from "class-variance-authority";
 import type { ReactNode } from "react";
 
 import { LoadingSpinner } from "#/components/loading-spinner";
+
+import { useSettingsAnchor } from "./use-settings-anchor";
 
 export const settingsSurfaceVariants = cva("", {
   variants: {
@@ -24,8 +27,6 @@ export const settingsSurfaceVariants = cva("", {
         "relative px-4 py-3 after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border/60 after:content-[''] last:after:hidden @md:px-6 @md:after:inset-x-6",
       insetStackedRow:
         "flex w-full flex-col gap-3 px-4 py-3 @md:flex-row @md:items-center @md:px-6",
-      listRow:
-        "flex flex-col gap-3 border-b border-border px-4 py-3 last:border-b-0 @md:flex-row @md:items-center @md:justify-between @md:px-6",
       padding: "px-4 py-3 @md:px-6",
       rowShell:
         "squircle relative flex w-full items-center gap-4 px-4 py-3 after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border/60 after:content-[''] last:after:hidden @md:px-6 @md:after:inset-x-6",
@@ -44,15 +45,7 @@ export const SettingsBackButton = ({
   className?: string;
   onClick: () => void;
 }) => (
-  <Button
-    className={cn(
-      "fixed top-4 left-4 z-50 text-muted-fg hover:text-fg",
-      className
-    )}
-    onClick={onClick}
-    size="sm"
-    variant="ghost"
-  >
+  <Button className={className} onClick={onClick} size="sm" variant="ghost">
     <HugeiconsIcon aria-hidden className="size-4" icon={ArrowLeft01Icon} />
     {children}
   </Button>
@@ -70,7 +63,7 @@ export const SettingsPageHeader = ({
   <div className="@container">
     <header className="flex flex-col gap-3 @md:flex-row @md:items-end @md:justify-between">
       <div className="min-w-0">
-        <h1 className="text-title-sm font-normal tracking-tight text-fg">
+        <h1 className="font-sans text-title-sm font-normal tracking-tight text-fg">
           {title}
         </h1>
         {children !== undefined && children !== null ? (
@@ -94,24 +87,32 @@ export const SettingsSection = ({
   children: ReactNode;
   description?: ReactNode;
   title?: string;
-}) => (
-  <section className="space-y-4">
-    {((title ?? "") !== "" ||
-      (description !== undefined && description !== null)) && (
-      <div>
-        {(title ?? "") === "" ? null : (
-          <h2 className="text-body font-normal text-fg">{title}</h2>
-        )}
-        {description !== undefined && description !== null ? (
-          <div className="mt-1 max-w-3xl text-body/6 text-muted-fg">
-            {description}
-          </div>
-        ) : null}
-      </div>
-    )}
-    {children}
-  </section>
-);
+}) => {
+  const { ref, selected } = useSettingsAnchor(title ?? "");
+  return (
+    <section
+      ref={ref}
+      className={cn("space-y-4", {
+        "rounded-lg ring-2 ring-ring ring-offset-4 ring-offset-bg": selected,
+      })}
+    >
+      {((title ?? "") !== "" ||
+        (description !== undefined && description !== null)) && (
+        <div>
+          {(title ?? "") === "" ? null : (
+            <h2 className="text-body font-normal text-fg">{title}</h2>
+          )}
+          {description !== undefined && description !== null ? (
+            <div className="mt-1 max-w-3xl text-body/6 text-muted-fg">
+              {description}
+            </div>
+          ) : null}
+        </div>
+      )}
+      {children}
+    </section>
+  );
+};
 
 export const SettingsCard = ({
   children,
@@ -122,7 +123,7 @@ export const SettingsCard = ({
 }) => (
   <div
     className={cn(
-      "squircle @container overflow-hidden rounded-lg border border-border bg-bg-raised/60",
+      "@container overflow-hidden rounded-lg border border-border bg-bg-raised/60 squircle",
       className
     )}
   >
@@ -192,20 +193,6 @@ export const SettingsInsetStackedRow = ({
   </div>
 );
 
-export const SettingsListRow = ({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) => (
-  <div
-    className={cn(settingsSurfaceVariants({ variant: "listRow" }), className)}
-  >
-    {children}
-  </div>
-);
-
 export const SettingsRows = ({ children }: { children: ReactNode }) => (
   <SettingsCard>
     <div>{children}</div>
@@ -258,21 +245,29 @@ export const SettingsRow = ({
   children?: ReactNode;
   icon?: ReactNode;
   title: string;
-}) => (
-  <div className={settingsSurfaceVariants({ variant: "rowShell" })}>
-    {icon !== undefined && icon !== null ? (
-      <div className="squircle flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/45 text-muted-fg [&_svg]:size-4">
-        {icon}
-      </div>
-    ) : null}
-    <SettingsRowText className="flex-1" title={title}>
-      {children}
-    </SettingsRowText>
-    {action !== undefined && action !== null ? (
-      <div className="ml-auto shrink-0">{action}</div>
-    ) : null}
-  </div>
-);
+}) => {
+  const { ref, selected } = useSettingsAnchor(title ?? "");
+  return (
+    <div
+      ref={ref}
+      className={cn(settingsSurfaceVariants({ variant: "rowShell" }), {
+        "bg-accent": selected,
+      })}
+    >
+      {icon !== undefined && icon !== null ? (
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/45 text-muted-fg squircle [&_svg]:size-4">
+          {icon}
+        </div>
+      ) : null}
+      <SettingsRowText className="flex-1" title={title}>
+        {children}
+      </SettingsRowText>
+      {action !== undefined && action !== null ? (
+        <div className="ml-auto shrink-0">{action}</div>
+      ) : null}
+    </div>
+  );
+};
 
 export const SettingsNavigationRow = ({
   description,
@@ -294,7 +289,7 @@ export const SettingsNavigationRow = ({
   <button
     className={cn(
       settingsSurfaceVariants({ variant: "rowShell" }),
-      "group squircle border border-transparent text-left transition-colors first:rounded-t-lg last:rounded-b-lg hover:bg-muted/60 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none focus-visible:ring-inset",
+      "group border border-transparent text-left transition-colors squircle first:rounded-t-lg last:rounded-b-lg hover:bg-muted/60 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none focus-visible:ring-inset",
       { "pointer-events-none": disabled }
     )}
     disabled={disabled}
@@ -309,7 +304,7 @@ export const SettingsNavigationRow = ({
     type="button"
   >
     {icon !== undefined && icon !== null ? (
-      <div className="squircle flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/45 text-muted-fg transition-colors group-hover:bg-muted/70 group-hover:text-fg [&_svg]:size-4">
+      <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-muted text-muted-fg transition-colors squircle group-hover:text-fg [&_svg]:size-4">
         {icon}
       </div>
     ) : null}
@@ -378,9 +373,9 @@ export const SettingsErrorState = ({
   onRetry: () => void;
 }) => (
   <SettingsCard className="flex min-h-15 items-center justify-between gap-4 px-4 py-3">
-    <p role="alert" className="text-body text-destructive">
+    <Text role="alert" tone="destructive">
       {message}
-    </p>
+    </Text>
     <Button onClick={onRetry} size="sm" type="button" variant="outline">
       Try again
     </Button>

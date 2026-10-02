@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { createGmailLiveSyncConnection } from "../../gmail-live-sync";
+import { createMailUpdateConnection } from "../../mail-updates";
 import {
   createManagedMailbox,
   getManagedMailboxDetails,
@@ -83,6 +84,9 @@ export const mailboxProcedures = {
           userId: context.userId,
         })
     ),
+  createUpdateConnection: protectedProcedure.handler(
+    async ({ context }) => await createMailUpdateConnection(context.userId)
+  ),
   disconnectMailbox: protectedProcedure
     .input(z.object({ mailboxId: mailboxIdSchema }))
     .handler(
@@ -95,7 +99,7 @@ export const mailboxProcedures = {
     )
     .handler(async ({ context, input }) => {
       const { dismissGmailUsefulDetail } =
-        await import("../../gmail-useful-details/service");
+        await import("../../gmail-useful-details/compatibility");
       return await dismissGmailUsefulDetail({
         ...input,
         userId: context.userId,
@@ -118,7 +122,7 @@ export const mailboxProcedures = {
     )
     .handler(async ({ context, input }) => {
       const { listGmailThreadUsefulDetails } =
-        await import("../../gmail-useful-details/service");
+        await import("../../gmail-useful-details/compatibility");
       return await listGmailThreadUsefulDetails({
         ...input,
         userId: context.userId,
@@ -135,7 +139,7 @@ export const mailboxProcedures = {
     .input(z.object({ mailboxId: mailboxIdSchema }))
     .handler(async ({ context, input }) => {
       const { listGmailUsefulDetails } =
-        await import("../../gmail-useful-details/service");
+        await import("../../gmail-useful-details/compatibility");
       return await listGmailUsefulDetails({ ...input, userId: context.userId });
     }),
   listMailboxes: protectedProcedure
@@ -170,6 +174,32 @@ export const mailboxProcedures = {
           userId: context.userId,
         })
     ),
+  listVerificationCodes: protectedProcedure
+    .route({ method: "GET" })
+    .input(
+      z.union([
+        z.object({
+          mailboxId: mailboxIdSchema,
+          threadIds: z.array(z.string().trim().min(1)).max(100),
+        }),
+        z.object({
+          mailboxId: mailboxIdSchema,
+          messageIds: z.array(z.string().trim().min(1)).max(100),
+        }),
+      ])
+    )
+    .handler(async ({ context, input }) => {
+      const { listVerificationCodes } =
+        await import("../../verification-codes");
+      return await listVerificationCodes({
+        mailboxId: input.mailboxId,
+        scope:
+          "threadIds" in input
+            ? { mode: "threads", threadIds: input.threadIds }
+            : { messageIds: input.messageIds, mode: "messages" },
+        userId: context.userId,
+      });
+    }),
   moveGmailMailbox: protectedProcedure
     .input(
       z.object({
@@ -248,7 +278,7 @@ export const mailboxProcedures = {
     )
     .handler(async ({ context, input }) => {
       const { setGmailUsefulDetailFeedback } =
-        await import("../../gmail-useful-details/service");
+        await import("../../gmail-useful-details/compatibility");
       return await setGmailUsefulDetailFeedback({
         ...input,
         userId: context.userId,
@@ -258,7 +288,7 @@ export const mailboxProcedures = {
     .input(z.object({ enabled: z.boolean(), mailboxId: mailboxIdSchema }))
     .handler(async ({ context, input }) => {
       const { setGmailUsefulDetails } =
-        await import("../../gmail-useful-details/settings");
+        await import("../../gmail-useful-details/compatibility");
       return await setGmailUsefulDetails({ ...input, userId: context.userId });
     }),
   setManagedMailboxAccessMode: protectedProcedure

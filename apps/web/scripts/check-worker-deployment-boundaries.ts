@@ -1,12 +1,14 @@
-import { execFileSync } from "node:child_process";
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
+import { gzipSync } from "node:zlib";
 
-const serverDirectory = path.resolve(import.meta.dirname, "../dist/server");
+const serverDirectory = path.resolve(
+  import.meta.dirname,
+  "../.cloudflare/output/v0/workers/default/bundle"
+);
 const assetDirectory = path.join(serverDirectory, "assets");
 const serverFiles = await readdir(serverDirectory);
 const assetFiles = await readdir(assetDirectory);
-const cloudflareBundle = serverFiles.includes("wrangler.json");
 const boundaries: {
   forbiddenMarkers?: string[];
   marker: string;
@@ -18,7 +20,6 @@ const boundaries: {
     forbiddenMarkers: [
       "src/features/settings/components/settings-layout.tsx",
       "src/features/settings/components/settings-overview-panel.tsx",
-      "src/components/workspace-dither-background.tsx",
       "src/lib/mail-open-marker.server.ts",
     ],
     marker: "src/router.tsx",
@@ -126,27 +127,7 @@ for (const { forbiddenMarkers = [], marker } of boundaries) {
   );
 }
 
-if (cloudflareBundle) {
-  const wranglerBin = path.resolve(
-    import.meta.dirname,
-    "../node_modules/wrangler/bin/wrangler.js"
-  );
-  const output = execFileSync(
-    process.execPath,
-    [wranglerBin, "deploy", "--dry-run", "--config", "wrangler.json"],
-    {
-      cwd: serverDirectory,
-      encoding: "utf-8",
-      maxBuffer: 10 * 1024 * 1024,
-      stdio: ["ignore", "pipe", "pipe"],
-    }
-  );
-  const uploadMatch =
-    /Total Upload:\s*[\d.]+\s*(?:KiB|MiB)\s*\/\s*gzip:\s*(?<size>[\d.]+)\s*(?<unit>KiB|MiB)/u.exec(
-      output
-    );
-  if (uploadMatch === null) {
-    throw new Error("Could not read the Worker size from Wrangler.");
-  }
-  process.stdout.write(`Worker ${uploadMatch[0]}\n`);
-}
+const workerModules = Buffer.from([...sources.values()].join("\n"));
+process.stdout.write(
+  `Worker JavaScript: ${(workerModules.byteLength / 1_000_000).toFixed(2)} MB, ${(gzipSync(workerModules).byteLength / 1_000_000).toFixed(2)} MB gzip\n`
+);

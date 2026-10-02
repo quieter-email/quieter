@@ -1,5 +1,5 @@
 import { ORPCError } from "@orpc/server";
-import type { Polar } from "@polar-sh/sdk";
+import type { Polar } from "@polar-sh/sdk/2026-04";
 import { serverEnv } from "@quieter/env/server";
 
 import { getPolarServer } from "./polar-config.ts";
@@ -43,10 +43,10 @@ export const getPolarClient = async () => {
   }
 
   const accessToken = getPolarAccessToken();
-  const { Polar } = await import("@polar-sh/sdk");
-  polarClient ??= new Polar({
+  const { createPolar } = await import("@polar-sh/sdk/2026-04");
+  polarClient ??= createPolar({
     accessToken,
-    server: getPolarServer(),
+    environment: getPolarServer(),
   });
 
   return polarClient;
@@ -64,6 +64,13 @@ export const ingestPolarEvents = async (
 ) => {
   const polar = await getPolarClient();
   await polar.events.ingest({
-    events,
+    events: events.map((event) => ({
+      external_customer_id: event.externalCustomerId,
+      external_id: event.externalId,
+      metadata: event.metadata,
+      name: event.name,
+      organization_id: event.organizationId,
+      timestamp: event.timestamp?.toISOString(),
+    })),
   });
 };

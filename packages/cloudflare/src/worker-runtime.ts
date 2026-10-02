@@ -1,4 +1,7 @@
-import { configureErrorReporter } from "@quieter/observability";
+import {
+  configureErrorReporter,
+  prepareReportedEvent,
+} from "@quieter/observability";
 import * as Sentry from "@sentry/cloudflare";
 import { z } from "zod";
 
@@ -35,11 +38,25 @@ export const readOptionalLinkedSecret = (value: string | undefined) =>
 export const withSentryReporting = <Handler extends ExportedHandler<Env>>(
   handler: Handler
 ): Handler =>
-  Sentry.withSentry(
-    (env) => ({
-      dsn: readOptionalLinkedSecret(env.SST_RESOURCE_SentryDsn),
-      environment: env.SENTRY_ENVIRONMENT,
+  Sentry.withSentry<Env, unknown, unknown, Handler>((runtimeEnv: unknown) => {
+    const bindings =
+      typeof runtimeEnv === "object" && runtimeEnv !== null ? runtimeEnv : {};
+    const dsnBinding =
+      "SST_RESOURCE_SentryDsn" in bindings &&
+      typeof bindings.SST_RESOURCE_SentryDsn === "string"
+        ? bindings.SST_RESOURCE_SentryDsn
+        : undefined;
+    const environment =
+      "SENTRY_ENVIRONMENT" in bindings &&
+      typeof bindings.SENTRY_ENVIRONMENT === "string"
+        ? bindings.SENTRY_ENVIRONMENT
+        : undefined;
+
+    return {
+      beforeSend: (event, hint) =>
+        prepareReportedEvent(event, hint.originalException),
+      dsn: readOptionalLinkedSecret(dsnBinding),
+      environment,
       tracesSampleRate: 0,
-    }),
-    handler
-  );
+    };
+  }, handler);

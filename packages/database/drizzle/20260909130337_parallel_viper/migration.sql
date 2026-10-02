@@ -1,0 +1,1 @@
+ALTER TABLE "mailSyncStream" ADD COLUMN "bodyReferencesInitializedAt" timestamp with time zone;

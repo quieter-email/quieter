@@ -7,6 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@quieter/ui/select";
+import { Text } from "@quieter/ui/text";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -22,6 +23,7 @@ import {
   hasOrganizationRole,
 } from "./organization-settings/domain";
 import { SettingsSection } from "./settings-layout";
+import { useSettingsTeam } from "./use-settings-team";
 
 const TeamMailboxAdministration = ({
   organizationId,
@@ -88,9 +90,7 @@ const TeamMailboxAdministration = ({
       description="Manage ownership without opening anyone's mail."
     >
       {isError ? (
-        <p className="text-body text-destructive">
-          Could not load team mailboxes.
-        </p>
+        <Text tone="destructive">Could not load team mailboxes.</Text>
       ) : (
         <Select
           items={mailboxes.map((mailbox) => ({
@@ -114,9 +114,7 @@ const TeamMailboxAdministration = ({
         </Select>
       )}
       {isDetailsError && (
-        <p className="text-body text-destructive">
-          Could not load mailbox access.
-        </p>
+        <Text tone="destructive">Could not load mailbox access.</Text>
       )}
       {details !== undefined && mailboxId !== null && (
         <ManagedMailboxAccessSection
@@ -135,17 +133,21 @@ const TeamMailboxAdministration = ({
 };
 
 export const ManagedMailboxAdministrationSettings = () => {
-  const organizations = authClient.useListOrganizations().data ?? [];
+  const { organizations, teamId } = useSettingsTeam();
   const session = authClient.useSession().data;
   if (session === null || session === undefined) {
     return null;
   }
-  return organizations.map((organization) => (
-    <TeamMailboxAdministration
-      key={organization.id}
-      organizationId={organization.id}
-      organizationName={organization.name}
-      userId={session.user.id}
-    />
-  ));
+  return organizations.flatMap((organization) =>
+    organization.id === teamId ? (
+      <TeamMailboxAdministration
+        key={organization.id}
+        organizationId={organization.id}
+        organizationName={organization.name}
+        userId={session.user.id}
+      />
+    ) : (
+      []
+    )
+  );
 };

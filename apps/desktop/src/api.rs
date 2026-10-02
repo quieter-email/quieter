@@ -162,23 +162,36 @@ impl ApiClient {
         }
         let complete =
             Url::parse(&code.verification_uri_complete).map_err(|_| ApiError::InvalidResponse)?;
+        let verification =
+            Url::parse(&code.verification_uri).map_err(|_| ApiError::InvalidResponse)?;
+        let mut approval_parameters = complete.query_pairs();
+        let approval_code = approval_parameters.next();
         if code.device_code.is_empty()
             || code.user_code.is_empty()
             || code.expires_in == 0
             || code.expires_in > 86_400
-            || !complete
-                .query_pairs()
-                .any(|(key, value)| key == "user_code" && value == code.user_code)
+            || code.interval == 0
+            || verification.query().is_some()
+            || !matches!(approval_code, Some((key, value)) if key == "user_code" && value == code.user_code)
+            || approval_parameters.next().is_some()
         {
             return Err(ApiError::InvalidResponse);
         }
         Ok(code)
     }
 
-    pub fn poll_device_token(&self, device_code: &str) -> Result<DeviceToken, ApiError> {
+    pub fn poll_device_token(
+        &self,
+        device_code: &str,
+        remaining: Duration,
+    ) -> Result<DeviceToken, ApiError> {
+        if remaining.is_zero() {
+            return Err(ApiError::DeviceCodeExpired);
+        }
         let token: DeviceToken = self.decode(
             self.client
                 .post(format!("{}/api/auth/device/token", self.base_url))
+                .timeout(remaining.min(Duration::from_secs(30)))
                 .json(&DeviceTokenRequest {
                     client_id: DESKTOP_CLIENT_ID,
                     device_code,
@@ -391,6 +404,7 @@ mod tests {
     use std::net::TcpListener;
     use std::sync::mpsc;
     use std::thread;
+    use std::time::Instant;
 
     use super::*;
 
@@ -506,16 +520,23 @@ mod tests {
     fn device_code_only_opens_the_configured_server_and_matching_code() {
         for (verification, accepted) in [
             ("same", true),
+            ("same-with-extra-query", false),
             ("https://attacker.test/device", false),
             ("file:///C:/Windows/System32/calc.exe", false),
         ] {
             let server = MockServer::start(200, move |base| {
-                let verification = if verification == "same" {
+                let same_server = verification.starts_with("same");
+                let verification_uri = if same_server {
                     format!("{base}/device")
                 } else {
                     verification.to_owned()
                 };
-                json!({ "device_code": "secret-device-code", "user_code": "TEST-CODE", "verification_uri": verification, "verification_uri_complete": format!("{verification}?user_code=TEST-CODE"), "expires_in": 300, "interval": 5 }).to_string()
+                let extra_query = if verification == "same-with-extra-query" {
+                    "&next=https://attacker.test"
+                } else {
+                    ""
+                };
+                json!({ "device_code": "secret-device-code", "user_code": "TEST-CODE", "verification_uri": verification_uri, "verification_uri_complete": format!("{verification_uri}?user_code=TEST-CODE{extra_query}"), "expires_in": 300, "interval": 5 }).to_string()
             });
             let api = ApiClient::from_base_url(&server.base_url, None).unwrap();
             assert_eq!(api.request_device_code().is_ok(), accepted);
@@ -538,7 +559,7 @@ mod tests {
                     .to_string()
             });
             let api = ApiClient::from_base_url(&server.base_url, None).unwrap();
-            let state = match api.poll_device_token("device-secret") {
+            let state = match api.poll_device_token("device-secret", Duration::from_secs(2)) {
                 Err(ApiError::AuthorizationPending) => "pending",
                 Err(ApiError::SlowDown) => "slow",
                 Err(ApiError::DeviceCodeExpired) => "expired",
@@ -547,6 +568,31 @@ mod tests {
             };
             assert_eq!(state, expected);
         }
+    }
+
+    #[test]
+    fn device_polling_cannot_run_past_its_remaining_deadline() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let base_url = format!("http://{}", listener.local_addr().unwrap());
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buffer = [0; 4096];
+            let _ = stream.read(&mut buffer);
+            thread::sleep(Duration::from_millis(150));
+        });
+        let api = ApiClient::from_base_url(&base_url, None).unwrap();
+        let started_at = Instant::now();
+        let error = api
+            .poll_device_token("device-secret", Duration::from_millis(50))
+            .unwrap_err();
+        assert!(matches!(error, ApiError::Transport(ref error) if error.is_timeout()));
+        assert!(started_at.elapsed() < Duration::from_secs(1));
+        server.join().unwrap();
+
+        assert!(matches!(
+            api.poll_device_token("device-secret", Duration::ZERO),
+            Err(ApiError::DeviceCodeExpired)
+        ));
     }
 
     #[test]

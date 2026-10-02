@@ -24,11 +24,12 @@ describe("prepared SST build", () => {
       path.join(directory, "fixture.cjs"),
       `
 const fs = require('node:fs');
-fs.mkdirSync('dist/client/assets', {recursive: true});
-fs.mkdirSync('dist/server', {recursive: true});
-fs.writeFileSync('dist/client/assets/build-id.txt', 'test-build');
-fs.writeFileSync('dist/server/wrangler.json', '{}');
-fs.writeFileSync('dist/server/index.js', 'original');
+fs.mkdirSync('.cloudflare/output/v0/workers/default/assets/assets', {recursive: true});
+fs.mkdirSync('.cloudflare/output/v0/workers/default/bundle', {recursive: true});
+fs.writeFileSync('.cloudflare/output/v0/workers/default/assets/assets/build-id.txt', 'test-build');
+fs.writeFileSync('.cloudflare/output/v0/config.json', '{}');
+fs.writeFileSync('.cloudflare/output/v0/workers/default/worker.config.json', '{}');
+fs.writeFileSync('.cloudflare/output/v0/workers/default/bundle/index.js', 'original');
 fs.appendFileSync('build-calls.txt', 'built\\n');
 `
     );
@@ -60,11 +61,17 @@ fs.appendFileSync('build-calls.txt', 'built\\n');
     await expect(
       readFile(path.join(cwd, "build-calls.txt"), "utf-8")
     ).resolves.toBe("built\n");
-    await writeFile(path.join(cwd, "dist/server/index.js"), "changed");
+    await writeFile(
+      path.join(cwd, ".cloudflare/output/v0/workers/default/bundle/index.js"),
+      "changed"
+    );
     expect(
       spawnSync(process.execPath, [script, "deploy"], options).status
     ).not.toBe(0);
-    await writeFile(path.join(cwd, "dist/server/index.js"), "original");
+    await writeFile(
+      path.join(cwd, ".cloudflare/output/v0/workers/default/bundle/index.js"),
+      "original"
+    );
     await writeFile(configPath, '{"vars":{"stage":"other"}}');
     expect(
       spawnSync(process.execPath, [script, "deploy"], options).status

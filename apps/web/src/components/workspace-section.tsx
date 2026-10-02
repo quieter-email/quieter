@@ -4,7 +4,7 @@ import type { VariantProps } from "class-variance-authority";
 import type { ComponentPropsWithoutRef } from "react";
 
 export const workspaceSectionVariants = cva(
-  "overflow-hidden rounded-lg border border-border bg-bg-raised/60",
+  "overflow-hidden rounded-xl border border-border bg-bg-raised shadow-surface [background-image:var(--panel-gradient)]",
   {
     defaultVariants: {
       centered: false,

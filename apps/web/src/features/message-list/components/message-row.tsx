@@ -5,9 +5,9 @@ import {
   MessageMultiple01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import type { IconSvgElement } from "@hugeicons/react";
 import { splitMailAddressList } from "@quieter/mail/compose/schema";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
+import type { RouterOutputs } from "@quieter/orpc";
 import { cn } from "@quieter/ui/cn";
 import { Pill } from "@quieter/ui/pill";
 import { m, useReducedMotion } from "motion/react";
@@ -29,6 +29,7 @@ import {
   appMotionDuration,
   getAppStaggerDelay,
 } from "#/features/motion/app-motion";
+import { CopyVerificationCode } from "#/features/verification-codes/components/copy-verification-code";
 import { formatMessageListDate, parseSender } from "#/lib/gmail/message-utils";
 import type { ThreadListEntry } from "#/lib/gmail/thread-list";
 
@@ -101,6 +102,25 @@ const getMessageRowOpenAriaLabel = (
   return `${isActive ? "Close" : "Open"} conversation: ${subject}`;
 };
 
+const getMessageRowCountsTitle = (thread: ThreadListEntry) => {
+  const parts: string[] = [];
+  if (thread.attachmentCount > 0) {
+    parts.push(
+      thread.attachmentCount === 1
+        ? "1 attachment"
+        : `${thread.attachmentCount} attachments`
+    );
+  }
+  if (thread.messageCount > 1) {
+    parts.push(
+      thread.messageCount === 1
+        ? "1 message"
+        : `${thread.messageCount} messages`
+    );
+  }
+  return `This thread has ${parts.join(" and ")}.`;
+};
+
 const rowPressTransition = {
   damping: 28,
   mass: 0.7,
@@ -131,6 +151,7 @@ type MessageRowProps = {
   rowRef?: (element: HTMLLIElement | null) => void;
   dataIndex?: number;
   thread: ThreadListEntry;
+  verificationCode?: RouterOutputs["mail"]["listVerificationCodes"]["items"][number];
   state?: MessageRowState;
   isNew?: boolean;
   staggerIndex?: number;
@@ -146,24 +167,6 @@ type MessageRowContentProps = Omit<
   MessageRowProps,
   "className" | "dataIndex" | "offsetY" | "rowRef"
 >;
-
-const MessageRowMetaBadge = ({
-  icon,
-  label,
-  title,
-}: {
-  icon: IconSvgElement;
-  label: string;
-  title: string;
-}) => (
-  <span
-    className="squircle inline-flex h-4.5 shrink-0 items-center gap-1 rounded-md border border-border bg-bg-raised/75 px-1 text-micro font-medium text-muted-fg tabular-nums shadow-xs"
-    title={title}
-  >
-    <HugeiconsIcon aria-hidden className="size-3" icon={icon} />
-    <span>{label}</span>
-  </span>
-);
 
 const MessageRowSelectionButton = ({
   isActionPending,
@@ -256,6 +259,7 @@ const MessageRowSelectionButton = ({
         >
           <span
             className={cn(
+              // oxlint-disable-next-line shadcn/no-arbitrary-values -- Bulk-select checkbox sizing with explicit transition properties.
               "flex size-4.5 items-center justify-center rounded-[5px] border bg-bg-raised text-transparent shadow-xs transition-[background-color,border-color,color] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out)",
               {
                 "border-border": !isSelected,
@@ -293,6 +297,7 @@ const MessageRowDetails = ({
   thread,
   threaded,
   unread,
+  verificationCode,
 }: {
   date: string;
   deliveryStatus?: MessageDeliveryStatus | null;
@@ -305,8 +310,9 @@ const MessageRowDetails = ({
   thread: ThreadListEntry;
   threaded: boolean;
   unread: boolean;
+  verificationCode?: string;
 }) => (
-  <div className="relative z-10 flex min-w-0 flex-1 items-center gap-2 px-2 @sm:gap-3 @sm:px-3">
+  <div className="pointer-events-none relative z-10 flex h-full min-w-0 flex-1 items-center gap-2 px-2 @sm:gap-3 @sm:px-3">
     <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 overflow-hidden">
       <div className="flex w-full min-w-0 items-center justify-between gap-2">
         <p className="min-w-0 truncate text-left text-body-sm/4.5 text-fg">
@@ -336,27 +342,32 @@ const MessageRowDetails = ({
               {getDeliveryStatusLabel(deliveryStatus)}
             </Pill>
           )}
-          {thread.attachmentCount > 0 && (
-            <MessageRowMetaBadge
-              icon={FileAttachmentIcon}
-              label={String(thread.attachmentCount)}
-              title={
-                thread.attachmentCount === 1
-                  ? "This thread has 1 attachment."
-                  : `This thread has ${thread.attachmentCount} attachments.`
-              }
-            />
-          )}
-          {threaded && (
-            <MessageRowMetaBadge
-              icon={MessageMultiple01Icon}
-              label={String(thread.messageCount)}
-              title={
-                thread.messageCount === 1
-                  ? "This thread has 1 message."
-                  : `This thread has ${thread.messageCount} messages.`
-              }
-            />
+          {(thread.attachmentCount > 0 || threaded) && (
+            <span
+              className="inline-flex h-4.5 shrink-0 items-center gap-1 rounded-sm border border-border bg-muted px-1 text-micro font-medium text-muted-fg tabular-nums squircle"
+              title={getMessageRowCountsTitle(thread)}
+            >
+              {thread.attachmentCount > 0 && (
+                <span className="inline-flex items-center gap-1">
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-3"
+                    icon={FileAttachmentIcon}
+                  />
+                  <span>{thread.attachmentCount}</span>
+                </span>
+              )}
+              {threaded && (
+                <span className="inline-flex items-center gap-1">
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-3"
+                    icon={MessageMultiple01Icon}
+                  />
+                  <span>{thread.messageCount}</span>
+                </span>
+              )}
+            </span>
           )}
           <span className={metaTextClassName} suppressHydrationWarning>
             {date || "--"}
@@ -380,6 +391,7 @@ const MessageRowDetails = ({
             subject
           )}
         </p>
+        {verificationCode && <CopyVerificationCode code={verificationCode} />}
         <div className="hidden shrink-0 @sm:block">
           <MessageLabels
             compact
@@ -444,6 +456,7 @@ const useMessageRowHandlers = ({
     }
 
     if (
+      !isActive &&
       !showSelectionControl &&
       unread &&
       mailboxProvider !== "api" &&
@@ -532,6 +545,7 @@ type MessageRowSurfaceProps = {
   thread: ThreadListEntry;
   threaded: boolean;
   unread: boolean;
+  verificationCode?: MessageRowProps["verificationCode"];
 };
 
 const MessageRowSurface = ({
@@ -571,6 +585,7 @@ const MessageRowSurface = ({
   thread,
   threaded,
   unread,
+  verificationCode,
 }: MessageRowSurfaceProps) => {
   const {
     handleRowBlurCapture,
@@ -598,7 +613,7 @@ const MessageRowSurface = ({
       animate={{
         scale: reducedMotion !== false || !isPressed ? 1 : 0.97,
       }}
-      className="relative flex h-17 items-stretch rounded-lg"
+      className="group/row relative flex h-17 items-stretch rounded-lg"
       initial={false}
       onBlurCapture={handleRowBlurCapture}
       onFocusCapture={handleRowFocusCapture}
@@ -652,45 +667,46 @@ const MessageRowSurface = ({
         thread={thread}
       />
 
-      <MessageActionsContextMenu
-        actions={createMailboxThreadMessageActionHandlers({
-          mailboxActions,
-          onOpenDraft,
-          supportsArchive: mailboxProvider !== "api",
-          supportsFolders: mailboxProvider === "gmail",
-          supportsLabels: mailboxProvider !== "api",
-          supportsReadState: mailboxProvider !== "api",
-          supportsUnsubscribe: mailboxProvider === "gmail",
-        })}
-        isPending={isActionPending}
-        mailboxId={mailboxId}
-        mailbox={activeMailbox}
-        message={anchorMessage}
-        threadLabelIds={thread.threadLabelIds}
-        triggerClassName="flex h-full min-w-0 flex-1 active:scale-100"
-      >
-        <button
-          aria-label={openAriaLabel}
-          aria-current={isActive ? "true" : undefined}
-          className="relative z-10 flex h-full min-w-0 flex-1 items-center rounded-lg border border-transparent text-left focus-visible:z-20 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none"
-          data-message-row-trigger
-          onClick={handleRowClick}
-          onKeyDown={handleRowKeyDown}
-          onMouseDown={handleRowMouseDown}
-          onPointerCancel={() => {
-            setIsPressed(false);
-          }}
-          onPointerDown={() => {
-            setIsPressed(true);
-          }}
-          onPointerLeave={() => {
-            setIsPressed(false);
-          }}
-          onPointerUp={() => {
-            setIsPressed(false);
-          }}
-          type="button"
+      <div className="relative h-full min-w-0 flex-1">
+        <MessageActionsContextMenu
+          actions={createMailboxThreadMessageActionHandlers({
+            mailboxActions,
+            onOpenDraft,
+            supportsArchive: mailboxProvider !== "api",
+            supportsFolders: mailboxProvider === "gmail",
+            supportsLabels: mailboxProvider !== "api",
+            supportsReadState: mailboxProvider !== "api",
+            supportsUnsubscribe: mailboxProvider === "gmail",
+          })}
+          isPending={isActionPending}
+          mailboxId={mailboxId}
+          mailbox={activeMailbox}
+          message={anchorMessage}
+          threadLabelIds={thread.threadLabelIds}
+          triggerClassName="relative flex h-full min-w-0 flex-1 active:scale-100"
         >
+          <button
+            aria-label={openAriaLabel}
+            aria-current={isActive ? "true" : undefined}
+            className="absolute inset-0 z-10 rounded-lg border border-transparent text-left focus-visible:z-20 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none"
+            data-message-row-trigger
+            onClick={handleRowClick}
+            onKeyDown={handleRowKeyDown}
+            onMouseDown={handleRowMouseDown}
+            onPointerCancel={() => {
+              setIsPressed(false);
+            }}
+            onPointerDown={() => {
+              setIsPressed(true);
+            }}
+            onPointerLeave={() => {
+              setIsPressed(false);
+            }}
+            onPointerUp={() => {
+              setIsPressed(false);
+            }}
+            type="button"
+          />
           <MessageRowDetails
             date={date}
             deliveryStatus={deliveryStatus}
@@ -703,9 +719,10 @@ const MessageRowSurface = ({
             thread={thread}
             threaded={threaded}
             unread={unread}
+            verificationCode={verificationCode?.code}
           />
-        </button>
-      </MessageActionsContextMenu>
+        </MessageActionsContextMenu>
+      </div>
     </m.div>
   );
 };
@@ -726,6 +743,7 @@ const MessageRowContent = ({
   pendingActions,
   state,
   thread,
+  verificationCode,
 }: MessageRowContentProps) => {
   const reducedMotion = useReducedMotion();
   const [isHovered, setIsHovered] = useState(false);
@@ -748,7 +766,7 @@ const MessageRowContent = ({
   const isActionPending =
     pendingActions.isMessageActionPending(anchorMessage.id) ||
     pendingActions.isThreadActionPending(thread.threadId);
-  const metaTextClassName = cn("text-caption tabular-nums", {
+  const metaTextClassName = cn("shrink-0 text-caption tabular-nums", {
     "font-semibold text-fg/90": unread,
     "text-fg/75": isActive && !unread,
     "text-muted-fg": !unread,
@@ -804,6 +822,7 @@ const MessageRowContent = ({
       thread={thread}
       threaded={threaded}
       unread={unread}
+      verificationCode={verificationCode}
     />
   );
 };
@@ -828,6 +847,7 @@ export const MessageRow = ({
   rowRef,
   state,
   thread,
+  verificationCode,
   isNew,
   staggerIndex = 0,
 }: MessageRowProps) => {
@@ -850,6 +870,7 @@ export const MessageRow = ({
       pendingActions={pendingActions}
       state={state}
       thread={thread}
+      verificationCode={verificationCode}
     />
   );
 
@@ -860,6 +881,7 @@ export const MessageRow = ({
       data-thread-id={thread.threadId}
       ref={rowRef}
       style={{
+        // oxlint-disable-next-line shadcn/no-inline-styles -- Virtualized rows are positioned by measured offset.
         transform: `translateY(${offsetY}px)`,
       }}
     >

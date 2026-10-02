@@ -1,4 +1,5 @@
 import { ORPCError } from "@orpc/server";
+import type * as DatabaseClientModule from "@quieter/database/client";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
 import type { getAuthorizedManagedMailbox } from "../src/mailbox/access";
@@ -11,9 +12,11 @@ const mocks = vi.hoisted(() => ({
   read: vi.fn<typeof readRawMailObject>(),
   select: vi.fn<(...args: unknown[]) => unknown>(),
 }));
-vi.mock(import("@quieter/database/client"), async (importOriginal) => {
-  const actual = await importOriginal();
-  return { ...actual, db: Object.assign(actual.db, { select: mocks.select }) };
+// This fake implements only the database operations exercised by the test.
+// oxlint-disable-next-line vitest/prefer-import-in-mock
+vi.mock("@quieter/database/client", async (importOriginal) => {
+  const actual = await importOriginal<typeof DatabaseClientModule>();
+  return { ...actual, db: { select: mocks.select } };
 });
 vi.mock(import("../src/mailbox/access"), () => ({
   getAuthorizedManagedMailbox: mocks.authorize,

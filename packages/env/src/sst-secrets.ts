@@ -21,6 +21,8 @@ export const sstSecretNames = {
   OPENROUTER_API_KEY: "OpenrouterApiKey",
   POLAR_ACCESS_TOKEN: "PolarAccessToken",
   POLAR_WEBHOOK_SECRET: "PolarWebhookSecret",
+  QUIETER_BACKGROUND_MODEL: "QuieterBackgroundModel",
+  QUIETER_CHAT_MODEL: "QuieterChatModel",
   QUIETER_MAIL_API_KEY: "QuieterMailApiKey",
   R2_ACCESS_KEY_ID: "R2AccessKeyId",
   R2_SECRET_ACCESS_KEY: "R2SecretAccessKey",

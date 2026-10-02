@@ -1,4 +1,4 @@
-import type { MailboxCategory } from "#/lib/gmail/gmail";
+import type { MailboxCategory } from "#/lib/mail";
 
 export type ChatViewProps = {
   activeMailbox: MailboxCategory;
@@ -12,5 +12,4 @@ export type ChatViewProps = {
   mailboxId: string;
   mailboxOrganizationId: string;
   onChatIdChange: (chatId: string) => void;
-  onOpenSidebar: () => void;
 };

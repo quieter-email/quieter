@@ -13,10 +13,8 @@ const DELIVERY_POLL_INTERVAL_MS = 5000;
 const DELIVERY_POLL_ATTEMPTS = 12;
 const DELIVERY_STALE_TIME_MS = 5000;
 
-export const getMessageDeliveryQueryKey = (
-  mailboxId: string,
-  messageId: string
-) => ["message-delivery", mailboxId, messageId] as const;
+const getMessageDeliveryQueryKey = (mailboxId: string, messageId: string) =>
+  ["message-delivery", mailboxId, messageId] as const;
 
 /**
  * Delivery feedback arrives out of band, so the first minute after opening a
@@ -59,7 +57,7 @@ const LIST_DELIVERY_POLL_INTERVAL_MS = 15_000;
 const LIST_DELIVERY_POLL_ATTEMPTS = 4;
 const LIST_DELIVERY_STALE_TIME_MS = 15_000;
 
-export const getMessageListDeliveryQueryKey = (mailboxId: string) =>
+const getMessageListDeliveryQueryKey = (mailboxId: string) =>
   ["message-delivery-list", mailboxId] as const;
 
 /**
@@ -84,7 +82,6 @@ export const getMessageListDeliveryOptions = ({
       for (let offset = 0; offset < ids.length; offset += 100) {
         Object.assign(
           result,
-          // oxlint-disable-next-line no-await-in-loop -- Bound concurrent requests when many pages are loaded.
           await rpc.mail.listMessageDeliveryStatuses(
             { mailboxId, messageIds: ids.slice(offset, offset + 100) },
             { signal }

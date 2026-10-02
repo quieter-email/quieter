@@ -1,13 +1,8 @@
-import type { RouterOutputs } from "@quieter/orpc";
 import type { QueryClient } from "@tanstack/react-query";
 
 import type { SettingsTab } from "#/features/settings/domain/settings-tab";
 import { connectorsQueryOptions } from "#/lib/connectors-query";
-import { mailboxActionsListQueryOptions } from "#/lib/mailbox-actions-query";
-import {
-  getMailboxesQueryKey,
-  mailboxesQueryOptions,
-} from "#/lib/mailboxes-query";
+import { mailboxesQueryOptions } from "#/lib/mailboxes-query";
 import { orpc } from "#/lib/orpc";
 
 import { userBillingQueryOptions } from "../domain/billing";
@@ -22,56 +17,30 @@ export type MailboxSettingsPrefetchTarget = {
   provider: string;
 };
 
-const settlePrefetches = async (prefetches: Promise<void>[]) => {
-  await Promise.allSettled(prefetches);
-};
-
 export const prefetchSettingsTab = async (
   queryClient: QueryClient,
   tab: SettingsTab
 ) => {
   switch (tab) {
     case "ai": {
-      await queryClient.prefetchQuery(orpc.ai.settings.queryOptions());
-      return;
-    }
-    case "mailboxes": {
-      await settlePrefetches([
-        queryClient.prefetchQuery(mailboxesQueryOptions()),
-        queryClient.prefetchQuery(userBillingQueryOptions()),
+      await Promise.allSettled([
+        queryClient.query(orpc.ai.settings.queryOptions()),
       ]);
       return;
     }
-    case "actions": {
-      const mailboxes = queryClient.getQueryData<
-        RouterOutputs["mail"]["listMailboxes"]
-      >(getMailboxesQueryKey());
-      const firstActionableMailbox = mailboxes?.groups
-        .flatMap((group) => group.mailboxes)
-        .find(
-          (mailbox) =>
-            mailbox.provider === "gmail" || mailbox.provider === "managed"
-        );
-
-      await settlePrefetches([
-        queryClient.prefetchQuery(mailboxesQueryOptions()),
-        queryClient.prefetchQuery(connectorsQueryOptions()),
-        ...(firstActionableMailbox
-          ? [
-              queryClient.prefetchQuery(
-                mailboxActionsListQueryOptions(firstActionableMailbox.id)
-              ),
-            ]
-          : []),
+    case "mailboxes": {
+      await Promise.allSettled([
+        queryClient.query(mailboxesQueryOptions()),
+        queryClient.query(userBillingQueryOptions()),
       ]);
       return;
     }
     case "connectors": {
-      await queryClient.prefetchQuery(connectorsQueryOptions());
+      await Promise.allSettled([queryClient.query(connectorsQueryOptions())]);
       return;
     }
     case "organization": {
-      await queryClient.prefetchQuery(userBillingQueryOptions());
+      await Promise.allSettled([queryClient.query(userBillingQueryOptions())]);
       break;
     }
     case "account":
@@ -93,16 +62,18 @@ export const prefetchOrganizationSettingsDetail = async (
   queryClient: QueryClient,
   organizationId: string
 ) => {
-  await queryClient.prefetchQuery(fullOrganizationQueryOptions(organizationId));
+  await Promise.allSettled([
+    queryClient.query(fullOrganizationQueryOptions(organizationId)),
+  ]);
 };
 
 export const prefetchOrganizationDivisions = async (
   queryClient: QueryClient,
   organizationId: string
 ) => {
-  await queryClient.prefetchQuery(
-    organizationDivisionsQueryOptions(organizationId)
-  );
+  await Promise.allSettled([
+    queryClient.query(organizationDivisionsQueryOptions(organizationId)),
+  ]);
 };
 
 export const prefetchMailboxSettingsDetail = async (
@@ -113,13 +84,11 @@ export const prefetchMailboxSettingsDetail = async (
     return;
   }
 
-  await settlePrefetches([
-    queryClient.prefetchQuery(
-      fullOrganizationQueryOptions(mailbox.organizationId)
-    ),
-    queryClient.prefetchQuery(
+  await Promise.allSettled([
+    queryClient.query(fullOrganizationQueryOptions(mailbox.organizationId)),
+    queryClient.query(
       organizationDivisionsQueryOptions(mailbox.organizationId)
     ),
-    queryClient.prefetchQuery(managedMailboxSettingsQueryOptions(mailbox.id)),
+    queryClient.query(managedMailboxSettingsQueryOptions(mailbox.id)),
   ]);
 };

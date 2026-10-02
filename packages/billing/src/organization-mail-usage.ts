@@ -1,4 +1,3 @@
-import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import {
   mailDomain,
@@ -14,6 +13,7 @@ import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
 
 import { getBillingCreditUsage, recordBillingCreditUsage } from "./credits.ts";
 import { getOrganizationBillingEntitlement } from "./entitlements.ts";
+import type { BillingAccount } from "./entitlements.ts";
 import {
   applyManagedUsageMarkup,
   getManagedUsageRates,
@@ -35,8 +35,10 @@ type OrganizationMailUsageEstimate = {
 };
 
 type OrganizationMailUsageInput = OrganizationMailUsageEstimate & {
+  billingAccount?: BillingAccount | null;
   metadata?: Record<string, string | number | boolean>;
   organizationId: string;
+  occurredAt?: Date;
   providerMessageId: string;
 };
 
@@ -72,24 +74,6 @@ const getManagedUsageCostMicroCents = (sesCostUsdMicroCents: number) =>
   applyManagedUsageMarkup({
     sesCostUsdMicroCents,
   });
-
-export const withOrganizationMailUsageLock = async <T>(
-  organizationId: string,
-  work: () => Promise<T>
-): Promise<T> => {
-  const connection = await db.$client.reserve();
-  let locked = false;
-  try {
-    await connection`select pg_advisory_lock(hashtextextended(${organizationId}, 0))`;
-    locked = true;
-    return await work();
-  } finally {
-    if (locked) {
-      await connection`select pg_advisory_unlock(hashtextextended(${organizationId}, 0))`;
-    }
-    connection.release();
-  }
-};
 
 export const normalizeOrganizationMailAlertMilestones = (
   milestones: number[]
@@ -355,74 +339,27 @@ const recordOrganizationMailUsageAlerts = async (input: {
     });
 };
 
-export const assertCanConsumeOrganizationMailUsage = async (input: {
-  estimate: OrganizationMailUsageEstimate;
-  organizationId: string;
-}) => {
-  const entitlement = await getOrganizationBillingEntitlement({
-    feature: "organizationMail",
-    organizationId: input.organizationId,
-  });
-
-  if (!entitlement.hasAccess) {
-    throw new ORPCError("FORBIDDEN", {
-      message: "Team mail requires Managed billing.",
-      status: 403,
-    });
-  }
-
+export const recordOrganizationMailUsage = async (
+  input: OrganizationMailUsageInput
+) => {
+  const entitlement =
+    input.billingAccount === undefined
+      ? await getOrganizationBillingEntitlement({
+          feature: "organizationMail",
+          organizationId: input.organizationId,
+        })
+      : {
+          account: input.billingAccount,
+          hasUnlimitedAccess: input.billingAccount === null,
+        };
   const period = getBillingPeriod(
     entitlement.account?.currentPeriodStart ?? null,
     entitlement.account?.currentPeriodEnd ?? null
   );
-
-  if (entitlement.account !== null) {
-    const usage = await getBillingCreditUsage(entitlement.account);
-    const costMicroCents = getManagedUsageCostMicroCents(
-      input.estimate.sesCostMicroCents
-    );
-    const projectedBillableCostMicroCents = Math.max(
-      0,
-      usage.costMicroCents + costMicroCents - usage.creditAmountMicroCents
-    );
-    const settings = await getOrganizationMailUsageSettings(
-      input.organizationId
-    );
-
-    if (projectedBillableCostMicroCents > 0 && !settings.overageEnabled) {
-      throw new ORPCError("FORBIDDEN", {
-        message: "Usage beyond this team's monthly balance is disabled.",
-        status: 403,
-      });
-    }
-
-    if (
-      settings.monthlyOverageLimitMicroCents !== null &&
-      settings.monthlyOverageLimitMicroCents !== undefined &&
-      projectedBillableCostMicroCents > settings.monthlyOverageLimitMicroCents
-    ) {
-      throw new ORPCError("FORBIDDEN", {
-        message:
-          "This team's usage limit has been reached for the billing period.",
-        status: 403,
-      });
-    }
-  }
-
-  return { entitlement, period };
-};
-
-export const recordOrganizationMailUsage = async (
-  input: OrganizationMailUsageInput
-) => {
-  const { entitlement, period } = await assertCanConsumeOrganizationMailUsage({
-    estimate: input,
-    organizationId: input.organizationId,
-  });
   const settings = entitlement.hasUnlimitedAccess
     ? DEFAULT_ORGANIZATION_MAIL_USAGE_SETTINGS
     : await getOrganizationMailUsageSettings(input.organizationId);
-  const now = new Date();
+  const now = input.occurredAt ?? new Date();
   const dedupeKey = `${input.direction}:${input.organizationId}:${input.providerMessageId}`;
   const customerCostMicroCents = getManagedUsageCostMicroCents(
     input.sesCostMicroCents
@@ -473,6 +410,7 @@ export const recordOrganizationMailUsage = async (
       account: entitlement.account,
       category: "mail",
       costMicroCents: customerCostMicroCents,
+      createdAt: now,
       dedupeKey: `mail:${dedupeKey}`,
       metadata: {
         direction: input.direction,
@@ -511,6 +449,16 @@ export const recordOrganizationMailUsage = async (
     });
   }
 
+  if (
+    input.billingAccount !== undefined &&
+    creditUsage !== null &&
+    creditUsage.costMicroCents > 0 &&
+    creditUsage.polarEventReportedAt === null
+  ) {
+    throw new Error(
+      "Mail usage is stored but its billing report is still pending."
+    );
+  }
   return usageEvent;
 };
 

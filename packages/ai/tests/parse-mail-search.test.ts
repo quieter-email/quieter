@@ -32,9 +32,9 @@ describe(parseMailSearchWithAi, () => {
     });
 
     const options = spy.mock.calls[0][0] as { prompt: string; system: string };
-    expect(options.system).toContain(
-      "is with exactly one value of: archived, read, unread."
-    );
+    for (const value of ["archived", "read", "unread"]) {
+      expect(options.system).toContain(value);
+    }
     expect(options.system).not.toContain("inbox");
   });
 

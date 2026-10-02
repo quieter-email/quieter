@@ -102,9 +102,6 @@ const getSetupState = async (organizationId: string | null, userId: string) => {
   return { domains, gmailMailboxes, managedMailboxes };
 };
 
-const hasText = (value: string | null | undefined): value is string =>
-  value !== null && value !== undefined && value.trim() !== "";
-
 /**
  * The address to offer as a one-click Gmail connection.
  *
@@ -209,7 +206,7 @@ export const completeOnboarding = async (input: {
     })
     .where(eq(user.id, input.userId));
 
-  if (hasText(trimmedTeamName)) {
+  if (trimmedTeamName?.trim()) {
     const organizations = await listUserOrganizations(input.userId);
     const [defaultOrganization] = organizations;
 

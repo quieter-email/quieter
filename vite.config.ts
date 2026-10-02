@@ -1,15 +1,16 @@
-import ultraciteFmt from "ultracite/oxfmt";
-import core from "ultracite/oxlint/core";
-import react from "ultracite/oxlint/react";
-import tanstack from "ultracite/oxlint/tanstack";
-import vitest from "ultracite/oxlint/vitest";
 import { configDefaults, defineConfig } from "vite-plus";
+
+import core from "./tooling/lint/core";
+import oxfmt from "./tooling/lint/oxfmt";
+import react from "./tooling/lint/react";
+import tanstack from "./tooling/lint/tanstack";
+import vitest from "./tooling/lint/vitest";
 
 export default defineConfig({
   fmt: {
-    ...ultraciteFmt,
+    ...oxfmt,
     ignorePatterns: [
-      ...(ultraciteFmt.ignorePatterns ?? []),
+      ...(oxfmt.ignorePatterns ?? []),
       ".agents/**",
       ".scratch/**",
       "**/.sst/**",
@@ -32,24 +33,50 @@ export default defineConfig({
       "sst-env.d.ts",
       "routeTree.gen.ts",
       "sst.config.ts",
+      "sst.local.config.ts",
+      "tooling/lint/**",
       "vite.config.ts",
     ],
     jsPlugins: [
       { name: "react-doctor", specifier: "oxlint-plugin-react-doctor" },
+      { name: "shadcn", specifier: "@shadcn/lint" },
       { name: "sonarjs", specifier: "eslint-plugin-sonarjs" },
       { name: "vite-plus", specifier: "vite-plus/oxlint-plugin" },
     ],
+    settings: {
+      shadcn: {
+        // Shared components live in packages/ui and are imported by package name.
+        ui: "@quieter/ui",
+      },
+    },
     options: {
       typeAware: true,
       typeCheck: true,
     },
     overrides: [
       {
+        files: ["**/*.test.{ts,tsx}"],
+        plugins: ["vitest"],
+        rules: {
+          "vitest/max-expects": "off",
+          "unicorn/text-encoding-identifier-case": "off",
+        },
+      },
+      {
         // Linear control flow reads better than artificial helper extraction;
         // the complexity gate pushed code into worse shapes to satisfy a number.
         files: ["**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}"],
         rules: {
           complexity: "off",
+          "typescript/prefer-nullish-coalescing": [
+            "error",
+            { ignorePrimitives: { string: true } },
+          ],
+          // Empty, null, and undefined strings all mean "absent" at these guards.
+          "typescript/strict-boolean-expressions": [
+            "error",
+            { allowNullableString: true },
+          ],
         },
       },
       {
@@ -75,7 +102,6 @@ export default defineConfig({
           "packages/orpc/src/client.ts",
           "packages/orpc/src/context.ts",
           "packages/orpc/src/routers/**/*.ts",
-          "packages/orpc/src/server-client.ts",
           "packages/orpc/src/server.ts",
         ],
         rules: {
@@ -84,7 +110,6 @@ export default defineConfig({
       },
       {
         files: [
-          "apps/web/src/env.ts",
           "apps/web/vite.config.ts",
           "packages/aws/scripts/**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}",
           "packages/billing/scripts/**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}",
@@ -115,7 +140,6 @@ export default defineConfig({
       {
         files: [
           "apps/web/src/features/mailbox/components/mailbox-workspace/use-mailbox-messages.ts",
-          "apps/web/src/lib/gmail/use-gmail-live-sync.ts",
           "packages/env/src/local-doctor.ts",
         ],
         rules: {
@@ -162,9 +186,8 @@ export default defineConfig({
         files: [
           "apps/web/src/features/message-search/components/message-list-search/use-message-list-search-controller.ts",
           "apps/web/src/features/settings/components/settings-overview-panel.tsx",
-          "apps/web/src/lib/gmail/inbox-query/actions.ts",
-          "apps/web/src/lib/gmail/inbox-query/data.ts",
-          "apps/web/src/lib/gmail/use-gmail-live-sync.ts",
+          "apps/web/src/lib/mail/inbox-query/actions.ts",
+          "apps/web/src/lib/mail/inbox-query/data.ts",
           "apps/web/src/start.ts",
         ],
         rules: {
@@ -178,13 +201,11 @@ export default defineConfig({
         files: [
           "apps/web/src/components/atmospheric-background.tsx",
           "apps/web/src/components/auth-visual.tsx",
-          "apps/web/src/components/contour-lines.tsx",
           "apps/web/src/components/workspace-dither-background.tsx",
           "apps/web/src/features/chat/components/chat-transcript.tsx",
           "apps/web/src/features/message-thread/components/message-body.tsx",
           "apps/web/src/features/message-thread/components/message-view.tsx",
           "apps/web/src/features/navigation/components/sidebar-label-nav.tsx",
-          "apps/web/src/lib/gmail/use-gmail-live-sync.ts",
         ],
         rules: {
           "typescript/consistent-return": "off",
@@ -203,9 +224,7 @@ export default defineConfig({
           "apps/web/src/features/navigation/components/sidebar-surfaces.tsx",
           "apps/web/src/features/mailbox/components/mailbox-workspace.tsx",
         ],
-        rules: {
-          "react/react-compiler": "off",
-        },
+        rules: {},
       },
       {
         // React 19's ReactNode includes promise-capable render children; this
@@ -229,7 +248,6 @@ export default defineConfig({
         // These containers only delegate pointer-hover cleanup or keyboard
         // navigation to their child controls; they are not themselves actions.
         files: [
-          "apps/web/src/features/navigation/components/sidebar-workspace-view-switch.tsx",
           "apps/web/src/features/navigation/components/sidebar-mailbox-nav.tsx",
           "apps/web/src/features/navigation/components/mail-sidebar.tsx",
         ],
@@ -257,7 +275,6 @@ export default defineConfig({
         // terms cookie predates Cookie Store support, and the test fixture
         // verifies javascript URLs are rejected by the mail parser.
         files: [
-          "apps/web/src/lib/terms-acceptance.ts",
           "apps/web/src/features/message-thread/domain/mail-html.test.ts",
         ],
         rules: {
@@ -273,17 +290,7 @@ export default defineConfig({
           "react/no-react-children": "off",
         },
       },
-      {
-        // These components intentionally create the dynamic Motion element
-        // at render time because `as` is a caller-selected element type.
-        files: [
-          "apps/web/src/features/home/components/reveal.tsx",
-          "apps/web/src/features/message-search/components/message-list-search/use-message-list-search-controller.ts",
-        ],
-        rules: {
-          "react/react-compiler": "off",
-        },
-      },
+
       {
         // The token field is an ARIA combobox over a contenteditable region
         // with an aria-activedescendant listbox. Neither select nor datalist
@@ -319,34 +326,12 @@ export default defineConfig({
         },
       },
       {
-        // These loops preserve ordering or bounded concurrency across remote
-        // mail operations; parallelizing them would change mailbox semantics.
-        files: [
-          "apps/web/scripts/check-worker-deployment-boundaries.ts",
-          "packages/orpc/src/ai-memory.ts",
-          "packages/orpc/src/gmail-sync/service.ts",
-          "packages/orpc/src/mailbox-actions/executor.ts",
-          "packages/orpc/src/managed-mail/rules/service.ts",
-          "packages/orpc/src/organization-api-mail.ts",
-        ],
-        rules: {
-          "eslint/no-await-in-loop": "off",
-        },
-      },
-      {
-        // Request-body streams must be consumed and cancelled in order.
-        files: ["apps/web/src/routes/api/v1/send.ts"],
-        rules: {
-          "eslint/no-await-in-loop": "off",
-        },
-      },
-      {
         // These cache/query helpers intentionally return undefined for a
         // missing result or JSON-replacer omission.
         files: [
           "apps/web/src/lib/query-persister.ts",
-          "apps/web/src/lib/gmail/inbox-query/data.ts",
-          "apps/web/src/lib/gmail/inbox-query/query-cache.ts",
+          "apps/web/src/lib/mail/inbox-query/data.ts",
+          "apps/web/src/lib/mail/inbox-query/query-cache.ts",
         ],
         rules: {
           "unicorn/no-useless-undefined": "off",
@@ -355,7 +340,7 @@ export default defineConfig({
       {
         // TanStack's persister bridge still requires the deprecated direction
         // field in its query context type while page params are adapted.
-        files: ["apps/web/src/lib/gmail/inbox-query/sync.ts"],
+        files: ["apps/web/src/lib/mail/inbox-query/sync.ts"],
         rules: {
           "typescript/no-deprecated": "off",
         },
@@ -382,8 +367,28 @@ export default defineConfig({
           "react/jsx-handler-names": "off",
         },
       },
+      {
+        // Design-system components own their own styling; @shadcn/lint checks
+        // how they are used everywhere else.
+        files: ["packages/ui/src/components/ui/**"],
+        rules: {
+          "shadcn/no-arbitrary-values": "off",
+          "shadcn/no-restyle": "off",
+          "shadcn/require-static-classes": "off",
+        },
+      },
+      {
+        // TanStack Router's type inference depends on route property order
+        // (validateSearch, ssr, loader, head), which is not alphabetical.
+        files: ["apps/web/src/routes/**"],
+        rules: {
+          "eslint/sort-keys": "off",
+        },
+      },
     ],
     rules: {
+      // Ordering and bounded concurrency are deliberate choices, not lint failures.
+      "eslint/no-await-in-loop": "off",
       "import/no-commonjs": "error",
       "jsx-a11y/no-autofocus": "error",
       "no-console": "error",
@@ -391,14 +396,70 @@ export default defineConfig({
       // Fire-and-forget event handlers need an explicit promise boundary.
       "no-void": "off",
       "react-doctor/no-secrets-in-client-code": "error",
+      "react-doctor/query-destructure-result": "error",
       "react-doctor/query-mutation-missing-invalidation": "error",
       "react-doctor/query-no-query-in-effect": "error",
+      "react-doctor/query-no-rest-destructuring": "error",
+      "react-doctor/query-no-usequery-for-mutation": "error",
+      "react-doctor/query-no-void-query-fn": "error",
       "react-doctor/query-stable-query-client": "error",
+      "react-doctor/tanstack-start-get-mutation": "error",
       "react-doctor/tanstack-start-loader-parallel-fetch": "error",
+      "react-doctor/tanstack-start-missing-head-content": "error",
+      "react-doctor/tanstack-start-no-anchor-element": "error",
+      "react-doctor/tanstack-start-no-direct-fetch-in-loader": "error",
+      "react-doctor/tanstack-start-no-dynamic-server-fn-import": "error",
+      "react-doctor/tanstack-start-no-navigate-in-render": "error",
       "react-doctor/tanstack-start-no-secrets-in-loader": "error",
+      "react-doctor/tanstack-start-no-use-server-in-handler": "error",
+      "react-doctor/tanstack-start-no-useeffect-fetch": "error",
+      "react-doctor/tanstack-start-redirect-in-try-catch": "error",
+      "react-doctor/tanstack-start-route-property-order": "error",
+      "react-doctor/tanstack-start-server-fn-method-order": "error",
       "react-doctor/tanstack-start-server-fn-validate-input": "error",
       "react/no-array-index-key": "error",
       "react/no-unknown-property": "error",
+      "shadcn/no-arbitrary-values": ["error", { allow: ["layout"] }],
+      "shadcn/no-inline-styles": "error",
+      // cn's grammar has no knowledge of the project's custom text and shadow
+      // scales, so those classes otherwise read as undeclared color tokens.
+      "shadcn/no-raw-colors": [
+        "error",
+        {
+          allow: [
+            "text-display-*",
+            "text-title-*",
+            "text-body",
+            "text-body-*",
+            "text-caption",
+            "text-caption-*",
+            "text-micro",
+            "text-micro-*",
+            "shadow-elevation",
+            "shadow-elevation-*",
+            "shadow-surface",
+            "shadow-inset",
+          ],
+          message:
+            'Use a theme color for "{{className}}". See {{file}} for the declared colors, and add --color-<name> there only if the design calls for a new one.',
+        },
+      ],
+      "shadcn/no-restyle": [
+        "error",
+        {
+          allow: ["layout"],
+          // Point agents at the component API and the file that owns it.
+          message: {
+            spacing:
+              "Use a {{component}} size ({{sizes|none defined}}), or margin and gap around it. Add a size in {{file}} only if the design calls for one.",
+            default:
+              "Use a {{component}} variant or prop ({{variants|none defined}}) instead of overriding its style. See {{file}}.",
+          },
+        },
+      ],
+      // home.css supplies plain class selectors outside the Tailwind theme graph.
+      "shadcn/no-unknown-classes": ["error", { allow: ["home-*"] }],
+      "shadcn/require-static-classes": "error",
       "sonarjs/no-clear-text-protocols": "error",
       "sonarjs/no-hardcoded-passwords": "error",
       "sonarjs/no-hardcoded-secrets": "error",
@@ -410,7 +471,7 @@ export default defineConfig({
     },
   },
   staged: {
-    "*.{js,mjs,cjs,jsx,ts,mts,cts,tsx,json,jsonc,css,md,mdx}": "vp check --fix",
+    "*.{js,mjs,cjs,jsx,ts,mts,cts,tsx,json,jsonc,css,md,mdx}": `${process.platform === "win32" ? "vp.exe" : "vp"} check --fix`,
   },
   test: {
     exclude: [

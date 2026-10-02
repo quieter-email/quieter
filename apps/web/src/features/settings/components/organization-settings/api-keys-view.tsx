@@ -44,6 +44,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@quieter/ui/select";
+import { Text } from "@quieter/ui/text";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { toast } from "@quieter/ui/toast";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
@@ -57,7 +58,6 @@ import { toastError } from "#/lib/error-toast";
 import { rethrowClassified } from "#/lib/orpc-errors";
 
 import {
-  SettingsBackButton,
   SettingsLoadingState,
   SettingsRow,
   SettingsRows,
@@ -202,9 +202,9 @@ const CreatedApiKeyReveal = ({
       </DialogDescription>
     </DialogHeader>
 
-    <DialogBody className="space-y-3">
+    <DialogBody spacing="3">
       <button
-        className="squircle w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-left font-mono text-caption break-all text-fg hover:bg-secondary/50"
+        className="w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-left font-mono text-caption break-all text-fg squircle hover:bg-secondary/50"
         onClick={() => {
           runDetached(async () => {
             await copyText(createdKey);
@@ -350,7 +350,7 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
                 </DialogDescription>
               </DialogHeader>
 
-              <DialogBody className="space-y-4">
+              <DialogBody spacing="4">
                 <form.Field name="name">
                   {(field) => (
                     <TextField>
@@ -369,12 +369,9 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
                         value={field.state.value}
                       />
                       {field.state.meta.errors.map((error) => (
-                        <p
-                          className="text-body text-destructive"
-                          key={error?.message}
-                        >
+                        <Text key={error?.message} tone="destructive">
                           {error?.message}
-                        </p>
+                        </Text>
                       ))}
                     </TextField>
                   )}
@@ -422,19 +419,16 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
                         </SelectContent>
                       </Select>
                       {field.state.meta.errors.map((error) => (
-                        <p
-                          className="text-body text-destructive"
-                          key={error?.message}
-                        >
+                        <Text key={error?.message} tone="destructive">
                           {error?.message}
-                        </p>
+                        </Text>
                       ))}
                     </TextField>
                   )}
                 </form.Field>
 
                 {submitError === null ? null : (
-                  <p className="text-body text-destructive">{submitError}</p>
+                  <Text tone="destructive">{submitError}</Text>
                 )}
               </DialogBody>
 
@@ -653,9 +647,9 @@ const ResetApiKeyDialog = ({
               </AlertDialogDescription>
             </AlertDialogHeader>
 
-            <AlertDialogBody className="space-y-3">
+            <AlertDialogBody spacing="3">
               <button
-                className="squircle w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-left font-mono text-caption break-all text-fg hover:bg-secondary/50"
+                className="w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-left font-mono text-caption break-all text-fg squircle hover:bg-secondary/50"
                 onClick={() => {
                   runDetached(async () => {
                     await copyText(createdKey);
@@ -877,7 +871,6 @@ export const ApiKeysView = ({
   billingPending,
   canManageApiKeys,
   canUseOrganizationApiKeys,
-  onBack,
   organization,
 }: {
   billingAccessUnknown: boolean;
@@ -908,10 +901,6 @@ export const ApiKeysView = ({
 
   return (
     <div className="@container space-y-6">
-      <SettingsBackButton onClick={onBack}>
-        {organization.name}
-      </SettingsBackButton>
-
       <div className="flex flex-col gap-3 @md:flex-row @md:items-start @md:justify-between">
         <div>
           <h1 className="text-body-lg font-semibold text-fg">API keys</h1>

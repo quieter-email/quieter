@@ -1,8 +1,6 @@
 import { ORPCError } from "@orpc/server";
 import {
-  composeEmailResultSchema,
   createAiMemoryChatTool,
-  createComposeEmailChatTool,
   createGmailChatTools,
   createGoogleCalendarChatTool,
   gmailToolsPrompt,
@@ -13,28 +11,50 @@ import type {
   AiMemoryToolsContext,
   GmailToolsContext,
 } from "@quieter/ai/chat-agent";
-import { CHAT_TITLE_MODEL, chatModelSchema } from "@quieter/ai/chat-models";
+import { chatModelSchema } from "@quieter/ai/chat-models";
+import {
+  createForegroundClientTools,
+  createForegroundServerTools,
+  editComposeOutputSchema,
+  foregroundComposeDraftSchema,
+  foregroundSnapshotSchema,
+  getWorkspaceOutputSchema,
+  isForegroundClientToolName,
+  navigateOutputSchema,
+  openComposeOutputSchema,
+  saveComposeDraftOutputSchema,
+  sendMailOutputSchema,
+} from "@quieter/ai/chat-tools";
+import type { ForegroundSnapshot } from "@quieter/ai/chat-tools";
+import { toCanonicalTranscript } from "@quieter/ai/chat-transcript";
 import { summarizeAiUsage } from "@quieter/ai/chat-usage";
+import { isTransientAiProviderError } from "@quieter/ai/errors";
 import { generateChatTitle } from "@quieter/ai/generate-chat-title";
+import {
+  resolveBackgroundModel,
+  resolveChatModel,
+} from "@quieter/ai/model-config";
 import { createChatModel } from "@quieter/ai/openrouter";
 import { reportAiUsage } from "@quieter/billing";
 import { db } from "@quieter/database/client";
 import { chat as chatTable, chatMessage } from "@quieter/database/schema";
 import type { ChatMessagePart } from "@quieter/database/schema";
-import type { MailboxCategory } from "@quieter/gmail";
 import { mailCategorySchema } from "@quieter/mail/data-plane";
+import type { MailboxCategory } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
 import {
   convertToModelMessages,
   createUIMessageStreamResponse,
   isStepCount,
+  isToolUIPart,
   streamText,
   toUIMessageStream,
 } from "ai";
-import type { UIMessage, UIMessageChunk } from "ai";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import type { TextStreamPart, UIMessage, UIMessageChunk } from "ai";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 
+import { assertCanUseAi } from "../ai-access";
 import {
   loadAiAgentContext,
   requestAiMemoryUpdate,
@@ -55,14 +75,18 @@ import {
   readGmailThreadForUser,
   searchGmailForUser,
 } from "../gmail-chat-search";
+import { composeMailOperations } from "../mail/compose";
 import { assertAccessibleMailbox } from "../mailbox/service";
-import { assertAiChatCredits } from "./access";
+import { replaceChatParts } from "./continuation";
 import { createLinearChatTools } from "./linear-tools";
+
+type UIMessagePart = UIMessage["parts"][number];
 
 const CHAT_HISTORY_WINDOW_MESSAGES = 30;
 const CHAT_MAX_COMPLETION_TOKENS = 2048;
 const CHAT_MAX_STEPS = 6;
 const MAIL_TOOL_TIMEOUT_MS = 25_000;
+const FOREGROUND_EXCHANGE_MAX_MS = 5 * 60_000;
 
 export class ChatRequestError extends Error {
   readonly status: number;
@@ -73,6 +97,34 @@ export class ChatRequestError extends Error {
     this.status = status;
   }
 }
+
+/**
+ * Maps a stream failure onto the user-facing error text sent as the UI
+ * message stream's error chunk. Distinct texts keep Sentry issues and user
+ * reports attributable to provider throttling, client disconnects, stale
+ * foreground exchanges, and genuine generation failures.
+ */
+export const resolveChatStreamErrorMessage = (error: unknown): string => {
+  if (error instanceof ChatRequestError) {
+    return "This chat changed while the answer was being completed. Retry it.";
+  }
+  if (error instanceof Error && error.name === "AbortError") {
+    return "The request was stopped.";
+  }
+  return isTransientAiProviderError(error)
+    ? "The assistant is busy. Retry shortly."
+    : "The answer could not be completed.";
+};
+
+/**
+ * Maps request validation failures onto the user-facing response text.
+ * Curated custom issues carry actionable wording (expired exchanges, stale
+ * workspace results); raw schema violations stay generic so Sentry issues
+ * and user reports remain attributable without leaking shapes.
+ */
+export const resolveChatValidationErrorMessage = (error: z.ZodError): string =>
+  error.issues.find(({ code }) => code === "custom")?.message ??
+  "Invalid chat request.";
 
 // ---------------------------------------------------------------------------
 // Request validation
@@ -122,10 +174,11 @@ const clientAssistantMessageSchema = z.object({
 type ValidatedChatRequestBase = {
   category: MailboxCategory;
   context?: z.infer<typeof contextSchema>;
+  foreground: ForegroundSnapshot;
   mailboxId: string;
   model: z.infer<typeof chatModelSchema>;
   threadId: string;
-  trigger: "submit-message" | "regenerate-message";
+  trigger: "submit-message";
 };
 
 type ValidatedChatRequest = ValidatedChatRequestBase &
@@ -140,39 +193,36 @@ type ValidatedChatRequest = ValidatedChatRequestBase &
         toolDecisions: Map<string, boolean>;
         toolOutputs: Map<string, unknown>;
       }
-    | {
-        kind: "regenerate";
-      }
   );
 
 const chatRequestBodySchema = z
   .object({
     category: mailCategorySchema,
     context: contextSchema.optional(),
+    foreground: foregroundSnapshotSchema,
     mailboxId: identifierSchema,
     message: z.unknown(),
-    model: chatModelSchema,
+    model: chatModelSchema.optional(),
     threadId: z.uuid(),
-    trigger: z.enum(["submit-message", "regenerate-message"]),
+    trigger: z.literal("submit-message"),
   })
   .strict();
 
 export const validateChatRequest = (body: unknown): ValidatedChatRequest => {
   const parsedBody = chatRequestBodySchema.parse(body);
   const { threadId } = parsedBody;
-
-  if (parsedBody.trigger === "regenerate-message") {
-    return {
-      category: parsedBody.category,
-      ...(parsedBody.context === undefined
-        ? {}
-        : { context: parsedBody.context }),
-      kind: "regenerate",
-      mailboxId: parsedBody.mailboxId,
-      model: parsedBody.model,
-      threadId,
-      trigger: parsedBody.trigger,
-    };
+  const now = Date.now();
+  if (
+    parsedBody.foreground.expiresAt <= now ||
+    parsedBody.foreground.expiresAt > now + FOREGROUND_EXCHANGE_MAX_MS
+  ) {
+    throw new z.ZodError([
+      {
+        code: "custom",
+        message: "The foreground exchange has expired.",
+        path: ["foreground", "expiresAt"],
+      },
+    ]);
   }
 
   const messageRole = z
@@ -195,9 +245,10 @@ export const validateChatRequest = (body: unknown): ValidatedChatRequest => {
       ...(parsedBody.context === undefined
         ? {}
         : { context: parsedBody.context }),
+      foreground: parsedBody.foreground,
       kind: "message",
       mailboxId: parsedBody.mailboxId,
-      model: parsedBody.model,
+      model: resolveChatModel(),
       threadId,
       trigger: parsedBody.trigger,
       userMessage: {
@@ -227,9 +278,8 @@ export const validateChatRequest = (body: unknown): ValidatedChatRequest => {
         .parse(part.approval);
       toolDecisions.set(toolPart.toolCallId, approval.approved);
     } else if (toolPart.state === "output-available") {
-      // Compose proposals are the only client-resolved tools; anything else
-      // claiming a client-side result is untrusted input.
-      if (type !== "tool-compose_email") {
+      const toolName = type.slice("tool-".length);
+      if (!isForegroundClientToolName(toolName)) {
         throw new z.ZodError([
           {
             code: "custom",
@@ -238,10 +288,23 @@ export const validateChatRequest = (body: unknown): ValidatedChatRequest => {
           },
         ]);
       }
-      toolOutputs.set(
-        toolPart.toolCallId,
-        composeEmailResultSchema.parse(part.output)
-      );
+      const outputSchema = {
+        edit_compose: editComposeOutputSchema,
+        get_workspace: getWorkspaceOutputSchema,
+        navigate: navigateOutputSchema,
+        open_compose: openComposeOutputSchema,
+      }[toolName];
+      const output = outputSchema.parse(part.output);
+      if (output.generation !== parsedBody.foreground.generation) {
+        throw new z.ZodError([
+          {
+            code: "custom",
+            message: "The client result belongs to an older workspace state.",
+            path: ["message", "parts"],
+          },
+        ]);
+      }
+      toolOutputs.set(toolPart.toolCallId, output);
     }
   }
   if (toolDecisions.size === 0 && toolOutputs.size === 0) {
@@ -260,65 +323,16 @@ export const validateChatRequest = (body: unknown): ValidatedChatRequest => {
     ...(parsedBody.context === undefined
       ? {}
       : { context: parsedBody.context }),
+    foreground: parsedBody.foreground,
     kind: "continue",
     mailboxId: parsedBody.mailboxId,
-    model: parsedBody.model,
+    model: resolveChatModel(),
     threadId,
     toolDecisions,
     toolOutputs,
     trigger: parsedBody.trigger,
   };
 };
-
-// ---------------------------------------------------------------------------
-// Stored parts → UI messages
-// ---------------------------------------------------------------------------
-
-type UIMessagePart = UIMessage["parts"][number];
-
-const isRenderablePart = (part: ChatMessagePart): boolean => {
-  if (part.type === "text") {
-    return typeof part.text === "string";
-  }
-  if (part.type === "") {
-    return false;
-  }
-  if (part.type === "step-start") {
-    return true;
-  }
-  return part.type.startsWith("tool-") && typeof part.toolCallId === "string";
-};
-
-/**
- * Maps persisted message rows onto AI SDK UI messages. Parts are stored in
- * their native UI message shape, so this only drops malformed entries.
- */
-export const toCanonicalTranscript = (
-  messages: readonly {
-    id: string;
-    parts: ChatMessagePart[];
-    role: "assistant" | "system" | "user";
-  }[]
-): UIMessage[] =>
-  messages.flatMap((message) => {
-    if (message.role !== "assistant" && message.role !== "user") {
-      return [];
-    }
-    const parts = message.parts.filter(isRenderablePart);
-    if (parts.length === 0) {
-      return [];
-    }
-    return [
-      {
-        id: message.id,
-        // Parts round-trip as opaque JSON; convertToModelMessages validates
-        // the shapes it consumes.
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-        parts: parts as UIMessagePart[],
-        role: message.role,
-      } satisfies UIMessage,
-    ];
-  });
 
 // ---------------------------------------------------------------------------
 // Tool plumbing
@@ -329,7 +343,7 @@ const assertCanUseAiCredits = async (input: {
   userId: string;
 }) => {
   try {
-    await assertAiChatCredits({
+    await assertCanUseAi({
       organizationId: input.organizationId,
       userId: input.userId,
     });
@@ -362,6 +376,29 @@ const runMailTool = async <T>(
     throw error;
   }
 };
+
+export const toForegroundComposeMessage = (
+  draft: z.infer<typeof foregroundComposeDraftSchema>,
+  localId: string
+) => ({
+  attachments: draft.attachments,
+  bodyHtml: draft.bodyHtml,
+  bodyText: draft.bodyText ?? "",
+  draftId: draft.providerDraftId ?? null,
+  errorMessage: null,
+  inlineImages: draft.inlineImages,
+  localId,
+  messageId: null,
+  recipients: {
+    bcc: draft.bcc ?? "",
+    cc: draft.cc ?? "",
+    to: draft.to ?? "",
+  },
+  replyContext: draft.replyContext ?? null,
+  saveStatus: "saved",
+  subject: draft.subject ?? "",
+  updatedAt: draft.draftRevision,
+});
 
 const buildMailboxContextPrompt = (context: {
   messageId?: string;
@@ -588,8 +625,152 @@ const readStoredApprovalId = (part: object): string | null => {
   return typeof id === "string" && id !== "" ? id : null;
 };
 
+const hasMatchingForegroundLease = (
+  part: object,
+  foreground: ForegroundSnapshot
+) => {
+  const stored = foregroundSnapshotSchema.safeParse(
+    Reflect.get(part, "foreground")
+  );
+  if (!stored.success || stored.data.expiresAt <= Date.now()) {
+    return false;
+  }
+  return JSON.stringify(stored.data) === JSON.stringify(foreground);
+};
+
+const stampForegroundLease = (
+  parts: ChatMessagePart[],
+  foreground: ForegroundSnapshot
+) =>
+  parts.map((part) =>
+    typeof part.type === "string" && part.type.startsWith("tool-")
+      ? { ...part, foreground }
+      : part
+  );
+
+const assertForegroundExchangeActive = async (input: {
+  assistantMessageId: string;
+  chatId: string;
+  userId: string;
+}) => {
+  const [messageRows, userRows] = await Promise.all([
+    db
+      .select({ parts: chatMessage.parts })
+      .from(chatMessage)
+      .where(
+        and(
+          eq(chatMessage.id, input.assistantMessageId),
+          eq(chatMessage.chatId, input.chatId),
+          eq(chatMessage.userId, input.userId)
+        )
+      )
+      .limit(1),
+    db
+      .select({ parts: chatMessage.parts })
+      .from(chatMessage)
+      .where(
+        and(
+          eq(chatMessage.chatId, input.chatId),
+          eq(chatMessage.userId, input.userId),
+          eq(chatMessage.role, "user")
+        )
+      )
+      .orderBy(desc(chatMessage.position))
+      .limit(1),
+  ]);
+  const message = messageRows.at(0);
+  const lastUserMessage = userRows.at(0);
+  if (
+    message?.parts.some((part) => part.type === "data-foreground-cancelled") ===
+    true
+  ) {
+    throw new ChatRequestError(409, "This workspace action was cancelled.");
+  }
+  const foreground = foregroundSnapshotSchema.safeParse(
+    [...(message?.parts ?? []), ...(lastUserMessage?.parts ?? [])].find(
+      (part) =>
+        typeof part.foreground === "object" &&
+        part.foreground !== null &&
+        "exchangeId" in part.foreground &&
+        part.foreground.exchangeId === input.assistantMessageId
+    )?.foreground
+  );
+  if (!foreground.success || foreground.data.expiresAt <= Date.now()) {
+    throw new ChatRequestError(
+      409,
+      "This workspace action has expired. Start again from the current mailbox."
+    );
+  }
+};
+
+export const resolveForegroundComposeDraftForPersistence = (input: {
+  draft: z.infer<typeof foregroundComposeDraftSchema>;
+  foreground: ForegroundSnapshot;
+  mailboxId: string;
+  transcript: readonly UIMessage[];
+}): z.infer<typeof foregroundComposeDraftSchema> => {
+  const assistantMessage = input.transcript.findLast(
+    (message) =>
+      message.id === input.foreground.exchangeId && message.role === "assistant"
+  );
+  let workspaceDraft: z.infer<typeof foregroundComposeDraftSchema> | undefined;
+  if (assistantMessage !== undefined) {
+    for (
+      let index = assistantMessage.parts.length - 1;
+      index >= 0;
+      index -= 1
+    ) {
+      const part = assistantMessage.parts[index];
+      if (
+        part === undefined ||
+        !isToolUIPart(part) ||
+        part.type !== "tool-get_workspace" ||
+        part.state !== "output-available"
+      ) {
+        continue;
+      }
+      const workspace = getWorkspaceOutputSchema.safeParse(part.output);
+      if (
+        workspace.success &&
+        workspace.data.generation === input.foreground.generation &&
+        workspace.data.mailboxId === input.mailboxId
+      ) {
+        workspaceDraft = workspace.data.draft;
+      }
+      break;
+    }
+  }
+
+  if (workspaceDraft === undefined) {
+    throw new ChatRequestError(
+      409,
+      "Read the visible draft again before saving or sending it."
+    );
+  }
+  if (
+    JSON.stringify(foregroundComposeDraftSchema.parse(input.draft)) !==
+    JSON.stringify(workspaceDraft)
+  ) {
+    throw new ChatRequestError(
+      409,
+      "The visible draft changed. Read it again before saving or sending it."
+    );
+  }
+  if (
+    workspaceDraft.attachments.length > 0 ||
+    workspaceDraft.inlineImages.length > 0
+  ) {
+    throw new ChatRequestError(
+      409,
+      "This draft has attachments. Save or send it from the composer."
+    );
+  }
+
+  return workspaceDraft;
+};
+
 /**
- * Applies the client's approval decisions and compose outcomes onto the
+ * Applies the client's approval decisions and workspace command outcomes onto the
  * stored assistant message. The database stays the source of truth; the
  * client only contributes which pending item resolved and how.
  */
@@ -602,44 +783,29 @@ const applyClientResolutions = (
 ) => ({
   ...message,
   parts: message.parts.map((part): UIMessagePart => {
-    const type: unknown = Reflect.get(part, "type");
-    if (typeof type !== "string" || !type.startsWith("tool-")) {
+    if (!isToolUIPart(part)) {
       return part;
     }
-    const toolCallId: unknown = Reflect.get(part, "toolCallId");
-    if (typeof toolCallId !== "string") {
-      return part;
-    }
-    const state: unknown = Reflect.get(part, "state");
-    const decision = resolutions.toolDecisions.get(toolCallId);
-    if (decision !== undefined && state === "approval-requested") {
-      const approvalId = readStoredApprovalId(part);
-      if (approvalId === null) {
-        // Pending ids are validated before the turn continues; this guard
-        // only satisfies the type.
-        return part;
-      }
-      // Part unions make this override awkward to express directly.
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+    const decision = resolutions.toolDecisions.get(part.toolCallId);
+    if (decision !== undefined && part.state === "approval-requested") {
       return {
         ...part,
         approval: {
           approved: decision,
-          id: approvalId,
+          id: part.approval.id,
         },
         state: "approval-responded",
-      } as unknown as UIMessagePart;
+      };
     }
     if (
-      resolutions.toolOutputs.has(toolCallId) &&
-      state === "input-available"
+      resolutions.toolOutputs.has(part.toolCallId) &&
+      part.state === "input-available"
     ) {
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion
       return {
         ...part,
-        output: resolutions.toolOutputs.get(toolCallId),
+        output: resolutions.toolOutputs.get(part.toolCallId),
         state: "output-available",
-      } as unknown as UIMessagePart;
+      };
     }
     return part;
   }),
@@ -672,55 +838,54 @@ const getStoredMessageText = (parts: ChatMessagePart[]) =>
     )
     .join("");
 
-const generateChatTitleInBackground = (input: {
+const generateChatTitleInRequest = async (input: {
   chatId: string;
   fallbackTitle: string;
   mailboxId: string;
   prompt: string;
   userId: string;
 }) => {
-  void (async () => {
-    try {
-      const title = await generateChatTitle({
-        onUsage: (usage) => {
-          void reportAiUsage({
-            chatId: input.chatId,
-            completionTokens: usage.completionTokens,
-            costUsd: usage.costUsd,
-            externalId: `chat-title:${input.chatId}`,
-            mailboxId: input.mailboxId,
-            model: CHAT_TITLE_MODEL,
-            promptTokens: usage.promptTokens,
-            promptTokensDetails: {
-              cacheWriteTokens: usage.cacheWriteTokens,
-              cachedTokens: usage.cachedTokens,
-            },
-            usageKind: "aiChat",
-            userId: input.userId,
-          }).catch((error: unknown) => {
-            reportError(error, { operation: "chat:report-title-usage" });
-          });
-        },
-        prompt: input.prompt,
-      });
-      if (title === "") {
-        return;
-      }
-      // Only replace the fallback while the user has not renamed the chat.
-      await db
-        .update(chatTable)
-        .set({ title })
-        .where(
-          and(
-            eq(chatTable.id, input.chatId),
-            eq(chatTable.title, input.fallbackTitle),
-            eq(chatTable.userId, input.userId)
-          )
-        );
-    } catch (error: unknown) {
-      reportError(error, { operation: "chat:generate-title" });
+  try {
+    const titleModel = resolveBackgroundModel();
+    const title = await generateChatTitle({
+      onUsage: (usage) => {
+        void reportAiUsage({
+          chatId: input.chatId,
+          completionTokens: usage.completionTokens,
+          costUsd: usage.costUsd,
+          externalId: `chat-title:${input.chatId}`,
+          mailboxId: input.mailboxId,
+          model: titleModel,
+          promptTokens: usage.promptTokens,
+          promptTokensDetails: {
+            cacheWriteTokens: usage.cacheWriteTokens,
+            cachedTokens: usage.cachedTokens,
+          },
+          usageKind: "aiChat",
+          userId: input.userId,
+        }).catch((error: unknown) => {
+          reportError(error, { operation: "chat:report-title-usage" });
+        });
+      },
+      prompt: input.prompt,
+    });
+    if (title === "") {
+      return;
     }
-  })();
+    // Only replace the fallback while the user has not renamed the chat.
+    await db
+      .update(chatTable)
+      .set({ title })
+      .where(
+        and(
+          eq(chatTable.id, input.chatId),
+          eq(chatTable.title, input.fallbackTitle),
+          eq(chatTable.userId, input.userId)
+        )
+      );
+  } catch (error: unknown) {
+    reportError(error, { operation: "chat:generate-title" });
+  }
 };
 
 const prepareChatContext = async (input: {
@@ -753,9 +918,13 @@ export const createAiChatResponse = async (input: {
     validated = validateChatRequest(input.body);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      throw new ChatRequestError(400, "Invalid chat request.", {
-        cause: error,
-      });
+      throw new ChatRequestError(
+        400,
+        resolveChatValidationErrorMessage(error),
+        {
+          cause: error,
+        }
+      );
     }
     throw error;
   }
@@ -802,30 +971,88 @@ export const createAiChatResponse = async (input: {
   }
 
   const rows = await loadRecentRows(threadId);
+  if (
+    rows.some(
+      (row) =>
+        row.id === validated.foreground.exchangeId &&
+        row.parts.some((part) => part.type === "data-foreground-cancelled")
+    )
+  ) {
+    throw new ChatRequestError(409, "This workspace action was cancelled.");
+  }
   const lastRow = rows.at(-1);
   let transcript: UIMessage[];
   let assistantMessageId: string;
-  let assistantPosition: number;
+  let assistantReservationParts: ChatMessagePart[] | null = null;
   let continuingRowId: string | null = null;
   let continuingOriginalParts: ChatMessagePart[] | null = null;
-  let createdChat = false;
-  let replacedAssistantIds: string[] = [];
+  let shouldGenerateTitle = false;
+  let titlePrompt = "";
 
   if (validated.kind === "message") {
+    assistantMessageId = validated.foreground.exchangeId;
+    const reservationParts: ChatMessagePart[] = [
+      { foreground: validated.foreground, type: "data-foreground" },
+    ];
+    assistantReservationParts = reservationParts;
     const userParts: ChatMessagePart[] = [
       { text: validated.userMessage.text, type: "text" },
+      { foreground: validated.foreground, type: "data-foreground" },
     ];
+    // Only marker-stamped reservations are ever dropped, so an explicit
+    // retry reuses the stored user message without ever deleting an active
+    // reservation (including a concurrent attempt's newer one).
+    const staleReservation = rows.at(-1);
     if (
-      lastRow?.role === "user" &&
-      lastRow.id === validated.userMessage.id &&
-      getStoredMessageText(lastRow.parts) === validated.userMessage.text
+      staleReservation?.role === "assistant" &&
+      staleReservation.parts.length === 1 &&
+      staleReservation.parts[0]?.type === "data-foreground-failed"
+    ) {
+      const [deleted] = await db
+        .delete(chatMessage)
+        .where(
+          and(
+            eq(chatMessage.id, staleReservation.id),
+            eq(chatMessage.chatId, threadId),
+            eq(chatMessage.userId, input.userId),
+            eq(chatMessage.parts, staleReservation.parts)
+          )
+        )
+        .returning({ id: chatMessage.id });
+      if (deleted !== undefined) {
+        rows.pop();
+      }
+    }
+    const previousRow = rows.at(-1);
+    if (
+      previousRow?.role === "user" &&
+      previousRow.id === validated.userMessage.id &&
+      getStoredMessageText(previousRow.parts) === validated.userMessage.text
     ) {
       // The previous attempt was aborted before its answer was persisted;
       // reuse the stored user message instead of duplicating it.
       transcript = toCanonicalTranscript(rows);
-      assistantPosition = lastRow.position + 1;
+      const [reserved] = await db
+        .insert(chatMessage)
+        .values({
+          chatId: threadId,
+          createdAt: new Date(),
+          id: assistantMessageId,
+          parts: reservationParts,
+          position: previousRow.position + 1,
+          role: "assistant",
+          userId: input.userId,
+        })
+        .onConflictDoNothing()
+        .returning({ id: chatMessage.id });
+      if (reserved === undefined) {
+        throw new ChatRequestError(
+          409,
+          "This chat exchange has already been submitted."
+        );
+      }
     } else {
-      if (lastRow?.role === "user") {
+      if (previousRow?.role === "user") {
         throw new ChatRequestError(
           409,
           "The previous chat turn is incomplete. Retry it before sending another message."
@@ -843,8 +1070,25 @@ export const createAiChatResponse = async (input: {
         );
       }
       const now = new Date();
-      if (existingChat === undefined) {
-        createdChat = true;
+      shouldGenerateTitle = !rows.some((row) => row.role === "user");
+      titlePrompt = validated.userMessage.text;
+      if (!shouldGenerateTitle) {
+        // A failed title attempt leaves the first prompt's fallback behind and
+        // never runs again. Retry on later turns while the stored title still
+        // matches that fallback; an explicit rename always wins because the
+        // replacement only applies while the fallback is untouched.
+        const firstUserRow = rows.find((row) => row.role === "user");
+        const firstPrompt =
+          firstUserRow === undefined
+            ? ""
+            : getStoredMessageText(firstUserRow.parts);
+        if (
+          firstPrompt !== "" &&
+          existingChat?.title === createChatTitle(firstPrompt)
+        ) {
+          shouldGenerateTitle = true;
+          titlePrompt = firstPrompt;
+        }
       }
       const userPosition = (lastRow?.position ?? -1) + 1;
       try {
@@ -858,6 +1102,17 @@ export const createAiChatResponse = async (input: {
               updatedAt: now,
               userId: input.userId,
             });
+          } else if (shouldGenerateTitle) {
+            await transaction
+              .update(chatTable)
+              .set({ title: createChatTitle(validated.userMessage.text) })
+              .where(
+                and(
+                  eq(chatTable.id, threadId),
+                  isNull(chatTable.title),
+                  eq(chatTable.userId, input.userId)
+                )
+              );
           }
           await transaction.insert(chatMessage).values({
             chatId: threadId,
@@ -868,12 +1123,27 @@ export const createAiChatResponse = async (input: {
             role: "user",
             userId: input.userId,
           });
+          await transaction.insert(chatMessage).values({
+            chatId: threadId,
+            createdAt: now,
+            id: assistantMessageId,
+            parts: reservationParts,
+            position: userPosition + 1,
+            role: "assistant",
+            userId: input.userId,
+          });
         });
       } catch (error) {
-        const errorCode =
-          error !== null && typeof error === "object" && "code" in error
-            ? error.code
-            : undefined;
+        let errorCode: unknown;
+        if (error !== null && typeof error === "object") {
+          errorCode = Reflect.get(error, "code");
+          if (errorCode === undefined) {
+            const cause: unknown = Reflect.get(error, "cause");
+            if (cause !== null && typeof cause === "object") {
+              errorCode = Reflect.get(cause, "code");
+            }
+          }
+        }
         if (errorCode === "23505") {
           throw new ChatRequestError(
             409,
@@ -891,17 +1161,6 @@ export const createAiChatResponse = async (input: {
           role: "user",
         } satisfies UIMessage,
       ];
-      assistantPosition = userPosition + 1;
-    }
-    assistantMessageId = crypto.randomUUID();
-    if (createdChat) {
-      generateChatTitleInBackground({
-        chatId: threadId,
-        fallbackTitle: createChatTitle(validated.userMessage.text),
-        mailboxId,
-        prompt: validated.userMessage.text,
-        userId: input.userId,
-      });
     }
   } else if (validated.kind === "continue") {
     if (
@@ -912,6 +1171,12 @@ export const createAiChatResponse = async (input: {
       throw new ChatRequestError(
         409,
         "This answer is no longer waiting for a response."
+      );
+    }
+    if (lastRow.parts.some((part) => part.state === "approval-responded")) {
+      throw new ChatRequestError(
+        409,
+        "An action was already submitted. Wait for its result, or check the affected item and send a new message."
       );
     }
     for (const part of lastRow.parts) {
@@ -943,6 +1208,22 @@ export const createAiChatResponse = async (input: {
         "This answer is no longer waiting for a response."
       );
     }
+    const resolvedIds = new Set([
+      ...validated.toolDecisions.keys(),
+      ...validated.toolOutputs.keys(),
+    ]);
+    if (
+      lastRow.parts.some(
+        (part) =>
+          resolvedIds.has(String(Reflect.get(part, "toolCallId"))) &&
+          !hasMatchingForegroundLease(part, validated.foreground)
+      )
+    ) {
+      throw new ChatRequestError(
+        409,
+        "This workspace action is no longer active. Start again from the current mailbox."
+      );
+    }
     const storedMessage: UIMessage = {
       id: lastRow.id,
       // Parts round-trip as opaque JSON; the resolutions above re-validate
@@ -956,34 +1237,10 @@ export const createAiChatResponse = async (input: {
       applyClientResolutions(storedMessage, validated),
     ];
     assistantMessageId = lastRow.id;
-    assistantPosition = lastRow.position;
     continuingRowId = lastRow.id;
     continuingOriginalParts = lastRow.parts;
   } else {
-    if (lastRow === undefined) {
-      throw new ChatRequestError(409, "There is no answer to retry yet.");
-    }
-    const trailingAssistantIds: string[] = [];
-    for (let index = rows.length - 1; index >= 0; index -= 1) {
-      const row = rows[index];
-      if (row?.role !== "assistant") {
-        break;
-      }
-      if (row.id !== undefined) {
-        trailingAssistantIds.push(row.id);
-      }
-    }
-    if (trailingAssistantIds.length > 0) {
-      replacedAssistantIds = trailingAssistantIds;
-      rows.splice(rows.length - trailingAssistantIds.length);
-    }
-    const lastRemaining = rows.at(-1);
-    if (lastRemaining?.role !== "user") {
-      throw new ChatRequestError(409, "There is no answer to retry yet.");
-    }
-    transcript = toCanonicalTranscript(rows);
-    assistantPosition = lastRemaining.position + 1;
-    assistantMessageId = crypto.randomUUID();
+    throw new ChatRequestError(400, "Invalid chat request.");
   }
 
   const latestUserRequest = getLatestUserRequest(transcript);
@@ -1018,16 +1275,97 @@ export const createAiChatResponse = async (input: {
       checkConnector(GOOGLE_CALENDAR_CONNECTOR_PROVIDER),
       convertToModelMessages(transcript),
     ]);
+  const gmailToolsContext = createGmailToolsContext({
+    category: validated.category,
+    mailboxId,
+    userId: input.userId,
+  });
 
   const tools = {
-    ...createGmailChatTools(
-      createGmailToolsContext({
-        category: validated.category,
-        mailboxId,
-        userId: input.userId,
-      })
-    ),
-    ...createComposeEmailChatTool(),
+    ...createForegroundClientTools(),
+    ...createForegroundServerTools({
+      saveComposeDraft: async ({ draft, toolCallId }, signal) => {
+        await assertForegroundExchangeActive({
+          assistantMessageId,
+          chatId: threadId,
+          userId: input.userId,
+        });
+        const reviewedDraft = resolveForegroundComposeDraftForPersistence({
+          draft,
+          foreground: validated.foreground,
+          mailboxId,
+          transcript,
+        });
+        const saved = await runMailTool(
+          signal,
+          async (runSignal) =>
+            await composeMailOperations.saveDraft({
+              context: { signal: runSignal, userId: input.userId },
+              input: {
+                draft: toForegroundComposeMessage(
+                  reviewedDraft,
+                  `chat:${threadId}:${assistantMessageId}:${toolCallId}`
+                ),
+                mailboxId,
+              },
+            })
+        );
+        return saveComposeDraftOutputSchema.parse({
+          draftId: draft.draftId,
+          draftRevision: draft.draftRevision,
+          ...(saved.messageId === undefined
+            ? {}
+            : { messageId: saved.messageId }),
+          providerDraftId: saved.draftId,
+          status: "draft_saved" as const,
+        });
+      },
+      sendMail: async ({ draft, toolCallId }, signal) => {
+        await assertForegroundExchangeActive({
+          assistantMessageId,
+          chatId: threadId,
+          userId: input.userId,
+        });
+        const reviewedDraft = resolveForegroundComposeDraftForPersistence({
+          draft,
+          foreground: validated.foreground,
+          mailboxId,
+          transcript,
+        });
+        const sent = await runMailTool(
+          signal,
+          async (runSignal) =>
+            await composeMailOperations.sendMessage({
+              context: { signal: runSignal, userId: input.userId },
+              input: {
+                mailboxId,
+                message: toForegroundComposeMessage(
+                  reviewedDraft,
+                  `chat:${threadId}:${assistantMessageId}:${toolCallId}`
+                ),
+              },
+            })
+        );
+        return sendMailOutputSchema.parse({
+          draftId: draft.draftId,
+          draftRevision: draft.draftRevision,
+          id: sent.id,
+          status: "sent" as const,
+          ...(sent.threadId === undefined ? {} : { threadId: sent.threadId }),
+        });
+      },
+    }),
+    ...createGmailChatTools({
+      ...gmailToolsContext,
+      modifyMail: async (modifyInput) => {
+        await assertForegroundExchangeActive({
+          assistantMessageId,
+          chatId: threadId,
+          userId: input.userId,
+        });
+        return await gmailToolsContext.modifyMail(modifyInput);
+      },
+    }),
     ...createAiMemoryChatTool(
       createMemoryToolContext({
         latestUserRequest,
@@ -1053,6 +1391,7 @@ export const createAiChatResponse = async (input: {
 
   const systemPrompt = [
     gmailToolsPrompt,
+    `The visible workspace is a foreground session. Its selected route and draft are only current for this response. Use get_workspace before relying on a changing selection. Use navigate, open_compose, and edit_compose for visible workspace changes. These tools never save or send mail.`,
     ...(preparedContext.mailboxContextPrompt === null
       ? []
       : [preparedContext.mailboxContextPrompt]),
@@ -1066,40 +1405,80 @@ export const createAiChatResponse = async (input: {
   ].join("\n\n");
 
   const usageId = crypto.randomUUID();
+  const model = createChatModel(validated.model);
+  input.request.signal.throwIfAborted();
+  if (continuingRowId !== null && continuingOriginalParts !== null) {
+    const resolvedParts: ChatMessagePart[] = transcript.at(-1)?.parts ?? [];
+    const claimed = await replaceChatParts({
+      chatId: threadId,
+      expectedParts: continuingOriginalParts,
+      messageId: continuingRowId,
+      parts: resolvedParts,
+      userId: input.userId,
+    });
+    if (!claimed) {
+      throw new ChatRequestError(409, "This action has already been answered.");
+    }
+    continuingOriginalParts = resolvedParts;
+  }
   let generationFailed = false;
   const result = streamText({
     abortSignal: input.request.signal,
     instructions: systemPrompt,
     maxOutputTokens: CHAT_MAX_COMPLETION_TOKENS,
     messages: modelMessages,
-    model: createChatModel(validated.model),
-    onEnd: ({ steps }) => {
+    model,
+    onEnd: async ({ steps }) => {
       const usage = summarizeAiUsage({ steps });
-      void (async () => {
-        try {
-          await reportAiUsage({
-            chatId: threadId,
-            completionTokens: usage.completionTokens,
-            costUsd: usage.costUsd,
-            externalId: `${usageId}:${assistantMessageId}`,
-            mailboxId,
-            model: validated.model,
-            promptTokens: usage.promptTokens,
-            promptTokensDetails: {
-              cacheWriteTokens: usage.cacheWriteTokens,
-              cachedTokens: usage.cachedTokens,
-            },
-            usageKind: "aiChat",
-            userId: input.userId,
-          });
-        } catch (error: unknown) {
-          reportError(error, { operation: "chat:report-ai-usage" });
-        }
-      })();
+      try {
+        await reportAiUsage({
+          chatId: threadId,
+          completionTokens: usage.completionTokens,
+          costUsd: usage.costUsd,
+          externalId: `${usageId}:${assistantMessageId}`,
+          mailboxId,
+          model: validated.model,
+          promptTokens: usage.promptTokens,
+          promptTokensDetails: {
+            cacheWriteTokens: usage.cacheWriteTokens,
+            cachedTokens: usage.cachedTokens,
+          },
+          usageKind: "aiChat",
+          userId: input.userId,
+        });
+      } catch (error: unknown) {
+        reportError(error, { operation: "chat:report-ai-usage" });
+      }
     },
-    onError: ({ error }) => {
+    onError: async ({ error }) => {
       generationFailed = true;
-      reportError(error, { operation: "chat:generation" });
+      if (error instanceof Error && error.name === "AbortError") {
+        return;
+      }
+      reportError(error, {
+        model: validated.model,
+        operation: "chat:generation",
+        phase: validated.kind,
+        provider: "openrouter",
+      });
+      if (assistantReservationParts === null) {
+        return;
+      }
+      // Stamp this attempt's reservation as terminally failed so an explicit
+      // retry can reclaim it. The conditional update only stamps the row this
+      // request reserved; anything else, including a concurrent attempt's
+      // newer reservation, is left untouched.
+      try {
+        await replaceChatParts({
+          chatId: threadId,
+          expectedParts: assistantReservationParts,
+          messageId: assistantMessageId,
+          parts: [{ type: "data-foreground-failed" }],
+          userId: input.userId,
+        });
+      } catch (markError: unknown) {
+        reportError(markError, { operation: "chat:mark-failed-exchange" });
+      }
     },
     providerOptions: {
       openrouter: {
@@ -1115,7 +1494,15 @@ export const createAiChatResponse = async (input: {
         : {}),
       linear_write: "user-approval" as const,
       memory: "user-approval" as const,
-      modify_mail: "user-approval" as const,
+      ...(validated.foreground.policy === "automatic" &&
+      validated.foreground.capabilities.includes("modify_mail")
+        ? {}
+        : { modify_mail: "user-approval" as const }),
+      ...(validated.foreground.policy === "automatic" &&
+      validated.foreground.capabilities.includes("save_draft")
+        ? {}
+        : { save_compose_draft: "user-approval" as const }),
+      send_mail: "user-approval" as const,
     },
     tools,
   });
@@ -1124,9 +1511,7 @@ export const createAiChatResponse = async (input: {
   const responseStream = toUIMessageStream({
     generateMessageId: () => assistantMessageId,
     onEnd: async ({ messages }) => {
-      // Stopping keeps whatever was generated so far; only a failed
-      // generation leaves nothing behind, since its partial output cannot
-      // be told apart from a broken answer.
+      // Tool outcomes are already durable; failed prose must not replace them.
       if (generationFailed) {
         return;
       }
@@ -1146,48 +1531,35 @@ export const createAiChatResponse = async (input: {
       }
       try {
         const now = new Date();
-        const parts = responseMessage.parts as ChatMessagePart[];
+        const parts = stampForegroundLease(
+          responseMessage.parts,
+          validated.foreground
+        );
         await db.transaction(async (transaction) => {
-          if (continuingRowId === null) {
-            if (replacedAssistantIds.length > 0) {
-              await transaction
-                .delete(chatMessage)
-                .where(
-                  and(
-                    eq(chatMessage.chatId, threadId),
-                    eq(chatMessage.userId, input.userId),
-                    inArray(chatMessage.id, replacedAssistantIds)
-                  )
-                );
-            }
-            await transaction.insert(chatMessage).values({
-              chatId: threadId,
-              createdAt: now,
-              id: assistantMessageId,
-              parts,
-              position: assistantPosition,
-              role: "assistant",
-              userId: input.userId,
-            });
-          } else {
-            const [updatedMessage] = await transaction
-              .update(chatMessage)
-              .set({ parts })
-              .where(
-                and(
-                  eq(chatMessage.id, continuingRowId),
-                  eq(chatMessage.chatId, threadId),
-                  eq(chatMessage.userId, input.userId),
-                  eq(chatMessage.parts, continuingOriginalParts ?? [])
-                )
+          const expectedParts =
+            continuingRowId === null
+              ? assistantReservationParts
+              : continuingOriginalParts;
+          if (expectedParts === null) {
+            throw new ChatRequestError(409, "This chat exchange is invalid.");
+          }
+          const [updatedMessage] = await transaction
+            .update(chatMessage)
+            .set({ parts })
+            .where(
+              and(
+                eq(chatMessage.id, continuingRowId ?? assistantMessageId),
+                eq(chatMessage.chatId, threadId),
+                eq(chatMessage.userId, input.userId),
+                eq(chatMessage.parts, expectedParts)
               )
-              .returning({ id: chatMessage.id });
-            if (updatedMessage === undefined) {
-              throw new ChatRequestError(
-                409,
-                "This chat changed while the answer was being completed. Retry it."
-              );
-            }
+            )
+            .returning({ id: chatMessage.id });
+          if (updatedMessage === undefined) {
+            throw new ChatRequestError(
+              409,
+              "This chat changed while the answer was being completed. Retry it."
+            );
           }
           await transaction
             .update(chatTable)
@@ -1200,6 +1572,15 @@ export const createAiChatResponse = async (input: {
               )
             );
         });
+        if (shouldGenerateTitle && validated.kind === "message") {
+          await generateChatTitleInRequest({
+            chatId: threadId,
+            fallbackTitle: createChatTitle(titlePrompt),
+            mailboxId,
+            prompt: titlePrompt,
+            userId: input.userId,
+          });
+        }
       } catch (error) {
         if (!(error instanceof ChatRequestError)) {
           reportError(error, { operation: "chat:persist-assistant-turn" });
@@ -1208,9 +1589,79 @@ export const createAiChatResponse = async (input: {
           "The answer could not be saved. Retry it before continuing.";
       }
     },
-    onError: () => "The answer could not be completed.",
+    onError: (error) => {
+      if (error instanceof ChatRequestError) {
+        reportError(error, { operation: "chat:stream-continuation" });
+      } else if (
+        !(error instanceof Error && error.name === "AbortError") &&
+        !generationFailed
+      ) {
+        reportError(error, {
+          model: validated.model,
+          operation: "chat:stream",
+          phase: validated.kind,
+          provider: "openrouter",
+        });
+      }
+      return resolveChatStreamErrorMessage(error);
+    },
     originalMessages: transcript,
-    stream: result.stream,
+    stream: result.stream.pipeThrough(
+      new TransformStream<
+        TextStreamPart<typeof tools>,
+        TextStreamPart<typeof tools>
+      >({
+        async transform(chunk, controller) {
+          if (
+            continuingRowId !== null &&
+            continuingOriginalParts !== null &&
+            (chunk.type === "tool-result" ||
+              chunk.type === "tool-error" ||
+              chunk.type === "tool-output-denied") &&
+            continuingOriginalParts.some(
+              (part) => part.toolCallId === chunk.toolCallId
+            )
+          ) {
+            const parts = continuingOriginalParts.map((part) => {
+              if (part.toolCallId !== chunk.toolCallId) {
+                return part;
+              }
+              if (chunk.type === "tool-result") {
+                const output: unknown = chunk.output;
+                return {
+                  ...part,
+                  output,
+                  state: "output-available",
+                };
+              }
+              return chunk.type === "tool-output-denied"
+                ? { ...part, state: "output-denied" }
+                : {
+                    ...part,
+                    errorText:
+                      "The action could not be confirmed. Check the affected item before trying again.",
+                    state: "output-error",
+                  };
+            });
+            const saved = await replaceChatParts({
+              chatId: threadId,
+              expectedParts: continuingOriginalParts,
+              messageId: continuingRowId,
+              parts,
+              userId: input.userId,
+            });
+            if (!saved) {
+              throw new ChatRequestError(
+                409,
+                "This chat changed while the action was being saved."
+              );
+            }
+            continuingOriginalParts = parts;
+          }
+          controller.enqueue(chunk);
+        },
+      })
+    ),
   });
   const durableStream = responseStream.pipeThrough(
     new TransformStream<UIMessageChunk, UIMessageChunk>({

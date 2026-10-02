@@ -1,10 +1,11 @@
-import type { Subscription } from "@polar-sh/sdk/models/components/subscription.js";
+import type { models } from "@polar-sh/sdk/2026-04";
 import { db } from "@quieter/database/client";
 import { billingSubscription } from "@quieter/database/schema";
 import type { BillingSubscriptionStatus } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { reportError } from "@quieter/observability";
 import { gte, or, sql } from "drizzle-orm";
+import { z } from "zod";
 
 import { BILLING_PRODUCTS, billingProductIdSchema } from "./plans.ts";
 
@@ -13,12 +14,56 @@ export const BILLING_METADATA_USER_ID = "quieterUserId";
 export const BILLING_METADATA_ORGANIZATION_ID = "quieterOrganizationId";
 const BILLING_METADATA_LEGACY_PLAN = "quieterPlan";
 const BILLING_PROVIDER = "polar" as const;
+export type BillingPolarSubscription = Pick<
+  models.Subscription,
+  | "cancel_at_period_end"
+  | "created_at"
+  | "current_period_end"
+  | "current_period_start"
+  | "customer_id"
+  | "id"
+  | "metadata"
+  | "modified_at"
+  | "product_id"
+  | "status"
+> & { product: Pick<models.Subscription["product"], "metadata"> };
 
-const getSyncedBillingProduct = (subscription: Subscription) => {
-  if (serverEnv.POLAR_PRODUCT_MANAGED_ID === subscription.productId) {
+export const billingPolarSubscriptionSchema = z.object({
+  cancel_at_period_end: z.boolean(),
+  created_at: z.iso.datetime({ offset: true }),
+  current_period_end: z.iso.datetime({ offset: true }),
+  current_period_start: z.iso.datetime({ offset: true }),
+  customer_id: z.string().min(1),
+  id: z.string().min(1),
+  metadata: z.record(
+    z.string(),
+    z.union([z.string(), z.number(), z.boolean()])
+  ),
+  modified_at: z.iso.datetime({ offset: true }).nullable(),
+  product: z.object({
+    metadata: z.record(
+      z.string(),
+      z.union([z.string(), z.number(), z.boolean()])
+    ),
+  }),
+  product_id: z.string().min(1),
+  status: z.enum([
+    "incomplete",
+    "incomplete_expired",
+    "trialing",
+    "active",
+    "past_due",
+    "canceled",
+    "unpaid",
+    "paused",
+  ]),
+}) satisfies z.ZodType<BillingPolarSubscription>;
+
+const getSyncedBillingProduct = (subscription: BillingPolarSubscription) => {
+  if (serverEnv.POLAR_PRODUCT_MANAGED_ID === subscription.product_id) {
     return "managed";
   }
-  if (serverEnv.POLAR_PRODUCT_PRO_ID === subscription.productId) {
+  if (serverEnv.POLAR_PRODUCT_PRO_ID === subscription.product_id) {
     return "pro";
   }
 
@@ -47,7 +92,7 @@ const getSyncedBillingProduct = (subscription: Subscription) => {
 };
 
 export const normalizeSubscriptionStatus = (
-  status: Subscription["status"]
+  status: BillingPolarSubscription["status"]
 ): BillingSubscriptionStatus => {
   switch (status) {
     case "active": {
@@ -80,7 +125,9 @@ export const normalizeSubscriptionStatus = (
   }
 };
 
-export const syncBillingSubscription = async (subscription: Subscription) => {
+export const syncBillingSubscription = async (
+  subscription: BillingPolarSubscription
+) => {
   const environment = subscription.metadata.quieterEnvironment;
   if (
     (serverEnv.QUIETER_DEPLOYMENT_ENV === "local" && environment !== "local") ||
@@ -93,7 +140,7 @@ export const syncBillingSubscription = async (subscription: Subscription) => {
     typeof metadataUserId === "string" ? metadataUserId.trim() : "";
   const product = getSyncedBillingProduct(subscription);
 
-  if ((userId ?? "") === "" || product === null) {
+  if (userId === "" || product === null) {
     reportError(new Error("Billing subscription metadata is incomplete."), {
       operation: "billing:sync-subscription",
       reason: "missing-user-or-product",
@@ -108,7 +155,7 @@ export const syncBillingSubscription = async (subscription: Subscription) => {
       ? metadataOrganizationId.trim() || null
       : null;
 
-  if (typeof organizationId !== "string" || organizationId === "") {
+  if (organizationId === null) {
     reportError(new Error("Billing subscription organization is missing."), {
       operation: "billing:sync-subscription",
       reason: "missing-organization",
@@ -116,16 +163,15 @@ export const syncBillingSubscription = async (subscription: Subscription) => {
     return { synced: false };
   }
 
-  const resolvedOrganizationId = organizationId;
   const now = new Date();
   const providerModifiedAt = new Date(
-    subscription.modifiedAt ?? subscription.createdAt
+    subscription.modified_at ?? subscription.created_at
   );
 
   const values = {
-    cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
-    currentPeriodEnd: subscription.currentPeriodEnd,
-    currentPeriodStart: subscription.currentPeriodStart,
+    cancelAtPeriodEnd: subscription.cancel_at_period_end,
+    currentPeriodEnd: new Date(subscription.current_period_end),
+    currentPeriodStart: new Date(subscription.current_period_start),
     lastReconciliationFailureAt: null,
     metadata: Object.fromEntries(
       Object.entries(subscription.metadata).map(([key, value]) => [
@@ -133,12 +179,12 @@ export const syncBillingSubscription = async (subscription: Subscription) => {
         String(value),
       ])
     ),
-    organizationId: resolvedOrganizationId,
+    organizationId,
     plan: product,
     provider: BILLING_PROVIDER,
-    providerCustomerId: subscription.customerId,
+    providerCustomerId: subscription.customer_id,
     providerModifiedAt,
-    providerProductId: subscription.productId,
+    providerProductId: subscription.product_id,
     providerSubscriptionId: subscription.id,
     status: normalizeSubscriptionStatus(subscription.status),
     updatedAt: now,

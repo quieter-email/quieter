@@ -56,6 +56,7 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       MAIL_RECEIPT_ROLE_ARN: runtimeEnv.MAIL_RECEIPT_ROLE_ARN,
       MAIL_RECEIPT_RULE_SET_NAME: runtimeEnv.MAIL_RECEIPT_RULE_SET_NAME,
       MAIL_RECEIPT_TOPIC_ARN: runtimeEnv.MAIL_RECEIPT_TOPIC_ARN,
+      MAIL_UPDATES_URL: runtimeEnv.MAIL_UPDATES_URL,
       NODE_ENV: runtimeEnv.NODE_ENV,
       OPENROUTER_API_KEY: runtimeEnv.OPENROUTER_API_KEY,
       POLAR_ACCESS_TOKEN: runtimeEnv.POLAR_ACCESS_TOKEN,
@@ -67,6 +68,8 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       POLAR_WEBHOOK_SECRET: runtimeEnv.POLAR_WEBHOOK_SECRET,
       QUIETER_AUTH_MAIL_MODE: runtimeEnv.QUIETER_AUTH_MAIL_MODE,
       QUIETER_AUTH_MAIL_SENDER: runtimeEnv.QUIETER_AUTH_MAIL_SENDER,
+      QUIETER_BACKGROUND_MODEL: runtimeEnv.QUIETER_BACKGROUND_MODEL,
+      QUIETER_CHAT_MODEL: runtimeEnv.QUIETER_CHAT_MODEL,
       QUIETER_DEPLOYMENT_ENV: runtimeEnv.QUIETER_DEPLOYMENT_ENV,
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED:
         runtimeEnv.QUIETER_GMAIL_AI_AUTOMATION_ENABLED,
@@ -90,7 +93,7 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       R2_ENDPOINT: runtimeEnv.R2_ENDPOINT,
       R2_SECRET_ACCESS_KEY: runtimeEnv.R2_SECRET_ACCESS_KEY,
       SENTRY_AUTH_TOKEN: runtimeEnv.SENTRY_AUTH_TOKEN,
-      SENTRY_DSN: runtimeEnv.SENTRY_DSN,
+      SENTRY_DSN: runtimeEnv.SENTRY_DSN ?? runtimeEnv.VITE_SENTRY_DSN,
       SENTRY_ENVIRONMENT: runtimeEnv.SENTRY_ENVIRONMENT,
       SENTRY_ORG: runtimeEnv.SENTRY_ORG,
       SENTRY_PROJECT: runtimeEnv.SENTRY_PROJECT,
@@ -98,13 +101,19 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       SES_FEEDBACK_TOPIC_ARN: runtimeEnv.SES_FEEDBACK_TOPIC_ARN,
       VITE_LOGO_DEV_PUBLISHABLE_KEY: runtimeEnv.VITE_LOGO_DEV_PUBLISHABLE_KEY,
       VITE_QUIETER_LOCAL_TELEMETRY: runtimeEnv.VITE_QUIETER_LOCAL_TELEMETRY,
+      VITE_SENTRY_DSN: runtimeEnv.VITE_SENTRY_DSN,
     },
     server: {
       APP_SITE_PASSWORD: optionalString,
       AWS_DEFAULT_REGION: optionalString,
       AWS_REGION: optionalString,
-      BACKFILL_BATCH_SIZE: optionalString,
-      BACKFILL_CONCURRENCY: optionalString,
+      BACKFILL_BATCH_SIZE: z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(1000)
+        .default(100),
+      BACKFILL_CONCURRENCY: z.coerce.number().int().min(1).max(10).default(5),
       BETTER_AUTH_APP_NAME: z.string().trim().min(1).default("quieter"),
       BETTER_AUTH_SECRET: optionalString,
       BETTER_AUTH_TRUSTED_ORIGINS: optionalString,
@@ -136,6 +145,7 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       MAIL_RECEIPT_ROLE_ARN: optionalString,
       MAIL_RECEIPT_RULE_SET_NAME: optionalString,
       MAIL_RECEIPT_TOPIC_ARN: optionalString,
+      MAIL_UPDATES_URL: webSocketUrl.optional(),
       NODE_ENV: nodeEnvironment,
       OPENROUTER_API_KEY: optionalString,
       POLAR_ACCESS_TOKEN: optionalString,
@@ -147,6 +157,8 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       POLAR_WEBHOOK_SECRET: optionalString,
       QUIETER_AUTH_MAIL_MODE: z.enum(["api", "console"]).default("api"),
       QUIETER_AUTH_MAIL_SENDER: z.email().default("auth@quieter.email"),
+      QUIETER_BACKGROUND_MODEL: optionalString,
+      QUIETER_CHAT_MODEL: optionalString,
       QUIETER_DEPLOYMENT_ENV: z.enum(["local", "production"]).default("local"),
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED: optionalBooleanString,
       QUIETER_LOCAL_BILLING_BYPASS: optionalBooleanString,
@@ -177,10 +189,16 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       SES_FEEDBACK_TOPIC_ARN: optionalString,
       VITE_LOGO_DEV_PUBLISHABLE_KEY: optionalString,
       VITE_QUIETER_LOCAL_TELEMETRY: optionalBooleanString,
+      VITE_SENTRY_DSN: optionalHttpUrl,
     },
   });
 
-export const serverEnv = createServerEnv();
+// oxlint-disable-next-line import/no-mutable-exports -- AWS linked secrets are attached at handler entry.
+export let serverEnv = createServerEnv();
+
+export const configureServerEnv = (overrides: RuntimeEnvironment) => {
+  serverEnv = createServerEnv({ ...process.env, ...overrides });
+};
 
 type ServerStringKey = {
   [Key in keyof typeof serverEnv]-?: Exclude<

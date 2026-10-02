@@ -8,7 +8,6 @@ import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 import {
-  SettingsBackButton,
   SettingsLoadingState,
   SettingsNavigationRow,
   SettingsRows,
@@ -93,7 +92,6 @@ export const DomainsView = ({
   billingPending,
   canManageDomains,
   canUseOrganizationDomains,
-  onBack,
   onOpenDomain,
   organization,
 }: {
@@ -157,10 +155,6 @@ export const DomainsView = ({
 
   return (
     <div className="@container space-y-6">
-      <SettingsBackButton onClick={onBack}>
-        {organization.name}
-      </SettingsBackButton>
-
       <div className="flex flex-col gap-3 @md:flex-row @md:items-start @md:justify-between">
         <div>
           <h1 className="text-body-lg font-semibold text-fg">Domains</h1>

@@ -22,12 +22,11 @@ import {
 import { MessageListSearch } from "#/features/message-search/components/message-list-search";
 import { appEaseOut, appMotionDuration } from "#/features/motion/app-motion";
 import { toastError } from "#/lib/error-toast";
-import type { MailboxCategory, MessageListItem } from "#/lib/gmail/gmail";
-import { labelsQueryOptions } from "#/lib/gmail/labels-query";
 import { buildThreadListEntries } from "#/lib/gmail/thread-list";
 import type { ThreadListEntry } from "#/lib/gmail/thread-list";
+import type { MailboxCategory, MessageListItem } from "#/lib/mail";
+import { labelsQueryOptions } from "#/lib/mail/labels-query";
 
-import { GmailUsefulDetails } from "./gmail-useful-details";
 import { MessageListHeader } from "./message-list-header";
 import { MessageListScrollPane } from "./message-list-scroll-pane";
 import { MessageListSelectionToolbar } from "./message-list-selection-toolbar";
@@ -690,15 +689,6 @@ export const MessageList = (props: MessageListProps) => {
           ) : null
         }
       />
-
-      {props.mailboxProvider === "gmail" &&
-        props.activeMailbox === "inbox" &&
-        !props.searchQuery.trim() && (
-          <GmailUsefulDetails
-            mailboxId={props.mailboxId}
-            onActivateMessage={props.onActivateMessage}
-          />
-        )}
 
       <m.div
         animate={{

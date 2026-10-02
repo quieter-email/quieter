@@ -16,6 +16,10 @@ See [Development integration plan](development-integrations.md) for the accepted
 
 ## Install
 
+Cloudflare uses the beta `cf` CLI and Vite plugin with `apps/web/cloudflare.config.ts` and `packages/cloudflare/cloudflare.config.ts`. SST remains the deployment authority. The Wrangler JSON fixture only serves Worker type generation and tests. Type generation explicitly loads the empty `packages/cloudflare/wrangler.types.env` fixture, keeping its output independent of local `.dev.vars` files. Run `vp exec sst install` after dependency installation to generate infrastructure types. A pinned `cf` patch launches JavaScript delegates through Node on Windows. Worker tests use isolated Vitest 4 packages until Cloudflare supports Vitest 5.
+
+Dependency installation checks peers strictly and does not auto-install optional integration trees. Declare required peers in the consuming workspace. The Vite peer-version exception maps the pinned Vite+ core alias; update it with Vite+. Run `vp pm audit` when updating dependencies, and upgrade related authentication or Cloudflare packages together.
+
 ```bash
 git clone https://github.com/quieter-email/quieter.git
 cd quieter
@@ -94,7 +98,7 @@ vp run dev
 
 This starts the web app in Cloudflare's local Worker runtime on `http://localhost:3000`. Vite validates the development database destination before serving. Use `vp run dev:full` for the web app plus the background Worker on port 8787. Use `vp run dev:workers` to start only the background runtime alongside an already-running web app.
 
-`dev:prepare` generates ignored `.dev.vars` from the validated local settings. It excludes migration credentials and supplies the linked live-sync signing secret. Restart both runtimes after changing secrets or Worker bindings. A Vite hot reload alone does not refresh a separate Wrangler process.
+`dev:prepare` generates ignored `packages/cloudflare/.dev.vars` from the validated local settings. The web plugin reads workspace `.env.local` and resolves declared secret bindings through `@quieter/env`. It excludes migration credentials and supplies the linked live-sync signing secret. Restart both runtimes after changing secrets or Worker bindings. A Vite hot reload alone does not refresh a separate `cf dev` process.
 
 ```bash
 vp run dev:setup
@@ -107,7 +111,7 @@ vp run dev:trigger maintenance
 vp run dev:trigger actions
 ```
 
-The local Worker delegates to the real Gmail queue consumer, action consumer, maintenance handler, dispatcher and realtime Durable Object. Queues, retries and Durable Object storage run in native workerd. Development combines these handlers in one process; production still deploys separate Workers. Maintenance and dispatch are manual triggers, not an automatically running cron. The Pub/Sub bridge uses `gcloud auth print-access-token`, pulls one message at a time from its own subscription, and acknowledges only after the local queue accepts the message.
+The local Worker runs Gmail notifications directly, alongside the action consumer, maintenance handler, dispatcher and realtime Durable Object. Development combines these handlers in one process; production deploys separate Workers. Maintenance and dispatch are manual triggers, not an automatically running cron. The Pub/Sub bridge uses `gcloud auth print-access-token`, pulls one message at a time from its own subscription, extends the acknowledgment deadline during processing, and acknowledges only after the local Worker finishes.
 
 Shared Gmail accounts default to `QUIETER_LOCAL_PROVIDER_MODE=observe` and `QUIETER_LOCAL_GMAIL_WATCH_OWNER=production`. Mail reads and AI results stored in `quieter_dev` work in this mode. Gmail, Calendar and Linear writes are rejected server-side. Auto-label classification is saved without applying labels. Write tests require a dedicated mailbox or a verified ownership handoff, plus the explicit Gmail account allowlist. Never start a competing consumer on the production subscription.
 
@@ -205,7 +209,7 @@ Application code must not access the database directly. Add or reuse an oRPC pro
    vp run db:check
    ```
 
-CI runs destructive migration integration tests only against a dedicated temporary PostgreSQL database. Automated production migrations reject destructive SQL. Use expand/contract changes for renames, required columns, type rewrites, and destructive changes.
+CI runs destructive migration integration tests only against a dedicated temporary PostgreSQL database. Automated production migrations reject destructive SQL unless the migration opts in with a top-of-file `-- quieter:contract` marker, which is reserved for reviewed contract changes. Use expand/contract changes for renames, required columns, type rewrites, and destructive changes.
 
 Read [Database safety](database-safety.md) before changing migration tooling.
 
@@ -252,3 +256,17 @@ Do not hand-edit:
 - Preserve existing layout and density for incremental UI changes.
 - Remove obsolete paths in the same change instead of keeping compatibility branches.
 - Update documentation when architecture, tooling, or operational behavior changes.
+
+## Incoming mail AI verification
+
+Run `vp run mail:benchmark` after local setup to exercise the real Jev code screen, code extractor, and label classifier using synthetic messages. It requires a separate, budget-limited development OpenRouter key and rejects uncapped keys or non-local configuration. It prints correctness, elapsed time, extractor-call counts, and cost without printing message content or codes. An optional model argument supports comparisons, for example `vp run mail:benchmark google/gemini-3.1-flash-lite`.
+
+On October 1, 2026, all five synthetic code cases passed for each tested model. Gemini 2.5 Flash Lite had a 651 ms median and 796 ms maximum, compared with 1,009 ms / 1,108 ms for Gemini 3.5 Flash and 1,241 ms / 1,615 ms for Gemini 3.1 Flash Lite. The 2.5 run, including one Jev classification, cost $0.000180. This small sample measures model requests, not mail arrival through Google/SES, message loading, database writes, or browser refresh. A one-second end-to-end target needs measurements in the deployed mail path and cannot be guaranteed by these results.
+
+After adding Jev screening, the same five-case synthetic probe passed all cases, made four extractor calls, and took 1,200 ms median / 1,296 ms maximum, with $0.000254 total provider cost including labeling. This fixture deliberately contains several code messages and ambiguous instruction text, so most messages pass the conservative screen and its cost exceeds direct extraction in this sample. Savings depend on the ordinary-mail rejection rate; do not infer a production savings percentage from this fixture. The code controls are now static and retain extracted codes after expiry.
+
+Gmail local observation continues to use a separate development subscription and preserves production watch ownership. `vp run dev:pubsub` acknowledges only after direct processing and extends the acknowledgement deadline while processing. Failed extraction is retried by the existing maintenance handlers; `vp run dev:trigger maintenance` and `vp run dev:trigger mail-recovery` exercise those paths locally. Apply new migrations only to the allowlisted development database with `vp run db:migrate`; production uses the protected deployment workflow.
+
+## Transcription format verification
+
+Chat and compose share recording preparation. The configured `microsoft/mai-transcribe-1.5` endpoint accepted WAV, MP3, FLAC, and Ogg in a September 7, 2026 development probe. It returned HTTP 400 for WebM, M4A, and AAC, so those formats are decoded and sent as PCM WAV. Keep this conversion until a replacement model accepts the browser output. The probe used synthetic speech and the budget-limited development key, with $0.0024 reported usage across successful requests. Recordings are base64-encoded once, after preparation; size and duration limits apply to both composers.

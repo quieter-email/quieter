@@ -59,10 +59,14 @@ const readStoredColorMode = (
     return initialColorMode;
   }
 
-  const storedColorMode = localStorage.getItem(COLOR_MODE_STORAGE_KEY);
-  return isConfigColorMode(storedColorMode)
-    ? storedColorMode
-    : initialColorMode;
+  try {
+    const storedColorMode = localStorage.getItem(COLOR_MODE_STORAGE_KEY);
+    return isConfigColorMode(storedColorMode)
+      ? storedColorMode
+      : initialColorMode;
+  } catch {
+    return initialColorMode;
+  }
 };
 
 const resolveColorMode = (
@@ -90,8 +94,11 @@ const getNextColorMode = (
   return "light";
 };
 
-const colorModeScript = (initialColorMode: ConfigColorMode) =>
-  `try{const stored=localStorage.getItem("${COLOR_MODE_STORAGE_KEY}");const configured=stored==="light"||stored==="dark"||stored==="system"?stored:"${initialColorMode}";const mode=location.pathname==="/home"?"dark":configured==="system"?(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):configured;document.documentElement.classList.add(mode);document.documentElement.style.colorScheme=mode}catch{}`;
+const colorModeScript = (
+  initialColorMode: ConfigColorMode,
+  forcedTheme?: ColorMode
+) =>
+  `try{const stored=localStorage.getItem("${COLOR_MODE_STORAGE_KEY}");const configured=stored==="light"||stored==="dark"||stored==="system"?stored:"${initialColorMode}";const mode=${forcedTheme === undefined ? "false" : "true"}?"${forcedTheme ?? "light"}":configured==="system"?(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):configured;document.documentElement.classList.add(mode);document.documentElement.style.colorScheme=mode}catch{}`;
 
 export const ColorModeProvider = ({
   children,
@@ -136,15 +143,18 @@ export const ColorModeProvider = ({
   }, [colorMode]);
 
   const setColorMode = useCallback((value: ConfigColorMode) => {
-    localStorage.setItem(COLOR_MODE_STORAGE_KEY, value);
+    try {
+      localStorage.setItem(COLOR_MODE_STORAGE_KEY, value);
+    } catch {
+      /* The preference remains available for this session. */
+    }
     setConfigColorMode(value);
   }, []);
 
   const cycleColorMode = useCallback(() => {
     const next = getNextColorMode(configColorMode);
-    localStorage.setItem(COLOR_MODE_STORAGE_KEY, next);
-    setConfigColorMode(next);
-  }, [configColorMode]);
+    setColorMode(next);
+  }, [configColorMode, setColorMode]);
 
   const value = useMemo(
     () => ({
@@ -186,9 +196,13 @@ export const useColorModeValue = <T,>(light: T, dark: T) => {
 };
 
 export const ColorModeScript = ({
+  forcedTheme,
   initialColorMode = "system",
 }: {
   initialColorMode?: ConfigColorMode;
+  forcedTheme?: ColorMode;
 }) => (
-  <script suppressHydrationWarning>{colorModeScript(initialColorMode)}</script>
+  <script suppressHydrationWarning>
+    {colorModeScript(initialColorMode, forcedTheme)}
+  </script>
 );

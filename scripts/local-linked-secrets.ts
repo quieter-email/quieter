@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { parseEnv } from "node:util";
 
-import { diagnoseLocalEnv } from "@quieter/env/local-doctor";
+import { diagnoseLocalEnv, serializeEnvFile } from "@quieter/env/local-doctor";
 import { sstSecretNames } from "@quieter/env/sst-secrets";
 import { Resource } from "sst";
 
@@ -39,11 +39,7 @@ const failures = diagnoseLocalEnv(checked);
 if (failures.length > 0) {
   throw new Error(failures.join("\n"));
 }
-await writeFile(
-  ".env.local",
-  `${[...checked].map(([key, value]) => `${key}=${JSON.stringify(value)}`).join("\n")}\n`,
-  { mode: 0o600 }
-);
+await writeFile(".env.local", serializeEnvFile(checked), { mode: 0o600 });
 process.stdout.write(
   `Refreshed ${count} linked development secrets in ignored local configuration.\n`
 );

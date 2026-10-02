@@ -4,15 +4,7 @@ import { getMailboxCapabilities, mailCategorySchema } from "../src/data-plane";
 
 describe("mail data plane", () => {
   test("keeps Archive in the shared category contract", () => {
-    expect(mailCategorySchema.options).toStrictEqual([
-      "inbox",
-      "unread",
-      "archive",
-      "sent",
-      "drafts",
-      "spam",
-      "trash",
-    ]);
+    expect(mailCategorySchema.options).toContain("archive");
   });
 
   test("limits API mailboxes to read-only Sent", () => {

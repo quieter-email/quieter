@@ -1,6 +1,8 @@
 "use client";
 
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
+import { cva } from "class-variance-authority";
+import type { VariantProps } from "class-variance-authority";
 import { createContext, useContext } from "react";
 import type { ComponentPropsWithoutRef, MouseEvent } from "react";
 
@@ -16,15 +18,39 @@ type DropdownMenuDensity = "default" | "compact";
 const DropdownMenuDensityContext =
   createContext<DropdownMenuDensity>("default");
 
+const dropdownMenuTriggerVariants = cva(
+  "transition-transform duration-100 ease-out focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
+  {
+    variants: {
+      appearance: {
+        // Muted square icon button, e.g. row overflow menus.
+        icon: "inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-fg transition-colors hover:bg-control-hover hover:text-fg disabled:pointer-events-none disabled:opacity-50",
+        // Transparent square icon button that stays invisible while its menu
+        // is open, e.g. the sidebar help menu.
+        "icon-transparent":
+          "inline-flex size-7 shrink-0 items-center justify-center rounded-md bg-transparent text-muted-fg hover:bg-transparent hover:text-fg focus-visible:bg-transparent focus-visible:text-fg data-popup-open:bg-transparent data-popup-open:text-fg",
+        // Caption-muted row, e.g. the chat composer policy picker.
+        row: "flex min-w-0 items-center gap-2 rounded-md py-1 text-caption text-muted-fg transition-colors hover:text-fg",
+        // Strong row, e.g. the conversation history picker.
+        "row-strong":
+          "flex min-w-0 items-center gap-2 rounded-md text-left text-body-sm font-medium text-fg",
+      },
+    },
+  }
+);
+
+type DropdownMenuTriggerProps = ComponentPropsWithoutRef<
+  typeof MenuPrimitive.Trigger
+> &
+  VariantProps<typeof dropdownMenuTriggerVariants>;
+
 export const DropdownMenuTrigger = ({
+  appearance,
   className,
   ...props
-}: ComponentPropsWithoutRef<typeof MenuPrimitive.Trigger>) => (
+}: DropdownMenuTriggerProps) => (
   <MenuPrimitive.Trigger
-    className={cn(
-      "transition-transform duration-100 ease-out focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
-      className
-    )}
+    className={cn(dropdownMenuTriggerVariants({ appearance }), className)}
     {...props}
   />
 );
@@ -55,8 +81,8 @@ export const DropdownMenuContent = ({
       <DropdownMenuDensityContext.Provider value={size}>
         <MenuPrimitive.Popup
           className={cn(
-            "z-50 max-h-[calc(100dvh-1rem)] max-w-[calc(100vw-1rem)] min-w-52 origin-(--transform-origin) overflow-x-hidden overflow-y-auto overscroll-contain rounded-lg border bg-popover p-1 text-body text-popover-fg shadow-md transition-[opacity,transform] duration-150 ease-out will-change-[translate,opacity,height,width] data-ending-style:scale-95 data-ending-style:opacity-0 data-instant:transition-none data-starting-style:scale-95 data-starting-style:opacity-0",
-            size === "compact" && "min-w-40 p-0.5 text-caption",
+            "z-50 max-h-[calc(100dvh-1rem)] max-w-[calc(100vw-1rem)] min-w-52 origin-(--transform-origin) overflow-x-hidden overflow-y-auto overscroll-contain rounded-lg border bg-popover p-1 text-body text-popover-fg shadow-md transition-[opacity,transform] duration-150 ease-out will-change-[translate,opacity,height,width] outline-none data-ending-style:scale-95 data-ending-style:opacity-0 data-instant:transition-none data-starting-style:scale-95 data-starting-style:opacity-0",
+            { "min-w-40 p-0.5 text-caption": size === "compact" },
             className
           )}
           {...props}
@@ -94,8 +120,8 @@ export const DropdownMenuSubmenuContent = ({
         <DropdownMenuDensityContext.Provider value={resolvedSize}>
           <MenuPrimitive.Popup
             className={cn(
-              "z-50 max-h-[calc(100dvh-1rem)] max-w-[calc(100vw-1rem)] min-w-52 origin-(--transform-origin) overflow-x-hidden overflow-y-auto overscroll-contain rounded-lg border bg-popover p-1 text-body text-popover-fg shadow-md transition-[opacity,transform] duration-150 ease-out will-change-[opacity,transform] data-ending-style:scale-95 data-ending-style:opacity-0 data-instant:transition-none data-starting-style:scale-95 data-starting-style:opacity-0",
-              resolvedSize === "compact" && "min-w-40 p-0.5 text-caption",
+              "z-50 max-h-[calc(100dvh-1rem)] max-w-[calc(100vw-1rem)] min-w-52 origin-(--transform-origin) overflow-x-hidden overflow-y-auto overscroll-contain rounded-lg border bg-popover p-1 text-body text-popover-fg shadow-md transition-[opacity,transform] duration-150 ease-out will-change-[opacity,transform] outline-none data-ending-style:scale-95 data-ending-style:opacity-0 data-instant:transition-none data-starting-style:scale-95 data-starting-style:opacity-0",
+              { "min-w-40 p-0.5 text-caption": resolvedSize === "compact" },
               className
             )}
             {...props}
@@ -112,12 +138,14 @@ type DropdownMenuItemProps = Omit<
 > & {
   closeOnSelect?: boolean;
   onSelect?: (event: MouseEvent<HTMLElement>) => void;
+  tone?: "default" | "destructive";
 };
 
 const DropdownMenuItemContent = ({
   className,
   closeOnSelect,
   onSelect,
+  tone = "default",
   ...props
 }: DropdownMenuItemProps) => {
   const size = useContext(DropdownMenuDensityContext);
@@ -125,8 +153,9 @@ const DropdownMenuItemContent = ({
   return (
     <MenuPrimitive.Item
       className={cn(
-        "squircle relative flex min-h-9 cursor-default items-center gap-2 rounded-md px-2.5 text-body text-fg transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
-        size === "compact" && "min-h-7 gap-1.5 px-2 text-caption",
+        "relative flex min-h-7 cursor-default items-center gap-2 rounded-md px-2.5 text-body-sm text-fg transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
+        { "min-h-7 gap-1.5 px-2 text-caption": size === "compact" },
+        { "text-destructive": tone === "destructive" },
         className
       )}
       closeOnClick={closeOnSelect}
@@ -170,8 +199,8 @@ export const DropdownMenuCheckboxItem = ({
   return (
     <MenuPrimitive.CheckboxItem
       className={cn(
-        "squircle relative flex min-h-9 cursor-default items-center gap-2 rounded-md py-1.5 pr-2.5 pl-8 text-body text-fg transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
-        size === "compact" && "min-h-7 gap-1.5 py-1 pr-2 pl-7 text-caption",
+        "relative flex min-h-7 cursor-default items-center gap-2 rounded-md py-1 pr-2.5 pl-8 text-body-sm text-fg transition-transform duration-100 ease-out select-none squircle focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
+        { "min-h-7 gap-1.5 py-1 pr-2 pl-7 text-caption": size === "compact" },
         className
       )}
       closeOnClick={closeOnSelect}
@@ -181,7 +210,7 @@ export const DropdownMenuCheckboxItem = ({
       <span
         className={cn(
           "pointer-events-none absolute left-2 flex size-4 items-center justify-center text-fg",
-          size === "compact" && "left-1.5"
+          { "left-1.5": size === "compact" }
         )}
       >
         {indeterminate ? (
@@ -207,8 +236,8 @@ const DropdownMenuSubmenuTriggerContent = ({
   return (
     <MenuPrimitive.SubmenuTrigger
       className={cn(
-        "squircle relative flex min-h-9 cursor-default items-center gap-2 rounded-md px-2.5 text-body text-fg transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
-        size === "compact" && "min-h-7 gap-1.5 px-2 text-caption",
+        "relative flex min-h-7 cursor-default items-center gap-2 rounded-md px-2.5 text-body-sm text-fg transition-transform duration-100 ease-out select-none squircle focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
+        { "min-h-7 gap-1.5 px-2 text-caption": size === "compact" },
         className
       )}
       {...props}
@@ -239,7 +268,7 @@ export const DropdownMenuSeparator = ({
     <MenuPrimitive.Separator
       className={cn(
         "my-1 h-px bg-border",
-        size === "compact" && "my-0.5",
+        { "my-0.5": size === "compact" },
         className
       )}
       {...props}

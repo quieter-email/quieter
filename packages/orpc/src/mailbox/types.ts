@@ -29,7 +29,6 @@ export type MailboxListItem = MailboxGroupMetadata & {
   emailAddress: string;
   grantRole: MailboxGrantRole | null;
   autoLabelEnabled: boolean;
-  usefulDetailsEnabled: boolean;
   id: string;
   includeApiSentMessages: boolean;
   signatureHtml?: string | null;
@@ -38,6 +37,7 @@ export type MailboxListItem = MailboxGroupMetadata & {
   ownerUserId: string | null;
   provider: "api" | PersistedMailboxProvider;
   unreadNonSpamCount: number;
+  usefulDetailsEnabled: boolean;
 };
 
 export type MailboxGroup = {

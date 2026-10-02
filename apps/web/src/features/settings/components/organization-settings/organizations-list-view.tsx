@@ -4,6 +4,7 @@ import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { Text } from "@quieter/ui/text";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -127,9 +128,9 @@ const PendingInvitationsSection = () => {
 
   if (userInvitationsError) {
     return (
-      <p className="text-body text-destructive">
+      <Text tone="destructive">
         {userInvitationsError.message ?? "Could not load invitations."}
-      </p>
+      </Text>
     );
   }
 
@@ -235,7 +236,7 @@ export const OrganizationsListView = ({
             return <SettingsLoadingState label="Loading teams" />;
           }
           if ((error ?? "") !== "") {
-            return <p className="text-body text-destructive">{error}</p>;
+            return <Text tone="destructive">{error}</Text>;
           }
           if (organizations.length > 0) {
             return (

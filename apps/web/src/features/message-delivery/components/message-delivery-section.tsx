@@ -13,6 +13,7 @@ import {
   CollapsibleTrigger,
 } from "@quieter/ui/collapsible";
 import { Pill } from "@quieter/ui/pill";
+import { Text } from "@quieter/ui/text";
 import { useQuery } from "@tanstack/react-query";
 
 import {
@@ -71,7 +72,10 @@ const DeliveryEventRow = ({ event }: { event: MessageDeliveryEvent }) => (
 
     {hasDeliveryDiagnostics(event) ? (
       <Collapsible>
-        <CollapsibleTrigger className="text-caption text-muted-fg underline underline-offset-2 hover:text-fg">
+        <CollapsibleTrigger
+          // oxlint-disable-next-line shadcn/no-restyle -- Technical details keeps its caption-link treatment.
+          className="text-caption text-muted-fg underline underline-offset-2 hover:text-fg"
+        >
           Technical details
         </CollapsibleTrigger>
         <CollapsiblePanel>
@@ -159,7 +163,10 @@ const DeliveryRecipients = ({
   }
 
   return (
-    <Accordion className="space-y-2">
+    <Accordion
+      // oxlint-disable-next-line shadcn/no-restyle -- Delivery list keeps its recipient stack.
+      className="space-y-2"
+    >
       {delivery.recipients.map((recipient) => (
         <DeliveryRecipientItem
           events={delivery.events}
@@ -207,9 +214,9 @@ export const MessageDeliverySection = ({
       ) : null}
 
       {isDeliveryError ? (
-        <p className="text-body text-destructive">
+        <Text tone="destructive">
           {deliveryError.message ?? "Could not load delivery status."}
-        </p>
+        </Text>
       ) : null}
 
       {delivery === undefined ? null : (

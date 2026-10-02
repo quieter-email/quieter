@@ -6,7 +6,7 @@ export type SettingsMutation<TVariables> = {
   isPending: boolean;
   mutate: (
     variables: TVariables,
-    options?: { onError?: (error: unknown) => void }
+    options?: { onError?: (error: unknown) => void; onSettled?: () => void }
   ) => void;
 };
 

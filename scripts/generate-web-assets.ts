@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { deflateSync } from "node:zlib";
+import { crc32, deflateSync } from "node:zlib";
 
 import { brand } from "../packages/ui/src/lib/brand-geometry.ts";
 
@@ -163,27 +163,12 @@ const formats = [
   { height: 800, name: "banner", width: 2400 },
 ];
 const variants: Artwork[] = ["mark", "combination", "wordmark"];
-const crcTable = new Uint32Array(256);
-for (let index = 0; index < 256; index += 1) {
-  let value = index;
-  for (let bit = 0; bit < 8; bit += 1) {
-    // oxlint-disable-next-line eslint/no-bitwise -- PNG CRC32 operates on individual bits.
-    value = value & 1 ? 0xed_b8_83_20 ^ (value >>> 1) : value >>> 1;
-  }
-  crcTable[index] = value;
-}
 const pngChunk = (kind: string, data: Buffer) => {
   const contents = Buffer.concat([Buffer.from(kind), data]);
-  let crc = 0xff_ff_ff_ff;
-  for (const byte of contents) {
-    // oxlint-disable-next-line eslint/no-bitwise -- PNG CRC32 operates on individual bits.
-    crc = (crcTable[(crc ^ byte) & 255] ?? 0) ^ (crc >>> 8);
-  }
   const chunk = Buffer.alloc(data.length + 12);
   chunk.writeUInt32BE(data.length, 0);
   contents.copy(chunk, 4);
-  // oxlint-disable-next-line eslint/no-bitwise -- Final unsigned PNG CRC32 checksum.
-  chunk.writeUInt32BE((crc ^ 0xff_ff_ff_ff) >>> 0, chunk.length - 4);
+  chunk.writeUInt32BE(crc32(contents), chunk.length - 4);
   return chunk;
 };
 

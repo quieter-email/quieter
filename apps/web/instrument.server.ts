@@ -1,54 +1,53 @@
-import * as Sentry from "@sentry/tanstackstart-react";
+import { serverEnv } from "@quieter/env/server";
+import { prepareReportedEvent } from "@quieter/observability";
+import type { CloudflareOptions } from "@sentry/cloudflare";
 
-const isSentryEnabled =
-  (process.env.NODE_ENV !== "development" ||
-    process.env.VITE_QUIETER_LOCAL_TELEMETRY === "true") &&
-  (process.env.SENTRY_DSN ?? "") !== "";
-const gmailReauthorizationMessage =
-  "Google access needs to be reconnected for this mailbox.";
-const mailboxScopeRepairRequired = "MAILBOX_SCOPE_REPAIR_REQUIRED";
+export const createServerSentryOptions = (
+  runtimeEnv: unknown
+): CloudflareOptions => {
+  const bindings =
+    typeof runtimeEnv === "object" && runtimeEnv !== null ? runtimeEnv : {};
+  const boundDsn =
+    "SENTRY_DSN" in bindings &&
+    typeof bindings.SENTRY_DSN === "string" &&
+    bindings.SENTRY_DSN !== ""
+      ? bindings.SENTRY_DSN
+      : undefined;
+  const dsn = boundDsn ?? serverEnv.SENTRY_DSN;
+  const environment =
+    "SENTRY_ENVIRONMENT" in bindings &&
+    typeof bindings.SENTRY_ENVIRONMENT === "string" &&
+    bindings.SENTRY_ENVIRONMENT !== ""
+      ? bindings.SENTRY_ENVIRONMENT
+      : (serverEnv.SENTRY_ENVIRONMENT ??
+        serverEnv.QUIETER_DEPLOYMENT_ENV ??
+        serverEnv.NODE_ENV);
+  const enabled =
+    (serverEnv.NODE_ENV !== "development" ||
+      serverEnv.VITE_QUIETER_LOCAL_TELEMETRY === true) &&
+    dsn !== undefined;
 
-const isErrorLike = (
-  value: unknown
-): value is { code?: string; message?: string; cause?: unknown } =>
-  typeof value === "object" && value !== null;
-
-const isExpectedServerError = (
-  event: Sentry.ErrorEvent,
-  originalException: unknown
-): boolean => {
-  let current: unknown = originalException;
-  const visited = new Set<unknown>();
-
-  while (isErrorLike(current) && !visited.has(current)) {
-    visited.add(current);
-    if (
-      current.code === mailboxScopeRepairRequired ||
-      current.message === gmailReauthorizationMessage
-    ) {
-      return true;
-    }
-    current = current.cause;
-  }
-
-  return (
-    event.message === gmailReauthorizationMessage ||
-    event.exception?.values?.some(
-      ({ value }) => value === gmailReauthorizationMessage
-    ) === true
-  );
-};
-
-if (isSentryEnabled) {
-  Sentry.init({
+  return {
     beforeSend: (event, hint) =>
-      isExpectedServerError(event, hint.originalException) ? null : event,
-    dsn: process.env.SENTRY_DSN,
-    enableLogs: false,
-    environment:
-      process.env.SENTRY_ENVIRONMENT ??
-      process.env.QUIETER_DEPLOYMENT_ENV ??
-      process.env.NODE_ENV,
+      prepareReportedEvent(event, hint.originalException),
+    dataCollection: {
+      cookies: false,
+      databaseQueryData: false,
+      genAI: { inputs: false, outputs: false },
+      graphQL: { document: false, variables: false },
+      httpBodies: [],
+      httpHeaders: { request: false, response: false },
+      stackFrameVariables: false,
+      urlQueryParams: false,
+      userInfo: false,
+    },
+    dsn,
+    enabled,
+    environment,
+    release:
+      typeof __QUIETER_BUILD_ID__ === "string"
+        ? __QUIETER_BUILD_ID__
+        : undefined,
     tracesSampleRate: 0,
-  });
-}
+  };
+};

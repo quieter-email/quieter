@@ -79,8 +79,22 @@ const searchQueryParam = () =>
     z.string().default("")
   );
 
-// react-doctor-disable-next-line react-doctor/tanstack-start-route-property-order -- The repository's TanStack Router lint rule owns this generated route property order.
 export const Route = createFileRoute("/")({
+  validateSearch: zodValidator(
+    z.object({
+      chatId: optionalMinLengthSearchString(),
+      compose: optionalLiteralSearchValue("mailto"),
+      gmailLink: optionalLiteralSearchValue("complete"),
+      mailbox: mailboxSearchCategory(),
+      mailboxId: optionalMinLengthSearchString(),
+      mailto: optionalMinLengthSearchString(),
+      messageId: optionalMinLengthSearchString(),
+      query: searchQueryParam(),
+      threadId: optionalMinLengthSearchString(),
+      view: mailboxWorkspaceViewSearch(),
+    })
+  ),
+  ssr: "data-only",
   loader: async ({ location }) => {
     const user = await getSessionUser();
 
@@ -105,21 +119,6 @@ export const Route = createFileRoute("/")({
     };
   },
   pendingComponent: LoadingPage,
-  ssr: "data-only",
-  validateSearch: zodValidator(
-    z.object({
-      chatId: optionalMinLengthSearchString(),
-      compose: optionalLiteralSearchValue("mailto"),
-      gmailLink: optionalLiteralSearchValue("complete"),
-      mailbox: mailboxSearchCategory(),
-      mailboxId: optionalMinLengthSearchString(),
-      mailto: optionalMinLengthSearchString(),
-      messageId: optionalMinLengthSearchString(),
-      query: searchQueryParam(),
-      threadId: optionalMinLengthSearchString(),
-      view: mailboxWorkspaceViewSearch(),
-    })
-  ),
 });
 
 export type MailboxSearch = ReturnType<typeof Route.useSearch>;

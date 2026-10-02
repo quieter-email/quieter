@@ -246,6 +246,11 @@ export const parseSesFeedbackNotification = (
     ...details,
     provider: "ses",
     providerMessageId,
+    sendOperationId: getStringArray(
+      getObject(mail, "tags"),
+      "quieter_send_id"
+    )[0],
+    sender: getString(mail, "source") ?? undefined,
   };
 };
 

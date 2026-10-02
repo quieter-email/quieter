@@ -36,10 +36,6 @@ import {
   appMotionDuration,
   getAppFlyInMotion,
 } from "#/features/motion/app-motion";
-import { SidebarSimpleHoverSurface } from "#/features/navigation/components/sidebar-surfaces";
-
-const hasText = (value: string | null | undefined): value is string =>
-  typeof value === "string" && value.length > 0;
 
 type MailboxSwitcherMailbox = {
   accessMode?: "private" | "shared" | null;
@@ -103,14 +99,13 @@ const getMailboxSwitcherSummary = (
     mailboxes[0] ??
     null;
   const selectedDisplayName = selectedMailbox?.displayName?.trim() ?? null;
-  const primaryLabel = hasText(selectedDisplayName)
-    ? selectedDisplayName
-    : (selectedMailbox?.emailAddress ?? "no mailbox");
+  const primaryLabel =
+    selectedDisplayName || (selectedMailbox?.emailAddress ?? "no mailbox");
   const secondaryLabel =
     selectedMailbox === null
       ? "No team"
       : [
-          hasText(selectedDisplayName) ? selectedMailbox.emailAddress : null,
+          selectedDisplayName ? selectedMailbox.emailAddress : null,
           selectedMailbox.groupName,
         ]
           .filter((value): value is string => value !== null)
@@ -270,7 +265,10 @@ const MailboxMenuItem = ({
   onSelect,
 }: MailboxMenuItemProps) => (
   <div
-    className="group/item squircle relative isolate rounded-xs"
+    className={cn(
+      "group/item relative isolate rounded-xs squircle hover:bg-muted/60 dark:hover:bg-muted/40",
+      { "bg-muted/60 dark:bg-muted/40": highlighted && !isActive }
+    )}
     data-mailbox-switcher-navigation-row
     onBlur={(event) => {
       if (event.currentTarget.contains(event.relatedTarget)) {
@@ -288,15 +286,12 @@ const MailboxMenuItem = ({
       onHighlightChange(false);
     }}
   >
-    <SidebarSimpleHoverSurface
-      className="rounded-xs"
-      layoutId="mailbox-switcher-row-hover"
-      visible={highlighted && !isActive}
-    />
     <Button
       aria-current={isActive ? "page" : undefined}
       className={cn(
-        "relative z-10 h-auto min-h-12 w-full justify-start rounded-xs px-2.5 py-2 pr-10 text-left active:scale-[0.985]",
+        // oxlint-disable-next-line shadcn/no-restyle -- Switcher items keep their bespoke metrics.
+        "relative z-10 h-auto min-h-12 w-full justify-start rounded-xs px-2.5 py-2 pr-10 text-left hover:bg-transparent active:scale-[0.985]",
+        // oxlint-disable-next-line shadcn/no-restyle -- Active item uses semibold.
         { "font-medium": isActive }
       )}
       data-mailbox-switcher-navigation-item
@@ -382,8 +377,11 @@ const MailboxDefaultButton = ({
   <IconButtonTooltip label={defaultMailboxLabel}>
     <Button
       aria-label={defaultMailboxLabel}
+      // oxlint-disable-next-line shadcn/no-restyle -- Pin toggle keeps its compact reveal-on-hover metrics.
       className={cn("size-5 shrink-0 rounded-md p-0", {
+        // oxlint-disable-next-line shadcn/no-restyle -- Pinned state uses foreground text.
         "text-fg": isDefault,
+        // oxlint-disable-next-line shadcn/no-restyle -- Unpinned state reveals on hover.
         "text-muted-fg/50 opacity-0 group-focus-within/item:opacity-100 group-hover/item:opacity-100 hover:text-fg focus-visible:opacity-100":
           !isDefault,
       })}
@@ -442,7 +440,10 @@ const SortableGroup = ({
         ref={sectionRef}
       >
         <div
-          className="group/header squircle relative isolate flex min-h-7 items-center rounded-xs"
+          className={cn(
+            "group/header relative isolate flex min-h-7 items-center rounded-xs squircle hover:bg-muted/60 dark:hover:bg-muted/40",
+            { "bg-muted/60 dark:bg-muted/40": highlighted }
+          )}
           data-mailbox-switcher-navigation-row
           onBlur={(event) => {
             if (event.currentTarget.contains(event.relatedTarget)) {
@@ -460,14 +461,9 @@ const SortableGroup = ({
             onHighlightChange(false);
           }}
         >
-          <SidebarSimpleHoverSurface
-            className="rounded-xs"
-            layoutId="mailbox-switcher-group-hover"
-            visible={highlighted}
-          />
           <button
             aria-expanded={!collapsed}
-            className="squircle relative z-10 flex min-w-0 flex-1 items-center gap-2 rounded-xs px-2 py-1 text-left focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none"
+            className="relative z-10 flex min-w-0 flex-1 items-center gap-2 rounded-xs px-2 py-1 text-left squircle focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none"
             data-mailbox-switcher-navigation-item
             onClick={() => {
               onToggle(group.id);
@@ -501,6 +497,7 @@ const SortableGroup = ({
             <IconButtonTooltip label={`Open ${group.name} settings`}>
               <LinkButton
                 aria-label={`Open ${group.name} settings`}
+                // oxlint-disable-next-line shadcn/no-restyle -- Reveal-on-hover settings action.
                 className="pointer-events-none relative z-10 mr-0.5 size-7 opacity-0 transition-opacity group-focus-within/header:pointer-events-auto group-focus-within/header:opacity-100 group-hover/header:pointer-events-auto group-hover/header:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100"
                 data-mailbox-switcher-navigation-action
                 search={{
@@ -670,7 +667,6 @@ export const MailboxSwitcherDropdown = ({
     string | null
   >(null);
   const [isOpen, setIsOpen] = useState(false);
-  const [isTriggerHovered, setIsTriggerHovered] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
   const handleArrowNavigation = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -809,22 +805,11 @@ export const MailboxSwitcherDropdown = ({
 
   return (
     <Popover onOpenChange={setIsOpen} open={isOpen}>
-      <div
-        className="squircle relative min-w-0 flex-1 rounded-md"
-        onMouseEnter={() => {
-          setIsTriggerHovered(true);
-        }}
-        onMouseLeave={() => {
-          setIsTriggerHovered(false);
-        }}
-      >
-        <SidebarSimpleHoverSurface
-          layoutId="mailbox-switcher-hover"
-          visible={isTriggerHovered}
-        />
+      <div className="relative min-w-0 flex-1 rounded-md squircle hover:bg-muted/60 dark:hover:bg-muted/40">
         <PopoverTrigger
           aria-label="Switch mailbox"
-          className="squircle relative z-10 w-full min-w-0 rounded-md px-3 py-2 text-left hover:bg-transparent hover:text-fg active:scale-100"
+          // oxlint-disable-next-line shadcn/no-restyle -- Switcher trigger keeps its nav metrics.
+          className="relative z-10 w-full min-w-0 rounded-md px-3 py-2 text-left squircle hover:bg-transparent hover:text-fg active:scale-100"
         >
           <AnimatePresence initial={false} mode="popLayout">
             <m.div
@@ -851,6 +836,7 @@ export const MailboxSwitcherDropdown = ({
 
       <PopoverContent
         align="start"
+        // oxlint-disable-next-line shadcn/no-restyle -- Switcher popover keeps its compact panel.
         className="w-[min(20rem,calc(100vw-2rem))] p-1"
         side={side}
         sideOffset={10}
@@ -950,6 +936,7 @@ export const MailboxSwitcherDropdown = ({
                                             {needsReconnect && (
                                               <button
                                                 aria-label={`Reconnect ${mailbox.emailAddress} through Google`}
+                                                // oxlint-disable-next-line shadcn/no-arbitrary-values -- Explicit transition properties for the reconnect affordance.
                                                 className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-destructive/20 bg-destructive/10 px-1.5 text-caption font-medium text-destructive transition-[color,transform] duration-100 hover:text-destructive/80 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-colors motion-reduce:active:scale-100"
                                                 data-mailbox-switcher-navigation-action
                                                 disabled={isReconnecting}
@@ -1031,7 +1018,8 @@ export const MailboxSwitcherDropdown = ({
                   {!embedded && (
                     <div className="mt-1">
                       <LinkButton
-                        className="squircle h-auto min-h-9 w-full justify-between rounded-xs px-2.5 py-2"
+                        // oxlint-disable-next-line shadcn/no-restyle -- Manage row keeps its compact nav metrics.
+                        className="h-auto min-h-7 w-full justify-between rounded-xs px-2.5 py-1 squircle"
                         data-mailbox-switcher-navigation-item
                         search={{ from: "/", mailboxId: "", tab: "mailboxes" }}
                         size="sm"
@@ -1060,18 +1048,3 @@ export const MailboxSwitcherDropdown = ({
     </Popover>
   );
 };
-
-export const MailboxSettingsRow = ({
-  action,
-  className,
-  mailbox,
-}: MailboxSummaryProps) => (
-  <div
-    className={cn("flex items-center justify-between gap-3 py-3", className)}
-  >
-    <MailboxSummary className="min-w-0 flex-1" mailbox={mailbox} />
-    {action !== null && action !== undefined && action !== false && (
-      <div className="shrink-0">{action}</div>
-    )}
-  </div>
-);

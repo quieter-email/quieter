@@ -14,9 +14,6 @@ type SenderAvatarProps = {
 
 type AvatarStatus = "error" | "loaded";
 
-const hasText = (value: string | null | undefined): value is string =>
-  value !== null && value !== undefined && value !== "";
-
 export const SenderAvatar = ({
   avatarUrlDark,
   avatarUrlLight,
@@ -32,13 +29,11 @@ export const SenderAvatar = ({
     colorMode === "dark"
       ? (avatarUrlDark ?? avatarUrlLight)
       : (avatarUrlLight ?? avatarUrlDark);
-  const activeAvatarStatus = hasText(activeAvatarUrl)
+  const activeAvatarStatus = activeAvatarUrl
     ? avatarStatusByUrl[activeAvatarUrl]
     : undefined;
-  const canRenderAvatar =
-    hasText(activeAvatarUrl) && activeAvatarStatus !== "error";
-  const showFallback =
-    !hasText(activeAvatarUrl) || activeAvatarStatus !== "loaded";
+  const canRenderAvatar = !!activeAvatarUrl && activeAvatarStatus !== "error";
+  const showFallback = !activeAvatarUrl || activeAvatarStatus !== "loaded";
 
   const updateAvatarStatus = (url: string, status: AvatarStatus) => {
     setAvatarStatusByUrl((current) =>
@@ -56,7 +51,7 @@ export const SenderAvatar = ({
     >
       {showFallback && <span className={labelClassName}>{fallbackLabel}</span>}
 
-      {canRenderAvatar && hasText(activeAvatarUrl) ? (
+      {canRenderAvatar && activeAvatarUrl ? (
         <img
           alt=""
           aria-hidden="true"

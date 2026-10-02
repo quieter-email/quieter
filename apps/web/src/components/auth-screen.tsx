@@ -8,7 +8,7 @@ import { FieldLabel } from "@quieter/ui/field";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { getRouteApi } from "@tanstack/react-router";
+import { getRouteApi, Link } from "@tanstack/react-router";
 import { domAnimation, LazyMotion, m } from "motion/react";
 import { useState } from "react";
 import type { ReactNode } from "react";
@@ -30,11 +30,8 @@ const authRouteApi = getRouteApi("/auth");
 const AUTHENTICATION_ERROR_MESSAGE =
   "Unable to authenticate. Please check your credentials or try again.";
 
-const hasText = (value: string | null | undefined): value is string =>
-  value !== null && value !== undefined && value !== "";
-
 const normalizeAuthReturnTo = (returnTo?: string) => {
-  if (!hasText(returnTo)) {
+  if (!returnTo) {
     return "/";
   }
 
@@ -65,19 +62,18 @@ const AuthLastUsedHint = () => (
   <LazyMotion features={domAnimation}>
     <span
       aria-hidden
-      className="squircle pointer-events-none absolute -inset-e-2.5 -top-2.5 isolate overflow-hidden rounded-md p-px shadow-sm *:pointer-events-none"
+      className="pointer-events-none absolute -inset-e-2.5 -top-2.5 isolate overflow-hidden rounded-md p-px shadow-sm squircle *:pointer-events-none"
     >
       <m.span
         animate={{ rotate: 360 }}
         aria-hidden
-        className="absolute top-1/2 left-1/2 aspect-square w-[300%] -translate-1/2"
-        style={{
-          background:
-            "conic-gradient(from 0deg, var(--border) 0deg, var(--border) 270deg, color-mix(in oklch, var(--primary) 100%, var(--border)) 325deg, var(--border) 360deg)",
-        }}
+        className="auth-sheen absolute top-1/2 left-1/2 aspect-square w-[300%] -translate-1/2"
         transition={{ duration: 5, ease: "linear", repeat: Infinity }}
       />
-      <span className="squircle relative block rounded-[inherit] bg-bg-raised px-2 py-1 text-micro font-medium tracking-wide text-muted-fg">
+      <span
+        // oxlint-disable-next-line shadcn/no-arbitrary-values -- Inherits the parent badge radius by design.
+        className="relative block rounded-[inherit] bg-bg-raised px-2 py-1 text-micro font-medium tracking-wide text-muted-fg squircle"
+      >
         Last used
       </span>
     </span>
@@ -305,11 +301,7 @@ const AuthCredentials = ({
             }
 
             return (
-              <Button
-                className="group relative w-full justify-center gap-3"
-                disabled={!canSubmit}
-                type="submit"
-              >
+              <Button disabled={!canSubmit} size="block" type="submit">
                 {authClient.isLastUsedLoginMethod("magic-link") && (
                   <AuthLastUsedHint />
                 )}
@@ -336,11 +328,12 @@ const AuthCredentials = ({
       <div className="mt-6 mb-3 h-px w-full bg-border" />
 
       <Button
-        className="group relative mt-3 w-full cursor-pointer justify-center gap-3"
+        className="mt-3"
         disabled={googleMutation.isPending}
         onClick={() => {
           googleMutation.mutate();
         }}
+        size="block"
         type="button"
         variant="outline"
       >
@@ -356,11 +349,12 @@ const AuthCredentials = ({
       </Button>
 
       <Button
-        className="group relative mt-3 w-full justify-center gap-3"
+        className="mt-3"
         disabled={passkeyMutation.isPending}
         onClick={() => {
           passkeyMutation.mutate();
         }}
+        size="block"
         type="button"
         variant="outline"
       >
@@ -369,7 +363,7 @@ const AuthCredentials = ({
         Continue with passkey
       </Button>
 
-      {hasText(errors.google) ? (
+      {errors.google ? (
         <output
           aria-live="assertive"
           className="mt-4 text-body text-destructive"
@@ -377,7 +371,7 @@ const AuthCredentials = ({
           {errors.google}
         </output>
       ) : null}
-      {hasText(errors.passkey) ? (
+      {errors.passkey ? (
         <output
           aria-live="assertive"
           className="mt-4 text-body text-destructive"
@@ -455,7 +449,7 @@ const PreviewPersonaPicker = ({ navigate }: { navigate: AuthNavigate }) => {
           </Button>
         ))}
       </div>
-      {hasText(error) ? (
+      {error ? (
         <output aria-live="assertive" className="text-body text-destructive">
           {error}
         </output>
@@ -467,16 +461,20 @@ const PreviewPersonaPicker = ({ navigate }: { navigate: AuthNavigate }) => {
 export const AuthScreen = () => {
   const { error, returnTo } = authRouteApi.useSearch();
   const navigate = authRouteApi.useNavigate();
-  const authError = hasText(error) ? AUTHENTICATION_ERROR_MESSAGE : null;
+  const authError = error ? AUTHENTICATION_ERROR_MESSAGE : null;
 
   return (
-    <div className="auth-scene relative isolate grid h-dvh max-h-dvh w-full overflow-hidden md:grid-cols-[3fr_2fr]">
-      {/* Form first, in DOM and on screen: it is the task, the atmosphere is
-          not. The visual sits second and is ordered right on wide viewports. */}
-      <div className="relative z-10 flex size-full min-h-0 items-center justify-center px-6">
-        <div className="w-full max-w-md">
-          <Brand className="mb-8 h-8 w-32 text-fg" variant="combination" />
-          <h1 className="text-title-md font-medium tracking-tight text-fg">
+    <div className="auth-scene dark relative isolate grid h-dvh max-h-dvh w-full overflow-hidden md:grid-cols-[7fr_5fr]">
+      <div className="relative z-10 flex size-full min-h-0 flex-col items-center overflow-y-auto px-6 py-24">
+        <div className="absolute top-6 left-6">
+          <Brand
+            // oxlint-disable-next-line shadcn/no-restyle -- Auth header keeps its brand metrics.
+            className="h-6 w-24 text-fg"
+            variant="combination"
+          />
+        </div>
+        <div className="my-auto w-full max-w-[22rem]">
+          <h1 className="text-center text-title-md font-medium tracking-tight text-fg">
             Continue to Quieter
           </h1>
 
@@ -488,7 +486,7 @@ export const AuthScreen = () => {
 
           <PreviewPersonaPicker navigate={navigate} />
 
-          {hasText(authError) ? (
+          {authError ? (
             <output
               aria-live="assertive"
               className="mt-4 text-body text-destructive"
@@ -496,9 +494,20 @@ export const AuthScreen = () => {
               {authError}
             </output>
           ) : null}
+          <nav
+            aria-label="Legal"
+            className="mt-10 flex justify-center gap-5 text-caption text-muted-fg"
+          >
+            <Link className="underline-offset-4 hover:underline" to="/terms">
+              Terms
+            </Link>
+            <Link className="underline-offset-4 hover:underline" to="/privacy">
+              Privacy
+            </Link>
+          </nav>
         </div>
       </div>
-      <div className="dark relative size-full min-h-0 border-l bg-brand-bg max-md:hidden">
+      <div className="relative size-full min-h-0 border-l border-border/30 bg-auth-visual-bg max-md:hidden">
         <AuthVisual />
       </div>
     </div>

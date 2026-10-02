@@ -1,5 +1,6 @@
 import { parseDraftAnchorFromHeaderReader } from "@quieter/mail/compose/draft-anchor";
 import {
+  decodeMimeHeaderValue,
   extractInlineMessageAttachments,
   extractMessageAttachments,
   extractMessageContent,
@@ -47,9 +48,9 @@ export const parseDraftMessage = (draft: GmailDraft) => {
     inlineImages: extractInlineMessageAttachments(message.payload),
     messageId: message.id,
     recipients: {
-      bcc: readHeader("Bcc"),
-      cc: readHeader("Cc"),
-      to: readHeader("To"),
+      bcc: decodeMimeHeaderValue(readHeader("Bcc")) ?? "",
+      cc: decodeMimeHeaderValue(readHeader("Cc")) ?? "",
+      to: decodeMimeHeaderValue(readHeader("To")) ?? "",
     },
     replyContext: message.threadId
       ? {
@@ -58,6 +59,6 @@ export const parseDraftMessage = (draft: GmailDraft) => {
           threadId: message.threadId,
         }
       : null,
-    subject: readHeader("Subject"),
+    subject: decodeMimeHeaderValue(readHeader("Subject")) ?? "",
   };
 };

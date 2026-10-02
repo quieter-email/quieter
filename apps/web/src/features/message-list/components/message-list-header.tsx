@@ -47,6 +47,7 @@ export const MessageListHeader = ({
             <IconButtonTooltip label="Open sidebar">
               <Button
                 aria-label="Open sidebar"
+                // oxlint-disable-next-line shadcn/require-static-classes -- Shared header control scale lives in message-list-header-surfaces.
                 className={messageListHeaderControlVariants({
                   control: "toolbar",
                 })}

@@ -1,4 +1,4 @@
-use gpui::{App, Hsla, Rgba, WindowAppearance, px};
+use gpui::{App, Background, Hsla, Rgba, WindowAppearance, linear_color_stop, linear_gradient, px};
 use gpui_component::theme::{Theme, ThemeMode};
 
 #[derive(Clone, Copy)]
@@ -41,8 +41,8 @@ impl QuieterTheme {
 
     pub fn dark() -> Self {
         Self {
-            background: oklch(0.125, 0.0, 264.0, 1.0),
-            raised: oklch(0.198, 0.003, 264.0, 1.0),
+            background: oklch(0.155, 0.003, 264.0, 1.0),
+            raised: oklch(0.24, 0.003, 264.0, 1.0),
             surface: oklch(0.235, 0.003, 264.0, 1.0),
             foreground: oklch(1.0, 0.002, 264.0, 1.0),
             muted: oklch(0.74, 0.004, 264.0, 1.0),
@@ -62,6 +62,22 @@ impl QuieterTheme {
         match appearance {
             WindowAppearance::Dark | WindowAppearance::VibrantDark => Self::dark(),
             WindowAppearance::Light | WindowAppearance::VibrantLight => Self::light(),
+        }
+    }
+
+    pub fn panel_background(self) -> Background {
+        if self.is_dark {
+            linear_gradient(
+                180.0,
+                linear_color_stop(oklch(0.188, 0.003, 264.0, 1.0), 0.0),
+                linear_color_stop(oklch(0.161, 0.003, 264.0, 1.0), 1.0),
+            )
+        } else {
+            linear_gradient(
+                180.0,
+                linear_color_stop(oklch(0.975, 0.002, 264.0, 1.0), 0.0),
+                linear_color_stop(oklch(0.945, 0.002, 264.0, 1.0), 1.0),
+            )
         }
     }
 
@@ -106,10 +122,10 @@ pub fn apply_component_theme(palette: QuieterTheme, cx: &mut App) {
     );
     let theme = Theme::global_mut(cx);
     theme.font_family = "Geist".into();
-    theme.font_size = px(16.0);
+    theme.font_size = px(14.0);
     theme.mono_font_family = "Geist Mono".into();
-    theme.radius = px(13.5);
-    theme.radius_lg = px(16.2);
+    theme.radius = px(12.0);
+    theme.radius_lg = px(16.0);
     theme.shadow = true;
     theme.background = palette.background;
     theme.foreground = palette.foreground;

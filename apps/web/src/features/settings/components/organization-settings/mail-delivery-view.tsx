@@ -2,6 +2,7 @@
 
 import { cn } from "@quieter/ui/cn";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
+import { Text } from "@quieter/ui/text";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { useState } from "react";
@@ -11,7 +12,6 @@ import { mailboxesQueryOptions } from "#/lib/mailboxes-query";
 import { orpc } from "#/lib/orpc";
 
 import {
-  SettingsBackButton,
   SettingsCard,
   SettingsLoadingState,
   settingsSurfaceVariants,
@@ -99,7 +99,6 @@ const RangeToggle = ({
 
 export const MailDeliveryView = ({
   canManage,
-  onBack,
   organization,
 }: {
   canManage: boolean;
@@ -268,9 +267,9 @@ export const MailDeliveryView = ({
     metricsSection = null;
   } else if (isMetricsError) {
     metricsSection = (
-      <p className="text-body text-destructive" role="alert">
+      <Text role="alert" tone="destructive">
         Could not load delivery metrics.
-      </p>
+      </Text>
     );
   } else if (isMetricsPending || metrics === undefined) {
     metricsSection = <SettingsLoadingState label="Loading metrics" />;
@@ -315,10 +314,6 @@ export const MailDeliveryView = ({
 
   return (
     <div className="@container space-y-6">
-      <SettingsBackButton onClick={onBack}>
-        {organization.name}
-      </SettingsBackButton>
-
       <div>
         <h1 className="text-body-lg font-semibold text-fg">Delivery</h1>
         <p className="mt-1 max-w-2xl text-body text-muted-fg">

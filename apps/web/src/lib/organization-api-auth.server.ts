@@ -16,13 +16,13 @@ export const getOrganizationApiKeyOrganizationId = async (
   }
 
   const [
-    { organizationApiKeyApi },
+    { auth },
     { ORGANIZATION_API_KEY_CONFIG_ID, organizationHasBillingFeature },
   ] = await Promise.all([
     import("@quieter/auth"),
     import("@quieter/orpc/organization-mail"),
   ]);
-  const verifiedApiKey = await organizationApiKeyApi.verifyApiKey({
+  const verifiedApiKey = await auth.api.verifyApiKey({
     body: {
       configId: ORGANIZATION_API_KEY_CONFIG_ID,
       key: apiKey,

@@ -1,7 +1,5 @@
 import { z } from "zod";
 
-const EMAIL_ADDRESS_PATTERN =
-  /(?<email>[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+)/iu;
 const UNRESOLVED_TEMPLATE_PLACEHOLDER_PATTERN =
   /\{\{quieter:[^{}\n]{1,80}\}\}|data-quieter-template-placeholder=/u;
 
@@ -93,19 +91,16 @@ export const extractMailAddress = (value: string): string => {
     return "";
   }
 
-  const angleMatch = /<(?<address>[^>]+)>/u.exec(normalized);
+  const angleMatch =
+    /^(?:"(?:[^"\\]|\\.)*"|[^<>"\r\n]*)\s*<(?<address>[^<>]+)>$/u.exec(
+      normalized
+    );
   const angleAddress = angleMatch?.groups?.address;
   if (angleAddress !== undefined && angleAddress.length > 0) {
     return normalizeMailAddressValue(angleAddress);
   }
 
-  const emailMatch = EMAIL_ADDRESS_PATTERN.exec(normalized);
-  const emailAddress = emailMatch?.groups?.email;
-  if (emailAddress !== undefined && emailAddress.length > 0) {
-    return normalizeMailAddressValue(emailAddress);
-  }
-
-  return normalized.replaceAll(/^"+|"+$/gu, "");
+  return normalized;
 };
 
 export const getMailAddressKey = (value: string): string => {
@@ -251,25 +246,30 @@ export const composeSendFormValuesSchema =
     }
   });
 
+const mimeHeaderValueSchema = z
+  .string()
+  .max(998)
+  .regex(/^[^\r\n]*$/u, "Header values cannot contain line breaks.");
+
 const composeAttachmentSchema = z.object({
-  contentId: z.string().nullable().optional(),
+  contentId: mimeHeaderValueSchema.nullable().optional(),
   file: z.file().optional(),
   fileName: z.string().optional(),
   gmailAttachmentId: z.string().optional(),
   id: z.string(),
   isInline: z.boolean(),
-  mimeType: z.string(),
+  mimeType: mimeHeaderValueSchema,
   name: z.string(),
   size: z.number(),
 });
 
 const composeInlineImageSchema = z.object({
-  contentId: z.string(),
+  contentId: mimeHeaderValueSchema,
   file: z.file().optional(),
   gmailAttachmentId: z.string().optional(),
   id: z.string(),
   isInline: z.boolean().optional(),
-  mimeType: z.string(),
+  mimeType: mimeHeaderValueSchema,
   name: z.string(),
   size: z.number(),
 });
@@ -289,8 +289,8 @@ export const composeDraftInputSchema = z.object({
   recipients: composeRecipientFieldsSchema,
   replyContext: z
     .object({
-      messageHeaderId: z.string().optional(),
-      references: z.array(z.string()).default([]),
+      messageHeaderId: mimeHeaderValueSchema.optional(),
+      references: z.array(mimeHeaderValueSchema).default([]),
       threadId: z.string(),
     })
     .nullable()

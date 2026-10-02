@@ -13,13 +13,12 @@ import {
   getSessionFromCtx,
 } from "better-auth/api";
 import {
-  bearer,
   createAccessControl,
-  deviceAuthorization,
   magicLink,
   organization,
   lastLoginMethod,
 } from "better-auth/plugins";
+import { bearer } from "better-auth/plugins/bearer";
 import {
   adminAc,
   defaultStatements,
@@ -28,7 +27,9 @@ import {
 } from "better-auth/plugins/organization/access";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 
+import { desktopDeviceAuthorization } from "./desktop-device-authorization";
 import { GOOGLE_AUTH_SCOPES } from "./google-scopes";
+import { lazyAuth } from "./lazy-auth";
 import {
   assertCanDeleteOrganization,
   assertCanLeaveOrganization,
@@ -127,186 +128,183 @@ const organizationApiKeyPlugin = apiKey({
   },
 });
 
-export const auth = betterAuth({
-  account: {
-    updateAccountOnSignIn: true,
-  },
-  advanced: {
-    ipAddress: {
-      ipAddressHeaders: ["cf-connecting-ip"],
+export const auth = lazyAuth(() =>
+  betterAuth({
+    account: {
+      updateAccountOnSignIn: true,
     },
-  },
-  appName,
-  baseURL,
-  database: drizzleAdapter(db, {
-    provider: "pg",
-    schema: tables,
-  }),
-  databaseHooks: {
-    user: {
-      create: {
-        after: async (createdUser) => {
-          await ensureUserOrganizationState(createdUser);
-        },
-        /**
-         * Acceptance is recorded during onboarding, not at account creation,
-         * so the account may exist before it. The onboarding gate keeps the
-         * product unusable until `termsAcceptedAt` is set, and a stale
-         * acceptance cookie from a previous flow still counts.
-         */
-        before: async (createdUser, context) =>
-          await Promise.resolve({
+    advanced: {
+      ipAddress: {
+        ipAddressHeaders: ["cf-connecting-ip"],
+      },
+    },
+    appName,
+    baseURL,
+    database: drizzleAdapter(db, {
+      provider: "pg",
+      schema: tables,
+    }),
+    databaseHooks: {
+      user: {
+        create: {
+          after: async (createdUser) => {
+            await ensureUserOrganizationState(createdUser);
+          },
+          /**
+           * Acceptance is recorded during onboarding, not at account creation,
+           * so the account may exist before it. The onboarding gate keeps the
+           * product unusable until `termsAcceptedAt` is set, and a stale
+           * acceptance cookie from a previous flow still counts.
+           */
+          // oxlint-disable-next-line require-await -- Better Auth requires an asynchronous hook.
+          before: async (createdUser, context) => ({
             data: {
               ...createdUser,
               termsAcceptedAt:
                 readTermsAcceptedAtFromRequest(context?.request) ?? null,
             },
           }),
-      },
-      delete: {
-        before: async (deletedUser) => {
-          await cleanupOrganizationsForDeletedUser(deletedUser.id);
         },
-      },
-    },
-  },
-  emailVerification: {
-    sendVerificationEmail: async ({ user, url }) => {
-      const { sendVerificationEmail } = await import("./email");
-      await sendVerificationEmail({
-        email: user.email,
-        url,
-      });
-    },
-  },
-  hooks: {
-    before: createAuthMiddleware(async (ctx) => {
-      const requiresSession =
-        ctx.path === "/get-session" ||
-        ctx.path.startsWith("/organization") ||
-        ctx.path === "/api-key/create";
-
-      if (!requiresSession) {
-        return;
-      }
-
-      const currentSession = await getSessionFromCtx(ctx, {
-        disableCookieCache: true,
-      }).catch(() => null);
-
-      if (
-        currentSession?.user === null ||
-        currentSession?.user === undefined ||
-        currentSession.session === null ||
-        currentSession.session === undefined
-      ) {
-        return;
-      }
-
-      const organizationId = getOrganizationIdFromBody(ctx.body);
-      if (
-        (ctx.path === "/organization/leave" ||
-          ctx.path === "/organization/delete") &&
-        organizationId !== null &&
-        organizationId !== undefined
-      ) {
-        await handleOrganizationMembershipGuard(
-          ctx.path,
-          currentSession.user,
-          organizationId
-        );
-      }
-
-      if (ctx.path === "/api-key/create") {
-        await handleApiKeyCreateGuard(ctx.body);
-      }
-
-      if (ctx.path === "/get-session") {
-        Object.assign(ctx, {
-          query: {
-            ...ctx.query,
-            disableCookieCache: true,
-          },
-        });
-      }
-    }),
-  },
-  plugins: [
-    bearer(),
-    deviceAuthorization({
-      schema: {},
-      validateClient: (clientId) => clientId === "quieter-desktop",
-      verificationUri: "/device",
-    }),
-    passkey(),
-    organization({
-      ac: organizationAccessControl,
-      hooks: {
-        organization: {
-          beforeDelete: async ({
-            organization: deletedOrganization,
-          }: {
-            organization: { id: string };
-          }) => {
-            await cleanupMailboxesForDeletedOrganization(
-              deletedOrganization.id
-            );
+        delete: {
+          before: async (deletedUser) => {
+            await cleanupOrganizationsForDeletedUser(deletedUser.id);
           },
         },
       },
-      roles: {
-        admin: adminRole,
-        member: memberRole,
-        owner: ownerRole,
-      },
-    }),
-    organizationApiKeyPlugin,
-    magicLink({
-      sendMagicLink: async ({ email, url }) => {
-        const { sendMagicLinkEmail } = await import("./email");
-        await sendMagicLinkEmail({
-          email,
+    },
+    emailVerification: {
+      sendVerificationEmail: async ({ user, url }) => {
+        const { sendVerificationEmail } = await import("./email");
+        await sendVerificationEmail({
+          email: user.email,
           url,
         });
       },
-    }),
-    lastLoginMethod(),
-    // Must be last so Set-Cookie from other plugins is forwarded on TanStack Start.
-    tanstackStartCookies(),
-  ] as const,
-  socialProviders: {
-    google: {
-      clientId: serverEnv.GOOGLE_AUTH_CLIENT_ID ?? "",
-      clientSecret: serverEnv.GOOGLE_AUTH_CLIENT_SECRET ?? "",
-      disableImplicitSignUp: true,
-      scope: [...GOOGLE_AUTH_SCOPES],
     },
-  },
-  trustedOrigins,
-  user: {
-    additionalFields: {
-      onboardingCompletedAt: {
-        input: false,
-        required: false,
-        type: "date",
+    hooks: {
+      before: createAuthMiddleware(async (ctx) => {
+        const requiresSession =
+          ctx.path === "/get-session" ||
+          ctx.path.startsWith("/organization") ||
+          ctx.path === "/api-key/create";
+
+        if (!requiresSession) {
+          return;
+        }
+
+        const currentSession = await getSessionFromCtx(ctx, {
+          disableCookieCache: true,
+        }).catch(() => null);
+
+        if (
+          currentSession?.user === null ||
+          currentSession?.user === undefined ||
+          currentSession.session === null ||
+          currentSession.session === undefined
+        ) {
+          return;
+        }
+
+        const organizationId = getOrganizationIdFromBody(ctx.body);
+        if (
+          (ctx.path === "/organization/leave" ||
+            ctx.path === "/organization/delete") &&
+          organizationId !== null &&
+          organizationId !== undefined
+        ) {
+          await handleOrganizationMembershipGuard(
+            ctx.path,
+            currentSession.user,
+            organizationId
+          );
+        }
+
+        if (ctx.path === "/api-key/create") {
+          await handleApiKeyCreateGuard(ctx.body);
+        }
+
+        if (ctx.path === "/get-session") {
+          Object.assign(ctx, {
+            query: {
+              ...ctx.query,
+              disableCookieCache: true,
+            },
+          });
+        }
+      }),
+    },
+    plugins: [
+      bearer(),
+      desktopDeviceAuthorization,
+      passkey(),
+      organization({
+        ac: organizationAccessControl,
+        hooks: {
+          organization: {
+            beforeDelete: async ({
+              organization: deletedOrganization,
+            }: {
+              organization: { id: string };
+            }) => {
+              await cleanupMailboxesForDeletedOrganization(
+                deletedOrganization.id
+              );
+            },
+          },
+        },
+        roles: {
+          admin: adminRole,
+          member: memberRole,
+          owner: ownerRole,
+        },
+      }),
+      organizationApiKeyPlugin,
+      magicLink({
+        sendMagicLink: async ({ email, url }) => {
+          const { sendMagicLinkEmail } = await import("./email");
+          await sendMagicLinkEmail({
+            email,
+            url,
+          });
+        },
+      }),
+      lastLoginMethod(),
+      // Must be last so Set-Cookie from other plugins is forwarded on TanStack Start.
+      tanstackStartCookies(),
+    ] as const,
+    secret: serverEnv.BETTER_AUTH_SECRET,
+    socialProviders: {
+      google: {
+        clientId: serverEnv.GOOGLE_AUTH_CLIENT_ID ?? "",
+        clientSecret: serverEnv.GOOGLE_AUTH_CLIENT_SECRET ?? "",
+        disableImplicitSignUp: true,
+        scope: [...GOOGLE_AUTH_SCOPES],
       },
-      termsAcceptedAt: {
-        input: false,
-        required: false,
-        type: "date",
+    },
+    trustedOrigins,
+    user: {
+      additionalFields: {
+        onboardingCompletedAt: {
+          input: false,
+          required: false,
+          type: "date",
+        },
+        termsAcceptedAt: {
+          input: false,
+          required: false,
+          type: "date",
+        },
+      },
+      changeEmail: {
+        enabled: true,
+      },
+      deleteUser: {
+        enabled: true,
       },
     },
-    changeEmail: {
-      enabled: true,
-    },
-    deleteUser: {
-      enabled: true,
-    },
-  },
-});
-const organizationApiKeyApi: typeof auth.api &
-  Pick<typeof organizationApiKeyPlugin.endpoints, "verifyApiKey"> = {
-  ...auth.api,
+  })
+);
+const organizationApiKeyApi = {
   verifyApiKey: organizationApiKeyPlugin.endpoints.verifyApiKey,
 };
 export { organizationApiKeyApi };

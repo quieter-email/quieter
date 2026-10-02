@@ -8,8 +8,6 @@ import type {
 } from "@quieter/database/schema";
 import { z } from "zod";
 
-import { hasText } from "../text";
-
 export const DOMAIN_CONNECT_PROVIDER_ID = "quieter.email";
 export const DOMAIN_CONNECT_PUBLIC_KEY_NAME = "_dck1";
 export const DOMAIN_CONNECT_STATE_TTL_MS = 10 * 60 * 1000;
@@ -239,7 +237,7 @@ const readDiscoveryEndpoint = async (
     const answers = await lookupTxt(`_domainconnect.${domain}`);
     for (const answer of answers) {
       const endpoint = normalizeEndpoint(answer.join("").trim());
-      if (hasText(endpoint) && getTrustedProvider(endpoint) !== undefined) {
+      if (endpoint && getTrustedProvider(endpoint) !== undefined) {
         return endpoint;
       }
     }
@@ -257,7 +255,7 @@ const providerNotSupportedDiscovery = (): DomainConnectDiscovery => ({
 });
 
 const parseTemplateVersion = (responseBody: string) => {
-  if (!hasText(responseBody.trim())) {
+  if (!responseBody.trim()) {
     return null;
   }
   try {
@@ -282,7 +280,7 @@ const isTrustedProviderSettings = (
     (providerId) => providerId === settings.providerId
   ) &&
   isTrustedEndpoint(settings.urlAPI, trustedProvider.urlApi) &&
-  hasText(settings.urlSyncUX) &&
+  !!settings.urlSyncUX &&
   isTrustedEndpoint(settings.urlSyncUX, trustedProvider.urlSyncUx);
 
 const isCompatibleTemplateVersion = (
@@ -310,7 +308,7 @@ export const discoverDomainConnect = async (input: {
     input.domain,
     input.lookupTxt ?? resolveTxt
   );
-  if (!hasText(discoveryEndpoint)) {
+  if (!discoveryEndpoint) {
     return providerNotSupportedDiscovery();
   }
 
@@ -344,10 +342,10 @@ export const discoverDomainConnect = async (input: {
 
   const service = domainConnectServices[input.mode];
   const apiUrl = normalizeEndpoint(settings.urlAPI);
-  const syncUrl = hasText(settings.urlSyncUX)
+  const syncUrl = settings.urlSyncUX
     ? normalizeEndpoint(settings.urlSyncUX)
     : null;
-  if (!hasText(apiUrl) || !hasText(syncUrl)) {
+  if (!apiUrl || !syncUrl) {
     return providerNotSupportedDiscovery();
   }
 
@@ -359,7 +357,7 @@ export const discoverDomainConnect = async (input: {
     }
   ).catch(() => null);
   const providerName = settings.providerDisplayName ?? settings.providerName;
-  const controlPanelUrl = hasText(settings.urlControlPanel)
+  const controlPanelUrl = settings.urlControlPanel
     ? settings.urlControlPanel.replaceAll(
         "%domain%",
         encodeURIComponent(input.domain)
@@ -429,7 +427,7 @@ export const getDomainConnectVariables = (
     const token = /^(?<token>[^.]+)\.dkim\.amazonses\.com\.?$/u.exec(
       record.value
     )?.groups?.token;
-    if (!hasText(selector) || selector.includes(".") || !hasText(token)) {
+    if (!selector || selector.includes(".") || !token) {
       throw new ORPCError("BAD_REQUEST", {
         message:
           "The domain signing records are invalid. Refresh the setup before continuing.",
@@ -444,7 +442,7 @@ export const getDomainConnectVariables = (
     /^feedback-smtp\.(?<region>[a-z0-9-]+)\.amazonses\.com\.?$/u.exec(
       getRecord("mail_from_mx").value
     )?.groups?.region;
-  if (!hasText(ownership) || !hasText(region)) {
+  if (!ownership || !region) {
     throw new ORPCError("BAD_REQUEST", {
       message:
         "The domain DNS setup is invalid. Refresh the setup before continuing.",

@@ -78,18 +78,23 @@ const parseCssHue = (value: string): number | undefined => {
     return undefined;
   }
 
-  const number = Number(value);
+  const match =
+    /^(?<number>[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(?<unit>deg|grad|rad|turn)?$/iu.exec(
+      value
+    );
+  const number = Number(match?.groups?.number);
   if (!Number.isFinite(number)) {
     return undefined;
   }
 
-  if (value.endsWith("rad")) {
+  const unit = match?.groups?.unit?.toLowerCase();
+  if (unit === "rad") {
     return number;
   }
-  if (value.endsWith("turn")) {
+  if (unit === "turn") {
     return number * 2 * Math.PI;
   }
-  if (value.endsWith("grad")) {
+  if (unit === "grad") {
     return (number / 200) * Math.PI;
   }
 

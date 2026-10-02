@@ -2,8 +2,10 @@
 
 import { cn } from "@quieter/ui/cn";
 import { Link, useLocation } from "@tanstack/react-router";
+import { domAnimation, LazyMotion } from "motion/react";
 
 import { ConsentPreferencesLink } from "#/components/consent-preferences-link";
+import { Reveal, RevealChild } from "#/features/home/components/reveal";
 
 const publicFooterRoutes = new Set([
   "/home",
@@ -60,12 +62,16 @@ export const SiteFooter = () => {
 
   if (pathname === "/home") {
     return (
-      <footer className="dark bg-black py-6 text-body text-muted-fg">
-        <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-x-6 gap-y-2 px-6 md:px-8">
-          <p>© 2026 quieter</p>
-          <FooterLinks className="max-w-xl md:justify-end" />
-        </div>
-      </footer>
+      <LazyMotion features={domAnimation}>
+        <footer className="home-footer dark">
+          <Reveal className="home-footer-content" stagger={0.18}>
+            <RevealChild as="p">© 2026 quieter</RevealChild>
+            <RevealChild>
+              <FooterLinks className="home-footer-links max-w-xl md:justify-end" />
+            </RevealChild>
+          </Reveal>
+        </footer>
+      </LazyMotion>
     );
   }
 

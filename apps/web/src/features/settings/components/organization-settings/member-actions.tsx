@@ -197,9 +197,9 @@ export const MemberActions = ({
               <Tooltip>
                 <TooltipTrigger className="block" render={<div />}>
                   <DropdownMenuItem
-                    className="text-destructive"
                     closeOnSelect={false}
                     disabled
+                    tone="destructive"
                   >
                     Remove
                   </DropdownMenuItem>
@@ -208,9 +208,9 @@ export const MemberActions = ({
               </Tooltip>
             ) : (
               <DropdownMenuItem
-                className="text-destructive"
                 closeOnSelect
                 onSelect={() => void handleRemoveMember()}
+                tone="destructive"
               >
                 Remove
               </DropdownMenuItem>

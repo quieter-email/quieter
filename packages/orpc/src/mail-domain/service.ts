@@ -17,7 +17,6 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { assertLocalMailDomain } from "../local-managed-mail";
-import { hasText } from "../text";
 import type { MailDomainCheck } from "./records";
 
 type MxLookupRecord = {
@@ -61,7 +60,7 @@ export const defaultDnsLookup = {
 export const getAwsRegion = () => {
   const region = serverEnv.AWS_REGION ?? serverEnv.AWS_DEFAULT_REGION;
 
-  if (!hasText(region)) {
+  if (!region) {
     throw new ORPCError("INTERNAL_SERVER_ERROR", {
       message: "Mail domain setup is temporarily unavailable.",
     });
@@ -289,21 +288,16 @@ const loadSstOutputs = async (): Promise<SstOutputs | null> => {
 
 const getReceiptRuleConfig = async (): Promise<ReceiptRuleConfig> => {
   const outputs = await loadSstOutputs();
-  const bucketName = hasText(serverEnv.MAIL_BUCKET)
-    ? serverEnv.MAIL_BUCKET
-    : outputs?.mailBucket?.trim();
-  const topicArn = hasText(serverEnv.MAIL_RECEIPT_TOPIC_ARN)
-    ? serverEnv.MAIL_RECEIPT_TOPIC_ARN
-    : outputs?.mailReceiptTopicArn?.trim();
-  const roleArn = hasText(serverEnv.MAIL_RECEIPT_ROLE_ARN)
-    ? serverEnv.MAIL_RECEIPT_ROLE_ARN
-    : outputs?.mailReceiptRoleArn?.trim();
-  const ruleSetName = hasText(serverEnv.MAIL_RECEIPT_RULE_SET_NAME)
-    ? serverEnv.MAIL_RECEIPT_RULE_SET_NAME
-    : (outputs?.mailReceiptRuleSetName?.trim() ??
-      DEFAULT_RECEIPT_RULE_SET_NAME);
+  const bucketName = serverEnv.MAIL_BUCKET || outputs?.mailBucket?.trim();
+  const topicArn =
+    serverEnv.MAIL_RECEIPT_TOPIC_ARN || outputs?.mailReceiptTopicArn?.trim();
+  const roleArn =
+    serverEnv.MAIL_RECEIPT_ROLE_ARN || outputs?.mailReceiptRoleArn?.trim();
+  const ruleSetName =
+    serverEnv.MAIL_RECEIPT_RULE_SET_NAME ||
+    (outputs?.mailReceiptRuleSetName?.trim() ?? DEFAULT_RECEIPT_RULE_SET_NAME);
 
-  if (!hasText(bucketName) || !hasText(topicArn) || !hasText(roleArn)) {
+  if (!bucketName || !topicArn || !roleArn) {
     throw new ORPCError("INTERNAL_SERVER_ERROR", {
       message:
         "Mail receipt rule configuration is missing. Set MAIL_BUCKET, MAIL_RECEIPT_TOPIC_ARN, and MAIL_RECEIPT_ROLE_ARN.",
@@ -435,8 +429,14 @@ const checkCnameRecord = async (
   try {
     const resolvedCnames = await dns.resolveCname(toLookupName(record.name));
     found = resolvedCnames.map(normalizeDnsValue);
-  } catch {
-    found = [];
+  } catch (error) {
+    if (
+      !(error instanceof Error) ||
+      !("code" in error) ||
+      (error.code !== "ENODATA" && error.code !== "ENOTFOUND")
+    ) {
+      throw error;
+    }
   }
 
   const ok = found.some((value) => expected.includes(value));
@@ -464,8 +464,14 @@ const checkMxRecord = async (
 
   try {
     foundRecords = await dns.resolveMx(toLookupName(record.name));
-  } catch {
-    foundRecords = [];
+  } catch (error) {
+    if (
+      !(error instanceof Error) ||
+      !("code" in error) ||
+      (error.code !== "ENODATA" && error.code !== "ENOTFOUND")
+    ) {
+      throw error;
+    }
   }
 
   const found = foundRecords.map(
@@ -493,8 +499,14 @@ const checkTxtRecord = async (
   try {
     const resolvedTxtRecords = await dns.resolveTxt(toLookupName(record.name));
     found = resolvedTxtRecords.map((chunks) => chunks.join("").toLowerCase());
-  } catch {
-    found = [];
+  } catch (error) {
+    if (
+      !(error instanceof Error) ||
+      !("code" in error) ||
+      (error.code !== "ENODATA" && error.code !== "ENOTFOUND")
+    ) {
+      throw error;
+    }
   }
 
   let ok = false;

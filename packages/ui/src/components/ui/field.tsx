@@ -17,14 +17,19 @@ const fieldControlVariants = cva(
     },
     variants: {
       chrome: {
+        // Borderless header control; the row tints instead, which keeps the
+        // group reading as one surface while still marking where the caret
+        // is. Shared by the mail and template composers.
+        composer:
+          "h-11 min-w-0 flex-1 rounded-none border-0 bg-transparent px-0 text-body shadow-none read-only:bg-transparent focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-none",
         default:
           "rounded-md border border-border bg-input shadow-sm read-only:cursor-default read-only:bg-input",
         ghost: "border-0 bg-transparent shadow-none read-only:bg-transparent",
       },
       size: {
-        default: "h-9 px-3 text-body",
+        default: "h-8 px-2.5 text-body-sm",
         lg: "h-10 px-4 text-body-lg",
-        sm: "h-8 px-3 text-body-sm",
+        sm: "h-7 px-2 text-body-sm",
       },
     },
   }
@@ -81,7 +86,7 @@ export const FieldControl = ({
     <FieldPrimitive.Control
       className={cn(
         fieldControlVariants({ chrome, size }),
-        chrome === "ghost" && "min-w-0 flex-1",
+        { "min-w-0 flex-1": chrome === "ghost" },
         className
       )}
       {...props}

@@ -4,6 +4,7 @@
 - [Development integration plan](development-integrations.md)
 - [Architecture](architecture.md)
 - [Responsive mail baseline](responsive-mail.md)
+- [Live mail and browser caching](mail-live-updates.md)
 - [Database safety](database-safety.md)
 - [Outbound mail feedback](outbound-mail-feedback.md)
 - [Deployment and operations](deployment.md)

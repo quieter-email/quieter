@@ -147,7 +147,7 @@ describe("Polar webhook receiver", () => {
       expect(response.status).toBe(200);
       expect(mocks.sync).toHaveBeenCalledWith(
         expect.objectContaining({
-          currentPeriodEnd: new Date(subscription.current_period_end),
+          current_period_end: subscription.current_period_end,
           id: "subscription-a",
           status: "active",
         })
@@ -159,6 +159,8 @@ describe("Polar webhook receiver", () => {
     "active",
     "canceled",
     "created",
+    "cycled",
+    "migrated",
     "past_due",
     "paused",
     "resumed",
@@ -185,6 +187,17 @@ describe("Polar webhook receiver", () => {
       )
     );
     expect(response.status).toBe(403);
+    expect(mocks.sync).not.toHaveBeenCalled();
+  });
+
+  test("does not synchronize a signed subscription without billing fields", async () => {
+    const response = await handlePolarWebhookRequest(
+      signedRequest({
+        data: { ...subscription, customer_id: undefined },
+        type: "subscription.updated",
+      })
+    );
+    expect(response.status).toBe(500);
     expect(mocks.sync).not.toHaveBeenCalled();
   });
 

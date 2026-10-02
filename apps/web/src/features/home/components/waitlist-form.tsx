@@ -15,12 +15,11 @@ type WaitlistResponse = {
   status: "created" | "existing";
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
-
 const parseWaitlistResponse = (value: unknown): WaitlistResponse => {
   if (
-    !isRecord(value) ||
+    !(typeof value === "object" && value !== null) ||
+    !("email" in value) ||
+    !("status" in value) ||
     typeof value.email !== "string" ||
     (value.status !== "created" && value.status !== "existing")
   ) {
@@ -106,6 +105,7 @@ export const WaitlistForm = ({
             autoCapitalize="none"
             autoComplete="email"
             autoCorrect="off"
+            // oxlint-disable-next-line shadcn/no-restyle -- Email input leaves room for its trailing status icon.
             className="bg-bg pr-11"
             disabled={iconState === "loading"}
             id={fieldId}

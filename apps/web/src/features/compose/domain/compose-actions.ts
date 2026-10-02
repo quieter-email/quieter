@@ -4,8 +4,8 @@ import {
 } from "@quieter/mail/compose/schema";
 import type { ComposeDraftAnchor } from "@quieter/mail/compose/schema";
 
-import type { MessageListItem } from "#/lib/gmail/gmail";
 import { formatMessageDate, parseSender } from "#/lib/gmail/message-utils";
+import type { MessageListItem } from "#/lib/mail";
 
 import {
   createEmptyComposeDraft,

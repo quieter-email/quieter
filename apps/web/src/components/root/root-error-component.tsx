@@ -1,21 +1,16 @@
 "use client";
 
 import { Button, LinkButton } from "@quieter/ui/button";
-import * as Sentry from "@sentry/tanstackstart-react";
+import * as Sentry from "@sentry/react";
+import type { ErrorComponentProps } from "@tanstack/react-router";
 import { useEffect } from "react";
 
 import { StatusScreen } from "#/components/root/status-screen";
 
-export const RootErrorComponent = ({
-  error,
-  reset,
-}: {
-  error: Error | null;
-  reset: () => void;
-}) => {
+export const RootErrorComponent = ({ error, reset }: ErrorComponentProps) => {
   useEffect(() => {
     // react-doctor-disable-next-line react-doctor/no-event-handler
-    if (!import.meta.env.DEV && error) {
+    if (!import.meta.env.DEV && error !== null) {
       Sentry.captureException(error);
     }
   }, [error]);
@@ -36,11 +31,7 @@ export const RootErrorComponent = ({
           >
             Try again
           </Button>
-          <LinkButton
-            className="border-fg/20 bg-transparent text-fg hover:bg-fg/10"
-            to="/"
-            variant="outline"
-          >
+          <LinkButton to="/" variant="overlay">
             Back to inbox
           </LinkButton>
         </>

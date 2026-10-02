@@ -1,0 +1,1 @@
+ALTER TABLE "mailboxVerificationCode" ADD COLUMN "receivedAt" timestamp;

@@ -29,6 +29,7 @@ describe("structured message search", () => {
         { type: "older_than", value: "30d" },
         { type: "newer_than", value: "1y" },
         { type: "has", value: "attachment" },
+        { type: "is", value: "unread" },
         { type: "is", value: "spam" },
       ],
       text: "",

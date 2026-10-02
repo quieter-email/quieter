@@ -10,18 +10,10 @@ import {
 } from "./preview-personas.shared";
 import type { PreviewPersona } from "./preview-personas.shared";
 
-export {
-  isPreviewPersona,
-  previewPersonaCookieName,
-  previewPersonas,
-} from "./preview-personas.shared";
 export type { PreviewPersona } from "./preview-personas.shared";
 
 const PREVIEW_PERSONA_STORAGE_KEY = "quieter:preview-persona";
 const PREVIEW_PERSONA_CHANGE_EVENT = "quieter:preview-persona-change";
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
 
 export const isPreviewPersonasAvailable = () =>
   import.meta.env.DEV ||
@@ -40,7 +32,10 @@ const readPreviewPersona = () => {
   try {
     const stored: unknown = JSON.parse(value);
     if (
-      isRecord(stored) &&
+      typeof stored === "object" &&
+      stored !== null &&
+      "persona" in stored &&
+      "expiresAt" in stored &&
       isPreviewPersonaValue(stored.persona) &&
       typeof stored.expiresAt === "number" &&
       stored.expiresAt > Date.now()

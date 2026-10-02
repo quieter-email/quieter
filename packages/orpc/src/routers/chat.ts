@@ -1,4 +1,5 @@
 import { ORPCError } from "@orpc/server";
+import { resolveBackgroundModel } from "@quieter/ai/model-config";
 import {
   OPENROUTER_TRANSCRIPTION_MODEL,
   openRouterAudioFormatSchema,
@@ -10,8 +11,13 @@ import { reportError } from "@quieter/observability";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 
+import { assertCanUseAi } from "../ai-access";
 import { loadAiAgentContext, serializeAiAgentContext } from "../ai-memory";
-import { assertAiChatCredits } from "../chat/access";
+import {
+  cancelForegroundExchangeParts,
+  normalizeExpiredChatParts,
+  replaceChatParts,
+} from "../chat/continuation";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import { mailboxIdSchema, protectedProcedure } from "./base";
 
@@ -61,6 +67,130 @@ const getAuthorizedChat = async (
 };
 
 export const chatRouter = {
+  cancel: protectedProcedure
+    .input(
+      z.object({
+        assistantMessageId: z.uuid(),
+        chatId: chatIdSchema,
+        mailboxId: mailboxIdSchema,
+      })
+    )
+    .handler(async ({ context, input }) => {
+      await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      await db
+        .insert(chat)
+        .values({
+          createdAt: new Date(),
+          id: input.chatId,
+          mailboxId: input.mailboxId,
+          title: null,
+          updatedAt: new Date(),
+          userId: context.userId,
+        })
+        .onConflictDoNothing();
+      const [authorizedChat] = await db
+        .select({ id: chat.id })
+        .from(chat)
+        .where(
+          and(
+            eq(chat.id, input.chatId),
+            eq(chat.mailboxId, input.mailboxId),
+            eq(chat.userId, context.userId)
+          )
+        )
+        .limit(1);
+      if (authorizedChat === undefined) {
+        throw new ORPCError("NOT_FOUND", { message: "Chat not found." });
+      }
+      const [message] = await db
+        .select({ parts: chatMessage.parts })
+        .from(chatMessage)
+        .where(
+          and(
+            eq(chatMessage.id, input.assistantMessageId),
+            eq(chatMessage.chatId, input.chatId),
+            eq(chatMessage.userId, context.userId),
+            eq(chatMessage.role, "assistant")
+          )
+        )
+        .limit(1);
+      if (message === undefined) {
+        const [lastMessage] = await db
+          .select({
+            parts: chatMessage.parts,
+            position: chatMessage.position,
+            role: chatMessage.role,
+          })
+          .from(chatMessage)
+          .where(
+            and(
+              eq(chatMessage.chatId, input.chatId),
+              eq(chatMessage.userId, context.userId)
+            )
+          )
+          .orderBy(desc(chatMessage.position))
+          .limit(1);
+        const belongsToExchange = lastMessage?.parts.some((part) => {
+          const { foreground } = part;
+          return (
+            part.type === "data-foreground" &&
+            typeof foreground === "object" &&
+            foreground !== null &&
+            "exchangeId" in foreground &&
+            foreground.exchangeId === input.assistantMessageId
+          );
+        });
+        if (lastMessage === undefined) {
+          const [cancelled] = await db
+            .insert(chatMessage)
+            .values({
+              chatId: input.chatId,
+              createdAt: new Date(),
+              id: input.assistantMessageId,
+              parts: [{ type: "data-foreground-cancelled" }],
+              position: 0,
+              role: "assistant",
+              userId: context.userId,
+            })
+            .onConflictDoNothing()
+            .returning({ id: chatMessage.id });
+          return { cancelled: cancelled !== undefined };
+        }
+        if (lastMessage.role !== "user" || !belongsToExchange) {
+          return { cancelled: false };
+        }
+        const [cancelled] = await db
+          .insert(chatMessage)
+          .values({
+            chatId: input.chatId,
+            createdAt: new Date(),
+            id: input.assistantMessageId,
+            parts: [{ type: "data-foreground-cancelled" }],
+            position: lastMessage.position + 1,
+            role: "assistant",
+            userId: context.userId,
+          })
+          .onConflictDoNothing()
+          .returning({ id: chatMessage.id });
+        return { cancelled: cancelled !== undefined };
+      }
+      const parts = cancelForegroundExchangeParts(message.parts);
+      if (parts === message.parts) {
+        return { cancelled: false };
+      }
+      const cancelled = await replaceChatParts({
+        chatId: input.chatId,
+        expectedParts: message.parts,
+        messageId: input.assistantMessageId,
+        parts,
+        userId: context.userId,
+      });
+      return { cancelled };
+    }),
+
   delete: protectedProcedure
     .input(z.object({ chatId: chatIdSchema, mailboxId: mailboxIdSchema }))
     .handler(async ({ context, input }) => {
@@ -101,11 +231,27 @@ export const chatRouter = {
         .from(chatMessage)
         .where(eq(chatMessage.chatId, authorizedChat.id))
         .orderBy(chatMessage.position);
+      const normalizedMessages = await Promise.all(
+        messages.map(async (message) => {
+          const parts = normalizeExpiredChatParts(message.parts);
+          if (parts === message.parts) {
+            return message;
+          }
+          const normalized = await replaceChatParts({
+            chatId: authorizedChat.id,
+            expectedParts: message.parts,
+            messageId: message.id,
+            parts,
+            userId: context.userId,
+          });
+          return normalized ? { ...message, parts } : message;
+        })
+      );
       return {
         createdAt: authorizedChat.createdAt,
         id: authorizedChat.id,
         mailboxId: authorizedChat.mailboxId,
-        messages,
+        messages: normalizedMessages,
         title: authorizedChat.title,
         updatedAt: authorizedChat.updatedAt,
       };
@@ -172,7 +318,7 @@ export const chatRouter = {
         mailboxId: input.mailboxId,
         userId: context.userId,
       });
-      await assertAiChatCredits({
+      await assertCanUseAi({
         organizationId: accessibleMailbox.organizationId ?? undefined,
         userId: context.userId,
       });
@@ -208,7 +354,7 @@ export const chatRouter = {
       const responseText =
         input.mode === "email"
           ? await (async () => {
-              const { formatTranscribedEmail, TRANSCRIBED_EMAIL_FORMAT_MODEL } =
+              const { formatTranscribedEmail } =
                 await import("@quieter/ai/format-transcribed-email");
               const memoryContext = await loadAiAgentContext({
                 agent: "compose",
@@ -226,7 +372,7 @@ export const chatRouter = {
                       costUsd: usage.costUsd,
                       externalId: `chat-transcription-format:${crypto.randomUUID()}`,
                       mailboxId: input.mailboxId,
-                      model: TRANSCRIBED_EMAIL_FORMAT_MODEL,
+                      model: resolveBackgroundModel(),
                       promptTokens: usage.promptTokens,
                       promptTokensDetails: {
                         cacheWriteTokens: usage.cacheWriteTokens,

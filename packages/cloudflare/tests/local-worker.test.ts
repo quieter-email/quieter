@@ -1,7 +1,43 @@
+import { processGmailPubSubNotification } from "@quieter/orpc/gmail-pubsub";
+import type {
+  findGmailUpdateMailboxIds,
+  listMailUpdateRecipients,
+} from "@quieter/orpc/mail-updates";
 import { env } from "cloudflare:workers";
 import { afterEach, describe, expect, test, vi } from "vite-plus/test";
 
 import localWorker from "../src/local-worker";
+
+vi.mock(import("@quieter/database/client"), async (importOriginal) => {
+  const original = await importOriginal();
+  return {
+    ...original,
+    // oxlint-disable-next-line promise/prefer-await-to-callbacks -- Preserve request-scope DB without opening a connection in ingress tests.
+    withRequestDatabaseClient: async (callback) => await callback(original.db),
+  };
+});
+
+vi.mock(import("@quieter/orpc/gmail-pubsub"), () => ({
+  processGmailPubSubNotification: vi.fn<typeof processGmailPubSubNotification>(
+    async () =>
+      await Promise.resolve({
+        busy: false,
+        ignored: false,
+        mailboxId: "test-mailbox",
+        needsContinuation: false,
+        pubSubMessageId: "local-test-delivery",
+      })
+  ),
+}));
+
+vi.mock(import("@quieter/orpc/mail-updates"), () => ({
+  findGmailUpdateMailboxIds: vi.fn<typeof findGmailUpdateMailboxIds>(
+    async () => await Promise.resolve([])
+  ),
+  listMailUpdateRecipients: vi.fn<typeof listMailUpdateRecipients>(
+    async () => await Promise.resolve([])
+  ),
+}));
 
 const settings = vi.hoisted(() => ({
   QUIETER_DEPLOYMENT_ENV: "local" as "local" | "production",
@@ -54,6 +90,7 @@ const delivery = {
 describe("local background entrypoint", () => {
   afterEach(() => {
     settings.QUIETER_DEPLOYMENT_ENV = "local";
+    vi.clearAllMocks();
     vi.restoreAllMocks();
   });
 
@@ -64,15 +101,12 @@ describe("local background entrypoint", () => {
   ])(
     "rejects missing or incorrect credentials and browser origins",
     async (key, value) => {
-      const send = vi.spyOn(env.GmailPsQueue, "send").mockResolvedValue({
-        metadata: { metrics: { backlogBytes: 0, backlogCount: 0 } },
-      });
       const response = await localWorker.fetch(
         request(JSON.stringify(delivery), [key, value]),
         env
       );
       expect(response.status).toBe(403);
-      expect(send).not.toHaveBeenCalled();
+      expect(processGmailPubSubNotification).not.toHaveBeenCalled();
     }
   );
 
@@ -147,29 +181,52 @@ describe("local background entrypoint", () => {
       JSON.stringify({ ...delivery, message: { data: "!", messageId: "x" } }),
       400,
     ],
-  ])("rejects invalid deliveries without enqueueing", async (body, status) => {
-    const send = vi.spyOn(env.GmailPsQueue, "send").mockResolvedValue({
-      metadata: { metrics: { backlogBytes: 0, backlogCount: 0 } },
-    });
+  ])("rejects invalid deliveries before processing", async (body, status) => {
     const response = await localWorker.fetch(request(body), env);
     expect(response.status).toBe(status);
-    expect(send).not.toHaveBeenCalled();
+    expect(processGmailPubSubNotification).not.toHaveBeenCalled();
   });
 
-  test("enqueues only validated deliveries from its configured subscription", async () => {
-    const send = vi.spyOn(env.GmailPsQueue, "send").mockResolvedValue({
-      metadata: { metrics: { backlogBytes: 0, backlogCount: 0 } },
-    });
+  test("processes validated deliveries before acknowledging", async () => {
     const response = await localWorker.fetch(
       request(JSON.stringify(delivery)),
       env
     );
     expect(response.status).toBe(204);
-    expect(send).toHaveBeenCalledExactlyOnceWith({
+    expect(processGmailPubSubNotification).toHaveBeenCalledExactlyOnceWith({
       emailAddress: "test@example.invalid",
       historyId: "42",
       pubSubMessageId: "local-test-delivery",
-      type: "notification",
     });
+  });
+
+  test("returns 503 while mailbox processing is leased", async () => {
+    vi.mocked(processGmailPubSubNotification).mockResolvedValueOnce({
+      busy: true,
+      ignored: false,
+      mailboxId: "test-mailbox",
+      needsContinuation: false,
+      pubSubMessageId: "local-test-delivery",
+    });
+    const response = await localWorker.fetch(
+      request(JSON.stringify(delivery)),
+      env
+    );
+    expect(response.status).toBe(503);
+  });
+
+  test("leaves a delivery unacknowledged when history has more pages", async () => {
+    vi.mocked(processGmailPubSubNotification).mockResolvedValueOnce({
+      busy: false,
+      ignored: false,
+      mailboxId: "test-mailbox",
+      needsContinuation: true,
+      pubSubMessageId: "local-test-delivery",
+    });
+    const response = await localWorker.fetch(
+      request(JSON.stringify(delivery)),
+      env
+    );
+    expect(response.status).toBe(503);
   });
 });

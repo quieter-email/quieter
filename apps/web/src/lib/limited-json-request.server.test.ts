@@ -6,6 +6,22 @@ import {
 } from "./limited-json-request.server";
 
 describe("limited JSON requests", () => {
+  test("releases the reader when the request stream fails", async () => {
+    const failure = new Error("Connection interrupted");
+    const init = {
+      body: new ReadableStream({
+        start(controller) {
+          controller.error(failure);
+        },
+      }),
+      duplex: "half",
+      method: "POST",
+    };
+    const request = new Request("https://example.test/api/send", init);
+    await expect(readLimitedJsonRequest(request, 1000)).rejects.toBe(failure);
+    expect(request.body?.locked).toBeFalsy();
+  });
+
   test("decodes UTF-8 characters split across chunks at the byte limit", async () => {
     const bytes = new TextEncoder().encode(JSON.stringify({ message: "é" }));
     const init = {

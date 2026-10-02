@@ -14,7 +14,9 @@ This pass was built and exercised on Windows. Use the MSVC Rust toolchain, Visua
 
 Debug builds use `http://localhost:3000`. Release builds use `https://quieter.email`. Override either with `QUIETER_SERVER_URL`. The app crate is optimized in development too, so the native effects do not incur unoptimized rasterization costs.
 
-Desktop sessions are authorized in the browser with a short-lived device code and stored in the operating system credential vault.
+Desktop sessions are authorized in the browser with a device code and stored in the operating system credential vault, separately for each server origin. The app polls the server while you sign in and approve the matching code. It never starts a localhost callback listener or redirects the browser back to the desktop. Browser approval ends on the server's confirmation page.
+
+Each sign-in attempt has a five-minute deadline, including the initial code request. A countdown stays visible while approval is pending. Cancel stops the attempt, and timeout shows “Sign-in took too long. Try again.” Polls respect server slowdown responses and retry temporary connection failures within that deadline; late or canceled sessions are revoked instead of saved. Loopback server URLs are only for the local development backend.
 
 Start browser sign-in immediately, only when there is no saved session:
 
@@ -48,9 +50,11 @@ For a shared web/native dataset, follow the local setup in `docs/development.md`
 
 ## Native rendering
 
-The workspace reproduces the current web geometry: 272px sidebar, 34% list column, 68px two-line rows, Geist typography, named OKLCH colors, and raised panels at 60% opacity over the dither field. SVG brand and icon assets are local copies of the web assets. The native title bar is additional desktop chrome.
+The workspace follows the current web geometry: a 272px sidebar, a list column sized to the larger of 34% or 405px in the two-panel layout, 68px two-line rows, Geist typography, named OKLCH colors, and native panel gradients over the solid canvas. Below 1100px, the list and conversation use one panel with a Back to list control. SVG brand and icon assets are local copies of the web assets. The native title bar is additional desktop chrome.
 
-The workspace dither is rasterized once per size/theme/scale and cached. The sign-in atmosphere ports the web's field math and particle physics to Rust, rendered on a dedicated worker and uploaded as GPUI textures. The atmosphere uses at most 20,000 samples per frame with full-resolution particles, capped at 24 frames per second. Work is suspended when inactive; reduced motion keeps a static frame. This is not a WebView and does not run JavaScript. GPUI 0.2.2 on Windows does not expose a public custom-fragment-shader or backdrop-filter API, so this is native texture compositing, not the same GPU shader pipeline or browser blur implementation. Windows acrylic is enabled, but the workspace base remains opaque to preserve the web colors; panel translucency reveals the internal dither.
+Refreshing a list preserves the open conversation and its position, including a newly read thread in Unread until it is closed. Conversation cards appear newest first and expand independently, with the latest message initially open. The offline preview includes the three-message onboarding conversation. Invalid timestamps are hidden; numeric server timestamps and dates from previous years are formatted for the list.
+
+The dark sign-in scene renders the web-inspired particle field on a dedicated Rust worker and uploads it as a GPUI texture, capped at 24 frames per second. Work is suspended when inactive; reduced motion keeps a static frame. This is native texture compositing rather than the web's GPU shader pipeline. Windows acrylic is enabled, while the workspace canvas and panel gradients remain opaque to preserve the web colors.
 
 Hover transitions use the web's 160ms easing, and view/composer entrances use its 280ms easing. The Help menu provides light/dark appearance and reduced motion. Inbox rendering is virtualized; network requests run off the UI thread.
 

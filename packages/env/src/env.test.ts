@@ -47,6 +47,24 @@ describe("server environment", () => {
     expect(env.QUIETER_DEPLOYMENT_ENV).toBe("production");
   });
 
+  test("falls back to the public Sentry DSN when no server DSN is set", () => {
+    const fallback = createServerEnv({
+      NODE_ENV: "production",
+      VITE_SENTRY_DSN: "https://public@o0.ingest.sentry.io/0",
+    });
+    expect(fallback.SENTRY_DSN).toBe("https://public@o0.ingest.sentry.io/0");
+
+    const explicit = createServerEnv({
+      NODE_ENV: "production",
+      SENTRY_DSN: "https://server@o0.ingest.sentry.io/0",
+      VITE_SENTRY_DSN: "https://public@o0.ingest.sentry.io/0",
+    });
+    expect(explicit.SENTRY_DSN).toBe("https://server@o0.ingest.sentry.io/0");
+
+    const unset = createServerEnv({ NODE_ENV: "production" });
+    expect(unset.SENTRY_DSN).toBeUndefined();
+  });
+
   test("rejects non-HTTP service URLs", () => {
     expect(() =>
       createServerEnv({
@@ -102,7 +120,7 @@ describe("SST environment", () => {
 
   test("requires non-secret service configuration in production", () => {
     expect(() => createSstConfigEnv({ production: true }, {})).toThrow(
-      "Gmail Pub/Sub configuration is required in production"
+      /configuration is required in production/u
     );
   });
 
@@ -112,7 +130,7 @@ describe("SST environment", () => {
         { production: false },
         { GMAIL_PUBSUB_TOPIC: "projects/example/topics/gmail" }
       )
-    ).toThrow("Gmail Pub/Sub configuration is incomplete");
+    ).toThrow(/configuration is incomplete/u);
   });
 
   test("accepts complete production service configuration", () => {

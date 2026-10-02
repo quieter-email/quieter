@@ -277,6 +277,3 @@ export const KEYBOARD_SHORTCUTS: readonly KeyboardShortcut[] = [
     scope: "compose",
   },
 ] as const;
-
-export const getShortcutKeys = (shortcut: KeyboardShortcut) =>
-  "sequence" in shortcut ? shortcut.sequence : shortcut.keys;

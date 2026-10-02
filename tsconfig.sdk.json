@@ -1,0 +1,8 @@
+{
+  "extends": "./packages/sdk/tsconfig.json",
+  "include": [
+    "packages/sdk/src/**/*.ts",
+    "packages/mail/src/send.ts",
+    "packages/mail/src/delivery.ts"
+  ]
+}

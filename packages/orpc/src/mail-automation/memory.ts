@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import { db } from "@quieter/database/client";
 import {
   gmailLabel,
-  gmailUsefulDetailFeedback,
   mailAutoLabelFeedback,
   managedMailLabel,
   managedMailMessage,
@@ -13,7 +12,7 @@ import type {
   MailAutoLabelFeedbackSignal,
   PersistedMailboxProvider,
 } from "@quieter/database/schema";
-import { MAILBOX_LABELS } from "@quieter/gmail";
+import { MAILBOX_LABELS } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
 import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
 
@@ -21,7 +20,6 @@ import {
   recordAndRefreshAiMemory,
   replaceMailboxFeedbackMemories,
 } from "../ai-memory";
-import { hasText } from "../text";
 
 const SYSTEM_LABEL_IDS = new Set<string>(Object.values(MAILBOX_LABELS));
 
@@ -36,18 +34,6 @@ export type AutoLabelMemoryRule = {
 export type AutoLabelMemoryProfile = {
   kind: "auto_label";
   rules: AutoLabelMemoryRule[];
-};
-
-export type UsefulDetailMemoryRule = {
-  count: number;
-  kind: string;
-  policy: "prefer" | "suppress";
-  source: string | null;
-};
-
-export type UsefulDetailMemoryProfile = {
-  kind: "useful_detail";
-  rules: UsefulDetailMemoryRule[];
 };
 
 export const getSenderSource = (from?: string | null) => {
@@ -195,114 +181,25 @@ export const refreshAutoLabelMemoryProfile = async (
       const label = rule.labelName ?? rule.labelId;
       const action =
         rule.policy === "prefer" ? "Prefer applying" : "Avoid applying";
-      const scope = hasText(rule.source)
+      const scope = rule.source
         ? ` to messages from ${rule.source}`
         : " when it clearly matches";
       return {
         confidence: Math.min(0.98, 0.65 + rule.count * 0.08),
         content: `${action} the “${label}” label${scope}; learned from ${rule.count} manual correction${rule.count === 1 ? "" : "s"}.`,
-        importance: hasText(rule.source) ? 4 : 3,
+        importance: rule.source ? 4 : 3,
         key: `${toMemoryKeyPart(rule.labelId)}:${toMemoryKeyPart(rule.source ?? "all")}`,
         metadata: {
           labelId: rule.labelId,
           policy: rule.policy,
         },
         reinforcementCount: rule.count,
-        sourceDomains: hasText(rule.source) ? [rule.source] : [],
-        summary: `${rule.policy === "prefer" ? "Prefers" : "Avoids"} “${label}”${hasText(rule.source) ? ` for ${rule.source}` : ""}`,
+        sourceDomains: rule.source ? [rule.source] : [],
+        summary: `${rule.policy === "prefer" ? "Prefers" : "Avoids"} “${label}”${rule.source ? ` for ${rule.source}` : ""}`,
         topics: [
           "email-labeling",
           label,
-          ...(hasText(rule.source) ? [rule.source] : []),
-        ],
-      };
-    }),
-    userId,
-  });
-};
-
-export const buildUsefulDetailMemoryProfile = (
-  rows: {
-    kind: string;
-    notUseful: number;
-    source: string | null;
-    useful: number;
-  }[]
-): UsefulDetailMemoryProfile => {
-  const rules = rows
-    .map((row) => {
-      const suppress = row.notUseful > row.useful;
-      const ruleCount = suppress ? row.notUseful : row.useful;
-
-      if (ruleCount < 2 && row.source === null) {
-        return null;
-      }
-      if (ruleCount === 0 || row.notUseful === row.useful) {
-        return null;
-      }
-
-      return {
-        count: ruleCount,
-        kind: row.kind,
-        policy: suppress ? "suppress" : "prefer",
-        source: row.source,
-      } satisfies UsefulDetailMemoryRule;
-    })
-    .filter((rule): rule is UsefulDetailMemoryRule => rule !== null)
-    .toSorted((left, right) => {
-      const sourceRank =
-        Number(right.source !== null) - Number(left.source !== null);
-      return (
-        sourceRank ||
-        right.count - left.count ||
-        left.kind.localeCompare(right.kind)
-      );
-    });
-
-  return { kind: "useful_detail", rules };
-};
-
-export const refreshUsefulDetailMemoryProfile = async (
-  mailboxId: string,
-  userId: string
-) => {
-  const rows = await db
-    .select({
-      kind: gmailUsefulDetailFeedback.kind,
-      notUseful: sql<number>`count(*) filter (where ${gmailUsefulDetailFeedback.signal} = 'not_useful')`,
-      source: gmailUsefulDetailFeedback.source,
-      useful: sql<number>`count(*) filter (where ${gmailUsefulDetailFeedback.signal} = 'useful')`,
-    })
-    .from(gmailUsefulDetailFeedback)
-    .where(eq(gmailUsefulDetailFeedback.mailboxId, mailboxId))
-    .groupBy(gmailUsefulDetailFeedback.kind, gmailUsefulDetailFeedback.source)
-    .orderBy(desc(count()));
-
-  const profile = buildUsefulDetailMemoryProfile(rows);
-  await replaceMailboxFeedbackMemories({
-    agent: "useful_detail",
-    mailboxId,
-    memories: profile.rules.map((rule) => {
-      const action = rule.policy === "prefer" ? "Treat" : "Do not treat";
-      const scope = hasText(rule.source)
-        ? ` from ${rule.source}`
-        : " across this mailbox";
-      return {
-        confidence: Math.min(0.98, 0.65 + rule.count * 0.08),
-        content: `${action} ${rule.kind.replaceAll("_", " ")} details${scope} as useful; learned from ${rule.count} rating${rule.count === 1 ? "" : "s"}.`,
-        importance: hasText(rule.source) ? 4 : 3,
-        key: `${toMemoryKeyPart(rule.kind)}:${toMemoryKeyPart(rule.source ?? "all")}`,
-        metadata: {
-          detailKind: rule.kind,
-          policy: rule.policy,
-        },
-        reinforcementCount: rule.count,
-        sourceDomains: hasText(rule.source) ? [rule.source] : [],
-        summary: `${rule.policy === "prefer" ? "Prefers" : "Suppresses"} ${rule.kind.replaceAll("_", " ")}${hasText(rule.source) ? ` from ${rule.source}` : ""}`,
-        topics: [
-          "useful-details",
-          rule.kind,
-          ...(hasText(rule.source) ? [rule.source] : []),
+          ...(rule.source ? [rule.source] : []),
         ],
       };
     }),
@@ -459,7 +356,7 @@ export const recordMailAutoLabelFeedback = async (input: {
         )
       ),
     ]
-      .filter((source): source is string => hasText(source))
+      .filter((source): source is string => !!source)
       .join(", ")
       .slice(0, 600),
     userId: input.userId,

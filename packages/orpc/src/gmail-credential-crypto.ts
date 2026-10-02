@@ -5,8 +5,6 @@ import {
   randomBytes,
 } from "node:crypto";
 
-import { hasText } from "./text";
-
 type GmailCredentialEncryptionKeys = {
   currentKey?: string;
   legacyKey: string;
@@ -19,7 +17,7 @@ export const encryptGmailCredentialSecret = (
   value: string,
   keys: GmailCredentialEncryptionKeys
 ) => {
-  const version = hasText(keys.currentKey) ? "v2" : "v1";
+  const version = keys.currentKey ? "v2" : "v1";
   const iv = randomBytes(12);
   const cipher = createCipheriv(
     "aes-256-gcm",
@@ -56,7 +54,7 @@ export const decryptGmailCredentialSecret = (
   }
 
   const secret = version === "v2" ? keys.currentKey : keys.legacyKey;
-  if (!hasText(secret)) {
+  if (!secret) {
     throw new Error("Current Gmail credential encryption key is missing.");
   }
 

@@ -34,6 +34,8 @@ TanStack Start application containing:
 - TanStack Query configuration and persisted caches
 - consent-gated browser analytics
 
+Mailbox organization separates state, rule actions and editors. Message cards and inspection, domain DNS and mail routing, and connector settings live beside their page controllers in feature-owned modules. Shared types describe their boundaries without importing page rendering at runtime.
+
 API handlers remain under `apps/web/src/routes/api/**`. Request-scoped auth and SSR data use route loaders or TanStack Start server functions.
 
 ### `packages/orpc`
@@ -50,26 +52,39 @@ The application and database boundary. It owns:
 
 No application module should bypass this package to query PostgreSQL.
 
+The mail router contains procedure registration, transport schemas and route metadata. Services under `packages/orpc/src/mail/` own queries, compose, labels and mutations, including provider selection and authorization. Shared Gmail request handling lives in `gmail-request.ts`; service modules do not import router bootstrapping. Feedback writes finish before request completion, with Gmail metadata reads processed in batches of four.
+
+`vp run check:boundaries` checks imports with Oxc, including dynamic imports, re-exports, and type imports. It enforces package/application separation, application database and UI boundaries, and the AWS oRPC entrypoint allowlist. Computed dynamic imports are rejected because their targets cannot be checked. The only application database import allowed is `withRequestDatabaseClient` in the request bootstrap. CI runs this check alongside the AWS and Cloudflare handler bundles.
+
 ### `packages/database`
 
 Owns the Drizzle schema, client, migrations, schema-drift checks, and migration safety tooling.
 
+Every Worker invocation uses `withRequestDatabaseClient`; unscoped Worker database access throws. The same client remains available to nested calls and streamed response work. Cloudflare closes invocation sockets automatically, including Hyperdrive connections. Node processes reuse a bounded pool, with one connection in local development and five elsewhere; idle connections close after 20 seconds. See Cloudflare's [connection lifecycle](https://developers.cloudflare.com/hyperdrive/concepts/connection-lifecycle/) and documented [runtime detection](https://developers.cloudflare.com/workers/runtime-apis/web-standards/#navigatoruseragent).
+
+Interactive write requests use database-backed rate limits. The per-minute mail maintenance worker deletes up to 5,000 expired IP buckets per run, using the expiry index and skipping locked rows. The local `mail-recovery` trigger performs the same cleanup. During database failure, each isolate retains at most 1,000 fallback identities and rejects new identities at capacity until entries expire. Signed billing webhooks bypass the interactive login bucket and remain subject to their own signature validation. Read-only requests do not advertise a measured remaining allowance.
+
 ### `packages/mail` and `packages/gmail`
 
-`packages/mail` contains provider-independent mail behavior: schemas, MIME construction, raw parsing, content extraction, draft anchors, and avatar derivation.
+`packages/mail` owns shared message, attachment, label, category, and pagination contracts, along with MIME construction, raw parsing, content extraction, draft anchors, and avatar derivation. Both provider adapters return these contracts. The browser's mail helpers live in `apps/web/src/lib/mail.ts`; the web and AI packages have no direct Gmail-package dependency.
+
+Managed rule conditions store stable label IDs. Definition writes hold shared locks on referenced labels until commit. Renaming or deleting a label locks it before repairing legacy name references and updating dependent definitions in the same transaction. Deletion disables affected rules without removing predicates or actions; the organizer explains the missing reference, and saving a repaired definition clears that reason. The nullable rule reason column is an additive migration and must precede the application release.
 
 `packages/gmail` contains Gmail REST calls and Gmail-specific draft parsing. It does not own encrypted credential storage or token refresh.
+
+The public SDK derives send inputs from `@quieter/mail/send` and validates responses with the shared delivery schemas. Its build bundles these contracts and permits only Zod and the optional React dependencies in emitted imports. `tsconfig.sdk.json` gives declaration generation a workspace-wide root so the published types include the shared contracts. React rendering lives in `quieter/react`; the core package has no React requirement.
 
 ### Other Packages
 
 - `packages/auth`: Better Auth setup, identity scopes, organizations, API keys, passkeys, and auth mail
 - `packages/ui`: reusable Base UI-backed components
-- `packages/ai`: model selection, prompts, classification, titles, and streamed generation
+- `packages/ai`: model configuration with provider fallbacks, prompts, classification, titles, and streamed generation
 - `packages/aws`: SES mail ingestion, delivery feedback, and AWS-specific handlers
-- `packages/cloudflare`: Gmail notification ingress, queued synchronization, scheduled maintenance, and mailbox live synchronization
+- `packages/cloudflare`: Gmail notification ingress and direct synchronization, scheduled maintenance, and mailbox live synchronization
 - `packages/billing`: plans, Polar checkout/webhooks, entitlements, and usage pricing
 - `packages/env`: typed environment schemas and normalization
-- `packages/deployment`: deployment helper scripts
+- `scripts`: SST deployment, local startup, environment checks, and release helpers
+- `packages/deployment`: residual SST-generated binding declarations and their TypeScript configuration; no runtime or deployment scripts
 
 ## Identity and Mailboxes
 
@@ -100,12 +115,28 @@ Unfiltered mailbox views can apply Gmail history updates. Filtered search and Dr
 For Pro mailboxes:
 
 1. Gmail sends an authenticated notification to the Cloudflare ingress.
-2. The ingress validates the Google identity, notifies the mailbox Durable Object, and enqueues a mailbox job in Cloudflare Queues.
-3. A Cloudflare queue consumer reconciles Gmail history through Hyperdrive and updates persisted state.
+2. The ingress validates the Google identity and processes the mailbox history before acknowledging Pub/Sub. A busy mailbox, transient failure, or remaining history page returns a retryable response to Google so backlog work continues.
+3. Up to four messages from a history page are processed concurrently; mailbox leases and history cursors keep progress ordered. The worker then sends browser refresh hints.
 4. Focused browser tabs receive mailbox-dirty signals from the mailbox Durable Object and refresh immediately.
-5. Scheduled maintenance on Cloudflare selects only mailboxes with due work: watch renewal (heartbeat plus expiry lookahead), first-time setup, or stale reconciliation for mailboxes with enabled automations.
+5. Scheduled Gmail maintenance processes due mailboxes with bounded concurrency for watch renewal and catch-up. The minute mail-maintenance worker retries managed code extraction and removes old processing records that contain no code.
 
 The notification is a wake-up signal, not the source of truth.
+
+Busy deliveries retain a retryable response. The active lease holder may have fetched its history page before the later notification arrived; acknowledging the busy notification would not guarantee that its changes were processed. There is no durable pending-history handoff yet. This accepts the subscription-wide push-backoff tradeoff documented by [Google Pub/Sub](https://docs.cloud.google.com/pubsub/docs/push) to preserve prompt retries for those changes.
+
+### Incoming mail AI
+
+Verification-code screening starts as soon as the message is available, alongside labeling. Gmail messages share one server-side fetch between both tasks; managed messages apply inherited labels and inbox rules after their ingestion transaction commits, then start screening alongside AI labeling. Jev first estimates whether the message could contain a temporary access code. A permissive probability threshold of 0.2 sends possible matches to `google/gemini-2.5-flash-lite` for structured extraction; confident negatives skip extraction. Screening errors or its three-second deadline fall through to extraction. Extraction has a short response, a ten-second deadline, and no SDK or empty-response retries. Both decisions are AI-based; server validation normalizes grouped whitespace and checks that the extracted answer appears in the message, using visible text for HTML. Incoming messages older than two hours, sent mail, drafts, spam, and trash are excluded.
+
+Codes are encrypted at rest, returned only after mailbox authorization, and displayed as small code-only copy controls in message rows and above the matching opened message body. A code's estimated expiry remains internal metadata and does not hide or delete it. Codes are excluded from persistent browser caching. Inbox queries return only the latest code per thread by source-message received time, with processing time as a fallback for legacy rows, while opened messages request their own codes in batches of at most 100; each response is capped at 100 codes. Screen and extraction usage are combined for billing, including messages the screen rules out. A saved code publishes a mailbox update before usage reporting finishes. Failed attempts persist a failure count and next-attempt time with exponential backoff; Gmail and managed-mail selectors and claims skip attempts until they are due. First attempts remain immediate. Existing maintenance retries failed extraction and billing and removes processing records without a code after thirty days, after accounting for reported usage.
+
+Screening reduces cost when enough messages are ruled out, while adding a serial decision request to code-containing messages. At the published rates, an illustrative 1,000-input-token message with 20 extraction-output tokens costs $0.000108 to extract directly, versus $0.000042 plus the extraction cost for messages that pass. At a 10% pass rate, that is approximately 51% cheaper before prompt-length differences, caching, and fallback routing. Screening can miss codes; the threshold favors recall, and extraction remains the fallback for screening failures.
+
+OpenRouter lists [Gemini 2.5 Flash Lite retirement on October 20, 2026](https://openrouter.ai/google/gemini-2.5-flash-lite). Its first configured fallback is Gemini 3.1 Flash Lite, followed by the existing provider failovers; zero-data-retention routing applies to extraction and its fallbacks.
+
+Labels use the pinned `typesafe/jev-1.13` model through OpenRouter's Decisions API, with an independent confidence decision for each label. TypeSafe's direct API and OpenRouter both list $0.042 per million input tokens with free output, so the existing OpenRouter credentials are reused. See the [TypeSafe models](https://docs.typesafe.ai/models) and [OpenRouter integration](https://openrouter.ai/blog/tutorials/how-to-use-jev/).
+
+The useful-details feature, cards, settings, and extraction are removed. Legacy useful-detail RPCs and mailbox response fields remain for one release so existing browser tabs can finish their requests during rollout; remove them in a later contract release. Historical tables and billing categories remain for the rollback window. Deploy the additive verification-code migrations before the application and background workers. Drain the old Gmail queue and prevent its previous consumer from resuming before retiring its infrastructure. The Google push subscription must allow enough acknowledgement time for direct history processing; use its supported 600-second maximum. Mailbox leases still serialize history progress while different mailboxes and messages process concurrently.
 
 ## Managed Mail
 
@@ -122,19 +153,24 @@ Outbound:
 
 - Managed compose and replies send through server-side mail logic.
 - `POST /api/v1/send` authenticates an organization API key and requires a verified sender domain.
+- `POST /api/v1/mcp` serves the transactional-mail MCP tool `send_email` over Streamable HTTP with the same organization API key, verified-domain, suppression, idempotency, and usage rules as the REST send endpoint. It exposes sending only: no mailbox, content, or settings access.
 - Better Auth email hooks call the same endpoint.
 
 ## Chat
 
-Chats are mailbox-scoped. There is no cross-request resumability: each POST carries one turn. A turn that fails leaves no assistant row behind; stopping or disconnecting mid-stream persists whatever was already generated.
+The assistant floats over the mail workspace. A square launcher opens it, and conversation history stays in its header dropdown. `chatId` is independent of the selected mail route. Conversations and titles persist, but an interrupted exchange never resumes after reload.
 
-1. The AI SDK `useChat` hook posts to `POST /api/chat`, sending the mailbox context, selected model, and only the newest client message.
-2. The server authorizes the mailbox-scoped thread, persists the user message, and rebuilds the canonical transcript from PostgreSQL; client-sent history is never trusted.
-3. The AI SDK runs the model with Gmail, memory, Linear, calendar, and compose tools and streams its UI message protocol directly to the browser.
-4. Tools that change state (`modify_mail`, `memory`, `linear_write`, `create_google_calendar_event`) require explicit user approval through the AI SDK's tool approval flow; a turn that ends on an approval prompt is persisted with its pending parts, so the decision can be validated server-side against what is actually pending.
-5. `compose_email` is resolved entirely in the browser: the model proposes a draft, the user edits it in an inline composer, and the chosen Send/Save-draft/Decline outcome flows back as a client tool result.
-6. Cancelling before any content arrived leaves no row. Once content has streamed, stopping the answer or disconnecting persists the partial assistant row when the stream ends, so reloads show what was generated. Failed generations persist nothing; their truncated output is indistinguishable from a broken answer.
-7. Successful completion also refreshes billing usage and the chat title in the background. There is no streaming status column, generation lock, or cross-device polling: the composer disables itself locally while a request is in flight.
+The AI SDK `useChat` hook sends only the newest message and a foreground snapshot to `POST /api/chat`. A TanStack Store coordinates the active generation, a two-minute deadline, and a maximum of twelve HTTP legs. The store does not duplicate route, query, or compose form state; client tools capture snapshots from the controllers that own that state. The shared `@quieter/ai/chat-tools` schemas define client navigation/compose commands and server save/send operations.
+
+Client tools read the workspace, navigate the real router, or open/edit the real compose controller. Draft revisions reject stale edits. Agent edits do not trigger provider autosave. Server tools retain mailbox ownership checks, credentials, mail operations, and send idempotency. They bind save and send requests to the latest completed workspace read for the active mailbox and generation. Ask mode reviews persistent changes; Automatic permits routine mail changes and draft saves. Sending always requires review of the exact current draft. Foreground continuations use JSON, so drafts with attachments or inline images must be saved or sent from the composer, where the browser still holds the file payloads. Other connector and memory writes keep their explicit approvals.
+
+Each exchange atomically reserves its assistant message ID before streaming or tool effects and has a stored lease binding its complete snapshot, policy, capabilities, browser tab, and expiry. Continuations load the server transcript and atomically resolve only the recorded pending calls. Browser tool results provide context; they never prove that mail was sent. The authenticated browser supplies the policy and unsaved draft snapshots. Exact snapshot matching prevents model/payload drift, not forgery by a compromised browser; mailbox ownership and provider authorization remain server-enforced. Cancellation writes a terminal marker, including when Stop arrives before the initial chat insertion. Server mail writes check cancellation and expiry immediately before executing. A provider request already accepted cannot be recalled by Stop.
+
+OpenRouter can return a rate-limit or upstream failure inside an HTTP 200 event stream. The provider adapter converts those payloads to SDK API errors and checks the stream before its first generated part. Transient startup failures use the SDK's bounded retries and backoff. Once text, reasoning, or a tool call starts, the stream is never replayed automatically. Exhausted retries retain the underlying status for user feedback and server error reporting.
+
+Stop, minimizing, switching conversation/mailbox, browser Back, hiding the tab, and trusted editing or navigation in the controlled workspace revoke the client generation. Late client results are discarded. Persisted unfinished tools become terminal results before future transcript conversion. Successful turns refresh history and usage. Title generation is awaited during response completion, with a first-prompt fallback. There is no durable run scheduler, stream resumption, or legacy regeneration path.
+
+For local verification, start `vp dev apps/web --port 3001 --configLoader native` from an isolated checkout when port 3000 is already occupied. Use the existing preview personas for layout and deterministic tool/continuation tests for the agent flow. Live provider writes require the dedicated development mailbox described in the local-development rules; previewing the panel does not require sending mail.
 
 ## Consent and Observability
 
@@ -159,7 +195,13 @@ For private production testing, a 100% subscription discount must cover every in
 
 ## Infrastructure Ownership
 
-SST provisions both providers. AWS owns the SES receipt bucket, receipt topic and role, and mail-processing functions. Cloudflare owns Gmail notification ingress, queueing, scheduled maintenance, and live-sync Durable Objects.
+Managed mail rules store the matching decision, definition, and completed actions before forwarding. Forwarding uses the send coordinator outside the rule transaction, with a stable identity per action. Ingestion retries resume the stored definition even after a rule edit; explicitly applying an edited rule to existing messages creates a new revision. Historical attempts with uncertain delivery require review.
+
+Historical rule runs advance through the per-minute mail maintenance worker, independently of status polling. Each job stores its definition and checks its lease and running status before updating progress. Cancellation prevents further messages and progress writes; an already executing message can finish. A failure retains the cursor and diagnostic. Running the same rule revision again resumes the failed job. Local execution uses `vp run dev:trigger mail-recovery`.
+
+Apply the consolidated migration `20260907233131_melodic_blacklash` before releasing these changes. Drain older ingestion and rule workers before enabling the new execution path because they do not understand the stored action decisions. Keep the historical application table during this transition.
+
+SST provisions both providers. AWS owns the SES receipt bucket, receipt topic and role, and mail-processing functions. Cloudflare owns Gmail notification processing, scheduled maintenance, and live-sync Durable Objects.
 
 Cloudflare Workers hosts the web application. SST builds and publishes production and binds deployment outputs directly.
 
@@ -172,9 +214,23 @@ The root [`sst.config.ts`](../sst.config.ts) owns only app-wide SST settings and
 - `secrets.ts` declares stage-aware `sst.Secret` resources and Cloudflare secret bindings.
 - `database.ts` owns the Cloudflare Hyperdrive binding.
 - `web.ts` owns the TanStack Start Worker and its common bindings.
-- Mailbox actions execute asynchronously from their persisted runs: Gmail sync and maintenance dispatch new runs straight onto Cloudflare Queues, while a per-minute fallback cron atomically claims SES-ingested, lost, or crashed runs before dispatching them. Transient execution failures stay retryable until the queue's final delivery settles the run as failed.
+- `mail-maintenance.ts` owns the per-minute `MailMaintenance` cron. `packages/cloudflare/src/mail-maintenance-worker.ts` runs send recovery, storage cleanup, expired rate-limit bucket cleanup, and managed rule backfills.
 - `mail.ts` owns SES receipt storage, processing, ingress, and send permissions.
 - `gmail.ts` owns Gmail live-sync and Pub/Sub resources on Cloudflare.
 - `app.ts` is the small stage-aware composition entry point; `types.ts` contains shared infra boundary types.
 
 SST is the runtime source of truth for application credentials and tokens; their canonical names live in `packages/env/src/sst-secrets.ts`. Cloudflare receives them as secret-text bindings, while AWS functions receive values derived from SST secret outputs. Deployment environment variables are reserved for non-secret configuration such as feature switches, resource identifiers, domains, and provider deployment credentials.
+
+## Custom action removal and release
+
+Custom actions, their settings UI, graph execution, queue, dispatcher, and action-specific credit reservations are removed. Connectors remain available to chat, and managed inbox rules remain supported. The new application does not enqueue custom action runs.
+
+Existing action tables and records remain untouched for an expand/contract release. Before rollout, pause old action dispatch and quiesce old producers, then drain in-flight action workers and account for queued retries. Confirm that old consumers cannot resume before removing their infrastructure. Removing code does not stop an already deployed worker. Review uncertain external effects instead of replaying them automatically. Table deletion belongs in a later, separately reviewed contract migration after the rollback window.
+
+Deploy `MailMaintenance` with the application so send recovery, object cleanup, rate-limit cleanup, and managed rule backfills continue every minute. Drain older send, ingestion, and rule workers before enabling the revised recovery paths. No production deployment or migration was performed for this cleanup.
+
+## Migration workflow
+
+Use `vp run db:generate` after a coherent schema change and `vp run db:check` before release. Drizzle generates a full schema snapshot beside each SQL migration and compares snapshots to derive later changes. Keep both files in version control. Large snapshots are expected, even when the SQL is short. See [Drizzle generation](https://orm.drizzle.team/docs/drizzle-kit-generate).
+
+Seven unpublished feature migrations were consolidated into `packages/database/drizzle/20260907233131_melodic_blacklash`. A read-only check of the development ledger confirmed that none of the seven had been applied there. Main-branch migration history is unchanged. Consolidate only unapplied feature migrations, regenerate against the unchanged baseline, and review the SQL and migration checks. Never rewrite applied migration history or reset a persistent database to accommodate consolidation. The consolidated migration must pass the protected release workflow before deployment.

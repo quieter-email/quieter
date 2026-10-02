@@ -3,7 +3,8 @@ import { z } from "zod";
 
 import { throwEnvironmentValidationError } from "./schema";
 
-const runtimeEnv = typeof process === "undefined" ? {} : process.env;
+const runtimeEnv: Record<string, string | undefined> =
+  typeof process === "undefined" ? {} : process.env;
 
 export const publicEnv = createEnv({
   client: {

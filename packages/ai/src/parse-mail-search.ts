@@ -1,11 +1,9 @@
 import { z } from "zod";
 
 import type { ChatModel } from "./chat-models";
-import { defaultSearchFilterModel } from "./chat-models";
 import type { AiUsageReport } from "./chat-usage";
 import { runStructuredGeneration } from "./generation";
-
-export { defaultSearchFilterModel } from "./chat-models";
+import { resolveBackgroundModel } from "./model-config";
 
 export const MAIL_SEARCH_QUERY_MAX_LENGTH = 300;
 
@@ -82,7 +80,7 @@ Rules:
 export const parseMailSearchWithAi = async ({
   allowedIsValues,
   availableLabels,
-  model = defaultSearchFilterModel,
+  model = resolveBackgroundModel(),
   onUsage,
   query,
 }: {

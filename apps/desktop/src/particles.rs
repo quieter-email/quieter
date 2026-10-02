@@ -132,7 +132,7 @@ impl ParticleField {
         display_scale: f32,
         seconds: f32,
         primary: [f32; 3],
-        dark: bool,
+        _dark: bool,
         pointer: Option<[f32; 2]>,
         clicks: &[[f32; 2]],
     ) -> RgbaImage {
@@ -142,7 +142,7 @@ impl ParticleField {
         let width = (css_width * dpr).round().max(1.0) as u32;
         let height = (css_height * dpr).round().max(1.0) as u32;
         let gap =
-            f64::from(4.0 * dpr).max((f64::from(width) * f64::from(height) / 54_000.0).sqrt());
+            f64::from(2.2 * dpr).max((f64::from(width) * f64::from(height) / 210_000.0).sqrt());
         if self.width != width || self.height != height || (self.gap - gap).abs() >= 0.01 {
             self.rebuild(width, height, gap);
         }
@@ -156,26 +156,18 @@ impl ParticleField {
         let width_f = width as f32;
         let height_f = height as f32;
         let swell_size = width_f.min(height_f) * 0.0012;
-        let tint = if dark {
-            [152.0 / 255.0, 184.0 / 255.0, 220.0 / 255.0]
-        } else {
-            [75.0 / 255.0, 99.0 / 255.0, 128.0 / 255.0]
-        };
         let mut image = RgbaImage::new(width, height);
         for dot in &self.dots {
             let energy = dot.energy.clamp(0.0, 1.0);
-            let radius = dot.radius + energy * 0.12 + smoothstep(0.72, 1.0, dot.vibrance) * 0.12;
+            let radius = dot.radius + energy * 0.16;
             let center = [
                 dot.position[0]
                     + (dot.base[1] / height_f * 6.28318 * 1.6 + seconds * 0.2).sin() * swell_size,
                 dot.position[1]
                     + (dot.base[0] / width_f * 6.28318 * 1.4 + seconds * 0.17).cos() * swell_size,
             ];
-            let shimmer =
-                ((seconds * (1.2 + 1.6 * dot.vibrance) + dot.vibrance * 41.0).sin() * 0.5 + 0.5)
-                    * smoothstep(0.68, 1.0, dot.vibrance);
-            let opacity = dot.opacity * (0.94 + shimmer * 0.1 + energy * 0.08);
-            let half_size = radius + 0.72;
+            let opacity = dot.opacity * (1.0 + energy * 0.16);
+            let half_size = radius + 0.5;
             let min_x = (center[0] - half_size).floor().max(0.0) as u32;
             let min_y = (center[1] - half_size).floor().max(0.0) as u32;
             let max_x = ((center[0] + half_size).ceil().max(0.0) as u32).min(width);
@@ -186,22 +178,17 @@ impl ParticleField {
                     let pixel_y = y as f32 + 0.5;
                     let distance = (pixel_x - center[0]).hypot(pixel_y - center[1]);
                     let alpha = ((1.0
-                        - smoothstep((radius - 0.72).max(0.0), radius + 0.78, distance))
+                        - smoothstep((radius - 0.45).max(0.0), radius + 0.5, distance))
                         * opacity)
                         .min(1.0);
                     if alpha <= 0.0 {
                         continue;
                     }
-                    let tint_amount = 0.12
-                        + 0.14
-                            * ((pixel_x / width_f * 5.0 + pixel_y / height_f * 3.0).sin() * 0.5
-                                + 0.5);
                     let current = image.get_pixel_mut(x, y);
                     let old_alpha = f32::from(current.0[3]) / 255.0;
                     let output_alpha = alpha + old_alpha * (1.0 - alpha);
                     for channel in 0..3 {
-                        let color =
-                            primary[channel] + (tint[channel] - primary[channel]) * tint_amount;
+                        let color = primary[channel];
                         let old_color = f32::from(current.0[2 - channel]) / 255.0;
                         current.0[2 - channel] =
                             ((color * alpha + old_color * old_alpha * (1.0 - alpha)) / output_alpha
@@ -226,10 +213,11 @@ impl ParticleField {
         self.cursor_strength = 0.0;
         let width = f64::from(width);
         let height = f64::from(height);
-        let unit = width.min(height) * 0.65 / 1000.0;
+        let min_side = width.min(height);
+        let unit = min_side * 0.65 / 1000.0 * 0.52;
         let margin =
             ((15.0_f64.max(width.min(height) / 10.0 * 0.13 + 2.0) + gap) / gap).ceil() as i32;
-        let radius_scale = (gap / 4.0).powf(0.42).clamp(1.0, 1.42);
+        let radius_scale = (gap / 2.2).powf(0.42).clamp(1.0, 1.65);
         let boundary = brand_boundary();
         for row in -margin..=(height / gap).ceil() as i32 + margin {
             for column in -margin..=(width / gap).ceil() as i32 + margin {
@@ -242,23 +230,39 @@ impl ParticleField {
                 let angle = local_y.atan2(local_x).rem_euclid(std::f64::consts::TAU);
                 let radius =
                     boundary[(angle / std::f64::consts::TAU * 720.0).round() as usize % 720];
-                let outer_radius = local_x.hypot(local_y) / radius;
-                let amount = ((outer_radius - 0.93) / (1.1 - 0.93)).clamp(0.0, 1.0);
-                let inside = 1.0 - amount * amount * (3.0 - 2.0 * amount);
-                let texture = 0.92 + (x / width * 29.0).sin() * (y / height * 23.0).cos() * 0.08;
-                if 0.018 + inside * 0.8 * texture < hash(cell_x + 719.0, cell_y + 719.0) {
+                let logo_radius = local_x.hypot(local_y) / radius;
+                let radial_distance = (x - width * 0.5).hypot(y - height * 0.5) / min_side;
+                let spiral_phase =
+                    angle * 3.0 + (radial_distance + 0.12).ln() * 8.0 - radial_distance * 4.0;
+                let strand = ((spiral_phase.sin() + 1.0) * 0.5).powi(2);
+                let fine_strand = ((spiral_phase * 3.0 + radial_distance * 19.0).sin() + 1.0) * 0.5;
+                let envelope = (-(radial_distance / 0.62).powi(2)).exp()
+                    * (1.0 - smoothstep(0.65, 1.05, radial_distance as f32) as f64);
+                let outside_logo = smoothstep(0.92, 1.14, logo_radius as f32) as f64;
+                let imprint = (-((logo_radius - 1.14) / 0.32).powi(2)).exp();
+                let base_density = 0.025 + envelope * (0.32 + strand * 0.58 + fine_strand * 0.08);
+                let density = (base_density * (1.0 - imprint * 0.65) + 0.95 * imprint * 0.65)
+                    * (0.68 + outside_logo * 0.32);
+                if density < hash(cell_x + 719.0, cell_y + 719.0) {
                     continue;
                 }
-                let seed = hash(cell_x + 389.0, cell_y + 389.0);
+                let radius_seed = hash(cell_x + 389.0, cell_y + 389.0);
+                let opacity_seed = hash(cell_x + 617.0, cell_y + 617.0);
+                let outer_opacity = (0.1 + opacity_seed.powf(1.6) * 0.52)
+                    * (0.18 + envelope * 0.82)
+                    * (0.5 + strand * 0.5);
+                let imprint_opacity = (0.24 + opacity_seed.powf(1.3) * 0.46) * envelope;
                 let base = [x as f32, y as f32];
                 self.dots.push(Dot {
                     base,
                     position: base,
                     velocity: [0.0; 2],
-                    opacity: (0.85 + seed * 0.15) as f32,
-                    radius: (((0.35 + seed * 0.45) * (1.0 - inside)
-                        + (0.65 + seed * 0.55) * inside)
-                        * radius_scale) as f32,
+                    opacity: ((outer_opacity * (1.0 - imprint * 0.65)
+                        + imprint_opacity * imprint * 0.65)
+                        * (0.58 + outside_logo * 0.42)) as f32,
+                    radius: ((0.24 + radius_seed.powf(2.8) * 1.05)
+                        * radius_scale
+                        * (0.82 + outside_logo * 0.18)) as f32,
                     vibrance: hash(cell_x + 941.0, cell_y + 941.0) as f32,
                     energy: 0.0,
                     active: false,

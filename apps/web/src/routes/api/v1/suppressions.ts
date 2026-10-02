@@ -1,3 +1,4 @@
+import { recipientSuppressionListSchema } from "@quieter/mail/delivery";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { getOrganizationApiKeyOrganizationId } from "#/lib/organization-api-auth.server";
@@ -27,7 +28,9 @@ export const Route = createFileRoute("/api/v1/suppressions")({
             limit,
             organizationId,
           });
-          return Response.json({ data: suppressions });
+          return Response.json(
+            recipientSuppressionListSchema.parse({ data: suppressions })
+          );
         } catch (error) {
           reportServerError(error, "organization-mail-suppressions");
           return Response.json(

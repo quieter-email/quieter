@@ -1,7 +1,7 @@
 import { ORPCError } from "@orpc/server";
 import { getOrganizationBillingEntitlement } from "@quieter/billing/entitlements";
 import { db } from "@quieter/database/client";
-import type { DatabaseClient } from "@quieter/database/client";
+import type { DatabaseExecutor } from "@quieter/database/client";
 import { mailbox, mailDomain } from "@quieter/database/schema";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -34,10 +34,6 @@ import { protectedProcedure } from "./base";
 
 const mailDomainModeSchema = z.enum(["send_only", "send_and_receive"]);
 
-type MailDomainDatabase =
-  | DatabaseClient
-  | Parameters<Parameters<DatabaseClient["transaction"]>[0]>[0];
-
 const assertDomainBillingAccess = async (organizationId: string) => {
   const entitlement = await getOrganizationBillingEntitlement({
     feature: "organizationDomains",
@@ -51,7 +47,7 @@ const assertDomainBillingAccess = async (organizationId: string) => {
 };
 
 const countManagedMailboxesForDomain = async (input: {
-  database?: MailDomainDatabase;
+  database?: DatabaseExecutor;
   domain: string;
   organizationId: string;
 }) => {

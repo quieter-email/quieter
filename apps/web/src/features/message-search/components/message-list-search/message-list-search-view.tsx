@@ -108,6 +108,7 @@ export const MessageListSearchView = ({
   const userLabelsBySelectionKey = new Map<string, MailboxLabel>();
   for (const label of userLabels) {
     if (label.type === "user") {
+      userLabelsBySelectionKey.set(normalizeLabelSelectionKey(label.id), label);
       userLabelsBySelectionKey.set(
         normalizeLabelSelectionKey(label.name),
         label
@@ -131,11 +132,12 @@ export const MessageListSearchView = ({
 
   return (
     <search className="block min-w-0">
-      <div className="flex h-9 min-w-0 items-stretch gap-2">
+      <div className="flex h-8 min-w-0 items-stretch gap-2">
         <div className="flex self-stretch">
           <IconButtonTooltip label="Refresh list">
             <Button
               aria-label="Refresh list"
+              // oxlint-disable-next-line shadcn/require-static-classes -- Shared header control scale lives in message-list-header-surfaces.
               className={messageListHeaderControlVariants({
                 control: "toolbar",
               })}
@@ -156,7 +158,7 @@ export const MessageListSearchView = ({
           onBlur={handleSearchFieldBlur}
           ref={fieldRef}
         >
-          <div className="squircle flex min-h-9 min-w-0 items-center gap-1 rounded-xl border border-border bg-control p-1 shadow-xs transition-colors duration-150 ease-out has-[input[data-slot=search-input]:focus-visible]:border-ring has-[input[data-slot=search-input]:focus-visible]:ring-1 has-[input[data-slot=search-input]:focus-visible]:ring-ring/45 has-[input[data-slot=search-input]:focus-visible]:outline-none">
+          <div className="flex min-h-8 min-w-0 items-center gap-1 rounded-xl border border-border bg-control p-0.5 shadow-xs transition-colors duration-150 ease-out squircle has-[input[data-slot=search-input]:focus-visible]:border-ring has-[input[data-slot=search-input]:focus-visible]:ring-1 has-[input[data-slot=search-input]:focus-visible]:ring-ring/45 has-[input[data-slot=search-input]:focus-visible]:outline-none">
             <div
               className="flex min-w-0 flex-1 scroll-px-1 scrollbar-none items-center gap-1 overflow-x-auto overscroll-x-contain [&::-webkit-scrollbar]:hidden"
               onMouseDown={(event) => {
@@ -189,18 +191,20 @@ export const MessageListSearchView = ({
                     <button
                       aria-label={
                         filter.negated === true
-                          ? `Remove excluded label ${filter.value}`
-                          : `Exclude label ${filter.value}`
+                          ? `Remove excluded label ${label?.name ?? filter.value}`
+                          : `Exclude label ${label?.name ?? filter.value}`
                       }
                       className={cn(
                         messageListHeaderControlVariants({ control: "chip" }),
                         "gap-1",
-                        label &&
-                          mailboxLabelSearchPillSurfaceClassNameByColor[
-                            label.color ?? "gray"
-                          ]
+                        {
+                          [mailboxLabelSearchPillSurfaceClassNameByColor[
+                            label?.color ?? "gray"
+                          ]]: label !== undefined,
+                        }
                       )}
                       key={filterRenderKey}
+                      // oxlint-disable-next-line shadcn/no-inline-styles -- Interleaved pills need computed flex order.
                       style={{ order: index * 2 + 1 }}
                       onClick={(event) => {
                         event.stopPropagation();
@@ -228,7 +232,9 @@ export const MessageListSearchView = ({
                       {filter.negated === true ? (
                         <span className="text-muted-fg">Not</span>
                       ) : null}
-                      <span className="min-w-0 truncate">{filter.value}</span>
+                      <span className="min-w-0 truncate">
+                        {label?.name ?? filter.value}
+                      </span>
                     </button>
                   );
                 }
@@ -246,6 +252,7 @@ export const MessageListSearchView = ({
                         "gap-1"
                       )}
                       key={filterRenderKey}
+                      // oxlint-disable-next-line shadcn/no-inline-styles -- Interleaved pills need computed flex order.
                       style={{ order: index * 2 + 1 }}
                       onClick={(event) => {
                         event.stopPropagation();
@@ -299,6 +306,7 @@ export const MessageListSearchView = ({
                     ref={(node) => {
                       setDateTokenRef(index, node);
                     }}
+                    // oxlint-disable-next-line shadcn/no-inline-styles -- Interleaved pills need computed flex order.
                     style={{ order: index * 2 + 1 }}
                   >
                     <button
@@ -416,6 +424,7 @@ export const MessageListSearchView = ({
                 placeholder={currentState.filters.length > 0 ? "" : "Search"}
                 ref={textInputRef}
                 spellCheck={false}
+                // oxlint-disable-next-line shadcn/no-inline-styles -- Input follows the last filter pill.
                 style={{ order: textInputIndex * 2 }}
                 type="text"
                 value={currentState.text}
@@ -431,7 +440,6 @@ export const MessageListSearchView = ({
                   >
                     <Button
                       aria-label="Convert to filters"
-                      className="size-6 shrink-0 rounded-lg text-muted-fg hover:bg-control-hover hover:text-fg"
                       onClick={(event) => {
                         event.stopPropagation();
                         interpretNaturalLanguage();
@@ -463,7 +471,6 @@ export const MessageListSearchView = ({
                   <IconButtonTooltip key="clear-search" label="Clear search">
                     <Button
                       aria-label="Clear search"
-                      className="size-6 shrink-0 rounded-lg text-muted-fg hover:bg-control-hover hover:text-fg"
                       onClick={(event) => {
                         event.stopPropagation();
                         clearSearch();
@@ -492,7 +499,6 @@ export const MessageListSearchView = ({
             <IconButtonTooltip label="Run search">
               <Button
                 aria-label="Run search"
-                className="size-6 shrink-0 rounded-lg text-muted-fg hover:bg-control-hover hover:text-fg"
                 onClick={(event) => {
                   event.stopPropagation();
                   runSearch();
@@ -515,6 +521,7 @@ export const MessageListSearchView = ({
               activeDateFilter.type === "before") && (
               <div
                 className="absolute top-full z-40 mt-2 max-h-[calc(100dvh-5rem)] max-w-[calc(100vw-1rem)] overflow-auto overscroll-contain rounded-lg bg-popover p-2 shadow-lg"
+                // oxlint-disable-next-line shadcn/no-inline-styles -- Popover anchors to measured input position.
                 style={{ left: datePopoverLeft }}
               >
                 <div className="mb-2 grid grid-cols-2 gap-1 border-b pb-2">

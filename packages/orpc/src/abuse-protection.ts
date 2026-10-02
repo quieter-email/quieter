@@ -1,6 +1,25 @@
 import { db } from "@quieter/database/client";
 import { rateLimitBucket } from "@quieter/database/schema";
-import { sql } from "drizzle-orm";
+import { inArray, lt, sql } from "drizzle-orm";
+
+export const cleanupRateLimitBuckets = async () => {
+  const removed = await db
+    .delete(rateLimitBucket)
+    .where(
+      inArray(
+        rateLimitBucket.key,
+        db
+          .select({ key: rateLimitBucket.key })
+          .from(rateLimitBucket)
+          .where(lt(rateLimitBucket.expiresAt, new Date()))
+          .orderBy(rateLimitBucket.expiresAt)
+          .limit(5000)
+          .for("update", { skipLocked: true })
+      )
+    )
+    .returning({ key: rateLimitBucket.key });
+  return { deleted: removed.length };
+};
 
 export const consumeRateLimit = async (input: {
   key: string;

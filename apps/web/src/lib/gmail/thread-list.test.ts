@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vite-plus/test";
 
-import type { MessageListItem } from "./gmail";
+import type { MessageListItem } from "#/lib/mail";
+
 import { buildThreadListEntries, getThreadLabelIds } from "./thread-list";
 
 const message = (id: string, labelIds: string[]): MessageListItem => ({

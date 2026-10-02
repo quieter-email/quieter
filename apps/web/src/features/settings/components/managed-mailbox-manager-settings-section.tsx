@@ -32,7 +32,6 @@ export const ManagedMailboxManagerSettingsSection = ({
   removeManagedMailboxDivisionGrantMutation,
   removeManagedMailboxGrantMutation,
   setGmailAutoLabelingMutation,
-  setGmailUsefulDetailsMutation,
   setManagedMailboxAccessModeMutation,
   setManagedMailboxDivisionGrantMutation,
   setManagedMailboxGrantMutation,
@@ -62,7 +61,6 @@ export const ManagedMailboxManagerSettingsSection = ({
     userId: string;
   }>;
   setGmailAutoLabelingMutation: SettingsMutation<ManagedMailboxToggleInput>;
-  setGmailUsefulDetailsMutation: SettingsMutation<ManagedMailboxToggleInput>;
   setManagedMailboxAccessModeMutation: SettingsMutation<ManagedMailboxAccessModeInput>;
   setManagedMailboxDivisionGrantMutation: SettingsMutation<ManagedMailboxDivisionGrantInput>;
   setManagedMailboxGrantMutation: SettingsMutation<ManagedMailboxGrantInput>;
@@ -161,11 +159,11 @@ export const ManagedMailboxManagerSettingsSection = ({
           }
         );
       }}
-      onUpdateMailbox={(input) => {
-        updateManagedMailboxMutation.mutate({ ...input, mailboxId });
-      }}
-      onUsefulDetailsChange={(enabled) => {
-        setGmailUsefulDetailsMutation.mutate({ enabled, mailboxId });
+      onUpdateMailbox={(input, onSettled) => {
+        updateManagedMailboxMutation.mutate(
+          { ...input, mailboxId },
+          { onSettled }
+        );
       }}
     />
   );

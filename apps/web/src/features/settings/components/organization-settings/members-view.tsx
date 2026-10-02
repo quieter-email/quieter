@@ -6,11 +6,7 @@ import { cn } from "@quieter/ui/cn";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { useState } from "react";
 
-import {
-  SettingsBackButton,
-  SettingsCard,
-  settingsSurfaceVariants,
-} from "../settings-layout";
+import { SettingsCard, settingsSurfaceVariants } from "../settings-layout";
 import { formatCount, formatRoleLabel } from "./domain";
 import type { FullOrganization, OrganizationMember } from "./domain";
 import { InviteMemberForm } from "./invite-member-form";
@@ -19,7 +15,6 @@ import { PendingOrganizationInvitations } from "./pending-organization-invitatio
 
 export const MembersView = ({
   activeMember,
-  onBack,
   organization,
   permissions,
 }: {
@@ -59,10 +54,6 @@ export const MembersView = ({
 
   return (
     <section className="space-y-6">
-      <SettingsBackButton onClick={onBack}>
-        {organization.name}
-      </SettingsBackButton>
-
       <div>
         <h1 className="text-body-lg font-semibold text-fg">Members</h1>
         <p className="mt-1 text-body text-muted-fg">
@@ -83,7 +74,9 @@ export const MembersView = ({
         {showMemberSearch && (
           <TextField
             className={cn(
+              // oxlint-disable-next-line shadcn/require-static-classes -- Shared surface scale lives in settings-layout.
               settingsSurfaceVariants({ variant: "insetRow" }),
+              // oxlint-disable-next-line shadcn/require-static-classes -- Shared surface scale lives in settings-layout.
               settingsSurfaceVariants({ variant: "divider" }),
               "relative"
             )}
@@ -96,7 +89,8 @@ export const MembersView = ({
             <TextFieldInput
               aria-label="Search members"
               chrome="ghost"
-              className="h-9 pl-7"
+              // oxlint-disable-next-line shadcn/no-restyle -- Search input leaves room for its leading icon.
+              className="h-8 pl-7"
               onChange={(event) => {
                 setMemberSearch(event.target.value);
               }}

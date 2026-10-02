@@ -1,18 +1,16 @@
 import { ORPCError } from "@orpc/server";
-import { hasUserBillingFeature } from "@quieter/billing/entitlements";
 import { db } from "@quieter/database/client";
 import { mailbox } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { and, eq } from "drizzle-orm";
 
 import { createGmailLiveSyncToken } from "./gmail-live-sync-token";
-import { hasText } from "./text";
 
 const getLiveSyncConfiguration = () => {
   const secret = serverEnv.GMAIL_LIVE_SYNC_TOKEN_SECRET;
   const url = serverEnv.GMAIL_LIVE_SYNC_URL;
-  const hasSecret = hasText(secret);
-  const hasUrl = hasText(url);
+  const hasSecret = !!secret;
+  const hasUrl = !!url;
 
   if (!hasSecret && !hasUrl) {
     return null;
@@ -64,15 +62,7 @@ export const getGmailLiveSyncAccess = async (input: {
     throw new ORPCError("NOT_FOUND", { message: "Gmail mailbox not found." });
   }
 
-  const entitlement = await hasUserBillingFeature({
-    feature: "gmailAutomation",
-    organizationId: selectedMailbox.organizationId ?? undefined,
-    userId: input.userId,
-  });
-  return {
-    ...entitlement,
-    emailAddress: selectedMailbox.emailAddress,
-  };
+  return { emailAddress: selectedMailbox.emailAddress };
 };
 
 export const createGmailLiveSyncConnection = async (input: {
@@ -81,7 +71,7 @@ export const createGmailLiveSyncConnection = async (input: {
 }) => {
   const access = await getGmailLiveSyncAccess(input);
   const configuration = getLiveSyncConfiguration();
-  if (!access.hasAccess || configuration === null) {
+  if (configuration === null) {
     return { url: null };
   }
 

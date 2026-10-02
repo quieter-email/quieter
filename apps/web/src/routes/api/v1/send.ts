@@ -1,6 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
+import {
+  LimitedJsonRequestError,
+  readLimitedJsonRequest,
+} from "#/lib/limited-json-request.server";
 import { getOrganizationApiKeyOrganizationId } from "#/lib/organization-api-auth.server";
 import { reportServerError } from "#/lib/server-error-reporting";
 
@@ -19,21 +23,21 @@ export const Route = createFileRoute("/api/v1/send")({
         const organizationMail =
           await import("@quieter/orpc/organization-mail");
 
-        const body = await readBoundedRequestBody(request);
-        if (body === null) {
-          return Response.json(
-            { error: "Message payload is too large." },
-            { status: 413 }
-          );
-        }
-
         let json: unknown;
         try {
-          json = JSON.parse(body);
-        } catch {
+          json = await readLimitedJsonRequest(request, MAX_SEND_PAYLOAD_BYTES);
+        } catch (error) {
+          if (!(error instanceof LimitedJsonRequestError)) {
+            throw error;
+          }
           return Response.json(
-            { error: "Could not parse the json message payload." },
-            { status: 400 }
+            {
+              error:
+                error.status === 413
+                  ? "Message payload is too large."
+                  : "Could not parse the json message payload.",
+            },
+            { status: error.status }
           );
         }
 
@@ -78,49 +82,6 @@ export const Route = createFileRoute("/api/v1/send")({
     },
   },
 });
-
-const readBoundedRequestBody = async (request: Request) => {
-  const contentLength = request.headers.get("content-length");
-  if (
-    contentLength !== null &&
-    contentLength !== "" &&
-    Number(contentLength) > MAX_SEND_PAYLOAD_BYTES
-  ) {
-    return null;
-  }
-
-  if (!request.body) {
-    return "";
-  }
-
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let byteLength = 0;
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) {
-      break;
-    }
-
-    byteLength += value.byteLength;
-    if (byteLength > MAX_SEND_PAYLOAD_BYTES) {
-      await reader.cancel();
-      return null;
-    }
-
-    chunks.push(value);
-  }
-
-  const body = new Uint8Array(byteLength);
-  let offset = 0;
-  for (const chunk of chunks) {
-    body.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-
-  return new TextDecoder().decode(body);
-};
 
 const mergeIdempotencyHeader = (json: unknown, headers: Headers) => {
   const idempotencyKey = headers.get("idempotency-key")?.trim();

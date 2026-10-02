@@ -1,13 +1,11 @@
 import { describe, expect, test, vi } from "vite-plus/test";
 
 import {
-  createComposeEmailChatTool,
   createGmailChatTools,
   gmailSearchResultSchema,
 } from "../src/chat-agent";
 import type { GmailToolsContext } from "../src/chat-agent";
 import { normalizeChatTitle } from "../src/generate-chat-title";
-import { OPENROUTER_TRANSCRIPTION_MODEL } from "../src/transcription-format";
 
 const noopContext = (): GmailToolsContext => ({
   category: "inbox",
@@ -140,17 +138,5 @@ describe("chat tools", () => {
 
     const parsed = gmailSearchResultSchema.safeParse(result);
     expect(parsed.success && parsed.data.status === "error").toBeTruthy();
-  });
-
-  test("compose proposals stay client-executed", () => {
-    const tools = createComposeEmailChatTool();
-    const tool = tools.compose_email;
-
-    expect(tool).toBeDefined();
-    expect(tool.execute).toBeUndefined();
-  });
-
-  test("uses the proven transcription model", () => {
-    expect(OPENROUTER_TRANSCRIPTION_MODEL).toBe("microsoft/mai-transcribe-1.5");
   });
 });

@@ -2,11 +2,16 @@ import { z } from "zod";
 
 export const BILLING_PRODUCT_IDS = ["managed", "pro"] as const;
 export const billingProductIdSchema = z.enum(BILLING_PRODUCT_IDS);
-export const billingPlanSchema = z.enum(["free", ...BILLING_PRODUCT_IDS]);
 
 export type BillingProductId = (typeof BILLING_PRODUCT_IDS)[number];
 export type PaidBillingPlan = BillingProductId;
 export type BillingPlan = "free" | BillingProductId;
+
+export const GMAIL_MAILBOX_LIMITS = {
+  free: 5,
+  managed: 25,
+  pro: 100,
+} as const satisfies Record<BillingPlan, number>;
 
 export type BillingFeature =
   | "aiChat"
@@ -22,7 +27,7 @@ export const BILLING_FEATURES = {
     type: "ai",
   },
   gmailAutomation: {
-    description: "Live Gmail updates and AI assistance",
+    description: "AI assistance for Gmail",
     requirementLabel: "Pro",
     type: "ai",
   },
@@ -57,6 +62,7 @@ export const BILLING_PRODUCTS = {
     description:
       "Managed mail for your team with a shared monthly usage balance.",
     features: [
+      "Up to 25 Gmail accounts per team, with live updates",
       "$10 monthly usage balance",
       "Managed sending and receiving",
       "Custom team domains",
@@ -76,8 +82,8 @@ export const BILLING_PRODUCTS = {
     features: [
       "$20 monthly usage balance",
       "Everything in Managed",
+      "Up to 100 Gmail accounts per team, with live updates",
       "AI features",
-      "AI usage at model cost plus 15%",
     ],
     highlight: true,
     monthlyPriceCents: 2500,
@@ -101,6 +107,3 @@ export const BILLING_PRODUCTS = {
 export const productHasAi = (product: BillingProductId) => product === "pro";
 
 export const productHasManagedMail = (_product: BillingProductId) => true;
-
-export const getBillingFeatureRequirement = (feature: BillingFeature) =>
-  BILLING_FEATURES[feature];

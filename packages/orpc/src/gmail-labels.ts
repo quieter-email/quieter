@@ -1,11 +1,11 @@
 import { db } from "@quieter/database/client";
 import { gmailLabel } from "@quieter/database/schema";
-import type { GmailLabelListItem } from "@quieter/gmail";
 import { mailboxLabelColorSchema } from "@quieter/mail/mailbox-organization";
 import type { MailboxLabelColor } from "@quieter/mail/mailbox-organization";
+import type { MailLabelListItem } from "@quieter/mail/messages";
 import { and, eq, notInArray, sql } from "drizzle-orm";
 
-export type GmailLabelWithDetails = GmailLabelListItem & {
+export type GmailLabelWithDetails = MailLabelListItem & {
   color: MailboxLabelColor;
   description: string | null;
   inclusionCriteria: string | null;
@@ -13,7 +13,7 @@ export type GmailLabelWithDetails = GmailLabelListItem & {
 
 export const syncGmailLabels = async (
   mailboxId: string,
-  labels: GmailLabelListItem[]
+  labels: MailLabelListItem[]
 ): Promise<GmailLabelWithDetails[]> => {
   const userLabels = labels.filter((label) => label.type === "user");
   const now = new Date();
@@ -106,7 +106,7 @@ export const saveGmailLabelDetails = async (input: {
 
 export const upsertSyncedGmailLabel = async (
   mailboxId: string,
-  label: GmailLabelListItem,
+  label: MailLabelListItem,
   color?: MailboxLabelColor
 ): Promise<GmailLabelWithDetails> => {
   const now = new Date();

@@ -48,20 +48,21 @@ export const handleDeploymentPreloadError = (event: Event) => {
   void checkForDeploymentUpdate();
 };
 
+const checkForVisibleDeploymentUpdate = () => {
+  if (document.visibilityState === "visible") {
+    void checkForDeploymentUpdate();
+  }
+};
+
 const subscribe = (listener: () => void) => {
   listeners.add(listener);
-  const check = () => {
-    if (document.visibilityState === "visible") {
-      void checkForDeploymentUpdate();
-    }
-  };
-  const timer = window.setInterval(check, 60_000);
-  window.addEventListener("focus", check);
-  check();
+  const timer = window.setInterval(checkForVisibleDeploymentUpdate, 60_000);
+  window.addEventListener("focus", checkForVisibleDeploymentUpdate);
+  checkForVisibleDeploymentUpdate();
   return () => {
     listeners.delete(listener);
     window.clearInterval(timer);
-    window.removeEventListener("focus", check);
+    window.removeEventListener("focus", checkForVisibleDeploymentUpdate);
   };
 };
 

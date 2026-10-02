@@ -6,15 +6,34 @@ import {
   mailDomain,
   managedMailAttachment,
   managedMailMessage,
+  mailboxVerificationCode,
 } from "@quieter/database/schema";
 import { parseRawMailMessage } from "@quieter/mail/raw-message";
 import type { ParsedRawMailMessage } from "@quieter/mail/raw-message";
-import { reportError } from "@quieter/observability";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  lte,
+  or,
+  sql,
+} from "drizzle-orm";
 
-import { enqueueMailboxActionsForMessage } from "../../mailbox-actions/enqueue";
-import { hasText } from "../../text";
-import { processManagedMailAutomation } from "../automation";
+import { publishMailUpdate } from "../../mail-updates";
+import {
+  processMailVerificationCode,
+  reportPendingMailboxVerificationCodeUsage,
+} from "../../verification-codes";
+import {
+  getManagedAutomationOwner,
+  loadManagedAutomationMessage,
+  processManagedMailAutomation,
+} from "../automation";
 import { inheritManagedThreadLabels } from "../labels/repository";
 import { applyManagedRulesToMessage } from "../rules/evaluator";
 import {
@@ -30,7 +49,7 @@ const getReplyReferenceIds = (message: ParsedRawMailMessage) => [
   ...new Set(
     [message.inReplyTo, ...(message.references?.match(/<[^>]+>/gu) ?? [])]
       .map((value) => value?.trim())
-      .filter((value): value is string => hasText(value))
+      .filter((value): value is string => !!value)
   ),
 ];
 
@@ -67,7 +86,31 @@ const resolveManagedThreadId = async (
   );
 };
 
-const runPostIngestionOrganization = async (input: {
+const processManagedVerificationCode = async (input: {
+  mailboxId: string;
+  messageId: string;
+}) => {
+  const owner = await getManagedAutomationOwner(input.mailboxId);
+  if (!owner) {
+    return;
+  }
+  await processMailVerificationCode({
+    loadMessage: async () =>
+      await loadManagedAutomationMessage(input.mailboxId, input.messageId, {
+        includeNonInbox: true,
+      }),
+    mailboxId: input.mailboxId,
+    messageId: input.messageId,
+    organizationId: owner.organizationId,
+    userId: owner.userId,
+  });
+  await reportPendingMailboxVerificationCodeUsage(
+    input.mailboxId,
+    owner.userId
+  );
+};
+
+const runPostIngestionProcessing = async (input: {
   mailboxId: string;
   messageId: string;
   providerMessageId: string;
@@ -79,21 +122,117 @@ const runPostIngestionOrganization = async (input: {
       messageId: input.messageId,
       threadId: input.threadId,
     });
-    await applyManagedRulesToMessage({
+    const rules = await applyManagedRulesToMessage({
       mailboxId: input.mailboxId,
       messageId: input.messageId,
     });
-    await processManagedMailAutomation({
+    if (rules.error !== null) {
+      throw new Error(rules.error);
+    }
+    const results = await Promise.allSettled([
+      processManagedVerificationCode(input),
+      processManagedMailAutomation({
+        mailboxId: input.mailboxId,
+        messageId: input.messageId,
+      }),
+    ]);
+    const failed = results.find((result) => result.status === "rejected");
+    if (failed) {
+      throw failed.reason;
+    }
+  } finally {
+    await publishMailUpdate({
       mailboxId: input.mailboxId,
-      messageId: input.messageId,
+      threadIds: [input.threadId],
+      type: "mailbox.changed",
     });
-    await enqueueMailboxActionsForMessage({
+  }
+};
+
+export const retryPendingManagedVerificationCodes = async () => {
+  const now = new Date();
+  const pending = await db
+    .select({
+      mailboxId: mailboxVerificationCode.mailboxId,
+      messageId: mailboxVerificationCode.messageId,
+    })
+    .from(mailboxVerificationCode)
+    .innerJoin(mailbox, eq(mailbox.id, mailboxVerificationCode.mailboxId))
+    .where(
+      and(
+        eq(mailbox.provider, "managed"),
+        isNull(mailboxVerificationCode.processedAt),
+        gt(
+          mailboxVerificationCode.createdAt,
+          new Date(now.getTime() - 2 * 60 * 60_000)
+        ),
+        or(
+          isNull(mailboxVerificationCode.leaseUntil),
+          lt(mailboxVerificationCode.leaseUntil, now)
+        ),
+        or(
+          isNull(mailboxVerificationCode.nextAttemptAt),
+          lte(mailboxVerificationCode.nextAttemptAt, now)
+        )
+      )
+    )
+    .orderBy(mailboxVerificationCode.createdAt)
+    .limit(40);
+  let nextIndex = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(4, pending.length) }, async () => {
+      while (nextIndex < pending.length) {
+        const message = pending[nextIndex];
+        nextIndex += 1;
+        if (message === undefined) {
+          break;
+        }
+        await processManagedVerificationCode(message);
+      }
+    })
+  );
+  const usagePending = await db
+    .selectDistinct({ mailboxId: mailboxVerificationCode.mailboxId })
+    .from(mailboxVerificationCode)
+    .innerJoin(mailbox, eq(mailbox.id, mailboxVerificationCode.mailboxId))
+    .where(
+      and(
+        eq(mailbox.provider, "managed"),
+        isNotNull(mailboxVerificationCode.processedAt),
+        isNotNull(mailboxVerificationCode.costUsd),
+        isNull(mailboxVerificationCode.usageReportedAt)
+      )
+    )
+    .limit(40);
+  for (const item of usagePending) {
+    const owner = await getManagedAutomationOwner(item.mailboxId);
+    if (owner) {
+      await reportPendingMailboxVerificationCodeUsage(
+        item.mailboxId,
+        owner.userId
+      );
+    }
+  }
+  return pending.length;
+};
+
+const finishIngestion = async (input: {
+  mailboxId: string;
+  messageId: string;
+  providerMessageId: string;
+  threadId: string;
+}) => {
+  const results = await Promise.allSettled([
+    publishMailUpdate({
       mailboxId: input.mailboxId,
-      sourceMessageId: input.providerMessageId,
-      sourceThreadId: input.threadId,
-    });
-  } catch (error) {
-    reportError(error, { operation: "managed-mail:organize-after-ingestion" });
+      threadIds: [input.threadId],
+      type: "mailbox.changed",
+    }),
+    runPostIngestionProcessing(input),
+  ]);
+  const failed = results.find((result) => result.status === "rejected");
+  if (failed) {
+    throw failed.reason;
   }
 };
 
@@ -208,7 +347,7 @@ const ingestManagedMessageForMailbox = async (input: {
   });
 
   if (inserted !== undefined) {
-    await runPostIngestionOrganization({
+    await finishIngestion({
       mailboxId: inserted.mailboxId,
       messageId: inserted.id,
       providerMessageId: input.providerMessageId,
@@ -231,17 +370,13 @@ const ingestManagedMessageForMailbox = async (input: {
     )
     .limit(1);
   if (existing !== undefined) {
-    await Promise.all([
-      inheritManagedThreadLabels({
-        mailboxId: input.targetMailboxId,
-        messageId: existing.id,
-        threadId: existing.threadId,
-      }),
-      applyManagedRulesToMessage({
-        mailboxId: input.targetMailboxId,
-        messageId: existing.id,
-      }),
-    ]);
+    await finishIngestion({
+      mailboxId: input.targetMailboxId,
+      messageId: existing.id,
+      providerMessageId: input.providerMessageId,
+      threadId: existing.threadId,
+    });
+    return input.targetMailboxId;
   }
   return null;
 };
@@ -348,7 +483,7 @@ export const recordInboundManagedMessage = async (input: {
     ...new Set(
       input.recipients
         .map(normalizeEmailAddress)
-        .filter((value) => hasText(value))
+        .filter((value): value is string => !!value)
     ),
   ];
   if (recipients.length === 0) {
@@ -365,13 +500,13 @@ export const recordInboundManagedMessage = async (input: {
   const rawObjectProvider = input.rawObjectProvider ?? "s3";
   const rawObjectBucket = input.rawObjectBucket ?? input.s3Bucket;
   const rawObjectKey = input.rawObjectKey ?? input.s3Key;
-  if (!hasText(rawObjectBucket) || !hasText(rawObjectKey)) {
+  if (!rawObjectBucket || !rawObjectKey) {
     throw new Error(
       "Inbound managed mail requires a canonical raw object reference."
     );
   }
 
-  const ingestResults = await Promise.all(
+  const ingestResults = await Promise.allSettled(
     targetMailboxIds.map(
       async (targetMailboxId) =>
         await ingestManagedMessageForMailbox({
@@ -389,11 +524,13 @@ export const recordInboundManagedMessage = async (input: {
         })
     )
   );
-  const insertedMailboxIds = ingestResults.filter(
-    (mailboxId): mailboxId is string => mailboxId !== null
+  const failed = ingestResults.find((result) => result.status === "rejected");
+  if (failed !== undefined) {
+    throw failed.reason;
+  }
+  return ingestResults.flatMap((result) =>
+    result.status === "fulfilled" && result.value !== null ? [result.value] : []
   );
-
-  return insertedMailboxIds;
 };
 
 export const hasManagedMailObjectReference = async (input: {

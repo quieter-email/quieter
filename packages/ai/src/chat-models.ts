@@ -2,6 +2,16 @@ import { z } from "zod";
 
 export const chatModels = [
   {
+    group: "google",
+    label: "Gemini 2.5 Flash Lite",
+    value: "google/gemini-2.5-flash-lite",
+  },
+  {
+    group: "google",
+    label: "Gemini 3.1 Flash Lite",
+    value: "google/gemini-3.1-flash-lite",
+  },
+  {
     group: "openai",
     label: "GPT 5.6 Luna",
     value: "openai/gpt-5.6-luna",
@@ -43,6 +53,11 @@ export const chatModels = [
   },
   {
     group: "google",
+    label: "Gemini 3.7 Flash",
+    value: "google/gemini-3.7-flash",
+  },
+  {
+    group: "google",
     label: "Gemini 3.1 Pro",
     value: "google/gemini-3.1-pro-preview",
   },
@@ -76,13 +91,25 @@ export const chatModelGroups: readonly ChatModelGroup[] = [
 export const chatModelSchema = z.enum(chatModels.map(({ value }) => value));
 export type ChatModel = (typeof chatModels)[number]["value"];
 
-export const defaultChatModel: ChatModel = "openai/gpt-5.6-luna";
-export const CHAT_TITLE_MODEL = defaultChatModel;
-export const defaultAutoLabelModel: ChatModel = "google/gemini-3.5-flash-lite";
-export const defaultSearchFilterModel: ChatModel =
-  "google/gemini-3.5-flash-lite";
-export const defaultUsefulDetailModel: ChatModel =
-  "google/gemini-3.5-flash-lite";
-export const AI_MEMORY_MODEL = defaultChatModel;
-export const TRANSCRIBED_EMAIL_FORMAT_MODEL = defaultChatModel;
-export const TEMPLATE_PLACEHOLDER_SUGGESTION_MODEL = defaultChatModel;
+/**
+ * Big-provider failover order for OpenRouter's `models` fallback routing.
+ * OpenRouter tries these in order when the primary errors, including on
+ * rate limits and downtime, and bills whichever model ultimately serves.
+ * The primary is always filtered out by `resolveModelFallbacks`.
+ */
+const MODEL_FALLBACK_ORDER: readonly ChatModel[] = [
+  "openai/gpt-5.6-luna",
+  "anthropic/claude-haiku-4.5",
+  "google/gemini-3.5-flash-lite",
+];
+
+export const resolveModelFallbacks = (model: ChatModel): ChatModel[] =>
+  (model === "google/gemini-2.5-flash-lite"
+    ? (["google/gemini-3.1-flash-lite", ...MODEL_FALLBACK_ORDER] as const)
+    : MODEL_FALLBACK_ORDER
+  )
+    .filter((fallback) => fallback !== model)
+    .slice(0, 3);
+
+export const defaultChatModel: ChatModel = "google/gemini-3.7-flash";
+export const defaultBackgroundModel: ChatModel = "google/gemini-3.5-flash-lite";

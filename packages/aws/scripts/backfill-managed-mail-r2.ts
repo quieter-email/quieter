@@ -8,8 +8,8 @@ import { managedMailMessage } from "@quieter/database/schema";
 import { requireServerEnv, serverEnv } from "@quieter/env/server";
 import { and, asc, eq, gt, isNotNull, isNull } from "drizzle-orm";
 
-const batchSize = Number(serverEnv.BACKFILL_BATCH_SIZE ?? 100);
-const concurrency = Number(serverEnv.BACKFILL_CONCURRENCY ?? 5);
+const batchSize = serverEnv.BACKFILL_BATCH_SIZE;
+const concurrency = serverEnv.BACKFILL_CONCURRENCY;
 const sourceBucket = requireServerEnv("MAIL_BUCKET");
 const targetBucket = requireServerEnv("R2_BUCKET");
 const endpoint =
@@ -118,7 +118,7 @@ const backfillBatch = async (
   );
   await runLimited(copyableMessages, copyMessage);
   const nextCursor = messages.at(-1)?.id ?? cursor;
-  const nextTotal = total + messages.length;
+  const nextTotal = total + copyableMessages.length;
   process.stdout.write(
     `Backfilled ${nextTotal} managed mail raw objects to R2.\n`
   );

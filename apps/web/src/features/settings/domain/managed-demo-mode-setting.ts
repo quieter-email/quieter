@@ -10,7 +10,7 @@ const MANAGED_DEMO_MODE_CHANGE_EVENT =
 const GMAIL_DEMO_MODE_STORAGE_KEY = "quieter:demo-mode-enabled";
 const GMAIL_DEMO_MODE_CHANGE_EVENT = "quieter:demo-mode-enabled-change";
 
-export const isManagedDemoModeAvailable = () => isPreviewPersonasAvailable();
+const isManagedDemoModeAvailable = () => isPreviewPersonasAvailable();
 
 const readManagedDemoModeEnabled = () => {
   if (!isManagedDemoModeAvailable() || typeof window === "undefined") {

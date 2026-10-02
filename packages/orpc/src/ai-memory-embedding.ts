@@ -5,16 +5,7 @@ import {
 import { db } from "@quieter/database/client";
 import { aiMemory } from "@quieter/database/schema";
 import { reportError } from "@quieter/observability";
-import {
-  and,
-  cosineDistance,
-  desc,
-  eq,
-  gt,
-  inArray,
-  isNull,
-  sql,
-} from "drizzle-orm";
+import { and, cosineDistance, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 
 const EMBEDDING_BACKFILL_BATCH_SIZE = 32;
 const SEMANTIC_CANDIDATE_LIMIT = 40;
@@ -157,7 +148,8 @@ export const searchAiMemoryBySimilarity = async ({
     if (embedding === null) {
       return empty;
     }
-    const similarity = sql<number>`1 - (${cosineDistance(aiMemory.embedding, embedding)})`;
+    const distance = cosineDistance(aiMemory.embedding, embedding);
+    const similarity = sql<number>`1 - (${distance})`;
     const matches = await db
       .select({ memory: aiMemory, similarity })
       .from(aiMemory)
@@ -168,7 +160,7 @@ export const searchAiMemoryBySimilarity = async ({
           gt(similarity, SEMANTIC_MINIMUM_SIMILARITY)
         )
       )
-      .orderBy(desc(similarity))
+      .orderBy(distance)
       .limit(SEMANTIC_CANDIDATE_LIMIT);
     return {
       rows: matches.map((match) => match.memory),

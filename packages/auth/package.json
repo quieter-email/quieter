@@ -14,18 +14,18 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "catalog:",
-    "@polar-sh/sdk": "^0.49.0",
+    "@polar-sh/sdk": "^1.0.1",
     "@quieter/billing": "workspace:*",
     "@quieter/database": "workspace:*",
     "@quieter/env": "workspace:*",
     "@quieter/observability": "workspace:*",
     "@react-email/render": "^2.1.0",
     "react": "catalog:",
-    "standardwebhooks": "1.0.0",
+    "standardwebhooks": "1.1.1",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@better-auth/api-key": "1.5.0",
+    "@better-auth/api-key": "catalog:",
     "@better-auth/core": "catalog:",
     "@better-auth/passkey": "catalog:",
     "@quieter/config": "workspace:*",
@@ -38,7 +38,7 @@
     "vite-plus": "catalog:"
   },
   "peerDependencies": {
-    "@better-auth/api-key": "1.5.0",
+    "@better-auth/api-key": "catalog:",
     "@better-auth/core": "catalog:",
     "@better-auth/passkey": "catalog:",
     "better-auth": "catalog:",

@@ -60,3 +60,25 @@ export const ProgressIndicator = ({
     {...props}
   />
 );
+
+// Compact progress for flow headers, e.g. onboarding and mailbox setup.
+export const FlowProgress = ({
+  label,
+  max,
+  value,
+}: {
+  label: string;
+  max: number;
+  value: number;
+}) => (
+  <Progress
+    aria-label={label}
+    className="hidden w-16 gap-0 sm:grid"
+    max={max}
+    value={value}
+  >
+    <ProgressTrack className="h-1 bg-control-hover">
+      <ProgressIndicator className="bg-fg" />
+    </ProgressTrack>
+  </Progress>
+);

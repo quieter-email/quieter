@@ -34,6 +34,7 @@ import { Route as ApiDesktopSplatRouteImport } from './routes/api/desktop.$'
 import { Route as ApiDomainConnectCallbackRouteImport } from './routes/api/domain-connect.callback'
 import { Route as ApiGmailCallbackRouteImport } from './routes/api/gmail.callback'
 import { Route as ApiOrpcSplatRouteImport } from './routes/api/orpc.$'
+import { Route as ApiV1McpRouteImport } from './routes/api/v1/mcp'
 import { Route as ApiV1SendRouteImport } from './routes/api/v1/send'
 import { Route as ApiV1SuppressionsRouteImport } from './routes/api/v1/suppressions'
 import { Route as ApiDomainConnectTemplatesServiceIdRouteImport } from './routes/api/domain-connect.templates.$serviceId'
@@ -167,6 +168,11 @@ const ApiOrpcSplatRoute = ApiOrpcSplatRouteImport.update({
   path: '/api/orpc/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1McpRoute = ApiV1McpRouteImport.update({
+  id: '/api/v1/mcp',
+  path: '/api/v1/mcp',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiV1SendRoute = ApiV1SendRouteImport.update({
   id: '/api/v1/send',
   path: '/api/v1/send',
@@ -226,6 +232,7 @@ export interface FileRoutesByFullPath {
   '/api/domain-connect/callback': typeof ApiDomainConnectCallbackRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
+  '/api/v1/mcp': typeof ApiV1McpRoute
   '/api/v1/send': typeof ApiV1SendRoute
   '/api/v1/suppressions': typeof ApiV1SuppressionsRoute
   '/api/domain-connect/templates/$serviceId': typeof ApiDomainConnectTemplatesServiceIdRoute
@@ -259,6 +266,7 @@ export interface FileRoutesByTo {
   '/api/domain-connect/callback': typeof ApiDomainConnectCallbackRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
+  '/api/v1/mcp': typeof ApiV1McpRoute
   '/api/v1/send': typeof ApiV1SendRoute
   '/api/v1/suppressions': typeof ApiV1SuppressionsRoute
   '/api/domain-connect/templates/$serviceId': typeof ApiDomainConnectTemplatesServiceIdRoute
@@ -293,6 +301,7 @@ export interface FileRoutesById {
   '/api/domain-connect/callback': typeof ApiDomainConnectCallbackRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
+  '/api/v1/mcp': typeof ApiV1McpRoute
   '/api/v1/send': typeof ApiV1SendRoute
   '/api/v1/suppressions': typeof ApiV1SuppressionsRoute
   '/api/domain-connect/templates/$serviceId': typeof ApiDomainConnectTemplatesServiceIdRoute
@@ -328,6 +337,7 @@ export interface FileRouteTypes {
     | '/api/domain-connect/callback'
     | '/api/gmail/callback'
     | '/api/orpc/$'
+    | '/api/v1/mcp'
     | '/api/v1/send'
     | '/api/v1/suppressions'
     | '/api/domain-connect/templates/$serviceId'
@@ -361,6 +371,7 @@ export interface FileRouteTypes {
     | '/api/domain-connect/callback'
     | '/api/gmail/callback'
     | '/api/orpc/$'
+    | '/api/v1/mcp'
     | '/api/v1/send'
     | '/api/v1/suppressions'
     | '/api/domain-connect/templates/$serviceId'
@@ -394,6 +405,7 @@ export interface FileRouteTypes {
     | '/api/domain-connect/callback'
     | '/api/gmail/callback'
     | '/api/orpc/$'
+    | '/api/v1/mcp'
     | '/api/v1/send'
     | '/api/v1/suppressions'
     | '/api/domain-connect/templates/$serviceId'
@@ -428,6 +440,7 @@ export interface RootRouteChildren {
   ApiDomainConnectCallbackRoute: typeof ApiDomainConnectCallbackRoute
   ApiGmailCallbackRoute: typeof ApiGmailCallbackRoute
   ApiOrpcSplatRoute: typeof ApiOrpcSplatRoute
+  ApiV1McpRoute: typeof ApiV1McpRoute
   ApiV1SendRoute: typeof ApiV1SendRoute
   ApiV1SuppressionsRoute: typeof ApiV1SuppressionsRoute
   ApiDomainConnectTemplatesServiceIdRoute: typeof ApiDomainConnectTemplatesServiceIdRoute
@@ -613,6 +626,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiOrpcSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/mcp': {
+      id: '/api/v1/mcp'
+      path: '/api/v1/mcp'
+      fullPath: '/api/v1/mcp'
+      preLoaderRoute: typeof ApiV1McpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/send': {
       id: '/api/v1/send'
       path: '/api/v1/send'
@@ -684,6 +704,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiDomainConnectCallbackRoute: ApiDomainConnectCallbackRoute,
   ApiGmailCallbackRoute: ApiGmailCallbackRoute,
   ApiOrpcSplatRoute: ApiOrpcSplatRoute,
+  ApiV1McpRoute: ApiV1McpRoute,
   ApiV1SendRoute: ApiV1SendRoute,
   ApiV1SuppressionsRoute: ApiV1SuppressionsRoute,
   ApiDomainConnectTemplatesServiceIdRoute:
