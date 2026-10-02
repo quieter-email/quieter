@@ -4,6 +4,10 @@ import { reportAiUsage } from "@quieter/billing";
 import { db } from "@quieter/database/client";
 import { mailTemplate, member } from "@quieter/database/schema";
 import type { MailTemplateScope } from "@quieter/database/schema";
+import {
+  renderVisualEmailDocument,
+  visualEmailDocumentSchema,
+} from "@quieter/mail/visual-email";
 import { reportError } from "@quieter/observability";
 import { and, desc, eq, or } from "drizzle-orm";
 import { z } from "zod";
@@ -16,6 +20,7 @@ const mailTemplateIdSchema = z.string().trim().min(1);
 const mailTemplateScopeSchema = z.enum(["personal", "team"]);
 const mailTemplateFieldsSchema = z.object({
   bodyHtml: z.string().trim().min(1).max(100_000),
+  document: visualEmailDocumentSchema.nullable().optional(),
   name: z.string().trim().min(1).max(120),
   scope: mailTemplateScopeSchema,
   subject: z.string().trim().max(998),
@@ -60,16 +65,28 @@ const getTemplateMailboxContext = async (mailboxId: string, userId: string) => {
 const serializeTemplate = (
   template: typeof mailTemplate.$inferSelect,
   canManageTeamTemplates: boolean
-) => ({
-  bodyHtml: template.bodyHtml,
-  canEdit: template.scope === "personal" || canManageTeamTemplates,
-  createdAt: template.createdAt,
-  id: template.id,
-  name: template.name,
-  scope: template.scope,
-  subject: template.subject,
-  updatedAt: template.updatedAt,
-});
+) => {
+  const parsedDocument =
+    template.document === null
+      ? null
+      : visualEmailDocumentSchema.safeParse(template.document);
+
+  return {
+    bodyHtml: template.bodyHtml,
+    canEdit: template.scope === "personal" || canManageTeamTemplates,
+    createdAt: template.createdAt,
+    document: parsedDocument?.success === true ? parsedDocument.data : null,
+    documentError:
+      parsedDocument?.success === false
+        ? "The saved layout could not be opened. Save the message content to recover this template."
+        : null,
+    id: template.id,
+    name: template.name,
+    scope: template.scope,
+    subject: template.subject,
+    updatedAt: template.updatedAt,
+  };
+};
 
 const getAuthorizedTemplate = async ({
   canManageTeamTemplates,
@@ -126,8 +143,11 @@ export const mailTemplatesRouter = {
       const [created] = await db
         .insert(mailTemplate)
         .values({
-          bodyHtml: input.bodyHtml,
+          bodyHtml: input.document
+            ? renderVisualEmailDocument(input.document)
+            : input.bodyHtml,
           createdAt: now,
+          document: input.document ?? null,
           id: crypto.randomUUID(),
           name: input.name,
           organizationId:
@@ -172,7 +192,7 @@ export const mailTemplatesRouter = {
         .select()
         .from(mailTemplate)
         .where(
-          membership === undefined
+          membership === null
             ? eq(mailTemplate.userId, context.userId)
             : or(
                 eq(mailTemplate.userId, context.userId),
@@ -280,7 +300,10 @@ export const mailTemplatesRouter = {
       const [updated] = await db
         .update(mailTemplate)
         .set({
-          bodyHtml: input.bodyHtml,
+          bodyHtml: input.document
+            ? renderVisualEmailDocument(input.document)
+            : input.bodyHtml,
+          document: input.document ?? null,
           name: input.name,
           organizationId:
             input.scope === "team" ? mailbox.organizationId : null,
