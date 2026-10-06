@@ -170,4 +170,4 @@ jobs:
         run: vp run @quieter/database#db:test-migrations
 
       - name: Test database behavior against migrated PostgreSQL
-        run: vp test integration.test.ts
+        run: vp test integration.test.ts credit-accounting.test.ts

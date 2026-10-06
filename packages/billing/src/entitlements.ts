@@ -33,11 +33,15 @@ export const isActiveBillingStatus = (status: BillingSubscriptionStatus) =>
   ACTIVE_BILLING_STATUSES.has(status);
 
 export const isActiveBillingSubscription = (
-  subscription: Pick<SubscriptionRow, "currentPeriodEnd" | "status">,
+  subscription: Pick<
+    SubscriptionRow,
+    "cancelAtPeriodEnd" | "currentPeriodEnd" | "status"
+  >,
   now = new Date()
 ) =>
   isActiveBillingStatus(subscription.status) &&
-  subscription.currentPeriodEnd > now;
+  (subscription.currentPeriodEnd > now ||
+    (subscription.status === "active" && !subscription.cancelAtPeriodEnd));
 
 export type BillingAccount = {
   creditAmountCents: number;
@@ -46,6 +50,7 @@ export type BillingAccount = {
   externalCustomerId: string;
   organizationId: string;
   product: BillingProductId;
+  providerSubscriptionId?: string;
 };
 
 type BillingEntitlement = {
@@ -167,6 +172,7 @@ const toBillingAccount = (
     ),
     organizationId,
     product: parsedProduct.data,
+    providerSubscriptionId: row.providerSubscriptionId,
   };
 };
 
@@ -263,6 +269,11 @@ export const getOrganizationSubscriptionRecord = async (
       subscriptionBelongsToOrganization(candidate.metadata, organizationId)
     );
     return (
+      ownedRows.find(
+        (candidate) =>
+          isActiveBillingStatus(candidate.status) &&
+          candidate.currentPeriodEnd > new Date()
+      ) ??
       ownedRows.find((candidate) => isActiveBillingSubscription(candidate)) ??
       ownedRows.find((candidate) => isActiveBillingStatus(candidate.status)) ??
       ownedRows[0]
