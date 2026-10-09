@@ -225,6 +225,8 @@ SST is the runtime source of truth for application credentials and tokens; their
 
 Custom actions, their settings UI, graph execution, queue, dispatcher, and action-specific credit reservations are removed. Connectors remain available to chat, and managed inbox rules remain supported. The new application does not enqueue custom action runs.
 
+The future Actions surface has a standalone versioned JSON contract in `@quieter/ai/action-specification`. It validates mailbox scope, stable connection references, explicit permissions and tool grants, and reviewable parsed output without restoring the retired runtime or changing retained records. See [Action specification contract](action-specifications.md) for validation and authorization boundaries.
+
 Existing action tables and records remain untouched for an expand/contract release. Before rollout, pause old action dispatch and quiesce old producers, then drain in-flight action workers and account for queued retries. Confirm that old consumers cannot resume before removing their infrastructure. Removing code does not stop an already deployed worker. Review uncertain external effects instead of replaying them automatically. Table deletion belongs in a later, separately reviewed contract migration after the rollback window.
 
 Deploy `MailMaintenance` with the application so send recovery, object cleanup, rate-limit cleanup, and managed rule backfills continue every minute. Drain older send, ingestion, and rule workers before enabling the revised recovery paths. No production deployment or migration was performed for this cleanup.
