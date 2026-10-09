@@ -112,6 +112,27 @@ export const mailboxProcedures = {
       async ({ context, input }) =>
         await getManagedMailboxDetails({ ...input, userId: context.userId })
     ),
+  labelExistingInbox: protectedProcedure
+    .input(
+      z.object({
+        cursor: z
+          .object({
+            before: z.iso.datetime(),
+            pageToken: z.string().min(1).max(2000),
+            scanned: z.number().int().min(0).max(99),
+          })
+          .optional(),
+        mailboxId: mailboxIdSchema,
+      })
+    )
+    .handler(async ({ context, input }) => {
+      const { labelExistingMailboxInboxBatch } =
+        await import("../../mail-automation/backfill");
+      return await labelExistingMailboxInboxBatch({
+        ...input,
+        userId: context.userId,
+      });
+    }),
   listGmailThreadUsefulDetails: protectedProcedure
     .route({ method: "GET" })
     .input(

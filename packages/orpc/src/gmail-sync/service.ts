@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { ORPCError } from "@orpc/server";
 import type { AiUsageReport } from "@quieter/ai/chat-usage";
 import { classifyMailMessage } from "@quieter/ai/classify-gmail-message";
 import type { MailAutoLabelCandidate } from "@quieter/ai/classify-gmail-message";
@@ -49,7 +50,10 @@ import type { AiAgentMemoryCandidates } from "../ai-memory";
 import { syncGmailLabels } from "../gmail-labels";
 import { runAuthorizedGmailMailbox } from "../gmail-mailbox-access";
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
-import { deferAutoLabelAutomation } from "../mail-automation/auto-label-events";
+import {
+  deferAutoLabelAutomation,
+  reopenEmptyAutoLabelEvent,
+} from "../mail-automation/auto-label-events";
 import { reportAutoLabelUsage } from "../mail-automation/usage";
 import {
   listPendingMailboxVerificationCodeMessageIds,
@@ -80,10 +84,6 @@ type AutoLabelContext = {
 type MailAutomationBudgetStatus = Awaited<
   ReturnType<typeof getMailAutomationAiBudgetStatus>
 >;
-type MailAutomationContext = {
-  configuration: Awaited<ReturnType<typeof loadAiConfiguration>>;
-  memoryCandidates: AiAgentMemoryCandidates;
-};
 type MailAutomationRuntime = {
   getAutoLabelContext: () => Promise<AutoLabelContext>;
   getBudgetStatus: () => Promise<MailAutomationBudgetStatus>;
@@ -256,6 +256,7 @@ const processAutoLabelMessage = async ({
   getAutoLabelContext,
   getBudgetStatus,
   gmailMessageId,
+  existingUnlabeled = false,
   loadMessage,
   mailboxId,
   userId,
@@ -264,6 +265,7 @@ const processAutoLabelMessage = async ({
   getAutoLabelContext: () => Promise<AutoLabelContext>;
   getBudgetStatus: () => Promise<MailAutomationBudgetStatus>;
   gmailMessageId: string;
+  existingUnlabeled?: boolean;
   loadMessage: () => Promise<Awaited<
     ReturnType<typeof getMessageWithDetails>
   > | null>;
@@ -272,9 +274,13 @@ const processAutoLabelMessage = async ({
 }) => {
   let event = await getOrCreateAutoLabelEvent(mailboxId, gmailMessageId);
 
+  if (existingUnlabeled) {
+    event = await reopenEmptyAutoLabelEvent(event, userId);
+  }
+
   if (event.appliedAt) {
     await reportAutoLabelUsage({ ...event, userId });
-    return;
+    return false;
   }
 
   try {
@@ -293,7 +299,7 @@ const processAutoLabelMessage = async ({
             usageReportedAt: now,
           })
           .where(eq(gmailAutoLabelEvent.id, event.id));
-        return;
+        return false;
       }
 
       const message = await loadMessage();
@@ -310,7 +316,7 @@ const processAutoLabelMessage = async ({
             usageReportedAt: now,
           })
           .where(eq(gmailAutoLabelEvent.id, event.id));
-        return;
+        return false;
       }
 
       if (!isAutoLabelCandidate(message.labelIds)) {
@@ -326,7 +332,7 @@ const processAutoLabelMessage = async ({
             usageReportedAt: now,
           })
           .where(eq(gmailAutoLabelEvent.id, event.id));
-        return;
+        return false;
       }
 
       let usage: AiUsageReport = {
@@ -339,7 +345,10 @@ const processAutoLabelMessage = async ({
       const budgetStatus = await getBudgetStatus();
       if (!budgetStatus.allowed) {
         await deferAutoLabelAutomation(event.id, budgetStatus.message);
-        return;
+        if (existingUnlabeled) {
+          throw new ORPCError("FORBIDDEN", { message: budgetStatus.message });
+        }
+        return false;
       }
 
       const labelIds = await classifyMailMessage({
@@ -401,10 +410,35 @@ const processAutoLabelMessage = async ({
         })
         .where(eq(gmailAutoLabelEvent.id, event.id));
       await reportAutoLabelUsage({ ...event, userId });
-      return;
+      return false;
     }
 
     if (labelIds.length > 0) {
+      if (existingUnlabeled) {
+        const currentMessage = await getMessageWithDetails(
+          accessToken,
+          gmailMessageId
+        );
+        if (
+          !isAutoLabelCandidate(currentMessage.labelIds) ||
+          currentMessage.labelIds?.some((labelId) =>
+            autoLabelContext.availableLabelIds.has(labelId)
+          ) === true
+        ) {
+          const now = new Date();
+          await db
+            .update(gmailAutoLabelEvent)
+            .set({
+              appliedAt: now,
+              lastError: null,
+              nextAttemptAt: null,
+              updatedAt: now,
+            })
+            .where(eq(gmailAutoLabelEvent.id, event.id));
+          await reportAutoLabelUsage({ ...event, userId });
+          return false;
+        }
+      }
       try {
         await mutateGmailMessage(accessToken, gmailMessageId, {
           addLabelIds: labelIds,
@@ -427,7 +461,21 @@ const processAutoLabelMessage = async ({
       })
       .where(eq(gmailAutoLabelEvent.id, event.id));
     await reportAutoLabelUsage({ ...event, userId });
+    return labelIds.length > 0;
   } catch (error) {
+    if (
+      error instanceof ORPCError &&
+      (error.code === "FORBIDDEN" ||
+        error.code === "UNAUTHORIZED" ||
+        error.code === "NOT_FOUND" ||
+        error.code === "BAD_REQUEST" ||
+        error.code === "CONFLICT")
+    ) {
+      if (existingUnlabeled) {
+        throw error;
+      }
+      return false;
+    }
     const now = new Date();
     const attemptCount = event.attemptCount + 1;
     await db
@@ -448,7 +496,11 @@ const processAutoLabelMessage = async ({
     if (shouldReportAiTaskFailure(error, attemptCount)) {
       reportError(error, { operation: "gmail-sync:auto-label-message" });
     }
+    if (existingUnlabeled) {
+      throw error;
+    }
   }
+  return false;
 };
 
 const processMessageIds = async ({
@@ -700,6 +752,135 @@ const processHistoryRecoveryPage = async ({
     .where(eq(gmailWatchState.mailboxId, mailboxId));
 };
 
+const createMailAutomationRuntime = (input: {
+  accessToken: string;
+  mailboxId: string;
+  organizationId: string | null;
+  userId: string;
+}): MailAutomationRuntime => {
+  const { accessToken, mailboxId, organizationId, userId } = input;
+  let contextPromise: Promise<AutoLabelContext> | null = null;
+  return {
+    getAutoLabelContext: async () => {
+      contextPromise ??= (async () => {
+        const [providerLabels, configuration, memoryCandidates] =
+          await Promise.all([
+            listLabels(accessToken),
+            Promise.resolve(loadAiConfiguration()),
+            loadAiAgentMemoryCandidates({
+              includeUserScope: false,
+              mailboxId,
+              userId,
+            }),
+          ]);
+        const gmailLabels = await syncGmailLabels(mailboxId, providerLabels);
+        const labels = gmailLabels
+          .filter((label) => label.type === "user")
+          .map((label) => ({
+            description: label.description,
+            id: label.id,
+            inclusionCriteria: label.inclusionCriteria,
+            name: label.name,
+          }));
+        return {
+          availableLabelIds: new Set(labels.map((label) => label.id)),
+          labels,
+          memoryCandidates,
+          model: configuration.autoLabelModel,
+        };
+      })();
+      return await contextPromise;
+    },
+    getBudgetStatus: async () =>
+      await getMailAutomationAiBudgetStatus({ organizationId, userId }),
+  };
+};
+
+export const labelExistingGmailInboxBatch = async (input: {
+  after: string;
+  before: string;
+  limit: number;
+  mailboxId: string;
+  organizationId: string | null;
+  onApplied?: () => void;
+  pageToken?: string;
+  userId: string;
+}) => {
+  if (
+    serverEnv.QUIETER_DEPLOYMENT_ENV === "local" &&
+    serverEnv.QUIETER_LOCAL_PROVIDER_MODE !== "write"
+  ) {
+    throw new ORPCError("FORBIDDEN", {
+      message:
+        "Labeling existing mail requires write mode and a dedicated test mailbox or a handoff of processing ownership.",
+    });
+  }
+  const leaseId = await claimMailboxProcessingLease(input.mailboxId);
+  if (!leaseId) {
+    throw new ORPCError("CONFLICT", {
+      message: "Mail is already being processed. Please try again shortly.",
+    });
+  }
+  try {
+    return await runAuthorizedGmailMailbox(input, async (accessToken) => {
+      const runtime = createMailAutomationRuntime({ ...input, accessToken });
+      const context = await runtime.getAutoLabelContext();
+      if (context.labels.length === 0) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: "Create a label before labeling existing mail.",
+        });
+      }
+      const page = await listGmailMessageIds(accessToken, {
+        mailbox: "inbox",
+        maxResults: input.limit,
+        pageToken: input.pageToken,
+        query: `after:${Math.floor(new Date(input.after).getTime() / 1000)} before:${Math.ceil(new Date(input.before).getTime() / 1000)}`,
+      });
+      let labeled = 0;
+      for (const gmailMessageId of page.messageIds) {
+        await extendMailboxProcessingLease(input.mailboxId, leaseId);
+        let message;
+        try {
+          message = await getMessageWithDetails(accessToken, gmailMessageId);
+        } catch (error) {
+          if (isGmailServiceError(error) && error.status === 404) {
+            continue;
+          }
+          throw error;
+        }
+        if (
+          !isAutoLabelCandidate(message.labelIds) ||
+          message.labelIds?.some((id) => context.availableLabelIds.has(id)) ===
+            true
+        ) {
+          continue;
+        }
+        const applied = await processAutoLabelMessage({
+          accessToken,
+          ...runtime,
+          existingUnlabeled: true,
+          gmailMessageId,
+          // oxlint-disable-next-line eslint/require-await -- The batch already loaded the message.
+          loadMessage: async () => message,
+          mailboxId: input.mailboxId,
+          userId: input.userId,
+        });
+        if (applied) {
+          labeled += 1;
+          input.onApplied?.();
+        }
+      }
+      return {
+        labeled,
+        nextPageToken: page.nextPageToken ?? null,
+        scanned: page.messageIds.length,
+      };
+    });
+  } finally {
+    await releaseMailboxProcessingLease(input.mailboxId, leaseId);
+  }
+};
+
 const processMailboxHistory = async ({
   mailboxId,
   maxHistoryPages,
@@ -728,57 +909,12 @@ const processMailboxHistory = async ({
           .where(eq(mailboxAutomationSettings.mailboxId, mailboxId))
           .limit(1);
         const autoLabelEnabled = automationSettings?.autoLabelEnabled ?? false;
-        let mailAutomationContextPromise: Promise<MailAutomationContext> | null =
-          null;
-        const getMailAutomationContext = async () => {
-          mailAutomationContextPromise ??= Promise.all([
-            Promise.resolve(loadAiConfiguration()),
-            loadAiAgentMemoryCandidates({
-              includeUserScope: false,
-              mailboxId,
-              userId,
-            }),
-          ]).then(([configuration, memoryCandidates]) => ({
-            configuration,
-            memoryCandidates,
-          }));
-          return await mailAutomationContextPromise;
-        };
-        let autoLabelContextPromise: Promise<AutoLabelContext> | null = null;
-        const getAutoLabelContext = async () => {
-          autoLabelContextPromise ??= Promise.all([
-            listLabels(accessToken).then(
-              async (labels) => await syncGmailLabels(mailboxId, labels)
-            ),
-            getMailAutomationContext(),
-          ]).then(([gmailLabels, automationContext]) => {
-            const labels = gmailLabels
-              .filter((label) => label.type === "user")
-              .map((label) => ({
-                description: label.description,
-                id: label.id,
-                inclusionCriteria: label.inclusionCriteria,
-                name: label.name,
-              }));
-            return {
-              availableLabelIds: new Set(labels.map((label) => label.id)),
-              labels,
-              memoryCandidates: automationContext.memoryCandidates,
-              model: automationContext.configuration.autoLabelModel,
-            };
-          });
-
-          return await autoLabelContextPromise;
-        };
-        const getBudgetStatus = async () =>
-          await getMailAutomationAiBudgetStatus({
-            organizationId,
-            userId,
-          });
-        const automationRuntime: MailAutomationRuntime = {
-          getAutoLabelContext,
-          getBudgetStatus,
-        };
+        const automationRuntime = createMailAutomationRuntime({
+          accessToken,
+          mailboxId,
+          organizationId,
+          userId,
+        });
 
         for (let pageIndex = 0; pageIndex < maxHistoryPages; pageIndex += 1) {
           const [state] = await db

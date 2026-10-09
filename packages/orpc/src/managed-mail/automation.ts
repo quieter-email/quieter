@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { ORPCError } from "@orpc/server";
 import type { AiUsageReport } from "@quieter/ai/chat-usage";
 import { classifyMailMessage } from "@quieter/ai/classify-gmail-message";
 import type {
@@ -15,11 +16,12 @@ import {
   managedMailAttachment,
   managedMailLabel,
   managedMailMessage,
+  managedMailMessageLabel,
   organization,
 } from "@quieter/database/schema";
 import { MAILBOX_LABELS } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
-import { and, eq, isNull, lte, or } from "drizzle-orm";
+import { and, eq, gt, gte, isNull, lte, notExists, or } from "drizzle-orm";
 
 import {
   buildMailMemoryQuery,
@@ -30,7 +32,12 @@ import {
 } from "../ai-memory";
 import type { AiAgentMemoryCandidates } from "../ai-memory";
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
-import { deferAutoLabelAutomation } from "../mail-automation/auto-label-events";
+import {
+  AUTO_LABEL_PROCESSING_MESSAGE,
+  claimAutoLabelEvent,
+  deferAutoLabelAutomation,
+  reopenEmptyAutoLabelEvent,
+} from "../mail-automation/auto-label-events";
 import { reportAutoLabelUsage } from "../mail-automation/usage";
 import { updateManagedMessageLabelAssignments } from "./labels/repository";
 
@@ -224,6 +231,7 @@ const markManagedAutoLabelEventAppliedWithoutUsage = async (
 
 const processManagedAutoLabelMessage = async (input: {
   autoLabelContext: ManagedAutoLabelContext;
+  existingUnlabeled?: boolean;
   mailboxId: string;
   messageId: string;
   organizationId: string;
@@ -233,16 +241,45 @@ const processManagedAutoLabelMessage = async (input: {
     input.mailboxId,
     input.messageId
   );
+  if (
+    event.nextAttemptAt &&
+    event.nextAttemptAt > new Date() &&
+    (event.lastError === AUTO_LABEL_PROCESSING_MESSAGE ||
+      event.lastError === null)
+  ) {
+    if (input.existingUnlabeled === true) {
+      throw new ORPCError("CONFLICT", {
+        message: "Mail is already being processed. Please try again shortly.",
+      });
+    }
+    return false;
+  }
+  if (input.existingUnlabeled === true) {
+    event = await reopenEmptyAutoLabelEvent(event, input.userId);
+  }
   if (event.appliedAt) {
     await reportAutoLabelUsage({ ...event, userId: input.userId });
-    return;
+    return false;
   }
 
+  const claimed = await claimAutoLabelEvent(
+    event,
+    input.existingUnlabeled === true
+  );
+  if (claimed === undefined) {
+    if (input.existingUnlabeled === true) {
+      throw new ORPCError("CONFLICT", {
+        message: "Mail is already being processed. Please try again shortly.",
+      });
+    }
+    return false;
+  }
+  event = claimed;
   try {
     if (event.labelIds === null || event.labelIds === undefined) {
       if (input.autoLabelContext.labels.length === 0) {
         await markManagedAutoLabelEventAppliedWithoutUsage(event.id);
-        return;
+        return false;
       }
 
       const message = await loadManagedAutomationMessage(
@@ -251,7 +288,7 @@ const processManagedAutoLabelMessage = async (input: {
       );
       if (message === null) {
         await markManagedAutoLabelEventAppliedWithoutUsage(event.id);
-        return;
+        return false;
       }
 
       let usage: AiUsageReport = {
@@ -267,7 +304,10 @@ const processManagedAutoLabelMessage = async (input: {
       });
       if (!budgetStatus.allowed) {
         await deferAutoLabelAutomation(event.id, budgetStatus.message);
-        return;
+        if (input.existingUnlabeled === true) {
+          throw new ORPCError("FORBIDDEN", { message: budgetStatus.message });
+        }
+        return false;
       }
 
       const labelIds = await classifyMailMessage({
@@ -294,7 +334,7 @@ const processManagedAutoLabelMessage = async (input: {
           completionTokens: usage.completionTokens,
           costUsd: usage.costUsd ?? null,
           labelIds,
-          lastError: null,
+          lastError: AUTO_LABEL_PROCESSING_MESSAGE,
           model: input.autoLabelContext.model,
           promptTokens: usage.promptTokens,
           updatedAt: new Date(),
@@ -317,6 +357,32 @@ const processManagedAutoLabelMessage = async (input: {
         : null;
 
     if (labelIds.length > 0 && currentMessage) {
+      if (input.existingUnlabeled === true) {
+        const assignments = await db
+          .select({ id: managedMailMessageLabel.id })
+          .from(managedMailMessageLabel)
+          .where(
+            and(
+              eq(managedMailMessageLabel.mailboxId, input.mailboxId),
+              eq(managedMailMessageLabel.messageId, input.messageId)
+            )
+          )
+          .limit(1);
+        if (assignments.length > 0) {
+          const now = new Date();
+          await db
+            .update(gmailAutoLabelEvent)
+            .set({
+              appliedAt: now,
+              lastError: null,
+              nextAttemptAt: null,
+              updatedAt: now,
+            })
+            .where(eq(gmailAutoLabelEvent.id, event.id));
+          await reportAutoLabelUsage({ ...event, userId: input.userId });
+          return false;
+        }
+      }
       await updateManagedMessageLabelAssignments({
         addLabelIds: labelIds,
         mailboxId: input.mailboxId,
@@ -336,7 +402,21 @@ const processManagedAutoLabelMessage = async (input: {
       })
       .where(eq(gmailAutoLabelEvent.id, event.id));
     await reportAutoLabelUsage({ ...event, userId: input.userId });
+    return labelIds.length > 0 && currentMessage !== null;
   } catch (error) {
+    if (
+      error instanceof ORPCError &&
+      (error.code === "FORBIDDEN" ||
+        error.code === "UNAUTHORIZED" ||
+        error.code === "NOT_FOUND" ||
+        error.code === "BAD_REQUEST" ||
+        error.code === "CONFLICT")
+    ) {
+      if (input.existingUnlabeled === true) {
+        throw error;
+      }
+      return false;
+    }
     const now = new Date();
     const attemptCount = event.attemptCount + 1;
     await db
@@ -355,7 +435,11 @@ const processManagedAutoLabelMessage = async (input: {
       })
       .where(eq(gmailAutoLabelEvent.id, event.id));
     reportError(error, { operation: "managed-mail:auto-label-message" });
+    if (input.existingUnlabeled === true) {
+      throw error;
+    }
   }
+  return false;
 };
 
 const listPendingManagedAutoLabelMessageIds = async (mailboxId: string) => {
@@ -488,3 +572,81 @@ export const processManagedMailAutomation = async (input: {
 };
 
 export const getManagedAutomationOwner = getAutomationOwner;
+
+export const labelExistingManagedInboxBatch = async (input: {
+  after: string;
+  before: string;
+  limit: number;
+  mailboxId: string;
+  onApplied?: () => void;
+  pageToken?: string;
+}) => {
+  const owner = await getAutomationOwner(input.mailboxId);
+  if (!owner) {
+    throw new ORPCError("FORBIDDEN", {
+      message: "AI automation requires a team billing owner.",
+    });
+  }
+  const budget = await getMailAutomationAiBudgetStatus(owner);
+  if (!budget.allowed) {
+    throw new ORPCError("FORBIDDEN", { message: budget.message });
+  }
+  const context = await getManagedAutoLabelCandidates({
+    ...owner,
+    mailboxId: input.mailboxId,
+  });
+  if (context.labels.length === 0) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Create a label before labeling existing mail.",
+    });
+  }
+  const messages = await db
+    .select({ id: managedMailMessage.id })
+    .from(managedMailMessage)
+    .where(
+      and(
+        eq(managedMailMessage.mailboxId, input.mailboxId),
+        eq(managedMailMessage.direction, "inbound"),
+        eq(managedMailMessage.mailboxState, "active"),
+        lte(managedMailMessage.createdAt, new Date(input.before)),
+        gte(managedMailMessage.createdAt, new Date(input.after)),
+        input.pageToken
+          ? gt(managedMailMessage.id, input.pageToken)
+          : undefined,
+        notExists(
+          db
+            .select({ id: managedMailMessageLabel.id })
+            .from(managedMailMessageLabel)
+            .where(
+              and(
+                eq(managedMailMessageLabel.mailboxId, input.mailboxId),
+                eq(managedMailMessageLabel.messageId, managedMailMessage.id)
+              )
+            )
+        )
+      )
+    )
+    .orderBy(managedMailMessage.id)
+    .limit(input.limit + 1);
+  const batch = messages.slice(0, input.limit);
+  let labeled = 0;
+  for (const message of batch) {
+    const applied = await processManagedAutoLabelMessage({
+      ...owner,
+      autoLabelContext: context,
+      existingUnlabeled: true,
+      mailboxId: input.mailboxId,
+      messageId: message.id,
+    });
+    if (applied) {
+      labeled += 1;
+      input.onApplied?.();
+    }
+  }
+  return {
+    labeled,
+    nextPageToken:
+      messages.length > batch.length ? (batch.at(-1)?.id ?? null) : null,
+    scanned: batch.length,
+  };
+};
