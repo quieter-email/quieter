@@ -35,7 +35,7 @@ import { EyeIcon, EyeOffIcon } from "@quieter/ui/icons";
 import { Input } from "@quieter/ui/input";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useReducer, useRef, useState } from "react";
+import { useEffect, useReducer, useState } from "react";
 
 import { MailboxColorPicker } from "#/features/message-labels/components/mailbox-color-picker";
 import { mailboxLabelDotClassNameByColor } from "#/features/message-labels/domain/mailbox-label-presentation";
@@ -49,26 +49,16 @@ import {
 } from "#/features/message-labels/domain/sidebar-label-visibility";
 import { getUserLabels } from "#/features/message-search/state/message-list-search-state";
 import { toastError } from "#/lib/error-toast";
-import { getMessagesQueryKey } from "#/lib/mail/inbox-query";
 import { getLabelsQueryKey, labelsQueryOptions } from "#/lib/mail/labels-query";
-import { getMailboxThreadQueriesKey } from "#/lib/mail/thread-query-keys";
 import {
   getManagedLabelCountsQueryKey,
   managedLabelCountsQueryOptions,
 } from "#/lib/managed-mailbox-organization-query";
 import { orpc } from "#/lib/orpc";
-import { isSandboxMailboxId } from "#/lib/sandbox-mailbox";
 
 type LabelsWorkspacePanelProps = {
   mailboxId: string | null;
   mailboxProvider: "gmail" | "managed";
-};
-
-type ExistingMailLabelingProgress = {
-  labeled: number;
-  mailboxId: string;
-  scanned: number;
-  status: "running" | "complete" | "limit" | "stopped" | "failed";
 };
 
 const isNonemptyMailboxId = (
@@ -87,16 +77,6 @@ export const LabelsWorkspacePanel = ({
   const [draftDescription, setDraftDescription] = useState("");
   const [draftName, setDraftName] = useState("");
   const [deletingLabel, setDeletingLabel] = useState<MailboxLabel | null>(null);
-  const [labelingProgress, setLabelingProgress] =
-    useState<ExistingMailLabelingProgress | null>(null);
-  const labelingRunRef = useRef<{
-    mailboxId: string;
-    stopRequested: boolean;
-  } | null>(null);
-  if (labelingProgress && labelingProgress.mailboxId !== mailboxId) {
-    setLabelingProgress(null);
-  }
-  const isLabelingExistingMail = labelingProgress?.status === "running";
   const [hiddenLabelState, updateHiddenLabelState] = useReducer(
     reduceHiddenLabelState,
     mailboxId,
@@ -110,15 +90,6 @@ export const LabelsWorkspacePanel = ({
     labelsQueryOptions(mailboxId ?? "", isNonemptyMailboxId(mailboxId))
   );
   const labelsUnavailable = areLabelsError && labels === undefined;
-
-  useEffect(
-    () => () => {
-      if (labelingRunRef.current?.mailboxId === mailboxId) {
-        labelingRunRef.current = null;
-      }
-    },
-    [mailboxId]
-  );
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -178,69 +149,6 @@ export const LabelsWorkspacePanel = ({
   const updateLabelDetailsMutation = useMutation(
     orpc.mail.updateLabelDetails.mutationOptions()
   );
-  const labelExistingInboxMutation = useMutation(
-    orpc.mail.labelExistingInbox.mutationOptions()
-  );
-
-  const labelExistingMail = async () => {
-    if (!isNonemptyMailboxId(mailboxId) || labelingRunRef.current !== null) {
-      return;
-    }
-    const run = { mailboxId, stopRequested: false };
-    labelingRunRef.current = run;
-    let cursor: { before: string; pageToken: string; scanned: number } | null =
-      null;
-    let labeled = 0;
-    let scanned = 0;
-    let status: ExistingMailLabelingProgress["status"] = "complete";
-    setLabelingProgress({ labeled, mailboxId, scanned, status: "running" });
-
-    try {
-      do {
-        const result = await labelExistingInboxMutation.mutateAsync({
-          cursor: cursor ?? undefined,
-          mailboxId,
-        });
-        if (labelingRunRef.current !== run) {
-          return;
-        }
-        labeled += result.labeled;
-        scanned += result.scanned;
-        ({ cursor } = result);
-        setLabelingProgress({ labeled, mailboxId, scanned, status: "running" });
-      } while (cursor !== null && !run.stopRequested);
-      if (cursor !== null) {
-        status = "stopped";
-      } else if (scanned >= 100) {
-        status = "limit";
-      }
-    } catch (error) {
-      status = "failed";
-      toastError(error, {
-        boundary: "labels-panel",
-        fallback: "Could not label recent mail. Please try again.",
-      });
-    } finally {
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: getLabelsQueryKey(mailboxId),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: getMessagesQueryKey(mailboxId, "inbox").slice(0, 2),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: getMailboxThreadQueriesKey(mailboxId),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: getManagedLabelCountsQueryKey(mailboxId),
-        }),
-      ]);
-      if (labelingRunRef.current === run) {
-        labelingRunRef.current = null;
-        setLabelingProgress({ labeled, mailboxId, scanned, status });
-      }
-    }
-  };
 
   const setMailboxHiddenLabelIds = (
     updater: (current: Set<string>) => Set<string>
@@ -591,60 +499,6 @@ export const LabelsWorkspacePanel = ({
             Create labels, choose which ones appear in your sidebar, and explain
             what belongs in each one.
           </p>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <Button
-              disabled={
-                isLabelingExistingMail ||
-                !isNonemptyMailboxId(mailboxId) ||
-                isSandboxMailboxId(mailboxId ?? "")
-              }
-              onClick={() => {
-                void labelExistingMail();
-              }}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              {isLabelingExistingMail
-                ? "Labeling recent mail…"
-                : "Label recent mail"}
-            </Button>
-            {isLabelingExistingMail ? (
-              <Button
-                onClick={() => {
-                  if (labelingRunRef.current) {
-                    labelingRunRef.current.stopRequested = true;
-                  }
-                }}
-                size="sm"
-                type="button"
-                variant="ghost"
-              >
-                Stop after this batch
-              </Button>
-            ) : null}
-            {labelingProgress ? (
-              <p aria-live="polite" className="text-caption text-muted-fg">
-                {labelingProgress.scanned} scanned, {labelingProgress.labeled}{" "}
-                labeled
-                {labelingProgress.status === "complete" ? ", complete" : null}
-                {labelingProgress.status === "limit"
-                  ? ", 100-message limit reached"
-                  : null}
-                {labelingProgress.status === "stopped" ? ", stopped" : null}
-                {labelingProgress.status === "failed" ? ", interrupted" : null}
-              </p>
-            ) : null}
-          </div>
-          <p className="mt-2 text-caption text-muted-fg">
-            Checks up to 100 Inbox messages from the past 7 days. Existing
-            labels are kept.
-          </p>
-          {isSandboxMailboxId(mailboxId ?? "") ? (
-            <p className="mt-2 text-caption text-muted-fg">
-              Connect a mailbox to label recent mail.
-            </p>
-          ) : null}
         </div>
 
         <form
