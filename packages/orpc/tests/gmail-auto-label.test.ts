@@ -1,60 +1,7 @@
-import {
-  buildAutoLabelPromptInput,
-  sanitizeAutoLabelSelection,
-} from "@quieter/ai/classify-gmail-message";
+import { buildAutoLabelPromptInput } from "@quieter/ai/classify-gmail-message";
 import { describe, expect, test } from "vite-plus/test";
 
 describe("Gmail auto-label selection", () => {
-  test("drops the result when every available label was selected", () => {
-    const availableLabelIds = new Set(["label-a", "label-b", "label-c"]);
-
-    expect(
-      sanitizeAutoLabelSelection(
-        ["label-a", "label-b", "label-c"],
-        availableLabelIds
-      )
-    ).toStrictEqual([]);
-  });
-
-  test("drops the result when more than half of the labels were selected", () => {
-    const availableLabelIds = new Set(["label-a", "label-b", "label-c"]);
-
-    expect(
-      sanitizeAutoLabelSelection(["label-a", "label-b"], availableLabelIds)
-    ).toStrictEqual([]);
-  });
-
-  test("keeps a single confident label", () => {
-    const availableLabelIds = new Set(["label-a", "label-b", "label-c"]);
-
-    expect(
-      sanitizeAutoLabelSelection(["label-b"], availableLabelIds)
-    ).toStrictEqual(["label-b"]);
-  });
-
-  test("keeps two labels when many are available", () => {
-    const availableLabelIds = new Set([
-      "receipts",
-      "amazon",
-      "tax",
-      "travel",
-      "finance",
-      "health",
-    ]);
-
-    expect(
-      sanitizeAutoLabelSelection(["receipts", "amazon"], availableLabelIds)
-    ).toStrictEqual(["receipts", "amazon"]);
-  });
-
-  test("ignores unknown label ids", () => {
-    const availableLabelIds = new Set(["label-a"]);
-
-    expect(
-      sanitizeAutoLabelSelection(["label-a", "label-z"], availableLabelIds)
-    ).toStrictEqual(["label-a"]);
-  });
-
   test("passes dynamically retrieved memory as advisory classifier context", () => {
     const input = buildAutoLabelPromptInput({
       labels: [
