@@ -249,10 +249,17 @@ describe("reply suggestion authorization and draft preparation", () => {
     );
   });
 
-  test("keeps the selected older message in bounded conversation context", async () => {
+  test("bounds conversation context at the selected message", async () => {
     const body = "Long message text ".repeat(10_000);
     mocks.thread.mockResolvedValue({
       messages: [
+        ...Array.from({ length: 30 }, (_, index) =>
+          message({
+            bodyText: body,
+            id: `earlier-${index}`,
+            internalDate: String(100 + index),
+          })
+        ),
         message(),
         ...Array.from({ length: 50 }, (_, index) =>
           message({
@@ -266,9 +273,11 @@ describe("reply suggestion authorization and draft preparation", () => {
     });
     await requestReplySuggestion(request);
     const messages = mocks.generate.mock.calls[0]?.[0].messages ?? [];
-    expect(messages.length).toBeLessThan(51);
+    expect(messages.length).toBeLessThan(31);
+    expect(messages.at(-1)).toMatchObject({ id: "message-1" });
+    expect(messages.some((entry) => entry.id.startsWith("later-"))).toBeFalsy();
     expect(messages).toContainEqual(
-      expect.objectContaining({ id: "message-1" })
+      expect.objectContaining({ id: "earlier-29" })
     );
     expect(
       messages.every((entry) => entry.bodyText.length < body.length)

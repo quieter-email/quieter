@@ -83,12 +83,11 @@ export const requestReplySuggestion = async ({
         (left, right) =>
           Number(left.internalDate ?? 0) - Number(right.internalDate ?? 0)
       );
-    const recentIds = new Set([
-      ...conversation.slice(-11).map((message) => message.id),
-      target.id,
-    ]);
+    const targetIndex = conversation.findIndex(
+      (message) => message.id === target.id
+    );
     const messages = conversation
-      .filter((message) => recentIds.has(message.id))
+      .slice(Math.max(0, targetIndex - 10), targetIndex + 1)
       .map((message) => ({
         bodyText: (
           message.bodyText ||

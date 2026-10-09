@@ -28,6 +28,7 @@ import type { ComposeDraftState } from "#/features/compose/domain/draft";
 import { MessageLabels } from "#/features/message-labels/components/message-labels";
 import { toastError } from "#/lib/error-toast";
 import { parseSender } from "#/lib/gmail/message-utils";
+import { MAILBOX_LABELS } from "#/lib/mail";
 import { getThreadWithDetailsOptions } from "#/lib/mail/thread-query";
 import { orpc } from "#/lib/orpc";
 
@@ -144,8 +145,15 @@ const MessageViewContent = (props: MessageViewContentProps) => {
             getThreadWithDetailsOptions(mailboxId, hotkeyMessage.threadId)
               .queryKey
           );
+          const currentReplyTarget = currentThread?.messages.findLast(
+            (entry) =>
+              !entry.draftId?.trim() &&
+              entry.labelIds?.includes(MAILBOX_LABELS.drafts) !== true
+          );
           if (
             composeRevisionRef.current !== composeRevision ||
+            (currentReplyTarget !== undefined &&
+              currentReplyTarget.id !== hotkeyMessage.id) ||
             findLinkedDraftForMessage(
               currentThread?.messages ?? [],
               hotkeyMessage
