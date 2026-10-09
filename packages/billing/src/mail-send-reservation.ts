@@ -11,7 +11,7 @@ import type {
 } from "@quieter/database/schema";
 import { and, eq, gte, inArray, isNull, lt, ne, sql } from "drizzle-orm";
 
-import { getBillingCreditUsage } from "./credits.ts";
+import { getBillingCreditUsage, getBillingUsagePeriodEnd } from "./credits.ts";
 import { getOrganizationBillingEntitlement } from "./entitlements.ts";
 import {
   estimateOutboundOrganizationMailUsage,
@@ -128,7 +128,7 @@ export const reserveOrganizationMailSend = async (input: {
             ),
             lt(
               organizationMailSendIdempotency.createdAt,
-              account.currentPeriodEnd
+              getBillingUsagePeriodEnd(account)
             ),
             isNull(billingCreditUsageEvent.id),
             existing === undefined

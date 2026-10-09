@@ -525,7 +525,7 @@ const processMessageIds = async ({
   );
 };
 
-const retryPendingAutomationMessages = async ({
+export const retryPendingAutomationMessages = async ({
   accessToken,
   automationRuntime,
   autoLabelEnabled,
@@ -544,7 +544,10 @@ const retryPendingAutomationMessages = async ({
   const [autoLabelEvents, pendingCodeMessageIds] = await Promise.all([
     autoLabelEnabled
       ? db
-          .select({ gmailMessageId: gmailAutoLabelEvent.gmailMessageId })
+          .select({
+            gmailMessageId: gmailAutoLabelEvent.gmailMessageId,
+            nextAttemptAt: gmailAutoLabelEvent.nextAttemptAt,
+          })
           .from(gmailAutoLabelEvent)
           .where(
             and(
@@ -552,14 +555,27 @@ const retryPendingAutomationMessages = async ({
               isNull(gmailAutoLabelEvent.appliedAt),
               or(
                 isNull(gmailAutoLabelEvent.nextAttemptAt),
-                lte(gmailAutoLabelEvent.nextAttemptAt, now)
+                lte(gmailAutoLabelEvent.nextAttemptAt, now),
+                // Budget deferrals have no classification or failed attempt.
+                and(
+                  eq(gmailAutoLabelEvent.attemptCount, 0),
+                  isNull(gmailAutoLabelEvent.labelIds),
+                  isNotNull(gmailAutoLabelEvent.lastError)
+                )
               )
             )
           )
+          .orderBy(sql`${gmailAutoLabelEvent.nextAttemptAt} asc nulls first`)
           .limit(20)
       : [],
     listPendingMailboxVerificationCodeMessageIds(mailboxId, 20),
   ]);
+  const budgetStatus = autoLabelEvents.some(
+    (event) => event.nextAttemptAt !== null && event.nextAttemptAt > now
+  )
+    ? await automationRuntime.getBudgetStatus()
+    : null;
+  const resumeBudgetDeferred = budgetStatus?.allowed ?? false;
 
   await processMessageIds({
     accessToken,
@@ -577,7 +593,14 @@ const retryPendingAutomationMessages = async ({
     automationRuntime,
     extractCodes: false,
     mailboxId,
-    messageIds: autoLabelEvents.map((event) => event.gmailMessageId),
+    messageIds: autoLabelEvents
+      .filter(
+        (event) =>
+          event.nextAttemptAt === null ||
+          event.nextAttemptAt <= now ||
+          resumeBudgetDeferred
+      )
+      .map((event) => event.gmailMessageId),
     organizationId,
     userId,
   });
@@ -968,6 +991,28 @@ export const listGmailPubSubMaintenanceJobs = async (limit = 500) =>
           lte(
             gmailWatchState.lastReconciledAt,
             sql`now() - interval '2 hours'`
+          ),
+          exists(
+            db
+              .select({ id: gmailAutoLabelEvent.id })
+              .from(gmailAutoLabelEvent)
+              .innerJoin(
+                mailboxAutomationSettings,
+                eq(
+                  mailboxAutomationSettings.mailboxId,
+                  gmailAutoLabelEvent.mailboxId
+                )
+              )
+              .where(
+                and(
+                  eq(gmailAutoLabelEvent.mailboxId, mailbox.id),
+                  eq(mailboxAutomationSettings.autoLabelEnabled, true),
+                  isNull(gmailAutoLabelEvent.appliedAt),
+                  eq(gmailAutoLabelEvent.attemptCount, 0),
+                  isNull(gmailAutoLabelEvent.labelIds),
+                  isNotNull(gmailAutoLabelEvent.lastError)
+                )
+              )
           ),
           exists(
             db

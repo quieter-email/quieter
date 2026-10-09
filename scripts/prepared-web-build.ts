@@ -24,7 +24,25 @@ const configuration = createHash("sha256")
   .update(buildId)
   .digest("hex");
 
-if (mode === "diff" || mode === "refresh") {
+if (mode !== "diff" && mode !== "refresh" && mode !== "deploy") {
+  throw new Error(`Unsupported production build operation: ${mode}`);
+}
+let preparedReceipt: string | null = null;
+if (mode === "deploy") {
+  try {
+    preparedReceipt = await readFile(receiptPath, "utf-8");
+  } catch (error) {
+    if (
+      !(error instanceof Error) ||
+      !("code" in error) ||
+      error.code !== "ENOENT"
+    ) {
+      throw error;
+    }
+  }
+}
+// Unknown preview inputs can prevent SST from invoking the build before deployment.
+if (mode !== "deploy" || preparedReceipt === null) {
   if (
     (process.env.SENTRY_AUTH_TOKEN ?? "") === "" ||
     (process.env.SENTRY_ORG ?? "") === "" ||
@@ -38,8 +56,6 @@ if (mode === "diff" || mode === "refresh") {
     shell: process.platform === "win32",
     stdio: "inherit",
   });
-} else if (mode !== "deploy") {
-  throw new Error(`Unsupported production build operation: ${mode}`);
 }
 
 const files: Record<string, string> = {};
@@ -81,8 +97,8 @@ if (
   );
 }
 const receipt = JSON.stringify({ buildId, configuration, files });
-if (mode === "deploy") {
-  if ((await readFile(receiptPath, "utf-8")) !== receipt) {
+if (mode === "deploy" && preparedReceipt !== null) {
+  if (preparedReceipt !== receipt) {
     throw new Error(
       "Build output or SST configuration changed after preparation. Run preparation again."
     );

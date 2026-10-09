@@ -6,6 +6,8 @@ All plans receive Gmail live updates. Free teams can connect 5 Gmail accounts, M
 
 Concurrent connections lock the destination team before counting and writing. Reconnecting an existing mailbox remains allowed after a downgrade; additions and incoming moves stop at the new limit without deleting existing mail. Paid Gmail AI assistance retains its separate entitlement. Watch renewal and notification ingestion do not require that entitlement.
 
+Active, renewing subscriptions retain access when Polar has not advanced the billing period end. Expired trials and scheduled cancellations still stop at that date, and failed provider reconciliation denies access. Usage continues against the existing period start and allowance until Polar renews the period; it does not receive a fresh allowance just because the old end has passed. Persisted send billing snapshots retain the subscription identity. Once a later billing period exists, old snapshots retain their original end because overwritten subscription records cannot establish historical renewal boundaries; they never count later cycles against the previous allowance. Unreported usage from ended cycles is not replayed into the current cycle.
+
 ## Production webhook setup
 
 Production configuration, secrets, migrations, and deployments require explicit authorization. Use the protected production workflow, and never copy production credentials into `.env.local`.
