@@ -7,9 +7,13 @@ import {
   Loading03Icon,
   MailReply02Icon,
   MailReplyAll02Icon,
+  SparklesIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
+import { toast } from "@quieter/ui/toast";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, LazyMotion, domMax, m } from "motion/react";
 import { lazy, Suspense, useRef, useState } from "react";
 
@@ -19,9 +23,14 @@ import {
   findLinkedDraftForMessage,
   hasDistinctReplyAllRecipients,
 } from "#/features/compose/domain/compose-actions";
+import { textToComposeBodyHtml } from "#/features/compose/domain/draft";
 import type { ComposeDraftState } from "#/features/compose/domain/draft";
 import { MessageLabels } from "#/features/message-labels/components/message-labels";
+import { toastError } from "#/lib/error-toast";
 import { parseSender } from "#/lib/gmail/message-utils";
+import { MAILBOX_LABELS } from "#/lib/mail";
+import { getThreadWithDetailsOptions } from "#/lib/mail/thread-query";
+import { orpc } from "#/lib/orpc";
 
 import { createMailboxThreadMessageActionHandlers } from "./message-action-handlers";
 import { MessageActionsDropdown } from "./message-actions";
@@ -96,7 +105,10 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     null
   );
   const inlineComposerRef = useRef<HTMLDivElement | null>(null);
+  const composeRevisionRef = useRef(0);
+  const queryClient = useQueryClient();
   const openInlineCompose = (draft: ComposeDraftState) => {
+    composeRevisionRef.current += 1;
     setInlineDraft((current) => current ?? draft);
     requestAnimationFrame(() => {
       inlineComposerRef.current?.scrollIntoView({
@@ -106,6 +118,62 @@ const MessageViewContent = (props: MessageViewContentProps) => {
         block: "nearest",
       });
     });
+  };
+  const suggestReply = useMutation(orpc.ai.suggestReply.mutationOptions());
+  const requestSuggestedReply = () => {
+    const composeRevision = composeRevisionRef.current;
+    const draft = buildComposeDraftFromMessageAction({
+      action: "reply",
+      currentUserEmail,
+      message: hotkeyMessage,
+    });
+    suggestReply.mutate(
+      {
+        mailboxId,
+        messageId: hotkeyMessage.id,
+        threadId: hotkeyMessage.threadId,
+      },
+      {
+        onError: (error) => {
+          toastError(error, {
+            boundary: "suggest-reply",
+            fallback: "Could not suggest a reply. Please try again.",
+          });
+        },
+        onSuccess: (suggestion) => {
+          const currentThread = queryClient.getQueryData(
+            getThreadWithDetailsOptions(mailboxId, hotkeyMessage.threadId)
+              .queryKey
+          );
+          const currentReplyTarget = currentThread?.messages.findLast(
+            (entry) =>
+              !entry.draftId?.trim() &&
+              entry.labelIds?.includes(MAILBOX_LABELS.drafts) !== true
+          );
+          if (
+            composeRevisionRef.current !== composeRevision ||
+            (currentReplyTarget !== undefined &&
+              currentReplyTarget.id !== hotkeyMessage.id) ||
+            findLinkedDraftForMessage(
+              currentThread?.messages ?? [],
+              hotkeyMessage
+            )
+          ) {
+            return;
+          }
+          if (suggestion.status === "not_needed") {
+            toast.info(suggestion.reason);
+            return;
+          }
+          openInlineCompose({
+            ...draft,
+            assistantUnsaved: true,
+            bodyHtml: `${textToComposeBodyHtml(suggestion.bodyText)}${draft.bodyHtml}`,
+            bodyText: `${suggestion.bodyText}\n\n${draft.bodyText}`,
+          });
+        },
+      }
+    );
   };
   const replyTarget = parseSender(hotkeyMessage.from);
   const replyTargetLabel =
@@ -268,6 +336,11 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                     opacity: inlineComposeFadeTransition,
                   }}
                 >
+                  {inlineDraft.assistantUnsaved === true ? (
+                    <p className="mb-3 text-caption text-muted-fg">
+                      Suggested reply. Review and edit before sending.
+                    </p>
+                  ) : null}
                   <Suspense
                     fallback={
                       <output
@@ -360,6 +433,36 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                       <span className="hidden @sm:inline">Reply all</span>
                     </Button>
                   ) : null}
+                  {!hotkeyLinkedDraftMessage &&
+                  composeDemoMode !== true &&
+                  composeManagedDemoMode !== true ? (
+                    <Button
+                      disabled={
+                        suggestReply.isPending ||
+                        isBodyRefreshPending ||
+                        isActionPending
+                      }
+                      onClick={requestSuggestedReply}
+                      size="sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      <HugeiconsIcon
+                        aria-hidden
+                        className={cn({
+                          "animate-spin": suggestReply.isPending,
+                        })}
+                        icon={
+                          suggestReply.isPending ? Loading03Icon : SparklesIcon
+                        }
+                      />
+                      <span aria-live="polite">
+                        {suggestReply.isPending
+                          ? "Suggesting reply…"
+                          : "Suggest reply"}
+                      </span>
+                    </Button>
+                  ) : null}
                   <Button
                     aria-label="Forward"
                     onClick={() => {
@@ -401,5 +504,12 @@ export const MessageView = (props: MessageViewProps) => {
     onAutoFocusComplete: props.onAutoFocusComplete,
   });
 
-  return <MessageViewContent {...props} {...data} viewRef={viewRef} />;
+  return (
+    <MessageViewContent
+      {...props}
+      {...data}
+      key={`${props.mailboxId}:${props.message.threadId}`}
+      viewRef={viewRef}
+    />
+  );
 };

@@ -238,7 +238,7 @@ export const ComposeEditor = ({
       return;
     }
     // react-doctor-disable-next-line react-doctor/no-pass-data-to-parent
-    editor.setEditable(disabled !== true);
+    editor.setEditable(disabled !== true, false);
   }, [disabled, editor]);
 
   useEffect(() => {

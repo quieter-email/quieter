@@ -36,6 +36,10 @@ import {
   updateAiMemoryScopeConfig,
 } from "../ai-memory";
 import { assertAccessibleMailbox } from "../mailbox/service";
+import {
+  replySuggestionInputSchema,
+  requestReplySuggestion,
+} from "../reply-suggestion";
 import { mailboxIdSchema, protectedProcedure } from "./base";
 
 const memoryTargetSchema = z
@@ -280,6 +284,10 @@ export const aiRouter = {
   settings: protectedProcedure
     .route({ method: "GET" })
     .handler(async ({ context }) => await loadSettings(context.userId)),
+
+  suggestReply: protectedProcedure
+    .input(replySuggestionInputSchema)
+    .handler(requestReplySuggestion),
 
   undoMemoryChange: protectedProcedure
     .input(memoryTargetSchema.extend({ changeSetId: z.string().trim().min(1) }))
