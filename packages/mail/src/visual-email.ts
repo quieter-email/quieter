@@ -362,9 +362,16 @@ const renderBlock = (node: VisualEmailBlock): string => {
 };
 
 const boundedDocumentSchema = z.unknown().superRefine((document, ctx) => {
-  const stack: { value: unknown; depth: number; path: (string | number)[] }[] =
-    [{ depth: 0, path: [], value: document }];
-  const objects = new WeakSet<object>();
+  const stack: (
+    | {
+        kind: "visit";
+        value: unknown;
+        depth: number;
+        path: (string | number)[];
+      }
+    | { kind: "leave"; value: object }
+  )[] = [{ depth: 0, kind: "visit", path: [], value: document }];
+  const ancestors = new WeakSet<object>();
   let count = 0;
   let elementCount = 0;
   let textLength = 0;
@@ -373,6 +380,10 @@ const boundedDocumentSchema = z.unknown().superRefine((document, ctx) => {
     const item = stack.pop();
     if (!item) {
       break;
+    }
+    if (item.kind === "leave") {
+      ancestors.delete(item.value);
+      continue;
     }
     count += 1;
     if (item.depth > 64 || count > 20_000) {
@@ -397,15 +408,16 @@ const boundedDocumentSchema = z.unknown().superRefine((document, ctx) => {
     if (typeof item.value !== "object" || item.value === null) {
       continue;
     }
-    if (objects.has(item.value)) {
+    if (ancestors.has(item.value)) {
       ctx.addIssue({
         code: "custom",
-        message: "This email contains repeated or circular elements.",
+        message: "This email contains circular elements.",
         path: item.path,
       });
       return;
     }
-    objects.add(item.value);
+    ancestors.add(item.value);
+    stack.push({ kind: "leave", value: item.value });
     if (!Array.isArray(item.value)) {
       elementCount += 1;
       if (elementCount > 2000) {
@@ -429,6 +441,7 @@ const boundedDocumentSchema = z.unknown().superRefine((document, ctx) => {
     for (const [key, value] of entries) {
       stack.push({
         depth: item.depth + 1,
+        kind: "visit",
         path: [...item.path, Array.isArray(item.value) ? Number(key) : key],
         value,
       });

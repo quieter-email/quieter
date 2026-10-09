@@ -427,6 +427,44 @@ describe("visual email documents", () => {
     expect(result.error?.issues[0]?.message).toMatch(/nested/iu);
   });
 
+  test("accepts shared link attributes from formatted editor content", () => {
+    const attrs = {
+      href: "https://example.com",
+      rel: "noopener noreferrer nofollow",
+      target: "_blank" as const,
+    };
+    const source: VisualEmailDocument = {
+      content: {
+        content: [
+          {
+            content: [
+              {
+                marks: [{ attrs, type: "link" }],
+                text: "Read ",
+                type: "text",
+              },
+              {
+                marks: [{ type: "bold" }, { attrs, type: "link" }],
+                text: "more",
+                type: "text",
+              },
+            ],
+            type: "paragraph",
+          },
+        ],
+        type: "doc",
+      },
+      version: 1,
+    };
+
+    const parsed = visualEmailDocumentSchema.parse(source);
+
+    expect(renderVisualEmailDocument(parsed)).toContain("Read </a>");
+    expect(renderVisualEmailDocument(parsed)).toMatch(
+      /<strong><a[^>]+>more<\/a><\/strong>/u
+    );
+  });
+
   test("rejects oversized serialized documents and escaped output", () => {
     const serializedResult = visualEmailDocumentSchema.safeParse({
       content: {
