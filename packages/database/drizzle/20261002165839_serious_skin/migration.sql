@@ -1,0 +1,1 @@
+ALTER TABLE "mailTemplate" ADD COLUMN "document" jsonb;

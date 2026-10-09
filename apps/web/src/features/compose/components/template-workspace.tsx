@@ -10,6 +10,7 @@ import {
   SidebarLeftIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { visualEmailDocumentSchema } from "@quieter/mail/visual-email";
 import {
   AlertDialog,
   AlertDialogBody,
@@ -138,26 +139,46 @@ export const TemplateWorkspace = ({
         return;
       }
 
+      const document = visualEmailDocumentSchema.safeParse(
+        templateEditorRef.current?.getDocument()
+      );
+      if (!document.success) {
+        toast.error(
+          document.error.issues[0]?.message ??
+            "This template contains unsupported content. Edit it before saving."
+        );
+        return;
+      }
+
       if (editingId) {
         await updateMutation.mutateAsync({
           ...value,
+          document: document.data,
           id: editingId,
           mailboxId,
           subject: "",
         });
       } else {
-        await createMutation.mutateAsync({ ...value, mailboxId, subject: "" });
+        await createMutation.mutateAsync({
+          ...value,
+          document: document.data,
+          mailboxId,
+          subject: "",
+        });
       }
     },
   });
   const selectTemplate = (template: MailTemplateItem) => {
     setEditingId(template.id);
     setMobileEditorOpen(true);
-    templateForm.reset({
-      bodyHtml: template.bodyHtml,
-      name: template.name,
-      scope: template.scope,
-    });
+    templateForm.reset(
+      {
+        bodyHtml: template.bodyHtml,
+        name: template.name,
+        scope: template.scope,
+      },
+      { keepDefaultValues: true }
+    );
   };
   const startNewTemplate = () => {
     setEditingId(null);
@@ -350,6 +371,14 @@ export const TemplateWorkspace = ({
 
           {/* The same writing measure and capped height as the mail composer. */}
           <ComposerFrame>
+            {currentTemplate?.documentError ? (
+              <p
+                className="px-3 py-2 text-caption text-destructive"
+                role="alert"
+              >
+                {currentTemplate.documentError}
+              </p>
+            ) : null}
             <ComposerFieldGroup>
               <templateForm.Field name="name">
                 {(field) => (
@@ -375,6 +404,7 @@ export const TemplateWorkspace = ({
               {(field) => (
                 <ComposeEditor
                   disabled={!canEditCurrentTemplate}
+                  document={currentTemplate?.document}
                   html={field.state.value}
                   key={editingId ?? "new"}
                   onBlur={() => {

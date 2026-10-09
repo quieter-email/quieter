@@ -3,6 +3,7 @@ import type {
   DeliveryStatus,
   RecipientSuppression,
 } from "@quieter/mail/delivery";
+import type { VisualEmailDocument } from "@quieter/mail/visual-email";
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -595,6 +596,7 @@ export const mailTemplate = pgTable(
   {
     bodyHtml: text("bodyHtml").notNull(),
     createdAt: timestamp("createdAt").notNull(),
+    document: jsonb("document").$type<VisualEmailDocument>(),
     id: text("id").primaryKey(),
     name: text("name").notNull(),
     organizationId: text("organizationId").references(() => organization.id, {
