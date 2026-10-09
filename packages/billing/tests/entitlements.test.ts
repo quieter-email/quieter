@@ -138,12 +138,13 @@ describe("billing entitlement statuses", () => {
     });
   });
 
-  test("requires an active status with a current billing period", () => {
+  test("keeps an active renewing subscription entitled while its period is stale", () => {
     const now = new Date("2026-08-02T00:00:00.000Z");
 
     expect(
       isActiveBillingSubscription(
         {
+          cancelAtPeriodEnd: false,
           currentPeriodEnd: new Date("2026-08-03T00:00:00.000Z"),
           status: "active",
         },
@@ -153,15 +154,17 @@ describe("billing entitlement statuses", () => {
     expect(
       isActiveBillingSubscription(
         {
+          cancelAtPeriodEnd: false,
           currentPeriodEnd: new Date("2026-07-23T00:00:00.000Z"),
           status: "active",
         },
         now
       )
-    ).toBeFalsy();
+    ).toBeTruthy();
     expect(
       isActiveBillingSubscription(
         {
+          cancelAtPeriodEnd: false,
           currentPeriodEnd: new Date("2026-08-03T00:00:00.000Z"),
           status: "canceled",
         },
@@ -169,6 +172,50 @@ describe("billing entitlement statuses", () => {
       )
     ).toBeFalsy();
   });
+
+  test.each(["canceled", "expired", "past_due", "pending"] as const)(
+    "denies %s subscriptions even before the period ends",
+    (status) => {
+      expect(
+        isActiveBillingSubscription(
+          {
+            cancelAtPeriodEnd: false,
+            currentPeriodEnd: new Date("2026-08-03T00:00:00.000Z"),
+            status,
+          },
+          new Date("2026-08-02T00:00:00.000Z")
+        )
+      ).toBeFalsy();
+    }
+  );
+
+  test.each([
+    { cancelAtPeriodEnd: true, status: "active" as const },
+    { cancelAtPeriodEnd: false, status: "trialing" as const },
+  ])(
+    "ends access at the period boundary for $status, cancellation $cancelAtPeriodEnd",
+    (subscription) => {
+      const currentPeriodEnd = new Date("2026-08-03T00:00:00.000Z");
+      expect(
+        isActiveBillingSubscription(
+          { ...subscription, currentPeriodEnd },
+          new Date(currentPeriodEnd.getTime() - 1)
+        )
+      ).toBeTruthy();
+      expect(
+        isActiveBillingSubscription(
+          { ...subscription, currentPeriodEnd },
+          currentPeriodEnd
+        )
+      ).toBeFalsy();
+      expect(
+        isActiveBillingSubscription(
+          { ...subscription, currentPeriodEnd },
+          new Date(currentPeriodEnd.getTime() + 1)
+        )
+      ).toBeFalsy();
+    }
+  );
 });
 
 describe("billing subscription reconciliation", () => {
@@ -322,7 +369,7 @@ describe("organization subscription reconciliation", () => {
     expect(billingMocks.loadRows).toHaveBeenCalledTimes(2);
   });
 
-  test("fails closed when Polar still returns an expired period", async () => {
+  test("keeps the existing allowance when reconciliation confirms active billing with a stale period", async () => {
     billingMocks.loadRows.mockResolvedValue([staleRow]);
     billingMocks.getPolarSubscription.mockResolvedValue(
       polarSubscription("polar-subscription-1")
@@ -331,9 +378,34 @@ describe("organization subscription reconciliation", () => {
 
     await expect(
       getOrganizationSubscription("organization-a")
-    ).resolves.toBeNull();
+    ).resolves.toMatchObject({
+      currentPeriodEnd: staleRow.currentPeriodEnd,
+      currentPeriodStart: staleRow.currentPeriodStart,
+      product: "pro",
+      providerSubscriptionId: staleRow.providerSubscriptionId,
+    });
     expect(billingMocks.loadRows).toHaveBeenCalledTimes(2);
   });
+
+  test.each([
+    { cancelAtPeriodEnd: true, status: "active" as const },
+    { cancelAtPeriodEnd: false, status: "trialing" as const },
+  ])(
+    "denies an expired $status subscription after reconciliation, cancellation $cancelAtPeriodEnd",
+    async (subscription) => {
+      billingMocks.loadRows.mockResolvedValue([
+        { ...staleRow, ...subscription },
+      ]);
+      billingMocks.getPolarSubscription.mockResolvedValue(
+        polarSubscription("polar-subscription-1")
+      );
+      billingMocks.syncBillingSubscription.mockResolvedValue({ synced: true });
+
+      await expect(
+        getOrganizationSubscription("organization-a")
+      ).resolves.toBeNull();
+    }
+  );
 
   test("fails closed during the reconciliation cooldown", async () => {
     billingMocks.loadRows.mockResolvedValueOnce([

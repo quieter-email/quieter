@@ -135,6 +135,7 @@ export type MailSendSnapshot = {
     externalCustomerId: string;
     organizationId: string;
     product: Exclude<BillingPlan, "free">;
+    providerSubscriptionId?: string;
   } | null;
   attachments: {
     contentId?: string | null;

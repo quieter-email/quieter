@@ -6,7 +6,20 @@ import {
 } from "@quieter/database/schema";
 import type { BillingUsageCategory } from "@quieter/database/schema";
 import { reportError } from "@quieter/observability";
-import { and, asc, eq, gt, gte, inArray, isNull, lt, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  isNull,
+  lt,
+  lte,
+  or,
+  sql,
+} from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
 import type { BillingAccount } from "./entitlements.ts";
 import {
@@ -16,6 +29,10 @@ import {
 
 const BILLING_CREDIT_USAGE_EVENT_NAME = "credit-usage";
 const MICROCENTS_PER_CENT = 1_000_000;
+const laterBillingSubscription = alias(
+  billingSubscription,
+  "laterBillingSubscription"
+);
 
 export const BILLING_USAGE_KINDS = [
   "aiChat",
@@ -61,6 +78,43 @@ export const createPolarCreditUsageEvent = (input: {
   timestamp: input.createdAt,
 });
 
+export const getBillingUsagePeriodEnd = (account: BillingAccount) => {
+  if (
+    account.currentPeriodEnd > new Date() ||
+    account.providerSubscriptionId === undefined
+  ) {
+    return account.currentPeriodEnd;
+  }
+
+  // Continue counting the live period, but retain the original bound once a
+  // later period exists because overwritten subscriptions lose period history.
+  return sql`coalesce((
+    select least(case
+      when ${billingSubscription.currentPeriodStart} > ${account.currentPeriodStart.toISOString()}::timestamp
+        then least(${billingSubscription.currentPeriodStart}, ${account.currentPeriodEnd.toISOString()}::timestamp)
+      when ${billingSubscription.currentPeriodEnd} > now()
+        then ${billingSubscription.currentPeriodEnd}
+      when ${billingSubscription.status} = 'active'
+        and not ${billingSubscription.cancelAtPeriodEnd}
+        then 'infinity'::timestamp
+      else ${account.currentPeriodEnd.toISOString()}::timestamp
+    end, coalesce((
+      select min(least(${laterBillingSubscription.currentPeriodStart}, ${account.currentPeriodEnd.toISOString()}::timestamp))
+      from ${billingSubscription} as ${laterBillingSubscription}
+      where ${laterBillingSubscription.organizationId} = ${account.organizationId}
+        and ${laterBillingSubscription.metadata}->>'quieterOrganizationId' = ${account.organizationId}
+        and ${laterBillingSubscription.plan} in ('managed', 'pro')
+        and ${laterBillingSubscription.status} in ('active', 'trialing', 'past_due', 'canceled')
+        and ${laterBillingSubscription.currentPeriodStart} > ${account.currentPeriodStart.toISOString()}::timestamp
+    ), 'infinity'::timestamp))
+    from ${billingSubscription}
+    where ${billingSubscription.providerSubscriptionId} = ${account.providerSubscriptionId}
+      and ${billingSubscription.organizationId} = ${account.organizationId}
+      and ${billingSubscription.metadata}->>'quieterOrganizationId' = ${account.organizationId}
+    limit 1
+  ), ${account.currentPeriodEnd.toISOString()}::timestamp)`;
+};
+
 export const getBillingCreditUsage = async (
   account: BillingAccount,
   client: Pick<typeof db, "select"> = db
@@ -68,7 +122,7 @@ export const getBillingCreditUsage = async (
   const periodFilter = and(
     eq(billingCreditUsageEvent.organizationId, account.organizationId),
     gte(billingCreditUsageEvent.createdAt, account.currentPeriodStart),
-    lt(billingCreditUsageEvent.createdAt, account.currentPeriodEnd)
+    lt(billingCreditUsageEvent.createdAt, getBillingUsagePeriodEnd(account))
   );
   const usageKind = sql<BillingUsageKind>`case
     when ${billingCreditUsageEvent.category} = 'mail'
@@ -255,7 +309,14 @@ const currentActiveSubscriptionUnreportedUsageFilter = and(
     billingCreditUsageEvent.createdAt,
     billingSubscription.currentPeriodStart
   ),
-  lt(billingCreditUsageEvent.createdAt, billingSubscription.currentPeriodEnd)
+  or(
+    lt(billingCreditUsageEvent.createdAt, billingSubscription.currentPeriodEnd),
+    and(
+      eq(billingSubscription.status, "active"),
+      eq(billingSubscription.cancelAtPeriodEnd, false),
+      lte(billingSubscription.currentPeriodEnd, sql`now()`)
+    )
+  )
 );
 
 const unreportedPositiveCreditUsageFilter = and(
@@ -285,7 +346,21 @@ export const syncUnreportedBillingCreditUsage = async (
     .where(
       and(
         unreportedPositiveCreditUsageFilter,
-        gt(billingSubscription.currentPeriodEnd, new Date())
+        or(
+          gt(billingSubscription.currentPeriodEnd, new Date()),
+          and(
+            eq(billingSubscription.status, "active"),
+            eq(billingSubscription.cancelAtPeriodEnd, false),
+            sql`not exists (
+              select 1 from ${billingSubscription} as ${laterBillingSubscription}
+              where ${laterBillingSubscription.organizationId} = ${billingSubscription.organizationId}
+                and ${laterBillingSubscription.metadata}->>'quieterOrganizationId' = ${billingSubscription.organizationId}
+                and ${laterBillingSubscription.plan} in ('managed', 'pro')
+                and ${laterBillingSubscription.status} in ('active', 'trialing', 'past_due', 'canceled')
+                and ${laterBillingSubscription.currentPeriodStart} > ${billingSubscription.currentPeriodStart}
+            )`
+          )
+        )
       )
     )
     .orderBy(asc(billingCreditUsageEvent.createdAt))

@@ -9,6 +9,7 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact, { reactCompilerPreset } from "@vitejs/plugin-react";
 import type { Plugin, Environment } from "vite-plus";
 import { defineConfig, lazyPlugins } from "vite-plus";
+import { unstable_readConfig } from "wrangler";
 
 const workspaceRoot = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -86,6 +87,7 @@ const validateLocalDevelopment = (): Plugin => ({
 });
 
 export default defineConfig(({ command }) => {
+  const configPath = process.env.SST_WRANGLER_PATH;
   const isDev = command === "serve";
   const isSentryEnabled = !isDev && !!process.env.SENTRY_AUTH_TOKEN;
   const sentryPluginsFor = (
@@ -148,6 +150,29 @@ export default defineConfig(({ command }) => {
     },
     plugins: lazyPlugins(() => [
       cloudflare({
+        // SST checks this file for its generated config; cf loads the adapter separately.
+        config: configPath
+          ? (worker) => {
+              const config = unstable_readConfig({ config: configPath });
+              const bindingNames = [
+                ...Object.keys(config.vars),
+                ...config.hyperdrive.map((binding) => binding.binding),
+                ...config.durable_objects.bindings.map(
+                  (binding) => binding.name
+                ),
+                ...config.r2_buckets.map((binding) => binding.binding),
+                ...config.services.map((binding) => binding.binding),
+              ];
+              if (
+                worker.name !== config.name ||
+                bindingNames.some((name) => !(name in (worker.env ?? {})))
+              ) {
+                throw new Error(
+                  "The Cloudflare configuration did not load SST's generated bindings."
+                );
+              }
+            }
+          : undefined,
         persistState: { path: `${workspaceRoot}/.wrangler/state` },
         remoteBindings: false,
         viteEnvironment: { name: "ssr" },

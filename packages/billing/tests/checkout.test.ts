@@ -197,7 +197,39 @@ describe("Polar checkout creation", () => {
     );
   });
 
-  test.each(["active", "past_due", "pending"] as const)(
+  test("reuses an active renewing subscription when its provider period is stale", async () => {
+    checkoutMocks.getSubscription.mockResolvedValue({
+      cancelAtPeriodEnd: false,
+      currentPeriodEnd: new Date("2026-07-23T00:00:00.000Z"),
+      currentPeriodStart: new Date("2026-06-23T00:00:00.000Z"),
+      lastReconciliationFailureAt: null,
+      metadata: { quieterOrganizationId: "organization-1" },
+      plan: "pro",
+      provider: "polar",
+      providerSubscriptionId: "subscription-1",
+      status: "active",
+      updatedAt: new Date(),
+    });
+
+    const result = await createBillingCheckout({
+      customerEmail: "owner@example.com",
+      customerName: "Owner",
+      headers: new Headers({ origin: "https://quieter.email" }),
+      organizationId: "organization-1",
+      product: "pro",
+      userId: "user-1",
+    });
+    const successUrl = new URL(result.checkoutUrl);
+    expect(successUrl.origin).toBe("https://quieter.email");
+    expect(successUrl.searchParams.get("billing")).toBe("success");
+    expect(successUrl.searchParams.get("organizationId")).toBe(
+      "organization-1"
+    );
+    expect(checkoutMocks.createCheckout).not.toHaveBeenCalled();
+    expect(checkoutMocks.getExternalCustomer).not.toHaveBeenCalled();
+  });
+
+  test.each(["past_due", "pending"] as const)(
     "does not duplicate an unresolved %s subscription",
     async (status) => {
       checkoutMocks.getSubscription.mockResolvedValue({
