@@ -1,11 +1,5 @@
 import { z } from "zod";
 
-const UNRESOLVED_TEMPLATE_PLACEHOLDER_PATTERN =
-  /\{\{quieter:[^{}\n]{1,80}\}\}|data-quieter-template-placeholder=/u;
-
-export const hasUnresolvedTemplatePlaceholders = (value: string): boolean =>
-  UNRESOLVED_TEMPLATE_PLACEHOLDER_PATTERN.test(value);
-
 const normalizeMailAddressValue = (value: string | undefined) =>
   value?.replaceAll(/\r?\n\s+/gu, " ").trim() ?? "";
 
@@ -233,17 +227,6 @@ export const composeSendFormValuesSchema =
         path: ["to"],
       });
     }
-
-    if (
-      hasUnresolvedTemplatePlaceholders(value.bodyHtml) ||
-      hasUnresolvedTemplatePlaceholders(value.bodyText)
-    ) {
-      ctx.addIssue({
-        code: "custom",
-        message: "Fill every template placeholder before sending.",
-        path: ["bodyHtml"],
-      });
-    }
   });
 
 const mimeHeaderValueSchema = z
@@ -307,17 +290,6 @@ export const composeMessageInputSchema = composeDraftInputSchema.superRefine(
         code: "custom",
         message: "Add at least one recipient in To.",
         path: ["recipients", "to"],
-      });
-    }
-
-    if (
-      hasUnresolvedTemplatePlaceholders(value.bodyHtml) ||
-      hasUnresolvedTemplatePlaceholders(value.bodyText)
-    ) {
-      ctx.addIssue({
-        code: "custom",
-        message: "Fill every template placeholder before sending.",
-        path: ["bodyHtml"],
       });
     }
   }

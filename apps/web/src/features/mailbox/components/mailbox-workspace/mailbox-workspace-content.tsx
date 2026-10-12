@@ -34,14 +34,14 @@ import { MailboxMessagesPanel } from "./mailbox-messages-panel";
 import {
   loadChatView,
   loadComposeWorkspace,
-  loadTemplateWorkspace,
+  loadSnippetWorkspace,
 } from "./workspace-component-loaders";
 
 const ChatView = lazy(loadChatView);
 
 const ComposeWorkspace = lazy(loadComposeWorkspace);
 
-const TemplateWorkspace = lazy(loadTemplateWorkspace);
+const SnippetWorkspace = lazy(loadSnippetWorkspace);
 
 type MailboxSidebarGroups = ComponentProps<typeof MailSidebar>["groups"];
 type MailboxSidebarChats = { id: string; title: string | null }[];
@@ -68,6 +68,7 @@ type MailboxWorkspaceContentProps = {
   defaultMailboxId: string | null;
   draftChatKey: string;
   isComposeMailbox: boolean;
+  isSnippetMailbox: boolean;
   isConnectingGmail: boolean;
   isDemoMode: boolean;
   isManagedDemoMode: boolean;
@@ -77,7 +78,7 @@ type MailboxWorkspaceContentProps = {
   onConnectGmail: () => void;
   onComposeDraftRequested: (draft: ComposeDraftState) => void;
   onComposeNewMail: () => void;
-  onManageTemplates: () => void;
+  onManageSnippets: () => void;
   onMobileOpenChange: (open: boolean) => void;
   onOpenSidebar: () => void;
   onReorderMailboxSwitcher: (order: MailboxSwitcherOrder) => void;
@@ -275,6 +276,7 @@ const MailboxWorkspaceContentInner = ({
   defaultMailboxId,
   draftChatKey,
   isComposeMailbox,
+  isSnippetMailbox,
   isConnectingGmail,
   isDemoMode,
   isManagedDemoMode,
@@ -284,7 +286,7 @@ const MailboxWorkspaceContentInner = ({
   onConnectGmail,
   onComposeDraftRequested,
   onComposeNewMail,
-  onManageTemplates,
+  onManageSnippets,
   onMobileOpenChange,
   onOpenSidebar,
   onReorderMailboxSwitcher,
@@ -338,7 +340,7 @@ const MailboxWorkspaceContentInner = ({
           managedDemoMode={isManagedDemoMode}
           mailboxId={selectedMailboxId}
           onClose={onCloseCompose}
-          onManageTemplates={onManageTemplates}
+          onManageSnippets={onManageSnippets}
           onOpenSidebar={onOpenSidebar}
           persistDrafts={persistComposeDrafts}
           senderEmail={currentUserEmail}
@@ -353,7 +355,7 @@ const MailboxWorkspaceContentInner = ({
           fallback={
             <WorkspaceSection centered className="lg:col-span-2">
               <output
-                aria-label="Loading templates"
+                aria-label="Loading snippets"
                 aria-live="polite"
                 className="flex items-center gap-3 text-body text-muted-fg"
               >
@@ -362,12 +364,13 @@ const MailboxWorkspaceContentInner = ({
                   className="size-5 animate-spin"
                   icon={Loading03Icon}
                 />
-                Loading templates…
+                Loading snippets…
               </output>
             </WorkspaceSection>
           }
         >
-          <TemplateWorkspace
+          <SnippetWorkspace
+            key={selectedMailboxId}
             mailboxId={selectedMailboxId}
             onOpenSidebar={onOpenSidebar}
           />
@@ -449,7 +452,7 @@ const MailboxWorkspaceContentInner = ({
           mailboxId={selectedMailboxId}
           mailboxProvider={selectedMailboxProvider ?? "gmail"}
           onComposeDraftRequested={onComposeDraftRequested}
-          onManageTemplates={onManageTemplates}
+          onManageSnippets={onManageSnippets}
           onOpenSidebar={onOpenSidebar}
           onSearchQueryChange={onSearch}
           persistComposeDrafts={persistComposeDrafts}
@@ -476,6 +479,7 @@ const MailboxWorkspaceContentInner = ({
               onManageLabels={() => {
                 onSelectView("labels");
               }}
+              onManageSnippets={onManageSnippets}
               onSelectMailbox={onSelectMailbox}
               onSelectMailboxId={onSelectMailboxId}
               onSelectView={onSelectView}
@@ -483,6 +487,7 @@ const MailboxWorkspaceContentInner = ({
               reconnectingMailboxId={reconnectingMailboxId}
               searchQuery={searchQuery}
               selectedMailbox={activeMailbox}
+              isSnippetMailbox={isSnippetMailbox}
               selectedMailboxId={selectedMailboxId}
               selectedMailboxProvider={selectedMailboxProvider}
               isMobileOpen={layoutState.isMobileSidebarOpen}

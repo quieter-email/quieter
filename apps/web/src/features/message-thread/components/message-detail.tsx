@@ -31,7 +31,7 @@ type MessageDetailProps = {
   mailboxProvider: "api" | "gmail" | "managed";
   onBackToList?: () => void;
   onAutoFocusComplete?: () => void;
-  onManageTemplates?: () => void;
+  onManageSnippets?: () => void;
   pendingActions: MailboxPendingActions;
   selectedMessage: MessageListItem | null;
 };
@@ -48,7 +48,7 @@ export const MessageDetail = ({
   mailboxActions,
   onBackToList,
   onAutoFocusComplete,
-  onManageTemplates,
+  onManageSnippets,
   pendingActions,
   selectedMessage,
   mailboxId,
@@ -96,7 +96,7 @@ export const MessageDetail = ({
           message={selectedMessage}
           onBackToList={onBackToList}
           onAutoFocusComplete={onAutoFocusComplete}
-          onManageTemplates={onManageTemplates}
+          onManageSnippets={onManageSnippets}
           pendingActions={pendingActions}
         />
       </Suspense>

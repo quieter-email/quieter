@@ -101,20 +101,6 @@ const visualEmailInlineSchema = z.discriminatedUnion("type", [
     marks: visualEmailMarksSchema.optional(),
     type: z.literal("hardBreak"),
   }),
-  z.strictObject({
-    attrs: z.strictObject({
-      label: z
-        .string()
-        .min(1)
-        .max(80)
-        .regex(/^[^{}<>&"\r\n]+$/u, "Use plain text for placeholder names.")
-        .refine((label) => label === label.trim(), {
-          message: "Remove spaces around the placeholder name.",
-        }),
-    }),
-    marks: visualEmailMarksSchema.optional(),
-    type: z.literal("templatePlaceholder"),
-  }),
 ]);
 
 const visualEmailParagraphSchema = z.strictObject({
@@ -251,10 +237,6 @@ const renderInline = (node: VisualEmailInline): string => {
     }
     case "hardBreak": {
       html = "<br>";
-      break;
-    }
-    case "templatePlaceholder": {
-      html = `{{quieter:${node.attrs.label}}}`;
       break;
     }
     default: {

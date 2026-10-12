@@ -162,7 +162,7 @@ export const AgentWorkspaceProvider = ({
           "sent",
           "trash",
           "drafts",
-          "template",
+          "snippets",
           "labels",
         ].includes(view)
       ) {
@@ -179,7 +179,7 @@ export const AgentWorkspaceProvider = ({
         view === "sent" ||
         view === "trash" ||
         view === "drafts" ||
-        view === "template"
+        view === "snippets"
           ? { mailbox: view }
           : {}),
         messageId: input.messageId ?? (view === undefined ? undefined : null),
@@ -218,8 +218,8 @@ export const AgentWorkspaceProvider = ({
       let view: string = selected.activeMailbox;
       if (selected.isComposeMailbox) {
         view = "compose";
-      } else if (selected.isTemplateMailbox) {
-        view = "template";
+      } else if (selected.isSnippetMailbox) {
+        view = "snippets";
       } else if (selected.view === "labels") {
         view = "labels";
       }

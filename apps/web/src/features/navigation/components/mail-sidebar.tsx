@@ -5,10 +5,12 @@ import {
   Cancel01Icon,
   Edit01Icon,
   HelpCircleIcon,
+  NoteEditIcon,
   Settings01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, LinkButton } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,13 +23,17 @@ import { WorkspaceSidebar } from "@quieter/ui/workspace-sidebar";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
-import { loadComposeWorkspace } from "#/features/mailbox/components/mailbox-workspace/workspace-component-loaders";
+import {
+  loadComposeWorkspace,
+  loadSnippetWorkspace,
+} from "#/features/mailbox/components/mailbox-workspace/workspace-component-loaders";
 import type { MailboxWorkspaceView } from "#/features/mailbox/domain/mailbox-workspace-view";
 import { MailboxOrganizer } from "#/features/navigation/components/mailbox-organizer";
 import { MailboxSwitcherDropdown } from "#/features/navigation/components/mailbox-switcher";
 import type { MailboxSwitcherOrder } from "#/features/navigation/components/mailbox-switcher";
 import { SidebarLabelNav } from "#/features/navigation/components/sidebar-label-nav";
 import { SidebarMailboxNav } from "#/features/navigation/components/sidebar-mailbox-nav";
+import { SidebarNavItem } from "#/features/navigation/components/sidebar-nav-item";
 import { SidebarEntrance } from "#/features/navigation/components/sidebar-surfaces";
 import type { MailboxCategory } from "#/lib/mail";
 
@@ -53,6 +59,7 @@ type MailSidebarProps = {
   selectedMailboxId: string | null;
   selectedMailboxProvider: "api" | "gmail" | "managed" | null;
   selectedMailbox: MailboxCategory | null;
+  isSnippetMailbox: boolean;
   onReorderMailboxSwitcher: (order: MailboxSwitcherOrder) => void;
   onReconnectMailbox: (mailbox: { emailAddress: string; id: string }) => void;
   onSelectMailbox: (mailbox: MailboxCategory) => void;
@@ -61,6 +68,7 @@ type MailSidebarProps = {
   onSearch: (query: string) => void;
   onComposeNewMail: () => void;
   onManageLabels: () => void;
+  onManageSnippets: () => void;
   onSelectView: (view: MailboxWorkspaceView) => void;
   reconnectingMailboxId: string | null;
   searchQuery: string;
@@ -157,9 +165,11 @@ const SidebarInboxSection = ({
   groups,
   onComposeNewMail,
   onManageLabels,
+  onManageSnippets,
   onRequestClose,
   onSearch,
   onSelectMailbox,
+  isSnippetMailbox,
   searchQuery,
   selectedMailbox,
   selectedMailboxId,
@@ -171,9 +181,11 @@ const SidebarInboxSection = ({
   | "groups"
   | "onComposeNewMail"
   | "onManageLabels"
+  | "onManageSnippets"
   | "onRequestClose"
   | "onSearch"
   | "onSelectMailbox"
+  | "isSnippetMailbox"
   | "searchQuery"
   | "selectedMailbox"
   | "selectedMailboxId"
@@ -228,6 +240,39 @@ const SidebarInboxSection = ({
           onSelectMailbox={handleSelectMailbox}
           selectedMailbox={selectedMailbox}
         />
+        {embedded !== true && selectedMailboxId !== null ? (
+          <SidebarEntrance
+            animateEntrance={animateEntrance}
+            className="w-full"
+            index={10}
+          >
+            <SidebarNavItem
+              active={isSnippetMailbox}
+              aria-current={isSnippetMailbox ? "page" : undefined}
+              className={cn("w-full justify-start gap-3 px-3 text-left", {
+                "text-fg": isSnippetMailbox,
+                "text-muted-fg": !isSnippetMailbox,
+              })}
+              onClick={() => {
+                onManageSnippets();
+                onRequestClose?.();
+              }}
+              onFocus={() => void loadSnippetWorkspace()}
+              onMouseEnter={() => void loadSnippetWorkspace()}
+              onPointerDown={() => void loadSnippetWorkspace()}
+              size="sm"
+              type="button"
+              variant="ghost"
+            >
+              <HugeiconsIcon
+                className="shrink-0 text-fg"
+                icon={NoteEditIcon}
+                strokeWidth={1.5}
+              />
+              Snippets
+            </SidebarNavItem>
+          </SidebarEntrance>
+        ) : null}
         {selectedMailboxProvider === "managed" && selectedMailboxId ? (
           <MailboxOrganizer
             canManage={selectedMailboxGrantRole === "manager"}
@@ -299,10 +344,12 @@ const SidebarContent = ({
   embedded = false,
   groups,
   onComposeNewMail,
+  onManageSnippets,
   onReorderMailboxSwitcher,
   onReconnectMailbox,
   onRequestClose,
   onSelectMailbox,
+  isSnippetMailbox,
   onSelectMailboxId,
   onSelectView,
   onSetDefaultMailbox,
@@ -364,12 +411,14 @@ const SidebarContent = ({
         embedded={embedded}
         groups={groups}
         onComposeNewMail={onComposeNewMail}
+        onManageSnippets={onManageSnippets}
         onManageLabels={() => {
           handleSelectView("labels");
         }}
         onRequestClose={onRequestClose}
         onSearch={onSearch}
         onSelectMailbox={onSelectMailbox}
+        isSnippetMailbox={isSnippetMailbox}
         searchQuery={searchQuery}
         selectedMailbox={selectedMailbox}
         selectedMailboxId={selectedMailboxId}

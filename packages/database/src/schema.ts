@@ -3,7 +3,6 @@ import type {
   DeliveryStatus,
   RecipientSuppression,
 } from "@quieter/mail/delivery";
-import type { VisualEmailDocument } from "@quieter/mail/visual-email";
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -39,7 +38,6 @@ export type MailboxConnectionStatus = "connected" | "needs_reconnect";
 export type MailboxGrantRole = "manager" | "reader" | "responder";
 export type MailboxAccessMode = "private" | "shared";
 export type PersistedMailboxProvider = "gmail" | "managed";
-export type MailTemplateScope = "personal" | "team";
 export type MailboxAccessSource = "direct" | "division";
 export type MailboxActionStatus = "needs_attention" | "ready";
 export type MailboxActionRevisionValidationStatus = "invalid" | "valid";
@@ -591,50 +589,29 @@ export const mailbox = pgTable(
   ]
 );
 
-export const mailTemplate = pgTable(
-  "mailTemplate",
+export const mailSnippet = pgTable(
+  "mailSnippet",
   {
-    bodyHtml: text("bodyHtml").notNull(),
+    bodyText: text("bodyText").notNull(),
     createdAt: timestamp("createdAt").notNull(),
-    document: jsonb("document").$type<VisualEmailDocument>(),
     id: text("id").primaryKey(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
-    organizationId: text("organizationId").references(() => organization.id, {
-      onDelete: "cascade",
-    }),
-    scope: text("scope").$type<MailTemplateScope>().notNull(),
-    subject: text("subject").notNull().default(""),
     updatedAt: timestamp("updatedAt").notNull(),
-    userId: text("userId").references(() => user.id, { onDelete: "cascade" }),
   },
   (table) => [
     check(
-      "mail_template_scope_owner_check",
-      sql`(
-        (${table.scope} = 'personal' and ${table.userId} is not null and ${table.organizationId} is null)
-        or
-        (${table.scope} = 'team' and ${table.userId} is null and ${table.organizationId} is not null)
-      )`
-    ),
-    check(
-      "mail_template_scope_check",
-      sql`${table.scope} in ('personal', 'team')`
-    ),
-    check(
-      "mail_template_name_length_check",
+      "mail_snippet_name_length_check",
       sql`char_length(${table.name}) between 1 and 120`
     ),
     check(
-      "mail_template_subject_length_check",
-      sql`char_length(${table.subject}) <= 998`
+      "mail_snippet_body_length_check",
+      sql`char_length(${table.bodyText}) between 1 and 100000`
     ),
-    check(
-      "mail_template_body_length_check",
-      sql`char_length(${table.bodyHtml}) <= 100000`
-    ),
-    index("mail_template_user_updated_idx").on(table.userId, table.updatedAt),
-    index("mail_template_organization_updated_idx").on(
-      table.organizationId,
+    index("mail_snippet_mailbox_updated_idx").on(
+      table.mailboxId,
       table.updatedAt
     ),
   ]
@@ -2895,7 +2872,7 @@ export const tables = {
   mailAutomationMemoryProfile,
   mailDomain,
   mailDomainConnectAttempt,
-  mailTemplate,
+  mailSnippet,
   mailbox,
   mailboxAction,
   mailboxActionExternalEffect,
@@ -3196,16 +3173,11 @@ export const authRelations = defineRelations(tables, (r) => ({
       to: r.user.id,
     }),
   },
-  mailTemplate: {
-    organization: r.one.organization({
-      from: r.mailTemplate.organizationId,
-      optional: true,
-      to: r.organization.id,
-    }),
-    user: r.one.user({
-      from: r.mailTemplate.userId,
-      optional: true,
-      to: r.user.id,
+  mailSnippet: {
+    mailbox: r.one.mailbox({
+      from: r.mailSnippet.mailboxId,
+      optional: false,
+      to: r.mailbox.id,
     }),
   },
   mailbox: {
@@ -3321,6 +3293,10 @@ export const authRelations = defineRelations(tables, (r) => ({
       from: r.mailbox.ownerUserId,
       optional: true,
       to: r.user.id,
+    }),
+    snippets: r.many.mailSnippet({
+      from: r.mailbox.id,
+      to: r.mailSnippet.mailboxId,
     }),
     userAiContextEvents: r.many.userAiContextEvent({
       from: r.mailbox.id,
@@ -3613,10 +3589,6 @@ export const authRelations = defineRelations(tables, (r) => ({
       from: r.organization.id,
       to: r.mailDomain.organizationId,
     }),
-    mailTemplates: r.many.mailTemplate({
-      from: r.organization.id,
-      to: r.mailTemplate.organizationId,
-    }),
     mailboxActionRuns: r.many.mailboxActionRun({
       from: r.organization.id,
       to: r.mailboxActionRun.organizationId,
@@ -3888,10 +3860,6 @@ export const authRelations = defineRelations(tables, (r) => ({
     mailDomainConnectAttempts: r.many.mailDomainConnectAttempt({
       from: r.user.id,
       to: r.mailDomainConnectAttempt.userId,
-    }),
-    mailTemplates: r.many.mailTemplate({
-      from: r.user.id,
-      to: r.mailTemplate.userId,
     }),
     mailboxGrants: r.many.mailboxGrant({
       from: r.user.id,

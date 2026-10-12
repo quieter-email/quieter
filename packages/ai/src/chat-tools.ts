@@ -21,7 +21,7 @@ export const workspaceViewSchema = z.enum([
   "sent",
   "trash",
   "drafts",
-  "template",
+  "snippets",
   "labels",
   "compose",
 ]);

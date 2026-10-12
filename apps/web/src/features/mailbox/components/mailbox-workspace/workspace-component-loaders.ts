@@ -8,7 +8,7 @@ export const loadComposeWorkspace = async () =>
     ({ ComposeWorkspace: Component }) => ({ default: Component })
   );
 
-export const loadTemplateWorkspace = async () =>
-  await import("#/features/compose/components/template-workspace").then(
-    ({ TemplateWorkspace: Component }) => ({ default: Component })
+export const loadSnippetWorkspace = async () =>
+  await import("#/features/compose/components/snippet-workspace").then(
+    ({ SnippetWorkspace: Component }) => ({ default: Component })
   );

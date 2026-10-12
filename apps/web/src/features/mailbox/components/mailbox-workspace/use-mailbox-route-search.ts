@@ -13,7 +13,7 @@ const MAILBOX_ROUTE_CATEGORIES = [
   "sent",
   "trash",
   "drafts",
-  "template",
+  "snippets",
   "compose",
 ] as const;
 
@@ -123,10 +123,10 @@ export const useMailboxRouteSearch = () => {
   const routeMailbox = inboxRouteApi.useSearch({
     select: (search) => search.mailbox,
   });
-  const isTemplateMailbox = routeMailbox === "template";
+  const isSnippetMailbox = routeMailbox === "snippets";
   const isComposeMailbox = routeMailbox === "compose";
   const activeMailbox =
-    routeMailbox === "template" || routeMailbox === "compose"
+    routeMailbox === "snippets" || routeMailbox === "compose"
       ? "inbox"
       : routeMailbox;
   const chatId = inboxRouteApi.useSearch({
@@ -164,7 +164,7 @@ export const useMailboxRouteSearch = () => {
     compose,
     gmailLink,
     isComposeMailbox,
-    isTemplateMailbox,
+    isSnippetMailbox,
     mailboxId,
     mailto,
     messageId,

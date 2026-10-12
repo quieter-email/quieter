@@ -81,6 +81,7 @@ export const getDraftStatusMessage = (
 };
 
 export const useComposeDialogController = ({
+  autosavePaused = false,
   demoMode = false,
   initialDraft = null,
   managedDemoMode = false,
@@ -90,6 +91,7 @@ export const useComposeDialogController = ({
   persistDrafts = true,
   signature,
 }: {
+  autosavePaused?: boolean;
   demoMode?: boolean;
   initialDraft?: ComposeDraftState | null;
   managedDemoMode?: boolean;
@@ -477,7 +479,7 @@ export const useComposeDialogController = ({
   };
 
   useDraftAutosave({
-    enabled: persistDrafts && !demoMode && !managedDemoMode,
+    enabled: persistDrafts && !demoMode && !managedDemoMode && !autosavePaused,
     mailboxId,
     save: async () => {
       if (

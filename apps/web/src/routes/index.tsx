@@ -29,7 +29,7 @@ const mailboxSearchCategories = [
   "sent",
   "trash",
   "drafts",
-  "template",
+  "snippets",
   "compose",
 ] as const;
 

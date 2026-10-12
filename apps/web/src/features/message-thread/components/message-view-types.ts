@@ -20,6 +20,6 @@ export type MessageViewProps = {
   message: MessageListItem;
   onBackToList?: () => void;
   onAutoFocusComplete?: () => void;
-  onManageTemplates?: () => void;
+  onManageSnippets?: () => void;
   pendingActions: MailboxPendingActions;
 };

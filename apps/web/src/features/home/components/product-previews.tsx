@@ -7,7 +7,6 @@ import {
   Mail01Icon,
   MoreHorizontalIcon,
   PinIcon,
-  Search01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Brand } from "@quieter/ui/brand";
@@ -303,16 +302,16 @@ export const AssistantPreview = () => (
   </div>
 );
 
-const TemplatesPreview = () => (
-  <div className="home-component-surface home-template-picker">
-    <div className="home-template-header">
-      <p>Insert a template</p>
-      <div className="home-template-search">
-        <HugeiconsIcon icon={Search01Icon} size={14} />
-        <span>Search</span>
+const SnippetsPreview = () => (
+  <div className="home-component-surface home-snippet-picker">
+    <div className="home-snippet-header">
+      <p>Insert a snippet</p>
+      <div className="home-snippet-search">
+        <span>/</span>
+        <span>Search snippets</span>
       </div>
     </div>
-    <div className="home-template-options">
+    <div className="home-snippet-options">
       <p className="home-selected-surface">Thanks for reaching out</p>
       <p>A quick follow-up</p>
     </div>
@@ -367,15 +366,15 @@ export const WorkflowPreview = () => (
     <div className="home-workflow-feature">
       <Reveal delay={0.4}>
         <div aria-hidden="true" className="home-workflow-art" inert>
-          <TemplatesPreview />
+          <SnippetsPreview />
         </div>
       </Reveal>
       <Reveal className="home-workflow-caption" delay={0.56}>
-        <h3>Reusable templates</h3>
+        <h3>Reusable snippets</h3>
         <p>
-          Save the replies you use often.
+          Save text you use often.
           <br />
-          Keep the personal touch.
+          Insert it with a slash.
         </p>
       </Reveal>
     </div>
