@@ -1,4 +1,9 @@
 import { ORPCError } from "@orpc/server";
+import {
+  PolarNetworkError,
+  PolarRateLimitError,
+  PolarServerError,
+} from "@polar-sh/sdk";
 import { db } from "@quieter/database/client";
 import {
   billingEntitlementOverride,
@@ -104,6 +109,7 @@ type SubscriptionRow = {
   metadata: Record<string, string> | null;
   plan: StoredBillingPlan;
   provider: "polar";
+  providerModifiedAt: Date | null;
   providerSubscriptionId: string;
   status: BillingSubscriptionStatus;
   updatedAt: Date;
@@ -214,21 +220,42 @@ const getOrganizationBillingOwnerId = async (organizationId: string) => {
 };
 
 const recordReconciliationFailure = async ({
+  allowCachedAccess,
   organizationId,
+  providerModifiedAt,
   providerSubscriptionId,
+  updatedAt,
 }: {
+  allowCachedAccess: boolean;
   organizationId: string;
+  providerModifiedAt: Date | null;
   providerSubscriptionId: string;
+  updatedAt: Date;
 }) => {
   try {
     await db
       .update(billingSubscription)
-      .set({ lastReconciliationFailureAt: new Date() })
+      .set({
+        lastReconciliationFailureAt: allowCachedAccess ? null : new Date(),
+        ...(allowCachedAccess ? { updatedAt: new Date() } : {}),
+      })
       .where(
         and(
           eq(billingSubscription.organizationId, organizationId),
           eq(billingSubscription.provider, "polar"),
-          eq(billingSubscription.providerSubscriptionId, providerSubscriptionId)
+          eq(
+            billingSubscription.providerSubscriptionId,
+            providerSubscriptionId
+          ),
+          providerModifiedAt === null
+            ? isNull(billingSubscription.providerModifiedAt)
+            : eq(billingSubscription.providerModifiedAt, providerModifiedAt),
+          ...(allowCachedAccess
+            ? [
+                eq(billingSubscription.updatedAt, updatedAt),
+                isNull(billingSubscription.lastReconciliationFailureAt),
+              ]
+            : [])
         )
       );
   } catch (error) {
@@ -251,6 +278,7 @@ export const getOrganizationSubscriptionRecord = async (
         metadata: billingSubscription.metadata,
         plan: billingSubscription.plan,
         provider: billingSubscription.provider,
+        providerModifiedAt: billingSubscription.providerModifiedAt,
         providerSubscriptionId: billingSubscription.providerSubscriptionId,
         status: billingSubscription.status,
         updatedAt: billingSubscription.updatedAt,
@@ -290,6 +318,7 @@ export const getOrganizationSubscriptionRecord = async (
     (options.forceReconcile === true || shouldReconcileBillingSubscription(row))
   ) {
     const { providerSubscriptionId } = row;
+    let providerUnavailable = false;
     try {
       const [{ getPolarClient }, { syncBillingSubscription }] =
         await Promise.all([
@@ -297,23 +326,51 @@ export const getOrganizationSubscriptionRecord = async (
           import("./subscription-sync.ts"),
         ]);
       const polar = await getPolarClient();
-      const subscription = await polar.subscriptions.get(
-        providerSubscriptionId,
-        { timeout: BILLING_RECONCILIATION_TIMEOUT_MS / 1000 }
-      );
+      const subscription = await polar.subscriptions
+        .get(providerSubscriptionId, {
+          timeout: BILLING_RECONCILIATION_TIMEOUT_MS / 1000,
+        })
+        .catch((error: unknown) => {
+          providerUnavailable =
+            error instanceof PolarNetworkError ||
+            error instanceof PolarServerError ||
+            error instanceof PolarRateLimitError;
+          throw error;
+        });
+      if (subscription.metadata.quieterOrganizationId !== organizationId) {
+        throw new Error("The subscription belongs to a different team.");
+      }
       const syncResult = await syncBillingSubscription(subscription);
-      if (!syncResult.synced) {
+      if (!syncResult.synced || syncResult.ignored === true) {
         throw new Error("The subscription could not be reconciled.");
       }
       row = findSubscription(await loadRows());
     } catch (error) {
+      const allowCachedAccess =
+        providerUnavailable &&
+        row.lastReconciliationFailureAt === null &&
+        isActiveBillingStatus(row.status) &&
+        row.currentPeriodEnd > new Date();
       await recordReconciliationFailure({
+        allowCachedAccess,
         organizationId,
+        providerModifiedAt: row.providerModifiedAt,
         providerSubscriptionId,
+        updatedAt: row.updatedAt,
       });
       reportError(error, {
         operation: "billing:reconcile-subscription",
       });
+      if (allowCachedAccess) {
+        row = findSubscription(await loadRows());
+        if (
+          row?.lastReconciliationFailureAt === null &&
+          isActiveBillingStatus(row.status) &&
+          row.currentPeriodEnd > new Date()
+        ) {
+          return row;
+        }
+      }
       throw new ORPCError("SERVICE_UNAVAILABLE", {
         message: "Could not check billing access. Please try again.",
       });

@@ -1,6 +1,16 @@
+import { DatabaseSync } from "node:sqlite";
+
+import {
+  PolarClientError,
+  PolarNetworkError,
+  PolarRateLimitError,
+  PolarServerError,
+} from "@polar-sh/sdk";
 import type { models } from "@polar-sh/sdk/2026-04";
 import type * as DatabaseClientModule from "@quieter/database/client";
 import type * as ServerEnvModule from "@quieter/env/server";
+import type { SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 import {
   beforeAll,
   beforeEach,
@@ -36,7 +46,11 @@ const polarSubscriptionSchema = z.custom<Subscription>(
     typeof value.id === "string"
 );
 
-const polarSubscription = (id: string) => polarSubscriptionSchema.parse({ id });
+const polarSubscription = (id: string) =>
+  polarSubscriptionSchema.parse({
+    id,
+    metadata: { quieterOrganizationId: "organization-a" },
+  });
 
 const polarState = vi.hoisted(() => ({
   getPolarClient: null as typeof PolarModule.getPolarClient | null,
@@ -49,10 +63,11 @@ const billingMocks = vi.hoisted(() => {
     vi.fn<() => { limit: typeof limit; orderBy: typeof loadRows }>();
   const from = vi.fn<() => { where: typeof where }>();
   const select = vi.fn<() => { from: typeof from }>();
-  const updateReconciliationFailure = vi.fn<() => Promise<unknown>>();
+  const updateReconciliationFailure =
+    vi.fn<(predicate: SQL | undefined) => Promise<unknown>>();
   const updateSet = vi.fn<
-    (input: { lastReconciliationFailureAt: Date }) => {
-      where: typeof updateReconciliationFailure;
+    (input: { lastReconciliationFailureAt: Date | null; updatedAt?: Date }) => {
+      where: (predicate: SQL | undefined) => Promise<unknown>;
     }
   >();
   const update = vi.fn<() => { set: typeof updateSet }>();
@@ -299,6 +314,7 @@ describe("organization subscription reconciliation", () => {
     metadata: { quieterOrganizationId: "organization-a" },
     plan: "pro" as const,
     provider: "polar" as const,
+    providerModifiedAt: null,
     providerSubscriptionId: "polar-subscription-1",
     status: "active" as const,
     updatedAt: new Date("2026-07-23T00:00:00.000Z"),
@@ -388,6 +404,128 @@ describe("organization subscription reconciliation", () => {
   });
 
   test.each([
+    { providerModifiedAt: null, webhookRefresh: false },
+    {
+      providerModifiedAt: new Date("2026-07-22T00:00:00.000Z"),
+      webhookRefresh: false,
+    },
+    { providerModifiedAt: null, webhookRefresh: true },
+    {
+      providerModifiedAt: new Date("2026-07-22T00:00:00.000Z"),
+      webhookRefresh: true,
+    },
+  ])(
+    "preserves definitive rejection after a concurrent timeout unless a newer webhook supersedes it",
+    async ({ providerModifiedAt, webhookRefresh }) => {
+      const database = new DatabaseSync(":memory:");
+      try {
+        database.exec(`create table "billingSubscription" (
+        "organizationId" text,
+        "provider" text,
+        "providerSubscriptionId" text,
+        "updatedAt" text,
+        "providerModifiedAt" text,
+        "lastReconciliationFailureAt" text
+      )`);
+        database
+          .prepare(
+            'insert into "billingSubscription" values (?, ?, ?, ?, ?, ?)'
+          )
+          .run(
+            "organization-a",
+            "polar",
+            refreshedRow.providerSubscriptionId,
+            staleRow.updatedAt.toISOString(),
+            providerModifiedAt?.toISOString() ?? null,
+            null
+          );
+        billingMocks.loadRows.mockImplementation(
+          async () =>
+            await Promise.resolve([
+              {
+                ...refreshedRow,
+                ...z
+                  .object({
+                    lastReconciliationFailureAt: z.coerce.date().nullable(),
+                    providerModifiedAt: z.coerce.date().nullable(),
+                    updatedAt: z.coerce.date(),
+                  })
+                  .parse(
+                    database
+                      .prepare('select * from "billingSubscription"')
+                      .get()
+                  ),
+              },
+            ])
+        );
+        billingMocks.updateSet.mockImplementation((values) => ({
+          where: async (predicate) => {
+            if (predicate === undefined) {
+              throw new Error("Expected a conditional update.");
+            }
+            const query = new PgDialect().sqlToQuery(predicate);
+            const parameters = z
+              .array(z.string().nullable())
+              .parse(query.params);
+            return await Promise.resolve(
+              database
+                .prepare(
+                  `update "billingSubscription" set "lastReconciliationFailureAt" = ?, "updatedAt" = coalesce(?, "updatedAt") where ${query.sql.replaceAll(/\$\d+/gu, "?")}`
+                )
+                .run(
+                  values.lastReconciliationFailureAt?.toISOString() ?? null,
+                  values.updatedAt?.toISOString() ?? null,
+                  ...parameters
+                )
+            );
+          },
+        }));
+        const timeout = Promise.withResolvers<Subscription>();
+        const rejection = Promise.withResolvers<Subscription>();
+        billingMocks.getPolarSubscription
+          .mockReturnValueOnce(timeout.promise)
+          .mockReturnValueOnce(rejection.promise);
+        const transient = getOrganizationSubscription("organization-a");
+        const definitive = getOrganizationSubscription("organization-a").catch(
+          // oxlint-disable-next-line promise/prefer-await-to-callbacks -- Attach rejection handling before completing either racing request.
+          (error: unknown) => error
+        );
+        await vi.waitFor(() => {
+          expect(billingMocks.getPolarSubscription).toHaveBeenCalledTimes(2);
+        });
+        timeout.reject(new PolarNetworkError("request timed out"));
+        await expect(transient).resolves.toMatchObject({ product: "pro" });
+        if (webhookRefresh) {
+          database
+            .prepare(
+              'update "billingSubscription" set "providerModifiedAt" = ?'
+            )
+            .run(new Date().toISOString());
+        }
+        rejection.reject(new PolarClientError(404, "subscription not found"));
+        await expect(definitive).resolves.toMatchObject({
+          code: "SERVICE_UNAVAILABLE",
+        });
+        const nextOutcome = await getOrganizationSubscription(
+          "organization-a"
+        ).then(
+          (account) => account?.product,
+          (error: unknown) =>
+            z.object({ code: z.literal("SERVICE_UNAVAILABLE") }).parse(error)
+              .code
+        );
+        expect(nextOutcome).toBe(
+          webhookRefresh ? "pro" : "SERVICE_UNAVAILABLE"
+        );
+      } finally {
+        billingMocks.loadRows.mockReset();
+        billingMocks.updateSet.mockReset();
+        database.close();
+      }
+    }
+  );
+
+  test.each([
     { cancelAtPeriodEnd: true, status: "active" as const },
     { cancelAtPeriodEnd: false, status: "trialing" as const },
   ])(
@@ -438,7 +576,7 @@ describe("organization subscription reconciliation", () => {
   test("fails closed when reconciliation throws", async () => {
     billingMocks.loadRows.mockResolvedValueOnce([staleRow]);
     billingMocks.getPolarSubscription.mockRejectedValue(
-      new Error("provider unavailable")
+      new PolarNetworkError("provider unavailable")
     );
 
     await expect(
@@ -449,6 +587,145 @@ describe("organization subscription reconciliation", () => {
     expect(reconciliationUpdate?.lastReconciliationFailureAt).toBeInstanceOf(
       Date
     );
+  });
+
+  test.each(["active", "trialing"] as const)(
+    "preserves a current %s subscription during provider outages and cooldown",
+    async (status) => {
+      const row = {
+        ...refreshedRow,
+        status,
+        updatedAt: staleRow.updatedAt,
+      };
+      billingMocks.loadRows.mockResolvedValue([row]);
+      billingMocks.getPolarSubscription.mockRejectedValue(
+        new PolarNetworkError("request timed out")
+      );
+
+      await expect(
+        getOrganizationSubscription("organization-a")
+      ).resolves.toMatchObject({ product: "pro" });
+
+      billingMocks.loadRows.mockResolvedValue([
+        { ...row, updatedAt: new Date() },
+      ]);
+      billingMocks.getPolarSubscription.mockClear();
+      await expect(
+        getOrganizationSubscription("organization-a")
+      ).resolves.toMatchObject({ product: "pro" });
+      expect(billingMocks.getPolarSubscription).not.toHaveBeenCalled();
+
+      vi.setSystemTime(row.currentPeriodEnd);
+      billingMocks.getPolarSubscription.mockRejectedValue(
+        new PolarNetworkError("request timed out")
+      );
+      await expect(
+        getOrganizationSubscription("organization-a")
+      ).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
+    }
+  );
+
+  test("denies current access when the provider rejects the request", async () => {
+    billingMocks.loadRows.mockResolvedValue([refreshedRow]);
+    billingMocks.getPolarSubscription.mockRejectedValue(
+      new PolarClientError(404, "subscription not found")
+    );
+
+    await expect(
+      getOrganizationSubscriptionRecord("organization-a", {
+        forceReconcile: true,
+      })
+    ).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
+    billingMocks.loadRows.mockResolvedValue([
+      { ...refreshedRow, lastReconciliationFailureAt: new Date() },
+    ]);
+    billingMocks.getPolarSubscription.mockClear();
+    await expect(
+      getOrganizationSubscription("organization-a")
+    ).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
+    expect(billingMocks.getPolarSubscription).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    new PolarServerError(503, "provider unavailable"),
+    new PolarRateLimitError(429),
+  ])(
+    "preserves current access during transient provider responses",
+    async (providerError) => {
+      billingMocks.loadRows.mockResolvedValue([
+        { ...refreshedRow, updatedAt: staleRow.updatedAt },
+      ]);
+      billingMocks.getPolarSubscription.mockRejectedValue(providerError);
+
+      await expect(
+        getOrganizationSubscription("organization-a")
+      ).resolves.toMatchObject({ product: "pro" });
+    }
+  );
+
+  test("retains fail-closed historical failures during provider outages", async () => {
+    billingMocks.loadRows.mockResolvedValue([
+      {
+        ...refreshedRow,
+        lastReconciliationFailureAt: new Date("2026-08-01T00:00:00.000Z"),
+      },
+    ]);
+    billingMocks.getPolarSubscription.mockRejectedValue(
+      new PolarNetworkError("request timed out")
+    );
+
+    await expect(
+      getOrganizationSubscription("organization-a")
+    ).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
+  });
+
+  test("observes a concurrent cancellation before returning cached access", async () => {
+    billingMocks.loadRows
+      .mockResolvedValueOnce([
+        { ...refreshedRow, updatedAt: staleRow.updatedAt },
+      ])
+      .mockResolvedValueOnce([{ ...refreshedRow, status: "canceled" }]);
+    billingMocks.getPolarSubscription.mockRejectedValue(
+      new PolarNetworkError("request timed out")
+    );
+
+    await expect(
+      getOrganizationSubscription("organization-a")
+    ).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
+  });
+
+  test.each([{ synced: false }, { ignored: true, synced: true }])(
+    "denies current access when synchronization rejects the subscription",
+    async (syncResult) => {
+      billingMocks.loadRows.mockResolvedValue([
+        { ...refreshedRow, updatedAt: staleRow.updatedAt },
+      ]);
+      billingMocks.getPolarSubscription.mockResolvedValue(
+        polarSubscription("polar-subscription-1")
+      );
+      billingMocks.syncBillingSubscription.mockResolvedValue(syncResult);
+
+      await expect(
+        getOrganizationSubscription("organization-a")
+      ).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
+    }
+  );
+
+  test("denies current access when the provider subscription belongs to another team", async () => {
+    billingMocks.loadRows.mockResolvedValue([
+      { ...refreshedRow, updatedAt: staleRow.updatedAt },
+    ]);
+    billingMocks.getPolarSubscription.mockResolvedValue(
+      polarSubscriptionSchema.parse({
+        id: "polar-subscription-1",
+        metadata: { quieterOrganizationId: "organization-b" },
+      })
+    );
+
+    await expect(
+      getOrganizationSubscription("organization-a")
+    ).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
+    expect(billingMocks.syncBillingSubscription).not.toHaveBeenCalled();
   });
 
   test("recovers a past-due subscription when the recovery webhook was missed", async () => {
