@@ -50,7 +50,10 @@ export const ChatComposer = ({
   streaming,
   submitting,
 }: ChatComposerProps) => (
-  <form className="flex w-full shrink-0 flex-col gap-2 p-4" onSubmit={onSubmit}>
+  <form
+    className="mt-auto flex w-full shrink-0 flex-col gap-2 p-4"
+    onSubmit={onSubmit}
+  >
     {contextLabel === undefined ? null : (
       <div className="flex h-4 items-center gap-2 text-caption text-muted-fg">
         <HugeiconsIcon

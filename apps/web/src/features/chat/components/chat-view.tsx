@@ -456,7 +456,10 @@ const ChatSession = ({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div
+      className="flex min-h-0 flex-1 flex-col"
+      data-assistant-loading={streaming || busy ? "" : undefined}
+    >
       {chat.messages.length > 0 || errorMessage !== "" ? (
         <ChatTranscript
           messages={chat.messages}
@@ -529,7 +532,11 @@ export const ChatView = (props: ChatViewProps) => {
     refetch: refetchChat,
   } = useQuery(chatQueryOptions(props.mailboxId, props.chatId));
   if (isPending || (props.chatId !== null && isChatPending)) {
-    return <p className="p-4 text-body-sm text-muted-fg">Loading assistant…</p>;
+    return (
+      <p className="p-4 text-body-sm text-muted-fg" data-assistant-loading>
+        Loading assistant…
+      </p>
+    );
   }
   if (props.chatId !== null && isChatError) {
     return (
