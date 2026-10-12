@@ -109,6 +109,7 @@ type SubscriptionRow = {
   metadata: Record<string, string> | null;
   plan: StoredBillingPlan;
   provider: "polar";
+  providerModifiedAt: Date | null;
   providerSubscriptionId: string;
   status: BillingSubscriptionStatus;
   updatedAt: Date;
@@ -221,11 +222,13 @@ const getOrganizationBillingOwnerId = async (organizationId: string) => {
 const recordReconciliationFailure = async ({
   allowCachedAccess,
   organizationId,
+  providerModifiedAt,
   providerSubscriptionId,
   updatedAt,
 }: {
   allowCachedAccess: boolean;
   organizationId: string;
+  providerModifiedAt: Date | null;
   providerSubscriptionId: string;
   updatedAt: Date;
 }) => {
@@ -244,9 +247,14 @@ const recordReconciliationFailure = async ({
             billingSubscription.providerSubscriptionId,
             providerSubscriptionId
           ),
-          eq(billingSubscription.updatedAt, updatedAt),
+          providerModifiedAt === null
+            ? isNull(billingSubscription.providerModifiedAt)
+            : eq(billingSubscription.providerModifiedAt, providerModifiedAt),
           ...(allowCachedAccess
-            ? [isNull(billingSubscription.lastReconciliationFailureAt)]
+            ? [
+                eq(billingSubscription.updatedAt, updatedAt),
+                isNull(billingSubscription.lastReconciliationFailureAt),
+              ]
             : [])
         )
       );
@@ -270,6 +278,7 @@ export const getOrganizationSubscriptionRecord = async (
         metadata: billingSubscription.metadata,
         plan: billingSubscription.plan,
         provider: billingSubscription.provider,
+        providerModifiedAt: billingSubscription.providerModifiedAt,
         providerSubscriptionId: billingSubscription.providerSubscriptionId,
         status: billingSubscription.status,
         updatedAt: billingSubscription.updatedAt,
@@ -345,6 +354,7 @@ export const getOrganizationSubscriptionRecord = async (
       await recordReconciliationFailure({
         allowCachedAccess,
         organizationId,
+        providerModifiedAt: row.providerModifiedAt,
         providerSubscriptionId,
         updatedAt: row.updatedAt,
       });
