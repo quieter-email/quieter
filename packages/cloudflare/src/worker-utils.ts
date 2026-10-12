@@ -273,7 +273,7 @@ export const handlePubSub = async (
     "retry" in processing &&
     processing.retry === true
   ) {
-    throw new RequestError(503, "gmail_processing_pending");
+    return Response.json({ error: "Processing pending" }, { status: 503 });
   }
   return new Response(null, { status: 204 });
 };
