@@ -135,19 +135,6 @@ export const useAssistantPosition = ({
         if (position.edge === "bottom") {
           nextY = window.innerHeight - bounds.bottom + height;
         }
-      } else if (!open) {
-        if (position.edge === "left") {
-          nextX = width - bounds.right + 8;
-        }
-        if (position.edge === "right") {
-          nextX = window.innerWidth - bounds.right - 8;
-        }
-        if (position.edge === "top") {
-          nextY = height - bounds.bottom + 8;
-        }
-        if (position.edge === "bottom") {
-          nextY = window.innerHeight - bounds.bottom - 8;
-        }
       }
     }
     if (position.mode !== "edge" || open) {
