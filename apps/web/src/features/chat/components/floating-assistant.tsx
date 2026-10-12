@@ -5,6 +5,7 @@ import {
   ArrowDown01Icon,
   Cancel01Icon,
   Delete02Icon,
+  DragDropVerticalIcon,
   Edit01Icon,
   Tick01Icon,
 } from "@hugeicons/core-free-icons";
@@ -23,9 +24,12 @@ import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
 import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { PointerEvent, ReactNode, SubmitEvent } from "react";
+import type { ReactNode, SubmitEvent } from "react";
 
-import { useAssistantPosition } from "./use-assistant-position";
+import {
+  assistantLauncherSize,
+  useAssistantPosition,
+} from "./use-assistant-position";
 
 export type FloatingAssistantChat = {
   id: string;
@@ -63,7 +67,10 @@ export const FloatingAssistant = ({
   const panelRef = useRef<HTMLDialogElement | null>(null);
   const launcherRef = useRef<HTMLButtonElement | null>(null);
   const reducedMotion = useReducedMotion() === true;
-  const [panelSize, setPanelSize] = useState({ height: 48, width: 400 });
+  const [panelSize, setPanelSize] = useState({
+    height: assistantLauncherSize,
+    width: 400,
+  });
   const {
     boundsRef,
     draggedRef,
@@ -178,16 +185,6 @@ export const FloatingAssistant = ({
     });
   };
 
-  const startPanelDrag = (event: PointerEvent<HTMLElement>) => {
-    if (
-      event.target instanceof Element &&
-      event.target.closest("button, a, input, textarea, select")
-    ) {
-      return;
-    }
-    startDrag(event);
-  };
-
   return (
     <div
       className="pointer-events-none fixed inset-[max(1.5rem,env(safe-area-inset-top),env(safe-area-inset-right),env(safe-area-inset-bottom),env(safe-area-inset-left))] z-50 max-sm:inset-[max(1rem,env(safe-area-inset-top),env(safe-area-inset-right),env(safe-area-inset-bottom),env(safe-area-inset-left))]"
@@ -245,7 +242,7 @@ export const FloatingAssistant = ({
         }}
         transition={{ duration: reducedMotion ? 0 : 0.15 }}
         className={cn(
-          "absolute right-0 bottom-0 size-12 rounded-lg border border-dashed border-muted-fg/35 shadow-sm",
+          "absolute right-0 bottom-0 size-14 rounded-lg border border-dashed border-muted-fg/35 shadow-sm",
           {
             "border-fg/60 bg-control-active/60 shadow-elevation": nearDock,
           }
@@ -268,14 +265,13 @@ export const FloatingAssistant = ({
         style={{ x, y }}
         initial={false}
         animate={{
-          height: open ? panelSize.height : 48,
-          opacity: tucked ? 0 : 1,
-          width: open ? panelSize.width : 48,
+          height: open ? panelSize.height : assistantLauncherSize,
+          width: open ? panelSize.width : assistantLauncherSize,
         }}
         transition={
           reducedMotion
             ? { duration: 0 }
-            : { bounce: 0.08, duration: 0.3, type: "spring" }
+            : { damping: 38, mass: 1, stiffness: 420, type: "spring" }
         }
         className={cn(
           "pointer-events-auto absolute right-0 bottom-0 z-20 max-h-full max-w-full overflow-hidden rounded-lg border border-border-strong/70 bg-bg-raised/90 [background-image:linear-gradient(160deg,color-mix(in_oklab,var(--bg-raised)_88%,transparent),color-mix(in_oklab,var(--bg)_96%,transparent))] text-fg shadow-elevation backdrop-blur-2xl",
@@ -306,21 +302,33 @@ export const FloatingAssistant = ({
             { "pointer-events-none": !open }
           )}
         >
-          <header
-            className="flex h-7 shrink-0 cursor-grab touch-none items-center gap-2 px-4 select-none active:cursor-grabbing"
-            onPointerDown={startPanelDrag}
-            onPointerMove={moveDrag}
-            onPointerUp={endDrag}
-            onPointerCancel={endDrag}
-            onLostPointerCapture={endDrag}
-          >
+          <header className="flex h-9 shrink-0 items-center gap-2 px-4">
+            <IconButtonTooltip label="Move assistant">
+              <Button
+                aria-label="Move assistant"
+                data-assistant-drag-handle
+                // oxlint-disable-next-line shadcn/no-restyle -- Dedicated grip keeps drag gestures away from conversation controls.
+                className="cursor-grab touch-none active:cursor-grabbing"
+                size="icon"
+                variant="ghost"
+                onPointerDown={startDrag}
+                onPointerMove={moveDrag}
+                onPointerUp={endDrag}
+                onPointerCancel={endDrag}
+                onLostPointerCapture={endDrag}
+              >
+                <HugeiconsIcon aria-hidden icon={DragDropVerticalIcon} />
+              </Button>
+            </IconButtonTooltip>
             <DropdownMenu>
               <DropdownMenuTrigger
                 appearance="row-strong"
                 aria-label="Open conversation history"
                 type="button"
               >
-                <span className="truncate">Quieter</span>
+                <span className="max-w-40 truncate">
+                  {activeChat ? getChatTitle(activeChat) : "New chat"}
+                </span>
                 <HugeiconsIcon
                   aria-hidden
                   className="size-3.5 text-muted-fg"
@@ -466,7 +474,7 @@ export const FloatingAssistant = ({
             animate={{ opacity: open ? 0 : 1 }}
             transition={{ duration: reducedMotion ? 0 : 0.12 }}
             className={cn(
-              "absolute right-0 bottom-0 flex size-[46px] cursor-grab touch-none items-center justify-center rounded-lg focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:cursor-grabbing",
+              "absolute right-0 bottom-0 flex size-[54px] cursor-grab touch-none items-center justify-center rounded-lg focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:cursor-grabbing",
               { "pointer-events-none": open }
             )}
             data-assistant-launcher
@@ -483,7 +491,7 @@ export const FloatingAssistant = ({
             type="button"
             ref={launcherRef}
           >
-            <Brand className="pointer-events-none size-7" />
+            <Brand className="pointer-events-none size-8" />
           </motion.button>
         </IconButtonTooltip>
       </motion.div>

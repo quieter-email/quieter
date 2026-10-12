@@ -430,8 +430,8 @@ const SidebarContent = ({
           {!onRequestClose &&
           selectedMailboxId &&
           selectedMailboxProvider !== "api" ? (
-            <div className="flex h-24 shrink-0 items-center justify-center">
-              <div aria-hidden className="size-12" data-assistant-dock />
+            <div className="flex h-24 shrink-0 items-center px-2">
+              <div aria-hidden className="size-14" data-assistant-dock />
             </div>
           ) : null}
           <SidebarFooter

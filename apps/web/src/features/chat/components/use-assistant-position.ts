@@ -25,6 +25,8 @@ const positionSchema = z.discriminatedUnion("mode", [
 ]);
 type Position = z.infer<typeof positionSchema>;
 type Edge = z.infer<typeof edgeSchema>;
+export const assistantLauncherSize = 56;
+
 const storageKey = "quieter:assistant-position:v1";
 
 export const useAssistantPosition = ({
@@ -68,8 +70,12 @@ export const useAssistantPosition = ({
     if (!bounds) {
       return;
     }
-    const width = open ? Math.min(panelSize.width, bounds.width) : 48;
-    const height = open ? Math.min(panelSize.height, bounds.height) : 48;
+    const width = open
+      ? Math.min(panelSize.width, bounds.width)
+      : assistantLauncherSize;
+    const height = open
+      ? Math.min(panelSize.height, bounds.height)
+      : assistantLauncherSize;
     const dock = [...document.querySelectorAll("[data-assistant-dock]")]
       .map((element) => element.getBoundingClientRect())
       .find((rect) => rect.width > 0 && rect.height > 0);
@@ -87,7 +93,7 @@ export const useAssistantPosition = ({
     let nextX = x.get();
     let nextY = y.get();
     if (position.mode === "dock") {
-      nextX = dockRef.current.x + (dock ? width - 48 : 0);
+      nextX = dockRef.current.x + (dock ? width - assistantLauncherSize : 0);
       nextY = dockRef.current.y;
     } else if (position.mode === "free") {
       nextX = -(1 - position.x) * (bounds.width - width);
@@ -118,20 +124,33 @@ export const useAssistantPosition = ({
       }
       if (!revealed && !open) {
         if (position.edge === "left") {
-          nextX = width - bounds.right - 40;
+          nextX = -bounds.right;
         }
         if (position.edge === "right") {
-          nextX = window.innerWidth - bounds.right + width - 8;
+          nextX = window.innerWidth - bounds.right + width;
         }
         if (position.edge === "top") {
-          nextY = height - bounds.bottom - 40;
+          nextY = -bounds.bottom;
         }
         if (position.edge === "bottom") {
-          nextY = window.innerHeight - bounds.bottom + height - 8;
+          nextY = window.innerHeight - bounds.bottom + height;
+        }
+      } else if (!open) {
+        if (position.edge === "left") {
+          nextX = width - bounds.right + 8;
+        }
+        if (position.edge === "right") {
+          nextX = window.innerWidth - bounds.right - 8;
+        }
+        if (position.edge === "top") {
+          nextY = height - bounds.bottom + 8;
+        }
+        if (position.edge === "bottom") {
+          nextY = window.innerHeight - bounds.bottom - 8;
         }
       }
     }
-    if (position.mode !== "edge" || revealed || open) {
+    if (position.mode !== "edge" || open) {
       nextX = Math.max(width - bounds.width, Math.min(0, nextX));
       nextY = Math.max(height - bounds.height, Math.min(0, nextY));
     }
@@ -144,8 +163,21 @@ export const useAssistantPosition = ({
       const transition = reducedMotion
         ? { duration: 0 }
         : { damping: 38, mass: 1, stiffness: 420, type: "spring" as const };
-      animate(x, nextX, transition);
-      animate(y, nextY, transition);
+      const edgeTransition = {
+        duration: reducedMotion ? 0 : 0.22,
+        ease: [0.22, 1, 0.36, 1] as const,
+        type: "tween" as const,
+      };
+      animate(
+        x,
+        nextX,
+        position.mode === "edge" && !open ? edgeTransition : transition
+      );
+      animate(
+        y,
+        nextY,
+        position.mode === "edge" && !open ? edgeTransition : transition
+      );
     }
   });
 
@@ -287,11 +319,15 @@ export const useAssistantPosition = ({
       deltaX *= resistedDistance / distance;
       deltaY *= resistedDistance / distance;
     }
-    const width = open ? Math.min(panelSize.width, bounds.width) : 48;
-    const height = open ? Math.min(panelSize.height, bounds.height) : 48;
+    const width = open
+      ? Math.min(panelSize.width, bounds.width)
+      : assistantLauncherSize;
+    const height = open
+      ? Math.min(panelSize.height, bounds.height)
+      : assistantLauncherSize;
     const targetX = Math.max(
       width - bounds.width,
-      Math.min(0, dockRef.current.x + width - 48)
+      Math.min(0, dockRef.current.x + width - assistantLauncherSize)
     );
     const targetY = Math.max(
       height - bounds.height,
@@ -348,11 +384,15 @@ export const useAssistantPosition = ({
       animate(y, gesture.y, transition);
       return;
     }
-    const width = open ? Math.min(panelSize.width, bounds.width) : 48;
-    const height = open ? Math.min(panelSize.height, bounds.height) : 48;
+    const width = open
+      ? Math.min(panelSize.width, bounds.width)
+      : assistantLauncherSize;
+    const height = open
+      ? Math.min(panelSize.height, bounds.height)
+      : assistantLauncherSize;
     const targetX = Math.max(
       width - bounds.width,
-      Math.min(0, dockRef.current.x + width - 48)
+      Math.min(0, dockRef.current.x + width - assistantLauncherSize)
     );
     const targetY = Math.max(
       height - bounds.height,
