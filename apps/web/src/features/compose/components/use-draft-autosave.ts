@@ -28,6 +28,7 @@ export const useDraftAutosave = ({
       }, 1500);
     };
     const subscription = subscribe(changed);
+    changed();
     // A change during an in-flight save must be reconsidered after that save finishes.
     const retry = setInterval(changed, 10_000);
     return () => {

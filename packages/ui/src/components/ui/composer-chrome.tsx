@@ -5,7 +5,7 @@ import type { ComponentPropsWithoutRef, ReactNode } from "react";
 import { cn } from "../../lib/cn";
 import { Field, FieldError, FieldLabel } from "./field";
 
-/** Chrome shared by the mail and template composers. */
+/** Shared chrome for the mail composer. */
 export const ComposerFrame = ({
   children,
   className,

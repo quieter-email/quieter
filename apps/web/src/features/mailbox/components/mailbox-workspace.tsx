@@ -31,7 +31,7 @@ import { useMailboxSelection } from "./mailbox-workspace/use-mailbox-selection";
 import { useWorkspaceUiState } from "./mailbox-workspace/use-workspace-ui-state";
 import {
   loadComposeWorkspace,
-  loadTemplateWorkspace,
+  loadSnippetWorkspace,
 } from "./mailbox-workspace/workspace-component-loaders";
 
 type MailboxWorkspaceProps = {
@@ -138,13 +138,13 @@ const useMailboxWorkspaceCompose = ({
   activeMailbox,
   selectedMailboxId,
   isComposeMailbox,
-  isTemplateMailbox,
+  isSnippetMailbox,
   setMailboxSearch,
 }: {
   activeMailbox: MailboxCategory;
   selectedMailboxId: string | null;
   isComposeMailbox: boolean;
-  isTemplateMailbox: boolean;
+  isSnippetMailbox: boolean;
   setMailboxSearch: SetMailboxSearch;
 }) => {
   const [composeSession, setComposeSession] = useState<{
@@ -168,7 +168,7 @@ const useMailboxWorkspaceCompose = ({
     }
     void loadComposeWorkspace();
     const returnMailbox =
-      isComposeMailbox || isTemplateMailbox
+      isComposeMailbox || isSnippetMailbox
         ? composeReturnMailboxRef.current
         : activeMailbox;
     composeReturnMailboxRef.current = returnMailbox;
@@ -209,7 +209,7 @@ const useMailboxWorkspaceRouteEffects = ({
   isCompletingGmailConnection,
   isComposeMailbox,
   isSandboxMode,
-  isTemplateMailbox,
+  isSnippetMailbox,
   isWorkspaceReady,
   launchedMailtoRef,
   mailboxId,
@@ -227,7 +227,7 @@ const useMailboxWorkspaceRouteEffects = ({
   isCompletingGmailConnection: boolean;
   isComposeMailbox: boolean;
   isSandboxMode: boolean;
-  isTemplateMailbox: boolean;
+  isSnippetMailbox: boolean;
   isWorkspaceReady: boolean;
   launchedMailtoRef: { current: string | null };
   mailboxId: string | null | undefined;
@@ -301,7 +301,7 @@ const useMailboxWorkspaceRouteEffects = ({
   }, [chatId, selectedMailboxProvider, setMailboxSearch]);
 
   useLayoutEffect(() => {
-    if (isComposeMailbox || isTemplateMailbox) {
+    if (isComposeMailbox || isSnippetMailbox) {
       return;
     }
     if (isMailboxSupportedByProvider(selectedMailboxProvider, activeMailbox)) {
@@ -315,7 +315,7 @@ const useMailboxWorkspaceRouteEffects = ({
   }, [
     activeMailbox,
     isComposeMailbox,
-    isTemplateMailbox,
+    isSnippetMailbox,
     selectedMailboxProvider,
     setMailboxSearch,
   ]);
@@ -370,7 +370,7 @@ const useMailboxWorkspaceRouteEffects = ({
 const useMailboxWorkspaceActions = ({
   activeMailbox,
   isComposeMailbox,
-  isTemplateMailbox,
+  isSnippetMailbox,
   mailboxes,
   openComposeWorkspace,
   query,
@@ -382,7 +382,7 @@ const useMailboxWorkspaceActions = ({
 }: {
   activeMailbox: MailboxCategory;
   isComposeMailbox: boolean;
-  isTemplateMailbox: boolean;
+  isSnippetMailbox: boolean;
   mailboxes: { id: string; provider: string }[];
   openComposeWorkspace: (draft: ComposeDraftState | null) => void;
   query: string | null;
@@ -418,7 +418,7 @@ const useMailboxWorkspaceActions = ({
 
   const selectMailbox = (mailbox: MailboxCategory) => {
     if (
-      !isTemplateMailbox &&
+      !isSnippetMailbox &&
       !isComposeMailbox &&
       mailbox === activeMailbox &&
       view === "inbox"
@@ -521,10 +521,10 @@ const useMailboxWorkspaceActions = ({
     }
   };
 
-  const manageTemplates = () => {
-    void loadTemplateWorkspace();
+  const manageSnippets = () => {
+    void loadSnippetWorkspace();
     void setMailboxSearch({
-      mailbox: "template",
+      mailbox: "snippets",
       messageId: null,
       threadId: null,
       view: "inbox",
@@ -540,7 +540,7 @@ const useMailboxWorkspaceActions = ({
     draftChatKey,
     gmailReconnectError,
     isStartingGmailConnection,
-    manageTemplates,
+    manageSnippets,
     reconnectMailbox,
     reconnectingMailboxId: startingReconnectMailboxId,
     selectChat,
@@ -661,7 +661,7 @@ type MailboxWorkspaceBodyProps = Omit<
 > & {
   activeMailbox: MailboxCategory;
   draftChatKey: string;
-  isTemplateMailbox: boolean;
+  isSnippetMailbox: boolean;
   messageId: string | undefined;
   query: string;
   selectedMailbox: {
@@ -677,7 +677,7 @@ const MailboxWorkspaceBody = ({
   draftChatKey,
   isComposeMailbox,
   isManagedDemoMode,
-  isTemplateMailbox,
+  isSnippetMailbox,
   messageId,
   query,
   selectedMailbox,
@@ -707,11 +707,12 @@ const MailboxWorkspaceBody = ({
     <MailboxWorkspaceContent
       {...contentProps}
       activeMailbox={
-        isTemplateMailbox || isComposeMailbox ? null : activeMailbox
+        isSnippetMailbox || isComposeMailbox ? null : activeMailbox
       }
       chatContext={chatContext}
       draftChatKey={draftChatKey}
       isComposeMailbox={isComposeMailbox}
+      isSnippetMailbox={isSnippetMailbox}
       isManagedDemoMode={isManagedDemoMode}
       persistComposeDrafts={
         !isManagedDemoMode && contentProps.selectedMailboxProvider !== "api"
@@ -738,7 +739,7 @@ export const MailboxWorkspace = ({ user: _user }: MailboxWorkspaceProps) => {
     compose,
     gmailLink,
     isComposeMailbox,
-    isTemplateMailbox,
+    isSnippetMailbox,
     mailboxId,
     mailto,
     messageId,
@@ -787,7 +788,7 @@ export const MailboxWorkspace = ({ user: _user }: MailboxWorkspaceProps) => {
   const composeWorkspace = useMailboxWorkspaceCompose({
     activeMailbox,
     isComposeMailbox,
-    isTemplateMailbox,
+    isSnippetMailbox,
     selectedMailboxId,
     setMailboxSearch,
   });
@@ -800,7 +801,7 @@ export const MailboxWorkspace = ({ user: _user }: MailboxWorkspaceProps) => {
   const workspaceActions = useMailboxWorkspaceActions({
     activeMailbox,
     isComposeMailbox,
-    isTemplateMailbox,
+    isSnippetMailbox,
     mailboxes,
     openComposeWorkspace: composeWorkspace.openComposeWorkspace,
     query,
@@ -818,7 +819,7 @@ export const MailboxWorkspace = ({ user: _user }: MailboxWorkspaceProps) => {
     isCompletingGmailConnection,
     isComposeMailbox,
     isSandboxMode,
-    isTemplateMailbox,
+    isSnippetMailbox,
     isWorkspaceReady,
     launchedMailtoRef: composeWorkspace.launchedMailtoRef,
     mailboxId,
@@ -848,7 +849,7 @@ export const MailboxWorkspace = ({ user: _user }: MailboxWorkspaceProps) => {
     draftChatKey,
     gmailReconnectError,
     isStartingGmailConnection,
-    manageTemplates,
+    manageSnippets,
     reconnectMailbox,
     reconnectingMailboxId,
     selectChat,
@@ -876,7 +877,7 @@ export const MailboxWorkspace = ({ user: _user }: MailboxWorkspaceProps) => {
       isManagedDemoMode={isManagedDemoMode}
       chats={chats}
       draftChatKey={draftChatKey}
-      isTemplateMailbox={isTemplateMailbox}
+      isSnippetMailbox={isSnippetMailbox}
       layoutState={{ isMobileSidebarOpen }}
       mailboxGroups={mailboxGroups}
       messageId={messageId}
@@ -886,7 +887,7 @@ export const MailboxWorkspace = ({ user: _user }: MailboxWorkspaceProps) => {
       }}
       onComposeDraftRequested={handleComposeDraftRequested}
       onComposeNewMail={createComposeDraft}
-      onManageTemplates={manageTemplates}
+      onManageSnippets={manageSnippets}
       onMobileOpenChange={setIsMobileSidebarOpen}
       onOpenSidebar={() => {
         setIsMobileSidebarOpen(true);

@@ -37,7 +37,7 @@ type MailboxMessagesPanelProps = {
   mailboxId: string;
   mailboxProvider: "api" | "gmail" | "managed";
   onComposeDraftRequested: (draft: ComposeDraftState) => void;
-  onManageTemplates: () => void;
+  onManageSnippets: () => void;
   onOpenSidebar: () => void;
   onSearchQueryChange: (query: string) => void;
   persistComposeDrafts: boolean;
@@ -151,7 +151,7 @@ export const MailboxMessagesPanel = ({
   mailboxId,
   mailboxProvider,
   onComposeDraftRequested,
-  onManageTemplates,
+  onManageSnippets,
   onOpenSidebar,
   onSearchQueryChange,
   persistComposeDrafts,
@@ -377,7 +377,7 @@ export const MailboxMessagesPanel = ({
             mailboxId={mailboxId}
             mailboxProvider={mailboxProvider}
             mailboxActions={mailboxActions}
-            onManageTemplates={onManageTemplates}
+            onManageSnippets={onManageSnippets}
             pendingActions={pendingActions}
             isPending={isLoadingEmptyMessages}
             onBackToList={backToList}

@@ -689,26 +689,26 @@
 .home-keyboard-art kbd:first-child {
   width: 98px;
 }
-.home-template-picker {
+.home-snippet-picker {
   width: min(300px, calc(100% - 40px));
   overflow: hidden;
   border-radius: 8px;
   font-size: 12px;
   line-height: 18px;
 }
-.home-template-header {
+.home-snippet-header {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 12px;
   border-bottom: 1px solid var(--home-edge);
 }
-.home-template-header p {
+.home-snippet-header p {
   font-size: 14px;
   font-weight: 500;
   line-height: 20px;
 }
-.home-template-search {
+.home-snippet-search {
   display: flex;
   height: 34px;
   align-items: center;
@@ -718,17 +718,17 @@
   border-radius: 6px;
   color: var(--muted-fg);
 }
-.home-template-options {
+.home-snippet-options {
   display: flex;
   flex-direction: column;
   gap: 2px;
   padding: 6px;
   color: var(--muted-fg);
 }
-.home-template-options p {
+.home-snippet-options p {
   padding: 10px;
 }
-.home-template-options .home-selected-surface {
+.home-snippet-options .home-selected-surface {
   color: var(--fg);
 }
 .home-devices {

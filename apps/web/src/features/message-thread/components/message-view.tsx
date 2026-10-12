@@ -91,7 +91,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     mailboxProvider,
     message,
     onBackToList,
-    onManageTemplates,
+    onManageSnippets,
     subject,
     threadAttachments,
     threadIsUnread,
@@ -365,7 +365,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                       onClose={() => {
                         setInlineDraft(null);
                       }}
-                      onManageTemplates={onManageTemplates}
+                      onManageSnippets={onManageSnippets}
                       persistDrafts={composePersistDrafts}
                       senderEmail={currentUserEmail}
                       signature={composeSignature}

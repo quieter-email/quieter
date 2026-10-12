@@ -7,6 +7,7 @@ import {
   LeftToRightListBulletIcon,
   LeftToRightListNumberIcon,
   QuoteUpIcon,
+  NoteIcon,
   StopIcon,
   TextBoldIcon,
   TextItalicIcon,
@@ -15,15 +16,27 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { VisualEmailDocument } from "@quieter/mail/visual-email";
+import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogBody,
+  DialogFooter,
+  DialogCloseButton,
+} from "@quieter/ui/dialog";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { Input } from "@quieter/ui/input";
+import { toast } from "@quieter/ui/toast";
 import {
   Toolbar,
   ToolbarButton,
   ToolbarGroup,
   ToolbarSeparator,
 } from "@quieter/ui/toolbar";
-import type { Editor } from "@tiptap/core";
+import type { Editor, Range } from "@tiptap/core";
 import { FileHandler } from "@tiptap/extension-file-handler";
 import { Image } from "@tiptap/extension-image";
 import { Link } from "@tiptap/extension-link";
@@ -37,17 +50,14 @@ import {
   useEffect,
   useImperativeHandle,
   useMemo,
+  useRef,
+  useState,
 } from "react";
 import type { ReactNode, Ref } from "react";
 
+import { buildComposeCommands } from "../domain/compose-commands";
 import { normalizeComposeBodyHtml } from "../domain/draft";
-import {
-  createTemplatePlaceholderToken,
-  getSelectedTemplatePlaceholder,
-  hydrateTemplatePlaceholders,
-  TemplatePlaceholder,
-} from "../domain/template-placeholders";
-import type { TemplatePlaceholderRange } from "../domain/template-placeholders";
+import { SlashCommands } from "../domain/slash-commands";
 
 const ComposeImage = Image.extend({
   addAttributes() {
@@ -71,6 +81,8 @@ const audioWaveBars = [
   { id: "low-right", scale: 0.52 },
 ];
 
+const EMPTY_SNIPPETS: NonNullable<ComposeEditorProps["snippets"]> = [];
+
 type ComposeEditorProps = {
   children: ReactNode;
   html: string;
@@ -80,9 +92,11 @@ type ComposeEditorProps = {
   onChange: (payload: { html: string; text: string }) => void;
   onBlur?: () => void;
   onInlineImageFiles: (files: File[]) => void | Promise<void>;
-  onPlaceholderSelectionChange?: (
-    placeholder: TemplatePlaceholderRange | null
-  ) => void;
+  snippets?: { id: string; name: string; bodyText: string }[];
+  snippetStatus?: string;
+  onCreateSnippet?: (text: string) => void;
+  onManageSnippets?: () => void;
+  onSlashMenuOpenChange?: (open: boolean) => void;
   onRecordingStart?: () => void;
   onRecordingStop?: () => void;
   recording?: boolean;
@@ -94,14 +108,13 @@ type ComposeEditorProps = {
 export type ComposeEditorHandle = {
   getDocument: () => unknown;
   insertHtml: (html: string) => void;
-  insertPlaceholder: (label: string) => void;
-  replaceSelectedPlaceholder: (value: string) => boolean;
 };
 
 type ComposeEditorContextValue = {
   density: NonNullable<ComposeEditorProps["density"]>;
   disabled: boolean;
   editor: Editor | null;
+  onCreateSnippet?: (text: string) => void;
   onRecordingStart?: () => void;
   onRecordingStop?: () => void;
   recording: boolean;
@@ -130,7 +143,11 @@ export const ComposeEditor = ({
   onBlur,
   onChange,
   onInlineImageFiles,
-  onPlaceholderSelectionChange,
+  snippets = EMPTY_SNIPPETS,
+  snippetStatus,
+  onCreateSnippet,
+  onManageSnippets,
+  onSlashMenuOpenChange,
   onRecordingStart,
   onRecordingStop,
   recording = false,
@@ -138,14 +155,39 @@ export const ComposeEditor = ({
   transcribing = false,
   ref,
 }: ComposeEditorProps) => {
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const [linkRange, setLinkRange] = useState<Range | null>(null);
+  const [linkUrl, setLinkUrl] = useState("");
+  const commandOptions = useRef({
+    onCreateSnippet,
+    onManageSnippets,
+    onSlashMenuOpenChange,
+    snippetStatus,
+    snippets,
+  });
+  useEffect(() => {
+    commandOptions.current = {
+      onCreateSnippet,
+      onManageSnippets,
+      onSlashMenuOpenChange,
+      snippetStatus,
+      snippets,
+    };
+  }, [
+    snippets,
+    snippetStatus,
+    onCreateSnippet,
+    onManageSnippets,
+    onSlashMenuOpenChange,
+  ]);
   const editor = useEditor({
     autofocus: false,
-    content: document?.content ?? hydrateTemplatePlaceholders(html.trim()),
+    content: document?.content ?? html.trim(),
     editable: disabled !== true,
     editorProps: {
       attributes: {
         class:
-          "min-h-full bg-transparent text-body text-fg outline-none [&_.ProseMirror-selectednode.quieter-template-placeholder]:border-fg [&_.is-editor-empty:first-child::before]:pointer-events-none [&_.is-editor-empty:first-child::before]:float-left [&_.is-editor-empty:first-child::before]:h-0 [&_.is-editor-empty:first-child::before]:text-muted-fg [&_.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.quieter-template-placeholder]:mx-1 [&_.quieter-template-placeholder]:inline-block [&_.quieter-template-placeholder]:min-w-20 [&_.quieter-template-placeholder]:cursor-text [&_.quieter-template-placeholder]:border-b [&_.quieter-template-placeholder]:border-muted-fg [&_.quieter-template-placeholder]:px-1 [&_.quieter-template-placeholder]:text-transparent [&_.quieter-template-placeholder]:selection:bg-primary/20 [&_.quieter-template-placeholder]:hover:border-fg [&_a]:text-fg [&_a]:underline [&_blockquote]:my-3 [&_blockquote]:border-l [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-muted-fg [&_img]:my-3 [&_img]:max-h-48 [&_img]:max-w-full [&_img]:rounded-md [&_img]:object-contain [&_li]:my-0.5 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-0 [&_p+p]:mt-2 [&_s]:text-muted-fg [&_strong]:font-semibold [&_u]:underline [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-5",
+          "min-h-full bg-transparent text-body text-fg outline-none [&_.is-editor-empty:first-child::before]:pointer-events-none [&_.is-editor-empty:first-child::before]:float-left [&_.is-editor-empty:first-child::before]:h-0 [&_.is-editor-empty:first-child::before]:text-muted-fg [&_.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_a]:text-fg [&_a]:underline [&_blockquote]:my-3 [&_blockquote]:border-l [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-muted-fg [&_img]:my-3 [&_img]:max-h-48 [&_img]:max-w-full [&_img]:rounded-md [&_img]:object-contain [&_li]:my-0.5 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-0 [&_p+p]:mt-2 [&_s]:text-muted-fg [&_strong]:font-semibold [&_u]:underline [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-5",
       },
     },
     extensions: [
@@ -154,7 +196,25 @@ export const ComposeEditor = ({
         link: false,
         underline: false,
       }),
-      TemplatePlaceholder,
+      // oxlint-disable-next-line react/refs -- Tiptap invokes suggestion callbacks after render, when command options and input refs are current.
+      SlashCommands.configure({
+        getItems: (query, currentEditor) =>
+          buildComposeCommands({
+            editor: currentEditor,
+            onCreateSnippet: commandOptions.current.onCreateSnippet,
+            onInsertImage: () => imageInputRef.current?.click(),
+            onInsertLink: (range) => {
+              setLinkUrl("");
+              setLinkRange(range);
+            },
+            onManageSnippets: commandOptions.current.onManageSnippets,
+            query,
+            snippets: commandOptions.current.snippets,
+          }),
+        getStatus: () => commandOptions.current.snippetStatus,
+        onOpenChange: (open) =>
+          commandOptions.current.onSlashMenuOpenChange?.(open),
+      }),
       Underline,
       Link.configure({
         autolink: true,
@@ -162,7 +222,7 @@ export const ComposeEditor = ({
         openOnClick: true,
       }),
       Placeholder.configure({
-        placeholder: "Write your message…",
+        placeholder: "Write your message, or type / for commands…",
       }),
       ComposeImage.configure({
         allowBase64: true,
@@ -185,11 +245,6 @@ export const ComposeEditor = ({
     ],
     immediatelyRender: false,
     onBlur: () => onBlur?.(),
-    onSelectionUpdate: ({ editor: updatedEditor }) => {
-      onPlaceholderSelectionChange?.(
-        getSelectedTemplatePlaceholder(updatedEditor)
-      );
-    },
     onUpdate: ({ editor: updatedEditor }) => {
       onChange({
         html: updatedEditor.getHTML(),
@@ -202,42 +257,7 @@ export const ComposeEditor = ({
     getDocument: () =>
       editor ? { content: editor.getJSON(), version: 1 } : null,
     insertHtml: (nextHtml) => {
-      editor
-        ?.chain()
-        .focus()
-        .insertContent(hydrateTemplatePlaceholders(nextHtml))
-        .run();
-    },
-    insertPlaceholder: (label) => {
-      const token = createTemplatePlaceholderToken(label);
-      if (!editor || !token) {
-        return;
-      }
-
-      editor
-        .chain()
-        .focus()
-        .insertContent({
-          attrs: { label: token.slice("{{quieter:".length, -2) },
-          type: "templatePlaceholder",
-        })
-        .run();
-      editor.commands.setNodeSelection(editor.state.selection.from - 1);
-    },
-    replaceSelectedPlaceholder: (value) => {
-      if (!editor) {
-        return false;
-      }
-      const placeholder = getSelectedTemplatePlaceholder(editor);
-      if (!placeholder) {
-        return false;
-      }
-
-      return editor
-        .chain()
-        .focus()
-        .insertContentAt({ from: placeholder.from, to: placeholder.to }, value)
-        .run();
+      editor?.chain().focus().insertContent(nextHtml).run();
     },
   }));
 
@@ -263,10 +283,9 @@ export const ComposeEditor = ({
     if (current === next) {
       return;
     }
-    editor.commands.setContent(
-      document?.content ?? (hydrateTemplatePlaceholders(next) || "<p></p>"),
-      { emitUpdate: false }
-    );
+    editor.commands.setContent(document?.content ?? (next || "<p></p>"), {
+      emitUpdate: false,
+    });
   }, [document, editor, html]);
 
   const contextValue = useMemo(
@@ -274,6 +293,7 @@ export const ComposeEditor = ({
       density,
       disabled: disabled === true,
       editor,
+      onCreateSnippet,
       onRecordingStart,
       onRecordingStop,
       recording,
@@ -284,6 +304,7 @@ export const ComposeEditor = ({
       density,
       disabled,
       editor,
+      onCreateSnippet,
       onRecordingStart,
       onRecordingStop,
       recording,
@@ -295,6 +316,84 @@ export const ComposeEditor = ({
   return (
     <ComposeEditorContext value={contextValue}>
       <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+      <input
+        accept="image/*"
+        aria-label="Insert image"
+        className="hidden"
+        multiple
+        onChange={(event) => {
+          void onInlineImageFiles([...(event.currentTarget.files ?? [])]);
+          event.currentTarget.value = "";
+        }}
+        ref={imageInputRef}
+        type="file"
+      />
+      <Dialog
+        open={linkRange !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setLinkRange(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Insert a link</DialogTitle>
+          </DialogHeader>
+          <DialogBody>
+            <label
+              className="space-y-2 text-caption"
+              htmlFor="compose-link-url"
+            >
+              Address
+              <Input
+                id="compose-link-url"
+                onChange={(event) => {
+                  setLinkUrl(event.currentTarget.value);
+                }}
+                placeholder="https://example.com"
+                value={linkUrl}
+              />
+            </label>
+          </DialogBody>
+          <DialogFooter>
+            <DialogCloseButton>Cancel</DialogCloseButton>
+            <Button
+              disabled={!linkUrl.trim()}
+              onClick={() => {
+                try {
+                  const { href } = new URL(linkUrl.trim());
+                  if (
+                    !["https:", "http:", "mailto:"].includes(
+                      new URL(href).protocol
+                    )
+                  ) {
+                    toast.error("Use a web or email address for links.");
+                    return;
+                  }
+                  if (editor && linkRange) {
+                    editor
+                      .chain()
+                      .focus()
+                      .insertContentAt(linkRange, {
+                        marks: [{ attrs: { href }, type: "link" }],
+                        text: href,
+                        type: "text",
+                      })
+                      .run();
+                    setLinkRange(null);
+                  }
+                } catch {
+                  toast.error("Use a web or email address for links.");
+                }
+              }}
+              type="button"
+            >
+              Insert
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </ComposeEditorContext>
   );
 };
@@ -400,7 +499,7 @@ export const ComposeEditorToolbar = ({
   leading?: ReactNode;
   trailing?: ReactNode;
 }) => {
-  const { disabled, editor } = useComposeEditor();
+  const { disabled, editor, onCreateSnippet } = useComposeEditor();
   const toolbarState = useEditorState({
     editor,
     selector: ({ editor: currentEditor }) => ({
@@ -424,6 +523,13 @@ export const ComposeEditorToolbar = ({
       canUndo: currentEditor?.can().chain().focus().undo().run() === true,
       italicActive: currentEditor?.isActive("italic") === true,
       orderedListActive: currentEditor?.isActive("orderedList") === true,
+      selectedText: currentEditor
+        ? currentEditor.state.doc.textBetween(
+            currentEditor.state.selection.from,
+            currentEditor.state.selection.to,
+            "\n"
+          )
+        : "",
       strikeActive: currentEditor?.isActive("strike") === true,
       underlineActive: currentEditor?.isActive("underline") === true,
     }),
@@ -569,6 +675,23 @@ export const ComposeEditorToolbar = ({
       {formattingControls}
       <ToolbarSeparator />
       {historyControls}
+      {onCreateSnippet && toolbarState?.selectedText.trim() ? (
+        <IconButtonTooltip label="Save selected text as a snippet">
+          <ToolbarButton
+            disabled={disabled}
+            onClick={() => {
+              onCreateSnippet(toolbarState.selectedText);
+            }}
+            onMouseDown={(event) => {
+              event.preventDefault();
+            }}
+            type="button"
+          >
+            <HugeiconsIcon icon={NoteIcon} />
+            Save snippet
+          </ToolbarButton>
+        </IconButtonTooltip>
+      ) : null}
       {trailing === undefined ? null : (
         <div className="ml-auto flex min-w-0 items-center gap-1">
           {trailing}

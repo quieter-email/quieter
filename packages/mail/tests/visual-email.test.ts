@@ -26,11 +26,6 @@ describe("visual email documents", () => {
                 text: "let value = 1;",
                 type: "text",
               },
-              {
-                attrs: { label: "First name" },
-                marks: [{ type: "bold" }],
-                type: "templatePlaceholder",
-              },
             ],
             type: "paragraph",
           },
@@ -85,7 +80,6 @@ describe("visual email documents", () => {
 
     expect(html).toContain("<strong><em>Hello</em></strong><br>");
     expect(html).toContain("<s>Old</s><u>New</u><code>let value = 1;</code>");
-    expect(html).toContain("<strong>{{quieter:First name}}</strong>");
     expect(html).toContain('<ol start="3"><li><p>Step</p></li></ol>');
     expect(html).toContain(
       "<ul><li><p></p><blockquote><p></p></blockquote></li></ul>"
@@ -241,30 +235,6 @@ describe("visual email documents", () => {
     );
   });
 
-  test("preserves apostrophes in placeholder tokens for editor hydration", () => {
-    const document: VisualEmailDocument = {
-      content: {
-        content: [
-          {
-            content: [
-              {
-                attrs: { label: "Customer's name" },
-                type: "templatePlaceholder",
-              },
-            ],
-            type: "paragraph",
-          },
-        ],
-        type: "doc",
-      },
-      version: 1,
-    };
-
-    expect(renderVisualEmailDocument(document)).toContain(
-      "{{quieter:Customer's name}}"
-    );
-  });
-
   test("accepts current editor image and link attributes and renders bounded dimensions", () => {
     const document: VisualEmailDocument = {
       content: {
@@ -385,20 +355,6 @@ describe("visual email documents", () => {
           {
             attrs: { onerror: "alert(1)", src: "https://example.com/image" },
             type: "image",
-          },
-        ],
-        type: "doc",
-      },
-      version: 1,
-    },
-    {
-      content: {
-        content: [
-          {
-            content: [
-              { attrs: { label: "First}}name" }, type: "templatePlaceholder" },
-            ],
-            type: "paragraph",
           },
         ],
         type: "doc",

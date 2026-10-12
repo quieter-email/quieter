@@ -35,10 +35,10 @@ export const appRouter = {
         default: mailDomainsRouter,
       }))
   ),
-  mailTemplates: lazy(
+  mailSnippets: lazy(
     async () =>
-      await import("./mail-templates").then(({ mailTemplatesRouter }) => ({
-        default: mailTemplatesRouter,
+      await import("./mail-snippets").then(({ mailSnippetsRouter }) => ({
+        default: mailSnippetsRouter,
       }))
   ),
   onboarding: lazy(

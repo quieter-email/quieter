@@ -14,7 +14,7 @@ const leadingIcons = {
 
 /**
  * The single narrow-viewport header for every product surface: Mail, message
- * detail, Compose, Chat, Templates, and Settings. One height, one icon size,
+ * detail, Compose, Chat, Snippets, and Settings. One height, one icon size,
  * one border, one tooltip treatment. Pass `className` only for panel-edge bleed.
  */
 export const MobileHeader = ({

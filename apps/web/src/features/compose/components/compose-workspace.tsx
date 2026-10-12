@@ -21,7 +21,7 @@ import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Text } from "@quieter/ui/text";
 import { ToolbarButton } from "@quieter/ui/toolbar";
 import { useHotkey } from "@tanstack/react-hotkeys";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
@@ -38,7 +38,6 @@ import {
   textToComposeBodyHtml,
 } from "../domain/draft";
 import type { ComposeDraftState } from "../domain/draft";
-import type { TemplatePlaceholderRange } from "../domain/template-placeholders";
 import {
   ComposeEditor,
   ComposeEditorBody,
@@ -46,10 +45,7 @@ import {
   ComposeEditorToolbar,
 } from "./compose-editor";
 import type { ComposeEditorHandle } from "./compose-editor";
-import {
-  ComposeTemplatePicker,
-  TemplatePlaceholderSuggestion,
-} from "./compose-templates";
+import { SaveSnippetDialog } from "./save-snippet-dialog";
 import {
   getDraftStatusMessage,
   useComposeDialogController,
@@ -63,7 +59,7 @@ export type ComposeSurfaceProps = {
   managedDemoMode?: boolean;
   mailboxId: string | null;
   onClose: () => void;
-  onManageTemplates?: () => void;
+  onManageSnippets?: () => void;
   persistDrafts?: boolean;
   senderEmail?: string | null;
   signature?: { html: string | null; text: string | null };
@@ -150,7 +146,7 @@ export const ComposeSurface = ({
   managedDemoMode = false,
   mailboxId,
   onClose,
-  onManageTemplates,
+  onManageSnippets,
   persistDrafts = true,
   senderEmail,
   signature,
@@ -171,11 +167,22 @@ export const ComposeSurface = ({
       mountedRef.current = false;
     };
   }, []);
-  const [selectedPlaceholder, setSelectedPlaceholder] =
-    useState<TemplatePlaceholderRange | null>(null);
-  const [activeTemplateName, setActiveTemplateName] =
-    useState("Email template");
+  const [snippetDraft, setSnippetDraft] = useState<string | null>(null);
+  const [slashMenuOpen, setSlashMenuOpen] = useState(false);
+  const snippetsQuery = useQuery({
+    ...orpc.mailSnippets.list.queryOptions({
+      input: { mailboxId: mailboxId ?? "" },
+    }),
+    enabled: !!mailboxId && !demoMode && !managedDemoMode,
+  });
+  let snippetStatus: string | undefined;
+  if (snippetsQuery.isError) {
+    snippetStatus = "Could not load snippets. Reopen the composer to retry.";
+  } else if (snippetsQuery.isFetching) {
+    snippetStatus = "Loading snippets…";
+  }
   const compose = useComposeDialogController({
+    autosavePaused: slashMenuOpen,
     demoMode,
     initialDraft,
     mailboxId,
@@ -299,6 +306,12 @@ export const ComposeSurface = ({
   useHotkey(
     "Mod+Enter",
     (event) => {
+      if (
+        event.defaultPrevented ||
+        document.querySelector('[role="listbox"][id^="compose-commands-"]')
+      ) {
+        return;
+      }
       const { target } = event;
       if (
         target instanceof Element &&
@@ -317,7 +330,16 @@ export const ComposeSurface = ({
 
   useHotkey(
     "Escape",
-    () => {
+    (event) => {
+      if (
+        event.defaultPrevented ||
+        document.querySelector('[role="listbox"][id^="compose-commands-"]') ||
+        snippetDraft !== null ||
+        (event.target instanceof Element &&
+          !!event.target.closest('[role="dialog"]'))
+      ) {
+        return;
+      }
       void closeComposeDialog();
     },
     {
@@ -327,342 +349,336 @@ export const ComposeSurface = ({
   );
 
   return (
-    <form
-      action={async () => {
-        await form.handleSubmit();
-      }}
-      className={cn("flex min-h-0 flex-col", className, {
-        "h-full flex-1": !isInline,
-        "w-full": isInline,
-      })}
-      data-compose-surface
-    >
-      <ComposerFrame
-        className={cn(
-          // oxlint-disable-next-line shadcn/no-restyle -- Composer frame keeps its padded canvas.
-          "p-4 sm:p-6",
-          {
-            // oxlint-disable-next-line shadcn/no-restyle -- Inline composer collapses the frame.
-            "my-0 max-w-none flex-none p-0 sm:p-0": isInline,
-          }
-        )}
+    <>
+      <form
+        action={async () => {
+          await form.handleSubmit();
+        }}
+        className={cn("flex min-h-0 flex-col", className, {
+          "h-full flex-1": !isInline,
+          "w-full": isInline,
+        })}
+        data-compose-surface
       >
-        <p className="sr-only">
-          {getDraftStatusMessage(compose.state.draft, persistDrafts)}
-          {senderEmail ? `, sending from ${senderEmail}` : ""}
-        </p>
+        <ComposerFrame
+          className={cn(
+            // oxlint-disable-next-line shadcn/no-restyle -- Composer frame keeps its padded canvas.
+            "p-4 sm:p-6",
+            {
+              // oxlint-disable-next-line shadcn/no-restyle -- Inline composer collapses the frame.
+              "my-0 max-w-none flex-none p-0 sm:p-0": isInline,
+            }
+          )}
+        >
+          <p className="sr-only">
+            {getDraftStatusMessage(compose.state.draft, persistDrafts)}
+            {senderEmail ? `, sending from ${senderEmail}` : ""}
+          </p>
 
-        <form.Field name="bodyHtml">
-          {(field) => (
-            <div className="flex min-h-0 flex-1 flex-col gap-2">
-              <ComposeEditor
-                density={isInline ? "compact" : "comfortable"}
-                disabled={!canEditBody}
-                html={field.state.value}
-                onBlur={() => {
-                  field.handleBlur();
-                }}
-                onChange={({ html, text }) => {
-                  if (
-                    normalizeComposeBodyHtml(html) !==
-                      normalizeComposeBodyHtml(field.state.value) ||
-                    text !== form.state.values.bodyText
-                  ) {
-                    handleUserDraftChange();
+          <form.Field name="bodyHtml">
+            {(field) => (
+              <div className="flex min-h-0 flex-1 flex-col gap-2">
+                <ComposeEditor
+                  density={isInline ? "compact" : "comfortable"}
+                  disabled={!canEditBody}
+                  html={field.state.value}
+                  onBlur={() => {
+                    field.handleBlur();
+                  }}
+                  onChange={({ html, text }) => {
+                    if (
+                      normalizeComposeBodyHtml(html) !==
+                        normalizeComposeBodyHtml(field.state.value) ||
+                      text !== form.state.values.bodyText
+                    ) {
+                      handleUserDraftChange();
+                    }
+                    field.handleChange(html);
+                    form.setFieldValue("bodyText", text);
+                  }}
+                  onInlineImageFiles={addInlineImageFiles}
+                  onSlashMenuOpenChange={setSlashMenuOpen}
+                  snippets={snippetsQuery.data?.snippets}
+                  snippetStatus={snippetStatus}
+                  onCreateSnippet={
+                    mailboxId && !demoMode && !managedDemoMode
+                      ? setSnippetDraft
+                      : undefined
                   }
-                  field.handleChange(html);
-                  form.setFieldValue("bodyText", text);
-                }}
-                onInlineImageFiles={addInlineImageFiles}
-                onPlaceholderSelectionChange={setSelectedPlaceholder}
-                onRecordingStart={handleRecordingStart}
-                onRecordingStop={handleRecordingStop}
-                recording={audioRecorder.isRecording}
-                recordingSupported={audioRecorder.isSupported}
-                ref={composeEditorRef}
-                transcribing={isTranscribingAudio}
-              >
-                <ComposerEditorFrame
-                  className={cn({
-                    "min-h-64 flex-none": isInline,
-                  })}
-                >
-                  <ComposerFieldGroup bare>
-                    <form.Field name="to">
-                      {(recipientField) => {
-                        const [error] = recipientField.state.meta.errors;
-                        return (
-                          <ComposerFieldRow
-                            error={
-                              error
-                                ? (error.message ?? "Invalid value")
-                                : undefined
-                            }
-                            label="To"
-                            trailing={
-                              <div className="flex shrink-0 items-center gap-0.5">
-                                <Button
-                                  aria-controls="compose-cc-field"
-                                  aria-expanded={state.showCc}
-                                  aria-pressed={state.showCc}
-                                  onClick={() => {
-                                    toggleRecipientVisibility("cc");
-                                  }}
-                                  type="button"
-                                  variant="chip"
-                                >
-                                  Cc
-                                </Button>
-                                <Button
-                                  aria-controls="compose-bcc-field"
-                                  aria-expanded={state.showBcc}
-                                  aria-pressed={state.showBcc}
-                                  onClick={() => {
-                                    toggleRecipientVisibility("bcc");
-                                  }}
-                                  type="button"
-                                  variant="chip"
-                                >
-                                  Bcc
-                                </Button>
-                              </div>
-                            }
-                          >
-                            <FieldControl
-                              aria-invalid={!!error}
-                              chrome="composer"
-                              data-compose-recipient-field
-                              disabled={!canEditBody}
-                              onBlur={() => {
-                                recipientField.handleBlur();
-                              }}
-                              onChange={(event) => {
-                                handleUserDraftChange();
-                                recipientField.handleChange(
-                                  event.currentTarget.value
-                                );
-                              }}
-                              value={recipientField.state.value}
-                            />
-                          </ComposerFieldRow>
-                        );
-                      }}
-                    </form.Field>
-                    <LazyMotion features={domAnimation} strict>
-                      <AnimatePresence initial={false}>
-                        {state.showCc ? (
-                          <m.div
-                            {...composeRecipientMotion}
-                            className="grid"
-                            id="compose-cc-field"
-                            key="compose-cc"
-                          >
-                            <div className="min-h-0 overflow-hidden">
-                              <ComposeFormField
-                                handleUserDraftChange={handleUserDraftChange}
-                                disabled={!canEditBody}
-                                form={form}
-                                label="Cc"
-                                name="cc"
-                              />
-                            </div>
-                          </m.div>
-                        ) : null}
-                        {state.showBcc ? (
-                          <m.div
-                            {...composeRecipientMotion}
-                            className="grid"
-                            id="compose-bcc-field"
-                            key="compose-bcc"
-                          >
-                            <div className="min-h-0 overflow-hidden">
-                              <ComposeFormField
-                                handleUserDraftChange={handleUserDraftChange}
-                                disabled={!canEditBody}
-                                form={form}
-                                label="Bcc"
-                                name="bcc"
-                              />
-                            </div>
-                          </m.div>
-                        ) : null}
-                      </AnimatePresence>
-                    </LazyMotion>
-                    {showSubject ? (
-                      <ComposeFormField
-                        handleUserDraftChange={handleUserDraftChange}
-                        disabled={!canEditBody}
-                        form={form}
-                        label="Subject"
-                        name="subject"
-                      />
-                    ) : null}
-                  </ComposerFieldGroup>
-
-                  <ComposeEditorBody
-                    chrome="seamless"
-                    className={cn("min-h-0 flex-1", {
-                      "[&_.ProseMirror>blockquote]:hidden":
-                        hasQuotedContent && !showQuotedContent,
-                    })}
-                    invalid={field.state.meta.errors.length > 0}
-                  />
-
-                  {hasQuotedContent ? (
-                    <div className="px-3 pb-1">
-                      <IconButtonTooltip
-                        label={
-                          showQuotedContent
-                            ? "Hide quoted message"
-                            : "Show quoted message"
+                  onManageSnippets={
+                    onManageSnippets
+                      ? () => {
+                          void closeComposeDialog(onManageSnippets);
                         }
-                      >
-                        <Button
-                          aria-label={
+                      : undefined
+                  }
+                  onRecordingStart={handleRecordingStart}
+                  onRecordingStop={handleRecordingStop}
+                  recording={audioRecorder.isRecording}
+                  recordingSupported={audioRecorder.isSupported}
+                  ref={composeEditorRef}
+                  transcribing={isTranscribingAudio}
+                >
+                  <ComposerEditorFrame
+                    className={cn({
+                      "min-h-64 flex-none": isInline,
+                    })}
+                  >
+                    <ComposerFieldGroup bare>
+                      <form.Field name="to">
+                        {(recipientField) => {
+                          const [error] = recipientField.state.meta.errors;
+                          return (
+                            <ComposerFieldRow
+                              error={
+                                error
+                                  ? (error.message ?? "Invalid value")
+                                  : undefined
+                              }
+                              label="To"
+                              trailing={
+                                <div className="flex shrink-0 items-center gap-0.5">
+                                  <Button
+                                    aria-controls="compose-cc-field"
+                                    aria-expanded={state.showCc}
+                                    aria-pressed={state.showCc}
+                                    onClick={() => {
+                                      toggleRecipientVisibility("cc");
+                                    }}
+                                    type="button"
+                                    variant="chip"
+                                  >
+                                    Cc
+                                  </Button>
+                                  <Button
+                                    aria-controls="compose-bcc-field"
+                                    aria-expanded={state.showBcc}
+                                    aria-pressed={state.showBcc}
+                                    onClick={() => {
+                                      toggleRecipientVisibility("bcc");
+                                    }}
+                                    type="button"
+                                    variant="chip"
+                                  >
+                                    Bcc
+                                  </Button>
+                                </div>
+                              }
+                            >
+                              <FieldControl
+                                aria-invalid={!!error}
+                                chrome="composer"
+                                data-compose-recipient-field
+                                disabled={!canEditBody}
+                                onBlur={() => {
+                                  recipientField.handleBlur();
+                                }}
+                                onChange={(event) => {
+                                  handleUserDraftChange();
+                                  recipientField.handleChange(
+                                    event.currentTarget.value
+                                  );
+                                }}
+                                value={recipientField.state.value}
+                              />
+                            </ComposerFieldRow>
+                          );
+                        }}
+                      </form.Field>
+                      <LazyMotion features={domAnimation} strict>
+                        <AnimatePresence initial={false}>
+                          {state.showCc ? (
+                            <m.div
+                              {...composeRecipientMotion}
+                              className="grid"
+                              id="compose-cc-field"
+                              key="compose-cc"
+                            >
+                              <div className="min-h-0 overflow-hidden">
+                                <ComposeFormField
+                                  handleUserDraftChange={handleUserDraftChange}
+                                  disabled={!canEditBody}
+                                  form={form}
+                                  label="Cc"
+                                  name="cc"
+                                />
+                              </div>
+                            </m.div>
+                          ) : null}
+                          {state.showBcc ? (
+                            <m.div
+                              {...composeRecipientMotion}
+                              className="grid"
+                              id="compose-bcc-field"
+                              key="compose-bcc"
+                            >
+                              <div className="min-h-0 overflow-hidden">
+                                <ComposeFormField
+                                  handleUserDraftChange={handleUserDraftChange}
+                                  disabled={!canEditBody}
+                                  form={form}
+                                  label="Bcc"
+                                  name="bcc"
+                                />
+                              </div>
+                            </m.div>
+                          ) : null}
+                        </AnimatePresence>
+                      </LazyMotion>
+                      {showSubject ? (
+                        <ComposeFormField
+                          handleUserDraftChange={handleUserDraftChange}
+                          disabled={!canEditBody}
+                          form={form}
+                          label="Subject"
+                          name="subject"
+                        />
+                      ) : null}
+                    </ComposerFieldGroup>
+
+                    <ComposeEditorBody
+                      chrome="seamless"
+                      className={cn("min-h-0 flex-1", {
+                        "[&_.ProseMirror>blockquote]:hidden":
+                          hasQuotedContent && !showQuotedContent,
+                      })}
+                      invalid={field.state.meta.errors.length > 0}
+                    />
+
+                    {hasQuotedContent ? (
+                      <div className="px-3 pb-1">
+                        <IconButtonTooltip
+                          label={
                             showQuotedContent
                               ? "Hide quoted message"
                               : "Show quoted message"
                           }
-                          onClick={() => {
-                            setShowQuotedContent((current) => !current);
-                          }}
-                          size="sm"
-                          type="button"
-                          variant="ghost"
                         >
-                          {showQuotedContent ? "Hide quote" : "..."}
-                        </Button>
-                      </IconButtonTooltip>
-                    </div>
-                  ) : null}
-
-                  <ComposeEditorToolbar
-                    chrome="footer"
-                    leading={
-                      <ToolbarButton
-                        disabled={!canSubmitCompose}
-                        type="submit"
-                        variant="primary"
-                      >
-                        {state.draft.saveStatus === "sending" ? (
-                          <HugeiconsIcon
-                            className="animate-spin"
-                            icon={Loading03Icon}
-                          />
-                        ) : (
-                          <HugeiconsIcon icon={MailSend02Icon} />
-                        )}
-                        Send
-                        <span className="text-caption text-primary-fg/60">
-                          {modKeyLabel}↵
-                        </span>
-                      </ToolbarButton>
-                    }
-                    trailing={
-                      <>
-                        {mailboxId ? (
-                          <>
-                            <ComposeTemplatePicker
-                              disabled={!canEditBody || audioBusy}
-                              mailboxId={mailboxId}
-                              onManage={() => {
-                                void closeComposeDialog(onManageTemplates);
-                              }}
-                              onInsert={(template) => {
-                                handleUserDraftChange();
-                                setActiveTemplateName(template.name);
-                                composeEditorRef.current?.insertHtml(
-                                  template.bodyHtml
-                                );
-                              }}
-                            />
-                            <TemplatePlaceholderSuggestion
-                              bodyText={form.state.values.bodyText}
-                              disabled={!canEditBody || audioBusy}
-                              editorRef={composeEditorRef}
-                              mailboxId={mailboxId}
-                              placeholder={selectedPlaceholder}
-                              recipients={[
-                                form.state.values.to,
-                                form.state.values.cc,
-                                form.state.values.bcc,
-                              ]
-                                .filter(Boolean)
-                                .join(", ")}
-                              subject={form.state.values.subject}
-                              templateName={activeTemplateName}
-                            />
-                          </>
-                        ) : null}
-                        <ComposeEditorDictationButton />
-                        <IconButtonTooltip
-                          label={
-                            state.draft.draftId ? "Discard draft" : "Discard"
-                          }
-                        >
-                          <ToolbarButton
+                          <Button
                             aria-label={
+                              showQuotedContent
+                                ? "Hide quoted message"
+                                : "Show quoted message"
+                            }
+                            onClick={() => {
+                              setShowQuotedContent((current) => !current);
+                            }}
+                            size="sm"
+                            type="button"
+                            variant="ghost"
+                          >
+                            {showQuotedContent ? "Hide quote" : "..."}
+                          </Button>
+                        </IconButtonTooltip>
+                      </div>
+                    ) : null}
+
+                    <ComposeEditorToolbar
+                      chrome="footer"
+                      leading={
+                        <ToolbarButton
+                          disabled={!canSubmitCompose}
+                          type="submit"
+                          variant="primary"
+                        >
+                          {state.draft.saveStatus === "sending" ? (
+                            <HugeiconsIcon
+                              className="animate-spin"
+                              icon={Loading03Icon}
+                            />
+                          ) : (
+                            <HugeiconsIcon icon={MailSend02Icon} />
+                          )}
+                          Send
+                          <span className="text-caption text-primary-fg/60">
+                            {modKeyLabel}↵
+                          </span>
+                        </ToolbarButton>
+                      }
+                      trailing={
+                        <>
+                          <ComposeEditorDictationButton />
+                          <IconButtonTooltip
+                            label={
                               state.draft.draftId ? "Discard draft" : "Discard"
                             }
-                            disabled={state.draft.saveStatus === "sending"}
-                            onClick={() => {
-                              void discardActiveDraft();
-                            }}
-                            size="icon"
-                            type="button"
                           >
-                            <HugeiconsIcon icon={Delete02Icon} />
-                          </ToolbarButton>
-                        </IconButtonTooltip>
-                        <IconButtonTooltip label="Close composer">
-                          <ToolbarButton
-                            aria-label="Close composer"
-                            disabled={state.draft.saveStatus === "sending"}
-                            onClick={() => {
-                              void closeComposeDialog();
-                            }}
-                            size="icon"
-                            type="button"
-                          >
-                            <HugeiconsIcon icon={Cancel01Icon} />
-                          </ToolbarButton>
-                        </IconButtonTooltip>
-                      </>
-                    }
-                  />
-                </ComposerEditorFrame>
+                            <ToolbarButton
+                              aria-label={
+                                state.draft.draftId
+                                  ? "Discard draft"
+                                  : "Discard"
+                              }
+                              disabled={state.draft.saveStatus === "sending"}
+                              onClick={() => {
+                                void discardActiveDraft();
+                              }}
+                              size="icon"
+                              type="button"
+                            >
+                              <HugeiconsIcon icon={Delete02Icon} />
+                            </ToolbarButton>
+                          </IconButtonTooltip>
+                          <IconButtonTooltip label="Close composer">
+                            <ToolbarButton
+                              aria-label="Close composer"
+                              disabled={state.draft.saveStatus === "sending"}
+                              onClick={() => {
+                                void closeComposeDialog();
+                              }}
+                              size="icon"
+                              type="button"
+                            >
+                              <HugeiconsIcon icon={Cancel01Icon} />
+                            </ToolbarButton>
+                          </IconButtonTooltip>
+                        </>
+                      }
+                    />
+                  </ComposerEditorFrame>
 
-                {field.state.meta.errors.map((error) => (
-                  <FieldError
-                    key={error?.message ?? "An unknown error occurred."}
-                  >
-                    {error?.message ?? "An unknown error occurred."}
-                  </FieldError>
-                ))}
-              </ComposeEditor>
-            </div>
-          )}
-        </form.Field>
+                  {field.state.meta.errors.map((error) => (
+                    <FieldError
+                      key={error?.message ?? "An unknown error occurred."}
+                    >
+                      {error?.message ?? "An unknown error occurred."}
+                    </FieldError>
+                  ))}
+                </ComposeEditor>
+              </div>
+            )}
+          </form.Field>
 
-        {state.draft.errorMessage ? (
-          <Text
-            as="div"
-            aria-live="polite"
-            className="flex min-w-0 shrink-0 items-start"
-            role="alert"
-            tone="destructive"
-          >
-            <HugeiconsIcon
-              className="mt-0.5 mr-2 size-4 shrink-0"
-              icon={AlertCircleIcon}
-            />
-            <span className="min-w-0 wrap-break-word">
-              {state.draft.errorMessage}
-            </span>
-          </Text>
-        ) : null}
-      </ComposerFrame>
-    </form>
+          {state.draft.errorMessage ? (
+            <Text
+              as="div"
+              aria-live="polite"
+              className="flex min-w-0 shrink-0 items-start"
+              role="alert"
+              tone="destructive"
+            >
+              <HugeiconsIcon
+                className="mt-0.5 mr-2 size-4 shrink-0"
+                icon={AlertCircleIcon}
+              />
+              <span className="min-w-0 wrap-break-word">
+                {state.draft.errorMessage}
+              </span>
+            </Text>
+          ) : null}
+        </ComposerFrame>
+      </form>
+      {snippetDraft !== null && mailboxId ? (
+        <SaveSnippetDialog
+          initialText={snippetDraft}
+          key={mailboxId}
+          mailboxId={mailboxId}
+          onClose={() => {
+            setSnippetDraft(null);
+          }}
+        />
+      ) : null}
+    </>
   );
 };
 
@@ -672,7 +688,7 @@ export const ComposeWorkspace = ({
   mailboxId,
   managedDemoMode,
   onClose,
-  onManageTemplates,
+  onManageSnippets,
   onOpenSidebar,
   persistDrafts,
   senderEmail,
@@ -692,7 +708,7 @@ export const ComposeWorkspace = ({
       mailboxId={mailboxId}
       managedDemoMode={managedDemoMode}
       onClose={onClose}
-      onManageTemplates={onManageTemplates}
+      onManageSnippets={onManageSnippets}
       persistDrafts={persistDrafts}
       senderEmail={senderEmail}
       signature={signature}
