@@ -535,7 +535,10 @@ const MailboxWorkspaceContentInner = ({
             {assistantOpened ? (
               <Suspense
                 fallback={
-                  <p className="p-4 text-body-sm text-muted-fg">
+                  <p
+                    className="p-4 text-body-sm text-muted-fg"
+                    data-assistant-loading
+                  >
                     Loading assistant…
                   </p>
                 }

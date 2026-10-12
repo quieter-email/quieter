@@ -90,15 +90,43 @@ export const FloatingAssistant = ({
     if (!panel) {
       return undefined;
     }
-    const observer = new ResizeObserver(() => {
-      setPanelSize({
-        height: panel.offsetHeight + 2,
-        width: panel.offsetWidth + 2,
-      });
-    });
+    let shrinkTimer: ReturnType<typeof setTimeout> | undefined;
+    let settledHeight = 48;
+    const measure = () => {
+      clearTimeout(shrinkTimer);
+      const loading = panel.querySelector("[data-assistant-loading]") !== null;
+      const measuredHeight = panel.offsetHeight + 2;
+      const height = loading
+        ? Math.max(settledHeight, measuredHeight)
+        : measuredHeight;
+      const width = panel.offsetWidth + 2;
+      if (height < settledHeight) {
+        shrinkTimer = setTimeout(() => {
+          settledHeight = height;
+          setPanelSize({ height, width });
+        }, 250);
+      } else {
+        settledHeight = height;
+        setPanelSize((previous) =>
+          previous.height === height && previous.width === width
+            ? previous
+            : { height, width }
+        );
+      }
+    };
+    const observer = new ResizeObserver(measure);
+    const loadingObserver = new MutationObserver(measure);
     observer.observe(panel);
+    loadingObserver.observe(panel, {
+      attributeFilter: ["data-assistant-loading"],
+      attributes: true,
+      childList: true,
+      subtree: true,
+    });
     return () => {
+      clearTimeout(shrinkTimer);
       observer.disconnect();
+      loadingObserver.disconnect();
     };
   }, []);
 
@@ -274,7 +302,7 @@ export const FloatingAssistant = ({
           animate={{ opacity: open ? 1 : 0 }}
           transition={{ duration: reducedMotion ? 0 : 0.12 }}
           className={cn(
-            "absolute right-0 bottom-0 left-auto m-0 flex w-[398px] max-w-[calc(100dvw-3rem-2px)] flex-col border-0 bg-transparent p-0 pt-4 text-fg max-sm:max-w-[calc(100dvw-2rem-2px)]",
+            "absolute top-0 right-0 left-auto m-0 flex min-h-[min(20rem,calc(100dvh-3rem-2px))] w-[398px] max-w-[calc(100dvw-3rem-2px)] flex-col border-0 bg-transparent p-0 pt-4 text-fg max-sm:min-h-[min(20rem,calc(100dvh-2rem-2px))] max-sm:max-w-[calc(100dvw-2rem-2px)]",
             { "pointer-events-none": !open }
           )}
         >
@@ -426,7 +454,7 @@ export const FloatingAssistant = ({
               </IconButtonTooltip>
             </div>
           </header>
-          <div className="min-h-0">{children}</div>
+          <div className="flex min-h-0 flex-1 flex-col">{children}</div>
         </motion.dialog>
         <IconButtonTooltip label="Open Quieter">
           <motion.button
