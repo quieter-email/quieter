@@ -229,12 +229,12 @@ export const FloatingAssistant = ({
             className={cn(
               "pointer-events-auto absolute right-0 bottom-0 z-10 flex items-center justify-center rounded-md focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none",
               {
-                "h-12 w-[18px]":
-                  tucked && (edge === "left" || edge === "right"),
-                "h-[18px] w-12":
+                "h-[18px] w-[50px]":
                   tucked && (edge === "top" || edge === "bottom"),
+                "h-[50px] w-[18px]":
+                  tucked && (edge === "left" || edge === "right"),
                 "pointer-events-none": open,
-                "size-12": !tucked,
+                "size-[50px]": !tucked,
               }
             )}
           />
@@ -251,7 +251,7 @@ export const FloatingAssistant = ({
         }}
         transition={{ duration: reducedMotion ? 0 : 0.15 }}
         className={cn(
-          "absolute right-0 bottom-0 size-12 rounded-lg border border-dashed border-muted-fg/35 shadow-sm",
+          "absolute right-0 bottom-0 size-[50px] rounded-lg border border-dashed border-muted-fg/35 shadow-sm",
           {
             "border-fg/60 bg-control-active/60 shadow-elevation": nearDock,
           }
@@ -479,7 +479,7 @@ export const FloatingAssistant = ({
             animate={{ opacity: open ? 0 : 1 }}
             transition={{ duration: reducedMotion ? 0 : 0.06 }}
             className={cn(
-              "absolute right-0 bottom-0 flex size-[46px] cursor-grab touch-none items-center justify-center rounded-lg focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:cursor-grabbing",
+              "absolute right-0 bottom-0 flex size-12 cursor-grab touch-none items-center justify-center rounded-lg focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:cursor-grabbing",
               { "pointer-events-none": open }
             )}
             data-assistant-launcher

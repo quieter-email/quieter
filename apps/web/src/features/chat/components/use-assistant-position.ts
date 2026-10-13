@@ -25,7 +25,7 @@ const positionSchema = z.discriminatedUnion("mode", [
 ]);
 type Position = z.infer<typeof positionSchema>;
 type Edge = z.infer<typeof edgeSchema>;
-export const assistantLauncherSize = 48;
+export const assistantLauncherSize = 50;
 
 const storageKey = "quieter:assistant-position:v1";
 
