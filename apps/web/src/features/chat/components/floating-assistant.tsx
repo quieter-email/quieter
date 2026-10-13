@@ -22,7 +22,12 @@ import {
 } from "@quieter/ui/dropdown-menu";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
-import { motion, useReducedMotion } from "motion/react";
+import {
+  animate,
+  motion,
+  useMotionValue,
+  useReducedMotion,
+} from "motion/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode, SubmitEvent } from "react";
 
@@ -138,6 +143,24 @@ export const FloatingAssistant = ({
   }, []);
 
   const previousOpenRef = useRef(open);
+  const previousSizeOpenRef = useRef(open);
+  const surfaceHeight = useMotionValue(assistantLauncherSize);
+  useLayoutEffect(() => {
+    const height = open ? panelSize.height : assistantLauncherSize;
+    surfaceHeight.stop();
+    if (reducedMotion || !open || previousSizeOpenRef.current !== open) {
+      surfaceHeight.set(height);
+    } else {
+      animate(surfaceHeight, height, {
+        duration: 0.18,
+        ease: [0.22, 1, 0.36, 1],
+      });
+    }
+    previousSizeOpenRef.current = open;
+    return () => {
+      surfaceHeight.stop();
+    };
+  }, [open, panelSize.height, reducedMotion, surfaceHeight]);
   const activeChat = chats.find((chat) => chat.id === activeChatId);
   const [renamingChat, setRenamingChat] =
     useState<FloatingAssistantChat | null>(null);
@@ -187,7 +210,7 @@ export const FloatingAssistant = ({
 
   return (
     <div
-      className="pointer-events-none fixed inset-[max(1.5rem,env(safe-area-inset-top),env(safe-area-inset-right),env(safe-area-inset-bottom),env(safe-area-inset-left))] z-50 max-sm:inset-[max(1rem,env(safe-area-inset-top),env(safe-area-inset-right),env(safe-area-inset-bottom),env(safe-area-inset-left))]"
+      className="pointer-events-none fixed inset-[max(1.5rem,env(safe-area-inset-top),env(safe-area-inset-right),env(safe-area-inset-bottom),env(safe-area-inset-left))] z-50 [--assistant-safe-bottom:env(safe-area-inset-bottom,0px)] [--assistant-safe-left:env(safe-area-inset-left,0px)] [--assistant-safe-right:env(safe-area-inset-right,0px)] [--assistant-safe-top:env(safe-area-inset-top,0px)] max-sm:inset-[max(1rem,env(safe-area-inset-top),env(safe-area-inset-right),env(safe-area-inset-bottom),env(safe-area-inset-left))]"
       ref={boundsRef}
     >
       {edge ? (
@@ -206,29 +229,15 @@ export const FloatingAssistant = ({
             className={cn(
               "pointer-events-auto absolute right-0 bottom-0 z-10 flex items-center justify-center rounded-md focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none",
               {
-                "h-20 w-[18px]":
+                "h-12 w-[18px]":
                   tucked && (edge === "left" || edge === "right"),
-                "h-[18px] w-20":
+                "h-[18px] w-12":
                   tucked && (edge === "top" || edge === "bottom"),
                 "pointer-events-none": open,
-                "size-20": !tucked,
+                "size-12": !tucked,
               }
             )}
-          >
-            <span
-              className={cn(
-                "absolute rounded-full bg-muted-fg/35 transition-colors hover:bg-fg/60",
-                {
-                  "bottom-2": edge === "bottom",
-                  "h-0.5 w-7": edge === "top" || edge === "bottom",
-                  "h-7 w-0.5": edge === "left" || edge === "right",
-                  "left-2": edge === "left",
-                  "right-2": edge === "right",
-                  "top-2": edge === "top",
-                }
-              )}
-            />
-          </motion.button>
+          />
         </IconButtonTooltip>
       ) : null}
       <motion.div
@@ -242,7 +251,7 @@ export const FloatingAssistant = ({
         }}
         transition={{ duration: reducedMotion ? 0 : 0.15 }}
         className={cn(
-          "absolute right-0 bottom-0 size-14 rounded-lg border border-dashed border-muted-fg/35 shadow-sm",
+          "absolute right-0 bottom-0 size-12 rounded-lg border border-dashed border-muted-fg/35 shadow-sm",
           {
             "border-fg/60 bg-control-active/60 shadow-elevation": nearDock,
           }
@@ -261,18 +270,14 @@ export const FloatingAssistant = ({
             tuck();
           }
         }}
-        // oxlint-disable-next-line shadcn/no-inline-styles -- Motion values keep dragging directly synchronized with the pointer.
-        style={{ x, y }}
-        initial={false}
-        animate={{
-          height: open ? panelSize.height : assistantLauncherSize,
+        // oxlint-disable shadcn/no-inline-styles -- Motion values synchronize dragging and measured panel height without an opening morph.
+        style={{
+          height: surfaceHeight,
           width: open ? panelSize.width : assistantLauncherSize,
+          x,
+          y,
         }}
-        transition={
-          reducedMotion
-            ? { duration: 0 }
-            : { damping: 38, mass: 1, stiffness: 420, type: "spring" }
-        }
+        // oxlint-enable shadcn/no-inline-styles
         className={cn(
           "pointer-events-auto absolute right-0 bottom-0 z-20 max-h-full max-w-full overflow-hidden rounded-lg border border-border-strong/70 bg-bg-raised/90 [background-image:linear-gradient(160deg,color-mix(in_oklab,var(--bg-raised)_88%,transparent),color-mix(in_oklab,var(--bg)_96%,transparent))] text-fg shadow-elevation backdrop-blur-2xl",
           {
@@ -474,7 +479,7 @@ export const FloatingAssistant = ({
             animate={{ opacity: open ? 0 : 1 }}
             transition={{ duration: reducedMotion ? 0 : 0.12 }}
             className={cn(
-              "absolute right-0 bottom-0 flex size-[54px] cursor-grab touch-none items-center justify-center rounded-lg focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:cursor-grabbing",
+              "absolute right-0 bottom-0 flex size-[46px] cursor-grab touch-none items-center justify-center rounded-lg focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:cursor-grabbing",
               { "pointer-events-none": open }
             )}
             data-assistant-launcher
@@ -491,7 +496,7 @@ export const FloatingAssistant = ({
             type="button"
             ref={launcherRef}
           >
-            <Brand className="pointer-events-none size-8" />
+            <Brand className="pointer-events-none size-6" />
           </motion.button>
         </IconButtonTooltip>
       </motion.div>

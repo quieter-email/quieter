@@ -25,7 +25,7 @@ const positionSchema = z.discriminatedUnion("mode", [
 ]);
 type Position = z.infer<typeof positionSchema>;
 type Edge = z.infer<typeof edgeSchema>;
-export const assistantLauncherSize = 56;
+export const assistantLauncherSize = 48;
 
 const storageKey = "quieter:assistant-position:v1";
 
@@ -48,9 +48,11 @@ export const useAssistantPosition = ({
     x: number;
     y: number;
     position: Position;
+    detached: boolean;
   } | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initializedRef = useRef(false);
+  const previousOpenRef = useRef(open);
   const [position, setPosition] = useState<Position>({ mode: "dock" });
   const [revealed, setRevealed] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -66,8 +68,9 @@ export const useAssistantPosition = ({
   const tabY = useMotionValue(0);
 
   const reposition = useEffectEvent((immediate = false) => {
-    const bounds = boundsRef.current?.getBoundingClientRect();
-    if (!bounds) {
+    const boundsElement = boundsRef.current;
+    const bounds = boundsElement?.getBoundingClientRect();
+    if (!boundsElement || !bounds) {
       return;
     }
     const width = open
@@ -100,13 +103,15 @@ export const useAssistantPosition = ({
       nextY = -(1 - position.y) * (bounds.height - height);
     } else {
       const horizontal = position.edge === "top" || position.edge === "bottom";
-      const tabDepth = revealed || open ? 80 : 18;
+      const tabDepth = revealed || open ? assistantLauncherSize : 18;
       const alongX = -(1 - position.fraction) * (bounds.width - width);
       const alongY = -(1 - position.fraction) * (bounds.height - height);
       if (horizontal) {
         nextX = alongX;
         nextY = position.edge === "top" ? height - bounds.height : 0;
-        tabX.set(-(1 - position.fraction) * (bounds.width - 80));
+        tabX.set(
+          -(1 - position.fraction) * (bounds.width - assistantLauncherSize)
+        );
         tabY.set(
           position.edge === "top"
             ? tabDepth - bounds.bottom
@@ -120,20 +125,61 @@ export const useAssistantPosition = ({
             ? tabDepth - bounds.right
             : window.innerWidth - bounds.right
         );
-        tabY.set(-(1 - position.fraction) * (bounds.height - 80));
+        tabY.set(
+          -(1 - position.fraction) * (bounds.height - assistantLauncherSize)
+        );
+      }
+      if (revealed && !open) {
+        const styles = getComputedStyle(boundsElement);
+        if (position.edge === "left") {
+          nextX =
+            width -
+            bounds.right +
+            Number(
+              styles.getPropertyValue("--assistant-safe-left").replace("px", "")
+            );
+        }
+        if (position.edge === "right") {
+          nextX =
+            window.innerWidth -
+            bounds.right -
+            Number(
+              styles
+                .getPropertyValue("--assistant-safe-right")
+                .replace("px", "")
+            );
+        }
+        if (position.edge === "top") {
+          nextY =
+            height -
+            bounds.bottom +
+            Number(
+              styles.getPropertyValue("--assistant-safe-top").replace("px", "")
+            );
+        }
+        if (position.edge === "bottom") {
+          nextY =
+            window.innerHeight -
+            bounds.bottom -
+            Number(
+              styles
+                .getPropertyValue("--assistant-safe-bottom")
+                .replace("px", "")
+            );
+        }
       }
       if (!revealed && !open) {
         if (position.edge === "left") {
-          nextX = -bounds.right;
+          nextX = 10 - bounds.right;
         }
         if (position.edge === "right") {
-          nextX = window.innerWidth - bounds.right + width;
+          nextX = window.innerWidth - bounds.right + width - 10;
         }
         if (position.edge === "top") {
-          nextY = -bounds.bottom;
+          nextY = 10 - bounds.bottom;
         }
         if (position.edge === "bottom") {
-          nextY = window.innerHeight - bounds.bottom + height;
+          nextY = window.innerHeight - bounds.bottom + height - 10;
         }
       }
     }
@@ -144,8 +190,8 @@ export const useAssistantPosition = ({
     if (immediate) {
       x.stop();
       y.stop();
-      x.set(nextX);
-      y.set(nextY);
+      x.jump(nextX);
+      y.jump(nextY);
     } else {
       const transition = reducedMotion
         ? { duration: 0 }
@@ -224,7 +270,8 @@ export const useAssistantPosition = ({
   }, []);
 
   useLayoutEffect(() => {
-    reposition();
+    reposition(previousOpenRef.current !== open);
+    previousOpenRef.current = open;
   }, [open, panelSize, position, reducedMotion, revealed]);
 
   useEffect(
@@ -274,6 +321,7 @@ export const useAssistantPosition = ({
     gestureRef.current = {
       clientX: event.clientX,
       clientY: event.clientY,
+      detached: false,
       pointerId: event.pointerId,
       position,
       x: x.get(),
@@ -299,10 +347,16 @@ export const useAssistantPosition = ({
     if (
       gesture.position.mode === "dock" &&
       dockRef.current.available &&
+      !gesture.detached &&
       distance > 0
     ) {
-      const resistedDistance =
-        distance <= 28 ? distance * 0.28 : distance - 28 * (1 - 0.28);
+      gesture.detached = distance >= 56;
+      let resistedDistance = distance;
+      if (distance <= 28) {
+        resistedDistance = distance * 0.28;
+      } else if (distance < 56) {
+        resistedDistance = 28 * 0.28 + (distance - 28) * (2 - 0.28);
+      }
       deltaX *= resistedDistance / distance;
       deltaY *= resistedDistance / distance;
     }
