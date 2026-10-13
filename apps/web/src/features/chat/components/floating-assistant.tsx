@@ -23,13 +23,15 @@ import {
 } from "@quieter/ui/dropdown-menu";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
+import { workspaceSectionVariants } from "@quieter/ui/workspace-section";
 import {
-  animate,
+  AnimatePresence,
   motion,
-  useMotionValue,
   useReducedMotion,
+  useMotionValue,
+  useMotionValueEvent,
 } from "motion/react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode, SubmitEvent } from "react";
 
 import {
@@ -61,6 +63,8 @@ type FloatingAssistantProps = {
 
 const getChatTitle = (chat: FloatingAssistantChat) =>
   chat.title?.trim() || "New chat";
+const floatingSurfaceClassName =
+  "overflow-hidden rounded-lg border border-border-strong/70 bg-bg-raised/90 [background-image:linear-gradient(160deg,color-mix(in_oklab,var(--bg-raised)_88%,transparent),color-mix(in_oklab,var(--bg)_96%,transparent))] text-fg shadow-elevation backdrop-blur-2xl";
 
 export const FloatingAssistant = ({
   activeChatId,
@@ -79,6 +83,10 @@ export const FloatingAssistant = ({
   focusRequest,
 }: FloatingAssistantProps) => {
   const panelRef = useRef<HTMLDialogElement | null>(null);
+  const surfaceRef = useRef<HTMLDivElement | null>(null);
+  const panelVisualRef = useRef<HTMLDivElement | null>(null);
+  const launcherSurfaceRef = useRef<HTMLDivElement | null>(null);
+  const layoutId = useId();
   const launcherRef = useRef<HTMLButtonElement | null>(null);
   const sidebarLauncherRef = useRef<HTMLButtonElement | null>(null);
   const focusInsideRef = useRef(false);
@@ -125,6 +133,25 @@ export const FloatingAssistant = ({
     panelSize,
     reducedMotion,
   });
+  const right = useMotionValue("0px");
+  const bottom = useMotionValue("0px");
+  useMotionValueEvent(x, "change", (value) => {
+    right.set(`${-value}px`);
+  });
+  useMotionValueEvent(y, "change", (value) => {
+    bottom.set(`${-value}px`);
+  });
+  const positionStyle = {
+    "--assistant-bottom": bottom,
+    "--assistant-right": right,
+  };
+  const prepareSurfaceMeasurement = (surface: HTMLDivElement | null) => {
+    if (surface && !sidebar) {
+      // Flush the latest position before Motion captures the shared layout box.
+      surface.style.setProperty("--assistant-right", `${-x.get()}px`);
+      surface.style.setProperty("--assistant-bottom", `${-y.get()}px`);
+    }
+  };
   useLayoutEffect((): (() => void) | undefined => {
     const panel = panelRef.current;
     if (!panel || sidebar) {
@@ -162,28 +189,22 @@ export const FloatingAssistant = ({
 
   const previousOpenRef = useRef(open);
   const previousFocusRequestRef = useRef(focusRequest);
-  const surfaceWidth = open ? panelSize.width : assistantLauncherSize;
   const edgeDirection =
     pendingEdge === "left" || pendingEdge === "top" ? -1 : 1;
   const horizontalEdge = pendingEdge === "top" || pendingEdge === "bottom";
-  const previousSizeOpenRef = useRef(open);
-  const surfaceHeight = useMotionValue(assistantLauncherSize);
-  useLayoutEffect(() => {
-    const height = open ? panelSize.height : assistantLauncherSize;
-    surfaceHeight.stop();
-    if (reducedMotion || !open || previousSizeOpenRef.current !== open) {
-      surfaceHeight.set(height);
-    } else {
-      animate(surfaceHeight, height, {
-        duration: 0.1,
-        ease: [0.22, 1, 0.36, 1],
-      });
-    }
-    previousSizeOpenRef.current = open;
-    return () => {
-      surfaceHeight.stop();
-    };
-  }, [open, panelSize.height, reducedMotion, surfaceHeight]);
+  const layoutDependency = `${sidebar}:${open}:${panelSize.width}:${panelSize.height}`;
+  const edgeRotation =
+    !sidebar && pendingEdge !== null && !reducedMotion
+      ? [0, edgeDirection * 4, edgeDirection * -1.5, edgeDirection * 2]
+      : 0;
+  const surfaceTransition = {
+    layout: {
+      duration: reducedMotion ? 0 : 0.18,
+      ease: [0.22, 1, 0.36, 1] as const,
+    },
+    opacity: { duration: reducedMotion ? 0 : 0.12 },
+    rotate: { duration: reducedMotion ? 0 : 0.28, ease: "easeOut" as const },
+  };
   const activeChat = chats.find((chat) => chat.id === activeChatId);
   const [renamingChat, setRenamingChat] =
     useState<FloatingAssistantChat | null>(null);
@@ -240,7 +261,7 @@ export const FloatingAssistant = ({
       className={cn("z-50", {
         "pointer-events-none fixed inset-[max(1.5rem,env(safe-area-inset-top),env(safe-area-inset-right),env(safe-area-inset-bottom),env(safe-area-inset-left))] [--assistant-safe-bottom:env(safe-area-inset-bottom,0px)] [--assistant-safe-left:env(safe-area-inset-left,0px)] [--assistant-safe-right:env(safe-area-inset-right,0px)] [--assistant-safe-top:env(safe-area-inset-top,0px)] max-sm:inset-[max(1rem,env(safe-area-inset-top),env(safe-area-inset-right),env(safe-area-inset-bottom),env(safe-area-inset-left))]":
           !sidebar,
-        "relative flex min-h-0 shrink-0 flex-col p-1": sidebar,
+        "relative flex min-h-0 shrink-0 flex-col p-1.5": sidebar,
         "w-12": sidebar && (!open || narrow),
         "w-[400px]": sidebar && open && !narrow,
       })}
@@ -349,302 +370,390 @@ export const FloatingAssistant = ({
           ))}
         </motion.div>
       ) : null}
-      <motion.div
-        data-assistant-surface
-        data-assistant-edge-preview={pendingEdge ?? undefined}
-        onPointerEnter={reveal}
-        onPointerLeave={tuck}
-        onFocusCapture={() => {
-          focusInsideRef.current = true;
-          reveal();
-        }}
-        onBlurCapture={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget)) {
-            if (
-              event.relatedTarget !== null &&
-              !(
-                event.relatedTarget instanceof Element &&
-                event.relatedTarget.closest("[data-assistant-panel]") !== null
-              )
-            ) {
-              focusInsideRef.current = false;
-            }
-            tuck();
-          }
-        }}
-        // oxlint-disable shadcn/no-inline-styles -- Motion values synchronize dragging and measured panel height without an opening morph.
-        style={{
-          height: sidebar ? "100%" : surfaceHeight,
-          width: sidebar ? "100%" : surfaceWidth,
-          x: sidebar ? 0 : x,
-          y: sidebar ? 0 : y,
-        }}
-        // oxlint-enable shadcn/no-inline-styles
-        animate={{
-          rotate:
-            !sidebar && pendingEdge !== null && !reducedMotion
-              ? [0, edgeDirection * 4, edgeDirection * -1.5, edgeDirection * 2]
-              : 0,
-        }}
-        transition={{
-          rotate: { duration: reducedMotion ? 0 : 0.28, ease: "easeOut" },
-        }}
-        className={cn(
-          "pointer-events-auto absolute right-0 bottom-0 z-20 max-h-full max-w-full overflow-hidden rounded-lg border border-border-strong/70 bg-bg-raised/90 [background-image:linear-gradient(160deg,color-mix(in_oklab,var(--bg-raised)_88%,transparent),color-mix(in_oklab,var(--bg)_96%,transparent))] text-fg shadow-elevation backdrop-blur-2xl",
-          {
-            "border-muted-fg/70": pendingEdge !== null && reducedMotion,
-            "fixed inset-y-[max(1rem,env(safe-area-inset-top),env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))] h-auto! w-[min(25rem,calc(100dvw-2*max(1rem,env(safe-area-inset-left),env(safe-area-inset-right))))]! max-w-none":
-              sidebar && narrow,
-            hidden: sidebar && !open,
-            "pointer-events-none": !sidebar && tucked,
-            "relative right-auto bottom-auto": sidebar && !narrow,
-          }
-        )}
-      >
-        <motion.dialog
-          open
-          aria-label="Quieter assistant"
-          aria-hidden={!open}
-          inert={!open}
-          data-assistant-panel
-          onKeyDown={(event) => {
-            if (event.key === "Escape" && !event.defaultPrevented) {
-              event.preventDefault();
-              minimize();
+      <AnimatePresence>
+        {open ? (
+          <motion.div
+            key={sidebar ? "sidebar-surface" : "panel-surface"}
+            aria-hidden
+            data-assistant-visual="panel"
+            layout
+            layoutId={layoutId}
+            layoutDependency={layoutDependency}
+            ref={panelVisualRef}
+            onBeforeLayoutMeasure={() => {
+              prepareSurfaceMeasurement(panelVisualRef.current);
+            }}
+            // oxlint-disable shadcn/no-inline-styles -- Shared layout projects the panel surface between its actual viewport boxes.
+            style={{
+              ...positionStyle,
+              borderRadius: sidebar ? "var(--radius-xl)" : 14,
+              height: sidebar ? "100%" : panelSize.height,
+              width: sidebar ? "100%" : panelSize.width,
+            }}
+            // oxlint-enable shadcn/no-inline-styles
+            exit={{ opacity: 0 }}
+            transition={surfaceTransition}
+            className={cn(
+              "pointer-events-none absolute z-10 max-h-full max-w-full",
+              {
+                [workspaceSectionVariants({ layout: "surface" })]: sidebar,
+                [floatingSurfaceClassName]: !sidebar,
+                "fixed inset-y-[max(1rem,env(safe-area-inset-top),env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))] h-auto! w-[min(25rem,calc(100dvw-2*max(1rem,env(safe-area-inset-left),env(safe-area-inset-right))))]! max-w-none":
+                  sidebar && narrow,
+                "inset-1.5 h-auto! w-auto!": sidebar && !narrow,
+                "right-[var(--assistant-right)] bottom-[var(--assistant-bottom)]":
+                  !sidebar,
+              }
+            )}
+          />
+        ) : null}
+        <motion.div
+          key="content"
+          data-assistant-surface
+          layout={!sidebar && !dragging && !reducedMotion}
+          layoutDependency={layoutDependency}
+          ref={surfaceRef}
+          onBeforeLayoutMeasure={() => {
+            prepareSurfaceMeasurement(surfaceRef.current);
+          }}
+          data-assistant-edge-preview={pendingEdge ?? undefined}
+          onPointerEnter={reveal}
+          onPointerLeave={tuck}
+          onFocusCapture={() => {
+            focusInsideRef.current = true;
+            reveal();
+          }}
+          onBlurCapture={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) {
+              if (
+                event.relatedTarget !== null &&
+                !(
+                  event.relatedTarget instanceof Element &&
+                  event.relatedTarget.closest("[data-assistant-panel]") !== null
+                )
+              ) {
+                focusInsideRef.current = false;
+              }
+              tuck();
             }
           }}
-          ref={panelRef}
-          initial={false}
-          animate={{ opacity: open ? 1 : 0 }}
-          transition={{ duration: reducedMotion ? 0 : 0.06 }}
+          // oxlint-disable shadcn/no-inline-styles -- Layout animation morphs the measured size while motion values handle dragging.
+          style={{
+            ...positionStyle,
+            height: sidebar ? "100%" : panelSize.height,
+            width: sidebar ? "100%" : panelSize.width,
+          }}
+          // oxlint-enable shadcn/no-inline-styles
+          animate={{
+            opacity: open ? 1 : 0,
+          }}
+          transition={{
+            ...surfaceTransition,
+            opacity: {
+              delay: open && !reducedMotion ? 0.06 : 0,
+              duration: reducedMotion ? 0 : 0.12,
+            },
+          }}
           className={cn(
-            "absolute top-0 right-0 left-auto m-0 flex min-h-[min(15rem,calc(100dvh-3rem-2px))] w-[398px] max-w-[calc(100dvw-3rem-2px)] flex-col border-0 bg-transparent p-0 pt-4 text-fg max-sm:min-h-[min(15rem,calc(100dvh-2rem-2px))] max-sm:max-w-[calc(100dvw-2rem-2px)]",
-            { "pointer-events-none": !open },
+            "pointer-events-auto absolute z-20 max-h-full max-w-full overflow-hidden rounded-lg border border-transparent text-fg",
             {
-              "relative top-auto right-auto h-full min-h-0 w-full max-w-none max-sm:min-h-0 max-sm:max-w-none":
-                sidebar,
+              "fixed inset-y-[max(1rem,env(safe-area-inset-top),env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))] h-auto! w-[min(25rem,calc(100dvw-2*max(1rem,env(safe-area-inset-left),env(safe-area-inset-right))))]! max-w-none":
+                sidebar && narrow,
+              hidden: sidebar && !open,
+              "pointer-events-none": !open,
+              "relative right-auto bottom-auto": sidebar && !narrow,
+              "right-[var(--assistant-right)] bottom-[var(--assistant-bottom)]":
+                !sidebar,
+              "rounded-xl": sidebar,
             }
           )}
         >
-          <header className="flex h-9 shrink-0 items-center gap-2 px-4">
-            {sidebar ? null : (
-              <IconButtonTooltip label="Move assistant">
-                <Button
-                  aria-label="Move assistant"
-                  data-assistant-drag-handle
-                  // oxlint-disable-next-line shadcn/no-restyle -- Dedicated grip keeps drag gestures away from conversation controls.
-                  className="cursor-grab touch-none active:cursor-grabbing"
-                  size="icon"
-                  variant="ghost"
-                  onPointerDown={startDrag}
-                  onPointerMove={moveDrag}
-                  onPointerUp={endDrag}
-                  onPointerCancel={endDrag}
-                  onLostPointerCapture={endDrag}
-                >
-                  <HugeiconsIcon aria-hidden icon={DragDropVerticalIcon} />
-                </Button>
-              </IconButtonTooltip>
+          <motion.dialog
+            layout="position"
+            transition={{
+              layout: {
+                duration: reducedMotion ? 0 : 0.18,
+                ease: [0.22, 1, 0.36, 1],
+              },
+              opacity: { duration: reducedMotion ? 0 : 0.12 },
+            }}
+            open
+            aria-label="Quieter assistant"
+            aria-hidden={!open}
+            inert={!open}
+            data-assistant-panel
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && !event.defaultPrevented) {
+                event.preventDefault();
+                minimize();
+              }
+            }}
+            ref={panelRef}
+            initial={false}
+            animate={{ opacity: open ? 1 : 0 }}
+            className={cn(
+              "absolute top-0 right-0 left-auto m-0 flex min-h-[min(15rem,calc(100dvh-3rem-2px))] w-[398px] max-w-[calc(100dvw-3rem-2px)] flex-col border-0 bg-transparent p-0 pt-4 text-fg max-sm:min-h-[min(15rem,calc(100dvh-2rem-2px))] max-sm:max-w-[calc(100dvw-2rem-2px)]",
+              { "pointer-events-none": !open },
+              {
+                "relative top-auto right-auto h-full min-h-0 w-full max-w-none max-sm:min-h-0 max-sm:max-w-none":
+                  sidebar,
+              }
             )}
-            <DropdownMenu key={open ? "visible" : "hidden"}>
-              <DropdownMenuTrigger
-                appearance="row-strong"
-                aria-label="Open conversation history"
-                type="button"
-              >
-                <span className="max-w-40 truncate">
-                  {activeChat ? getChatTitle(activeChat) : "New chat"}
-                </span>
-                <HugeiconsIcon
-                  aria-hidden
-                  className="size-3.5 text-muted-fg"
-                  icon={ArrowDown01Icon}
-                />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="start"
-                // oxlint-disable-next-line shadcn/no-restyle -- Assistant panel keeps its menu sizing.
-                className="w-72 p-1.5"
-                sideOffset={8}
-                data-assistant-panel
-              >
-                <p className="px-2 py-1.5 text-caption text-muted-fg">
-                  Conversations
-                </p>
-                <div className="max-h-56 overflow-y-auto">
-                  {chats.length === 0 ? (
-                    <p className="px-2 py-3 text-caption text-muted-fg">
-                      No conversations yet
-                    </p>
-                  ) : (
-                    chats.map((chat) => (
-                      <DropdownMenuItem
-                        // oxlint-disable-next-line shadcn/no-restyle -- Active conversation keeps its highlight.
-                        className={cn("w-full", {
-                          // oxlint-disable-next-line shadcn/no-restyle -- Active conversation keeps its highlight.
-                          "bg-muted": chat.id === activeChatId,
-                        })}
-                        key={chat.id}
-                        onSelect={() => {
-                          onChatSelect(chat.id);
-                        }}
-                      >
-                        <span className="truncate">{getChatTitle(chat)}</span>
-                      </DropdownMenuItem>
-                    ))
-                  )}
-                </div>
-                {activeChat === undefined ? null : (
-                  <>
-                    <DropdownMenuSeparator />
-                    {renamingChat?.id === activeChat.id ? (
-                      <form
-                        className="flex items-center gap-1 px-1 py-1"
-                        onSubmit={submitRename}
-                      >
-                        <Input
-                          aria-label="Conversation title"
-                          // oxlint-disable-next-line shadcn/no-restyle -- Rename input keeps caption type.
-                          className="h-8 text-caption"
-                          onChange={(event) => {
-                            setRenameTitle(event.target.value);
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key === "Escape") {
-                              event.preventDefault();
-                              setRenamingChat(null);
-                            }
-                          }}
-                          value={renameTitle}
-                        />
-                        <IconButtonTooltip label="Confirm rename">
-                          <Button
-                            aria-label="Confirm rename"
-                            disabled={renameTitle.trim() === ""}
-                            size="icon-sm"
-                            type="submit"
-                            variant="ghost"
-                          >
-                            <HugeiconsIcon
-                              aria-hidden
-                              className="size-3.5"
-                              icon={Tick01Icon}
-                            />
-                          </Button>
-                        </IconButtonTooltip>
-                      </form>
+          >
+            <header className="flex h-9 shrink-0 items-center gap-2 px-4">
+              {sidebar ? null : (
+                <IconButtonTooltip label="Move assistant">
+                  <Button
+                    aria-label="Move assistant"
+                    data-assistant-drag-handle
+                    // oxlint-disable-next-line shadcn/no-restyle -- Dedicated grip keeps drag gestures away from conversation controls.
+                    className="cursor-grab touch-none active:cursor-grabbing"
+                    size="icon"
+                    variant="ghost"
+                    onPointerDown={startDrag}
+                    onPointerMove={moveDrag}
+                    onPointerUp={endDrag}
+                    onPointerCancel={endDrag}
+                    onLostPointerCapture={endDrag}
+                  >
+                    <HugeiconsIcon aria-hidden icon={DragDropVerticalIcon} />
+                  </Button>
+                </IconButtonTooltip>
+              )}
+              <DropdownMenu key={open ? "visible" : "hidden"}>
+                <DropdownMenuTrigger
+                  appearance="row-strong"
+                  aria-label="Open conversation history"
+                  type="button"
+                >
+                  <span className="max-w-40 truncate">
+                    {activeChat ? getChatTitle(activeChat) : "New chat"}
+                  </span>
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-3.5 text-muted-fg"
+                    icon={ArrowDown01Icon}
+                  />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="start"
+                  // oxlint-disable-next-line shadcn/no-restyle -- Assistant panel keeps its menu sizing.
+                  className="w-72 p-1.5"
+                  sideOffset={8}
+                  data-assistant-panel
+                >
+                  <p className="px-2 py-1.5 text-caption text-muted-fg">
+                    Conversations
+                  </p>
+                  <div className="max-h-56 overflow-y-auto">
+                    {chats.length === 0 ? (
+                      <p className="px-2 py-3 text-caption text-muted-fg">
+                        No conversations yet
+                      </p>
                     ) : (
+                      chats.map((chat) => (
+                        <DropdownMenuItem
+                          // oxlint-disable-next-line shadcn/no-restyle -- Active conversation keeps its highlight.
+                          className={cn("w-full", {
+                            // oxlint-disable-next-line shadcn/no-restyle -- Active conversation keeps its highlight.
+                            "bg-muted": chat.id === activeChatId,
+                          })}
+                          key={chat.id}
+                          onSelect={() => {
+                            onChatSelect(chat.id);
+                          }}
+                        >
+                          <span className="truncate">{getChatTitle(chat)}</span>
+                        </DropdownMenuItem>
+                      ))
+                    )}
+                  </div>
+                  {activeChat === undefined ? null : (
+                    <>
+                      <DropdownMenuSeparator />
+                      {renamingChat?.id === activeChat.id ? (
+                        <form
+                          className="flex items-center gap-1 px-1 py-1"
+                          onSubmit={submitRename}
+                        >
+                          <Input
+                            aria-label="Conversation title"
+                            // oxlint-disable-next-line shadcn/no-restyle -- Rename input keeps caption type.
+                            className="h-8 text-caption"
+                            onChange={(event) => {
+                              setRenameTitle(event.target.value);
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === "Escape") {
+                                event.preventDefault();
+                                setRenamingChat(null);
+                              }
+                            }}
+                            value={renameTitle}
+                          />
+                          <IconButtonTooltip label="Confirm rename">
+                            <Button
+                              aria-label="Confirm rename"
+                              disabled={renameTitle.trim() === ""}
+                              size="icon-sm"
+                              type="submit"
+                              variant="ghost"
+                            >
+                              <HugeiconsIcon
+                                aria-hidden
+                                className="size-3.5"
+                                icon={Tick01Icon}
+                              />
+                            </Button>
+                          </IconButtonTooltip>
+                        </form>
+                      ) : (
+                        <DropdownMenuItem
+                          closeOnSelect={false}
+                          onSelect={startRename}
+                        >
+                          <HugeiconsIcon
+                            aria-hidden
+                            className="size-3.5"
+                            icon={Edit01Icon}
+                          />
+                          Rename conversation
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuItem
-                        closeOnSelect={false}
-                        onSelect={startRename}
+                        onSelect={() => {
+                          onDeleteChat(activeChat.id);
+                        }}
+                        tone="destructive"
                       >
                         <HugeiconsIcon
                           aria-hidden
                           className="size-3.5"
-                          icon={Edit01Icon}
+                          icon={Delete02Icon}
                         />
-                        Rename conversation
+                        Delete conversation
                       </DropdownMenuItem>
-                    )}
-                    <DropdownMenuItem
-                      onSelect={() => {
-                        onDeleteChat(activeChat.id);
-                      }}
-                      tone="destructive"
-                    >
-                      <HugeiconsIcon
-                        aria-hidden
-                        className="size-3.5"
-                        icon={Delete02Icon}
-                      />
-                      Delete conversation
-                    </DropdownMenuItem>
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <IconButtonTooltip label="New conversation">
-              <Button
-                aria-label="New conversation"
-                onClick={onNewChat}
-                size="icon-sm"
-                type="button"
-                variant="ghost"
-              >
-                <HugeiconsIcon aria-hidden icon={Add01Icon} />
-              </Button>
-            </IconButtonTooltip>
-            <div className="ml-auto flex items-center gap-1">
-              {onToggleSidebar ? (
-                <IconButtonTooltip
-                  label={
-                    sidebar ? "Use floating assistant" : "Use assistant sidebar"
-                  }
-                >
-                  <Button
-                    aria-label={
-                      sidebar
-                        ? "Use floating assistant"
-                        : "Use assistant sidebar"
-                    }
-                    aria-pressed={sidebar}
-                    onClick={onToggleSidebar}
-                    size="icon-sm"
-                    variant="ghost"
-                  >
-                    <HugeiconsIcon
-                      aria-hidden
-                      icon={sidebar ? DragDropVerticalIcon : LayoutRightIcon}
-                    />
-                  </Button>
-                </IconButtonTooltip>
-              ) : null}
-              <IconButtonTooltip label="Close assistant">
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <IconButtonTooltip label="New conversation">
                 <Button
-                  aria-label="Close assistant"
-                  onClick={minimize}
+                  aria-label="New conversation"
+                  onClick={onNewChat}
                   size="icon-sm"
                   type="button"
                   variant="ghost"
                 >
-                  <HugeiconsIcon aria-hidden icon={Cancel01Icon} />
+                  <HugeiconsIcon aria-hidden icon={Add01Icon} />
                 </Button>
               </IconButtonTooltip>
-            </div>
-          </header>
-          <div className="flex min-h-0 flex-1 flex-col">{children}</div>
-        </motion.dialog>
-        <IconButtonTooltip label="Open Quieter">
-          <motion.button
-            aria-label="Open Quieter"
-            aria-hidden={open || tucked}
-            inert={open || tucked}
-            tabIndex={open || tucked ? -1 : 0}
-            initial={false}
-            animate={{ opacity: open ? 0 : 1 }}
-            transition={{ duration: reducedMotion ? 0 : 0.06 }}
-            className={cn(
-              "absolute right-0 bottom-0 flex size-12 cursor-grab touch-none items-center justify-center rounded-lg focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:cursor-grabbing",
-              { hidden: sidebar, "pointer-events-none": open }
-            )}
-            data-assistant-launcher
-            onPointerDown={startDrag}
-            onPointerMove={moveDrag}
-            onPointerUp={endDrag}
-            onPointerCancel={endDrag}
-            onLostPointerCapture={endDrag}
-            onClick={(event) => {
-              if (event.detail === 0 || !draggedRef.current) {
-                onOpen();
-              }
+              <div className="ml-auto flex items-center gap-1">
+                {onToggleSidebar ? (
+                  <IconButtonTooltip
+                    label={
+                      sidebar
+                        ? "Use floating assistant"
+                        : "Use assistant sidebar"
+                    }
+                  >
+                    <Button
+                      aria-label={
+                        sidebar
+                          ? "Use floating assistant"
+                          : "Use assistant sidebar"
+                      }
+                      aria-pressed={sidebar}
+                      onClick={onToggleSidebar}
+                      size="icon-sm"
+                      variant="ghost"
+                    >
+                      <HugeiconsIcon
+                        aria-hidden
+                        icon={sidebar ? DragDropVerticalIcon : LayoutRightIcon}
+                      />
+                    </Button>
+                  </IconButtonTooltip>
+                ) : null}
+                <IconButtonTooltip label="Close assistant">
+                  <Button
+                    aria-label="Close assistant"
+                    onClick={minimize}
+                    size="icon-sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    <HugeiconsIcon aria-hidden icon={Cancel01Icon} />
+                  </Button>
+                </IconButtonTooltip>
+              </div>
+            </header>
+            <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+          </motion.dialog>
+        </motion.div>
+        {!sidebar && !open ? (
+          <motion.div
+            key="launcher"
+            layout={!dragging && !reducedMotion}
+            layoutId={layoutId}
+            layoutDependency={layoutDependency}
+            ref={launcherSurfaceRef}
+            onBeforeLayoutMeasure={() => {
+              prepareSurfaceMeasurement(launcherSurfaceRef.current);
             }}
-            type="button"
-            ref={launcherRef}
+            data-assistant-surface
+            data-assistant-visual="launcher"
+            data-assistant-edge-preview={pendingEdge ?? undefined}
+            onPointerEnter={reveal}
+            onPointerLeave={tuck}
+            // oxlint-disable shadcn/no-inline-styles -- Shared layout animation keeps the launcher radius and viewport position consistent.
+            style={{
+              ...positionStyle,
+              borderRadius: 14,
+            }}
+            // oxlint-enable shadcn/no-inline-styles
+            animate={{ rotate: edgeRotation }}
+            exit={{ opacity: 0, pointerEvents: "none" }}
+            transition={surfaceTransition}
+            className={cn(
+              "pointer-events-auto absolute right-[var(--assistant-right)] bottom-[var(--assistant-bottom)] z-20 size-[50px]",
+              floatingSurfaceClassName,
+              {
+                "border-muted-fg/70": pendingEdge !== null && reducedMotion,
+                "pointer-events-none": tucked,
+              }
+            )}
           >
-            <Brand className="pointer-events-none size-6" />
-          </motion.button>
-        </IconButtonTooltip>
-      </motion.div>
+            <IconButtonTooltip label="Open Quieter">
+              <motion.button
+                aria-label="Open Quieter"
+                aria-hidden={tucked}
+                inert={tucked}
+                tabIndex={tucked ? -1 : 0}
+                layout="position"
+                initial={false}
+                transition={surfaceTransition}
+                className="absolute right-0 bottom-0 flex size-12 cursor-grab touch-none items-center justify-center rounded-lg focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:cursor-grabbing"
+                data-assistant-launcher
+                onPointerDown={startDrag}
+                onPointerMove={moveDrag}
+                onPointerUp={endDrag}
+                onPointerCancel={endDrag}
+                onLostPointerCapture={endDrag}
+                onClick={(event) => {
+                  if (event.detail === 0 || !draggedRef.current) {
+                    onOpen();
+                  }
+                }}
+                type="button"
+                ref={launcherRef}
+              >
+                <Brand className="pointer-events-none size-6" />
+              </motion.button>
+            </IconButtonTooltip>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 };

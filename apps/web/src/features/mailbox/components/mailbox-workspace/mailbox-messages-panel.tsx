@@ -1,10 +1,10 @@
 "use client";
 
 import { cn } from "@quieter/ui/cn";
+import { WorkspaceSection } from "@quieter/ui/workspace-section";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLayoutEffect, useState } from "react";
 
-import { WorkspaceSection } from "#/components/workspace-section";
 import { buildComposeDraftFromSavedDraftMessage } from "#/features/compose/domain/compose-actions";
 import type { ComposeDraftState } from "#/features/compose/domain/draft";
 import { MessageList } from "#/features/message-list/components/message-list";
