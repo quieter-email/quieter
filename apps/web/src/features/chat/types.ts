@@ -1,6 +1,7 @@
 import type { MailboxCategory } from "#/lib/mail";
 
 export type ChatViewProps = {
+  visible?: boolean;
   activeMailbox: MailboxCategory;
   chatId: string | null;
   draftChatKey: string;

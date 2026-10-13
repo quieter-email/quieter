@@ -10,7 +10,15 @@ import { Button, LinkButton } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { Text } from "@quieter/ui/text";
 import { domAnimation, LazyMotion, m } from "motion/react";
-import { lazy, Suspense, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import type { ComponentProps, ReactNode } from "react";
 
 import { MobileHeader } from "#/components/mobile-header";
@@ -313,6 +321,51 @@ const MailboxWorkspaceContentInner = ({
 }: MailboxWorkspaceContentProps) => {
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantOpened, setAssistantOpened] = useState(false);
+  const [assistantFocusRequest, setAssistantFocusRequest] = useState(0);
+  const [assistantSidebar, setAssistantSidebar] = useState(false);
+  const [assistantNarrow, setAssistantNarrow] = useState(false);
+  const assistantAutoCollapsedRef = useRef(false);
+  useLayoutEffect(() => {
+    try {
+      if (localStorage.getItem("quieter:assistant-mode") === "sidebar") {
+        const closed =
+          localStorage.getItem("quieter:assistant-sidebar-closed") === "true";
+        const wide = window.matchMedia("(min-width: 80rem)").matches;
+        // oxlint-disable-next-line react/set-state-in-effect -- Restore the optional browser preference before paint.
+        setAssistantSidebar(true);
+        // oxlint-disable-next-line react/set-state-in-effect -- Keep the existing chat mounted when restoring sidebar mode.
+        setAssistantOpened(true);
+        // oxlint-disable-next-line react/set-state-in-effect -- Restore the sidebar's initial visibility for the current viewport.
+        setAssistantOpen(wide && !closed);
+        assistantAutoCollapsedRef.current = !wide && !closed;
+      }
+    } catch {
+      // Floating mode remains available when storage is disabled.
+    }
+  }, []);
+  const updateAssistantViewport = useEffectEvent((wide: boolean) => {
+    setAssistantNarrow(!wide);
+    if (assistantSidebar) {
+      if (!wide && assistantOpen) {
+        assistantAutoCollapsedRef.current = true;
+        setAssistantOpen(false);
+      } else if (wide && assistantAutoCollapsedRef.current) {
+        assistantAutoCollapsedRef.current = false;
+        setAssistantOpen(true);
+      }
+    }
+  });
+  useEffect(() => {
+    const desktop = window.matchMedia("(min-width: 80rem)");
+    const update = () => {
+      updateAssistantViewport(desktop.matches);
+    };
+    update();
+    desktop.addEventListener("change", update);
+    return () => {
+      desktop.removeEventListener("change", update);
+    };
+  }, [assistantSidebar]);
   const agentWorkspace = useAgentWorkspace();
   let mailboxContent: ReactNode;
   if (!selectedMailboxId) {
@@ -494,7 +547,7 @@ const MailboxWorkspaceContentInner = ({
             />
           ) : null}
 
-          <div className="relative min-h-0 flex-1 overflow-hidden bg-transparent">
+          <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-transparent">
             {mailboxContent}
             {!isComposeMailbox &&
             !isDemoMode &&
@@ -506,67 +559,113 @@ const MailboxWorkspaceContentInner = ({
               />
             ) : null}
           </div>
-        </div>
-        {selectedMailboxId && selectedMailboxProvider !== "api" ? (
-          <FloatingAssistant
-            open={assistantOpen}
-            activeChatId={chatId}
-            chats={chats.map((chat) => ({
-              ...chat,
-              title: chat.title ?? "New chat",
-            }))}
-            onChatSelect={(id) => {
-              agentWorkspace?.control.cancel();
-              onSelectChat(id);
-            }}
-            onNewChat={() => {
-              agentWorkspace?.control.cancel();
-              onCreateChat();
-            }}
-            onDeleteChat={(deletedChatId) => {
-              agentWorkspace?.control.cancel();
-              onDeleteChat(deletedChatId);
-            }}
-            onRenameChat={onRenameChat}
-            onMinimize={() => {
-              agentWorkspace?.control.cancel();
-              setAssistantOpen(false);
-            }}
-            onOpen={() => {
-              setAssistantOpened(true);
-              setAssistantOpen(true);
-            }}
-          >
-            {assistantOpened ? (
-              <Suspense
-                fallback={
-                  <p
-                    className="p-4 text-body-sm text-muted-fg"
-                    data-assistant-loading
-                  >
-                    Loading assistant…
-                  </p>
+          {selectedMailboxId && selectedMailboxProvider !== "api" ? (
+            <FloatingAssistant
+              sidebar={assistantSidebar}
+              narrow={assistantNarrow}
+              focusRequest={assistantFocusRequest}
+              onToggleSidebar={() => {
+                const next = !assistantSidebar;
+                assistantAutoCollapsedRef.current = next && assistantNarrow;
+                setAssistantSidebar(next);
+                setAssistantOpened(true);
+                setAssistantFocusRequest((request) => request + 1);
+                setAssistantOpen(!next || !assistantNarrow);
+                try {
+                  localStorage.setItem(
+                    "quieter:assistant-mode",
+                    next ? "sidebar" : "floating"
+                  );
+                  localStorage.setItem(
+                    "quieter:assistant-sidebar-closed",
+                    "false"
+                  );
+                } catch {
+                  // Switching modes remains available without persistent storage.
                 }
-              >
-                <ChatView
-                  activeMailbox={activeMailbox ?? "inbox"}
-                  mailContext={chatContext}
-                  chatId={chatId}
-                  draftChatKey={draftChatKey}
-                  mailboxId={selectedMailboxId}
-                  mailboxOrganizationId={
-                    mailboxGroups.find((group) =>
-                      group.mailboxes.some(
-                        (mailbox) => mailbox.id === selectedMailboxId
-                      )
-                    )?.id ?? ""
+              }}
+              open={assistantOpen}
+              activeChatId={chatId}
+              chats={chats.map((chat) => ({
+                ...chat,
+                title: chat.title ?? "New chat",
+              }))}
+              onChatSelect={(id) => {
+                agentWorkspace?.control.cancel();
+                onSelectChat(id);
+              }}
+              onNewChat={() => {
+                agentWorkspace?.control.cancel();
+                onCreateChat();
+              }}
+              onDeleteChat={(deletedChatId) => {
+                agentWorkspace?.control.cancel();
+                onDeleteChat(deletedChatId);
+              }}
+              onRenameChat={onRenameChat}
+              onMinimize={() => {
+                assistantAutoCollapsedRef.current = false;
+                agentWorkspace?.control.cancel();
+                setAssistantOpen(false);
+                if (assistantSidebar) {
+                  try {
+                    localStorage.setItem(
+                      "quieter:assistant-sidebar-closed",
+                      "true"
+                    );
+                  } catch {
+                    // Closing remains available without persistent storage.
                   }
-                  onChatIdChange={onChatIdChange}
-                />
-              </Suspense>
-            ) : null}
-          </FloatingAssistant>
-        ) : null}
+                }
+              }}
+              onOpen={() => {
+                setAssistantFocusRequest((request) => request + 1);
+                setAssistantOpened(true);
+                setAssistantOpen(true);
+                if (assistantSidebar) {
+                  try {
+                    localStorage.setItem(
+                      "quieter:assistant-sidebar-closed",
+                      "false"
+                    );
+                  } catch {
+                    // Opening remains available without persistent storage.
+                  }
+                }
+              }}
+            >
+              {assistantOpened ? (
+                <Suspense
+                  fallback={
+                    <p
+                      className="p-4 text-body-sm text-muted-fg"
+                      data-assistant-loading
+                    >
+                      Loading assistant…
+                    </p>
+                  }
+                >
+                  <ChatView
+                    visible={assistantOpen}
+                    activeMailbox={activeMailbox ?? "inbox"}
+                    mailContext={chatContext}
+                    chatId={chatId}
+                    draftChatKey={draftChatKey}
+                    mailboxId={selectedMailboxId}
+                    mailboxOrganizationId={
+                      mailboxGroups.find((group) =>
+                        group.mailboxes.some(
+                          (mailbox) => mailbox.id === selectedMailboxId
+                        )
+                      )?.id ?? ""
+                    }
+                    onChatIdChange={onChatIdChange}
+                  />
+                </Suspense>
+              ) : null}
+            </FloatingAssistant>
+          ) : null}
+        </div>
       </main>
     </LazyMotion>
   );
