@@ -143,6 +143,9 @@ export const FloatingAssistant = ({
   }, []);
 
   const previousOpenRef = useRef(open);
+  const edgeDirection =
+    pendingEdge === "left" || pendingEdge === "top" ? -1 : 1;
+  const horizontalEdge = pendingEdge === "top" || pendingEdge === "bottom";
   const previousSizeOpenRef = useRef(open);
   const surfaceHeight = useMotionValue(assistantLauncherSize);
   useLayoutEffect(() => {
@@ -259,6 +262,48 @@ export const FloatingAssistant = ({
       >
         <span className="absolute -inset-1 rounded-xl border border-dashed border-muted-fg/15" />
       </motion.div>
+      {pendingEdge !== null && !reducedMotion ? (
+        <motion.div
+          aria-hidden
+          data-assistant-edge-wind
+          className="pointer-events-none absolute right-0 bottom-0 z-20 size-[50px]"
+          // oxlint-disable-next-line shadcn/no-inline-styles -- Wind feedback follows the dragged launcher.
+          style={{ x, y }}
+        >
+          {[0, 1, 2].map((particle) => (
+            <motion.span
+              key={particle}
+              className={cn("absolute rounded-full bg-muted-fg/45", {
+                "bottom-full": pendingEdge === "bottom",
+                "h-1.5 w-px": horizontalEdge,
+                "h-px w-1.5": !horizontalEdge,
+                "left-10": horizontalEdge && particle === 2,
+                "left-2": horizontalEdge && particle === 0,
+                "left-6": horizontalEdge && particle === 1,
+                "left-full": pendingEdge === "left",
+                "right-full": pendingEdge === "right",
+                "top-10": !horizontalEdge && particle === 2,
+                "top-2": !horizontalEdge && particle === 0,
+                "top-6": !horizontalEdge && particle === 1,
+                "top-full": pendingEdge === "top",
+              })}
+              initial={{ opacity: 0 }}
+              animate={{
+                opacity: [0, 0.4, 0],
+                x: horizontalEdge ? 0 : [0, edgeDirection * 10],
+                y: horizontalEdge ? [0, edgeDirection * 10] : 0,
+              }}
+              transition={{
+                delay: particle * 0.05,
+                duration: 0.35,
+                ease: "easeOut",
+                repeat: 1,
+                repeatDelay: 0.2,
+              }}
+            />
+          ))}
+        </motion.div>
+      ) : null}
       <motion.div
         data-assistant-surface
         data-assistant-edge-preview={pendingEdge ?? undefined}
@@ -278,11 +323,20 @@ export const FloatingAssistant = ({
           y,
         }}
         // oxlint-enable shadcn/no-inline-styles
+        animate={{
+          rotate:
+            pendingEdge !== null && !reducedMotion
+              ? [0, edgeDirection * 4, edgeDirection * -1.5, edgeDirection * 2]
+              : 0,
+        }}
+        transition={{
+          rotate: { duration: reducedMotion ? 0 : 0.28, ease: "easeOut" },
+        }}
         className={cn(
           "pointer-events-auto absolute right-0 bottom-0 z-20 max-h-full max-w-full overflow-hidden rounded-lg border border-border-strong/70 bg-bg-raised/90 [background-image:linear-gradient(160deg,color-mix(in_oklab,var(--bg-raised)_88%,transparent),color-mix(in_oklab,var(--bg)_96%,transparent))] text-fg shadow-elevation backdrop-blur-2xl",
           {
+            "border-muted-fg/70": pendingEdge !== null && reducedMotion,
             "pointer-events-none": tucked,
-            "ring-2 ring-muted-fg/30": pendingEdge !== null,
           }
         )}
       >
