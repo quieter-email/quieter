@@ -79,9 +79,17 @@ export const FloatingAssistant = ({
   const panelRef = useRef<HTMLDialogElement | null>(null);
   const launcherRef = useRef<HTMLButtonElement | null>(null);
   const sidebarLauncherRef = useRef<HTMLButtonElement | null>(null);
+  const focusInsideRef = useRef(false);
   useLayoutEffect(() => {
-    if (sidebar && !open) {
-      sidebarLauncherRef.current?.focus();
+    if (sidebar && !open && focusInsideRef.current) {
+      const focused = document.activeElement;
+      if (
+        focused === document.body ||
+        panelRef.current?.contains(focused) === true
+      ) {
+        sidebarLauncherRef.current?.focus();
+      }
+      focusInsideRef.current = false;
     }
   }, [open, sidebar]);
   const reducedMotion = useReducedMotion() === true;
@@ -116,7 +124,7 @@ export const FloatingAssistant = ({
   });
   useLayoutEffect((): (() => void) | undefined => {
     const panel = panelRef.current;
-    if (!panel) {
+    if (!panel || sidebar) {
       return undefined;
     }
     let settledHeight = assistantLauncherSize;
@@ -147,7 +155,7 @@ export const FloatingAssistant = ({
       observer.disconnect();
       loadingObserver.disconnect();
     };
-  }, []);
+  }, [sidebar]);
 
   const previousOpenRef = useRef(open);
   const surfaceWidth = open ? panelSize.width : assistantLauncherSize;
@@ -338,9 +346,15 @@ export const FloatingAssistant = ({
         data-assistant-edge-preview={pendingEdge ?? undefined}
         onPointerEnter={reveal}
         onPointerLeave={tuck}
-        onFocusCapture={reveal}
+        onFocusCapture={() => {
+          focusInsideRef.current = true;
+          reveal();
+        }}
         onBlurCapture={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget)) {
+            if (event.relatedTarget !== null) {
+              focusInsideRef.current = false;
+            }
             tuck();
           }
         }}
