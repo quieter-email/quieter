@@ -152,7 +152,7 @@ export const FloatingAssistant = ({
       surfaceHeight.set(height);
     } else {
       animate(surfaceHeight, height, {
-        duration: 0.18,
+        duration: 0.1,
         ease: [0.22, 1, 0.36, 1],
       });
     }
@@ -301,7 +301,7 @@ export const FloatingAssistant = ({
           ref={panelRef}
           initial={false}
           animate={{ opacity: open ? 1 : 0 }}
-          transition={{ duration: reducedMotion ? 0 : 0.12 }}
+          transition={{ duration: reducedMotion ? 0 : 0.06 }}
           className={cn(
             "absolute top-0 right-0 left-auto m-0 flex min-h-[min(20rem,calc(100dvh-3rem-2px))] w-[398px] max-w-[calc(100dvw-3rem-2px)] flex-col border-0 bg-transparent p-0 pt-4 text-fg max-sm:min-h-[min(20rem,calc(100dvh-2rem-2px))] max-sm:max-w-[calc(100dvw-2rem-2px)]",
             { "pointer-events-none": !open }
@@ -477,7 +477,7 @@ export const FloatingAssistant = ({
             tabIndex={open || tucked ? -1 : 0}
             initial={false}
             animate={{ opacity: open ? 0 : 1 }}
-            transition={{ duration: reducedMotion ? 0 : 0.12 }}
+            transition={{ duration: reducedMotion ? 0 : 0.06 }}
             className={cn(
               "absolute right-0 bottom-0 flex size-[46px] cursor-grab touch-none items-center justify-center rounded-lg focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:cursor-grabbing",
               { "pointer-events-none": open }
