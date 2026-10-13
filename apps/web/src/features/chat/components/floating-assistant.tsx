@@ -335,6 +335,7 @@ export const FloatingAssistant = ({
         className={cn(
           "pointer-events-auto absolute right-0 bottom-0 z-20 max-h-full max-w-full overflow-hidden rounded-lg border border-border-strong/70 bg-bg-raised/90 [background-image:linear-gradient(160deg,color-mix(in_oklab,var(--bg-raised)_88%,transparent),color-mix(in_oklab,var(--bg)_96%,transparent))] text-fg shadow-elevation backdrop-blur-2xl",
           {
+            "border-muted-fg/70": pendingEdge !== null && reducedMotion,
             "pointer-events-none": tucked,
           }
         )}
