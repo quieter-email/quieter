@@ -23,6 +23,7 @@ import {
 } from "@quieter/ui/dropdown-menu";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
+import { workspaceSectionVariants } from "@quieter/ui/workspace-section";
 import {
   animate,
   motion,
@@ -100,6 +101,8 @@ export const FloatingAssistant = ({
     height: assistantLauncherSize,
     width: 400,
   });
+  const surfaceWidth = useMotionValue(assistantLauncherSize);
+  const surfaceHeight = useMotionValue(assistantLauncherSize);
   const {
     boundsRef,
     draggedRef,
@@ -124,6 +127,8 @@ export const FloatingAssistant = ({
     open: open && !sidebar,
     panelSize,
     reducedMotion,
+    surfaceHeight,
+    surfaceWidth,
   });
   useLayoutEffect((): (() => void) | undefined => {
     const panel = panelRef.current;
@@ -162,28 +167,40 @@ export const FloatingAssistant = ({
 
   const previousOpenRef = useRef(open);
   const previousFocusRequestRef = useRef(focusRequest);
-  const surfaceWidth = open ? panelSize.width : assistantLauncherSize;
   const edgeDirection =
     pendingEdge === "left" || pendingEdge === "top" ? -1 : 1;
   const horizontalEdge = pendingEdge === "top" || pendingEdge === "bottom";
-  const previousSizeOpenRef = useRef(open);
-  const surfaceHeight = useMotionValue(assistantLauncherSize);
+  const previousSidebarRef = useRef(sidebar);
   useLayoutEffect(() => {
     const height = open ? panelSize.height : assistantLauncherSize;
+    const width = open ? panelSize.width : assistantLauncherSize;
     surfaceHeight.stop();
-    if (reducedMotion || !open || previousSizeOpenRef.current !== open) {
-      surfaceHeight.set(height);
+    surfaceWidth.stop();
+    if (reducedMotion || sidebar || previousSidebarRef.current !== sidebar) {
+      surfaceHeight.jump(height);
+      surfaceWidth.jump(width);
     } else {
-      animate(surfaceHeight, height, {
-        duration: 0.1,
+      const transition = {
+        duration: 0.18,
         ease: [0.22, 1, 0.36, 1],
-      });
+      } as const;
+      animate(surfaceHeight, height, transition);
+      animate(surfaceWidth, width, transition);
     }
-    previousSizeOpenRef.current = open;
+    previousSidebarRef.current = sidebar;
     return () => {
       surfaceHeight.stop();
+      surfaceWidth.stop();
     };
-  }, [open, panelSize.height, reducedMotion, surfaceHeight]);
+  }, [
+    open,
+    panelSize.height,
+    panelSize.width,
+    reducedMotion,
+    sidebar,
+    surfaceHeight,
+    surfaceWidth,
+  ]);
   const activeChat = chats.find((chat) => chat.id === activeChatId);
   const [renamingChat, setRenamingChat] =
     useState<FloatingAssistantChat | null>(null);
@@ -240,7 +257,7 @@ export const FloatingAssistant = ({
       className={cn("z-50", {
         "pointer-events-none fixed inset-[max(1.5rem,env(safe-area-inset-top),env(safe-area-inset-right),env(safe-area-inset-bottom),env(safe-area-inset-left))] [--assistant-safe-bottom:env(safe-area-inset-bottom,0px)] [--assistant-safe-left:env(safe-area-inset-left,0px)] [--assistant-safe-right:env(safe-area-inset-right,0px)] [--assistant-safe-top:env(safe-area-inset-top,0px)] max-sm:inset-[max(1rem,env(safe-area-inset-top),env(safe-area-inset-right),env(safe-area-inset-bottom),env(safe-area-inset-left))]":
           !sidebar,
-        "relative flex min-h-0 shrink-0 flex-col p-1": sidebar,
+        "relative flex min-h-0 shrink-0 flex-col p-1.5": sidebar,
         "w-12": sidebar && (!open || narrow),
         "w-[400px]": sidebar && open && !narrow,
       })}
@@ -390,12 +407,15 @@ export const FloatingAssistant = ({
           rotate: { duration: reducedMotion ? 0 : 0.28, ease: "easeOut" },
         }}
         className={cn(
-          "pointer-events-auto absolute right-0 bottom-0 z-20 max-h-full max-w-full overflow-hidden rounded-lg border border-border-strong/70 bg-bg-raised/90 [background-image:linear-gradient(160deg,color-mix(in_oklab,var(--bg-raised)_88%,transparent),color-mix(in_oklab,var(--bg)_96%,transparent))] text-fg shadow-elevation backdrop-blur-2xl",
+          "pointer-events-auto absolute right-0 bottom-0 z-20 max-h-full max-w-full text-fg",
           {
+            [workspaceSectionVariants({ layout: "surface" })]: sidebar,
             "border-muted-fg/70": pendingEdge !== null && reducedMotion,
             "fixed inset-y-[max(1rem,env(safe-area-inset-top),env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))] h-auto! w-[min(25rem,calc(100dvw-2*max(1rem,env(safe-area-inset-left),env(safe-area-inset-right))))]! max-w-none":
               sidebar && narrow,
             hidden: sidebar && !open,
+            "overflow-hidden rounded-lg border border-border-strong/70 bg-bg-raised/90 [background-image:linear-gradient(160deg,color-mix(in_oklab,var(--bg-raised)_88%,transparent),color-mix(in_oklab,var(--bg)_96%,transparent))] shadow-elevation backdrop-blur-2xl":
+              !sidebar,
             "pointer-events-none": !sidebar && tucked,
             "relative right-auto bottom-auto": sidebar && !narrow,
           }
@@ -416,7 +436,7 @@ export const FloatingAssistant = ({
           ref={panelRef}
           initial={false}
           animate={{ opacity: open ? 1 : 0 }}
-          transition={{ duration: reducedMotion ? 0 : 0.06 }}
+          transition={{ duration: reducedMotion ? 0 : 0.12 }}
           className={cn(
             "absolute top-0 right-0 left-auto m-0 flex min-h-[min(15rem,calc(100dvh-3rem-2px))] w-[398px] max-w-[calc(100dvw-3rem-2px)] flex-col border-0 bg-transparent p-0 pt-4 text-fg max-sm:min-h-[min(15rem,calc(100dvh-2rem-2px))] max-sm:max-w-[calc(100dvw-2rem-2px)]",
             { "pointer-events-none": !open },
@@ -622,7 +642,7 @@ export const FloatingAssistant = ({
             tabIndex={open || tucked ? -1 : 0}
             initial={false}
             animate={{ opacity: open ? 0 : 1 }}
-            transition={{ duration: reducedMotion ? 0 : 0.06 }}
+            transition={{ duration: reducedMotion ? 0 : 0.1 }}
             className={cn(
               "absolute right-0 bottom-0 flex size-12 cursor-grab touch-none items-center justify-center rounded-lg focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:cursor-grabbing",
               { hidden: sidebar, "pointer-events-none": open }

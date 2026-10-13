@@ -4,10 +4,10 @@ import { Menu01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { WorkspaceSection } from "@quieter/ui/workspace-section";
 import { WorkspaceSidebar } from "@quieter/ui/workspace-sidebar";
 import { lazy, Suspense, useState } from "react";
 
-import { WorkspaceSection } from "#/components/workspace-section";
 import { isDemoModeAvailable } from "#/features/settings/domain/demo-mode-setting";
 import { SETTINGS_TITLES } from "#/features/settings/domain/settings-navigation";
 import { settingsRouteApi } from "#/lib/route-apis";

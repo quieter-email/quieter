@@ -25,14 +25,14 @@ import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
 import { Textarea } from "@quieter/ui/textarea";
 import { toast } from "@quieter/ui/toast";
+import {
+  WorkspaceSection,
+  workspaceSectionVariants,
+} from "@quieter/ui/workspace-section";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import type { ReactNode } from "react";
 
-import {
-  WorkspaceSection,
-  workspaceSectionVariants,
-} from "#/components/workspace-section";
 import { toastError } from "#/lib/error-toast";
 import { orpc } from "#/lib/orpc";
 

@@ -1,5 +1,6 @@
+import { WorkspaceSection } from "@quieter/ui/workspace-section";
+
 import { LoadingSpinner } from "#/components/loading-spinner";
-import { WorkspaceSection } from "#/components/workspace-section";
 import { SETTINGS_TITLES } from "#/features/settings/domain/settings-navigation";
 import type { SettingsTab } from "#/features/settings/domain/settings-tab";
 

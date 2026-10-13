@@ -1,7 +1,8 @@
-import { cn } from "@quieter/ui/cn";
 import { cva } from "class-variance-authority";
 import type { VariantProps } from "class-variance-authority";
 import type { ComponentPropsWithoutRef } from "react";
+
+import { cn } from "../../lib/cn";
 
 export const workspaceSectionVariants = cva(
   "overflow-hidden rounded-xl border border-border bg-bg-raised shadow-surface [background-image:var(--panel-gradient)]",
@@ -18,6 +19,7 @@ export const workspaceSectionVariants = cva(
       layout: {
         cell: "m-1.5 min-h-0 min-w-0 flex-1 flex-col lg:m-2 lg:ml-0 lg:flex",
         fill: "absolute inset-1.5 flex min-h-0 min-w-0 flex-col",
+        surface: "flex min-h-0 min-w-0 flex-col",
       },
     },
   }

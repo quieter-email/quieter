@@ -9,6 +9,10 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { Text } from "@quieter/ui/text";
+import {
+  WorkspaceSection,
+  workspaceSectionVariants,
+} from "@quieter/ui/workspace-section";
 import { domAnimation, LazyMotion, m } from "motion/react";
 import {
   lazy,
@@ -22,10 +26,6 @@ import {
 import type { ComponentProps, ReactNode } from "react";
 
 import { MobileHeader } from "#/components/mobile-header";
-import {
-  WorkspaceSection,
-  workspaceSectionVariants,
-} from "#/components/workspace-section";
 import { AgentWorkspaceProvider } from "#/features/chat/components/agent-workspace";
 import { FloatingAssistant } from "#/features/chat/components/floating-assistant";
 import { useAgentWorkspace } from "#/features/chat/domain/workspace-context";
@@ -436,7 +436,11 @@ const MailboxWorkspaceContentInner = ({
       .find((mailbox) => mailbox.id === selectedMailboxId);
     const isReconnecting = reconnectingMailboxId === selectedMailboxId;
     mailboxContent = (
-      <WorkspaceSection centered className="px-8">
+      <WorkspaceSection
+        centered
+        // oxlint-disable-next-line shadcn/no-restyle -- Preserve the existing empty-state content inset.
+        className="px-8"
+      >
         <m.div
           className="max-w-md space-y-3 text-center"
           {...workspaceContentMotion}
