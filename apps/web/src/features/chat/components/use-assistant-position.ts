@@ -1,4 +1,4 @@
-import { animate, useMotionValue } from "motion/react";
+import { animate, useMotionValue, useMotionValueEvent } from "motion/react";
 import {
   useEffect,
   useEffectEvent,
@@ -49,6 +49,10 @@ export const useAssistantPosition = ({
     y: number;
     position: Position;
     detached: boolean;
+    targetX: number;
+    targetY: number;
+    releaseOffsetX: number;
+    releaseOffsetY: number;
   } | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initializedRef = useRef(false);
@@ -66,6 +70,14 @@ export const useAssistantPosition = ({
   const dockY = useMotionValue(0);
   const tabX = useMotionValue(0);
   const tabY = useMotionValue(0);
+  const releaseProgress = useMotionValue(1);
+  useMotionValueEvent(releaseProgress, "change", (progress) => {
+    const gesture = gestureRef.current;
+    if (gesture?.detached === true) {
+      x.set(gesture.targetX + gesture.releaseOffsetX * (1 - progress));
+      y.set(gesture.targetY + gesture.releaseOffsetY * (1 - progress));
+    }
+  });
 
   const reposition = useEffectEvent((immediate = false) => {
     const boundsElement = boundsRef.current;
@@ -281,8 +293,9 @@ export const useAssistantPosition = ({
       }
       x.stop();
       y.stop();
+      releaseProgress.stop();
     },
-    [x, y]
+    [releaseProgress, x, y]
   );
 
   const reveal = () => {
@@ -318,12 +331,18 @@ export const useAssistantPosition = ({
     pendingEdgeRef.current = null;
     x.stop();
     y.stop();
+    releaseProgress.stop();
+    releaseProgress.set(1);
     gestureRef.current = {
       clientX: event.clientX,
       clientY: event.clientY,
       detached: false,
       pointerId: event.pointerId,
       position,
+      releaseOffsetX: 0,
+      releaseOffsetY: 0,
+      targetX: x.get(),
+      targetY: y.get(),
       x: x.get(),
       y: y.get(),
     };
@@ -339,6 +358,7 @@ export const useAssistantPosition = ({
     let deltaX = event.clientX - gesture.clientX;
     let deltaY = event.clientY - gesture.clientY;
     const distance = Math.hypot(deltaX, deltaY);
+    let releasing = false;
     if (distance < 5 && !draggedRef.current) {
       return;
     }
@@ -350,15 +370,13 @@ export const useAssistantPosition = ({
       !gesture.detached &&
       distance > 0
     ) {
-      gesture.detached = distance >= 56;
-      let resistedDistance = distance;
-      if (distance <= 28) {
-        resistedDistance = distance * 0.28;
-      } else if (distance < 56) {
-        resistedDistance = 28 * 0.28 + (distance - 28) * (2 - 0.28);
+      if (distance >= 28) {
+        gesture.detached = true;
+        releasing = true;
+      } else {
+        deltaX *= 0.28;
+        deltaY *= 0.28;
       }
-      deltaX *= resistedDistance / distance;
-      deltaY *= resistedDistance / distance;
     }
     const width = open
       ? Math.min(panelSize.width, bounds.width)
@@ -400,8 +418,21 @@ export const useAssistantPosition = ({
     pendingEdgeRef.current =
       !open && !canDock && closest.distance < 14 ? closest.edge : null;
     setPendingEdge(pendingEdgeRef.current);
-    x.set(nextX);
-    y.set(nextY);
+    gesture.targetX = nextX;
+    gesture.targetY = nextY;
+    if (releasing && !reducedMotion) {
+      gesture.releaseOffsetX = x.get() - nextX;
+      gesture.releaseOffsetY = y.get() - nextY;
+      releaseProgress.set(0);
+      animate(releaseProgress, 1, {
+        duration: 0.1,
+        ease: [0.16, 1, 0.3, 1],
+      });
+    } else {
+      const remaining = gesture.detached ? 1 - releaseProgress.get() : 0;
+      x.set(nextX + gesture.releaseOffsetX * remaining);
+      y.set(nextY + gesture.releaseOffsetY * remaining);
+    }
   };
 
   const endDrag = (event: PointerEvent<HTMLElement>) => {
@@ -411,6 +442,9 @@ export const useAssistantPosition = ({
       return;
     }
     gestureRef.current = null;
+    const finalX = gesture.detached ? gesture.targetX : x.get();
+    const finalY = gesture.detached ? gesture.targetY : y.get();
+    releaseProgress.stop();
     setDragging(false);
     setNearDock(false);
     setPendingEdge(null);
@@ -443,20 +477,20 @@ export const useAssistantPosition = ({
       0,
       Math.min(
         1,
-        (bounds.width - width + x.get()) / Math.max(1, bounds.width - width)
+        (bounds.width - width + finalX) / Math.max(1, bounds.width - width)
       )
     );
     const normalizedY = Math.max(
       0,
       Math.min(
         1,
-        (bounds.height - height + y.get()) / Math.max(1, bounds.height - height)
+        (bounds.height - height + finalY) / Math.max(1, bounds.height - height)
       )
     );
     let next: Position = { mode: "free", x: normalizedX, y: normalizedY };
     if (
       dockRef.current.available &&
-      Math.hypot(x.get() - targetX, y.get() - targetY) < 56
+      Math.hypot(finalX - targetX, finalY - targetY) < 56
     ) {
       next = { mode: "dock" };
     } else if (pendingEdgeRef.current) {
