@@ -35,6 +35,7 @@ const FooterLinks = ({
     <Link className="hover:text-fg" tabIndex={tabIndex} to="/imprint">
       Imprint
     </Link>
+    {/* oxlint-disable-next-line shadcn/no-restyle -- The default link variant renders a native text button. */}
     <ConsentPreferencesLink className="hover:text-fg" tabIndex={tabIndex}>
       Preferences
     </ConsentPreferencesLink>

@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "catalog:",
-    "@polar-sh/sdk": "^1.0.1",
+    "@polar-sh/sdk": "^1.0.2",
     "@quieter/billing": "workspace:*",
     "@quieter/database": "workspace:*",
     "@quieter/env": "workspace:*",

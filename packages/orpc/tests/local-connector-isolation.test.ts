@@ -1,4 +1,5 @@
 import type { MCPClient } from "@ai-sdk/mcp";
+import type * as McpModule from "@ai-sdk/mcp";
 import type * as DatabaseClientModule from "@quieter/database/client";
 import {
   afterEach,
@@ -49,13 +50,19 @@ vi.mock(import("@quieter/env/server"), async (importOriginal) => {
     },
   };
 });
-vi.mock(import("@ai-sdk/mcp"), () => ({
-  createMCPClient: vi.fn<() => Promise<MCPClient>>().mockResolvedValue(
-    // Only tool execution and cleanup are needed by this test client.
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-    { callTool: mocks.callTool, close: mocks.close } as unknown as MCPClient
-  ),
-}));
+// The fake covers tool calls only, not the managed-events overload.
+// oxlint-disable-next-line vitest/prefer-import-in-mock
+vi.mock("@ai-sdk/mcp", async (importOriginal) => {
+  const actual = await importOriginal<typeof McpModule>();
+  return {
+    ...actual,
+    createMCPClient: vi.fn<() => Promise<MCPClient>>().mockResolvedValue(
+      // Only tool execution and cleanup are needed by this test client.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+      { callTool: mocks.callTool, close: mocks.close } as unknown as MCPClient
+    ),
+  };
+});
 // This fake implements only the database operations exercised by the test.
 // oxlint-disable-next-line vitest/prefer-import-in-mock
 vi.mock("@quieter/database/client", async (importOriginal) => {

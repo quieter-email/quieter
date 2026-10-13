@@ -1,6 +1,6 @@
 "use client";
 
-import { ConsentManagerProvider } from "@c15t/react";
+import { ConsentProvider, offline } from "@c15t/react";
 import { posthog } from "@c15t/scripts/posthog";
 import type { PropsWithChildren } from "react";
 
@@ -25,6 +25,18 @@ const posthogHost =
   typeof configuredPosthogHost === "string" && configuredPosthogHost !== ""
     ? configuredPosthogHost
     : "https://eu.i.posthog.com";
+const consentMode = offline({
+  policyRules: [
+    {
+      categories: ["measurement"],
+      id: "quieter-measurement-opt-in",
+      match: { isDefault: true },
+      model: "opt-in",
+      prompt: "choice",
+      scopeMode: "strict",
+    },
+  ],
+});
 const posthogScript =
   posthogId === null
     ? null
@@ -38,6 +50,7 @@ const posthogScript =
           capture_exceptions: false,
           capture_pageleave: false,
           capture_pageview: false,
+          cookieless_mode: "never",
           defaults: "2026-01-30",
           disable_session_recording: true,
           person_profiles: "never",
@@ -56,17 +69,17 @@ if (posthogScript) {
 }
 
 export const ConsentManager = ({ children }: PropsWithChildren) => (
-  <ConsentManagerProvider
+  <ConsentProvider
     options={{
       consentCategories: ["necessary", "measurement"],
       i18n: consentEnglishI18n,
       legalLinks: consentLegalLinks,
-      mode: "offline",
+      mode: consentMode,
       scripts: posthogScript ? [posthogScript] : [],
     }}
   >
     <ConsentBanner />
     <ConsentPreferencesDialog />
     {children}
-  </ConsentManagerProvider>
+  </ConsentProvider>
 );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useConsentManager } from "@c15t/react";
+import { useConsent, useExplicitChoice } from "@c15t/react";
 import { useLocation } from "@tanstack/react-router";
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import type { PropsWithChildren } from "react";
@@ -14,8 +14,9 @@ import {
 const appEnvironment = import.meta.env.MODE;
 
 export const TelemetryProvider = ({ children }: PropsWithChildren) => {
-  const { has, hasConsented } = useConsentManager();
-  const measurementConsented = hasConsented() && has("measurement");
+  const explicitChoice = useExplicitChoice();
+  const measurementAllowed = useConsent("measurement");
+  const measurementConsented = explicitChoice !== null && measurementAllowed;
   const posthogReady = useSyncExternalStore(
     subscribeToPosthogReady,
     getPosthogReady,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useHeadlessConsentUI } from "@c15t/react";
+import { useHeadlessConsentUI } from "@c15t/react/headless";
 import { Button } from "@quieter/ui/button";
 import type { ReactNode } from "react";
 

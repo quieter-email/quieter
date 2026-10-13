@@ -223,6 +223,7 @@ export const SidebarLabelNav = ({
           <SidebarNavItem
             active={isActive}
             aria-pressed={isActive}
+            // oxlint-disable shadcn/no-restyle -- SidebarNavItem owns an animated surface with custom label-row spacing.
             className={cn(
               "h-7 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-left text-caption font-normal squircle",
               {
@@ -230,6 +231,7 @@ export const SidebarLabelNav = ({
                 "text-muted-fg": !isActive,
               }
             )}
+            // oxlint-enable shadcn/no-restyle
             onClick={() => {
               onSearch(
                 updateLabelFilter(

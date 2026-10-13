@@ -49,7 +49,7 @@
     "@quieter/mail": "workspace:*",
     "@quieter/observability": "workspace:*",
     "ai": "catalog:",
-    "html-to-text": "9.0.5",
+    "html-to-text": "10.0.1",
     "ical.js": "^2.2.1"
   },
   "devDependencies": {

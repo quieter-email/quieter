@@ -138,6 +138,7 @@ export const MessageListSearchView = ({
             <Button
               aria-label="Refresh list"
               // oxlint-disable-next-line shadcn/require-static-classes -- Shared header control scale lives in message-list-header-surfaces.
+              // oxlint-disable shadcn/require-static-classes -- Uses the shared header-control variant with a fixed toolbar option.
               className={messageListHeaderControlVariants({
                 control: "toolbar",
               })}
@@ -606,6 +607,7 @@ export const MessageListSearchView = ({
               className={messageListHeaderControlVariants({
                 control: "toolbar",
               })}
+              // oxlint-enable shadcn/require-static-classes
               onClick={onScrollToTop}
               size="icon"
               type="button"

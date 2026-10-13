@@ -1,6 +1,6 @@
 "use client";
 
-import { useHeadlessConsentUI, useTranslations } from "@c15t/react";
+import { useHeadlessConsentUI, useTranslations } from "@c15t/react/headless";
 import { Button } from "@quieter/ui/button";
 import { Link } from "@tanstack/react-router";
 
