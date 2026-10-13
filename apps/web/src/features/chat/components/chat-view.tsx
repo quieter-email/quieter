@@ -484,6 +484,7 @@ const ChatSession = ({
         </p>
       )}
       <ChatComposer
+        visible={props.visible}
         input={input}
         disabled={!canUseAiChat || busy || streaming || approvals.length > 0}
         streaming={streaming || approvals.length > 0}

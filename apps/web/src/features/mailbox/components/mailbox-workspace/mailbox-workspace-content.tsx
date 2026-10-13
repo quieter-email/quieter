@@ -321,6 +321,7 @@ const MailboxWorkspaceContentInner = ({
 }: MailboxWorkspaceContentProps) => {
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantOpened, setAssistantOpened] = useState(false);
+  const [assistantFocusRequest, setAssistantFocusRequest] = useState(0);
   const [assistantSidebar, setAssistantSidebar] = useState(false);
   const [assistantNarrow, setAssistantNarrow] = useState(false);
   const assistantAutoCollapsedRef = useRef(false);
@@ -560,11 +561,13 @@ const MailboxWorkspaceContentInner = ({
             <FloatingAssistant
               sidebar={assistantSidebar}
               narrow={assistantNarrow}
+              focusRequest={assistantFocusRequest}
               onToggleSidebar={() => {
                 const next = !assistantSidebar;
                 assistantAutoCollapsedRef.current = next && assistantNarrow;
                 setAssistantSidebar(next);
                 setAssistantOpened(true);
+                setAssistantFocusRequest((request) => request + 1);
                 setAssistantOpen(!next || !assistantNarrow);
                 try {
                   localStorage.setItem(
@@ -600,6 +603,7 @@ const MailboxWorkspaceContentInner = ({
                 setAssistantOpen(false);
               }}
               onOpen={() => {
+                setAssistantFocusRequest((request) => request + 1);
                 setAssistantOpened(true);
                 setAssistantOpen(true);
               }}
@@ -616,6 +620,7 @@ const MailboxWorkspaceContentInner = ({
                   }
                 >
                   <ChatView
+                    visible={assistantOpen}
                     activeMailbox={activeMailbox ?? "inbox"}
                     mailContext={chatContext}
                     chatId={chatId}

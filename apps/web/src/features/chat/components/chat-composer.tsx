@@ -22,6 +22,7 @@ import type { KeyboardEvent, SubmitEvent } from "react";
 export type AssistantPolicy = "ask" | "automatic";
 
 type ChatComposerProps = {
+  visible?: boolean;
   contextLabel?: string;
   disabled?: boolean;
   input: string;
@@ -37,6 +38,7 @@ type ChatComposerProps = {
 };
 
 export const ChatComposer = ({
+  visible = true,
   contextLabel,
   disabled,
   input,
@@ -95,7 +97,7 @@ export const ChatComposer = ({
       />
     </div>
     <div className="flex min-h-7 items-center gap-2">
-      <DropdownMenu>
+      <DropdownMenu key={visible ? "visible" : "hidden"}>
         <DropdownMenuTrigger
           appearance="row"
           aria-label="Choose assistant change policy"

@@ -56,6 +56,7 @@ type FloatingAssistantProps = {
   sidebar?: boolean;
   narrow?: boolean;
   onToggleSidebar?: () => void;
+  focusRequest?: number;
 };
 
 const getChatTitle = (chat: FloatingAssistantChat) =>
@@ -75,6 +76,7 @@ export const FloatingAssistant = ({
   sidebar = false,
   narrow = false,
   onToggleSidebar,
+  focusRequest,
 }: FloatingAssistantProps) => {
   const panelRef = useRef<HTMLDialogElement | null>(null);
   const launcherRef = useRef<HTMLButtonElement | null>(null);
@@ -85,7 +87,8 @@ export const FloatingAssistant = ({
       const focused = document.activeElement;
       if (
         focused === document.body ||
-        panelRef.current?.contains(focused) === true
+        (focused instanceof Element &&
+          focused.closest("[data-assistant-panel]") !== null)
       ) {
         sidebarLauncherRef.current?.focus();
       }
@@ -158,6 +161,7 @@ export const FloatingAssistant = ({
   }, [sidebar]);
 
   const previousOpenRef = useRef(open);
+  const previousFocusRequestRef = useRef(focusRequest);
   const surfaceWidth = open ? panelSize.width : assistantLauncherSize;
   const edgeDirection =
     pendingEdge === "left" || pendingEdge === "top" ? -1 : 1;
@@ -205,20 +209,24 @@ export const FloatingAssistant = ({
   };
 
   useEffect((): (() => void) | undefined => {
-    if (open && !previousOpenRef.current) {
+    const requested =
+      focusRequest === undefined
+        ? open && !previousOpenRef.current
+        : focusRequest !== previousFocusRequestRef.current;
+    previousOpenRef.current = open;
+    previousFocusRequestRef.current = focusRequest;
+    if (open && requested) {
       const animationFrame = window.requestAnimationFrame(() => {
         panelRef.current
           ?.querySelector<HTMLTextAreaElement>("[data-assistant-composer]")
           ?.focus();
       });
-      previousOpenRef.current = open;
       return () => {
         window.cancelAnimationFrame(animationFrame);
       };
     }
-    previousOpenRef.current = open;
     return undefined;
-  }, [open]);
+  }, [focusRequest, open]);
 
   const minimize = () => {
     onMinimize();
@@ -352,7 +360,13 @@ export const FloatingAssistant = ({
         }}
         onBlurCapture={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget)) {
-            if (event.relatedTarget !== null) {
+            if (
+              event.relatedTarget !== null &&
+              !(
+                event.relatedTarget instanceof Element &&
+                event.relatedTarget.closest("[data-assistant-panel]") !== null
+              )
+            ) {
               focusInsideRef.current = false;
             }
             tuck();
@@ -432,7 +446,7 @@ export const FloatingAssistant = ({
                 </Button>
               </IconButtonTooltip>
             )}
-            <DropdownMenu>
+            <DropdownMenu key={open ? "visible" : "hidden"}>
               <DropdownMenuTrigger
                 appearance="row-strong"
                 aria-label="Open conversation history"
