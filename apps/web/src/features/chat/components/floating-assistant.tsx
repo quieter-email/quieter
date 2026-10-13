@@ -79,6 +79,11 @@ export const FloatingAssistant = ({
   const panelRef = useRef<HTMLDialogElement | null>(null);
   const launcherRef = useRef<HTMLButtonElement | null>(null);
   const sidebarLauncherRef = useRef<HTMLButtonElement | null>(null);
+  useLayoutEffect(() => {
+    if (sidebar && !open) {
+      sidebarLauncherRef.current?.focus();
+    }
+  }, [open, sidebar]);
   const reducedMotion = useReducedMotion() === true;
   const [panelSize, setPanelSize] = useState({
     height: assistantLauncherSize,

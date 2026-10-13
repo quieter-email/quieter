@@ -10,7 +10,15 @@ import { Button, LinkButton } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { Text } from "@quieter/ui/text";
 import { domAnimation, LazyMotion, m } from "motion/react";
-import { lazy, Suspense, useEffect, useLayoutEffect, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import type { ComponentProps, ReactNode } from "react";
 
 import { MobileHeader } from "#/components/mobile-header";
@@ -315,6 +323,7 @@ const MailboxWorkspaceContentInner = ({
   const [assistantOpened, setAssistantOpened] = useState(false);
   const [assistantSidebar, setAssistantSidebar] = useState(false);
   const [assistantNarrow, setAssistantNarrow] = useState(false);
+  const assistantAutoCollapsedRef = useRef(false);
   useLayoutEffect(() => {
     try {
       if (localStorage.getItem("quieter:assistant-mode") === "sidebar") {
@@ -322,18 +331,31 @@ const MailboxWorkspaceContentInner = ({
         setAssistantSidebar(true);
         // oxlint-disable-next-line react/set-state-in-effect -- Keep the existing chat mounted when restoring sidebar mode.
         setAssistantOpened(true);
+        // oxlint-disable-next-line react/set-state-in-effect -- Restore the sidebar's initial visibility for the current viewport.
+        setAssistantOpen(window.matchMedia("(min-width: 80rem)").matches);
+        assistantAutoCollapsedRef.current =
+          !window.matchMedia("(min-width: 80rem)").matches;
       }
     } catch {
       // Floating mode remains available when storage is disabled.
     }
   }, []);
+  const updateAssistantViewport = useEffectEvent((wide: boolean) => {
+    setAssistantNarrow(!wide);
+    if (assistantSidebar) {
+      if (!wide && assistantOpen) {
+        assistantAutoCollapsedRef.current = true;
+        setAssistantOpen(false);
+      } else if (wide && assistantAutoCollapsedRef.current) {
+        assistantAutoCollapsedRef.current = false;
+        setAssistantOpen(true);
+      }
+    }
+  });
   useEffect(() => {
     const desktop = window.matchMedia("(min-width: 80rem)");
     const update = () => {
-      setAssistantNarrow(!desktop.matches);
-      if (assistantSidebar) {
-        setAssistantOpen(desktop.matches);
-      }
+      updateAssistantViewport(desktop.matches);
     };
     update();
     desktop.addEventListener("change", update);
@@ -540,6 +562,7 @@ const MailboxWorkspaceContentInner = ({
               narrow={assistantNarrow}
               onToggleSidebar={() => {
                 const next = !assistantSidebar;
+                assistantAutoCollapsedRef.current = next && assistantNarrow;
                 setAssistantSidebar(next);
                 setAssistantOpened(true);
                 setAssistantOpen(!next || !assistantNarrow);
@@ -572,6 +595,7 @@ const MailboxWorkspaceContentInner = ({
               }}
               onRenameChat={onRenameChat}
               onMinimize={() => {
+                assistantAutoCollapsedRef.current = false;
                 agentWorkspace?.control.cancel();
                 setAssistantOpen(false);
               }}
