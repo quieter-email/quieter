@@ -1,5 +1,4 @@
 import { animate, useMotionValue, useMotionValueEvent } from "motion/react";
-import type { MotionValue } from "motion/react";
 import {
   useEffect,
   useEffectEvent,
@@ -33,14 +32,10 @@ const storageKey = "quieter:assistant-position:v1";
 export const useAssistantPosition = ({
   open,
   panelSize,
-  surfaceWidth,
-  surfaceHeight,
   reducedMotion,
 }: {
   open: boolean;
   panelSize: { width: number; height: number };
-  surfaceWidth: MotionValue<number>;
-  surfaceHeight: MotionValue<number>;
   reducedMotion: boolean;
 }) => {
   const boundsRef = useRef<HTMLDivElement | null>(null);
@@ -84,14 +79,18 @@ export const useAssistantPosition = ({
     }
   });
 
-  const reposition = useEffectEvent((immediate = false, morph = false) => {
+  const reposition = useEffectEvent((immediate = false) => {
     const boundsElement = boundsRef.current;
     const bounds = boundsElement?.getBoundingClientRect();
     if (!boundsElement || !bounds) {
       return;
     }
-    const width = Math.min(surfaceWidth.get(), bounds.width);
-    const height = Math.min(surfaceHeight.get(), bounds.height);
+    const width = open
+      ? Math.min(panelSize.width, bounds.width)
+      : assistantLauncherSize;
+    const height = open
+      ? Math.min(panelSize.height, bounds.height)
+      : assistantLauncherSize;
     const dock = [...document.querySelectorAll("[data-assistant-dock]")]
       .map((element) => element.getBoundingClientRect())
       .find((rect) => rect.width > 0 && rect.height > 0);
@@ -214,35 +213,18 @@ export const useAssistantPosition = ({
         ease: [0.22, 1, 0.36, 1] as const,
         type: "tween" as const,
       };
-      const morphTransition = {
-        duration: reducedMotion ? 0 : 0.18,
-        ease: [0.22, 1, 0.36, 1] as const,
-        type: "tween" as const,
-      };
-      let activeTransition: typeof transition | typeof morphTransition =
-        transition;
-      if (open || morph) {
-        activeTransition = morphTransition;
-      } else if (position.mode === "edge") {
-        activeTransition = edgeTransition;
-      }
-      animate(x, nextX, activeTransition);
-      animate(y, nextY, activeTransition);
+      animate(
+        x,
+        nextX,
+        position.mode === "edge" && !open ? edgeTransition : transition
+      );
+      animate(
+        y,
+        nextY,
+        position.mode === "edge" && !open ? edgeTransition : transition
+      );
     }
   });
-
-  useEffect(() => {
-    const stopWidth = surfaceWidth.on("change", () => {
-      reposition(true);
-    });
-    const stopHeight = surfaceHeight.on("change", () => {
-      reposition(true);
-    });
-    return () => {
-      stopWidth();
-      stopHeight();
-    };
-  }, [surfaceWidth, surfaceHeight]);
 
   useLayoutEffect(() => {
     try {
@@ -300,7 +282,7 @@ export const useAssistantPosition = ({
   }, []);
 
   useLayoutEffect(() => {
-    reposition(false, previousOpenRef.current !== open);
+    reposition(previousOpenRef.current !== open);
     previousOpenRef.current = open;
   }, [open, panelSize, position, reducedMotion, revealed]);
 

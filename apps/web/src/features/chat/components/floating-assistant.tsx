@@ -24,12 +24,7 @@ import {
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
 import { workspaceSectionVariants } from "@quieter/ui/workspace-section";
-import {
-  animate,
-  motion,
-  useMotionValue,
-  useReducedMotion,
-} from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode, SubmitEvent } from "react";
 
@@ -101,8 +96,6 @@ export const FloatingAssistant = ({
     height: assistantLauncherSize,
     width: 400,
   });
-  const surfaceWidth = useMotionValue(assistantLauncherSize);
-  const surfaceHeight = useMotionValue(assistantLauncherSize);
   const {
     boundsRef,
     draggedRef,
@@ -127,8 +120,6 @@ export const FloatingAssistant = ({
     open: open && !sidebar,
     panelSize,
     reducedMotion,
-    surfaceHeight,
-    surfaceWidth,
   });
   useLayoutEffect((): (() => void) | undefined => {
     const panel = panelRef.current;
@@ -167,40 +158,11 @@ export const FloatingAssistant = ({
 
   const previousOpenRef = useRef(open);
   const previousFocusRequestRef = useRef(focusRequest);
+  const surfaceWidth = open ? panelSize.width : assistantLauncherSize;
+  const surfaceHeight = open ? panelSize.height : assistantLauncherSize;
   const edgeDirection =
     pendingEdge === "left" || pendingEdge === "top" ? -1 : 1;
   const horizontalEdge = pendingEdge === "top" || pendingEdge === "bottom";
-  const previousSidebarRef = useRef(sidebar);
-  useLayoutEffect(() => {
-    const height = open ? panelSize.height : assistantLauncherSize;
-    const width = open ? panelSize.width : assistantLauncherSize;
-    surfaceHeight.stop();
-    surfaceWidth.stop();
-    if (reducedMotion || sidebar || previousSidebarRef.current !== sidebar) {
-      surfaceHeight.jump(height);
-      surfaceWidth.jump(width);
-    } else {
-      const transition = {
-        duration: 0.18,
-        ease: [0.22, 1, 0.36, 1],
-      } as const;
-      animate(surfaceHeight, height, transition);
-      animate(surfaceWidth, width, transition);
-    }
-    previousSidebarRef.current = sidebar;
-    return () => {
-      surfaceHeight.stop();
-      surfaceWidth.stop();
-    };
-  }, [
-    open,
-    panelSize.height,
-    panelSize.width,
-    reducedMotion,
-    sidebar,
-    surfaceHeight,
-    surfaceWidth,
-  ]);
   const activeChat = chats.find((chat) => chat.id === activeChatId);
   const [renamingChat, setRenamingChat] =
     useState<FloatingAssistantChat | null>(null);
@@ -368,6 +330,7 @@ export const FloatingAssistant = ({
       ) : null}
       <motion.div
         data-assistant-surface
+        layout={sidebar || dragging || reducedMotion ? false : "size"}
         data-assistant-edge-preview={pendingEdge ?? undefined}
         onPointerEnter={reveal}
         onPointerLeave={tuck}
@@ -389,9 +352,11 @@ export const FloatingAssistant = ({
             tuck();
           }
         }}
-        // oxlint-disable shadcn/no-inline-styles -- Motion values synchronize dragging and measured panel height without an opening morph.
+        // oxlint-disable shadcn/no-inline-styles -- Layout animation morphs the measured size while motion values handle dragging.
         style={{
           height: sidebar ? "100%" : surfaceHeight,
+          originX: 0,
+          originY: 1,
           width: sidebar ? "100%" : surfaceWidth,
           x: sidebar ? 0 : x,
           y: sidebar ? 0 : y,
@@ -404,6 +369,7 @@ export const FloatingAssistant = ({
               : 0,
         }}
         transition={{
+          layout: { duration: 0.18, ease: [0.22, 1, 0.36, 1] },
           rotate: { duration: reducedMotion ? 0 : 0.28, ease: "easeOut" },
         }}
         className={cn(
@@ -422,6 +388,14 @@ export const FloatingAssistant = ({
         )}
       >
         <motion.dialog
+          layout="position"
+          transition={{
+            layout: {
+              duration: reducedMotion ? 0 : 0.18,
+              ease: [0.22, 1, 0.36, 1],
+            },
+            opacity: { duration: reducedMotion ? 0 : 0.12 },
+          }}
           open
           aria-label="Quieter assistant"
           aria-hidden={!open}
@@ -436,7 +410,6 @@ export const FloatingAssistant = ({
           ref={panelRef}
           initial={false}
           animate={{ opacity: open ? 1 : 0 }}
-          transition={{ duration: reducedMotion ? 0 : 0.12 }}
           className={cn(
             "absolute top-0 right-0 left-auto m-0 flex min-h-[min(15rem,calc(100dvh-3rem-2px))] w-[398px] max-w-[calc(100dvw-3rem-2px)] flex-col border-0 bg-transparent p-0 pt-4 text-fg max-sm:min-h-[min(15rem,calc(100dvh-2rem-2px))] max-sm:max-w-[calc(100dvw-2rem-2px)]",
             { "pointer-events-none": !open },
