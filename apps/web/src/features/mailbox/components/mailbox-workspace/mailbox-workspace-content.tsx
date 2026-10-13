@@ -328,14 +328,16 @@ const MailboxWorkspaceContentInner = ({
   useLayoutEffect(() => {
     try {
       if (localStorage.getItem("quieter:assistant-mode") === "sidebar") {
+        const closed =
+          localStorage.getItem("quieter:assistant-sidebar-closed") === "true";
+        const wide = window.matchMedia("(min-width: 80rem)").matches;
         // oxlint-disable-next-line react/set-state-in-effect -- Restore the optional browser preference before paint.
         setAssistantSidebar(true);
         // oxlint-disable-next-line react/set-state-in-effect -- Keep the existing chat mounted when restoring sidebar mode.
         setAssistantOpened(true);
         // oxlint-disable-next-line react/set-state-in-effect -- Restore the sidebar's initial visibility for the current viewport.
-        setAssistantOpen(window.matchMedia("(min-width: 80rem)").matches);
-        assistantAutoCollapsedRef.current =
-          !window.matchMedia("(min-width: 80rem)").matches;
+        setAssistantOpen(wide && !closed);
+        assistantAutoCollapsedRef.current = !wide && !closed;
       }
     } catch {
       // Floating mode remains available when storage is disabled.
@@ -574,6 +576,10 @@ const MailboxWorkspaceContentInner = ({
                     "quieter:assistant-mode",
                     next ? "sidebar" : "floating"
                   );
+                  localStorage.setItem(
+                    "quieter:assistant-sidebar-closed",
+                    "false"
+                  );
                 } catch {
                   // Switching modes remains available without persistent storage.
                 }
@@ -601,11 +607,31 @@ const MailboxWorkspaceContentInner = ({
                 assistantAutoCollapsedRef.current = false;
                 agentWorkspace?.control.cancel();
                 setAssistantOpen(false);
+                if (assistantSidebar) {
+                  try {
+                    localStorage.setItem(
+                      "quieter:assistant-sidebar-closed",
+                      "true"
+                    );
+                  } catch {
+                    // Closing remains available without persistent storage.
+                  }
+                }
               }}
               onOpen={() => {
                 setAssistantFocusRequest((request) => request + 1);
                 setAssistantOpened(true);
                 setAssistantOpen(true);
+                if (assistantSidebar) {
+                  try {
+                    localStorage.setItem(
+                      "quieter:assistant-sidebar-closed",
+                      "false"
+                    );
+                  } catch {
+                    // Opening remains available without persistent storage.
+                  }
+                }
               }}
             >
               {assistantOpened ? (
