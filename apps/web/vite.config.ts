@@ -7,6 +7,7 @@ import { sentryTanstackStart } from "@sentry/tanstackstart-react/vite";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact, { reactCompilerPreset } from "@vitejs/plugin-react";
+import { wgslVitePlugin } from "vgpu/client";
 import type { Plugin, Environment } from "vite-plus";
 import { defineConfig, lazyPlugins } from "vite-plus";
 import { unstable_readConfig } from "wrangler";
@@ -149,6 +150,7 @@ export default defineConfig(({ command }) => {
       ],
     },
     plugins: lazyPlugins(() => [
+      wgslVitePlugin(),
       cloudflare({
         // SST checks this file for its generated config; cf loads the adapter separately.
         config: configPath

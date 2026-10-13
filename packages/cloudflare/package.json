@@ -6,7 +6,7 @@
     "./compatibility-date": "./src/compatibility-date.ts"
   },
   "scripts": {
-    "dev": "cf dev --persist-to ../../.wrangler/state",
+    "dev": "wrangler dev --experimental-new-config --persist-to ../../.wrangler/state",
     "cf-typecheck": "wrangler types worker-configuration.d.ts --config wrangler.types.jsonc --env-file wrangler.types.env --strict-vars false --check",
     "cf-typegen": "wrangler types worker-configuration.d.ts --config wrangler.types.jsonc --env-file wrangler.types.env --strict-vars false",
     "check:compatibility-date": "node scripts/sync-compatibility-date.ts --check",
@@ -35,7 +35,7 @@
     "@vitest/snapshot": "4.1.11",
     "@vitest/ui": "4.1.11",
     "@vitest/utils": "4.1.11",
-    "cf": "1.0.0-beta.10",
+    "cf": "1.0.0-beta.16",
     "rolldown": "catalog:",
     "typescript": "catalog:",
     "vite-plus": "catalog:",

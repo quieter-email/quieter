@@ -130,7 +130,7 @@ jobs:
 
       - name: Upload SST logs on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sst-logs
           path: .sst/log/
@@ -142,7 +142,7 @@ jobs:
         run: vp exec node scripts/web-recovery.ts record previous-web.json
 
       - name: Retain web recovery record before deployment
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: previous-web
           path: previous-web.json

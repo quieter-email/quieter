@@ -1,4 +1,4 @@
-import { defaultTranslationConfig } from "@c15t/react";
+import { defaultTranslationConfig } from "@c15t/react/headless";
 
 export const consentEnglishI18n = {
   detectBrowserLanguage: false,

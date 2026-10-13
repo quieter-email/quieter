@@ -1,10 +1,7 @@
 "use client";
 
-import {
-  useConsentManager,
-  useHeadlessConsentUI,
-  useTranslations,
-} from "@c15t/react";
+import { ConsentDraftProvider, useConsentDraft } from "@c15t/react";
+import { useHeadlessConsentUI, useTranslations } from "@c15t/react/headless";
 import { Button } from "@quieter/ui/button";
 import {
   Dialog,
@@ -17,17 +14,103 @@ import {
 } from "@quieter/ui/dialog";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
 
-export const ConsentPreferencesDialog = () => {
+const ConsentPreferencesDialogContent = () => {
   const translations = useTranslations();
-  const { getDisplayedConsents, selectedConsents, setSelectedConsent } =
-    useConsentManager();
-  const {
-    closeUI,
-    dialog,
-    openDialog,
-    performDialogAction,
-    saveCustomPreferences,
-  } = useHeadlessConsentUI();
+  const { displayedCategories, set, values } = useConsentDraft();
+  const { performDialogAction, saveCustomPreferences } = useHeadlessConsentUI();
+
+  return (
+    <DialogContent className="w-[min(92vw,34rem)]">
+      <DialogHeader>
+        <DialogTitle>{translations.consentManagerDialog.title}</DialogTitle>
+        <DialogDescription>
+          {translations.consentManagerDialog.description}
+        </DialogDescription>
+      </DialogHeader>
+
+      <DialogBody
+        // oxlint-disable-next-line shadcn/no-restyle -- Consent list keeps its flush-top body.
+        className="pt-0"
+        spacing="4"
+      >
+        {displayedCategories.map((category) => {
+          const copy = translations.consentTypes[category];
+          const isDisabled = category === "necessary";
+
+          return (
+            <div
+              className="flex items-start justify-between gap-4 border-b border-border pb-4 last:border-b-0 last:pb-0"
+              key={category}
+            >
+              <div className="min-w-0">
+                <p className="text-body font-medium text-fg">
+                  {copy?.title ?? category}
+                </p>
+                <p className="mt-1 text-body/6 text-muted-fg">
+                  {copy?.description ?? ""}
+                </p>
+              </div>
+
+              <Switch
+                aria-label={copy?.title ?? category}
+                checked={values[category]}
+                className="shrink-0"
+                size="sm"
+                disabled={isDisabled}
+                onCheckedChange={(checked) => {
+                  set(category, checked);
+                }}
+              >
+                <SwitchThumb />
+              </Switch>
+            </div>
+          );
+        })}
+      </DialogBody>
+
+      <DialogFooter
+        // oxlint-disable-next-line shadcn/no-restyle -- Consent footer keeps its stacked-split actions.
+        className="flex-col gap-2 sm:flex-row sm:justify-between"
+      >
+        <Button
+          onClick={() => {
+            void performDialogAction("reject");
+          }}
+          size="sm"
+          type="button"
+          variant="ghost"
+        >
+          {translations.common.rejectAll}
+        </Button>
+
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button
+            onClick={() => {
+              void saveCustomPreferences();
+            }}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            {translations.common.save}
+          </Button>
+          <Button
+            onClick={() => {
+              void performDialogAction("accept");
+            }}
+            size="sm"
+            type="button"
+          >
+            {translations.common.acceptAll}
+          </Button>
+        </div>
+      </DialogFooter>
+    </DialogContent>
+  );
+};
+
+export const ConsentPreferencesDialog = () => {
+  const { closeUI, dialog, openDialog } = useHeadlessConsentUI();
 
   return (
     <Dialog
@@ -41,94 +124,11 @@ export const ConsentPreferencesDialog = () => {
       }}
       open={dialog.isVisible}
     >
-      <DialogContent className="w-[min(92vw,34rem)]">
-        <DialogHeader>
-          <DialogTitle>{translations.consentManagerDialog.title}</DialogTitle>
-          <DialogDescription>
-            {translations.consentManagerDialog.description}
-          </DialogDescription>
-        </DialogHeader>
-
-        <DialogBody
-          // oxlint-disable-next-line shadcn/no-restyle -- Consent list keeps its flush-top body.
-          className="pt-0"
-          spacing="4"
-        >
-          {getDisplayedConsents().map((config) => {
-            const category = config.name;
-            const copy = translations.consentTypes[category];
-            const isDisabled =
-              category === "necessary" || config.disabled === true;
-
-            return (
-              <div
-                className="flex items-start justify-between gap-4 border-b border-border pb-4 last:border-b-0 last:pb-0"
-                key={category}
-              >
-                <div className="min-w-0">
-                  <p className="text-body font-medium text-fg">
-                    {copy?.title ?? category}
-                  </p>
-                  <p className="mt-1 text-body/6 text-muted-fg">
-                    {copy?.description ?? ""}
-                  </p>
-                </div>
-
-                <Switch
-                  aria-label={copy?.title ?? category}
-                  checked={selectedConsents[category]}
-                  className="shrink-0"
-                  size="sm"
-                  disabled={isDisabled}
-                  onCheckedChange={(checked) => {
-                    setSelectedConsent(category, checked);
-                  }}
-                >
-                  <SwitchThumb />
-                </Switch>
-              </div>
-            );
-          })}
-        </DialogBody>
-
-        <DialogFooter
-          // oxlint-disable-next-line shadcn/no-restyle -- Consent footer keeps its stacked-split actions.
-          className="flex-col gap-2 sm:flex-row sm:justify-between"
-        >
-          <Button
-            onClick={() => {
-              void performDialogAction("reject");
-            }}
-            size="sm"
-            type="button"
-            variant="ghost"
-          >
-            {translations.common.rejectAll}
-          </Button>
-
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <Button
-              onClick={() => {
-                void saveCustomPreferences();
-              }}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              {translations.common.save}
-            </Button>
-            <Button
-              onClick={() => {
-                void performDialogAction("accept");
-              }}
-              size="sm"
-              type="button"
-            >
-              {translations.common.acceptAll}
-            </Button>
-          </div>
-        </DialogFooter>
-      </DialogContent>
+      {dialog.isVisible ? (
+        <ConsentDraftProvider>
+          <ConsentPreferencesDialogContent />
+        </ConsentDraftProvider>
+      ) : null}
     </Dialog>
   );
 };

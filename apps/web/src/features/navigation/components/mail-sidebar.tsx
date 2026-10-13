@@ -1,6 +1,6 @@
 "use client";
 
-import { useHeadlessConsentUI } from "@c15t/react";
+import { useHeadlessConsentUI } from "@c15t/react/headless";
 import {
   Cancel01Icon,
   Edit01Icon,
@@ -249,10 +249,12 @@ const SidebarInboxSection = ({
             <SidebarNavItem
               active={isSnippetMailbox}
               aria-current={isSnippetMailbox ? "page" : undefined}
+              // oxlint-disable shadcn/no-restyle -- The sidebar row uses its existing animated active styling.
               className={cn("w-full justify-start gap-3 px-3 text-left", {
                 "text-fg": isSnippetMailbox,
                 "text-muted-fg": !isSnippetMailbox,
               })}
+              // oxlint-enable shadcn/no-restyle
               onClick={() => {
                 onManageSnippets();
                 onRequestClose?.();

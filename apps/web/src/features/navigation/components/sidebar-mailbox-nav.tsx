@@ -64,10 +64,12 @@ export const SidebarMailboxNav = ({
           <SidebarNavItem
             active={isActive}
             aria-current={isActive ? "page" : undefined}
+            // oxlint-disable shadcn/no-restyle -- SidebarNavItem owns an animated surface with custom row spacing.
             className={cn("w-full justify-start gap-3 px-3 text-left", {
               "text-fg": isActive,
               "text-muted-fg": !isActive,
             })}
+            // oxlint-enable shadcn/no-restyle
             onClick={() => {
               onSelectMailbox(item.id);
             }}

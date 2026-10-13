@@ -115,6 +115,7 @@ export const SettingsSidebar = ({
       active={selected}
       key={title}
       aria-current={selected ? "page" : undefined}
+      // oxlint-disable shadcn/no-restyle -- SidebarNavItem owns an animated surface with compact settings-row spacing.
       className={cn(
         "h-6 w-full justify-start gap-2 px-2 text-left text-caption font-normal [&_svg]:size-3.5",
         {
@@ -122,6 +123,7 @@ export const SettingsSidebar = ({
           "text-muted-fg": !selected,
         }
       )}
+      // oxlint-enable shadcn/no-restyle
       onClick={() => {
         open(destination);
       }}
