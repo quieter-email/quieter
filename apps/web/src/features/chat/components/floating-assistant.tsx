@@ -7,6 +7,7 @@ import {
   Delete02Icon,
   DragDropVerticalIcon,
   Edit01Icon,
+  LayoutRightIcon,
   Tick01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -52,6 +53,9 @@ type FloatingAssistantProps = {
   onRenameChat: (chatId: string, title: string) => void;
   onChatSelect: (chatId: string) => void;
   open: boolean;
+  sidebar?: boolean;
+  narrow?: boolean;
+  onToggleSidebar?: () => void;
 };
 
 const getChatTitle = (chat: FloatingAssistantChat) =>
@@ -68,9 +72,13 @@ export const FloatingAssistant = ({
   onRenameChat,
   onChatSelect,
   open,
+  sidebar = false,
+  narrow = false,
+  onToggleSidebar,
 }: FloatingAssistantProps) => {
   const panelRef = useRef<HTMLDialogElement | null>(null);
   const launcherRef = useRef<HTMLButtonElement | null>(null);
+  const sidebarLauncherRef = useRef<HTMLButtonElement | null>(null);
   const reducedMotion = useReducedMotion() === true;
   const [panelSize, setPanelSize] = useState({
     height: assistantLauncherSize,
@@ -96,35 +104,30 @@ export const FloatingAssistant = ({
     startDrag,
     moveDrag,
     endDrag,
-  } = useAssistantPosition({ open, panelSize, reducedMotion });
+  } = useAssistantPosition({
+    open: open && !sidebar,
+    panelSize,
+    reducedMotion,
+  });
   useLayoutEffect((): (() => void) | undefined => {
     const panel = panelRef.current;
     if (!panel) {
       return undefined;
     }
-    let shrinkTimer: ReturnType<typeof setTimeout> | undefined;
-    let settledHeight = 48;
+    let settledHeight = assistantLauncherSize;
     const measure = () => {
-      clearTimeout(shrinkTimer);
       const loading = panel.querySelector("[data-assistant-loading]") !== null;
       const measuredHeight = panel.offsetHeight + 2;
       const height = loading
         ? Math.max(settledHeight, measuredHeight)
         : measuredHeight;
       const width = panel.offsetWidth + 2;
-      if (height < settledHeight) {
-        shrinkTimer = setTimeout(() => {
-          settledHeight = height;
-          setPanelSize({ height, width });
-        }, 250);
-      } else {
-        settledHeight = height;
-        setPanelSize((previous) =>
-          previous.height === height && previous.width === width
-            ? previous
-            : { height, width }
-        );
-      }
+      settledHeight = height;
+      setPanelSize((previous) =>
+        previous.height === height && previous.width === width
+          ? previous
+          : { height, width }
+      );
     };
     const observer = new ResizeObserver(measure);
     const loadingObserver = new MutationObserver(measure);
@@ -136,13 +139,13 @@ export const FloatingAssistant = ({
       subtree: true,
     });
     return () => {
-      clearTimeout(shrinkTimer);
       observer.disconnect();
       loadingObserver.disconnect();
     };
   }, []);
 
   const previousOpenRef = useRef(open);
+  const surfaceWidth = open ? panelSize.width : assistantLauncherSize;
   const edgeDirection =
     pendingEdge === "left" || pendingEdge === "top" ? -1 : 1;
   const horizontalEdge = pendingEdge === "top" || pendingEdge === "bottom";
@@ -207,16 +210,36 @@ export const FloatingAssistant = ({
   const minimize = () => {
     onMinimize();
     window.requestAnimationFrame(() => {
-      launcherRef.current?.focus();
+      (sidebar ? sidebarLauncherRef.current : launcherRef.current)?.focus();
     });
   };
 
   return (
     <div
-      className="pointer-events-none fixed inset-[max(1.5rem,env(safe-area-inset-top),env(safe-area-inset-right),env(safe-area-inset-bottom),env(safe-area-inset-left))] z-50 [--assistant-safe-bottom:env(safe-area-inset-bottom,0px)] [--assistant-safe-left:env(safe-area-inset-left,0px)] [--assistant-safe-right:env(safe-area-inset-right,0px)] [--assistant-safe-top:env(safe-area-inset-top,0px)] max-sm:inset-[max(1rem,env(safe-area-inset-top),env(safe-area-inset-right),env(safe-area-inset-bottom),env(safe-area-inset-left))]"
+      className={cn("z-50", {
+        "pointer-events-none fixed inset-[max(1.5rem,env(safe-area-inset-top),env(safe-area-inset-right),env(safe-area-inset-bottom),env(safe-area-inset-left))] [--assistant-safe-bottom:env(safe-area-inset-bottom,0px)] [--assistant-safe-left:env(safe-area-inset-left,0px)] [--assistant-safe-right:env(safe-area-inset-right,0px)] [--assistant-safe-top:env(safe-area-inset-top,0px)] max-sm:inset-[max(1rem,env(safe-area-inset-top),env(safe-area-inset-right),env(safe-area-inset-bottom),env(safe-area-inset-left))]":
+          !sidebar,
+        "relative flex min-h-0 shrink-0 flex-col p-1": sidebar,
+        "w-12": sidebar && (!open || narrow),
+        "w-[400px]": sidebar && open && !narrow,
+      })}
       ref={boundsRef}
     >
-      {edge ? (
+      {sidebar && !open ? (
+        <IconButtonTooltip label="Expand assistant sidebar">
+          <Button
+            aria-label="Expand assistant sidebar"
+            data-assistant-launcher
+            ref={sidebarLauncherRef}
+            onClick={onOpen}
+            size="icon"
+            variant="ghost"
+          >
+            <HugeiconsIcon aria-hidden icon={LayoutRightIcon} />
+          </Button>
+        </IconButtonTooltip>
+      ) : null}
+      {!sidebar && edge ? (
         <IconButtonTooltip label="Reveal Quieter">
           <motion.button
             aria-label="Reveal Quieter"
@@ -249,7 +272,7 @@ export const FloatingAssistant = ({
         // oxlint-disable-next-line shadcn/no-inline-styles -- Marker follows the measured sidebar slot.
         style={{ x: dockX, y: dockY }}
         animate={{
-          opacity: dragging && hasDock ? 1 : 0,
+          opacity: !sidebar && dragging && hasDock ? 1 : 0,
           scale: nearDock ? 1.08 : 1,
         }}
         transition={{ duration: reducedMotion ? 0 : 0.15 }}
@@ -257,12 +280,13 @@ export const FloatingAssistant = ({
           "absolute right-0 bottom-0 size-[50px] rounded-lg border border-dashed border-muted-fg/35 shadow-sm",
           {
             "border-fg/60 bg-control-active/60 shadow-elevation": nearDock,
+            hidden: sidebar,
           }
         )}
       >
         <span className="absolute -inset-1 rounded-xl border border-dashed border-muted-fg/15" />
       </motion.div>
-      {pendingEdge !== null && !reducedMotion ? (
+      {!sidebar && pendingEdge !== null && !reducedMotion ? (
         <motion.div
           aria-hidden
           data-assistant-edge-wind
@@ -317,15 +341,15 @@ export const FloatingAssistant = ({
         }}
         // oxlint-disable shadcn/no-inline-styles -- Motion values synchronize dragging and measured panel height without an opening morph.
         style={{
-          height: surfaceHeight,
-          width: open ? panelSize.width : assistantLauncherSize,
-          x,
-          y,
+          height: sidebar ? "100%" : surfaceHeight,
+          width: sidebar ? "100%" : surfaceWidth,
+          x: sidebar ? 0 : x,
+          y: sidebar ? 0 : y,
         }}
         // oxlint-enable shadcn/no-inline-styles
         animate={{
           rotate:
-            pendingEdge !== null && !reducedMotion
+            !sidebar && pendingEdge !== null && !reducedMotion
               ? [0, edgeDirection * 4, edgeDirection * -1.5, edgeDirection * 2]
               : 0,
         }}
@@ -336,7 +360,11 @@ export const FloatingAssistant = ({
           "pointer-events-auto absolute right-0 bottom-0 z-20 max-h-full max-w-full overflow-hidden rounded-lg border border-border-strong/70 bg-bg-raised/90 [background-image:linear-gradient(160deg,color-mix(in_oklab,var(--bg-raised)_88%,transparent),color-mix(in_oklab,var(--bg)_96%,transparent))] text-fg shadow-elevation backdrop-blur-2xl",
           {
             "border-muted-fg/70": pendingEdge !== null && reducedMotion,
-            "pointer-events-none": tucked,
+            "fixed inset-y-[max(1rem,env(safe-area-inset-top),env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))] h-auto! w-[min(25rem,calc(100dvw-2*max(1rem,env(safe-area-inset-left),env(safe-area-inset-right))))]! max-w-none":
+              sidebar && narrow,
+            hidden: sidebar && !open,
+            "pointer-events-none": !sidebar && tucked,
+            "relative right-auto bottom-auto": sidebar && !narrow,
           }
         )}
       >
@@ -357,28 +385,34 @@ export const FloatingAssistant = ({
           animate={{ opacity: open ? 1 : 0 }}
           transition={{ duration: reducedMotion ? 0 : 0.06 }}
           className={cn(
-            "absolute top-0 right-0 left-auto m-0 flex min-h-[min(20rem,calc(100dvh-3rem-2px))] w-[398px] max-w-[calc(100dvw-3rem-2px)] flex-col border-0 bg-transparent p-0 pt-4 text-fg max-sm:min-h-[min(20rem,calc(100dvh-2rem-2px))] max-sm:max-w-[calc(100dvw-2rem-2px)]",
-            { "pointer-events-none": !open }
+            "absolute top-0 right-0 left-auto m-0 flex min-h-[min(15rem,calc(100dvh-3rem-2px))] w-[398px] max-w-[calc(100dvw-3rem-2px)] flex-col border-0 bg-transparent p-0 pt-4 text-fg max-sm:min-h-[min(15rem,calc(100dvh-2rem-2px))] max-sm:max-w-[calc(100dvw-2rem-2px)]",
+            { "pointer-events-none": !open },
+            {
+              "relative top-auto right-auto h-full min-h-0 w-full max-w-none max-sm:min-h-0 max-sm:max-w-none":
+                sidebar,
+            }
           )}
         >
           <header className="flex h-9 shrink-0 items-center gap-2 px-4">
-            <IconButtonTooltip label="Move assistant">
-              <Button
-                aria-label="Move assistant"
-                data-assistant-drag-handle
-                // oxlint-disable-next-line shadcn/no-restyle -- Dedicated grip keeps drag gestures away from conversation controls.
-                className="cursor-grab touch-none active:cursor-grabbing"
-                size="icon"
-                variant="ghost"
-                onPointerDown={startDrag}
-                onPointerMove={moveDrag}
-                onPointerUp={endDrag}
-                onPointerCancel={endDrag}
-                onLostPointerCapture={endDrag}
-              >
-                <HugeiconsIcon aria-hidden icon={DragDropVerticalIcon} />
-              </Button>
-            </IconButtonTooltip>
+            {sidebar ? null : (
+              <IconButtonTooltip label="Move assistant">
+                <Button
+                  aria-label="Move assistant"
+                  data-assistant-drag-handle
+                  // oxlint-disable-next-line shadcn/no-restyle -- Dedicated grip keeps drag gestures away from conversation controls.
+                  className="cursor-grab touch-none active:cursor-grabbing"
+                  size="icon"
+                  variant="ghost"
+                  onPointerDown={startDrag}
+                  onPointerMove={moveDrag}
+                  onPointerUp={endDrag}
+                  onPointerCancel={endDrag}
+                  onLostPointerCapture={endDrag}
+                >
+                  <HugeiconsIcon aria-hidden icon={DragDropVerticalIcon} />
+                </Button>
+              </IconButtonTooltip>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger
                 appearance="row-strong"
@@ -508,6 +542,30 @@ export const FloatingAssistant = ({
               </Button>
             </IconButtonTooltip>
             <div className="ml-auto flex items-center gap-1">
+              {onToggleSidebar ? (
+                <IconButtonTooltip
+                  label={
+                    sidebar ? "Use floating assistant" : "Use assistant sidebar"
+                  }
+                >
+                  <Button
+                    aria-label={
+                      sidebar
+                        ? "Use floating assistant"
+                        : "Use assistant sidebar"
+                    }
+                    aria-pressed={sidebar}
+                    onClick={onToggleSidebar}
+                    size="icon-sm"
+                    variant="ghost"
+                  >
+                    <HugeiconsIcon
+                      aria-hidden
+                      icon={sidebar ? DragDropVerticalIcon : LayoutRightIcon}
+                    />
+                  </Button>
+                </IconButtonTooltip>
+              ) : null}
               <IconButtonTooltip label="Close assistant">
                 <Button
                   aria-label="Close assistant"
@@ -534,7 +592,7 @@ export const FloatingAssistant = ({
             transition={{ duration: reducedMotion ? 0 : 0.06 }}
             className={cn(
               "absolute right-0 bottom-0 flex size-12 cursor-grab touch-none items-center justify-center rounded-lg focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:cursor-grabbing",
-              { "pointer-events-none": open }
+              { hidden: sidebar, "pointer-events-none": open }
             )}
             data-assistant-launcher
             onPointerDown={startDrag}
