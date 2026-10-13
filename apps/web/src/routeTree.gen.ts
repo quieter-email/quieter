@@ -15,6 +15,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as CookiesRouteImport } from './routes/cookies'
 import { Route as DesignSystemRouteImport } from './routes/design-system'
+import { Route as DeviceRouteImport } from './routes/device'
 import { Route as HomeRouteImport } from './routes/home'
 import { Route as ImprintRouteImport } from './routes/imprint'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
@@ -29,6 +30,7 @@ import { Route as ApiSitePasswordRouteImport } from './routes/api/site-password'
 import { Route as ApiWaitlistRouteImport } from './routes/api/waitlist'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth.$'
 import { Route as ApiConnectorsCallbackRouteImport } from './routes/api/connectors.callback'
+import { Route as ApiDesktopSplatRouteImport } from './routes/api/desktop.$'
 import { Route as ApiDomainConnectCallbackRouteImport } from './routes/api/domain-connect.callback'
 import { Route as ApiGmailCallbackRouteImport } from './routes/api/gmail.callback'
 import { Route as ApiOrpcSplatRouteImport } from './routes/api/orpc.$'
@@ -70,6 +72,11 @@ const DesignSystemRoute = DesignSystemRouteImport.update({
   path: '/design-system',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DeviceRoute = DeviceRouteImport.update({
+  id: '/device',
+  path: '/device',
+  getParentRoute: () => rootRouteImport,
+} as any).lazy(() => import('./routes/device.lazy').then((d) => d.Route))
 const HomeRoute = HomeRouteImport.update({
   id: '/home',
   path: '/home',
@@ -140,6 +147,11 @@ const ApiConnectorsCallbackRoute = ApiConnectorsCallbackRouteImport.update({
   path: '/api/connectors/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiDesktopSplatRoute = ApiDesktopSplatRouteImport.update({
+  id: '/api/desktop/$',
+  path: '/api/desktop/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiDomainConnectCallbackRoute =
   ApiDomainConnectCallbackRouteImport.update({
     id: '/api/domain-connect/callback',
@@ -201,6 +213,7 @@ export interface FileRoutesByFullPath {
   '/contact': typeof ContactRoute
   '/cookies': typeof CookiesRoute
   '/design-system': typeof DesignSystemRoute
+  '/device': typeof DeviceRoute
   '/home': typeof HomeRoute
   '/imprint': typeof ImprintRoute
   '/onboarding': typeof OnboardingRoute
@@ -215,6 +228,7 @@ export interface FileRoutesByFullPath {
   '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/connectors/callback': typeof ApiConnectorsCallbackRoute
+  '/api/desktop/$': typeof ApiDesktopSplatRoute
   '/api/domain-connect/callback': typeof ApiDomainConnectCallbackRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
@@ -233,6 +247,7 @@ export interface FileRoutesByTo {
   '/contact': typeof ContactRoute
   '/cookies': typeof CookiesRoute
   '/design-system': typeof DesignSystemRoute
+  '/device': typeof DeviceRoute
   '/home': typeof HomeRoute
   '/imprint': typeof ImprintRoute
   '/onboarding': typeof OnboardingRoute
@@ -247,6 +262,7 @@ export interface FileRoutesByTo {
   '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/connectors/callback': typeof ApiConnectorsCallbackRoute
+  '/api/desktop/$': typeof ApiDesktopSplatRoute
   '/api/domain-connect/callback': typeof ApiDomainConnectCallbackRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
@@ -266,6 +282,7 @@ export interface FileRoutesById {
   '/contact': typeof ContactRoute
   '/cookies': typeof CookiesRoute
   '/design-system': typeof DesignSystemRoute
+  '/device': typeof DeviceRoute
   '/home': typeof HomeRoute
   '/imprint': typeof ImprintRoute
   '/onboarding': typeof OnboardingRoute
@@ -280,6 +297,7 @@ export interface FileRoutesById {
   '/api/waitlist': typeof ApiWaitlistRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/connectors/callback': typeof ApiConnectorsCallbackRoute
+  '/api/desktop/$': typeof ApiDesktopSplatRoute
   '/api/domain-connect/callback': typeof ApiDomainConnectCallbackRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
@@ -300,6 +318,7 @@ export interface FileRouteTypes {
     | '/contact'
     | '/cookies'
     | '/design-system'
+    | '/device'
     | '/home'
     | '/imprint'
     | '/onboarding'
@@ -314,6 +333,7 @@ export interface FileRouteTypes {
     | '/api/waitlist'
     | '/api/auth/$'
     | '/api/connectors/callback'
+    | '/api/desktop/$'
     | '/api/domain-connect/callback'
     | '/api/gmail/callback'
     | '/api/orpc/$'
@@ -332,6 +352,7 @@ export interface FileRouteTypes {
     | '/contact'
     | '/cookies'
     | '/design-system'
+    | '/device'
     | '/home'
     | '/imprint'
     | '/onboarding'
@@ -346,6 +367,7 @@ export interface FileRouteTypes {
     | '/api/waitlist'
     | '/api/auth/$'
     | '/api/connectors/callback'
+    | '/api/desktop/$'
     | '/api/domain-connect/callback'
     | '/api/gmail/callback'
     | '/api/orpc/$'
@@ -364,6 +386,7 @@ export interface FileRouteTypes {
     | '/contact'
     | '/cookies'
     | '/design-system'
+    | '/device'
     | '/home'
     | '/imprint'
     | '/onboarding'
@@ -378,6 +401,7 @@ export interface FileRouteTypes {
     | '/api/waitlist'
     | '/api/auth/$'
     | '/api/connectors/callback'
+    | '/api/desktop/$'
     | '/api/domain-connect/callback'
     | '/api/gmail/callback'
     | '/api/orpc/$'
@@ -397,6 +421,7 @@ export interface RootRouteChildren {
   ContactRoute: typeof ContactRoute
   CookiesRoute: typeof CookiesRoute
   DesignSystemRoute: typeof DesignSystemRoute
+  DeviceRoute: typeof DeviceRoute
   HomeRoute: typeof HomeRoute
   ImprintRoute: typeof ImprintRoute
   OnboardingRoute: typeof OnboardingRoute
@@ -411,6 +436,7 @@ export interface RootRouteChildren {
   ApiWaitlistRoute: typeof ApiWaitlistRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiConnectorsCallbackRoute: typeof ApiConnectorsCallbackRoute
+  ApiDesktopSplatRoute: typeof ApiDesktopSplatRoute
   ApiDomainConnectCallbackRoute: typeof ApiDomainConnectCallbackRoute
   ApiGmailCallbackRoute: typeof ApiGmailCallbackRoute
   ApiOrpcSplatRoute: typeof ApiOrpcSplatRoute
@@ -465,6 +491,13 @@ declare module '@tanstack/react-router' {
       path: '/design-system'
       fullPath: '/design-system'
       preLoaderRoute: typeof DesignSystemRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/device': {
+      id: '/device'
+      path: '/device'
+      fullPath: '/device'
+      preLoaderRoute: typeof DeviceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/home': {
@@ -565,6 +598,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiConnectorsCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/desktop/$': {
+      id: '/api/desktop/$'
+      path: '/api/desktop/$'
+      fullPath: '/api/desktop/$'
+      preLoaderRoute: typeof ApiDesktopSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/domain-connect/callback': {
       id: '/api/domain-connect/callback'
       path: '/api/domain-connect/callback'
@@ -645,6 +685,7 @@ const rootRouteChildren: RootRouteChildren = {
   ContactRoute: ContactRoute,
   CookiesRoute: CookiesRoute,
   DesignSystemRoute: DesignSystemRoute,
+  DeviceRoute: DeviceRoute,
   HomeRoute: HomeRoute,
   ImprintRoute: ImprintRoute,
   OnboardingRoute: OnboardingRoute,
@@ -659,6 +700,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiWaitlistRoute: ApiWaitlistRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiConnectorsCallbackRoute: ApiConnectorsCallbackRoute,
+  ApiDesktopSplatRoute: ApiDesktopSplatRoute,
   ApiDomainConnectCallbackRoute: ApiDomainConnectCallbackRoute,
   ApiGmailCallbackRoute: ApiGmailCallbackRoute,
   ApiOrpcSplatRoute: ApiOrpcSplatRoute,

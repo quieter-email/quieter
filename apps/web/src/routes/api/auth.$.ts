@@ -15,7 +15,14 @@ const handleAuthRequest = async (request: Request) => {
   }
 
   const { auth } = await import("@quieter/auth");
-  return await auth.handler(request);
+  const response = await auth.handler(request);
+  if (
+    pathname === "/api/auth/device" ||
+    pathname.startsWith("/api/auth/device/")
+  ) {
+    response.headers.set("cache-control", "no-store");
+  }
+  return response;
 };
 
 export const Route = createFileRoute("/api/auth/$")({
