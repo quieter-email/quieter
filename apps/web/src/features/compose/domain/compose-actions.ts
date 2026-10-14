@@ -292,6 +292,14 @@ export const buildComposeDraftFromSavedDraftMessage = (
 
   return {
     ...draft,
+    attachments: (message.attachments ?? []).map((attachment) => ({
+      gmailAttachmentId: attachment.attachmentId,
+      id: attachment.attachmentId,
+      isInline: false,
+      mimeType: attachment.mimeType,
+      name: attachment.fileName,
+      size: attachment.size,
+    })),
     bodyHtml: message.bodyHtml ?? "",
     bodyText: message.bodyText ?? message.snippet ?? "",
     draftAnchor: message.draftAnchor ?? null,

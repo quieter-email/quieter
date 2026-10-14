@@ -1,11 +1,13 @@
 import { useEffect, useEffectEvent } from "react";
 
 export const useDraftAutosave = ({
+  attachments,
   mailboxId,
   enabled,
   save,
   subscribe,
 }: {
+  attachments: readonly { id: string }[];
   mailboxId: string | null;
   enabled: boolean;
   save: () => Promise<void>;
@@ -59,5 +61,5 @@ export const useDraftAutosave = ({
       window.removeEventListener("online", changed);
       subscription.unsubscribe();
     };
-  }, [enabled, mailboxId]);
+  }, [attachments, enabled, mailboxId]);
 };

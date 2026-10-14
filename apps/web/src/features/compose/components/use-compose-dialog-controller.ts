@@ -36,12 +36,14 @@ import {
 import type { ComposeFormValues } from "../domain/compose-form";
 import {
   attachInlineImagesToHtml,
+  addComposeAttachmentFiles,
   appendComposeSignature,
   clearComposeDraftRuntimeFiles,
   cloneComposeDraft,
   createComposeInlineImagesFromFiles,
   createEmptyComposeDraft,
   deleteComposeDraft,
+  removeComposeRuntimeFile,
   hasComposeDraftContent,
   saveComposeDraft,
   sendComposeMessage,
@@ -128,6 +130,7 @@ export const useComposeDialogController = ({
   });
   const assistantUnsavedRef = useRef(state.draft.assistantUnsaved === true);
   const activeDraftRef = useRef(state.draft);
+  const lastSavedDraftRef = useRef(state.draft);
   const draftClosedRef = useRef(false);
   const savingRef = useRef<Promise<boolean> | null>(null);
   const finishingRef = useRef(false);
@@ -444,7 +447,10 @@ export const useComposeDialogController = ({
       mailboxId === "" ||
       !persistDrafts ||
       !shouldPersistComposeDraft({
-        currentDraft: activeDraftRef.current,
+        currentDraft: {
+          ...lastSavedDraftRef.current,
+          saveStatus: activeDraftRef.current.saveStatus,
+        },
         nextDraft: draft,
         values,
       })
@@ -475,6 +481,7 @@ export const useComposeDialogController = ({
       });
       return false;
     }
+    lastSavedDraftRef.current = saved;
     setDraft({
       ...saved,
       attachments: activeDraftRef.current.attachments,
@@ -521,6 +528,7 @@ export const useComposeDialogController = ({
   };
 
   useDraftAutosave({
+    attachments: state.draft.attachments,
     enabled: persistDrafts && !autosavePaused && state.open,
     mailboxId,
     save: async () => {
@@ -547,7 +555,10 @@ export const useComposeDialogController = ({
         hasComposeDraftContent(draft) &&
         (!composeDraftFormValuesSchema.safeParse(values).success ||
           shouldPersistComposeDraft({
-            currentDraft: activeDraftRef.current,
+            currentDraft: {
+              ...lastSavedDraftRef.current,
+              saveStatus: activeDraftRef.current.saveStatus,
+            },
             nextDraft: draft,
             values,
           }))
@@ -726,13 +737,56 @@ export const useComposeDialogController = ({
     }
   };
 
+  const addAttachmentFiles = (files: File[]) => {
+    if (
+      files.length === 0 ||
+      finishingRef.current ||
+      activeDraftRef.current.saveStatus === "sending"
+    ) {
+      return;
+    }
+    try {
+      const draft = addComposeAttachmentFiles(activeDraftRef.current, files);
+      handleUserDraftChange();
+      setDraft({ ...draft, saveStatus: activeDraftRef.current.saveStatus });
+      recovery.checkpoint();
+    } catch (error) {
+      toastError(error, {
+        boundary: "compose-attachments",
+        fallback:
+          "Could not attach those files. Keep attachments under 24 MB and try again.",
+      });
+    }
+  };
+
+  const removeAttachment = (id: string) => {
+    if (
+      finishingRef.current ||
+      activeDraftRef.current.saveStatus === "sending"
+    ) {
+      return;
+    }
+    handleUserDraftChange();
+    removeComposeRuntimeFile(id);
+    setDraft((current) => ({
+      ...current,
+      attachments: current.attachments.filter(
+        (attachment) => attachment.id !== id
+      ),
+      updatedAt: Date.now(),
+    }));
+    recovery.checkpoint();
+  };
+
   return {
+    addAttachmentFiles,
     addInlineImageFiles,
     closeComposeDialog,
     discardActiveDraft,
     form,
     handleDialogOpenChange,
     handleUserDraftChange,
+    removeAttachment,
     setActiveDraftError,
     state,
     toggleRecipientVisibility,
