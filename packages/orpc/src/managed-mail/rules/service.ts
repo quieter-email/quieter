@@ -275,31 +275,33 @@ export const reorderManagedRules = async (input: {
     requiredRoles: ["manager"],
     userId: input.userId,
   });
-  const rules =
-    input.ruleIds.length > 0
-      ? await db
-          .select({ id: managedMailRule.id })
-          .from(managedMailRule)
-          .where(
-            and(
-              eq(managedMailRule.mailboxId, input.mailboxId),
-              inArray(managedMailRule.id, input.ruleIds)
+  await db.transaction(async (tx) => {
+    const rules =
+      input.ruleIds.length > 0
+        ? await tx
+            .select({ id: managedMailRule.id })
+            .from(managedMailRule)
+            .where(
+              and(
+                eq(managedMailRule.mailboxId, input.mailboxId),
+                inArray(managedMailRule.id, input.ruleIds)
+              )
             )
-          )
-      : [];
-  if (rules.length !== new Set(input.ruleIds).size) {
-    throw new ORPCError("BAD_REQUEST", {
-      message: "One or more rules are unavailable.",
-    });
-  }
-  await Promise.all(
-    input.ruleIds.map((ruleId, priority) =>
-      db
+            .orderBy(asc(managedMailRule.id))
+            .for("update")
+        : [];
+    if (rules.length !== new Set(input.ruleIds).size) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "One or more rules are unavailable.",
+      });
+    }
+    for (const [priority, ruleId] of input.ruleIds.entries()) {
+      await tx
         .update(managedMailRule)
         .set({ priority, updatedAt: new Date(), updatedByUserId: input.userId })
-        .where(eq(managedMailRule.id, ruleId))
-    )
-  );
+        .where(eq(managedMailRule.id, ruleId));
+    }
+  });
   return { ruleIds: input.ruleIds };
 };
 

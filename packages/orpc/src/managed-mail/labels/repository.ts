@@ -47,14 +47,23 @@ export const updateManagedMessageLabelAssignments = async (input: {
   ruleId?: string;
   userId?: string;
   database?: DatabaseExecutor;
-}) => {
+}): Promise<{ id: string; labelIds: string[] }[]> => {
+  if (input.database === undefined) {
+    return await db.transaction(
+      async (transaction) =>
+        await updateManagedMessageLabelAssignments({
+          ...input,
+          database: transaction,
+        })
+    );
+  }
   const addLabelIds =
     input.addLabelIds === undefined ? [] : [...new Set(input.addLabelIds)];
   const removeLabelIds =
     input.removeLabelIds === undefined
       ? []
       : [...new Set(input.removeLabelIds)];
-  const database = input.database ?? db;
+  const { database } = input;
   await assertManagedLabelsBelongToMailbox(
     input.mailboxId,
     [...addLabelIds, ...removeLabelIds],

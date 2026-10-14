@@ -30,7 +30,24 @@ import {
   buildOpenTrackingToken,
 } from "@quieter/mail/tracking";
 import { reportError } from "@quieter/observability";
-import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
+import {
+  and,
+  count,
+  countDistinct,
+  desc,
+  eq,
+  exists,
+  gt,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  lte,
+  or,
+  sql,
+} from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
 import { OrganizationMailSendError } from "./organization-mail-policy";
 
@@ -76,6 +93,11 @@ const DELIVERY_STATUS_RANK: Record<OrganizationMailDeliveryStatus, number> = {
   rejected: 4,
   sent: 1,
 };
+const excludedDeliveryRecipient = alias(
+  organizationMailDeliveryRecipient,
+  "excluded"
+);
+const excludedMailOpenEvent = alias(organizationMailOpenEvent, "excluded");
 
 export const isTerminalDeliveryStatus = (
   status: OrganizationMailDeliveryStatus
@@ -116,8 +138,8 @@ const deliveryStatusRankSql = (column: unknown) => sql`case ${column}
   else -1 end`;
 
 const mergeDeliveryStatusSql = (statusColumn: unknown) => sql`case
-  when ${deliveryStatusRankSql(statusColumn)} > ${deliveryStatusRankSql(sql`excluded."status"`)} then ${statusColumn}
-  else excluded."status"
+  when ${gt(deliveryStatusRankSql(statusColumn), deliveryStatusRankSql(excludedDeliveryRecipient.status))} then ${statusColumn}
+  else ${excludedDeliveryRecipient.status}
 end`;
 
 const resolveOrganizationId = async (providerMessageId: string) => {
@@ -306,8 +328,8 @@ const applySuppressionChange = async (
     .update(organizationMailRecipientSuppression)
     .set({
       reason: sql`case
-        when ${organizationMailRecipientSuppression.revokedAt} is not null then ${input.suppressionReason}
-        when ${suppressionSeveritySql(organizationMailRecipientSuppression.reason)} >= ${suppressionSeveritySql(input.suppressionReason)}
+        when ${isNotNull(organizationMailRecipientSuppression.revokedAt)} then ${input.suppressionReason}
+        when ${gte(suppressionSeveritySql(organizationMailRecipientSuppression.reason), suppressionSeveritySql(input.suppressionReason))}
           then ${organizationMailRecipientSuppression.reason}
         else ${input.suppressionReason}
       end`,
@@ -325,12 +347,21 @@ const applySuppressionChange = async (
         ...(input.occurredAt === undefined
           ? []
           : [
-              sql`(${organizationMailRecipientSuppression.revokedAt} is null or ${organizationMailRecipientSuppression.revokedAt} < ${input.occurredAt.toISOString()}::timestamp)`,
+              or(
+                isNull(organizationMailRecipientSuppression.revokedAt),
+                lt(
+                  organizationMailRecipientSuppression.revokedAt,
+                  input.occurredAt
+                )
+              ),
             ]),
-        sql`(
-          ${organizationMailRecipientSuppression.revokedAt} is not null
-          or ${suppressionSeveritySql(organizationMailRecipientSuppression.reason)} < ${suppressionSeveritySql(input.suppressionReason)}
-        )`
+        or(
+          isNotNull(organizationMailRecipientSuppression.revokedAt),
+          lt(
+            suppressionSeveritySql(organizationMailRecipientSuppression.reason),
+            suppressionSeveritySql(input.suppressionReason)
+          )
+        )
       )
     )
     .returning({
@@ -384,7 +415,13 @@ export const recordOrganizationMailFeedback = async (
               "unknown",
               "accepted",
             ]),
-            sql`(${organizationMailSendIdempotency.response} is null or ${organizationMailSendIdempotency.response}->>'messageId' = ${feedback.providerMessageId})`
+            or(
+              isNull(organizationMailSendIdempotency.response),
+              eq(
+                sql<string>`${organizationMailSendIdempotency.response}->>'messageId'`,
+                feedback.providerMessageId
+              )
+            )
           )
         )
         .returning({
@@ -469,7 +506,7 @@ export const recordOrganizationMailFeedback = async (
           })
           .onConflictDoUpdate({
             set: {
-              lastEventAt: sql`greatest(${organizationMailDeliveryRecipient.lastEventAt}, excluded."lastEventAt")`,
+              lastEventAt: sql`greatest(${organizationMailDeliveryRecipient.lastEventAt}, ${excludedDeliveryRecipient.lastEventAt})`,
               status: mergeDeliveryStatusSql(
                 organizationMailDeliveryRecipient.status
               ),
@@ -775,7 +812,7 @@ export const reconcileOrganizationMailDeliveryRecipients = async (input: {
           })
           .onConflictDoUpdate({
             set: {
-              lastEventAt: sql`greatest(${organizationMailDeliveryRecipient.lastEventAt}, excluded."lastEventAt")`,
+              lastEventAt: sql`greatest(${organizationMailDeliveryRecipient.lastEventAt}, ${excludedDeliveryRecipient.lastEventAt})`,
               status: mergeDeliveryStatusSql(
                 organizationMailDeliveryRecipient.status
               ),
@@ -1024,8 +1061,8 @@ export const recordOrganizationMailOpenEvent = async (input: {
       })
       .onConflictDoUpdate({
         set: {
-          firstOpenedAt: sql`least(${organizationMailOpenEvent.firstOpenedAt}, excluded."firstOpenedAt")`,
-          lastOpenedAt: sql`greatest(${organizationMailOpenEvent.lastOpenedAt}, excluded."lastOpenedAt")`,
+          firstOpenedAt: sql`least(${organizationMailOpenEvent.firstOpenedAt}, ${excludedMailOpenEvent.firstOpenedAt})`,
+          lastOpenedAt: sql`greatest(${organizationMailOpenEvent.lastOpenedAt}, ${excludedMailOpenEvent.lastOpenedAt})`,
           reportedOpenCount: sql`least(${organizationMailOpenEvent.reportedOpenCount} + 1, ${MAX_REPORTED_OPENS})`,
         },
         target: [
@@ -1111,19 +1148,30 @@ export const getOrganizationMailDeliveryMetrics = async (input: {
   }
   if (input.mailboxId !== undefined && input.mailboxId !== "") {
     conditions.push(
-      sql`exists (
-        select 1 from ${managedMailMessage}
-        where ${managedMailMessage.providerMessageId} = ${organizationMailDeliveryEvent.providerMessageId}
-          and ${managedMailMessage.mailboxId} = ${input.mailboxId}
-          and ${managedMailMessage.direction} = 'outbound'
-      )`
+      exists(
+        db
+          .select({ id: managedMailMessage.id })
+          .from(managedMailMessage)
+          .where(
+            and(
+              eq(
+                managedMailMessage.providerMessageId,
+                organizationMailDeliveryEvent.providerMessageId
+              ),
+              eq(managedMailMessage.mailboxId, input.mailboxId),
+              eq(managedMailMessage.direction, "outbound")
+            )
+          )
+      )
     );
   }
 
   const [eventRows, [openRow]] = await Promise.all([
     db
       .select({
-        count: sql<number>`count(distinct (${organizationMailDeliveryEvent.providerMessageId}, ${organizationMailDeliveryEvent.recipient}))::int`,
+        count: countDistinct(
+          sql`(${organizationMailDeliveryEvent.providerMessageId}, ${organizationMailDeliveryEvent.recipient})`
+        ),
         eventType: organizationMailDeliveryEvent.eventType,
       })
       .from(organizationMailDeliveryEvent)
@@ -1131,7 +1179,7 @@ export const getOrganizationMailDeliveryMetrics = async (input: {
       .groupBy(organizationMailDeliveryEvent.eventType),
     db
       .select({
-        openedMessages: sql<number>`count(*)::int`,
+        openedMessages: count(),
       })
       .from(organizationMailOpenEvent)
       .where(
@@ -1140,12 +1188,21 @@ export const getOrganizationMailDeliveryMetrics = async (input: {
           ...(input.mailboxId === undefined
             ? []
             : [
-                sql`exists (
-            select 1 from ${managedMailMessage}
-            where ${managedMailMessage.providerMessageId} = ${organizationMailOpenEvent.providerMessageId}
-              and ${managedMailMessage.mailboxId} = ${input.mailboxId}
-              and ${managedMailMessage.direction} = 'outbound'
-          )`,
+                exists(
+                  db
+                    .select({ id: managedMailMessage.id })
+                    .from(managedMailMessage)
+                    .where(
+                      and(
+                        eq(
+                          managedMailMessage.providerMessageId,
+                          organizationMailOpenEvent.providerMessageId
+                        ),
+                        eq(managedMailMessage.mailboxId, input.mailboxId),
+                        eq(managedMailMessage.direction, "outbound")
+                      )
+                    )
+                ),
               ]),
           ...(input.from === undefined
             ? []

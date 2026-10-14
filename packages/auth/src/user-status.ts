@@ -1,18 +1,21 @@
 import { db } from "@quieter/database/client";
 import { tables } from "@quieter/database/schema";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, exists } from "drizzle-orm";
 
 export const getAuthUserStatus = async (email: string) => {
   const [result] = await db
     .select({
-      email: tables.user.email,
-      exists: sql<boolean>`true`,
-      hasGoogleAccount: sql<boolean>`exists (
-        select 1
-        from "account"
-        where "account"."userId" = ${tables.user.id}
-          and "account"."providerId" = 'google'
-      )`,
+      hasGoogleAccount: exists(
+        db
+          .select({ id: tables.account.id })
+          .from(tables.account)
+          .where(
+            and(
+              eq(tables.account.userId, tables.user.id),
+              eq(tables.account.providerId, "google")
+            )
+          )
+      ).mapWith(Boolean),
     })
     .from(tables.user)
     .where(eq(tables.user.email, email.trim().toLowerCase()))
@@ -20,7 +23,7 @@ export const getAuthUserStatus = async (email: string) => {
 
   return {
     email: email.trim().toLowerCase(),
-    exists: result?.exists ?? false,
+    exists: result !== undefined,
     hasGoogleAccount: result?.hasGoogleAccount ?? false,
   };
 };

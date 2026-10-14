@@ -27,6 +27,8 @@ import { MAILBOX_LABELS } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
 import {
   and,
+  asc,
+  desc,
   eq,
   exists,
   gt,
@@ -565,7 +567,10 @@ export const retryPendingAutomationMessages = async ({
               )
             )
           )
-          .orderBy(sql`${gmailAutoLabelEvent.nextAttemptAt} asc nulls first`)
+          .orderBy(
+            desc(isNull(gmailAutoLabelEvent.nextAttemptAt)),
+            asc(gmailAutoLabelEvent.nextAttemptAt)
+          )
           .limit(20)
       : [],
     listPendingMailboxVerificationCodeMessageIds(mailboxId, 20),
@@ -1044,7 +1049,10 @@ export const listGmailPubSubMaintenanceJobs = async (limit = 500) =>
         )
       )
     )
-    .orderBy(sql`coalesce(${gmailWatchState.lastReconciledAt}, '-infinity')`)
+    .orderBy(
+      desc(isNull(gmailWatchState.lastReconciledAt)),
+      asc(gmailWatchState.lastReconciledAt)
+    )
     .limit(limit);
 
 export const maintainGmailPubSubMailbox = async (input: {

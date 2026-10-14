@@ -183,40 +183,58 @@ const toBillingAccount = (
 };
 
 const getOrganizationBillingOwnerId = async (organizationId: string) => {
-  const [record] = await db
+  const [current] = await db
     .select({ billingOwnerUserId: organization.billingOwnerUserId })
     .from(organization)
     .where(eq(organization.id, organizationId))
     .limit(1);
-
-  if ((record?.billingOwnerUserId ?? "") !== "") {
-    return record.billingOwnerUserId;
-  }
-
-  const [owner] = await db
-    .select({ userId: member.userId })
-    .from(member)
-    .where(
-      and(eq(member.organizationId, organizationId), eq(member.role, "owner"))
-    )
-    .orderBy(asc(member.createdAt))
-    .limit(1);
-  if (owner === undefined) {
+  if (current === undefined) {
     return null;
   }
+  if ((current.billingOwnerUserId ?? "") !== "") {
+    return current.billingOwnerUserId;
+  }
 
-  const [assigned] = await db
-    .update(organization)
-    .set({ billingOwnerUserId: owner.userId, updatedAt: new Date() })
-    .where(
-      and(
-        eq(organization.id, organizationId),
-        isNull(organization.billingOwnerUserId)
+  return await db.transaction(async (transaction) => {
+    const [record] = await transaction
+      .select({ billingOwnerUserId: organization.billingOwnerUserId })
+      .from(organization)
+      .where(eq(organization.id, organizationId))
+      .limit(1)
+      .for("update");
+
+    if (record === undefined) {
+      return null;
+    }
+    if ((record.billingOwnerUserId ?? "") !== "") {
+      return record.billingOwnerUserId;
+    }
+
+    const [owner] = await transaction
+      .select({ userId: member.userId })
+      .from(member)
+      .where(
+        and(eq(member.organizationId, organizationId), eq(member.role, "owner"))
       )
-    )
-    .returning({ billingOwnerUserId: organization.billingOwnerUserId });
+      .orderBy(asc(member.createdAt))
+      .limit(1);
+    if (owner === undefined) {
+      return null;
+    }
 
-  return assigned?.billingOwnerUserId ?? owner.userId;
+    const [assigned] = await transaction
+      .update(organization)
+      .set({ billingOwnerUserId: owner.userId, updatedAt: new Date() })
+      .where(
+        and(
+          eq(organization.id, organizationId),
+          isNull(organization.billingOwnerUserId)
+        )
+      )
+      .returning({ billingOwnerUserId: organization.billingOwnerUserId });
+
+    return assigned?.billingOwnerUserId ?? owner.userId;
+  });
 };
 
 const recordReconciliationFailure = async ({

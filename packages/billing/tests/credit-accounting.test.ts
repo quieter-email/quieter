@@ -456,10 +456,14 @@ describe("credit accounting with PostgreSQL numeric aggregates", () => {
     });
 
     for (const [query, params] of mocks.query.mock.calls) {
-      expect(query).toContain('"organizationId" = $1');
-      expect(query).toContain('"createdAt" >= $2');
-      expect(query).toContain('"createdAt" < $3');
-      expect(params.slice(0, 3)).toStrictEqual([
+      const filterParameters =
+        /"organizationId" = \$(?<organization>\d+).*"createdAt" >= \$(?<start>\d+).*"createdAt" < \$(?<end>\d+)/u.exec(
+          query
+        );
+      expect(filterParameters).not.toBeNull();
+      expect(
+        filterParameters?.slice(1).map((index) => params[Number(index) - 1])
+      ).toStrictEqual([
         "team-a",
         "2026-10-01T00:00:00.000Z",
         "2026-11-01T00:00:00.000Z",

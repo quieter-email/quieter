@@ -1,6 +1,6 @@
 import { db } from "@quieter/database/client";
 import { rateLimitBucket } from "@quieter/database/schema";
-import { inArray, lt, sql } from "drizzle-orm";
+import { inArray, lt, lte, sql } from "drizzle-orm";
 
 export const cleanupRateLimitBuckets = async () => {
   const removed = await db
@@ -30,6 +30,7 @@ export const consumeRateLimit = async (input: {
   const expiresAt = new Date(now.getTime() + input.windowMs);
   const nowValue = now.toISOString();
   const expiresAtValue = expiresAt.toISOString();
+  const isExpired = lte(rateLimitBucket.expiresAt, now);
   const [bucket] = await db
     .insert(rateLimitBucket)
     .values({
@@ -40,9 +41,9 @@ export const consumeRateLimit = async (input: {
     })
     .onConflictDoUpdate({
       set: {
-        count: sql`case when ${rateLimitBucket.expiresAt} <= ${nowValue} then 1 else ${rateLimitBucket.count} + 1 end`,
-        expiresAt: sql`case when ${rateLimitBucket.expiresAt} <= ${nowValue} then ${expiresAtValue} else ${rateLimitBucket.expiresAt} end`,
-        windowStart: sql`case when ${rateLimitBucket.expiresAt} <= ${nowValue} then ${nowValue} else ${rateLimitBucket.windowStart} end`,
+        count: sql`case when ${isExpired} then 1 else ${rateLimitBucket.count} + 1 end`,
+        expiresAt: sql`case when ${isExpired} then ${expiresAtValue} else ${rateLimitBucket.expiresAt} end`,
+        windowStart: sql`case when ${isExpired} then ${nowValue} else ${rateLimitBucket.windowStart} end`,
       },
       target: rateLimitBucket.key,
     })

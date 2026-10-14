@@ -499,7 +499,7 @@ export const applyManagedRulesToMessage = async (input: {
           .where(
             and(
               eq(managedMailRuleRun.id, run.id),
-              sql`${managedMailRuleRun.actionResults} = ${JSON.stringify(forward.actionResults)}::jsonb`
+              eq(managedMailRuleRun.actionResults, forward.actionResults)
             )
           );
       }

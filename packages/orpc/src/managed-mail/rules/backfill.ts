@@ -7,7 +7,18 @@ import {
   managedMailRuleBackfill,
 } from "@quieter/database/schema";
 import { reportError } from "@quieter/observability";
-import { and, asc, eq, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lt,
+  lte,
+  or,
+  sql,
+} from "drizzle-orm";
 
 import { publishMailUpdate } from "../../mail-updates";
 import { applyManagedRulesToMessage } from "./evaluator";
@@ -107,7 +118,7 @@ export const processManagedRuleBackfills = async () => {
               eq(managedMailMessage.mailboxId, current.mailboxId),
               eq(managedMailMessage.direction, "inbound"),
               current.cursor
-                ? sql`${managedMailMessage.id} > ${current.cursor}`
+                ? gt(managedMailMessage.id, current.cursor)
                 : undefined,
               lte(managedMailMessage.createdAt, current.createdAt)
             )

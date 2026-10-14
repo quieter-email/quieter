@@ -4,7 +4,8 @@ import { billingSubscription } from "@quieter/database/schema";
 import type { BillingSubscriptionStatus } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { reportError } from "@quieter/observability";
-import { gte, or, sql } from "drizzle-orm";
+import { gte, isNull, or } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 
 import { BILLING_PRODUCTS, billingProductIdSchema } from "./plans.ts";
@@ -14,6 +15,7 @@ export const BILLING_METADATA_USER_ID = "quieterUserId";
 export const BILLING_METADATA_ORGANIZATION_ID = "quieterOrganizationId";
 const BILLING_METADATA_LEGACY_PLAN = "quieterPlan";
 const BILLING_PROVIDER = "polar" as const;
+const excludedBillingSubscription = alias(billingSubscription, "excluded");
 export type BillingPolarSubscription = Pick<
   models.Subscription,
   | "cancel_at_period_end"
@@ -201,9 +203,9 @@ export const syncBillingSubscription = async (
     .onConflictDoUpdate({
       set: values,
       setWhere: or(
-        sql`${billingSubscription.providerModifiedAt} IS NULL`,
+        isNull(billingSubscription.providerModifiedAt),
         gte(
-          sql`excluded."providerModifiedAt"`,
+          excludedBillingSubscription.providerModifiedAt,
           billingSubscription.providerModifiedAt
         )
       ),

@@ -249,6 +249,8 @@ sequenceDiagram
 
 `infra/mail-maintenance.ts` provisions `MailMaintenance` every minute. Its handler, `packages/cloudflare/src/mail-maintenance-worker.ts`, runs send recovery, storage cleanup, rate-limit cleanup, and managed rule backfills within a request-scoped database client. The local `vp run dev:trigger mail-recovery` command invokes the same maintenance operations. Managed inbox rules remain supported; custom actions are no longer created or executed by the new application.
 
+Organization mailbox cleanup records raw-object cleanup jobs in the same transaction that moves Gmail mailboxes and deletes managed mailboxes. Object deletion runs after commit; failures are reported and retained for maintenance retries. Cleanup workers atomically claim due jobs and preserve objects referenced by managed messages, API messages, or send reservations, including legacy S3 message references.
+
 ### 6. Chat with tools
 
 Browser `useChat` streams one turn to `POST /api/chat` on the Web Worker. The worker authorizes the mailbox-scoped thread, rebuilds the transcript from PostgreSQL, runs the AI SDK against OpenRouter with Gmail/memory/Linear/calendar tools, streams the UI protocol back, and persists the assistant row on completion. State-changing tools require the AI SDK approval flow; `compose_email` resolves entirely in the browser.

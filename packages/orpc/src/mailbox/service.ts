@@ -1224,27 +1224,34 @@ export const disconnectGmailMailbox = async (input: {
   mailboxId: string;
   userId: string;
 }) => {
-  const [deletedMailbox] = await db
-    .delete(mailbox)
-    .where(
-      and(
-        eq(mailbox.id, input.mailboxId),
-        eq(mailbox.ownerUserId, input.userId),
-        eq(mailbox.provider, MAILBOX_PROVIDER_GMAIL)
+  await db.transaction(async (tx) => {
+    const [deletedMailbox] = await tx
+      .delete(mailbox)
+      .where(
+        and(
+          eq(mailbox.id, input.mailboxId),
+          eq(mailbox.ownerUserId, input.userId),
+          eq(mailbox.provider, MAILBOX_PROVIDER_GMAIL)
+        )
       )
-    )
-    .returning({ id: mailbox.id });
+      .returning({ id: mailbox.id });
 
-  if (deletedMailbox === undefined) {
-    throw new ORPCError("NOT_FOUND", { message: "Gmail mailbox not found." });
-  }
+    if (deletedMailbox === undefined) {
+      throw new ORPCError("NOT_FOUND", {
+        message: "Gmail mailbox not found.",
+      });
+    }
 
-  await db
-    .update(user)
-    .set({ defaultMailboxId: null, updatedAt: new Date() })
-    .where(
-      and(eq(user.id, input.userId), eq(user.defaultMailboxId, input.mailboxId))
-    );
+    await tx
+      .update(user)
+      .set({ defaultMailboxId: null, updatedAt: new Date() })
+      .where(
+        and(
+          eq(user.id, input.userId),
+          eq(user.defaultMailboxId, input.mailboxId)
+        )
+      );
+  });
   return { disconnected: true, mailboxId: input.mailboxId };
 };
 
@@ -1332,24 +1339,54 @@ export const updateMailboxSignature = async (input: {
     });
   }
 
-  const [updated] = await db
-    .update(mailbox)
-    .set({
-      signatureHtml: input.signatureHtml ? input.signatureHtml.trim() : null,
-      signatureText: input.signatureText ? input.signatureText.trim() : null,
-      updatedAt: new Date(),
-    })
-    .where(eq(mailbox.id, input.mailboxId))
-    .returning({
-      mailboxId: mailbox.id,
-      signatureHtml: mailbox.signatureHtml,
-      signatureText: mailbox.signatureText,
-    });
-  if (updated === undefined) {
-    throw new ORPCError("NOT_FOUND", {
-      data: { resource: "mailbox" },
-      message: "Mailbox not found.",
-    });
-  }
-  return updated;
+  return await db.transaction(async (tx) => {
+    const [lockedMailbox] = await tx
+      .select({ ownerUserId: mailbox.ownerUserId, provider: mailbox.provider })
+      .from(mailbox)
+      .where(eq(mailbox.id, input.mailboxId))
+      .limit(1)
+      .for("update");
+    if (lockedMailbox === undefined) {
+      throw new ORPCError("NOT_FOUND", {
+        data: { resource: "mailbox" },
+        message: "Mailbox not found.",
+      });
+    }
+    if (lockedMailbox.provider === MAILBOX_PROVIDER_GMAIL) {
+      if (lockedMailbox.ownerUserId !== input.userId) {
+        throw new ORPCError("NOT_FOUND", {
+          message: "Gmail mailbox not found.",
+        });
+      }
+    } else {
+      await getAuthorizedManagedMailbox(
+        {
+          mailboxId: input.mailboxId,
+          requiredRoles: ["manager"],
+          userId: input.userId,
+        },
+        tx
+      );
+    }
+    const [updated] = await tx
+      .update(mailbox)
+      .set({
+        signatureHtml: input.signatureHtml ? input.signatureHtml.trim() : null,
+        signatureText: input.signatureText ? input.signatureText.trim() : null,
+        updatedAt: new Date(),
+      })
+      .where(eq(mailbox.id, input.mailboxId))
+      .returning({
+        mailboxId: mailbox.id,
+        signatureHtml: mailbox.signatureHtml,
+        signatureText: mailbox.signatureText,
+      });
+    if (updated === undefined) {
+      throw new ORPCError("NOT_FOUND", {
+        data: { resource: "mailbox" },
+        message: "Mailbox not found.",
+      });
+    }
+    return updated;
+  });
 };

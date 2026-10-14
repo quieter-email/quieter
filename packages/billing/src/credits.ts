@@ -16,8 +16,11 @@ import {
   isNull,
   lt,
   lte,
+  min,
+  notExists,
   or,
   sql,
+  sum,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
@@ -78,7 +81,10 @@ export const createPolarCreditUsageEvent = (input: {
   timestamp: input.createdAt,
 });
 
-export const getBillingUsagePeriodEnd = (account: BillingAccount) => {
+export const getBillingUsagePeriodEnd = (
+  account: BillingAccount,
+  client: Pick<typeof db, "select"> = db
+) => {
   if (
     account.currentPeriodEnd > new Date() ||
     account.providerSubscriptionId === undefined
@@ -88,31 +94,61 @@ export const getBillingUsagePeriodEnd = (account: BillingAccount) => {
 
   // Continue counting the live period, but retain the original bound once a
   // later period exists because overwritten subscriptions lose period history.
-  return sql`coalesce((
-    select least(case
-      when ${billingSubscription.currentPeriodStart} > ${account.currentPeriodStart.toISOString()}::timestamp
+  const laterPeriod = client
+    .select({
+      start: min(
+        sql`least(${laterBillingSubscription.currentPeriodStart}, ${account.currentPeriodEnd.toISOString()}::timestamp)`
+      ),
+    })
+    .from(laterBillingSubscription)
+    .where(
+      and(
+        eq(laterBillingSubscription.organizationId, account.organizationId),
+        eq(
+          sql<string>`${laterBillingSubscription.metadata}->>'quieterOrganizationId'`,
+          account.organizationId
+        ),
+        inArray(laterBillingSubscription.plan, ["managed", "pro"]),
+        inArray(laterBillingSubscription.status, [
+          "active",
+          "trialing",
+          "past_due",
+          "canceled",
+        ]),
+        gt(
+          laterBillingSubscription.currentPeriodStart,
+          account.currentPeriodStart
+        )
+      )
+    );
+  const currentPeriod = client
+    .select({
+      end: sql`least(case
+      when ${gt(billingSubscription.currentPeriodStart, account.currentPeriodStart)}
         then least(${billingSubscription.currentPeriodStart}, ${account.currentPeriodEnd.toISOString()}::timestamp)
-      when ${billingSubscription.currentPeriodEnd} > now()
+      when ${gt(billingSubscription.currentPeriodEnd, sql`now()`)}
         then ${billingSubscription.currentPeriodEnd}
-      when ${billingSubscription.status} = 'active'
-        and not ${billingSubscription.cancelAtPeriodEnd}
+      when ${and(eq(billingSubscription.status, "active"), eq(billingSubscription.cancelAtPeriodEnd, false))}
         then 'infinity'::timestamp
       else ${account.currentPeriodEnd.toISOString()}::timestamp
-    end, coalesce((
-      select min(least(${laterBillingSubscription.currentPeriodStart}, ${account.currentPeriodEnd.toISOString()}::timestamp))
-      from ${billingSubscription} as ${laterBillingSubscription}
-      where ${laterBillingSubscription.organizationId} = ${account.organizationId}
-        and ${laterBillingSubscription.metadata}->>'quieterOrganizationId' = ${account.organizationId}
-        and ${laterBillingSubscription.plan} in ('managed', 'pro')
-        and ${laterBillingSubscription.status} in ('active', 'trialing', 'past_due', 'canceled')
-        and ${laterBillingSubscription.currentPeriodStart} > ${account.currentPeriodStart.toISOString()}::timestamp
-    ), 'infinity'::timestamp))
-    from ${billingSubscription}
-    where ${billingSubscription.providerSubscriptionId} = ${account.providerSubscriptionId}
-      and ${billingSubscription.organizationId} = ${account.organizationId}
-      and ${billingSubscription.metadata}->>'quieterOrganizationId' = ${account.organizationId}
-    limit 1
-  ), ${account.currentPeriodEnd.toISOString()}::timestamp)`;
+    end, coalesce((${laterPeriod}), 'infinity'::timestamp))`,
+    })
+    .from(billingSubscription)
+    .where(
+      and(
+        eq(
+          billingSubscription.providerSubscriptionId,
+          account.providerSubscriptionId
+        ),
+        eq(billingSubscription.organizationId, account.organizationId),
+        eq(
+          sql<string>`${billingSubscription.metadata}->>'quieterOrganizationId'`,
+          account.organizationId
+        )
+      )
+    )
+    .limit(1);
+  return sql`coalesce((${currentPeriod}), ${account.currentPeriodEnd.toISOString()}::timestamp)`;
 };
 
 export const getBillingCreditUsage = async (
@@ -122,33 +158,30 @@ export const getBillingCreditUsage = async (
   const periodFilter = and(
     eq(billingCreditUsageEvent.organizationId, account.organizationId),
     gte(billingCreditUsageEvent.createdAt, account.currentPeriodStart),
-    lt(billingCreditUsageEvent.createdAt, getBillingUsagePeriodEnd(account))
+    lt(
+      billingCreditUsageEvent.createdAt,
+      getBillingUsagePeriodEnd(account, client)
+    )
   );
   const usageKind = sql<BillingUsageKind>`case
-    when ${billingCreditUsageEvent.category} = 'mail'
-      and ${billingCreditUsageEvent.metadata}->>'direction' = 'inbound' then 'inboundMail'
-    when ${billingCreditUsageEvent.category} = 'mail'
-      and ${billingCreditUsageEvent.metadata}->>'direction' = 'outbound' then 'outboundMail'
-    when ${billingCreditUsageEvent.category} = 'ai'
-      and ${billingCreditUsageEvent.metadata}->>'usageKind' = 'autoLabel' then 'autoLabel'
-    when ${billingCreditUsageEvent.category} = 'ai'
-      and ${billingCreditUsageEvent.metadata}->>'usageKind' = 'aiMemory' then 'aiMemory'
-    when ${billingCreditUsageEvent.category} = 'ai'
-      and ${billingCreditUsageEvent.metadata}->>'usageKind' = 'usefulDetails' then 'usefulDetails'
-    when ${billingCreditUsageEvent.category} = 'ai'
-      and ${billingCreditUsageEvent.metadata}->>'usageKind' = 'verificationCode' then 'verificationCode'
-    when ${billingCreditUsageEvent.category} = 'ai' then 'aiChat'
+    when ${and(eq(billingCreditUsageEvent.category, "mail"), eq(sql`${billingCreditUsageEvent.metadata}->>'direction'`, "inbound"))} then 'inboundMail'
+    when ${and(eq(billingCreditUsageEvent.category, "mail"), eq(sql`${billingCreditUsageEvent.metadata}->>'direction'`, "outbound"))} then 'outboundMail'
+    when ${and(eq(billingCreditUsageEvent.category, "ai"), eq(sql`${billingCreditUsageEvent.metadata}->>'usageKind'`, "autoLabel"))} then 'autoLabel'
+    when ${and(eq(billingCreditUsageEvent.category, "ai"), eq(sql`${billingCreditUsageEvent.metadata}->>'usageKind'`, "aiMemory"))} then 'aiMemory'
+    when ${and(eq(billingCreditUsageEvent.category, "ai"), eq(sql`${billingCreditUsageEvent.metadata}->>'usageKind'`, "usefulDetails"))} then 'usefulDetails'
+    when ${and(eq(billingCreditUsageEvent.category, "ai"), eq(sql`${billingCreditUsageEvent.metadata}->>'usageKind'`, "verificationCode"))} then 'verificationCode'
+    when ${eq(billingCreditUsageEvent.category, "ai")} then 'aiChat'
     else 'other'
   end`;
   const [[usage], breakdown] = await Promise.all([
     client
       .select({
         billableCostMicroCents:
-          sql`coalesce(sum(${billingCreditUsageEvent.billableCostMicroCents}), 0)`.mapWith(
+          sql`coalesce(${sum(billingCreditUsageEvent.billableCostMicroCents)}, 0)`.mapWith(
             Number
           ),
         costMicroCents:
-          sql`coalesce(sum(${billingCreditUsageEvent.costMicroCents}), 0)`.mapWith(
+          sql`coalesce(${sum(billingCreditUsageEvent.costMicroCents)}, 0)`.mapWith(
             Number
           ),
       })
@@ -158,20 +191,20 @@ export const getBillingCreditUsage = async (
     client
       .select({
         costMicroCents:
-          sql`coalesce(sum(${billingCreditUsageEvent.costMicroCents}), 0)`.mapWith(
+          sql`coalesce(${sum(billingCreditUsageEvent.costMicroCents)}, 0)`.mapWith(
             Number
           ),
-        kind: usageKind,
+        kind: usageKind.as("usage_kind"),
       })
       .from(billingCreditUsageEvent)
       .where(periodFilter)
-      .groupBy(usageKind),
+      .groupBy((selection) => selection.kind),
   ]);
 
   return {
     billableCostMicroCents: usage?.billableCostMicroCents ?? 0,
     breakdown: breakdown.map((item) => ({
-      costMicroCents: item.costMicroCents,
+      costMicroCents: item.costMicroCents ?? 0,
       kind: item.kind,
     })),
     costMicroCents: usage?.costMicroCents ?? 0,
@@ -351,14 +384,34 @@ export const syncUnreportedBillingCreditUsage = async (
           and(
             eq(billingSubscription.status, "active"),
             eq(billingSubscription.cancelAtPeriodEnd, false),
-            sql`not exists (
-              select 1 from ${billingSubscription} as ${laterBillingSubscription}
-              where ${laterBillingSubscription.organizationId} = ${billingSubscription.organizationId}
-                and ${laterBillingSubscription.metadata}->>'quieterOrganizationId' = ${billingSubscription.organizationId}
-                and ${laterBillingSubscription.plan} in ('managed', 'pro')
-                and ${laterBillingSubscription.status} in ('active', 'trialing', 'past_due', 'canceled')
-                and ${laterBillingSubscription.currentPeriodStart} > ${billingSubscription.currentPeriodStart}
-            )`
+            notExists(
+              db
+                .select({ start: laterBillingSubscription.currentPeriodStart })
+                .from(laterBillingSubscription)
+                .where(
+                  and(
+                    eq(
+                      laterBillingSubscription.organizationId,
+                      billingSubscription.organizationId
+                    ),
+                    eq(
+                      sql<string>`${laterBillingSubscription.metadata}->>'quieterOrganizationId'`,
+                      billingSubscription.organizationId
+                    ),
+                    inArray(laterBillingSubscription.plan, ["managed", "pro"]),
+                    inArray(laterBillingSubscription.status, [
+                      "active",
+                      "trialing",
+                      "past_due",
+                      "canceled",
+                    ]),
+                    gt(
+                      laterBillingSubscription.currentPeriodStart,
+                      billingSubscription.currentPeriodStart
+                    )
+                  )
+                )
+            )
           )
         )
       )

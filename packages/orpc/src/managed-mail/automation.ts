@@ -316,25 +316,27 @@ const processManagedAutoLabelMessage = async (input: {
         ? await loadManagedAutomationMessage(input.mailboxId, input.messageId)
         : null;
 
-    if (labelIds.length > 0 && currentMessage) {
-      await updateManagedMessageLabelAssignments({
-        addLabelIds: labelIds,
-        mailboxId: input.mailboxId,
-        messageIds: [input.messageId],
-        source: "ai_auto_label",
-      });
-    }
-
     const now = new Date();
-    await db
-      .update(gmailAutoLabelEvent)
-      .set({
-        appliedAt: now,
-        lastError: null,
-        nextAttemptAt: null,
-        updatedAt: now,
-      })
-      .where(eq(gmailAutoLabelEvent.id, event.id));
+    await db.transaction(async (transaction) => {
+      if (labelIds.length > 0 && currentMessage) {
+        await updateManagedMessageLabelAssignments({
+          addLabelIds: labelIds,
+          database: transaction,
+          mailboxId: input.mailboxId,
+          messageIds: [input.messageId],
+          source: "ai_auto_label",
+        });
+      }
+      await transaction
+        .update(gmailAutoLabelEvent)
+        .set({
+          appliedAt: now,
+          lastError: null,
+          nextAttemptAt: null,
+          updatedAt: now,
+        })
+        .where(eq(gmailAutoLabelEvent.id, event.id));
+    });
     await reportAutoLabelUsage({ ...event, userId: input.userId });
   } catch (error) {
     const now = new Date();

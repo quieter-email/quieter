@@ -3,15 +3,19 @@ import { createHash } from "node:crypto";
 import { db } from "@quieter/database/client";
 import {
   invitation,
+  mailObjectCleanup,
   mailbox,
   managedMailMessage,
   member,
   organization,
+  organizationApiMailMessage,
+  organizationMailSendIdempotency,
   user,
 } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
+import { reportError } from "@quieter/observability";
 import { APIError } from "better-auth/api";
-import { and, eq, notInArray, or, sql } from "drizzle-orm";
+import { and, eq, isNull, ne, or } from "drizzle-orm";
 
 type AuthUser = typeof user.$inferSelect;
 
@@ -70,7 +74,7 @@ export const ensureUserOrganizationState = async (
         and(
           eq(mailbox.ownerUserId, currentUser.id),
           eq(mailbox.provider, "gmail"),
-          sql`${mailbox.organizationId} is null`
+          isNull(mailbox.organizationId)
         )
       );
 
@@ -131,7 +135,7 @@ export const ensureUserOrganizationState = async (
         and(
           eq(mailbox.ownerUserId, currentUser.id),
           eq(mailbox.provider, "gmail"),
-          sql`${mailbox.organizationId} is null`
+          isNull(mailbox.organizationId)
         )
       );
 
@@ -228,129 +232,167 @@ const deleteUntrackedManagedMailObject = async (input: {
 export const cleanupMailboxesForDeletedOrganization = async (
   organizationId: string
 ) => {
-  const managedMessages = await db
-    .select({
-      id: managedMailMessage.id,
-      rawObjectBucket: managedMailMessage.rawObjectBucket,
-      rawObjectKey: managedMailMessage.rawObjectKey,
-      rawObjectProvider: managedMailMessage.rawObjectProvider,
-      s3Bucket: managedMailMessage.s3Bucket,
-      s3Key: managedMailMessage.s3Key,
-    })
-    .from(managedMailMessage)
-    .innerJoin(mailbox, eq(mailbox.id, managedMailMessage.mailboxId))
-    .where(
-      and(
-        eq(mailbox.organizationId, organizationId),
-        eq(mailbox.provider, "managed")
-      )
-    );
-  const managedMessageIds = managedMessages.map((message) => message.id);
-  const objects = new Map<
-    string,
-    { bucket: string; key: string; provider: RawMailObjectProvider }
-  >();
-
-  for (const message of managedMessages) {
-    if (
-      message.rawObjectProvider !== null &&
-      message.rawObjectProvider !== undefined &&
-      message.rawObjectBucket !== null &&
-      message.rawObjectBucket !== undefined &&
-      message.rawObjectBucket !== "" &&
-      message.rawObjectKey !== null &&
-      message.rawObjectKey !== undefined &&
-      message.rawObjectKey !== ""
-    ) {
-      objects.set(
-        `${message.rawObjectProvider}\0${message.rawObjectBucket}\0${message.rawObjectKey}`,
-        {
-          bucket: message.rawObjectBucket,
-          key: message.rawObjectKey,
-          provider: message.rawObjectProvider,
-        }
-      );
-    } else if (
-      message.s3Bucket !== null &&
-      message.s3Bucket !== undefined &&
-      message.s3Bucket !== "" &&
-      message.s3Key !== null &&
-      message.s3Key !== undefined &&
-      message.s3Key !== ""
-    ) {
-      objects.set(`s3\0${message.s3Bucket}\0${message.s3Key}`, {
-        bucket: message.s3Bucket,
-        key: message.s3Key,
-        provider: "s3",
-      });
+  const objects = await db.transaction(async (transaction) => {
+    const [lockedOrganization] = await transaction
+      .select({ id: organization.id })
+      .from(organization)
+      .where(eq(organization.id, organizationId))
+      .for("update");
+    if (lockedOrganization === undefined) {
+      return [];
     }
-  }
 
-  await db
-    .delete(mailbox)
-    .where(
-      and(
-        eq(mailbox.organizationId, organizationId),
-        eq(mailbox.provider, "managed")
-      )
-    );
-  const gmailMailboxes = await db
-    .select({
-      id: mailbox.id,
-      ownerUserId: mailbox.ownerUserId,
-    })
-    .from(mailbox)
-    .where(
-      and(
-        eq(mailbox.organizationId, organizationId),
-        eq(mailbox.provider, "gmail")
-      )
-    );
+    const managedMessages = await transaction
+      .select({
+        rawObjectBucket: managedMailMessage.rawObjectBucket,
+        rawObjectKey: managedMailMessage.rawObjectKey,
+        rawObjectProvider: managedMailMessage.rawObjectProvider,
+        s3Bucket: managedMailMessage.s3Bucket,
+        s3Key: managedMailMessage.s3Key,
+      })
+      .from(managedMailMessage)
+      .innerJoin(mailbox, eq(mailbox.id, managedMailMessage.mailboxId))
+      .where(
+        and(
+          eq(mailbox.organizationId, organizationId),
+          eq(mailbox.provider, "managed")
+        )
+      );
+    const objectsByKey = new Map<
+      string,
+      { bucket: string; key: string; provider: RawMailObjectProvider }
+    >();
 
-  await Promise.all(
-    gmailMailboxes.map(async (gmailMailbox) => {
+    for (const message of managedMessages) {
+      if (
+        message.rawObjectProvider !== null &&
+        message.rawObjectProvider !== undefined &&
+        message.rawObjectBucket !== null &&
+        message.rawObjectBucket !== undefined &&
+        message.rawObjectBucket !== "" &&
+        message.rawObjectKey !== null &&
+        message.rawObjectKey !== undefined &&
+        message.rawObjectKey !== ""
+      ) {
+        objectsByKey.set(
+          `${message.rawObjectProvider}\0${message.rawObjectBucket}\0${message.rawObjectKey}`,
+          {
+            bucket: message.rawObjectBucket,
+            key: message.rawObjectKey,
+            provider: message.rawObjectProvider,
+          }
+        );
+      }
+      if (
+        message.s3Bucket !== null &&
+        message.s3Bucket !== undefined &&
+        message.s3Bucket !== "" &&
+        message.s3Key !== null &&
+        message.s3Key !== undefined &&
+        message.s3Key !== ""
+      ) {
+        objectsByKey.set(`s3\0${message.s3Bucket}\0${message.s3Key}`, {
+          bucket: message.s3Bucket,
+          key: message.s3Key,
+          provider: "s3",
+        });
+      }
+    }
+
+    const gmailMailboxes = await transaction
+      .select({
+        id: mailbox.id,
+        ownerUserId: mailbox.ownerUserId,
+      })
+      .from(mailbox)
+      .where(
+        and(
+          eq(mailbox.organizationId, organizationId),
+          eq(mailbox.provider, "gmail")
+        )
+      )
+      .for("update");
+
+    for (const gmailMailbox of gmailMailboxes) {
       if (
         gmailMailbox.ownerUserId === null ||
         gmailMailbox.ownerUserId === undefined ||
         gmailMailbox.ownerUserId === ""
       ) {
-        return;
+        continue;
       }
-      const [targetMembership] = await db
+      const [targetMembership] = await transaction
         .select({ organizationId: member.organizationId })
         .from(member)
         .where(
           and(
             eq(member.userId, gmailMailbox.ownerUserId),
-            sql`${member.organizationId} <> ${organizationId}`
+            ne(member.organizationId, organizationId)
           )
         )
-        .limit(1);
+        .limit(1)
+        .for("share");
 
-      if (targetMembership === null || targetMembership === undefined) {
+      if (targetMembership === undefined) {
         throw new Error("Every mailbox owner must retain another team.");
       }
 
-      await db
+      await transaction
         .update(mailbox)
         .set({
           organizationId: targetMembership.organizationId,
           updatedAt: new Date(),
         })
-        .where(eq(mailbox.id, gmailMailbox.id));
-    })
-  );
+        .where(
+          and(
+            eq(mailbox.id, gmailMailbox.id),
+            eq(mailbox.organizationId, organizationId)
+          )
+        );
+    }
+
+    if (objectsByKey.size > 0) {
+      const now = new Date();
+      await transaction
+        .insert(mailObjectCleanup)
+        .values(
+          [...objectsByKey.values()].map((object) => ({
+            ...object,
+            createdAt: now,
+            id: crypto.randomUUID(),
+            notBefore: now,
+          }))
+        )
+        .onConflictDoNothing({
+          target: [
+            mailObjectCleanup.provider,
+            mailObjectCleanup.bucket,
+            mailObjectCleanup.key,
+          ],
+        });
+    }
+
+    await transaction
+      .delete(mailbox)
+      .where(
+        and(
+          eq(mailbox.organizationId, organizationId),
+          eq(mailbox.provider, "managed")
+        )
+      );
+
+    return [...objectsByKey.values()];
+  });
 
   await Promise.all(
-    [...objects.values()].map(async (object) => {
-      const [otherReference] = await db
-        .select({ id: managedMailMessage.id })
-        .from(managedMailMessage)
-        .where(
-          object.provider === "s3"
-            ? and(
-                notInArray(managedMailMessage.id, managedMessageIds),
-                or(
+    objects.map(async (object) => {
+      try {
+        const [otherReference] = await db
+          .select({ id: managedMailMessage.id })
+          .from(managedMailMessage)
+          .where(
+            object.provider === "s3"
+              ? or(
                   and(
                     eq(managedMailMessage.rawObjectProvider, object.provider),
                     eq(managedMailMessage.rawObjectBucket, object.bucket),
@@ -361,18 +403,63 @@ export const cleanupMailboxesForDeletedOrganization = async (
                     eq(managedMailMessage.s3Key, object.key)
                   )
                 )
-              )
-            : and(
-                eq(managedMailMessage.rawObjectProvider, object.provider),
-                eq(managedMailMessage.rawObjectBucket, object.bucket),
-                eq(managedMailMessage.rawObjectKey, object.key),
-                notInArray(managedMailMessage.id, managedMessageIds)
-              )
-        )
-        .limit(1);
+              : and(
+                  eq(managedMailMessage.rawObjectProvider, object.provider),
+                  eq(managedMailMessage.rawObjectBucket, object.bucket),
+                  eq(managedMailMessage.rawObjectKey, object.key)
+                )
+          )
+          .limit(1);
 
-      if (otherReference === null || otherReference === undefined) {
+        if (otherReference !== undefined) {
+          return;
+        }
+        const [apiReference] = await db
+          .select({ id: organizationApiMailMessage.id })
+          .from(organizationApiMailMessage)
+          .where(
+            and(
+              eq(organizationApiMailMessage.rawObjectProvider, object.provider),
+              eq(organizationApiMailMessage.rawObjectBucket, object.bucket),
+              eq(organizationApiMailMessage.rawObjectKey, object.key)
+            )
+          )
+          .limit(1);
+        if (apiReference !== undefined) {
+          return;
+        }
+        const [sendReference] = await db
+          .select({ id: organizationMailSendIdempotency.id })
+          .from(organizationMailSendIdempotency)
+          .where(
+            and(
+              eq(
+                organizationMailSendIdempotency.rawObjectProvider,
+                object.provider
+              ),
+              eq(
+                organizationMailSendIdempotency.rawObjectBucket,
+                object.bucket
+              ),
+              eq(organizationMailSendIdempotency.rawObjectKey, object.key)
+            )
+          )
+          .limit(1);
+        if (sendReference !== undefined) {
+          return;
+        }
         await deleteUntrackedManagedMailObject(object);
+        await db
+          .delete(mailObjectCleanup)
+          .where(
+            and(
+              eq(mailObjectCleanup.provider, object.provider),
+              eq(mailObjectCleanup.bucket, object.bucket),
+              eq(mailObjectCleanup.key, object.key)
+            )
+          );
+      } catch (error) {
+        reportError(error, { operation: "organization:mail-object-cleanup" });
       }
     })
   );

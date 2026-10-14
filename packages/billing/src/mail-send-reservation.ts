@@ -9,7 +9,7 @@ import type {
   MailSendSnapshot,
   ManagedMailRawObjectProvider,
 } from "@quieter/database/schema";
-import { and, eq, gte, inArray, isNull, lt, ne, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, lt, ne, sql, sum } from "drizzle-orm";
 
 import { getBillingCreditUsage, getBillingUsagePeriodEnd } from "./credits.ts";
 import { getOrganizationBillingEntitlement } from "./entitlements.ts";
@@ -32,13 +32,10 @@ export const reserveOrganizationMailSend = async (input: {
   requestHash: string;
   snapshot: MailSendSnapshot;
 }) => {
-  const [entitlement, settings] = await Promise.all([
-    getOrganizationBillingEntitlement({
-      feature: "organizationMail",
-      organizationId: input.organizationId,
-    }),
-    getOrganizationMailUsageSettings(input.organizationId),
-  ]);
+  const entitlement = await getOrganizationBillingEntitlement({
+    feature: "organizationMail",
+    organizationId: input.organizationId,
+  });
   const estimate = estimateOutboundOrganizationMailUsage({
     attachmentSizeBytes: input.snapshot.attachments.reduce(
       (size, attachment) => size + attachment.size,
@@ -95,10 +92,14 @@ export const reserveOrganizationMailSend = async (input: {
           message: "The team's billing account is unavailable.",
         });
       }
+      const settings = await getOrganizationMailUsageSettings(
+        input.organizationId,
+        tx
+      );
       const usage = await getBillingCreditUsage(account, tx);
       const [reserved] = await tx
         .select({
-          cost: sql`coalesce(sum(${organizationMailSendIdempotency.estimatedCostMicroCents}), 0)`.mapWith(
+          cost: sql`coalesce(${sum(organizationMailSendIdempotency.estimatedCostMicroCents)}, 0)`.mapWith(
             Number
           ),
         })
@@ -128,7 +129,7 @@ export const reserveOrganizationMailSend = async (input: {
             ),
             lt(
               organizationMailSendIdempotency.createdAt,
-              getBillingUsagePeriodEnd(account)
+              getBillingUsagePeriodEnd(account, tx)
             ),
             isNull(billingCreditUsageEvent.id),
             existing === undefined

@@ -49,33 +49,35 @@ export const setGmailUsefulDetails = async (input: {
   }
 
   const now = new Date();
-  await db
-    .insert(mailboxAutomationSettings)
-    .values({
-      createdAt: now,
-      mailboxId: input.mailboxId,
-      updatedAt: now,
-      usefulDetailsEnabled: false,
-    })
-    .onConflictDoUpdate({
-      set: { updatedAt: now, usefulDetailsEnabled: false },
-      target: mailboxAutomationSettings.mailboxId,
-    });
-
-  if (selectedMailbox.provider === "gmail") {
-    await db
-      .insert(gmailUsefulDetailSettings)
+  await db.transaction(async (tx) => {
+    await tx
+      .insert(mailboxAutomationSettings)
       .values({
         createdAt: now,
-        enabled: false,
         mailboxId: input.mailboxId,
         updatedAt: now,
+        usefulDetailsEnabled: false,
       })
       .onConflictDoUpdate({
-        set: { enabled: false, updatedAt: now },
-        target: gmailUsefulDetailSettings.mailboxId,
+        set: { updatedAt: now, usefulDetailsEnabled: false },
+        target: mailboxAutomationSettings.mailboxId,
       });
-  }
+
+    if (selectedMailbox.provider === "gmail") {
+      await tx
+        .insert(gmailUsefulDetailSettings)
+        .values({
+          createdAt: now,
+          enabled: false,
+          mailboxId: input.mailboxId,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          set: { enabled: false, updatedAt: now },
+          target: gmailUsefulDetailSettings.mailboxId,
+        });
+    }
+  });
 
   return { enabled: false, mailboxId: input.mailboxId };
 };
@@ -110,61 +112,67 @@ export const setGmailUsefulDetailFeedback = async (input: {
   userId: string;
 }) => {
   await assertOwnedGmailMailbox(input);
-  const [detail] = await db
-    .select({
-      id: gmailUsefulDetail.id,
-      kind: gmailUsefulDetail.kind,
-      source: gmailUsefulDetail.source,
-    })
-    .from(gmailUsefulDetail)
-    .where(
-      and(
-        eq(gmailUsefulDetail.id, input.id),
-        eq(gmailUsefulDetail.mailboxId, input.mailboxId)
-      )
-    )
-    .limit(1);
-  if (detail === undefined) {
-    throw new ORPCError("NOT_FOUND", { message: "Useful detail not found." });
-  }
-
   const now = new Date();
-  await db
-    .insert(gmailUsefulDetailFeedback)
-    .values({
-      createdAt: now,
-      detailId: detail.id,
-      id: randomUUID(),
-      kind: detail.kind,
-      mailboxId: input.mailboxId,
-      signal: input.feedback,
-      source: detail.source,
-      updatedAt: now,
-    })
-    .onConflictDoUpdate({
-      set: {
+  const detailId = await db.transaction(async (tx) => {
+    const [detail] = await tx
+      .select({
+        id: gmailUsefulDetail.id,
+        kind: gmailUsefulDetail.kind,
+        source: gmailUsefulDetail.source,
+      })
+      .from(gmailUsefulDetail)
+      .where(
+        and(
+          eq(gmailUsefulDetail.id, input.id),
+          eq(gmailUsefulDetail.mailboxId, input.mailboxId)
+        )
+      )
+      .limit(1)
+      .for("update");
+    if (detail === undefined) {
+      throw new ORPCError("NOT_FOUND", {
+        message: "Useful detail not found.",
+      });
+    }
+
+    await tx
+      .insert(gmailUsefulDetailFeedback)
+      .values({
+        createdAt: now,
+        detailId: detail.id,
+        id: randomUUID(),
         kind: detail.kind,
+        mailboxId: input.mailboxId,
         signal: input.feedback,
         source: detail.source,
         updatedAt: now,
-      },
-      target: [
-        gmailUsefulDetailFeedback.mailboxId,
-        gmailUsefulDetailFeedback.detailId,
-      ],
-    });
+      })
+      .onConflictDoUpdate({
+        set: {
+          kind: detail.kind,
+          signal: input.feedback,
+          source: detail.source,
+          updatedAt: now,
+        },
+        target: [
+          gmailUsefulDetailFeedback.mailboxId,
+          gmailUsefulDetailFeedback.detailId,
+        ],
+      });
 
-  if (input.feedback === "not_useful") {
-    await db
-      .update(gmailUsefulDetail)
-      .set({ dismissedAt: now, updatedAt: now })
-      .where(
-        and(
-          eq(gmailUsefulDetail.id, detail.id),
-          eq(gmailUsefulDetail.mailboxId, input.mailboxId)
-        )
-      );
-  }
+    if (input.feedback === "not_useful") {
+      await tx
+        .update(gmailUsefulDetail)
+        .set({ dismissedAt: now, updatedAt: now })
+        .where(
+          and(
+            eq(gmailUsefulDetail.id, detail.id),
+            eq(gmailUsefulDetail.mailboxId, input.mailboxId)
+          )
+        );
+    }
+    return detail.id;
+  });
 
-  return { feedback: input.feedback, id: detail.id };
+  return { feedback: input.feedback, id: detailId };
 };

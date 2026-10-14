@@ -53,32 +53,32 @@ export const recordOutboundManagedMessageForSender = async (input: {
   )
     .trim()
     .toLowerCase();
-  const [senderMailbox] = await db
-    .select({ id: mailbox.id })
-    .from(mailbox)
-    .where(
-      and(
-        input.mailboxId === undefined
-          ? eq(mailbox.emailAddress, senderAddress)
-          : undefined,
-        eq(mailbox.organizationId, input.organizationId),
-        eq(mailbox.provider, "managed"),
-        input.mailboxId === undefined
-          ? undefined
-          : eq(mailbox.id, input.mailboxId),
-        input.requireApiSentMessageInclusion === true
-          ? eq(mailbox.includeApiSentMessages, true)
-          : undefined
-      )
-    )
-    .limit(1);
-  if (senderMailbox === undefined) {
-    return null;
-  }
-
   const id = input.id ?? randomUUID();
   const sentAt = input.sentAt ?? new Date();
   const result = await db.transaction(async (tx) => {
+    const [senderMailbox] = await tx
+      .select({ id: mailbox.id })
+      .from(mailbox)
+      .where(
+        and(
+          input.mailboxId === undefined
+            ? eq(mailbox.emailAddress, senderAddress)
+            : undefined,
+          eq(mailbox.organizationId, input.organizationId),
+          eq(mailbox.provider, "managed"),
+          input.mailboxId === undefined
+            ? undefined
+            : eq(mailbox.id, input.mailboxId),
+          input.requireApiSentMessageInclusion === true
+            ? eq(mailbox.includeApiSentMessages, true)
+            : undefined
+        )
+      )
+      .limit(1)
+      .for("key share");
+    if (senderMailbox === undefined) {
+      return null;
+    }
     const [inserted] = await tx
       .insert(managedMailMessage)
       .values({
@@ -150,7 +150,9 @@ export const recordOutboundManagedMessageForSender = async (input: {
           )
         )
         .limit(1);
-      return existing ?? null;
+      return existing === undefined
+        ? null
+        : { mailboxId: senderMailbox.id, message: existing };
     }
 
     if (input.attachments !== undefined && input.attachments.length > 0) {
@@ -213,11 +215,14 @@ export const recordOutboundManagedMessageForSender = async (input: {
         updatedAt: new Date(),
       })
       .where(eq(mailbox.id, senderMailbox.id));
-    return inserted;
+    return { mailboxId: senderMailbox.id, message: inserted };
   });
+  if (result === null) {
+    return null;
+  }
   await publishMailUpdate({
-    mailboxId: senderMailbox.id,
+    mailboxId: result.mailboxId,
     type: "mailbox.changed",
   });
-  return result;
+  return result.message;
 };

@@ -7,7 +7,7 @@ import {
 } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { reportError } from "@quieter/observability";
-import { asc, eq, lte, sql } from "drizzle-orm";
+import { and, asc, eq, exists, lte, or } from "drizzle-orm";
 
 import { LOCAL_MAIL_BUCKET } from "../local-storage";
 import { deleteRawMailObject, writeRawMailObject } from "./raw-object";
@@ -50,21 +50,92 @@ export const cleanupMailObjects = async (now = new Date()) => {
     .limit(25);
   const results = await Promise.allSettled(
     objects.map(async (object) => {
-      await db
+      const [claimed] = await db
         .update(mailObjectCleanup)
         .set({ notBefore: new Date(now.getTime() + OBJECT_RECHECK_MS) })
-        .where(eq(mailObjectCleanup.id, object.id));
-      const [references] = await db
-        .select({
-          tracked: sql<boolean>`
-      exists(select 1 from ${managedMailMessage} where ${managedMailMessage.rawObjectProvider} = ${object.provider} and ${managedMailMessage.rawObjectBucket} = ${object.bucket} and ${managedMailMessage.rawObjectKey} = ${object.key})
-      or exists(select 1 from ${organizationApiMailMessage} where ${organizationApiMailMessage.rawObjectProvider} = ${object.provider} and ${organizationApiMailMessage.rawObjectBucket} = ${object.bucket} and ${organizationApiMailMessage.rawObjectKey} = ${object.key})
-      or exists(select 1 from ${organizationMailSendIdempotency} where ${organizationMailSendIdempotency.rawObjectProvider} = ${object.provider} and ${organizationMailSendIdempotency.rawObjectBucket} = ${object.bucket} and ${organizationMailSendIdempotency.rawObjectKey} = ${object.key})
-    `,
-        })
+        .where(
+          and(
+            eq(mailObjectCleanup.id, object.id),
+            lte(mailObjectCleanup.notBefore, now)
+          )
+        )
+        .returning({ id: mailObjectCleanup.id });
+      if (claimed === undefined) {
+        return;
+      }
+      const references = await db
+        .select({ id: mailObjectCleanup.id })
         .from(mailObjectCleanup)
-        .where(eq(mailObjectCleanup.id, object.id));
-      if (!references?.tracked) {
+        .where(
+          and(
+            eq(mailObjectCleanup.id, object.id),
+            or(
+              exists(
+                db
+                  .select({ id: managedMailMessage.id })
+                  .from(managedMailMessage)
+                  .where(
+                    or(
+                      and(
+                        eq(
+                          managedMailMessage.rawObjectProvider,
+                          object.provider
+                        ),
+                        eq(managedMailMessage.rawObjectBucket, object.bucket),
+                        eq(managedMailMessage.rawObjectKey, object.key)
+                      ),
+                      object.provider === "s3"
+                        ? and(
+                            eq(managedMailMessage.s3Bucket, object.bucket),
+                            eq(managedMailMessage.s3Key, object.key)
+                          )
+                        : undefined
+                    )
+                  )
+              ),
+              exists(
+                db
+                  .select({ id: organizationApiMailMessage.id })
+                  .from(organizationApiMailMessage)
+                  .where(
+                    and(
+                      eq(
+                        organizationApiMailMessage.rawObjectProvider,
+                        object.provider
+                      ),
+                      eq(
+                        organizationApiMailMessage.rawObjectBucket,
+                        object.bucket
+                      ),
+                      eq(organizationApiMailMessage.rawObjectKey, object.key)
+                    )
+                  )
+              ),
+              exists(
+                db
+                  .select({ id: organizationMailSendIdempotency.id })
+                  .from(organizationMailSendIdempotency)
+                  .where(
+                    and(
+                      eq(
+                        organizationMailSendIdempotency.rawObjectProvider,
+                        object.provider
+                      ),
+                      eq(
+                        organizationMailSendIdempotency.rawObjectBucket,
+                        object.bucket
+                      ),
+                      eq(
+                        organizationMailSendIdempotency.rawObjectKey,
+                        object.key
+                      )
+                    )
+                  )
+              )
+            )
+          )
+        );
+      if (references.length === 0) {
         await deleteRawMailObject(object);
         await db
           .delete(mailObjectCleanup)

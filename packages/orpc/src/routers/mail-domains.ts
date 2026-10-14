@@ -3,7 +3,7 @@ import { getOrganizationBillingEntitlement } from "@quieter/billing/entitlements
 import { db } from "@quieter/database/client";
 import type { DatabaseExecutor } from "@quieter/database/client";
 import { mailbox, mailDomain } from "@quieter/database/schema";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, count, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { setMailDomainCatchAll } from "../mail-domain/catch-all";
@@ -52,13 +52,16 @@ const countManagedMailboxesForDomain = async (input: {
   organizationId: string;
 }) => {
   const [result] = await (input.database ?? db)
-    .select({ count: sql<number>`count(*)::int` })
+    .select({ count: count() })
     .from(mailbox)
     .where(
       and(
         eq(mailbox.organizationId, input.organizationId),
         eq(mailbox.provider, "managed"),
-        sql`lower(split_part(${mailbox.emailAddress}, '@', 2)) = ${input.domain}`
+        eq(
+          sql<string>`lower(split_part(${mailbox.emailAddress}, '@', 2))`,
+          input.domain
+        )
       )
     );
   return result?.count ?? 0;
