@@ -37,7 +37,10 @@ import { SidebarNavItem } from "#/features/navigation/components/sidebar-nav-ite
 import { SidebarEntrance } from "#/features/navigation/components/sidebar-surfaces";
 import type { MailboxCategory } from "#/lib/mail";
 
+import { UnifiedSidebarLabelNav } from "./unified-sidebar-label-nav";
+
 type MailSidebarProps = {
+  userId?: string;
   allInboxesActive?: boolean;
   defaultMailboxId: string | null;
   embedded?: boolean;
@@ -70,7 +73,7 @@ type MailSidebarProps = {
   onSetDefaultMailbox: (mailboxId: string | null) => void;
   onSearch: (query: string) => void;
   onComposeNewMail: () => void;
-  onManageLabels: () => void;
+  onManageLabels: (mailboxId?: string) => void;
   onManageSnippets: () => void;
   onSelectView: (view: MailboxWorkspaceView) => void;
   reconnectingMailboxId: string | null;
@@ -164,6 +167,7 @@ const SidebarHelpMenu = ({
 
 const SidebarInboxSection = ({
   allInboxesActive = false,
+  userId = "preview",
   animateEntrance,
   embedded,
   groups,
@@ -182,6 +186,7 @@ const SidebarInboxSection = ({
   SidebarContentProps,
   | "animateEntrance"
   | "allInboxesActive"
+  | "userId"
   | "embedded"
   | "groups"
   | "onComposeNewMail"
@@ -248,12 +253,12 @@ const SidebarInboxSection = ({
         </Button>
       </SidebarEntrance>
 
-      <div className="mt-2 min-h-0 flex-1 p-1">
+      <div className="mt-2 min-h-0 flex-1 overflow-y-auto p-1">
         <SidebarMailboxNav
           animateEntrance={animateEntrance}
           mailboxProvider={selectedMailboxProvider}
           onSelectMailbox={handleSelectMailbox}
-          selectedMailbox={allInboxesActive ? null : selectedMailbox}
+          selectedMailbox={selectedMailbox}
         />
         {embedded !== true && selectedMailboxId !== null ? (
           <SidebarEntrance
@@ -299,6 +304,18 @@ const SidebarInboxSection = ({
             searchQuery={searchQuery}
           />
         ) : null}
+        {allInboxesActive && (
+          <UnifiedSidebarLabelNav
+            groups={groups}
+            userId={userId}
+            searchQuery={searchQuery}
+            onManageLabels={onManageLabels}
+            onSearch={(nextQuery) => {
+              onSearch(nextQuery);
+              onRequestClose?.();
+            }}
+          />
+        )}
         {!allInboxesActive && selectedMailboxProvider !== "api" && (
           <SidebarLabelNav
             animateEntrance={animateEntrance}
@@ -359,6 +376,7 @@ const SidebarFooter = ({
 
 const SidebarContent = ({
   allInboxesActive,
+  userId,
   animateEntrance,
   defaultMailboxId,
   embedded = false,
@@ -435,6 +453,7 @@ const SidebarContent = ({
       </SidebarEntrance>
 
       <SidebarInboxSection
+        userId={userId}
         allInboxesActive={allInboxesActive}
         animateEntrance={animateEntrance}
         embedded={embedded}

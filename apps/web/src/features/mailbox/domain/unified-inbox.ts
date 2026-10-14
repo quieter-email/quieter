@@ -1,7 +1,6 @@
 import type { MailboxLabelColor } from "@quieter/mail/mailbox-organization";
+import { useMemo, useSyncExternalStore } from "react";
 
-import { buildThreadListEntries } from "#/lib/gmail/thread-list";
-import type { ThreadListEntry } from "#/lib/gmail/thread-list";
 import type { MessageListItem } from "#/lib/mail";
 
 export type UnifiedInboxMailbox = {
@@ -41,7 +40,8 @@ export const defaultMailboxColor = (mailboxId: string): MailboxLabelColor => {
 };
 
 export const readUnifiedInboxPreferences = (
-  userId: string
+  userId: string,
+  storedValue?: string | null
 ): UnifiedInboxPreferences => {
   const empty = {
     colors: {},
@@ -51,9 +51,10 @@ export const readUnifiedInboxPreferences = (
     return empty;
   }
   try {
-    const raw = window.localStorage.getItem(
-      `quieter:unified-inbox:v1:${userId}`
-    );
+    const raw =
+      storedValue === undefined
+        ? window.localStorage.getItem(`quieter:unified-inbox:v1:${userId}`)
+        : storedValue;
     if (!raw) {
       return empty;
     }
@@ -111,14 +112,41 @@ export const writeUnifiedInboxPreferences = (
         version: 1,
       })
     );
+    window.dispatchEvent(new Event("quieter:unified-inbox-change"));
   } catch {
     // The panel remains usable when storage is unavailable.
   }
 };
 
+const subscribeUnifiedInboxPreferences = (onChange: () => void) => {
+  window.addEventListener("storage", onChange);
+  window.addEventListener("quieter:unified-inbox-change", onChange);
+  return () => {
+    window.removeEventListener("storage", onChange);
+    window.removeEventListener("quieter:unified-inbox-change", onChange);
+  };
+};
+
+export const useUnifiedInboxPreferences = (userId: string) => {
+  const raw = useSyncExternalStore(
+    subscribeUnifiedInboxPreferences,
+    () => {
+      try {
+        return window.localStorage.getItem(
+          `quieter:unified-inbox:v1:${userId}`
+        );
+      } catch {
+        return null;
+      }
+    },
+    () => null
+  );
+  return useMemo(() => readUnifiedInboxPreferences(userId, raw), [raw, userId]);
+};
+
 export type UnifiedInboxEntry = {
   mailboxId: string;
-  thread: ThreadListEntry;
+  message: MessageListItem;
   timestamp: number;
 };
 
@@ -152,17 +180,19 @@ export const buildUnifiedInboxEntries = (
   }
   return sources
     .flatMap((source) =>
-      buildThreadListEntries(source.messages).map((thread) => ({
+      source.messages.map((message) => ({
         mailboxId: source.mailboxId,
-        thread,
-        timestamp: Math.max(...thread.messages.map(messageTimestamp)),
+        message,
+        timestamp: messageTimestamp(message),
       }))
     )
-    .filter((entry) => entry.timestamp >= safeOldestTimestamp)
+    .filter(
+      (entry) => entry.timestamp === 0 || entry.timestamp >= safeOldestTimestamp
+    )
     .toSorted(
       (left, right) =>
         right.timestamp - left.timestamp ||
         left.mailboxId.localeCompare(right.mailboxId) ||
-        left.thread.threadId.localeCompare(right.thread.threadId)
+        left.message.id.localeCompare(right.message.id)
     );
 };

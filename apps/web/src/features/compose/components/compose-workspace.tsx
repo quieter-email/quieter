@@ -38,11 +38,15 @@ import { USER_BILLING_QUERY_KEY } from "#/features/settings/domain/billing";
 import { useAudioRecorder } from "#/lib/audio-recorder";
 import { prepareTranscriptionRecording } from "#/lib/audio-transcription";
 import { toastError } from "#/lib/error-toast";
+import { deleteDemoDraft } from "#/lib/gmail/demo-mail";
+import { refreshCachedMailboxQueries } from "#/lib/mail/inbox-query";
+import { deleteManagedDemoDraft } from "#/lib/managed-mail/demo-managed-mail";
 import { orpc } from "#/lib/orpc";
 
 import type { ComposeFormValues } from "../domain/compose-form";
 import {
   appendComposeSignature,
+  deleteComposeDraft,
   hasComposeDraftContent,
   normalizeComposeBodyHtml,
   textToComposeBodyHtml,
@@ -72,6 +76,7 @@ export type ComposeSenderMailbox = {
 
 export type ComposeSurfaceProps = {
   allowSenderSwitch?: boolean;
+  beforeNavigate?: () => Promise<void>;
   className?: string;
   demoMode?: boolean;
   initialDraft?: ComposeDraftState | null;
@@ -168,6 +173,7 @@ const ComposeFormField = ({
 
 export const ComposeSurface = ({
   allowSenderSwitch = false,
+  beforeNavigate,
   className,
   demoMode = false,
   initialDraft = null,
@@ -219,6 +225,7 @@ export const ComposeSurface = ({
   }
   const compose = useComposeDialogController({
     autosavePaused: slashMenuOpen,
+    beforeNavigate,
     demoMode,
     initialDraft,
     initialDraftNeedsSave,
@@ -254,6 +261,7 @@ export const ComposeSurface = ({
     isPreparingAudio || transcribeAudioMutation.isPending;
 
   const canEditBody =
+    state.open &&
     state.draft.saveStatus !== "sending" &&
     !state.isFinishing &&
     !switchingSender &&
@@ -886,6 +894,8 @@ export const ComposeSurface = ({
                                   : "Discard"
                               }
                               disabled={
+                                !state.open ||
+                                state.isFinishing ||
                                 state.draft.saveStatus === "sending" ||
                                 switchingSender
                               }
@@ -902,6 +912,8 @@ export const ComposeSurface = ({
                             <ToolbarButton
                               aria-label="Close composer"
                               disabled={
+                                !state.open ||
+                                state.isFinishing ||
                                 state.draft.saveStatus === "sending" ||
                                 switchingSender
                               }
@@ -984,6 +996,7 @@ export const ComposeWorkspace = ({
   senderMailboxes,
   signature,
 }: ComposeWorkspaceProps) => {
+  const queryClient = useQueryClient();
   const [senderSession, setSenderSession] = useState(() => ({
     draft: initialDraft ?? null,
     mailboxId,
@@ -995,9 +1008,66 @@ export const ComposeWorkspace = ({
       null,
   }));
   const savedSenderDrafts = useRef(new Map<string, ComposeDraftState>());
+  const cleanupPromiseRef = useRef<Promise<void> | null>(null);
+  const finishPromiseRef = useRef<Promise<void> | null>(null);
   const selectedSender = senderMailboxes?.find(
     (sender) => sender.id === senderSession.mailboxId
   );
+  const cleanupInactiveDrafts = async (): Promise<void> => {
+    if (cleanupPromiseRef.current !== null) {
+      await cleanupPromiseRef.current;
+      return;
+    }
+    const inactiveDrafts = [...savedSenderDrafts.current].filter(
+      ([sourceMailboxId, draft]) =>
+        sourceMailboxId !== senderSession.mailboxId &&
+        sourceMailboxId !== "" &&
+        (draft.draftId?.trim() ?? "") !== ""
+    );
+    cleanupPromiseRef.current = (async () => {
+      for (const [sourceMailboxId, draft] of inactiveDrafts) {
+        try {
+          if (demoMode === true) {
+            deleteDemoDraft(draft);
+          } else if (managedDemoMode === true) {
+            deleteManagedDemoDraft(draft);
+          } else {
+            await deleteComposeDraft(sourceMailboxId, draft);
+          }
+        } catch (error) {
+          toastError(error, {
+            boundary: "compose-inactive-draft-cleanup",
+            fallback:
+              "An older draft could not be removed. You can delete it from Drafts.",
+          });
+          continue;
+        }
+        try {
+          await refreshCachedMailboxQueries(
+            queryClient,
+            sourceMailboxId,
+            "drafts"
+          );
+        } catch (error) {
+          toastError(error, {
+            boundary: "compose-inactive-draft-refresh",
+            fallback:
+              "An older draft was removed. Refresh Drafts to update the list.",
+          });
+        }
+      }
+    })();
+    await cleanupPromiseRef.current;
+  };
+  const finishCompose = (afterClose: () => void) => {
+    if (finishPromiseRef.current !== null) {
+      return;
+    }
+    finishPromiseRef.current = (async () => {
+      await cleanupInactiveDrafts();
+      afterClose();
+    })();
+  };
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-compose-workspace>
@@ -1009,6 +1079,7 @@ export const ComposeWorkspace = ({
       />
       <ComposeSurface
         allowSenderSwitch={!initialDraft}
+        beforeNavigate={cleanupInactiveDrafts}
         className="flex-1"
         demoMode={demoMode}
         initialDraft={senderSession.draft}
@@ -1016,8 +1087,16 @@ export const ComposeWorkspace = ({
         key={senderSession.mailboxId ?? "none"}
         mailboxId={senderSession.mailboxId}
         managedDemoMode={managedDemoMode}
-        onClose={onClose}
-        onManageSnippets={onManageSnippets}
+        onClose={() => {
+          finishCompose(onClose);
+        }}
+        onManageSnippets={
+          onManageSnippets
+            ? () => {
+                finishCompose(onManageSnippets);
+              }
+            : undefined
+        }
         onSenderSwitch={(nextMailboxId, currentDraft, transferDraft) => {
           if (senderSession.mailboxId) {
             savedSenderDrafts.current.set(

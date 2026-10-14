@@ -85,6 +85,7 @@ export const getDraftStatusMessage = (
 
 export const useComposeDialogController = ({
   autosavePaused = false,
+  beforeNavigate,
   demoMode = false,
   initialDraft = null,
   initialDraftNeedsSave = false,
@@ -96,6 +97,7 @@ export const useComposeDialogController = ({
   signature,
 }: {
   autosavePaused?: boolean;
+  beforeNavigate?: () => Promise<void>;
   demoMode?: boolean;
   initialDraft?: ComposeDraftState | null;
   initialDraftNeedsSave?: boolean;
@@ -627,7 +629,19 @@ export const useComposeDialogController = ({
       finishingRef.current = true;
       setState((current) => ({ ...current, isFinishing: true }));
       try {
-        return !(await persistCurrentDraft());
+        if (!(await persistCurrentDraft())) {
+          return true;
+        }
+        try {
+          await beforeNavigate?.();
+        } catch (error) {
+          toastError(error, {
+            boundary: "compose-inactive-draft-cleanup",
+            fallback:
+              "An older draft could not be removed. You can delete it from Drafts.",
+          });
+        }
+        return false;
       } finally {
         finishingRef.current = false;
         setState((current) => ({ ...current, isFinishing: false }));

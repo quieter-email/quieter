@@ -30,6 +30,7 @@ import { AgentWorkspaceProvider } from "#/features/chat/components/agent-workspa
 import { FloatingAssistant } from "#/features/chat/components/floating-assistant";
 import { useAgentWorkspace } from "#/features/chat/domain/workspace-context";
 import { DraftRecoveryNotice } from "#/features/compose/components/draft-recovery-notice";
+import { buildComposeDraftFromSavedDraftMessage } from "#/features/compose/domain/compose-actions";
 import type { ComposeDraftState } from "#/features/compose/domain/draft";
 import type { MailboxWorkspaceView } from "#/features/mailbox/domain/mailbox-workspace-view";
 import { LabelsWorkspacePanel } from "#/features/message-labels/components/labels-workspace-panel";
@@ -90,7 +91,10 @@ type MailboxWorkspaceContentProps = {
   mailboxGroups: MailboxSidebarGroups;
   onCloseCompose: () => void;
   onConnectGmail: () => void;
-  onComposeDraftRequested: (draft: ComposeDraftState) => void;
+  onComposeDraftRequested: (
+    draft: ComposeDraftState,
+    mailboxId?: string
+  ) => void;
   onComposeNewMail: () => void;
   onManageSnippets: () => void;
   onMobileOpenChange: (open: boolean) => void;
@@ -474,15 +478,27 @@ const MailboxWorkspaceContentInner = ({
           layout="cell"
         >
           <UnifiedInboxPanel
+            activeMailbox={activeMailbox}
             activeMailboxId={selectedMailboxId}
             activeMessageId={messageId}
             mailboxes={mailboxes}
             onOpenSidebar={onOpenSidebar}
             onReconnectMailbox={onReconnectMailbox}
             onSearch={onSearch}
+            onDeactivateActiveMessage={() => {
+              void setMailboxSearch({ messageId: null, threadId: null });
+            }}
+            onOpenDraft={(sourceMailboxId, message) => {
+              onComposeDraftRequested(
+                buildComposeDraftFromSavedDraftMessage(message),
+                sourceMailboxId
+              );
+            }}
             onSelectMessage={(sourceMailboxId, nextMessageId, threadId) => {
               void setMailboxSearch(
                 {
+                  chatId:
+                    sourceMailboxId === selectedMailboxId ? undefined : null,
                   mailboxId: sourceMailboxId,
                   messageId: nextMessageId,
                   threadId,
@@ -501,7 +517,7 @@ const MailboxWorkspaceContentInner = ({
         {messageId ? (
           <MailboxMessagesPanel
             detailOnly
-            activeMailbox="inbox"
+            activeMailbox={activeMailbox}
             currentUserEmail={currentUserEmail}
             isDemoMode={isDemoMode}
             isManagedDemoMode={isManagedDemoMode}
@@ -624,6 +640,7 @@ const MailboxWorkspaceContentInner = ({
         <div className="relative z-10 flex min-h-0 flex-1 overflow-hidden">
           {selectedMailboxId ? (
             <MailSidebar
+              userId={userId}
               allInboxesActive={allInboxesActive}
               defaultMailboxId={defaultMailboxId}
               groups={mailboxGroups}
@@ -632,8 +649,18 @@ const MailboxWorkspaceContentInner = ({
               onReorderMailboxSwitcher={onReorderMailboxSwitcher}
               onReconnectMailbox={onReconnectMailbox}
               onSearch={onSearch}
-              onManageLabels={() => {
-                onSelectView("labels");
+              onManageLabels={(sourceMailboxId) => {
+                if (sourceMailboxId) {
+                  void setMailboxSearch({
+                    mailboxId: sourceMailboxId,
+                    messageId: null,
+                    query: null,
+                    threadId: null,
+                    view: "labels",
+                  });
+                } else {
+                  onSelectView("labels");
+                }
               }}
               onManageSnippets={onManageSnippets}
               onSelectMailbox={onSelectMailbox}
@@ -663,9 +690,7 @@ const MailboxWorkspaceContentInner = ({
               />
             ) : null}
           </div>
-          {!allInboxesActive &&
-          selectedMailboxId &&
-          selectedMailboxProvider !== "api" ? (
+          {selectedMailboxId && selectedMailboxProvider !== "api" ? (
             <FloatingAssistant
               sidebar={assistantSidebar}
               narrow={assistantNarrow}
@@ -751,6 +776,14 @@ const MailboxWorkspaceContentInner = ({
                     </p>
                   }
                 >
+                  {allInboxesActive && (
+                    <p className="border-b border-border px-4 py-2 text-caption text-muted-fg">
+                      Assistant for{" "}
+                      {mailboxes
+                        .find((mailbox) => mailbox.id === selectedMailboxId)
+                        ?.displayName?.trim() || currentUserEmail}
+                    </p>
+                  )}
                   <ChatView
                     visible={assistantOpen}
                     activeMailbox={activeMailbox ?? "inbox"}
@@ -781,7 +814,11 @@ export const MailboxWorkspaceContent = (
   props: MailboxWorkspaceContentProps
 ) => (
   <AgentWorkspaceProvider
-    key={props.selectedMailboxId ?? "empty"}
+    key={
+      props.selectedView === "all-inboxes"
+        ? `all-inboxes:${props.userId}`
+        : (props.selectedMailboxId ?? "empty")
+    }
     mailboxId={props.selectedMailboxId ?? ""}
     onComposeDraftRequested={props.onComposeDraftRequested}
   >

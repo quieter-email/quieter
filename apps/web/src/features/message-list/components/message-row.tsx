@@ -11,7 +11,7 @@ import type { RouterOutputs } from "@quieter/orpc";
 import { cn } from "@quieter/ui/cn";
 import { Pill } from "@quieter/ui/pill";
 import { m, useReducedMotion } from "motion/react";
-import type { FocusEvent, KeyboardEvent, MouseEvent } from "react";
+import type { FocusEvent, KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { useState } from "react";
 
 import { SenderAvatar } from "#/components/sender-avatar";
@@ -94,12 +94,14 @@ const getMessageRowSurfaceOpacity = (
 const getMessageRowOpenAriaLabel = (
   isActive: boolean,
   isDraftMailbox: boolean,
-  subject: string
+  subject: string,
+  mailboxEmailAddress?: string
 ) => {
+  const sourceLabel = mailboxEmailAddress ? `, in ${mailboxEmailAddress}` : "";
   if (isDraftMailbox) {
-    return `Open draft: ${subject}`;
+    return `Open draft: ${subject}${sourceLabel}`;
   }
-  return `${isActive ? "Close" : "Open"} conversation: ${subject}`;
+  return `${isActive ? "Close" : "Open"} conversation: ${subject}${sourceLabel}`;
 };
 
 const getMessageRowCountsTitle = (thread: ThreadListEntry) => {
@@ -130,9 +132,11 @@ const rowPressTransition = {
 
 type MessageRowProps = {
   activeMailbox: MessageListProps["activeMailbox"];
+  badge?: ReactNode;
   deliveryStatus?: MessageDeliveryStatus | null;
   gmailLabels: MailboxLabel[];
   mailboxActions: MessageListProps["mailboxActions"];
+  mailboxEmailAddress?: string;
   mailboxId: string;
   mailboxProvider: MessageListProps["mailboxProvider"];
   offsetY: number;
@@ -286,6 +290,7 @@ const MessageRowSelectionButton = ({
 };
 
 const MessageRowDetails = ({
+  badge,
   date,
   deliveryStatus,
   gmailLabels,
@@ -299,6 +304,7 @@ const MessageRowDetails = ({
   unread,
   verificationCode,
 }: {
+  badge?: ReactNode;
   date: string;
   deliveryStatus?: MessageDeliveryStatus | null;
   gmailLabels: MailboxLabel[];
@@ -376,6 +382,9 @@ const MessageRowDetails = ({
       </div>
 
       <div className="flex w-full min-w-0 items-center gap-1.5">
+        {badge !== undefined && badge !== null && (
+          <span className="shrink-0">{badge}</span>
+        )}
         <p
           className={cn("min-w-0 flex-1 truncate text-left text-body-sm/4.5", {
             "font-medium text-fg": unread,
@@ -511,6 +520,7 @@ const useMessageRowHandlers = ({
 type MessageRowSurfaceProps = {
   activeMailbox: MessageListProps["activeMailbox"];
   anchorMessage: ThreadListEntry["anchorMessage"];
+  badge?: ReactNode;
   date: string;
   deliveryStatus?: MessageDeliveryStatus | null;
   gmailLabels: MailboxLabel[];
@@ -551,6 +561,7 @@ type MessageRowSurfaceProps = {
 const MessageRowSurface = ({
   activeMailbox,
   anchorMessage,
+  badge,
   date,
   deliveryStatus,
   gmailLabels,
@@ -687,6 +698,9 @@ const MessageRowSurface = ({
         >
           <button
             aria-label={openAriaLabel}
+            title={
+              badge !== undefined && badge !== null ? openAriaLabel : undefined
+            }
             aria-current={isActive ? "true" : undefined}
             className="absolute inset-0 z-10 rounded-lg border border-transparent text-left focus-visible:z-20 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none"
             data-message-row-trigger
@@ -708,6 +722,7 @@ const MessageRowSurface = ({
             type="button"
           />
           <MessageRowDetails
+            badge={badge}
             date={date}
             deliveryStatus={deliveryStatus}
             gmailLabels={gmailLabels}
@@ -729,9 +744,11 @@ const MessageRowSurface = ({
 
 const MessageRowContent = ({
   activeMailbox,
+  badge,
   deliveryStatus,
   gmailLabels,
   mailboxActions,
+  mailboxEmailAddress,
   mailboxId,
   mailboxProvider,
   onOpenDraft,
@@ -782,12 +799,14 @@ const MessageRowContent = ({
   const openAriaLabel = getMessageRowOpenAriaLabel(
     isActive,
     isDraftMailbox,
-    subject
+    subject,
+    mailboxEmailAddress
   );
   return (
     <MessageRowSurface
       activeMailbox={activeMailbox}
       anchorMessage={anchorMessage}
+      badge={badge}
       date={date}
       deliveryStatus={deliveryStatus}
       gmailLabels={gmailLabels}
@@ -829,11 +848,13 @@ const MessageRowContent = ({
 
 export const MessageRow = ({
   activeMailbox,
+  badge,
   className,
   dataIndex,
   deliveryStatus,
   gmailLabels,
   mailboxActions,
+  mailboxEmailAddress,
   mailboxId,
   mailboxProvider,
   offsetY,
@@ -856,9 +877,11 @@ export const MessageRow = ({
   const element = (
     <MessageRowContent
       activeMailbox={activeMailbox}
+      badge={badge}
       deliveryStatus={deliveryStatus}
       gmailLabels={gmailLabels}
       mailboxActions={mailboxActions}
+      mailboxEmailAddress={mailboxEmailAddress}
       mailboxId={mailboxId}
       mailboxProvider={mailboxProvider}
       onOpenDraft={onOpenDraft}

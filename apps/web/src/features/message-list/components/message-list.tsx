@@ -11,7 +11,7 @@ import {
 import { toast } from "@quieter/ui/toast";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import type { UseHotkeyDefinition } from "@tanstack/react-hotkeys";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries } from "@tanstack/react-query";
 import { m, useReducedMotion } from "motion/react";
 import { useLayoutEffect, useRef, useState } from "react";
 
@@ -37,7 +37,10 @@ import type {
 } from "./message-list-types";
 import { useMessageListSelection } from "./use-message-list-selection";
 
-const buildDraftListEntry = (message: MessageListItem): ThreadListEntry => ({
+const buildDraftListEntry = (
+  message: MessageListItem,
+  useScopedThreadId: boolean
+): ThreadListEntry => ({
   anchorMessage: message,
   attachmentCount:
     message.threadAttachmentCount ?? message.attachments?.length ?? 0,
@@ -46,7 +49,9 @@ const buildDraftListEntry = (message: MessageListItem): ThreadListEntry => ({
   participants: [],
   preview: message.snippet?.trim() ?? "",
   subject: message.subject?.trim() ?? "(No subject)",
-  threadId: message.draftId ?? message.id,
+  threadId: useScopedThreadId
+    ? message.threadId
+    : (message.draftId ?? message.id),
   threadLabelIds: message.threadLabelIds ?? message.labelIds ?? [],
   unreadCount: 0,
 });
@@ -422,22 +427,32 @@ const buildMessageListBulkActions = ({
 type MessageListSelection = ReturnType<typeof useMessageListSelection>;
 
 const useMessageListInteractions = ({
+  actionMailboxProvider,
+  labelMailboxActions,
+  labelMailboxId,
   props,
   selection,
   threadedMessages,
   userLabels,
 }: {
+  actionMailboxProvider: MessageListProps["mailboxProvider"];
+  labelMailboxActions: MessageListProps["mailboxActions"] | null;
+  labelMailboxId: string | null;
   props: MessageListProps;
   selection: MessageListSelection;
   threadedMessages: ThreadListEntry[];
   userLabels: { type: string }[];
 }) => {
   const [isBulkLabelsOpen, setIsBulkLabelsOpen] = useState(false);
-  const isBulkActionPending = selection.selectedThreads.some(
-    (thread) =>
-      props.pendingActions.isMessageActionPending(thread.anchorMessage.id) ||
-      props.pendingActions.isThreadActionPending(thread.threadId)
-  );
+  const isBulkActionPending = selection.selectedThreads.some((thread) => {
+    const pendingActions =
+      props.mailboxContextsByThreadId?.get(thread.threadId)?.pendingActions ??
+      props.pendingActions;
+    return (
+      pendingActions.isMessageActionPending(thread.anchorMessage.id) ||
+      pendingActions.isThreadActionPending(thread.threadId)
+    );
+  });
 
   const runActionThreads = async (
     action: (threads: ThreadListEntry[]) => void | Promise<void>,
@@ -448,6 +463,15 @@ const useMessageListInteractions = ({
       selection.focusedThread
     );
     if (threads.length === 0) {
+      return;
+    }
+    if (
+      props.mailboxContextsByThreadId !== undefined &&
+      threads.some(
+        (thread) =>
+          props.mailboxContextsByThreadId?.has(thread.threadId) === false
+      )
+    ) {
       return;
     }
 
@@ -478,20 +502,30 @@ const useMessageListInteractions = ({
   };
   const openFocusedThread = () => {
     const thread = selection.focusedThread;
+    const context =
+      thread === null
+        ? undefined
+        : props.mailboxContextsByThreadId?.get(thread.threadId);
     const isPending =
       thread !== null &&
-      (props.pendingActions.isMessageActionPending(thread.anchorMessage.id) ||
-        props.pendingActions.isThreadActionPending(thread.threadId));
+      ((context?.pendingActions ?? props.pendingActions).isMessageActionPending(
+        thread.anchorMessage.id
+      ) ||
+        (context?.pendingActions ?? props.pendingActions).isThreadActionPending(
+          thread.threadId
+        ));
     if (
       thread !== null &&
       selection.selectedThreadIds.size === 0 &&
       thread.unreadCount > 0 &&
-      props.mailboxProvider !== "api" &&
+      (context?.mailboxProvider ?? props.mailboxProvider) !== "api" &&
       !isPending
     ) {
       void (async () => {
         try {
-          await props.mailboxActions.markThreadAsRead(thread.threadId);
+          await (
+            context?.mailboxActions ?? props.mailboxActions
+          ).markThreadAsRead(thread.threadId);
         } catch {
           // Ignore mark-read failures during keyboard open.
         }
@@ -542,7 +576,7 @@ const useMessageListInteractions = ({
   }, [props.activeMessageId, selection]);
 
   const actionHotkeysEnabled =
-    props.mailboxProvider !== "api" &&
+    actionMailboxProvider !== "api" &&
     (props.activeMessageId?.trim() ?? "") === "" &&
     props.activeMailbox !== "drafts";
   const listNavigationHotkeysEnabled =
@@ -556,7 +590,7 @@ const useMessageListInteractions = ({
         activeMessageId: props.activeMessageId,
         listNavigationHotkeysEnabled,
         mailboxActions: props.mailboxActions,
-        mailboxProvider: props.mailboxProvider,
+        mailboxProvider: actionMailboxProvider,
         onDeactivateActiveMessage: props.onDeactivateActiveMessage,
         openBulkLabels,
         openFocusedThread,
@@ -572,15 +606,17 @@ const useMessageListInteractions = ({
   );
 
   const bulkLabels: MessageListBulkLabels | null =
-    props.mailboxProvider === "api" ||
+    labelMailboxId === null ||
+    labelMailboxActions === null ||
+    actionMailboxProvider === "api" ||
     props.activeMailbox === "drafts" ||
     userLabels.length === 0
       ? null
       : {
           isPending: isBulkActionPending,
-          mailboxId: props.mailboxId,
+          mailboxId: labelMailboxId,
           onApply: async (updates) => {
-            await props.mailboxActions.updateThreadsLabels(
+            await labelMailboxActions.updateThreadsLabels(
               updates.map(({ id, ...changes }) => ({
                 ...changes,
                 threadId: id,
@@ -599,7 +635,7 @@ const useMessageListInteractions = ({
     bulkActions: buildMessageListBulkActions({
       activeMailbox: props.activeMailbox,
       mailboxActions: props.mailboxActions,
-      mailboxProvider: props.mailboxProvider,
+      mailboxProvider: actionMailboxProvider,
       runActionThreads,
     }),
     bulkLabels,
@@ -612,14 +648,36 @@ const useMessageListInteractions = ({
 
 export const MessageList = (props: MessageListProps) => {
   const reducedMotion = useReducedMotion();
-  const { data: gmailLabels = [] } = useQuery(
-    labelsQueryOptions(props.mailboxId, props.mailboxProvider !== "api")
+  const mailboxSources = new Map<string, MessageListProps["mailboxProvider"]>();
+  if (props.mailboxContextsByThreadId) {
+    for (const context of props.mailboxContextsByThreadId.values()) {
+      mailboxSources.set(context.mailboxId, context.mailboxProvider);
+    }
+  } else {
+    mailboxSources.set(props.mailboxId, props.mailboxProvider);
+  }
+  const sourceEntries = [...mailboxSources];
+  const labelQueries = useQueries({
+    queries: sourceEntries.map(([mailboxId, mailboxProvider]) =>
+      labelsQueryOptions(mailboxId, mailboxProvider !== "api")
+    ),
+  });
+  const labelsByMailboxId = new Map(
+    sourceEntries.map(([mailboxId], index) => [
+      mailboxId,
+      labelQueries[index]?.data ?? [],
+    ])
   );
-  const userLabels = gmailLabels.filter((label) => label.type === "user");
+  const gmailLabels = labelsByMailboxId.get(props.mailboxId) ?? [];
   const flattenedMessages = props.messages.flatMap((page) => page.messages);
   const threadedMessages =
     props.activeMailbox === "drafts"
-      ? flattenedMessages.map((message) => buildDraftListEntry(message))
+      ? flattenedMessages.map((message) =>
+          buildDraftListEntry(
+            message,
+            props.mailboxContextsByThreadId !== undefined
+          )
+        )
       : buildThreadListEntries(flattenedMessages);
   const activeThreadId =
     props.activeMailbox === "drafts" ||
@@ -635,8 +693,51 @@ export const MessageList = (props: MessageListProps) => {
     onActivateMessage: props.onActivateMessage,
     onDeactivateActiveMessage: props.onDeactivateActiveMessage,
     searchQuery: props.searchQuery,
+    selectionScopeKey: props.selectionScopeKey,
     threadedMessages,
   });
+  const actionThreads = getActionThreads(
+    selection.selectedThreads,
+    selection.focusedThread
+  );
+  const actionContexts = actionThreads.map((thread) =>
+    props.mailboxContextsByThreadId?.get(thread.threadId)
+  );
+  let actionMailboxProvider = props.mailboxProvider;
+  if (props.mailboxContextsByThreadId) {
+    if (
+      actionContexts.some(
+        (context) => !context || context.mailboxProvider === "api"
+      )
+    ) {
+      actionMailboxProvider = "api";
+    } else if (
+      actionContexts.some((context) => context?.mailboxProvider === "managed")
+    ) {
+      actionMailboxProvider = "managed";
+    } else {
+      actionMailboxProvider = "gmail";
+    }
+  }
+  const singleSourceContext =
+    props.mailboxContextsByThreadId &&
+    actionContexts.length > 0 &&
+    actionContexts.every(
+      (context) =>
+        context !== undefined &&
+        context.mailboxId === actionContexts[0]?.mailboxId
+    )
+      ? actionContexts[0]
+      : undefined;
+  const labelMailboxId = props.mailboxContextsByThreadId
+    ? (singleSourceContext?.mailboxId ?? null)
+    : props.mailboxId;
+  const labelMailboxActions = props.mailboxContextsByThreadId
+    ? (singleSourceContext?.mailboxActions ?? null)
+    : props.mailboxActions;
+  const userLabels = (labelsByMailboxId.get(labelMailboxId ?? "") ?? []).filter(
+    (label) => label.type === "user"
+  );
   const {
     bulkActions,
     bulkLabels,
@@ -645,6 +746,9 @@ export const MessageList = (props: MessageListProps) => {
     handleToggleAllLoadedThreads,
     isBulkActionPending,
   } = useMessageListInteractions({
+    actionMailboxProvider,
+    labelMailboxActions,
+    labelMailboxId,
     props,
     selection,
     threadedMessages,
@@ -652,8 +756,10 @@ export const MessageList = (props: MessageListProps) => {
   });
 
   const isSelecting =
-    selection.selectedThreadIds.size > 0 && props.mailboxProvider !== "api";
-  const scrollPaneKey = `${props.mailboxId}:${props.activeMailbox}:${props.searchQuery}`;
+    selection.selectedThreadIds.size > 0 && actionMailboxProvider !== "api";
+  const scrollPaneKey =
+    props.selectionScopeKey ??
+    `${props.mailboxId}:${props.activeMailbox}:${props.searchQuery}`;
 
   return (
     <div className="@container flex min-h-0 flex-1 flex-col">
@@ -668,6 +774,7 @@ export const MessageList = (props: MessageListProps) => {
             onScrollToTop={handleScrollListToTop}
             onSearch={props.onSearch}
             searchQuery={props.searchQuery}
+            searchMailboxes={props.searchMailboxes}
           />
         }
         selection={
@@ -689,6 +796,13 @@ export const MessageList = (props: MessageListProps) => {
           ) : null
         }
       />
+
+      {props.headerAddon !== undefined && props.headerAddon !== null && (
+        <div className="px-2 pb-2 @sm:px-4">{props.headerAddon}</div>
+      )}
+      {props.listNotices !== undefined && props.listNotices !== null && (
+        <div className="px-2 pb-2 @sm:px-4">{props.listNotices}</div>
+      )}
 
       <m.div
         animate={{
@@ -717,6 +831,7 @@ export const MessageList = (props: MessageListProps) => {
       >
         <MessageListScrollPane
           gmailLabels={gmailLabels}
+          gmailLabelsByMailboxId={labelsByMailboxId}
           list={props}
           onKeyboardOpenMessage={props.onKeyboardOpenMessage}
           selection={selection}

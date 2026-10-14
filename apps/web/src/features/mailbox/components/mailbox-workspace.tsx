@@ -156,7 +156,7 @@ const useMailboxWorkspaceCompose = ({
     draft: ComposeDraftState | null;
     mailboxId: string | null;
   }>({ draft: null, key: 0, mailboxId: selectedMailboxId });
-  if (composeSession.mailboxId !== selectedMailboxId) {
+  if (isComposeMailbox && composeSession.mailboxId !== selectedMailboxId) {
     setComposeSession({
       draft: null,
       key: composeSession.key + 1,
@@ -166,7 +166,10 @@ const useMailboxWorkspaceCompose = ({
   const composeReturnMailboxRef = useRef<MailboxCategory>("inbox");
   const launchedMailtoRef = useRef<string | null>(null);
 
-  const openComposeWorkspace = (draft: ComposeDraftState | null) => {
+  const openComposeWorkspace = (
+    draft: ComposeDraftState | null,
+    draftMailboxId = selectedMailboxId
+  ) => {
     if (isComposeMailbox || (draft === null && !canComposeNew)) {
       return;
     }
@@ -179,10 +182,11 @@ const useMailboxWorkspaceCompose = ({
     setComposeSession((session) => ({
       draft,
       key: session.key + 1,
-      mailboxId: selectedMailboxId,
+      mailboxId: draftMailboxId,
     }));
     void setMailboxSearch({
       mailbox: "compose",
+      mailboxId: draftMailboxId,
       messageId: null,
       threadId: null,
       view: view === "all-inboxes" ? "all-inboxes" : "inbox",
@@ -429,7 +433,11 @@ const useMailboxWorkspaceActions = ({
     ) {
       return;
     }
-    void setMailboxSearch({ mailbox, messageId: null, view: "inbox" });
+    void setMailboxSearch({
+      mailbox,
+      messageId: null,
+      view: view === "all-inboxes" ? "all-inboxes" : "inbox",
+    });
   };
 
   const selectView = (nextView: MailboxWorkspaceView) => {

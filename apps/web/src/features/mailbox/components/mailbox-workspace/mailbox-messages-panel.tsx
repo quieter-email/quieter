@@ -81,7 +81,7 @@ const createReadOnlyMailboxActions = (): MailboxActions =>
     updateThreadsLabels: noopMailboxAction,
   }) satisfies MailboxActions;
 
-const resolveMailboxActions = ({
+export const resolveMailboxActions = ({
   activeMailbox,
   isDemoMode,
   isManagedDemoMode,

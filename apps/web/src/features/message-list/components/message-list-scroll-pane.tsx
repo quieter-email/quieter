@@ -4,7 +4,7 @@ import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import type { RouterOutputs } from "@quieter/orpc";
-import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useLayoutEffect, useMemo, useRef } from "react";
 
@@ -38,6 +38,7 @@ const MESSAGE_LIST_SKELETON_ROW_IDS = [
 
 type MessageListScrollPaneProps = {
   gmailLabels: MailboxLabel[];
+  gmailLabelsByMailboxId?: ReadonlyMap<string, MailboxLabel[]>;
   list: MessageListProps;
   onKeyboardOpenMessage?: () => void;
   selection: ReturnType<typeof useMessageListSelection>;
@@ -94,6 +95,7 @@ const MessageListLoadingSkeleton = () => (
 
 const useThreadIntentPrefetch = (
   mailboxId: string,
+  mailboxContextsByThreadId: MessageListProps["mailboxContextsByThreadId"],
   queryClient: ReturnType<typeof useQueryClient>
 ) => {
   const intentTimerRef = useRef<number | null>(null);
@@ -112,12 +114,20 @@ const useThreadIntentPrefetch = (
       if (intentThreadIdRef.current !== threadId) {
         return;
       }
-      const queryKey = getThreadQueryKey(mailboxId, threadId);
+      const context = mailboxContextsByThreadId?.get(threadId);
+      if (mailboxContextsByThreadId && !context) {
+        return;
+      }
+      const sourceMailboxId = context?.mailboxId ?? mailboxId;
+      const originalThreadId = context?.originalThreadId ?? threadId;
+      const queryKey = getThreadQueryKey(sourceMailboxId, originalThreadId);
       if (queryClient.isFetching({ exact: true, queryKey }) > 0) {
         return;
       }
       void Promise.allSettled([
-        queryClient.query(getThreadWithDetailsOptions(mailboxId, threadId)),
+        queryClient.query(
+          getThreadWithDetailsOptions(sourceMailboxId, originalThreadId)
+        ),
       ]);
     }, 200);
   };
@@ -154,6 +164,7 @@ const isLoadingEmptyMessageList = (
 
 export const MessageListScrollPane = ({
   gmailLabels,
+  gmailLabelsByMailboxId,
   list,
   onKeyboardOpenMessage,
   selection,
@@ -170,55 +181,96 @@ export const MessageListScrollPane = ({
   );
   const handleThreadIntent = useThreadIntentPrefetch(
     list.mailboxId,
+    list.mailboxContextsByThreadId,
     queryClient
   );
 
-  const deliveryMessageIds = useMemo(
-    () =>
-      threadedMessages
-        .filter((thread) =>
-          supportsMessageDelivery({
-            mailboxId: list.mailboxId,
-            mailboxProvider: list.mailboxProvider,
-            message: thread.anchorMessage,
-          })
-        )
-        .map((thread) => thread.anchorMessage.id),
-    [threadedMessages, list.mailboxId, list.mailboxProvider]
-  );
-  const { data: deliveryStatusMap } = useQuery(
-    getMessageListDeliveryOptions({
-      enabled: deliveryMessageIds.length > 0,
-      mailboxId: list.mailboxId,
-      messageIds: deliveryMessageIds,
-    })
-  );
+  const deliveryBuckets = useMemo(() => {
+    const buckets = new Map<
+      string,
+      { messageIds: string[]; uiIdByOriginalId: Map<string, string> }
+    >();
+    for (const thread of threadedMessages) {
+      const context = list.mailboxContextsByThreadId?.get(thread.threadId);
+      if (list.mailboxContextsByThreadId && !context) {
+        continue;
+      }
+      const sourceMailboxId = context?.mailboxId ?? list.mailboxId;
+      if (
+        !supportsMessageDelivery({
+          mailboxId: sourceMailboxId,
+          mailboxProvider: context?.mailboxProvider ?? list.mailboxProvider,
+          message: thread.anchorMessage,
+        })
+      ) {
+        continue;
+      }
+      const originalMessageId =
+        context?.originalMessageIds.get(thread.anchorMessage.id) ??
+        thread.anchorMessage.id;
+      const bucket = buckets.get(sourceMailboxId) ?? {
+        messageIds: [],
+        uiIdByOriginalId: new Map<string, string>(),
+      };
+      bucket.messageIds.push(originalMessageId);
+      bucket.uiIdByOriginalId.set(originalMessageId, thread.anchorMessage.id);
+      buckets.set(sourceMailboxId, bucket);
+    }
+    return [...buckets].map(([mailboxId, bucket]) => ({
+      mailboxId,
+      ...bucket,
+    }));
+  }, [
+    threadedMessages,
+    list.mailboxContextsByThreadId,
+    list.mailboxId,
+    list.mailboxProvider,
+  ]);
+  const deliveryQueries = useQueries({
+    queries: deliveryBuckets.map((bucket) =>
+      getMessageListDeliveryOptions({
+        enabled: bucket.messageIds.length > 0,
+        mailboxId: bucket.mailboxId,
+        messageIds: bucket.messageIds,
+      })
+    ),
+  });
   const deliveryStatusByMessageId = useMemo(() => {
     const statuses = new Map<
       string,
       ReturnType<typeof getAggregateDeliveryStatusFromStatuses>
     >();
-    for (const [messageId, messageStatuses] of Object.entries(
-      deliveryStatusMap ?? {}
-    )) {
-      statuses.set(
-        messageId,
-        getAggregateDeliveryStatusFromStatuses(messageStatuses)
-      );
+    for (const [index, query] of deliveryQueries.entries()) {
+      const bucket = deliveryBuckets[index];
+      if (bucket === undefined) {
+        continue;
+      }
+      for (const [originalId, messageStatuses] of Object.entries(
+        query.data ?? {}
+      )) {
+        const uiMessageId = bucket.uiIdByOriginalId.get(originalId);
+        if (uiMessageId) {
+          statuses.set(
+            uiMessageId,
+            getAggregateDeliveryStatusFromStatuses(messageStatuses)
+          );
+        }
+      }
     }
     return statuses;
-  }, [deliveryStatusMap]);
+  }, [deliveryBuckets, deliveryQueries]);
 
   // Track when we first see each thread ID to identify new messages
   const seenTimestampsRef = useRef<Map<string, number> | null>(null);
   seenTimestampsRef.current ??= new Map();
   const seenTimestamps = seenTimestampsRef.current;
   const now = Date.now();
+  const animationScopeKey = list.selectionScopeKey ?? list.mailboxId;
   const isFirstLoad = seenTimestamps.size === 0;
 
   for (const thread of threadedMessages) {
     if (thread.threadId) {
-      const compositeKey = `${list.mailboxId}-${thread.threadId}`;
+      const compositeKey = `${animationScopeKey}-${thread.threadId}`;
       if (!seenTimestamps.has(compositeKey)) {
         seenTimestamps.set(compositeKey, isFirstLoad ? 0 : now);
       }
@@ -227,7 +279,7 @@ export const MessageListScrollPane = ({
 
   // Identify threads that are new (seen in the last 2 seconds)
   const newThreads = threadedMessages.filter((t) => {
-    const compositeKey = `${list.mailboxId}-${t.threadId}`;
+    const compositeKey = `${animationScopeKey}-${t.threadId}`;
     return (seenTimestamps.get(compositeKey) ?? 0) > now - 2000;
   });
 
@@ -242,22 +294,59 @@ export const MessageListScrollPane = ({
   });
   const virtualItems = messageVirtualizer.getVirtualItems();
   const codeThreadIdBuckets = useMemo(() => {
-    if (list.mailboxProvider === "api" || list.activeMailbox === "drafts") {
+    if (list.activeMailbox === "drafts") {
       return [];
     }
-    const threadIds = [
-      ...new Set(threadedMessages.map((thread) => thread.threadId)),
-    ];
-    const buckets: string[][] = [];
-    for (let offset = 0; offset < threadIds.length; offset += 100) {
-      buckets.push(threadIds.slice(offset, offset + 100));
+    const sources = new Map<
+      string,
+      { threadIds: string[]; uiIdByOriginalId: Map<string, string> }
+    >();
+    for (const thread of threadedMessages) {
+      const context = list.mailboxContextsByThreadId?.get(thread.threadId);
+      if (
+        (list.mailboxContextsByThreadId && !context) ||
+        (context?.mailboxProvider ?? list.mailboxProvider) === "api"
+      ) {
+        continue;
+      }
+      const mailboxId = context?.mailboxId ?? list.mailboxId;
+      const originalThreadId = context?.originalThreadId ?? thread.threadId;
+      const source = sources.get(mailboxId) ?? {
+        threadIds: [],
+        uiIdByOriginalId: new Map<string, string>(),
+      };
+      if (!source.uiIdByOriginalId.has(originalThreadId)) {
+        source.threadIds.push(originalThreadId);
+      }
+      source.uiIdByOriginalId.set(originalThreadId, thread.threadId);
+      sources.set(mailboxId, source);
+    }
+    const buckets: {
+      mailboxId: string;
+      threadIds: string[];
+      uiIdByOriginalId: Map<string, string>;
+    }[] = [];
+    for (const [mailboxId, source] of sources) {
+      for (let offset = 0; offset < source.threadIds.length; offset += 100) {
+        buckets.push({
+          mailboxId,
+          threadIds: source.threadIds.slice(offset, offset + 100),
+          uiIdByOriginalId: source.uiIdByOriginalId,
+        });
+      }
     }
     return buckets;
-  }, [threadedMessages, list.activeMailbox, list.mailboxProvider]);
+  }, [
+    threadedMessages,
+    list.activeMailbox,
+    list.mailboxContextsByThreadId,
+    list.mailboxId,
+    list.mailboxProvider,
+  ]);
   const codeQueries = useQueries({
-    queries: codeThreadIdBuckets.map((threadIds) => ({
+    queries: codeThreadIdBuckets.map(({ mailboxId, threadIds }) => ({
       ...verificationCodesQueryOptions(
-        list.mailboxId,
+        mailboxId,
         { mode: "threads", threadIds },
         true
       ),
@@ -266,7 +355,7 @@ export const MessageListScrollPane = ({
         return {
           items: queryClient
             .getQueriesData<RouterOutputs["mail"]["listVerificationCodes"]>({
-              queryKey: ["verification-codes", list.mailboxId, "threads"],
+              queryKey: ["verification-codes", mailboxId, "threads"],
             })
             .toSorted(
               ([leftKey], [rightKey]) =>
@@ -283,10 +372,15 @@ export const MessageListScrollPane = ({
     string,
     RouterOutputs["mail"]["listVerificationCodes"]["items"][number]
   >();
-  for (const query of codeQueries) {
+  for (const [index, query] of codeQueries.entries()) {
+    const bucket = codeThreadIdBuckets[index];
+    if (bucket === undefined) {
+      continue;
+    }
     for (const code of query.data?.items ?? []) {
-      if (!latestCodeByThreadId.has(code.threadId)) {
-        latestCodeByThreadId.set(code.threadId, code);
+      const uiThreadId = bucket.uiIdByOriginalId.get(code.threadId);
+      if (uiThreadId && !latestCodeByThreadId.has(uiThreadId)) {
+        latestCodeByThreadId.set(uiThreadId, code);
       }
     }
   }
@@ -409,8 +503,12 @@ export const MessageListScrollPane = ({
         >
           {virtualItems.map((virtualItem) => {
             const thread = threadedMessages[virtualItem.index];
+            const context =
+              thread === undefined
+                ? undefined
+                : list.mailboxContextsByThreadId?.get(thread.threadId);
             const compositeKey = thread?.threadId
-              ? `${list.mailboxId}-${thread.threadId}`
+              ? `${animationScopeKey}-${thread.threadId}`
               : "";
             const isNew = thread?.threadId
               ? (seenTimestamps.get(compositeKey) ?? 0) > now - 2000
@@ -420,9 +518,16 @@ export const MessageListScrollPane = ({
                 ? newThreads.findIndex((t) => t.threadId === thread.threadId)
                 : 0;
 
-            return thread === undefined ? null : (
+            if (
+              thread === undefined ||
+              (list.mailboxContextsByThreadId && !context)
+            ) {
+              return null;
+            }
+            return (
               <MessageRow
                 activeMailbox={list.activeMailbox}
+                badge={context?.badge}
                 className="absolute top-0 left-0 w-full"
                 dataIndex={virtualItem.index}
                 deliveryStatus={
@@ -430,12 +535,19 @@ export const MessageListScrollPane = ({
                     ? undefined
                     : deliveryStatusByMessageId.get(thread.anchorMessage.id)
                 }
-                gmailLabels={gmailLabels}
+                gmailLabels={
+                  context
+                    ? (gmailLabelsByMailboxId?.get(context.mailboxId) ?? [])
+                    : gmailLabels
+                }
                 isNew={isNew}
                 key={thread.threadId}
-                mailboxActions={list.mailboxActions}
-                mailboxId={list.mailboxId}
-                mailboxProvider={list.mailboxProvider}
+                mailboxActions={context?.mailboxActions ?? list.mailboxActions}
+                mailboxEmailAddress={context?.emailAddress}
+                mailboxId={context?.mailboxId ?? list.mailboxId}
+                mailboxProvider={
+                  context?.mailboxProvider ?? list.mailboxProvider
+                }
                 offsetY={virtualItem.start}
                 onThreadFocus={handleThreadFocus}
                 onThreadIntent={handleThreadIntent}
@@ -443,7 +555,7 @@ export const MessageListScrollPane = ({
                 onKeyboardOpen={onKeyboardOpenMessage}
                 onThreadPress={selection.handleThreadPress}
                 onThreadSelectionPress={selection.handleThreadSelectionPress}
-                pendingActions={list.pendingActions}
+                pendingActions={context?.pendingActions ?? list.pendingActions}
                 staggerIndex={staggerIndex}
                 state={{
                   active: activeThreadId === thread.threadId,

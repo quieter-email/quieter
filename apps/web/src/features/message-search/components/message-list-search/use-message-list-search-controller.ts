@@ -7,7 +7,7 @@ import {
 } from "@quieter/mail/search";
 import { toast } from "@quieter/ui/toast";
 import { useHotkey } from "@tanstack/react-hotkeys";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
 import {
   useEffect,
   useEffectEvent,
@@ -124,6 +124,7 @@ export const useMessageListSearchController = ({
   onScrollToTop,
   onSearch,
   searchQuery,
+  searchMailboxes,
 }: MessageListSearchProps) => {
   const fieldRef = useRef<HTMLDivElement>(null);
   const textInputRef = useRef<HTMLInputElement>(null);
@@ -197,12 +198,51 @@ export const useMessageListSearchController = ({
     textInputIndex ?? currentState.filters.length,
     currentState.filters.length
   );
-  const {
-    data: labelsData,
-    error: labelsError,
-    isPending: isLabelsPending,
-  } = useQuery(labelsQueryOptions(mailboxId, isDropdownOpen));
-  const userLabels = getUserLabels(labelsData ?? []);
+  const labelSources = new Map<
+    string,
+    MessageListSearchProps["mailboxProvider"]
+  >();
+  if (searchMailboxes === undefined) {
+    labelSources.set(mailboxId, mailboxProvider);
+  } else {
+    for (const source of searchMailboxes) {
+      labelSources.set(source.mailboxId, source.mailboxProvider);
+    }
+  }
+  const labelSourceIds = [...labelSources]
+    .filter(
+      ([sourceMailboxId, provider]) =>
+        sourceMailboxId.trim() !== "" && provider !== "api"
+    )
+    .map(([sourceMailboxId]) => sourceMailboxId)
+    .toSorted();
+  const labelQueries = useQueries({
+    queries: labelSourceIds.map((sourceMailboxId) =>
+      labelsQueryOptions(sourceMailboxId, isDropdownOpen)
+    ),
+  });
+  const labelsError = labelQueries.find((query) => query.isError)?.error;
+  const isLabelsPending = labelQueries.some((query) => query.isPending);
+  const labelsByName = new Map<
+    string,
+    ReturnType<typeof getUserLabels>[number]
+  >();
+  for (const query of labelQueries) {
+    for (const label of getUserLabels(query.data ?? []).toSorted(
+      (left, right) => left.name.localeCompare(right.name)
+    )) {
+      const key = normalizeLabelSelectionKey(label.name);
+      if (key !== "" && !labelsByName.has(key)) {
+        labelsByName.set(
+          key,
+          searchMailboxes === undefined ? label : { ...label, id: label.name }
+        );
+      }
+    }
+  }
+  const userLabels = [...labelsByName.values()].toSorted((left, right) =>
+    left.name.localeCompare(right.name)
+  );
   const activeDateFilter =
     activeDateFilterIndex === null
       ? null
@@ -582,7 +622,7 @@ export const useMessageListSearchController = ({
         handleFilterSelection(option.filter);
       },
     })),
-    ...(isLabelsPending || labelsError
+    ...(userLabels.length === 0 && (isLabelsPending || labelsError)
       ? []
       : userLabels.map((label) => ({
           key: `label:${normalizeLabelSelectionKey(label.name)}`,
@@ -1098,9 +1138,12 @@ export const useMessageListSearchController = ({
     interpretNaturalLanguage,
     isDropdownOpen,
     isInterpretingSearch: interpretMutation.isPending,
-    isLoadingLabels: isLabelsPending,
+    isLoadingLabels: isLabelsPending && userLabels.length === 0,
     isRefreshing,
-    labelsErrorMessage: isLabelsPending ? null : (labelsError?.message ?? null),
+    labelsErrorMessage:
+      isLabelsPending || userLabels.length > 0
+        ? null
+        : (labelsError?.message ?? null),
     onRefresh,
     onScrollToTop,
     openDateFilter,
@@ -1118,7 +1161,7 @@ export const useMessageListSearchController = ({
     toggleLabelToken,
     updateFilterValue,
     updateSearchText,
-    userLabels: isLabelsPending ? [] : userLabels,
+    userLabels,
   };
 };
 
