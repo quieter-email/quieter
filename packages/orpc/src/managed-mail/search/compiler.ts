@@ -47,20 +47,20 @@ const createHeaderFilterCondition = (
     return undefined;
   }
   return exists(
-    sql`select 1
+    sql`(select 1
         from jsonb_array_elements(${managedMailMessage.headers}) as header
         where regexp_replace(lower(trim(header->>'name')), '[[:space:]]+', ' ', 'g') = ${headerName}
-          and regexp_replace(lower(trim(header->>'value')), '[[:space:]]+', ' ', 'g') like ${createContainsPattern(normalizeManagedSearchValue(headerValue))}`
+          and regexp_replace(lower(trim(header->>'value')), '[[:space:]]+', ' ', 'g') like ${createContainsPattern(normalizeManagedSearchValue(headerValue))})`
   );
 };
 
 const createFilenameFilterCondition = (filter: MailSearchFilter) => {
   const normalizedValue = normalizeManagedSearchValue(filter.value.trim());
   return exists(
-    sql`select 1 from ${managedMailAttachment}
+    sql`(select 1 from ${managedMailAttachment}
         where ${managedMailAttachment.messageId} = ${managedMailMessage.id}
           and ${managedMailAttachment.normalizedFileName}
-            like ${createContainsPattern(normalizedValue)}`
+            like ${createContainsPattern(normalizedValue)})`
   );
 };
 
@@ -70,7 +70,7 @@ const createLabelFilterCondition = (
 ) => {
   const normalizedValue = normalizeManagedSearchValue(filter.value.trim());
   return exists(
-    sql`select 1
+    sql`(select 1
         from ${managedMailMessageLabel}
         inner join ${managedMailLabel}
           on ${managedMailLabel.id} = ${managedMailMessageLabel.labelId}
@@ -79,7 +79,7 @@ const createLabelFilterCondition = (
           and (
             ${managedMailLabel.normalizedName} = ${normalizedValue}
             or lower(${managedMailLabel.id}) = ${normalizedValue}
-          )`
+          ))`
   );
 };
 
@@ -200,8 +200,8 @@ const createFilterCondition = (
     case "has": {
       if (value === "attachment") {
         condition = exists(
-          sql`select 1 from ${managedMailAttachment}
-              where ${managedMailAttachment.messageId} = ${managedMailMessage.id}`
+          sql`(select 1 from ${managedMailAttachment}
+              where ${managedMailAttachment.messageId} = ${managedMailMessage.id})`
         );
       }
       break;
@@ -245,10 +245,10 @@ const createTextCondition = (text: string, fullText: boolean) => {
       createContainsPattern(normalizeManagedSearchValue(text))
     ),
     exists(
-      sql`select 1 from ${managedMailAttachment}
+      sql`(select 1 from ${managedMailAttachment}
           where ${managedMailAttachment.messageId} = ${managedMailMessage.id}
             and ${managedMailAttachment.normalizedFileName}
-              like ${createContainsPattern(normalizeManagedSearchValue(text))}`
+              like ${createContainsPattern(normalizeManagedSearchValue(text))})`
     ),
   ];
   if (fullText) {
