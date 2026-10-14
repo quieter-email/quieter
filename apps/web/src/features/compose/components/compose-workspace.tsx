@@ -1151,13 +1151,13 @@ export const ComposeWorkspace = ({
           transferDraft,
           hasAuthoredContent
         ) => {
-          await onSwitchSenderMailbox?.(nextMailboxId);
           if (senderSession.mailboxId && selectedSender !== undefined) {
             savedSenderDrafts.current.set(
               senderSession.mailboxId,
               currentDraft
             );
           }
+          await onSwitchSenderMailbox?.(nextMailboxId);
           const savedDraft = savedSenderDrafts.current.get(nextMailboxId);
           setSenderSession({
             draft: savedDraft
