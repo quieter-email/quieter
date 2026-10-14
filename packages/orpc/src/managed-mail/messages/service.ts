@@ -32,6 +32,7 @@ import {
   desc,
   eq,
   inArray,
+  isNotNull,
   lt,
   ne,
   or,
@@ -321,7 +322,7 @@ export const listManagedMessages = async (input: {
               attachmentCount: countDistinct(managedMailAttachment.id),
               labelIds: sql<
                 string[]
-              >`coalesce(array_agg(distinct ${managedMailMessageLabel.labelId}) filter (where ${managedMailMessageLabel.labelId} is not null), '{}')`,
+              >`coalesce(array_agg(distinct ${managedMailMessageLabel.labelId}) filter (where ${isNotNull(managedMailMessageLabel.labelId)}), '{}')`,
               messageCount: countDistinct(managedMailMessage.id),
               threadId: managedMailMessage.threadId,
             })
@@ -584,25 +585,25 @@ const updateManagedMessageState = async (input: {
       "mailboxState" in input.changes ? ["manager", "responder"] : undefined,
     userId: input.userId,
   });
-  const [record] = await db
-    .select({
-      direction: managedMailMessage.direction,
-      isRead: managedMailMessage.isRead,
-      mailboxState: managedMailMessage.mailboxState,
-    })
-    .from(managedMailMessage)
-    .where(
-      and(
-        eq(managedMailMessage.mailboxId, input.mailboxId),
-        eq(managedMailMessage.id, input.messageId)
+  const { record, customLabels } = await db.transaction(async (tx) => {
+    const [lockedRecord] = await tx
+      .select({
+        direction: managedMailMessage.direction,
+        isRead: managedMailMessage.isRead,
+        mailboxState: managedMailMessage.mailboxState,
+      })
+      .from(managedMailMessage)
+      .where(
+        and(
+          eq(managedMailMessage.mailboxId, input.mailboxId),
+          eq(managedMailMessage.id, input.messageId)
+        )
       )
-    )
-    .limit(1);
-  if (record === undefined) {
-    throw new ORPCError("NOT_FOUND", { message: "Message not found." });
-  }
-
-  await db.transaction(async (tx) => {
+      .limit(1)
+      .for("update");
+    if (lockedRecord === undefined) {
+      throw new ORPCError("NOT_FOUND", { message: "Message not found." });
+    }
     await tx
       .update(managedMailMessage)
       .set({ ...input.changes, updatedAt: new Date() })
@@ -619,11 +620,12 @@ const updateManagedMessageState = async (input: {
         updatedAt: new Date(),
       })
       .where(eq(mailbox.id, input.mailboxId));
+    const selectedCustomLabels = await tx
+      .select({ labelId: managedMailMessageLabel.labelId })
+      .from(managedMailMessageLabel)
+      .where(eq(managedMailMessageLabel.messageId, input.messageId));
+    return { customLabels: selectedCustomLabels, record: lockedRecord };
   });
-  const customLabels = await db
-    .select({ labelId: managedMailMessageLabel.labelId })
-    .from(managedMailMessageLabel)
-    .where(eq(managedMailMessageLabel.messageId, input.messageId));
 
   const updated = { ...record, ...input.changes };
   return {
@@ -671,7 +673,9 @@ export const applyManagedMessageChanges = async (input: {
           eq(managedMailMessage.mailboxId, input.mailboxId),
           inArray(managedMailMessage.id, messageIds)
         )
-      );
+      )
+      .orderBy(asc(managedMailMessage.id))
+      .for("update");
     const threadIdByMessageId = new Map(
       records.map((record) => [record.id, record.threadId])
     );
@@ -809,33 +813,39 @@ const updateManagedThreadState = async (input: {
     "mailboxState" in input.changes && input.changes.mailboxState === "archived"
       ? ne(managedMailMessage.mailboxState, "draft")
       : undefined;
-  const records = await db
-    .select({
-      direction: managedMailMessage.direction,
-      id: managedMailMessage.id,
-      isRead: managedMailMessage.isRead,
-      mailboxState: managedMailMessage.mailboxState,
-    })
-    .from(managedMailMessage)
-    .where(
-      and(
-        eq(managedMailMessage.mailboxId, input.mailboxId),
-        eq(managedMailMessage.threadId, input.threadId),
-        stateCondition
+  const { records, customLabels } = await db.transaction(async (tx) => {
+    const lockedRecords = await tx
+      .select({
+        direction: managedMailMessage.direction,
+        id: managedMailMessage.id,
+        isRead: managedMailMessage.isRead,
+        mailboxState: managedMailMessage.mailboxState,
+      })
+      .from(managedMailMessage)
+      .where(
+        and(
+          eq(managedMailMessage.mailboxId, input.mailboxId),
+          eq(managedMailMessage.threadId, input.threadId),
+          stateCondition
+        )
       )
-    );
-  if (records.length === 0) {
-    throw new ORPCError("NOT_FOUND", { message: "Message thread not found." });
-  }
-
-  await db.transaction(async (tx) => {
+      .orderBy(asc(managedMailMessage.id))
+      .for("update");
+    if (lockedRecords.length === 0) {
+      throw new ORPCError("NOT_FOUND", {
+        message: "Message thread not found.",
+      });
+    }
     await tx
       .update(managedMailMessage)
       .set({ ...input.changes, updatedAt: new Date() })
       .where(
         and(
           eq(managedMailMessage.mailboxId, input.mailboxId),
-          eq(managedMailMessage.threadId, input.threadId),
+          inArray(
+            managedMailMessage.id,
+            lockedRecords.map((record) => record.id)
+          ),
           stateCondition
         )
       );
@@ -846,19 +856,20 @@ const updateManagedThreadState = async (input: {
         updatedAt: new Date(),
       })
       .where(eq(mailbox.id, input.mailboxId));
+    const selectedCustomLabels = await tx
+      .select({
+        labelId: managedMailMessageLabel.labelId,
+        messageId: managedMailMessageLabel.messageId,
+      })
+      .from(managedMailMessageLabel)
+      .where(
+        inArray(
+          managedMailMessageLabel.messageId,
+          lockedRecords.map((record) => record.id)
+        )
+      );
+    return { customLabels: selectedCustomLabels, records: lockedRecords };
   });
-  const customLabels = await db
-    .select({
-      labelId: managedMailMessageLabel.labelId,
-      messageId: managedMailMessageLabel.messageId,
-    })
-    .from(managedMailMessageLabel)
-    .where(
-      inArray(
-        managedMailMessageLabel.messageId,
-        records.map((record) => record.id)
-      )
-    );
   const labelIdsByMessageId = new Map<string, string[]>();
   for (const assignment of customLabels) {
     const labelIds = labelIdsByMessageId.get(assignment.messageId) ?? [];

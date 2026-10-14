@@ -3,7 +3,8 @@ import { gmailLabel } from "@quieter/database/schema";
 import { mailboxLabelColorSchema } from "@quieter/mail/mailbox-organization";
 import type { MailboxLabelColor } from "@quieter/mail/mailbox-organization";
 import type { MailLabelListItem } from "@quieter/mail/messages";
-import { and, eq, notInArray, sql } from "drizzle-orm";
+import { and, eq, notInArray } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
 export type GmailLabelWithDetails = MailLabelListItem & {
   color: MailboxLabelColor;
@@ -18,49 +19,53 @@ export const syncGmailLabels = async (
   const userLabels = labels.filter((label) => label.type === "user");
   const now = new Date();
 
-  if (userLabels.length > 0) {
-    await db
-      .insert(gmailLabel)
-      .values(
-        userLabels.map((label) => ({
-          color: "gray",
-          createdAt: now,
-          labelId: label.id,
-          mailboxId,
-          name: label.name,
-          updatedAt: now,
-        }))
-      )
-      .onConflictDoUpdate({
-        set: {
-          name: sql.raw('excluded."name"'),
-          updatedAt: now,
-        },
-        target: [gmailLabel.mailboxId, gmailLabel.labelId],
-      });
-
-    await db.delete(gmailLabel).where(
-      and(
-        eq(gmailLabel.mailboxId, mailboxId),
-        notInArray(
-          gmailLabel.labelId,
-          userLabels.map((label) => label.id)
+  const details = await db.transaction(async (transaction) => {
+    if (userLabels.length > 0) {
+      await transaction
+        .insert(gmailLabel)
+        .values(
+          userLabels.map((label) => ({
+            color: "gray",
+            createdAt: now,
+            labelId: label.id,
+            mailboxId,
+            name: label.name,
+            updatedAt: now,
+          }))
         )
-      )
-    );
-  } else {
-    await db.delete(gmailLabel).where(eq(gmailLabel.mailboxId, mailboxId));
-  }
+        .onConflictDoUpdate({
+          set: {
+            name: alias(gmailLabel, "excluded").name,
+            updatedAt: now,
+          },
+          target: [gmailLabel.mailboxId, gmailLabel.labelId],
+        });
 
-  const details = await db
-    .select({
-      color: gmailLabel.color,
-      description: gmailLabel.description,
-      inclusionCriteria: gmailLabel.inclusionCriteria,
-      labelId: gmailLabel.labelId,
-    })
-    .from(gmailLabel)
-    .where(eq(gmailLabel.mailboxId, mailboxId));
+      await transaction.delete(gmailLabel).where(
+        and(
+          eq(gmailLabel.mailboxId, mailboxId),
+          notInArray(
+            gmailLabel.labelId,
+            userLabels.map((label) => label.id)
+          )
+        )
+      );
+    } else {
+      await transaction
+        .delete(gmailLabel)
+        .where(eq(gmailLabel.mailboxId, mailboxId));
+    }
+
+    return await transaction
+      .select({
+        color: gmailLabel.color,
+        description: gmailLabel.description,
+        inclusionCriteria: gmailLabel.inclusionCriteria,
+        labelId: gmailLabel.labelId,
+      })
+      .from(gmailLabel)
+      .where(eq(gmailLabel.mailboxId, mailboxId));
+  });
   const detailsByLabelId = new Map(
     details.map((detail) => [detail.labelId, detail])
   );

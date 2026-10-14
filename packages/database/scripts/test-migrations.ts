@@ -8,11 +8,16 @@ import {
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { asc } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
 import { assertLocalDatabaseUrl } from "./database-url.ts";
 import { runKitMigrate } from "./drizzle-kit.ts";
-import { runForwardMigrations } from "./run-forward-migrations.ts";
+import {
+  migrationLedger,
+  runForwardMigrations,
+} from "./run-forward-migrations.ts";
 import { testBillingCreditRepair } from "./test-billing-credit-repair.ts";
 
 const packageDirectory = fileURLToPath(new URL("..", import.meta.url));
@@ -49,11 +54,10 @@ const resetDatabase = async () => {
 };
 
 const assertMigrationHistory = async () => {
-  const history: { name: string }[] = await sql`
-    SELECT name
-    FROM drizzle.__drizzle_migrations
-    ORDER BY id
-  `;
+  const history = await drizzle({ client: sql })
+    .select({ name: migrationLedger.name })
+    .from(migrationLedger)
+    .orderBy(asc(migrationLedger.id));
   const appliedNames = history.map((entry) => entry.name);
 
   if (

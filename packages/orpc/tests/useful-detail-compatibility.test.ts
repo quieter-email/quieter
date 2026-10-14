@@ -23,8 +23,8 @@ const mocks = vi.hoisted(() => ({
 
 // This fake implements only the insert operations exercised by the test.
 // oxlint-disable-next-line vitest/prefer-import-in-mock
-vi.mock("@quieter/database/client", () => ({
-  db: {
+vi.mock("@quieter/database/client", () => {
+  const database = {
     insert: () => ({
       values: (values: Record<string, unknown>) => {
         mocks.insertedValues.push(values);
@@ -35,8 +35,16 @@ vi.mock("@quieter/database/client", () => ({
         };
       },
     }),
-  },
-}));
+  };
+  return {
+    db: {
+      ...database,
+      transaction: async <Result>(
+        run: (transaction: typeof database) => Promise<Result>
+      ) => await run(database),
+    },
+  };
+});
 vi.mock(import("../src/mailbox/access"), () => ({
   assertOwnedGmailMailbox: mocks.owned,
 }));

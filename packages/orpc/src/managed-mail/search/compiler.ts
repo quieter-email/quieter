@@ -10,14 +10,28 @@ import type {
   MailSearchFilter,
   StructuredMailSearch,
 } from "@quieter/mail/search";
-import { and, eq, exists, ilike, not, or, sql } from "drizzle-orm";
+import {
+  and,
+  eq,
+  exists,
+  gte,
+  ilike,
+  like,
+  lt,
+  not,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
+import { QueryBuilder } from "drizzle-orm/pg-core";
 
 import {
   normalizeManagedSearchValue,
   parseAbsoluteDate,
   parseRelativeDate,
 } from "./normalization";
+
+const queryBuilder = new QueryBuilder();
 
 const createContainsPattern = (value: string) =>
   `%${value.replaceAll(/[%_\\]/gu, "\\$&")}%`;
@@ -28,7 +42,7 @@ const createAddressFilterCondition = (
 ) => {
   const value = filter.value.trim();
   return ilike(
-    sql`coalesce(${column}, '')`,
+    column,
     createContainsPattern(normalizeManagedSearchValue(value))
   );
 };
@@ -47,20 +61,39 @@ const createHeaderFilterCondition = (
     return undefined;
   }
   return exists(
-    sql`select 1
-        from jsonb_array_elements(${managedMailMessage.headers}) as header
-        where regexp_replace(lower(trim(header->>'name')), '[[:space:]]+', ' ', 'g') = ${headerName}
-          and regexp_replace(lower(trim(header->>'value')), '[[:space:]]+', ' ', 'g') like ${createContainsPattern(normalizeManagedSearchValue(headerValue))}`
+    queryBuilder
+      .select({ name: sql<string>`header->>'name'` })
+      .from(sql`jsonb_array_elements(${managedMailMessage.headers}) as header`)
+      .where(
+        and(
+          eq(
+            sql`regexp_replace(lower(trim(header->>'name')), '[[:space:]]+', ' ', 'g')`,
+            headerName
+          ),
+          like(
+            sql`regexp_replace(lower(trim(header->>'value')), '[[:space:]]+', ' ', 'g')`,
+            createContainsPattern(normalizeManagedSearchValue(headerValue))
+          )
+        )
+      )
   );
 };
 
 const createFilenameFilterCondition = (filter: MailSearchFilter) => {
   const normalizedValue = normalizeManagedSearchValue(filter.value.trim());
   return exists(
-    sql`select 1 from ${managedMailAttachment}
-        where ${managedMailAttachment.messageId} = ${managedMailMessage.id}
-          and ${managedMailAttachment.normalizedFileName}
-            like ${createContainsPattern(normalizedValue)}`
+    queryBuilder
+      .select({ id: managedMailAttachment.id })
+      .from(managedMailAttachment)
+      .where(
+        and(
+          eq(managedMailAttachment.messageId, managedMailMessage.id),
+          like(
+            managedMailAttachment.normalizedFileName,
+            createContainsPattern(normalizedValue)
+          )
+        )
+      )
   );
 };
 
@@ -70,16 +103,23 @@ const createLabelFilterCondition = (
 ) => {
   const normalizedValue = normalizeManagedSearchValue(filter.value.trim());
   return exists(
-    sql`select 1
-        from ${managedMailMessageLabel}
-        inner join ${managedMailLabel}
-          on ${managedMailLabel.id} = ${managedMailMessageLabel.labelId}
-        where ${managedMailMessageLabel.messageId} = ${managedMailMessage.id}
-          and ${managedMailMessageLabel.mailboxId} = ${mailboxId}
-          and (
-            ${managedMailLabel.normalizedName} = ${normalizedValue}
-            or lower(${managedMailLabel.id}) = ${normalizedValue}
-          )`
+    queryBuilder
+      .select({ messageId: managedMailMessageLabel.messageId })
+      .from(managedMailMessageLabel)
+      .innerJoin(
+        managedMailLabel,
+        eq(managedMailLabel.id, managedMailMessageLabel.labelId)
+      )
+      .where(
+        and(
+          eq(managedMailMessageLabel.messageId, managedMailMessage.id),
+          eq(managedMailMessageLabel.mailboxId, mailboxId),
+          or(
+            eq(managedMailLabel.normalizedName, normalizedValue),
+            eq(sql`lower(${managedMailLabel.id})`, normalizedValue)
+          )
+        )
+      )
   );
 };
 
@@ -123,9 +163,9 @@ const createDateFilterCondition = (
       return undefined;
     }
     if (filter.type === "before") {
-      return sql`${managedMailMessage.sentAt} < ${date}`;
+      return lt(managedMailMessage.sentAt, date);
     }
-    return sql`${managedMailMessage.sentAt} >= ${date}`;
+    return gte(managedMailMessage.sentAt, date);
   }
 
   const date = parseRelativeDate(value, now);
@@ -133,9 +173,9 @@ const createDateFilterCondition = (
     return undefined;
   }
   if (filter.type === "older_than") {
-    return sql`${managedMailMessage.sentAt} < ${date}`;
+    return lt(managedMailMessage.sentAt, date);
   }
-  return sql`${managedMailMessage.sentAt} >= ${date}`;
+  return gte(managedMailMessage.sentAt, date);
 };
 
 const createFilterCondition = (
@@ -200,8 +240,10 @@ const createFilterCondition = (
     case "has": {
       if (value === "attachment") {
         condition = exists(
-          sql`select 1 from ${managedMailAttachment}
-              where ${managedMailAttachment.messageId} = ${managedMailMessage.id}`
+          queryBuilder
+            .select({ id: managedMailAttachment.id })
+            .from(managedMailAttachment)
+            .where(eq(managedMailAttachment.messageId, managedMailMessage.id))
         );
       }
       break;
@@ -245,10 +287,18 @@ const createTextCondition = (text: string, fullText: boolean) => {
       createContainsPattern(normalizeManagedSearchValue(text))
     ),
     exists(
-      sql`select 1 from ${managedMailAttachment}
-          where ${managedMailAttachment.messageId} = ${managedMailMessage.id}
-            and ${managedMailAttachment.normalizedFileName}
-              like ${createContainsPattern(normalizeManagedSearchValue(text))}`
+      queryBuilder
+        .select({ id: managedMailAttachment.id })
+        .from(managedMailAttachment)
+        .where(
+          and(
+            eq(managedMailAttachment.messageId, managedMailMessage.id),
+            like(
+              managedMailAttachment.normalizedFileName,
+              createContainsPattern(normalizeManagedSearchValue(text))
+            )
+          )
+        )
     ),
   ];
   if (fullText) {

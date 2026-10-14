@@ -12,17 +12,14 @@ import type { ManagedMailMailboxState } from "@quieter/database/schema";
 import { mailboxLabelColorSchema } from "@quieter/mail/mailbox-organization";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { MAILBOX_LABELS } from "@quieter/mail/messages";
-import { and, asc, countDistinct, eq, sql } from "drizzle-orm";
+import { and, asc, countDistinct, eq, inArray, sql } from "drizzle-orm";
 
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
 import { getManagedMessageLabelIds } from "../messages/service";
 import { throwMailboxOrganizationNameConflict } from "../organization/name-conflict";
 import { normalizeManagedOrganizationName } from "../organization/normalize-name";
 import { updateManagedLabelReferences } from "./references";
-import {
-  assertManagedLabelsBelongToMailbox,
-  updateManagedMessageLabelAssignments,
-} from "./repository";
+import { updateManagedMessageLabelAssignments } from "./repository";
 
 const toMailboxLabel = (
   record: typeof managedMailLabel.$inferSelect
@@ -221,11 +218,29 @@ export const reorderManagedLabels = async (input: {
     requiredRoles: ["manager"],
     userId: input.userId,
   });
-  await assertManagedLabelsBelongToMailbox(input.mailboxId, input.labelIds);
   const now = new Date();
-  await Promise.all(
-    input.labelIds.map((labelId, position) =>
-      db
+  await db.transaction(async (tx) => {
+    const labels =
+      input.labelIds.length > 0
+        ? await tx
+            .select({ id: managedMailLabel.id })
+            .from(managedMailLabel)
+            .where(
+              and(
+                eq(managedMailLabel.mailboxId, input.mailboxId),
+                inArray(managedMailLabel.id, input.labelIds)
+              )
+            )
+            .orderBy(asc(managedMailLabel.id))
+            .for("update")
+        : [];
+    if (labels.length !== new Set(input.labelIds).size) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "One or more labels are unavailable.",
+      });
+    }
+    for (const [position, labelId] of input.labelIds.entries()) {
+      await tx
         .update(managedMailLabel)
         .set({ position, updatedAt: now, updatedByUserId: input.userId })
         .where(
@@ -233,9 +248,9 @@ export const reorderManagedLabels = async (input: {
             eq(managedMailLabel.id, labelId),
             eq(managedMailLabel.mailboxId, input.mailboxId)
           )
-        )
-    )
-  );
+        );
+    }
+  });
   return { labelIds: input.labelIds };
 };
 
@@ -281,25 +296,29 @@ export const updateManagedThreadLabels = async (input: {
     requiredRoles: ["manager", "responder"],
     userId: input.userId,
   });
-  const messages = await db
-    .select({
-      direction: managedMailMessage.direction,
-      id: managedMailMessage.id,
-      isRead: managedMailMessage.isRead,
-      mailboxState: managedMailMessage.mailboxState,
-    })
-    .from(managedMailMessage)
-    .where(
-      and(
-        eq(managedMailMessage.mailboxId, input.mailboxId),
-        eq(managedMailMessage.threadId, input.threadId)
-      )
-    );
-  if (messages.length === 0) {
-    throw new ORPCError("NOT_FOUND", { message: "Message thread not found." });
-  }
   const mailboxState = getMailboxStateFromLabelChanges(input);
-  const updated = await db.transaction(async (tx) => {
+  const { messages, updated } = await db.transaction(async (tx) => {
+    const lockedMessages = await tx
+      .select({
+        direction: managedMailMessage.direction,
+        id: managedMailMessage.id,
+        isRead: managedMailMessage.isRead,
+        mailboxState: managedMailMessage.mailboxState,
+      })
+      .from(managedMailMessage)
+      .where(
+        and(
+          eq(managedMailMessage.mailboxId, input.mailboxId),
+          eq(managedMailMessage.threadId, input.threadId)
+        )
+      )
+      .orderBy(asc(managedMailMessage.id))
+      .for("update");
+    if (lockedMessages.length === 0) {
+      throw new ORPCError("NOT_FOUND", {
+        message: "Message thread not found.",
+      });
+    }
     if (mailboxState) {
       await tx
         .update(managedMailMessage)
@@ -307,7 +326,10 @@ export const updateManagedThreadLabels = async (input: {
         .where(
           and(
             eq(managedMailMessage.mailboxId, input.mailboxId),
-            eq(managedMailMessage.threadId, input.threadId)
+            inArray(
+              managedMailMessage.id,
+              lockedMessages.map((message) => message.id)
+            )
           )
         );
     }
@@ -315,7 +337,7 @@ export const updateManagedThreadLabels = async (input: {
       ...input,
       addLabelIds: getCustomLabelIds(input.addLabelIds),
       database: tx,
-      messageIds: messages.map((message) => message.id),
+      messageIds: lockedMessages.map((message) => message.id),
       removeLabelIds: getCustomLabelIds(input.removeLabelIds),
       source: "manual",
     });
@@ -326,7 +348,7 @@ export const updateManagedThreadLabels = async (input: {
         updatedAt: new Date(),
       })
       .where(eq(mailbox.id, input.mailboxId));
-    return assignments;
+    return { messages: lockedMessages, updated: assignments };
   });
   const messagesById = new Map(
     messages.map((message) => [message.id, message])
@@ -364,26 +386,27 @@ export const updateSingleManagedMessageLabels = async (input: {
     requiredRoles: ["manager", "responder"],
     userId: input.userId,
   });
-  const [message] = await db
-    .select({
-      direction: managedMailMessage.direction,
-      id: managedMailMessage.id,
-      isRead: managedMailMessage.isRead,
-      mailboxState: managedMailMessage.mailboxState,
-    })
-    .from(managedMailMessage)
-    .where(
-      and(
-        eq(managedMailMessage.mailboxId, input.mailboxId),
-        eq(managedMailMessage.id, input.messageId)
-      )
-    )
-    .limit(1);
-  if (message === undefined) {
-    throw new ORPCError("NOT_FOUND", { message: "Message not found." });
-  }
   const mailboxState = getMailboxStateFromLabelChanges(input);
-  const updated = await db.transaction(async (tx) => {
+  const { message, updated } = await db.transaction(async (tx) => {
+    const [lockedMessage] = await tx
+      .select({
+        direction: managedMailMessage.direction,
+        id: managedMailMessage.id,
+        isRead: managedMailMessage.isRead,
+        mailboxState: managedMailMessage.mailboxState,
+      })
+      .from(managedMailMessage)
+      .where(
+        and(
+          eq(managedMailMessage.mailboxId, input.mailboxId),
+          eq(managedMailMessage.id, input.messageId)
+        )
+      )
+      .limit(1)
+      .for("update");
+    if (lockedMessage === undefined) {
+      throw new ORPCError("NOT_FOUND", { message: "Message not found." });
+    }
     if (mailboxState) {
       await tx
         .update(managedMailMessage)
@@ -399,7 +422,7 @@ export const updateSingleManagedMessageLabels = async (input: {
       ...input,
       addLabelIds: getCustomLabelIds(input.addLabelIds),
       database: tx,
-      messageIds: [message.id],
+      messageIds: [lockedMessage.id],
       removeLabelIds: getCustomLabelIds(input.removeLabelIds),
       source: "manual",
     });
@@ -410,7 +433,7 @@ export const updateSingleManagedMessageLabels = async (input: {
         updatedAt: new Date(),
       })
       .where(eq(mailbox.id, input.mailboxId));
-    return assignment;
+    return { message: lockedMessage, updated: assignment };
   });
   return {
     ...updated,

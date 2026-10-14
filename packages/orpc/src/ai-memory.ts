@@ -35,7 +35,7 @@ import type {
 } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { reportError } from "@quieter/observability";
-import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, like, lt, or, sql } from "drizzle-orm";
 
 import { assertCanUseAi } from "./ai-access";
 import {
@@ -594,9 +594,11 @@ const applyAiMemoryPlan = async ({
   sourceEventId?: string | null;
 }) => {
   const appliedChangeSet = await db.transaction(async (tx) => {
-    await tx.execute(
-      sql`select "id" from "aiMemory" where "scopeKey" = ${scope.scopeKey} for update`
-    );
+    await tx
+      .select({ id: aiMemory.id })
+      .from(aiMemory)
+      .where(eq(aiMemory.scopeKey, scope.scopeKey))
+      .for("update");
     const current = await tx
       .select()
       .from(aiMemory)
@@ -1275,7 +1277,7 @@ export const rankAiAgentMemoryCandidates = async ({
             .update(aiMemory)
             .set({
               lastUsedAt: new Date(),
-              updatedAt: sql`${aiMemory.updatedAt}`,
+              updatedAt: aiMemory.updatedAt,
             })
             .where(
               inArray(
@@ -1587,16 +1589,18 @@ export const replaceMailboxFeedbackMemories = async ({
   const scope = mailboxScope(mailboxId);
   const now = new Date();
   const changes = await db.transaction(async (tx) => {
-    await tx.execute(
-      sql`select "id" from "aiMemory" where "scopeKey" = ${scope.scopeKey} for update`
-    );
+    await tx
+      .select({ id: aiMemory.id })
+      .from(aiMemory)
+      .where(eq(aiMemory.scopeKey, scope.scopeKey))
+      .for("update");
     const current = await tx
       .select()
       .from(aiMemory)
       .where(
         and(
           eq(aiMemory.scopeKey, scope.scopeKey),
-          sql`${aiMemory.key} like ${`${prefix}%`}`
+          like(aiMemory.key, `${prefix}%`)
         )
       );
     const byKey = new Map(current.map((memory) => [memory.key, memory]));
@@ -2066,7 +2070,10 @@ export const purgePersonalAiMemory = async (userId: string) =>
           or(
             eq(userAiContextEvent.kind, "chat_discovery"),
             eq(userAiContextEvent.kind, "explicit_preference"),
-            sql`${userAiContextEvent.metadata}->>'memoryScope' = 'user'`
+            eq(
+              sql<string>`${userAiContextEvent.metadata}->>'memoryScope'`,
+              "user"
+            )
           )
         )
       );

@@ -41,7 +41,7 @@ const storeEmbeddings = async (
           .set({
             embeddedAt: now,
             embedding: row.embedding,
-            updatedAt: sql`${aiMemory.updatedAt}`,
+            updatedAt: aiMemory.updatedAt,
           })
           .where(
             and(

@@ -14,7 +14,8 @@ import type {
 } from "@quieter/database/schema";
 import { MAILBOX_LABELS } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
-import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, max, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
 import {
   recordAndRefreshAiMemory,
@@ -162,10 +163,16 @@ export const refreshAutoLabelMemoryProfile = async (
 ) => {
   const rows = await db
     .select({
-      added: sql<number>`count(*) filter (where ${mailAutoLabelFeedback.signal} = 'added')`,
+      added:
+        sql`${count()} filter (where ${eq(mailAutoLabelFeedback.signal, "added")})`.mapWith(
+          Number
+        ),
       labelId: mailAutoLabelFeedback.labelId,
-      labelName: sql<string | null>`max(${mailAutoLabelFeedback.labelName})`,
-      removed: sql<number>`count(*) filter (where ${mailAutoLabelFeedback.signal} = 'removed')`,
+      labelName: max(mailAutoLabelFeedback.labelName),
+      removed:
+        sql`${count()} filter (where ${eq(mailAutoLabelFeedback.signal, "removed")})`.mapWith(
+          Number
+        ),
       source: mailAutoLabelFeedback.source,
     })
     .from(mailAutoLabelFeedback)
@@ -325,9 +332,9 @@ export const recordMailAutoLabelFeedback = async (input: {
     .onConflictDoUpdate({
       set: {
         createdByUserId: input.userId,
-        labelName: sql`excluded."labelName"`,
-        signal: sql`excluded."signal"`,
-        source: sql`excluded."source"`,
+        labelName: alias(mailAutoLabelFeedback, "excluded").labelName,
+        signal: alias(mailAutoLabelFeedback, "excluded").signal,
+        source: alias(mailAutoLabelFeedback, "excluded").source,
         updatedAt: now,
       },
       target: [

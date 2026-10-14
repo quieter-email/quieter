@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import { db } from "@quieter/database/client";
+import type { DatabaseExecutor } from "@quieter/database/client";
 import {
   mailbox,
   mailDomain,
@@ -60,6 +61,7 @@ const deriveThreadId = (mailboxId: string, canonicalRef: string) =>
     .slice(0, 32);
 
 const resolveManagedThreadId = async (
+  database: DatabaseExecutor,
   mailboxId: string,
   message: ParsedRawMailMessage,
   fallbackThreadId: string
@@ -69,7 +71,7 @@ const resolveManagedThreadId = async (
     return fallbackThreadId;
   }
 
-  const [referencedMessage] = await db
+  const [referencedMessage] = await database
     .select({ threadId: managedMailMessage.threadId })
     .from(managedMailMessage)
     .where(
@@ -79,7 +81,8 @@ const resolveManagedThreadId = async (
       )
     )
     .orderBy(desc(managedMailMessage.sentAt))
-    .limit(1);
+    .limit(1)
+    .for("key share");
 
   return (
     referencedMessage?.threadId ?? deriveThreadId(mailboxId, referenceIds[0])
@@ -252,12 +255,13 @@ const ingestManagedMessageForMailbox = async (input: {
   const id = randomUUID();
   const sentAt = input.parsed.date ?? input.receivedAt;
   const canonicalRef = input.parsed.messageHeaderId ?? id;
-  const threadId = await resolveManagedThreadId(
-    input.targetMailboxId,
-    input.parsed,
-    deriveThreadId(input.targetMailboxId, canonicalRef)
-  );
   const inserted = await db.transaction(async (tx) => {
+    const threadId = await resolveManagedThreadId(
+      tx,
+      input.targetMailboxId,
+      input.parsed,
+      deriveThreadId(input.targetMailboxId, canonicalRef)
+    );
     const [message] = await tx
       .insert(managedMailMessage)
       .values({
@@ -403,7 +407,10 @@ export const resolveInboundManagedTargetMailboxIds = async (
         eq(mailDomain.organizationId, mailbox.organizationId),
         eq(mailDomain.mode, "send_and_receive"),
         eq(mailDomain.status, "verified"),
-        sql`lower(split_part(${mailbox.emailAddress}, '@', 2)) = ${mailDomain.domain}`
+        eq(
+          sql<string>`lower(split_part(${mailbox.emailAddress}, '@', 2))`,
+          mailDomain.domain
+        )
       )
     )
     .where(

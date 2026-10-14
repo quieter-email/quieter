@@ -11,12 +11,25 @@ import {
 } from "node:fs";
 import path from "node:path";
 
+import { isNotNull } from "drizzle-orm";
+import { bigint, pgSchema, serial, text } from "drizzle-orm/pg-core";
+import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
 import { runKitMigrate } from "./drizzle-kit.ts";
 
 const NON_TRANSACTIONAL_MARKER = /^-- quieter:no-transaction(?:\r?\n|$)/u;
 const STATEMENT_BREAKPOINT = "--> statement-breakpoint";
+
+export const migrationLedger = pgSchema("drizzle").table(
+  "__drizzle_migrations",
+  {
+    createdAt: bigint("created_at", { mode: "number" }),
+    hash: text("hash").notNull(),
+    id: serial("id").primaryKey(),
+    name: text("name"),
+  }
+);
 
 const toMigrationMillis = (name: string) => {
   const date = name.slice(0, 14);
@@ -84,14 +97,13 @@ const applyNonTransactionalMigration = async ({
     }
   }
 
-  await sql`
-    insert into drizzle.__drizzle_migrations (hash, created_at, name)
-    values (
-      ${createHash("sha256").update(migration.sql).digest("hex")},
-      ${toMigrationMillis(migration.name)},
-      ${migration.name}
-    )
-  `;
+  await drizzle({ client: sql })
+    .insert(migrationLedger)
+    .values({
+      createdAt: toMigrationMillis(migration.name),
+      hash: createHash("sha256").update(migration.sql).digest("hex"),
+      name: migration.name,
+    });
 };
 
 export const runForwardMigrations = async (input: {
@@ -123,6 +135,7 @@ export const runForwardMigrations = async (input: {
   }
 
   const sql = postgres(input.databaseUrl, { max: 1 });
+  const database = drizzle({ client: sql });
   await sql`select pg_advisory_lock(hashtext('quieter-forward-migrations'))`;
 
   try {
@@ -131,9 +144,10 @@ export const runForwardMigrations = async (input: {
     `;
     const migrationTableExists = migrationTableRows[0]?.exists ?? false;
     const appliedNameRows = migrationTableExists
-      ? await sql<{ name: string | null }[]>`
-          select name from drizzle.__drizzle_migrations where name is not null
-        `
+      ? await database
+          .select({ name: migrationLedger.name })
+          .from(migrationLedger)
+          .where(isNotNull(migrationLedger.name))
       : [];
     const appliedNames = new Set(
       appliedNameRows.flatMap(({ name }) =>

@@ -17,8 +17,11 @@ import {
 
 const GOOGLE_IDENTITY_PROVIDER_ID = "google";
 
-const listUserOrganizations = async (userId: string) =>
-  await db
+const listUserOrganizations = async (
+  userId: string,
+  client: Pick<typeof db, "select"> = db
+) =>
+  await client
     .select({ id: organization.id, name: organization.name })
     .from(member)
     .innerJoin(organization, eq(organization.id, member.organizationId))
@@ -188,35 +191,41 @@ export const completeOnboarding = async (input: {
   const trimmedName = input.name.trim();
   const trimmedTeamName = input.teamName?.trim();
 
-  const [currentUser] = await db
-    .select({ termsAcceptedAt: user.termsAcceptedAt })
-    .from(user)
-    .where(eq(user.id, input.userId))
-    .limit(1);
+  await db.transaction(async (transaction) => {
+    const [currentUser] = await transaction
+      .select({ termsAcceptedAt: user.termsAcceptedAt })
+      .from(user)
+      .where(eq(user.id, input.userId))
+      .limit(1)
+      .for("update");
 
-  await db
-    .update(user)
-    .set({
-      name: trimmedName,
-      onboardingCompletedAt: now,
-      // Keep the earliest acceptance so the audit trail reflects the moment
-      // the user first agreed, including accounts stamped at creation time.
-      termsAcceptedAt: currentUser?.termsAcceptedAt ?? now,
-      updatedAt: now,
-    })
-    .where(eq(user.id, input.userId));
+    await transaction
+      .update(user)
+      .set({
+        name: trimmedName,
+        onboardingCompletedAt: now,
+        // Keep the earliest acceptance so the audit trail reflects the moment
+        // the user first agreed, including accounts stamped at creation time.
+        termsAcceptedAt: currentUser?.termsAcceptedAt ?? now,
+        updatedAt: now,
+      })
+      .where(eq(user.id, input.userId));
 
-  if (trimmedTeamName?.trim()) {
-    const organizations = await listUserOrganizations(input.userId);
-    const [defaultOrganization] = organizations;
+    if (trimmedTeamName?.trim()) {
+      const organizations = await listUserOrganizations(
+        input.userId,
+        transaction
+      );
+      const [defaultOrganization] = organizations;
 
-    if (defaultOrganization !== undefined) {
-      // Only the display name changes; the slug stays stable because default
-      // team provisioning looks organizations up by it.
-      await db
-        .update(organization)
-        .set({ name: trimmedTeamName, updatedAt: now })
-        .where(eq(organization.id, defaultOrganization.id));
+      if (defaultOrganization !== undefined) {
+        // Only the display name changes; the slug stays stable because default
+        // team provisioning looks organizations up by it.
+        await transaction
+          .update(organization)
+          .set({ name: trimmedTeamName, updatedAt: now })
+          .where(eq(organization.id, defaultOrganization.id));
+      }
     }
-  }
+  });
 };

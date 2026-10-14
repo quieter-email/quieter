@@ -1,6 +1,7 @@
 import { db } from "@quieter/database/client";
 import {
   mailDomain,
+  organization,
   organizationMailUsageAlertEvent,
   organizationMailUsageEvent,
   organizationMailUsageSettings,
@@ -9,7 +10,7 @@ import type {
   OrganizationMailUsageAlertTarget,
   OrganizationMailUsageDirection,
 } from "@quieter/database/schema";
-import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, sql, sum } from "drizzle-orm";
 
 import { getBillingCreditUsage, recordBillingCreditUsage } from "./credits.ts";
 import { getOrganizationBillingEntitlement } from "./entitlements.ts";
@@ -87,9 +88,10 @@ export const normalizeOrganizationMailAlertMilestones = (
   ].toSorted((left, right) => left - right);
 
 export const getOrganizationMailUsageSettings = async (
-  organizationId: string
+  organizationId: string,
+  client: Pick<typeof db, "select"> = db
 ): Promise<OrganizationMailUsageSettings> => {
-  const [settings] = await db
+  const [settings] = await client
     .select({
       alertMilestonePercents:
         organizationMailUsageSettings.alertMilestonePercents,
@@ -138,30 +140,37 @@ export const updateOrganizationMailUsageSettings = async (input: {
     overageEnabled: input.overageEnabled,
   } satisfies OrganizationMailUsageSettings;
 
-  const [updatedSettings] = await db
-    .insert(organizationMailUsageSettings)
-    .values({
-      ...settings,
-      createdAt: now,
-      organizationId: input.organizationId,
-      updatedAt: now,
-    })
-    .onConflictDoUpdate({
-      set: {
+  return await db.transaction(async (transaction) => {
+    await transaction
+      .select({ id: organization.id })
+      .from(organization)
+      .where(eq(organization.id, input.organizationId))
+      .for("update");
+    const [updatedSettings] = await transaction
+      .insert(organizationMailUsageSettings)
+      .values({
         ...settings,
+        createdAt: now,
+        organizationId: input.organizationId,
         updatedAt: now,
-      },
-      target: organizationMailUsageSettings.organizationId,
-    })
-    .returning({
-      alertMilestonePercents:
-        organizationMailUsageSettings.alertMilestonePercents,
-      monthlyOverageLimitMicroCents:
-        organizationMailUsageSettings.monthlyOverageLimitMicroCents,
-      overageEnabled: organizationMailUsageSettings.overageEnabled,
-    });
+      })
+      .onConflictDoUpdate({
+        set: {
+          ...settings,
+          updatedAt: now,
+        },
+        target: organizationMailUsageSettings.organizationId,
+      })
+      .returning({
+        alertMilestonePercents:
+          organizationMailUsageSettings.alertMilestonePercents,
+        monthlyOverageLimitMicroCents:
+          organizationMailUsageSettings.monthlyOverageLimitMicroCents,
+        overageEnabled: organizationMailUsageSettings.overageEnabled,
+      });
 
-  return updatedSettings ?? settings;
+    return updatedSettings ?? settings;
+  });
 };
 
 export const estimateOutboundOrganizationMailUsage = (input: {
@@ -234,11 +243,11 @@ const getPeriodUsageMicroCents = async (input: {
   const [usage] = await db
     .select({
       billableCostMicroCents:
-        sql`coalesce(sum(${organizationMailUsageEvent.billableCostMicroCents}), 0)`.mapWith(
+        sql`coalesce(${sum(organizationMailUsageEvent.billableCostMicroCents)}, 0)`.mapWith(
           Number
         ),
       sesCostMicroCents:
-        sql`coalesce(sum(${organizationMailUsageEvent.sesCostMicroCents}), 0)`.mapWith(
+        sql`coalesce(${sum(organizationMailUsageEvent.sesCostMicroCents)}, 0)`.mapWith(
           Number
         ),
     })

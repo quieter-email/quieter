@@ -2,7 +2,7 @@ import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import type { MailDomainCheckResult } from "@quieter/database/schema";
 import { mailDomain } from "@quieter/database/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 import {
   aggregateMailDomainStatus,
@@ -31,8 +31,12 @@ export const verifyMailDomainSetup = async (input: {
     .select({
       domain: mailDomain.domain,
       id: mailDomain.id,
+      lastCheckResult: mailDomain.lastCheckResult,
+      mailFromDomain: mailDomain.mailFromDomain,
       mode: mailDomain.mode,
       requiredDnsRecords: mailDomain.requiredDnsRecords,
+      status: mailDomain.status,
+      updatedAt: mailDomain.updatedAt,
       verifiedAt: mailDomain.verifiedAt,
     })
     .from(mailDomain)
@@ -97,7 +101,7 @@ export const verifyMailDomainSetup = async (input: {
     checks,
   } satisfies MailDomainCheckResult;
 
-  await db
+  const [updatedDomain] = await db
     .update(mailDomain)
     .set({
       lastCheckResult,
@@ -106,7 +110,29 @@ export const verifyMailDomainSetup = async (input: {
       updatedAt: now,
       verifiedAt,
     })
-    .where(eq(mailDomain.id, storedDomain.id));
+    .where(
+      and(
+        eq(mailDomain.id, storedDomain.id),
+        eq(mailDomain.organizationId, input.organizationId),
+        eq(mailDomain.updatedAt, storedDomain.updatedAt),
+        eq(mailDomain.mailFromDomain, storedDomain.mailFromDomain),
+        eq(mailDomain.mode, storedDomain.mode),
+        eq(mailDomain.requiredDnsRecords, storedDomain.requiredDnsRecords),
+        eq(mailDomain.status, storedDomain.status),
+        storedDomain.lastCheckResult === null
+          ? isNull(mailDomain.lastCheckResult)
+          : eq(mailDomain.lastCheckResult, storedDomain.lastCheckResult),
+        storedDomain.verifiedAt === null
+          ? isNull(mailDomain.verifiedAt)
+          : eq(mailDomain.verifiedAt, storedDomain.verifiedAt)
+      )
+    )
+    .returning({ id: mailDomain.id });
+  if (updatedDomain === undefined) {
+    throw new ORPCError("CONFLICT", {
+      message: "Mail domain setup changed while we checked it. Try again.",
+    });
+  }
 
   return {
     checks,

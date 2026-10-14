@@ -162,6 +162,30 @@ export const createManagedMailbox = async (input: {
       });
     }
 
+    const creatorMembership = await assertOrganizationManager(
+      { organizationId: input.organizationId, userId: input.userId },
+      tx
+    );
+    const [lockedCreatorMembership] = await tx
+      .select({ role: member.role })
+      .from(member)
+      .where(
+        and(
+          eq(member.id, creatorMembership.id),
+          eq(member.organizationId, input.organizationId),
+          eq(member.userId, input.userId)
+        )
+      )
+      .for("share");
+    if (
+      lockedCreatorMembership === undefined ||
+      !["admin", "owner"].includes(lockedCreatorMembership.role)
+    ) {
+      throw new ORPCError("FORBIDDEN", {
+        message: "Only team owners and admins can manage divisions.",
+      });
+    }
+
     if (ownerId !== null) {
       const [ownerMembership] = await tx
         .select({ id: member.id })
