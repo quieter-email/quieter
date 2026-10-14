@@ -164,7 +164,9 @@ export const getDemoMailThread = (
     ...new Set(thread.flatMap((message) => message.labelIds ?? [])),
   ];
   return {
-    messages: thread.map((message) => ({ ...message, threadLabelIds })),
+    messages: thread
+      .toReversed()
+      .map((message) => ({ ...message, threadLabelIds })),
     snippet: thread[0]?.snippet,
     subject: thread[0]?.subject,
     threadId,
