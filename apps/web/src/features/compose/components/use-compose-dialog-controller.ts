@@ -48,6 +48,7 @@ import {
   textToComposeBodyHtml,
 } from "../domain/draft";
 import type { ComposeDraftState } from "../domain/draft";
+import { findRecoverableComposeDraft } from "../domain/draft-recovery";
 import { useDraftAutosave } from "./use-draft-autosave";
 import { useDraftRecovery } from "./use-draft-recovery";
 
@@ -103,16 +104,15 @@ export const useComposeDialogController = ({
 }) => {
   const queryClient = useQueryClient();
   const agentWorkspace = useAgentWorkspace();
-  const assistantUnsavedRef = useRef(initialDraft?.assistantUnsaved === true);
   const [state, setState] = useState(() => {
-    const draft = initialDraft
-      ? cloneComposeDraft(initialDraft)
-      : createEmptyComposeDraft();
+    const seed = initialDraft ?? createEmptyComposeDraft();
+    const draft = cloneComposeDraft(
+      persistDrafts && !demoMode && !managedDemoMode && mailboxId
+        ? (findRecoverableComposeDraft(mailboxId, seed) ?? seed)
+        : seed
+    );
     let resolved = draft;
-    if (
-      (initialDraft?.draftId ?? "") === "" &&
-      initialDraft?.recoveryEditorId === undefined
-    ) {
+    if ((draft.draftId ?? "") === "" && draft.recoveryEditorId === undefined) {
       resolved = appendComposeSignature(
         draft,
         signature ?? { html: undefined, text: undefined }
@@ -120,13 +120,17 @@ export const useComposeDialogController = ({
     }
     return {
       draft: resolved,
+      isFinishing: false,
       open: true,
       showBcc: resolved.recipients.bcc.trim() !== "",
       showCc: resolved.recipients.cc.trim() !== "",
     };
   });
+  const assistantUnsavedRef = useRef(state.draft.assistantUnsaved === true);
   const activeDraftRef = useRef(state.draft);
   const draftClosedRef = useRef(false);
+  const savingRef = useRef<Promise<boolean> | null>(null);
+  const finishingRef = useRef(false);
   const setDraft = (update: ComposeDraftUpdate) => {
     const draft =
       typeof update === "function" ? update(activeDraftRef.current) : update;
@@ -203,14 +207,20 @@ export const useComposeDialogController = ({
     if (
       mailboxId === null ||
       mailboxId === "" ||
-      activeDraftRef.current.saveStatus === "saving" ||
+      finishingRef.current ||
       activeDraftRef.current.saveStatus === "sending"
     ) {
       return;
     }
 
+    setDraft((current) => ({
+      ...current,
+      errorMessage: null,
+      saveStatus: "sending",
+    }));
+    await savingRef.current;
     const message = buildDraftFromForm(values);
-    setDraft(() => ({ ...message, errorMessage: null, saveStatus: "sending" }));
+    setDraft({ ...message, saveStatus: "sending" });
     // oxlint-disable-next-line no-use-before-define -- The form invokes this handler after recovery initializes.
     recovery.checkpoint();
 
@@ -282,9 +292,10 @@ export const useComposeDialogController = ({
   });
 
   const recovery = useDraftRecovery({
-    enabled: persistDrafts && !demoMode && !managedDemoMode,
+    enabled: persistDrafts && !demoMode && !managedDemoMode && state.open,
     getDraft: () => ({
       ...buildDraftFromForm(form.state.values),
+      assistantUnsaved: assistantUnsavedRef.current,
       errorMessage: activeDraftRef.current.errorMessage,
       saveStatus: activeDraftRef.current.saveStatus,
     }),
@@ -412,7 +423,7 @@ export const useComposeDialogController = ({
     };
   }, [agentWorkspace, form, mailboxId]);
 
-  const persistCurrentDraft = async () => {
+  const persistDraftSnapshot = async () => {
     const { values } = form.state;
     const draft = buildDraftFromForm(values);
     if (
@@ -453,9 +464,10 @@ export const useComposeDialogController = ({
       }
     } catch (error) {
       setDraft({
-        ...draft,
+        ...activeDraftRef.current,
         errorMessage: "Your draft could not be saved. Please try again.",
-        saveStatus: "error",
+        saveStatus:
+          activeDraftRef.current.saveStatus === "sending" ? "sending" : "error",
       });
       toastError(error, {
         boundary: "compose-save",
@@ -463,6 +475,14 @@ export const useComposeDialogController = ({
       });
       return false;
     }
+    setDraft({
+      ...saved,
+      attachments: activeDraftRef.current.attachments,
+      inlineImages: activeDraftRef.current.inlineImages,
+      saveStatus:
+        activeDraftRef.current.saveStatus === "sending" ? "sending" : "saved",
+    });
+    recovery.checkpoint();
     try {
       await Promise.all([
         refreshCachedMailboxQueries(queryClient, mailboxId, "drafts"),
@@ -474,23 +494,45 @@ export const useComposeDialogController = ({
         fallback: "Draft saved. Refresh to update your mailbox.",
       });
     }
-    setDraft(saved);
     return true;
   };
 
+  const persistCurrentDraft = async (background = false): Promise<boolean> => {
+    while (savingRef.current !== null) {
+      await savingRef.current;
+    }
+    if (
+      background &&
+      (finishingRef.current ||
+        draftClosedRef.current ||
+        assistantUnsavedRef.current ||
+        activeDraftRef.current.saveStatus === "sending" ||
+        activeDraftRef.current.saveStatus === "error")
+    ) {
+      return true;
+    }
+    const saving = persistDraftSnapshot();
+    savingRef.current = saving;
+    try {
+      return await saving;
+    } finally {
+      savingRef.current = null;
+    }
+  };
+
   useDraftAutosave({
-    enabled: persistDrafts && !demoMode && !managedDemoMode && !autosavePaused,
+    enabled: persistDrafts && !autosavePaused && state.open,
     mailboxId,
     save: async () => {
       if (
         !assistantUnsavedRef.current &&
         !draftClosedRef.current &&
-        activeDraftRef.current.saveStatus !== "saving" &&
+        !finishingRef.current &&
         activeDraftRef.current.saveStatus !== "sending" &&
         activeDraftRef.current.saveStatus !== "error" &&
         composeDraftFormValuesSchema.safeParse(form.state.values).success
       ) {
-        await persistCurrentDraft();
+        await persistCurrentDraft(true);
       }
     },
     subscribe: (onChange) => form.store.subscribe(onChange),
@@ -517,11 +559,18 @@ export const useComposeDialogController = ({
       }
       if (
         activeDraftRef.current.saveStatus === "sending" ||
-        activeDraftRef.current.saveStatus === "saving"
+        finishingRef.current
       ) {
         return true;
       }
-      return !(await persistCurrentDraft());
+      finishingRef.current = true;
+      setState((current) => ({ ...current, isFinishing: true }));
+      try {
+        return !(await persistCurrentDraft());
+      } finally {
+        finishingRef.current = false;
+        setState((current) => ({ ...current, isFinishing: false }));
+      }
     },
   });
 
@@ -550,15 +599,22 @@ export const useComposeDialogController = ({
   const closeComposeDialog = async (afterClose?: () => void) => {
     if (
       activeDraftRef.current.saveStatus === "sending" ||
-      activeDraftRef.current.saveStatus === "saving"
+      finishingRef.current
     ) {
       return;
     }
-    if (!(await persistCurrentDraft())) {
-      return;
+    finishingRef.current = true;
+    setState((current) => ({ ...current, isFinishing: true }));
+    try {
+      if (!(await persistCurrentDraft())) {
+        return;
+      }
+      clearComposeDraftRuntimeFiles(activeDraftRef.current);
+      closeDialog(afterClose);
+    } finally {
+      finishingRef.current = false;
+      setState((current) => ({ ...current, isFinishing: false }));
     }
-    clearComposeDraftRuntimeFiles(activeDraftRef.current);
-    closeDialog(afterClose);
   };
 
   const handleDialogOpenChange = (open: boolean) => {
@@ -572,10 +628,13 @@ export const useComposeDialogController = ({
   const discardActiveDraft = async () => {
     if (
       activeDraftRef.current.saveStatus === "sending" ||
-      activeDraftRef.current.saveStatus === "saving"
+      finishingRef.current
     ) {
       return;
     }
+    finishingRef.current = true;
+    setState((current) => ({ ...current, isFinishing: true }));
+    await savingRef.current;
     const draft = activeDraftRef.current;
     setDraft({ ...draft, saveStatus: "saving" });
     try {
@@ -600,6 +659,8 @@ export const useComposeDialogController = ({
         saveStatus: "error",
       });
       toastError(error, { boundary: "compose-discard" });
+      finishingRef.current = false;
+      setState((current) => ({ ...current, isFinishing: false }));
       return;
     }
     clearComposeDraftRuntimeFiles(draft);

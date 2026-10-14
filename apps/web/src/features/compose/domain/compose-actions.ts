@@ -296,6 +296,7 @@ export const buildComposeDraftFromSavedDraftMessage = (
     bodyText: message.bodyText ?? message.snippet ?? "",
     draftAnchor: message.draftAnchor ?? null,
     draftId: message.draftId,
+    lastSavedAt: getMessageTimestamp(message) || undefined,
     messageId: message.id,
     recipients: {
       bcc: message.bcc ?? "",
@@ -342,46 +343,45 @@ export const buildComposeDraftFromMessageAction = ({
   message: MessageListItem;
 }): ComposeDraftState => {
   const existingDraftId = existingDraftMessage?.draftId?.trim() ?? "";
-  if (existingDraftId !== "" && existingDraftMessage) {
-    const existingDraft =
-      buildComposeDraftFromSavedDraftMessage(existingDraftMessage);
-    if (hasSavedDraftBody(existingDraft)) {
-      const fallbackRecipients =
-        action === "forward"
-          ? {
-              bcc: "",
-              cc: "",
-              to: "",
-            }
-          : getReplyRecipients(
-              message,
-              currentUserEmail,
-              action === "reply-all"
-            );
+  const existingDraft =
+    existingDraftId !== "" &&
+    existingDraftMessage &&
+    (action === "forward") ===
+      (existingDraftMessage.draftAnchor?.seededBy === "forward")
+      ? buildComposeDraftFromSavedDraftMessage(existingDraftMessage)
+      : null;
+  if (existingDraft && hasSavedDraftBody(existingDraft)) {
+    const fallbackRecipients =
+      action === "forward"
+        ? {
+            bcc: "",
+            cc: "",
+            to: "",
+          }
+        : getReplyRecipients(message, currentUserEmail, action === "reply-all");
 
-      return {
-        ...existingDraft,
-        draftAnchor: buildDraftAnchor(message, action),
-        recipients: {
-          bcc:
-            (existingDraft.recipients.bcc?.trim() ?? "") === ""
-              ? fallbackRecipients.bcc
-              : existingDraft.recipients.bcc,
-          cc:
-            (existingDraft.recipients.cc?.trim() ?? "") === ""
-              ? fallbackRecipients.cc
-              : existingDraft.recipients.cc,
-          to:
-            (existingDraft.recipients.to?.trim() ?? "") === ""
-              ? fallbackRecipients.to
-              : existingDraft.recipients.to,
-        },
-        updatedAt: Date.now(),
-      };
-    }
+    return {
+      ...existingDraft,
+      draftAnchor: buildDraftAnchor(message, action),
+      recipients: {
+        bcc:
+          (existingDraft.recipients.bcc?.trim() ?? "") === ""
+            ? fallbackRecipients.bcc
+            : existingDraft.recipients.bcc,
+        cc:
+          (existingDraft.recipients.cc?.trim() ?? "") === ""
+            ? fallbackRecipients.cc
+            : existingDraft.recipients.cc,
+        to:
+          (existingDraft.recipients.to?.trim() ?? "") === ""
+            ? fallbackRecipients.to
+            : existingDraft.recipients.to,
+      },
+      updatedAt: Date.now(),
+    };
   }
 
-  const draft = createEmptyComposeDraft();
+  const draft = existingDraft ?? createEmptyComposeDraft();
   const replyContext = buildReplyContext(message);
   const draftAnchor = buildDraftAnchor(message, action);
 
@@ -453,7 +453,11 @@ export const findLinkedDraftForMessage = (
 
   for (const message of messages) {
     const draftId = message.draftId?.trim() ?? "";
-    if (draftId === "" || message.id === sourceMessage.id) {
+    if (
+      draftId === "" ||
+      message.id === sourceMessage.id ||
+      message.draftAnchor?.seededBy === "forward"
+    ) {
       continue;
     }
 
@@ -461,11 +465,16 @@ export const findLinkedDraftForMessage = (
       message.draftAnchor?.sourceMessageId?.trim() ?? "";
     const anchorSourceThreadId =
       message.draftAnchor?.sourceThreadId?.trim() ?? "";
+    const sourceThreadId = sourceMessage.threadId?.trim() ?? "";
     const matchesByAnchor =
+      sourceThreadId !== "" &&
       anchorSourceMessageId === sourceMessage.id &&
-      anchorSourceThreadId === sourceMessage.threadId;
+      anchorSourceThreadId === sourceThreadId;
+    const matchesByThread =
+      sourceThreadId !== "" &&
+      (anchorSourceThreadId || message.threadId?.trim()) === sourceThreadId;
 
-    if (!matchesByAnchor) {
+    if (!matchesByAnchor && !matchesByThread) {
       continue;
     }
 

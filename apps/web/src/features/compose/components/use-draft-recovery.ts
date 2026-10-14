@@ -24,6 +24,25 @@ export const useDraftRecovery = ({
   const completed = useRef(false);
   const warned = useRef(false);
 
+  useEffect((): (() => void) | undefined => {
+    if (!enabled || mailboxId === null) {
+      return undefined;
+    }
+    const unregister = draftRecoveryJournal.registerEditor({
+      editorId: editorId.current,
+      mailboxId,
+    });
+    void queryClient.invalidateQueries({
+      queryKey: ["local-draft-recovery", mailboxId],
+    });
+    return () => {
+      unregister();
+      void queryClient.invalidateQueries({
+        queryKey: ["local-draft-recovery", mailboxId],
+      });
+    };
+  }, [enabled, mailboxId, queryClient]);
+
   const checkpoint = () => {
     if (!enabled || completed.current || mailboxId === null) {
       return;

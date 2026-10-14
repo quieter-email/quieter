@@ -9,6 +9,7 @@ export type LocalDraftRecord = {
 const STORAGE_KEY_PREFIX = "quieter:draft-recovery:";
 const MAX_RECORDS_PER_MAILBOX = 3;
 const MAX_PAYLOAD_LENGTH = 4 * 1024 * 1024;
+const activeEditors = new Map<string, string>();
 
 const isRecord = (value: unknown): value is LocalDraftRecord =>
   typeof value === "object" &&
@@ -57,15 +58,30 @@ export const draftRecoveryJournal = {
     readRecords(mailboxId).toSorted(
       (left, right) => right.updatedAt - left.updatedAt
     ),
+  listRecoverable: (mailboxId: string): LocalDraftRecord[] =>
+    [...activeEditors.values()].includes(mailboxId)
+      ? []
+      : readRecords(mailboxId).toSorted(
+          (left, right) => right.updatedAt - left.updatedAt
+        ),
+  registerEditor: (record: { editorId: string; mailboxId: string }) => {
+    activeEditors.set(record.editorId, record.mailboxId);
+    return () => {
+      activeEditors.delete(record.editorId);
+    };
+  },
   remove: (
-    record: Pick<LocalDraftRecord, "editorId" | "localId" | "mailboxId">
+    record: Pick<LocalDraftRecord, "editorId" | "localId" | "mailboxId"> &
+      Partial<Pick<LocalDraftRecord, "updatedAt">>
   ) => {
     writeRecords(
       record.mailboxId,
       readRecords(record.mailboxId).filter(
         (current) =>
           current.editorId !== record.editorId ||
-          current.localId !== record.localId
+          current.localId !== record.localId ||
+          (record.updatedAt !== undefined &&
+            current.updatedAt !== record.updatedAt)
       )
     );
   },

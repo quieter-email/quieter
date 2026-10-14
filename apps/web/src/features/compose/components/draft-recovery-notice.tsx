@@ -1,5 +1,6 @@
 import { Button } from "@quieter/ui/button";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 
 import { draftRecoveryJournal } from "#/lib/draft-recovery-journal";
 import { toastError } from "#/lib/error-toast";
@@ -17,10 +18,21 @@ export const DraftRecoveryNotice = ({
   const queryClient = useQueryClient();
   const queryKey = ["local-draft-recovery", mailboxId];
   const { data = [] } = useQuery({
-    queryFn: () => draftRecoveryJournal.list(mailboxId),
+    queryFn: () => draftRecoveryJournal.listRecoverable(mailboxId),
     queryKey,
     staleTime: 0,
   });
+  useEffect(() => {
+    const refresh = () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["local-draft-recovery", mailboxId],
+      });
+    };
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener("storage", refresh);
+    };
+  }, [mailboxId, queryClient]);
   const discard = useMutation({
     mutationFn: async () => {
       const [record] = data;
@@ -38,7 +50,7 @@ export const DraftRecoveryNotice = ({
     return null;
   }
   return (
-    <output className="absolute inset-x-3 bottom-3 z-20 flex items-center gap-3 rounded-lg border border-border bg-bg p-3 shadow-lg">
+    <output className="m-3 flex shrink-0 items-center gap-3 rounded-lg border border-border bg-bg p-3">
       <span className="min-w-0 flex-1 text-body-sm">
         An unfinished draft is saved on this device.
       </span>

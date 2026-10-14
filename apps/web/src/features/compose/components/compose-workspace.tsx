@@ -215,9 +215,7 @@ export const ComposeSurface = ({
     isPreparingAudio || transcribeAudioMutation.isPending;
 
   const canEditBody =
-    state.draft.saveStatus !== "sending" &&
-    state.draft.saveStatus !== "saving" &&
-    !!mailboxId;
+    state.draft.saveStatus !== "sending" && !state.isFinishing && !!mailboxId;
   const audioBusy = audioRecorder.isRecording || isTranscribingAudio;
   const canSubmitCompose = canEditBody && !audioBusy;
   const isInline = variant === "inline";

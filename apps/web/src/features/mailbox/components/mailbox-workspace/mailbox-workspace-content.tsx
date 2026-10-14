@@ -547,8 +547,8 @@ const MailboxWorkspaceContentInner = ({
             />
           ) : null}
 
-          <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-transparent">
-            {mailboxContent}
+          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-transparent">
+            <div className="relative min-h-0 flex-1">{mailboxContent}</div>
             {!isComposeMailbox &&
             !isDemoMode &&
             !isManagedDemoMode &&
