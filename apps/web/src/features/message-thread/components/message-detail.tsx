@@ -3,7 +3,7 @@
 import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { m, useReducedMotion } from "motion/react";
-import { Suspense } from "react";
+import { Suspense, useLayoutEffect, useRef } from "react";
 import type { ReactNode } from "react";
 
 import { EmptyMessageState } from "#/components/empty-message-state";
@@ -55,6 +55,12 @@ export const MessageDetail = ({
   mailboxProvider,
 }: MessageDetailProps) => {
   const reducedMotion = useReducedMotion();
+  const detailRef = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    if (focusOnOpen === true) {
+      detailRef.current?.focus({ preventScroll: true });
+    }
+  }, [focusOnOpen, selectedMessage?.id]);
   const emptyState =
     activeMailbox === "drafts" ? (
       <EmptyMessageState
@@ -106,7 +112,11 @@ export const MessageDetail = ({
   }
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+    <section
+      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+      ref={detailRef}
+      tabIndex={focusOnOpen === true ? -1 : undefined}
+    >
       <div
         className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto"
         data-message-detail-scroll-container

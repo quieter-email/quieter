@@ -33,11 +33,13 @@ type MailboxMessagesPanelProps = {
   detailOnly?: boolean;
   activeMailbox: MailboxCategory;
   currentUserEmail: string | null;
+  focusOnOpen?: boolean;
   isDemoMode: boolean;
   isManagedDemoMode: boolean;
   mailboxId: string;
   mailboxProvider: "api" | "gmail" | "managed";
   onComposeDraftRequested: (draft: ComposeDraftState) => void;
+  onFocusRequestComplete?: () => void;
   onManageSnippets: () => void;
   onOpenSidebar: () => void;
   onSearchQueryChange: (query: string) => void;
@@ -148,11 +150,13 @@ export const MailboxMessagesPanel = ({
   detailOnly = false,
   activeMailbox,
   currentUserEmail,
+  focusOnOpen,
   isDemoMode,
   isManagedDemoMode,
   mailboxId,
   mailboxProvider,
   onComposeDraftRequested,
+  onFocusRequestComplete,
   onManageSnippets,
   onOpenSidebar,
   onSearchQueryChange,
@@ -308,6 +312,7 @@ export const MailboxMessagesPanel = ({
 
   const backToList = () => {
     setShouldFocusMessageView(false);
+    onFocusRequestComplete?.();
     void setMailboxSearch({ messageId: null, threadId: null });
   };
 
@@ -377,7 +382,7 @@ export const MailboxMessagesPanel = ({
             composePersistDrafts={persistComposeDrafts}
             composeSignature={signature}
             currentUserEmail={currentUserEmail}
-            focusOnOpen={shouldFocusMessageView}
+            focusOnOpen={shouldFocusMessageView || focusOnOpen === true}
             mailboxId={mailboxId}
             mailboxProvider={mailboxProvider}
             mailboxActions={mailboxActions}
@@ -387,6 +392,7 @@ export const MailboxMessagesPanel = ({
             onBackToList={backToList}
             onAutoFocusComplete={() => {
               setShouldFocusMessageView(false);
+              onFocusRequestComplete?.();
             }}
             selectedMessage={selectedMessage}
           />

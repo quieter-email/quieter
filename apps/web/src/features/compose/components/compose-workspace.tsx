@@ -335,11 +335,12 @@ export const ComposeSurface = ({
             bodyText,
           };
           hasAuthoredContent = hasComposeDraftContent(withoutSignature);
-          transferDraft = appendComposeSignature(withoutSignature, {
-            html: nextSender?.signatureHtml ?? null,
-            text: nextSender?.signatureText ?? null,
-          });
+          transferDraft = withoutSignature;
         }
+        transferDraft = appendComposeSignature(transferDraft, {
+          html: nextSender?.signatureHtml ?? null,
+          text: nextSender?.signatureText ?? null,
+        });
         compose.allowSenderRouteChange(nextMailboxId);
         await onSenderSwitch?.(
           nextMailboxId,

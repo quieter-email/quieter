@@ -354,6 +354,11 @@ const MailboxWorkspaceContentInner = ({
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantOpened, setAssistantOpened] = useState(false);
   const [assistantFocusRequest, setAssistantFocusRequest] = useState(0);
+  const [combinedFocusTarget, setCombinedFocusTarget] = useState<{
+    mailboxId: string;
+    messageId: string;
+  } | null>(null);
+  const pendingKeyboardOpenRef = useRef(false);
   const [assistantSidebar, setAssistantSidebar] = useState(false);
   const [assistantNarrow, setAssistantNarrow] = useState(false);
   const assistantAutoCollapsedRef = useRef(false);
@@ -487,7 +492,15 @@ const MailboxWorkspaceContentInner = ({
             onReconnectMailbox={onReconnectMailbox}
             onSearch={onSearch}
             onDeactivateActiveMessage={() => {
+              pendingKeyboardOpenRef.current = false;
+              setCombinedFocusTarget(null);
               void setMailboxSearch({ messageId: null, threadId: null });
+            }}
+            onKeyboardOpenMessage={() => {
+              pendingKeyboardOpenRef.current = true;
+              queueMicrotask(() => {
+                pendingKeyboardOpenRef.current = false;
+              });
             }}
             onOpenDraft={(sourceMailboxId, message) => {
               onComposeDraftRequested(
@@ -496,6 +509,12 @@ const MailboxWorkspaceContentInner = ({
               );
             }}
             onSelectMessage={(sourceMailboxId, nextMessageId, threadId) => {
+              setCombinedFocusTarget(
+                pendingKeyboardOpenRef.current
+                  ? { mailboxId: sourceMailboxId, messageId: nextMessageId }
+                  : null
+              );
+              pendingKeyboardOpenRef.current = false;
               void setMailboxSearch(
                 {
                   chatId:
@@ -520,12 +539,19 @@ const MailboxWorkspaceContentInner = ({
             detailOnly
             activeMailbox={activeMailbox}
             currentUserEmail={currentUserEmail}
+            focusOnOpen={
+              combinedFocusTarget?.mailboxId === selectedMailboxId &&
+              combinedFocusTarget.messageId === messageId
+            }
             isDemoMode={isDemoMode}
             isManagedDemoMode={isManagedDemoMode}
             key={selectedMailboxId}
             mailboxId={selectedMailboxId}
             mailboxProvider={selectedMailboxProvider ?? "gmail"}
             onComposeDraftRequested={onComposeDraftRequested}
+            onFocusRequestComplete={() => {
+              setCombinedFocusTarget(null);
+            }}
             onManageSnippets={onManageSnippets}
             onOpenSidebar={onOpenSidebar}
             onSearchQueryChange={onSearch}
