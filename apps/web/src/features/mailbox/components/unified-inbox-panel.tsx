@@ -1,6 +1,10 @@
 "use client";
 
 import type { MailboxLabelColor } from "@quieter/mail/mailbox-organization";
+import {
+  isMailSearchFilterSupported,
+  parseStructuredSearchQuery,
+} from "@quieter/mail/search";
 import { Button } from "@quieter/ui/button";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import { cn } from "@quieter/ui/cn";
@@ -235,6 +239,14 @@ export const UnifiedInboxPanel = ({
   );
   const [isRefreshing, setIsRefreshing] = useState(false);
   const normalizedSearch = searchQuery.trim();
+  const hasUnsupportedSearch = parseStructuredSearchQuery(
+    normalizedSearch
+  ).filters.some((filter) =>
+    connectedMailboxes.some(
+      (mailbox) => !isMailSearchFilterSupported(mailbox.provider, filter)
+    )
+  );
+  const queryMailboxes = hasUnsupportedSearch ? [] : connectedMailboxes;
   const onSourceChange = useCallback(
     (key: string, state: SourceState | null) => {
       setSourceStates((current) => {
@@ -266,7 +278,7 @@ export const UnifiedInboxPanel = ({
     },
     []
   );
-  const connectedStates = connectedMailboxes.map((mailbox) => ({
+  const connectedStates = queryMailboxes.map((mailbox) => ({
     mailbox,
     state:
       sourceStates[
@@ -317,7 +329,7 @@ export const UnifiedInboxPanel = ({
     });
   };
   const refresh = async () => {
-    if (isRefreshing || connectedMailboxes.length === 0 || pending) {
+    if (isRefreshing || connectedStates.length === 0 || pending) {
       return;
     }
     setIsRefreshing(true);
@@ -515,6 +527,26 @@ export const UnifiedInboxPanel = ({
       : null;
   const listNotices = (
     <>
+      {hasUnsupportedSearch && (
+        <div
+          className="flex items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2 text-body-sm"
+          role="alert"
+        >
+          <span>
+            Some search filters are unavailable for the selected inboxes. Remove
+            those filters or change your selected inboxes.
+          </span>
+          <Button
+            onClick={() => {
+              onSearch("");
+            }}
+            size="sm"
+            variant="outline"
+          >
+            Clear search
+          </Button>
+        </div>
+      )}
       {selectedMailboxes.length === 0 && (
         <p className="rounded-md bg-muted/40 px-3 py-3 text-body-sm text-muted-fg">
           Choose an inbox to show its messages.
@@ -637,7 +669,7 @@ export const UnifiedInboxPanel = ({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {connectedMailboxes.map((mailbox) => {
+      {queryMailboxes.map((mailbox) => {
         const sourceKey = JSON.stringify([
           mailbox.id,
           activeMailbox,

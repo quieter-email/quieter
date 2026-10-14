@@ -139,6 +139,7 @@ export const useComposeDialogController = ({
   const draftClosedRef = useRef(false);
   const savingRef = useRef<Promise<boolean> | null>(null);
   const finishingRef = useRef(false);
+  const senderRouteMailboxIdRef = useRef<string | null>(null);
   const setDraft = (update: ComposeDraftUpdate) => {
     const draft =
       typeof update === "function" ? update(activeDraftRef.current) : update;
@@ -538,7 +539,9 @@ export const useComposeDialogController = ({
     }
   };
 
-  const prepareSenderSwitch = async (): Promise<{
+  const prepareSenderSwitch = async (
+    sourceUnavailable = false
+  ): Promise<{
     currentDraft: ComposeDraftState;
     transferDraft: ComposeDraftState;
   } | null> => {
@@ -553,7 +556,19 @@ export const useComposeDialogController = ({
       ...activeDraftRef.current.attachments,
       ...activeDraftRef.current.inlineImages,
     ].some((asset) => asset.gmailAttachmentId !== undefined);
-    if (!(await persistCurrentDraft(false, hasProviderAttachments))) {
+    if (sourceUnavailable && hasProviderAttachments) {
+      setDraft({
+        ...activeDraftRef.current,
+        errorMessage:
+          "Remove attachments from this unavailable account before changing the sending address.",
+        saveStatus: "error",
+      });
+      return null;
+    }
+    if (
+      !sourceUnavailable &&
+      !(await persistCurrentDraft(false, hasProviderAttachments))
+    ) {
       return null;
     }
 
@@ -616,7 +631,20 @@ export const useComposeDialogController = ({
           }))
       );
     },
-    shouldBlockFn: async () => {
+    shouldBlockFn: async ({ next }) => {
+      const nextSearch = next.search;
+      if (
+        senderRouteMailboxIdRef.current !== null &&
+        typeof nextSearch === "object" &&
+        nextSearch !== null &&
+        "mailbox" in nextSearch &&
+        nextSearch.mailbox === "compose" &&
+        "mailboxId" in nextSearch &&
+        nextSearch.mailboxId === senderRouteMailboxIdRef.current
+      ) {
+        senderRouteMailboxIdRef.current = null;
+        return false;
+      }
       if (draftClosedRef.current) {
         return false;
       }
@@ -845,6 +873,12 @@ export const useComposeDialogController = ({
   return {
     addAttachmentFiles,
     addInlineImageFiles,
+    allowSenderRouteChange: (nextMailboxId: string) => {
+      senderRouteMailboxIdRef.current = nextMailboxId;
+    },
+    clearSenderRouteChange: () => {
+      senderRouteMailboxIdRef.current = null;
+    },
     closeComposeDialog,
     discardActiveDraft,
     form,

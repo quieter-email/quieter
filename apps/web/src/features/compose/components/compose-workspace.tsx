@@ -89,7 +89,7 @@ export type ComposeSurfaceProps = {
     mailboxId: string,
     currentDraft: ComposeDraftState,
     transferDraft: ComposeDraftState
-  ) => void;
+  ) => Promise<void> | void;
   persistDrafts?: boolean;
   senderEmail?: string | null;
   senderMailboxes?: ComposeSenderMailbox[];
@@ -103,6 +103,7 @@ type ComposeWorkspaceProps = Omit<
   "className" | "variant"
 > & {
   onOpenSidebar: () => void;
+  onSwitchSenderMailbox?: (mailboxId: string) => Promise<void>;
 };
 
 type ComposeFormFieldProps = Pick<
@@ -278,8 +279,9 @@ export const ComposeSurface = ({
     !!onSenderSwitch &&
     !!mailboxId &&
     senderMailboxes !== undefined &&
-    currentSender !== undefined &&
-    senderMailboxes.length > 1;
+    (currentSender === undefined
+      ? senderUnavailable && senderMailboxes.length > 0
+      : senderMailboxes.length > 1);
   const showSubject =
     !isInline || state.draft.draftAnchor?.seededBy === "forward";
   const [showQuotedContent, setShowQuotedContent] = useState(false);
@@ -297,7 +299,7 @@ export const ComposeSurface = ({
     }
     setSwitchingSender(true);
     try {
-      const drafts = await compose.prepareSenderSwitch();
+      const drafts = await compose.prepareSenderSwitch(senderUnavailable);
       if (drafts) {
         const nextSender = senderMailboxes?.find(
           (sender) => sender.id === nextMailboxId
@@ -337,7 +339,16 @@ export const ComposeSurface = ({
             }
           );
         }
-        onSenderSwitch?.(nextMailboxId, drafts.currentDraft, transferDraft);
+        compose.allowSenderRouteChange(nextMailboxId);
+        try {
+          await onSenderSwitch?.(
+            nextMailboxId,
+            drafts.currentDraft,
+            transferDraft
+          );
+        } finally {
+          compose.clearSenderRouteChange();
+        }
       } else {
         setSwitchingSender(false);
       }
@@ -598,12 +609,22 @@ export const ComposeSurface = ({
                       {canSwitchSender && (
                         <ComposerFieldRow label="From">
                           <Select
-                            items={senderMailboxes?.map((sender) => ({
-                              label: sender.displayName
-                                ? `${sender.displayName} <${sender.emailAddress}>`
-                                : sender.emailAddress,
-                              value: sender.id,
-                            }))}
+                            items={[
+                              ...(senderMailboxes?.map((sender) => ({
+                                label: sender.displayName
+                                  ? `${sender.displayName} <${sender.emailAddress}>`
+                                  : sender.emailAddress,
+                                value: sender.id,
+                              })) ?? []),
+                              ...(currentSender === undefined && mailboxId
+                                ? [
+                                    {
+                                      label: `${senderEmail ?? "Account"} (unavailable)`,
+                                      value: mailboxId,
+                                    },
+                                  ]
+                                : []),
+                            ]}
                             onValueChange={(nextMailboxId) => {
                               void handleSenderChange(nextMailboxId);
                             }}
@@ -624,6 +645,11 @@ export const ComposeSurface = ({
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
+                              {currentSender === undefined && mailboxId ? (
+                                <SelectItem value={mailboxId}>
+                                  {senderEmail ?? "Account"} (unavailable)
+                                </SelectItem>
+                              ) : null}
                               {senderMailboxes?.map((sender) => (
                                 <SelectItem key={sender.id} value={sender.id}>
                                   {sender.displayName
@@ -991,6 +1017,7 @@ export const ComposeWorkspace = ({
   onClose,
   onManageSnippets,
   onOpenSidebar,
+  onSwitchSenderMailbox,
   persistDrafts,
   senderEmail,
   senderMailboxes,
@@ -1097,8 +1124,9 @@ export const ComposeWorkspace = ({
               }
             : undefined
         }
-        onSenderSwitch={(nextMailboxId, currentDraft, transferDraft) => {
-          if (senderSession.mailboxId) {
+        onSenderSwitch={async (nextMailboxId, currentDraft, transferDraft) => {
+          await onSwitchSenderMailbox?.(nextMailboxId);
+          if (senderSession.mailboxId && selectedSender !== undefined) {
             savedSenderDrafts.current.set(
               senderSession.mailboxId,
               currentDraft

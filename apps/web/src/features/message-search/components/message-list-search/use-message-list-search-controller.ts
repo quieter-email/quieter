@@ -1,10 +1,7 @@
 "use client";
 
 import { parseNaturalLanguageMailSearch } from "@quieter/mail/natural-language-search";
-import {
-  getSupportedMailSearchFilterTypes,
-  isMailSearchFilterSupported,
-} from "@quieter/mail/search";
+import { isMailSearchFilterSupported } from "@quieter/mail/search";
 import { toast } from "@quieter/ui/toast";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
@@ -70,18 +67,6 @@ const initialSearchOverlayState: SearchOverlayState = {
   datePopoverLeft: 0,
   isDropdownOpen: false,
 };
-
-const isAvailableFilterOption = (
-  option: (typeof searchFilterOptions)[number],
-  supportedFilterTypes: ReadonlySet<string>,
-  mailboxProvider: MessageListSearchProps["mailboxProvider"]
-) =>
-  supportedFilterTypes.has(option.filter.type) &&
-  !(
-    mailboxProvider === "gmail" &&
-    option.filter.type === "is" &&
-    ["inbound", "outbound"].includes(option.filter.value)
-  );
 
 const getActiveDraftState = (
   draftState: DraftSearchState | null,
@@ -247,10 +232,17 @@ export const useMessageListSearchController = ({
     activeDateFilterIndex === null
       ? null
       : (currentState.filters[activeDateFilterIndex] ?? null);
-  const supportedFilterTypes =
-    getSupportedMailSearchFilterTypes(mailboxProvider);
+  const searchProviders = [
+    ...new Set(
+      searchMailboxes && searchMailboxes.length > 0
+        ? searchMailboxes.map((source) => source.mailboxProvider)
+        : [mailboxProvider]
+    ),
+  ];
   const availableFilterOptions = searchFilterOptions.filter((option) =>
-    isAvailableFilterOption(option, supportedFilterTypes, mailboxProvider)
+    searchProviders.every((provider) =>
+      isMailSearchFilterSupported(provider, option.filter)
+    )
   );
 
   const openDropdown = (preserveHighlight = false) => {
@@ -491,11 +483,30 @@ export const useMessageListSearchController = ({
     closeAfterCommit = false,
     { refreshIfUnchanged = false }: { refreshIfUnchanged?: boolean } = {}
   ) => {
+    if (
+      searchMailboxes !== undefined &&
+      parseStructuredSearchQuery(
+        serializeStructuredSearchState(nextState)
+      ).filters.some(
+        (filter) =>
+          filter.value.trim().length > 0 &&
+          searchProviders.some(
+            (provider) => !isMailSearchFilterSupported(provider, filter)
+          )
+      )
+    ) {
+      toast.message(
+        "Some search filters are unavailable for the selected inboxes."
+      );
+      return;
+    }
     const normalizedState = {
       filters: nextState.filters.filter(
         (filter) =>
           filter.value.trim().length > 0 &&
-          isMailSearchFilterSupported(mailboxProvider, filter)
+          searchProviders.every((provider) =>
+            isMailSearchFilterSupported(provider, filter)
+          )
       ),
       text: normalizeSearchText(nextState.text),
     };

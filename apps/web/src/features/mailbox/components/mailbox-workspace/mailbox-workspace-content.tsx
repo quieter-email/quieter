@@ -90,6 +90,7 @@ type MailboxWorkspaceContentProps = {
   layoutState: MailboxWorkspaceLayoutState;
   mailboxGroups: MailboxSidebarGroups;
   onCloseCompose: () => void;
+  onComposeSenderSwitch: (mailboxId: string) => Promise<void>;
   onConnectGmail: () => void;
   onComposeDraftRequested: (
     draft: ComposeDraftState,
@@ -302,6 +303,7 @@ const MailboxWorkspaceContentInner = ({
   layoutState,
   mailboxGroups,
   onCloseCompose,
+  onComposeSenderSwitch,
   onConnectGmail,
   onComposeDraftRequested,
   onComposeNewMail,
@@ -346,11 +348,9 @@ const MailboxWorkspaceContentInner = ({
       signatureHtml: mailbox.signatureHtml ?? null,
       signatureText: mailbox.signatureText ?? null,
     }));
-  const composeMailbox =
-    allInboxesActive && composeSession.draft === null
-      ? (senderMailboxes.find((mailbox) => mailbox.id === selectedMailboxId) ??
-        senderMailboxes[0])
-      : mailboxes.find((mailbox) => mailbox.id === selectedMailboxId);
+  const composeMailbox = mailboxes.find(
+    (mailbox) => mailbox.id === selectedMailboxId
+  );
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantOpened, setAssistantOpened] = useState(false);
   const [assistantFocusRequest, setAssistantFocusRequest] = useState(0);
@@ -415,7 +415,7 @@ const MailboxWorkspaceContentInner = ({
         fallback={<ComposeWorkspaceLoading onOpenSidebar={onOpenSidebar} />}
       >
         <ComposeWorkspace
-          key={`${selectedMailboxId}:${composeSession.key}`}
+          key={composeSession.key}
           initialDraft={
             composeSession.mailboxId === selectedMailboxId
               ? composeSession.draft
@@ -425,6 +425,7 @@ const MailboxWorkspaceContentInner = ({
           managedDemoMode={isManagedDemoMode}
           mailboxId={composeMailbox?.id ?? null}
           onClose={onCloseCompose}
+          onSwitchSenderMailbox={onComposeSenderSwitch}
           onManageSnippets={onManageSnippets}
           onOpenSidebar={onOpenSidebar}
           persistDrafts={persistComposeDrafts}
