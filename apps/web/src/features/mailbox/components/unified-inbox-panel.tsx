@@ -446,7 +446,7 @@ export const UnifiedInboxPanel = ({
           <span
             aria-hidden
             className={cn(
-              "inline-flex size-2 shrink-0",
+              "inline-flex size-2.5 shrink-0 rounded-xs",
               mailboxLabelDotClassNameByColor[color]
             )}
           />
@@ -622,7 +622,7 @@ export const UnifiedInboxPanel = ({
               <span
                 aria-hidden
                 className={cn(
-                  "inline-flex size-2 shrink-0",
+                  "inline-flex size-2.5 shrink-0 rounded-xs",
                   mailboxLabelDotClassNameByColor[
                     preferences.colors[mailbox.id] ??
                       defaultMailboxColor(mailbox.id)

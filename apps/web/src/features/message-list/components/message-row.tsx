@@ -324,7 +324,9 @@ const MessageRowDetails = ({
       <div className="flex w-full min-w-0 items-center justify-between gap-2">
         <div className="flex min-w-0 flex-1 items-center gap-1.5">
           {badge !== undefined && badge !== null && (
-            <span className="shrink-0">{badge}</span>
+            <span className="inline-flex shrink-0 items-center justify-center">
+              {badge}
+            </span>
           )}
           <p className="min-w-0 truncate text-left text-body-sm/4.5 text-fg">
             {isDraftMailbox && (
