@@ -218,6 +218,9 @@ export const composeMailOperations = {
         ...input,
         userId: context.userId,
       });
+      if (sent.idempotent === true) {
+        return sent;
+      }
       await learnAiMemoryFromSentMessage({
         bodyText: input.message.bodyText,
         isReply: !!input.message.replyContext,
@@ -243,6 +246,9 @@ export const composeMailOperations = {
         input.message,
         context.signal
       );
+      if (sent.idempotent) {
+        return sent;
+      }
       await learnAiMemoryFromSentMessage({
         bodyText: input.message.bodyText,
         isReply: !!input.message.replyContext,

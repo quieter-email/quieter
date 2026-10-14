@@ -291,6 +291,12 @@ const toSavedComposeDraft = async (
         hydrated = candidate;
       }
     } catch (error) {
+      if (isGmailServiceError(error) && error.status === 404) {
+        throw new ORPCError("CONFLICT", {
+          data: { draftConflict: true },
+          message: DRAFT_CONFLICT_MESSAGE,
+        });
+      }
       reportError(error, { operation: "compose:gmail-draft-hydration" });
     }
   }

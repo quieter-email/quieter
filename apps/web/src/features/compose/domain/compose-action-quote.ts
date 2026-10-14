@@ -12,6 +12,22 @@ export type ComposeActionDraft = ComposeDraftState & {
   actionQuote?: ComposeActionQuote;
 };
 
+export const getReferencedComposeActionImages = (
+  bodyHtml: string,
+  inlineImages: ComposeDraftState["inlineImages"]
+) => {
+  const doc = new DOMParser().parseFromString(bodyHtml, "text/html");
+  const references = [...doc.querySelectorAll<HTMLImageElement>("img")];
+  return inlineImages.filter((asset) =>
+    references.some(
+      (image) =>
+        image.dataset.composeInlineId === asset.id ||
+        image.getAttribute("src")?.toLowerCase() ===
+          `cid:${asset.contentId.toLowerCase()}`
+    )
+  );
+};
+
 export const prepareComposeActionQuote = ({
   quote,
   inlineImages,
@@ -43,7 +59,11 @@ export const prepareComposeActionQuote = ({
     }
     return { ...asset, contentId };
   });
-  return { bodyHtml: doc.body.innerHTML, inlineImages: images };
+  const bodyHtml = doc.body.innerHTML;
+  return {
+    bodyHtml,
+    inlineImages: getReferencedComposeActionImages(bodyHtml, images),
+  };
 };
 
 export const replaceComposeActionQuote = ({

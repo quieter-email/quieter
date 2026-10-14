@@ -33,6 +33,7 @@ import {
 } from "#/lib/orpc-errors";
 
 import {
+  getReferencedComposeActionImages,
   prepareComposeActionQuote,
   replaceComposeActionQuote,
 } from "../domain/compose-action-quote";
@@ -1299,13 +1300,13 @@ export const useComposeDialogController = ({
           ),
           ...prepared.attachments,
         ];
-        inlineImages = [
+        inlineImages = getReferencedComposeActionImages(bodyHtml, [
           ...current.inlineImages,
           ...prepared.inlineImages.filter(
             (asset) =>
               !current.inlineImages.some((existing) => existing.id === asset.id)
           ),
-        ];
+        ]);
         previousActionRef.current = {
           attachments: prepared.attachments,
           html: prepared.bodyHtml,
@@ -1340,7 +1341,6 @@ export const useComposeDialogController = ({
         showCc: next.recipients.cc.trim() !== "",
       }));
       recovery.checkpoint();
-      prepared = null;
     } catch (error) {
       if (!queuedActionRef.current) {
         toastError(error, {
